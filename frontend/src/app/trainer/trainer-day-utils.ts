@@ -236,6 +236,25 @@ export function findAbsenceAlert(records: AttendanceRecord[]): AbsenceAlert | nu
   return worst && worst.ausencias >= ABSENCE_ALERT_THRESHOLD ? worst : null;
 }
 
+/**
+ * Every student at or above the alert threshold, most absences first, ties
+ * alphabetical, capped for a dashboard block. Same counting rule as
+ * `findAbsenceAlert` (only `absent`; a justified absence is already known) —
+ * this is its list form, for "Alumnos a seguir".
+ */
+export function findStudentsToFollow(records: AttendanceRecord[], limit = 5): AbsenceAlert[] {
+  const byStudent = new Map<string, number>();
+  for (const record of records) {
+    if (record.estado !== "absent") continue;
+    byStudent.set(record.estudiante, (byStudent.get(record.estudiante) ?? 0) + 1);
+  }
+  return [...byStudent]
+    .filter(([, ausencias]) => ausencias >= ABSENCE_ALERT_THRESHOLD)
+    .map(([estudiante, ausencias]) => ({ estudiante, ausencias }))
+    .sort((a, b) => b.ausencias - a.ausencias || a.estudiante.localeCompare(b.estudiante))
+    .slice(0, limit);
+}
+
 /** "3 ausencias" / "2 ausencias" / "1 ausencia". */
 export function formatAbsenceCount(ausencias: number): string {
   return ausencias === 1 ? "1 ausencia" : `${ausencias} ausencias`;

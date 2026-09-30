@@ -799,3 +799,37 @@ describe("buildDayRail", () => {
     expect(buildDayRail([schedule(1, "??", "??")], NOW)).toBeNull();
   });
 });
+
+describe("findStudentsToFollow", () => {
+  const rec = (estudiante: string, estado: AttendanceRecord["estado"], n = 0): AttendanceRecord => ({
+    id: `${estudiante}-${estado}-${n}`,
+    fecha: "2026-07-20",
+    horario: "Lunes",
+    horarioId: 1,
+    personaId: 1,
+    estudiante,
+    estado,
+  });
+
+  it("lists every student at the threshold, most absences first, ties alphabetical", async () => {
+    const { findStudentsToFollow } = await import("../trainer-day-utils");
+    const list = findStudentsToFollow([
+      rec("Zoe", "absent", 1), rec("Zoe", "absent", 2),
+      rec("Ana", "absent", 1), rec("Ana", "absent", 2),
+      rec("Luis", "absent", 1), rec("Luis", "absent", 2), rec("Luis", "absent", 3),
+      rec("Eva", "absent", 1), rec("Eva", "justified", 2),
+    ]);
+    expect(list).toEqual([
+      { estudiante: "Luis", ausencias: 3 },
+      { estudiante: "Ana", ausencias: 2 },
+      { estudiante: "Zoe", ausencias: 2 },
+    ]);
+  });
+
+  it("caps the list and is empty when nobody reaches the threshold", async () => {
+    const { findStudentsToFollow } = await import("../trainer-day-utils");
+    expect(findStudentsToFollow([rec("Eva", "absent")])).toEqual([]);
+    const many = ["A", "B", "C", "D"].flatMap((n) => [rec(n, "absent", 1), rec(n, "absent", 2)]);
+    expect(findStudentsToFollow(many, 3)).toHaveLength(3);
+  });
+});

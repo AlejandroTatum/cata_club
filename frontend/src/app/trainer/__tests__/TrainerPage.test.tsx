@@ -540,9 +540,9 @@ describe("TrainerPage — Mi día", () => {
     render(<TrainerPage />);
 
     expect(await screen.findByText("Lunes 15:00 — 16:00")).toBeInTheDocument();
-    expect(
-      await screen.findByText("Todavía no hay listas registradas"),
-    ).toBeInTheDocument();
+    // The failure is announced, not dressed up as "no lists yet".
+    expect(await screen.findByText(/no se pudieron cargar las últimas listas/i)).toBeInTheDocument();
+    expect(screen.queryByText("Todavía no hay listas registradas")).toBeNull();
   });
 
   it("sends the history to its own view instead of embedding a correction table", async () => {
@@ -857,5 +857,66 @@ describe("TrainerPage — el pulso mensual no pierde una sesión de días antes 
     expect(within(listsCard).getByText("1")).toBeInTheDocument();
     expect(pulse.getByText("Asistencia del mes")).toBeInTheDocument();
     expect(pulse.getByText("15 de 15 entrenaron")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dashboard reorganisation: context line, clickable pulse, "Alumnos a seguir",
+// and a recent-lists failure that says so.
+// ---------------------------------------------------------------------------
+
+describe("TrainerPage — organised around today", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(NOW);
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue(TODAY_SCHEDULES);
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue(MONTH_RECORDS);
+    mockFetchRosterDeTodosLosHorarios.mockReset().mockResolvedValue(ROSTER);
+    mockFetchRecentAttendanceSessions.mockReset().mockResolvedValue(RECENT_SESSIONS);
+    mockUseAuth.mockReset().mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Mendoza"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("states role and long date under the greeting", async () => {
+    render(<TrainerPage />);
+    await screen.findByText("Lunes 15:00 — 16:00");
+    expect(screen.getByText("Entrenador · lunes, 20 de julio de 2026")).toBeInTheDocument();
+  });
+
+  it("links the pulse figures to where their numbers are worked", async () => {
+    render(<TrainerPage />);
+    await screen.findByText("Lunes 15:00 — 16:00");
+    const pulse = within(screen.getByTestId("trainer-pulse"));
+    expect(pulse.getByText("Sesiones hoy").closest("a")).toHaveAttribute("href", "/trainer/attendance");
+    expect(pulse.getByText("Asistencia del mes").closest("a")).toHaveAttribute("href", "/trainer/attendance/history");
+    expect(pulse.getByText("Listas del mes").closest("a")).toHaveAttribute("href", "/trainer/attendance/history");
+  });
+
+  it("lists the students to follow with their absence counts", async () => {
+    render(<TrainerPage />);
+    const block = await screen.findByTestId("students-to-follow");
+    expect(within(block).getByText("Alumnos a seguir")).toBeInTheDocument();
+    expect(within(block).getByText("Luis Lopez")).toBeInTheDocument();
+    expect(within(block).getByText("3 ausencias")).toBeInTheDocument();
+  });
+
+  it("says nobody needs follow-up instead of hiding the block", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([record("present", "Sofia Vera")]);
+    render(<TrainerPage />);
+    const block = await screen.findByTestId("students-to-follow");
+    expect(within(block).getByText("Nadie necesita seguimiento")).toBeInTheDocument();
+  });
+
+  it("tells the trainer the recent lists failed to load, and retries", async () => {
+    mockFetchRecentAttendanceSessions.mockRejectedValueOnce(new Error("boom")).mockResolvedValue(RECENT_SESSIONS);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    render(<TrainerPage />);
+    const notice = await screen.findByText(/no se pudieron cargar las últimas listas/i);
+    expect(screen.queryByText("Todavía no hay listas registradas")).toBeNull();
+    fireEvent.click(within(notice.closest("[role=status]") as HTMLElement).getByRole("button", { name: /reintentar/i }));
+    expect(await screen.findByText("Domingo 09:00 — 10:00")).toBeInTheDocument();
   });
 });
