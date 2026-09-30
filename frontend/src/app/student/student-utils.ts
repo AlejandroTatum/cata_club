@@ -189,7 +189,7 @@ export function breakdownAttendance(sessions: StudentSessionSummary[]): Attendan
 // ---------------------------------------------------------------------------
 
 /** Backend `DiaSemana` → the Spanish label the rest of the app already uses. */
-const DIA_LABELS: Record<string, string> = {
+export const DIA_LABELS: Record<string, string> = {
   LUNES: "Lunes",
   MARTES: "Martes",
   MIERCOLES: "Miércoles",
@@ -210,7 +210,7 @@ const DIA_JS_DAY: Record<string, number> = {
   SABADO: 6,
 };
 
-const WEEK_ORDER = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO", "DOMINGO"];
+export const WEEK_ORDER = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO", "DOMINGO"];
 
 /** One weekday's continuous training window — "Lunes 15:00 — 18:00". */
 export interface WeeklyTrainingSlot {
@@ -954,6 +954,37 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
 // `resolveSituation` draws — so the badge and the band cannot word coverage
 // differently, and `estado` is left to say only what it alone knows.
 // ---------------------------------------------------------------------------
+
+/**
+ * The ONE coloured signal of the Cuota card: a short badge that says the state
+ * in the fewest words. The card's headline explains it; this is what a family
+ * reads at a glance. `ending-soon` warns rather than alarms — the card is calm
+ * on purpose, and only an expired or never-paid cuota is `bad`.
+ */
+export function describeCuotaBadge(situation: PaymentSituation): { label: string; tone: BadgeTone } {
+  switch (situation.kind) {
+    case "expired":
+      return { label: "Vencida", tone: "bad" };
+    case "never-paid":
+      return { label: "Sin pagos", tone: "bad" };
+    case "ending-soon": {
+      const days = situation.figure?.value;
+      return days
+        ? { label: `Vence en ${days} ${days === 1 ? "día" : "días"}`, tone: "warn" }
+        : { label: "Vence hoy", tone: "warn" };
+    }
+    case "covered":
+      return { label: "Al día", tone: "ok" };
+    case "awaiting-validation":
+      return { label: "En revisión", tone: "neutral" };
+    case "no-membership":
+      return { label: "Sin membresía", tone: "neutral" };
+    case "gratuitous":
+      return { label: "Sin costo", tone: "ok" };
+    case "minor-blocked":
+      return { label: "Lo gestiona el club", tone: "neutral" };
+  }
+}
 
 /**
  * The verdict's weight: `"bad"` is something to resolve now, `"ok"` is a
