@@ -860,7 +860,7 @@ function TrainingPanel({
           // do). `/ayuda` is where the club answers "who assigns a schedule",
           // labelled with the destination's registered name (D12b). A tall
           // empty card here would only stretch the column beside the carnet.
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line px-5 py-4">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-field border-t border-line px-5 py-4">
             <p className="min-w-0 flex-1 text-sm text-ink-2">
               <span className="font-semibold text-ink">
                 {viewingOwnProfile
