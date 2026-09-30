@@ -90,4 +90,28 @@ describe("bandeja de reportes", () => {
     expect(within(detail).getByText("Seleccione un reporte de la lista para ver su detalle.")).toBeInTheDocument();
     expect(within(detail).getByText("Hay 2 reportes recibidos.")).toBeInTheDocument();
   });
+  it("shows a summary strip derived from the list", async () => {
+    render(<ReportesErrorPage />);
+    await screen.findByRole("button", { name: /Reporte #7/ });
+    const strip = screen.getByLabelText("Resumen de reportes");
+    expect(strip).toHaveTextContent("Reportes");
+    expect(strip).toHaveTextContent("/perfil");
+    expect(strip).toHaveTextContent("Chrome · Linux");
+  });
+  it("filters the list with the chips", async () => {
+    render(<ReportesErrorPage />);
+    await screen.findByRole("button", { name: /Reporte #7/ });
+    fireEvent.click(screen.getByRole("button", { name: /^\/perfil/ }));
+    expect(screen.getByRole("button", { name: /Reporte #7/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Reporte #8/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Todos/ }));
+    expect(screen.getByRole("button", { name: /Reporte #8/ })).toBeInTheDocument();
+  });
+  it("explains how reports arrive, also when the inbox is empty", async () => {
+    vi.mocked(fetchReportesError).mockResolvedValue([]);
+    render(<ReportesErrorPage />);
+    expect(await screen.findByText("Cómo llegan los reportes")).toBeInTheDocument();
+    expect(screen.getByText(/solo la administración del club las ve/)).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Filtrar reportes" })).not.toBeInTheDocument();
+  });
 });
