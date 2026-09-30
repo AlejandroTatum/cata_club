@@ -22,7 +22,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import StudentMedicalRecordPage from "@/app/student/medical-record/page";
 import type { StudentPortalSummary, StudentProfileSummary } from "@/services/api";
 
@@ -234,7 +234,8 @@ describe("StudentMedicalRecordPage — reusing MedicalRecordEditor per represent
     render(<StudentMedicalRecordPage />);
 
     // En reposo el valor guardado se LEE; recién al editar vuelve a ser input.
-    expect(await screen.findByText("Polvo")).toBeInTheDocument();
+    // The saved value shows in the record rows AND the live emergency card.
+    expect((await screen.findAllByText("Polvo")).length).toBeGreaterThanOrEqual(2);
     fireEvent.click(screen.getByRole("button", { name: "Editar" }));
     expect(screen.getByLabelText<HTMLInputElement>("Alergias").value).toBe("Polvo");
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
@@ -301,5 +302,25 @@ describe("StudentMedicalRecordPage — the no-representados state fills its page
     const emptyState = title.parentElement;
     expect(emptyState?.className).toMatch(/\bflex-1\b/);
     expect(emptyState?.className).toMatch(/justify-center/);
+  });
+});
+
+describe("StudentMedicalRecordPage — emergency card rail", () => {
+  it("draws the live emergency card, completeness and visibility beside the record", async () => {
+    render(<StudentMedicalRecordPage />);
+
+    const card = await screen.findByTestId("emergency-card");
+    expect(within(card).getByText("Tarjeta de emergencia")).toBeInTheDocument();
+    expect(within(card).getByRole("progressbar", { name: /completitud/i })).toBeInTheDocument();
+    expect(within(card).getByText("Quién puede ver estos datos")).toBeInTheDocument();
+  });
+
+  it("updates the emergency card while the form is being edited", async () => {
+    render(<StudentMedicalRecordPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+
+    fireEvent.change(screen.getByLabelText(/alergias/i), { target: { value: "Penicilina" } });
+
+    expect(within(screen.getByTestId("emergency-card")).getByText("Penicilina")).toBeInTheDocument();
   });
 });

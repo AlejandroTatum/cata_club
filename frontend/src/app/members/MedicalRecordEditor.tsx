@@ -5,7 +5,8 @@ import { Loader2, Save, CheckCircle2, Stethoscope, Pencil, X } from "lucide-reac
 import { ICON } from "@/lib/icon-size";
 import { fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
-import { Badge, Button, DataBox, ErrorState, LoadingState } from "@/components/ui";
+import { Badge, Button, DataBox, ErrorState, LoadingState, PAGE_RAIL } from "@/components/ui";
+import EmergencyCard, { type EmergencyCardValues } from "./EmergencyCard";
 import type { FichaMedicaEditable, TipoSangre } from "@/types/domain";
 import { toUserMessage, isNotFound } from "@/lib/error-message";
 import { phoneFieldRule, toPhoneFieldDigits, toStoredPhone } from "@/lib/identity-validation";
@@ -110,6 +111,14 @@ function FilaLectura({
   );
 }
 
+function GroupHeading({ children, className = "" }: { children: React.ReactNode; className?: string }): React.ReactElement {
+  return (
+    <h4 className={`border-b border-line pb-1.5 text-2xs font-bold uppercase tracking-caps text-ink-3-strong ${className}`}>
+      {children}
+    </h4>
+  );
+}
+
 interface MedicalRecordEditorProps {
   personaId: number;
   /**
@@ -121,9 +130,22 @@ interface MedicalRecordEditorProps {
    * scope still renders; the heading then names the section alone.
    */
   studentName?: string;
+  /**
+   * Page mode (`/student/medical-record`): groups the fields under "Salud" and
+   * "Contacto de emergencia" and draws the live emergency card in a rail beside
+   * the form. Off for the admin dialog, which is a narrow modal.
+   */
+  withEmergencyCard?: boolean;
+  /** Whose record this is relative to the reader; only read with `withEmergencyCard`. */
+  viewerIsOwner?: boolean;
 }
 
-export default function MedicalRecordEditor({ personaId, studentName }: MedicalRecordEditorProps): React.ReactElement {
+export default function MedicalRecordEditor({
+  personaId,
+  studentName,
+  withEmergencyCard = false,
+  viewerIsOwner = true,
+}: MedicalRecordEditorProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
   const [state, setState] = useState<
     | { status: "loading" }
@@ -335,7 +357,30 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
     );
   }
 
-  return (
+  // Live values for the emergency card: what the form holds while editing (or
+  // creating), the stored record otherwise.
+  const cardValues: EmergencyCardValues =
+    editing || state.isNew
+      ? {
+          tipoSangre: tipoSangre ? etiquetaTipoSangre(tipoSangre) : "",
+          alergias: alergias.trim(),
+          enfermedades: enfermedadesInput
+            .split(",")
+            .map((e) => e.trim())
+            .filter(Boolean)
+            .join(", "),
+          contactoEmergencia: contactoEmergencia.trim(),
+          telefonoEmergencia: telefonoEmergencia.trim() ? `+593 ${telefonoEmergencia.trim()}` : "",
+        }
+      : {
+          tipoSangre: state.ficha.tipoSangre === "DESCONOCIDO" ? "" : etiquetaTipoSangre(state.ficha.tipoSangre),
+          alergias: state.ficha.alergias ?? "",
+          enfermedades: state.ficha.enfermedades.map((e) => e.nombreEnfermedad).join(", "),
+          contactoEmergencia: state.ficha.contactoEmergencia ?? "",
+          telefonoEmergencia: state.ficha.telefonoEmergencia ?? "",
+        };
+
+  const recordCard = (
     // `flex flex-1 flex-col` — D11b's "regla del aire" (`DESIGN.md`), the
     // same mechanism `EmptyState`'s `fill` already uses: the callers of this
     // editor (`/student/medical-record`) sit as a direct child of `AppShell`'s
@@ -422,15 +467,24 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
          * `fill` centres for a single statement, spread between these FIVE
          * rows instead — the sobrante lands as air between them rather than
          * as bare canvas below the last one. */
-        <div data-testid="medical-record-rows" className="space-y-0">
-          <FilaLectura label="Tipo de sangre" value={etiquetaTipoSangre(state.ficha.tipoSangre)} />
-          <FilaLectura label="Alergias" value={state.ficha.alergias ?? ""} />
-          <FilaLectura
-            label="Enfermedades"
-            value={state.ficha.enfermedades.map((e) => e.nombreEnfermedad).join(", ")}
-          />
-          <FilaLectura label="Contacto de emergencia" value={state.ficha.contactoEmergencia ?? ""} />
-          <FilaLectura label="Teléfono de emergencia" value={state.ficha.telefonoEmergencia ?? ""} />
+        <div
+          data-testid="medical-record-rows"
+          className={withEmergencyCard ? "grid gap-x-10 gap-y-4 lg:grid-cols-2" : "space-y-0"}
+        >
+          <div>
+            {withEmergencyCard && <GroupHeading>Salud</GroupHeading>}
+            <FilaLectura label="Tipo de sangre" value={etiquetaTipoSangre(state.ficha.tipoSangre)} />
+            <FilaLectura label="Alergias" value={state.ficha.alergias ?? ""} />
+            <FilaLectura
+              label="Enfermedades"
+              value={state.ficha.enfermedades.map((e) => e.nombreEnfermedad).join(", ")}
+            />
+          </div>
+          <div>
+            {withEmergencyCard && <GroupHeading>Contacto de emergencia</GroupHeading>}
+            <FilaLectura label="Contacto de emergencia" value={state.ficha.contactoEmergencia ?? ""} />
+            <FilaLectura label="Teléfono de emergencia" value={state.ficha.telefonoEmergencia ?? ""} />
+          </div>
         </div>
       )}
 
@@ -459,6 +513,7 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
        * value, and the two emergency-contact fields are adjacent because they
        * are one fact written in two boxes. */}
       <div className="grid gap-3 sm:grid-cols-2">
+        {withEmergencyCard && <GroupHeading className="sm:col-span-2">Salud</GroupHeading>}
         <div>
           {/* The asterisk sits OUTSIDE the `<label>` on purpose: inside, it
               becomes part of the control's accessible name, so the field a
@@ -524,6 +579,9 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
             Al guardar se reemplaza la lista completa. Dejar vacío borra todas las enfermedades.
           </p>
         </div>
+        {withEmergencyCard && (
+          <GroupHeading className="mt-2 sm:col-span-2">Contacto de emergencia</GroupHeading>
+        )}
         <div>
           <label htmlFor={`contacto-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
             Contacto de emergencia
@@ -577,6 +635,15 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
       </div>
       )}
       </div>
+    </div>
+  );
+
+  if (!withEmergencyCard) return recordCard;
+
+  return (
+    <div className={PAGE_RAIL}>
+      <div className="min-w-0 [&>[data-testid=medical-record-card]]:mt-0">{recordCard}</div>
+      <EmergencyCard studentName={studentName} values={cardValues} ownerIsViewer={viewerIsOwner} />
     </div>
   );
 }
