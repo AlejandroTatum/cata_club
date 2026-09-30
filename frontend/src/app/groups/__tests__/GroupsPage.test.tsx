@@ -276,10 +276,11 @@ describe("GroupsPage — categoría form is typed input, not a locked catalog se
   });
 
   // The screen's name matches its nav entry and the approved prototype
-  // (14-horarios.html: `<h2 class="h-page">Horarios</h2>`).
+  // (14-horarios.html: `<h2 class="h-page">Horarios</h2>`;
+  // the nav label was later widened to "Grupos y horarios").
   it("shows its own name as a visible page heading", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
-    const heading = await screen.findByRole("heading", { level: 1, name: "Horarios" });
+    const heading = await screen.findByRole("heading", { level: 1, name: "Grupos y horarios" });
     expect(heading).toBeInTheDocument();
     expect(heading).not.toHaveClass("sr-only");
   });

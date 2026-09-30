@@ -1,8 +1,8 @@
 /**
- * Horarios — Admin page for managing training schedules.
+ * Grupos y horarios — Admin page for managing training schedules.
  *
  * NAMING (three names, one thing — read this before renaming anything):
- *   - USER-FACING name: **Horarios**. That is what the nav says
+ *   - USER-FACING name: **Grupos y horarios**. That is what the nav says
  *     (`lib/auth-utils.ts`), what the page title says, and what the approved
  *     prototype says (`docs/archive/prototypes/prototipos/14-horarios.html`). It is the only
  *     name a user ever sees.
@@ -203,7 +203,7 @@ const CELL_LABEL = "text-2xs font-bold uppercase text-ink-3-strong";
 // `categoriaLabel(card.categoria)`, the exact value the "Nueva categoría" /
 // "Editar categoría" controls on this same screen already name — a third
 // word for the same thing was the finding, not the column itself. The
-// user-facing screen name stays "Horarios" (see the NAMING note at the top
+// user-facing screen name stays "Grupos y horarios" (see the NAMING note at the top
 // of this file): that rename is deliberately out of scope, this one is not.
 const COLUMNS = ["Categoría", "Horario", "Alumnos", "Acciones"] as const;
 
@@ -1471,7 +1471,7 @@ export default function GroupsPage(): React.ReactElement {
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
-        title="Horarios"
+        title="Grupos y horarios"
         /*
          * One card per categoría, and there are as many categorías as the club
          * defines — five today. Like `/discounts` this list has no pager, so
