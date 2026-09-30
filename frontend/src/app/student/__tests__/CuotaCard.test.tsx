@@ -53,9 +53,9 @@ describe("CuotaCard", () => {
   it("puts 'Cubierta hasta' and 'A pagar' side by side as plain tabular figures", () => {
     renderCard(situation({}));
     const figures = screen.getByTestId("cuota-figures");
-    // One row with the verdict and the action: figures are inline, not stacked.
-    expect(figures.className).toMatch(/\bflex\b/);
-    expect(figures.parentElement?.className).toMatch(/\bjustify-between\b/);
+    // Side by side, in the row's own wide column, not stacked under the verdict.
+    expect(figures.className).toMatch(/\bgrid-cols-2\b/);
+    expect(figures.parentElement?.className).toMatch(/md:grid-cols-\[/);
     expect(within(figures).getByText("Cubierta hasta")).toBeInTheDocument();
     expect(within(figures).getByText("26/09/2026")).toHaveClass("tabular-nums");
     expect(within(figures).getByText("A pagar")).toBeInTheDocument();

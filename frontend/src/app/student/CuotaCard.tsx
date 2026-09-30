@@ -104,32 +104,39 @@ export default function CuotaCard({
       {/* ONE row that uses the width: verdict | figures | action. Wrapping
           (phones) stacks the same pieces; nothing is stretched to fill. */}
       <div className="flex flex-col gap-3 px-5 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
-          <div
-            data-testid="cuota-verdict"
-            data-urgent={String(situation.urgent)}
-            data-tone={tone}
-            className="flex flex-wrap items-center gap-x-3 gap-y-2"
-          >
-            <Badge tone={badge.tone}>{badge.label}</Badge>
-            <p className="text-sm font-semibold text-ink">{situation.headline}</p>
+        <div className="grid gap-x-8 gap-y-4 md:grid-cols-[minmax(0,1.3fr)_minmax(0,2fr)] md:items-center">
+          <div className="flex flex-col items-start gap-3">
+            <div
+              data-testid="cuota-verdict"
+              data-urgent={String(situation.urgent)}
+              data-tone={tone}
+              className="flex flex-wrap items-center gap-x-3 gap-y-2"
+            >
+              <Badge tone={badge.tone}>{badge.label}</Badge>
+              <p className="text-sm font-semibold text-ink">{situation.headline}</p>
+            </div>
+            {action && (
+              <Link href={action.href} className={buttonClasses("secondary", "md")}>
+                {situation.urgent ? (
+                  <CreditCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                ) : null}
+                {action.label}
+                <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+              </Link>
+            )}
           </div>
 
           {hasFigures && (
-            <div data-testid="cuota-figures" className="flex flex-wrap items-center gap-x-8 gap-y-3">
+            <div
+              data-testid="cuota-figures"
+              className={cn(
+                "grid gap-x-8 gap-y-3",
+                coverageEnd && monthlyPriceLabel ? "grid-cols-2" : "grid-cols-1",
+              )}
+            >
               {coverageEnd && <CuotaFigure label="Cubierta hasta" value={formatDate(coverageEnd)} />}
               {monthlyPriceLabel && <CuotaFigure label="A pagar" value={monthlyPriceLabel} note="al mes" />}
             </div>
-          )}
-
-          {action && (
-            <Link href={action.href} className={buttonClasses("secondary", "md")}>
-              {situation.urgent ? (
-                <CreditCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-              ) : null}
-              {action.label}
-              <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-            </Link>
           )}
         </div>
         {showDetail && <p className="text-xs leading-relaxed text-ink-3-strong">{situation.detail}</p>}

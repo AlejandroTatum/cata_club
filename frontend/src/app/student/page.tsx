@@ -1425,10 +1425,12 @@ function ActivePortalView({
                 #1137: independence is a PRESENCIAL admin command, not here. */}
             <section
               aria-label="Acciones de la cuenta"
-              className="card flex flex-col gap-3 p-5"
+              className="card overflow-hidden"
             >
-              <h2 className="text-sm font-bold text-ink">Acciones de la cuenta</h2>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="border-b border-line px-5 py-3">
+                <h2 className="text-sm font-bold text-ink">Acciones de la cuenta</h2>
+              </div>
+              <div className="flex flex-wrap items-stretch gap-2 px-5 py-4 [&>*]:flex-1 [&>*]:justify-center">
                 {!selfIsMinor && showAddDependentCta && (
                   <Link href="/student/add-dependent" className={buttonClasses("secondary")}>
                     <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
