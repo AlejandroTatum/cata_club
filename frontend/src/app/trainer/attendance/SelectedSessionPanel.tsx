@@ -86,7 +86,17 @@ export default function SelectedSessionPanel({
               <CalendarClock size={ICON.lg} strokeWidth={1.5} aria-hidden="true" className="flex-none" />
               <p className="text-sm">Elija un horario para ver a sus alumnos y cómo quedó su última lista.</p>
             </div>
-            <GhostLines count={4} />
+            <dl
+              aria-hidden="true"
+              className="flex flex-col divide-y divide-dashed divide-line border-t border-dashed border-line text-xs"
+            >
+              {["Categoría", "Alumnos en la lista", "Última lista"].map((label) => (
+                <div key={label} className="flex items-center justify-between gap-3 py-2.5">
+                  <dt className="font-bold uppercase text-ink-3">{label}</dt>
+                  <dd className="text-ink-3">—</dd>
+                </div>
+              ))}
+            </dl>
           </div>
         )}
       </div>
