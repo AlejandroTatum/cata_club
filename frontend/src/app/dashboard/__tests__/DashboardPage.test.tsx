@@ -71,6 +71,7 @@ vi.mock("@/services/api", () => ({
   fetchDashboardStats: () => mockFetchDashboardStats(),
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
   fetchPaymentValidations: () => mockFetchPaymentValidations(),
+  fetchTrainingSchedules: () => Promise.resolve([]),
 }));
 
 // `totalPersonas` and `totalAlumnos` differ on purpose, and every assertion
@@ -145,7 +146,7 @@ beforeEach(() => {
 // 1. The hero
 // ---------------------------------------------------------------------------
 
-describe("DashboardPage — the hero carries one number and one action", () => {
+describe("DashboardPage — the attention strip carries the count and its action", () => {
   it("states the pending payment count and the ageing sub-line as real text", async () => {
     mockFetchPaymentValidations.mockResolvedValue([
       pendingPayment("a", 10),
@@ -174,26 +175,20 @@ describe("DashboardPage — the hero carries one number and one action", () => {
     expect(screen.queryByTestId("hero-note")).toBeNull();
   });
 
-  it("switches the call to action when the queue is empty", async () => {
+  it("states the queue is clear, with no review link, when nothing is pending", async () => {
     mockFetchDashboardStats.mockResolvedValue(statsFixture({ pendingPayments: 0 }));
 
     render(<DashboardPage />);
 
-    // Wait for the hero note, not for the link: `pendingPayments` falls back to
-    // 0 before the stats resolve, so "Ver pagos" is already in the header on the
-    // very first render and awaiting it proves nothing. "La cola está al día" is
-    // the one thing here that only exists once the stats came back saying zero.
-    await screen.findByText("La cola está al día");
-    expect(screen.getByRole("link", { name: /ver pagos/i })).toHaveAttribute(
-      "href",
-      "/payments",
-    );
+    const strip = await screen.findByTestId("attention-strip");
+    expect(await within(strip).findByText(/no hay nada pendiente/i)).toBeInTheDocument();
+    expect(within(strip).queryByRole("link", { name: /revisar/i })).toBeNull();
   });
 
-  it("points the primary action at the payment queue", async () => {
+  it("points the row's action at the payment queue", async () => {
     render(<DashboardPage />);
 
-    expect(await screen.findByRole("link", { name: /revisar ahora/i })).toHaveAttribute(
+    expect(await screen.findByRole("link", { name: /^revisar/i })).toHaveAttribute(
       "href",
       "/payments",
     );
@@ -212,13 +207,15 @@ describe("DashboardPage — the sidebar's table of contents is gone", () => {
     expect(screen.queryByText(/acciones r[áa]pidas/i)).not.toBeInTheDocument();
   });
 
-  it("keeps no duplicate navigation to sections the sidebar already owns", async () => {
+  it("links only from the figures and rows that act on a module, never a menu of shortcuts", async () => {
     render(<DashboardPage />);
     await screen.findByText("Miembros");
 
-    for (const href of ["/members", "/groups"]) {
-      expect(document.querySelector(`a[href="${href}"]`)).toBeNull();
-    }
+    // `/members` is now reached through the Miembros tile — a figure that
+    // opens its own list, not a card that duplicates the sidebar. `/groups`
+    // has no figure here and stays unlinked.
+    expect(screen.getByText("Miembros").closest("a")).toHaveAttribute("href", "/members");
+    expect(document.querySelector('a[href="/groups"]')).toBeNull();
   });
 });
 
@@ -327,7 +324,7 @@ describe("DashboardPage — actividad reciente", () => {
     // for the list itself, which replaces the empty state only once there is
     // something to list; its items all arrive in that same commit.
     await within(feed).findByRole("list");
-    expect(within(feed).getAllByRole("listitem").length).toBeLessThanOrEqual(5);
+    expect(within(feed).getAllByRole("listitem").length).toBeLessThanOrEqual(6);
   });
 
   it("groups the feed and the donut side by side instead of stacking full-width cards", async () => {
@@ -351,10 +348,9 @@ describe("DashboardPage — actividad reciente", () => {
     // ~600px of nothing — with no way to tell "no activity yet" apart from
     // "this page is broken". A section that disappears answers neither.
     render(<DashboardPage />);
-    await screen.findByText("Miembros");
 
+    expect(await screen.findByText("Todavía no hay movimiento")).toBeInTheDocument();
     expect(screen.getByText("Actividad reciente")).toBeInTheDocument();
-    expect(screen.getByText("Todavía no hay movimiento")).toBeInTheDocument();
     // An empty state without a next action is a dead end.
     expect(screen.getByRole("link", { name: /pasar lista/i })).toHaveAttribute(
       "href",
@@ -371,11 +367,10 @@ describe("DashboardPage — actividad reciente", () => {
 
   it("keeps the donut's card and explains the blank, rather than dropping it", async () => {
     render(<DashboardPage />);
-    await screen.findByText("Miembros");
 
+    expect(await screen.findByText("Sin asistencias registradas")).toBeInTheDocument();
     expect(screen.queryByTestId("attendance-donut")).not.toBeInTheDocument();
     expect(screen.getByText("Distribución de asistencias")).toBeInTheDocument();
-    expect(screen.getByText("Sin asistencias registradas")).toBeInTheDocument();
   });
 
   it("holds the two-column row whether or not either card has data", async () => {
@@ -384,10 +379,14 @@ describe("DashboardPage — actividad reciente", () => {
     render(<DashboardPage />);
     await screen.findByText("Miembros");
 
-    // `PAGE_RAIL`, not a literal: the dashboard used to write its own 16px gap
-    // and its own `minmax(0,340px)` track, one of the six spellings #36 found
-    // of the same split.
-    expect(screen.getByTestId("dashboard-lower").className).toBe(PAGE_RAIL);
+    // `PAGE_RAIL`, not a literal, for the work row (queue + today's classes):
+    // the dashboard used to write its own 16px gap and its own
+    // `minmax(0,340px)` track, one of the six spellings #36 found. The bottom
+    // row is two EQUAL blocks that end together — not a rail — so it names its
+    // own stretch instead.
+    expect(screen.getByTestId("dashboard-work").className).toBe(PAGE_RAIL);
+    expect(screen.getByTestId("dashboard-lower").className).toContain("lg:grid-cols-2");
+    expect(screen.getByTestId("dashboard-lower").className).toContain("lg:items-stretch");
   });
 });
 
@@ -464,11 +463,12 @@ describe("DashboardPage — degraded loads", () => {
     render(<DashboardPage />);
 
     expect(await screen.findByText("Miembros")).toBeInTheDocument();
-    // The card stays and says so. A secondary list that failed and a club with
-    // no activity yet look the same to the admin either way, so the honest
-    // thing is to keep the section and let the pulse above carry the news.
-    expect(screen.getByText("Actividad reciente")).toBeInTheDocument();
-    expect(screen.getByText("Todavía no hay movimiento")).toBeInTheDocument();
+    // The card stays and SAYS it failed. A secondary list that failed and a
+    // club with no activity yet used to look the same; now the failure has its
+    // own words and the "no movement" empty state is reserved for the real thing.
+    const feed = await screen.findByTestId("activity-feed");
+    expect(await within(feed).findByText(/no se pudo cargar/i)).toBeInTheDocument();
+    expect(within(feed).queryByText("Todavía no hay movimiento")).toBeNull();
   });
 
   it("offers a retry when the stats themselves fail", async () => {
@@ -477,7 +477,7 @@ describe("DashboardPage — degraded loads", () => {
     render(<DashboardPage />);
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /reintentar/i })).toBeInTheDocument(),
+      expect(screen.getAllByRole("button", { name: /reintentar/i }).length).toBeGreaterThan(0),
     );
     expect(screen.getAllByText(/no se pudieron cargar las estadísticas/i).length).toBeGreaterThan(0);
   });
