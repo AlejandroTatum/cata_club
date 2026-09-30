@@ -76,32 +76,30 @@ export default function AccountInfoSection({ account }: AccountInfoSectionProps)
 
   return (
     <>
-      <dl className="space-y-field text-sm">
-        <div className="flex items-center justify-between gap-3">
-          <dt className="shrink-0 text-ink-3" id={`nombres-label-${account.id}`}>Nombres</dt>
-          <dd className="min-w-0 flex-1">
-            <input
-              type="text"
-              value={nombres}
-              onChange={(e) => setNombres(e.target.value)}
-              aria-labelledby={`nombres-label-${account.id}`}
-              className="input-field w-full py-1 text-left text-sm"
-            />
-          </dd>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <dt className="shrink-0 text-ink-3" id={`apellidos-label-${account.id}`}>Apellidos</dt>
-          <dd className="min-w-0 flex-1">
-            <input
-              type="text"
-              value={apellidos}
-              onChange={(e) => setApellidos(e.target.value)}
-              aria-labelledby={`apellidos-label-${account.id}`}
-              className="input-field w-full py-1 text-left text-sm"
-            />
-          </dd>
-        </div>
-      </dl>
+      <div className="mb-4">
+        <label htmlFor={`nombres-${account.id}`} className="mb-field block text-sm font-semibold text-ink">
+          Nombres
+        </label>
+        <input
+          id={`nombres-${account.id}`}
+          type="text"
+          value={nombres}
+          onChange={(e) => setNombres(e.target.value)}
+          className="input-field w-full"
+        />
+      </div>
+      <div className="mb-4">
+        <label htmlFor={`apellidos-${account.id}`} className="mb-field block text-sm font-semibold text-ink">
+          Apellidos
+        </label>
+        <input
+          id={`apellidos-${account.id}`}
+          type="text"
+          value={apellidos}
+          onChange={(e) => setApellidos(e.target.value)}
+          className="input-field w-full"
+        />
+      </div>
       {/* Issue #1296: the same `PhoneField` every other phone field on the
           app shares (fixed +593, local digits, no trunk 0) — the only site
           of the five that had neither `type="tel"`, a mask, nor `phoneRule`
