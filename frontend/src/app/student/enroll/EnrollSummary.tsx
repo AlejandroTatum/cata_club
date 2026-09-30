@@ -13,7 +13,11 @@
 
 import type { ReactElement, ReactNode } from "react";
 import { getUserInitials } from "@/lib/auth-utils";
-import { calculatePersonAge, isPlausibleHumanAge, toStoredPhone } from "@/lib/identity-validation";
+import {
+  calculatePersonAge,
+  isPlausibleHumanAge,
+  toStoredPhone,
+} from "@/lib/identity-validation";
 import Badge from "@/components/ui/Badge";
 import { cn } from "@/components/ui/cn";
 import {
@@ -50,7 +54,10 @@ function Fact(props: { label: string; value: string }): ReactElement {
   );
 }
 
-export function SummaryRow(props: { label: string; children: ReactNode }): ReactElement {
+export function SummaryRow(props: {
+  label: string;
+  children: ReactNode;
+}): ReactElement {
   return (
     <li className={ROW}>
       <span className="text-sm text-ink-2">{props.label}</span>
@@ -67,11 +74,14 @@ export default function EnrollSummary({
 }: EnrollSummaryProps): ReactElement {
   const isChild = formData.enrollmentType === ENROLLMENT_TYPES.CHILD;
   const name = `${formData.nombres} ${formData.apellidos}`.trim();
-  const age = formData.fechaNacimiento ? calculatePersonAge(formData.fechaNacimiento) : NaN;
+  const age = formData.fechaNacimiento
+    ? calculatePersonAge(formData.fechaNacimiento)
+    : NaN;
   const agePlausible = !Number.isNaN(age) && isPlausibleHumanAge(age);
   const stepNumber = steps.indexOf(currentStep) + 1;
 
-  const guardian = `${formData.nombreRepresentante} ${formData.apellidosRepresentante}`.trim();
+  const guardian =
+    `${formData.nombreRepresentante} ${formData.apellidosRepresentante}`.trim();
   const email = isChild ? formData.correoRepresentante : formData.correo;
 
   return (
@@ -95,17 +105,25 @@ export default function EnrollSummary({
             <div className="flex items-center gap-2">
               <p
                 title={name || undefined}
-                className={name ? "truncate text-sm font-semibold text-ink" : "truncate text-sm text-ink-3-strong"}
+                className={
+                  name
+                    ? "truncate text-sm font-semibold text-ink"
+                    : "truncate text-sm text-ink-3-strong"
+                }
               >
                 {name || (isChild ? "Nuevo representante" : "Nuevo jugador")}
               </p>
-              <Badge className="flex-none">{isChild ? "Representante" : "Jugador"}</Badge>
+              <Badge className="flex-none">
+                {isChild ? "Representante" : "Jugador"}
+              </Badge>
             </div>
             <p className="text-xs text-ink-3-strong">
               {agePlausible ? (
                 <>
                   {age} años
-                  {age < 18 && <span className="text-state-warn"> · menor de edad</span>}
+                  {age < 18 && (
+                    <span className="text-state-warn"> · menor de edad</span>
+                  )}
                 </>
               ) : (
                 "Edad por completar"
@@ -119,7 +137,10 @@ export default function EnrollSummary({
           {isChild ? (
             <Fact label="Representante" value={guardian} />
           ) : (
-            <Fact label="Teléfono" value={formData.telefono ? toStoredPhone(formData.telefono) : ""} />
+            <Fact
+              label="Teléfono"
+              value={formData.telefono ? toStoredPhone(formData.telefono) : ""}
+            />
           )}
           <Fact label="Correo" value={email} />
         </dl>
@@ -142,10 +163,13 @@ export default function EnrollSummary({
             />
           </div>
         </div>
-
       </div>
 
-      {children && <div className="lg:mt-section lg:border-t lg:border-line lg:pt-section">{children}</div>}
+      {children && (
+        <div className="lg:mt-section lg:border-t lg:border-line lg:pt-section">
+          {children}
+        </div>
+      )}
     </aside>
   );
 }
