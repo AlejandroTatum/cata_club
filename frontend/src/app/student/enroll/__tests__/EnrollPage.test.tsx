@@ -391,14 +391,17 @@ describe("EnrollPage — error prevention on the student step", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
   }
 
-  it("disables 'Siguiente' on an empty step and says what is missing", () => {
+  it("keeps 'Siguiente' enabled on an empty step and names each missing field inline once pressed", () => {
     render(<EnrollPage />);
     goToStudentStep();
 
     const next = screen.getByRole("button", { name: /^Siguiente/ });
-    expect(next).toBeDisabled();
-    expect(screen.getByText(/para continuar, revise:/i)).toHaveTextContent("Nombres");
-    expect(screen.getByText(/para continuar, revise:/i)).toHaveTextContent("Cédula de identidad");
+    expect(next).toBeEnabled();
+    fireEvent.click(next);
+
+    expect(screen.getByLabelText(/^Nombres/)).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText(/cédula de identidad/i)).toHaveAttribute("aria-invalid", "true");
+    expect(screen.queryByText(/para continuar, revise:/i)).not.toBeInTheDocument();
   });
 
   it("shows the cédula message beside the field only after the visitor leaves it", () => {
@@ -535,7 +538,9 @@ describe("EnrollPage — error prevention on the student step", () => {
     fireEvent.blur(screen.getByLabelText(/^Año/));
 
     expect(screen.getByText(/menores de edad no pueden autoinscribirse/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeDisabled();
+    // Not disabled: pressing it re-flags the step instead of advancing.
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    expect(screen.getByLabelText(/^Nombres/)).toBeInTheDocument();
   });
 
   /**
@@ -552,10 +557,13 @@ describe("EnrollPage — error prevention on the student step", () => {
     fireEvent.blur(confirm);
 
     expect(screen.getByText("Las contraseñas no coinciden.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    expect(confirm).toBeInTheDocument();
 
     fireEvent.change(confirm, { target: { value: "password8" } });
-    expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeEnabled();
+    expect(screen.queryByText("Las contraseñas no coinciden.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    expect(screen.getByLabelText(/tipo de sangre/i)).toBeInTheDocument();
   });
 });
 
@@ -578,14 +586,51 @@ describe("EnrollPage — un enrolamiento de menor nunca pide sus credenciales (#
 });
 
 /**
+ * The birth date's computed age is the date column's own hint line, and its
+ * three parts keep their accessible names without visible captions.
+ */
+describe("EnrollPage — edad en la columna de la fecha de nacimiento", () => {
+  function goToStudentStep(): void {
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+  }
+
+  it("shows the age as the date field's hint, not as a separate well", () => {
+    render(<EnrollPage />);
+    goToStudentStep();
+    fillBirthDate(enrollFieldId("fechaNacimiento"), "2000-02-20");
+
+    const hint = document.getElementById("enroll-fecha-nacimiento-message");
+    expect(hint).toHaveTextContent(/^\d+ años$/);
+    expect(screen.queryByText(/Edad calculada/)).not.toBeInTheDocument();
+    expect(document.getElementById("enroll-fecha-nacimiento")).toContainElement(hint);
+  });
+
+  it("names the three date parts for assistive tech while hiding the captions", () => {
+    render(<EnrollPage />);
+    goToStudentStep();
+
+    // jsdom applies no stylesheet: assert the wrapper that hides every
+    // caption, and that each part is still reachable by its label.
+    const wrapper = document.getElementById("enroll-fecha-nacimiento")?.parentElement;
+    expect(wrapper).toHaveClass("[&_label]:sr-only");
+    for (const name of [/^Día/, /^Mes/, /^Año/]) {
+      expect(screen.getByLabelText(name)).toBeInTheDocument();
+    }
+  });
+});
+
+/**
  * Issue #1395 — the advisory layer on the credential-creation steps. The
  * checklist and meter inform while the visitor types; the hard policy (the
  * 8-character floor and the common-password list) stays the only gate, so
  * a weak-composed but policy-compliant password advances the wizard.
  */
 describe("EnrollPage — guía informativa de la contraseña (#1395)", () => {
-  const CHECKLIST = "Recomendaciones para la contraseña";
-  const METER = "Fortaleza de la contraseña";
+  const METER_ID = "enroll-contrasenia-strength";
+
+  function segments(): number {
+    return document.querySelectorAll('[data-segment="filled"]').length;
+  }
 
   function goToSelfStudentStep(): void {
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
@@ -600,36 +645,31 @@ describe("EnrollPage — guía informativa de la contraseña (#1395)", () => {
     });
   }
 
-  it("shows the advisory checklist and meter in the self credentials block", () => {
+  it("shows the compact meter under the password, with no recommendations checklist", () => {
     render(<EnrollPage />);
     goToSelfStudentStep();
 
-    expect(screen.getByRole("status", { name: CHECKLIST })).toBeInTheDocument();
-    expect(screen.getByRole("status", { name: METER })).toBeInTheDocument();
+    expect(screen.getByText("Al menos 8 caracteres.")).toHaveAttribute("id", METER_ID);
+    expect(screen.queryByText("Para una contraseña más fuerte")).not.toBeInTheDocument();
+    expect(segments()).toBe(0);
   });
 
-  it("ticks the recommendations while typing, without moving any hard rule", () => {
+  it("moves the meter level while typing, without moving any hard rule", () => {
     render(<EnrollPage />);
     goToSelfStudentStep();
 
-    fireEvent.change(screen.getByLabelText(/^Contraseña/), {
-      target: { value: "nubesverd" },
-    });
-    const list = screen.getByRole("status", { name: CHECKLIST });
-    expect(within(list).getByText("Al menos 10 caracteres").closest("li")).toHaveAttribute(
-      "data-met",
-      "false",
-    );
-    expect(screen.getByRole("status", { name: METER })).toHaveTextContent("Débil");
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "nubes" } });
+    expect(segments()).toBe(1);
+    expect(screen.getByText("5 de 8 caracteres — faltan 3.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "nubesverd" } });
+    expect(segments()).toBe(2);
 
     fireEvent.change(screen.getByLabelText(/^Contraseña/), {
       target: { value: "Nubes-Verdes-2024" },
     });
-    expect(within(list).getByText("Al menos 10 caracteres").closest("li")).toHaveAttribute(
-      "data-met",
-      "true",
-    );
-    expect(screen.getByRole("status", { name: METER })).toHaveTextContent("Muy fuerte");
+    expect(segments()).toBe(3);
+    expect(screen.getByText("Contraseña segura.")).toBeInTheDocument();
   });
 
   it("shows the same guidance under the representative's own credentials", () => {
@@ -639,8 +679,10 @@ describe("EnrollPage — guía informativa de la contraseña (#1395)", () => {
     fillChildStudentStep();
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
-    expect(screen.getByRole("status", { name: CHECKLIST })).toBeInTheDocument();
-    expect(screen.getByRole("status", { name: METER })).toBeInTheDocument();
+    expect(screen.getByText("Al menos 8 caracteres.")).toHaveAttribute(
+      "id",
+      "enroll-contrasenia-representante-strength",
+    );
   });
 
   it("renders no guidance on the child flow's personal step — no credentials there", () => {
@@ -648,8 +690,7 @@ describe("EnrollPage — guía informativa de la contraseña (#1395)", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Representante Gestiono la inscripción/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
-    expect(screen.queryByRole("status", { name: CHECKLIST })).not.toBeInTheDocument();
-    expect(screen.queryByRole("status", { name: METER })).not.toBeInTheDocument();
+    expect(screen.queryByText("Al menos 8 caracteres.")).not.toBeInTheDocument();
   });
 
   it("never gates the step on the meter: a policy-compliant but weak password advances", () => {
@@ -665,7 +706,7 @@ describe("EnrollPage — guía informativa de la contraseña (#1395)", () => {
     fireEvent.change(screen.getByLabelText(/^Confirmar contraseña/), {
       target: { value: "nubesverd" },
     });
-    expect(screen.getByRole("status", { name: METER })).toHaveTextContent("Débil");
+    expect(segments()).toBe(2);
 
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     expect(screen.getByLabelText(/tipo de sangre/i)).toBeInTheDocument();
@@ -687,7 +728,7 @@ describe("EnrollPage — el teléfono de emergencia no puede repetir el del estu
   it.each([
     ["the exact same local number", "0991234567"],
     ["the equivalent +593 form of the same number", "+593991234567"],
-  ])("rejects %s beside 'Teléfono de emergencia' and keeps 'Siguiente' disabled", (_description, valor) => {
+  ])("rejects %s beside 'Teléfono de emergencia' and keeps the step from advancing", (_description, valor) => {
     render(<EnrollPage />);
     goToHealthStep();
 
@@ -701,7 +742,8 @@ describe("EnrollPage — el teléfono de emergencia no puede repetir el del estu
       screen.getByText("El teléfono de emergencia debe ser diferente del teléfono del estudiante."),
     ).toBeInTheDocument();
     expect(telefonoEmergencia).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    expect(screen.getByLabelText(/tipo de sangre/i)).toBeInTheDocument();
   });
 
   it("enables 'Siguiente' once the emergency phone is a different valid number", () => {
@@ -776,7 +818,7 @@ describe("EnrollPage — duplicate-identity recovery on the summary step", () =>
     const cedulaRow = screen.getByText("Cédula").closest("li");
     expect(cedulaRow).not.toBeNull();
     expect(within(cedulaRow as HTMLElement).getByText(/revisar/i)).toBeInTheDocument();
-    expect(within(cedulaRow as HTMLElement).getByRole("button", { name: /corregir/i })).toBeVisible();
+    expect(within(cedulaRow as HTMLElement).getByRole("button", { name: /editar/i })).toBeVisible();
 
     // Issue #999: BOTH candidate rows get flagged, never just the one the
     // wizard happens to show first — a self enrollment collides on the same
@@ -784,7 +826,7 @@ describe("EnrollPage — duplicate-identity recovery on the summary step", () =>
     const correoRow = screen.getByText("Correo").closest("li");
     expect(correoRow).not.toBeNull();
     expect(within(correoRow as HTMLElement).getByText(/revisar/i)).toBeInTheDocument();
-    expect(within(correoRow as HTMLElement).getByRole("button", { name: /corregir/i })).toBeVisible();
+    expect(within(correoRow as HTMLElement).getByRole("button", { name: /editar/i })).toBeVisible();
   });
 
   it("still offers the two exits (Iniciar sesión / Recuperar contraseña)", async () => {
@@ -800,12 +842,12 @@ describe("EnrollPage — duplicate-identity recovery on the summary step", () =>
     );
   });
 
-  it("keeps every 'Corregir' button visible — no auto-navigation away from the summary", async () => {
+  it("keeps every 'Editar' button visible — no auto-navigation away from the summary", async () => {
     render(<EnrollPage />);
     fillValidSelfEnrollment();
     await submitAndFailWithDuplicate();
 
-    const corregirButtons = screen.getAllByRole("button", { name: /corregir/i });
+    const corregirButtons = screen.getAllByRole("button", { name: /^editar/i });
     expect(corregirButtons.length).toBeGreaterThan(0);
     corregirButtons.forEach((button) => expect(button).toBeVisible());
   });
@@ -894,15 +936,36 @@ function reachSummaryStep(): void {
 }
 
 describe("EnrollPage — motivo del bloqueo en el paso 5 (#312 / #2, #9)", () => {
-  it("names why 'Confirmar inscripción' is disabled, the same pattern steps 2-4 already use", () => {
+  it("keeps 'Confirmar inscripción' enabled and shows no error before the visitor touches anything", () => {
     render(<EnrollPage />);
     reachSummaryStep();
 
-    const checkbox = screen.getByRole("checkbox") as HTMLInputElement;
-    expect(checkbox.checked).toBe(false);
-    const confirmButton = screen.getByRole("button", { name: /confirmar inscripción/i });
-    expect(confirmButton).toBeDisabled();
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByRole("button", { name: /confirmar inscripción/i })).toBeEnabled();
+    expect(screen.queryByText(/para continuar, marque la casilla de confirmación/i)).not.toBeInTheDocument();
+  });
+
+  it("names the missing checkbox inline once confirming is attempted, without submitting", () => {
+    vi.mocked(enrollStudent).mockClear();
+    render(<EnrollPage />);
+    reachSummaryStep();
+
+    fireEvent.click(screen.getByRole("button", { name: /confirmar inscripción/i }));
+
     expect(screen.getByText(/para continuar, marque la casilla de confirmación/i)).toBeInTheDocument();
+    expect(enrollStudent).not.toHaveBeenCalled();
+  });
+
+  it("shows the inline error when the checkbox is toggled back off, and drops it when checked", () => {
+    render(<EnrollPage />);
+    reachSummaryStep();
+
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(screen.queryByText(/para continuar, marque la casilla de confirmación/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(screen.getByText(/para continuar, marque la casilla de confirmación/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(screen.queryByText(/para continuar, marque la casilla de confirmación/i)).not.toBeInTheDocument();
   });
 
   it("opens the in-flow legal review for each grouped document — no link leaves the wizard (#1368)", () => {
@@ -1006,7 +1069,7 @@ describe("EnrollPage — semántica nativa del consentimiento legal (#763)", () 
     fireEvent.submit(form);
 
     expect(enrollStudent).not.toHaveBeenCalled();
-    expect(screen.getByText(/revise y confirme el resumen antes de finalizar/i)).toBeInTheDocument();
+    expect(screen.getByText(/para continuar, marque la casilla de confirmación/i)).toBeInTheDocument();
   });
 
   it("is never granted by the fill-everything shortcut — consent is the one field nothing else can answer", () => {
@@ -1021,7 +1084,7 @@ describe("EnrollPage — semántica nativa del consentimiento legal (#763)", () 
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
     expect(screen.getByRole("checkbox")).not.toBeChecked();
-    expect(screen.getByRole("button", { name: /confirmar inscripción/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /confirmar inscripción/i })).toBeEnabled();
   });
 });
 

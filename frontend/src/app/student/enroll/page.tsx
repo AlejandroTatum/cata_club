@@ -31,14 +31,15 @@ import { toUserMessage } from "@/lib/error-message";
 import { formatCurrency } from "@/lib/format-utils";
 import { clearLegacyEnrollmentSession } from "@/lib/enrollment-session";
 import { furthestReachableIndex, useWizardHistory } from "@/lib/wizard-history";
+import { DuplicateIdentityHelp } from "@/components/DuplicateIdentityHelp";
 import LegalReviewDialog, { type LegalReviewDocumentId } from "@/components/legal/LegalReviewDialog";
 import {
   WizardInput,
   BirthDateField,
   WizardTextarea,
-  PersonIdentityFields,
+  PhoneField,
   EmergencyContactFields,
-  WizardNavigation,
+  birthDatePartIds,
   example,
   CEDULA_HINT,
   PHONE_HINT,
@@ -51,11 +52,12 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
+  PAGE_RAIL,
   PageHeader,
-  PasswordGuidance,
   Stepper,
   buttonClasses,
 } from "@/components/ui";
+import PasswordStrengthMeter from "@/components/ui/PasswordStrengthMeter";
 import { BLOOD_TYPES, BLOOD_TYPE_LABELS, SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
 import {
   User,
@@ -66,6 +68,7 @@ import {
   Hash,
   FileText,
   Mail,
+  Calendar,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import {
@@ -81,8 +84,9 @@ import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import {
   buildEnrollmentRequest,
   clearEnrollDraft,
-  describeStepBlocker,
   ENROLLMENT_TYPES,
+  digitsOf,
+  fieldsForStep,
   getEnrollmentErrorMessage,
   isDemoQuickFillEnabled,
   loadEnrollDraft,
@@ -92,6 +96,7 @@ import {
   validateEnrollStep,
   validateEnrollment,
   ENROLL_ID_PREFIX,
+  enrollFieldId,
   ENROLL_FIELD_TOKEN,
   STEP_ORDER,
   isStepComplete,
@@ -103,6 +108,9 @@ import {
   type EnrollmentType,
   type WizardStep,
 } from "./enroll-utils";
+import FieldSlot, { EnrollFieldGrid } from "./EnrollFieldSlot";
+import EnrollNav from "./EnrollNav";
+import EnrollSummary, { SummaryRow } from "./EnrollSummary";
 
 // ---------------------------------------------------------------------------
 // Step 1 — the two ways into the club. Transcribed from
@@ -219,6 +227,9 @@ function EnrollWizard(): React.ReactElement {
    */
   const sessionConfirmed = sessionOutcome === "authenticated";
   const [summaryReviewed, setSummaryReviewed] = useState(false);
+  // The missing-checkbox error is shown only after confirming was attempted
+  // (or the box was ticked and then cleared), never on arrival at the step.
+  const [confirmAttempted, setConfirmAttempted] = useState(false);
   // #1368 — which grouped legal document is under review, or none. Reviewing
   // is an overlay on the summary step: it must never unmount this component,
   // because everything the visitor entered (and the consent decision itself)
@@ -226,6 +237,15 @@ function EnrollWizard(): React.ReactElement {
   const [legalReviewDoc, setLegalReviewDoc] = useState<LegalReviewDocumentId | null>(null);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [touched, setTouched] = useState<Set<EnrollField>>(new Set());
+  /**
+   * How many times "Siguiente" has been pressed on an incomplete step. Only
+   * the effect below reads it: it needs the errors of THIS attempt to be on
+   * screen before it can find the first `aria-invalid` field, so the focus
+   * move rides the commit instead of racing it.
+   */
+  const [attemptCount, setAttemptCount] = useState(0);
+  const [attemptedStep, setAttemptedStep] = useState<WizardStep | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   /**
    * Issue #331: the public tariff catalog shown on step 1, BEFORE the
    * visitor's first field. A failure here gets its own visible `ErrorState`
@@ -324,6 +344,18 @@ function EnrollWizard(): React.ReactElement {
     stepHeadingRef.current?.focus();
   }, [step]);
 
+  useEffect(() => {
+    if (attemptCount === 0) return;
+    const firstInvalid = formRef.current?.querySelector<HTMLElement>("[aria-invalid='true']");
+    if (!firstInvalid) return;
+    // The birth date is a `<fieldset>`; the control to focus is its first part.
+    const target =
+      firstInvalid.tagName === "FIELDSET"
+        ? document.getElementById(birthDatePartIds(firstInvalid.id).day)
+        : firstInvalid;
+    target?.focus();
+  }, [attemptCount]);
+
   function handleStepperJump(index: number): void {
     const destination = effectiveSteps[index];
     if (shouldFocusStepHeadingOnJump(destination, step)) {
@@ -335,8 +367,7 @@ function EnrollWizard(): React.ReactElement {
   // Live validation: recomputed on every keystroke, but only SHOWN for a field
   // the visitor has already left, so a pristine form is never a wall of red.
   const fieldErrors = useMemo(() => validateEnrollFields(step, formData), [step, formData]);
-  const stepComplete = Object.keys(fieldErrors).length === 0;
-  const blockedReason = describeStepBlocker(fieldErrors);
+  const invalidCount = Object.keys(fieldErrors).length;
 
   function shownError(field: EnrollField): string | undefined {
     return touched.has(field) ? fieldErrors[field] : undefined;
@@ -413,16 +444,25 @@ function EnrollWizard(): React.ReactElement {
   }
 
   function handleNext(): void {
-    const errors = validateEnrollStep(step, formData);
-    if (errors.length > 0) {
-      setFormErrors(errors);
+    // The whole step at once: every field is marked, so every message shows
+    // under its own control, and from here on each one re-validates as the
+    // visitor corrects it.
+    if (validateEnrollStep(step, formData).length > 0) {
+      const stepFields = fieldsForStep(step, formData.enrollmentType);
+      setTouched((prev) => new Set([...prev, ...stepFields]));
+      setAttemptedStep(step);
+      setAttemptCount((n) => n + 1);
       return;
     }
     setFormErrors([]);
+    setAttemptedStep(null);
     const nextIdx = currentIndex + 1;
     if (nextIdx < effectiveSteps.length) {
       const nextStep = effectiveSteps[nextIdx];
-      if (nextStep === "summary") setSummaryReviewed(false);
+      if (nextStep === "summary") {
+        setSummaryReviewed(false);
+        setConfirmAttempted(false);
+      }
       goToStep(nextStep);
     }
   }
@@ -445,7 +485,7 @@ function EnrollWizard(): React.ReactElement {
       return;
     }
     if (!summaryReviewed) {
-      setFormErrors(["Revise y confirme el resumen antes de finalizar la inscripción."]);
+      setConfirmAttempted(true);
       return;
     }
     const errors = validateEnrollment(formData);
@@ -493,6 +533,7 @@ function EnrollWizard(): React.ReactElement {
     setSessionOutcome(null);
     setSubmitting(false);
     setSummaryReviewed(false);
+    setConfirmAttempted(false);
     setFormErrors([]);
     setTouched(new Set());
     setRestoredFromDraft(false);
@@ -551,6 +592,7 @@ function EnrollWizard(): React.ReactElement {
     setFormErrors([]);
     setConfirmed(false);
     setSummaryReviewed(false);
+    setConfirmAttempted(false);
     setSubmitting(false);
     setTouched(new Set());
   }
@@ -578,17 +620,19 @@ function EnrollWizard(): React.ReactElement {
     },
   ): React.ReactElement {
     return (
-      <WizardInput
-        idPrefix={ENROLL_ID_PREFIX}
-        // The id is the FIELD's, not the label's — see `ENROLL_FIELD_TOKEN`.
-        // This is what lets the seven "… del Representante" labels lose those
-        // two words without moving forty end-to-end selectors underneath them.
-        field={ENROLL_FIELD_TOKEN[field]}
-        {...opts}
-        disabled={submitting}
-        error={shownError(field)}
-        onBlur={() => markTouched(field)}
-      />
+      <FieldSlot>
+        <WizardInput
+          idPrefix={ENROLL_ID_PREFIX}
+          // The id is the FIELD's, not the label's — see `ENROLL_FIELD_TOKEN`.
+          // This is what lets the seven "… del Representante" labels lose those
+          // two words without moving forty end-to-end selectors underneath them.
+          field={ENROLL_FIELD_TOKEN[field]}
+          {...opts}
+          disabled={submitting}
+          error={shownError(field)}
+          onBlur={() => markTouched(field)}
+        />
+      </FieldSlot>
     );
   }
 
@@ -611,14 +655,22 @@ function EnrollWizard(): React.ReactElement {
     },
   ): React.ReactElement {
     return (
-      <BirthDateField
-        idPrefix={ENROLL_ID_PREFIX}
-        field={ENROLL_FIELD_TOKEN[field]}
-        {...opts}
-        disabled={submitting}
-        error={shownError(field)}
-        onBlur={() => markTouched(field)}
-      />
+      <FieldSlot>
+        {/* Día/Mes/Año keep their `<label>`s as accessible names but drop the
+            visible captions (the placeholders say the same), so the three
+            controls sit on the same top line as the cédula input beside them. */}
+        <div className="[&_label]:sr-only">
+          <BirthDateField
+            idPrefix={ENROLL_ID_PREFIX}
+            field={ENROLL_FIELD_TOKEN[field]}
+            icon={<Calendar size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
+            {...opts}
+            disabled={submitting}
+            error={shownError(field)}
+            onBlur={() => markTouched(field)}
+          />
+        </div>
+      </FieldSlot>
     );
   }
 
@@ -713,138 +765,110 @@ function EnrollWizard(): React.ReactElement {
     );
   }
 
+  /**
+   * The computed age, as the birth-date column's own hint line — it replaces
+   * the generic format hint once a date exists, so it never spans the row.
+   */
+  function birthDateHint(): string {
+    const generic = "Día, mes y año de cuatro dígitos (por ejemplo, 15 marzo 2015).";
+    if (!formData.fechaNacimiento) return generic;
+    const age = calculatePersonAge(formData.fechaNacimiento);
+    if (isNaN(age)) return generic;
+    if (!isPlausibleHumanAge(age)) return "Revise el año.";
+    if (age < 18) {
+      return formData.enrollmentType === ENROLLMENT_TYPES.SELF
+        ? `${age} años · menor de edad: requiere un representante.`
+        : `${age} años · menor de edad.`;
+    }
+    return `${age} años`;
+  }
+
   function renderPersonalStep(): React.ReactElement {
     const isSelf = formData.enrollmentType === ENROLLMENT_TYPES.SELF;
-    // Issue #1197: the represented minor's age preview, hand-computed for
-    // the CHILD branch below — `PersonIdentityFields` (SELF branch) already
-    // does this internally.
-    const childAge = calculatePersonAge(formData.fechaNacimiento);
-    const childAgePlausible = !isNaN(childAge) && isPlausibleHumanAge(childAge);
-    const childBirthDateBounds = studentBirthDateBounds();
+    const birthDateBounds = studentBirthDateBounds();
+    const cedulaTyped = digitsOf(formData.cedula).length;
     return (
-      <div className="space-y-1">
+      <div>
         <p className="mb-page text-sm text-ink-2">
           {isSelf
             ? "Ingrese sus datos personales y credenciales de acceso:"
             : "Ingrese los datos personales del estudiante a inscribir:"}
         </p>
 
-        {isSelf ? (
-          // Issue #1296 — the phone field is now the same shared `PhoneField`
-          // every other site uses: fixed +593, local digits, no leading 0.
-          <PersonIdentityFields
-            idPrefix="enroll"
-            disabled={submitting}
-            nombres={formData.nombres}
-            apellidos={formData.apellidos}
-            fechaNacimiento={formData.fechaNacimiento}
-            cedula={formData.cedula}
-            telefono={formData.telefono}
-            onNombresChange={(v) => updateField("nombres", v)}
-            onApellidosChange={(v) => updateField("apellidos", v)}
-            onFechaNacimientoChange={(v) => updateField("fechaNacimiento", v)}
-            onCedulaChange={(v) => updateField("cedula", v)}
-            onTelefonoChange={(v) => updateField("telefono", v)}
-            errors={{
-              nombres: shownError("nombres"),
-              apellidos: shownError("apellidos"),
-              fechaNacimiento: shownError("fechaNacimiento"),
-              cedula: shownError("cedula"),
-              telefono: shownError("telefono"),
-            }}
-            onFieldBlur={(field) => markTouched(field)}
-            renderAgeWarning={(age) =>
-              age < 18 && (
-                <span className="ml-1 text-state-warn">
-                  — Los menores de edad requieren un representante.
-                </span>
-              )
-            }
-          />
-        ) : (
-          // Issue #1197: a represented minor has no phone of their own —
-          // the emergency contact already derives from the representative
-          // (#1138) — so this branch hand-renders the same four fields
-          // `PersonIdentityFields` would, in the same order, minus the
-          // phone. `PersonIdentityFields` itself stays untouched: other
-          // screens still use it as-is.
-          <>
-            {renderField("nombres", {
-              label: "Nombres",
-              value: formData.nombres,
-              onChange: (v) => updateField("nombres", v),
-              placeholder: example("Juan Carlos"),
-              required: true,
-              icon: <User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
-              pattern: "[A-Za-zÀ-ɏ\\s]+",
-              maxLength: 100,
-              minLength: 3,
-              autoComplete: "given-name",
-            })}
-            {renderField("apellidos", {
-              label: "Apellidos",
-              value: formData.apellidos,
-              onChange: (v) => updateField("apellidos", v),
-              placeholder: example("Rodríguez López"),
-              required: true,
-              icon: <User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
-              pattern: "[A-Za-zÀ-ɏ\\s]+",
-              maxLength: 100,
-              minLength: 3,
-              autoComplete: "family-name",
-            })}
-            <div className="grid gap-4 sm:grid-cols-2">
-              {renderBirthDateField("fechaNacimiento", {
-                label: "Fecha de nacimiento",
-                value: formData.fechaNacimiento,
-                onChange: (v) => updateField("fechaNacimiento", v),
-                required: true,
-                min: childBirthDateBounds.min,
-                max: childBirthDateBounds.max,
-                hint: "Día, mes y año de cuatro dígitos (por ejemplo, 15 marzo 2015).",
-              })}
-              {renderField("cedula", {
-                label: "Cédula de identidad",
-                value: formData.cedula,
-                onChange: (v) => updateField("cedula", v),
-                placeholder: example("1712345678"),
-                required: true,
-                icon: <Hash size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
-                pattern: "[0-9]{10}",
-                inputMode: "numeric",
-                numericMode: "cedula",
-                hint: CEDULA_HINT,
-              })}
-            </div>
-            {formData.fechaNacimiento && (
-              <div className="rounded-ctl bg-sunken p-3 text-xs text-ink-3-strong">
-                Edad calculada:{" "}
-                <span className="font-semibold text-ink">
-                  {childAgePlausible
-                    ? `${childAge} años`
-                    : !isNaN(childAge) ? "Revise el año." : "—"}
-                </span>
-              </div>
-            )}
-          </>
-        )}
+        {/* Two columns from `md`, in reading order: name, birth date and
+            cédula, then — for a player only — phone and the account
+            credentials. Issue #1197: a represented minor has no phone or
+            credentials of their own (the emergency contact derives from the
+            representative, #1138), so that branch simply ends after the age. */}
+        <EnrollFieldGrid>
+          {renderField("nombres", {
+            label: "Nombres",
+            value: formData.nombres,
+            onChange: (v) => updateField("nombres", v),
+            placeholder: example("Juan Carlos"),
+            required: true,
+            icon: <User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+            pattern: "[A-Za-zÀ-ɏ\\s]+",
+            maxLength: 100,
+            minLength: 3,
+            autoComplete: "given-name",
+          })}
+          {renderField("apellidos", {
+            label: "Apellidos",
+            value: formData.apellidos,
+            onChange: (v) => updateField("apellidos", v),
+            placeholder: example("Rodríguez López"),
+            required: true,
+            icon: <User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+            pattern: "[A-Za-zÀ-ɏ\\s]+",
+            maxLength: 100,
+            minLength: 3,
+            autoComplete: "family-name",
+          })}
+          {renderBirthDateField("fechaNacimiento", {
+            label: "Fecha de nacimiento",
+            value: formData.fechaNacimiento,
+            onChange: (v) => updateField("fechaNacimiento", v),
+            required: true,
+            min: birthDateBounds.min,
+            max: birthDateBounds.max,
+            hint: birthDateHint(),
+          })}
+          {renderField("cedula", {
+            label: "Cédula de identidad",
+            value: formData.cedula,
+            onChange: (v) => updateField("cedula", v),
+            placeholder: example("1712345678"),
+            required: true,
+            icon: <Hash size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+            pattern: "[0-9]{10}",
+            inputMode: "numeric",
+            numericMode: "cedula",
+            hint:
+              cedulaTyped > 0 && cedulaTyped < 10
+                ? `Lleva ${cedulaTyped} de 10 dígitos.`
+                : CEDULA_HINT,
+          })}
 
-        {/* Student credentials — self enrollment only (issue #1137,
-            invariante B: un menor representado nunca tiene Usuario propio,
-            así que este bloque no tiene sentido para un "child"). */}
-        {isSelf && (
-          <>
-            <div className="my-page h-px bg-line" />
-            <div>
-              {/* The icon lost its red. A decorative glyph beside a section
-                  heading is not the primary action and not a destructive
-                  one, which are the only two jobs the red has. */}
-              <div className="mb-section flex items-center gap-2">
-                <Mail size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
-                <h3 className="text-2xs font-bold uppercase text-ink-3">
-                  Credenciales de acceso
-                </h3>
-              </div>
+          {/* Student credentials — self enrollment only (issue #1137,
+              invariante B: un menor representado nunca tiene Usuario propio). */}
+          {isSelf && (
+            <>
+              {/* Issue #1296 — the shared `PhoneField`: fixed +593, local
+                  digits, no leading 0. */}
+              <FieldSlot>
+                <PhoneField
+                  idPrefix={ENROLL_ID_PREFIX}
+                  field={ENROLL_FIELD_TOKEN.telefono}
+                  label="Teléfono"
+                  required
+                  disabled={submitting}
+                  value={formData.telefono}
+                  onChange={(v) => updateField("telefono", v)}
+                  error={shownError("telefono")}
+                  onBlur={() => markTouched("telefono")}
+                />
+              </FieldSlot>
               {renderField("correo", {
                 label: "Correo electrónico",
                 value: formData.correo,
@@ -852,26 +876,26 @@ function EnrollWizard(): React.ReactElement {
                 type: "email",
                 required: true,
                 placeholder: example("correo@ejemplo.com"),
+                icon: <Mail size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
                 autoComplete: "email",
               })}
-              {renderField("contrasenia", {
-                label: "Contraseña",
-                value: formData.contrasenia,
-                onChange: (v) => updateField("contrasenia", v),
-                type: "password",
-                required: true,
-                hint: "Al menos 8 caracteres.",
-                autoComplete: "new-password",
-              })}
-              {/**
-               * Issue #1395 — the advisory layer, LIVE under the field it
-               * reads: recommendations and a strength reading that move
-               * while the visitor types. Information only — the hard
-               * policy (floor + common list) stays the only gate, so a
-               * password that clears it advances with the meter reading
-               * "Débil".
-               */}
-              <PasswordGuidance password={formData.contrasenia} />
+              <div>
+                {renderField("contrasenia", {
+                  label: "Contraseña",
+                  value: formData.contrasenia,
+                  onChange: (v) => updateField("contrasenia", v),
+                  type: "password",
+                  required: true,
+                  autoComplete: "new-password",
+                })}
+                {/* Issue #1395 — the advisory layer, LIVE under the field it
+                    reads. Information only: the hard policy (floor + common
+                    list) stays the only gate. */}
+                <PasswordStrengthMeter
+                  id={`${enrollFieldId("contrasenia")}-strength`}
+                  value={formData.contrasenia}
+                />
+              </div>
               {renderField("contraseniaConfirmacion", {
                 label: "Confirmar contraseña",
                 value: formData.contraseniaConfirmacion,
@@ -880,9 +904,9 @@ function EnrollWizard(): React.ReactElement {
                 required: true,
                 autoComplete: "new-password",
               })}
-            </div>
-          </>
-        )}
+            </>
+          )}
+        </EnrollFieldGrid>
       </div>
     );
   }
@@ -895,94 +919,91 @@ function EnrollWizard(): React.ReactElement {
       // the fields say which datum. What made the repetition load-bearing was
       // that the ids were slugged from those labels, which is the coupling
       // `ENROLL_FIELD_TOKEN` breaks.
-      <div className="space-y-1">
+      <div>
         <p className="mb-page text-sm text-ink-2">
           Complete los datos del representante legal y sus credenciales de acceso:
         </p>
-        {renderField("nombreRepresentante", {
-          label: "Nombres",
-          value: formData.nombreRepresentante,
-          onChange: (v) => updateField("nombreRepresentante", v),
-          placeholder: example("María Fernanda"),
-          required: true,
-          icon: <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
-          autoComplete: "given-name",
-        })}
-
-        {renderField("apellidosRepresentante", {
-          label: "Apellidos",
-          value: formData.apellidosRepresentante,
-          onChange: (v) => updateField("apellidosRepresentante", v),
-          placeholder: example("Mora Salas"),
-          required: true,
-          icon: <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
-          autoComplete: "family-name",
-        })}
-
-        {renderBirthDateField("fechaNacimientoRepresentante", {
-          label: "Fecha de nacimiento",
-          value: formData.fechaNacimientoRepresentante,
-          onChange: (v) => updateField("fechaNacimientoRepresentante", v),
-          required: true,
-        })}
-
-        {renderField("cedulaRepresentante", {
-          label: "Cédula de identidad",
-          value: formData.cedulaRepresentante,
-          onChange: (v) => updateField("cedulaRepresentante", v),
-          placeholder: example("1712345678"),
-          required: true,
-          icon: <Hash size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
-          pattern: "[0-9]{10}",
-          inputMode: "numeric",
-          numericMode: "cedula",
-          hint: CEDULA_HINT,
-        })}
-
-        {renderField("telefonoRepresentante", {
-          label: "Teléfono",
-          value: formData.telefonoRepresentante,
-          onChange: (v) => updateField("telefonoRepresentante", v),
-          placeholder: example("0991234567"),
-          inputMode: "tel",
-          numericMode: "phone",
-          required: true,
-          hint: PHONE_HINT,
-          autoComplete: "tel",
-        })}
-
-        <div className="my-page h-px bg-line" />
-
-        {renderField("correoRepresentante", {
-          label: "Correo electrónico",
-          value: formData.correoRepresentante,
-          onChange: (v) => updateField("correoRepresentante", v),
-          type: "email",
-          placeholder: example("correo@ejemplo.com"),
-          required: true,
-          autoComplete: "email",
-        })}
-
-        {renderField("contraseniaRepresentante", {
-          label: "Contraseña",
-          value: formData.contraseniaRepresentante,
-          onChange: (v) => updateField("contraseniaRepresentante", v),
-          type: "password",
-          required: true,
-          hint: "Al menos 8 caracteres.",
-          autoComplete: "new-password",
-        })}
-        {/** Same advisory layer as the self flow (#1395): informs, never gates. */}
-        <PasswordGuidance password={formData.contraseniaRepresentante} />
-
-        {renderField("contraseniaRepresentanteConfirmacion", {
-          label: "Confirmar contraseña",
-          value: formData.contraseniaRepresentanteConfirmacion,
-          onChange: (v) => updateField("contraseniaRepresentanteConfirmacion", v),
-          type: "password",
-          required: true,
-          autoComplete: "new-password",
-        })}
+        <EnrollFieldGrid>
+          {renderField("nombreRepresentante", {
+            label: "Nombres",
+            value: formData.nombreRepresentante,
+            onChange: (v) => updateField("nombreRepresentante", v),
+            placeholder: example("María Fernanda"),
+            required: true,
+            icon: <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+            autoComplete: "given-name",
+          })}
+          {renderField("apellidosRepresentante", {
+            label: "Apellidos",
+            value: formData.apellidosRepresentante,
+            onChange: (v) => updateField("apellidosRepresentante", v),
+            placeholder: example("Mora Salas"),
+            required: true,
+            icon: <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+            autoComplete: "family-name",
+          })}
+          {renderBirthDateField("fechaNacimientoRepresentante", {
+            label: "Fecha de nacimiento",
+            value: formData.fechaNacimientoRepresentante,
+            onChange: (v) => updateField("fechaNacimientoRepresentante", v),
+            required: true,
+          })}
+          {renderField("cedulaRepresentante", {
+            label: "Cédula de identidad",
+            value: formData.cedulaRepresentante,
+            onChange: (v) => updateField("cedulaRepresentante", v),
+            placeholder: example("1712345678"),
+            required: true,
+            icon: <Hash size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+            pattern: "[0-9]{10}",
+            inputMode: "numeric",
+            numericMode: "cedula",
+            hint: CEDULA_HINT,
+          })}
+          {renderField("telefonoRepresentante", {
+            label: "Teléfono",
+            value: formData.telefonoRepresentante,
+            onChange: (v) => updateField("telefonoRepresentante", v),
+            placeholder: example("0991234567"),
+            inputMode: "tel",
+            numericMode: "phone",
+            required: true,
+            hint: PHONE_HINT,
+            autoComplete: "tel",
+          })}
+          {renderField("correoRepresentante", {
+            label: "Correo electrónico",
+            value: formData.correoRepresentante,
+            onChange: (v) => updateField("correoRepresentante", v),
+            type: "email",
+            placeholder: example("correo@ejemplo.com"),
+            required: true,
+            autoComplete: "email",
+          })}
+          <div>
+            {renderField("contraseniaRepresentante", {
+              label: "Contraseña",
+              value: formData.contraseniaRepresentante,
+              onChange: (v) => updateField("contraseniaRepresentante", v),
+              type: "password",
+              required: true,
+              autoComplete: "new-password",
+            })}
+            {/** Same advisory layer as the self flow (#1395): informs, never gates. */}
+            <PasswordStrengthMeter
+              id={`${enrollFieldId("contraseniaRepresentante")}-strength`}
+              value={formData.contraseniaRepresentante}
+            />
+          </div>
+          {renderField("contraseniaRepresentanteConfirmacion", {
+            label: "Confirmar contraseña",
+            value: formData.contraseniaRepresentanteConfirmacion,
+            onChange: (v) => updateField("contraseniaRepresentanteConfirmacion", v),
+            type: "password",
+            required: true,
+            autoComplete: "new-password",
+          })}
+        </EnrollFieldGrid>
 
         {/* #1320: this is an informational note, not an error, so it carries
             the same weight as every other field hint in the wizard
@@ -1006,6 +1027,8 @@ function EnrollWizard(): React.ReactElement {
           Información que el club necesita conocer para la seguridad del estudiante:
         </p>
 
+        <EnrollFieldGrid>
+        <FieldSlot>
         <div className="mb-4">
           <label htmlFor="enroll-tipo-sangre" className="mb-field block text-sm font-semibold text-ink">
             Tipo de sangre <span aria-hidden="true" className="text-state-bad">*</span>
@@ -1018,6 +1041,7 @@ function EnrollWizard(): React.ReactElement {
             required
             disabled={submitting}
             aria-invalid={shownError("tipoSangre") ? true : undefined}
+            aria-describedby={shownError("tipoSangre") ? "enroll-tipo-sangre-message" : undefined}
             className={`input-field ${shownError("tipoSangre") ? "border-state-bad" : ""}`}
           >
             <option value="">Seleccione una opción</option>
@@ -1034,12 +1058,17 @@ function EnrollWizard(): React.ReactElement {
             ))}
           </select>
           {shownError("tipoSangre") && (
-            <p className="mt-field flex items-center gap-1.5 text-xs font-semibold text-state-bad">
+            <p
+              id="enroll-tipo-sangre-message"
+              className="mt-field flex items-center gap-1.5 text-xs font-semibold text-state-bad"
+            >
               <AlertTriangle size={ICON.sm} strokeWidth={2} className="shrink-0" aria-hidden="true" />
               {shownError("tipoSangre")}
             </p>
           )}
         </div>
+        </FieldSlot>
+        <div className="hidden md:block" aria-hidden="true" />
 
         {renderTextarea("condicionesSalud", {
           label: "Condiciones de salud",
@@ -1058,6 +1087,7 @@ function EnrollWizard(): React.ReactElement {
           icon: <AlertTriangle size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
           rows: 2,
         })}
+        </EnrollFieldGrid>
 
         {/*
          * Issue #1138: un menor representado no tiene contacto de
@@ -1144,15 +1174,23 @@ function EnrollWizard(): React.ReactElement {
           flagged ? "bg-state-warn-bg" : ""
         }`}
       >
-        <span className="w-[150px] flex-none text-2xs font-bold uppercase text-ink-3">
-          {label}
+        {/* Label above the datum: the review is two columns now, and a fixed
+            label column would leave the value half a card to wrap in. */}
+        <span className="min-w-0 flex-1">
+          <span className="block text-2xs font-bold uppercase text-ink-3">{label}</span>
+          <span className="block break-words text-sm font-semibold text-ink">{value}</span>
         </span>
-        <span className="min-w-0 flex-1 text-sm font-semibold text-ink">{value}</span>
         {/* The flag is a STATUS, so it is the badge the system already has —
             not a second uppercase micro-label invented for this one row. */}
         {flagged && <Badge tone="warn">Revisar</Badge>}
-        <Button variant="secondary" size="sm" className="flex-none" onClick={() => goToStep(correctStep)}>
-          Corregir
+        <Button
+          variant="secondary"
+          size="sm"
+          className="flex-none"
+          aria-label={`Editar ${label}`}
+          onClick={() => goToStep(correctStep)}
+        >
+          Editar
         </Button>
       </li>
     );
@@ -1182,6 +1220,7 @@ function EnrollWizard(): React.ReactElement {
             has no background at all — this list is the one that sits inside
             a summary card and needs to read as an inset panel instead of a
             second `paper` surface stacked on the first. */}
+        <div className="grid gap-page md:grid-cols-2 md:items-start">
         <DataRowList className="bg-sunken">
           {summaryRow(
             "Tipo",
@@ -1229,6 +1268,8 @@ function EnrollWizard(): React.ReactElement {
             // their cédula while the real collision was on this row (#999).
             { duplicateCandidate: true },
           )}
+        </DataRowList>
+        <DataRowList className="bg-sunken">
           {summaryRow(
             "Tipo de sangre",
             formData.tipoSangre ? BLOOD_TYPE_LABELS[formData.tipoSangre] : "—",
@@ -1251,6 +1292,7 @@ function EnrollWizard(): React.ReactElement {
             ? summaryRow("Observaciones", formData.observaciones, "health")
             : null}
         </DataRowList>
+        </div>
 
         <p className="text-sm text-ink-2">
           {/* #1398: «le enviamos» afirmaba una entrega que al confirmar todavía
@@ -1283,6 +1325,7 @@ function EnrollWizard(): React.ReactElement {
             checked={summaryReviewed}
             onChange={(e) => {
               setSummaryReviewed(e.target.checked);
+              if (!e.target.checked) setConfirmAttempted(true);
               setFormErrors([]);
             }}
             /* #763: the rule was enforced and never declared — the audit read
@@ -1292,11 +1335,10 @@ function EnrollWizard(): React.ReactElement {
                the "Tipo de sangre" select already carries, and on a native
                checkbox it is what maps to the accessibility tree's required
                state; no `aria-required` on top, which would only restate it.
-               It does not become a second voice either: "Confirmar
-               inscripción" is `disabled` while this is unchecked, so the form
-               is never submitted in the invalid state and the browser's own
-               bubble has no moment to fire. The message people read is still
-               `submitBlockedReason`, and the block is still `handleConfirm`. */
+               It does not become a second voice either: the form is
+               `noValidate`, so the browser's own bubble never fires; the
+               message people read is the inline one below, and the block is
+               still `handleConfirm`. */
             required
             /* `focus:ring-ball` was inert twice over: it names a colour with
                no ring width, and `@tailwindcss/forms` (which is what would
@@ -1517,14 +1559,14 @@ function EnrollWizard(): React.ReactElement {
         </div>
       ) : (
 
-        /* One column, three levels of rhythm and no fourth. The page step is a
-           `gap` on this column instead of an `mb-*` written seven times by
-           hand — the wizard had seven first-level distances (24px, 24px, 32px,
-           24px, 16px…) and separated the same kind of work with 16px on one
-           step and 32px on the next. This screen renders no `AppShell`, so the
-           rhythm lock in `page-rhythm-wrapper.test.ts` never looked at it; the
-           doctrine still applies. */
-        <div className="mx-auto flex w-full max-w-[760px] flex-col gap-page px-4 py-page">
+        /* A wide canvas with a rail: the form column on the left and a live
+           summary on the right from `lg`, both under one `PAGE_RAIL` (no hand
+           written track). The navigation row spans both, above them. The
+           review step drops the rail and lays its own summary out in two
+           columns. Still no `AppShell` here, so the rhythm lock never looked
+           at this screen; the doctrine (`gap-page` on the column, distances
+           owned by the container) applies all the same. */
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-page px-4 py-page">
           {/* One back-navigation rule: a sub-page carries a `BackLink` at the
               TOP, where back navigation lives everywhere else in the product.
               This used to be a centred text link at the very bottom of a
@@ -1616,19 +1658,6 @@ function EnrollWizard(): React.ReactElement {
                       : " Usted actúa como representante.")
               }
             />
-
-            {/* #1321: `goToStep` already jumps to an arbitrary step from the
-                summary's "Corregir" buttons (below) without losing anything —
-                `formData` lives in this component, not per step — so a
-                completed pill needs no extra guard to reuse it. */}
-            <Stepper
-              label="Pasos de la inscripción"
-              current={currentIndex + 1}
-              steps={effectiveSteps.map((s) => STEP_SHORT_LABELS[s])}
-              className="mt-page"
-              onStepClick={handleStepperJump}
-              showCount={!isFirst}
-            />
           </div>
 
           {/* Issue #317 / hallazgo #62: recuperado de `sessionStorage`, no del
@@ -1645,27 +1674,20 @@ function EnrollWizard(): React.ReactElement {
           {/* Demo helper — quick-fill for testing convenience. The "(solo
               desarrollo)" label used to be the ONLY thing stopping this from
               reaching real visitors; `isDemoQuickFillEnabled` is the actual
-              guard. See its doc comment for why it reads NODE_ENV. */}
+              guard. See its doc comment for why it reads NODE_ENV. It is one
+              compact row: it never reaches a visitor, so it should not cost
+              them (or a developer's screenshot) a card of height. */}
           {demoQuickFillEnabled && (
-            <div className="rounded-card border border-dashed border-line-2 bg-sunken p-page">
-              <div className="mb-field flex items-center gap-2">
-                <AlertTriangle size={ICON.sm} strokeWidth={1.5} className="text-state-warn" aria-hidden="true" />
-                {/* Both lines were translucent ink over the `sunken` panel:
-                    `/45` composited to #9499A1 (2.61:1) and `/40` to #9FA3AA
-                    (2.31:1), the two worst pairs in the product. The panel is
-                    dev-only (`isDemoQuickFillEnabled` gates it on NODE_ENV) so
-                    it never reaches a visitor — but a token swap costs nothing
-                    and the panel is unreadable to the developers who DO see it. */}
-                <p className="text-2xs font-semibold uppercase tracking-wider text-ink-3-strong">
-                  Rellenar datos de prueba (solo desarrollo)
-                </p>
-              </div>
-              <p className="mb-section text-2xs tracking-flat leading-relaxed text-ink-3-strong">
-                Llena los campos automáticamente pero no salta la validación — los pasos deben completarse uno por uno.
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-field rounded-card border border-dashed border-line-2 bg-sunken px-page py-2">
+              <AlertTriangle size={ICON.sm} strokeWidth={1.5} className="text-state-warn" aria-hidden="true" />
+              {/* `ink-3-strong`, not translucent ink: the old `/45` and `/40`
+                  pairs measured 2.61:1 and 2.31:1 on `sunken`. */}
+              <p
+                className="text-2xs font-semibold uppercase tracking-wider text-ink-3-strong"
+                title="Llena los campos automáticamente pero no salta la validación — los pasos deben completarse uno por uno."
+              >
+                Rellenar datos de prueba (solo desarrollo)
               </p>
-              {/* Two hand-rolled buttons with their own border, their own
-                  radius and their own hover became the `secondary` skin at the
-                  compact size — the same control the "Corregir" rows use. */}
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" size="sm" onClick={() => fillDemoData("self")}>
                   Jugador
@@ -1677,105 +1699,156 @@ function EnrollWizard(): React.ReactElement {
             </div>
           )}
 
-          {/* Public tariff catalog (issue #331, consumes the public BFF/
-              backend contract of #394) — shown ONLY on step 1, before the
-              visitor's first field, so anyone knows the price before they
-              start. Public and harmless data: unlike the demo panel above,
-              this is NOT gated on auth or environment, and a failure here
-              gets its own loud `ErrorState` with retry — the whole point of
-              this block is showing a price, so its absence must say so. */}
-          {step === "type" && (
-            <div className="card p-page">
-              <h2 className="mb-page font-display text-lg uppercase tracking-flat text-ink">
-                Tarifas vigentes
-              </h2>
-              {tarifasLoading ? (
-                <LoadingState label="Cargando tarifas…" />
-              ) : tarifasError ? (
-                <ErrorState message={tarifasError} onRetry={() => void loadTarifas()} />
-              ) : tarifas.length === 0 ? (
-                <EmptyState
-                  surface="inset"
-                  title="Sin tarifas publicadas"
-                  description="Todavía no hay categorías de membresía configuradas."
+          {/* One form around the navigation row and both columns, so the
+              top-bar "Siguiente" is the form's submit control and Enter inside
+              a field advances. `noValidate`: the messages are ours, printed
+              under each field, not the browser's one-at-a-time bubble. */}
+          <form
+            ref={formRef}
+            noValidate
+            onSubmit={handleConfirm}
+            className="flex flex-col gap-page"
+          >
+            {/* #1321: `goToStep` already jumps to an arbitrary step from the
+                review's "Editar" buttons without losing anything —
+                `formData` lives in this component, not per step — so a
+                completed pill needs no extra guard to reuse it. */}
+            <EnrollNav
+              isFirst={isFirst}
+              isLast={isLast}
+              submitting={submitting}
+              onBack={handleBack}
+              stepper={
+                <Stepper
+                  label="Pasos de la inscripción"
+                  current={currentIndex + 1}
+                  steps={effectiveSteps.map((s) => STEP_SHORT_LABELS[s])}
+                  onStepClick={handleStepperJump}
+                  showCount={!isFirst}
                 />
-              ) : (
-                <ul className="space-y-field">
-                  {tarifas.map((tarifa) => (
-                    <li
-                      key={tarifa.categoria}
-                      className="flex items-center justify-between gap-3 text-sm"
-                    >
-                      <span className="text-ink-2">{tarifa.categoria}</span>
-                      <b className="text-ink">{formatCurrency(tarifa.precio)}</b>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
+              }
+            />
 
-          {/* Form card */}
-          <div data-testid="enroll-wizard-card" className="card p-page">
-            {/* The card title was `text-sm font-bold` — 13.5px of Barlow, the
-                DENSE step, which is the size of a table cell. It was smaller
-                than the labels of the fields inside it, so the title of the
-                block and the contents of the block were told apart by weight
-                alone. It takes the `title` step now: Graduate, 20px, uppercase,
-                flat tracking, and no weight class — the face has a single 400
-                cut. Same correction `PageHeader` and `StatCard` already had. */}
-            <h2
-              ref={stepHeadingRef}
-              tabIndex={-1}
-              className="mb-page font-display text-lg uppercase tracking-flat text-ink"
-            >
-              {STEP_LABELS[step]}
-            </h2>
-
-            <form onSubmit={handleConfirm}>
-              {/* Step content */}
-              {step === "type" && renderTypeStep()}
-              {step === "personal" && renderPersonalStep()}
-              {step === "representative" && renderRepresentativeStep()}
-              {step === "health" && renderHealthStep()}
-              {step === "summary" && renderSummary()}
-
-              <WizardNavigation
-                formErrors={formErrors}
-                duplicateIdentityAudience="self-service"
-                isFirst={isFirst}
-                isLast={isLast}
-                submitting={submitting}
-                onBack={handleBack}
-                onNext={handleNext}
-                nextDisabled={!stepComplete}
-                nextBlockedReason={blockedReason ?? undefined}
-                submitButton={
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    disabled={submitting || !summaryReviewed}
-                    className="disabled:cursor-not-allowed"
-                  >
-                    {submitting ? (
-                      "Inscribiendo…"
-                    ) : (
-                      <>
-                        <CheckCircle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                        Confirmar inscripción
-                      </>
+            <div className={isLast ? undefined : PAGE_RAIL}>
+              {/* The rail comes FIRST in the DOM so that on a phone the public
+                  tariffs (issue #331) still precede the first choice, as the
+                  wizard has always promised; from `lg` it is pinned to the
+                  second column on the same row. */}
+              {!isLast && (
+                <div className="flex flex-col gap-page lg:col-start-2 lg:row-start-1">
+                  {/* Public tariff catalog (issue #331, consumes the public BFF/
+                      backend contract of #394) — shown ONLY on step 1, before the
+                      visitor's first field, so anyone knows the price before they
+                      start. It shares the summary card as its trailing section.
+                      Public and harmless data: unlike the demo panel above, this
+                      is NOT gated on auth or environment, and a failure here gets
+                      its own loud `ErrorState` with retry — the whole point of
+                      this block is showing a price, so its absence must say so. */}
+                  <EnrollSummary formData={formData} steps={effectiveSteps} currentStep={step}>
+                    {step === "type" && (
+                      <section aria-label="Tarifas vigentes">
+                        <h3 className="mb-field text-xs text-ink-3-strong">Tarifas vigentes</h3>
+                        {tarifasLoading ? (
+                          <LoadingState label="Cargando tarifas…" />
+                        ) : tarifasError ? (
+                          <ErrorState message={tarifasError} onRetry={() => void loadTarifas()} />
+                        ) : tarifas.length === 0 ? (
+                          <EmptyState
+                            surface="inset"
+                            title="Sin tarifas publicadas"
+                            description="Todavía no hay categorías de membresía configuradas."
+                          />
+                        ) : (
+                          <ul className="divide-y divide-line">
+                            {tarifas.map((tarifa) => (
+                              <SummaryRow key={tarifa.categoria} label={tarifa.categoria}>
+                                {formatCurrency(tarifa.precio)}
+                              </SummaryRow>
+                            ))}
+                          </ul>
+                        )}
+                      </section>
                     )}
-                  </Button>
-                }
-                // #312 / hallazgo #2: el paso 5 apagaba este botón sin decir
-                // por qué — la MISMA falla de mensaje que `nextBlockedReason`
-                // ya arregla en los pasos 2-4, así que reusa el mismo prop.
-                submitBlocked={!submitting && !summaryReviewed}
-                submitBlockedReason="Para continuar, marque la casilla de confirmación."
-              />
-            </form>
-          </div>
+                  </EnrollSummary>
+                </div>
+              )}
+              <div data-testid="enroll-wizard-card" className="card p-page lg:col-start-1 lg:row-start-1">
+                {/* The card title was `text-sm font-bold` — 13.5px of Barlow,
+                    the DENSE step, smaller than the labels inside it. It takes
+                    the `title` step now: Graduate, 20px, uppercase, flat
+                    tracking, no weight class — the face has a single 400 cut. */}
+                <h2
+                  ref={stepHeadingRef}
+                  tabIndex={-1}
+                  className="mb-page font-display text-lg uppercase tracking-flat text-ink"
+                >
+                  {STEP_LABELS[step]}
+                </h2>
 
+                {step === "type" && renderTypeStep()}
+                {step === "personal" && renderPersonalStep()}
+                {step === "representative" && renderRepresentativeStep()}
+                {step === "health" && renderHealthStep()}
+                {step === "summary" && renderSummary()}
+
+                {/* Screen readers hear how many fields the last "Siguiente"
+                    flagged; sighted visitors see the messages themselves, so
+                    there is no red paragraph listing them a second time. */}
+                {attemptedStep === step && invalidCount > 0 && (
+                  <p role="status" className="sr-only">
+                    {invalidCount === 1
+                      ? "Hay 1 campo por corregir en este paso."
+                      : `Hay ${invalidCount} campos por corregir en este paso.`}
+                  </p>
+                )}
+
+                {formErrors.length > 0 && (
+                  <div className="alert-error mt-section items-start" role="alert">
+                    <AlertTriangle size={ICON.sm} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
+                    <div className="space-y-2">
+                      <ul className="list-inside list-disc space-y-1">
+                        {formErrors.map((err, i) => (
+                          <li key={i}>{err}</li>
+                        ))}
+                      </ul>
+                      {formErrors.some(isDuplicateIdentityError) && (
+                        <DuplicateIdentityHelp audience="self-service" />
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {isLast && (
+                  <div className="mt-page flex flex-col items-end gap-section">
+                    {/* Same pattern as "Siguiente": the button stays enabled and
+                        the missing box is named inline once confirming was
+                        attempted, not before the visitor has touched anything. */}
+                    {!submitting && confirmAttempted && !summaryReviewed && (
+                      <p role="alert" className="text-base font-semibold text-cata-red-dark [text-wrap:pretty]">
+                        Para continuar, marque la casilla de confirmación.
+                      </p>
+                    )}
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      disabled={submitting}
+                      className="disabled:cursor-not-allowed"
+                    >
+                      {submitting ? (
+                        "Inscribiendo…"
+                      ) : (
+                        <>
+                          <CheckCircle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                          Confirmar inscripción
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          </form>
         </div>
       )}
 

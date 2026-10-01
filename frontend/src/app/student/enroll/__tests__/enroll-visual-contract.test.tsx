@@ -25,7 +25,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import EnrollPage from "@/app/student/enroll/page";
 import { resetTestHistory, useTestSearchParams } from "@/lib/__tests__/next-navigation-double";
 import {
@@ -239,7 +239,8 @@ describe("the enrollment wash marks only the wizard's own header/context", () =>
     expect(header).toContainElement(
       screen.getByRole("heading", { name: /inscripción de estudiante/i }),
     );
-    expect(header).toContainElement(
+    // The stepper left the header for the navigation row: Atrás | Stepper | Siguiente.
+    expect(screen.getByTestId("enroll-nav")).toContainElement(
       screen.getByRole("list", { name: /pasos de la inscripción/i }),
     );
 
@@ -256,15 +257,20 @@ describe("the enrollment wash marks only the wizard's own header/context", () =>
   });
 });
 
+/** The named stepper — the rail's own checklist repeats the step names. */
+function stepperList(): HTMLElement {
+  return screen.getByRole("list", { name: /pasos de la inscripción/i });
+}
+
 describe("the stepper's three states are tellable apart without colour alone", () => {
   it("marks the current step coal and the pending ones sunken, not paper", () => {
     render(<EnrollPage />);
 
-    const current = screen.getByText("Tipo");
+    const current = within(stepperList()).getByText("Tipo");
     expect(current).toHaveAttribute("data-state", "current");
     expect(current.className).toContain("bg-coal");
 
-    const pending = screen.getByText("Estudiante");
+    const pending = within(stepperList()).getByText("Estudiante");
     expect(pending).toHaveAttribute("data-state", "upcoming");
     expect(pending.className).toContain("bg-sunken");
     expect(pending.className).not.toMatch(/\bbg-paper\b/);
@@ -274,7 +280,7 @@ describe("the stepper's three states are tellable apart without colour alone", (
     render(<EnrollPage />);
     next(); // type -> personal
 
-    const done = screen.getByText("Tipo");
+    const done = within(stepperList()).getByText("Tipo");
     expect(done).toHaveAttribute("data-state", "done");
     expect(done.className).toContain("bg-state-ok-bg");
     // The non-colour marker survives the fill change: a real check glyph.
