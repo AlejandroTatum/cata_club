@@ -254,6 +254,8 @@ function EnrollWizard(): React.ReactElement {
   // lives here.
   const [legalReviewDoc, setLegalReviewDoc] = useState<LegalReviewDocumentId | null>(null);
   const [formErrors, setFormErrors] = useState<string[]>([]);
+  /** The consent box was needed and left unticked on a confirm attempt. */
+  const showConsentError = !submitting && confirmAttempted && !summaryReviewed;
   const [touched, setTouched] = useState<Set<EnrollField>>(new Set());
   /**
    * How many times "Siguiente" has been pressed on an incomplete step. Only
@@ -516,7 +518,7 @@ function EnrollWizard(): React.ReactElement {
     try {
       const response = await enrollStudent(buildEnrollmentRequest(formData, summaryReviewed));
       if (!response.enrolled) {
-        throw new Error("No se pudo completar la inscripción.");
+        throw new Error("No pudimos registrar la inscripción. Intente de nuevo.");
       }
       // The backend auto-logs the new user in (HttpOnly cookies set by
       // /api/enrollment); re-hydrate AuthContext now so "Ir a mi cuenta"
@@ -1429,6 +1431,8 @@ function EnrollWizard(): React.ReactElement {
                message people read is the inline one below, and the block is
                still `handleConfirm`. */
             required
+            aria-invalid={showConsentError ? true : undefined}
+            aria-describedby={showConsentError ? "enroll-consentimiento-message" : undefined}
             /* `focus:ring-ball` was inert twice over: it names a colour with
                no ring width, and `@tailwindcss/forms` (which is what would
                give a checkbox a ring at all) is not installed. Focus is marked
@@ -1457,6 +1461,21 @@ function EnrollWizard(): React.ReactElement {
                 <button type="button" className="underline" onClick={() => setLegalReviewDoc("permiso-imagen-fetm")}>Permiso de imagen FETM</button>.
               </span>
         </label>
+        {/* The message sits under the box it is about (it used to render by the
+            submit button, a screen away from the control) and is tied to the
+            checkbox with aria-describedby. `role="alert"` announces it the
+            moment the attempt is made. */}
+        {showConsentError && (
+          <p
+            id="enroll-consentimiento-message"
+            role="alert"
+            className="-mt-2 flex items-start gap-1.5 text-sm font-semibold text-state-bad [text-wrap:pretty]"
+          >
+            <AlertTriangle size={ICON.sm} strokeWidth={2} className="mt-0.5 shrink-0" aria-hidden="true" />
+            Para confirmar la inscripción, marque la casilla de aceptación de los Términos de uso, el Aviso de
+            privacidad y el Permiso de imagen FETM.
+          </p>
+        )}
       </div>
     );
   }
@@ -1837,14 +1856,6 @@ function EnrollWizard(): React.ReactElement {
 
                 {isLast && (
                   <div className="mt-page flex flex-col items-end gap-section">
-                    {/* Same pattern as "Siguiente": the button stays enabled and
-                        the missing box is named inline once confirming was
-                        attempted, not before the visitor has touched anything. */}
-                    {!submitting && confirmAttempted && !summaryReviewed && (
-                      <p role="alert" className="text-base font-semibold text-cata-red-dark [text-wrap:pretty]">
-                        Para continuar, marque la casilla de confirmación.
-                      </p>
-                    )}
                     <Button
                       type="submit"
                       variant="primary"

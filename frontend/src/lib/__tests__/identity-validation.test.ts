@@ -630,18 +630,18 @@ describe("edad del alumno", () => {
 
   describe("studentBirthDateRule — issue #224's five reproduction cases", () => {
     it("requires a value", () => {
-      expect(studentBirthDateRule("", FROZEN_TODAY)).toBe("La fecha de nacimiento es obligatoria.");
+      expect(studentBirthDateRule("", FROZEN_TODAY)).toBe("Indique la fecha de nacimiento del alumno.");
     });
 
     it("rejects an invalid calendar date", () => {
       expect(studentBirthDateRule("2024-02-30", FROZEN_TODAY)).toBe(
-        "La fecha de nacimiento ingresada no es válida.",
+        "La fecha de nacimiento no existe. Revise el día, el mes y el año.",
       );
     });
 
     it("rejects a future date by naming it future, never as a bogus negative age", () => {
       const message = studentBirthDateRule("2030-01-01", FROZEN_TODAY);
-      expect(message).toBe("La fecha de nacimiento no puede ser en el futuro.");
+      expect(message).toBe("La fecha de nacimiento no puede ser posterior a hoy. Revise el año.");
       expect(message).not.toContain("menor");
     });
 
@@ -651,19 +651,19 @@ describe("edad del alumno", () => {
 
     it("rejects a birth date 2 years ago, naming the computed age", () => {
       expect(studentBirthDateRule("2027-01-01", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 2).`,
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; con esa fecha resultan 2. Revise el año de nacimiento.`,
       );
     });
 
     it("rejects a birth date 120 years ago, naming the computed age", () => {
       expect(studentBirthDateRule("1909-01-01", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 120).`,
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; con esa fecha resultan 120. Revise el año de nacimiento.`,
       );
     });
 
     it("rejects an implausible historical date (1750), naming the computed age", () => {
       expect(studentBirthDateRule("1750-03-15", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 278).`,
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; con esa fecha resultan 278. Revise el año de nacimiento.`,
       );
     });
 
@@ -677,13 +677,13 @@ describe("edad del alumno", () => {
 
     it("rejects one day past the maximum boundary (96 years old)", () => {
       expect(studentBirthDateRule("1933-01-01", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 96).`,
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; con esa fecha resultan 96. Revise el año de nacimiento.`,
       );
     });
 
     it("rejects one day short of the minimum boundary (2 years old)", () => {
       expect(studentBirthDateRule("2026-01-02", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 2).`,
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; con esa fecha resultan 2. Revise el año de nacimiento.`,
       );
     });
   });

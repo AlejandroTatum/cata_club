@@ -537,7 +537,7 @@ describe("EnrollPage — error prevention on the student step", () => {
     fillBirthDate(enrollFieldId("fechaNacimiento"), "2015-06-15");
     fireEvent.blur(screen.getByLabelText(/^Año/));
 
-    expect(screen.getByText(/menores de edad no pueden autoinscribirse/i)).toBeInTheDocument();
+    expect(screen.getByText(/el alumno es menor de edad y no puede inscribirse por su cuenta/i)).toBeInTheDocument();
     // Not disabled: pressing it re-flags the step instead of advancing.
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     expect(screen.getByLabelText(/^Nombres/)).toBeInTheDocument();
@@ -556,12 +556,12 @@ describe("EnrollPage — error prevention on the student step", () => {
     fireEvent.change(confirm, { target: { value: "otraClave9" } });
     fireEvent.blur(confirm);
 
-    expect(screen.getByText("Las contraseñas no coinciden.")).toBeInTheDocument();
+    expect(screen.getByText(/Las contraseñas no coinciden\./)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     expect(confirm).toBeInTheDocument();
 
     fireEvent.change(confirm, { target: { value: "password8" } });
-    expect(screen.queryByText("Las contraseñas no coinciden.")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Las contraseñas no coinciden\./)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     expect(screen.getByLabelText(/tipo de sangre/i)).toBeInTheDocument();
   });
@@ -830,7 +830,7 @@ describe("EnrollPage — duplicate-identity recovery on the summary step", () =>
     await submitAndFailWithDuplicate();
 
     const alert = screen.getByRole("alert");
-    expect(alert).toHaveTextContent(MENSAJE_IDENTIDAD_DUPLICADA);
+    expect(alert).toHaveTextContent(/ya existe una cuenta registrada con la cédula o el correo que ingresó/i);
     // The oracle guard, revisited by #999: the alert may name the SET of
     // fields that can collide ("cédula o correo") but must never repeat the
     // value the visitor typed, which is the only thing that would actually
@@ -974,7 +974,7 @@ describe("EnrollPage — motivo del bloqueo en el paso 5 (#312 / #2, #9)", () =>
 
     expect(screen.getByRole("checkbox")).not.toBeChecked();
     expect(screen.getByRole("button", { name: /confirmar inscripción/i })).toBeEnabled();
-    expect(screen.queryByText(/para continuar, marque la casilla de confirmación/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/para confirmar la inscripción, marque la casilla de aceptación/i)).not.toBeInTheDocument();
   });
 
   it("names the missing checkbox inline once confirming is attempted, without submitting", () => {
@@ -984,7 +984,11 @@ describe("EnrollPage — motivo del bloqueo en el paso 5 (#312 / #2, #9)", () =>
 
     fireEvent.click(screen.getByRole("button", { name: /confirmar inscripción/i }));
 
-    expect(screen.getByText(/para continuar, marque la casilla de confirmación/i)).toBeInTheDocument();
+    const message = screen.getByText(/para confirmar la inscripción, marque la casilla de aceptación/i);
+    expect(message).toHaveAttribute("role", "alert");
+    const checkbox = screen.getByRole("checkbox");
+    expect(checkbox).toHaveAttribute("aria-invalid", "true");
+    expect(checkbox).toHaveAttribute("aria-describedby", message.id);
     expect(enrollStudent).not.toHaveBeenCalled();
   });
 
@@ -993,11 +997,11 @@ describe("EnrollPage — motivo del bloqueo en el paso 5 (#312 / #2, #9)", () =>
     reachSummaryStep();
 
     fireEvent.click(screen.getByRole("checkbox"));
-    expect(screen.queryByText(/para continuar, marque la casilla de confirmación/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/para confirmar la inscripción, marque la casilla de aceptación/i)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("checkbox"));
-    expect(screen.getByText(/para continuar, marque la casilla de confirmación/i)).toBeInTheDocument();
+    expect(screen.getByText(/para confirmar la inscripción, marque la casilla de aceptación/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("checkbox"));
-    expect(screen.queryByText(/para continuar, marque la casilla de confirmación/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/para confirmar la inscripción, marque la casilla de aceptación/i)).not.toBeInTheDocument();
   });
 
   it("opens the in-flow legal review for each grouped document — no link leaves the wizard (#1368)", () => {
@@ -1029,7 +1033,7 @@ describe("EnrollPage — motivo del bloqueo en el paso 5 (#312 / #2, #9)", () =>
 
     const confirmButton = screen.getByRole("button", { name: /confirmar inscripción/i });
     expect(confirmButton).toBeEnabled();
-    expect(screen.queryByText(/para continuar, marque la casilla de confirmación/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/para confirmar la inscripción, marque la casilla de aceptación/i)).not.toBeInTheDocument();
   });
 
   it("gives the confirmation checkbox a >=24x24px target, not the old 16x16 (h-4 w-4)", () => {
@@ -1101,7 +1105,7 @@ describe("EnrollPage — semántica nativa del consentimiento legal (#763)", () 
     fireEvent.submit(form);
 
     expect(enrollStudent).not.toHaveBeenCalled();
-    expect(screen.getByText(/para continuar, marque la casilla de confirmación/i)).toBeInTheDocument();
+    expect(screen.getByText(/para confirmar la inscripción, marque la casilla de aceptación/i)).toBeInTheDocument();
   });
 
   it("is never granted by the fill-everything shortcut — consent is the one field nothing else can answer", () => {

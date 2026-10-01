@@ -528,12 +528,12 @@ export function isFutureBirthDate(birthDate: string, today: Date = new Date()): 
  * the wrong thing.
  */
 export function studentBirthDateRule(value: string, today: Date = new Date()): string | null {
-  if (!value) return "La fecha de nacimiento es obligatoria.";
-  if (!isValidCalendarDate(value)) return "La fecha de nacimiento ingresada no es válida.";
-  if (isFutureBirthDate(value, today)) return "La fecha de nacimiento no puede ser en el futuro.";
+  if (!value) return "Indique la fecha de nacimiento del alumno.";
+  if (!isValidCalendarDate(value)) return "La fecha de nacimiento no existe. Revise el día, el mes y el año.";
+  if (isFutureBirthDate(value, today)) return "La fecha de nacimiento no puede ser posterior a hoy. Revise el año.";
   const age = calculatePersonAge(value, today);
   if (age < EDAD_MINIMA_ALUMNO || age > EDAD_MAXIMA_ALUMNO) {
-    return `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: ${age}).`;
+    return `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; con esa fecha resultan ${age}. Revise el año de nacimiento.`;
   }
   return null;
 }

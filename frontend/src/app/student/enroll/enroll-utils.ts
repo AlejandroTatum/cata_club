@@ -11,6 +11,7 @@ import {
   type EnrollmentRequest,
   type EnrollmentStudent,
 } from "@/types/enrollment";
+import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import { toUserMessage } from "@/lib/error-message";
 import {
   cedulaRule,
@@ -234,15 +235,31 @@ export function isDemoQuickFillEnabled(
  */
 export function getEnrollmentErrorMessage(error: unknown): string {
   const field = enrollmentValidationField(error);
-  if (field === "correo") return "Revise el correo electrónico e intente nuevamente.";
-  if (field === "correoRepresentante") return "Revise el correo electrónico del representante e intente nuevamente.";
+  if (field === "correo") {
+    return "El servidor no aceptó el correo electrónico. Corríjalo en el paso «Datos del estudiante» e intente de nuevo.";
+  }
+  if (field === "correoRepresentante") {
+    return "El servidor no aceptó el correo electrónico del representante. Corríjalo en el paso «Datos del representante» e intente de nuevo.";
+  }
   // The old helper carried two fallbacks — "revise sus datos" for 400/422 and
   // "intente más tarde" for everything else. The translator answers everything
   // else from the status now, so the one remaining fallback is the one for the
   // case it cannot answer: a 400/422 whose detail was not fit to show. Telling
   // that user to wait would be the wrong advice; their form is what is wrong.
-  return toUserMessage(error, "No se pudo validar la inscripción. Revise sus datos e intente nuevamente.");
+  const message = toUserMessage(
+    error,
+    "No pudimos registrar la inscripción. Revise los datos de cada paso e intente de nuevo.",
+  );
+  return isDuplicateIdentityError(message) ? DUPLICATE_IDENTITY_COPY : message;
 }
+
+/**
+ * The backend's anti-enumeration answer says a datum "pertenece a una cuenta
+ * registrada" without saying which one. The visitor needs the next move too, so
+ * the wizard restates it; `isDuplicateIdentityError` recognises this sentence.
+ */
+const DUPLICATE_IDENTITY_COPY =
+  "Ya existe una cuenta registrada con la cédula o el correo que ingresó. Si es suya, inicie sesión; si no, revise que los datos estén bien escritos.";
 
 function enrollmentValidationField(error: unknown): EnrollField | undefined {
   if (!error || typeof error !== "object" || !("status" in error) || error.status !== 422) return undefined;
@@ -384,8 +401,8 @@ export function digitsOf(value: string): string {
  * caller — `FIELD_RULES` for self/representante credentials.
  */
 function passwordConfirmRule(confirm: string, password: string): string | null {
-  if (confirm.length === 0) return "La confirmación de contraseña es obligatoria.";
-  return confirm === password ? null : "Las contraseñas no coinciden.";
+  if (confirm.length === 0) return "Repita la contraseña para confirmarla.";
+  return confirm === password ? null : "Las contraseñas no coinciden. Escriba la misma contraseña en los dos campos.";
 }
 
 const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string | null>> = {
@@ -398,13 +415,13 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
       d.enrollmentType === ENROLLMENT_TYPES.SELF &&
       isMinorAge(calculatePersonAge(d.fechaNacimiento))
     ) {
-      return "Los menores de edad no pueden autoinscribirse. Seleccione 'Inscribo a un hijo / dependiente' o un representante debe completar la inscripción.";
+      return "Por la fecha indicada, el alumno es menor de edad y no puede inscribirse por su cuenta. Vuelva al primer paso y elija «Inscribo a un hijo / dependiente», o pida a su representante que complete la inscripción.";
     }
     if (
       d.enrollmentType === ENROLLMENT_TYPES.CHILD &&
       !isMinorAge(calculatePersonAge(d.fechaNacimiento))
     ) {
-      return "Un mayor de edad no puede inscribirse con representante. Seleccione 'Me inscribo yo' para gestionar su propia cuenta.";
+      return "Por la fecha indicada, el alumno ya es mayor de edad y gestiona su propia cuenta. Vuelva al primer paso y elija «Me inscribo yo».";
     }
     return null;
   },
@@ -416,13 +433,13 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
   telefono: (d) => phoneFieldRule(d.telefono, "El teléfono"),
   correo: (d) =>
     d.correo.trim().length === 0
-      ? "El correo electrónico es obligatorio."
+      ? "Escriba su correo electrónico: lo usará para iniciar sesión."
       : isEmail(d.correo)
         ? null
-        : "El correo electrónico no es válido.",
+        : "El correo electrónico no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.",
   contrasenia: (d) =>
     d.contrasenia.length === 0
-      ? "La contraseña es obligatoria."
+      ? "Cree una contraseña para su cuenta."
       : passwordRule(d.contrasenia, "La contraseña"),
   contraseniaConfirmacion: (d) => passwordConfirmRule(d.contraseniaConfirmacion, d.contrasenia),
   nombreRepresentante: (d) => personNameRule(d.nombreRepresentante, "Los nombres del representante"),
@@ -436,32 +453,31 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
     cedulaRule(d.cedulaRepresentante, "La cédula del representante") ??
     representativeCedulaDiffersRule(d.cedulaRepresentante, d.cedula),
   fechaNacimientoRepresentante: (d) => {
+    if (!d.fechaNacimientoRepresentante) {
+      return "Indique la fecha de nacimiento del representante.";
+    }
     if (!isValidCalendarDate(d.fechaNacimientoRepresentante)) {
-      // "(18+)" was an abbreviation of the sentence it sat inside — the rule of
-      // the words: the interface never shortens, and never says twice what one
-      // phrase already says. The lower bound is stated in full by the very next
-      // branch, which is the one that can actually name a number.
-      return "El representante debe ser mayor de edad.";
+      return "La fecha de nacimiento del representante no existe. Revise el día, el mes y el año.";
     }
     const edad = calculatePersonAge(d.fechaNacimientoRepresentante);
     return edad >= EDAD_MAYORIA_EDAD && edad <= EDAD_MAXIMA_ALUMNO
       ? null
-      : `El representante debe tener entre ${EDAD_MAYORIA_EDAD} y ${EDAD_MAXIMA_ALUMNO} años (calculado: ${edad}).`;
+      : `El representante debe tener entre ${EDAD_MAYORIA_EDAD} y ${EDAD_MAXIMA_ALUMNO} años; con esa fecha resultan ${edad}. Revise el año de nacimiento.`;
   },
   telefonoRepresentante: (d) => phoneRule(d.telefonoRepresentante, "El teléfono del representante"),
   correoRepresentante: (d) =>
     d.correoRepresentante.trim().length === 0
-      ? "El correo del representante es obligatorio."
+      ? "Escriba el correo electrónico del representante: lo usará para iniciar sesión."
       : isEmail(d.correoRepresentante)
         ? null
-        : "El correo del representante no es válido.",
+        : "El correo del representante no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.",
   contraseniaRepresentante: (d) =>
     d.contraseniaRepresentante.length === 0
-      ? "La contraseña del representante es obligatoria."
+      ? "Cree una contraseña para la cuenta del representante."
       : passwordRule(d.contraseniaRepresentante, "La contraseña del representante"),
   contraseniaRepresentanteConfirmacion: (d) =>
     passwordConfirmRule(d.contraseniaRepresentanteConfirmacion, d.contraseniaRepresentante),
-  tipoSangre: (d) => (isBloodType(d.tipoSangre) ? null : "El tipo de sangre es obligatorio."),
+  tipoSangre: (d) => (isBloodType(d.tipoSangre) ? null : "Seleccione el tipo de sangre del alumno."),
   contactoEmergencia: (d) =>
     personNameRule(d.contactoEmergencia, "El nombre del contacto de emergencia", { plural: false }),
   // Issue #860: chained after `phoneFieldRule` so a malformed number is
