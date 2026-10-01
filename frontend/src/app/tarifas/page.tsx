@@ -25,6 +25,7 @@ import {
   DataRow,
   EmptyState,
   ErrorState,
+  InfoPanel,
   LoadingState,
   PAGE_RAIL,
   Table,
@@ -436,6 +437,27 @@ export default function TarifasPage(): React.ReactElement {
     );
   }
 
+  /** The rail's resting state: how the catalog is read, from what is loaded. */
+  function renderGuidance(): React.ReactElement {
+    return (
+      <InfoPanel title="Cómo se aplican las tarifas">
+        {tarifas.length > 0 ? (
+          <p>
+            {tarifas.length === 1 ? "1 tarifa" : `${tarifas.length} tarifas`} en el catálogo.
+          </p>
+        ) : null}
+        <p>
+          Cada membresía nueva toma el precio de su tarifa en el momento de crearse o de
+          registrar el pago.
+        </p>
+        <p>
+          Cambiar un precio solo afecta a los pagos futuros; los ya registrados no cambian.
+        </p>
+        <p>Para sumar una categoría o modalidad, use «Nueva tarifa».</p>
+      </InfoPanel>
+    );
+  }
+
   function renderCreateForm(): React.ReactElement {
     return (
       <div className="card flex flex-col gap-section p-[18px]">
@@ -524,7 +546,6 @@ export default function TarifasPage(): React.ReactElement {
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
         title="Tarifas"
-        measure="short"
         actions={
           <Button variant="dark" onClick={openCreateForm}>
             <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
@@ -534,10 +555,7 @@ export default function TarifasPage(): React.ReactElement {
       >
         {loadError && <ErrorState message={loadError} onRetry={() => void loadCatalog()} />}
 
-        <div
-          data-testid="tarifas-split"
-          className={createOpen ? PAGE_RAIL : "flex min-w-0 flex-1 flex-col"}
-        >
+        <div data-testid="tarifas-split" className={PAGE_RAIL}>
           <div className="flex min-w-0 flex-1 flex-col gap-page">
             <section className="card flex min-w-0 flex-col overflow-hidden">
               <div className="flex items-center justify-between gap-2 border-b border-line px-[18px] py-3">
@@ -638,7 +656,9 @@ export default function TarifasPage(): React.ReactElement {
             </section>
           </div>
 
-          {createOpen ? <div data-testid="tarifas-rail">{renderCreateForm()}</div> : null}
+          <div data-testid="tarifas-rail">
+            {createOpen ? renderCreateForm() : renderGuidance()}
+          </div>
         </div>
 
         <ConfirmDialog

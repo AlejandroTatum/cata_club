@@ -59,7 +59,7 @@ export default function ScheduleDayGroup({
         />
       </button>
       {isExpanded && (
-        <div id={panelId} className="grid gap-2 border-t border-line p-3 sm:grid-cols-2">
+        <div id={panelId} className="flex flex-wrap gap-2 border-t border-line p-3">
           {group.schedules.map((sched: TrainingSchedule) => {
             const isActive = sched.id === selectedScheduleId;
             const recordedCount = weekRecordCounts.get(sched.id) ?? 0;
@@ -76,7 +76,7 @@ export default function ScheduleDayGroup({
                 aria-pressed={isActive}
                 // Selection is coal + the yellow ball dot, never a red fill —
                 // red is CTA and destructive only.
-                className={`flex min-h-[56px] flex-col justify-center gap-1 rounded-ctl border px-4 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                className={`flex min-h-[56px] flex-1 basis-44 flex-col justify-center gap-1 rounded-ctl border px-4 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                   isActive
                     ? "border-coal bg-paper shadow-selected"
                     : "border-line-2 bg-paper hover:border-ink-3"

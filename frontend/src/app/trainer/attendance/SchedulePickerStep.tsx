@@ -70,9 +70,14 @@ export default function SchedulePickerStep({
       <div>
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-field">
           <p className="text-sm text-ink-3">
-            {visible.narrowedToToday
-              ? `Horarios de hoy · ${formatDay(today)}`
-              : "Seleccione el horario de entrenamiento:"}
+            {visible.narrowedToToday ? (
+              <>
+                <span>{`Horarios de hoy · ${formatDay(today)}`}</span>
+                <span> — toque el que va a pasar</span>
+              </>
+            ) : (
+              "Seleccione el horario de entrenamiento:"
+            )}
           </p>
           {/* The escape hatch. Hidden when today is empty: the list is
               already the full week and the hint below says why. */}

@@ -35,6 +35,9 @@ export type { ErrorStateProps } from "./ErrorState";
 export { FilterGroup, FilterPanel, FILTER_LABEL } from "./FilterPanel";
 export type { FilterGroupProps, FilterPanelLayout, FilterPanelProps } from "./FilterPanel";
 
+export { default as FileDropZone } from "./FileDropZone";
+export type { FileDropZoneProps } from "./FileDropZone";
+
 export { default as FilterPill } from "./FilterPill";
 export type { FilterPillProps } from "./FilterPill";
 
@@ -42,6 +45,9 @@ export { default as IdentityCell, MEMBER_ROLE_LABELS } from "./IdentityCell";
 export type { IdentityCellProps, MemberRole } from "./IdentityCell";
 
 export { PAGE_RAIL } from "./layout";
+
+export { default as InfoPanel } from "./InfoPanel";
+export type { InfoPanelProps } from "./InfoPanel";
 
 export { default as LoadingState } from "./LoadingState";
 export type { LoadingStateProps } from "./LoadingState";
@@ -54,6 +60,9 @@ export type { PageHeaderProps } from "./PageHeader";
 
 export { default as PasswordGuidance, PASSWORD_GUIDANCE_HEADING } from "./PasswordGuidance";
 export type { PasswordGuidanceProps } from "./PasswordGuidance";
+
+export { default as RowActionsMenu } from "./RowActionsMenu";
+export type { RowActionsMenuItem, RowActionsMenuProps } from "./RowActionsMenu";
 
 export { default as ResponsiveListTable } from "./ResponsiveListTable";
 export type { ResponsiveListTableProps } from "./ResponsiveListTable";

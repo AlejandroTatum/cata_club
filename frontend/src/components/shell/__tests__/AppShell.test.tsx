@@ -289,7 +289,7 @@ describe("AppShell", (): void => {
     // two links by design.
     const sidebarNav = within(screen.getByRole("navigation", { name: "Navegación principal" }));
     expect(sidebarNav.getByRole("link", { name: /Miembros/i })).toBeInTheDocument();
-    expect(sidebarNav.getByRole("link", { name: "Horarios" })).toBeInTheDocument();
+    expect(sidebarNav.getByRole("link", { name: "Grupos y horarios" })).toBeInTheDocument();
     // "Inicio" is represented by the brand logo link, not a separate nav row.
     expect(screen.queryByRole("link", { name: /^Inicio$/i })).not.toBeInTheDocument();
   });
@@ -475,8 +475,8 @@ describe("AppShell", (): void => {
 
     fireEvent.change(input, { target: { value: "pagos" } });
 
-    expect(screen.getByRole("option", { name: /Membresías y Pagos/i })).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: /^Horarios$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /^Pagos$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /^Grupos y horarios$/i })).not.toBeInTheDocument();
   });
 
   it("shows an empty-results message when nothing matches", (): void => {
@@ -535,7 +535,7 @@ describe("AppShell", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 
     fireEvent.click(screen.getByRole("button", { name: "Buscar secciones" }));
-    fireEvent.click(screen.getByRole("option", { name: "Horarios" }));
+    fireEvent.click(screen.getByRole("option", { name: "Grupos y horarios" }));
 
     expect(mockPush).toHaveBeenCalledWith("/groups");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -560,11 +560,11 @@ describe("AppShell", (): void => {
     fireEvent.click(screen.getByRole("button", { name: /Colapsar menú/i }));
 
     expect(container.querySelector("aside")).toHaveClass("lg:w-[76px]");
-    const groupsLink = screen.getByRole("link", { name: "Horarios" });
-    expect(groupsLink).toHaveAttribute("title", "Horarios");
+    const groupsLink = screen.getByRole("link", { name: "Grupos y horarios" });
+    expect(groupsLink).toHaveAttribute("title", "Grupos y horarios");
     // The visible label is hidden at `lg`, so the accessible name must not
     // depend on it — a native `title` tooltip is not a substitute.
-    expect(groupsLink).toHaveAttribute("aria-label", "Horarios");
+    expect(groupsLink).toHaveAttribute("aria-label", "Grupos y horarios");
     expect(groupsLink.querySelector("span:not([aria-hidden])")).toHaveClass("lg:hidden");
     expect(screen.getByRole("button", { name: /Expandir menú/i })).toBeInTheDocument();
   });
@@ -1163,31 +1163,47 @@ describe("AppShell — the rail of a person with several roles", (): void => {
    */
   const rail = () => within(screen.getByRole("navigation", { name: "Navegación principal" }));
 
-  it("draws no heading when the person holds a single role", (): void => {
-    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Entrenador"));
+  it("draws no heading when the person's rail is a single group", (): void => {
+    // A minor with their own account: no Ficha médica, so one group only.
+    const auth = createAuthenticatedAuth("estudiante", "Laura Vera");
+    if (auth.session?.user.role === "estudiante") auth.session.user.fechaNacimiento = "2015-01-01";
+    mockUseAuth.mockReturnValue(auth);
 
-    render(<AppShell title="Mi día">{null}</AppShell>);
+    render(<AppShell title="Mi cuenta">{null}</AppShell>);
 
     // One group names the whole rail, and the brand block right above it
     // already does that ("Panel de gestión" / "Mi cuenta", `getAreaLabel`).
     expect(rail().queryAllByRole("group")).toHaveLength(0);
-    expect(rail().queryByText("Entrenar")).not.toBeInTheDocument();
-    expect(rail().getByRole("link", { name: "Mi día" })).toBeInTheDocument();
+    expect(rail().getByRole("link", { name: "Pagos" })).toBeInTheDocument();
   });
 
-  it("keeps the 18 alumno+representante accounts on one Mi cuenta, unnamed", (): void => {
+  it("splits a trainer's rail into Hoy and Seguimiento", (): void => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Entrenador"));
+
+    render(<AppShell title="Mi día">{null}</AppShell>);
+
+    const groups = rail().getAllByRole("group");
+    expect(groups.map((group) => group.getAttribute("aria-label"))).toEqual([
+      "Hoy",
+      "Seguimiento",
+    ]);
+    expect(within(groups[0]).getByRole("link", { name: "Pasar lista" })).toBeInTheDocument();
+    expect(within(groups[1]).getByRole("link", { name: "Alumnos del club" })).toBeInTheDocument();
+  });
+
+  it("keeps the 18 alumno+representante accounts on one Mi cuenta, split from Salud y familia", (): void => {
     mockUseAuth.mockReturnValue(
       createMultiRoleAuth(["REPRESENTANTE", "ALUMNO"], "representante", "Marta Vera"),
     );
 
     render(<AppShell title="Mi cuenta">{null}</AppShell>);
 
-    // Both roles name the same section, so there is still ONE group — and a
-    // lone group draws no heading. Asserted on the group wrapper rather than
-    // on the words: "Mi cuenta" is ALSO the registered name of `/student`
-    // (`lib/destinations.ts`), so a text query cannot tell a rótulo that is
-    // absent from the row that is present.
-    expect(rail().queryAllByRole("group")).toHaveLength(0);
+    // Both roles name the same sections, so each is drawn ONCE. Asserted on
+    // the group wrapper rather than on the words: "Mi cuenta" is ALSO the
+    // registered name of `/student` (`lib/destinations.ts`).
+    expect(
+      rail().getAllByRole("group").map((group) => group.getAttribute("aria-label")),
+    ).toEqual(["Mi cuenta", "Salud y familia"]);
     expect(rail().getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([
       "/student",
       "/student/payments",
@@ -1205,7 +1221,8 @@ describe("AppShell — the rail of a person with several roles", (): void => {
 
     // The case the product could not express: his own fees and his own
     // attendance did not exist for him.
-    expect(rail().getByText("Entrenar")).toBeInTheDocument();
+    expect(rail().getByText("Hoy")).toBeInTheDocument();
+    expect(rail().getByText("Seguimiento")).toBeInTheDocument();
     // The rótulo, not the row: `/student` is registered as "Mi cuenta" too, so
     // the heading and the destination under it say the same two words. The
     // registry owns the row's name (D12b) and D12d chose the heading — the
@@ -1245,7 +1262,7 @@ describe("AppShell — the rail of a person with several roles", (): void => {
     const family = render(<AppShell title="Mi cuenta">{null}</AppShell>);
     // The area line, not the `/student` row: the destination registry names
     // that row "Mi cuenta" too, so the words alone cannot tell them apart.
-    expect(screen.getByText("Mi cuenta", { selector: ".text-2xs" })).toBeInTheDocument();
+    expect(screen.getByText("Mi cuenta", { selector: "span.text-2xs" })).toBeInTheDocument();
     expect(screen.queryByText("Panel de gestión")).not.toBeInTheDocument();
     family.unmount();
   });
@@ -1260,7 +1277,7 @@ describe("AppShell — the rail of a person with several roles", (): void => {
     expect(screen.queryByText("Panel de gestión")).not.toBeInTheDocument();
     // The two rótulos still name both areas, which is the honest version of
     // the same statement.
-    expect(rail().getByText("Entrenar")).toBeInTheDocument();
+    expect(rail().getByText("Hoy")).toBeInTheDocument();
     expect(rail().getByText("Mi cuenta", { selector: "p" })).toBeInTheDocument();
   });
 
@@ -1273,10 +1290,11 @@ describe("AppShell — the rail of a person with several roles", (): void => {
 
     const groups = rail().getAllByRole("group");
     expect(groups.map((group) => group.getAttribute("aria-label"))).toEqual([
-      "Entrenar",
+      "Hoy",
+      "Seguimiento",
       "Mi cuenta",
     ]);
-    expect(within(groups[1]).getByRole("link", { name: "Pagos" })).toBeInTheDocument();
+    expect(within(groups[2]).getByRole("link", { name: "Pagos" })).toBeInTheDocument();
   });
 
   /*
