@@ -278,7 +278,7 @@ function ActivationPageContent(): React.ReactElement {
           {resendMessage && <p role="status" className="text-sm leading-relaxed text-state-ok">{resendMessage}</p>}
           {resendError && <p role="alert" className="text-sm leading-relaxed text-state-bad">{resendError}</p>}
 
-          <div className="flex flex-col items-center gap-2 text-center">
+          <div className="flex flex-col items-start gap-2 text-left">
             <button
               type="button"
               onClick={checkStatus}
@@ -351,7 +351,7 @@ function ActivationPageContent(): React.ReactElement {
            * "Cerrar sesión" is the one action here the shell has no
            * equivalent for, so it is the only thing left in this row.
            */}
-          <div className="flex flex-col items-center gap-2 text-center text-sm">
+          <div className="flex flex-col items-start gap-2 text-left text-sm">
             <button type="button" onClick={() => void logout()} className={buttonClasses("tertiary", "sm")}>
               Cerrar sesión
             </button>
@@ -395,7 +395,7 @@ function ActivationPageContent(): React.ReactElement {
         </Button>
         {resendError && <p role="alert" className="text-sm leading-relaxed text-state-bad">{resendError}</p>}
 
-        <div className="flex flex-col items-center gap-2 text-center text-sm">
+        <div className="flex flex-col items-start gap-2 text-left text-sm">
           <Link href="/ayuda" className={AUTH_LINK_CLASSES}>Necesito ayuda</Link>
           <button type="button" onClick={() => void logout()} className={buttonClasses("tertiary", "sm")}>
             Cerrar sesión

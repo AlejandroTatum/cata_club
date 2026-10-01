@@ -305,12 +305,16 @@ test.describe("the login brand measure", () => {
       expect(m.cluster / m.panel, `cluster share at ${m.width}`).toBeGreaterThan(0.5);
     }
 
-    // The defect itself, stated as the one thing a frozen cap cannot do. This
-    // fails on the old code no matter what the bounds are, because 440px at
-    // 1440 and 440px at 1920 are the same number.
-    const [at1440, at1920] = measured;
+    // The geometry contract of the v4 split: the brand PANEL grows with the
+    // viewport (5/12 of the width, parked in gutters past 120rem) while the
+    // brand cluster holds one fixed 448px measure (`max-w-md`). Widening it
+    // instead collapses the motto to a single line at 1920 (measured: 576px
+    // cluster -> 1 line), which the 2-3 line bound above forbids — so the
+    // panel absorbs the extra width and the cluster stays centred in it.
+    const [at1440, at1920, at2560] = measured;
     expect(at1920.panel).toBeGreaterThan(at1440.panel);
-    expect(at1920.cluster).toBeGreaterThan(at1440.cluster);
+    expect(at1920.cluster).toBe(at1440.cluster);
+    expect(at2560.cluster).toBe(at1440.cluster);
   });
 
   for (const width of [1440, 1920, 390]) {

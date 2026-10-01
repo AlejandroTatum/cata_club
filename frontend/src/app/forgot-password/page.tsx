@@ -100,7 +100,7 @@ export default function ForgotPasswordPage(): React.ReactElement {
         /* Confirmation — deliberately identical regardless of whether the
          * email is registered (mirrors the backend's anti-enumeration
          * contract). No nested card: the shell already IS the card. */
-        <div className="flex flex-col items-center gap-2.5 py-2 text-center">
+        <div className="flex flex-col items-start gap-3 text-left">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-ok-bg">
             <CheckCircle2 size={ICON.lg} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
           </span>
