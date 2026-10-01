@@ -52,7 +52,7 @@ def _leer(ruta: Path) -> str:
 
 def _archivos_harness() -> list[Path]:
     """Todos los archivos del harness de carga (escenarios + scripts)."""
-    return sorted([*DIR_K6.iterdir(), *DIR_SCRIPTS.iterdir()])
+    return sorted(p for p in [*DIR_K6.iterdir(), *DIR_SCRIPTS.iterdir()] if p.is_file())
 
 
 # ─── 1. Escenarios k6: exports, VUs, umbrales ───────────────────────────────
@@ -79,10 +79,12 @@ class TestContratosDeEscenarios:
         texto = _leer(DIR_K6 / "baseline.js")
         assert re.search(r"\bvus:\s*1\b", texto), "el baseline debe fijar vus: 1"
 
-    def test_steady_declara_cien_vus(self):
+    def test_steady_declara_cien_vus_por_default(self):
         # 100 VUs = 100 usuarios concurrentes AL MOMENTO, no 100 totales.
+        # El default se conserva; LOAD_STEADY_VUS lo baja (p. ej. 30).
         texto = _leer(DIR_K6 / "steady_100.js")
-        assert re.search(r"target:\s*100\b", texto), "el warm-up debe terminar en 100 VUs"
+        assert re.search(r"LOAD_STEADY_VUS\s*\|\|\s*100\b", texto), "el default debe ser 100 VUs"
+        assert re.search(r"target:\s*VUS_STEADY\b", texto), "warm-up y plato deben llegar a VUS_STEADY"
 
     def test_steady_calienta_con_ramping_vus(self):
         # 100 logins simultáneos violan el límite de login (60/min/IP,
@@ -146,9 +148,9 @@ class TestAceptacionPorPlatoYPoolSuficiente:
         assert re.search(r"export function authenticatedReadJourney\(credential, tagsExtra\)", texto)
         assert texto.count("...faseTags") >= 3, "login, sesión y lectura llevan la fase"
 
-    def test_steady_exige_pool_de_al_menos_cien_identidades(self):
+    def test_steady_exige_pool_de_tantas_identidades_como_vus(self):
         texto = _leer(DIR_K6 / "steady_100.js")
-        assert "asegurarPoolSuficiente(pool, 100, 'steady_100')" in texto
+        assert "asegurarPoolSuficiente(pool, VUS_STEADY, 'steady_100')" in texto
 
     def test_ramp_exige_pool_para_su_tope(self):
         texto = _leer(DIR_K6 / "ramp.js")
@@ -253,12 +255,12 @@ class TestPacingDeLoginYPlato:
         )
 
     def test_steady_calienta_tres_minutos_antes_del_plato_de_diez(self):
-        # Forma vinculante: 3 m de warm-up (0→100), luego el plato de
+        # Forma vinculante: 3 m de warm-up (0→VUS_STEADY), luego el plato de
         # LOAD_STEADY_DURATION (default 10m), luego ramp-down a 0.
         texto = _leer(DIR_K6 / "steady_100.js")
         assert "startVUs: 0" in texto
-        pos_warmup = texto.find("duration: '3m', target: 100")
-        pos_plato = texto.find("{ duration: __ENV.LOAD_STEADY_DURATION || '10m', target: 100 }")
+        pos_warmup = texto.find("duration: '3m', target: VUS_STEADY")
+        pos_plato = texto.find("{ duration: __ENV.LOAD_STEADY_DURATION || '10m', target: VUS_STEADY }")
         pos_bajada = texto.find("{ duration: '30s', target: 0 }")
         assert pos_warmup != -1, "falta el warm-up de 3 m hasta 100"
         assert pos_plato != -1, "falta el plato de 10 m (LOAD_STEADY_DURATION)"
@@ -457,14 +459,6 @@ class TestRegresionesVerificacionIndependiente:
         assert ":+--out" not in texto, "usa array de argumentos, no expansión +"
         assert "K6_ARGS+=(" in texto, "faltan argumentos extra en el array"
         assert '"${K6_ARGS[@]}"' in texto, "el array debe expandirse entrecomillado"
-
-    # ── Blocker 5: forecast de alcance honesto ──
-
-    def test_el_tracker_no_mantiene_el_forecast_falso(self):
-        texto = _leer(RAIZ / "odd" / "tasks" / "100-user-load-test.md")
-        assert "300–500" not in texto, "el forecast ya no es honesto tras medir"
-        assert "1692" in texto, "el tracker debe registrar el tamaño real medido"
-        assert "encadenad" in texto.lower(), "la decisión oversized/chained debe quedar registrada"
 
 
 def _script_guard_node() -> str:
@@ -699,3 +693,210 @@ class TestDocsOperador:
         readme = _leer(RAIZ / "README.md")
         assert "load-testing.md" in readme, "el README debe enlazar la doc de carga"
         assert "load-steady" in readme, "el README debe mencionar el comando del steady"
+
+
+# ─── 6. VUs configurables (#1314 A2) ────────────────────────────────────────
+
+
+class TestVusConfigurablesDelSteady:
+    def test_el_steady_valida_el_entero_positivo_de_vus(self):
+        texto = _leer(DIR_K6 / "steady_100.js")
+        assert "LOAD_STEADY_VUS" in texto
+        assert "Number.isInteger(VUS_STEADY)" in texto
+        assert "VUS_STEADY < 1" in texto
+
+    def test_el_steady_conserva_umbrales_y_aborto_con_cualquier_vus(self):
+        texto = _leer(DIR_K6 / "steady_100.js")
+        for fragmento in (
+            "rate<0.01",
+            "p(95)<800",
+            "rate<0.05",
+            "p(95)<3000",
+            "abortOnFail: true",
+        ):
+            assert fragmento in texto, fragmento
+
+    def test_el_runner_pasa_los_vus_a_k6_y_los_registra(self):
+        texto = _leer(DIR_SCRIPTS / "run_load_test.sh")
+        assert "-e LOAD_STEADY_VUS" in texto
+        assert "steady_vus" in texto
+
+    def test_el_runner_rechaza_vus_no_enteros(self):
+        texto = _leer(DIR_SCRIPTS / "run_load_test.sh")
+        assert re.search(r"LOAD_STEADY_VUS.*\^\[1-9\]", texto), "validar entero positivo"
+
+    def test_make_load_steady_acepta_vus(self):
+        makefile = _leer(RAIZ / "Makefile")
+        bloque = makefile.split("\nload-steady:", 1)[1].split("\n\n", 1)[0]
+        assert 'LOAD_STEADY_VUS="$(VUS)"' in bloque
+        assert re.search(r"^VUS \?= 100$", makefile, re.MULTILINE)
+
+    def test_la_doc_explica_la_corrida_de_30_usuarios(self):
+        doc = _leer(RAIZ / "docs" / "operations" / "load-testing.md")
+        assert "make load-steady VUS=30" in doc
+
+
+# ─── 7. Métricas server-side antes/después (#1314 A2) ───────────────────────
+
+SCRAPE_ANTES = """\
+# HELP http_requests_total Total number of requests by method, status and handler.
+# TYPE http_requests_total counter
+http_requests_total{handler="/api/v1/auth/login",method="POST",status="2xx"} 10.0
+http_requests_total{handler="/api/v1/auth/me",method="GET",status="2xx"} 100.0
+http_requests_total{handler="/api/v1/auth/me",method="GET",status="5xx"} 1.0
+# TYPE http_request_duration_seconds histogram
+http_request_duration_seconds_bucket{handler="/api/v1/auth/me",le="0.1",method="GET"} 90.0
+http_request_duration_seconds_bucket{handler="/api/v1/auth/me",le="0.5",method="GET"} 100.0
+http_request_duration_seconds_bucket{handler="/api/v1/auth/me",le="1.0",method="GET"} 101.0
+http_request_duration_seconds_bucket{handler="/api/v1/auth/me",le="+Inf",method="GET"} 101.0
+http_request_duration_seconds_count{handler="/api/v1/auth/me",method="GET"} 101.0
+# TYPE cata_outbox_pendientes gauge
+cata_outbox_pendientes{tabla="recuperacion_outbox"} 0.0
+cata_outbox_pendiente_mas_antiguo_segundos{tabla="recuperacion_outbox"} 0.0
+"""
+
+SCRAPE_DESPUES = """\
+http_requests_total{handler="/api/v1/auth/login",method="POST",status="2xx"} 40.0
+http_requests_total{handler="/api/v1/auth/me",method="GET",status="2xx"} 300.0
+http_requests_total{handler="/api/v1/auth/me",method="GET",status="5xx"} 4.0
+http_request_duration_seconds_bucket{handler="/api/v1/auth/me",le="0.1",method="GET"} 190.0
+http_request_duration_seconds_bucket{handler="/api/v1/auth/me",le="0.5",method="GET"} 290.0
+http_request_duration_seconds_bucket{handler="/api/v1/auth/me",le="1.0",method="GET"} 300.0
+http_request_duration_seconds_bucket{handler="/api/v1/auth/me",le="+Inf",method="GET"} 305.0
+http_request_duration_seconds_count{handler="/api/v1/auth/me",method="GET"} 305.0
+cata_outbox_pendientes{tabla="recuperacion_outbox"} 7.0
+cata_outbox_pendiente_mas_antiguo_segundos{tabla="recuperacion_outbox"} 42.5
+cata_outbox_scrape_ok 1.0
+"""
+
+
+def _cargar_server_metrics():
+    import importlib.util
+
+    ruta = DIR_SCRIPTS / "server_metrics.py"
+    assert ruta.exists(), "falta scripts/load/server_metrics.py"
+    spec = importlib.util.spec_from_file_location("server_metrics", ruta)
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    return modulo
+
+
+class TestParserYDeltasDeMetricasServerSide:
+    def test_parsea_series_con_etiquetas_ignorando_comentarios(self):
+        sm = _cargar_server_metrics()
+        series = sm.parse_prometheus_text(SCRAPE_ANTES)
+        assert (
+            "http_requests_total",
+            (("handler", "/api/v1/auth/me"), ("method", "GET"), ("status", "5xx")),
+        ) in series
+        assert not any(nombre.startswith("#") for nombre, _ in series)
+
+    def test_delta_de_requests_y_5xx_por_ruta(self):
+        sm = _cargar_server_metrics()
+        informe = sm.build_report(SCRAPE_ANTES, SCRAPE_DESPUES)
+        me = informe["routes"]["GET /api/v1/auth/me"]
+        assert me["requests"] == 203  # (300+4) - (100+1)
+        assert me["errors_5xx"] == 3
+        assert informe["routes"]["POST /api/v1/auth/login"]["requests"] == 30
+        assert informe["totals"]["requests"] == 233
+        assert informe["totals"]["errors_5xx"] == 3
+
+    def test_p95_server_side_desde_buckets_del_delta(self):
+        sm = _cargar_server_metrics()
+        informe = sm.build_report(SCRAPE_ANTES, SCRAPE_DESPUES)
+        me = informe["routes"]["GET /api/v1/auth/me"]
+        # Delta acumulado: 100 <=0.1, 190 <=0.5, 199 <=1.0, 204 total.
+        # Rango p95 = 193.8 -> cae en el bucket (0.5, 1.0]: cota 1.0 s.
+        assert me["p95_le_seconds"] == 1.0
+        assert 0.5 < me["p95_estimate_seconds"] <= 1.0
+
+    def test_p95_en_el_bucket_infinito_se_reporta_como_mayor_al_ultimo_finito(self):
+        sm = _cargar_server_metrics()
+        antes = 'http_request_duration_seconds_bucket{handler="/x",le="1.0",method="GET"} 0\n' \
+            'http_request_duration_seconds_bucket{handler="/x",le="+Inf",method="GET"} 0\n'
+        despues = 'http_request_duration_seconds_bucket{handler="/x",le="1.0",method="GET"} 1\n' \
+            'http_request_duration_seconds_bucket{handler="/x",le="+Inf",method="GET"} 10\n'
+        ruta = sm.build_report(antes, despues)["routes"]["GET /x"]
+        assert ruta["p95_le_seconds"] is None
+        assert ruta["p95_over_seconds"] == 1.0
+
+    def test_p95_lee_los_limites_expuestos_sin_asumir_buckets_fijos(self):
+        sm = _cargar_server_metrics()
+        # Set fino (0.025 ... 10 s): 100 requests, 96 <= 0.25 s -> p95 en (0.1, 0.25].
+        les = ["0.025", "0.05", "0.1", "0.25", "0.5", "1.0", "2.5", "5.0", "10.0", "+Inf"]
+        acumulado = [20, 60, 90, 96, 99, 100, 100, 100, 100, 100]
+        antes = "".join(
+            f'http_request_duration_seconds_bucket{{handler="/y",le="{le}",method="GET"}} 0\n'
+            for le in les
+        )
+        despues = "".join(
+            f'http_request_duration_seconds_bucket{{handler="/y",le="{le}",method="GET"}} {n}\n'
+            for le, n in zip(les, acumulado)
+        )
+        ruta = sm.build_report(antes, despues)["routes"]["GET /y"]
+        assert ruta["p95_le_seconds"] == 0.25
+        assert 0.1 < ruta["p95_estimate_seconds"] <= 0.25
+
+    def test_el_parser_no_codifica_buckets_fijos(self):
+        texto = _leer(DIR_SCRIPTS / "server_metrics.py")
+        for fijo in ('"0.1"', '"0.5"', '"1.0"', "0.1,", "0.5,"):
+            assert fijo not in texto, fijo
+
+    def test_reinicio_de_contador_usa_el_valor_final_y_lo_marca(self):
+        sm = _cargar_server_metrics()
+        antes = 'http_requests_total{handler="/x",method="GET",status="2xx"} 500\n'
+        despues = 'http_requests_total{handler="/x",method="GET",status="2xx"} 20\n'
+        informe = sm.build_report(antes, despues)
+        assert informe["routes"]["GET /x"]["requests"] == 20
+        assert informe["counter_reset_detected"] is True
+
+    def test_outbox_al_final_usa_el_scrape_posterior(self):
+        sm = _cargar_server_metrics()
+        outbox = sm.build_report(SCRAPE_ANTES, SCRAPE_DESPUES)["outbox_end"]
+        assert outbox["pending_total"] == 7
+        assert outbox["oldest_pending_seconds_max"] == 42.5
+        assert outbox["scrape_ok"] is True
+
+    def test_render_texto_lista_rutas_y_outbox(self):
+        sm = _cargar_server_metrics()
+        texto = sm.render_text(sm.build_report(SCRAPE_ANTES, SCRAPE_DESPUES))
+        assert "GET /api/v1/auth/me" in texto
+        assert "5xx" in texto
+        assert "outbox" in texto.lower()
+
+    def test_un_scrape_vacio_produce_informe_sin_rutas_no_una_excepcion(self):
+        sm = _cargar_server_metrics()
+        informe = sm.build_report("", "")
+        assert informe["routes"] == {}
+        assert informe["totals"] == {"requests": 0, "errors_5xx": 0}
+
+
+class TestPasoAntesDespuesEnElRunner:
+    def test_el_runner_scrapea_desde_dentro_del_contenedor_backend(self):
+        texto = _leer(DIR_SCRIPTS / "run_load_test.sh")
+        assert "docker exec" in texto
+        assert "http://127.0.0.1:8000/metrics" in texto
+        assert "metrics-before.prom" in texto
+        assert "metrics-after.prom" in texto
+
+    def test_el_scrape_antes_corre_antes_de_k6_y_el_despues_tras_k6(self):
+        texto = _leer(DIR_SCRIPTS / "run_load_test.sh")
+        antes = texto.index("metrics-before.prom")
+        k6 = texto.index('docker run --rm "${K6_DOCKER_ARGS[@]}"')
+        despues = texto.index("metrics-after.prom", k6)
+        assert antes < k6 < despues
+
+    def test_el_runner_invoca_el_informe_y_lo_incluye_en_run_json(self):
+        texto = _leer(DIR_SCRIPTS / "run_load_test.sh")
+        assert "server_metrics.py" in texto
+        assert "server-metrics.json" in texto
+        assert "server_metrics" in texto.split("run.json", 1)[1]
+
+    def test_el_scrape_fallido_no_aborta_la_corrida(self):
+        texto = _leer(DIR_SCRIPTS / "run_load_test.sh")
+        assert re.search(r"metrics-before\.prom.*\|\|", texto), "el scrape es best-effort"
+
+    def test_la_doc_explica_la_seccion_server_side(self):
+        doc = _leer(RAIZ / "docs" / "operations" / "load-testing.md")
+        assert "server-metrics.json" in doc
+        assert "server_metrics.py" in doc

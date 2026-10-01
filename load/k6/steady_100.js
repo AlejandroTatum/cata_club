@@ -1,5 +1,6 @@
 /**
- * Steady state: 100 concurrent VUs walking the authenticated read journey.
+ * Steady state: N concurrent VUs (default 100; LOAD_STEADY_VUS, e.g. 30 via
+ * `make load-steady VUS=30`) walking the authenticated read journey.
  *
  * 100 VUs = 100 users holding the journey AT AN INSTANT (peak concurrency).
  * Over a 10-minute run that completes many more than 100 SESSIONS (journeys);
@@ -46,6 +47,14 @@ function duracionMs(texto) {
   return Number(m[1]) * { s: 1000, m: 60000, h: 3600000 }[m[2]];
 }
 
+// Configurable concurrency: default 100 (the original acceptance run); a
+// smaller realistic load (e.g. 30) is `LOAD_STEADY_VUS=30`. The acceptance
+// thresholds and aborts below do not change with the VU count.
+const VUS_STEADY = Number(__ENV.LOAD_STEADY_VUS || 100);
+if (!Number.isInteger(VUS_STEADY) || VUS_STEADY < 1) {
+  throw new Error(`LOAD_STEADY_VUS inválida: '${__ENV.LOAD_STEADY_VUS}' (entero >= 1)`);
+}
+
 const MS_PLATO = duracionMs(__ENV.LOAD_STEADY_DURATION || '10m');
 
 export function faseActual() {
@@ -61,13 +70,13 @@ export const options = {
       executor: 'ramping-vus',
       startVUs: 0,
       stages: [
-        // Warm-up (NOT part of the plateau evidence): 0 → 100 VUs over
-        // 3 minutes ≈ 33 new logins/min, under the backend's 60/min/IP
+        // Warm-up (NOT part of the plateau evidence): 0 → VUS_STEADY over
+        // 3 minutes (100 VUs ≈ 33 new logins/min), under the backend's 60/min/IP
         // login cap (auth_router.py:43) — every VU shares one IP and each
         // logs in exactly once (per-VU session cache).
-        { duration: '3m', target: 100 },
+        { duration: '3m', target: VUS_STEADY },
         // Plateau: the actual 10-minute measurement window at full load.
-        { duration: __ENV.LOAD_STEADY_DURATION || '10m', target: 100 },
+        { duration: __ENV.LOAD_STEADY_DURATION || '10m', target: VUS_STEADY },
         // Ramp-down: release VUs instead of cutting them mid-journey.
         { duration: '30s', target: 0 },
       ],
@@ -96,7 +105,7 @@ export function setup() {
   assertLocalBaseUrl(BASE_URL);
   const pool = loadCredentials();
   // Fail-closed (review correction): capacity claims need 1 identity per VU.
-  asegurarPoolSuficiente(pool, 100, 'steady_100');
+  asegurarPoolSuficiente(pool, VUS_STEADY, 'steady_100');
   return { pool };
 }
 

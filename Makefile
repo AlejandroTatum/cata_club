@@ -401,6 +401,8 @@ qa-pdf-delivery-check: ## Descargar de verdad un PDF de Cloudinary y verificar q
 #   LOAD_CREDENTIALS_FILE=load/results/credentials-pool.json make load-steady
 LOAD_BASE_URL ?= http://localhost:3000
 LOAD_RUNNER = scripts/load/run_load_test.sh
+# VUs del steady (default 100): `make load-steady VUS=30` para la corrida realista.
+VUS ?= 100
 
 load-preflight: ## Verificar el stack local para carga (db-test :5436 + QA :3000/:8000); no levanta nada
 	scripts/load/preflight_load_stack.sh
@@ -414,8 +416,8 @@ load-baseline: ## Calibración: 1 VU sobre el viaje autenticado contra el QA loc
 load-ramp: ## Ramp escalonado de VUs (tope LOAD_RAMP_MAX_VUS, default 100) para buscar la rodilla
 	LOAD_BASE_URL="$(LOAD_BASE_URL)" $(LOAD_RUNNER) ramp
 
-load-steady: ## 100 VUs constantes por 10m (default) con umbrales provisorios de aceptación y aborto
-	LOAD_BASE_URL="$(LOAD_BASE_URL)" $(LOAD_RUNNER) steady_100
+load-steady: ## VUs constantes (VUS=, default 100) por 10m con umbrales de aceptación/aborto + cifras server-side de /metrics
+	LOAD_BASE_URL="$(LOAD_BASE_URL)" LOAD_STEADY_VUS="$(VUS)" $(LOAD_RUNNER) steady_100
 
 # ─── Clean ──────────────────────────────────────────────────────────────────
 clean: clean-backend clean-frontend ## Clean caches from both projects

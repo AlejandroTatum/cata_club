@@ -109,6 +109,7 @@ make load-preflight   # salud del stack local: db-test :5436, QA :3000/:8000
 make load-baseline    # 1 VU, 3m (LOAD_BASELINE_DURATION) — calibración
 make load-ramp        # rampa escalonada hasta 100 VUs (LOAD_RAMP_MAX_VUS)
 make load-steady      # 100 VUs constantes, 10m (LOAD_STEADY_DURATION)
+make load-steady VUS=30   # 30 usuarios concurrentes (carga realista)
 ```
 
 Las credenciales viajan por entorno (el make target no las toca):
@@ -117,6 +118,22 @@ Las credenciales viajan por entorno (el make target no las toca):
 LOAD_EMAIL='...' LOAD_PASSWORD='...' make load-baseline
 LOAD_CREDENTIALS_JSON='[{"email":"...","password":"..."}]' make load-steady
 ```
+
+### Corrida de 30 usuarios
+
+`VUS` fija la concurrencia del steady (default 100, entero >= 1; el runner
+rechaza cualquier otro valor):
+
+```bash
+make load-pool                                   # una vez: pool 1:1 (QA_SEED_PASSWORD por env)
+LOAD_CREDENTIALS_FILE=load/results/credentials-pool.json make load-steady VUS=30
+```
+
+Se mantiene todo lo demás: 3 min de warm-up, plato de 10 min, aceptación
+solo sobre el plato (fallidas < 1 %, p95 < 800 ms) y los abortos
+(error >= 5 %, p95 >= 3 s). El pool debe tener al menos tantas identidades
+como VUs (1 por VU); con 30 VUs el warm-up hace ~10 logins/min, muy por debajo
+del techo de 60/min/IP. `run.json` registra `steady_vus`.
 
 Orden recomendado: **baseline primero**; solo si el baseline es sano corre
 el steady. El ramp es diagnóstico: ubica la rodilla antes de comprometerse a
@@ -131,6 +148,8 @@ Cada corrida deja un directorio `load/results/<UTC ts>-<escenario>/`
 | --- | --- |
 | `summary.json` | Resumen k6 completo legible por máquina + bloque `sessions` (`vus_max` vs `sessions_completed`). |
 | `resources.jsonl` | Una muestra JSON por intervalo: CPU/memoria de backend y db (solo observación), conexiones vs `max_connections`, antigüedad del outbox `PENDIENTE` más viejo, salud del contenedor backend. |
+| `metrics-before.prom` / `metrics-after.prom` | Scrapes de `/metrics` del backend justo antes y después de k6 (best-effort). |
+| `server-metrics.json` / `server-metrics.txt` | Deltas server-side por ruta (ver abajo), generados por `scripts/load/server_metrics.py`. |
 | `run.json` | Metadatos: escenario, imagen k6, código de salida y su significado, artefactos presentes, si abortó el monitor. |
 | `abort.txt` | Presente SOLO si el monitor de host abortó: motivo + timestamp. |
 | `k6-stdout.log` | El resumen humano de k6 (texto). |
@@ -144,6 +163,33 @@ Números clave de `summary.json`:
 - `metrics.journey_failure_rate.values.rate` — iteraciones con algún paso
   fallido (salud a nivel viaje, no request).
 - `journey_*_duration` — tendencias por paso (login / session / lectura).
+
+### Sección server-side (`server-metrics.json`)
+
+k6 mide desde el cliente; esta sección mide lo que el backend vio, como
+**delta entre el scrape previo y el posterior**:
+
+- `routes["MÉTODO /ruta/{plantilla}"].requests` y `.errors_5xx`: requests y
+  respuestas 5xx por plantilla de ruta (`http_requests_total`). Debe cuadrar
+  con `http_reqs` de k6 (diferencias chicas: `/health` y el scrape mismo).
+- `.p95_le_seconds`: p95 server-side **como cota superior** (el `le` del bucket
+  donde cae el percentil 95). La precisión depende de los buckets que exponga
+  el instrumentador en ese momento: con pocos buckets es una cota gruesa, con
+  un set más fino es más ajustada. El script lee los `le` que encuentre, no
+  asume ninguno. `.p95_estimate_seconds` interpola linealmente dentro de ese
+  bucket. Si el p95 cae en el bucket `+Inf`, `p95_le_seconds` es `null` y
+  `p95_over_seconds` es el último límite finito (el p95 real es mayor).
+- `outbox_end`: filas `PENDIENTE` y antigüedad de la más vieja **al final** de
+  la corrida (del scrape posterior). Un valor creciente es hallazgo de aborto.
+- `counter_reset_detected: true`: el backend se reinició durante la corrida;
+  los deltas usan el valor final y no son comparables.
+
+`/metrics` no es público: el runner lo lee con `docker exec` dentro del
+contenedor `backend` del proyecto `cataclub-qa` (`http://127.0.0.1:8000/metrics`),
+sin depender del puerto publicado. Si el scrape falla, la corrida sigue y
+`server_metrics` queda `null` en `run.json`. El parseo se prueba sin stack en
+`tests/test_load_testing_config.py` (texto de ejemplo); también se puede
+re-generar a mano: `python3 scripts/load/server_metrics.py antes.prom despues.prom`.
 
 ## Techos de tasa del backend que el harness respeta
 
@@ -220,4 +266,6 @@ las colas outbox, interno a Compose — ver
 [`metricas.md`](metricas.md)). Durante una corrida podés muestrearlo desde la
 red de Compose para correlacionar la vista del borde (k6) con la vista del
 proceso; el scraper de Prometheus/Grafana es exactamente el alcance de #1314
-y NO forma parte de este harness.
+y NO forma parte de este harness. El runner ya hace el mínimo necesario:
+scrapea antes y después de cada corrida y vuelca los deltas en
+`server-metrics.json` (ver «Sección server-side»).

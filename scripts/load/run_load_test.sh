@@ -12,6 +12,8 @@
 # - Per-run evidence lands in load/results/<UTC ts>-<scenario>/ (git-ignored):
 #     summary.json     machine-readable k6 summary (+ VU-vs-sessions block)
 #     resources.jsonl  host/container resource samples (monitor_resources.sh)
+#     metrics-before.prom / metrics-after.prom  backend /metrics scrapes (best-effort)
+#     server-metrics.json  per-route server-side deltas (scripts/load/server_metrics.py)
 #     run.json         run metadata (scenario, image, exit code, artifacts)
 #     abort.txt        present only when the host monitor aborted the run
 #     k6-stdout.log    k6's human stdout (k6 text summary at the end)
@@ -29,6 +31,12 @@ case "$ESCENARIO" in
     exit 64
     ;;
 esac
+
+# Steady VU count (default 100): entero positivo, validado antes de tocar nada.
+if [[ ! "${LOAD_STEADY_VUS:-100}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "Error: LOAD_STEADY_VUS debe ser un entero positivo; obtuve '${LOAD_STEADY_VUS}'." >&2
+  exit 64
+fi
 
 # ── Fail-closed host guard: solo loopback, jamás userinfo ───────────────
 # Solo http://localhost[:puerto], http://127.x.x.x[:puerto] y
@@ -139,6 +147,24 @@ else
   echo "AVISO: monitor_resources.sh no está disponible; esta corrida no tendrá evidencia de recursos ni abortos de host." >&2
 fi
 
+# ── Scrape de /metrics del backend (server-side), best-effort ──────────────
+# /metrics NO es público: se lee desde DENTRO del contenedor backend (mismo
+# descubrimiento por labels de Compose que el monitor; -a incluye detenidos).
+# El QA publica 127.0.0.1:8000, pero el scrape por exec no depende de eso. Si
+# falla (sin docker, contenedor caído), la corrida sigue sin cifras server-side.
+BACKEND_CID="$(docker ps -q \
+  --filter "label=com.docker.compose.project=cataclub-qa" \
+  --filter "label=com.docker.compose.service=backend" 2>/dev/null | head -n1 || true)"
+
+scrapear_metricas() {
+  [ -n "$BACKEND_CID" ] || return 1
+  docker exec "$BACKEND_CID" python -c \
+    "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8000/metrics',timeout=10).read().decode())" \
+    >"$1" 2>/dev/null
+}
+
+scrapear_metricas "$RUN_DIR/metrics-before.prom" || echo "AVISO: no se pudo scrapear /metrics antes de la corrida; sin cifras server-side." >&2
+
 # ── Lanzar k6 dentro de la imagen oficial fijada ────────────────────────────
 # --network host: en Linux el contenedor alcanza localhost:3000 del host.
 # --user: los artefactos quedan del operador, no de root.
@@ -160,6 +186,7 @@ K6_DOCKER_ARGS=(
   -e LOAD_EMAIL
   -e LOAD_PASSWORD
   -e LOAD_STEADY_DURATION
+  -e LOAD_STEADY_VUS
   -e LOAD_BASELINE_DURATION
   -e LOAD_RAMP_MAX_VUS
   -e LOAD_RESULTS_DIR=/results
@@ -187,9 +214,22 @@ fi
 
 FIN="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
+# ── Scrape posterior + deltas server-side ────────────────────────────────────
+SERVER_METRICS_OK=0
+if scrapear_metricas "$RUN_DIR/metrics-after.prom" && [ -s "$RUN_DIR/metrics-before.prom" ]; then
+  if python3 "$REPO_ROOT/scripts/load/server_metrics.py" \
+    "$RUN_DIR/metrics-before.prom" "$RUN_DIR/metrics-after.prom" \
+    --json "$RUN_DIR/server-metrics.json" >"$RUN_DIR/server-metrics.txt"; then
+    SERVER_METRICS_OK=1
+    cat "$RUN_DIR/server-metrics.txt"
+  fi
+fi
+[ "$SERVER_METRICS_OK" = 1 ] || echo "AVISO: sin cifras server-side en esta corrida (scrape antes/después incompleto)." >&2
+
 # ── run.json: metadatos legibles por máquina de la corrida ──────────────────
 RUN_DIR="$RUN_DIR" ESCENARIO="$ESCENARIO" K6_IMAGE="$K6_IMAGE" CODIGO_K6="$CODIGO_K6" \
-  INICIO="$INICIO" FIN="$FIN" LOAD_BASE_URL="$LOAD_BASE_URL" python3 - <<'PY' >"$RUN_DIR/run.json"
+  INICIO="$INICIO" FIN="$FIN" LOAD_BASE_URL="$LOAD_BASE_URL" \
+  LOAD_STEADY_VUS="${LOAD_STEADY_VUS:-100}" python3 - <<'PY' >"$RUN_DIR/run.json"
 import json
 import os
 
@@ -197,6 +237,11 @@ run_dir = os.environ["RUN_DIR"]
 
 def existe(nombre):
     return os.path.isfile(os.path.join(run_dir, nombre))
+
+server_metrics = None
+if existe("server-metrics.json"):
+    with open(os.path.join(run_dir, "server-metrics.json"), encoding="utf-8") as f:
+        server_metrics = json.load(f)
 
 interpretacion = {
     0: "thresholds cumplidos",
@@ -210,12 +255,14 @@ print(json.dumps({
     "k6_image": os.environ["K6_IMAGE"],
     "started_at": os.environ["INICIO"],
     "finished_at": os.environ["FIN"],
+    "steady_vus": int(os.environ["LOAD_STEADY_VUS"]) if os.environ["ESCENARIO"] == "steady_100" else None,
+    "server_metrics": server_metrics,
     "k6_exit_code": int(os.environ["CODIGO_K6"]),
     "k6_exit_meaning": interpretacion,
     "monitor_aborted": existe("abort.txt"),
     "artifacts": [n for n in (
-        "summary.json", "resources.jsonl", "abort.txt",
-        "k6-stdout.log", "k6-raw.json",
+        "summary.json", "resources.jsonl", "abort.txt", "metrics-before.prom",
+        "metrics-after.prom", "server-metrics.json", "k6-stdout.log", "k6-raw.json",
     ) if existe(n)],
     "credentials_source": "env-only (LOAD_CREDENTIALS_JSON pool or LOAD_EMAIL/LOAD_PASSWORD)",
 }, indent=2))
