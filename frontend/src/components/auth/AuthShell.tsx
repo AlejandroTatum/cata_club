@@ -215,11 +215,12 @@ export default function AuthShell({
           className="pointer-events-none absolute inset-0 hidden split:block"
         >
           <Image
-            src="/landing/hero-action.jpeg"
+            src="/landing/gallery-12-team.jpg"
             alt=""
             fill
             sizes="(min-width: 980px) 42vw, 0px"
-            className="object-cover object-[45%_30%]"
+            quality={85}
+            className="object-cover object-[50%_40%]"
           />
           <span className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(17,17,20,0.55)_0%,rgba(17,17,20,0.35)_22%,rgba(17,17,20,0.88)_58%,rgba(17,17,20,0.96)_100%)]" />
         </div>

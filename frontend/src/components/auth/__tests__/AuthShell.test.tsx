@@ -463,7 +463,7 @@ describe("AuthShell — hideBack lets one authenticated screen opt out", () => {
     expect(screen.getByTestId("auth-panel-dark")).toContainElement(photo);
     const img = photo.querySelector("img");
     expect(img).not.toBeNull();
-    expect(img?.getAttribute("src") ?? "").toMatch(/hero-action/);
+    expect(img?.getAttribute("src") ?? "").toMatch(/gallery-12-team/);
     // The photo is atmosphere; the lockup is the panel's one accessible logo.
     expect(img).toHaveAttribute("alt", "");
     // Hidden on phones, so it must not be fetched eagerly.
