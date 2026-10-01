@@ -265,6 +265,18 @@ describe("ActivationPage — the email screen", () => {
     expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeInTheDocument();
   });
 
+  it("signs out from the enrolment screen too, through the fallback logout button", async () => {
+    const logout = vi.fn().mockResolvedValue(undefined);
+    const session = pendingSession({ correoVerificado: true });
+    mockUseAuth.mockReturnValue({ ...createAuthenticatedAuth("estudiante", "Test User", { session }), logout });
+
+    render(<ActivationPage />);
+
+    expect(await screen.findByRole("button", { name: "Consultar estado nuevamente" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar sesión" }));
+    expect(logout).toHaveBeenCalledTimes(1);
+  });
+
   it("moves to the enrolment screen once checking status reports the email verified, with only the enrolment pending", async () => {
     const pending = pendingSession();
     const verified = { ...pending, correoVerificado: true };

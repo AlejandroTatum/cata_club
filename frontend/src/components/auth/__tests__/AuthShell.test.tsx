@@ -456,17 +456,29 @@ describe("AuthShell — hideBack lets one authenticated screen opt out", () => {
     expect(screen.getByTestId("auth-brand-cluster")).toBeInTheDocument();
   });
 
-  it("fills the brand panel's middle with the club's crest as a centred emblem", () => {
+  it("fills the brand panel with a real club photo, decorative and behind the copy", () => {
     renderShell();
 
-    const emblem = screen.getByTestId("auth-crest");
-    expect(screen.getByTestId("auth-panel-dark")).toContainElement(emblem);
-    // Centred in the room between the top row and the motto, not cropped by an edge.
-    expect(emblem.className).toContain("mx-auto");
-    expect(emblem.querySelector("img")).toHaveAttribute("alt", "Cata Club");
+    const photo = screen.getByTestId("auth-photo");
+    expect(screen.getByTestId("auth-panel-dark")).toContainElement(photo);
+    const img = photo.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute("src") ?? "").toMatch(/hero-action/);
+    // The photo is atmosphere; the lockup is the panel's one accessible logo.
+    expect(img).toHaveAttribute("alt", "");
+    // Hidden on phones, so it must not be fetched eagerly.
+    expect(img).not.toHaveAttribute("fetchpriority", "high");
+    expect(photo.className).toContain("hidden");
   });
 
-  it("anchors the form column between a top label and a help footer", () => {
+  it("no longer renders the big crest disc or the old watermark silhouette", () => {
+    renderShell();
+
+    expect(screen.queryByTestId("auth-crest")).not.toBeInTheDocument();
+    expect(document.querySelector('img[src*="cata-club-crest"]')).toBeNull();
+  });
+
+  it("anchors the form column above a help footer", () => {
     renderShell();
 
     const help = screen.getByTestId("auth-help");
@@ -481,7 +493,8 @@ describe("AuthShell — hideBack lets one authenticated screen opt out", () => {
 
 // ---------------------------------------------------------------------------
 // QA registro: the "Escuela de tenis de mesa" pill is gone, the way back sits
-// top-left of the coal panel and the lockup moves to the opposite corner.
+// top-left of the coal panel and the original lockup (small crest + wordmark)
+// sits in the opposite corner.
 // ---------------------------------------------------------------------------
 
 describe("AuthShell — QA registro layout", () => {
@@ -506,6 +519,16 @@ describe("AuthShell — QA registro layout", () => {
     renderHiddenBackShell();
 
     expect(screen.getByTestId("auth-lockup")).toBeInTheDocument();
-    expect(screen.getByTestId("auth-crest")).toBeInTheDocument();
+  });
+
+  it("keeps the original lockup: the small crest as the accessible logo beside the wordmark", () => {
+    renderShell();
+
+    const lockup = screen.getByTestId("auth-lockup");
+    const logo = lockup.querySelector("img");
+    expect(logo).toHaveAttribute("alt", "Cata Club");
+    expect(logo?.getAttribute("src") ?? "").toMatch(/cata-club-logo/);
+    expect(lockup).toHaveTextContent(/cata club/i);
+    expect(screen.getAllByRole("img", { name: "Cata Club" })).toHaveLength(1);
   });
 });
