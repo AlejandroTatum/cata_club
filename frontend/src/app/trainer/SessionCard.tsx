@@ -96,6 +96,8 @@ interface SessionCardProps {
   rail: DayRail | null;
   /** Enrolled-count-by-horario-id — covers the hero session AND every block of the rail. */
   enrolledCounts: Record<number, number>;
+  /** "miércoles 15:00" — the next scheduled session, when the day is done and one is known. */
+  nextSessionLabel?: string | null;
 }
 
 /**
@@ -143,25 +145,27 @@ export default function SessionCard({
   state,
   rail,
   enrolledCounts,
+  nextSessionLabel = null,
 }: SessionCardProps): React.ReactElement | null {
   if (state === null) return null;
 
   if (state.kind === "done") {
+    // An emptied day has nothing to promise, so the band collapses to one line
+    // instead of a 170px block that says "nothing" loudly. The button stays,
+    // inline: the way out is still "pick another time".
     return (
       <section
-        className="flex flex-col gap-3 rounded-card bg-coal px-7 py-6 text-white"
+        className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-card bg-coal px-5 py-3 text-white"
         aria-label="Su día de hoy"
       >
-        <p className="m-0 flex items-center gap-2 text-sm text-white/60">
+        <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
           <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-ball" />
-          Hoy
+          <span className="font-semibold">No quedan sesiones hoy.</span>
+          {nextSessionLabel && <span className="text-white/60">Próxima: {nextSessionLabel}</span>}
         </p>
-        <p className="m-0 text-lg font-bold leading-snug">Ya no quedan sesiones hoy.</p>
-        <div className="mt-auto flex flex-wrap gap-2.5 pt-3">
-          <Link href="/trainer/attendance" className={buttonClasses("onCoal")}>
-            Elegir otro horario
-          </Link>
-        </div>
+        <Link href="/trainer/attendance" className={buttonClasses("onCoal", "sm")}>
+          Elegir otro horario
+        </Link>
       </section>
     );
   }

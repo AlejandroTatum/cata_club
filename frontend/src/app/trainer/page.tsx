@@ -80,6 +80,7 @@ import {
   type RecentAttendanceSession,
 } from "@/services/api";
 import {
+  Badge,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -101,12 +102,17 @@ import {
   buildMonthAttendanceRate,
   buildDayRail,
   buildSessionCardState,
-  findAbsenceAlert,
+  findNextScheduledSession,
+  findStudentsToFollow,
+  formatNextSessionLabel,
   formatAbsenceCount,
   groupRecordsBySession,
   monthToDateRange,
   sumEnrolledToday,
 } from "./trainer-day-utils";
+import CompactEmpty from "@/components/dashboard/CompactEmpty";
+import DashboardSection from "@/components/dashboard/DashboardSection";
+import { buildContextLine } from "@/components/dashboard/context-line";
 import SessionCard from "./SessionCard";
 import RecentSessionsList from "./RecentSessionsList";
 import SessionsWithoutList from "./SessionsWithoutList";
@@ -124,6 +130,7 @@ export default function TrainerPage(): React.ReactElement {
   const [monthRecords, setMonthRecords] = useState<AttendanceRecord[]>([]);
   const [enrolledCounts, setEnrolledCounts] = useState<Record<number, number>>({});
   const [recentSessions, setRecentSessions] = useState<RecentAttendanceSession[]>([]);
+  const [recentStatus, setRecentStatus] = useState<"loading" | "ready" | "error">("loading");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -153,11 +160,14 @@ export default function TrainerPage(): React.ReactElement {
    * secondary cards (`loadDetail`, `Promise.allSettled`).
    */
   const loadRecentSessions = useCallback(async (): Promise<void> => {
+    setRecentStatus("loading");
     try {
       setRecentSessions(await fetchRecentAttendanceSessions());
+      setRecentStatus("ready");
     } catch (err) {
       console.error("[trainer] fetchRecentAttendanceSessions failed", err);
       setRecentSessions([]);
+      setRecentStatus("error");
     }
   }, []);
 
@@ -185,7 +195,11 @@ export default function TrainerPage(): React.ReactElement {
   // parado. La geometría se calcula acá, junto al resto del estado derivado,
   // para que `SessionCard` no tenga que leer el reloj por su cuenta.
   const dayRail = useMemo(() => buildDayRail(todaySchedules), [todaySchedules]);
-  const absenceAlert = useMemo(() => findAbsenceAlert(monthRecords), [monthRecords]);
+  const nextSessionLabel = useMemo(() => {
+    const next = findNextScheduledSession(schedules);
+    return next ? formatNextSessionLabel(next) : null;
+  }, [schedules]);
+  const studentsToFollow = useMemo(() => findStudentsToFollow(monthRecords), [monthRecords]);
   const attendanceStats = useMemo(() => buildAttendanceStats(monthRecords), [monthRecords]);
 
   /**
@@ -271,7 +285,7 @@ export default function TrainerPage(): React.ReactElement {
        */}
       <AppShell
         title={`Hola, ${firstNameOf(session?.user?.name)}`}
-        subtitle="Mi día — su próxima sesión y el resumen de asistencias."
+        subtitle={buildContextLine("Entrenador")}
       >
         {loading && <LoadingState label="Cargando su día…" />}
 
@@ -308,6 +322,7 @@ export default function TrainerPage(): React.ReactElement {
                 state={sessionCardState}
                 rail={dayRail}
                 enrolledCounts={enrolledCounts}
+                nextSessionLabel={nextSessionLabel}
               />
             ) : (
               <EmptyState
@@ -357,6 +372,7 @@ export default function TrainerPage(): React.ReactElement {
                 label="Sesiones hoy"
                 value={todaySchedules.length}
                 hint={`programadas para hoy, ${formatDay(todayDiaSemana()).toLowerCase()}`}
+                href="/trainer/attendance"
               />
               <StatCard
                 label="Inscritos hoy"
@@ -371,6 +387,7 @@ export default function TrainerPage(): React.ReactElement {
                 label="Asistencia del mes"
                 value={monthRate.percent}
                 unit="%"
+                href="/trainer/attendance/history"
                 hint={
                   <span className="flex flex-col gap-y-field">
                     <StatTrack value={monthRate.present} total={monthRate.total} />
@@ -382,6 +399,7 @@ export default function TrainerPage(): React.ReactElement {
                 label="Listas del mes"
                 value={listsThisMonth}
                 hint="sesiones con lista tomada"
+                href="/trainer/attendance/history"
               />
             </div>
 
@@ -397,21 +415,42 @@ export default function TrainerPage(): React.ReactElement {
               a hero whose own rule is one number and the sentence that reads it.
             */}
             <div data-testid="trainer-lower" className={PAGE_RAIL}>
-              <RecentSessionsList sessions={recentSessions} />
+              {/* Two independent stacks: each column ends where its own content
+                  ends, so an empty block on one side never stretches the other. */}
+              <div data-testid="trainer-main" className="flex flex-col gap-page">
+                <RecentSessionsList
+                  sessions={recentSessions}
+                  status={recentStatus}
+                  onRetry={() => void loadRecentSessions()}
+                />
 
-              <section className="card flex flex-col gap-4 p-[18px]">
-                {absenceAlert && (
-                  <p className="m-0 border-b border-line pb-4 text-sm text-ink-2">
-                    <b className="font-semibold text-ink">{absenceAlert.estudiante}</b> suma{" "}
-                    <b className="font-semibold text-ink">
-                      {formatAbsenceCount(absenceAlert.ausencias)}
-                    </b>{" "}
-                    este mes
-                  </p>
-                )}
+                <DashboardSection title="Alumnos a seguir" testId="students-to-follow">
+                  {studentsToFollow.length > 0 ? (
+                    <ul className="grid sm:grid-cols-2 lg:grid-cols-3">
+                      {studentsToFollow.map((student) => (
+                        <li
+                          key={student.estudiante}
+                          className="flex min-h-drow items-center justify-between gap-3 border-b border-line px-[18px] py-3 text-sm"
+                        >
+                          <b className="min-w-0 truncate font-semibold text-ink">{student.estudiante}</b>
+                          <Badge tone="warn">{formatAbsenceCount(student.ausencias)}</Badge>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <CompactEmpty
+                      title="Nadie necesita seguimiento"
+                      description="Aquí aparecen quienes faltan dos veces o más en el mes."
+                    />
+                  )}
+                </DashboardSection>
+              </div>
 
-                <SessionsWithoutList missing={missingSessions} />
-              </section>
+              <div data-testid="trainer-rail" className="flex flex-col gap-page max-lg:order-first">
+                <section className="card flex flex-col gap-4 p-[18px]">
+                  <SessionsWithoutList missing={missingSessions} />
+                </section>
+              </div>
             </div>
           </>
         )}

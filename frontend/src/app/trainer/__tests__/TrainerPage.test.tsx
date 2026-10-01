@@ -311,7 +311,7 @@ describe("TrainerPage — Mi día", () => {
     vi.setSystemTime(new Date(2026, 6, 20, 21, 0));
     render(<TrainerPage />);
 
-    expect(await screen.findByText("Ya no quedan sesiones hoy.")).toBeInTheDocument();
+    expect(await screen.findByText(/No quedan sesiones hoy/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Elegir otro horario" })).toHaveAttribute(
       "href",
       "/trainer/attendance",
@@ -468,7 +468,7 @@ describe("TrainerPage — Mi día", () => {
     render(<TrainerPage />);
 
     expect(
-      await screen.findByText("Todas las sesiones del mes tienen lista"),
+      await screen.findByText(/Todas las sesiones del mes tienen lista/),
     ).toBeInTheDocument();
     // Scoped to the rail: the sidebar's own bare "Pasar lista" nav row shares
     // this exact accessible name and is unrelated to the empty state.
@@ -540,17 +540,18 @@ describe("TrainerPage — Mi día", () => {
     render(<TrainerPage />);
 
     expect(await screen.findByText("Lunes 15:00 — 16:00")).toBeInTheDocument();
-    expect(
-      await screen.findByText("Todavía no hay listas registradas"),
-    ).toBeInTheDocument();
+    // The failure is announced, not dressed up as "no lists yet".
+    expect(await screen.findByText(/no se pudieron cargar las últimas listas/i)).toBeInTheDocument();
+    expect(screen.queryByText("Todavía no hay listas registradas")).toBeNull();
   });
 
   it("sends the history to its own view instead of embedding a correction table", async () => {
     render(<TrainerPage />);
 
     // Two now: "Últimas listas"' own header link, and "Sesiones sin lista"'s
-    // footer link — both name the same destination, once each.
-    const links = await screen.findAllByRole("link", { name: "Ver historial" });
+    // footer link ("Ver todas" once more than five are missing) — both name
+    // the same destination, once each.
+    const links = await screen.findAllByRole("link", { name: /^Ver (historial|todas)$/ });
     expect(links).toHaveLength(2);
     for (const link of links) {
       expect(link).toHaveAttribute("href", "/trainer/attendance/history");
@@ -730,6 +731,43 @@ describe("TrainerPage — la anatomía del panel de admin", () => {
     expect(pulse.getByText("Listas del mes")).toBeInTheDocument();
   });
 
+  it("labels each missing session with weekday and short date, not a bare long date", async () => {
+    render(<TrainerPage />);
+    await screen.findByText("Sesiones sin lista");
+
+    const rail = within(screen.getByTestId("trainer-lower"));
+    // Newest first: 14/07 (mar) leads; 13/07 is a Monday.
+    expect(rail.getAllByText("mar 14/07").length).toBeGreaterThan(0);
+    expect(rail.getAllByText("lun 13/07").length).toBeGreaterThan(0);
+    expect(rail.queryByText("14/07/2026")).not.toBeInTheDocument();
+  });
+
+  it("stacks 'Alumnos a seguir' under the recent lists and the absence card in its own rail column", async () => {
+    render(<TrainerPage />);
+    await screen.findByText("Sesiones sin lista");
+
+    const main = screen.getByTestId("trainer-main");
+    const rail = screen.getByTestId("trainer-rail");
+    expect(main.contains(screen.getByTestId("students-to-follow"))).toBe(true);
+    expect(rail.contains(screen.getByText("Sesiones sin lista"))).toBe(true);
+    // Independent stacks: neither column is stretched to the other's height.
+    expect(main.className).not.toMatch(/stretch|h-full|flex-1/);
+    expect(rail.className).not.toMatch(/stretch|h-full|flex-1/);
+  });
+
+  it("renders the empty states as one line, not as tall empty cards", async () => {
+    mockFetchRecentAttendanceSessions.mockResolvedValue([]);
+    render(<TrainerPage />);
+    await screen.findByText("Sesiones sin lista");
+    await screen.findByText("Todavía no hay listas registradas");
+    const follow = screen.getByTestId("students-to-follow");
+    // Both blocks say it in the shared one-line shape, never an illustrated card.
+    expect(screen.getByText("Todavía no hay listas registradas").closest('[data-testid="compact-empty"]')).not.toBeNull();
+    if (within(follow).queryByText("Nadie necesita seguimiento")) {
+      expect(within(follow).getByTestId("compact-empty")).toBeInTheDocument();
+    }
+  });
+
   it("puts the recent lists beside sesiones sin lista in the rail, as the panel does", async () => {
     render(<TrainerPage />);
     await screen.findByText("Lunes 15:00 — 16:00");
@@ -857,5 +895,66 @@ describe("TrainerPage — el pulso mensual no pierde una sesión de días antes 
     expect(within(listsCard).getByText("1")).toBeInTheDocument();
     expect(pulse.getByText("Asistencia del mes")).toBeInTheDocument();
     expect(pulse.getByText("15 de 15 entrenaron")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dashboard reorganisation: context line, clickable pulse, "Alumnos a seguir",
+// and a recent-lists failure that says so.
+// ---------------------------------------------------------------------------
+
+describe("TrainerPage — organised around today", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(NOW);
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue(TODAY_SCHEDULES);
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue(MONTH_RECORDS);
+    mockFetchRosterDeTodosLosHorarios.mockReset().mockResolvedValue(ROSTER);
+    mockFetchRecentAttendanceSessions.mockReset().mockResolvedValue(RECENT_SESSIONS);
+    mockUseAuth.mockReset().mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Mendoza"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("states role and long date under the greeting", async () => {
+    render(<TrainerPage />);
+    await screen.findByText("Lunes 15:00 — 16:00");
+    expect(screen.getByText("Entrenador · lunes, 20 de julio de 2026")).toBeInTheDocument();
+  });
+
+  it("links the pulse figures to where their numbers are worked", async () => {
+    render(<TrainerPage />);
+    await screen.findByText("Lunes 15:00 — 16:00");
+    const pulse = within(screen.getByTestId("trainer-pulse"));
+    expect(pulse.getByText("Sesiones hoy").closest("a")).toHaveAttribute("href", "/trainer/attendance");
+    expect(pulse.getByText("Asistencia del mes").closest("a")).toHaveAttribute("href", "/trainer/attendance/history");
+    expect(pulse.getByText("Listas del mes").closest("a")).toHaveAttribute("href", "/trainer/attendance/history");
+  });
+
+  it("lists the students to follow with their absence counts", async () => {
+    render(<TrainerPage />);
+    const block = await screen.findByTestId("students-to-follow");
+    expect(within(block).getByText("Alumnos a seguir")).toBeInTheDocument();
+    expect(within(block).getByText("Luis Lopez")).toBeInTheDocument();
+    expect(within(block).getByText("3 ausencias")).toBeInTheDocument();
+  });
+
+  it("says nobody needs follow-up instead of hiding the block", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([record("present", "Sofia Vera")]);
+    render(<TrainerPage />);
+    const block = await screen.findByTestId("students-to-follow");
+    expect(within(block).getByText("Nadie necesita seguimiento")).toBeInTheDocument();
+  });
+
+  it("tells the trainer the recent lists failed to load, and retries", async () => {
+    mockFetchRecentAttendanceSessions.mockRejectedValueOnce(new Error("boom")).mockResolvedValue(RECENT_SESSIONS);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    render(<TrainerPage />);
+    const notice = await screen.findByText(/no se pudieron cargar las últimas listas/i);
+    expect(screen.queryByText("Todavía no hay listas registradas")).toBeNull();
+    fireEvent.click(within(notice.closest("[role=status]") as HTMLElement).getByRole("button", { name: /reintentar/i }));
+    expect(await screen.findByText("Domingo 09:00 — 10:00")).toBeInTheDocument();
   });
 });

@@ -24,16 +24,21 @@ import { useState } from "react";
 import Link from "next/link";
 import { ClipboardList } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { EmptyState, buttonClasses } from "@/components/ui";
+import CompactEmpty from "@/components/dashboard/CompactEmpty";
+import { LoadingState, buttonClasses } from "@/components/ui";
+import SectionNotice from "@/components/dashboard/SectionNotice";
 import type { RecentAttendanceSession } from "@/services/api";
 import { formatDate } from "@/lib/format-utils";
 import { SessionCompositionBar, SessionCompositionCounts } from "./SessionComposition";
 
 interface RecentSessionsListProps {
   sessions: RecentAttendanceSession[];
+  /** Best-effort load state; a failure says so instead of reading as "no lists". */
+  status?: "loading" | "ready" | "error";
+  onRetry?: () => void;
 }
 
-export default function RecentSessionsList({ sessions }: RecentSessionsListProps): React.ReactElement {
+export default function RecentSessionsList({ sessions, status = "ready", onRetry }: RecentSessionsListProps): React.ReactElement {
   return (
     <section aria-labelledby="ultimas-listas-title" className="card overflow-hidden">
       <div className="flex items-center gap-3 border-b border-line px-5 py-4">
@@ -50,16 +55,18 @@ export default function RecentSessionsList({ sessions }: RecentSessionsListProps
         </Link>
       </div>
 
-      {sessions.length > 0 ? (
+      {status === "loading" ? (
+        <LoadingState label="Cargando listas…" />
+      ) : status === "error" ? (
+        <SectionNotice message="No se pudieron cargar las últimas listas." onRetry={onRetry} />
+      ) : sessions.length > 0 ? (
         <div className="flex flex-col">
           {sessions.map((session) => (
             <SessionRow key={`${session.horarioId}|${session.fecha}`} session={session} />
           ))}
         </div>
       ) : (
-        <EmptyState
-          surface="inset"
-          icon={<ClipboardList size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+        <CompactEmpty
           title="Todavía no hay listas registradas"
           description="En cuanto alguien pase lista en el club, la sesión aparece acá con su desglose."
         />

@@ -14,6 +14,9 @@ import {
   buildDayRail,
   buildSessionCardState,
   findAbsenceAlert,
+  findNextScheduledSession,
+  formatNextSessionLabel,
+  formatMissingSessionDate,
   formatAbsenceCount,
   formatElapsedMinutes,
   formatMinutesAsHora,
@@ -797,5 +800,83 @@ describe("buildDayRail", () => {
 
   it("is null when not one session of the day can be drawn", () => {
     expect(buildDayRail([schedule(1, "??", "??")], NOW)).toBeNull();
+  });
+});
+
+describe("findStudentsToFollow", () => {
+  const rec = (estudiante: string, estado: AttendanceRecord["estado"], n = 0): AttendanceRecord => ({
+    id: `${estudiante}-${estado}-${n}`,
+    fecha: "2026-07-20",
+    horario: "Lunes",
+    horarioId: 1,
+    personaId: 1,
+    estudiante,
+    estado,
+  });
+
+  it("lists every student at the threshold, most absences first, ties alphabetical", async () => {
+    const { findStudentsToFollow } = await import("../trainer-day-utils");
+    const list = findStudentsToFollow([
+      rec("Zoe", "absent", 1), rec("Zoe", "absent", 2),
+      rec("Ana", "absent", 1), rec("Ana", "absent", 2),
+      rec("Luis", "absent", 1), rec("Luis", "absent", 2), rec("Luis", "absent", 3),
+      rec("Eva", "absent", 1), rec("Eva", "justified", 2),
+    ]);
+    expect(list).toEqual([
+      { estudiante: "Luis", ausencias: 3 },
+      { estudiante: "Ana", ausencias: 2 },
+      { estudiante: "Zoe", ausencias: 2 },
+    ]);
+  });
+
+  it("caps the list and is empty when nobody reaches the threshold", async () => {
+    const { findStudentsToFollow } = await import("../trainer-day-utils");
+    expect(findStudentsToFollow([rec("Eva", "absent")])).toEqual([]);
+    const many = ["A", "B", "C", "D"].flatMap((n) => [rec(n, "absent", 1), rec(n, "absent", 2)]);
+    expect(findStudentsToFollow(many, 3)).toHaveLength(3);
+  });
+});
+
+describe("findNextScheduledSession", () => {
+  // Monday 2026-07-20, after the last session of the day.
+  const EVENING = new Date(2026, 6, 20, 21, 0);
+
+  it("returns the first session on the following days, ordered by hour", () => {
+    const next = findNextScheduledSession(
+      [
+        { ...schedule(1, "15:00", "16:00"), diaSemana: "mie" },
+        { ...schedule(2, "09:00", "10:00"), diaSemana: "mie" },
+        { ...schedule(3, "08:00", "09:00"), diaSemana: "vie" },
+      ],
+      EVENING,
+    );
+    expect(next).toEqual({ diaSemana: "mie", horaInicio: "09:00", daysAway: 2 });
+  });
+
+  it("wraps to the same weekday next week when nothing else is scheduled", () => {
+    const next = findNextScheduledSession([schedule(1, "15:00", "16:00")], EVENING);
+    expect(next).toEqual({ diaSemana: "lun", horaInicio: "15:00", daysAway: 7 });
+  });
+
+  it("returns null without schedules", () => {
+    expect(findNextScheduledSession([], EVENING)).toBeNull();
+  });
+});
+
+describe("formatNextSessionLabel", () => {
+  it("says mañana for the next day and the weekday otherwise", () => {
+    expect(formatNextSessionLabel({ diaSemana: "mar", horaInicio: "15:00", daysAway: 1 })).toBe("mañana 15:00");
+    expect(formatNextSessionLabel({ diaSemana: "mie", horaInicio: "15:00", daysAway: 2 })).toBe("miércoles 15:00");
+  });
+});
+
+describe("formatMissingSessionDate", () => {
+  it("writes weekday and short date", () => {
+    expect(formatMissingSessionDate("2026-09-01")).toBe("mar 01/09");
+    expect(formatMissingSessionDate("2026-07-13")).toBe("lun 13/07");
+  });
+
+  it("returns an empty string for something that is not a date", () => {
+    expect(formatMissingSessionDate("garbage")).toBe("");
   });
 });
