@@ -22,6 +22,7 @@ from app.dominio.mensajes import (
     MENSAJE_VERIFICACION_ENVIADA,
 )
 from app.infraestructura import actividad
+from app.infraestructura.metricas import contar_login
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.restricciones_identidad import identidad_en_conflicto
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
@@ -206,9 +207,11 @@ class AuthServicio:
         try:
             usuario = self._verificar_credenciales(correo, contrasenia)
         except CredencialesInvalidas:
+            contar_login(ok=False)
             self._penalizar_intento_fallido(clave)
             raise
 
+        contar_login(ok=True)
         _INTENTOS_FALLIDOS_LOGIN.pop(clave, None)
         sesion = self._registrar_sesion(usuario, user_agent)
         tokens = self._emitir_par_tokens(usuario, sesion_id=sesion.id)
