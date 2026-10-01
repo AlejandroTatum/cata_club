@@ -42,6 +42,11 @@ coverage/
 test-results/
 playwright-report/
 
+# Load-test run evidence (k6 summaries, resource samples): generated per run,
+# never committed — they can hold run metadata but must stay out of the tree
+# by policy (odd/tasks/100-user-load-test.md).
+load/results/
+
 # Playwright MCP's own session output (screenshots, console logs, page
 # snapshots) — a different tool from the `playwright-report/` test runner
 # above, and previously untracked AND unignored: the exact shape that let
