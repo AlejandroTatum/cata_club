@@ -412,7 +412,7 @@ export default function MedicalRecordEditor({
               repeated the page title verbatim and the name arrived as an
               orphan. One heading says the whole thing, and it is still the
               element the sticky band pins (D11c). */}
-          <h3 className="truncate text-base font-extrabold text-ink">
+          <h3 className="break-words text-base font-extrabold text-ink sm:truncate">
             {studentName ? `Ficha médica de ${studentName}` : "Ficha médica"}
           </h3>
         </div>

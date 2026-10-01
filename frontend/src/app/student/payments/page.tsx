@@ -93,6 +93,11 @@ type HistorialItem =
   | { kind: "pago"; pago: PagoPersona }
   | { kind: "cobertura"; cobertura: CoberturaBonificada };
 
+/** Stat figure that steps down on small screens so a long date never clips. */
+function StatValue({ children }: { children: React.ReactNode }): React.ReactElement {
+  return <span className="text-lg sm:text-xl xl:text-2xl">{children}</span>;
+}
+
 const FILTERS: PagoStatusFilter[] = ["TODOS", "PENDIENTE_VALIDACION", "APROBADO", "RECHAZADO"];
 
 function isPagoStatusFilter(value: string): value is PagoStatusFilter {
@@ -574,35 +579,37 @@ function PaymentsContent({
 
       {/* Mounted once the history has settled — see `pagosSettled`. */}
       {pagosSettled && (
-        <HowToPay
-          studentName={studentName}
-          blocked={blockedAsMinor}
-          gratuitous={isGratuitous}
-          hasMembership={selectedProfile.membership != null}
-          monthlyPrice={selectedProfile.membership?.montoAplicado ?? null}
-          openByDefault={howToPayOpensByDefault}
-        />
+        <div className="max-md:[&_button]:min-h-10">
+          <HowToPay
+            studentName={studentName}
+            blocked={blockedAsMinor}
+            gratuitous={isGratuitous}
+            hasMembership={selectedProfile.membership != null}
+            monthlyPrice={selectedProfile.membership?.montoAplicado ?? null}
+            openByDefault={howToPayOpensByDefault}
+          />
+        </div>
       )}
         </aside>
 
         <div data-dash-col className="flex min-w-0 flex-col gap-page lg:col-start-1 lg:row-start-1">
       {pagosState.status === "ready" && (
-        <div className="grid grid-cols-2 gap-section lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
+        <div className="grid grid-cols-2 gap-section xl:grid-cols-[1.5fr_1fr_1fr_1fr]">
           <StatCard
             label="Pagado hasta"
-            value={coverageEnd ? formatDate(coverageEnd) : "—"}
+            value={<StatValue>{coverageEnd ? formatDate(coverageEnd) : "—"}</StatValue>}
             hint={coverageEnd ? "fin de la cobertura aprobada" : "sin pagos aprobados"}
           />
-          <StatCard label="Pagos aprobados" value={counts.APROBADO} hint="en su historial" />
+          <StatCard label="Pagos aprobados" value={<StatValue>{counts.APROBADO}</StatValue>} hint="en su historial" />
           <StatCard
             label="En revisión"
-            value={counts.PENDIENTE_VALIDACION}
+            value={<StatValue>{counts.PENDIENTE_VALIDACION}</StatValue>}
             hint="esperando al club"
             className={counts.PENDIENTE_VALIDACION === 0 ? "opacity-60" : undefined}
           />
           <StatCard
             label="Último pago"
-            value={lastPago ? formatPagoMonto(lastPago.monto) : "—"}
+            value={<StatValue>{lastPago ? formatPagoMonto(lastPago.monto) : "—"}</StatValue>}
             hint={lastPago ? `registrado el ${formatDate(lastPago.fechaRegistro)}` : "aún no hay pagos"}
           />
         </div>

@@ -245,10 +245,13 @@ export default function ManagedStudentPicker({
           select, which meant four copies of the same floating sentence: this
           component draws on `/student`, `/student/payments`,
           `/student/attendance` and `/student/medical-record` at once. */}
-      <ContextualHelp title="Cómo funciona esta elección">
-        Se mantiene en Mi cuenta, Pagos, Asistencias y Ficha médica hasta que usted lo cambie, y
-        viaja en la dirección de la página, así que un enlace compartido abre la misma persona.
-      </ContextualHelp>
+      {/* The toggle is 24px tall by default; give it a 40px hit area on phones. */}
+      <div className="max-md:[&_button]:min-h-10">
+        <ContextualHelp title="Cómo funciona esta elección">
+          Se mantiene en Mi cuenta, Pagos, Asistencias y Ficha médica hasta que usted lo cambie, y
+          viaja en la dirección de la página, así que un enlace compartido abre la misma persona.
+        </ContextualHelp>
+      </div>
     </div>
   );
 }
