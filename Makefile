@@ -1,6 +1,7 @@
 .PHONY: help dev dev-backend dev-frontend test test-backend test-backend-preflight \
        test-root ci-backend test-frontend test-compose test-qa-guard \
        test-qa-recovery-delivery test-diagnostico-horarios \
+       load-preflight load-pool load-baseline load-ramp load-steady \
        pre-pr pre-pr-guard-secrets pre-pr-backend pre-pr-frontend \
          pre-pr-integration pre-pr-full \
          lint lint-backend lint-frontend typecheck build build-frontend \
@@ -379,6 +380,42 @@ qa-logs: ## Ver los logs del entorno de QA
 # configuración válida en desarrollo.
 qa-pdf-delivery-check: ## Descargar de verdad un PDF de Cloudinary y verificar que llega
 	$(QA_ENV) $(QA_COMPOSE) exec backend uv run python scripts/verificar_entrega_pdf.py
+
+# ─── Pruebas de carga (QA local, requisito previo de #1314) ─────────────
+# Harness k6 reproducible contra el stack de QA LOCAL, con la imagen oficial
+# fijada grafana/k6:1.0.0 (no requiere instalar k6 en el host). Las
+# credenciales y la base URL entran SOLO por entorno -- nada versionado.
+#
+# Fail-closed: los tres capas (default de acá, runner de shell y el setup de
+# k6) rechazan cualquier LOAD_BASE_URL que no sea localhost/127.0.0.1/[::1].
+# Staging y producción son blancos PROHIBIDOS para este harness; correr carga
+# contra ellos exige una autorización explícita y separada del owner.
+#
+# Ver docs/operations/load-testing.md (cómo correr, cómo leer, vocabulario
+# VU-vs-sesiones, calibración de umbrales) y odd/tasks/100-user-load-test.md.
+#
+# Ejemplo:
+#   make load-preflight
+#   LOAD_EMAIL=alumno@... LOAD_PASSWORD=... make load-baseline
+#   QA_SEED_PASSWORD='...' make load-pool          # pool 1:1 → load/results/ (git-ignorado)
+#   LOAD_CREDENTIALS_FILE=load/results/credentials-pool.json make load-steady
+LOAD_BASE_URL ?= http://localhost:3000
+LOAD_RUNNER = scripts/load/run_load_test.sh
+
+load-preflight: ## Verificar el stack local para carga (db-test :5436 + QA :3000/:8000); no levanta nada
+	scripts/load/preflight_load_stack.sh
+
+load-pool: ## Construir el pool local de credenciales (QA_SEED_PASSWORD por env; escribe load/results/, git-ignorado; nunca imprime el password)
+	python3 scripts/load/build_credentials_pool.py
+
+load-baseline: ## Calibración: 1 VU sobre el viaje autenticado contra el QA local (credenciales por env)
+	LOAD_BASE_URL="$(LOAD_BASE_URL)" $(LOAD_RUNNER) baseline
+
+load-ramp: ## Ramp escalonado de VUs (tope LOAD_RAMP_MAX_VUS, default 100) para buscar la rodilla
+	LOAD_BASE_URL="$(LOAD_BASE_URL)" $(LOAD_RUNNER) ramp
+
+load-steady: ## 100 VUs constantes por 10m (default) con umbrales provisorios de aceptación y aborto
+	LOAD_BASE_URL="$(LOAD_BASE_URL)" $(LOAD_RUNNER) steady_100
 
 # ─── Clean ──────────────────────────────────────────────────────────────────
 clean: clean-backend clean-frontend ## Clean caches from both projects
