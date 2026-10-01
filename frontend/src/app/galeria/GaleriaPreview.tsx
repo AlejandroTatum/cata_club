@@ -24,10 +24,13 @@ export default function GaleriaPreview({ imageUrl, title, description }: Galeria
   // A new photo is framed at the default until its own ratio is measured.
   useEffect(() => { setAspect(DEFAULT_ASPECT); }, [imageUrl]);
 
+  // Nothing chosen or typed yet: the same light placeholder the sponsors composer uses.
+  const empty = !imageUrl && !title && !description;
+
   return (
     <figure
       style={{ aspectRatio: aspect.toFixed(4) }}
-      className="relative m-0 w-full overflow-hidden rounded-card bg-coal"
+      className={`relative m-0 w-full overflow-hidden rounded-card ${empty ? "border border-line bg-sunken" : "bg-coal"}`}
     >
       {imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element -- local blob: preview URL, not optimizable by next/image
@@ -41,7 +44,7 @@ export default function GaleriaPreview({ imageUrl, title, description }: Galeria
           className="block size-full object-cover"
         />
       ) : (
-        <span className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-white/70">La foto aparecerá aquí al elegirla.</span>
+        <span className={`absolute inset-0 flex items-center justify-center px-4 text-center text-xs ${empty ? "text-ink-2" : "text-white/70"}`}>La foto aparecerá aquí al elegirla.</span>
       )}
       {imageUrl || title || description ? (
         <figcaption className="absolute inset-x-0 bottom-0 flex flex-col gap-1.5 bg-gradient-to-t from-coal/80 to-transparent px-4 pb-4 pt-10">

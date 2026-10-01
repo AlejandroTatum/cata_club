@@ -98,13 +98,12 @@ describe("GaleriaPage", () => {
     await completarFormularioValido();
     // A valid small image failing upstream (e.g. absent Cloudinary credentials
     // in the preview) must NOT read as "your photo is too big/formatted badly".
-    // The 5xx detail itself never reaches the screen — the translator's
-    // SERVER FAILURE sentence does (only a backend safe-marker can change
-    // that, and an unmarked provider outage has none).
+    // The 5xx detail itself never reaches the screen — the shared upload
+    // helper's service-outage sentence does.
     crearEntradaGaleria.mockRejectedValueOnce(new ApiClientError("Fallo del proveedor de imágenes.", 503));
     fireEvent.click(screen.getByRole("button", { name: "Publicar foto" }));
     const alerta = await screen.findByRole("alert");
-    expect(alerta).toHaveTextContent(/Tuvimos un problema de nuestro lado/);
+    expect(alerta).toHaveTextContent("El servicio de imágenes no está disponible en este momento. Intente de nuevo más tarde.");
     expect(alerta.textContent).not.toMatch(/5 MB|JPG|PNG|proveedor/);
   });
   it("keeps actionable backend 4xx messages visible", async () => {
