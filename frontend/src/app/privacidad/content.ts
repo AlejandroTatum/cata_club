@@ -28,3 +28,12 @@ export const legalBlocks: readonly LegalBlock[] = [
   paragraph("[ ] Acepto los Términos de uso, el Aviso de privacidad, el tratamiento de datos médicos y la difusión pública de imagen conforme al documento de Permiso público de difusión de imagen FETM."),
   paragraph("La aceptación agrupada debe auditar por separado cada documento o versión, timestamp, cuenta y representante cuando aplique. Las cuentas existentes deben aceptar al siguiente inicio de sesión; hasta entonces solo podrán revisar los documentos o cerrar sesión. Nunca se autoaceptará."),
 ];
+
+/** Key points of the document above, for the side summary. Nothing here goes beyond the text. */
+export const summary: readonly string[] = [
+  "Cata Club puede gestionar datos de identidad y contacto, actividad deportiva, pagos, información médica o de emergencia, imagen y datos técnicos, según la función utilizada.",
+  "La información se utiliza para cuentas, alumnos, asistencia, pagos, emergencias, seguridad y para demostrar qué versión fue aceptada.",
+  "El acceso se limita a usted, sus representantes, el personal con función pertinente y proveedores que actúan bajo instrucciones de Cata Club.",
+  "Puede enviar consultas y solicitudes de acceso, corrección o retiro de su autorización a cataclub.loja@proton.me.",
+  "Retirar una autorización opera hacia el futuro y no equivale automáticamente a borrar datos.",
+];

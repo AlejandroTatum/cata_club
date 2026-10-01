@@ -33,3 +33,19 @@ export function heading(text: string): LegalBlock {
 export function paragraph(text: string): LegalBlock {
   return { kind: "paragraph", text };
 }
+
+/**
+ * The anchor a section heading answers to. It is derived from the heading text
+ * (accents folded, punctuation dropped) so the contents list and the heading
+ * agree without either keeping a second list; the index prefix keeps two
+ * headings with the same wording from sharing an id.
+ */
+export function sectionId(text: string, index: number): string {
+  const slug = text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `${slug}-${index + 1}`;
+}
