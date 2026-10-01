@@ -1,0 +1,53 @@
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import EnrollConfirmation, { type EnrollConfirmationProps } from "../EnrollConfirmation";
+
+function renderConfirmation(overrides: Partial<EnrollConfirmationProps> = {}) {
+  const props: EnrollConfirmationProps = {
+    studentName: "Lucas Martinez",
+    isSelf: false,
+    sessionConfirmed: true,
+    sessionNotice: null,
+    accountAreaLink: { href: "/student", label: "Ir a mi cuenta" },
+    onReset: vi.fn(),
+    ...overrides,
+  };
+  render(<EnrollConfirmation {...props} />);
+  return props;
+}
+
+describe("EnrollConfirmation", () => {
+  it("shows a real, local club photo with a text alternative", () => {
+    renderConfirmation();
+    const photo = screen.getByRole("img", { name: /cata club reunidos en el club/i });
+    expect(decodeURIComponent(photo.getAttribute("src") ?? "")).toContain("/landing/hero-community.jpg");
+  });
+
+  it("lays the next steps out as four numbered cards", () => {
+    renderConfirmation();
+    const steps = within(screen.getByRole("list")).getAllByRole("listitem");
+    expect(steps).toHaveLength(4);
+    steps.forEach((step, index) => expect(step).toHaveTextContent(String(index + 1)));
+    expect(steps[0]).toHaveTextContent("Su cuenta ya está creada y la sesión, iniciada.");
+    expect(steps[3]).toHaveTextContent("El club lo valida y ahí se activa la membresía.");
+  });
+
+  it("only claims the session when it was confirmed", () => {
+    renderConfirmation({ sessionConfirmed: false, accountAreaLink: null });
+    expect(screen.queryByText(/la sesión, iniciada/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/inicie sesión con su correo y su contraseña/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute("href", "/login");
+  });
+
+  it("keeps one primary action and a secondary 'Nueva inscripción' that resets", () => {
+    const props = renderConfirmation();
+    expect(screen.getByRole("link", { name: "Ir a mi cuenta" })).toHaveAttribute("href", "/student");
+    fireEvent.click(screen.getByRole("button", { name: "Nueva inscripción" }));
+    expect(props.onReset).toHaveBeenCalledTimes(1);
+  });
+
+  it("states the role of the person enrolling", () => {
+    renderConfirmation({ isSelf: true });
+    expect(screen.getByText(/titular de la cuenta y el estudiante/i)).toBeInTheDocument();
+  });
+});

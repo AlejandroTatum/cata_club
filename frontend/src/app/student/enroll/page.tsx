@@ -109,6 +109,7 @@ import {
 import FieldSlot, { EnrollFieldGrid } from "./EnrollFieldSlot";
 import { cn } from "@/components/ui/cn";
 import EnrollAside from "./EnrollAside";
+import EnrollConfirmation from "./EnrollConfirmation";
 import EnrollFrame from "./EnrollFrame";
 import EnrollNav from "./EnrollNav";
 import EnrollSteps from "./EnrollSteps";
@@ -1504,176 +1505,18 @@ function EnrollWizard(): React.ReactElement {
     // the root layout's, which is the wrapper that stopped being one.
     <main>
       {confirmed ? (
-        /* The confirmation used to declare its own emptiness: `min-h-[75vh]`
-           reserved for a ~300px box, and the box was pinned to the TOP of that
-           reservation — 44% dead air at 1440×900, the worst number on the
-           wizard and more than half the window under the last button.
-           Two things changed, and only one of them is layout.
-           · The surplus is SPLIT, not dumped at the bottom. That is the answer
-             `EmptyState` already wrote down for itself: *"half the air at each
-             end reads as margin; all of it at one end reads as a mistake."*
-             A block centred on the page is the same shape the login settled on
-             for the same reason.
-           · The screen says what happens next. It used to end at "ha sido
-             registrado" plus two buttons, which is a confirmation that answers
-             none of the three questions an end state owes (D11: what happened,
-             why, what to do). The three lines below are the club's real
-             process — the summary step already promises them in writing — and
-             not one of them invents a datum: no plan, no amount, no date.
-           A `<h1>` and not `EmptyState`'s `<b>`: this is the page's title, two
-           end-to-end cases pin it as a heading, and a confirmation is not an
-           empty state — see "Lo que falta" in the comparison. */
-        /* `100vh` minus the 5rem that `app-main` (`src/app/layout.tsx`) puts
-           above and below every route as `py-10`. `min-h-screen` here measured
-           right but overflowed the window by exactly those 80px, which turned
-           a confirmation into a page that scrolls to show nothing. */
-        <div className="flex min-h-[calc(100vh-5rem)] items-center justify-center px-4">
-          <div className="card w-full max-w-[560px] overflow-hidden">
-            {/* The coal shoulder (D7): the one card on this screen that asks
-                for something, and the only one — the rule caps it at one per
-                row, and here there is one card. It is also the only moment in
-                the wizard where the club gets to speak in its own colours. */}
-            <div className="flex justify-end bg-coal px-page py-2">
-              <span className="text-2xs font-bold uppercase text-ball">
-                ¡Le damos la bienvenida a Cata Club!
-              </span>
-            </div>
-
-            {/* One alignment for the whole card. A centred statement above a
-                left-aligned list is two axes in one box — literally the
-                "cosas desalineadas" the client named — and the list is the
-                part that has to be read, so the axis is the list's. */}
-            <div className="flex flex-col gap-page p-page">
-              <div className="flex flex-col items-start gap-section">
-                <span
-                  aria-hidden="true"
-                  className="flex h-12 w-12 items-center justify-center rounded-full bg-state-ok-bg"
-                >
-                  <CheckCircle size={ICON.lg} className="text-state-ok" strokeWidth={1.5} />
-                </span>
-                {/* Graduate at the headline step, with no weight class: the
-                    face ships a single 400 cut, so the `font-bold` this line
-                    used to carry could only ask the browser to fake one. And
-                    `state-ok`, not `cata-state-ok` (#15803D) — the ramp's green
-                    is #137739, and the disc was tinted at 10% opacity where the
-                    ramp already has an opaque `state-ok-bg`. */}
-                <h1 className="font-display text-xl uppercase tracking-flat text-ink">
-                  Inscripción completada
-                </h1>
-                {/* #877: a contained emotional line, not a second claim — it
-                    says nothing about membership, payment or session, so it
-                    stays true regardless of `sessionConfirmed`. */}
-                <p className="max-w-[44ch] text-sm text-ink-2">
-                  Su camino en el tenis de mesa comienza aquí.
-                </p>
-                <p className="max-w-[44ch] text-sm text-ink-2">
-                  <b className="font-semibold text-ink">
-                    {formData.nombres} {formData.apellidos}
-                  </b>{" "}
-                  ha sido registrado como estudiante de Cata Club.{" "}
-                  {formData.enrollmentType === "self"
-                    ? "Usted es el titular de la cuenta y el estudiante."
-                    : "Usted es el representante y responsable de pago de este estudiante."}
-                </p>
-              </div>
-
-              {/* The session that never was (issue #717). `role="alert"`, and
-                  on the CARD rather than in a toast, for the same reason the
-                  login screen holds its own copy of this message there: the
-                  remedy is in a browser settings panel, and a notice that
-                  fades cannot survive the trip. It sits ABOVE "Qué sigue"
-                  because it changes what the first of those steps is. */}
-              {sessionOutcome !== null && sessionOutcome !== "authenticated" && (
-                <p
-                  role="alert"
-                  data-testid="enroll-session-not-confirmed"
-                  className="rounded-ctl border border-state-bad bg-canvas px-3.5 py-2.5 text-sm text-ink-2"
-                >
-                  {unconfirmedSessionNotice(sessionOutcome)}
-                </p>
-              )}
-
-              <div>
-                <p className="mb-section text-2xs font-bold uppercase text-ink-3">
-                  Qué sigue
-                </p>
-                {/* No `01/02/03`: the sequence is real, but the numbering is
-                    the landing's device and `DESIGN.md` keeps it out of the
-                    product. The dot marks the item; the order does the rest.
-                    It is `ink-3` and not red: red is the action and this is a
-                    bullet, which is the exact substitution — decoration
-                    wearing the one colour that means "press me" — that this
-                    screen spent seven asterisks on. */}
-                <ol className="space-y-section">
-                  {[
-                    /* #717: the session half of this line is a CLAIM, and it
-                       is only true when the round trip above confirmed it.
-                       Unconfirmed, the account is still created — that half
-                       is a fact — and the next step is signing in, not
-                       enrolling again. */
-                    sessionConfirmed
-                      ? "Su cuenta ya está creada y la sesión, iniciada."
-                      : "Su cuenta ya está creada. Inicie sesión con su correo y su contraseña.",
-                    /* #1196: la historia completa empieza acá -- antes la
-                       confirmación no mencionaba la verificación de correo.
-                       #1398: «le enviamos» afirmaba la entrega como hecho
-                       consumado, pero el enlace no «viaja apenas se crea la
-                       cuenta»: la solicitud queda registrada en el outbox y
-                       la entrega la hace después el beat (~2 minutos, #1295,
-                       reintentos at-least-once, #839). Esta línea dice la
-                       solicitud registrada, la demora posible y la salida si
-                       no llega (#1245) — nunca la entrega misma. */
-                    "Verifique su correo: registramos el envío de un enlace de confirmación; puede tardar unos minutos en llegar. Si no llega, reenvíelo desde la pantalla de activación, donde también puede corregir el correo.",
-                    /* #348: "Mis pagos" no tiene ningún botón para el primer
-                       pago -- registrarlo requiere una membresía que todavía
-                       no existe, y crearla es una acción exclusiva del
-                       administrador (ver membresia_pago_servicio.
-                       registrar_pago, que exige una membresia_id ya
-                       existente, y crear_membresia, ROL_ADMIN). La
-                       confirmación no puede mandar al socio recién creado a
-                       una pantalla sin la acción que promete: la verdad es
-                       la misma que ya dice student-utils.ts para ese estado
-                       ("El club crea la membresía al registrar el primer
-                       pago. Acérquese a administración..."). */
-                    "Acérquese a administración o escríbanos por WhatsApp para registrar la inscripción y el primer pago.",
-                    "El club lo valida y ahí se activa la membresía.",
-                  ].map((linea) => (
-                    <li key={linea} className="flex items-start gap-3 text-sm text-ink-2">
-                      <span
-                        aria-hidden="true"
-                        className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-ink-3"
-                      />
-                      {linea}
-                    </li>
-                  ))}
-                </ol>
-              </div>
-
-              <div className="flex flex-col gap-3 sm:flex-row">
-                {/* #717: `/student` is a protected route. Offering it without
-                    a confirmed session is offering a button whose only
-                    outcome is a silent bounce to /login — which is exactly
-                    what the reproduction produced. Unconfirmed, the honest
-                    destination IS /login.
-                    #1055: a CONFIRMED session can still be stuck at the
-                    activation gate — `accountAreaLink` is `null` for both
-                    cases, so this stays the same fallback either way. */}
-                {accountAreaLink ? (
-                  <Link href={accountAreaLink.href} className={buttonClasses("primary")}>
-                    {accountAreaLink.label}
-                  </Link>
-                ) : (
-                  <Link href="/login" className={buttonClasses("primary")}>
-                    Iniciar sesión
-                  </Link>
-                )}
-                <Button variant="secondary" onClick={handleReset}>
-                  Nueva inscripción
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <EnrollConfirmation
+          studentName={`${formData.nombres} ${formData.apellidos}`}
+          isSelf={formData.enrollmentType === "self"}
+          sessionConfirmed={sessionConfirmed}
+          sessionNotice={
+            sessionOutcome !== null && sessionOutcome !== "authenticated"
+              ? unconfirmedSessionNotice(sessionOutcome)
+              : null
+          }
+          accountAreaLink={accountAreaLink}
+          onReset={handleReset}
+        />
       ) : (
 
         /* A full-height split (see `EnrollFrame`): the brand panel carries the
