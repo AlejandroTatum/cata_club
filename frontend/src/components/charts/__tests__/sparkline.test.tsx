@@ -80,4 +80,51 @@ describe("Sparkline", () => {
     fireEvent.mouseLeave(chart);
     expect(screen.queryByTestId("chart-tooltip")).toBeNull();
   });
+  describe("gaps (null readings)", () => {
+    const withGap = [4, 9, null, null, 8, 6];
+    const labels = ["hace 5 min", "hace 4 min", "hace 3 min", "hace 2 min", "hace 1 min", "ahora"];
+
+    it("breaks the line at a gap instead of drawing it through zero", () => {
+      render(<Sparkline values={withGap} label="CPU" />);
+      const lines = screen.getAllByTestId("sparkline-line");
+      expect(lines).toHaveLength(2);
+      expect(lines[0].getAttribute("points")?.split(" ")).toHaveLength(2);
+      expect(lines[1].getAttribute("points")?.split(" ")).toHaveLength(2);
+    });
+
+    it("keeps the scale to the real readings (a null is not a zero)", () => {
+      render(<Sparkline values={[50, null, 60]} label="CPU" />);
+      expect(screen.getByRole("img").getAttribute("aria-label")).toBe("CPU: mínimo 50, máximo 60, último 60");
+    });
+
+    it("says the latest reading is missing when the series ends in a gap", () => {
+      render(<Sparkline values={[50, 60, null]} label="CPU" />);
+      expect(screen.getByRole("img").getAttribute("aria-label")).toBe(
+        "CPU: mínimo 50, máximo 60, último 60 (sin lectura reciente)",
+      );
+    });
+
+    it("draws a lone reading between two gaps as a dot", () => {
+      render(<Sparkline values={[null, 7, null]} label="CPU" />);
+      expect(screen.queryAllByTestId("sparkline-line")).toHaveLength(0);
+      expect(screen.getAllByTestId("sparkline-dot")).toHaveLength(1);
+    });
+
+    it("reads an all-null series as no data", () => {
+      render(<Sparkline values={[null, null]} label="CPU" />);
+      expect(screen.getByRole("img", { name: "CPU: sin datos" })).toBeInTheDocument();
+      expect(screen.queryByTestId("sparkline-line")).toBeNull();
+    });
+
+    it("names a gap point 'sin lectura' in the tooltip, with no marker", () => {
+      render(<Sparkline values={withGap} label="CPU" pointLabels={labels} />);
+      const chart = screen.getByRole("img");
+      fireEvent.focus(chart);
+      fireEvent.keyDown(chart, { key: "Home" });
+      fireEvent.keyDown(chart, { key: "ArrowRight" });
+      fireEvent.keyDown(chart, { key: "ArrowRight" });
+      expect(screen.getByText("hace 3 min: sin lectura")).toBeInTheDocument();
+      expect(screen.queryByTestId("sparkline-marker")).toBeNull();
+    });
+  });
 });
