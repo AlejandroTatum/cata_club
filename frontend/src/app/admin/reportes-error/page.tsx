@@ -8,11 +8,14 @@ import { fetchReportesError, fetchReporteError, type ReporteError } from "@/serv
 import { EmptyInbox, GhostDetail, GhostRows, HowItWorks, SelectPrompt, SummaryStrip } from "./InboxParts";
 import { NO_DISPONIBLE, applyFilter, buildChips, formatFecha, resumirNavegador, summarize, type InboxFilter } from "./inbox";
 
-/** Empty inbox: both columns reach the bottom of the screen (page header and padding above, ~24px margin below). */
+/** Both columns reach the bottom of the screen (page header and padding above, ~24px margin below), so no dead band is left under a short inbox. */
 const FILL_SCREEN = "lg:min-h-[calc(100dvh-10rem)]";
 
 /** Below this many visible rows the list card is continued with skeleton rows. */
 const GHOST_BELOW = 5;
+
+/** Skeleton rows drawn to continue a short list; the card clips whatever exceeds its height. */
+const GHOST_FILL = 14;
 
 export default function ReportesErrorPage(): React.ReactElement {
   const [reports, setReports] = useState<ReporteError[]>([]);
@@ -59,7 +62,7 @@ export default function ReportesErrorPage(): React.ReactElement {
   return <ProtectedRoute allowedRoles={["admin"]}><AppShell title="Reportes de error" subtitle="Avisos enviados por usuarios del club">
     {cargando ? <LoadingState label="Cargando reportes…" />
       : errorLista ? <ErrorState message="No se pudo cargar la bandeja." onRetry={() => void load()} />
-      : <div className={PAGE_RAIL}>
+      : <div className={cn(PAGE_RAIL, FILL_SCREEN)}>
         <div className="relative min-w-0 lg:self-stretch">
           <div className="flex min-w-0 flex-col gap-page lg:absolute lg:inset-0">
             {vacia ? <EmptyInbox /> : <>
@@ -91,13 +94,13 @@ export default function ReportesErrorPage(): React.ReactElement {
                   </ul>
                   {visibles.length === 0 && <p className="px-5 py-6 text-sm text-ink-2">Ningún reporte coincide con este filtro.</p>}
                   {/* A short list keeps the card the rail's height: skeleton rows continue it. */}
-                  {visibles.length < GHOST_BELOW && <GhostRows count={GHOST_BELOW} className="hidden min-h-0 flex-1 border-t border-line lg:flex" />}
+                  {visibles.length < GHOST_BELOW && <GhostRows count={GHOST_FILL} className="hidden min-h-0 flex-1 border-t border-line lg:flex" />}
                 </div>
               </section>
             </>}
           </div>
         </div>
-        <aside ref={detalleRef} aria-label="Detalle" className={cn("flex min-w-0 flex-col gap-page lg:self-stretch", vacia && FILL_SCREEN)}>
+        <aside ref={detalleRef} aria-label="Detalle" className="flex min-w-0 flex-col gap-page lg:self-stretch">
           {selectedId === null ? vacia ? null : <SelectPrompt total={reports.length} />
             : cargandoDetalle ? <LoadingState label="Cargando reporte…" />
             : errorDetalle ? <ErrorState message="No se pudo cargar el reporte." onRetry={() => void select(selectedId)} />
@@ -126,7 +129,7 @@ export default function ReportesErrorPage(): React.ReactElement {
               </div>
             </section>}
           <HowItWorks />
-          {vacia && <GhostDetail />}
+          {selectedId === null && <GhostDetail />}
         </aside>
       </div>}
   </AppShell></ProtectedRoute>;

@@ -40,6 +40,15 @@ describe("GaleriaPage", () => {
     vi.stubGlobal("confirm", vi.fn(() => true));
     URL.createObjectURL = vi.fn(() => "blob:preview"); URL.revokeObjectURL = vi.fn();
   });
+  it("puts the upload form before the list and the guide below lg", async () => {
+    render(<GaleriaPage />); await screen.findByText("En juego");
+    const form = screen.getByRole("heading", { name: "Subir foto" }).closest("form")!;
+    const list = screen.getByRole("region", { name: "Fotos publicadas" });
+    const guide = screen.getByRole("complementary", { name: "Cómo se publica en el sitio" });
+    expect(form).toHaveClass("max-lg:order-1");
+    expect(list).toHaveClass("max-lg:order-2");
+    expect(guide).toHaveClass("max-lg:order-3");
+  });
   it("lists published photos with their accessible descriptions", async () => {
     render(<GaleriaPage />);
     expect(await screen.findByRole("img", { name: "En juego" })).toHaveAttribute("src", "https://cdn/foto.png");
@@ -213,5 +222,13 @@ describe("GaleriaPage", () => {
     // The preview URL is cleared by an effect after the success toast, so wait for it.
     await waitFor(() => expect(screen.getByTestId("galeria-preview").querySelector("img")).toBeNull());
     expect(screen.getByLabelText("Título")).toHaveValue("");
+  });
+  it("keeps the publishing indications visible beside the form, even with photos listed", async () => {
+    render(<GaleriaPage />);
+    await screen.findByText("En juego");
+    expect(screen.getByRole("heading", { name: "Cómo se publica en el sitio" })).toBeInTheDocument();
+    expect(screen.getByText("JPG o PNG, hasta 5 MB.")).toBeInTheDocument();
+    expect(screen.getByText(/de la más antigua a la más reciente/)).toBeInTheDocument();
+    expect(screen.getByText(/no se puede recuperar/)).toBeInTheDocument();
   });
 });

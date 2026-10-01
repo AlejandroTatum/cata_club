@@ -10,6 +10,7 @@ import { ICON } from "@/lib/icon-size";
 import { useToast } from "@/contexts/ToastContext";
 import EmptyGrid from "./EmptyGrid";
 import GaleriaPreview from "./GaleriaPreview";
+import PublishGuide from "./PublishGuide";
 import { crearEntradaGaleria, eliminarEntradaGaleria, fetchGaleria, type GaleriaEntry } from "@/services/api";
 import { imageFileError, uploadErrorMessage } from "./uploadError";
 
@@ -123,7 +124,15 @@ export default function GaleriaPage(): React.ReactElement {
   >
     <>
       <div className={PAGE_RAIL}>
-        <form onSubmit={submit} className="card flex min-w-0 flex-col gap-4 p-4 lg:sticky lg:top-4 lg:col-start-2 lg:row-start-1">
+        <div className="flex min-w-0 flex-col gap-page max-lg:contents lg:col-start-2 lg:row-start-1">
+        <PublishGuide className="max-lg:order-3" title="Cómo se publica en el sitio" rules={[
+          { term: "Dónde aparece", detail: "Cada foto es una diapositiva de la galería de la landing, con su título y descripción." },
+          { term: "Título y descripción", detail: `Hasta ${TITULO_MAX_PALABRAS} palabras el título y ${DESCRIPCION_MAX_PALABRAS} la descripción; esta última es también la descripción accesible de la foto.` },
+          { term: "Orden y visibilidad", detail: "Se muestran de inmediato, de la más antigua a la más reciente. No hay borradores." },
+          { term: "Al eliminar", detail: "La foto deja de mostrarse en la landing y no se puede recuperar." },
+        ]} />
+        <form onSubmit={submit} className="card flex max-lg:order-1 min-w-0 flex-col gap-4 p-4">
+          <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Subir foto</h2>
           <FileDropZone
             id="galeria-foto"
             label="Foto (JPG o PNG)"
@@ -154,7 +163,8 @@ export default function GaleriaPage(): React.ReactElement {
           {error && <p ref={errorRef} id="galeria-error" role="alert" tabIndex={-1} className="text-sm text-state-bad">{error}</p>}
           <Button type="submit" variant="primary" disabled={saving || !archivo} className="self-start">{saving ? "Publicando…" : "Publicar foto"}</Button>
         </form>
-        <section aria-label="Fotos publicadas" className="flex min-w-0 flex-col lg:col-start-1 lg:row-start-1 lg:self-stretch">
+        </div>
+        <section aria-label="Fotos publicadas" className="flex min-w-0 flex-col max-lg:order-2 lg:col-start-1 lg:row-start-1 lg:self-stretch">
           {cargando ? <LoadingState label="Cargando fotos…" />
             : errorCarga ? <ErrorState message="No se pudo cargar la galería." onRetry={() => void load()} />
             : entradas.length === 0 ? <EmptyGrid icon={<ImageIcon size={ICON.lg} />} title="Aún no hay fotos en la galería" description="Las fotos publicadas aparecen aquí y en la galería del sitio." tileRatio="3 / 2" tiles={15} />

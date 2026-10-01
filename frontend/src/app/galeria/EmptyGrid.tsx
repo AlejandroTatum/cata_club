@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
-import { EmptyState } from "@/components/ui";
+import EmptyState from "@/components/ui/EmptyState";
 
 interface EmptyGridProps {
   icon: ReactNode;
