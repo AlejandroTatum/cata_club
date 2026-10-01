@@ -11,9 +11,10 @@
  * presentation only.
  *
  * Two presentation fixes:
- *   · Stacked, never side-by-side. The card now shares its row with the
- *     activity feed, so the legend gets the column's full width instead of
- *     ~180px for three numeric columns.
+ *   · Donut stacked above the legend at every width. The card lives in the
+ *     dashboard's rail (~340px), which has no room for the two side by side,
+ *     and its column stacks independently of the other one, so its height is
+ *     free to follow its content.
  *   · Legend text migrated off the legacy `cata-*` palette onto the ink ramp.
  *     `text-cata-text/50` measured 3.05:1 — below AA. The percentage column is
  *     `ink-3-strong`, which holds on `paper` (5.26:1) AND on the `canvas` fill
@@ -45,7 +46,7 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
   );
 
   return (
-    <div className="flex flex-col items-center gap-page">
+    <div className="flex w-full flex-col items-center gap-page">
       <svg
         width={SIZE}
         height={SIZE}
@@ -119,7 +120,7 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
         </g>
       </svg>
 
-      <table className="w-full text-left text-sm">
+      <table className="w-full min-w-0 text-left text-sm">
         <thead>
           <tr className="border-b border-line text-2xs font-bold uppercase tracking-caps-wide text-ink-3-strong">
             <th className="py-2 font-bold">Estado</th>
@@ -137,7 +138,7 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
                 onMouseLeave={() => setHovered((prev) => (prev === segment.estado ? null : prev))}
                 className={`transition-colors ${isHovered ? "bg-canvas" : ""}`}
               >
-                <td className="py-2">
+                <td className="py-2.5">
                   <span className="flex items-center gap-2.5 text-ink-2">
                     <span
                       aria-hidden="true"
@@ -147,8 +148,8 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
                     {segment.label}
                   </span>
                 </td>
-                <td className="py-2 text-right font-semibold text-ink">{segment.value}</td>
-                <td className="py-2 text-right text-xs text-ink-3-strong">{segment.percentage}%</td>
+                <td className="py-2.5 text-right font-semibold text-ink">{segment.value}</td>
+                <td className="py-2.5 text-right text-xs text-ink-3-strong">{segment.percentage}%</td>
               </tr>
             );
           })}

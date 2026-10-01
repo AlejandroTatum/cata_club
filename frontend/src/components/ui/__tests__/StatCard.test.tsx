@@ -329,3 +329,18 @@ describe("STAT_GRID — the shared stat row", () => {
     }
   });
 });
+
+describe("StatCard — href", () => {
+  it("is a plain tile without an href", () => {
+    render(<StatCard label="Miembros" value={86} />);
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("wraps the whole tile in one link to its module when given an href", () => {
+    render(<StatCard label="Miembros" value={86} href="/members" />);
+    const link = screen.getByRole("link", { name: /miembros/i });
+    expect(link).toHaveAttribute("href", "/members");
+    expect(link).toContainElement(card());
+    expect(committedMinHeight(card())).toBe("116px");
+  });
+});

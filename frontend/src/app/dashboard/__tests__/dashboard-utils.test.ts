@@ -409,3 +409,101 @@ describe("getActivityMarker", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// buildPaymentQueue / formatWaiting / buildTodayClasses
+// ---------------------------------------------------------------------------
+
+import { buildPaymentQueue, buildTodayClasses, formatWaiting } from "../dashboard-utils";
+import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
+
+const QUEUE_NOW = new Date("2026-09-29T15:30:00-05:00");
+
+function queuePayment(id: string, daysAgo: number, status: PaymentValidationRequest["validationStatus"] = "pendiente"): PaymentValidationRequest {
+  return {
+    id,
+    studentName: `Alumno ${id}`,
+    responsablePagoName: `Pagador ${id}`,
+    membershipPeriod: "01/09/2026 – 30/09/2026",
+    membershipType: "Mensual",
+    expectedAmount: 25,
+    paymentMethod: "Transferencia",
+    uploadedAt: new Date(QUEUE_NOW.getTime() - daysAgo * 86_400_000).toISOString(),
+    currentMembershipStatus: "vencida",
+    proofFileType: "image",
+    validationStatus: status,
+    startDate: "2026-09-01",
+    endDate: "2026-09-30",
+  };
+}
+
+describe("buildPaymentQueue", () => {
+  it("keeps only pending payments, oldest first, capped at the limit", () => {
+    const queue = buildPaymentQueue(
+      [queuePayment("new", 1), queuePayment("old", 9), queuePayment("done", 20, "validado"), queuePayment("mid", 4)],
+      2,
+      QUEUE_NOW,
+    );
+    expect(queue.total).toBe(3);
+    expect(queue.rows.map((r) => r.id)).toEqual(["old", "mid"]);
+  });
+
+  it("marks a receipt waiting more than a week as overdue and names the payer", () => {
+    const [row] = buildPaymentQueue([queuePayment("a", 9)], 5, QUEUE_NOW).rows;
+    expect(row.waitingDays).toBe(9);
+    expect(row.overdue).toBe(true);
+    expect(row.payer).toBe("Pagador a");
+    expect(row.detail).toBe("Mensual · $25,00");
+  });
+
+  it("is empty, not broken, when nothing is pending", () => {
+    expect(buildPaymentQueue([queuePayment("x", 3, "rechazado")], 5, QUEUE_NOW)).toEqual({ rows: [], total: 0 });
+  });
+});
+
+describe("formatWaiting", () => {
+  it("speaks in days, singular included", () => {
+    expect(formatWaiting(0)).toBe("Hoy");
+    expect(formatWaiting(1)).toBe("Hace 1 día");
+    expect(formatWaiting(6)).toBe("Hace 6 días");
+  });
+});
+
+describe("buildTodayClasses", () => {
+  const schedule = (id: number, horaInicio: string, horaFin: string): TrainingSchedule => ({
+    id,
+    diaSemana: "mar",
+    horaInicio,
+    horaFin,
+    categoriaLabel: "Sub-12",
+  });
+  const record = (horarioId: number, fecha = "2026-09-29"): AttendanceRecord => ({
+    id: `r${horarioId}${fecha}`,
+    fecha,
+    horario: "Martes",
+    horarioId,
+    personaId: 1,
+    estudiante: "A",
+    estado: "present",
+  });
+
+  it("orders by start time and states each list as taken, missing or pending", () => {
+    const classes = buildTodayClasses(
+      [schedule(3, "18:00", "19:00"), schedule(1, "09:00", "10:00"), schedule(2, "14:00", "15:00")],
+      [record(2), record(2)],
+      QUEUE_NOW,
+    );
+    expect(classes.map((c) => [c.scheduleId, c.status])).toEqual([
+      [1, "missing"],
+      [2, "taken"],
+      [3, "pending"],
+    ]);
+    expect(classes[1].records).toBe(2);
+    expect(classes[0].hours).toBe("09:00 — 10:00");
+  });
+
+  it("ignores records from other days", () => {
+    const [only] = buildTodayClasses([schedule(1, "18:00", "19:00")], [record(1, "2026-09-28")], QUEUE_NOW);
+    expect(only.status).toBe("pending");
+  });
+});

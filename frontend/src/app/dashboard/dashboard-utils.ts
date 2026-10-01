@@ -19,7 +19,8 @@ import {
 import type { EstadoAsistencia } from "@/types/domain";
 import type { PaymentValidationRequest } from "@/services/api";
 import { formatCurrency } from "@/lib/format-utils";
-import { calendarIsoDate, clubToday } from "@/lib/club-date";
+import { calendarIsoDate, clubIsoDate, clubTimeHHMM, clubToday } from "@/lib/club-date";
+import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
 import type { BadgeTone } from "@/components/ui/Badge";
 
 export const ATTENDANCE_STATUS_CHART_COLORS: Record<EstadoAsistencia, string> = {
@@ -266,7 +267,7 @@ export interface ActivityEvent {
   at: string;
 }
 
-function initialsFor(name: string): string {
+export function initialsFor(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean).slice(0, 2);
   if (words.length === 0) return "?";
   return words.map((w) => w[0].toUpperCase()).join("");
@@ -412,4 +413,132 @@ export function getActivityMarker(kind: ActivityKind): ActivityMarker {
     tone: ACTIVITY_KIND_TONE[kind] ?? "neutral",
     label: ACTIVITY_KIND_LABEL[kind] ?? "Actividad",
   };
+}
+
+// ---------------------------------------------------------------------------
+// "Pagos por validar" — the queue the admin works from
+// ---------------------------------------------------------------------------
+
+export interface PaymentQueueRow {
+  id: string;
+  /** Who paid, falling back to the student when no payer is named. */
+  payer: string;
+  initials: string;
+  /** "Mensual · $25,00" — what the receipt is for. */
+  detail: string;
+  /** Whole days since the receipt was uploaded. 0 for today. */
+  waitingDays: number;
+  /** Waiting more than a week — the row that asks to be opened first. */
+  overdue: boolean;
+}
+
+export interface PaymentQueue {
+  /** Oldest first, capped at `limit`. */
+  rows: PaymentQueueRow[];
+  /** Every pending payment, before the cap. */
+  total: number;
+}
+
+/**
+ * The pending payments, oldest first, capped for a dashboard block.
+ *
+ * Oldest first because the queue's own rule is first-in, first-out: the receipt
+ * that has waited longest is the one a reader should open. Rows with an
+ * unusable timestamp sort last rather than being dropped — a pending payment
+ * is work whether or not its clock survived.
+ */
+export function buildPaymentQueue(
+  requests: PaymentValidationRequest[],
+  limit = 5,
+  now: Date = new Date(),
+): PaymentQueue {
+  const pending = requests
+    .filter((r) => r.validationStatus === "pendiente")
+    .map((request) => ({ request, time: toSortableTime(request.uploadedAt) }))
+    .sort((a, b) => (a.time ?? Number.POSITIVE_INFINITY) - (b.time ?? Number.POSITIVE_INFINITY));
+
+  const rows = pending.slice(0, limit).map(({ request, time }): PaymentQueueRow => {
+    const payer = request.responsablePagoName || request.representativeName || request.studentName;
+    const waitingDays = time === null ? 0 : Math.max(0, Math.floor((now.getTime() - time) / DAY_MS));
+    return {
+      id: request.id,
+      payer,
+      initials: initialsFor(payer),
+      detail: `${request.membershipType} · ${formatCurrency(request.expectedAmount)}`,
+      waitingDays,
+      overdue: waitingDays > 7,
+    };
+  });
+
+  return { rows, total: pending.length };
+}
+
+/** "Hoy", "Hace 1 día", "Hace 5 días". */
+export function formatWaiting(days: number): string {
+  if (days <= 0) return "Hoy";
+  return days === 1 ? "Hace 1 día" : `Hace ${days} días`;
+}
+
+// ---------------------------------------------------------------------------
+// "Clases de hoy" — today's timetable read against today's lists
+// ---------------------------------------------------------------------------
+
+export type TodayClassStatus = "taken" | "missing" | "pending";
+
+export interface TodayClass {
+  scheduleId: number;
+  /** "15:00 — 16:00". */
+  hours: string;
+  /** The category's name, when the catalog supplies one. */
+  category: string | null;
+  /**
+   * `taken`: a list exists for this session today. `missing`: the session has
+   * ended and no list was taken. `pending`: it has not ended yet — no verdict.
+   */
+  status: TodayClassStatus;
+  /** How many records the list carries. 0 unless `taken`. */
+  records: number;
+}
+
+function toMinutes(hora: string): number | null {
+  const match = /^(\d{1,2}):(\d{2})/.exec(hora.trim());
+  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+}
+
+/**
+ * Cross today's schedules with the attendance records already loaded.
+ *
+ * Nothing new is fetched: `fetchAttendanceRecords()` returns records with their
+ * `horarioId` and `fecha`, so "was today's 15:00 list taken" is a lookup. A
+ * class is only `missing` once its end time has passed, so a morning admin does
+ * not see the evening's session accused of having no list.
+ */
+export function buildTodayClasses(
+  schedules: TrainingSchedule[],
+  records: AttendanceRecord[],
+  now: Date = new Date(),
+): TodayClass[] {
+  const today = clubIsoDate(now);
+  const nowMinutes = toMinutes(clubTimeHHMM(now)) ?? 0;
+
+  const recordsByHorario = new Map<number, number>();
+  for (const record of records) {
+    if (record.fecha !== today) continue;
+    recordsByHorario.set(record.horarioId, (recordsByHorario.get(record.horarioId) ?? 0) + 1);
+  }
+
+  return [...schedules]
+    .sort((a, b) => (toMinutes(a.horaInicio) ?? 0) - (toMinutes(b.horaInicio) ?? 0))
+    .map((schedule): TodayClass => {
+      const count = recordsByHorario.get(schedule.id) ?? 0;
+      const end = toMinutes(schedule.horaFin);
+      const ended = end !== null && end <= nowMinutes;
+      return {
+        scheduleId: schedule.id,
+        hours: `${schedule.horaInicio} — ${schedule.horaFin}`,
+        category: schedule.categoriaLabel ?? null,
+        status: count > 0 ? "taken" : ended ? "missing" : "pending",
+        records: count,
+      };
+    });
 }

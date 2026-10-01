@@ -27,6 +27,7 @@
  */
 
 import type { ReactElement, ReactNode } from "react";
+import Link from "next/link";
 import { cn } from "./cn";
 
 /**
@@ -196,6 +197,12 @@ export interface StatCardProps {
   /** Bottom line — a short qualifier, a link, or a sparkline/track element. */
   hint?: ReactNode;
   variant?: StatCardVariant;
+  /**
+   * The module this figure comes from. When set the whole tile is one link, so
+   * a number that raises a question is one click from the list that answers it.
+   * The tile keeps its own markup either way — the link only wraps it.
+   */
+  href?: string;
   className?: string;
 }
 
@@ -205,15 +212,17 @@ export default function StatCard({
   unit,
   hint,
   variant = "default",
+  href,
   className,
 }: StatCardProps): ReactElement {
   const hot = variant === "hot";
 
-  return (
+  const tile = (
     <div
       className={cn(
         "min-h-stat rounded-card border px-[18px] py-4 flex flex-col justify-between",
         hot ? "bg-coal border-coal" : "bg-paper border-line",
+        href && "h-full transition-colors hover:border-ink-3",
         className,
       )}
     >
@@ -280,5 +289,13 @@ export default function StatCard({
         </span>
       ) : null}
     </div>
+  );
+
+  if (!href) return tile;
+
+  return (
+    <Link href={href} className="block rounded-card">
+      {tile}
+    </Link>
   );
 }
