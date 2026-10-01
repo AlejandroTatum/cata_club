@@ -11,7 +11,7 @@ import { useToast } from "@/contexts/ToastContext";
 import EmptyGrid from "./EmptyGrid";
 import GaleriaPreview from "./GaleriaPreview";
 import { crearEntradaGaleria, eliminarEntradaGaleria, fetchGaleria, type GaleriaEntry } from "@/services/api";
-import { toUserMessage } from "@/lib/error-message";
+import { imageFileError, uploadErrorMessage } from "./uploadError";
 
 /**
  * Admin management of the landing gallery (issue #1372).
@@ -36,20 +36,13 @@ import { toUserMessage } from "@/lib/error-message";
 
 const TITULO_MAX_PALABRAS = 8;
 const DESCRIPCION_MAX_PALABRAS = 45;
-const TAMANIO_MAX_FOTO_BYTES = 5 * 1024 * 1024;
 
 function contarPalabras(texto: string): number {
   const recortado = texto.trim();
   return recortado ? recortado.split(/\s+/).length : 0;
 }
 
-/** Client-side gate mirroring the backend upload rules; returns a specific
- * message or null when the file is acceptable. */
-function errorDeArchivo(archivo: File): string | null {
-  if (archivo.type !== "image/jpeg" && archivo.type !== "image/png") return "La foto debe ser un archivo JPG o PNG.";
-  if (archivo.size > TAMANIO_MAX_FOTO_BYTES) return "La foto supera el límite de 5 MB. Elija una imagen más liviana.";
-  return null;
-}
+const errorDeArchivo = (archivo: File): string | null => imageFileError(archivo, "La foto");
 
 export default function GaleriaPage(): React.ReactElement {
   const { showSuccess, showError } = useToast();
@@ -105,13 +98,7 @@ export default function GaleriaPage(): React.ReactElement {
       await load();
     }
     catch (error: unknown) {
-      // The translator is the only door for error text (error-message-usage
-      // guard): actionable backend validation detail (4xx that passes its
-      // who-was-this-written-for gates) is shown as-is; everything else —
-      // 5xx, timeouts, network — is a service problem and must neither read
-      // as a size/format problem nor leak provider details (fail closed to
-      // this operation's service message).
-      setError(toUserMessage(error, "El servicio de publicación no está disponible en este momento. Intente nuevamente más tarde."));
+      setError(uploadErrorMessage(error, "No se pudo publicar la foto. Intente de nuevo."));
     }
     finally { setSaving(false); }
   }
