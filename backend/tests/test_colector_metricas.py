@@ -345,3 +345,43 @@ def test_la_instantanea_no_guarda_nada_que_identifique(db_session):
     columnas = {c.name for c in MetricaInstantanea.__table__.columns}
     assert not {c for c in columnas if any(k in c for k in ("ip", "correo", "email", "usuario", "token", "version", "hostname"))} - {"capturada_en"}
     assert fila.conectados_por_rol.keys() == {"ALUMNO", "ENTRENADOR", "REPRESENTANTE", "ADMINISTRADOR"}
+
+
+# --- scrape HTTP real (servidor local) -----------------------------------------------
+def _servir(cuerpo: bytes):
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    class Manejador(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(cuerpo)))
+            self.end_headers()
+            self.wfile.write(cuerpo)
+
+        def log_message(self, *_):
+            pass
+
+    servidor = HTTPServer(("127.0.0.1", 0), Manejador)
+    threading.Thread(target=servidor.serve_forever, daemon=True).start()
+    return servidor
+
+
+def test_scrapear_metricas_lee_el_cuerpo_por_http(monkeypatch):
+    servidor = _servir(_texto(api=[3] * 12).encode())
+    try:
+        monkeypatch.setattr(cm.settings, "metricas_url_scrape", f"http://127.0.0.1:{servidor.server_port}/metrics")
+        assert cm.parsear_exposicion(cm.scrapear_metricas()).logins_ok == 7
+    finally:
+        servidor.shutdown()
+
+
+def test_scrapear_metricas_rechaza_una_respuesta_desmedida(monkeypatch):
+    monkeypatch.setattr(cm, "TOPE_BYTES_SCRAPE", 1024)
+    servidor = _servir(b"x" * 4096)
+    try:
+        monkeypatch.setattr(cm.settings, "metricas_url_scrape", f"http://127.0.0.1:{servidor.server_port}/metrics")
+        with pytest.raises(ValueError):
+            cm.scrapear_metricas()
+    finally:
+        servidor.shutdown()

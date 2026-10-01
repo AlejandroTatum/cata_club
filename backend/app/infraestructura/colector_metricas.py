@@ -22,9 +22,11 @@ plantillas (`/api/v1/personas/{persona_id}`), nunca URLs concretas.
 """
 from __future__ import annotations
 
+import io
 import json
 import logging
 import re
+import shutil
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -51,6 +53,8 @@ MAX_HUECO_S = 300
 # corre cada 1) el cron está caído y el dato ya no describe el presente.
 MAX_EDAD_HOST_S = 180
 TIMEOUT_SCRAPE_HTTP_S = 5
+# Techo de lo que se acepta de `/metrics`: un scrape normal pesa ~100 KB.
+TOPE_BYTES_SCRAPE = 8 * 1024 * 1024
 COLA_CELERY = "celery"
 # Retención. Instantáneas: el rango máximo de "Métricas avanzadas" (7 d).
 # Actividad: el de "Resumen" son 30 días más el día en curso; 35 deja margen.
@@ -260,9 +264,22 @@ def leer_host(archivo: Path | str | None, ahora: datetime) -> dict | None:
 
 
 # --- fuentes por defecto ----------------------------------------------------
+class _BufferAcotado(io.BytesIO):
+    """Sumidero que se niega a crecer más allá de `TOPE_BYTES_SCRAPE`."""
+
+    def write(self, datos) -> int:
+        if self.tell() + len(datos) > TOPE_BYTES_SCRAPE:
+            raise ValueError("la respuesta de /metrics supera el tope aceptado")
+        return super().write(datos)
+
+
 def scrapear_metricas() -> str:
+    # `copyfileobj` en bloques y no una lectura total: el cuerpo nunca se
+    # materializa entero si el servidor responde algo desmedido.
+    buffer = _BufferAcotado()
     with urllib.request.urlopen(settings.metricas_url_scrape, timeout=TIMEOUT_SCRAPE_HTTP_S) as respuesta:  # noqa: S310
-        return respuesta.read().decode("utf-8")
+        shutil.copyfileobj(respuesta, buffer)
+    return buffer.getvalue().decode("utf-8")
 
 
 def _estado_de_redis(redis_cliente) -> tuple[int | None, float | None, float | None]:
