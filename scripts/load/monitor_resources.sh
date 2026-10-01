@@ -57,7 +57,7 @@ restarts_base=""
 # comienza hasta que el pid existe. Si llega el stop file (corrida ya
 # terminada, p. ej. k6 murió al arrancar) o vence la espera, no se vigila.
 esperar_pid_de_k6() {
-  local limite="${LOAD_PID_WAIT_SECONDS:-120}"
+  local limite="${LOAD_PID_WAIT_SECONDS:-900}"
   local intento=0
   local maximo=$((limite * 10)) # pasos de 0.1 s
   while [ ! -s "$PID_FILE" ]; do
@@ -67,7 +67,7 @@ esperar_pid_de_k6() {
     fi
     intento=$((intento + 1))
     if [ "$intento" -ge "$maximo" ]; then
-      echo "monitor: k6.pid no apareció en ${limite}s; aborto sin enforcement" >&2
+      echo "monitor: k6.pid no apareció en ${limite}s (¿docker pull lento del primer arranque?); sigo sin enforcement de host. Ampliá la espera con LOAD_PID_WAIT_SECONDS." >&2
       return 1
     fi
     sleep 0.1
