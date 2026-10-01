@@ -153,6 +153,15 @@ describe("middleware CSP", () => {
     expect(imgSrc).toContain("https://*.tile.openstreetmap.org");
   });
 
+  // Local previews (gallery photo, sponsor logo, payment voucher) render the
+  // picked file through URL.createObjectURL, which yields a blob: URL. Without
+  // blob: in img-src the preview stays blank in production builds.
+  it("allows blob: in img-src for local file previews", () => {
+    const csp = buildContentSecurityPolicy("ABC=");
+    const imgSrc = csp.split("; ").find((directive) => directive.startsWith("img-src "));
+    expect(imgSrc?.split(" ")).toContain("blob:");
+  });
+
   it("sets Content-Security-Policy on plain next() responses for public paths", () => {
     const response = middleware(makeRequest("/"));
     expect(response.headers.get("Content-Security-Policy")).toContain("strict-dynamic");
