@@ -190,7 +190,8 @@ describe("GaleriaPage", () => {
     render(<GaleriaPage />); await completarFormularioValido();
     fireEvent.click(screen.getByRole("button", { name: "Publicar foto" }));
     await waitFor(() => expect(showSuccess).toHaveBeenCalled());
+    // The preview URL is cleared by an effect after the success toast, so wait for it.
+    await waitFor(() => expect(screen.getByTestId("galeria-preview").querySelector("img")).toBeNull());
     expect(screen.getByLabelText("Título")).toHaveValue("");
-    expect(screen.getByTestId("galeria-preview").querySelector("img")).toBeNull();
   });
 });
