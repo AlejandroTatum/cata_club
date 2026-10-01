@@ -44,6 +44,7 @@ import type { AttendanceRecord, TrainingSchedule } from "@/app/attendance/attend
 import type { MemberAccount } from "@/app/members/members-utils";
 import type { BackendEstadoMembresia } from "@/lib/membership-status";
 import { GENERIC_FAILURE } from "@/lib/error-message";
+import type { AvanzadasData, AvanzadasRange, ResumenData, ResumenRange } from "@/app/admin/actividad/actividad-types";
 
 // ---------------------------------------------------------------------------
 // Types — Membership Payment Validation (CU012)
@@ -1344,6 +1345,16 @@ export interface DashboardStats {
 /** Fetch aggregate dashboard stats, composed server-side from `/personas`, `/membresias/pagos*` and `/asistencias/horarios` — `GET /api/dashboard`. */
 export async function fetchDashboardStats(): Promise<DashboardStats> {
   return request<DashboardStats>(apiEndpoint("/dashboard"));
+}
+
+/** Club usage figures for the admin activity screen — `GET /api/actividad/resumen?rango=`. Admin only. */
+export async function fetchActividadResumen(rango: ResumenRange): Promise<ResumenData> {
+  return request<ResumenData>(`${apiEndpoint("/actividad/resumen")}?rango=${rango}`);
+}
+
+/** Aggregated service/server readings for the admin activity screen — `GET /api/actividad/avanzadas?rango=`. Admin only. */
+export async function fetchActividadAvanzadas(rango: AvanzadasRange): Promise<AvanzadasData> {
+  return request<AvanzadasData>(`${apiEndpoint("/actividad/avanzadas")}?rango=${rango}`);
 }
 
 // ---------------------------------------------------------------------------
