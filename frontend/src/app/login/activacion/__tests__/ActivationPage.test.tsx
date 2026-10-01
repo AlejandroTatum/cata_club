@@ -220,6 +220,37 @@ describe("ActivationPage — the email screen", () => {
     expect(primaryButtons).toEqual([resendButton]);
   });
 
+  // QA registro: the four actions were three different sizes and two
+  // alignments. One column, one width, one height; hierarchy comes from the
+  // skin (primary / secondary / secondary / tertiary), never from the size.
+  it("lays the four actions out as one column of equal-width, equal-height controls", async () => {
+    renderPending(pendingSession());
+
+    const names = [
+      /reenviar correo de verificación/i,
+      "Ya verifiqué mi correo",
+      "¿Correo equivocado? Corregirlo",
+      "Cerrar sesión",
+    ];
+    for (const name of names) {
+      const control = await screen.findByRole("button", { name });
+      expect(control).toHaveClass("w-full", "h-ctl");
+      expect(control).not.toHaveClass("h-ctl-sm");
+    }
+  });
+
+  it("ranks them: secondary for re-check and correction, the quietest skin for sign-out", async () => {
+    renderPending(pendingSession());
+
+    const recheck = await screen.findByRole("button", { name: "Ya verifiqué mi correo" });
+    const correct = screen.getByRole("button", { name: "¿Correo equivocado? Corregirlo" });
+    const signOut = screen.getByRole("button", { name: "Cerrar sesión" });
+    expect(recheck.className).toBe(correct.className);
+    expect(signOut.className).not.toBe(recheck.className);
+    expect(signOut).toHaveClass("bg-sunken", "border-transparent");
+    expect(recheck).toHaveClass("bg-paper", "border-line-2");
+  });
+
   // Issue #1295: the card used to carry its own "Necesito ayuda" link right
   // above "Cerrar sesión", a few pixels from the shell's own "¿Necesita
   // ayuda para entrar?" launcher (`AuthShell.tsx`) — two paths to the same
