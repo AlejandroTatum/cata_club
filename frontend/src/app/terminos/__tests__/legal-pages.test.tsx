@@ -4,9 +4,9 @@ import TermsPage from "../page";
 import PrivacyPage from "../../privacidad/page";
 import FETMPage from "../../permiso-imagen-fetm/page";
 import LegalDocumentPage from "../LegalDocumentPage";
-import { heading, paragraph } from "../legal-content";
-import { legalBlocks as termsBlocks } from "../content";
-import { legalBlocks as privacyBlocks } from "../../privacidad/content";
+import { heading, paragraph, sectionId } from "../legal-content";
+import { legalBlocks as termsBlocks, summary as termsSummary } from "../content";
+import { legalBlocks as privacyBlocks, summary as privacySummary } from "../../privacidad/content";
 import { legalBlocks as fetmBlocks } from "../../permiso-imagen-fetm/content";
 
 const pages = [
@@ -118,13 +118,55 @@ describe("public legal documents", () => {
   });
 
   /**
-   * jsdom does not lay text out, so the characters per line this produces can
-   * only be confirmed in a real browser. What a unit test can hold is that the
-   * column declares a measure at all, and that the old full-width one is gone.
+   * jsdom does not lay text out; the measure is confirmed in a browser. What a
+   * unit test can hold is that the page declares its three zones (contents,
+   * document, summary) instead of one narrow centred column.
    */
-  it("sets the column to a reading measure rather than the page width", () => {
+  it("lays the document out as contents, document and summary zones", () => {
     const html = renderToStaticMarkup(<TermsPage />);
-    expect(html).toContain("max-w-measure");
-    expect(html).not.toContain("max-w-4xl");
+    expect(html).toContain("xl:grid-cols-[240px_minmax(0,1fr)_300px]");
+    expect(html).not.toContain("max-w-measure");
+  });
+
+  it.each([
+    ["Términos", TermsPage, termsBlocks],
+    ["Privacidad", PrivacyPage, privacyBlocks],
+  ] as const)("%s links every section from the contents list", (_name, Page, blocks) => {
+    const html = renderToStaticMarkup(<Page />);
+    const headings = blocks.flatMap((block, index) => (block.kind === "heading" ? [{ text: block.text, id: sectionId(block.text, index) }] : []));
+    const nav = /<nav aria-label="En este documento"[\s\S]*?<\/nav>/.exec(html)?.[0] ?? "";
+    for (const { text, id } of headings) {
+      expect(html).toMatch(new RegExp(`<h2[^>]*id="${id}"`));
+      expect(nav).toContain(`href="#${id}"`);
+      expect(decode(nav)).toContain(text);
+    }
+  });
+
+  it("gives every section id a distinct, accent-free anchor", () => {
+    expect(sectionId("Cuenta y responsabilidades", 2)).toBe("cuenta-y-responsabilidades-3");
+    expect(sectionId("Derechos, consultas y revocación", 0)).toBe("derechos-consultas-y-revocacion-1");
+  });
+
+  it.each([
+    ["Términos", TermsPage, termsSummary],
+    ["Privacidad", PrivacyPage, privacySummary],
+  ] as const)("%s shows three to five summary points under En resumen", (_name, Page, points) => {
+    expect(points.length).toBeGreaterThanOrEqual(3);
+    expect(points.length).toBeLessThanOrEqual(5);
+    const html = decode(renderToStaticMarkup(<Page />));
+    expect(html).toContain("En resumen");
+    for (const point of points) expect(html).toContain(point);
+  });
+
+  it("keeps the FETM permission rail and omits a one-entry contents list", () => {
+    const html = renderToStaticMarkup(<FETMPage />);
+    expect(html).toContain("Qué autoriza este permiso");
+    expect(html).not.toContain('aria-label="En este documento"');
+  });
+
+  it("offers the club contact beside the document", () => {
+    const html = renderToStaticMarkup(<TermsPage />);
+    expect(html).toContain("¿Dudas?");
+    expect(html).toContain('href="mailto:cataclub.loja@proton.me"');
   });
 });
