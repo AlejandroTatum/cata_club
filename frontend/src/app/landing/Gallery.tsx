@@ -97,7 +97,7 @@ export default function Gallery(): React.ReactElement {
   const focusRef = useRef(false);
   const openRef = useRef<number | null>(null);
   const heldRef = useRef(false);
-  /** True between a pointer press and the next key press: focus gained then is the pointer's, not a reader's. */
+  /** True from a pointer press until the next key press: focus gained meanwhile is the pointer's, not a reader's. */
   const pointerFocusRef = useRef(false);
   const browseIndexRef = useRef(0);
   const browseTimerRef = useRef<number | null>(null);
@@ -215,24 +215,14 @@ export default function Gallery(): React.ReactElement {
     releasePinAfterWindow(target);
   };
 
-  // The press flag only separates a click's focus from a keyboard's, so it
-  // must end with the press however the press ends: released outside the
-  // strip, cancelled (touch scroll takeover), capture lost, or the page hidden.
-  // Focus lands between pointerdown and these, so clearing here is safe.
+  // Input modality: a pointer press marks focus as the pointer's until the
+  // next key press. It must outlive pointerup — a touch tap fires pointerup
+  // and lostpointercapture BEFORE the compatibility mousedown that moves
+  // focus. Keyboard focus always follows a keydown (Tab), so that clears it.
   useEffect((): (() => void) => {
-    const endPress = (): void => { pointerFocusRef.current = false; };
-    document.addEventListener("pointerup", endPress);
-    document.addEventListener("pointercancel", endPress);
-    document.addEventListener("lostpointercapture", endPress);
-    document.addEventListener("visibilitychange", endPress);
-    window.addEventListener("blur", endPress);
-    return (): void => {
-      document.removeEventListener("pointerup", endPress);
-      document.removeEventListener("pointercancel", endPress);
-      document.removeEventListener("lostpointercapture", endPress);
-      document.removeEventListener("visibilitychange", endPress);
-      window.removeEventListener("blur", endPress);
-    };
+    const onKey = (): void => { pointerFocusRef.current = false; };
+    document.addEventListener("keydown", onKey, true);
+    return (): void => { document.removeEventListener("keydown", onKey, true); };
   }, []);
 
   // A tap anywhere outside the strip releases the pin (touch has no leave).
@@ -292,7 +282,7 @@ export default function Gallery(): React.ReactElement {
               focusRef.current = true;
               syncHold();
             }}
-            onBlur={(): void => { pointerFocusRef.current = false; focusRef.current = false; syncHold(); }}
+            onBlur={(): void => { focusRef.current = false; syncHold(); }}
             onKeyDown={(event): void => {
               pointerFocusRef.current = false;
               // Arrow keys browse on the same terms as the buttons, from

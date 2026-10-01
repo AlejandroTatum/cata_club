@@ -1237,32 +1237,42 @@ describe("LandingPage", (): void => {
   });
 
   /**
-   * The "pointer is down" flag exists only to tell a click's focus from a
-   * keyboard's. Every way a press can end without the usual pointerup on the
-   * strip must clear it, or the next genuine keyboard focus is ignored and the
-   * loop keeps running over a reader.
+   * Touch order: a tap fires pointerdown, pointerup, lostpointercapture and
+   * only THEN the compatibility mousedown that moves focus. That focus is the
+   * tap's, not a reader's, so it must not hold the loop.
    */
-  describe.each([
-    ["pointercancel", (figure: HTMLElement): void => { fireEvent.pointerCancel(figure); }],
-    ["lostpointercapture", (figure: HTMLElement): void => { fireEvent.lostPointerCapture(figure); }],
-    ["pointerup released outside the strip", (): void => { fireEvent.pointerUp(document.body); }],
-    ["the page being hidden", (): void => { document.dispatchEvent(new Event("visibilitychange")); }],
-  ] as Array<[string, (figure: HTMLElement) => void]>)("when a press ends by %s", (_name, endPress): void => {
-    it("still lets later keyboard focus hold the loop", async (): Promise<void> => {
-      publishGallery(TWO_PHOTOS);
-      render(<LandingPage />);
+  it("does not hold the loop for the focus a touch tap delivers after pointerup", async (): Promise<void> => {
+    publishGallery(TWO_PHOTOS);
+    render(<LandingPage />);
 
-      await within(gallerySection()).findAllByRole("img");
-      const [first, second] = galleryFigures();
-      const holds = trackHolds();
+    await within(gallerySection()).findAllByRole("img");
+    const figure = galleryFigures()[0];
+    const holds = trackHolds();
 
-      fireEvent.pointerDown(first);
-      endPress(first);
-      second.focus();
+    fireEvent.pointerDown(figure);
+    fireEvent.pointerUp(figure);
+    fireEvent.lostPointerCapture(figure);
+    figure.focus();
 
-      expect(holds.held.at(-1)).toBe(true);
-      holds.stop();
-    });
+    expect(holds.held.at(-1)).not.toBe(true);
+    holds.stop();
+  });
+
+  it("holds again for keyboard focus once a key is pressed after a pointer interaction", async (): Promise<void> => {
+    publishGallery(TWO_PHOTOS);
+    render(<LandingPage />);
+
+    await within(gallerySection()).findAllByRole("img");
+    const [first, second] = galleryFigures();
+    const holds = trackHolds();
+
+    fireEvent.pointerDown(first);
+    fireEvent.pointerUp(first);
+    fireEvent.keyDown(document.body, { key: "Tab" });
+    second.focus();
+
+    expect(holds.held.at(-1)).toBe(true);
+    holds.stop();
   });
 
   it("browses with the arrow keys from wherever focus sits inside the strip", async (): Promise<void> => {
