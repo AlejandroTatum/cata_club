@@ -137,6 +137,16 @@ services:
   celery-worker:
     image: *imagen_backend
     mem_limit: 320m
+    # Issue #1314: el colector de métricas (tarea de beat, cada minuto) corre en
+    # este worker y lee el JSON que un cron del HOST escribe cada minuto
+    # (`scripts/metrics/host-snapshot.sh`: CPU, RAM, swap, disco y memoria por
+    # contenedor). Es un bind mount de SOLO LECTURA de un directorio, no del
+    # socket de Docker: el contenedor ve lo que el host decide mostrar y no
+    # puede escribirlo ni pedirle nada al daemon. Si el directorio no se creó
+    # (docs/operations/metricas.md) Compose lo crea vacío y el colector reporta
+    # el host como no disponible, sin fallar.
+    volumes:
+      - /var/lib/cata-club/metricas:/host-metricas:ro
     environment:
       AMBIENTE: production
       CORS_ORIGENES: "${CORS_ORIGENES:?Error: define CORS_ORIGENES en el entorno de producción (origen real del frontend, no localhost)}"
