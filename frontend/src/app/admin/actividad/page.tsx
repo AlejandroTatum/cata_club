@@ -9,10 +9,10 @@
  *   · Métricas avanzadas: aggregated service and server readings, for the
  *     technical follow-up.
  *
- * DEMO DATA. Both views read `demo-data.ts` through `getResumenDemo` /
- * `getAvanzadasDemo`; a visible badge says so. Replacing those two functions
- * with fetchers is the whole backend swap — the components take the typed
- * response and nothing else.
+ * Each view loads its own endpoint (`fetchActividadResumen` / `fetchActividadAvanzadas`)
+ * for the chosen range and fails on its own: a notice with a retry, never an
+ * empty chart. Resumen reloads only when the range changes; Métricas avanzadas
+ * also refreshes every minute while the tab is visible.
  */
 
 "use client";
@@ -21,16 +21,18 @@ import { Suspense, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import { Badge, FilterGroup, FilterPanel, FilterPill, LoadingState } from "@/components/ui";
+import DashboardSection from "@/components/dashboard/DashboardSection";
+import SectionNotice from "@/components/dashboard/SectionNotice";
+import { FilterGroup, FilterPanel, FilterPill, LoadingState } from "@/components/ui";
+import { fetchActividadAvanzadas, fetchActividadResumen } from "@/services/api";
 import AvanzadasView from "./AvanzadasView";
 import ResumenView from "./ResumenView";
 import { parseView, type ActivityView } from "./activity-utils";
-import {
-  getAvanzadasDemo,
-  getResumenDemo,
-  type AvanzadasRange,
-  type ResumenRange,
-} from "./demo-data";
+import type { AvanzadasRange, ResumenRange } from "./actividad-types";
+import { useActividad } from "./useActividad";
+
+/** How often the advanced view refreshes while the tab is visible. */
+const POLL_MS = 60_000;
 
 const VIEWS: { value: ActivityView; label: string }[] = [
   { value: "resumen", label: "Resumen" },
@@ -48,6 +50,38 @@ const AVANZADAS_RANGES: { value: AvanzadasRange; label: string }[] = [
   { value: "24h", label: "24 h" },
   { value: "7d", label: "7 días" },
 ];
+
+/** What a failed load tells the reader: a missing permission is not a flaky network. */
+function failureMessage(error: unknown): string {
+  const status = typeof error === "object" && error !== null ? (error as { status?: unknown }).status : undefined;
+  return status === 403
+    ? "No tiene permiso para ver la actividad del club."
+    : "No se pudo cargar la actividad del club. Intente nuevamente.";
+}
+
+function FailedBlock({ title, error, onRetry }: { title: string; error: unknown; onRetry: () => void }): React.ReactElement {
+  return (
+    <DashboardSection title={title}>
+      <SectionNotice message={failureMessage(error)} onRetry={onRetry} />
+    </DashboardSection>
+  );
+}
+
+const asInstant = (millis: number): string => new Date(millis).toISOString();
+
+function ResumenPane({ range }: { range: ResumenRange }): React.ReactElement {
+  const { state, retry } = useActividad(fetchActividadResumen, range);
+  if (state.status === "loading") return <LoadingState label="Cargando actividad…" />;
+  if (state.status === "error") return <FailedBlock title="Resumen" error={state.error} onRetry={retry} />;
+  return <ResumenView data={state.data} now={asInstant(state.loadedAt)} />;
+}
+
+function AvanzadasPane({ range }: { range: AvanzadasRange }): React.ReactElement {
+  const { state, retry } = useActividad(fetchActividadAvanzadas, range, POLL_MS);
+  if (state.status === "loading") return <LoadingState label="Cargando métricas…" />;
+  if (state.status === "error") return <FailedBlock title="Métricas avanzadas" error={state.error} onRetry={retry} />;
+  return <AvanzadasView data={state.data} now={asInstant(state.loadedAt)} />;
+}
 
 function ActividadContent(): React.ReactElement {
   const router = useRouter();
@@ -100,19 +134,14 @@ function ActividadContent(): React.ReactElement {
                     ))}
               </div>
             </FilterGroup>
-            <FilterGroup label="Origen de las cifras">
-              <div className="flex h-ctl items-center">
-                <Badge>Datos de demostración</Badge>
-              </div>
-            </FilterGroup>
           </>
         }
       />
 
       {view === "resumen" ? (
-        <ResumenView data={getResumenDemo(resumenRange)} />
+        <ResumenPane key={resumenRange} range={resumenRange} />
       ) : (
-        <AvanzadasView data={getAvanzadasDemo(avanzadasRange)} />
+        <AvanzadasPane key={avanzadasRange} range={avanzadasRange} />
       )}
     </>
   );

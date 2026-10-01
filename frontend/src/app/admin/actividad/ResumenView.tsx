@@ -15,9 +15,11 @@ import { Badge, InfoPanel, PAGE_RAIL, STAT_GRID, cn, type BadgeTone } from "@/co
 import {
   formatCount,
   formatPeriodLabel,
+  formatUpdatedAgo,
+  minutesBetween,
   statusCopy,
 } from "./activity-utils";
-import type { HealthLevel, PeriodSpan, ResumenData, ResumenPeriod } from "./demo-data";
+import type { HealthLevel, PeriodSpan, ResumenData, ResumenPeriod } from "./actividad-types";
 
 const CHART_TITLE: Record<PeriodSpan, string> = {
   "2h": "Uso por franja horaria",
@@ -41,12 +43,14 @@ const STATUS_DOT: Record<HealthLevel, string> = {
   ok: "bg-state-ok",
   warn: "bg-state-warn",
   bad: "bg-state-bad",
+  unknown: "bg-state-neutral",
 };
 
 const STATUS_WORD: Record<HealthLevel, string> = {
   ok: "Todo bien",
   warn: "Atención",
   bad: "Urgente",
+  unknown: "Sin datos",
 };
 
 const visitorsOf = (period: ResumenPeriod): number =>
@@ -69,7 +73,8 @@ function trendSummary(title: string, bars: readonly BarDatum[]): string {
   return `${title}: ${bars.map((bar) => `${bar.label} ${bar.value}`).join(", ")}`;
 }
 
-export default function ResumenView({ data }: { data: ResumenData }): ReactElement {
+/** `now` is the instant the figures were fetched, so "hace N min" does not drift with the render. */
+export default function ResumenView({ data, now }: { data: ResumenData; now: string }): ReactElement {
   const { uniqueVisitors, span } = data;
   const people = trendData(data, visitorsOf, "personas");
   const attendances = trendData(data, (p) => p.attendances, "asistencias");
@@ -167,7 +172,15 @@ export default function ResumenView({ data }: { data: ResumenData }): ReactEleme
         </div>
 
         <div className="flex min-w-0 flex-col gap-page">
-          <DashboardSection title="Estado del sistema" testId="system-status">
+          <DashboardSection
+            title="Estado del sistema"
+            testId="system-status"
+            action={
+              <span className="text-xs text-ink-3-strong">
+                {formatUpdatedAgo(minutesBetween(data.generatedAt, now))}
+              </span>
+            }
+          >
             <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">
               {data.status.map(({ key, level }) => {
                 const copy = statusCopy(key, level);
@@ -181,7 +194,7 @@ export default function ResumenView({ data }: { data: ResumenData }): ReactEleme
                       </p>
                       {copy.action ? <p className="m-0 text-xs text-ink-2">{copy.action}</p> : null}
                     </div>
-                    {level !== "ok" ? <Badge tone={level as BadgeTone}>{STATUS_WORD[level]}</Badge> : null}
+                    {level !== "ok" && level !== "unknown" ? <Badge tone={level as BadgeTone}>{STATUS_WORD[level]}</Badge> : null}
                   </li>
                 );
               })}

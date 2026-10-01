@@ -10,7 +10,7 @@
 import type { ReactElement, ReactNode } from "react";
 import { Badge } from "@/components/ui";
 import { Sparkline } from "@/components/charts";
-import type { HealthLevel, Series } from "./demo-data";
+import type { Tone, Series } from "./actividad-types";
 import { formatPointLabel } from "./activity-utils";
 
 export interface MetricBlockProps {
@@ -18,7 +18,7 @@ export interface MetricBlockProps {
   /** The current value, already formatted. */
   value: string;
   unit?: string;
-  tone: HealthLevel;
+  tone: Tone;
   /** Words for the badge when `tone` is not ok. */
   statusLabel?: string;
   series: Series;

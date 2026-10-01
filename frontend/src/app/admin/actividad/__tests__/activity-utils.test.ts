@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
+  NO_READING,
+  STALE_AFTER_MINUTES,
   formatAge,
+  formatOrDash,
+  isStale,
+  lastReading,
+  shareOrNull,
   formatCount,
   formatDecimal,
   formatMegabytes,
@@ -118,5 +124,47 @@ describe("statusCopy", () => {
     expect(warn.sentence).toMatch(/^Hay correos o avisos/);
     expect(warn.action).toMatch(/técnico/);
     expect(statusCopy("errors", "bad").action).not.toBeNull();
+  });
+});
+
+describe("missing readings", () => {
+  it("writes a missing figure as a dash and formats a present one", () => {
+    expect(NO_READING).toBe("—");
+    expect(formatOrDash(null)).toBe("—");
+    expect(formatOrDash(1234)).toBe("1.234");
+    expect(formatOrDash(0.25, (v) => formatDecimal(v, 1))).toBe("0,3");
+    expect(formatOrDash(0)).toBe("0");
+  });
+
+  it("takes the latest reading of a series, null when that minute has none", () => {
+    expect(lastReading([1, 2, 3])).toBe(3);
+    expect(lastReading([1, 2, null])).toBeNull();
+    expect(lastReading([])).toBeNull();
+  });
+
+  it("computes a share only when both figures exist", () => {
+    expect(shareOrNull(14, 100)).toBe(14);
+    expect(shareOrNull(null, 100)).toBeNull();
+    expect(shareOrNull(14, null)).toBeNull();
+  });
+
+  it("ignores gaps when judging whether swap keeps growing", () => {
+    expect(swapTone([100, null, 150])).toBe("warn");
+    expect(swapTone([null, 120, null])).toBe("ok");
+    expect(swapTone([null, null])).toBe("ok");
+  });
+
+  it("calls a snapshot stale only past three minutes", () => {
+    const now = "2026-10-01T15:30:00-05:00";
+    expect(STALE_AFTER_MINUTES).toBe(3);
+    expect(isStale("2026-10-01T15:27:00-05:00", now)).toBe(false);
+    expect(isStale("2026-10-01T15:26:00-05:00", now)).toBe(true);
+  });
+
+  it("has plain copy for a status nobody has measured yet", () => {
+    for (const key of ["app", "errors", "notifications"] as const) {
+      expect(statusCopy(key, "unknown").sentence).toMatch(/Sin datos todavía/);
+      expect(statusCopy(key, "unknown").action).toBeNull();
+    }
   });
 });

@@ -10,9 +10,9 @@
 import type { ReactElement } from "react";
 import { cn } from "@/components/ui";
 import { shareOf } from "./activity-utils";
-import type { HealthLevel } from "./demo-data";
+import type { Tone } from "./actividad-types";
 
-const FILL: Record<HealthLevel, string> = {
+const FILL: Record<Tone, string> = {
   ok: "bg-coal",
   warn: "bg-state-warn",
   bad: "bg-state-bad",
@@ -23,7 +23,7 @@ export interface UsageBarProps {
   label: string;
   used: number;
   limit: number;
-  tone: HealthLevel;
+  tone: Tone;
   className?: string;
 }
 

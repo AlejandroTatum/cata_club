@@ -9,7 +9,7 @@
  */
 
 import type { ChartTone } from "@/components/charts";
-import type { HealthLevel, PeriodSpan, StatusKey } from "./demo-data";
+import type { HealthLevel, PeriodSpan, StatusKey, Tone } from "./actividad-types";
 
 export type ActivityView = "resumen" | "avanzadas";
 
@@ -51,11 +51,37 @@ export function formatAge(minutes: number): string {
   return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
 }
 
+// --- Missing readings ------------------------------------------------------
+
+/** What a figure that was never measured reads as. Never "0": that would be a claim. */
+export const NO_READING = "—";
+
+export function formatOrDash(value: number | null, format: (value: number) => string = formatCount): string {
+  return value === null ? NO_READING : format(value);
+}
+
+/** The newest value of a series; `null` when that point has no reading (or the series is empty). */
+export function lastReading(values: readonly (number | null)[]): number | null {
+  return values.length === 0 ? null : values[values.length - 1];
+}
+
+/** `shareOf` for figures that may be missing: no figure, no percentage. */
+export function shareOrNull(part: number | null, whole: number | null): number | null {
+  return part === null || whole === null ? null : shareOf(part, whole);
+}
+
 // --- Freshness -------------------------------------------------------------
 
 /** Whole minutes from `fromIso` to `nowIso`, never negative. */
 export function minutesBetween(fromIso: string, nowIso: string): number {
   return Math.max(0, Math.floor((Date.parse(nowIso) - Date.parse(fromIso)) / 60000));
+}
+
+/** A snapshot older than this (the collector runs every minute) is flagged. */
+export const STALE_AFTER_MINUTES = 3;
+
+export function isStale(updatedAtIso: string, nowIso: string): boolean {
+  return minutesBetween(updatedAtIso, nowIso) > STALE_AFTER_MINUTES;
 }
 
 export function formatUpdatedAgo(minutes: number): string {
@@ -72,7 +98,8 @@ export interface Thresholds {
 }
 
 /** ok below `warn`, warn from `warn`, bad from `bad`. */
-export function toneForThresholds(value: number, limits: Thresholds): "ok" | "warn" | "bad" {
+export function toneForThresholds(value: number | null, limits: Thresholds): Tone {
+  if (value === null) return "ok";
   if (value >= limits.bad) return "bad";
   if (value >= limits.warn) return "warn";
   return "ok";
@@ -94,14 +121,15 @@ export const NOTIFICATION_AGE_LIMITS: Thresholds = { warn: 30, bad: 120 };
 /** Swap growing by at least this many MB across the window is a warning. */
 export const SWAP_GROWTH_WARN_MB = 20;
 
-export function swapTone(values: readonly number[]): "ok" | "warn" {
-  if (values.length < 2) return "ok";
-  return values[values.length - 1] - values[0] >= SWAP_GROWTH_WARN_MB ? "warn" : "ok";
+export function swapTone(values: readonly (number | null)[]): "ok" | "warn" {
+  const readings = values.filter((value): value is number => value !== null);
+  if (readings.length < 2) return "ok";
+  return readings[readings.length - 1] - readings[0] >= SWAP_GROWTH_WARN_MB ? "warn" : "ok";
 }
 
 /** Maps a health level to a chart tone (the same words, one is for pills and one for SVG). */
 export function chartTone(level: HealthLevel): ChartTone {
-  return level;
+  return level === "unknown" ? "neutral" : level;
 }
 
 // --- Dates and points ------------------------------------------------------
@@ -176,6 +204,7 @@ const STATUS_COPY: Record<StatusKey, Record<HealthLevel, { sentence: string; act
       sentence: "La aplicación no está respondiendo.",
       action: "Avise de inmediato al equipo técnico.",
     },
+    unknown: { sentence: "Sin datos todavía sobre la aplicación.", action: null },
   },
   errors: {
     ok: { sentence: "No hay errores que afecten al club.", action: null },
@@ -187,6 +216,7 @@ const STATUS_COPY: Record<StatusKey, Record<HealthLevel, { sentence: string; act
       sentence: "Hay errores frecuentes que afectan al club.",
       action: "Avise de inmediato al equipo técnico.",
     },
+    unknown: { sentence: "Sin datos todavía sobre los errores.", action: null },
   },
   notifications: {
     ok: { sentence: "Los correos y avisos están al día.", action: null },
@@ -198,6 +228,7 @@ const STATUS_COPY: Record<StatusKey, Record<HealthLevel, { sentence: string; act
       sentence: "Los correos y avisos no están saliendo.",
       action: "Avise de inmediato al equipo técnico.",
     },
+    unknown: { sentence: "Sin datos todavía sobre los correos y avisos.", action: null },
   },
 };
 

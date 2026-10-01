@@ -1,116 +1,25 @@
 /**
- * DEMO DATA for "Actividad del club" — not real figures.
+ * Deterministic fixtures for the "Actividad del club" tests — not production
+ * data, and not imported by any production module. They are shaped exactly like
+ * the backend's `ResumenResponse` / `AvanzadasResponse`.
  *
- * The screen is being approved on its design before any backend exists, so
- * everything it draws comes from here. Two rules keep the swap to real data
- * cheap:
- *
- *   1. One typed object per view (`ResumenData`, `AvanzadasData`), shaped the
- *      way an endpoint would answer — raw counts, ISO instants and series with
- *      a step. No display strings: the page formats, so a fetcher can replace
- *      `getResumenDemo` / `getAvanzadasDemo` without touching a component.
- *   2. Deterministic. No `Math.random`, no `Date.now`: the "current" instant is
- *      the fixed `DEMO_NOW`, so a render and a test see the same screen.
- *
- * Aggregates only. Nothing here may identify a person, a host, an address or a
- * version — the advanced view is for a technical reader, not a surveillance
- * screen, and a real API must keep it that way.
+ * No `Math.random`, no `Date.now`: the "current" instant is the fixed
+ * `FIXTURE_NOW`, so a render and a test see the same screen.
  */
 
-import type { UserRole } from "@/types/domain";
+import type {
+  AvanzadasData,
+  AvanzadasRange,
+  ResumenData,
+  ResumenPeriod,
+  ResumenRange,
+  RoleCounts,
+  Series,
+  SlowEndpoint,
+} from "../actividad-types";
 
 /** The instant every "hace N min" is measured against (America/Guayaquil, UTC-5). */
-export const DEMO_NOW = "2026-10-01T15:30:00-05:00";
-
-export type ResumenRange = "24h" | "7d" | "30d";
-export type AvanzadasRange = "1h" | "24h" | "7d";
-
-/** Width of one column of the usage chart. */
-export type PeriodSpan = "2h" | "1d" | "6d";
-
-export type HealthLevel = "ok" | "warn" | "bad";
-
-export interface RoleCounts {
-  alumnos: number;
-  entrenadores: number;
-  representantes: number;
-}
-
-export interface ResumenPeriod {
-  /** ISO start of the period, in the club's offset. */
-  start: string;
-  /** People who signed in during the period, by role. */
-  visitors: RoleCounts;
-  attendances: number;
-  payments: number;
-  enrollments: number;
-}
-
-export type StatusKey = "app" | "errors" | "notifications";
-
-export interface ResumenData {
-  range: ResumenRange;
-  generatedAt: string;
-  span: PeriodSpan;
-  periods: readonly ResumenPeriod[];
-  /** Distinct people over the whole range (not the sum of the periods). */
-  uniqueVisitors: RoleCounts & { total: number };
-  status: readonly { key: StatusKey; level: HealthLevel }[];
-}
-
-export interface Series {
-  /** Minutes between two consecutive values. */
-  stepMinutes: number;
-  /** Oldest first; the last value is "now". */
-  values: readonly number[];
-}
-
-export interface SlowEndpoint {
-  method: "GET" | "POST" | "PATCH";
-  /** Route template, never a concrete URL. */
-  route: string;
-  p95Ms: number;
-  requests: number;
-}
-
-export interface ContainerMemory {
-  name: string;
-  usedMb: number;
-  limitMb: number;
-}
-
-export interface AvanzadasData {
-  range: AvanzadasRange;
-  service: {
-    updatedAt: string;
-    requestsPerMinute: Series;
-    errorRate5xx: Series;
-    errorRate4xx: Series;
-    latencyMs: { p50: number; p95: number; p99: number };
-    slowEndpoints: readonly SlowEndpoint[];
-  };
-  host: {
-    updatedAt: string;
-    cpuPercent: Series;
-    memory: { usedMb: number; totalMb: number; series: Series };
-    swap: { usedMb: number; totalMb: number; series: Series };
-    diskPercent: Series;
-  };
-  runtime: {
-    updatedAt: string;
-    containers: readonly ContainerMemory[];
-    database: { connectionsUsed: number; connectionsMax: number };
-    redis: { usedMb: number; maxMb: number };
-    queues: { celeryPending: number; notificationsPending: number; oldestNotificationMinutes: number };
-  };
-  users: {
-    updatedAt: string;
-    connectedNow: number;
-    loginsOk: number;
-    loginsFailed: number;
-    sessionsByRole: Readonly<Record<Extract<UserRole, "admin" | "trainer" | "estudiante" | "representante">, number>>;
-  };
-}
+export const FIXTURE_NOW = "2026-10-01T15:30:00-05:00";
 
 /** The system status is a "now" reading, so every range shares it. */
 const STATUS: ResumenData["status"] = [
@@ -144,7 +53,7 @@ function periods(
 const RESUMEN: Record<ResumenRange, ResumenData> = {
   "24h": {
     range: "24h",
-    generatedAt: DEMO_NOW,
+    generatedAt: FIXTURE_NOW,
     span: "2h",
     periods: periods(
       [
@@ -166,7 +75,7 @@ const RESUMEN: Record<ResumenRange, ResumenData> = {
   },
   "7d": {
     range: "7d",
-    generatedAt: DEMO_NOW,
+    generatedAt: FIXTURE_NOW,
     span: "1d",
     periods: periods(
       [
@@ -187,7 +96,7 @@ const RESUMEN: Record<ResumenRange, ResumenData> = {
   },
   "30d": {
     range: "30d",
-    generatedAt: DEMO_NOW,
+    generatedAt: FIXTURE_NOW,
     span: "6d",
     periods: periods(
       [
@@ -204,8 +113,8 @@ const RESUMEN: Record<ResumenRange, ResumenData> = {
   },
 };
 
-/** Stand-in for the summary endpoint. Replace the body with a fetcher. */
-export function getResumenDemo(range: ResumenRange): ResumenData {
+/** Backend-shaped summary for `range`. */
+export function resumenFixture(range: ResumenRange): ResumenData {
   return RESUMEN[range];
 }
 
@@ -320,7 +229,7 @@ const AVANZADAS: Record<AvanzadasRange, AvanzadasData> = {
   "7d": buildAvanzadas("7d"),
 };
 
-/** Stand-in for the metrics endpoint. Replace the body with a fetcher. */
-export function getAvanzadasDemo(range: AvanzadasRange): AvanzadasData {
+/** Backend-shaped advanced metrics for `range`. */
+export function avanzadasFixture(range: AvanzadasRange): AvanzadasData {
   return AVANZADAS[range];
 }
