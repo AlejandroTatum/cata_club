@@ -142,6 +142,30 @@ describe("Button — behavior", () => {
   });
 });
 
+describe("Button — disabled appearance", () => {
+  it.each(["primary", "dark"] as const)("%s swaps to a neutral inactive look, not a faded fill", (variant) => {
+    const button = renderButton({ children: "Guardar", variant, disabled: true });
+    expect(button).toHaveClass(
+      "disabled:bg-sunken",
+      "disabled:border-line-2",
+      "disabled:text-ink-3-strong",
+      "disabled:cursor-not-allowed",
+    );
+    expect(button.className).not.toContain("disabled:opacity");
+  });
+
+  it.each(["secondary", "tertiary", "onCoal"] as const)("%s keeps the plain fade", (variant) => {
+    expect(renderButton({ children: "Guardar", variant, disabled: true })).toHaveClass(
+      "disabled:opacity-45",
+      "disabled:cursor-not-allowed",
+    );
+  });
+
+  it("does not change the committed height when disabled", () => {
+    expect(committedHeight(renderButton({ children: "Guardar", variant: "primary", disabled: true }))).toBe("40px");
+  });
+});
+
 describe("buttonClasses", () => {
   it("gives anchors the same skin as the component", () => {
     render(

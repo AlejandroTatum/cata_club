@@ -33,7 +33,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { MoreHorizontal } from "lucide-react";
+import { ChevronDown, MoreHorizontal } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { buttonClasses } from "./Button";
 
@@ -47,11 +47,17 @@ export interface RowActionsMenuProps {
   /** Accessible name of the trigger, e.g. "Más acciones para María González". */
   label: string;
   items: readonly RowActionsMenuItem[];
+  /**
+   * Visible text for the trigger (e.g. "Más"). Without it the trigger is a
+   * bare "⋯" icon that only announces itself on hover, so a list that wants the
+   * overflow to read as a control passes one. The accessible name stays `label`.
+   */
+  triggerLabel?: string;
 }
 
 const MENU_GAP = 4;
 
-export default function RowActionsMenu({ label, items }: RowActionsMenuProps): ReactElement {
+export default function RowActionsMenu({ label, items, triggerLabel }: RowActionsMenuProps): ReactElement {
   const menuId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -179,11 +185,19 @@ export default function RowActionsMenu({ label, items }: RowActionsMenuProps): R
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        className={buttonClasses("tertiary", "sm", "w-8 !px-0")}
+        title={label}
+        className={triggerLabel ? buttonClasses("tertiary", "sm", "w-full") : buttonClasses("tertiary", "sm", "w-8 !px-0")}
         onClick={() => (open ? close(false) : openWith("first"))}
         onKeyDown={onTriggerKeyDown}
       >
-        <MoreHorizontal size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+        {triggerLabel ? (
+          <>
+            {triggerLabel}
+            <ChevronDown size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+          </>
+        ) : (
+          <MoreHorizontal size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+        )}
       </button>
       {open && position
         ? createPortal(

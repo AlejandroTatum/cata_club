@@ -60,7 +60,7 @@ import { usePendingPaymentsCount } from "@/lib/usePendingPayments";
 import { NAV_ICON_MAP } from "@/components/Header";
 import NotificationBell from "@/components/NotificationBell";
 import { useReportProblem } from "@/components/report-problem/useReportProblem";
-import { PageHeader } from "@/components/ui";
+import { PageHeader, useBodyScrollLock } from "@/components/ui";
 
 export interface AppShellProps {
   /** Main page heading — rendered as the visible `<h1>` of the screen. */
@@ -498,6 +498,11 @@ export default function AppShell({
     (tab) => pathname === tab.href || pathname.startsWith(`${tab.href}/`),
   );
 
+  // "Más" is current only for a page that lives in the drawer: a route the
+  // nav config knows about that is not one of the three tabs. An unknown
+  // route highlights nothing rather than defaulting to "Más".
+  const moreActive = !activeTab && activeHref !== null;
+
   const paletteResults = useMemo<NavLinkDef[]>(() => {
     const term = normalizeText(query);
     if (!term) return navLinks;
@@ -654,6 +659,8 @@ export default function AppShell({
   // Only the mobile drawer is ever hidden — at `lg` the aside is on screen
   // regardless of `sidebarOpen`.
   const drawerHidden = !isDesktopViewport && !sidebarOpen;
+  // The open drawer is modal below `lg`: freeze the page behind its backdrop.
+  useBodyScrollLock(sidebarOpen && !isDesktopViewport);
 
   return (
     <div className="app-shell flex min-h-screen bg-canvas">
@@ -756,7 +763,7 @@ export default function AppShell({
         </button>
 
         <nav
-          className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 py-3"
+          className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 py-3"
           aria-label="Navegación principal"
         >
           {navGroups.map((group): React.ReactElement => {
@@ -797,7 +804,7 @@ export default function AppShell({
         </nav>
 
         {/* `.side .foot-nav` — help, then account rows, then the user card. */}
-        <div className="flex flex-col gap-2 border-t border-white/[0.08] p-2.5">
+        <div className="flex shrink-0 flex-col gap-2 border-t border-white/[0.08] p-2.5">
           <button type="button" onClick={(): void => { const wasOpen = sidebarOpen; setSidebarOpen(false); report.open(wasOpen ? DRAWER_CLOSE_MS : 0); }} disabled={report.busy} className={`${NAV_ITEM_CLASSES} ${NAV_ITEM_IDLE_CLASSES}`}>
             <CircleHelp size={ICON.base} aria-hidden="true" />
             <span className={collapsed ? "lg:hidden" : ""}>Reportar un problema</span>
@@ -1092,12 +1099,13 @@ export default function AppShell({
               }}
               aria-label="Más secciones"
               aria-expanded={sidebarOpen}
-              className={`${TAB_CLASSES} ${activeTab ? "text-ink-3" : "text-ink"}`}
+              aria-current={moreActive ? "page" : undefined}
+              className={`${TAB_CLASSES} ${moreActive ? "text-ink" : "text-ink-3"}`}
             >
               <MoreHorizontal
                 size={ICON.base}
                 strokeWidth={2}
-                className={activeTab ? "" : "text-cata-red"}
+                className={moreActive ? "text-cata-red" : ""}
                 aria-hidden="true"
               />
               Más
