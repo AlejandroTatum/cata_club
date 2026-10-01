@@ -97,13 +97,15 @@ test("members disclose visible results and essential membership information at 3
   // Membership info lives in the account's Editar modal (the row does not
   // expand) — one card per student under "Estudiantes a cargo".
   //
-  // Exactly ONE edit trigger is reachable here. The old layout left two per
+  // Exactly ONE overflow trigger is reachable here. The old layout left two per
   // account (the desktop cell plus a mobile duplicate) and the previous
   // version of this test worked around that with a `:visible` CSS filter;
   // asserting the count instead pins the fix rather than tolerating it.
-  const edit = page.getByRole("button", { name: "Editar María González" });
-  await expect(edit).toHaveCount(1);
-  await edit.click();
+  // Editar is inside that menu, not a visible button on the row.
+  const more = page.getByRole("button", { name: "Más acciones para María González" });
+  await expect(more).toHaveCount(1);
+  await more.click();
+  await page.getByRole("menuitem", { name: "Editar María González" }).click();
   const dialog = page.getByRole("dialog");
   const membershipTerm = dialog.getByRole("term").filter({ hasText: "Membresía" });
   await expect(membershipTerm).toBeVisible();
