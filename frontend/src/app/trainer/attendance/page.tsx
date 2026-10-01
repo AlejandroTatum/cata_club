@@ -334,9 +334,19 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
                 <div className="mx-auto w-full max-w-3xl">
                   <div className="card p-5 sm:p-6">
-                    <h2 className="mb-4 font-display text-lg uppercase leading-tight tracking-flat text-ink">
-                      {STEP_LABELS[roster.step]}
-                    </h2>
+                    <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-field">
+                      <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
+                        {STEP_LABELS[roster.step]}
+                      </h2>
+                      {/* Fills the heading row's right side with what is on offer. */}
+                      {roster.step === "select-session" && schedules.visible.schedules.length > 0 && (
+                        <p className="text-xs font-bold uppercase text-ink-3">
+                          {schedules.visible.schedules.length === 1
+                            ? "1 horario disponible"
+                            : `${schedules.visible.schedules.length} horarios disponibles`}
+                        </p>
+                      )}
+                    </div>
 
                     <form onSubmit={(e) => void submission.handleConfirm(e)}>
                       {roster.step === "select-session" && (

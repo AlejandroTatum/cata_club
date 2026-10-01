@@ -20,7 +20,7 @@ import { buttonSkin } from "@/components/ui/Button";
 describe("BackLink — destination", () => {
   it("points at the given href", () => {
     render(<BackLink href="/payments" />);
-    expect(screen.getByRole("link", { name: /volver a membresías y pagos/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /volver a pagos/i })).toHaveAttribute(
       "href",
       "/payments",
     );
@@ -144,7 +144,7 @@ describe("BackLink — optional onClick", () => {
   it("still calls a caller-supplied onClick alongside the navigation", () => {
     const onClick = vi.fn();
     render(<BackLink href="/payments" onClick={onClick} />);
-    fireEvent.click(screen.getByRole("link", { name: /volver a membresías y pagos/i }));
+    fireEvent.click(screen.getByRole("link", { name: /volver a pagos/i }));
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
