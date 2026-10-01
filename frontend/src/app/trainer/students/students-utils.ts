@@ -38,6 +38,17 @@ export interface AlumnoDelClub {
    * línea que diga "undefined".
    */
   horarios: string | null;
+  /**
+   * The same week, compact: `"Lun–Vie 15:00"`, `"Lun, Mié 18:00 · Sáb 09:00"`.
+   * Consecutive days collapse into a range so the line fits a panel header.
+   */
+  horariosCompactos: string | null;
+  /**
+   * The start time of the alumno's first training window (`"15:00"`). The
+   * roster carries no categoría, and the club's groups train at fixed hours,
+   * so the start time is the group key the filter pills use.
+   */
+  grupo: string | null;
 }
 
 /**
@@ -68,8 +79,31 @@ function abreviarDia(diaLabel: string): string {
 function resumirHorarios(filas: AlumnoHorario[]): string | null {
   const ventanas = buildWeeklyTrainingSchedule(filas);
   if (ventanas.length === 0) return null;
-  return ventanas
-    .map((ventana) => `${abreviarDia(ventana.diaLabel)} ${ventana.horaInicio}`)
+  return ventanas.map((ventana) => `${abreviarDia(ventana.diaLabel)} ${ventana.horaInicio}`).join(" · ");
+}
+
+const SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+/** `Lun–Vie 15:00` for a run of three or more consecutive days, else `Lun, Mié 18:00`. */
+function compactarHorarios(filas: AlumnoHorario[]): string | null {
+  const ventanas = buildWeeklyTrainingSchedule(filas);
+  if (ventanas.length === 0) return null;
+  const porHora = new Map<string, number[]>();
+  for (const ventana of ventanas) {
+    const dias = porHora.get(ventana.horaInicio) ?? [];
+    dias.push(SEMANA.indexOf(abreviarDia(ventana.diaLabel)));
+    porHora.set(ventana.horaInicio, dias);
+  }
+  return [...porHora.entries()]
+    .map(([hora, dias]) => {
+      const ordenados = [...dias].sort((a, b) => a - b);
+      const corrido = ordenados.every((d, i) => d === ordenados[0] + i);
+      const texto =
+        ordenados.length >= 3 && corrido
+          ? `${SEMANA[ordenados[0]]}–${SEMANA[ordenados[ordenados.length - 1]]}`
+          : ordenados.map((d) => SEMANA[d]).join(", ");
+      return `${texto} ${hora}`;
+    })
     .join(" · ");
 }
 
@@ -99,6 +133,8 @@ export function agruparAlumnosDelPadron(filas: AlumnoHorario[]): AlumnoDelClub[]
       nombreCompleto: filasDeLaPersona[0].personaNombreCompleto,
       edad: filasDeLaPersona[0].edad,
       horarios: resumirHorarios(filasDeLaPersona),
+      horariosCompactos: compactarHorarios(filasDeLaPersona),
+      grupo: buildWeeklyTrainingSchedule(filasDeLaPersona)[0]?.horaInicio ?? null,
     }))
     .sort((a, b) => a.nombreCompleto.localeCompare(b.nombreCompleto, "es"));
 }

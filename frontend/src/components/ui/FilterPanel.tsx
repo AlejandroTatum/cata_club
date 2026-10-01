@@ -20,26 +20,13 @@
  *
  * ## The order is the API
  *
- * The slots render in a fixed sequence — search, then chips, then fields, then
- * help — whatever order the caller writes the props in. That is deliberate: an
+ * The slots render in a fixed sequence — search, then chips, then fields —
+ * whatever order the caller writes the props in. That is deliberate: an
  * order kept by convention is the thing that drifted in the first place, and a
  * screen cannot express the wrong one here. The sequence goes from the fastest
  * question to the slowest: free text finds ONE record, a chip narrows a set,
- * and a named field is the deliberate, typed-out case. The caveat comes last,
- * because it is read after the controls it qualifies.
+ * and a named field is the deliberate, typed-out case.
  *
- * ## D11c — the help does not live loose
- *
- * "La ayuda no vive suelta." `/members` shipped its "Ver ayuda" as a bare
- * child of the canvas, in a band of its own between this panel and the table,
- * held there by a margin nobody else in the column speaks. What it opens is a
- * caveat about what the search can REACH — "este listado puede incluir hasta
- * 200 registros" — so the block it belongs to is the block that searches, and
- * that is this one. The panel is also the only part of the screen that renders
- * in every state, which is what keeps the caveat on screen in the case that
- * needs it most: a search that found nobody.
- *
-
  * The panel carries NO margin of its own. The shell's `<main>` is a
  * `flex flex-col gap-page` column, so a margin here would be added on top of
  * the 20px step instead of replacing it; a screen that still spaces itself by
@@ -84,11 +71,9 @@ const PANEL = "gap-4 card p-[18px]";
  * a phone.
  *
  * What moves is the axis. What does not move is the sequence — search, chips,
- * fields, then the caveat — because "a screen cannot express the wrong order"
+ * fields — because "a screen cannot express the wrong order"
  * is the entire reason the panel exists, and an escape hatch that also reorders
- * would hand back exactly what was taken away. Flowing keeps the help on its
- * own full-width line: it qualifies the controls, so it is read after them, not
- * beside them.
+ * would hand back exactly what was taken away.
  */
 const AXIS = {
   column: "flex flex-col",
@@ -114,17 +99,18 @@ export interface FilterPanelProps {
   /** Slot 3 — selects, dates, anything carrying its own field caption. */
   fields?: ReactNode;
   /**
-   * Slot 4 — a `ContextualHelp` disclosure qualifying what the controls above
-   * can reach. See the note on D11c below.
-   */
-  help?: ReactNode;
-  /**
    * `column` (default) stacks the slots — the shape a rail needs. `row` flows
    * the control slots across the panel's width, for a panel that spans a page.
    * The slot order is identical either way. See the note on `AXIS` above.
    */
   layout?: FilterPanelLayout;
   /** Merged with the base classes, never replacing them. */
+  /**
+   * Drop the frame (card surface and padding) when the controls already sit
+   * inside a card's own header — a second frame there would read as a
+   * page-level filter nested in another card.
+   */
+  bare?: boolean;
   className?: string;
 }
 
@@ -133,14 +119,14 @@ export function FilterPanel({
   search,
   chips,
   fields,
-  help,
   layout = "column",
+  bare = false,
   className,
 }: FilterPanelProps): ReactElement {
   const flowing = layout === "row";
 
   return (
-    <section aria-label={label} className={cn(PANEL, AXIS[layout], className)}>
+    <section aria-label={label} className={cn(bare ? "gap-4" : PANEL, AXIS[layout], className)}>
       {/* Flowing, the search is one track of the grid and the grid owns its
           width; capping it again at 320px would leave a hole inside its own
           column. Stacked, the cap is what stops a full-width text field from
@@ -150,7 +136,6 @@ export function FilterPanel({
       {fields}
       {/* The caveat is read after the controls, so it never shares a row with
           them — it takes the full width at the foot on both axes. */}
-      {help ? <div className={flowing ? "sm:col-span-full" : undefined}>{help}</div> : null}
     </section>
   );
 }

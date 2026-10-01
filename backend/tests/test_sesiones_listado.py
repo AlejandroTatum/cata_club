@@ -152,6 +152,93 @@ class TestListado:
         )
 
 
+class TestPaginacion:
+    """`limite`/`desplazamiento` se aplican en la consulta (LIMIT/OFFSET) con
+    la sesión actual primero y luego las más recientes. Sin parámetros el
+    listado es el de siempre."""
+
+    def _abrir(self, servicio, n):
+        # Devuelve los ids en orden de apertura (el último es el más reciente).
+        for i in range(n):
+            servicio.login("ana@cataclub.test", "clave12345", user_agent="curl/8.7.1")
+
+    def _ids(self, db_session, usuario):
+        return [
+            f.id for f in db_session.query(Sesion)
+            .filter(Sesion.usuario_id == usuario.id).order_by(Sesion.id).all()
+        ]
+
+    def test_limite_corta_en_la_consulta_y_pone_la_actual_primero(self, db_session):
+        usuario = _crear_usuario(db_session)
+        servicio = AuthServicio(db_session)
+        self._abrir(servicio, 6)
+        ids = self._ids(db_session, usuario)
+        actual = ids[1]  # una sesión vieja: igual debe encabezar la lista
+
+        sesiones = servicio.listar_sesiones(usuario.correo, sesion_actual_id=actual, limite=2)
+
+        assert [s.id for s in sesiones] == [actual, ids[5]]
+        assert sesiones[0].actual is True
+
+    def test_desplazamiento_pagina_el_resto_sin_repetir_ni_saltar(self, db_session):
+        usuario = _crear_usuario(db_session)
+        servicio = AuthServicio(db_session)
+        self._abrir(servicio, 6)
+        ids = self._ids(db_session, usuario)
+        actual = ids[1]
+
+        pagina_1 = servicio.listar_sesiones(usuario.correo, sesion_actual_id=actual, limite=2, desplazamiento=0)
+        pagina_2 = servicio.listar_sesiones(usuario.correo, sesion_actual_id=actual, limite=2, desplazamiento=2)
+        pagina_3 = servicio.listar_sesiones(usuario.correo, sesion_actual_id=actual, limite=2, desplazamiento=4)
+
+        todas = [s.id for s in pagina_1 + pagina_2 + pagina_3]
+        assert todas == [actual, ids[5], ids[4], ids[3], ids[2], ids[0]]
+
+    def test_desplazamiento_pasado_el_final_devuelve_vacio(self, db_session):
+        usuario = _crear_usuario(db_session)
+        servicio = AuthServicio(db_session)
+        self._abrir(servicio, 3)
+
+        assert servicio.listar_sesiones(usuario.correo, sesion_actual_id=None, limite=2, desplazamiento=3) == []
+
+    def test_sin_parametros_conserva_el_comportamiento_anterior(self, db_session):
+        usuario = _crear_usuario(db_session)
+        servicio = AuthServicio(db_session)
+        self._abrir(servicio, LIMITE_SESIONES_LISTADAS + 3)
+        ids = self._ids(db_session, usuario)
+
+        sesiones = servicio.listar_sesiones(usuario.correo, sesion_actual_id=ids[0])
+
+        # Corte de lectura y orden por recencia puro: la actual NO se adelanta.
+        assert [s.id for s in sesiones] == list(reversed(ids))[:LIMITE_SESIONES_LISTADAS]
+
+
+class TestPaginacionHttp:
+    def _como_ana(self, db_session, client, n):
+        usuario = _crear_usuario(db_session)
+        servicio = AuthServicio(db_session)
+        for _ in range(n):
+            servicio.login("ana@cataclub.test", "clave12345", user_agent="curl/8.7.1")
+        client.app.dependency_overrides[GestorAutenticacion.decodificar_token] = lambda: {
+            "sub": usuario.correo, "roles": ["ALUMNO"],
+        }
+
+    def test_endpoint_acepta_limite_y_desplazamiento(self, db_session, client):
+        self._como_ana(db_session, client, 4)
+
+        r = client.get("/api/v1/auth/me/sesiones?limite=2&desplazamiento=1")
+
+        assert r.status_code == 200
+        assert len(r.json()) == 2
+        assert len(client.get("/api/v1/auth/me/sesiones").json()) == 4
+
+    @pytest.mark.parametrize("query", ["limite=0", "limite=51", "desplazamiento=-1"])
+    def test_endpoint_rechaza_valores_fuera_de_rango(self, db_session, client, query):
+        self._como_ana(db_session, client, 1)
+
+        assert client.get(f"/api/v1/auth/me/sesiones?{query}").status_code == 422
+
+
 class TestElTokenLlevaSuSesion:
     def test_el_login_emite_un_token_atado_a_la_fila_que_abrio(self, db_session):
         usuario = _crear_usuario(db_session)

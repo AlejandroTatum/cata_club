@@ -414,10 +414,7 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
   });
 
   it("tells the reader the discount stays in the list to reactivate (#315 hallazgo #40)", async () => {
-    // The catalog's own "Ver ayuda" panel (D11c) already explains this, but
-    // it starts collapsed and nothing on the closed screen hints it is
-    // in there. This is the alternative the finding names: the consequence
-    // stated at the one moment the admin is guaranteed to read something —
+    // The consequence is stated at the one moment the admin is guaranteed to read something —
     // the confirmation the click itself opens.
     renderPage();
 
@@ -543,46 +540,6 @@ describe("DiscountsPage — la segunda columna", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Contextual help — issue #199
-// ---------------------------------------------------------------------------
-
-describe("DiscountsPage — ayuda contextual", () => {
-  it("keeps the catalog rules collapsed behind a Ver ayuda toggle", async () => {
-    // There is no "Eliminar" anywhere on this screen and there never will be:
-    // applied discounts reference the catalog by FK. That rule used to sit in
-    // a permanent lateral card; it now follows the Members disclosure
-    // pattern instead — available, but not occupying space until asked for.
-    renderPage();
-    await screen.findByTestId("discounts-table");
-
-    expect(screen.queryByText(/no se elimina/i)).not.toBeInTheDocument();
-
-    const toggle = screen.getByRole("button", { name: /cómo funciona el catálogo/i });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-
-    fireEvent.click(toggle);
-
-    expect(await screen.findByText(/no se elimina/i)).toBeInTheDocument();
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-  });
-
-  it("does not put the catalog rules inside the form rail", async () => {
-    // #199 moved the rules out of a permanent rail card and into the header's
-    // disclosure. The rail is the form's column now and holds nothing else,
-    // so this has to be asserted with a form actually open — with none, there
-    // is no rail at all (see "la segunda columna").
-    renderPage();
-    await screen.findByTestId("discounts-table");
-    fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
-    fireEvent.click(screen.getByRole("button", { name: /cómo funciona el catálogo/i }));
-
-    expect(await screen.findByText(/no se elimina/i)).toBeInTheDocument();
-    const rail = screen.getByTestId("discounts-rail");
-    expect(within(rail).queryByText(/no se elimina/i)).not.toBeInTheDocument();
-  });
-});
-
-// ---------------------------------------------------------------------------
 // The form's field layout
 // ---------------------------------------------------------------------------
 
@@ -620,38 +577,8 @@ describe("DiscountsPage — el formulario de alta/edición", () => {
 });
 
 // ---------------------------------------------------------------------------
-// D11c — the help stops floating, and the empty catalog stops reserving a rail
+// The empty catalog stops reserving a rail
 // ---------------------------------------------------------------------------
-
-describe("DiscountsPage — la ayuda vive en el bloque que explica", () => {
-  it("anchors the Ver ayuda toggle inside the catalog block, not loose on the canvas", async () => {
-    // It shipped as a bare child of the shell: no wrapper, no className, a
-    // 16px underlined control alone in a 20px band between the error slot and
-    // the grid. It got there by losing the `mt-3` it used to hold itself up
-    // with, and nothing caught it. Its three rules are all about the catalog,
-    // so the catalog card is the block that owns it.
-    renderPage();
-    await screen.findByTestId("discounts-table");
-
-    const toggle = screen.getByRole("button", { name: /cómo funciona el catálogo/i });
-    const block = screen.getByRole("table").closest("section");
-
-    expect(block).not.toBeNull();
-    expect(block?.contains(toggle)).toBe(true);
-  });
-
-  it("keeps the help beside the catalog title even when there is no catalog yet", async () => {
-    // The state that needs the rules most is the one with nothing to look at.
-    mockFetchDescuentos.mockResolvedValue([]);
-    renderPage();
-    await screen.findByText(/sin descuentos en el catálogo/i);
-
-    expect(
-      screen.getByRole("button", { name: /cómo funciona el catálogo/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Catálogo de descuentos")).toBeInTheDocument();
-  });
-});
 
 describe("DiscountsPage — el catálogo vacío no reserva un riel", () => {
   it("drops the 340px track when there is no row to hold still and no form open", async () => {

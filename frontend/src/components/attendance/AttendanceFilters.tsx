@@ -29,7 +29,6 @@
 
 import { useCallback, useMemo, useState } from "react";
 import StudentSearch from "@/components/StudentSearch";
-import ContextualHelp from "@/components/ContextualHelp";
 import {
   FILTER_LABEL,
   FilterGroup,
@@ -227,27 +226,6 @@ export default function AttendanceFilters({
             ))}
           </select>
         </label>
-      }
-      // D11c — the caveat about what these controls reach, in the block that
-      // holds them. An incomplete custom range makes the page render its empty
-      // state ("no hay registros en este rango"), which is a claim about the
-      // club rather than about the form: the query is simply not built yet.
-      // The panel shows its own `role="alert"` about the range, but only once
-      // both fields disagree; the half-filled case says nothing anywhere.
-      help={
-        <ContextualHelp title="Cómo funciona el filtro de registros">
-          <ul className="flex flex-col gap-field">
-            <li>
-              Un rango personalizado necesita las dos fechas. Con una sola cargada el listado se
-              muestra vacío porque todavía no hay rango que consultar, no porque el club no tenga
-              registros.
-            </li>
-            <li>
-              Los filtros se combinan: alumno, rango y horario se aplican a la vez, y el listado
-              responde a los tres.
-            </li>
-          </ul>
-        </ContextualHelp>
       }
     />
   );

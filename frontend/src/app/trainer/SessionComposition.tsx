@@ -91,8 +91,14 @@ export function SessionCompositionCounts({
   counts,
   total,
   className = "",
-}: SessionCompositionProps): React.ReactElement {
-  const segments = buildSessionBarSegments(counts, total);
+  hideZero = false,
+}: SessionCompositionProps & {
+  /** Print only the states somebody is in — for a legend next to a ring. */
+  hideZero?: boolean;
+}): React.ReactElement {
+  const all = buildSessionBarSegments(counts, total);
+  const nonZero = all.filter((segment) => segment.count > 0);
+  const segments = hideZero && nonZero.length > 0 ? nonZero : all;
 
   return (
     <span className={`flex flex-wrap gap-x-3.5 gap-y-1 text-xs text-ink-2 ${className}`}>

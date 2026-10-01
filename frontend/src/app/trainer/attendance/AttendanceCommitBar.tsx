@@ -54,10 +54,19 @@ export default function AttendanceCommitBar({
   return (
     <div
       data-testid="attendance-commit-bar"
-      className="sticky bottom-0 -mx-5 -mb-5 mt-5 flex rounded-b-card flex-wrap items-center gap-3 border-t border-line bg-paper/95 px-5 py-3.5 backdrop-blur sm:-mx-6 sm:-mb-6 sm:px-6"
+      // Below `lg` the bar is `sticky bottom-0`, so a forty-row roster never
+      // costs a scroll to the action. From `lg` it is the tail of the aside
+      // card (no chrome of its own) — stacked, so the actions sit under the summary they commit.
+      className="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 rounded-card border border-line bg-paper/95 px-4 py-3 shadow-soft backdrop-blur lg:static lg:flex-col lg:items-stretch lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none"
     >
       {!isFirst && (
-        <Button type="button" variant="tertiary" onClick={onBack} disabled={submitting}>
+        <Button
+          type="button"
+          variant="tertiary"
+          onClick={onBack}
+          disabled={submitting}
+          className="lg:order-3 lg:justify-center"
+        >
           <ChevronLeft size={ICON.sm} strokeWidth={2} aria-hidden="true" />
           Atrás
         </Button>
@@ -72,7 +81,10 @@ export default function AttendanceCommitBar({
           variant="tertiary"
           onClick={onUndo}
           disabled={lastUndoable === null || submitting}
-          aria-label={lastUndoable ? `Deshacer: ${lastUndoable.label}` : "Deshacer — no hay nada que deshacer"}
+          className="lg:order-3 lg:justify-center"
+          aria-label={
+            lastUndoable ? `Deshacer: ${lastUndoable.label}` : "Deshacer — no hay nada que deshacer"
+          }
         >
           <Undo2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
           Deshacer
@@ -82,7 +94,7 @@ export default function AttendanceCommitBar({
       {/* The first step has nothing to summarise yet, so the bar's left side
           says what the button will do instead of standing empty. */}
       {step === "select-session" && (
-        <p className="text-sm text-ink-3">
+        <p className="min-w-[200px] flex-1 text-sm text-ink-3 lg:order-1 lg:min-w-0">
           {selectedScheduleId === null
             ? "Elija un horario de la lista para ver a sus alumnos y marcar la asistencia de cada uno."
             : "Horario elegido: siga para ver a sus alumnos y marcar la asistencia de cada uno."}
@@ -93,7 +105,7 @@ export default function AttendanceCommitBar({
         <AttendanceTotalsSummary students={students} unreviewedCount={unreviewedCount} />
       )}
 
-      <div className="ml-auto flex flex-col items-end gap-1.5">
+      <div className="ml-auto flex flex-col items-end gap-1.5 lg:order-2 lg:ml-0 lg:items-stretch lg:[&>button]:w-full lg:[&>button]:justify-center">
         {/* The `UNMARKED` invariant, and its explanation — no path the wizard
             can take produces the sentinel any more, but a button disabled by
             an invariant still has to say why. */}

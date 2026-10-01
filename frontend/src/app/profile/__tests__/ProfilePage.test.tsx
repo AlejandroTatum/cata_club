@@ -97,7 +97,7 @@ vi.mock("@/services/api", () => ({
   // Su propio comportamiento se prueba en SessionsCard.test.tsx; acá alcanza
   // con que exista y no devuelva nada, para que la tarjeta no se dibuje y no
   // interfiera con las aserciones de esta pantalla.
-  fetchMisSesiones: () => mockFetchMisSesiones(),
+  fetchMisSesiones: (opciones?: unknown) => mockFetchMisSesiones(opciones),
   ApiClientError: class ApiClientError extends Error {
     status: number;
     constructor(message: string, status: number) {
@@ -1735,52 +1735,31 @@ describe("ProfilePage — the redesigned account layout", () => {
     expect(screen.queryByText(/cédula/i)).not.toBeInTheDocument();
   });
 
-  it("offers the security actions as rows, including closing other sessions", async () => {
+  it("offers the security actions as tiles, including closing other sessions", async () => {
     await renderAdmin();
 
     const security = screen.getByTestId("profile-column-status");
-    expect(within(security).getByText("Contraseña")).toBeInTheDocument();
-    expect(within(security).getByRole("button", { name: /cambiar contraseña/i })).toBeInTheDocument();
-    expect(within(security).getByText(/cerrar sesión en este equipo/i)).toBeInTheDocument();
-    expect(within(security).getByRole("button", { name: /^cerrar sesión$/i })).toBeInTheDocument();
-    // POST /auth/sesiones/invalidar now exists (slice B4) — the third row.
-    // Exact match on the row LABEL: a substring regex also matches the
-    // button's own text ("Cerrar otras sesiones"), which is a second,
-    // unrelated element.
-    expect(within(security).getByText("Otras sesiones")).toBeInTheDocument();
-    expect(
-      within(security).getByRole("button", { name: /cerrar otras sesiones/i }),
-    ).toBeInTheDocument();
+    const password = within(security).getByRole("button", { name: /^cambiar contraseña$/i });
+    expect(password).toHaveAccessibleDescription(/enlace de cambio a su correo/i);
+    const logoutTile = within(security).getByRole("button", { name: /^cerrar sesión$/i });
+    expect(logoutTile).toHaveAccessibleDescription(/cerrar sesión en este equipo/i);
+    // POST /auth/sesiones/invalidar (slice B4) — the third tile.
+    const others = within(security).getByRole("button", { name: /^cerrar otras sesiones$/i });
+    expect(others).toHaveAccessibleDescription(/todos los demás dispositivos/i);
   });
 
-  it("puts every Seguridad action in the same column so the three rows line up", async () => {
-    /*
-     * These three rows are the only `DetailRow`s that pass a SENTENCE as the
-     * value AND an action. With the action merely `ml-auto`, the width left for
-     * each sentence depended on its own button's width, so the rows wrapped at
-     * different points and the buttons landed at different heights — the
-     * "misaligned" report. A shared action column makes the three value columns
-     * identical, so they wrap identically.
-     */
+  it("lays the three Seguridad actions out as one equal tile grid", async () => {
     await renderAdmin();
 
     const security = screen.getByTestId("profile-column-status");
-    const buttons = [
-      within(security).getByRole("button", { name: /cambiar contraseña/i }),
+    const tiles = [
+      within(security).getByRole("button", { name: /^cambiar contraseña$/i }),
       within(security).getByRole("button", { name: /^cerrar sesión$/i }),
-      within(security).getByRole("button", { name: /cerrar otras sesiones/i }),
+      within(security).getByRole("button", { name: /^cerrar otras sesiones$/i }),
     ];
-
-    const wrappers = buttons.map((button) => button.parentElement);
-    for (const wrapper of wrappers) {
-      expect(wrapper).not.toBeNull();
-      // Its own line on a phone, a fixed right-hand column from `sm` up.
-      expect(wrapper?.className).toMatch(/\bw-full\b/);
-      expect(wrapper?.className).toMatch(/\bjustify-end\b/);
-      expect(wrapper?.className).toMatch(/\bsm:w-\[210px\](\s|$)/);
-    }
-    // Identical, not merely similar: one column, not three near-misses.
-    expect(new Set(wrappers.map((wrapper) => wrapper?.className)).size).toBe(1);
+    const grid = tiles[0].parentElement;
+    expect(grid?.className).toMatch(/\bgrid\b/);
+    for (const tile of tiles) expect(tile.parentElement).toBe(grid);
   });
 
   it("closes the session from the security row", async () => {
@@ -2222,6 +2201,28 @@ describe("ProfilePage — the club on the screen (faro: perfil y login)", () => 
     // The very date the badge above is calling lapsed — same reading, no
     // second interpretation.
     expect(within(membership).getByText(formatDate(lapsedEnd))).toBeInTheDocument();
+  });
+
+  it("draws the key stats in the hero and a coverage meter with the days left", async () => {
+    const hero = await renderStudent({}, [makePago({ fechaFin: isoDaysFromToday(10) })]);
+
+    const stats = within(hero).getByTestId("profile-hero-stats");
+    expect(within(stats).getByText("Mensual Infantil")).toBeInTheDocument();
+    expect(within(stats).getByText("Cobertura hasta")).toBeInTheDocument();
+    expect(within(stats).getByText("Asistencias recientes")).toBeInTheDocument();
+
+    const membership = await screen.findByTestId("profile-membership");
+    const meter = within(membership).getByRole("progressbar", { name: /cobertura restante/i });
+    expect(meter).toHaveAttribute("aria-valuenow", "10");
+    expect(within(membership).getByText("Quedan 10 días")).toBeInTheDocument();
+  });
+
+  it("shows an empty meter and how long ago coverage lapsed", async () => {
+    await renderStudent({}, [makePago({ fechaFin: isoDaysFromToday(-3) })]);
+
+    const membership = await screen.findByTestId("profile-membership");
+    expect(within(membership).getByText("Venció hace 3 días")).toBeInTheDocument();
+    expect(within(membership).getByRole("progressbar")).toHaveAttribute("aria-valuenow", "0");
   });
 
   it("keeps the active badge when approved coverage is still in force", async () => {

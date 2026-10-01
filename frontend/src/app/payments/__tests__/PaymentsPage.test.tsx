@@ -252,17 +252,6 @@ function completeChecklist(): void {
   }
 }
 
-/**
- * Abre el desplegable de procedimiento del bloque «Decisión».
- *
- * Se busca por rol y nombre accesible —«Cómo se decide», el `aria-label` que
- * `ContextualHelp` pone en su toggle— y no por el texto visible «Ver ayuda»,
- * que se repite en cada desplegable de la app.
- */
-function openComoSeDecide(): void {
-  fireEvent.click(screen.getByRole("button", { name: /cómo se decide/i }));
-}
-
 async function openPendingWithChecklistDone(): Promise<void> {
   renderPage();
   await openRequest("Juan Pérez");
@@ -990,10 +979,6 @@ describe("PaymentsPage — the checklist adapts to the payment method", () => {
       "La transferencia de $50,00 está acreditada en la cuenta del club",
       "El período de vigencia que se va a activar es el correcto",
     ]);
-    // La nota explica POR QUÉ la lista cambió, que es procedimiento: vive en
-    // «Cómo se decide». Los ítems, que son el control, siguen a la vista.
-    openComoSeDecide();
-    expect(screen.getByText(/verifíquela en la cuenta del club/i)).toBeInTheDocument();
   });
 });
 
@@ -1280,19 +1265,6 @@ describe("PaymentsPage — issue #456: no success before the real server respons
 // ---------------------------------------------------------------------------
 
 describe("PaymentsPage — approving announces that it cannot be undone, before it happens", () => {
-  // El aviso dejó de estar suelto bajo los botones: ahora vive dentro de
-  // «Cómo se decide», en la misma tarjeta. La garantía que este test
-  // sostiene no es «está a la vista» sino «se alcanza sin salir de la pantalla».
-  it("keeps the irreversibility warning one disclosure away, not one screen away", async () => {
-    await openPendingWithChecklistDone();
-
-    expect(screen.queryByText(/no se puede deshacer/i)).not.toBeInTheDocument();
-
-    openComoSeDecide();
-
-    expect(screen.getByText(/no se puede deshacer/i)).toBeInTheDocument();
-  });
-
   it("repeats the irreversibility warning in the confirmation dialog itself", async () => {
     await openPendingWithChecklistDone();
 
@@ -1300,164 +1272,6 @@ describe("PaymentsPage — approving announces that it cannot be undone, before 
 
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText(/no se puede deshacer/i)).toBeInTheDocument();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// La prosa de procedimiento se pliega; el dato y el riesgo se quedan
-//
-// El reclamo era «demasiado texto, es hasta confuso leerlo». Contando los
-// bloques, el de «Detalle de la solicitud» tiene ocho campos y CERO texto de
-// ayuda: todo el texto estaba en «Decisión», mezclado con los controles. Así
-// que no se movieron cajas —esta pantalla ya se reestructuró una vez—, se
-// separó la prosa del control.
-//
-// El corte es por naturaleza del texto, no por longitud: lo que explica un
-// PROCEDIMIENTO se pliega, y lo que informa un DATO o un RIESGO se queda a la
-// vista. Estos tests fijan ese corte en los dos sentidos, porque plegar de más
-// esconde un riesgo y plegar de menos no arregla nada.
-// ---------------------------------------------------------------------------
-
-describe("PaymentsPage — «Cómo se decide» pliega el procedimiento, no el riesgo", () => {
-  it("no muestra el aviso de irreversibilidad al cargar la decisión", async () => {
-    renderPage();
-    await openRequest("Juan Pérez");
-    await screen.findByRole("button", { name: /aprobar pago/i });
-
-    expect(screen.queryByText(/no se puede deshacer/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /cómo se decide/i })).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
-  });
-
-  it("despliega el aviso de irreversibilidad al abrir «Cómo se decide», y lo vuelve a plegar", async () => {
-    renderPage();
-    await openRequest("Juan Pérez");
-    await screen.findByRole("button", { name: /aprobar pago/i });
-
-    openComoSeDecide();
-    expect(screen.getByText(/no se puede deshacer/i)).toBeInTheDocument();
-
-    openComoSeDecide();
-    expect(screen.queryByText(/no se puede deshacer/i)).not.toBeInTheDocument();
-  });
-
-  // Issue #400 supersedes this test's premise. The "alerta de vigencia
-  // divergente" it checked stayed unfolded belonged to the "Período de
-  // vigencia" editor (issue #314 K6 hallazgo #46): typing a Meses value that
-  // produced an end date different from the one requested triggered a
-  // visible `role="alert"` naming both values. That editor is gone —
-  // Administración cannot edit `fecha_inicio`/`fecha_fin` at approval at
-  // all (#400) — so there is no admin-entered value left to diverge from
-  // anything, and no alert left to fold-vs-unfold. The fold-vs-unfold
-  // principle this describe block documents still holds; this specific
-  // example of "risk stays visible" just no longer has a mechanism to
-  // exercise it.
-
-  // Los datos y el estado del bloque siguen siendo datos: nada de esto entra al
-  // desplegable.
-  it("deja a la vista el período (de solo lectura) y el contador de puntos", async () => {
-    renderPage();
-    await openRequest("Juan Pérez");
-    await screen.findByRole("button", { name: /aprobar pago/i });
-
-    // Issue #400: no editable period fields — "Fecha de inicio"/"Meses"
-    // inputs and the "Vence el" preview do not exist anymore. What was
-    // derived at registration is shown as plain read-only text, from the
-    // same "Período" field the queue table already uses.
-    expect(screen.queryByLabelText(/fecha de inicio/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/^meses$/i)).not.toBeInTheDocument();
-    // Issue #510: the period now also repeats as a fixed caption over the
-    // comprobante (intentional redundancy), so it appears twice — once in
-    // "Detalle de la solicitud", once in the voucher caption.
-    expect(
-      screen.getAllByText(humanizePaymentPeriod(PENDING_REQUEST.membershipPeriod)).length,
-    ).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText(/faltan 3 puntos de la lista/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /rechazar pago/i })).toBeInTheDocument();
-  });
-
-  // LO QUE NO SE TOCA. Los tres checkboxes existen porque un pago se podía
-  // aprobar sin haber mirado nunca el monto. Plegar prosa no puede aflojar eso,
-  // ni con el desplegable abierto.
-  it("sigue bloqueando «Aprobar pago» hasta confirmar los tres puntos", async () => {
-    renderPage();
-    await openRequest("Juan Pérez");
-    const approve = await screen.findByRole("button", { name: /aprobar pago/i });
-
-    expect(approve).toBeDisabled();
-
-    openComoSeDecide();
-    expect(screen.getByRole("button", { name: /aprobar pago/i })).toBeDisabled();
-
-    const group = screen.getByRole("group", { name: /antes de aprobar/i });
-    const boxes = within(group).getAllByRole("checkbox");
-    expect(boxes).toHaveLength(3);
-
-    fireEvent.click(boxes[0]);
-    fireEvent.click(boxes[1]);
-    expect(screen.getByRole("button", { name: /aprobar pago/i })).toBeDisabled();
-
-    fireEvent.click(boxes[2]);
-    expect(screen.getByRole("button", { name: /aprobar pago/i })).toBeEnabled();
-  });
-
-  it("deja «Antes de aprobar» como un encabezado de una línea: título y badge, sin prosa", async () => {
-    mockFetchPaymentValidations.mockResolvedValue([CASH_REQUEST]);
-    renderPage();
-    await openRequest("Sofía Vera");
-    await screen.findByRole("button", { name: /aprobar pago/i });
-
-    const bloque = screen.getByRole("region", { name: /antes de aprobar/i });
-    expect(within(bloque).getByText("0 de 2")).toBeInTheDocument();
-    expect(bloque.textContent).not.toMatch(/se confirma la entrega del dinero/i);
-  });
-});
-
-// La `note` la arma `buildApprovalChecklist` y CAMBIA con el método de pago, así
-// que plegarla se verifica variante por variante y no con un texto fijo. La
-// cuarta —transferencia con comprobante— no tiene `note` en absoluto: es el caso
-// más común y el que rompería un desplegable que diera por hecho que siempre hay
-// algo que mostrar.
-describe("PaymentsPage — la nota del checklist se pliega en sus tres variantes", () => {
-  const CASH_WITH_RECEIPT: PaymentValidationRequest = {
-    ...CASH_REQUEST,
-    id: "req-cash-receipt",
-    proofPreviewUrl: "https://files.example/recibo.pdf",
-  };
-  const TRANSFER_NO_PROOF: PaymentValidationRequest = {
-    ...PENDING_REQUEST,
-    id: "req-transfer-bare",
-    proofPreviewUrl: undefined,
-  };
-
-  it.each([
-    ["efectivo con recibo", CASH_WITH_RECEIPT, "Sofía Vera", /con recibo adjunto/i],
-    ["efectivo sin recibo", CASH_REQUEST, "Sofía Vera", /sin comprobante que revisar/i],
-    ["transferencia sin comprobante", TRANSFER_NO_PROOF, "Juan Pérez", /verifíquela en la cuenta del club/i],
-  ])("pliega la nota de %s detrás de «Cómo se decide»", async (_name, fixture, student, nota) => {
-    mockFetchPaymentValidations.mockResolvedValue([fixture]);
-    renderPage();
-    await openRequest(student);
-    await screen.findByRole("button", { name: /aprobar pago/i });
-
-    expect(screen.queryByText(nota)).not.toBeInTheDocument();
-
-    openComoSeDecide();
-
-    expect(screen.getByText(nota)).toBeInTheDocument();
-  });
-
-  it("abre igual para una transferencia con comprobante, que no tiene nota", async () => {
-    renderPage();
-    await openRequest("Juan Pérez");
-    await screen.findByRole("button", { name: /aprobar pago/i });
-
-    openComoSeDecide();
-
-    // Sin `note` el panel sigue teniendo algo que decir: el aviso de irreversibilidad.
-    expect(screen.getByText(/no se puede deshacer/i)).toBeInTheDocument();
   });
 });
 
@@ -1796,16 +1610,6 @@ describe("PaymentsPage — el visor de comprobante (Ampliar) es un diálogo real
   });
 });
 
-describe("PaymentsPage — unrelated happy path", () => {
-  it("does not add contextual help to the unrelated payment-review journey", async () => {
-    renderPage();
-    await openRequest("Juan Pérez");
-    await screen.findByRole("button", { name: /aprobar pago/i });
-
-    expect(screen.queryByRole("button", { name: /ayuda sobre/i })).not.toBeInTheDocument();
-  });
-});
-
 // ---------------------------------------------------------------------------
 // One payment, one decision — the batch path is gone
 //
@@ -2078,34 +1882,10 @@ describe("PaymentsPage — el rojo es una acción, no una columna", () => {
 });
 
 // ---------------------------------------------------------------------------
-// D11c and the empty state's third part
+// The empty state's third part
 // ---------------------------------------------------------------------------
 
-describe("PaymentsPage — la ayuda y la salida", () => {
-  it("discloses the queue's fetch ceiling in the block that filters", async () => {
-    // The four pill counts read as club totals and are counts of what this
-    // page fetched. `/members` already discloses the same cap in the same slot.
-    renderPage();
-    await screen.findAllByText("Juan Pérez");
-
-    const toggle = screen.getByRole("button", { name: /alcance de la cola/i });
-    const panel = screen.getByRole("region", { name: /filtros de pagos/i });
-    expect(panel.contains(toggle)).toBe(true);
-  });
-
-  it("explains what validating a payment is before it explains the fetch ceiling (#315 hallazgo #45)", async () => {
-    // This queue is where the admin's main job lives, and its only help
-    // panel used to explain a technical limit (the 200-request fetch cap)
-    // without ever saying what "validar" means. It has to lead with the job.
-    renderPage();
-    await screen.findAllByText("Juan Pérez");
-
-    fireEvent.click(screen.getByRole("button", { name: /alcance de la cola/i }));
-    const panel = screen.getByRole("region", { name: /alcance de la cola/i });
-
-    expect(within(panel).getByText(/validar/i)).toBeInTheDocument();
-  });
-
+describe("PaymentsPage — la salida", () => {
   it("gives the truly-empty queue a way out instead of a dead end", async () => {
     // The `all` filter with no query was the one branch that shipped with no
     // action at all — the dead end the shared component's own doc warns about.

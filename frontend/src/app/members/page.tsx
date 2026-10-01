@@ -19,7 +19,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import ContextualHelp from "@/components/ContextualHelp";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import {
   Badge,
@@ -1034,9 +1033,6 @@ export default function MembersPage(): React.ReactElement {
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
         title="Miembros"
-        // D11c: the subtitle says WHAT this screen is, in one line, and
-        // everything explaining HOW it works lives behind "Ver ayuda" — which
-        // is why the note about the 200-record cap is not repeated here.
         subtitle="Las cuentas que pagan y los jugadores que tienen a cargo."
       >
         {error && (
@@ -1156,51 +1152,6 @@ export default function MembersPage(): React.ReactElement {
                 />
               ))}
             </div>
-          }
-          // D11c — "la ayuda no vive suelta". This used to be a bare child of
-          // the canvas, in a band of its own between the panel and the table,
-          // holding itself there with a margin no other block in the column
-          // speaks. What it opens is a caveat about what the search can REACH,
-          // so it belongs to the block that searches; and because the panel is
-          // the one part of the screen drawn in every state, the caveat is
-          // still there in the case that needs it most — a search that found
-          // nobody, where the reason may well be the cap itself.
-          help={
-            <ContextualHelp title="Cómo funciona el listado">
-              {/* Issue #388 rewrote both bullets below. La fila ya no es un
-                  grupo: cada persona representada dejó de vivir anidada
-                  dentro de la fila de su representante y pasó a tener la
-                  suya propia, así que la primera viñeta ya no puede hablar de
-                  desplegar una fila para leer nombres — no hay nada que
-                  desplegar. La segunda viñeta describía `getAccountStatusBadge`
-                  resumiendo a TODOS los estudiantes de una cuenta en una sola
-                  insignia con el MEJOR estado; ese cálculo ya no existe
-                  porque cada fila es una sola persona. */}
-              <ul className="flex flex-col gap-field">
-                <li>
-                  Cada fila es una <b className="font-semibold text-ink">persona</b>: su nombre,
-                  su membresía y su estado de pago. Cuando alguien más paga por ella, la fila lo
-                  dice en «Representado por».
-                </li>
-                <li>
-                  El estado de la fila es el de esa persona, y de nadie más: no se mezcla con el
-                  de quien la representa ni con el de otras personas a cargo de la misma cuenta.
-                </li>
-                {/* "Registros", no "personas": el tope es de la consulta de
-                    origen, y el listado sale de traducir esos registros uno a
-                    uno, así que ya coinciden en cantidad. Y el buscador filtra
-                    sobre lo ya traído (`filterAccounts` corre en el cliente),
-                    de modo que la ayuda no puede prometer que buscar alcance
-                    para traer a alguien que quedó fuera del tope. */}
-                <li>
-                  El listado se arma con hasta {MEMBERS_AGGREGATE_LIMIT} registros de origen y no
-                  confirma que se hayan cargado todos los miembros. El buscador filtra solo sobre lo
-                  ya traído — por nombre de la persona, su correo o el nombre de quien la
-                  representa —, así que si no encuentra a alguien es probable que haya quedado
-                  fuera de ese tope.
-                </li>
-              </ul>
-            </ContextualHelp>
           }
         />
 

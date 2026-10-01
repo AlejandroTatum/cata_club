@@ -1882,23 +1882,6 @@ describe("MembersPage — Beneficio del club", () => {
   });
 });
 
-describe("MembersPage — capped results help", () => {
-  it("opens named help that truthfully describes the known 200-result cap", async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    await findAccountRow();
-
-    fireEvent.click(screen.getByRole("button", { name: "Cómo funciona el listado" }));
-
-    const help = screen.getByRole("region", { name: "Cómo funciona el listado" });
-    expect(help).toHaveTextContent("hasta 200 registros");
-    expect(help).toHaveTextContent("no confirma que se hayan cargado todos los miembros");
-  });
-});
-
 // ---------------------------------------------------------------------------
 // Issue #538: debt/month state belongs to the existing Pagos action rather
 // than appearing as a detached message in the row/card.
@@ -2883,10 +2866,10 @@ describe("MembersPage — the repeated row trigger is tertiary (D5)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// D11c — the help does not live loose.
+// The subtitle says what the screen is.
 // ---------------------------------------------------------------------------
 
-describe("MembersPage — the help is anchored (D11c)", () => {
+describe("MembersPage — the subtitle", () => {
   beforeEach(() => {
     mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT] });
   });
@@ -2903,51 +2886,6 @@ describe("MembersPage — the help is anchored (D11c)", () => {
     ).toBeInTheDocument();
   });
 
-  it("lives inside the block it qualifies, not in a band of canvas of its own", async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    await findAccountRow();
-
-    const panel = screen.getByRole("region", { name: "Filtros de miembros" });
-    expect(
-      within(panel).getByRole("button", { name: "Cómo funciona el listado" }),
-    ).toBeInTheDocument();
-  });
-
-  it("stays on screen when the search finds nobody, which is when the cap matters most", async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    await findAccountRow();
-
-    fireEvent.change(screen.getByLabelText("Buscar miembros"), {
-      target: { value: "nadie con este nombre" },
-    });
-
-    await screen.findByText("No se encontraron miembros");
-    const panel = screen.getByRole("region", { name: "Filtros de miembros" });
-    expect(
-      within(panel).getByRole("button", { name: "Cómo funciona el listado" }),
-    ).toBeInTheDocument();
-  });
-
-  it("does not repeat the subtitle it sits under", async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    await findAccountRow();
-
-    fireEvent.click(screen.getByRole("button", { name: "Cómo funciona el listado" }));
-    const help = screen.getByRole("region", { name: "Cómo funciona el listado" });
-    expect(help.textContent).not.toContain("Las cuentas que pagan");
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -3005,65 +2943,6 @@ describe("MembersPage — the empty state leaves no hole under it (D11b)", () =>
 // del cambio: `getAccountStatusBadge` resume a todos los estudiantes de la
 // cuenta y ese cálculo no estaba escrito en ninguna parte de la interfaz.
 // ---------------------------------------------------------------------------
-
-describe("MembersPage — la ayuda explica el listado", () => {
-  beforeEach(() => {
-    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT] });
-  });
-
-  /** Abre el disclosure y devuelve la región de ayuda. */
-  async function openHelp(): Promise<HTMLElement> {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    await findAccountRow();
-    fireEvent.click(screen.getByRole("button", { name: "Cómo funciona el listado" }));
-    return screen.getByRole("region", { name: "Cómo funciona el listado" });
-  }
-
-  it("explica en tres viñetas, como el catálogo de Descuentos", async () => {
-    const panel = await openHelp();
-    expect(within(panel).getAllByRole("listitem")).toHaveLength(3);
-  });
-
-  it("dice que la fila es una persona y dónde se lee quién la representa", async () => {
-    const panel = await openHelp();
-    const [primera] = within(panel).getAllByRole("listitem");
-
-    // Issue #388: la fila dejó de ser un grupo que se despliega — ya no hay
-    // nombres que "leer desplegando la fila", solo la persona y, si aplica,
-    // quién paga por ella.
-    expect(primera).toHaveTextContent(/persona/i);
-    expect(primera).toHaveTextContent(/representado por/i);
-  });
-
-  it("explica que el estado de la fila es el de esa persona, nunca una mezcla (issue #388)", async () => {
-    const panel = await openHelp();
-    const segunda = within(panel).getAllByRole("listitem")[1];
-
-    // La vieja copia describía `getAccountStatusBadge` resumiendo a TODOS los
-    // estudiantes de un grupo en el MEJOR estado. Ese cálculo ya no existe:
-    // cada fila es una sola persona, así que la ayuda no puede seguir
-    // hablando de "mejor, no el peor" — no hay nada que comparar dentro de la
-    // fila.
-    expect(segunda).not.toHaveTextContent(/mejor/i);
-    expect(segunda).not.toHaveTextContent(/peor/i);
-    expect(segunda).toHaveTextContent(/esa persona/i);
-  });
-
-  it("dice el tope y qué esperar cuando alguien no aparece", async () => {
-    const panel = await openHelp();
-    const tercera = within(panel).getAllByRole("listitem")[2];
-
-    expect(tercera).toHaveTextContent(/200/);
-    // El buscador filtra sobre lo ya traído (`filterAccounts` es cliente), así
-    // que la ayuda no puede prometer que buscar alcance para traer a alguien
-    // que quedó fuera del tope.
-    expect(tercera).toHaveTextContent(/tope|fuera/i);
-  });
-});
 
 /**
  * Issue #460, Escenario 5: the backend already lets an ADMINISTRADOR call

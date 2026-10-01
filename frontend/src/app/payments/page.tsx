@@ -67,7 +67,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import ContextualHelp from "@/components/ContextualHelp";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -1145,19 +1144,6 @@ export default function PaymentsPage(): React.ReactElement {
           // matching. The old "esta cola trae hasta 200 solicitudes"
           // sentence described a real cap that no longer exists anywhere on
           // this page, so it was removed rather than left to mislead.
-          help={
-            <ContextualHelp title="Ayuda sobre el alcance de la cola">
-              {/* #315 hallazgo #45: esta era la única ayuda de la cola y solo
-                  hablaba del tope técnico de la consulta — nunca de en qué
-                  consiste el trabajo que el administrador vino a hacer acá.
-                  El primer párrafo dice eso. */}
-              <p>
-                Validar un pago es revisar lo que la familia declaró — monto, período y comprobante
-                cuando corresponde — antes de decidir. Aprobar activa la membresía del período
-                pagado; rechazar le pide a la familia un comprobante nuevo.
-              </p>
-            </ContextualHelp>
-          }
         />
 
         {visibleLoading && <LoadingState label="Cargando solicitudes…" />}
@@ -1449,23 +1435,8 @@ export default function PaymentsPage(): React.ReactElement {
                       {checklist.items.length - remainingChecks} de {checklist.items.length}
                     </Badge>
                   </div>
-                  {/* `checklist.note` ya no se dibuja acá. Explica POR QUÉ esta
-                      lista trae estas preguntas y no otras — procedimiento, no
-                      dato — y se mudó, entera, al desplegable «Cómo se decide» de
-                      la tarjeta de Decisión, junto al aviso del deshacer: los dos
-                      contestan la misma pregunta, y contestarla en dos lugares
-                      distintos era parte del amontonamiento que el dueño leyó
-                      como «demasiado».
-
-                      Cuánto texto saca de acá depende del caso, y en el más
-                      común no saca ninguno: `buildApprovalChecklist` solo pone
-                      `note` cuando el pago es en efectivo o cuando es una
-                      transferencia SIN comprobante adjunto. Una transferencia
-                      CON comprobante — la que llena esta cola — nunca trajo
-                      nota, así que en esa tarjeta lo que se aliviana es el
-                      encabezado, no la prosa.
-                      Los checkboxes se quedan enteros: son los que habilitan el
-                      botón de aprobar. */}
+                  {/* `checklist.note` no se dibuja: las preguntas ya dicen qué
+                      verificar. Los checkboxes habilitan el botón de aprobar. */}
                   <div
                     role="group"
                     aria-labelledby="antes-de-aprobar"
@@ -1493,34 +1464,8 @@ export default function PaymentsPage(): React.ReactElement {
 
               {isPending && (
                 <div className="border-t border-line">
-                {/* El título y su desplegable comparten fila. El desplegable
-                    junta el procedimiento de LA DECISIÓN —por qué la lista de
-                    verificación trae estas preguntas, cuando hay nota que lo
-                    diga, y qué pasa después de aprobar— y deja a la vista solo
-                    lo que es dato o riesgo.
-
-                    No junta el procedimiento de toda la pantalla, y no es la
-                    intención que lo haga: el alcance de la cola se explica en
-                    su propia ayuda, arriba de la lista, y lo que implica
-                    rechazar lo dice el aviso del formulario de rechazo, unas
-                    líneas más abajo. Cada explicación vive pegada a la
-                    decisión que explica; juntarlas acá sería el amontonamiento
-                    otra vez, con otra dirección.
-                    En modo rechazo este desplegable no se ofrece: lo que
-                    explica adentro es del camino de aprobación, y un
-                    desplegable que contesta otra pregunta es peor que
-                    ninguno. */}
                 <div className="flex items-center justify-between gap-3 border-b border-line px-[18px] py-4">
                   <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Decisión</h2>
-                  {!showRejectForm && (
-                    <ContextualHelp title="Cómo se decide">
-                      {checklist.note && <p className="text-xs text-ink-2">{checklist.note}</p>}
-                      <p className="text-xs text-ink-2">
-                        Aprobar se envía de inmediato y activa la membresía; esta acción no se
-                        puede deshacer una vez confirmada. Revise el comprobante antes de confirmar.
-                      </p>
-                    </ContextualHelp>
-                  )}
                 </div>
 
                 <div className="flex flex-col gap-3 px-[18px] py-4">

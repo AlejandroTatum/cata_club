@@ -158,6 +158,8 @@ function RepresentanteMedicalRecordView({
         key={selectedProfile.personaId}
         personaId={Number(selectedProfile.personaId)}
         studentName={studentName}
+        withEmergencyCard
+        viewerIsOwner={false}
       />
     </>
   );
@@ -243,6 +245,7 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
         <MedicalRecordEditor
           personaId={Number(state.data.self.personaId)}
           studentName={firstNameOf(state.data.self.nombres)}
+          withEmergencyCard
         />
       )}
       {state.status === "ready" && role === "estudiante" && !state.data.self && (
