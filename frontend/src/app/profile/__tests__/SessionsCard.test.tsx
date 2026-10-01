@@ -17,7 +17,7 @@ import type { SesionPropia } from "@/services/api";
 
 const mockFetchMisSesiones = vi.fn();
 vi.mock("@/services/api", () => ({
-  fetchMisSesiones: () => mockFetchMisSesiones(),
+  fetchMisSesiones: (opciones?: unknown) => mockFetchMisSesiones(opciones),
 }));
 
 function sesion(overrides: Partial<SesionPropia> = {}): SesionPropia {
@@ -105,49 +105,86 @@ describe("SessionsCard", () => {
   });
 });
 
-describe("SessionsCard collapsing", () => {
-  const five = [
-    sesion({ id: 1, dispositivo: "A" }),
-    sesion({ id: 2, dispositivo: "B" }),
-    sesion({ id: 3, dispositivo: "C", actual: true }),
-    sesion({ id: 4, dispositivo: "D" }),
-    sesion({ id: 5, dispositivo: "E" }),
-  ];
+describe("SessionsCard pagination", () => {
+  const filas = (ids: number[], actual?: number): SesionPropia[] =>
+    ids.map((id) => sesion({ id, dispositivo: `Equipo ${id}`, actual: id === actual }));
+  const ids = (): (string | undefined)[] =>
+    screen.getAllByTestId(/^sesion-\d+$/).map((r) => r.dataset.testid);
 
-  it("shows only two sessions by default, the current one first", async () => {
-    mockFetchMisSesiones.mockResolvedValue(five);
+  it("asks the API for just two sessions (plus one to detect more) on first load", async () => {
+    mockFetchMisSesiones.mockResolvedValue(filas([3, 1, 2], 3));
     render(<SessionsCard />);
 
     await screen.findByTestId("sesion-3");
-    const rows = screen.getAllByTestId(/^sesion-\d+$/);
-    expect(rows.map((r) => r.dataset.testid)).toEqual(["sesion-3", "sesion-1"]);
+    expect(mockFetchMisSesiones).toHaveBeenCalledWith({ limite: 3, desplazamiento: 0 });
+    expect(ids()).toEqual(["sesion-3", "sesion-1"]);
+    expect(screen.getByRole("button", { name: "Ver más sesiones" })).toBeInTheDocument();
   });
 
-  it("expands and collapses the full list in place", async () => {
-    mockFetchMisSesiones.mockResolvedValue(five);
+  it("loads the next page from the API and appends it", async () => {
+    mockFetchMisSesiones
+      .mockResolvedValueOnce(filas([3, 1, 2], 3))
+      .mockResolvedValueOnce(filas([2, 4, 5, 6, 7, 8]));
     render(<SessionsCard />);
 
-    const toggle = await screen.findByRole("button", { name: "Ver todas las sesiones (5)" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    const controlled = toggle.getAttribute("aria-controls");
-    expect(controlled).toBeTruthy();
-    expect(document.getElementById(controlled as string)).toBe(screen.getByRole("list"));
+    fireEvent.click(await screen.findByRole("button", { name: "Ver más sesiones" }));
 
-    fireEvent.click(toggle);
-    expect(screen.getAllByTestId(/^sesion-\d+$/)).toHaveLength(5);
-    const less = screen.getByRole("button", { name: "Mostrar menos" });
-    expect(less).toHaveAttribute("aria-expanded", "true");
-
-    fireEvent.click(less);
-    expect(screen.getAllByTestId(/^sesion-\d+$/)).toHaveLength(2);
+    await screen.findByTestId("sesion-7");
+    expect(mockFetchMisSesiones).toHaveBeenLastCalledWith({ limite: 6, desplazamiento: 2 });
+    expect(ids()).toEqual(["sesion-3", "sesion-1", "sesion-2", "sesion-4", "sesion-5", "sesion-6", "sesion-7"]);
+    // The sixth row only proved there is more; it is not shown yet.
+    expect(screen.queryByTestId("sesion-8")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ver más sesiones" })).toBeInTheDocument();
   });
 
-  it("offers no toggle when there are two sessions or fewer", async () => {
-    mockFetchMisSesiones.mockResolvedValue([sesion({ id: 1 }), sesion({ id: 2 })]);
+  it("hides the button once the API has nothing more", async () => {
+    mockFetchMisSesiones
+      .mockResolvedValueOnce(filas([3, 1, 2], 3))
+      .mockResolvedValueOnce(filas([2, 4]));
+    render(<SessionsCard />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Ver más sesiones" }));
+
+    await screen.findByTestId("sesion-4");
+    expect(ids()).toEqual(["sesion-3", "sesion-1", "sesion-2", "sesion-4"]);
+    expect(screen.queryByRole("button", { name: "Ver más sesiones" })).not.toBeInTheDocument();
+  });
+
+  it("offers no button when there are two sessions or fewer", async () => {
+    mockFetchMisSesiones.mockResolvedValue(filas([1, 2]));
     render(<SessionsCard />);
 
     await screen.findByTestId("sesion-1");
-    expect(screen.getAllByTestId(/^sesion-\d+$/)).toHaveLength(2);
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("degrades to client-side paging when the backend ignores the params", async () => {
+    // A backend that predates `limite` returns everything.
+    mockFetchMisSesiones.mockResolvedValue(filas([1, 2, 3, 4, 5, 6, 7, 8, 9], 3));
+    render(<SessionsCard />);
+
+    await screen.findByTestId("sesion-3");
+    expect(ids()).toEqual(["sesion-3", "sesion-1"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Ver más sesiones" }));
+    expect(ids()).toHaveLength(7);
+    expect(mockFetchMisSesiones).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Ver más sesiones" }));
+    expect(ids()).toHaveLength(9);
+    expect(screen.queryByRole("button", { name: "Ver más sesiones" })).not.toBeInTheDocument();
+  });
+
+  it("reloads from the first page when refreshKey changes", async () => {
+    mockFetchMisSesiones.mockResolvedValue(filas([3, 1, 2], 3));
+    const { rerender } = render(<SessionsCard refreshKey={0} />);
+    await screen.findByTestId("sesion-3");
+
+    mockFetchMisSesiones.mockResolvedValue(filas([9], 9));
+    rerender(<SessionsCard refreshKey={1} />);
+
+    await screen.findByTestId("sesion-9");
+    expect(screen.queryByTestId("sesion-3")).not.toBeInTheDocument();
+    expect(mockFetchMisSesiones).toHaveBeenCalledTimes(2);
   });
 });

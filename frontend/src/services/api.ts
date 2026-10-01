@@ -2669,9 +2669,22 @@ export interface SesionPropia {
   actual: boolean;
 }
 
-/** Fetch the caller's own session history — GET /api/auth/me/sesiones. */
-export async function fetchMisSesiones(): Promise<SesionPropia[]> {
-  return request<SesionPropia[]>(apiEndpoint("/auth/me/sesiones"));
+/**
+ * Fetch the caller's own session history — GET /api/auth/me/sesiones.
+ *
+ * With `limite` the backend paginates in the query (current session first,
+ * then most recent). The response shape does not change, so callers ask for
+ * `limite + 1` rows to learn whether more exist. Without options the list is
+ * the unpaginated default.
+ */
+export async function fetchMisSesiones(
+  opciones: { limite?: number; desplazamiento?: number } = {},
+): Promise<SesionPropia[]> {
+  const params = new URLSearchParams();
+  if (opciones.limite !== undefined) params.set("limite", String(opciones.limite));
+  if (opciones.desplazamiento !== undefined) params.set("desplazamiento", String(opciones.desplazamiento));
+  const query = params.toString();
+  return request<SesionPropia[]>(apiEndpoint(`/auth/me/sesiones${query ? `?${query}` : ""}`));
 }
 
 /** Update the logged-in user's own telefono — PATCH /api/auth/me. Correo is not editable (see `ActualizarPerfilPropioPayload`). */

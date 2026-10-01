@@ -863,6 +863,8 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   // ---- "Cerrar otras sesiones" (E01, slice B4) ---------------------------
   const [confirmingInvalidation, setConfirmingInvalidation] = useState(false);
   const [invalidatingSessions, setInvalidatingSessions] = useState(false);
+  // Bumped after "Cerrar otras sesiones" so SessionsCard reloads its first page.
+  const [sessionsRefresh, setSessionsRefresh] = useState(0);
   const [sessionsMessage, setSessionsMessage] = useState<string | null>(null);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
 
@@ -1007,6 +1009,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     setSessionsMessage(null);
     try {
       const result = await invalidarOtrasSesiones();
+      setSessionsRefresh((n) => n + 1);
       setSessionsMessage(result.mensaje);
       showSuccess(result.mensaje);
     } catch (error: unknown) {
@@ -1472,7 +1475,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             vez de gritar. Es contenido de compañía; nadie abre esta pantalla
             para leerlo.
           */}
-          <SessionsCard />
+          <SessionsCard refreshKey={sessionsRefresh} />
         </div>
       </div>
     </ProfileShell>

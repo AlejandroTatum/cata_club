@@ -37,46 +37,97 @@
 
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchMisSesiones, type SesionPropia } from "@/services/api";
 import { formatDateTime } from "@/lib/format-utils";
 import { Badge } from "@/components/ui";
 
-/** Rows visible before the user asks for the full history. */
-const COLLAPSED_COUNT = 2;
+/** Rows shown on first load: this device + the most recent other one. */
+const FIRST_PAGE = 2;
+/** Rows added per "Ver más sesiones". */
+const NEXT_PAGE = 5;
 
-export default function SessionsCard(): React.ReactElement | null {
+/** The caller's own session leads; the stable sort keeps the recency order. */
+function actualPrimero(filas: SesionPropia[]): SesionPropia[] {
+  return [...filas].sort((a, b) => Number(b.actual) - Number(a.actual));
+}
+
+interface SessionsCardProps {
+  /** Bump to reload from the first page (e.g. after closing the other sessions). */
+  refreshKey?: number;
+}
+
+export default function SessionsCard({ refreshKey = 0 }: SessionsCardProps): React.ReactElement | null {
   const [sesiones, setSesiones] = useState<SesionPropia[]>([]);
-  const [expandida, setExpandida] = useState(false);
-  const listId = useId();
+  const [hayMas, setHayMas] = useState(false);
+  const [cargandoMas, setCargandoMas] = useState(false);
+  // Full list, only when the backend ignored `limite` and sent everything;
+  // paging then happens here instead of in the API.
+  const reserva = useRef<SesionPropia[] | null>(null);
+  const generacion = useRef(0);
 
   useEffect((): (() => void) => {
-    let cancelado = false;
-    fetchMisSesiones()
+    const contador = generacion;
+    const miGeneracion = ++contador.current;
+    reserva.current = null;
+    fetchMisSesiones({ limite: FIRST_PAGE + 1, desplazamiento: 0 })
       .then((filas) => {
-        if (!cancelado) setSesiones(filas);
+        if (generacion.current !== miGeneracion) return;
+        if (filas.length > FIRST_PAGE + 1) {
+          const todas = actualPrimero(filas);
+          reserva.current = todas;
+          setSesiones(todas.slice(0, FIRST_PAGE));
+          setHayMas(true);
+        } else {
+          setSesiones(filas.slice(0, FIRST_PAGE));
+          setHayMas(filas.length > FIRST_PAGE);
+        }
       })
       .catch((err: unknown) => {
         // Se registra y se calla: ver el módulo doc. La consola es para quien
         // depura, la pantalla es para quien vino a otra cosa.
         console.error("[profile] fetchMisSesiones failed", err);
-        if (!cancelado) setSesiones([]);
+        if (generacion.current === miGeneracion) {
+          setSesiones([]);
+          setHayMas(false);
+        }
       });
     return (): void => {
-      cancelado = true;
+      // Invalidates any in-flight response (unmount or refreshKey change).
+      contador.current++;
     };
-  }, []);
+  }, [refreshKey]);
+
+  const verMas = useCallback((): void => {
+    const todas = reserva.current;
+    if (todas) {
+      const siguiente = todas.slice(0, sesiones.length + NEXT_PAGE);
+      setSesiones(siguiente);
+      setHayMas(todas.length > siguiente.length);
+      return;
+    }
+    const miGeneracion = generacion.current;
+    setCargandoMas(true);
+    fetchMisSesiones({ limite: NEXT_PAGE + 1, desplazamiento: sesiones.length })
+      .then((filas) => {
+        if (generacion.current !== miGeneracion) return;
+        setSesiones((previas) => {
+          const vistas = new Set(previas.map((f) => f.id));
+          return [...previas, ...filas.slice(0, NEXT_PAGE).filter((f) => !vistas.has(f.id))];
+        });
+        setHayMas(filas.length > NEXT_PAGE);
+      })
+      .catch((err: unknown) => {
+        console.error("[profile] fetchMisSesiones (more) failed", err);
+      })
+      .finally(() => {
+        if (generacion.current === miGeneracion) setCargandoMas(false);
+      });
+  }, [sesiones.length]);
 
   // Sin filas no hay tarjeta. Un encabezado sobre una lista vacía es el mismo
   // hueco de antes, ahora con un borde alrededor.
   if (sesiones.length === 0) return null;
-
-  // The caller's own session leads (stable sort keeps the backend's recency
-  // order for the rest), so the collapsed pair is "this device" + the most
-  // recent other one.
-  const ordenadas = [...sesiones].sort((a, b) => Number(b.actual) - Number(a.actual));
-  const colapsable = ordenadas.length > COLLAPSED_COUNT;
-  const visibles = colapsable && !expandida ? ordenadas.slice(0, COLLAPSED_COUNT) : ordenadas;
 
   return (
     <section
@@ -89,8 +140,8 @@ export default function SessionsCard(): React.ReactElement | null {
         </h2>
       </div>
 
-      <ul id={listId} className="m-0 flex list-none flex-col p-0">
-        {visibles.map((sesion) => (
+      <ul className="m-0 flex list-none flex-col p-0">
+        {sesiones.map((sesion) => (
           <li
             key={sesion.id}
             data-testid={`sesion-${sesion.id}`}
@@ -113,15 +164,14 @@ export default function SessionsCard(): React.ReactElement | null {
         ))}
       </ul>
 
-      {colapsable && (
+      {hayMas && (
         <button
           type="button"
-          aria-expanded={expandida}
-          aria-controls={listId}
-          onClick={() => setExpandida((v) => !v)}
-          className="border-t border-line px-5 py-3 text-left text-sm font-semibold text-ink-2 hover:text-ink"
+          onClick={verMas}
+          disabled={cargandoMas}
+          className="border-t border-line px-5 py-3 text-left text-sm font-semibold text-ink-2 hover:text-ink disabled:opacity-60"
         >
-          {expandida ? "Mostrar menos" : `Ver todas las sesiones (${ordenadas.length})`}
+          Ver más sesiones
         </button>
       )}
     </section>

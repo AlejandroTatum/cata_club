@@ -97,7 +97,7 @@ vi.mock("@/services/api", () => ({
   // Su propio comportamiento se prueba en SessionsCard.test.tsx; acá alcanza
   // con que exista y no devuelva nada, para que la tarjeta no se dibuje y no
   // interfiera con las aserciones de esta pantalla.
-  fetchMisSesiones: () => mockFetchMisSesiones(),
+  fetchMisSesiones: (opciones?: unknown) => mockFetchMisSesiones(opciones),
   ApiClientError: class ApiClientError extends Error {
     status: number;
     constructor(message: string, status: number) {
