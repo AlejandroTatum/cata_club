@@ -1170,6 +1170,66 @@ describe("LandingPage", (): void => {
     holds.stop();
   });
 
+  /**
+   * QA regression (landing gallery "se queda parada"): a mouse or touch click
+   * on a slide also gives it DOM focus, and that focus used to count as a
+   * keyboard read that only a blur could release — so after the visitor
+   * stopped interacting the loop stayed frozen until they clicked elsewhere.
+   * Pointer-driven focus must not hold, and a tap pin must lapse by itself.
+   */
+  it("resumes the loop on its own once a pointer interaction ends", async (): Promise<void> => {
+    publishGallery(TWO_PHOTOS);
+    render(<LandingPage />);
+
+    await within(gallerySection()).findAllByRole("img");
+    const figure = galleryFigures()[0];
+    const track = document.querySelector("[data-carousel]") as HTMLElement;
+    const holds = trackHolds();
+
+    vi.useFakeTimers();
+    try {
+      // What a real click does: pointer down, focus lands on the slide, click.
+      fireEvent.mouseOver(track);
+      fireEvent.pointerDown(figure);
+      figure.focus();
+      fireEvent.click(figure);
+      expect(holds.held.at(-1)).toBe(true);
+
+      // The pointer leaves; nothing else is touched or clicked.
+      fireEvent.mouseOut(track);
+      await act(async (): Promise<void> => { await vi.advanceTimersByTimeAsync(GALLERY_BROWSE_HOLD_MS); });
+
+      expect(document.activeElement).toBe(figure);
+      expect(figure).not.toHaveClass("is-open");
+      expect(holds.held.at(-1)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+      holds.stop();
+    }
+  });
+
+  it("still holds for as long as keyboard focus rests on a slide", async (): Promise<void> => {
+    publishGallery(TWO_PHOTOS);
+    render(<LandingPage />);
+
+    await within(gallerySection()).findAllByRole("img");
+    const figure = galleryFigures()[0];
+    const holds = trackHolds();
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.keyDown(figure, { key: "Tab" });
+      figure.focus();
+      await act(async (): Promise<void> => { await vi.advanceTimersByTimeAsync(GALLERY_BROWSE_HOLD_MS * 3); });
+      expect(holds.held.at(-1)).toBe(true);
+      figure.blur();
+      expect(holds.held.at(-1)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+      holds.stop();
+    }
+  });
+
   it("browses with the arrow keys from wherever focus sits inside the strip", async (): Promise<void> => {
     publishGallery(TWO_PHOTOS);
     render(<LandingPage />);

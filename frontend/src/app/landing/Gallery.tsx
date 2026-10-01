@@ -97,6 +97,8 @@ export default function Gallery(): React.ReactElement {
   const focusRef = useRef(false);
   const openRef = useRef<number | null>(null);
   const heldRef = useRef(false);
+  /** True between a pointer press and the next key press: focus gained then is the pointer's, not a reader's. */
+  const pointerFocusRef = useRef(false);
   const browseIndexRef = useRef(0);
   const browseTimerRef = useRef<number | null>(null);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
@@ -149,17 +151,38 @@ export default function Gallery(): React.ReactElement {
     document.dispatchEvent(new CustomEvent(GALLERY_HOLD_EVENT, { detail: { held } }));
   };
 
-  const toggleOpen = (index: number): void => {
-    const next = openRef.current === index ? null : index;
-    openRef.current = next;
-    setOpenIndex(next);
-    syncHold();
-  };
-
   const clearBrowseWindow = (): void => {
     if (browseTimerRef.current === null) return;
     window.clearTimeout(browseTimerRef.current);
     browseTimerRef.current = null;
+  };
+
+  /**
+   * Lets a pin lapse on its own after the reading window. Touch has no
+   * "leave" and a pointer click leaves nothing to blur, so without this a pin
+   * outlived the visitor's attention and the strip stayed parked until they
+   * clicked somewhere else. Hover or keyboard focus still outlive the window.
+   */
+  const releasePinAfterWindow = (index: number): void => {
+    clearBrowseWindow();
+    browseTimerRef.current = window.setTimeout((): void => {
+      browseTimerRef.current = null;
+      // Superseded by another interaction (a tap elsewhere on the strip, a
+      // newer browse): that interaction now owns the pin, not this window.
+      if (openRef.current !== index) return;
+      openRef.current = null;
+      setOpenIndex(null);
+      syncHold();
+    }, GALLERY_BROWSE_HOLD_MS);
+  };
+
+  const toggleOpen = (index: number): void => {
+    const next = openRef.current === index ? null : index;
+    openRef.current = next;
+    setOpenIndex(next);
+    if (next === null) clearBrowseWindow();
+    else releasePinAfterWindow(next);
+    syncHold();
   };
 
   // A pending browse window must not outlive the section.
@@ -181,7 +204,6 @@ export default function Gallery(): React.ReactElement {
       : (browseIndexRef.current - 1 + count) % count;
     browseIndexRef.current = target;
 
-    clearBrowseWindow();
     openRef.current = target;
     setOpenIndex(target);
     syncHold();
@@ -190,15 +212,7 @@ export default function Gallery(): React.ReactElement {
     }));
     setAnnouncement(`Foto ${target + 1} de ${count}: ${state.entries[target].title}`);
 
-    browseTimerRef.current = window.setTimeout((): void => {
-      browseTimerRef.current = null;
-      // Superseded by another interaction (a tap elsewhere on the strip, a
-      // newer browse): that interaction now owns the pin, not this window.
-      if (openRef.current !== target) return;
-      openRef.current = null;
-      setOpenIndex(null);
-      syncHold();
-    }, GALLERY_BROWSE_HOLD_MS);
+    releasePinAfterWindow(target);
   };
 
   // A tap anywhere outside the strip releases the pin (touch has no leave).
@@ -249,9 +263,18 @@ export default function Gallery(): React.ReactElement {
             ref={trackRef}
             onMouseEnter={(): void => { hoverRef.current = true; syncHold(); }}
             onMouseLeave={(): void => { hoverRef.current = false; syncHold(); }}
-            onFocus={(): void => { focusRef.current = true; syncHold(); }}
+            onPointerDown={(): void => { pointerFocusRef.current = true; }}
+            // Only keyboard focus counts as a read. A click or tap also
+            // focuses the slide, and that focus lingers until a blur the
+            // visitor never makes — the "bar stays stopped" bug.
+            onFocus={(): void => {
+              if (pointerFocusRef.current) return;
+              focusRef.current = true;
+              syncHold();
+            }}
             onBlur={(): void => { focusRef.current = false; syncHold(); }}
             onKeyDown={(event): void => {
+              pointerFocusRef.current = false;
               // Arrow keys browse on the same terms as the buttons, from
               // wherever inside the strip keyboard focus happens to sit.
               if (event.key === "ArrowRight") {

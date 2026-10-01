@@ -427,7 +427,7 @@
    the same register as the section's labels (issue #1372: the caption
    briefly wore Playfair; the serif is the motto's voice, not the gallery's). */
 .landing-slide-caption { position: absolute; inset-inline: 0; bottom: 0; z-index: 1; display: flex; flex-direction: column; gap: 6px; padding: 18px 20px 20px; opacity: 0; transform: translateY(8px); transition: opacity 0.25s ease-out, transform 0.25s ease-out; }
-.landing-slide:hover .landing-slide-caption, .landing-slide:focus .landing-slide-caption, .landing-slide.is-open .landing-slide-caption { opacity: 1; transform: none; }
+.landing-slide:hover .landing-slide-caption, .landing-slide:focus-visible .landing-slide-caption, .landing-slide.is-open .landing-slide-caption { opacity: 1; transform: none; }
 .landing-slide-title { color: var(--landing-surface); font-family: var(--font-landing-barlow), sans-serif; font-size: 17px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; }
 .landing-slide-description { color: var(--landing-vitrina-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 15px; line-height: 1.45; }
 .landing-gallery-status { margin: 0; color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 17px; }
