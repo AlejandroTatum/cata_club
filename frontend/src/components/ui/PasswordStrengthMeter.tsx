@@ -89,7 +89,7 @@ export default function PasswordStrengthMeter({
   const { filled, tone } = SEGMENTS[level];
 
   return (
-    <div className={cn("mt-field flex flex-col gap-1.5", className)}>
+    <div className={cn("mt-field mb-4 flex flex-col gap-1.5", className)}>
       <div className="flex gap-1" aria-hidden="true">
         {[1, 2, 3].map((segment) => {
           const on = segment <= filled;

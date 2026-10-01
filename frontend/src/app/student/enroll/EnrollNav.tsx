@@ -1,5 +1,6 @@
 /**
- * The wizard's one navigation row: `Atrás | Stepper | Siguiente`.
+ * The wizard's one navigation row, at the top of the step card:
+ * `Atrás | Stepper | Siguiente`.
  *
  * On desktop it is a single row. Below `md` the stepper takes its own row and
  * the two buttons sit under it, so neither is squeezed by the pills.
@@ -28,22 +29,34 @@ export default function EnrollNav(props: EnrollNavProps): ReactElement {
   return (
     <div
       data-testid="enroll-nav"
-      className="flex flex-wrap items-center justify-between gap-x-page gap-y-section md:flex-nowrap"
+      data-enroll-nav
+      className="mb-page flex flex-wrap items-center justify-between gap-x-page gap-y-section md:flex-nowrap"
     >
       <div className="min-w-24">
         {!props.isFirst && (
-          <Button variant="tertiary" onClick={props.onBack} disabled={props.submitting}>
+          <Button
+            variant="tertiary"
+            onClick={props.onBack}
+            disabled={props.submitting}
+          >
             <ChevronLeft size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
             Atrás
           </Button>
         )}
       </div>
 
-      <div className="order-first w-full md:order-none md:w-auto">{props.stepper}</div>
+      <div className="order-first w-full md:order-none md:w-auto">
+        {props.stepper}
+      </div>
 
       <div className="flex min-w-24 justify-end">
         {!props.isLast && (
-          <Button type="submit" variant="primary" disabled={props.submitting}>
+          <Button
+            type="submit"
+            variant="primary"
+            data-enroll-next
+            disabled={props.submitting}
+          >
             Siguiente
             <ChevronRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           </Button>

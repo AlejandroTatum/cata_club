@@ -8,11 +8,17 @@
 
 import type { ReactElement, ReactNode } from "react";
 
-export default function FieldSlot(props: { children: ReactNode }): ReactElement {
+export default function FieldSlot(props: {
+  children: ReactNode;
+}): ReactElement {
   return <div className="min-h-22">{props.children}</div>;
 }
 
-/** Two fields side by side from `md`, stacked below it. */
+/** Two fields side by side from `md`, three from `2xl`, stacked below it. */
 export function EnrollFieldGrid(props: { children: ReactNode }): ReactElement {
-  return <div className="grid gap-x-page md:grid-cols-2 md:items-start">{props.children}</div>;
+  return (
+    <div className="grid gap-x-page md:grid-cols-2 md:items-start 2xl:grid-cols-3">
+      {props.children}
+    </div>
+  );
 }

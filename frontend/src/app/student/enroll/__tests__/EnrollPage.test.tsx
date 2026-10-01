@@ -605,6 +605,16 @@ describe("EnrollPage — edad en la columna de la fecha de nacimiento", () => {
     expect(document.getElementById("enroll-fecha-nacimiento")).toContainElement(hint);
   });
 
+  it("tints the minor's age hint as a warning", () => {
+    render(<EnrollPage />);
+    goToStudentStep();
+    fillBirthDate(enrollFieldId("fechaNacimiento"), "2015-06-15");
+
+    expect(document.getElementById("enroll-fecha-nacimiento-message")).toHaveClass(
+      "text-state-warn",
+    );
+  });
+
   it("names the three date parts for assistive tech while hiding the captions", () => {
     render(<EnrollPage />);
     goToStudentStep();
@@ -652,6 +662,28 @@ describe("EnrollPage — guía informativa de la contraseña (#1395)", () => {
     expect(screen.getByText("Al menos 8 caracteres.")).toHaveAttribute("id", METER_ID);
     expect(screen.queryByText("Para una contraseña más fuerte")).not.toBeInTheDocument();
     expect(segments()).toBe(0);
+  });
+
+  it("points the password input's aria-describedby at the meter text", () => {
+    render(<EnrollPage />);
+    goToSelfStudentStep();
+
+    expect(screen.getByLabelText(/^Contraseña/)).toHaveAttribute("aria-describedby", METER_ID);
+  });
+
+  it("clears the invalid styling of every field once it holds a valid value", () => {
+    render(<EnrollPage />);
+    goToSelfStudentStep();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    expect(screen.getByLabelText(/^Nombres/)).toHaveAttribute("aria-invalid", "true");
+
+    fillEnrollStudentStep();
+
+    const stale = Array.from(document.querySelectorAll("input, select")).filter(
+      (el) =>
+        el.getAttribute("aria-invalid") === "true" || el.className.includes("border-state-bad"),
+    );
+    expect(stale).toEqual([]);
   });
 
   it("moves the meter level while typing, without moving any hard rule", () => {
