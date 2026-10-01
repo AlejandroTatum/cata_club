@@ -196,14 +196,19 @@ test.describe("the discounts rail", () => {
     );
     await page.goto("/discounts");
 
-    const table = page.locator("table");
-    await expect(table).toBeVisible();
-    const before = await table.evaluate((el) => el.getBoundingClientRect().top);
+    // The catalog is a card grid now; its top edge is what must not move.
+    const catalog = page.getByTestId("discounts-cards");
+    await expect(catalog).toBeVisible();
+    const before = await catalog.evaluate((el) => el.getBoundingClientRect().top);
 
-    await page.getByRole("row", { name: /Beca municipal/ }).getByRole("button", { name: /editar/i }).click();
+    await page
+      .getByTestId("discounts-cards")
+      .locator("li", { hasText: "Beca municipal" })
+      .getByRole("button", { name: /editar/i })
+      .click();
     await expect(page.getByLabel(/nombre/i)).toBeVisible();
 
-    const after = await table.evaluate((el) => el.getBoundingClientRect().top);
+    const after = await catalog.evaluate((el) => el.getBoundingClientRect().top);
 
     await testInfo.attach("catalog-top-before-after", {
       body: `${Math.round(before)} → ${Math.round(after)}`,

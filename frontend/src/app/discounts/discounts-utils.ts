@@ -28,6 +28,16 @@ export function descuentoValorLabel(descuento: DescuentoCatalogo): string {
   return formatCurrency(descuento.monto);
 }
 
+/** Card headline of the discount's value: "50 %" or "$ 10,00". */
+export function descuentoValorDisplay(descuento: DescuentoCatalogo): string {
+  if (descuento.porcentaje !== null) {
+    return `${Number(descuento.porcentaje)} %`;
+  }
+  return `$ ${Number(descuento.monto ?? 0)
+    .toFixed(2)
+    .replace(".", ",")}`;
+}
+
 /**
  * Filter the catalog by discount name — issue A3. The catalog has no
  * separate description field, so the visible `nombre` is the only thing a

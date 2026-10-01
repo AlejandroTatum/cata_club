@@ -117,7 +117,7 @@ function renderPage(): void {
  */
 async function findDescuentoRow(nombre: string): Promise<HTMLElement> {
   const matches = await screen.findAllByText(nombre);
-  const row = matches.map((el) => el.closest("tr")).find(Boolean);
+  const row = matches.map((el) => el.closest("li")).find(Boolean);
   return row as HTMLElement;
 }
 
@@ -135,7 +135,7 @@ describe("DiscountsPage — listado", () => {
     const convenioRow = await findDescuentoRow("Convenio empresa");
 
     expect(within(becaRow).getByText("Activo")).toBeInTheDocument();
-    expect(within(becaRow).getByText("100%")).toBeInTheDocument();
+    expect(within(becaRow).getByText("100 %")).toBeInTheDocument();
     expect(within(convenioRow).getByText("Inactivo")).toBeInTheDocument();
     expect(convenioRow).toHaveAttribute("data-inactivo", "true");
     expect(becaRow).not.toHaveAttribute("data-inactivo", "true");
@@ -145,6 +145,34 @@ describe("DiscountsPage — listado", () => {
     mockFetchDescuentos.mockResolvedValue([]);
     renderPage();
     expect(await screen.findByText(/sin descuentos/i)).toBeInTheDocument();
+  });
+
+  it("explains the discount types while the catalog is empty", async () => {
+    mockFetchDescuentos.mockResolvedValue([]);
+    renderPage();
+    const types = await screen.findByTestId("discounts-types");
+    expect(within(types).getByRole("heading", { name: "Porcentaje" })).toBeInTheDocument();
+    expect(within(types).getByRole("heading", { name: "Monto fijo" })).toBeInTheDocument();
+  });
+
+  it("continues a short catalog with the types explainer in the main column", async () => {
+    renderPage();
+    await findDescuentoRow("Beca municipal");
+    const types = screen.getByTestId("discounts-types");
+    expect(within(screen.getByTestId("discounts-rail")).queryByTestId("discounts-types")).not.toBeInTheDocument();
+    expect(within(types).getByRole("heading", { name: "Porcentaje" })).toBeInTheDocument();
+  });
+
+  it("drops the types explainer once the catalog has four entries", async () => {
+    mockFetchDescuentos.mockResolvedValue([
+      BECA,
+      CONVENIO,
+      { ...BECA, id: 11, nombre: "Tercero" },
+      { ...BECA, id: 12, nombre: "Cuarto" },
+    ]);
+    renderPage();
+    await findDescuentoRow("Cuarto");
+    expect(screen.queryByTestId("discounts-types")).not.toBeInTheDocument();
   });
 
   it("keeps a single primary action to create the first discount", async () => {
@@ -182,14 +210,14 @@ describe("DiscountsPage — listado", () => {
 describe("DiscountsPage — búsqueda", () => {
   it("has an accessible search field, consistent with /members", async () => {
     renderPage();
-    await screen.findByTestId("discounts-table");
+    await screen.findByTestId("discounts-cards");
 
     expect(screen.getByLabelText("Buscar descuentos")).toBeInTheDocument();
   });
 
   it("narrows the list to discounts whose name matches the typed term", async () => {
     renderPage();
-    await screen.findByTestId("discounts-table");
+    await screen.findByTestId("discounts-cards");
 
     fireEvent.change(screen.getByLabelText("Buscar descuentos"), {
       target: { value: "beca" },
@@ -201,7 +229,7 @@ describe("DiscountsPage — búsqueda", () => {
 
   it("restores the full list when the search term is cleared", async () => {
     renderPage();
-    await screen.findByTestId("discounts-table");
+    await screen.findByTestId("discounts-cards");
 
     const search = screen.getByLabelText("Buscar descuentos");
     fireEvent.change(search, { target: { value: "beca" } });
@@ -215,7 +243,7 @@ describe("DiscountsPage — búsqueda", () => {
 
   it("shows the no-results empty state when nothing matches the search", async () => {
     renderPage();
-    await screen.findByTestId("discounts-table");
+    await screen.findByTestId("discounts-cards");
 
     fireEvent.change(screen.getByLabelText("Buscar descuentos"), {
       target: { value: "nadie con este nombre" },
@@ -227,7 +255,7 @@ describe("DiscountsPage — búsqueda", () => {
 
   it("clears the search from the no-results empty state action", async () => {
     renderPage();
-    await screen.findByTestId("discounts-table");
+    await screen.findByTestId("discounts-cards");
 
     fireEvent.change(screen.getByLabelText("Buscar descuentos"), {
       target: { value: "nadie con este nombre" },
@@ -236,7 +264,7 @@ describe("DiscountsPage — búsqueda", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /limpiar búsqueda/i }));
 
-    expect(await screen.findByTestId("discounts-table")).toBeInTheDocument();
+    expect(await screen.findByTestId("discounts-cards")).toBeInTheDocument();
     expect((screen.getByLabelText("Buscar descuentos") as HTMLInputElement).value).toBe("");
   });
 });
@@ -245,11 +273,11 @@ describe("DiscountsPage — crear", () => {
   it("creates a percentage discount from the form", async () => {
     mockCrearDescuento.mockResolvedValueOnce({ ...BECA, id: 3, nombre: "Media beca", porcentaje: "50" });
     renderPage();
-    await screen.findByTestId("discounts-table");
+    await screen.findByTestId("discounts-cards");
 
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
     expect(screen.getByLabelText(/^Nombre/)).toBeRequired();
-    expect(screen.getByLabelText(/^Tipo/)).toBeRequired();
+    expect(screen.getByLabelText(/^Tipo\b(?!s)/)).toBeRequired();
     expect(screen.getByLabelText(/^Valor/)).toBeRequired();
     fireEvent.change(screen.getByLabelText(/nombre/i), { target: { value: "Media beca" } });
     fireEvent.change(screen.getByLabelText(/valor/i), { target: { value: "50" } });
@@ -265,11 +293,11 @@ describe("DiscountsPage — crear", () => {
   it("creates a fixed-amount discount when the modality is switched", async () => {
     mockCrearDescuento.mockResolvedValueOnce({ ...CONVENIO, id: 4, nombre: "Convenio dos", activo: true });
     renderPage();
-    await screen.findByTestId("discounts-table");
+    await screen.findByTestId("discounts-cards");
 
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
     fireEvent.change(screen.getByLabelText(/nombre/i), { target: { value: "Convenio dos" } });
-    fireEvent.change(screen.getByLabelText(/tipo/i), { target: { value: "MONTO" } });
+    fireEvent.change(screen.getByLabelText(/^tipo\b(?!s)/i), { target: { value: "MONTO" } });
     fireEvent.change(screen.getByLabelText(/valor/i), { target: { value: "10" } });
     fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
 
@@ -288,21 +316,21 @@ describe("DiscountsPage — crear", () => {
    */
   it("carries a max attribute on the MONTO branch, matching the amount business ceiling", async () => {
     renderPage();
-    await screen.findByTestId("discounts-table");
+    await screen.findByTestId("discounts-cards");
 
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
-    fireEvent.change(screen.getByLabelText(/tipo/i), { target: { value: "MONTO" } });
+    fireEvent.change(screen.getByLabelText(/^tipo\b(?!s)/i), { target: { value: "MONTO" } });
 
     expect(screen.getByLabelText(/valor/i)).toHaveAttribute("max", "999999.99");
   });
 
   it("refuses to save a MONTO value over the business ceiling", async () => {
     renderPage();
-    await screen.findByTestId("discounts-table");
+    await screen.findByTestId("discounts-cards");
 
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
     fireEvent.change(screen.getByLabelText(/nombre/i), { target: { value: "Convenio grande" } });
-    fireEvent.change(screen.getByLabelText(/tipo/i), { target: { value: "MONTO" } });
+    fireEvent.change(screen.getByLabelText(/^tipo\b(?!s)/i), { target: { value: "MONTO" } });
     fireEvent.change(screen.getByLabelText(/valor/i), { target: { value: "1000000" } });
     fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
 
@@ -314,7 +342,7 @@ describe("DiscountsPage — crear", () => {
     const { ApiClientError } = await import("@/services/api");
     mockCrearDescuento.mockRejectedValueOnce(new ApiClientError("Ya existe un descuento con ese nombre", 400));
     renderPage();
-    await screen.findByTestId("discounts-table");
+    await screen.findByTestId("discounts-cards");
 
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
     fireEvent.change(screen.getByLabelText(/nombre/i), { target: { value: "Beca municipal" } });
@@ -328,7 +356,7 @@ describe("DiscountsPage — crear", () => {
 
   it("validates locally that the value is positive before calling the API", async () => {
     renderPage();
-    await screen.findByTestId("discounts-table");
+    await screen.findByTestId("discounts-cards");
 
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
     fireEvent.change(screen.getByLabelText(/nombre/i), { target: { value: "Inválido" } });
@@ -346,7 +374,7 @@ describe("DiscountsPage — crear", () => {
   // and `handleSubmit` refuses to save until it fits.
   it("keeps the full pasted name instead of silently clipping it at 100 chars", async () => {
     renderPage();
-    await screen.findByTestId("discounts-table");
+    await screen.findByTestId("discounts-cards");
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
 
     const nombreInput = screen.getByLabelText(/nombre/i) as HTMLInputElement;
@@ -360,7 +388,7 @@ describe("DiscountsPage — crear", () => {
 
   it("refuses to save a name over 100 characters instead of truncating it silently", async () => {
     renderPage();
-    await screen.findByTestId("discounts-table");
+    await screen.findByTestId("discounts-cards");
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
 
     fireEvent.change(screen.getByLabelText(/nombre/i), { target: { value: "X".repeat(521) } });
@@ -474,28 +502,29 @@ describe("DiscountsPage — la segunda columna", () => {
     // that ran out of content, so the resting state holds a summary of the
     // catalog instead of 340px of nothing.
     renderPage();
-    await screen.findByTestId("discounts-table");
+    await screen.findByTestId("discounts-cards");
 
     expect(screen.getByTestId("discounts-split").className).toBe(PAGE_RAIL);
     const rail = screen.getByTestId("discounts-rail");
     expect(within(rail).getByRole("heading", { name: /resumen del catálogo/i })).toBeInTheDocument();
-    expect(within(rail).getByText(/descuentos? activos?/i)).toBeInTheDocument();
+    expect(within(rail).getByText("Activos")).toBeInTheDocument();
+    expect(within(rail).getByText("Inactivos")).toBeInTheDocument();
   });
 
-  it("replaces the summary with the form when there is one to show", async () => {
+  it("shows the create form above the summary when there is one to show", async () => {
     renderPage();
-    await screen.findByTestId("discounts-table");
+    await screen.findByTestId("discounts-cards");
 
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
 
     const rail = screen.getByTestId("discounts-rail");
     expect(within(rail).getByLabelText(/nombre/i)).toBeInTheDocument();
-    expect(within(rail).queryByText(/resumen del catálogo/i)).not.toBeInTheDocument();
+    expect(within(rail).getByText(/resumen del catálogo/i)).toBeInTheDocument();
   });
 
   it("brings the summary back when the form is dismissed", async () => {
     renderPage();
-    await screen.findByTestId("discounts-table");
+    await screen.findByTestId("discounts-cards");
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
 
     fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
@@ -505,37 +534,38 @@ describe("DiscountsPage — la segunda columna", () => {
     ).toBeInTheDocument();
   });
 
-  it("does not stretch the catalog card past its own rows", async () => {
-    // `flex-1` on the card exists for the EMPTY state, whose `fill` needs a
-    // tall parent to centre itself in. Applying it to a populated card would
-    // just move the dead air inside the card, and a card taller than its own
-    // content reads as broken where short canvas only reads as the end of the
-    // page. /members already draws its table card this way.
+  it("draws the catalog as cards with an add-card slot, never as a table", async () => {
     renderPage();
-    await screen.findByTestId("discounts-table");
+    const cards = await screen.findByTestId("discounts-cards");
 
-    const card = screen.getByRole("table").closest("section") as HTMLElement;
-    expect(card.className).not.toContain("flex-1");
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(within(cards).getByRole("button", { name: /agregar descuento/i })).toBeInTheDocument();
+    const becaCard = within(cards).getByText("Beca municipal").closest("li") as HTMLElement;
+    expect(within(becaCard).getByText("Porcentaje")).toBeInTheDocument();
+    const convenioCard = within(cards).getByText("Convenio empresa").closest("li") as HTMLElement;
+    expect(within(convenioCard).getByText("Monto fijo")).toBeInTheDocument();
   });
 
-  it("puts the form beside the table, not above it", async () => {
-    // The assertion that carries the weight, and the one #81 is about: the
-    // table and the form are SIBLINGS in the split, so opening one cannot
-    // push the other down. It used to render between the page header and the
-    // catalog. Losing the always-on track costs a horizontal reflow when the
-    // form opens; it does not bring back the vertical shove.
+  it("opens the create form from the add-card slot", async () => {
+    renderPage();
+    const cards = await screen.findByTestId("discounts-cards");
+
+    fireEvent.click(within(cards).getByRole("button", { name: /agregar descuento/i }));
+
+    expect(within(screen.getByTestId("discounts-rail")).getByLabelText(/nombre/i)).toBeInTheDocument();
+  });
+
+  it("edits inline inside the card, leaving the rail on its summary", async () => {
     renderPage();
     const becaRow = await findDescuentoRow("Beca municipal");
 
     fireEvent.click(within(becaRow).getByRole("button", { name: /editar/i }));
 
-    const split = screen.getByTestId("discounts-split");
-    const form = screen.getByLabelText(/nombre/i).closest("[data-testid='discounts-rail']");
-    const table = screen.getByRole("table");
-
-    expect(form).not.toBeNull();
-    expect(split.contains(table)).toBe(true);
-    expect(form?.contains(table)).toBe(false);
+    const cards = screen.getByTestId("discounts-cards");
+    expect(within(cards).getByLabelText(/nombre/i)).toBeInTheDocument();
+    const rail = screen.getByTestId("discounts-rail");
+    expect(within(rail).queryByLabelText(/nombre/i)).not.toBeInTheDocument();
+    expect(within(rail).getByText(/resumen del catálogo/i)).toBeInTheDocument();
   });
 });
 
@@ -550,7 +580,7 @@ describe("DiscountsPage — el formulario de alta/edición", () => {
     // "Porcentaje (%)" to render without being cut off. The fields must
     // stack in a single column so each one gets the rail's full width.
     renderPage();
-    await screen.findByTestId("discounts-table");
+    await screen.findByTestId("discounts-cards");
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
 
     const nombreLabel = screen.getByLabelText(/nombre/i).closest("label");
@@ -561,7 +591,7 @@ describe("DiscountsPage — el formulario de alta/edición", () => {
 
   it("gives every field the full input width, so a long name has room to render", async () => {
     renderPage();
-    await screen.findByTestId("discounts-table");
+    await screen.findByTestId("discounts-cards");
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
 
     const nombreInput = screen.getByLabelText(/nombre/i);
@@ -580,54 +610,53 @@ describe("DiscountsPage — el formulario de alta/edición", () => {
 // The empty catalog stops reserving a rail
 // ---------------------------------------------------------------------------
 
-describe("DiscountsPage — el catálogo vacío no reserva un riel", () => {
-  it("drops the 340px track when there is no row to hold still and no form open", async () => {
-    // The rail exists so the row being edited does not move. With zero rows
-    // that argument has nothing to protect, and the reserved track was 340 of
-    // the ~470 horizontal pixels this screen was leaving blank beside a card
-    // that says there is nothing here.
+describe("DiscountsPage — el catálogo vacío conserva el riel de indicaciones", () => {
+  it("keeps the PAGE_RAIL split and the indications card on an empty catalog", async () => {
     mockFetchDescuentos.mockResolvedValue([]);
     renderPage();
     await screen.findByText(/sin descuentos en el catálogo/i);
 
-    expect(screen.getByTestId("discounts-split").className).not.toBe(PAGE_RAIL);
-    expect(screen.queryByTestId("discounts-rail")).not.toBeInTheDocument();
+    expect(screen.getByTestId("discounts-split").className).toBe(PAGE_RAIL);
+    const rail = screen.getByTestId("discounts-rail");
+    expect(within(rail).getByRole("heading", { name: /cómo funcionan los descuentos/i })).toBeInTheDocument();
+    // Types live in their own rail card on an empty catalog, not repeated in the guidance.
+    expect(within(rail).getByTestId("discounts-types")).toBeInTheDocument();
+    expect(within(rail).queryByText(/porcentaje:/i)).not.toBeInTheDocument();
+    expect(within(rail).getByText(/inactivo:/i)).toBeInTheDocument();
   });
 
-  it("brings the split straight back the moment a form opens over an empty catalog", async () => {
+  it("keeps the indications card while the form is open", async () => {
     mockFetchDescuentos.mockResolvedValue([]);
     renderPage();
     await screen.findByText(/sin descuentos en el catálogo/i);
 
     fireEvent.click(screen.getByRole("button", { name: /crear primer descuento/i }));
 
-    expect(screen.getByTestId("discounts-split").className).toBe(PAGE_RAIL);
-    expect(screen.getByTestId("discounts-rail")).toBeInTheDocument();
+    const rail = screen.getByTestId("discounts-rail");
+    expect(within(rail).getByLabelText(/nombre/i)).toBeInTheDocument();
+    expect(within(rail).getByRole("heading", { name: /cómo funcionan los descuentos/i })).toBeInTheDocument();
   });
 
-  it("stretches the empty statement into the card instead of leaving canvas under it", async () => {
-    // 62% — 555px — was the largest dead-air figure of the whole redesign.
+  it("stays compact: ghost example cards instead of a stretched card", async () => {
     mockFetchDescuentos.mockResolvedValue([]);
     renderPage();
     const title = await screen.findByText(/sin descuentos en el catálogo/i);
 
     const statement = title.parentElement as HTMLElement;
-    expect(statement.className).toContain("flex-1");
-    // `inset`, because the catalog card is already open around it — a card
-    // inside a card is a border and a shadow the design never asks for.
-    expect(statement.className).not.toContain("card");
+    expect(statement.className).not.toContain("flex-1");
+    expect(screen.getAllByText("Ejemplo")).toHaveLength(4);
   });
 });
 
 describe("DiscountsPage — el formulario habla el idioma del sistema", () => {
   it("dresses its fields in the control radius, not the retired 8px one", async () => {
     renderPage();
-    await screen.findByTestId("discounts-table");
+    await screen.findByTestId("discounts-cards");
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
 
     for (const field of [
       screen.getByLabelText(/nombre/i),
-      screen.getByLabelText(/tipo/i),
+      screen.getByLabelText(/^tipo\b(?!s)/i),
       screen.getByLabelText(/valor/i),
     ]) {
       expect(field.className).toContain("rounded-ctl");
@@ -639,7 +668,7 @@ describe("DiscountsPage — el formulario habla el idioma del sistema", () => {
 
   it("titles its card in the display face, like every other card title", async () => {
     renderPage();
-    await screen.findByTestId("discounts-table");
+    await screen.findByTestId("discounts-cards");
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
 
     expect(screen.getByRole("heading", { name: /nuevo descuento/i }).className).toContain(
@@ -649,63 +678,35 @@ describe("DiscountsPage — el formulario habla el idioma del sistema", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Mobile reflow — issue #339 (blocks release)
+// Responsive reflow — issue #339 (blocks release)
 //
-// At 320/375px the table used to be the ONLY rendering: `overflow-x-auto` on
-// its own wrapper let the BODY scroll sideways instead, with no affordance
-// that Acciones (Editar/Desactivar) existed off-screen at all. `/members` and
-// `/payments` solve this the same way — reflow to cards below the table
-// breakpoint, actions inside each card — and this screen now follows that
-// exact pattern instead of inventing a scrolling-table variant.
-//
-// jsdom applies no real CSS, so both the card list and the table are always
-// in the document; the breakpoint classes (`sm:hidden` / `hidden sm:block`)
-// are what a browser actually uses to show only one. Only a browser can
-// measure real pixel widths against a viewport (see
-// tests/e2e/content-measure.spec.ts for that kind of assertion elsewhere in
-// this repo) — what a unit test CAN pin down, and the thing that actually
-// regressed here, is that the mechanism exists at all: a card rendering that
-// carries the actions, toggled by the same breakpoint classes `/members`
-// already ships.
+// The catalog is a card grid at every width (one column on phones), so there
+// is no table to overflow sideways; Editar/Desactivar live inside each card.
 // ---------------------------------------------------------------------------
 
-describe("DiscountsPage — mobile reflow (issue #339)", () => {
-  it("collapses the catalog into cards below sm, each one carrying Editar and Desactivar", async () => {
+describe("DiscountsPage — responsive cards (issue #339)", () => {
+  it("carries Editar and Desactivar/Reactivar inside every card", async () => {
     renderPage();
 
     const cards = await screen.findByTestId("discounts-cards");
-    expect(cards.className).toContain("sm:hidden");
+    expect(cards.className).not.toContain("overflow-x-auto");
 
     const becaCard = within(cards).getByText("Beca municipal").closest("li") as HTMLElement;
-    expect(becaCard).not.toBeNull();
     expect(within(becaCard).getByRole("button", { name: /^editar/i })).toBeInTheDocument();
     expect(within(becaCard).getByRole("button", { name: /desactivar/i })).toBeInTheDocument();
 
-    // The inactive discount's card carries "Reactivar" instead — same rule
-    // the table row already followed.
     const convenioCard = within(cards).getByText("Convenio empresa").closest("li") as HTMLElement;
     expect(within(convenioCard).getByRole("button", { name: /reactivar/i })).toBeInTheDocument();
   });
+});
 
-  it("hides the table below sm and shows it again at sm and up — never the only rendering", async () => {
+describe("DiscountsPage — mobile form reveal", () => {
+  it("moves focus to the first field of the create form when it opens", async () => {
     renderPage();
+    await screen.findByTestId("discounts-cards");
 
-    const tableWrapper = await screen.findByTestId("discounts-table");
-    expect(tableWrapper.className).toContain("hidden");
-    expect(tableWrapper.className).toContain("sm:block");
-    expect(within(tableWrapper).getByRole("table")).toBeInTheDocument();
-  });
+    fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
 
-  it("never wraps the table in a bare overflow-x-auto with no narrower affordance", async () => {
-    // The exact shape the issue rules out: `overflow-x-auto` alone, on a
-    // wrapper with no `hidden`/breakpoint class, forces the BODY (not a
-    // contained box) to carry the sideways scroll and gives the admin no
-    // signal there is more to the right at all.
-    renderPage();
-
-    const tableWrapper = await screen.findByTestId("discounts-table");
-    if (tableWrapper.className.includes("overflow-x-auto")) {
-      expect(tableWrapper.className).toContain("hidden");
-    }
+    expect(await screen.findByPlaceholderText("Beca municipal")).toHaveFocus();
   });
 });

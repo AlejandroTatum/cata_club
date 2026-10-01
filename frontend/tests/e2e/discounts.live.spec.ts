@@ -82,7 +82,7 @@ test("un admin crea un descuento y el catalogo lo conserva tras recargar", async
   // `getByText(nombre)` sin acotar resuelve ambas y rompe el modo estricto de
   // Playwright. Acotado a la tabla — la única región visible en el viewport
   // Desktop Chrome con el que corre `qa-live` — queda una única coincidencia.
-  await expect(page.getByTestId("discounts-table").getByText(nombre)).toBeVisible({
+  await expect(page.getByTestId("discounts-cards").getByText(nombre)).toBeVisible({
     timeout: 15_000,
   });
 });
