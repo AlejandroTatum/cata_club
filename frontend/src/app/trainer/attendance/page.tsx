@@ -278,7 +278,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
   /**
    * The commit bar. Each step hosts it in its own aside (stacked from `lg`)
-   * and it is `sticky bottom-0` below `lg`, so the trainer never scrolls to
+   * and it is `fixed` above the tab bar below `lg`, so the trainer never scrolls to
    * reach the action — all three steps commit from it.
    */
   const commitBar = (
@@ -357,7 +357,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                   label="Pasos para tomar asistencia"
                 />
 
-                <form onSubmit={(e) => void submission.handleConfirm(e)}>
+                <form className="pb-32 lg:pb-0" onSubmit={(e) => void submission.handleConfirm(e)}>
                   {roster.step === "select-session" && (
                     <SchedulePickerStep
                       heading={STEP_LABELS["select-session"]}

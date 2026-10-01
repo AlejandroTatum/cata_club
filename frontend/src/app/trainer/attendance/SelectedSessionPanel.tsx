@@ -32,9 +32,9 @@ export default function SelectedSessionPanel({
   const rest = preview.names.length - shown.length;
 
   return (
-    <aside className="flex flex-col gap-page lg:sticky lg:top-4" aria-label="Horario elegido">
+    <aside className="flex flex-col gap-page" aria-label="Horario elegido">
       <div className="card flex flex-col gap-4 p-5" data-testid="selected-session-panel">
-        <p className="text-2xs font-bold uppercase tracking-wide text-ink-3">Horario elegido</p>
+        <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Horario elegido</h2>
 
         {schedule ? (
           <>

@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { Calendar } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { EmptyState, PAGE_RAIL } from "@/components/ui";
+import { EmptyState, InfoPanel, PAGE_RAIL } from "@/components/ui";
 import { formatDay, groupSchedulesByDay, type TrainingSchedule } from "@/app/attendance/attendance-utils";
 import type { DiaSemana } from "@/types/domain";
 import ResumableDraftsPanel from "./ResumableDraftsPanel";
 import DayTabs from "./DayTabs";
 import ScheduleDayGroup from "./ScheduleDayGroup";
 import SelectedSessionPanel from "./SelectedSessionPanel";
+import WeekOverview from "./WeekOverview";
 import { useSchedulePreview } from "./useSchedulePreview";
 import type { PendingConfirmation } from "./useLeaveGuard";
 import type { StoredAttendanceDraft } from "./attendance-utils";
@@ -63,7 +64,7 @@ export default function SchedulePickerStep({
 
   return (
     <div className={PAGE_RAIL}>
-      <div className="card flex flex-col gap-5 p-5 sm:p-6">
+      <div className="card flex flex-col gap-5 p-5 sm:p-6 lg:min-h-[calc(100dvh-17rem)]">
         <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-field">
           <div className="flex min-w-0 flex-col gap-1.5">
             <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">{heading}</h2>
@@ -139,14 +140,28 @@ export default function SchedulePickerStep({
             {rosterError}
           </div>
         )}
+
+        <WeekOverview
+          dayGroups={dayGroups}
+          today={today}
+          weekRecordCounts={weekRecordCounts}
+          onSelectDay={setPickedDay}
+        />
       </div>
-      <SelectedSessionPanel
-        schedule={selectedSchedule}
-        today={today}
-        recordedCount={selectedSchedule ? (weekRecordCounts.get(selectedSchedule.id) ?? 0) : 0}
-        preview={preview}
-        commitBar={commitBar}
-      />
+      <div className="flex min-w-0 flex-col gap-page lg:sticky lg:top-4">
+        <SelectedSessionPanel
+          schedule={selectedSchedule}
+          today={today}
+          recordedCount={selectedSchedule ? (weekRecordCounts.get(selectedSchedule.id) ?? 0) : 0}
+          preview={preview}
+          commitBar={commitBar}
+        />
+        <InfoPanel title="Cómo pasar lista">
+          <p>1. Elija el día y toque el horario que va a pasar.</p>
+          <p>2. Marque a cada alumno; todos parten como presentes, revise a quien falta.</p>
+          <p>3. Confirme: una vez registrada, la lista queda cerrada.</p>
+        </InfoPanel>
+      </div>
     </div>
   );
 }

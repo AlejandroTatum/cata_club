@@ -104,7 +104,7 @@ test("trainer directly selects every attendance state at 390px", async ({ page }
   await mockTrainerAttendanceRuntime(page);
 
   await page.goto("/trainer/attendance");
-  await page.getByRole("button", { name: /lunes/i }).click();
+  await page.getByRole("button", { name: "Lunes", exact: true }).click();
   await page.getByRole("button", { name: SCHEDULE_SLOT }).click();
   await page.getByRole("button", { name: "Continuar" }).click();
 
@@ -148,7 +148,7 @@ test("trainer discovers mobile navigation and Justificado guidance at 390px", as
   await expect(page.getByRole("navigation", { name: "Navegación principal" })).toBeVisible();
   await page.getByRole("button", { name: "Cerrar menú" }).click();
 
-  await page.getByRole("button", { name: /lunes/i }).click();
+  await page.getByRole("button", { name: "Lunes", exact: true }).click();
   await page.getByRole("button", { name: SCHEDULE_SLOT }).click();
   await page.getByRole("button", { name: "Continuar" }).click();
 

@@ -106,7 +106,7 @@ test("ningún elemento de la barra de acciones se superpone a una ficha de alumn
   await mockTrainerAttendanceRuntime(page);
 
   await page.goto("/trainer/attendance");
-  await page.getByRole("button", { name: /lunes/i }).click();
+  await page.getByRole("button", { name: "Lunes", exact: true }).click();
   await page.getByRole("button", { name: SCHEDULE_SLOT }).click();
   await page.getByRole("button", { name: "Continuar" }).click();
 
