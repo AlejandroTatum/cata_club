@@ -124,7 +124,7 @@ describe("public legal documents", () => {
    */
   it("lays the document out as contents, document and summary zones", () => {
     const html = renderToStaticMarkup(<TermsPage />);
-    expect(html).toContain("xl:grid-cols-[minmax(240px,320px)_minmax(0,1fr)_minmax(300px,380px)]");
+    expect(html).toContain("xl:grid-cols-[minmax(232px,260px)_minmax(0,1fr)_minmax(300px,380px)]");
     expect(html).not.toContain("max-w-measure");
   });
 
@@ -173,6 +173,34 @@ describe("public legal documents", () => {
   it("uses the wide three-zone grid for long documents", () => {
     const html = renderToStaticMarkup(<TermsPage />);
     expect(html).toContain("xl:w-[min(1600px,calc(100vw-7rem))]");
+  });
+
+  /** "Reframe rather than fill": no document may stretch a card or hold the page open. */
+  it.each(pages)("%s stretches nothing and reserves no minimum height", (_name, Page) => {
+    const html = renderToStaticMarkup(<Page />);
+    expect(html).not.toMatch(/items-stretch|min-h-\[|flex-1|grid-rows-\[1fr|grid-rows-\[auto_1fr/);
+  });
+
+  it.each(pages)("%s carries a real club photograph with a description", (_name, Page) => {
+    const html = renderToStaticMarkup(<Page />);
+    expect(html).toMatch(/<img[^>]*alt="[^"]{20,}"/);
+    expect(html).toMatch(/landing%2Fphoto-|\/landing\/photo-/);
+  });
+
+  it.each([
+    ["Términos", TermsPage],
+    ["Privacidad", PrivacyPage],
+  ] as const)("%s pins two rails around the document", (_name, Page) => {
+    const html = renderToStaticMarkup(<Page />);
+    expect(html.match(/xl:sticky/g)).toHaveLength(2);
+    expect(html).toContain('aria-label="En este documento"');
+  });
+
+  it("composes FETM as a hero plus a row of content-height cards", () => {
+    const html = renderToStaticMarkup(<FETMPage />);
+    expect(html).toContain("lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]");
+    for (const card of ["Qué autoriza este permiso", "Preguntas sobre este permiso", "Otros documentos públicos", "¿Dudas?"]) expect(html).toContain(card);
+    expect(html).not.toContain("xl:sticky");
   });
 
   it("offers the club contact beside the document", () => {
