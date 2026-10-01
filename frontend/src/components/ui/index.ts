@@ -35,6 +35,9 @@ export type { ErrorStateProps } from "./ErrorState";
 export { FilterGroup, FilterPanel, FILTER_LABEL } from "./FilterPanel";
 export type { FilterGroupProps, FilterPanelLayout, FilterPanelProps } from "./FilterPanel";
 
+export { default as FileDropZone } from "./FileDropZone";
+export type { FileDropZoneProps } from "./FileDropZone";
+
 export { default as FilterPill } from "./FilterPill";
 export type { FilterPillProps } from "./FilterPill";
 
