@@ -143,6 +143,19 @@ function nextButton(page: Page): Locator {
 }
 
 /**
+ * "Siguiente" is never disabled: an incomplete step is BLOCKED by pressing it —
+ * the step stays put and the offending fields are flagged inline
+ * (`aria-invalid`), the first of them holding focus.
+ */
+async function expectStepBlocked(page: Page): Promise<void> {
+  const before = page.url();
+  await expect(nextButton(page)).toBeEnabled();
+  await nextButton(page).click();
+  await expect(page.locator('[aria-invalid="true"]').first()).toBeVisible();
+  expect(page.url()).toBe(before);
+}
+
+/**
  * `BirthDateField` (issue #853) has no single input to `.fill()` — the two
  * birth-date ids route through `fillBirthDate` and blur its last part
  * (Año), the same control every fill ends on; every other field keeps the
@@ -385,9 +398,8 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
   });
 
   test("P01 · un paso en blanco bloquea Siguiente y nombra lo que falta", async ({ page }) => {
-    await expect(nextButton(page)).toBeDisabled();
-    // El motivo lista los campos por su nombre visible — no "hay errores".
-    await expect(page.getByText(/^Para continuar, revise:/)).toBeVisible();
+    await expectStepBlocked(page);
+    // Cada campo faltante lleva su propio mensaje, bajo el campo.
     await shot(page, "P01", "paso-en-blanco");
   });
 
@@ -396,7 +408,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     await expect(fieldError(page, F.nombres)).toHaveText(
       "Los nombres deben tener al menos 3 caracteres.",
     );
-    await expect(nextButton(page)).toBeDisabled();
+    await expectStepBlocked(page);
     await shot(page, "P02", "nombres-cortos");
   });
 
@@ -513,7 +525,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     await expect(fieldError(page, F.fechaNacimiento)).toContainText(
       "Los menores de edad no pueden autoinscribirse.",
     );
-    await expect(nextButton(page)).toBeDisabled();
+    await expectStepBlocked(page);
     await shot(page, "P14", "menor-autoinscripcion");
   });
 
@@ -566,7 +578,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     await expect(fieldError(page, F.contrasenia)).toHaveText(
       "La contraseña debe tener al menos 8 caracteres.",
     );
-    await expect(nextButton(page)).toBeDisabled();
+    await expectStepBlocked(page);
     await shot(page, "P20", "contrasenia-corta");
   });
 
@@ -608,7 +620,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     await expect(fieldError(page, F.contraseniaConfirmacion)).toHaveText(
       "Las contraseñas no coinciden.",
     );
-    await expect(nextButton(page)).toBeDisabled();
+    await expectStepBlocked(page);
     await shot(page, "P24", "confirmacion-no-coincide");
 
     await field(page, F.contraseniaConfirmacion).fill(VALID_CREDENTIALS.contrasenia);
@@ -669,8 +681,7 @@ test.describe("R · Datos del representante", () => {
   });
 
   test("R01 · el paso en blanco bloquea Siguiente", async ({ page }) => {
-    await expect(nextButton(page)).toBeDisabled();
-    await expect(page.getByText(/^Para continuar, revise:/)).toBeVisible();
+    await expectStepBlocked(page);
     await shot(page, "R01", "representante-en-blanco");
   });
 
@@ -687,7 +698,7 @@ test.describe("R · Datos del representante", () => {
     await expect(fieldError(page, F.fechaNacimientoRepresentante)).toHaveText(
       "El representante debe tener entre 18 y 95 años (calculado: 17).",
     );
-    await expect(nextButton(page)).toBeDisabled();
+    await expectStepBlocked(page);
     await shot(page, "R03", "representante-menor");
   });
 
@@ -711,7 +722,7 @@ test.describe("R · Datos del representante", () => {
     await expect(fieldError(page, F.fechaNacimientoRepresentante)).toContainText(
       "El representante debe tener entre 18 y 95 años",
     );
-    await expect(nextButton(page)).toBeDisabled();
+    await expectStepBlocked(page);
     await shot(page, "R05", "anio-implausible-1750");
   });
 
@@ -775,8 +786,7 @@ test.describe("H · Salud y emergencia", () => {
   });
 
   test("H01 · la ficha médica no es opcional: en blanco bloquea", async ({ page }) => {
-    await expect(nextButton(page)).toBeDisabled();
-    await expect(page.getByText(/^Para continuar, revise:/)).toBeVisible();
+    await expectStepBlocked(page);
     await shot(page, "H01", "salud-en-blanco");
   });
 
@@ -801,7 +811,7 @@ test.describe("H · Salud y emergencia", () => {
     await expect(fieldError(page, F.telefonoEmergencia)).toHaveText(
       "El teléfono de emergencia debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
     );
-    await expect(nextButton(page)).toBeDisabled();
+    await expectStepBlocked(page);
     await shot(page, "H04", "telefono-emergencia-corto");
   });
 
@@ -834,7 +844,7 @@ test.describe("H · Salud y emergencia (camino representado)", () => {
   });
 
   test("H07 · solo el tipo de sangre habilita Siguiente en el camino representado", async ({ page }) => {
-    await expect(nextButton(page)).toBeDisabled();
+    await expectStepBlocked(page);
     await field(page, F.tipoSangre).selectOption(VALID_HEALTH.tipoSangre);
     await expect(nextButton(page)).toBeEnabled();
     await nextButton(page).click();
@@ -867,16 +877,20 @@ async function goToSummary(page: Page): Promise<void> {
 }
 
 test.describe("S · Resumen, envío y errores del servidor", () => {
-  test("S01 · sin marcar la casilla de revisión, confirmar está deshabilitado", async ({ page }) => {
+  test("S01 · sin marcar la casilla de revisión, confirmar muestra el error en línea", async ({ page }) => {
     await goToSummary(page);
-    await expect(page.getByRole("button", { name: /confirmar inscripción/i })).toBeDisabled();
+    const confirmar = page.getByRole("button", { name: /confirmar inscripción/i });
+    await expect(confirmar).toBeEnabled();
+    await expect(page.getByText(/marque la casilla de confirmación/i)).toHaveCount(0);
+    await confirmar.click();
+    await expect(page.getByText(/marque la casilla de confirmación/i)).toBeVisible();
     await shot(page, "S01", "resumen-sin-confirmar");
   });
 
   test("S02 · el resumen muestra los datos cargados antes de enviarlos", async ({ page }) => {
     await goToSummary(page);
-    await expect(page.getByText(VALID_STUDENT.cedula)).toBeVisible();
-    await expect(page.getByText(VALID_CREDENTIALS.correo)).toBeVisible();
+    await expect(page.getByTestId("enroll-wizard-card").getByText(VALID_STUDENT.cedula)).toBeVisible();
+    await expect(page.getByTestId("enroll-wizard-card").getByText(VALID_CREDENTIALS.correo)).toBeVisible();
     // La contraseña nunca se muestra en claro, ni siquiera en el resumen.
     await expect(page.getByText(VALID_CREDENTIALS.contrasenia)).toHaveCount(0);
     await shot(page, "S02", "resumen-datos-visibles");
@@ -1120,7 +1134,7 @@ test.describe("S07 · idempotencia de reintentos", () => {
     await fallarConDuplicado(page);
 
     // `handleConfirm` ya no dispara `showError`: el error del alta vive
-    // solo en la alerta del paso, junto al botón «Corregir» que pide usar.
+    // solo en la alerta del paso, junto al botón «Editar» que pide usar.
     //
     // El timeout corto es deliberado: el toast, si existiera, dura ~4.8s
     // (`toastDurationFor` para este mensaje) antes de auto-descartarse, más
@@ -1134,7 +1148,7 @@ test.describe("S07 · idempotencia de reintentos", () => {
     await shot(page, "M01", "mensaje-duplicado-solo-en-alerta");
   });
 
-  test("M02 · sin toast, ningún «Corregir» del resumen queda tapado", async ({ page }) => {
+  test("M02 · sin toast, ningún «Editar» del resumen queda tapado", async ({ page }) => {
     await fallarConDuplicado(page);
 
     // Sin `showError` no hay toast que pueda solaparse con nada. Se mide
@@ -1143,13 +1157,13 @@ test.describe("S07 · idempotencia de reintentos", () => {
     const toast = page.locator('[role="alert"].toast-error');
     await expect(toast).toHaveCount(0, { timeout: 1000 });
 
-    const corregir = page.getByRole("button", { name: /corregir/i });
+    const corregir = page.getByRole("button", { name: /^editar/i });
     const total = await corregir.count();
     expect(total).toBeGreaterThan(0);
     for (let i = 0; i < total; i++) {
       await expect(corregir.nth(i)).toBeVisible();
     }
-    await shot(page, "M02", "sin-toast-boton-corregir-visible");
+    await shot(page, "M02", "sin-toast-boton-editar-visible");
   });
 });
 
@@ -1245,7 +1259,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     await expect(fieldError(page, F.fechaNacimiento)).toHaveText(
       "La fecha de nacimiento no puede ser en el futuro.",
     );
-    await expect(nextButton(page)).toBeDisabled();
+    await expectStepBlocked(page);
     await shot(page, "G01", "fecha-futura-mensaje-correcto");
   });
 
@@ -1263,7 +1277,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     await expect(fieldError(page, F.fechaNacimiento)).toHaveText(
       "La fecha de nacimiento no puede ser en el futuro.",
     );
-    await expect(nextButton(page)).toBeDisabled();
+    await expectStepBlocked(page);
     await shot(page, "G02", "dependiente-fecha-futura-rechazada");
   });
 
@@ -1281,7 +1295,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     await expect(fieldError(page, F.fechaNacimiento)).toContainText(
       "La edad del alumno debe estar entre 5 y 95 años",
     );
-    await expect(nextButton(page)).toBeDisabled();
+    await expectStepBlocked(page);
     await shot(page, "G03", "techo-de-edad-jugador-120");
   });
 
@@ -1294,7 +1308,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     await expect(fieldError(page, F.fechaNacimiento)).toContainText(
       "La edad del alumno debe estar entre 5 y 95 años",
     );
-    await expect(nextButton(page)).toBeDisabled();
+    await expectStepBlocked(page);
     await shot(page, "G04", "jugador-anio-1750-rechazado");
   });
 
@@ -1330,7 +1344,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     await expect(fieldError(page, F.fechaNacimiento)).toContainText(
       "La edad del alumno debe estar entre 5 y 95 años",
     );
-    await expect(nextButton(page)).toBeDisabled();
+    await expectStepBlocked(page);
     await shot(page, "G08", "dependiente-menor-de-5-rechazado");
   });
 
@@ -1498,9 +1512,9 @@ test.describe("X · Robustez del envío", () => {
 
   test("X03 · corregir desde el resumen vuelve al paso correcto con los datos puestos", async ({ page }) => {
     await goToSummary(page);
-    // El resumen ofrece "Corregir" por bloque — es el atajo que evita rehacer
+    // El resumen ofrece "Editar" por bloque — es el atajo que evita rehacer
     // el asistente entero por un dígito.
-    await page.getByRole("button", { name: /corregir/i }).nth(1).click();
+    await page.getByRole("button", { name: /^editar/i }).nth(1).click();
     await expect(page.getByRole("heading", { name: /datos del estudiante/i })).toBeVisible();
     await expect(field(page, F.cedula)).toHaveValue(VALID_STUDENT.cedula);
     await shot(page, "X03", "corregir-desde-resumen");
@@ -1606,7 +1620,7 @@ test.describe("D · Borrador en sessionStorage tras un alta fallida", () => {
     await expect(field(page, F.cedula)).toHaveValue(VALID_STUDENT.cedula);
     await expect(field(page, F.correo)).toHaveValue(VALID_CREDENTIALS.correo);
     await expect(field(page, F.contrasenia)).toHaveValue("");
-    await expect(nextButton(page)).toBeDisabled();
+    await expectStepBlocked(page);
 
     // Se retipea la contraseña —tal como documenta el comentario de
     // `stripEnrollPasswords`— y recién ahí el asistente deja avanzar.
