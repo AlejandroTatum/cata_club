@@ -1,5 +1,5 @@
 /**
- * Membresías y Pagos — the validation queue (CU012), redesigned for Fase 3.
+ * Pagos — the validation queue (CU012), redesigned for Fase 3.
  *
  * Sources of truth: `docs/archive/prototypes/prototipos/09-pagos-cola.html` (queue),
  * `10-pago-validar.html` (detail) and `11-pago-rechazar.html` (rejection).
@@ -1778,7 +1778,7 @@ export default function PaymentsPage(): React.ReactElement {
             `router.back()`; the registry names the label), like every other
             second-level screen. */}
       <AppShell
-        title="Membresías y Pagos"
+        title="Pagos"
         back={
           selectedRequest ? (
             <BackLink

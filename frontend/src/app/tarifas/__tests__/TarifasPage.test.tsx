@@ -677,3 +677,27 @@ describe("TarifasPage — crear tarifa", () => {
     expect(screen.getByLabelText(/categoría/i)).toHaveFocus();
   });
 });
+
+describe("TarifasPage — panel lateral", () => {
+  it("explains how tariffs apply beside the catalog while nobody is creating one", async () => {
+    renderPage();
+    await findTarifaRow("Junior");
+
+    const rail = screen.getByTestId("tarifas-rail");
+    expect(within(rail).getByRole("heading", { name: /cómo se aplican las tarifas/i })).toBeInTheDocument();
+    expect(within(rail).getByText("2 tarifas en el catálogo.")).toBeInTheDocument();
+  });
+
+  it("swaps the guidance for the creation form and back", async () => {
+    renderPage();
+    await findTarifaRow("Junior");
+
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
+    const rail = screen.getByTestId("tarifas-rail");
+    expect(within(rail).getByLabelText(/categoría/i)).toBeInTheDocument();
+    expect(within(rail).queryByText(/cómo se aplican/i)).not.toBeInTheDocument();
+
+    fireEvent.click(within(rail).getByRole("button", { name: /cancelar/i }));
+    expect(within(screen.getByTestId("tarifas-rail")).getByText(/cómo se aplican/i)).toBeInTheDocument();
+  });
+});

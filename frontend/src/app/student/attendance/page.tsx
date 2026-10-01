@@ -55,6 +55,7 @@ import { fetchStudentPortal } from "@/services/api";
 import type { StudentPortalSummary, StudentProfileSummary } from "@/services/api";
 import { getAttendanceBadgeTone, getAttendanceLabel } from "@/app/attendance/attendance-utils";
 import { formatDate } from "@/lib/format-utils";
+import type { EstadoAsistencia } from "@/types/domain";
 import {
   BackLink,
   Badge,
@@ -113,6 +114,16 @@ const DOT_CLASS: Record<string, string> = {
   justified: "bg-state-neutral",
   absent: "bg-state-bad",
 };
+
+/** What each state a session can carry means, for a reader with no rows yet. */
+const ATTENDANCE_LEGEND: { estado: EstadoAsistencia; meaning: string }[] = [
+  { estado: "present", meaning: "Estuvo en la sesión" },
+  { estado: "late", meaning: "Llegó después de la hora" },
+  { estado: "absent", meaning: "No asistió" },
+  { estado: "justified", meaning: "Avisó que no podía ir" },
+  { estado: "sick", meaning: "Faltó por enfermedad" },
+  { estado: "competition", meaning: "Estuvo en una competencia" },
+];
 
 function AttendanceRecap({
   profile,
@@ -213,20 +224,12 @@ function SessionList({
   const empty = sessions.length === 0;
 
   return (
-    /*
-     * `flex-1` when — and only when — there is nothing to list (D11b).
-     *
-     * `AppShell` stretches `<main>` to the window, and until this batch no
-     * first-level child of this screen claimed that height: a socio nuevo saw
-     * the record card stop at 466px and 434px of bare canvas under it, 48% of
-     * a 900px window. This is the same move `/student/payments` measured, and
-     * it is conditional for the reason recorded there — stretching a card that
-     * holds ONE row draws an empty frame under a single line, which is the
-     * hole relocated inside a border rather than closed.
-     */
+    // No stretch when empty: a tall frame around one sentence is the hole
+    // relocated inside a border. The empty state is one guiding line plus the
+    // legend of what each row will say once the trainer takes attendance.
     <section
       data-testid="sessions-card"
-      className={cn("card flex flex-col overflow-hidden", empty && "flex-1")}
+      className="card flex flex-col overflow-hidden"
       aria-labelledby="sessions-title"
     >
       <div className="flex items-center gap-3 border-b border-line px-5 py-4">
@@ -244,20 +247,44 @@ function SessionList({
       </div>
 
       {empty ? (
-        /* `fill` goes with the `flex-1` above: it centres the statement inside
-           the stretched surface. Pinned to the top it would be the same hole,
-           only now framed. */
-        <EmptyState
-          surface="inset"
-          fill
-          icon={<CalendarCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-          title={
-            studentName
-              ? `Aún no hay asistencias registradas de ${studentName}`
-              : "Aún no hay asistencias registradas"
-          }
-          description="Cada vez que el entrenador tome lista, la sesión aparecerá en esta pantalla con el estado que le haya asignado."
-        />
+        <div data-testid="sessions-empty">
+          <div className="flex items-start gap-3 px-5 py-4">
+            <CalendarCheck
+              size={ICON.lg}
+              strokeWidth={1.5}
+              aria-hidden="true"
+              className="mt-0.5 flex-none text-ink-3"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-ink">
+                {studentName
+                  ? `Aún no hay asistencias registradas de ${studentName}`
+                  : "Aún no hay asistencias registradas"}
+              </p>
+              <p className="mt-0.5 text-sm text-ink-3">
+                Cada vez que el entrenador tome lista, la sesión aparecerá aquí con el estado que
+                le haya asignado.
+              </p>
+            </div>
+            {/* The scope line lives here for an empty record: a footnote under
+                a one-line card would only float in the canvas. */}
+            <p className="hidden max-w-xs text-right text-xs text-ink-3 lg:block">
+              El portal muestra las {PORTAL_SESSION_WINDOW} sesiones más recientes; para un período
+              anterior, pídalo al club.
+            </p>
+          </div>
+          <div className="border-t border-line bg-sunken px-5 py-3">
+            <p className="text-2xs font-bold uppercase text-ink-3-strong">Estados posibles</p>
+            <ul className="mt-2 grid gap-x-8 gap-y-field sm:grid-cols-2 xl:grid-cols-3">
+              {ATTENDANCE_LEGEND.map(({ estado, meaning }) => (
+                <li key={estado} className="flex items-center gap-2.5">
+                  <Badge tone={getAttendanceBadgeTone(estado)}>{getAttendanceLabel(estado)}</Badge>
+                  <span className="text-xs text-ink-3">{meaning}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
       ) : (
         <ul className="flex flex-col">
           {sessions.map((session) => (
@@ -336,11 +363,6 @@ function StudentAttendanceContent(): React.ReactElement {
       // reading a dependent's record. See the same change on `/student/payments`.
       title="Asistencias"
       subtitle="Cada sesión que el entrenador registró, con el estado que le asignó."
-      // `short`, like its two siblings. This screen's height is a function of
-      // how many sessions EXIST — the portal hands over a capped window with
-      // no pager — which is the reading that admits a screen to the 1024px
-      // measure. See `lib/__tests__/content-measure.test.ts`.
-      measure="short"
       // Issue #1396: through the shell's `back` slot, so the control precedes
       // the title in document order — `PageHeader` is drawn above `<main>`,
       // so a back control among the children lands after the title by
@@ -432,7 +454,9 @@ function AttendanceView({
          */
         <>
           <SessionList profile={selectedProfile} studentName={studentName} />
-          <PortalWindowNote />
+          <div className="lg:hidden">
+            <PortalWindowNote />
+          </div>
         </>
       ) : (
         <div className={PAGE_RAIL}>

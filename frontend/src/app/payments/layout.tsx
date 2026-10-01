@@ -8,7 +8,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Membresías y Pagos",
+  title: "Pagos",
 };
 
 export default function PaymentsLayout({
