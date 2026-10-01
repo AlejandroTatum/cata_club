@@ -177,3 +177,20 @@ describe("ActividadPage — Métricas avanzadas", () => {
     expect(container.textContent).not.toMatch(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b|@|postgres:\d|v\d+\.\d+\.\d+/);
   });
 });
+
+describe("ActividadPage — Resumen layout", () => {
+  it("stretches the usage card to the rail height from lg up, and only from lg up", () => {
+    render(<ActividadPage />);
+    const work = screen.getByTestId("activity-work");
+    expect(work.className).toContain("lg:items-stretch");
+    const column = work.children[0] as HTMLElement;
+    expect(column.className).toContain("[&>section]:flex-1");
+    const card = screen.getByTestId("usage-chart");
+    const chart = within(card).getByTestId("stacked-bars");
+    expect(chart.className).toContain("lg:flex-1");
+    const plot = within(card).getAllByTestId("stacked-column")[0].parentElement!.parentElement!;
+    expect(plot.className).toContain("h-44");
+    expect(plot.className).toContain("lg:h-auto");
+    expect(plot.className).toContain("lg:flex-1");
+  });
+});

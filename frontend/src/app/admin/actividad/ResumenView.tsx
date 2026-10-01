@@ -130,8 +130,9 @@ export default function ResumenView({ data }: { data: ResumenData }): ReactEleme
         ))}
       </div>
 
-      <div data-testid="activity-work" className={PAGE_RAIL}>
-        <div className="flex min-w-0 flex-col gap-page">
+      {/* `items-stretch` from lg: the usage card grows to the rail's height instead of ending above it. */}
+      <div data-testid="activity-work" className={cn(PAGE_RAIL, "lg:items-stretch")}>
+        <div className="flex min-w-0 flex-col gap-page [&>section]:flex-1">
           <DashboardSection title={CHART_TITLE[span]} testId="usage-chart">
             {quiet ? (
               <CompactEmpty
@@ -139,8 +140,9 @@ export default function ResumenView({ data }: { data: ResumenData }): ReactEleme
                 description="El gráfico se dibuja con el primer ingreso."
               />
             ) : (
-              <div className="p-[18px]">
+              <div className="flex flex-1 flex-col p-[18px]">
                 <StackedBars
+                  fill
                   series={[
                     { key: "alumnos", label: "Alumnos", tone: "coal" },
                     { key: "entrenadores", label: "Entrenadores", tone: "neutral" },
