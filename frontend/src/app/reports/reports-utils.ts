@@ -8,7 +8,12 @@
  */
 
 import type { PersonaReporte } from "@/types/domain";
-import type { AttendanceRecord } from "@/app/attendance/attendance-utils";
+import {
+  DIA_SEMANA_LABELS,
+  formatDay,
+  type AttendanceRecord,
+  type TrainingSchedule,
+} from "@/app/attendance/attendance-utils";
 import type { PaymentValidationRequest } from "@/services/api";
 import {
   buildDateRange,
@@ -189,6 +194,75 @@ export function getPagosReportTotalPages(
   pageSize: number = PAGOS_REPORT_PAGE_SIZE,
 ): number {
   return Math.max(1, Math.ceil(totalResults / pageSize));
+}
+
+// ---------------------------------------------------------------------------
+// Schedule slot → day picker
+// ---------------------------------------------------------------------------
+//
+// The attendance filter used to list every day+time Horario row (~100
+// options). It is now two dependent selects: the distinct slot (category +
+// time range, deduped across days), then the day within that slot. The pair
+// maps back to the horario ids the API already filters by.
+
+export interface ScheduleSlot {
+  /** Stable dedupe key: category label + time range. */
+  key: string;
+  label: string;
+}
+
+export interface SlotDay {
+  id: number;
+  label: string;
+}
+
+function slotKeyOf(h: TrainingSchedule): string {
+  return `${h.categoriaLabel ?? ""}|${h.horaInicio}|${h.horaFin}`;
+}
+
+const DAY_ORDER = Object.keys(DIA_SEMANA_LABELS);
+
+/** Distinct schedule slots, ordered by start time then category. */
+export function buildScheduleSlots(horarios: TrainingSchedule[]): ScheduleSlot[] {
+  const seen = new Map<string, TrainingSchedule>();
+  for (const h of horarios) {
+    const key = slotKeyOf(h);
+    if (!seen.has(key)) seen.set(key, h);
+  }
+  return [...seen.entries()]
+    .sort(
+      ([, a], [, b]) =>
+        a.horaInicio.localeCompare(b.horaInicio) ||
+        a.horaFin.localeCompare(b.horaFin) ||
+        (a.categoriaLabel ?? "").localeCompare(b.categoriaLabel ?? ""),
+    )
+    .map(([key, h]) => {
+      const range = `${h.horaInicio}–${h.horaFin}`;
+      return { key, label: h.categoriaLabel ? `${h.categoriaLabel} · ${range}` : range };
+    });
+}
+
+/** The days a slot runs on, in week order. Unknown slot → empty. */
+export function daysForSlot(horarios: TrainingSchedule[], slotKey: string): SlotDay[] {
+  if (!slotKey) return [];
+  return horarios
+    .filter((h) => slotKeyOf(h) === slotKey)
+    .sort((a, b) => DAY_ORDER.indexOf(a.diaSemana) - DAY_ORDER.indexOf(b.diaSemana))
+    .map((h) => ({ id: h.id, label: formatDay(h.diaSemana) }));
+}
+
+/**
+ * Horario ids behind the (slot, day) pair. No slot → no filter (empty).
+ * Slot with "all days" → every day's id. A day outside the slot is ignored.
+ */
+export function resolveHorarioIds(
+  horarios: TrainingSchedule[],
+  slotKey: string,
+  dayId: string,
+): number[] {
+  const days = daysForSlot(horarios, slotKey);
+  const picked = days.find((d) => String(d.id) === dayId);
+  return picked ? [picked.id] : days.map((d) => d.id);
 }
 
 // The CSV export that used to live here (`csvField`/`toCsv`/`csvFilename`/

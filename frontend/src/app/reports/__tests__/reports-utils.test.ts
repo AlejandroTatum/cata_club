@@ -21,6 +21,9 @@ import {
   getPagosReportTotalPages,
   buildReportDateRange,
   REPORT_DATE_PRESETS,
+  buildScheduleSlots,
+  daysForSlot,
+  resolveHorarioIds,
 } from "../reports-utils";
 
 function buildPersonas(count: number): PersonaReporte[] {
@@ -209,5 +212,66 @@ describe("buildReportDateRange", () => {
       fechaInicio: "2013-10-10",
       fechaFin: "2026-08-12",
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Schedule slot → day picker
+// ---------------------------------------------------------------------------
+
+const HORARIOS = [
+  { id: 1, diaSemana: "mar", horaInicio: "15:00", horaFin: "16:00", categoriaLabel: "Formativo" },
+  { id: 2, diaSemana: "lun", horaInicio: "15:00", horaFin: "16:00", categoriaLabel: "Formativo" },
+  { id: 3, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", categoriaLabel: "Adultos" },
+  { id: 4, diaSemana: "lun", horaInicio: "15:00", horaFin: "16:00" },
+] as unknown as Parameters<typeof buildScheduleSlots>[0];
+
+describe("buildScheduleSlots", () => {
+  it("dedupes the same category and time range across days", () => {
+    const slots = buildScheduleSlots(HORARIOS);
+    expect(slots.map((s) => s.label)).toEqual([
+      "15:00–16:00",
+      "Formativo · 15:00–16:00",
+      "Adultos · 18:00–19:00",
+    ]);
+  });
+
+  it("returns no slots for an empty list", () => {
+    expect(buildScheduleSlots([])).toEqual([]);
+  });
+});
+
+describe("daysForSlot", () => {
+  it("lists only that slot's days in week order", () => {
+    const [, formativo] = buildScheduleSlots(HORARIOS);
+    expect(daysForSlot(HORARIOS, formativo.key)).toEqual([
+      { id: 2, label: "Lunes" },
+      { id: 1, label: "Martes" },
+    ]);
+  });
+
+  it("returns nothing for an unknown or empty slot key", () => {
+    expect(daysForSlot(HORARIOS, "")).toEqual([]);
+    expect(daysForSlot(HORARIOS, "nope")).toEqual([]);
+  });
+});
+
+describe("resolveHorarioIds", () => {
+  const [, formativo] = buildScheduleSlots(HORARIOS);
+
+  it("is empty when no slot is chosen (no filter)", () => {
+    expect(resolveHorarioIds(HORARIOS, "", "")).toEqual([]);
+  });
+
+  it("returns every day's id for a slot with all days", () => {
+    expect(resolveHorarioIds(HORARIOS, formativo.key, "")).toEqual([2, 1]);
+  });
+
+  it("returns the single id for a specific day", () => {
+    expect(resolveHorarioIds(HORARIOS, formativo.key, "1")).toEqual([1]);
+  });
+
+  it("ignores a day that does not belong to the slot", () => {
+    expect(resolveHorarioIds(HORARIOS, formativo.key, "3")).toEqual([2, 1]);
   });
 });
