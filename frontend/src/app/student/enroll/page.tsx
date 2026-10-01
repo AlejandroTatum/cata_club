@@ -108,6 +108,7 @@ import {
 } from "./enroll-utils";
 import FieldSlot, { EnrollFieldGrid } from "./EnrollFieldSlot";
 import { cn } from "@/components/ui/cn";
+import EnrollAside from "./EnrollAside";
 import EnrollFrame from "./EnrollFrame";
 import EnrollNav from "./EnrollNav";
 import EnrollSteps from "./EnrollSteps";
@@ -119,18 +120,33 @@ import EnrollSummary from "./EnrollSummary";
 // `docs/archive/prototypes/prototipos/05-inscripcion.html:57-67`.
 // ---------------------------------------------------------------------------
 
-const ENROLLMENT_CHOICES: { value: EnrollmentType; title: string; description: string }[] = [
+const ENROLLMENT_CHOICES: {
+  value: EnrollmentType;
+  title: string;
+  description: string;
+  /** What the visitor will be asked, step by step, and how long it takes. */
+  asks: string[];
+  steps: string;
+}[] = [
   {
     value: ENROLLMENT_TYPES.SELF,
     title: "Jugador",
     description:
       "Me inscribo yo al club. Soy mayor de edad y gestiono mi propia cuenta como estudiante.",
+    asks: ["Sus datos personales y de acceso", "Salud y contacto de emergencia"],
+    steps: "4 pasos",
   },
   {
     value: ENROLLMENT_TYPES.CHILD,
     title: "Representante",
     description:
       "Gestiono la inscripción de un hijo o dependiente. El estudiante es distinto de mi cuenta.",
+    asks: [
+      "Los datos del estudiante",
+      "Sus propios datos y los de acceso a la cuenta",
+      "Salud del estudiante; su contacto de emergencia es usted",
+    ],
+    steps: "5 pasos",
   },
 ];
 
@@ -724,9 +740,9 @@ function EnrollWizard(): React.ReactElement {
             description="Todavía no hay categorías de membresía configuradas."
           />
         ) : (
-          <ul className="grid gap-section sm:grid-cols-2">
+          <ul className="grid grid-cols-2 gap-section">
             {tarifas.map((tarifa) => (
-              <li key={tarifa.categoria} className="rounded-ctl bg-sunken p-page">
+              <li key={tarifa.categoria} className="rounded-ctl bg-paper p-section">
                 <p className="text-sm text-ink-2">{tarifa.categoria}</p>
                 <p className="mt-field text-xl font-bold tabular-nums text-ink">
                   {formatCurrency(tarifa.precio)}
@@ -742,7 +758,7 @@ function EnrollWizard(): React.ReactElement {
 
   function renderTypeStep(): React.ReactElement {
     return (
-      <div className="space-y-section">
+      <div className="flex flex-col gap-section">
         <p className="text-sm text-ink-2">
           Seleccione el tipo de inscripción que desea realizar:
         </p>
@@ -774,6 +790,16 @@ function EnrollWizard(): React.ReactElement {
               >
                 <b className="text-base font-bold text-ink">{choice.title}</b>
                 <p className="text-sm text-ink-2">{choice.description}</p>
+                <span className="mt-field block text-xs font-bold uppercase tracking-flat text-ink-3-strong">
+                  Le pediremos · {choice.steps}
+                </span>
+                <span className="block text-sm text-ink-2">
+                  {choice.asks.map((ask) => (
+                    <span key={ask} className="block py-0.5">
+                      · {ask}
+                    </span>
+                  ))}
+                </span>
                 {/* Coal fill plus the yellow ball dot — the system's ONE way of
                     drawing a selected state, the same one `FilterPill` draws.
                     Not a `Badge`: the four badge tones are STATUSES, and a
@@ -807,8 +833,18 @@ function EnrollWizard(): React.ReactElement {
           </p>
         </div>
 
-        {renderTariffs()}
-      </div>
+        {/* Nothing the wizard asks for is a surprise: these are the data it
+            will request, so the visitor can have them at hand. */}
+        <div data-enroll-note>
+          <p className="text-sm font-bold text-ink">Tenga a mano</p>
+          <ul className="mt-field space-y-1 text-sm text-ink-2">
+            <li>La cédula: son 10 dígitos, sin guiones.</li>
+            <li>Un correo electrónico al que tenga acceso, para verificar la cuenta.</li>
+            <li>Un teléfono de contacto y el de una persona para emergencias.</li>
+          </ul>
+        </div>
+
+              </div>
     );
   }
 
@@ -839,7 +875,7 @@ function EnrollWizard(): React.ReactElement {
     const birthDateBounds = studentBirthDateBounds();
     const cedulaTyped = digitsOf(formData.cedula).length;
     return (
-      <div>
+      <div className="flex flex-col">
         <p className="mb-page text-sm text-ink-2">
           {isSelf
             ? "Ingrese sus datos personales y credenciales de acceso:"
@@ -971,7 +1007,7 @@ function EnrollWizard(): React.ReactElement {
       // the fields say which datum. What made the repetition load-bearing was
       // that the ids were slugged from those labels, which is the coupling
       // `ENROLL_FIELD_TOKEN` breaks.
-      <div>
+      <div className="flex flex-col">
         <p className="mb-page text-sm text-ink-2">
           Complete los datos del representante legal y sus credenciales de acceso:
         </p>
@@ -1075,7 +1111,7 @@ function EnrollWizard(): React.ReactElement {
 
   function renderHealthStep(): React.ReactElement {
     return (
-      <div className="space-y-1">
+      <div className="flex flex-col">
         <p className="mb-page text-sm text-ink-2">
           Información que el club necesita conocer para la seguridad del estudiante:
         </p>
@@ -1140,6 +1176,16 @@ function EnrollWizard(): React.ReactElement {
           icon: <AlertTriangle size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
           rows: 2,
         })}
+
+        {renderTextarea("observaciones", {
+          label: "Observaciones adicionales",
+          value: formData.observaciones,
+          onChange: (v) => updateField("observaciones", v),
+          placeholder:
+            "Cualquier otra información relevante que el club deba conocer",
+          icon: <FileText size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+          rows: 2,
+        })}
         </EnrollFieldGrid>
 
         {/*
@@ -1161,7 +1207,6 @@ function EnrollWizard(): React.ReactElement {
             telefonoError={shownError("telefonoEmergencia")}
             onContactoBlur={() => markTouched("contactoEmergencia")}
             onTelefonoBlur={() => markTouched("telefonoEmergencia")}
-            wide
           />
         ) : (
           <div className="rounded-ctl border border-line-2 bg-canvas p-page text-xs text-ink-2">
@@ -1170,22 +1215,12 @@ function EnrollWizard(): React.ReactElement {
           </div>
         )}
 
-        {renderTextarea("observaciones", {
-          label: "Observaciones adicionales",
-          value: formData.observaciones,
-          onChange: (v) => updateField("observaciones", v),
-          placeholder:
-            "Cualquier otra información relevante que el club deba conocer",
-          icon: <FileText size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
-          rows: 2,
-        })}
-
         {/* `rounded-xl` (12px) was a third radius on a screen that already had
             two, and the second line was `text-blue-700` — a raw Tailwind blue,
             a colour that exists nowhere in the palette, inside an amber box.
             One tone, one radius: this is a `warn` notice and it says so all the
             way through. */}
-        <div className="rounded-ctl border border-state-warn/25 bg-state-warn-bg p-page text-xs text-state-warn">
+        <div className="rounded-ctl border border-state-warn/25 bg-state-warn-bg p-page text-xs text-state-warn lg:hidden">
           <p className="flex items-center gap-1.5 font-semibold">
             <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Datos sensibles
@@ -1230,10 +1265,10 @@ function EnrollWizard(): React.ReactElement {
       >
         {/* Label above the datum: the review is two columns now, and a fixed
             label column would leave the value half a card to wrap in. */}
-        <span className="min-w-0 flex-1">
-          <span className="block text-2xs font-bold uppercase text-ink-3">{label}</span>
-          <span className="block break-words text-sm font-semibold text-ink">{value}</span>
-        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-2xs font-bold uppercase text-ink-3">{label}</p>
+          <p className="break-words text-sm font-semibold text-ink">{value}</p>
+        </div>
         {/* The flag is a STATUS, so it is the badge the system already has —
             not a second uppercase micro-label invented for this one row. */}
         {flagged && <Badge tone="warn">Revisar</Badge>}
@@ -1255,7 +1290,7 @@ function EnrollWizard(): React.ReactElement {
     const ageLabel = age !== null && !Number.isNaN(age) ? ` · ${age} años` : "";
     const isChild = formData.enrollmentType === ENROLLMENT_TYPES.CHILD;
     return (
-      <div className="space-y-section">
+      <div className="flex flex-col gap-section">
         <p className="text-sm text-ink-2">
           Esto es lo que vamos a crear. Corrija cualquier bloque antes de confirmar:
         </p>
@@ -1274,7 +1309,7 @@ function EnrollWizard(): React.ReactElement {
             has no background at all — this list is the one that sits inside
             a summary card and needs to read as an inset panel instead of a
             second `paper` surface stacked on the first. */}
-        <div className="grid gap-page md:grid-cols-2 md:items-start">
+        <div className="grid gap-page 2xl:grid-cols-2 2xl:items-start">
         <DataRowList className="bg-sunken">
           {summaryRow(
             "Tipo",
@@ -1689,7 +1724,7 @@ function EnrollWizard(): React.ReactElement {
             onSubmit={handleConfirm}
             data-testid="enroll-wizard-card"
             data-enroll-card
-            className="card flex w-full flex-1 flex-col p-page lg:p-10"
+            className="card flex w-full flex-1 flex-col p-page lg:flex-none lg:p-10"
           >
             {/* #1321: `goToStep` already jumps to an arbitrary step from the
                 review's "Editar" buttons without losing anything —
@@ -1713,7 +1748,8 @@ function EnrollWizard(): React.ReactElement {
               }
             />
 
-            <div data-enroll-body className="flex flex-1 flex-col justify-center">
+            <div data-enroll-body className="grid gap-8 lg:grid-cols-5">
+            <div data-enroll-form className="flex min-w-0 flex-col lg:col-span-3 lg:self-start">
             {/* Issue #317 / hallazgo #62: recuperado de `sessionStorage`, no del
                 servidor — nada de esto se envió todavía. El rótulo lo dice para
                 que un dato restaurado nunca se confunda con uno ya guardado, la
@@ -1826,6 +1862,14 @@ function EnrollWizard(): React.ReactElement {
                     </Button>
                   </div>
                 )}
+            </div>
+
+            <EnrollAside
+              step={step}
+              isChild={formData.enrollmentType === ENROLLMENT_TYPES.CHILD}
+              tariffs={step === "type" ? renderTariffs() : null}
+              onOpenDocument={setLegalReviewDoc}
+            />
             </div>
           </form>
         </EnrollFrame>
