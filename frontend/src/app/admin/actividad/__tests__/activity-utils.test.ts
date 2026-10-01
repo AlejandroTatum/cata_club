@@ -46,6 +46,7 @@ describe("number formatting", () => {
   it("writes megabytes up to a gigabyte and gigabytes beyond", () => {
     expect(formatMegabytes(248)).toBe("248 MB");
     expect(formatMegabytes(1536)).toBe("1,5 GB");
+    expect(formatMegabytes(1024)).toBe("1 GB");
   });
 
   it("writes an age as minutes, then hours and minutes", () => {

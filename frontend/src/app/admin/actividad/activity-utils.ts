@@ -33,7 +33,9 @@ export function formatDecimal(value: number, digits: number): string {
 
 /** 248 → "248 MB"; 1536 → "1,5 GB". */
 export function formatMegabytes(mb: number): string {
-  return mb >= 1024 ? `${formatDecimal(mb / 1024, 1)} GB` : `${formatCount(mb)} MB`;
+  if (mb < 1024) return `${formatCount(mb)} MB`;
+  const gb = formatDecimal(mb / 1024, 1);
+  return `${gb.replace(/,0$/, "")} GB`;
 }
 
 /** Whole-number percentage of a part; an empty whole is 0, not NaN. */

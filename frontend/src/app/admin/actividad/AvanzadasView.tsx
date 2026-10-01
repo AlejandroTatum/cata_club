@@ -144,14 +144,14 @@ function Service({ data }: { data: AvanzadasData }): ReactElement {
                 const slow = toneForThresholds(endpoint.p95Ms, ENDPOINT_P95_LIMITS) !== "ok";
                 return (
                   <TableRow key={`${endpoint.method} ${endpoint.route}`}>
-                    <TableCell>
-                      <span className="mr-2 text-2xs font-bold text-ink-3-strong">{endpoint.method}</span>
-                      <span className="font-semibold text-ink">{endpoint.route}</span>
+                    <TableCell className="whitespace-normal">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-field">
+                        <span className="text-2xs font-bold text-ink-3-strong">{endpoint.method}</span>
+                        <span className="break-all font-semibold text-ink">{endpoint.route}</span>
+                        {slow ? <Badge tone="warn">Lento</Badge> : null}
+                      </div>
                     </TableCell>
-                    <TableCell type="number">
-                      {slow ? <Badge tone="warn" className="mr-2">Lento</Badge> : null}
-                      {formatCount(endpoint.p95Ms)} ms
-                    </TableCell>
+                    <TableCell type="number">{formatCount(endpoint.p95Ms)} ms</TableCell>
                     <TableCell type="number">{formatCount(endpoint.requests)}</TableCell>
                   </TableRow>
                 );

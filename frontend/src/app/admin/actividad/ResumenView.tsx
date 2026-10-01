@@ -123,7 +123,9 @@ export default function ResumenView({ data }: { data: ResumenData }): ReactEleme
                 hideLabels
               />
             }
-            caption={tile.caption}
+            // Two lines of room in every tile, so the figures sit level whether a
+            // caption wraps (the role split) or not.
+            caption={<span className="block min-h-8">{tile.caption}</span>}
           />
         ))}
       </div>
