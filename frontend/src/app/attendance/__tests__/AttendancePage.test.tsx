@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import AttendancePage from "@/app/attendance/page";
 import { ToastProvider } from "@/contexts/ToastContext";
 import ToastContainer from "@/components/ToastContainer";
@@ -120,9 +120,8 @@ describe("AttendancePage — Horarios section removed, Tomar asistencia in the h
   it("removes the Horarios table and keeps a Tomar asistencia entry point", async () => {
     renderPage();
 
-    await waitFor(() => expect(screen.getByText("Estudiante 1")).toBeInTheDocument());
+    await screen.findAllByRole("row");
     expect(screen.queryByText("Horarios de Entrenamiento")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Filtrar por día")).not.toBeInTheDocument();
 
     const links = screen.getAllByRole("link", { name: /tomar asistencia/i });
     expect(links.length).toBeGreaterThan(0);
@@ -131,7 +130,7 @@ describe("AttendancePage — Horarios section removed, Tomar asistencia in the h
 
   it("drops the redundant 'Volver al Panel' link the sidebar already provides", async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByText("Estudiante 1")).toBeInTheDocument());
+    await screen.findAllByRole("row");
 
     expect(screen.queryByRole("link", { name: /volver al panel/i })).not.toBeInTheDocument();
   });
@@ -149,11 +148,15 @@ describe("AttendancePage — filters reach the records endpoint", () => {
     });
   });
 
-  it("passes the selected horario through as horarioId", async () => {
+  it("passes the chosen day of a slot through as horarioId", async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByText("Estudiante 1")).toBeInTheDocument());
+    await screen.findAllByRole("row");
+    expect(screen.getByLabelText("Filtrar por día")).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText("Filtrar por horario"), { target: { value: "1" } });
+    fireEvent.change(await screen.findByLabelText("Filtrar por horario"), {
+      target: { value: "Sin categoría|15:00|16:30" },
+    });
+    fireEvent.change(screen.getByLabelText("Filtrar por día"), { target: { value: "1" } });
 
     await waitFor(() => {
       const lastCall = mockFetchAttendanceRecords.mock.calls.at(-1)?.[0];
@@ -161,9 +164,33 @@ describe("AttendancePage — filters reach the records endpoint", () => {
     });
   });
 
+  it("filters a slot's 'Todos los días' client-side, never sending horarioIds", async () => {
+    mockFetchTrainingSchedules.mockResolvedValue([
+      ...SCHEDULES,
+      { id: 2, diaSemana: "vie", horaInicio: "15:00", horaFin: "16:30" },
+    ]);
+    mockFetchAttendanceRecords.mockResolvedValue([
+      ...buildRecords(1),
+      { ...buildRecords(2)[1], id: "9", horarioId: 99, estudiante: "Otro Horario" },
+    ]);
+    renderPage();
+    await screen.findAllByRole("row");
+
+    fireEvent.change(await screen.findByLabelText("Filtrar por horario"), {
+      target: { value: "Sin categoría|15:00|16:30" },
+    });
+
+    await waitFor(() => {
+      const lastCall = mockFetchAttendanceRecords.mock.calls.at(-1)?.[0];
+      expect(lastCall).not.toHaveProperty("horarioIds");
+      expect(lastCall).not.toHaveProperty("horarioId");
+    });
+    expect(screen.queryByText("Otro Horario")).not.toBeInTheDocument();
+  });
+
   it("narrows the range to a single day when 'Hoy' is chosen", async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByText("Estudiante 1")).toBeInTheDocument());
+    await screen.findAllByRole("row");
 
     fireEvent.click(screen.getByRole("button", { name: /^hoy$/i }));
 
@@ -175,7 +202,7 @@ describe("AttendancePage — filters reach the records endpoint", () => {
 
   it("refuses to query an inverted custom range and says why", async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByText("Estudiante 1")).toBeInTheDocument());
+    await screen.findAllByRole("row");
 
     fireEvent.click(screen.getByRole("button", { name: /rango personalizado/i }));
     fireEvent.change(await screen.findByLabelText("Fecha de inicio"), {
@@ -191,34 +218,51 @@ describe("AttendancePage — filters reach the records endpoint", () => {
   });
 });
 
-describe("AttendancePage — records table", () => {
-  it("humanises the record date instead of printing dd/mm/yyyy in the log", async () => {
-    const today = new Date();
-    const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    mockFetchAttendanceRecords.mockResolvedValue([{ ...buildRecords(1)[0], fecha: iso }]);
+/** Rows of the history table, header excluded. */
+async function sessionRows(): Promise<HTMLElement[]> {
+  const rows = await screen.findAllByRole("row");
+  return rows.slice(1);
+}
 
+describe("AttendancePage — session history (same format as the trainer's)", () => {
+  it("groups the records into one row per session, not one per student", async () => {
     renderPage();
 
-    expect(await screen.findByText(/^Hoy, /)).toBeInTheDocument();
+    const rows = await sessionRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent("01/07/2026");
+    expect(rows[0]).toHaveTextContent("Lunes 15:00");
+    expect(screen.getByRole("columnheader", { name: "Registró" })).toBeInTheDocument();
+    expect(screen.queryByText("Estudiante 1")).not.toBeInTheDocument();
   });
 
-  it("renders the attendance state as a badge", async () => {
+  it("draws the session's result as the shared composition bar", async () => {
     renderPage();
+    await sessionRows();
 
-    expect((await screen.findAllByText("Presente")).length).toBe(5);
+    expect(screen.getAllByRole("img", { name: /5 presentes/i }).length).toBeGreaterThan(0);
   });
 
   it("offers a way out when the filters match nothing", async () => {
     mockFetchAttendanceRecords.mockResolvedValue([]);
     renderPage();
 
-    expect(await screen.findByText("No hay registros en este rango")).toBeInTheDocument();
+    expect(await screen.findByText("No hay listas en este período")).toBeInTheDocument();
+    expect(screen.getByTestId("history-ghost-rows")).toBeInTheDocument();
   });
 });
 
-describe("AttendancePage — visible records pagination (PR8b)", () => {
+describe("AttendancePage — session pagination", () => {
+  function manySessions(count: number): AttendanceRecord[] {
+    return Array.from({ length: count }, (_, i) => ({
+      ...buildRecords(1)[0],
+      id: String(i + 1),
+      fecha: `2026-06-${String(i + 1).padStart(2, "0")}`,
+    }));
+  }
+
   beforeEach(() => {
-    mockFetchAttendanceRecords.mockReset().mockResolvedValue(buildRecords(15));
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue(manySessions(15));
   });
 
   it("shows labeled Anterior/Siguiente controls (visible text, not icon-only) and a prominent page count", async () => {
@@ -228,8 +272,6 @@ describe("AttendancePage — visible records pagination (PR8b)", () => {
 
     const prevButton = screen.getByRole("button", { name: /anterior/i });
     const nextButton = screen.getByRole("button", { name: /siguiente/i });
-    // The old design was icon-only with only an aria-label — assert real
-    // VISIBLE text content so a regression back to icon-only fails this test.
     expect(prevButton).toHaveTextContent("Anterior");
     expect(nextButton).toHaveTextContent("Siguiente");
     expect(prevButton).toBeDisabled();
@@ -242,58 +284,74 @@ describe("AttendancePage — visible records pagination (PR8b)", () => {
     await screen.findByText("Página 1 de 2");
     fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
 
-    // The "Página X de Y" string is split across multiple text nodes by JSX
-    // interpolation (`Página {page} de {total}`), so a plain findByText string
-    // match is flaky across re-renders. Match on the normalized textContent
-    // of the wrapping <p> instead.
     expect(await screen.findByText((_content, element) => element?.textContent === "Página 2 de 2")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /siguiente/i })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: /anterior/i }));
     expect(await screen.findByText((_content, element) => element?.textContent === "Página 1 de 2")).toBeInTheDocument();
   });
+
+  it("pads a short list with ghost rows and drops them once it paginates", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue(buildRecords(5));
+    renderPage();
+    expect(await screen.findByTestId("history-ghost-rows")).toBeInTheDocument();
+
+    mockFetchAttendanceRecords.mockResolvedValue(manySessions(15));
+    fireEvent.click(screen.getByRole("button", { name: /^hoy$/i }));
+    await screen.findByText("Página 1 de 2");
+    expect(screen.queryByTestId("history-ghost-rows")).not.toBeInTheDocument();
+  });
 });
 
-// --- Issue #663: discoverable per-row correction ----------------------------
-describe("AttendancePage — per-row correction is discoverable from the history", () => {
-  it("still gates the whole screen to admin only — the new column adds no second door", async () => {
-    renderPage();
-    await waitFor(() => expect(screen.getByText("Estudiante 1")).toBeInTheDocument());
+// --- Issue #663: correction lives in the session drill-down -----------------
+describe("AttendancePage — per-record correction inside the session drill-down", () => {
+  async function openSession(): Promise<void> {
+    await sessionRows();
+    fireEvent.click(screen.getAllByRole("button", { name: /^Registros/ })[0]);
+  }
 
-    // The security note this issue carries: making correction DISCOVERABLE
-    // must not make it PERMITTED for anyone new. `AttendanceCorrectionAction`
-    // does no role check of its own — it trusts the page-level gate below,
-    // so THIS is the one assertion standing between "admin-only" and a
-    // regression that quietly widens `allowedRoles`.
+  it("still gates the whole screen to admin only — the drill-down adds no second door", async () => {
+    renderPage();
+    await sessionRows();
+
+    // `AttendanceCorrectionAction` does no role check of its own — it trusts
+    // the page-level gate, so THIS is the one assertion standing between
+    // "admin-only" and a regression that quietly widens `allowedRoles`.
     expect(mockProtectedRouteProps).toHaveBeenCalledWith(
       expect.objectContaining({ allowedRoles: ["admin"] }),
     );
   });
 
-  it("adds an Actions column with a Corregir button per row — the gap this issue reports", async () => {
+  it("keeps records and Corregir hidden until the session is expanded, then lists each student", async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByText("Estudiante 1")).toBeInTheDocument());
+    await sessionRows();
+    expect(screen.queryByRole("button", { name: "Corregir" })).not.toBeInTheDocument();
 
-    expect(screen.getByRole("columnheader", { name: "Acciones" })).toBeInTheDocument();
+    const toggle = screen.getAllByRole("button", { name: /^Registros/ })[0];
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Estudiante 1")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Corregir" })).toHaveLength(5);
+
+    fireEvent.click(toggle);
+    expect(screen.queryByText("Estudiante 1")).not.toBeInTheDocument();
   });
 
-  it("shows a disabled Corregir with the reason stated, not silently disabled, once the 30-day window closed", async () => {
+  it("shows a disabled Corregir with the reason stated once the 30-day window closed", async () => {
     mockFetchAttendanceRecords.mockResolvedValue([
       { ...buildRecords(1)[0], id: "101", estudiante: "Dentro de ventana", correctable: true },
       { ...buildRecords(1)[0], id: "102", estudiante: "Fuera de ventana", correctable: false },
     ]);
     renderPage();
-    await waitFor(() => expect(screen.getByText("Dentro de ventana")).toBeInTheDocument());
+    await openSession();
 
     const buttons = screen.getAllByRole("button", { name: "Corregir" });
     expect(buttons).toHaveLength(2);
     expect(buttons[0]).toBeEnabled();
     expect(buttons[1]).toBeDisabled();
 
-    // A named reason next to the dead control, same criterion as #373/#312 —
-    // never an empty cell indistinguishable from a loading error.
-    expect(screen.getByText("La ventana de corrección de 30 días ya cerró para esta sesión.")).toBeInTheDocument();
     const reasonId = buttons[1].getAttribute("aria-describedby");
     expect(reasonId).toBeTruthy();
     expect(document.getElementById(reasonId as string)).toHaveTextContent(
@@ -301,7 +359,7 @@ describe("AttendancePage — per-row correction is discoverable from the history
     );
   });
 
-  it("opens the shared correction dialog and patches the row in place on submit, without a refetch", async () => {
+  it("opens the shared correction dialog and patches the session in place on submit, without a refetch", async () => {
     mockFetchAttendanceRecords.mockResolvedValue([buildRecords(1)[0]]);
     mockCorrectAttendance.mockResolvedValue({
       asistencia: { ...buildRecords(1)[0], estado: "absent" },
@@ -312,7 +370,7 @@ describe("AttendancePage — per-row correction is discoverable from the history
       estadoAnterior: "present",
     });
     renderPage();
-    await waitFor(() => expect(screen.getByText("Estudiante 1")).toBeInTheDocument());
+    await openSession();
 
     const callsBeforeCorrection = mockFetchAttendanceRecords.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: "Corregir" }));
@@ -329,8 +387,29 @@ describe("AttendancePage — per-row correction is discoverable from the history
       motivo: "Se cargó mal el estado.",
     })));
     expect(await screen.findByText("Corrección guardada.")).toBeInTheDocument();
-    // Patched from the PATCH response directly — the log never re-fetched.
-    expect(screen.getByText("Ausente")).toBeInTheDocument();
+    // Patched from the PATCH response directly — the log never re-fetched, and
+    // the session's bar now counts the absence.
+    expect(screen.getAllByText("Ausente").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("img", { name: /1 ausente/i }).length).toBeGreaterThan(0);
     expect(mockFetchAttendanceRecords.mock.calls.length).toBe(callsBeforeCorrection);
+  });
+});
+
+describe("AttendancePage — rail", () => {
+  it("shares the trainer's rail: period stats, distribution, sessions without list and the guide", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([
+      ...buildRecords(3),
+      { ...buildRecords(1)[0], id: "9", estado: "absent" as const },
+    ]);
+    renderPage();
+
+    const rail = await screen.findByRole("complementary", { name: "Resumen del período" });
+    expect(rail).toHaveTextContent("Listas tomadas");
+    expect(rail).toHaveTextContent("Distribución del período");
+    expect(rail).toHaveTextContent("3 presentes");
+    expect(rail).toHaveTextContent("1 ausente");
+    expect(within(rail).getByRole("region", { name: "Sin lista en el período" })).toBeInTheDocument();
+    expect(within(rail).getByRole("heading", { name: "Cómo leer el historial" })).toBeInTheDocument();
+    expect(rail).toHaveTextContent("últimos 30 días");
   });
 });

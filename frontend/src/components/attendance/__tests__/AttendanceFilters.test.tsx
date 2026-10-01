@@ -42,8 +42,10 @@ const controller: AttendanceFiltersController = {
   customEnd: "",
   setCustomEnd: () => {},
   rangeError: null,
-  scheduleId: null,
-  setScheduleId: () => {},
+  slotKey: null,
+  setSlotKey: () => {},
+  dayId: null,
+  setDayId: () => {},
   student: null,
   selectStudent: () => {},
   clearStudent: () => {},
@@ -130,87 +132,65 @@ function buildSchedule(overrides: Partial<TrainingSchedule> = {}): TrainingSched
   };
 }
 
-describe("AttendanceFilters — horario select grouping (issue A1)", () => {
-  it("keeps 'Todos los horarios' first and ungrouped, ahead of any optgroup", () => {
-    render(
-      <AttendanceFilters
-        filters={controller}
-        schedules={[buildSchedule({ id: 1, categoriaLabel: "Competitivo" })]}
-      />,
-    );
+describe("AttendanceFilters — schedule first, then the day", () => {
+  const schedules = [
+    buildSchedule({ id: 1, diaSemana: "vie", horaInicio: "17:00", horaFin: "18:00" }),
+    buildSchedule({ id: 2, diaSemana: "lun", horaInicio: "17:00", horaFin: "18:00" }),
+    buildSchedule({ id: 3, diaSemana: "lun", horaInicio: "15:00", horaFin: "16:00" }),
+    buildSchedule({ id: 4, diaSemana: "lun", horaInicio: "15:00", horaFin: "16:00", categoriaLabel: "Recreativo" }),
+  ];
 
-    const select = screen.getByLabelText("Filtrar por horario") as HTMLSelectElement;
-    const first = select.children[0] as HTMLOptionElement;
-    expect(first.tagName).toBe("OPTION");
-    expect(first.value).toBe("");
-    expect(first.textContent).toBe("Todos los horarios");
-  });
+  it("lists each slot once, deduped across days, behind 'Todos los horarios'", () => {
+    render(<AttendanceFilters filters={controller} schedules={schedules} />);
 
-  it("groups options into one optgroup per category", () => {
-    render(
-      <AttendanceFilters
-        filters={controller}
-        schedules={[
-          buildSchedule({ id: 1, categoriaLabel: "Competitivo" }),
-          buildSchedule({ id: 2, categoriaLabel: "Recreativo" }),
-          buildSchedule({ id: 3, categoriaLabel: "Competitivo" }),
-        ]}
-      />,
-    );
-
-    const select = screen.getByLabelText("Filtrar por horario") as HTMLSelectElement;
-    const groups = select.querySelectorAll("optgroup");
-    expect(groups).toHaveLength(2);
-    expect(Array.from(groups).map((g) => g.label)).toEqual(["Competitivo", "Recreativo"]);
-    expect(within(groups[0] as HTMLOptGroupElement).getAllByRole("option")).toHaveLength(2);
-  });
-
-  it("orders options inside a group by weekday (Monday→Sunday), then start time", () => {
-    render(
-      <AttendanceFilters
-        filters={controller}
-        schedules={[
-          buildSchedule({ id: 1, diaSemana: "vie", horaInicio: "17:00", horaFin: "18:00" }),
-          buildSchedule({ id: 2, diaSemana: "lun", horaInicio: "16:00", horaFin: "17:00" }),
-          buildSchedule({ id: 3, diaSemana: "lun", horaInicio: "15:00", horaFin: "16:00" }),
-        ]}
-      />,
-    );
-
-    const select = screen.getByLabelText("Filtrar por horario") as HTMLSelectElement;
-    const group = select.querySelector("optgroup") as HTMLOptGroupElement;
-    const labels = Array.from(group.querySelectorAll("option")).map((o) => o.textContent);
-    expect(labels).toEqual([
-      "Lunes 15:00 — 16:00",
-      "Lunes 16:00 — 17:00",
-      "Viernes 17:00 — 18:00",
+    const select = screen.getByLabelText("Filtrar por horario");
+    expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Todos los horarios",
+      "Competitivo · 15:00–16:00",
+      "Competitivo · 17:00–18:00",
+      "Recreativo · 15:00–16:00",
     ]);
   });
 
-  it("groups a schedule with no categoriaLabel under its own fallback group instead of dropping it", () => {
-    render(
-      <AttendanceFilters
-        filters={controller}
-        schedules={[buildSchedule({ id: 1, categoriaLabel: undefined })]}
-      />,
-    );
+  it("keeps the day select disabled until a slot is chosen", () => {
+    render(<AttendanceFilters filters={controller} schedules={schedules} />);
 
-    const select = screen.getByLabelText("Filtrar por horario") as HTMLSelectElement;
-    expect(within(select).getByRole("option", { name: /lunes/i })).toBeInTheDocument();
-    expect(select.querySelectorAll("optgroup")).toHaveLength(1);
+    expect(screen.getByLabelText("Filtrar por día")).toBeDisabled();
   });
 
-  it("keeps the same id semantics when an option is selected", () => {
-    const setScheduleId = vi.fn();
+  it("enables the day select with that slot's days, Monday first", () => {
     render(
       <AttendanceFilters
-        filters={{ ...controller, setScheduleId }}
-        schedules={[buildSchedule({ id: 7, categoriaLabel: "Competitivo" })]}
+        filters={{ ...controller, slotKey: "Competitivo|17:00|18:00" }}
+        schedules={schedules}
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Filtrar por horario"), { target: { value: "7" } });
+    const day = screen.getByLabelText("Filtrar por día");
+    expect(day).toBeEnabled();
+    expect(within(day).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Todos los días",
+      "Lunes",
+      "Viernes",
+    ]);
+  });
 
-    expect(setScheduleId).toHaveBeenCalledWith(7);
+  it("reports the slot key and the day's horario id when chosen", () => {
+    const setSlotKey = vi.fn();
+    const setDayId = vi.fn();
+    render(
+      <AttendanceFilters
+        filters={{ ...controller, slotKey: "Competitivo|17:00|18:00", setSlotKey, setDayId }}
+        schedules={schedules}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Filtrar por horario"), {
+      target: { value: "Recreativo|15:00|16:00" },
+    });
+    fireEvent.change(screen.getByLabelText("Filtrar por día"), { target: { value: "1" } });
+
+    expect(setSlotKey).toHaveBeenCalledWith("Recreativo|15:00|16:00");
+    expect(setDayId).toHaveBeenCalledWith(1);
   });
 });

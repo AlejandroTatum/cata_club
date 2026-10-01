@@ -36,17 +36,16 @@ import {
   FilterPill,
   type FilterPanelLayout,
 } from "@/components/ui";
-import {
-  formatDay,
-  groupSchedulesByCategory,
-  type TrainingSchedule,
-} from "@/app/attendance/attendance-utils";
+import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
 import type { DateRangePreset } from "@/lib/club-date";
 import type { PersonaBusqueda } from "@/types/domain";
 import {
   buildAttendanceQuery,
+  buildScheduleSlots,
   customRangeError,
   DATE_PRESETS,
+  resolveScheduleFilter,
+  slotDayOptions,
   type AttendanceQuery,
 } from "./attendance-filters-utils";
 
@@ -59,8 +58,13 @@ export interface AttendanceFiltersController {
   customEnd: string;
   setCustomEnd: (value: string) => void;
   rangeError: string | null;
-  scheduleId: number | null;
-  setScheduleId: (id: number | null) => void;
+  /** The chosen slot (category + times, any day); `null` = every horario. */
+  slotKey: string | null;
+  /** Picking a slot always resets the day to "Todos los días". */
+  setSlotKey: (key: string | null) => void;
+  /** One horario of the slot; `null` = every day of the slot. */
+  dayId: number | null;
+  setDayId: (id: number | null) => void;
   student: PersonaBusqueda | null;
   selectStudent: (student: PersonaBusqueda) => void;
   /** Invalidate the selection — wired to `<StudentSearch>`'s own clear signal. */
@@ -72,16 +76,30 @@ export interface AttendanceFiltersController {
 /** State + derived query for the filter panel. */
 export function useAttendanceFilters(
   initialPreset: DateRangePreset = "this_month",
+  schedules: readonly TrainingSchedule[] = [],
 ): AttendanceFiltersController {
   const [preset, setPreset] = useState<DateRangePreset>(initialPreset);
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
-  const [scheduleId, setScheduleId] = useState<number | null>(null);
+  const [slotKey, setSlotKeyState] = useState<string | null>(null);
+  const [dayId, setDayId] = useState<number | null>(null);
   const [student, setStudent] = useState<PersonaBusqueda | null>(null);
 
   const clearStudent = useCallback(() => {
     setStudent(null);
   }, []);
+
+  const setSlotKey = useCallback((key: string | null) => {
+    setSlotKeyState(key);
+    setDayId(null);
+  }, []);
+
+  const slots = useMemo(() => buildScheduleSlots(schedules), [schedules]);
+
+  // Resolved to primitives on purpose: `schedules` arrive after the first
+  // render, and a query rebuilt on that alone would refetch for nothing.
+  const { horarioId, horarioIds } = resolveScheduleFilter(slots, slotKey, dayId);
+  const horarioIdsKey = horarioIds?.join(",");
 
   const query = useMemo(
     () =>
@@ -89,10 +107,11 @@ export function useAttendanceFilters(
         preset,
         customStart,
         customEnd,
-        horarioId: scheduleId,
+        horarioId: horarioId ?? null,
+        horarioIds: horarioIdsKey === undefined ? undefined : horarioIdsKey.split(",").map(Number),
         personaId: student?.id ?? null,
       }),
-    [preset, customStart, customEnd, scheduleId, student],
+    [preset, customStart, customEnd, horarioId, horarioIdsKey, student],
   );
 
   return {
@@ -103,8 +122,10 @@ export function useAttendanceFilters(
     customEnd,
     setCustomEnd,
     rangeError: preset === "custom" ? customRangeError(customStart, customEnd) : null,
-    scheduleId,
-    setScheduleId,
+    slotKey,
+    setSlotKey,
+    dayId,
+    setDayId,
     student,
     selectStudent: setStudent,
     clearStudent,
@@ -141,6 +162,8 @@ export default function AttendanceFilters({
   layout = "column",
   className,
 }: AttendanceFiltersProps): React.ReactElement {
+  const slots = useMemo(() => buildScheduleSlots(schedules), [schedules]);
+  const selectedSlot = slots.find((slot) => slot.key === filters.slotKey);
   return (
     <FilterPanel
       label="Filtros de registros"
@@ -201,31 +224,41 @@ export default function AttendanceFilters({
         </FilterGroup>
       }
       fields={
-        <label className="flex flex-col gap-field">
-          <span className={FILTER_LABEL}>Horario</span>
-          <select
-            aria-label="Filtrar por horario"
-            value={filters.scheduleId ?? ""}
-            onChange={(e) => filters.setScheduleId(e.target.value ? Number(e.target.value) : null)}
-            className={FIELD_CONTROL}
-          >
-            <option value="">Todos los horarios</option>
-            {/* Issue A1: a flat list of ~26 sessions made the trainer scan
-                every option to find one class. One `<optgroup>` per
-                categoría — the grouping the picker already reads by, see
-                `ScheduleDayGroup` — turns that scan into "find the
-                category, then the day". */}
-            {groupSchedulesByCategory(schedules).map((group) => (
-              <optgroup key={group.category} label={group.category}>
-                {group.schedules.map((schedule) => (
-                  <option key={schedule.id} value={schedule.id}>
-                    {formatDay(schedule.diaSemana)} {schedule.horaInicio} — {schedule.horaFin}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex min-w-0 flex-col gap-field">
+            <span className={FILTER_LABEL}>Horario</span>
+            <select
+              aria-label="Filtrar por horario"
+              value={filters.slotKey ?? ""}
+              onChange={(e) => filters.setSlotKey(e.target.value || null)}
+              className={FIELD_CONTROL}
+            >
+              <option value="">Todos los horarios</option>
+              {slots.map((slot) => (
+                <option key={slot.key} value={slot.key}>
+                  {slot.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex min-w-0 flex-col gap-field">
+            <span className={FILTER_LABEL}>Día</span>
+            <select
+              aria-label="Filtrar por día"
+              value={filters.dayId ?? ""}
+              disabled={selectedSlot === undefined}
+              onChange={(e) => filters.setDayId(e.target.value ? Number(e.target.value) : null)}
+              className={`${FIELD_CONTROL} disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              <option value="">Todos los días</option>
+              {slotDayOptions(selectedSlot).map((day) => (
+                <option key={day.id} value={day.id}>
+                  {day.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       }
     />
   );

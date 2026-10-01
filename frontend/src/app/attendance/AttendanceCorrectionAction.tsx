@@ -105,7 +105,7 @@ export default function AttendanceCorrectionAction({
         <Button type="button" variant="secondary" size="sm" disabled aria-describedby={reasonId}>
           Corregir
         </Button>
-        <p id={reasonId} className="max-w-[200px] text-balance text-right text-2xs text-ink-3">
+        <p id={reasonId} className="w-48 text-balance text-right text-2xs text-ink-3">
           {CORRECTION_WINDOW_CLOSED_REASON}
         </p>
       </div>
