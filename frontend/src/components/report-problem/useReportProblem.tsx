@@ -9,14 +9,16 @@ import { captureViewport } from "./capture";
  * happen before the dialog (and its backdrop) exists, or it would photograph
  * the dialog itself. A failed capture never blocks the report.
  */
-export function useReportProblem(requestId?: string): { open: () => void; busy: boolean; dialog: ReactElement | null } {
+export function useReportProblem(requestId?: string): { open: (waitMs?: number | unknown) => void; busy: boolean; dialog: ReactElement | null } {
   const [capture, setCapture] = useState<InitialCapture | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const open = useCallback((): void => {
+  // `waitMs` lets a closing overlay (the mobile drawer) finish its transition first.
+  const open = useCallback((waitMs?: unknown): void => {
     if (busy) return;
     setBusy(true);
-    captureViewport()
+    new Promise<void>((resolve) => setTimeout(resolve, typeof waitMs === "number" ? waitMs : 0))
+      .then(captureViewport)
       .then((file) => setCapture({ file, failed: false }))
       .catch(() => setCapture({ file: null, failed: true }))
       .finally(() => setBusy(false));

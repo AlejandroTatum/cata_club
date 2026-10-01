@@ -14,9 +14,15 @@ function toBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob | null
   return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
 }
 
-/** Elements marked `data-report-ignore` never appear in the capture. */
-function keepNode(node: Node): boolean {
-  return !(node instanceof HTMLElement && node.hasAttribute("data-report-ignore"));
+/**
+ * Transient chrome never appears in the capture: anything marked
+ * `data-report-ignore` (mobile drawer, its backdrop), live toasts and the
+ * "Saltar al contenido" skip link.
+ */
+export function keepNode(node: Node): boolean {
+  if (!(node instanceof HTMLElement)) return true;
+  if (node.hasAttribute("data-report-ignore") || node.classList.contains("animate-toast-in")) return false;
+  return !(node instanceof HTMLAnchorElement && node.textContent?.trim() === "Saltar al contenido");
 }
 
 /**

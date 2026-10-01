@@ -2,6 +2,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import ReportProblemDialog from "../ReportProblemDialog";
+import { keepNode } from "../report-problem/capture";
 import { useReportProblem } from "../report-problem/useReportProblem";
 
 const captureViewport = vi.hoisted(() => vi.fn());
@@ -116,5 +117,29 @@ describe("useReportProblem", () => {
     await waitFor(() => expect(result.current.dialog).not.toBeNull());
     render(result.current.dialog as React.ReactElement);
     expect(screen.getByText(/No se pudo capturar la pantalla/)).toBeInTheDocument();
+  });
+});
+
+describe("capture filter", () => {
+  it("drops the drawer, backdrop, toasts and skip link but keeps page content", () => {
+    const el = (html: string): HTMLElement => { const d = document.createElement("div"); d.innerHTML = html; return d.firstElementChild as HTMLElement; };
+    expect(keepNode(el('<aside data-report-ignore></aside>'))).toBe(false);
+    expect(keepNode(el('<div data-report-ignore class="bg-black/40"></div>'))).toBe(false);
+    expect(keepNode(el('<div class="animate-toast-in"></div>'))).toBe(false);
+    expect(keepNode(el('<a href="#main">Saltar al contenido</a>'))).toBe(false);
+    expect(keepNode(el('<main>Pagos</main>'))).toBe(true);
+    expect(keepNode(document.createTextNode("x"))).toBe(true);
+  });
+
+  it("waits for the drawer transition before capturing", async () => {
+    vi.useFakeTimers();
+    captureViewport.mockResolvedValue(draft());
+    const { result } = renderHook(() => useReportProblem());
+    act(() => result.current.open(280));
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+    expect(captureViewport).not.toHaveBeenCalled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    expect(captureViewport).toHaveBeenCalledOnce();
+    vi.useRealTimers();
   });
 });
