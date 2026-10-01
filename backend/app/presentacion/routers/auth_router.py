@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
@@ -181,6 +181,8 @@ async def actualizar_foto_perfil(
 
 @router.get("/me/sesiones", response_model=List[SesionResponseDTO])
 async def listar_mis_sesiones(
+    limite: int | None = Query(default=None, ge=1, le=50),
+    desplazamiento: int = Query(default=0, ge=0),
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
     db: Session = Depends(obtener_sesion),
 ):
@@ -192,9 +194,17 @@ async def listar_mis_sesiones(
     `sid` es opcional a propósito -- los tokens emitidos antes de que el claim
     existiera siguen siendo válidos y simplemente no marcan ninguna sesión como
     actual, en vez de fallar.
+
+    `limite`/`desplazamiento` son opcionales y paginan en la consulta con la
+    sesión actual primero; sin ellos la respuesta es la de siempre. La forma
+    de la respuesta no cambia: quien pagina pide `limite + 1` filas para saber
+    si hay más.
     """
     return AuthServicio(db).listar_sesiones(
-        token_payload["sub"], sesion_actual_id=token_payload.get("sid"),
+        token_payload["sub"],
+        sesion_actual_id=token_payload.get("sid"),
+        limite=limite,
+        desplazamiento=desplazamiento,
     )
 
 

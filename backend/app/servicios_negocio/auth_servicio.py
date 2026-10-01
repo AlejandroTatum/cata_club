@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 import jwt
+from sqlalchemy import case
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -695,7 +696,13 @@ class AuthServicio:
         return self._emitir_par_tokens(usuario)
 
     # --- Listado de sesiones propias ----------------------------------------
-    def listar_sesiones(self, correo: str, sesion_actual_id: int | None) -> list[SesionVista]:
+    def listar_sesiones(
+        self,
+        correo: str,
+        sesion_actual_id: int | None,
+        limite: int | None = None,
+        desplazamiento: int = 0,
+    ) -> list[SesionVista]:
         """Las sesiones del usuario autenticado, la más reciente primero.
 
         `vigente` se DERIVA comparando el epoch de cada fila contra
@@ -707,15 +714,28 @@ class AuthServicio:
         una fila para siempre y la tarjeta del perfil muestra las últimas, no
         una bitácora de auditoría -- pero borrar el resto sería tirar historial
         para ahorrar en una consulta que ya está indexada.
+
+        Con `limite` el listado se PAGINA en la consulta (LIMIT/OFFSET): la
+        sesión actual va primera y después las más recientes, para que la
+        primera página sea "este equipo" + lo último. Sin `limite` nada cambia:
+        orden por recencia y corte en `LIMITE_SESIONES_LISTADAS`. Quien pagina
+        pide `limite + 1` para saber si hay más, sin sobre ni encabezado.
         """
         usuario = self.obtener_usuario_actual(correo)
-        filas = (
-            self.db.query(Sesion)
-            .filter(Sesion.usuario_id == usuario.id)
-            .order_by(Sesion.iniciada_en.desc(), Sesion.id.desc())
-            .limit(LIMITE_SESIONES_LISTADAS)
-            .all()
-        )
+        consulta = self.db.query(Sesion).filter(Sesion.usuario_id == usuario.id)
+        if limite is None:
+            consulta = consulta.order_by(Sesion.iniciada_en.desc(), Sesion.id.desc()).limit(
+                LIMITE_SESIONES_LISTADAS
+            )
+        else:
+            if sesion_actual_id is not None:
+                consulta = consulta.order_by(case((Sesion.id == sesion_actual_id, 0), else_=1))
+            consulta = (
+                consulta.order_by(Sesion.iniciada_en.desc(), Sesion.id.desc())
+                .offset(desplazamiento)
+                .limit(limite)
+            )
+        filas = consulta.all()
         return [
             SesionVista(
                 id=fila.id,
