@@ -484,7 +484,7 @@ describe("EnrollPage — error prevention on the student step", () => {
     const year = screen.getByLabelText(/^Año/);
     const thisYear = new Date().getFullYear();
     expect(year).toHaveAttribute("min", `${thisYear - 96}`);
-    expect(year).toHaveAttribute("max", `${thisYear - 5}`);
+    expect(year).toHaveAttribute("max", `${thisYear - 3}`);
   });
 
   it("hints the expected format next to the birth-date field", () => {

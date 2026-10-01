@@ -80,7 +80,7 @@ def _crear_alumno_adulto(db_session, sufijo: int):
     """Alumno MAYOR de edad, autogestionado -- sin representante -- con su
     propia ficha médica ya cargada. A diferencia de `_crear_familia`, nace en
     1990: no necesita representante_id (regla de `PersonaServicio`: solo
-    obligatorio entre 5 y 17 años)."""
+    obligatorio entre 3 y 17 años)."""
     adulto = Persona(
         nombres="Alumno", apellidos=f"Adulto{sufijo}", cedula=cedula_valida(270 + sufijo),
         fecha_nacimiento=date(1990, 1, 1), telefono="0991110002",

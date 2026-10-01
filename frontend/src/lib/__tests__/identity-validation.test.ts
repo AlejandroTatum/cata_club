@@ -645,9 +645,13 @@ describe("edad del alumno", () => {
       expect(message).not.toContain("menor");
     });
 
-    it("rejects a birth date 3 years ago, naming the computed age", () => {
-      expect(studentBirthDateRule("2026-01-01", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 3).`,
+    it("pins the club's minimum player age at 3 years", () => {
+      expect(EDAD_MINIMA_ALUMNO).toBe(3);
+    });
+
+    it("rejects a birth date 2 years ago, naming the computed age", () => {
+      expect(studentBirthDateRule("2027-01-01", FROZEN_TODAY)).toBe(
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 2).`,
       );
     });
 
@@ -663,8 +667,8 @@ describe("edad del alumno", () => {
       );
     });
 
-    it("accepts the minimum boundary (exactly 5 years old today)", () => {
-      expect(studentBirthDateRule("2024-01-01", FROZEN_TODAY)).toBeNull();
+    it("accepts the minimum boundary (exactly 3 years old today)", () => {
+      expect(studentBirthDateRule("2026-01-01", FROZEN_TODAY)).toBeNull();
     });
 
     it("accepts the maximum boundary (exactly 95 years old today)", () => {
@@ -677,9 +681,9 @@ describe("edad del alumno", () => {
       );
     });
 
-    it("rejects one day short of the minimum boundary (4 years old)", () => {
-      expect(studentBirthDateRule("2024-01-02", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 4).`,
+    it("rejects one day short of the minimum boundary (2 years old)", () => {
+      expect(studentBirthDateRule("2026-01-02", FROZEN_TODAY)).toBe(
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 2).`,
       );
     });
   });

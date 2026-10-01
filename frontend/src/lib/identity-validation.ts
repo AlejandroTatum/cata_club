@@ -426,7 +426,7 @@ export function personNameRule(
 // `persona_servicio.py`), which one of the three wizards never implemented.
 // ---------------------------------------------------------------------------
 
-export const EDAD_MINIMA_ALUMNO = 5;
+export const EDAD_MINIMA_ALUMNO = 3;
 export const EDAD_MAXIMA_ALUMNO = 95;
 export const EDAD_MAYORIA_EDAD = 18;
 
@@ -519,7 +519,7 @@ export function isFutureBirthDate(birthDate: string, today: Date = new Date()): 
 
 /**
  * The student birth-date rule the backend enforces
- * (`5 <= edad <= 95`), applied at the field instead of discovered only after
+ * (`3 <= edad <= 95`), applied at the field instead of discovered only after
  * a full wizard and a rejected submit (issue #224).
  *
  * A future date is rejected for BEING future, with its own message — never
@@ -561,7 +561,7 @@ export function isPlausibleHumanAge(age: number): boolean {
  * from 0001 to 9999). Padded to whole calendar years — Jan 1 on the old end,
  * Dec 31 on the young end — so nobody whose birthday has not landed yet this
  * year is excluded by an exact day-of-year boundary; `studentBirthDateRule`
- * is still what enforces the real 5-95 cutoff precisely.
+ * is still what enforces the real 3-95 cutoff precisely.
  */
 export function studentBirthDateBounds(today: Date = new Date()): { min: string; max: string } {
   const year = today.getFullYear();

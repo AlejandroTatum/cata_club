@@ -3,6 +3,7 @@ from datetime import date
 import pytest
 
 from app.dominio.cedula import cedula_valida
+from tests.conftest import FECHA_CONGELADA_HOY
 from app.dominio.enums import (
     NivelTecnicoAlumno, TipoManoDominante, TipoNotificacion, TipoRol, TipoSangre,
 )
@@ -437,22 +438,37 @@ def test_menor_con_credenciales_sin_representante_rechazado(db_session):
         EnrollmentServicio(db_session).enroll(datos)
 
 
-def test_alumno_menor_de_5_anos_rechazado(db_session):
-    """Alumnos menores de 5 años no son admitidos."""
-    datos = _enrollment_dto(
+def _cumple(anios: int) -> date:
+    """Nacimiento de alguien con exactamente `anios` años cumplidos al día
+    congelado de la suite (`FECHA_CONGELADA_HOY`, conftest): sin fronteras
+    de cumpleaños en el día de hoy."""
+    return date(FECHA_CONGELADA_HOY.year - anios - 1, 6, 15)
+
+
+def _dto_con_alumno_de(anios: int, serie: int):
+    return _enrollment_dto(
         representante=EnrollmentRepresentanteDTO(
-            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
+            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(serie),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
-            correo="sofia@example.com", contrasenia="password8",
+            correo=f"rep{serie}@example.com", contrasenia="password8",
         ),
         alumno=EnrollmentAlumnoDTO(
-            nombres="Bebé", apellidos="Martinez", cedula=cedula_valida(251),
-            fecha_nacimiento=date(2026, 1, 1), telefono="0991234567",
+            nombres="Peque", apellidos="Martinez", cedula=cedula_valida(serie + 1),
+            fecha_nacimiento=_cumple(anios), telefono="0991234567",
         ),
     )
-    from app.dominio.excepciones import OperacionInvalida
-    with pytest.raises(OperacionInvalida, match="edad"):
-        EnrollmentServicio(db_session).enroll(datos)
+
+
+def test_alumno_de_3_anos_es_admitido_con_representante(db_session):
+    """El club admite jugadores desde los 3 años (feedback QA de registro)."""
+    resultado = EnrollmentServicio(db_session).enroll(_dto_con_alumno_de(3, 270))
+    assert resultado is not None
+
+
+def test_alumno_de_2_anos_rechazado_con_piso_de_3(db_session):
+    """El piso es 3: a los 2 años el alta se rechaza citando el rango real."""
+    with pytest.raises(OperacionInvalida, match="entre 3 y 95 años"):
+        EnrollmentServicio(db_session).enroll(_dto_con_alumno_de(2, 272))
 
 
 def test_alumno_cedula_duplicada_rechazada(db_session):
@@ -621,7 +637,7 @@ def test_alumno_edad_maxima_rechazada(db_session):
         ),
     )
 
-    with pytest.raises(OperacionInvalida, match="entre 5 y 95 años"):
+    with pytest.raises(OperacionInvalida, match="entre 3 y 95 años"):
         EnrollmentServicio(db_session).enroll(datos)
 
 
