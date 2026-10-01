@@ -22,6 +22,7 @@ import { formatCurrency } from "@/lib/format-utils";
 import { calendarIsoDate, clubIsoDate, clubTimeHHMM, clubToday } from "@/lib/club-date";
 import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
 import type { BadgeTone } from "@/components/ui/Badge";
+import { toMinutes, type TimelineItem, type TimelineStatus } from "@/components/charts/timeline-layout";
 
 export const ATTENDANCE_STATUS_CHART_COLORS: Record<EstadoAsistencia, string> = {
   present: "#008300",
@@ -498,11 +499,9 @@ export interface TodayClass {
   status: TodayClassStatus;
   /** How many records the list carries. 0 unless `taken`. */
   records: number;
-}
-
-function toMinutes(hora: string): number | null {
-  const match = /^(\d{1,2}):(\d{2})/.exec(hora.trim());
-  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+  /** "15:00" / "16:00" — the timeline places the class by these. */
+  horaInicio: string;
+  horaFin: string;
 }
 
 /**
@@ -539,6 +538,156 @@ export function buildTodayClasses(
         category: schedule.categoriaLabel ?? null,
         status: count > 0 ? "taken" : ended ? "missing" : "pending",
         records: count,
+        horaInicio: schedule.horaInicio,
+        horaFin: schedule.horaFin,
       };
     });
+}
+
+// ---------------------------------------------------------------------------
+// "Hoy en el club" — today's classes on a timeline
+// ---------------------------------------------------------------------------
+
+/** Minutes since midnight on the club's clock. */
+export function clubNowMinutes(now: Date = new Date()): number {
+  return toMinutes(clubTimeHHMM(now)) ?? 0;
+}
+
+const TIMELINE_STATUS_LABEL: Record<TimelineStatus, string> = {
+  pending: "Pendiente",
+  live: "En curso",
+  done: "Lista tomada",
+  missing: "Sin lista",
+};
+
+/**
+ * Today's classes as timeline items. A class with a list is `done` whatever the
+ * clock says; without one it is `live` while it runs, `missing` once it ended
+ * and `pending` before it starts. `enrolled` is the roster count per horario
+ * when the roster arrived (an unknown count says nothing rather than "0").
+ */
+export function buildTimelineItems(
+  classes: TodayClass[],
+  enrolled: Record<number, number> | null,
+  hrefFor: (scheduleId: number) => string,
+  now: Date = new Date(),
+): TimelineItem[] {
+  const nowMinutes = clubNowMinutes(now);
+  return classes.map((entry): TimelineItem => {
+    const start = toMinutes(entry.horaInicio);
+    const end = toMinutes(entry.horaFin);
+    const running = start !== null && end !== null && start <= nowMinutes && nowMinutes < end;
+    const status: TimelineStatus = entry.status === "taken" ? "done" : running ? "live" : entry.status === "missing" ? "missing" : "pending";
+    const count = enrolled?.[entry.scheduleId];
+    return {
+      id: String(entry.scheduleId),
+      start: entry.horaInicio,
+      end: entry.horaFin,
+      title: entry.category ?? "Clase",
+      group: entry.category ?? "Clase",
+      status,
+      statusLabel: TIMELINE_STATUS_LABEL[status],
+      note: count === undefined ? null : count === 1 ? "1 inscrito" : `${count} inscritos`,
+      href: hrefFor(entry.scheduleId),
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Payments: how long they wait, and where they all stand
+// ---------------------------------------------------------------------------
+
+export interface PaymentAgeBuckets {
+  today: number;
+  recent: number;
+  old: number;
+}
+
+/** Pending payments by how long they have waited: hoy / 1–3 días / más de 3. */
+export function buildPaymentAgeBuckets(requests: PaymentValidationRequest[], now: Date = new Date()): PaymentAgeBuckets {
+  const buckets: PaymentAgeBuckets = { today: 0, recent: 0, old: 0 };
+  for (const request of requests) {
+    if (request.validationStatus !== "pendiente") continue;
+    const time = toSortableTime(request.uploadedAt);
+    const days = time === null ? 0 : Math.max(0, Math.floor((now.getTime() - time) / DAY_MS));
+    if (days < 1) buckets.today += 1;
+    else if (days <= 3) buckets.recent += 1;
+    else buckets.old += 1;
+  }
+  return buckets;
+}
+
+export interface PaymentPipeline {
+  pendiente: number;
+  validado: number;
+  rechazado: number;
+}
+
+/** Every payment request by state — the whole loaded list, not just the queue. */
+export function buildPaymentPipeline(requests: PaymentValidationRequest[]): PaymentPipeline {
+  const pipeline: PaymentPipeline = { pendiente: 0, validado: 0, rechazado: 0 };
+  for (const request of requests) pipeline[request.validationStatus] += 1;
+  return pipeline;
+}
+
+// ---------------------------------------------------------------------------
+// Attendance by state, week by week
+// ---------------------------------------------------------------------------
+
+export interface WeeklyStatusColumn {
+  /** "YYYY-MM-DD" of the first day of the 7-day window. */
+  startIso: string;
+  counts: Record<EstadoAsistencia, number>;
+  total: number;
+}
+
+/**
+ * Bucket records into the trailing N 7-day windows ending today (oldest first),
+ * counting each attendance state. Same windowing as `buildFourWeekAttendance`,
+ * so the tile and the chart agree about what "a week" is.
+ */
+export function buildWeeklyStatusBreakdown(
+  records: AttendanceRecord[],
+  today: Date = new Date(),
+  weeks = 6,
+): WeeklyStatusColumn[] {
+  const clubNow = clubToday(today);
+  const endOfToday = new Date(clubNow.getFullYear(), clubNow.getMonth(), clubNow.getDate()).getTime();
+  const columns: WeeklyStatusColumn[] = Array.from({ length: weeks }, (_, i) => ({
+    startIso: calendarIsoDate(new Date(endOfToday - ((weeks - 1 - i) * 7 + 6) * DAY_MS)),
+    counts: { present: 0, late: 0, justified: 0, sick: 0, competition: 0, absent: 0 },
+    total: 0,
+  }));
+
+  for (const record of records) {
+    const time = toSortableTime(record.fecha);
+    if (time === null || !(record.estado in columns[0].counts)) continue;
+    const day = new Date(time);
+    const daysAgo = Math.round((endOfToday - new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime()) / DAY_MS);
+    if (daysAgo < 0 || daysAgo >= weeks * 7) continue;
+    const column = columns[weeks - 1 - Math.floor(daysAgo / 7)];
+    column.counts[record.estado] += 1;
+    column.total += 1;
+  }
+  return columns;
+}
+
+/** The attendance states in chart order, with their validated palette. */
+export function attendanceChartSeries(): { key: EstadoAsistencia; label: string; color: string }[] {
+  return ATTENDANCE_STATUS_ORDER.map((estado) => ({
+    key: estado,
+    label: ATTENDANCE_LABELS[estado],
+    color: ATTENDANCE_STATUS_CHART_COLORS[estado],
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Activity filters
+// ---------------------------------------------------------------------------
+
+export type ActivityFilter = "all" | "payments" | "attendance";
+
+export function filterActivity(events: ActivityEvent[], filter: ActivityFilter): ActivityEvent[] {
+  if (filter === "all") return events;
+  return events.filter((event) => (filter === "payments" ? event.kind.startsWith("payment") : event.kind === "attendance-session"));
 }

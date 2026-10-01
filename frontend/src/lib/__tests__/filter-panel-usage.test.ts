@@ -66,13 +66,22 @@ const FILES = sourceFiles(SRC)
   .map((path) => ({ path: path.slice(SRC.length + 1), code: stripComments(readFileSync(path, "utf8")) }))
   .filter(({ path }) => !path.replace(/\\/g, "/").startsWith(PRIMITIVES));
 
+/**
+ * Screens whose only filter is a toolbar INSIDE a card that is not a filter
+ * screen: the admin dashboard filters its own "Actividad reciente" feed from
+ * the feed's header. A framed panel nested in that card would read as a
+ * second, page-level filter — the case the note above already carves out.
+ */
+const TOOLBAR_IN_CARD = ["app/dashboard/page.tsx"];
+
 const RENDERS_CONTROL = /<(?:SearchInput|FilterPill)\b/;
 const RENDERS_PANEL = /<FilterPanel\b/;
 
 describe("filter controls live in a filter panel", () => {
   it("is used by every screen that filters", () => {
     const loose = FILES.filter(
-      ({ code }) => RENDERS_CONTROL.test(code) && !RENDERS_PANEL.test(code),
+      ({ path, code }) =>
+        RENDERS_CONTROL.test(code) && !RENDERS_PANEL.test(code) && !TOOLBAR_IN_CARD.includes(path),
     ).map(({ path }) => path);
 
     expect(loose).toEqual([]);
