@@ -90,6 +90,7 @@ function Service({ data }: { data: AvanzadasData }): ReactElement {
           tone="ok"
           series={service.requestsPerMinute}
           formatValue={formatCount}
+          caption="Tráfico de la aplicación"
         />
         <MetricBlock
           label="Errores 5xx"
@@ -151,7 +152,9 @@ function Service({ data }: { data: AvanzadasData }): ReactElement {
                         {slow ? <Badge tone="warn">Lento</Badge> : null}
                       </div>
                     </TableCell>
-                    <TableCell type="number">{formatCount(endpoint.p95Ms)} ms</TableCell>
+                    <TableCell type="number">
+                      <span className="whitespace-nowrap">{formatCount(endpoint.p95Ms)} ms</span>
+                    </TableCell>
                     <TableCell type="number">{formatCount(endpoint.requests)}</TableCell>
                   </TableRow>
                 );
