@@ -341,6 +341,33 @@ describe("MembersPage — Editar member modal", () => {
     expect(footer).toHaveClass("shrink-0");
   });
 
+  it("lays the Editar dialog out in two columns: manual save left, instant-save groups right", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const dialog = await openModalAndWaitForRoles(row);
+
+    expect(dialog.className).toContain("max-w-5xl");
+    const heading = (name: string): HTMLElement =>
+      within(dialog).getByRole("heading", { name });
+    const left = heading("Datos de la cuenta").closest("section")?.parentElement as HTMLElement;
+    const right = heading("Estado de la cuenta").closest("section")?.parentElement as HTMLElement;
+
+    expect(left).not.toBe(right);
+    expect(left.parentElement).toBe(right.parentElement);
+    expect(left.parentElement).toHaveClass("lg:grid-cols-2");
+    expect(within(right).getByRole("heading", { name: "Roles" })).toBeInTheDocument();
+    // Each group still declares how it persists.
+    expect(within(left).getByText("Requiere guardar")).toBeInTheDocument();
+    expect(within(right).getAllByText("Se guarda al instante")).toHaveLength(2);
+    // Nombres and apellidos share one row from `sm`.
+    const nombres = within(dialog).getByLabelText("Nombres");
+    expect(nombres.parentElement?.parentElement).toHaveClass("sm:grid-cols-2");
+  });
+
   it("gives each rendering exactly one Editar trigger, and no inline role/status controls", async () => {
     render(
       <ToastProvider>
@@ -1862,7 +1889,7 @@ describe("MembersPage — Beneficio del club", () => {
     expect(within(dialog).getByRole("button", { name: /^asignar$/i })).toBeDisabled();
     expect(within(dialog).getByText(/supera la tarifa mensual/i)).toBeInTheDocument();
     // Actionable in local currency, not a bare number.
-    expect(within(dialog).getByText(/\$\s?80/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/supera la tarifa mensual/)).toHaveTextContent(/\$\s?80/);
     expect(mockAsignarBeneficio).not.toHaveBeenCalled();
   });
 
@@ -2074,80 +2101,6 @@ describe("MembersPage — honest aggregate coverage", () => {
     );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: /paginación/i })).not.toBeInTheDocument();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// The stats row doesn't print the same count twice.
-//
-// "Estudiantes" and "Con membresía activa" sit side by side in the same tile
-// row. The total student count was the tile's own value AND, verbatim, the
-// number inside the neighboring tile's hint ("de N estudiantes") — the same
-// figure spelled out twice a few centimeters apart.
-// ---------------------------------------------------------------------------
-
-describe("MembersPage — the stats row doesn't repeat the student count", () => {
-  it("doesn't echo the total student count inside the neighboring tile's hint", async () => {
-    const active = (id: string): MemberAccount => ({
-      ...ACCOUNT,
-      id,
-      estudiantes: [
-        {
-          ...ACCOUNT.estudiantes[0],
-          id: `${id}-e`,
-          membresia: {
-            tipo: "Mensual",
-            estado: "activa",
-            fechaInicio: "2026-07-01",
-            fechaFin: "2026-07-31",
-            monto: 50,
-            id: Number(id),
-          },
-        },
-      ],
-    });
-    // 2 accounts with an active membership + 1 with a lapsed one (a real
-    // membership on file, issue #1132 — a pure representative with none at
-    // all would not count as a student here) → 3 students total, 2 with an
-    // active membership: two distinct, unambiguous figures.
-    mockFetchMembers.mockReset().mockResolvedValue({
-      accounts: [
-        active("1"),
-        active("2"),
-        {
-          ...ACCOUNT,
-          id: "3",
-          estudiantes: [{
-            ...ACCOUNT.estudiantes[0],
-            membresia: {
-              tipo: "Mensual",
-              estado: "vencida",
-              fechaInicio: "2026-06-01",
-              fechaFin: "2026-06-30",
-              monto: 50,
-              id: 3,
-            },
-          }],
-        },
-      ],
-    });
-
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-
-    const label = await screen.findByText("Estudiantes");
-    const tile = label.closest("div") as HTMLElement;
-    // The total (3) is the "Estudiantes" tile's own value...
-    expect(within(tile).getByText("3")).toBeInTheDocument();
-    // ...and the old bug repeated it, verbatim, inside the tile beside it.
-    expect(screen.queryByText("de 3 estudiantes")).not.toBeInTheDocument();
-    // The neighboring tile still names the population it measures against —
-    // it just does not spell out the figure a second time.
-    const activeTile = screen.getByText("Con membresía activa").closest("div") as HTMLElement;
-    expect(within(activeTile).getByText("de los estudiantes")).toBeInTheDocument();
   });
 });
 
@@ -2469,128 +2422,25 @@ describe("MembersPage — defers /api/members until the role resolves", () => {
 });
 
 // ---------------------------------------------------------------------------
-// D7 — four tiles that were four different things wearing one shape.
-//
-// "Regla del hombro: el hombro de caucho marca lo que pide acción, y por eso lo
-// lleva como mucho una tarjeta por fila. Si lo llevan las cuatro, no marca
-// nada." And: "Regla de la forma: la figura toma la forma de lo que mide."
-//
-// The screen holds one queue of work (payments waiting to be validated) and one
-// proportion (students with an active membership, out of the students). The
-// other two are counts, and this screen has no creation date on any account or
-// student — `MemberAccount` carries id/role/name/phone/students and nothing
-// dated — so there is no trend to draw and no card may pretend otherwise.
+// Counts live in the filter chips — the single place to count and filter.
 // ---------------------------------------------------------------------------
 
-describe("MembersPage — four tiles, four shapes (D7)", () => {
-  /** Accounts whose single student does or does not hold an active membership. */
-  function withMembership(id: string, activa: boolean): MemberAccount {
-    return {
-      ...ACCOUNT,
-      id,
-      estudiantes: [
-        {
-          ...ACCOUNT.estudiantes[0],
-          id: `${id}-e`,
-          // Issue #1132: a `null` membresia is a pure representative — not a
-          // student at all — so the "not active" leg of this fixture needs a
-          // REAL (lapsed) membership on file to still count toward the
-          // "Estudiantes" denominator this ratio divides by.
-          membresia: {
-            tipo: "Mensual",
-            estado: activa ? "activa" : "vencida",
-            fechaInicio: "2026-07-01",
-            fechaFin: "2026-07-31",
-            monto: 50,
-            id: Number(id),
-          },
-        },
-      ],
-    };
-  }
-
-  /**
-   * The tile carrying a given label.
-   *
-   * Looked up through `min-h-stat` — the 116px floor token that IS a stat
-   * tile (#1278: it was a fixed `h-stat` before a degraded hint's overflow
-   * turned it into a floor) — rather than through `getByText`, because two of
-   * these labels also name a table column ("Estudiantes") and a plain text
-   * query cannot tell the tile from the column header.
-   */
-  function tileOf(label: string): HTMLElement {
-    const tiles = Array.from(document.querySelectorAll<HTMLElement>(".min-h-stat"));
-    const tile = tiles.find((candidate) => candidate.firstElementChild?.textContent === label);
-    expect(tile, `no stat tile labelled "${label}"`).toBeDefined();
-    return tile as HTMLElement;
-  }
-
-  beforeEach(() => {
-    mockFetchMembers.mockReset().mockResolvedValue({
-      accounts: [withMembership("1", true), withMembership("2", false), withMembership("3", false)],
-    });
-  });
-
-  it("gives the coal shoulder to the queue of work, and to nothing else", async () => {
+describe("MembersPage — counts live in the filter chips", () => {
+  it("renders no stat tiles and counts each population on its chip", async () => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT] });
     render(
       <ToastProvider>
         <MembersPage />
       </ToastProvider>,
     );
-    await screen.findByText("Pagos pendientes");
+    await findAccountRow();
 
-    // Pending payments is the only tile that names a pile of things somebody
-    // has to come and do; the other three report a state of the world.
-    expect(tileOf("Pagos pendientes")).toHaveClass("bg-coal");
-    for (const quiet of ["Cuentas", "Estudiantes", "Con membresía activa"]) {
-      expect(tileOf(quiet)).not.toHaveClass("bg-coal");
-    }
-  });
-
-  it("draws the membership share as a share, at the ratio the figures measure", async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    await screen.findByText("Con membresía activa");
-
-    // One of the three students holds an active membership.
-    const track = within(tileOf("Con membresía activa")).getByTestId("stat-track");
-    expect((track.firstElementChild as HTMLElement).style.width).toBe("33.3%");
-  });
-
-  it("draws no bar on the tiles that measure a count, because no trend reaches this screen", async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    await screen.findByText("Cuentas");
-
-    expect(screen.getAllByTestId("stat-track")).toHaveLength(1);
-    for (const counted of ["Cuentas", "Estudiantes", "Pagos pendientes"]) {
-      expect(within(tileOf(counted)).queryByTestId("stat-track")).not.toBeInTheDocument();
-    }
-  });
-
-  it("draws no bar at all when the share cannot be read upstream", async () => {
-    // An unreadable numerator is not a numerator of zero, and a bar at 0% is
-    // exactly the lie the em dash exists to avoid.
-    mockFetchMembers.mockReset().mockResolvedValue({
-      accounts: [withMembership("1", false)],
-      membresiasDegraded: true,
-    });
-
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    await screen.findByText("Con membresía activa");
-
-    expect(within(tileOf("Con membresía activa")).getByText("—")).toBeInTheDocument();
+    expect(document.querySelector(".min-h-stat")).toBeNull();
     expect(screen.queryByTestId("stat-track")).not.toBeInTheDocument();
+    const chips = screen.getByRole("group", { name: "Filtrar miembros" });
+    for (const label of ["Todos", "Pago pendiente", "Sin datos de emergencia", "Membresía vencida"]) {
+      expect(within(chips).getByRole("button", { name: new RegExp(label) })).toBeInTheDocument();
+    }
   });
 });
 
@@ -2785,9 +2635,13 @@ describe("MembersPage — missing emergency data reads as informational, not an 
     fireEvent.click(getRowAction(row, /^ficha médica de maría gonzález$/i));
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByRole("status")).toHaveTextContent("Sin ficha médica");
+    expect(within(dialog).getByRole("status")).toHaveTextContent("Complete los datos y guárdelos.");
+    // The status itself is stated once, by the editor's "Nueva" chip.
+    expect(within(dialog).queryByText(/Sin ficha médica/)).not.toBeInTheDocument();
     // The editor stays fully available: the banner is additive.
     expect(await within(dialog).findByText("Tipo de sangre")).toBeInTheDocument();
+    // One empty-state message only: the editor's own notice is suppressed.
+    expect(within(dialog).queryByText(/Todavía no hay una ficha/)).not.toBeInTheDocument();
   });
 
   it("does not show the 'Sin ficha médica' banner once emergency data is present", async () => {
@@ -2843,12 +2697,12 @@ describe("MembersPage — the trailing column is not named after its button", ()
 // D5 — three levels, and a row action is the third one.
 // ---------------------------------------------------------------------------
 
-describe("MembersPage — the repeated row trigger is tertiary (D5)", () => {
+describe("MembersPage — the repeated row actions are one consistent set", () => {
   beforeEach(() => {
     mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT] });
   });
 
-  it("fills the row trigger instead of outlining it once per row", async () => {
+  it("draws Pagos as an outlined secondary action in a fixed-width slot", async () => {
     render(
       <ToastProvider>
         <MembersPage />
@@ -2857,11 +2711,11 @@ describe("MembersPage — the repeated row trigger is tertiary (D5)", () => {
     const row = await findAccountRow();
     const trigger = getRowAction(row, /^pagos/i);
 
-    // `secondary` is `bg-paper border-line-2` — on a paper table that is a
-    // visible box drawn once per row, forty-five of them down the page, all
-    // claiming the weight D8 reserves for the one action beside the primary.
-    expect(trigger).toHaveClass("bg-sunken", "border-transparent");
-    expect(trigger).not.toHaveClass("bg-paper");
+    // Pagos is the one visible row action, so it is drawn as a box (admin
+    // redesign v4: a borderless fill read as "flat, confusing"). The overflow
+    // stays quieter; the slot keeps every row's buttons aligned.
+    expect(trigger).toHaveClass("bg-paper", "border-line-2", "w-full");
+    expect((trigger.parentElement as HTMLElement).className).toContain("w-20");
   });
 });
 
@@ -3487,7 +3341,7 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     expect(overflow.className).toContain("h-ctl-sm");
   });
 
-  it("leaves Pagos as the only visible action, drawn borderless, with the rest in the menu", async () => {
+  it("leaves Pagos as the only visible action, with the rest in a labelled menu", async () => {
     render(
       <ToastProvider>
         <MembersPage />
@@ -3495,10 +3349,13 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     );
     const row = await findAccountRow();
 
-    expect(getRowButton(row, /^pagos/i).className).toContain("border-transparent");
+    expect(getRowButton(row, /^pagos/i).className).toContain("border-line-2");
     expect(within(row).queryByRole("button", { name: /^ficha médica/i })).not.toBeInTheDocument();
     expect(within(row).queryByRole("button", { name: /^editar/i })).not.toBeInTheDocument();
-    expect(getRowActionsTrigger(row)).toHaveAccessibleName("Más acciones para María González");
+    const menu = getRowActionsTrigger(row);
+    expect(menu).toHaveAccessibleName("Más acciones para María González");
+    // Visible text, not just a "⋯" glyph that only explains itself on hover.
+    expect(menu).toHaveTextContent("Más");
   });
 
   it("keeps the derived debt inside the Pagos dialog when the table label is stripped", async () => {
@@ -3980,7 +3837,8 @@ describe("MembersPage — the dialog follows the visual viewport (issue #767)", 
     );
     const card = await findAccountCard();
     const pagos = within(card).getAllByRole("button", { name: /^pagos/i })[0];
-    const group = pagos.parentElement as HTMLElement;
+    // Pagos sits in a fixed-width slot; the slots' parent is the wrapping group.
+    const group = pagos.parentElement?.parentElement as HTMLElement;
 
     expect(group.className).toContain("flex-wrap");
     // …and the group must be allowed to give up width, or wrapping inside it
@@ -4367,5 +4225,155 @@ describe('MembersPage — "Estudiantes a cargo" lists real dependents (issue #12
     const dialog = screen.getByRole("dialog");
 
     expect(within(dialog).queryByText("Estudiantes a cargo")).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Admin redesign v4 — hierarchy: no stat row, a rail, a list that fills.
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — rail (admin redesign v4)", () => {
+  beforeEach(() => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT] });
+  });
+
+  it("has no stat tiles and carries the attention callout in the rail", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    await findAccountRow();
+
+    expect(document.querySelectorAll(".min-h-stat")).toHaveLength(0);
+    const rail = screen.getByTestId("members-rail");
+    expect(within(rail).getByRole("button", { name: /sin datos de emergencia/i })).toBeInTheDocument();
+    expect(within(rail).getByRole("link", { name: /pagos por validar/i })).toHaveAttribute("href", "/payments");
+  });
+
+  it("always shows the indications card, never behind a disclosure", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    await findAccountRow();
+
+    const rail = screen.getByTestId("members-rail");
+    expect(within(rail).getByRole("heading", { name: "Cómo usar el listado" })).toBeVisible();
+    expect(rail.querySelector("details")).toBeNull();
+  });
+
+  it("sends the attention shortcut to the matching filter chip", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    await findAccountRow();
+
+    fireEvent.click(within(screen.getByTestId("members-rail")).getByRole("button", { name: /sin datos de emergencia/i }));
+
+    const chips = screen.getByRole("group", { name: "Filtrar miembros" });
+    expect(within(chips).getByRole("button", { name: /sin datos de emergencia/i })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("pads a short result with decorative ghost rows that tests and assistive tech never see", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    await findAccountRow();
+
+    const ghost = screen.getByTestId("members-ghost-rows");
+    expect(ghost).toHaveAttribute("aria-hidden", "true");
+    expect(ghost.children.length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Admin redesign v4 — the Pagos dialog has a hierarchy.
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — Pagos dialog hierarchy (admin redesign v4)", () => {
+  async function openActiveMembershipPayments(): Promise<HTMLElement> {
+    mockFetchMembers.mockReset().mockResolvedValue({
+      accounts: [{
+        ...ACCOUNT,
+        estudiantes: [{
+          ...ACCOUNT.estudiantes[0],
+          membresia: {
+            id: 42,
+            tipo: "Mensual",
+            estado: "activa",
+            fechaInicio: "2026-07-01",
+            fechaFin: "2026-07-31",
+            monto: 85,
+          },
+        }],
+      }],
+    });
+    render(<ToastProvider><MembersPage /></ToastProvider>);
+    fireEvent.click(getRowAction(await findAccountRow(), /^pagos/i));
+    return screen.findByRole("dialog");
+  }
+
+  it("summarises the membership before offering any action", async () => {
+    const dialog = await openActiveMembershipPayments();
+
+    const summary = within(dialog).getByLabelText("Resumen de la membresía");
+    expect(within(summary).getByText("Mensual")).toBeInTheDocument();
+    expect(within(summary).getByText(/\$\s?85/)).toBeInTheDocument();
+    expect(within(summary).getByText("Vigencia")).toBeInTheDocument();
+    expect(dialog.className).toContain("max-w-5xl");
+  });
+
+  it("shows the payment history as its own labelled section, with no toggle", async () => {
+    const dialog = await openActiveMembershipPayments();
+
+    expect(within(dialog).getByRole("heading", { name: "Historial de pagos" })).toBeVisible();
+    expect(within(dialog).queryByRole("button", { name: /historial de pagos/i })).not.toBeInTheDocument();
+    await waitFor(() => expect(mockFetchPagosDePersona).toHaveBeenCalled());
+  });
+
+  it("offers one red primary and equal-size secondary actions, each explained", async () => {
+    const dialog = await openActiveMembershipPayments();
+    const actions = within(dialog).getByRole("region", { name: "Acciones" });
+
+    const registrar = within(actions).getByRole("button", { name: "Registrar pago" });
+    expect(registrar).toHaveClass("bg-cata-red", "h-ctl");
+    for (const name of ["Regularizar deuda", "Suspender membresía", "Cambiar plan", "Asignar beneficio"]) {
+      const trigger = await within(actions).findByRole("button", { name });
+      expect(trigger, name).toHaveClass("bg-paper", "h-ctl", "w-full");
+      expect(trigger, name).not.toHaveClass("bg-cata-red");
+    }
+    // Same size for the primary and the rest.
+    expect(registrar).toHaveClass("w-full");
+    // Suspending is the one that takes something away.
+    expect(within(actions).getByRole("button", { name: "Suspender membresía" })).toHaveClass("text-state-bad");
+    // Each trigger has its one-line explanation next to it.
+    expect(within(actions).getByText(/pagos atrasados/i)).toBeInTheDocument();
+    expect(within(actions).getByText(/pausa los cobros/i)).toBeInTheDocument();
+    expect(within(actions).getByText(/rige desde el próximo pago/i)).toBeInTheDocument();
+  });
+
+  it("hands the red primary to Regularizar deuda when there is debt", async () => {
+    mockFetchMembers.mockReset().mockResolvedValue({
+      accounts: [{
+        ...ACCOUNT,
+        estudiantes: [{
+          ...ACCOUNT.estudiantes[0],
+          membresia: { id: 42, estado: "vencida", monto: 85, mesesAdeudados: 2, montoAdeudado: 170 },
+        }],
+      }],
+    });
+    render(<ToastProvider><MembersPage /></ToastProvider>);
+    fireEvent.click(getRowAction(await findAccountRow(), /^pagos/i));
+    const dialog = await screen.findByRole("dialog");
+
+    expect(within(dialog).getByRole("button", { name: "Regularizar deuda" })).toHaveClass("bg-cata-red");
+    expect(within(dialog).getByRole("button", { name: "Registrar pago" })).not.toHaveClass("bg-cata-red");
+    expect(dialog.querySelectorAll("button.bg-cata-red")).toHaveLength(1);
   });
 });

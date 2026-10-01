@@ -20,6 +20,15 @@ describe("SponsorsPage", () => {
     crearSponsor.mockResolvedValue({}); eliminarSponsor.mockResolvedValue(undefined);
     vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:preview"), revokeObjectURL: vi.fn() }));
   });
+  it("puts the upload form before the list and the guide below lg", async () => {
+    render(<SponsorsPage />); await screen.findByText("Municipio");
+    const form = screen.getByRole("heading", { name: "Agregar patrocinador" }).closest("form")!;
+    const list = screen.getByRole("region", { name: "Logos cargados" }).parentElement!;
+    const guide = screen.getByRole("complementary", { name: "Cómo se publica en el sitio" });
+    expect(form).toHaveClass("max-lg:order-1");
+    expect(list).toHaveClass("max-lg:order-2");
+    expect(guide).toHaveClass("max-lg:order-3");
+  });
   it("lists uploaded logos with meaningful alt text, lazy loading and dimensions", async () => {
     render(<SponsorsPage />);
     const img = await screen.findByRole("img", { name: "Logo de Municipio" });
@@ -150,5 +159,11 @@ describe("SponsorsPage", () => {
     render(<SponsorsPage />); await screen.findByText("Municipio");
     fireEvent.change(screen.getByLabelText("Logo (JPG o PNG)"), { target: { files: [new File(["gif"], "logo.gif", { type: "image/gif" })] } });
     expect(await screen.findByRole("alert")).toHaveTextContent(/debe ser un archivo JPG o PNG/);
+  });
+  it("keeps the publishing indications visible beside the form", async () => {
+    render(<SponsorsPage />); await screen.findByText("Municipio");
+    expect(screen.getByRole("heading", { name: "Cómo se publica en el sitio" })).toBeInTheDocument();
+    expect(screen.getByText("JPG o PNG, hasta 5 MB.")).toBeInTheDocument();
+    expect(screen.getByText(/El logo se muestra en la franja de patrocinadores de la landing/)).toBeInTheDocument();
   });
 });

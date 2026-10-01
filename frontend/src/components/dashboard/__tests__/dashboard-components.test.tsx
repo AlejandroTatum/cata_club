@@ -11,6 +11,8 @@ import AttentionStrip from "../AttentionStrip";
 import CompactEmpty from "../CompactEmpty";
 import SectionNotice from "../SectionNotice";
 import StatusRowList from "../StatusRowList";
+import KpiTile from "../KpiTile";
+import TimelineDayList from "../TimelineDayList";
 import { buildContextLine, formatClubLongDate } from "../context-line";
 
 describe("formatClubLongDate", () => {
@@ -93,5 +95,39 @@ describe("CompactEmpty", () => {
     expect(within(line).getByText("No hay nada por revisar.")).toBeInTheDocument();
     expect(within(line).getByRole("link", { name: "Ir" })).toBeInTheDocument();
     expect(line.className).not.toMatch(/\bmin-h-|\bh-full\b|\bflex-1\b/);
+  });
+});
+
+describe("KpiTile", () => {
+  it("lets a side picture wrap under the figure instead of overflowing a narrow tile", () => {
+    render(<KpiTile label="Pagos" value="8" visual={<span>picture</span>} caption="Ver" />);
+    expect(screen.getByTestId("kpi-tile").querySelector(".flex-wrap")).not.toBeNull();
+  });
+});
+
+describe("TimelineDayList", () => {
+  it("writes each session in full, linking into its attendance when it has one", () => {
+    render(
+      <TimelineDayList
+        items={[
+          { id: "a", start: "15:00", end: "16:00", title: "Formativo", status: "pending", statusLabel: "Pendiente", href: "/trainer/attendance?horario=1" },
+          { id: "b", start: "16:00", end: "17:00", title: "Avanzado", status: "done", statusLabel: "Lista tomada", note: "12 inscritos" },
+        ]}
+      />,
+    );
+    const rows = within(screen.getByTestId("timeline-day-list")).getAllByRole("listitem");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent("15:00 – 16:00");
+    expect(rows[0]).toHaveTextContent("Pendiente");
+    expect(within(rows[0]).getByRole("link").getAttribute("href")).toBe("/trainer/attendance?horario=1");
+    expect(rows[1]).toHaveTextContent("Lista tomada · 12 inscritos");
+    expect(within(rows[1]).queryByRole("link")).toBeNull();
+  });
+});
+
+describe("KpiTile caption link", () => {
+  it("accepts a taller tap area for the caption link", () => {
+    render(<KpiTile label="Alumnos" value={8} caption="8 alumnos" href="/members" captionClassName="max-lg:min-h-[44px]" />);
+    expect(screen.getByRole("link", { name: /8 alumnos/ }).className).toContain("max-lg:min-h-[44px]");
   });
 });

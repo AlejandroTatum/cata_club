@@ -24,38 +24,31 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import AttendanceFilters, { useAttendanceFilters } from "@/components/attendance/AttendanceFilters";
-import AttendanceCorrectionAction, {
-  type AttendanceCorrectionPatch,
-} from "@/app/attendance/AttendanceCorrectionAction";
-import { ArrowRight, UserCheck } from "lucide-react";
+import AttendanceFilters, {
+  useAttendanceFilters,
+} from "@/components/attendance/AttendanceFilters";
+import {
+  narrowSchedules,
+  narrowToHorarios,
+  toApiParams,
+} from "@/components/attendance/attendance-filters-utils";
+import AttendancePeriodRail from "@/components/attendance/AttendancePeriodRail";
+import SessionHistoryList, {
+  sessionKey,
+} from "@/components/attendance/SessionHistoryList";
+import { type AttendanceCorrectionPatch } from "@/app/attendance/AttendanceCorrectionAction";
+import SessionRecordsPanel from "@/app/attendance/SessionRecordsPanel";
+import { groupRecordsBySession } from "@/app/trainer/trainer-day-utils";
+import { ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { fetchTrainingSchedules, fetchAttendanceRecords } from "@/services/api";
 import {
-  Badge,
   buttonClasses,
-  EmptyState,
   ErrorState,
   LoadingState,
-  Pagination,
-  STAT_GRID,
-  StatCard,
-  StatTrack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeaderCell,
-  TableNameCell,
-  TableRow,
+  PAGE_RAIL,
 } from "@/components/ui";
 import {
-  buildAttendanceStats,
-  formatHumanDate,
-  getAttendanceBadgeTone,
-  getAttendanceLabel,
-  paginateRecords,
-  getTotalPages,
   ATTENDANCE_PAGE_SIZE,
   type AttendanceRecord,
   type TrainingSchedule,
@@ -66,10 +59,11 @@ export default function AttendancePage(): React.ReactElement {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
 
-  const filters = useAttendanceFilters("this_month");
+  const filters = useAttendanceFilters("this_month", schedules);
   const { query } = filters;
+  // The API takes one horarioId; a slot's "Todos los días" narrows client-side.
+  const apiParams = useMemo(() => (query ? toApiParams(query) : {}), [query]);
 
   const loadSchedules = useCallback(async (): Promise<void> => {
     try {
@@ -95,14 +89,18 @@ export default function AttendancePage(): React.ReactElement {
     setLoading(true);
     setError(null);
     try {
-      setRecords(await fetchAttendanceRecords(Object.keys(query).length > 0 ? query : undefined));
+      setRecords(
+        await fetchAttendanceRecords(
+          Object.keys(apiParams).length > 0 ? apiParams : undefined,
+        ),
+      );
     } catch (err) {
       console.error("[attendance] fetchAttendanceRecords failed", err);
       setError("No se pudieron cargar los registros de asistencia.");
     } finally {
       setLoading(false);
     }
-  }, [query]);
+  }, [query, apiParams]);
 
   useEffect(() => {
     void loadSchedules();
@@ -112,42 +110,45 @@ export default function AttendancePage(): React.ReactElement {
     void loadRecords();
   }, [loadRecords]);
 
-  // Reset to page 1 whenever the underlying set changes, so the paginator
-  // never gets stuck on a stale/out-of-range page.
-  useEffect(() => {
-    setPage(1);
-  }, [records]);
-
-  const stats = buildAttendanceStats(records);
-  const presentPercent =
-    stats.totalStudents > 0 ? Math.round((stats.totalPresent / stats.totalStudents) * 100) : 0;
-
-  const totalPages = useMemo(() => getTotalPages(records.length), [records]);
-  const paginatedRecords = useMemo(() => paginateRecords(records, page), [records, page]);
+  const scopedRecords = useMemo(() => narrowToHorarios(records, query), [records, query]);
+  const scopedSchedules = useMemo(() => narrowSchedules(schedules, query), [schedules, query]);
+  const sessions = useMemo(() => groupRecordsBySession(scopedRecords), [scopedRecords]);
+  const recordsBySession = useMemo(() => {
+    const map = new Map<string, AttendanceRecord[]>();
+    for (const record of scopedRecords) {
+      const key = sessionKey(record);
+      map.set(key, [...(map.get(key) ?? []), record]);
+    }
+    return map;
+  }, [scopedRecords]);
 
   // Issue #663: patches the corrected row in place, same idiom as the
   // trainer roster's `handleRowCorrected` — a fresh `fetchAttendanceRecords`
   // round trip is not needed to reflect what the PATCH response already
   // confirmed.
-  const handleCorrected = useCallback((recordId: string, patch: AttendanceCorrectionPatch): void => {
-    setRecords((prev) =>
-      prev.map((record) =>
-        record.id === recordId
-          ? {
-              ...record,
-              estado: patch.estado,
-              justificativo: patch.justificativo,
-              estadoJustificativo: patch.estadoJustificativo,
-            }
-          : record,
-      ),
-    );
-  }, []);
+  const handleCorrected = useCallback(
+    (recordId: string, patch: AttendanceCorrectionPatch): void => {
+      setRecords((prev) =>
+        prev.map((record) =>
+          record.id === recordId
+            ? {
+                ...record,
+                estado: patch.estado,
+                justificativo: patch.justificativo,
+                estadoJustificativo: patch.estadoJustificativo,
+              }
+            : record,
+        ),
+      );
+    },
+    [],
+  );
 
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
         title="Asistencias"
+        subtitle="El registro de quién entrenó, y cuándo."
         actions={
           <Link href="/trainer/attendance" className={buttonClasses("primary")}>
             Tomar asistencia
@@ -155,41 +156,6 @@ export default function AttendancePage(): React.ReactElement {
           </Link>
         }
       >
-        <div className={STAT_GRID}>
-          <StatCard label="Horarios" value={schedules.length} hint="sesiones semanales" />
-          <StatCard label="Registros" value={stats.totalStudents} hint="en el rango elegido" />
-          {/* LA REGLA DE LA FORMA. "Presentes" is a proportion of "Registros"
-              right beside it, and it stated the share as a bare "54%" glued to
-              the figure with "del total" underneath — a sentence where the
-              system has a shape. `StatTrack` is the piece, and `/members` and
-              `/dashboard` now draw the same statistic the same way. */}
-          <StatCard
-            label="Presentes"
-            value={stats.totalPresent}
-            hint={
-              <span className="flex flex-col gap-y-field">
-                <StatTrack value={stats.totalPresent} total={stats.totalStudents} />
-                <span>
-                  {stats.totalStudents > 0 ? `${presentPercent}% del total` : "del total"}
-                </span>
-              </span>
-            }
-          />
-          {/* "Ausencias / tardanzas · combinadas" was a slash compound holding
-              two different states in one figure, with the caption spending its
-              line to say that it did. The two counts exist separately — the
-              donut on `/dashboard` draws them apart — so the caption states the
-              split instead of announcing that there is one. No shoulder on this
-              row and no `hot` tile: the shoulder marks what ASKS somebody to
-              come and do it, and this screen reports a log rather than holding
-              a queue. Marking one of four here would mark nothing. */}
-          <StatCard
-            label="Ausencias y tardanzas"
-            value={stats.totalAbsent + stats.totalLate}
-            hint={`${stats.totalAbsent} ausencias y ${stats.totalLate} tardanzas`}
-          />
-        </div>
-
         {/* The panel spans the page here, so its slots flow across the width.
             It used to stack three controls in the left 320px of a full-width
             card — 254px tall with the entire right half empty, which is the
@@ -197,80 +163,65 @@ export default function AttendancePage(): React.ReactElement {
             dense. The trainer's history draws this same component in the left
             third of its layout and keeps the column, which is why the axis is
             declared by the caller and not changed for everyone. */}
-        <AttendanceFilters filters={filters} schedules={schedules} layout="row" />
+        <AttendanceFilters
+          filters={filters}
+          schedules={schedules}
+          layout="row"
+          className="lg:grid-cols-[1fr_1.7fr_1fr]"
+        />
 
         {loading && <LoadingState label="Cargando registros…" />}
 
-        {error && !loading && <ErrorState message={error} onRetry={() => void loadRecords()} />}
-
-        {!loading && !error && records.length === 0 && (
-          <EmptyState
-            fill
-            icon={<UserCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-            title="No hay registros en este rango"
-            description="Cambie el rango o los filtros, o registre una sesión de entrenamiento."
-            action={
-              // NOT `primary`. The page header already draws "Tomar asistencia"
-              // in red, so the empty state was putting the same label, in the
-              // same colour, pointing at the same destination, a second time on
-              // the same screen — two red buttons at once, and the client's "un
-              // botón por acá y otro por allá" in its most literal form.
-              <Link href="/trainer/attendance" className={buttonClasses("secondary")}>
-                Tomar asistencia
-              </Link>
-            }
-          />
+        {error && !loading && (
+          <ErrorState message={error} onRetry={() => void loadRecords()} />
         )}
 
-        {!loading && !error && records.length > 0 && (
-          <div className="card overflow-hidden">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableHeaderCell>Fecha</TableHeaderCell>
-                    <TableHeaderCell>Horario</TableHeaderCell>
-                    <TableHeaderCell>Estudiante</TableHeaderCell>
-                    <TableHeaderCell>Estado</TableHeaderCell>
-                    {/* Issue #663: the door into correcting a row was
-                        reachable only from `/trainer/attendance`, a live
-                        roll call — not from this log, which is what an
-                        admin actually reads to find a mistake days later.
-                        Admin-only is already enforced by this page's
-                        `ProtectedRoute` above, so no second role check
-                        belongs in the column itself. */}
-                    <TableHeaderCell type="action">Acciones</TableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {paginatedRecords.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableNameCell name={formatHumanDate(record.fecha)} />
-                      <TableCell>{record.horario}</TableCell>
-                      <TableCell className="font-semibold text-ink">{record.estudiante}</TableCell>
-                      <TableCell>
-                        <Badge tone={getAttendanceBadgeTone(record.estado)}>
-                          {getAttendanceLabel(record.estado)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell type="action">
-                        <AttendanceCorrectionAction record={record} onCorrected={handleCorrected} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+        {!loading && !error && (
+          <div className={query !== null ? PAGE_RAIL : undefined}>
+            <SessionHistoryList
+              sessions={sessions}
+              pageSize={ATTENDANCE_PAGE_SIZE}
+              rangeInvalid={query === null}
+              // NOT `primary`: the header already draws "Tomar asistencia" in red.
+              emptyAction={
+                <Link
+                  href="/trainer/attendance"
+                  className={buttonClasses("secondary")}
+                >
+                  Tomar asistencia
+                </Link>
+              }
+              // Issue #663: the door into correcting a record — admin only, already
+              // enforced by this page's `ProtectedRoute`, so no second role check.
+              renderDetail={(session) => (
+                <SessionRecordsPanel
+                  records={recordsBySession.get(sessionKey(session)) ?? []}
+                  onCorrected={handleCorrected}
+                />
+              )}
+            />
 
-            {totalPages > 1 && (
-              <Pagination
-                variant="footer"
-                page={page}
-                totalPages={totalPages}
-                onPageChange={setPage}
-                totalItems={records.length}
-                pageSize={ATTENDANCE_PAGE_SIZE}
-                itemNoun="registro"
+            {query !== null && (
+              <AttendancePeriodRail
+                sessions={sessions}
+                schedules={scopedSchedules}
+                fechaInicio={query.fechaInicio ?? ""}
+                fechaFin={query.fechaFin ?? ""}
+                horarioId={query.horarioId ?? null}
+                studentFiltered={Boolean(filters.student)}
+                guideExtra={
+                  <>
+                    <p>
+                      Abra «Registros» en una sesión para ver a cada alumno.
+                      «Corregir» cambia el estado de un registro y exige un
+                      motivo, que queda guardado con quien corrigió.
+                    </p>
+                    <p>
+                      Solo se puede corregir una sesión de los últimos 30 días;
+                      después, la ventana se cierra y el registro queda fijo.
+                    </p>
+                  </>
+                }
               />
             )}
           </div>

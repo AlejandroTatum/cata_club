@@ -46,8 +46,8 @@ export type ButtonSize = (typeof BUTTON_SIZES)[number];
 const BASE =
   "inline-flex items-center justify-center gap-2 whitespace-nowrap border font-semibold " +
   "transition-colors duration-150 " +
-  // `.btn[disabled], .btn.off` (:176)
-  "disabled:cursor-not-allowed disabled:opacity-45";
+  // `.btn[disabled], .btn.off` (:176) — the fade lives in `DISABLED` below.
+  "disabled:cursor-not-allowed";
 
 // Both sizes wear the CONTROL radius. `sm` used to carry `rounded-lg` — 8px —
 // which was the only third radius in `ui/` and the one DESIGN.md's "dos radios
@@ -99,6 +99,29 @@ const VARIANT: Record<ButtonVariant, string> = {
 };
 
 /**
+ * The disabled look of a level.
+ *
+ * A filled button (`primary` red, `dark` coal) faded by opacity turns into a
+ * washed-out pink / grey that reads as unfinished or broken rather than
+ * inactive. They swap to the neutral recipe instead — `sunken` fill, `line-2`
+ * edge, `ink-3-strong` label (5.40:1 on `sunken`, over the 3:1 floor) — which
+ * is plainly "off" and still legible. The hover variants are repeated under
+ * `disabled:` so a disabled control does not answer the pointer.
+ * Levels that are already pale keep the plain fade.
+ */
+const NEUTRAL_DISABLED =
+  "disabled:bg-sunken disabled:border-line-2 disabled:text-ink-3-strong " +
+  "disabled:hover:bg-sunken disabled:hover:border-line-2";
+
+const DISABLED: Record<ButtonVariant, string> = {
+  primary: NEUTRAL_DISABLED,
+  secondary: "disabled:opacity-45",
+  dark: NEUTRAL_DISABLED,
+  tertiary: "disabled:opacity-45",
+  onCoal: "disabled:opacity-45",
+};
+
+/**
  * The COLOURS of a level, without its shape.
  *
  * `buttonClasses` below is the usual door and hands out shape and colour
@@ -126,7 +149,7 @@ export function buttonClasses(
   size: ButtonSize = "md",
   className?: string,
 ): string {
-  return cn(BASE, SIZE[size], VARIANT[variant], className);
+  return cn(BASE, SIZE[size], VARIANT[variant], DISABLED[variant], className);
 }
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

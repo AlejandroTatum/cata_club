@@ -65,7 +65,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { fetchStudentPortal } from "@/services/api";
 import type { StudentPortalSummary } from "@/services/api";
-import { EmptyState, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
+import { EmptyState, ErrorState, InfoPanel, LoadingState, buttonClasses } from "@/components/ui";
 import MedicalRecordEditor from "@/app/members/MedicalRecordEditor";
 import ManagedStudentPicker, { useManagedProfiles } from "../ManagedStudentPicker";
 import { firstNameOf, isMinor } from "../student-utils";
@@ -81,6 +81,22 @@ type LoadState =
   | { status: "loading" }
   | { status: "error"; message: string }
   | { status: "ready"; data: StudentPortalSummary };
+
+/**
+ * The guide in the editor's rail, under the emergency card: it says how to
+ * use the form, not what is in it.
+ */
+function MedicalRecordGuide(): React.ReactElement {
+  return (
+    <InfoPanel title="Cómo completar la ficha médica" as="div">
+      <ol className="grid list-decimal gap-y-field pl-4">
+        <li>El tipo de sangre y el teléfono de emergencia son obligatorios.</li>
+        <li>Al guardar se reemplaza la ficha completa: revise alergias y enfermedades antes.</li>
+        <li>La tarjeta de emergencia se actualiza con cada cambio guardado.</li>
+      </ol>
+    </InfoPanel>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Representante branch — the picker, then the reused editor
@@ -160,6 +176,7 @@ function RepresentanteMedicalRecordView({
         studentName={studentName}
         withEmergencyCard
         viewerIsOwner={false}
+        railFooter={<MedicalRecordGuide />}
       />
     </>
   );
@@ -242,11 +259,14 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
         <RepresentanteMedicalRecordView data={state.data} accountPersonaId={personaId} />
       )}
       {state.status === "ready" && role === "estudiante" && state.data.self && (
-        <MedicalRecordEditor
-          personaId={Number(state.data.self.personaId)}
-          studentName={firstNameOf(state.data.self.nombres)}
-          withEmergencyCard
-        />
+        <>
+          <MedicalRecordEditor
+            personaId={Number(state.data.self.personaId)}
+            studentName={firstNameOf(state.data.self.nombres)}
+            withEmergencyCard
+            railFooter={<MedicalRecordGuide />}
+          />
+        </>
       )}
       {state.status === "ready" && role === "estudiante" && !state.data.self && (
         <ErrorState

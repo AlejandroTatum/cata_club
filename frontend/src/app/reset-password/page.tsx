@@ -99,7 +99,7 @@ function ResetPasswordContent(): React.ReactElement {
         // "Panel de gestión", is wrong here.
         eyebrow="Acceso al club"
       >
-        <div className="flex flex-col items-center gap-2.5 py-2 text-center">
+        <div className="flex flex-col items-start gap-3 text-left">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-bad-bg">
             {/* `state-bad`, not the action red: this disc reports a state, and
                 the only thing on this card that may say "press me" is the exit
@@ -146,7 +146,7 @@ function ResetPasswordContent(): React.ReactElement {
         backHref="/login"
         eyebrow="Acceso al club"
       >
-        <div className="flex flex-col items-center gap-2.5 py-2 text-center">
+        <div className="flex flex-col items-start gap-3 text-left">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-ok-bg">
             <CheckCircle2 size={ICON.lg} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
           </span>

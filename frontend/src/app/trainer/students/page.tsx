@@ -54,6 +54,7 @@ import {
   EmptyState,
   ErrorState,
   FilterPanel,
+  InfoPanel,
   LoadingState,
   PAGE_RAIL,
   Pagination,
@@ -361,6 +362,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
 
         {!cargando && !fallo && (
           <div className={esEscritorio && !estadoVacio ? PAGE_RAIL : undefined}>
+            <div className="flex min-w-0 flex-col gap-page">
             <div className="card overflow-hidden">
               {estadoVacio ? (
                 <EmptyState
@@ -507,7 +509,40 @@ export default function TrainerStudentsPage(): React.ReactElement {
                 </>
               )}
             </div>
-            {esEscritorio && !estadoVacio && <StudentFichaPanel student={seleccionado} />}
+            {esEscritorio && !estadoVacio && grupos.length > 0 && (
+              <section aria-label="Alumnos por grupo" data-testid="students-by-group" className="card flex flex-col gap-2 p-[18px]">
+                <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Alumnos por grupo</h2>
+                <ul className="m-0 flex list-none flex-col p-0">
+                  {grupos.map(([hora, cuenta]) => (
+                    <li key={hora} className="border-b border-line last:border-b-0">
+                      <button
+                        type="button"
+                        onClick={() => elegirGrupo(hora)}
+                        aria-pressed={grupo === hora}
+                        aria-label={`Filtrar el grupo de las ${hora}, ${cuenta}`}
+                        className="flex min-h-drow w-full items-center justify-between gap-3 text-left text-sm hover:bg-ink/5"
+                      >
+                        <span className="font-semibold text-ink">Grupo de las {hora}</span>
+                        <span className="text-ink-2">
+                          <b className="font-bold tabular-nums text-ink">{cuenta}</b> {cuenta === 1 ? "alumno" : "alumnos"}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            </div>
+            {esEscritorio && !estadoVacio && (
+              <div className="flex min-w-0 flex-col gap-page">
+                <StudentFichaPanel student={seleccionado} />
+                <InfoPanel title="Cómo usar la nómina">
+                  <p>Busque por nombre o filtre por grupo; un alumno en varios horarios aparece una sola vez.</p>
+                  <p>Toque un renglón para ver su ficha médica y a quién llamar en una emergencia.</p>
+                  <p>«Horario» muestra los días y horas en que entrena cada alumno.</p>
+                </InfoPanel>
+              </div>
+            )}
           </div>
         )}
 

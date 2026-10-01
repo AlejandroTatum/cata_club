@@ -18,6 +18,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { PAGE_RAIL } from "@/components/ui";
 import ProfilePage from "@/app/profile/page";
 import type { PerfilPropio } from "@/types/domain";
 import type { MembershipSummary, PagoPersona, StudentProfileSummary } from "@/services/api";
@@ -254,7 +255,7 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
     await waitForStaffProfile();
     const main = screen.getByRole("main");
     expect(within(main).getAllByText("Ana Admin").length).toBe(2);
-    expect(screen.getAllByText("ana.admin@cataclub.com").length).toBe(2);
+    expect(screen.getAllByText("ana.admin@cataclub.com").length).toBe(3);
     expect(screen.getByText("099111222")).toBeInTheDocument();
     // The role reads as Spanish prose on the identity card, not as the raw
     // backend enum ("ADMINISTRADOR") the old status column printed.
@@ -348,7 +349,7 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
 
     expect((await screen.findAllByText("Carla Entrenadora")).length).toBe(2);
     // Correo appears twice by design — see the dedicated dedupe-reversal test.
-    expect(screen.getAllByText("carla.entrenadora@cataclub.com").length).toBe(2);
+    expect(screen.getAllByText("carla.entrenadora@cataclub.com").length).toBe(3);
     expect(within(screen.getByTestId("profile-hero")).getByText("Entrenador")).toBeInTheDocument();
     // Different fechaCreacion than the admin fixture — proves the date is
     // computed from `perfil.fechaCreacion`, not hardcoded.
@@ -894,7 +895,7 @@ describe("ProfilePage — inline teléfono edit (correo is read-only)", () => {
     expect(screen.queryByLabelText(/correo electrónico/i)).not.toBeInTheDocument();
     // Correo appears twice (identity panel + "Correo de cuenta" row) but is
     // never an editable field in EITHER spot.
-    expect(screen.getAllByText("ana.admin@cataclub.com").length).toBe(2);
+    expect(screen.getAllByText("ana.admin@cataclub.com").length).toBe(3);
   });
 
   it("surfaces an error and reverts the teléfono when the save fails", async () => {
@@ -1536,16 +1537,14 @@ describe("ProfilePage — the redesigned account layout", () => {
     await waitForStaffProfile();
   }
 
-  it("puts the page action in the page header row, not floating above the content", async () => {
+  it("puts the profile actions inside the identity band, not in the page header", async () => {
     await renderAdmin();
 
     const button = screen.getByRole("button", { name: /editar datos/i });
-    // It belongs to the SAME header row as the page title — it used to sit on
-    // a line of its own between the header and the identity card, which is
-    // what pushed the first real content ~40% down the viewport.
-    const header = button.closest("header");
-    expect(header).not.toBeNull();
-    expect(within(header as HTMLElement).getByRole("heading", { name: "Perfil" })).toBeInTheDocument();
+    // The band owns the profile actions (edit, change photo) so the page
+    // header stays a plain title row and the hero uses its full width.
+    expect(screen.getByTestId("profile-hero").contains(button)).toBe(true);
+    expect(button.closest("header")).toBeNull();
     expect(screen.getByTestId("profile-column-info").contains(button)).toBe(false);
   });
 
@@ -1600,7 +1599,8 @@ describe("ProfilePage — the redesigned account layout", () => {
     const hero = screen.getByTestId("profile-hero");
 
     // No red field, and no `clip-path` polygon painting one.
-    expect(hero.querySelector(".bg-cata-red")).toBeNull();
+    // (The primary "Editar datos" button is red on purpose; only decoration is barred.)
+    expect(hero.querySelector(".bg-cata-red:not(button)")).toBeNull();
     expect(hero.innerHTML).not.toContain("clip-path");
 
     // The shoulder: coal bar, eyebrow in the club's yellow, naming what the
@@ -1611,14 +1611,14 @@ describe("ProfilePage — the redesigned account layout", () => {
     expect(shoulder.closest(".bg-coal")).not.toBeNull();
   });
 
-  it("shows the correo twice by design — the identity panel AND the 'Datos personales' row (issue #204's own requirement)", async () => {
+  it("shows the correo on the identity panel, the 'Datos personales' row (issue #204) and the rail's account summary", async () => {
     // The first #204 pass read "if the prototype shows a field the product
     // doesn't compute, drop it" as "when in doubt, cut it" and removed this
     // exact row. The prototype repeats correo in both places on purpose —
     // this test locks that reversal in.
     await renderAdmin();
 
-    expect(screen.getAllByText("ana.admin@cataclub.com")).toHaveLength(2);
+    expect(screen.getAllByText("ana.admin@cataclub.com")).toHaveLength(3);
     const hero = screen.getByTestId("profile-hero");
     expect(within(hero).getByText(/lo gestiona el club/i)).toBeInTheDocument();
     const info = screen.getByTestId("profile-column-info");
@@ -2485,4 +2485,57 @@ describe("ProfilePage — usted register (issue #340)", () => {
       expect(offenders).toEqual([]);
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// admin v4 — the page is a main column plus the shared PAGE_RAIL rail
+// ---------------------------------------------------------------------------
+
+describe("ProfilePage — main column plus rail (admin v4)", () => {
+  async function renderAdmin(): Promise<void> {
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await waitForStaffProfile();
+  }
+
+  it("splits the screen with PAGE_RAIL and keeps the identity panel in the main column", async () => {
+    await renderAdmin();
+
+    const split = screen.getByTestId("profile-split");
+    expect(split.className).toBe(PAGE_RAIL);
+    expect(within(split.children[0] as HTMLElement).getByTestId("profile-hero")).toBeInTheDocument();
+    expect(within(split.children[0] as HTMLElement).getByTestId("profile-column-status")).toBeInTheDocument();
+  });
+
+  it("always shows the account summary and the 'Cómo proteger su cuenta' indications in the rail", async () => {
+    await renderAdmin();
+
+    const rail = screen.getByTestId("profile-split").children[1] as HTMLElement;
+    const summary = within(rail).getByTestId("profile-account-summary");
+    expect(within(summary).getByText("ana.admin@cataclub.com")).toBeInTheDocument();
+    expect(within(summary).getByText("Administrador")).toBeInTheDocument();
+    expect(within(summary).getByText("10/03/2024")).toBeInTheDocument();
+    expect(within(rail).getByRole("heading", { name: "Cómo proteger su cuenta" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /ver ayuda/i })).not.toBeInTheDocument();
+  });
+
+  it("offers role shortcuts to staff, inside the main column", async () => {
+    await renderAdmin();
+
+    const shortcuts = within(screen.getByTestId("profile-shortcuts"));
+    expect(shortcuts.getByRole("link", { name: /Miembros/ })).toHaveAttribute("href", "/members");
+    expect(within(screen.getByTestId("profile-split").children[1] as HTMLElement).queryByTestId("profile-shortcuts")).toBeNull();
+  });
+
+  it("points the help panel at the FAQ", async () => {
+    await renderAdmin();
+
+    const rail = within(screen.getByTestId("profile-split").children[1] as HTMLElement);
+    expect(rail.getByRole("link", { name: "Preguntas frecuentes" })).toHaveAttribute("href", "/ayuda");
+  });
 });

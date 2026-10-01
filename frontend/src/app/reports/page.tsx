@@ -59,6 +59,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   CheckCircle,
+  Check,
   Download,
   FileText,
   Loader2,
@@ -83,7 +84,6 @@ import {
 import {
   getAttendanceBadgeTone,
   getAttendanceLabel,
-  formatDay,
   type AttendanceRecord,
   type TrainingSchedule,
 } from "@/app/attendance/attendance-utils";
@@ -99,6 +99,9 @@ import {
   PAGOS_REPORT_PAGE_SIZE,
   buildReportDateRange,
   REPORT_DATE_PRESETS,
+  buildScheduleSlots,
+  daysForSlot,
+  resolveHorarioIds,
   type ReportRangePreset,
 } from "@/app/reports/reports-utils";
 import {
@@ -116,6 +119,7 @@ import {
   FilterGroup,
   FilterPanel,
   FilterPill,
+  InfoPanel,
   LoadingState,
   Pagination,
   ScrollableTable,
@@ -126,6 +130,7 @@ import {
   TableHeaderCell,
   TableNameCell,
   TableRow,
+  PAGE_RAIL,
   cn,
 } from "@/components/ui";
 import {
@@ -133,6 +138,7 @@ import {
   VALIDATION_STATUS_LABELS,
   VALIDATION_STATUS_TONES,
 } from "@/lib/status-badges";
+import type { LucideIcon } from "lucide-react";
 import type { PersonaBusqueda, PersonaReporte } from "@/types/domain";
 import { toUserMessage } from "@/lib/error-message";
 
@@ -144,6 +150,7 @@ interface PresetDef {
   description: string;
   /** Singular noun for the preview's scope badge. */
   noun: string;
+  icon: LucideIcon;
 }
 
 const PRESETS: PresetDef[] = [
@@ -152,20 +159,43 @@ const PRESETS: PresetDef[] = [
     title: "Reporte de período",
     description: "Personas registradas entre dos fechas.",
     noun: "persona",
+    icon: Users,
   },
   {
     key: "asistencia",
     title: "Reporte de asistencia",
     description: "Presencias por estudiante, horario y fecha.",
     noun: "registro",
+    icon: CheckCircle,
   },
   {
     key: "pagos",
     title: "Reporte de pagos",
     description: "Pagos y membresías entre dos fechas.",
     noun: "pago",
+    icon: Wallet,
   },
 ];
+
+/** Sticky head for the bounded preview tables — the scroll region is the table's own. */
+const STICKY_TH = "sticky top-0 z-10";
+/** Bound for the preview listing; taller results scroll inside the card. */
+const PREVIEW_SCROLL = "max-h-96 overflow-y-auto";
+
+/** Numbered heading of the three-step flow (type, range, download). */
+function StepHeading({ step, title }: { step: number; title: string }): React.ReactElement {
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        aria-hidden="true"
+        className="grid h-6 w-6 flex-none place-items-center rounded-full bg-coal text-2xs font-bold text-white"
+      >
+        {step}
+      </span>
+      <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">{title}</h2>
+    </div>
+  );
+}
 
 /** Settling time before the preview re-queries after a filter edit. */
 const PREVIEW_DEBOUNCE_MS = 250;
@@ -252,6 +282,8 @@ function ReportsContent(): React.ReactElement {
   }, []);
 
   /** The single preset-specific filter: horario for asistencia, estado for pagos. */
+  const [slotKey, setSlotKey] = useState("");
+  /** Specific day within the slot; "" = every day of the slot. */
   const [horarioId, setHorarioId] = useState("");
   const [pagosEstado, setPagosEstado] = useState("");
 
@@ -297,6 +329,23 @@ function ReportsContent(): React.ReactElement {
       .catch(() => {});
   }, []);
 
+  const slots = useMemo(() => buildScheduleSlots(horarios), [horarios]);
+  const slotDays = useMemo(() => daysForSlot(horarios, slotKey), [horarios, slotKey]);
+  const horarioIds = useMemo(
+    () => resolveHorarioIds(horarios, slotKey, horarioId),
+    [horarios, slotKey, horarioId],
+  );
+
+  function chooseSlot(key: string): void {
+    setSlotKey(key);
+    setHorarioId("");
+  }
+
+  function clearHorario(): void {
+    setSlotKey("");
+    setHorarioId("");
+  }
+
   const runPreview = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
@@ -307,9 +356,14 @@ function ReportsContent(): React.ReactElement {
         const params: { fechaInicio?: string; fechaFin?: string; horarioId?: number; personaId?: number } = {};
         if (fechaInicio) params.fechaInicio = fechaInicio;
         if (fechaFin) params.fechaFin = fechaFin;
-        if (horarioId) params.horarioId = Number(horarioId);
         if (student) params.personaId = student.id;
-        setAttendanceResults(await fetchAttendanceRecords(params));
+        // One id is the common case; a slot with several days is one call per day.
+        const batches = await Promise.all(
+          (horarioIds.length ? horarioIds : [undefined]).map((id) =>
+            fetchAttendanceRecords(id === undefined ? params : { ...params, horarioId: id }),
+          ),
+        );
+        setAttendanceResults(batches.flat());
       } else {
         const params: { fechaInicio?: string; fechaFin?: string; estadoPago?: string } = {};
         if (fechaInicio) params.fechaInicio = fechaInicio;
@@ -326,7 +380,7 @@ function ReportsContent(): React.ReactElement {
     } finally {
       setLoading(false);
     }
-  }, [preset, fechaInicio, fechaFin, horarioId, pagosEstado, student]);
+  }, [preset, fechaInicio, fechaFin, horarioIds, pagosEstado, student]);
 
   /**
    * The preview generates itself from the current selection. That is the whole
@@ -394,9 +448,13 @@ function ReportsContent(): React.ReactElement {
         const params: { fechaInicio?: string; fechaFin?: string; horarioId?: number; personaId?: number } = {};
         if (fechaInicio) params.fechaInicio = fechaInicio;
         if (fechaFin) params.fechaFin = fechaFin;
-        if (horarioId) params.horarioId = Number(horarioId);
         if (student) params.personaId = student.id;
-        await exportAsistenciaReportePdf(params);
+        if (horarioIds.length === 0) {
+          await exportAsistenciaReportePdf(params);
+        } else {
+          // The PDF endpoint filters by a single horario: one file per day.
+          for (const id of horarioIds) await exportAsistenciaReportePdf({ ...params, horarioId: id });
+        }
       } else {
         const params: { fechaInicio?: string; fechaFin?: string; estadoPago?: string } = {};
         if (fechaInicio) params.fechaInicio = fechaInicio;
@@ -474,76 +532,118 @@ function ReportsContent(): React.ReactElement {
     }
   }
 
+  /** "Reporte de período · Este mes · 12 personas · 2 páginas" — what the downloads will contain. */
+  const rangeLabel =
+    rangePreset === "custom"
+      ? fechaInicio && fechaFin
+        ? `${formatDate(fechaInicio)} – ${formatDate(fechaFin)}`
+        : "Rango sin definir"
+      : (REPORT_DATE_PRESETS.find((option) => option.key === rangePreset)?.label ?? "");
+  const summaryParts = [activePreset.title, rangeLabel];
+  if (canQuery && !loading) {
+    summaryParts.push(`${resultCount} ${pluralize(activePreset.noun, resultCount)}`);
+    if (resultCount > 0) summaryParts.push(`${totalPages} ${totalPages === 1 ? "página" : "páginas"}`);
+  }
+  const summary = summaryParts.join(" · ");
+  const downloadHint =
+    canQuery && !loading && resultCount > 0
+      ? "Listo: descargue con «Generar PDF» o «Exportar a Excel», arriba."
+      : "La descarga se habilita cuando la vista previa tiene resultados.";
+
   return (
     <AppShell
       title="Reportes"
+      subtitle="Los listados del club por rango de fechas, para descargar en PDF o Excel."
       /*
-       * The PDF is the club's document (server-rendered, the one to hand in)
-       * and it is the primary CTA of the screen — red, the only red control.
-       * It lives in the header `actions` slot, the one place `AppShellProps`
-       * reserves for a screen's primary action.
-       *
-       * "Exportar a Excel" used to render here too — issue A4 (K6 hallazgo):
-       * it read as available above the report-type selector and the date
-       * range, before the scope it exports was even chosen. It is a secondary
-       * control, and `AppShellProps`' own doc comment already says where one
-       * of those belongs: "in the body, where the thing they act on is". It
-       * now renders after the scope controls — see below.
+       * Both exports live in ONE group in the header slot, same size: "Generar
+       * PDF" is the red primary (the club's server-rendered document), "Exportar
+       * a Excel" the secondary. Both stay disabled until the preview has rows,
+       * and the rail's summary names exactly which report/range they act on —
+       * which is what issue A4 (Excel reading as available before the scope was
+       * chosen) was really asking for.
        */
       actions={
-        <Button
-          variant="primary"
-          onClick={() => void handleGeneratePdf()}
-          disabled={exportingPdf || !canQuery || resultCount === 0}
-        >
-          {exportingPdf ? (
-            <Loader2 size={ICON.sm} strokeWidth={1.5} className="animate-spin" aria-hidden="true" />
-          ) : (
-            <Download size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          )}
-          {exportingPdf ? "Generando…" : "Generar PDF"}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="primary"
+            onClick={() => void handleGeneratePdf()}
+            disabled={exportingPdf || !canQuery || resultCount === 0}
+          >
+            {exportingPdf ? (
+              <Loader2 size={ICON.sm} strokeWidth={1.5} className="animate-spin" aria-hidden="true" />
+            ) : (
+              <Download size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+            )}
+            {exportingPdf ? "Generando…" : "Generar PDF"}
+          </Button>
+          <Button
+            onClick={() => void handleDownloadXlsx()}
+            disabled={exportingXlsx || !canQuery || resultCount === 0}
+          >
+            {exportingXlsx ? (
+              <Loader2 size={ICON.sm} strokeWidth={1.5} className="animate-spin" aria-hidden="true" />
+            ) : (
+              <Table2 size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+            )}
+            {exportingXlsx ? "Generando…" : "Exportar a Excel"}
+          </Button>
+        </div>
       }
     >
-      {/* Preset cards. Even height via `items-stretch` + `h-full`, selection
-          marked with coal + the yellow ball dot — red is reserved for the
-          primary CTA and for destructive/error states. */}
-      <div
-        role="radiogroup"
-        aria-label="Tipo de reporte"
-        className="grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] items-stretch gap-section"
-      >
-        {PRESETS.map((item) => {
-          const selected = preset === item.key;
-          return (
-            <button
-              key={item.key}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              onClick={() => setPreset(item.key)}
-              className={cn(
-                "flex h-full flex-col items-start gap-field rounded-card border bg-paper p-[18px] text-left",
-                selected ? "border-coal ring-1 ring-coal" : "border-line-2 hover:bg-canvas",
-              )}
-            >
-              <b className="text-base text-ink">{item.title}</b>
-              <p className="text-sm text-ink-3">{item.description}</p>
-              {selected ? (
-                <span className="h-badge mt-1 inline-flex items-center gap-1.5 rounded-full bg-coal px-[11px] text-2xs tracking-flat font-bold text-white">
+      <div data-testid="reports-split" className={PAGE_RAIL}>
+        <div className="flex min-w-0 flex-col gap-page lg:min-h-[calc(100dvh-10rem)]">
+      <section className="card grid gap-section p-4">
+        <StepHeading step={1} title="Tipo de reporte" />
+        <div
+          role="radiogroup"
+          aria-label="Tipo de reporte"
+          className="grid items-stretch gap-field sm:grid-cols-3"
+        >
+          {PRESETS.map((item) => {
+            const selected = preset === item.key;
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => setPreset(item.key)}
+                className={cn(
+                  "relative flex h-full items-start gap-3 rounded-card border p-3 text-left",
+                  selected ? "border-coal bg-canvas ring-1 ring-coal" : "border-line-2 bg-paper hover:bg-canvas",
+                )}
+              >
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "grid h-9 w-9 flex-none place-items-center rounded-card",
+                    selected ? "bg-coal text-white" : "bg-sunken text-ink-3",
+                  )}
+                >
+                  <Icon size={ICON.base} strokeWidth={1.5} />
+                </span>
+                <span className="flex min-w-0 flex-col gap-0.5 pr-5">
+                  <b className="text-sm text-ink">{item.title}</b>
+                  <span className="text-xs text-ink-3">{item.description}</span>
+                </span>
+                {selected ? (
                   <span
                     data-testid="preset-ball-dot"
                     aria-hidden="true"
-                    className="h-1.5 w-1.5 flex-none rounded-full bg-ball"
-                  />
-                  Seleccionado
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
+                    className="absolute right-3 top-3 grid h-4 w-4 place-items-center rounded-full bg-ball text-coal"
+                  >
+                    <Check size={ICON.sm} strokeWidth={2} />
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
+      <div className="grid gap-field">
+        <StepHeading step={2} title="Rango de fechas" />
       {/* Range + the single preset-specific filter. The frame used to be a
           hand-written card with its own `p-[17px_18px]` and no caption — one
           pixel off the panel every other screen filters through. */}
@@ -602,14 +702,34 @@ function ReportsContent(): React.ReactElement {
                   </label>
                   <select
                     id="horarioId"
-                    value={horarioId}
-                    onChange={(e) => setHorarioId(e.target.value)}
+                    value={slotKey}
+                    onChange={(e) => chooseSlot(e.target.value)}
                     className="input-field h-ctl"
                   >
                     <option value="">Todos</option>
-                    {horarios.map((h) => (
-                      <option key={h.id} value={h.id}>
-                        {formatDay(h.diaSemana)} {h.horaInicio}–{h.horaFin}
+                    {slots.map((slot) => (
+                      <option key={slot.key} value={slot.key}>
+                        {slot.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex min-w-[150px] flex-col gap-field">
+                  <label htmlFor="horarioDia" className={FILTER_LABEL}>
+                    Día
+                  </label>
+                  <select
+                    id="horarioDia"
+                    value={horarioId}
+                    onChange={(e) => setHorarioId(e.target.value)}
+                    disabled={!slotKey}
+                    className="input-field h-ctl"
+                  >
+                    <option value="">Todos los días</option>
+                    {slotDays.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.label}
                       </option>
                     ))}
                   </select>
@@ -649,22 +769,6 @@ function ReportsContent(): React.ReactElement {
           </div>
         }
       />
-
-      {/* Issue A4: the secondary export sits right after the controls that
-          define what it exports, never above them — see the note beside
-          "Generar PDF" in the header for the full reasoning. */}
-      <div className="flex justify-end">
-        <Button
-          onClick={() => void handleDownloadXlsx()}
-          disabled={exportingXlsx || !canQuery || resultCount === 0}
-        >
-          {exportingXlsx ? (
-            <Loader2 size={ICON.sm} strokeWidth={1.5} className="animate-spin" aria-hidden="true" />
-          ) : (
-            <Table2 size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          )}
-          {exportingXlsx ? "Generando…" : "Exportar a Excel"}
-        </Button>
       </div>
 
       {rangeInverted && (
@@ -682,7 +786,7 @@ function ReportsContent(): React.ReactElement {
       )}
 
       {/* Preview — the canvas that used to sit empty until you pressed Buscar. */}
-      <section className="card overflow-hidden">
+      <section className="card flex flex-1 flex-col overflow-hidden" aria-label="Vista previa del reporte">
         <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-[15px]">
           <h2 className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">
             Vista previa — {activePreset.title}
@@ -722,8 +826,8 @@ function ReportsContent(): React.ReactElement {
             // widening the range, and offering the range first would send the
             // reader past the control that is holding the result at zero.
             action={
-              horarioId ? (
-                <Button onClick={() => setHorarioId("")}>Quitar el filtro de horario</Button>
+              slotKey ? (
+                <Button onClick={clearHorario}>Quitar el filtro de horario</Button>
               ) : (
                 widenRangeAction
               )
@@ -755,6 +859,41 @@ function ReportsContent(): React.ReactElement {
           />
         )}
       </section>
+        </div>
+
+        <div data-testid="reports-rail" className="grid content-start gap-page lg:sticky lg:top-4">
+          <InfoPanel title="Resumen del reporte">
+            <p data-testid="report-summary" className="font-bold text-ink">
+              {summary}
+            </p>
+            <p>{downloadHint}</p>
+          </InfoPanel>
+          <InfoPanel title="Qué contiene cada reporte">
+            <dl className="grid gap-2">
+              <div>
+                <dt className="font-semibold text-ink">Período</dt>
+                <dd>Personas registradas entre dos fechas, con cédula, edad y teléfono.</dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-ink">Asistencia</dt>
+                <dd>Presencias por estudiante, horario y fecha; admite filtrar por horario y alumno.</dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-ink">Pagos</dt>
+                <dd>Pagos y membresías con monto, método y estado; admite filtrar por estado.</dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-ink">PDF</dt>
+                <dd>El documento del club, listo para imprimir o entregar.</dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-ink">Excel</dt>
+                <dd>Una hoja con todas las filas del rango, para ordenar o analizar.</dd>
+              </div>
+            </dl>
+          </InfoPanel>
+        </div>
+      </div>
     </AppShell>
   );
 }
@@ -802,15 +941,15 @@ function PersonaPreview({
     );
   }
   return (
-    <ScrollableTable label="Listado de personas, tabla desplazable">
+    <ScrollableTable label="Listado de personas, tabla desplazable" className={PREVIEW_SCROLL}>
       <Table>
         <TableHead>
           <tr>
-            <TableHeaderCell>Nombre</TableHeaderCell>
-            <TableHeaderCell>Cédula</TableHeaderCell>
-            <TableHeaderCell>Fecha de nacimiento</TableHeaderCell>
-            <TableHeaderCell>Edad</TableHeaderCell>
-            <TableHeaderCell>Teléfono</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Nombre</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Cédula</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Fecha de nacimiento</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Edad</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Teléfono</TableHeaderCell>
           </tr>
         </TableHead>
         <TableBody>
@@ -851,14 +990,14 @@ function AsistenciaPreview({
     );
   }
   return (
-    <ScrollableTable label="Listado de asistencia, tabla desplazable">
+    <ScrollableTable label="Listado de asistencia, tabla desplazable" className={PREVIEW_SCROLL}>
       <Table>
         <TableHead>
           <tr>
-            <TableHeaderCell>Fecha</TableHeaderCell>
-            <TableHeaderCell>Horario</TableHeaderCell>
-            <TableHeaderCell>Estudiante</TableHeaderCell>
-            <TableHeaderCell>Estado</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Fecha</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Horario</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Estudiante</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Estado</TableHeaderCell>
           </tr>
         </TableHead>
         <TableBody>
@@ -902,17 +1041,17 @@ function PagosPreview({
     );
   }
   return (
-    <ScrollableTable label="Listado de pagos, tabla desplazable">
+    <ScrollableTable label="Listado de pagos, tabla desplazable" className={PREVIEW_SCROLL}>
       <Table>
         <TableHead>
           <tr>
-            <TableHeaderCell>Estudiante</TableHeaderCell>
-            <TableHeaderCell>Responsable de pago</TableHeaderCell>
-            <TableHeaderCell>Período</TableHeaderCell>
-            <TableHeaderCell>Monto</TableHeaderCell>
-            <TableHeaderCell>Método</TableHeaderCell>
-            <TableHeaderCell>Subido</TableHeaderCell>
-            <TableHeaderCell>Estado</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Estudiante</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Responsable de pago</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Período</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Monto</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Método</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Subido</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Estado</TableHeaderCell>
           </tr>
         </TableHead>
         <TableBody>

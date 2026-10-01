@@ -147,7 +147,7 @@ function VerificarCorreoContent(): React.ReactElement {
   if (estado === "verificando") {
     return (
       <AuthShell title="Verificando su correo" note={LINK_LIFETIME_NOTE} backHref="/login" eyebrow="Acceso al club">
-        <p role="status" className="py-2 text-center text-sm leading-relaxed text-ink-2">
+        <p role="status" className="text-sm leading-relaxed text-ink-2">
           Un momento, estamos confirmando su dirección…
         </p>
       </AuthShell>
@@ -157,7 +157,7 @@ function VerificarCorreoContent(): React.ReactElement {
   if (estado === "verificado") {
     return (
       <AuthShell title="Correo verificado" backHref="/login" eyebrow="Acceso al club">
-        <div className="flex flex-col items-center gap-2.5 py-2 text-center">
+        <div className="flex flex-col items-start gap-3 text-left">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-ok-bg">
             <CheckCircle2 size={ICON.lg} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
           </span>
@@ -188,7 +188,7 @@ function VerificarCorreoContent(): React.ReactElement {
       backHref="/login"
       eyebrow="Acceso al club"
     >
-      <div className="flex flex-col items-center gap-2.5 py-2 text-center">
+      <div className="flex flex-col items-start gap-3 text-left">
         <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-bad-bg">
           <AlertCircle size={ICON.lg} className="text-state-bad" strokeWidth={1.5} aria-hidden="true" />
         </span>

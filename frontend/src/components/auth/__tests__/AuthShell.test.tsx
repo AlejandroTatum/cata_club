@@ -170,7 +170,8 @@ describe("AuthShell", () => {
 
     const title = screen.getByRole("heading", { name: "Bienvenido de nuevo" });
     expect(title.className).toContain("font-display");
-    expect(title.className).toContain("text-lg");
+    expect(title.className).toContain("text-xl");
+    expect(title.className).toContain("split:text-2xl");
     expect(title.className).toContain("uppercase");
     // One 400 cut — a weight class here asks the browser to fake a bold.
     expect(title.className).not.toMatch(/font-(bold|semibold|extrabold)/);
@@ -206,73 +207,84 @@ describe("AuthShell", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The alignment defect: *"el login y la parte izquierda no están bien
-// centradas, se ven desalineadas"*. Measured at 1440x900, the brand cluster
-// centred at y=414 and the form card at y=398 — neither on the page's own
-// 450 — because each half was centred inside its own leftover space. Both
-// panels now run the same `1fr / auto / 1fr` grid, which puts the one object
-// that matters in the auto row and forces the two rails equal, so both
-// objects land on the viewport's middle. Geometry cannot be asserted in
-// jsdom (no layout), so what is pinned here is the structure that produces
-// it — the part a later edit could quietly undo.
+// Admin v4 composition. The old screen centred a 360px card on a grey canvas
+// and floated the brand cluster in the middle of the coal: dead space on both
+// halves at 1920x1080. Geometry cannot be asserted in jsdom, so what is pinned
+// here is the structure that produces it — the part a later edit could undo.
 // ---------------------------------------------------------------------------
 
-describe("AuthShell — the two halves share one vertical axis", () => {
-  it("centres the brand cluster with an elastic rail above and below it", () => {
+describe("AuthShell — rebalanced split", () => {
+  it("gives the brand panel 5/12 of the width and anchors its content top and bottom", () => {
     renderShell();
 
     const dark = screen.getByTestId("auth-panel-dark");
-    expect(dark.className).toContain("grid-rows-[1fr_auto_1fr]");
-    expect(screen.getByTestId("auth-brand-cluster").className).toContain("self-center");
-    // Placement, not just a class string: the string survived #931 unchanged
-    // while `row-span-2` on the header collapsed the middle row to 0px
-    // (#998). The header itself must own the middle row, same as the card
-    // does on the light half.
-    const banner = screen.getByRole("banner", { name: "Marca de Cata Club" });
-    expect(banner.className).toContain("row-start-2");
-    expect(banner.className).not.toContain("row-span-2");
+    expect(dark.className).toContain("split:w-5/12");
+    expect(dark.className).toContain("justify-between");
+    expect(dark.className).not.toContain("grid-rows-[1fr_auto_1fr]");
+    expect(screen.getByRole("banner", { name: "Marca de Cata Club" }).className).toContain("justify-between");
   });
 
-  it("centres the form card on the same axis, with its small print in the lower rail", () => {
+  it("gives the form its own column instead of a small card floating on grey", () => {
     renderShell();
 
     const light = screen.getByTestId("auth-panel-light");
-    expect(light.className).toContain("grid-rows-[1fr_auto_1fr]");
-    // The card owns the auto row; the note and the assistant trigger hang
-    // below it instead of dragging the card off-centre by their own height.
-    expect(screen.getByTestId("auth-card").className).toContain("row-start-2");
-    expect(screen.getByText("Nota").parentElement?.className).toContain("row-start-3");
+    expect(light.className).toContain("bg-paper");
+    expect(light.className).not.toContain("bg-canvas");
+    const column = screen.getByTestId("auth-card");
+    expect(column.className).toContain("max-w-md");
+    expect(column.className).toContain("w-full");
+    // No box around the form: the panel is the surface.
+    expect(column.className).not.toMatch(/\b(border|shadow-hero|rounded-\[18px\])\b/);
   });
 
-  it("closes the brand cluster with the figure rail instead of stranding it at the floor", () => {
+  it("keeps the top label, the form and the help footer in one column", () => {
     renderShell();
 
-    // The figure used to pair with the copyright as a bottom rail, which left
-    // a 194px hole between the subtitle and the hairline above it.
-    const cluster = screen.getByTestId("auth-brand-cluster");
-    expect(cluster).toContainElement(screen.getByTestId("auth-figure"));
-    expect(cluster).not.toContainElement(screen.getByText(/© 2026 Cata Club/));
+    const column = screen.getByTestId("auth-card").parentElement?.parentElement as HTMLElement;
+    expect(column.className).toContain("max-w-md");
+    expect(column).toContainElement(screen.getByText("Escuela de tenis de mesa"));
+    expect(column).toContainElement(screen.getByTestId("auth-help"));
   });
 
-  // WCAG 2.2 SC 2.5.8 — measured at 390x844 this escape hatch was
-  // 101.8 x 19.5, i.e. a bare 13px line of type with no hit area of its own.
-  // It was padded out to a 24px minimum, and D12b then replaced the bare link
-  // with the system's own back control: 32px, which is the product's compact
-  // control height and clears 2.5.8 by 8px rather than by nothing.
+  it("groups the small print under a hairline inside the form column", () => {
+    renderShell();
+
+    const note = screen.getByText("Nota");
+    expect(screen.getByTestId("auth-card")).toContainElement(note);
+    expect(note.className).toContain("border-t");
+  });
+
+  it("shows three public facts, the first being the club's age", () => {
+    renderShell();
+
+    const figure = screen.getByTestId("auth-figure");
+    expect(figure).toHaveTextContent(String(yearsSinceFounding()));
+    expect(screen.getByText("años formando deportistas")).toBeInTheDocument();
+    expect(screen.getByText("Desde el 10 de octubre")).toBeInTheDocument();
+    expect(screen.getByText("Loja")).toBeInTheDocument();
+    expect(screen.getByTestId("auth-brand-cluster")).not.toContainElement(figure);
+    expect(screen.getByRole("banner", { name: "Marca de Cata Club" })).toContainElement(figure);
+  });
+
+  it("collapses the brand panel to a compact header on phones", () => {
+    renderShell();
+
+    // Supporting line, facts and copyright only exist from `split` up.
+    expect(screen.getByText(/Cada entrenamiento/).className).toContain("hidden");
+    expect(screen.getByTestId("auth-figure").closest("dl")?.className).toContain("hidden");
+    expect(screen.getByText(/© 2026 Cata Club/).closest("footer")?.className).toContain("hidden");
+  });
+
+  // WCAG 2.2 SC 2.5.8 — the escape is the system's own back control: 32px.
   it("gives the escape back to the public site the system's control height", () => {
     renderShell();
 
     const back = screen.getByRole("link", { name: /volver al inicio/i });
     expect(back.className).toContain("h-ctl-sm");
-    // The old floor is gone because it is no longer the binding number, not
-    // because the target shrank.
     expect(back.className).not.toContain("min-h-[24px]");
   });
 
   it("dresses that escape in the coal skin rather than a second bare link", () => {
-    // The defect D12b names: this screen carried the product's SECOND back
-    // control — grey, boxless, under the system's control height — because the
-    // light skin is unreadable on coal. One control, two tones.
     renderShell();
 
     const back = screen.getByRole("link", { name: /volver al inicio/i });
@@ -280,27 +292,13 @@ describe("AuthShell — the two halves share one vertical axis", () => {
     expect(back).not.toHaveClass("bg-sunken");
   });
 
-  // #1029 — `absolute left-0 top-0` sat the control flush against the
-  // panel's (0,0), ignoring the panel's own padding, so on screens where the
-  // coal panel reaches the viewport edge the exit hugged the SCREEN corner
-  // and — with no border at rest — read as part of the background. The
-  // offsets below ARE the panel's padding (`px-6 py-8` / `split:px-14
-  // split:py-12`), so the control aligns with the panel's content column,
-  // and the inset ring is the at-rest hairline that makes the box
-  // discoverable before anyone hovers it. Same control, same href, same
-  // derived label — one exit, easier to find.
-  it("sits the escape inside the panel's padding with an at-rest hairline (#1029)", () => {
+  it("keeps the escape in the top row's flow, with an at-rest hairline", () => {
+    // Pinned absolutely it overlapped the lockup on a narrow phone.
     renderShell();
 
     const back = screen.getByRole("link", { name: /volver al inicio/i });
-    expect(back.className).toContain("left-6");
-    expect(back.className).toContain("top-8");
-    expect(back.className).toContain("split:left-14");
-    expect(back.className).toContain("split:top-12");
     expect(back.className).toContain("ring-white/20");
-    // The old flush-corner pinning is what this test retires.
-    expect(back.className).not.toContain("left-0");
-    expect(back.className).not.toContain("top-0");
+    expect(back.className).not.toContain("absolute");
   });
 
   it("does not restate a focus ring the system rule already outranks", () => {
@@ -342,74 +340,21 @@ describe("AuthShell — the dark rail's contents live in landmarks", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The frozen measure (#42).
-//
-// The brand block did not grow with the panel. Both caps that could have held
-// it back were written in `ch`, which resolves against the element's OWN
-// font-size and therefore cannot know how wide the viewport is:
-//
-//   wrapper  `max-width:44ch` at the inherited 16px -> a flat 440px
-//   headline `max-w-[15ch]`   at the `display` step -> a flat 465px
-//
-// Measured in Chromium, the coal panel goes 749 -> 1000 -> 1336px across
-// 1440/1920/2560 while the cluster stayed at 440 on all three, so it fell from
-// 58.7% of the panel to 44.0% to 32.9%. The wrapper's 440px was the binding
-// one; the headline's 465px was 25px looser and never bound anything on
-// desktop, which is why the issue's reading of it as "the strangler" did not
-// survive measurement.
-//
-// The real geometry is proved in `tests/e2e/content-measure.spec.ts`, where a
-// browser can lay the page out. What is pinned here is the MECHANISM, i.e. the
-// part a later edit could quietly revert: a fluid cap on the wrapper, and no
-// `ch` cap on the headline above the `split` breakpoint.
+// The brand measure. A `ch` cap resolves against the element's own font size
+// and cannot know the viewport, so the cluster caps in rem and the motto keeps
+// the voice step (a fluid clamp). Real geometry belongs to the browser tests.
 // ---------------------------------------------------------------------------
 
-describe("AuthShell — the brand measure tracks the panel", () => {
-  it("caps the brand cluster with a fluid measure instead of a frozen ch count", () => {
+describe("AuthShell — the brand measure", () => {
+  it("caps the brand cluster in rem, never in ch", () => {
     renderShell();
 
     const cluster = screen.getByTestId("auth-brand-cluster");
-    // The percentage is what makes it track the panel; the two bounds are the
-    // limits either side of which the composition breaks, and both were
-    // RE-MEASURED when the motto changed face — Playfair sets a different
-    // width per character than the Barlow ExtraBold these were calibrated
-    // against, so carrying the old numbers over would have been an estimate
-    // wearing a measurement's clothes.
-    //
-    // Measured in Chromium at 1440x900 against the shipped woff2: the motto is
-    // 507px unbroken at the clamp's 31px ceiling, its natural first line is
-    // 326px, and the supporting line under it is 350px. 22.5rem (360px) clears
-    // the supporting line by 10px; 31rem (496px) stays 11px under the width at
-    // which the motto collapses to one line.
-    expect(cluster.className).toContain("max-w-[clamp(22.5rem,72%,31rem)]");
-    // The frozen cap, in either spelling.
-    expect(cluster.className).not.toContain("[max-width:44ch]");
+    expect(cluster.className).toContain("split:max-w-md");
     expect(cluster.className).not.toMatch(/max-w-\[\d+(?:\.\d+)?ch\]/);
   });
 
-  it("drops the headline's own ch measure from the split breakpoint up", () => {
-    renderShell();
-
-    const headline = screen.getByTestId("auth-headline");
-    // Phones keep a measure of their own, in rem rather than in `ch`: against
-    // Playfair, `15ch` computes to ~150px and breaks the motto into four
-    // lines. Measured at the clamp's 20px floor, the motto is 328px unbroken
-    // and its first line 210px, so 16rem (256px) sets it on two inside a 342px
-    // phone panel.
-    expect(headline.className).toContain("max-w-[16rem]");
-    expect(headline.className).not.toMatch(/max-w-\[\d+(?:\.\d+)?ch\]/);
-    // Desktop has exactly one measure, and it belongs to the cluster. Leaving
-    // the `ch` cap in place would re-clamp the motto to 465px and undo the
-    // fluid wrapper above it.
-    expect(headline.className).toContain("split:max-w-none");
-  });
-
   it("keeps every size on the type scale, with no loose pixel left in the panel", () => {
-    // #42 also asked for the Fase 1 scale to be applied here, against an
-    // inventory of six raw sizes (42/26/14.5/13/12.5/12). #29 already did it:
-    // the panel reads `display`, `2xl`, `xl`, `base`, `xs` and `2xs` and owns
-    // no `text-[Npx]` at all. Asserted rather than assumed, so the panel cannot
-    // drift back off the scale.
     renderShell();
 
     const dark = screen.getByTestId("auth-panel-dark");
@@ -510,5 +455,26 @@ describe("AuthShell — hideBack lets one authenticated screen opt out", () => {
 
     expect(screen.getByRole("banner", { name: "Marca de Cata Club" })).toBeInTheDocument();
     expect(screen.getByTestId("auth-brand-cluster")).toBeInTheDocument();
+  });
+
+  it("fills the brand panel's middle with a decorative crest watermark", () => {
+    renderShell();
+
+    const watermark = screen.getByTestId("auth-panel-dark").querySelector('img[src*="crest"]');
+    expect(watermark).not.toBeNull();
+    expect(watermark).toHaveAttribute("alt", "");
+    expect(watermark?.closest("span")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("anchors the form column between a top label and a help footer", () => {
+    renderShell();
+
+    const help = screen.getByTestId("auth-help");
+    expect(help).toHaveTextContent("¿Problemas para ingresar?");
+    expect(screen.getByRole("link", { name: /whatsapp/i })).toHaveAttribute(
+      "href",
+      expect.stringContaining("wa.me/"),
+    );
+    expect(screen.getByTestId("auth-panel-light")).toContainElement(help);
   });
 });

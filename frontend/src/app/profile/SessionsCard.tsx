@@ -40,7 +40,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchMisSesiones, type SesionPropia } from "@/services/api";
 import { formatDateTime } from "@/lib/format-utils";
-import { Badge } from "@/components/ui";
+import { Monitor } from "lucide-react";
+import { Badge, cn } from "@/components/ui";
+import { ICON } from "@/lib/icon-size";
+import { SectionHead } from "./ProfileParts";
 
 /** Rows shown on first load: this device + the most recent other one. */
 const FIRST_PAGE = 2;
@@ -134,18 +137,21 @@ export default function SessionsCard({ refreshKey = 0 }: SessionsCardProps): Rea
       data-testid="profile-sessions"
       className="card flex flex-none flex-col overflow-hidden"
     >
-      <div className="border-b border-line px-5 py-4">
-        <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
-          Sus sesiones
-        </h2>
-      </div>
+      <SectionHead
+        title="Sus sesiones"
+        icon={<Monitor size={ICON.sm} strokeWidth={1.5} />}
+        tone="info"
+      />
 
       <ul className="m-0 flex list-none flex-col p-0">
         {sesiones.map((sesion) => (
           <li
             key={sesion.id}
             data-testid={`sesion-${sesion.id}`}
-            className="flex flex-col gap-y-field border-b border-line px-5 py-3 last:border-b-0"
+            className={cn(
+              "flex flex-col gap-y-field border-b border-line px-5 py-3 last:border-b-0",
+              sesion.actual && "bg-state-ok-bg/50",
+            )}
           >
             <p className="m-0 break-words text-sm font-semibold text-ink">{sesion.dispositivo}</p>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

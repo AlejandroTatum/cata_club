@@ -14,13 +14,29 @@
 
 "use client";
 
+import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Dumbbell, Rocket, ShieldCheck, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import AppShell from "@/components/shell/AppShell";
-import { Accordion, BackLink } from "@/components/ui";
+import {
+  Accordion,
+  BackLink,
+  Button,
+  EmptyState,
+  FilterPanel,
+  FilterPill,
+  InfoPanel,
+  PAGE_RAIL,
+  SearchInput,
+  buttonClasses,
+} from "@/components/ui";
+import { useReportProblem } from "@/components/report-problem/useReportProblem";
 import { useAuth } from "@/contexts/AuthContext";
 import { backHrefForRole } from "@/lib/auth-utils";
+import type { UserRole } from "@/types/domain";
+import { cn } from "@/components/ui/cn";
 import { FAQ_SECTIONS } from "./faq-content";
 
 /**
@@ -113,23 +129,133 @@ function AnswerWithLink({ question, answer }: { question: string; answer: string
   );
 }
 
+/** Rows share the viewport's height left under the page header (no dead band). */
+const FILL_SCREEN = "xl:min-h-[calc(100dvh-25rem)] xl:auto-rows-fr";
+
+interface QuickLink {
+  label: string;
+  href: string;
+}
+
+/**
+ * Where each audience most often goes next. Destinations only — every one is
+ * a route the role's own navigation already reaches.
+ */
+const QUICK_LINKS_BY_ROLE: Partial<Record<UserRole, QuickLink[]>> = {
+  admin: [
+    { label: "Panel de Control", href: "/dashboard" },
+    { label: "Miembros", href: "/members" },
+    { label: "Pagos", href: "/payments" },
+    { label: "Asistencias", href: "/attendance" },
+  ],
+  trainer: [
+    { label: "Mi día", href: "/trainer" },
+    { label: "Asistencias", href: "/trainer/attendance" },
+    { label: "Mi perfil", href: "/profile" },
+  ],
+  estudiante: [
+    { label: "Mi cuenta", href: "/student" },
+    { label: "Mis pagos", href: "/student/payments" },
+    { label: "Mi asistencia", href: "/student/attendance" },
+    { label: "Mi perfil", href: "/profile" },
+  ],
+  representante: [
+    { label: "Mi cuenta", href: "/student" },
+    { label: "Mis pagos", href: "/student/payments" },
+    { label: "Agregar estudiante", href: "/student/add-dependent" },
+    { label: "Mi perfil", href: "/profile" },
+  ],
+};
+
+const PUBLIC_QUICK_LINKS: QuickLink[] = [
+  { label: "Iniciar sesión", href: "/login" },
+  { label: "Horarios del club", href: "/#horarios" },
+  { label: "Página principal", href: "/" },
+];
+
+/** Case- and accent-insensitive, so "inscripcion" finds "inscripción". */
+function normalize(text: string): string {
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
 export default function AyudaPage(): React.ReactElement {
   const { session } = useAuth();
+  const report = useReportProblem();
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState<string | null>(null);
+
+  const filtering = query.trim() !== "" || category !== null;
+  const role = session?.user.role;
+  const quickLinks = (role && QUICK_LINKS_BY_ROLE[role]) || PUBLIC_QUICK_LINKS;
+
+  const visibleSections = useMemo(() => {
+    const needle = normalize(query.trim());
+    return FAQ_SECTIONS.filter((section) => category === null || section.title === category)
+      .map((section) => ({
+        ...section,
+        entries: section.entries.filter(
+          (entry) =>
+            needle === "" || normalize(`${entry.question} ${entry.answer}`).includes(needle),
+        ),
+      }))
+      .filter((section) => section.entries.length > 0);
+  }, [query, category]);
+
   return (
     <AppShell
       title="Preguntas frecuentes"
       subtitle="Cómo funciona la app del club, sección por sección."
       back={<BackLink href={backHrefForRole(session?.user.role)} />}
     >
+      <div data-testid="faq-split" className={PAGE_RAIL}>
+      <div className="grid min-w-0 content-start gap-page">
+      <FilterPanel
+        label="Buscar en las preguntas frecuentes"
+        search={
+          <SearchInput
+            label="Buscar una pregunta"
+            placeholder="Buscar una pregunta…"
+            value={query}
+            onChange={setQuery}
+          />
+        }
+        chips={
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por categoría">
+            <FilterPill label="Todas" active={category === null} onClick={() => setCategory(null)} />
+            {FAQ_SECTIONS.map((section) => (
+              <FilterPill
+                key={section.title}
+                label={section.title}
+                active={category === section.title}
+                onClick={() => setCategory(section.title)}
+              />
+            ))}
+          </div>
+        }
+      />
+      {visibleSections.length === 0 && (
+        <EmptyState
+          title="Sin resultados"
+          description="Pruebe con otra palabra o elija «Todas» las categorías."
+        />
+      )}
       {/*
-       * Two columns on desktop, one on narrow screens — #203's grid. Each
+       * Two columns on wide screens, one on narrow ones — #203's grid. Each
        * `FAQ_SECTIONS` entry renders as exactly one `<section>`, which is
        * also exactly one grid cell: a section's questions can never split
        * across columns because there is nothing splitting them, the CSS
        * grid just wraps whole cells.
        */}
-      <div data-testid="faq-grid" className="grid grid-cols-1 gap-page lg:grid-cols-2 lg:items-start">
-        {FAQ_SECTIONS.map((section) => {
+      <div
+        data-testid="faq-grid"
+        className={cn(
+          "grid grid-cols-1 gap-page xl:grid-cols-2",
+          // Unfiltered, the whole FAQ fills the screen beside the rail; a
+          // filtered result keeps its natural height instead of stretching.
+          filtering ? "xl:items-start" : FILL_SCREEN,
+        )}
+      >
+        {visibleSections.map((section) => {
           const slug = sectionSlug(section.title);
           const headingId = `faq-${slug}`;
           const accent = SECTION_ACCENT[section.title];
@@ -156,6 +282,9 @@ export default function AyudaPage(): React.ReactElement {
               <Accordion
                 idPrefix={`faq-${slug}`}
                 label={section.title}
+                // The category chips are already 40px; the sub-40px targets on a
+                // phone are the question triggers (24px), so lift them here.
+                className="max-md:[&_h3>button]:min-h-10"
                 items={section.entries.map((entry) => ({
                   id: sectionSlug(entry.question),
                   question: entry.question,
@@ -166,6 +295,46 @@ export default function AyudaPage(): React.ReactElement {
           );
         })}
       </div>
+      </div>
+
+      <div className="grid min-w-0 content-start gap-page">
+        <InfoPanel title="Cómo usar esta página">
+          <p>Escriba una palabra en el buscador o elija una categoría para acotar las preguntas.</p>
+          <p>Toque una pregunta para ver su respuesta; se abre una a la vez por categoría.</p>
+          <p>Los horarios y precios vigentes se consultan en la página principal del club.</p>
+        </InfoPanel>
+        <InfoPanel title="¿No encontró su respuesta?">
+          <p>Cuéntenos qué pasó y lo revisamos: se envía junto con una captura de esta pantalla.</p>
+          <Button variant="secondary" onClick={() => report.open()} disabled={report.busy}>
+            Reportar un problema
+          </Button>
+        </InfoPanel>
+        <InfoPanel title="Qué encontrará aquí">
+          <ul className="grid gap-2">
+            {FAQ_SECTIONS.map((section) => (
+              <li key={section.title} className="flex items-center justify-between gap-3">
+                <span>{section.title}</span>
+                <span className="text-xs text-ink-3-strong">
+                  {section.entries.length} {section.entries.length === 1 ? "pregunta" : "preguntas"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </InfoPanel>
+        <InfoPanel title="Accesos rápidos">
+          <ul className="grid gap-2" aria-label="Accesos rápidos">
+            {quickLinks.map((link) => (
+              <li key={link.href + link.label}>
+                <Link href={link.href} className={buttonClasses("tertiary", "sm")}>
+                  {link.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </InfoPanel>
+      </div>
+      </div>
+      {report.dialog}
     </AppShell>
   );
 }

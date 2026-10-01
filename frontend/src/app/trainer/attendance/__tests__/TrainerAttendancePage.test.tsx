@@ -337,6 +337,25 @@ describe("TrainerAttendancePage — schedule accordion grouped by day (Slice A)"
     expect(screen.queryByRole("button", { name: /18:00/i })).not.toBeInTheDocument();
   });
 
+  it("shows the 'Cómo pasar lista' guide and a week overview beside the picker", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
+    mockFetchTrainingSchedules.mockResolvedValue([
+      { id: 1, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres" },
+      { id: 2, diaSemana: "vie", horaInicio: "20:00", horaFin: "21:00", entrenadorId: 19, entrenadorNombre: "Coach Ruiz" },
+    ]);
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+
+    expect(await screen.findByRole("complementary", { name: "Cómo pasar lista" })).toBeInTheDocument();
+    const overview = await screen.findByTestId("week-overview");
+    expect(overview).toHaveTextContent("Lunes");
+    expect(overview).toHaveTextContent("Viernes");
+
+    // The overview doubles as a day switch.
+    fireEvent.click(screen.getByRole("button", { name: /^ver viernes/i }));
+    expect(await screen.findByRole("button", { name: /20:00/i })).toBeInTheDocument();
+  });
+
   it("disables the chip of a day with no schedules", async () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
     mockFetchTrainingSchedules.mockResolvedValue([
@@ -1213,9 +1232,9 @@ describe("TrainerAttendancePage — live marker and sticky commit bar", () => {
     await openRoster();
     await screen.findByText("Student 01");
 
-    const bar = screen.getByRole("button", { name: /Revisar y confirmar/ }).closest("div.sticky");
+    const bar = screen.getByRole("button", { name: /Revisar y confirmar/ }).closest("[data-testid='attendance-commit-bar']");
     expect(bar).not.toBeNull();
-    expect(bar).toHaveClass("sticky", "bottom-0");
+    expect(bar).toHaveClass("fixed", "bottom-[62px]", "lg:static");
   });
 
   // Lowercase since the redesign sweep: the bar had its own singular/plural

@@ -103,11 +103,10 @@ function renderPage(): void {
   );
 }
 
-/** Mirrors `findDescuentoRow` in DiscountsPage.test.tsx: jsdom renders both
- *  the `sm`+ table row and the below-`sm` card, so pick the `<tr>`. */
+/** Mirrors `findDescuentoRow` in DiscountsPage.test.tsx: each tariff is one card (`<li>`). */
 async function findTarifaRow(categoria: string): Promise<HTMLElement> {
   const matches = await screen.findAllByText(categoria);
-  const row = matches.map((el) => el.closest("tr")).find(Boolean);
+  const row = matches.map((el) => el.closest("li")).find(Boolean);
   return row as HTMLElement;
 }
 
@@ -133,6 +132,20 @@ describe("TarifasPage — listado", () => {
     mockFetchTiposMembresia.mockResolvedValue([]);
     renderPage();
     expect(await screen.findByText(/sin tarifas/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("tarifas-usage")).not.toBeInTheDocument();
+  });
+
+  it("continues the main column with where the tariffs are used", async () => {
+    renderPage();
+    await findTarifaRow("Junior");
+
+    const usage = screen.getByTestId("tarifas-usage");
+    expect(
+      within(usage).getByRole("heading", { name: /dónde se usan las tarifas/i }),
+    ).toBeInTheDocument();
+    for (const title of ["Inscripción", "Pagos", "Cambio de plan"]) {
+      expect(within(usage).getByRole("heading", { name: title })).toBeInTheDocument();
+    }
   });
 
   it("shows an error state with retry when loading fails", async () => {
@@ -570,7 +583,7 @@ describe("TarifasPage — crear tarifa", () => {
       id: 3, categoria: "Mensual Infantil", precio: "25.00", modalidad: "MENSUAL",
     });
     renderPage();
-    await screen.findByTestId("tarifas-table");
+    await screen.findByTestId("tarifas-cards");
 
     fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
     expect(screen.getByLabelText(/categoría/i)).toBeRequired();
@@ -596,7 +609,7 @@ describe("TarifasPage — crear tarifa", () => {
       id: 4, categoria: "Clases sueltas", precio: "10.00", modalidad: "PERSONALIZADA",
     });
     renderPage();
-    await screen.findByTestId("tarifas-table");
+    await screen.findByTestId("tarifas-cards");
 
     fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
     fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "Clases sueltas" } });
@@ -615,7 +628,7 @@ describe("TarifasPage — crear tarifa", () => {
 
   it("rejects an empty categoria without calling the API", async () => {
     renderPage();
-    await screen.findByTestId("tarifas-table");
+    await screen.findByTestId("tarifas-cards");
 
     fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
     fireEvent.change(screen.getByLabelText(/^precio/i), { target: { value: "25.00" } });
@@ -627,7 +640,7 @@ describe("TarifasPage — crear tarifa", () => {
 
   it("rejects an invalid price without calling the API", async () => {
     renderPage();
-    await screen.findByTestId("tarifas-table");
+    await screen.findByTestId("tarifas-cards");
 
     fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
     fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "Mensual Infantil" } });
@@ -644,7 +657,7 @@ describe("TarifasPage — crear tarifa", () => {
       new ApiClientError("Ya existe una tarifa con esa categoría", 409),
     );
     renderPage();
-    await screen.findByTestId("tarifas-table");
+    await screen.findByTestId("tarifas-cards");
 
     fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
     fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "Mensual Infantil" } });
@@ -658,7 +671,7 @@ describe("TarifasPage — crear tarifa", () => {
 
   it("lets the admin cancel without creating anything", async () => {
     renderPage();
-    await screen.findByTestId("tarifas-table");
+    await screen.findByTestId("tarifas-cards");
 
     fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
     fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "Mensual Infantil" } });
@@ -670,7 +683,7 @@ describe("TarifasPage — crear tarifa", () => {
 
   it("gives the categoria field initial focus when the form opens", async () => {
     renderPage();
-    await screen.findByTestId("tarifas-table");
+    await screen.findByTestId("tarifas-cards");
 
     fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
 
@@ -685,19 +698,43 @@ describe("TarifasPage — panel lateral", () => {
 
     const rail = screen.getByTestId("tarifas-rail");
     expect(within(rail).getByRole("heading", { name: /cómo se aplican las tarifas/i })).toBeInTheDocument();
-    expect(within(rail).getByText("2 tarifas en el catálogo.")).toBeInTheDocument();
+    expect(within(rail).getByRole("heading", { name: /resumen del catálogo/i })).toBeInTheDocument();
+    expect(within(rail).getByText("$ 45.00 – $ 60.00")).toBeInTheDocument();
+    expect(within(rail).getByText(/al editar un precio/i)).toBeInTheDocument();
+    // The three uses live in the main column, not repeated in the rail.
+    expect(within(rail).queryByText(/cambio de plan/i)).not.toBeInTheDocument();
   });
 
-  it("swaps the guidance for the creation form and back", async () => {
+  it("offers an add-card slot in the grid that opens the creation form", async () => {
+    renderPage();
+    await findTarifaRow("Junior");
+
+    fireEvent.click(screen.getByRole("button", { name: /agregar tarifa/i }));
+    expect(within(screen.getByTestId("tarifas-rail")).getByLabelText(/categoría/i)).toBeInTheDocument();
+  });
+
+  it("shows the creation form above the guidance, which never disappears", async () => {
     renderPage();
     await findTarifaRow("Junior");
 
     fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
     const rail = screen.getByTestId("tarifas-rail");
     expect(within(rail).getByLabelText(/categoría/i)).toBeInTheDocument();
-    expect(within(rail).queryByText(/cómo se aplican/i)).not.toBeInTheDocument();
+    expect(within(rail).getByText(/cómo se aplican/i)).toBeInTheDocument();
 
     fireEvent.click(within(rail).getByRole("button", { name: /cancelar/i }));
-    expect(within(screen.getByTestId("tarifas-rail")).getByText(/cómo se aplican/i)).toBeInTheDocument();
+    expect(within(screen.getByTestId("tarifas-rail")).queryByLabelText(/categoría/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("TarifasPage — mobile form reveal", () => {
+  it("moves focus to the first field of the create form when it opens", async () => {
+    renderPage();
+    await screen.findByTestId("tarifas-cards");
+
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
+
+    const first = within(screen.getByTestId("tarifas-rail")).getAllByRole("textbox")[0];
+    expect(first).toHaveFocus();
   });
 });

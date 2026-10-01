@@ -49,9 +49,10 @@ function createMemoryStorage(): Storage {
 }
 
 const mockPush = vi.fn();
+const mockPathname = vi.hoisted(() => ({ value: "/dashboard" }));
 
 vi.mock("next/navigation", (): { usePathname: () => string; useRouter: () => { push: typeof mockPush } } => ({
-  usePathname: (): string => "/dashboard",
+  usePathname: (): string => mockPathname.value,
   useRouter: (): { push: typeof mockPush } => ({ push: mockPush }),
 }));
 
@@ -107,6 +108,7 @@ const mockUseAuth = vi.mocked(useAuth);
 describe("AppShell", (): void => {
   beforeEach((): void => {
     mockPush.mockReset();
+    mockPathname.value = "/dashboard";
     mockUseAuth.mockReset();
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
     mockFetchNotificaciones.mockClear();
@@ -413,6 +415,37 @@ describe("AppShell", (): void => {
     expect(screen.getByRole("button", { name: /Cerrar menú/i })).toBeInTheDocument();
   });
 
+  it("highlights Más only for a page that lives in the drawer", (): void => {
+    const moreTab = (): HTMLElement =>
+      within(screen.getByRole("navigation", { name: /móvil/i })).getByRole("button", {
+        name: "Más secciones",
+      });
+
+    const { unmount } = render(<AppShell title="Dashboard">{null}</AppShell>);
+    expect(moreTab()).not.toHaveAttribute("aria-current");
+    unmount();
+
+    mockPathname.value = "/sponsors";
+    render(<AppShell title="Patrocinadores">{null}</AppShell>);
+    expect(moreTab()).toHaveAttribute("aria-current", "page");
+    // The drawer marks the current page too.
+    expect(
+      within(screen.getByRole("navigation", { name: "Navegación principal" })).getByRole("link", {
+        name: /Patrocinadores/,
+      }),
+    ).toHaveAttribute("aria-current", "page");
+  });
+
+  it("does not highlight Más on a route the nav does not know", (): void => {
+    mockPathname.value = "/ruta-desconocida";
+    render(<AppShell title="X">{null}</AppShell>);
+    expect(
+      within(screen.getByRole("navigation", { name: /móvil/i })).getByRole("button", {
+        name: "Más secciones",
+      }),
+    ).not.toHaveAttribute("aria-current");
+  });
+
   it("gives every touch target in the tab bar at least 44px", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 
@@ -695,6 +728,16 @@ describe("AppShell — closed mobile drawer leaves the tab order", (): void => {
   beforeEach((): void => {
     vi.unstubAllGlobals();
     Object.defineProperty(window, "localStorage", { value: createMemoryStorage(), writable: true });
+  });
+
+  it("locks body scroll while the mobile drawer is open", (): void => {
+    stubViewport(false);
+    document.body.style.overflow = "";
+    render(<AppShell title="Dashboard">{null}</AppShell>);
+    fireEvent.click(screen.getByRole("button", { name: "Más secciones" }));
+    expect(document.body.style.overflow).toBe("hidden");
+    fireEvent.click(screen.getByRole("button", { name: /Cerrar menú/i }));
+    expect(document.body.style.overflow).toBe("");
   });
 
   it("hides the closed drawer from keyboard and screen readers on a mobile viewport", (): void => {

@@ -624,6 +624,59 @@ describe("ReportsPage — Generar PDF", () => {
     await waitFor(() => expect(mockExportAsistenciaReportePdf).toHaveBeenCalledWith({}));
   });
 
+  describe("horario → día filter", () => {
+    const SCHEDULES = [
+      { id: 11, diaSemana: "lun", horaInicio: "15:00", horaFin: "16:00", categoriaLabel: "Formativo" },
+      { id: 12, diaSemana: "mar", horaInicio: "15:00", horaFin: "16:00", categoriaLabel: "Formativo" },
+      { id: 13, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", categoriaLabel: "Adultos" },
+    ];
+
+    async function openAsistencia(): Promise<void> {
+      mockFetchTrainingSchedules.mockResolvedValue(SCHEDULES);
+      mockFetchAttendanceRecords.mockResolvedValue([ATTENDANCE_RECORD]);
+      render(<ReportsPage />);
+      await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+      choosePreset(/asistencia/i);
+      await screen.findByRole("option", { name: "Formativo · 15:00–16:00" });
+    }
+
+    it("lists one option per slot and keeps the day select disabled until a slot is chosen", async () => {
+      await openAsistencia();
+
+      const horario = screen.getByLabelText("Horario");
+      expect(Array.from((horario as HTMLSelectElement).options).map((o) => o.text)).toEqual([
+        "Todos",
+        "Formativo · 15:00–16:00",
+        "Adultos · 18:00–19:00",
+      ]);
+      expect(screen.getByLabelText("Día")).toBeDisabled();
+    });
+
+    it("lists only the chosen slot's days and filters by the picked day's id", async () => {
+      await openAsistencia();
+
+      fireEvent.change(screen.getByLabelText("Horario"), { target: { value: "Formativo|15:00|16:00" } });
+      const dia = screen.getByLabelText("Día") as HTMLSelectElement;
+      expect(dia).toBeEnabled();
+      expect(Array.from(dia.options).map((o) => o.text)).toEqual(["Todos los días", "Lunes", "Martes"]);
+
+      fireEvent.change(dia, { target: { value: "12" } });
+      await waitFor(() =>
+        expect(mockFetchAttendanceRecords).toHaveBeenLastCalledWith(expect.objectContaining({ horarioId: 12 })),
+      );
+    });
+
+    it("queries every day of the slot when no specific day is chosen", async () => {
+      await openAsistencia();
+
+      fireEvent.change(screen.getByLabelText("Horario"), { target: { value: "Formativo|15:00|16:00" } });
+      await waitFor(() => {
+        const ids = mockFetchAttendanceRecords.mock.calls.map((c) => (c[0] as { horarioId?: number }).horarioId);
+        expect(ids).toEqual(expect.arrayContaining([11, 12]));
+      });
+    });
+  });
+
   it("exports the asistencia PDF scoped to the selected alumno (ASI-7)", async () => {
     mockFetchAttendanceRecords.mockResolvedValue([ATTENDANCE_RECORD]);
     mockExportAsistenciaReportePdf.mockResolvedValue(undefined);
@@ -848,19 +901,12 @@ describe("ReportsPage — Exportar a Excel", () => {
 });
 
 /**
- * A4 — "Exportar a Excel" used to render in the header alongside "Generar
- * PDF", above the report-type selector and the date range, so it read as
- * available before the scope it exports was even defined. `AppShellProps`'
- * own doc comment already draws this line ("Per-row actions and secondary
- * controls stay in the body, where the thing they act on is"): the Excel
- * button is exactly that secondary control, so it now renders in the body,
- * right after the scope controls it exports.
- *
- * "Generar PDF" stays in the header `actions` slot: it is this screen's one
- * primary/red CTA, and `components/shell/__tests__/primary-action.test.ts`
- * requires `app/reports/page.tsx` to keep a header action.
+ * Admin v4 — a three-step flow (tipo, rango, descargar) with both exports in
+ * ONE group, and a rail that summarises the selection and explains what each
+ * report and format is for. `primary-action.test.ts` still requires the
+ * header action slot, so the group lives there.
  */
-describe("ReportsPage — la acción de Excel vive después del alcance del reporte (A4)", () => {
+describe("ReportsPage — three-step flow, grouped exports and rail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetchTrainingSchedules.mockResolvedValue([]);
@@ -870,20 +916,59 @@ describe("ReportsPage — la acción de Excel vive después del alcance del repo
     mockSearchStudents.mockResolvedValue([]);
   });
 
-  it("renders the Excel export after the report-type selector and the date range", async () => {
+  it("numbers the steps: tipo de reporte, then rango de fechas", async () => {
     render(<ReportsPage />);
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
 
-    const typeSelector = screen.getByRole("radiogroup", { name: "Tipo de reporte" });
-    const dateRange = screen.getByRole("region", { name: "Filtros del reporte" });
-    const excelButton = screen.getByRole("button", { name: /exportar a excel/i });
+    const type = screen.getByRole("heading", { name: "Tipo de reporte" });
+    const range = screen.getByRole("heading", { name: "Rango de fechas" });
+    expect(type.previousElementSibling).toHaveTextContent("1");
+    expect(range.previousElementSibling).toHaveTextContent("2");
+    expect(type.compareDocumentPosition(range) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 
-    expect(
-      typeSelector.compareDocumentPosition(excelButton) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      dateRange.compareDocumentPosition(excelButton) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+  it("groups PDF and Excel side by side in one container, same size", async () => {
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+
+    const pdf = generateButton();
+    const excel = screen.getByRole("button", { name: /exportar a excel/i });
+    expect(pdf.parentElement).toBe(excel.parentElement);
+    expect(pdf.className).toContain("h-ctl");
+    expect(excel.className).toContain("h-ctl");
+  });
+
+  it("summarises the selection in the rail: report, range, count and pages", async () => {
+    mockFetchNuevosPorPeriodo.mockResolvedValue([PERSONA]);
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+
+    await waitFor(() =>
+      expect(screen.getByTestId("report-summary")).toHaveTextContent(
+        "Reporte de período · Este mes · 1 persona · 1 página",
+      ),
+    );
+  });
+
+  it("explains what each report and format contains, always visible", async () => {
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+
+    const rail = screen.getByTestId("reports-rail");
+    expect(rail).toHaveTextContent("Qué contiene cada reporte");
+    expect(rail).toHaveTextContent("PDF");
+    expect(rail).toHaveTextContent("Excel");
+    expect(screen.getByText(/Los listados del club por rango de fechas/)).toBeInTheDocument();
+    expect(screen.queryByText(/ver ayuda/i)).not.toBeInTheDocument();
+  });
+
+  it("bounds the preview and keeps its header sticky", async () => {
+    mockFetchNuevosPorPeriodo.mockResolvedValue([PERSONA]);
+    render(<ReportsPage />);
+
+    const region = await screen.findByRole("region", { name: /tabla desplazable/i });
+    expect(region.className).toContain("max-h-96");
+    expect(screen.getByRole("columnheader", { name: "Nombre" }).className).toContain("sticky");
   });
 });
 

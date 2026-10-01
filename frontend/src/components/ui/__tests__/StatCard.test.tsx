@@ -315,11 +315,11 @@ describe("STAT_GRID — the shared stat row", () => {
     // the row must reference the constant, never retype the classes.
     // /admin/crear-cuenta draws the same four-column shape but its cells are
     // account-type buttons, not tiles. Same grid, different job — it keeps its
-    // own classes on purpose.
+    // own classes on purpose. /members has no tile row: its counts live in the
+    // filter chips, the one place where the list is counted and filtered.
     const screens = [
       "src/app/dashboard/page.tsx",
-      "src/app/attendance/page.tsx",
-      "src/app/members/page.tsx",
+      // attendance dropped STAT_GRID: its figures are a compact strip in the period rail
     ];
 
     for (const path of screens) {

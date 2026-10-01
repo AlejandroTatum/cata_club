@@ -28,6 +28,7 @@ import { CheckCircle2, Repeat } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
 import { cambiarPlanMembresia } from "@/services/api";
 import TipoSelectorForm from "@/components/admin/TipoSelectorForm";
+import { ACTION_TRIGGER } from "./payment-action-styles";
 
 interface CambiarPlanFormProps {
   membresiaId: number;
@@ -44,6 +45,7 @@ export default function CambiarPlanForm({
   return (
     <TipoSelectorForm
       triggerLabel="Cambiar plan"
+      triggerClassName={ACTION_TRIGGER}
       TriggerIcon={Repeat}
       submitLabel="Cambiar"
       SubmitIcon={CheckCircle2}

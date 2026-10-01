@@ -78,11 +78,12 @@
 
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import StudentSearch from "@/components/StudentSearch";
 import AppShell from "@/components/shell/AppShell";
+import Link from "next/link";
 import {
   Calendar,
   Plus,
@@ -97,8 +98,8 @@ import {
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import { Button, Badge, DataBox, DataRow, DataRowList, EmptyState, ErrorState, LoadingState, Pagination, STAT_GRID, StatCard, WeekStrip } from "@/components/ui";
-import { getTotalPages, paginateRecords } from "@/app/attendance/attendance-utils";
+import { Button, Badge, EmptyState, ErrorState, InfoPanel, LoadingState, PAGE_RAIL, Pagination, STAT_GRID, StatCard } from "@/components/ui";
+import { DIA_SEMANA_LABELS, getTotalPages, paginateRecords } from "@/app/attendance/attendance-utils";
 import { useGroupRoster } from "./useGroupRoster";
 import {
   fetchHorarios,
@@ -179,8 +180,8 @@ function extractErrorMessage(err: unknown, fallback: string): string {
  * values under them.
  */
 const ROW_COLUMNS =
-  "xl:grid xl:grid-cols-[minmax(140px,0.95fr)_minmax(200px,1.25fr)_minmax(92px,0.5fr)_192px] " +
-  "xl:items-center xl:gap-x-5";
+  "2xl:grid 2xl:grid-cols-[minmax(170px,0.95fr)_minmax(200px,1.25fr)_minmax(92px,0.5fr)_244px] " +
+  "2xl:items-center 2xl:gap-x-5";
 
 /** `.tbl thead th` typography — the header strip and the stacked cell labels. */
 const CELL_LABEL = "text-2xs font-bold uppercase text-ink-3-strong";
@@ -214,7 +215,7 @@ const COLUMNS = ["Categoría", "Horario", "Alumnos", "Acciones"] as const;
  * announced before it is not a row a screen reader can read.
  */
 function CellLabel({ children }: { children: React.ReactNode }): React.ReactElement {
-  return <span className={`mb-1 block ${CELL_LABEL} xl:sr-only`}>{children}</span>;
+  return <span className={`mb-1 block ${CELL_LABEL} 2xl:sr-only`}>{children}</span>;
 }
 
 /**
@@ -240,9 +241,62 @@ function CellLabel({ children }: { children: React.ReactNode }): React.ReactElem
  * information an admin decides with, not decoration. It is `permitidos` on the
  * strip now.
  */
+const WEEK_BOX =
+  "flex h-5 w-5 items-center justify-center rounded-[3px] text-2xs font-bold tracking-flat";
+const WEEK_BOX_TONE = {
+  activo: "bg-coal text-white",
+  disponible: "border border-dashed border-line-2 bg-sunken text-ink-3-strong",
+  inactivo: "bg-sunken text-ink-3-strong",
+} as const;
+
+/**
+ * Screen-local week strip: same seven fixed boxes and `data-day`/`data-state`
+ * contract as `ui/WeekStrip`, but the days that run are carbon, not red. Five
+ * red boxes per row, five rows, next to a red row action is the oversaturation
+ * the admin audit flagged; red stays for the one primary action.
+ */
+function WeekTrack({
+  dias,
+  permitidos,
+}: {
+  dias: readonly string[];
+  permitidos: readonly string[];
+}): React.ReactElement {
+  const running = (Object.keys(DIA_SEMANA_LABELS) as Array<keyof typeof DIA_SEMANA_LABELS>).filter((d) =>
+    dias.includes(d),
+  );
+  const names = running.map((d, i) =>
+    i === 0 ? DIA_SEMANA_LABELS[d] : DIA_SEMANA_LABELS[d].toLocaleLowerCase("es"),
+  );
+  return (
+    <span
+      role="img"
+      data-testid="week-strip"
+      aria-label={joinWithY(names) || "Sin horario"}
+      className="inline-flex items-center gap-0.5"
+    >
+      {(Object.keys(DIA_SEMANA_LABELS) as Array<keyof typeof DIA_SEMANA_LABELS>).map((day) => {
+        const state = dias.includes(day) ? "activo" : permitidos.includes(day) ? "disponible" : "inactivo";
+        return (
+          <span
+            key={day}
+            data-day={day}
+            data-state={state}
+            title={DIA_SEMANA_LABELS[day]}
+            aria-hidden="true"
+            className={`${WEEK_BOX} ${WEEK_BOX_TONE[state]}`}
+          >
+            {DIA_SEMANA_LABELS[day].charAt(0)}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
 function DiaTrack({ track, dias }: { track: string[]; dias: string[] }): React.ReactElement {
   return (
-    <WeekStrip dias={toStripDias(dias)} permitidos={toStripDias(track)} />
+    <WeekTrack dias={toStripDias(dias)} permitidos={toStripDias(track)} />
   );
 }
 
@@ -450,6 +504,7 @@ export default function GroupsPage(): React.ReactElement {
   // fixed-position panels — PR3a.
   const [expandedGroup, setExpandedGroup] = useState<ExpandedGroupState | null>(null);
   const [editingGroup, setEditingGroup] = useState<HorarioGroup | null>(null);
+  const [sinGrupoPage, setSinGrupoPage] = useState(1);
   const [formData, setFormData] = useState<HorarioFormData>(EMPTY_FORM);
   const [selectedDias, setSelectedDias] = useState<Set<string>>(new Set());
   const [formSubmitting, setFormSubmitting] = useState(false);
@@ -652,13 +707,18 @@ export default function GroupsPage(): React.ReactElement {
   const summary = useMemo(() => {
     const rostersLoaded =
       horarios.length > 0 && horarios.every((horario) => personasPorHorario[horario.id] !== undefined);
-    if (!rostersLoaded) return { inscriptos: null, sinGrupo: null };
+    if (!rostersLoaded) return { inscriptos: null, sinGrupo: null, sinGrupoAlumnos: [] as StudentRef[], activos: 0 };
     const assigned = new Set<number>();
     for (const horario of horarios) {
       for (const personaId of personasPorHorario[horario.id]) assigned.add(personaId);
     }
-    const sinGrupo = allStudents.filter((student) => student.activo && !assigned.has(Number(student.id))).length;
-    return { inscriptos: assigned.size, sinGrupo };
+    const sinGrupoAlumnos = allStudents.filter((student) => student.activo && !assigned.has(Number(student.id)));
+    return {
+      inscriptos: assigned.size,
+      sinGrupo: sinGrupoAlumnos.length,
+      sinGrupoAlumnos,
+      activos: allStudents.filter((student) => student.activo).length,
+    };
   }, [horarios, personasPorHorario, allStudents]);
 
   /**
@@ -672,6 +732,11 @@ export default function GroupsPage(): React.ReactElement {
   const catalogoPendientes = useMemo(
     () => buildCatalogoSinHorarios(categorias, categoriaCards.map((card) => card.categoria)),
     [categorias, categoriaCards],
+  );
+
+  const categoriasOcultas = useMemo(
+    () => categoriaCards.filter((card) => categorias[card.categoria as Categoria]?.visible === false).length,
+    [categoriaCards, categorias],
   );
 
   /** No catalog answered: the only state where "no hay categorías" is true. */
@@ -777,11 +842,24 @@ export default function GroupsPage(): React.ReactElement {
   /** Opens the "Alumnos" accordion tab under a categoría card — loads the
    * roster for every weekday row at once (a student belongs to the whole
    * recurring grupo, not one día). */
-  function openAlumnosTab(card: CategoriaCard): void {
+  function openAlumnosTab(card: CategoriaCard, focusAdd = false): void {
+    focusAddOnOpen.current = focusAdd;
     setExpandedGroup({ key: card.categoria, tab: "alumnos" });
     roster.setPage(1);
     void roster.load(card.rows);
   }
+
+  /**
+   * Set by "Agregar alumnos": the roster panel opens with the add-student
+   * selector focused, since adding is what the admin came to do. "N inscritos"
+   * opens the same panel without stealing focus.
+   */
+  const focusAddOnOpen = useRef(false);
+  useEffect(() => {
+    if (expandedGroup?.tab !== "alumnos" || !focusAddOnOpen.current) return;
+    focusAddOnOpen.current = false;
+    document.getElementById("alumno-select")?.focus();
+  }, [expandedGroup]);
 
   /** The código whose publication toggle is mid-flight, so its button alone
    *  busies out while the PATCH runs. */
@@ -827,10 +905,15 @@ export default function GroupsPage(): React.ReactElement {
     const isToggling = togglingPublicacion === codigo;
     return (
       <Button
+        variant="tertiary"
         size="sm"
-        className="flex-1 md:flex-none"
         onClick={() => void togglePublicacion(codigo)}
         disabled={disabled || isToggling}
+        title={
+          visible
+            ? "Oculta esta categoría del sitio público. Sigue activa para inscripciones y asistencia."
+            : "Vuelve a publicar esta categoría en el sitio público."
+        }
         aria-label={
           visible
             ? `Ocultar ${label} de la landing pública`
@@ -844,7 +927,7 @@ export default function GroupsPage(): React.ReactElement {
         ) : (
           <EyeOff size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
         )}
-        {visible ? "Ocultar" : "Mostrar"}
+        {visible ? "Ocultar de la landing" : "Mostrar en la landing"}
       </Button>
     );
   }
@@ -1372,11 +1455,12 @@ export default function GroupsPage(): React.ReactElement {
           </Button>
         </div>
 
-        {/* Asignar first — before the roster, not after it. */}
-        <div className="mb-4 flex items-end gap-3">
+        {/* Asignar first — before the roster, not after it. It is the panel's
+            main task, so it sits in its own framed box. */}
+        <div className="mb-4 flex flex-col gap-3 rounded-card border border-line bg-sunken p-4 sm:flex-row sm:items-end">
           <div className="flex-1">
             <label htmlFor="alumno-select" className="mb-1 block text-xs font-semibold text-ink-2">
-              Seleccionar alumno
+              Agregar un alumno a esta categoría
             </label>
             <StudentSearch
               id="alumno-select"
@@ -1397,8 +1481,7 @@ export default function GroupsPage(): React.ReactElement {
               inside a row and the screen's red belongs to the destructive
               dialog. */}
           <Button
-            variant="dark"
-            size="sm"
+            variant="primary"
             onClick={() => void roster.assign(rows)}
             disabled={!roster.selectedId || roster.assigning}
           >
@@ -1440,35 +1523,33 @@ export default function GroupsPage(): React.ReactElement {
               <p className="mb-2 text-2xs font-semibold uppercase tracking-wider text-ink-3-strong">
                 Alumnos asignados ({roster.alumnos.length})
               </p>
-              <DataRowList>
+              <ul className="grid gap-2 lg:grid-cols-2 2xl:grid-cols-3">
                 {alumnosVisibles.map((a) => (
-                  <DataRow
+                  <li
                     key={a.id}
-                    name={a.personaNombreCompleto}
-                    meta={<DataBox>{a.edad} años</DataBox>}
-                    actions={
-                      // `primary` (red), not a raw hover-only button: the
-                      // control used to read as destructive only on
-                      // `:hover`, which a pointer resting elsewhere (or any
-                      // touch device) never sees. Red is otherwise reserved
-                      // for the primary CTA and destructive actions
-                      // (`ui/Button`'s own doc comment) — this earns it.
-                      // `aria-label` overrides the visible "Desasignar" so
-                      // the accessible name still names WHICH student, the
-                      // way a screen-reader user moving row-to-row needs.
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => setPendingUnassign({ card, alumno: a })}
-                        aria-label={`Desasignar a ${a.personaNombreCompleto}`}
-                      >
-                        <UserMinus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                        Desasignar
-                      </Button>
-                    }
-                  />
+                    className="flex min-w-0 items-center gap-3 rounded-ctl border border-line bg-surface px-3 py-2"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-ink">{a.personaNombreCompleto}</p>
+                      <p className="text-xs text-ink-3">{a.edad} años</p>
+                    </div>
+                    {/* `secondary` + `text-state-bad`: destructive without
+                        competing with the panel's red "Asignar". `aria-label`
+                        overrides the visible "Desasignar" so the accessible
+                        name still names WHICH student. */}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="shrink-0 text-state-bad"
+                      onClick={() => setPendingUnassign({ card, alumno: a })}
+                      aria-label={`Desasignar a ${a.personaNombreCompleto}`}
+                    >
+                      <UserMinus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                      Desasignar
+                    </Button>
+                  </li>
                 ))}
-              </DataRowList>
+              </ul>
               {roster.alumnos.length > ALUMNOS_PAGE_SIZE && (
                 <Pagination
                   page={currentPage}
@@ -1487,10 +1568,111 @@ export default function GroupsPage(): React.ReactElement {
     );
   }
 
+  /** How many unassigned students the rail lists per page. Five, not the
+   * ten-row list standard: a deliberate, user-directed rail-widget exception
+   * (admin v4 review R4), hence not named `*PAGE_SIZE`. */
+  const SIN_GRUPO_RAIL_ROWS = 5;
+
+  function renderRail(): React.ReactElement {
+    const sinGrupoAlumnos = summary.sinGrupoAlumnos;
+    // Clamped: the list can shrink (a student gets assigned) under the page being read.
+    const sinGrupoTotalPages = getTotalPages(sinGrupoAlumnos.length, SIN_GRUPO_RAIL_ROWS);
+    const sinGrupoCurrentPage = Math.min(sinGrupoPage, sinGrupoTotalPages);
+    const sinGrupoFrom = (sinGrupoCurrentPage - 1) * SIN_GRUPO_RAIL_ROWS;
+    return (
+      <div className="grid content-start gap-page" data-testid="groups-rail">
+        <InfoPanel title="Cómo funciona">
+          <dl className="grid gap-2">
+            <div>
+              <dt className="font-semibold text-ink">Categorías y horarios</dt>
+              <dd>Cada categoría tiene una franja horaria y los días en que entrena.</dd>
+            </div>
+            <div>
+              <dt className="font-semibold text-ink">Inscripción</dt>
+              <dd>
+                «Agregar alumnos» inscribe al alumno en todos los días de la categoría a la vez, nunca solo en algunos.
+              </dd>
+            </div>
+            <div>
+              <dt className="font-semibold text-ink">Ocultar de la landing</dt>
+              <dd>
+                Quita la categoría del sitio público. Sigue activa para inscripciones y asistencia, y puede volver a
+                mostrarla cuando quiera.
+              </dd>
+            </div>
+          </dl>
+        </InfoPanel>
+
+        <InfoPanel title="Qué hacer después">
+          <ul className="grid gap-2">
+            <li>Asigne a los alumnos sin grupo desde «Agregar alumnos» en la categoría que les corresponda.</li>
+            <li>Use «Editar» para cambiar la franja horaria o los días de una categoría.</li>
+          </ul>
+        </InfoPanel>
+
+        <InfoPanel
+          title="Sin grupo"
+          className={sinGrupoAlumnos.length > 0 ? "border-state-warn/30" : undefined}
+        >
+          <div id="sin-grupo" className="scroll-mt-24" />
+          {summary.sinGrupo === null ? (
+            <p>Calculando alumnos sin horario…</p>
+          ) : sinGrupoAlumnos.length === 0 ? (
+            <p>Todos los alumnos activos tienen un horario asignado.</p>
+          ) : (
+            <>
+              <ul className="grid gap-1" data-testid="sin-grupo-list">
+                {sinGrupoAlumnos.slice(sinGrupoFrom, sinGrupoFrom + SIN_GRUPO_RAIL_ROWS).map((alumno) => (
+                  <li key={alumno.id} className="flex min-h-[32px] items-center gap-2 text-ink">
+                    <Badge tone="warn">Sin horario</Badge>
+                    <span className="min-w-0 truncate">
+                      {alumno.nombres} {alumno.apellidos}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {sinGrupoAlumnos.length > SIN_GRUPO_RAIL_ROWS && (
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs tabular-nums text-ink-3">
+                    {sinGrupoFrom + 1}–{Math.min(sinGrupoFrom + SIN_GRUPO_RAIL_ROWS, sinGrupoAlumnos.length)} de{" "}
+                    {sinGrupoAlumnos.length}
+                  </p>
+                  <div className="flex gap-1">
+                    <Button
+                      size="sm"
+                      onClick={() => setSinGrupoPage(sinGrupoCurrentPage - 1)}
+                      disabled={sinGrupoCurrentPage <= 1}
+                    >
+                      Anterior
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => setSinGrupoPage(sinGrupoCurrentPage + 1)}
+                      disabled={sinGrupoCurrentPage >= sinGrupoTotalPages}
+                    >
+                      Siguiente
+                    </Button>
+                  </div>
+                </div>
+              )}
+              <p className="border-t border-line pt-3 text-xs text-ink-3">
+                Para asignarlos, presione «Agregar alumnos» en la categoría y búsquelos por nombre.{" "}
+                <Link href="/members" className="font-semibold text-ink underline underline-offset-2">
+                  Ver miembros
+                </Link>
+              </p>
+            </>
+          )}
+        </InfoPanel>
+      </div>
+    );
+  }
+
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
         title="Grupos y horarios"
+        subtitle="Organice las categorías, sus horarios y los alumnos de cada una."
         actions={
           // Disabled while `categorias` (part of `loadData`'s Promise.all,
           // same as `horarios`/`allStudents`) hasn't loaded yet — the create
@@ -1534,17 +1716,40 @@ export default function GroupsPage(): React.ReactElement {
 
         {!loading && categoriaCards.length > 0 ? (
           <div data-testid="groups-summary" className={STAT_GRID}>
-            <StatCard label="Categorías" value={categoriaCards.length} />
-            <StatCard label="Horarios" value={horarios.length} />
-            <StatCard label="Alumnos en grupos" value={summary.inscriptos ?? "—"} />
+            <StatCard
+              label="Categorías"
+              value={categoriaCards.length}
+              hint={
+                categoriasOcultas > 0
+                  ? `${categoriasOcultas} oculta${categoriasOcultas === 1 ? "" : "s"} en la landing`
+                  : "Todas visibles en la landing"
+              }
+            />
+            <StatCard label="Horarios" value={horarios.length} hint="Sesiones por semana, sumando todos los días" />
+            <StatCard
+              label="Alumnos en grupos"
+              value={summary.inscriptos ?? "—"}
+              hint={summary.inscriptos === null ? "Calculando…" : `De ${summary.activos} alumnos activos`}
+            />
+            {/* Attention card: the one figure that is a queue of work. */}
             <StatCard
               label="Sin grupo"
               value={summary.sinGrupo ?? "—"}
-              hint="Alumnos activos sin ningún horario"
+              variant={summary.sinGrupo ? "hot" : "default"}
+              href={summary.sinGrupo ? "#sin-grupo" : undefined}
+              hint={
+                summary.sinGrupo
+                  ? "Ver quiénes son y asignarlos"
+                  : summary.sinGrupo === 0
+                    ? "Todos los activos tienen horario"
+                    : "Calculando…"
+              }
             />
           </div>
         ) : null}
 
+        <div className={PAGE_RAIL}>
+        <div className="grid min-w-0 content-start gap-page">
         {loading ? (
           <div className="card">
             <LoadingState label="Cargando horarios…" />
@@ -1578,6 +1783,7 @@ export default function GroupsPage(): React.ReactElement {
                 // one of its día rows — so the categoría's row busies out.
                 const isDeleting = card.rows.some((row) => row.id === deletingId);
                 const isExpanded = expandedGroup?.key === card.categoria;
+                const editOpen = isExpanded && expandedGroup.tab === "editar";
                 const metadata = categorias[card.categoria as Categoria];
                 // An unrecognized `categoria` has no metadata, so the track
                 // falls back to the días the rows themselves carry.
@@ -1605,7 +1811,7 @@ export default function GroupsPage(): React.ReactElement {
                   <li
                     key={card.categoria}
                     data-testid="horario-card"
-                    className="min-h-drow px-5 py-4"
+                    className="min-h-drow px-5 py-4 2xl:py-12"
                   >
                     {/* Three shapes, one row: a stack on a phone, two columns
                         on the tablet/small-laptop band where the five tracks do
@@ -1625,6 +1831,9 @@ export default function GroupsPage(): React.ReactElement {
                           {!(categorias[card.categoria as Categoria]?.visible ?? true) && (
                             <Badge tone="neutral">Oculta en la landing</Badge>
                           )}
+                        </div>
+                        <div className="mt-2">
+                          {renderPublicacionToggle(card.categoria, categoriaLabel(card.categoria), isDeleting)}
                         </div>
                       </div>
 
@@ -1647,37 +1856,47 @@ export default function GroupsPage(): React.ReactElement {
                       {/* Distinct students across the categoría's días. Absent
                           rather than zero while any roster is still unanswered —
                           the club plans around this figure. */}
-                      <div className={`min-w-0 ${inscriptos === null ? "hidden xl:block" : ""}`}>
+                      <div className={`min-w-0 ${inscriptos === null ? "hidden 2xl:block" : ""}`}>
                         {inscriptos !== null && (
                           <>
                             <CellLabel>{COLUMNS[2]}</CellLabel>
-                            <p className="text-base font-semibold text-ink">
+                            {/* The count is also the way in to the roster. */}
+                            <button
+                              type="button"
+                              className="rounded-ctl text-base font-semibold text-ink underline decoration-line-2 underline-offset-4 hover:decoration-ink max-md:inline-flex max-md:min-h-10 max-md:items-center"
+                              onClick={() => openAlumnosTab(card)}
+                              disabled={isDeleting}
+                              aria-label={`Ver alumnos de ${cardTitle(card)}`}
+                            >
                               {inscriptos} inscrito{inscriptos === 1 ? "" : "s"}
-                            </p>
+                            </button>
                           </>
                         )}
                       </div>
 
-                      <div className="flex gap-2 md:col-span-2 md:justify-end xl:col-span-1 xl:justify-end">
+                      <div className="flex gap-2 md:col-span-2 md:justify-end 2xl:col-span-1 2xl:justify-end">
                         <span className="sr-only">{COLUMNS[3]}</span>
-                        {renderPublicacionToggle(card.categoria, categoriaLabel(card.categoria), isDeleting)}
                         <Button
+                          variant="dark"
                           size="sm"
                           className="flex-1 md:flex-none"
-                          onClick={() => openAlumnosTab(card)}
+                          onClick={() => openAlumnosTab(card, true)}
                           disabled={isDeleting}
-                          aria-label={`Ver alumnos de ${cardTitle(card)}`}
+                          aria-label={`Agregar alumnos a ${cardTitle(card)}`}
                         >
-                          Ver alumnos
+                          <UserPlus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                          Agregar alumnos
                         </Button>
                         <Button
+                          variant="secondary"
                           size="sm"
                           className="flex-1 md:flex-none"
-                          onClick={() => openEditForm(card)}
+                          onClick={() => (editOpen ? closeExpanded() : openEditForm(card))}
                           disabled={isDeleting}
-                          aria-label={`Editar ${cardTitle(card)}`}
+                          aria-expanded={editOpen}
+                          aria-label={`${editOpen ? "Cerrar edición de" : "Editar"} ${cardTitle(card)}`}
                         >
-                          Editar
+                          {editOpen ? "Cerrar edición" : "Editar"}
                         </Button>
                       </div>
                     </div>
@@ -1707,7 +1926,7 @@ export default function GroupsPage(): React.ReactElement {
                 <li
                   key={entry.categoria}
                   data-testid="catalogo-pendiente-card"
-                  className="min-h-drow px-5 py-4"
+                  className="min-h-drow px-5 py-4 2xl:py-12"
                 >
                   <div className={`flex flex-col gap-3.5 md:grid md:grid-cols-2 md:items-start md:gap-x-6 ${ROW_COLUMNS}`}>
                     <div className="min-w-0">
@@ -1719,6 +1938,7 @@ export default function GroupsPage(): React.ReactElement {
                           <Badge tone="neutral">Oculta en la landing</Badge>
                         )}
                       </div>
+                      <div className="mt-2">{renderPublicacionToggle(entry.categoria, entry.label, false)}</div>
                     </div>
 
                     {/* Días permitidos, in words and on the strip. The días are
@@ -1737,12 +1957,12 @@ export default function GroupsPage(): React.ReactElement {
                     {/* No roster exists yet, so no count to show. The empty
                         cell keeps the action column aligned with the rows
                         above at `xl`. */}
-                    <div className="hidden min-w-0 xl:block" />
+                    <div className="hidden min-w-0 2xl:block" />
 
-                    <div className="flex gap-2 md:col-span-2 md:justify-end xl:col-span-1 xl:justify-end">
+                    <div className="flex gap-2 md:col-span-2 md:justify-end 2xl:col-span-1 2xl:justify-end">
                       <span className="sr-only">{COLUMNS[3]}</span>
-                      {renderPublicacionToggle(entry.categoria, entry.label, false)}
                       <Button
+                        variant="dark"
                         size="sm"
                         className="flex-1 md:flex-none"
                         onClick={() => openCatalogoEditForm(entry)}
@@ -1775,6 +1995,11 @@ export default function GroupsPage(): React.ReactElement {
             }
           />
         )}
+
+        </div>
+
+        {renderRail()}
+        </div>
 
         <ConfirmDialog
           open={pendingDeletions !== null && pendingDeletions.length > 0}

@@ -22,6 +22,7 @@ import { formatCurrency, formatDate } from "@/lib/format-utils";
 import {
   EmptyState,
   ErrorState,
+  InfoPanel,
   LoadingState,
   PAGE_RAIL,
   STAT_GRID,
@@ -483,7 +484,7 @@ function Carnet({
       className={cn("card overflow-hidden", className)}
     >
       <div className="flex items-center gap-3 border-b border-line px-5 py-3">
-        <h2 className="flex-1 text-sm font-bold text-ink">Carnet de socio</h2>
+        <h2 className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">Carnet de socio</h2>
         {/* A TEXT LINK, not a button — the same skin `CuotaCard` gives "Ver
             pagos" one panel down. Printing is a destination, not a second CTA
             competing with the page's own; it was a filled control only while
@@ -827,7 +828,7 @@ function TrainingPanel({
       className="card flex flex-col overflow-hidden"
     >
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-field px-5 pb-3.5 pt-[18px]">
-        <h2 className="text-base font-bold tracking-tight text-ink">Esta semana</h2>
+        <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Esta semana</h2>
         <p className="text-xs text-ink-3-strong">
           {viewingOwnProfile
             ? "El horario semanal que el club le asignó."
@@ -958,7 +959,7 @@ function PendingEnrollmentView({
   return (
     <>
       <section className="card p-6">
-        <h2 className="text-base font-bold tracking-tight text-ink">Bienvenido a Cata Club</h2>
+        <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Bienvenido a Cata Club</h2>
         {/* Capped at a readable measure inside a full-width card, rather than
             capping the card: a 110-character line is not a paragraph. */}
         <p className="mt-2 max-w-[68ch] text-sm leading-relaxed text-ink-3">
@@ -1332,7 +1333,7 @@ function ActivePortalView({
           {/* Below `lg` the wrapper dissolves (`contents`) so the account
               actions can drop to the end of the page: a phone reads carnet,
               cuota, this week, and only then the occasional actions. */}
-          <div className="flex flex-col gap-5 max-lg:contents">
+          <div className="flex flex-col gap-5 max-lg:contents lg:self-stretch">
             <Carnet
               profile={selectedProfile}
               coverageEnd={coverageEnd}
@@ -1368,6 +1369,54 @@ function ActivePortalView({
               </section>
             )}
 
+            {/* Fills the carnet column under the credential: the quick doors
+                this account has, each one only when its destination is valid
+                for the role (same gates as the account actions card). */}
+            <InfoPanel title="Qué puede hacer aquí" className="max-lg:hidden lg:flex-1">
+              <ul className="flex flex-col gap-field">
+                <li>
+                  <Link
+                    href={withSelectedStudent(
+                      paymentSituation.canRegister ? "/student/payments?registrar=1" : "/student/payments",
+                      selectedPersonaId,
+                    )}
+                    className="font-semibold text-ink underline decoration-line-2 underline-offset-4 hover:decoration-ink"
+                  >
+                    {paymentSituation.canRegister ? "Pagar la cuota" : "Ver los pagos"}
+                  </Link>{" "}
+                  y su validación.
+                </li>
+                <li>
+                  <Link
+                    href={withSelectedStudent("/student/attendance", selectedPersonaId)}
+                    className="font-semibold text-ink underline decoration-line-2 underline-offset-4 hover:decoration-ink"
+                  >
+                    Ver la asistencia
+                  </Link>{" "}
+                  de las últimas sesiones.
+                </li>
+                <li>
+                  <Link
+                    href={withSelectedStudent("/student/medical-record", selectedPersonaId)}
+                    className="font-semibold text-ink underline decoration-line-2 underline-offset-4 hover:decoration-ink"
+                  >
+                    Revisar la ficha médica
+                  </Link>{" "}
+                  y el contacto de emergencia.
+                </li>
+                {!selfIsMinor && showAddDependentCta && (
+                  <li>
+                    <Link
+                      href="/student/add-dependent"
+                      className="font-semibold text-ink underline decoration-line-2 underline-offset-4 hover:decoration-ink"
+                    >
+                      Agregar un dependiente
+                    </Link>{" "}
+                    a su cuenta.
+                  </li>
+                )}
+              </ul>
+            </InfoPanel>
           </div>
 
           {/* Below `lg` this is the SECOND stacked block (see `PAGE_RAIL`'s
@@ -1383,7 +1432,7 @@ function ActivePortalView({
               under its fact grid, which is the same emptiness moved rather
               than closed. A carnet has a carnet's proportions; a panel of
               rows does not. */}
-          <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-5 lg:self-stretch">
             <CuotaCard
               situation={paymentSituation}
               coverageEnd={coverageEnd}
@@ -1425,12 +1474,12 @@ function ActivePortalView({
                 #1137: independence is a PRESENCIAL admin command, not here. */}
             <section
               aria-label="Acciones de la cuenta"
-              className="card overflow-hidden"
+              className="card flex flex-col overflow-hidden lg:flex-1"
             >
               <div className="border-b border-line px-5 py-3">
-                <h2 className="text-sm font-bold text-ink">Acciones de la cuenta</h2>
+                <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Acciones de la cuenta</h2>
               </div>
-              <div className="flex flex-wrap items-stretch gap-2 px-5 py-4 [&>*]:flex-1 [&>*]:justify-center">
+              <div className="flex flex-col gap-2 px-5 py-4 [&>*]:justify-center">
                 {!selfIsMinor && showAddDependentCta && (
                   <Link href="/student/add-dependent" className={buttonClasses("secondary")}>
                     <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />

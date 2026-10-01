@@ -37,6 +37,7 @@ import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
 import { toUserMessage } from "@/lib/error-message";
 import { formatDate } from "@/lib/format-utils";
 import { MIN_TARGET_CLASS } from "@/lib/target-size";
+import { ACTION_TRIGGER, PRIMARY_ACTION_TRIGGER } from "./payment-action-styles";
 import {
   addMonthsIso,
   excedeMesesMaximo,
@@ -55,12 +56,19 @@ interface RegisterPaymentFormProps {
    *  caller can refetch and show it — optional so callers/tests that don't
    *  need a refresh (e.g. the standalone form tests) can omit it. */
   onPaymentRegistered?: () => void;
+  /**
+   * Whether the trigger is the dialog's one red primary. Defaults to `true`:
+   * registering a payment is the task the dialog exists for, and only yields
+   * the skin to "Regularizar deuda" when the membership has debt to clear.
+   */
+  primary?: boolean;
 }
 
 export default function RegisterPaymentForm({
   personaId,
   membresia,
   onPaymentRegistered,
+  primary = true,
 }: RegisterPaymentFormProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
   const monthlyPrice = membresia.monto != null ? Number(membresia.monto) : 0;
@@ -456,7 +464,7 @@ export default function RegisterPaymentForm({
       <button
         type="button"
         onClick={handleOpen}
-        className="inline-flex h-ctl items-center gap-2 rounded-lg bg-cata-red/15 px-4 text-sm font-semibold text-cata-red transition-colors hover:bg-cata-red/25"
+        className={primary ? PRIMARY_ACTION_TRIGGER : ACTION_TRIGGER}
       >
         <Plus size={ICON.base} strokeWidth={2} aria-hidden="true" />
         {etiquetaRegistro}

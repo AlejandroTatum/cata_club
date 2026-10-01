@@ -30,7 +30,7 @@ interface AttendanceCommitBarProps {
 }
 
 /**
- * The commit bar. `sticky bottom-0` so the trainer never scrolls the whole
+ * The commit bar. Fixed above the mobile tab bar (below `lg`) so the trainer never scrolls the whole
  * card to reach the primary action — all three steps commit from here, one
  * bar, one position, one size, from the first question to the last.
  */
@@ -54,10 +54,11 @@ export default function AttendanceCommitBar({
   return (
     <div
       data-testid="attendance-commit-bar"
-      // Below `lg` the bar is `sticky bottom-0`, so a forty-row roster never
-      // costs a scroll to the action. From `lg` it is the tail of the aside
+      // Below `lg` the bar is `fixed` above the 62px tab bar: `sticky` cannot
+      // work here because its parent is the short aside card, so there is no
+      // scroll range to stick within. A forty-row roster never costs a scroll. From `lg` it is the tail of the aside
       // card (no chrome of its own) — stacked, so the actions sit under the summary they commit.
-      className="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 rounded-card border border-line bg-paper/95 px-4 py-3 shadow-soft backdrop-blur lg:static lg:flex-col lg:items-stretch lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none"
+      className="fixed inset-x-0 bottom-[62px] z-20 flex flex-wrap items-center gap-3 border-t border-line bg-paper/95 px-4 py-3 shadow-soft backdrop-blur lg:static lg:rounded-none lg:border-t-0 lg:flex-col lg:items-stretch lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none"
     >
       {!isFirst && (
         <Button
@@ -73,7 +74,7 @@ export default function AttendanceCommitBar({
       )}
 
       {/* Undo lives here, beside the step navigation, because this bar is
-          `sticky bottom-0`: on a forty-row roster it is the only control
+          pinned to the viewport on mobile: on a forty-row roster it is the only control
           always within reach of the row just mistyped. */}
       {step === "mark-attendance" && (
         <Button

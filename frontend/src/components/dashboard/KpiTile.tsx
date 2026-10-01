@@ -30,6 +30,8 @@ export interface KpiTileProps {
   /** Bottom line. With `href` it becomes a link into the module. */
   caption: ReactNode;
   href?: string;
+  /** Extra classes for the caption link, e.g. a taller tap area on phones. */
+  captionClassName?: string;
   className?: string;
 }
 
@@ -41,6 +43,7 @@ export default function KpiTile({
   visualPlacement = "side",
   caption,
   href,
+  captionClassName,
   className,
 }: KpiTileProps): ReactElement {
   return (
@@ -50,7 +53,7 @@ export default function KpiTile({
     >
       <span className="text-2xs font-bold uppercase text-ink-3">{label}</span>
 
-      <div className={cn("flex gap-3", visualPlacement === "side" ? "items-center justify-between" : "flex-col")}>
+      <div className={cn("flex gap-3", visualPlacement === "side" ? "flex-wrap items-center justify-between" : "flex-col")}>
         <span className="font-display text-2xl leading-none tabular-nums tracking-flat text-ink">
           {value}
           {unit ? <small className="ml-[3px] font-sans text-sm font-semibold text-ink-3">{unit}</small> : null}
@@ -59,7 +62,7 @@ export default function KpiTile({
       </div>
 
       {href ? (
-        <Link href={href} className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-2 underline-offset-2 hover:text-ink hover:underline">
+        <Link href={href} className={cn("inline-flex items-center gap-1.5 text-xs font-semibold text-ink-2 underline-offset-2 hover:text-ink hover:underline", captionClassName)}>
           {caption}
           <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         </Link>

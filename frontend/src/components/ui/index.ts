@@ -8,6 +8,8 @@
  * something each caller re-derives from padding.
  */
 
+export { useBodyScrollLock } from "./useBodyScrollLock";
+
 export { default as Accordion } from "./Accordion";
 export type { AccordionItem, AccordionProps } from "./Accordion";
 

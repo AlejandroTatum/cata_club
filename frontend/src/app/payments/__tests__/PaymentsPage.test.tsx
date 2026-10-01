@@ -890,6 +890,24 @@ describe("PaymentsPage — the checklist gates 'Aprobar'", () => {
     expect(screen.getByRole("button", { name: /aprobar pago/i })).toBeEnabled();
   });
 
+  it("pins the decision bar above the 62px tab bar below lg, with the reason under the buttons", async () => {
+    renderPage();
+    await openRequest("Juan Pérez");
+
+    const bar = await screen.findByTestId("payment-decision-bar");
+    expect(bar).toHaveClass("sticky", "bottom-[62px]", "lg:static");
+    const approve = within(bar).getByRole("button", { name: /aprobar pago/i });
+    const reject = within(bar).getByRole("button", { name: /rechazar pago/i });
+    expect(approve).toBeInTheDocument();
+    expect(reject).toBeInTheDocument();
+    // The disabled reason is a sibling AFTER the button row, full width.
+    const reason = within(bar).getByText(/para poder aprobar/i);
+    expect(
+      approve.parentElement!.compareDocumentPosition(reason) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(reason.parentElement).toBe(bar);
+  });
+
   it("names the expected amount inside the item that checks it", async () => {
     renderPage();
     await openRequest("Juan Pérez");
@@ -2007,5 +2025,90 @@ describe("PaymentsPage — la insignia de membresía distingue INACTIVA de VENCI
     renderPage();
     await openRequest("Mario Chávez");
     await screen.findByText("Vencida");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Admin v4 — queue stat strip + rail, method visuals, and the review layout
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — queue stat strip and rail (admin v4)", () => {
+  it("summarises the pending queue and carries an always-visible guide in the rail", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, CASH_REQUEST]);
+    renderPage();
+    await screen.findByTestId("payments-table");
+
+    expect(screen.getByText("Pendientes por validar")).toBeInTheDocument();
+    // 50 + 25 across the two pending payments.
+    expect(await screen.findByText("$75,00")).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Cómo se revisa un pago" })).toBeInTheDocument();
+    expect(screen.getByText(/1 por transferencia y 1 en efectivo/i)).toBeInTheDocument();
+  });
+
+  it("opens the first pending payment from the rail call to action", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, CASH_REQUEST]);
+    renderPage();
+    await screen.findByTestId("payments-table");
+
+    fireEvent.click(screen.getByRole("button", { name: /revisar siguiente pendiente/i }));
+
+    expect(await screen.findByText("Pendiente 1 de 2")).toBeInTheDocument();
+  });
+
+  it("disables the call to action when nothing is pending", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([RESOLVED_REQUEST]);
+    renderPage();
+    await screen.findByText(/no hay solicitudes pendientes/i);
+
+    expect(screen.getByRole("button", { name: /revisar siguiente pendiente/i })).toBeDisabled();
+  });
+
+  it("keeps the row action neutral: outlined for pending, low weight for decided", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, RESOLVED_REQUEST]);
+    renderPage();
+    await screen.findByTestId("payments-table");
+    expect(
+      within(queueTable()).getByRole("button", { name: /revisar el pago de/i }),
+    ).toHaveTextContent("Revisar");
+
+    fireEvent.click(screen.getByRole("button", { name: /^todos/i }));
+    const decided = await screen.findAllByRole("button", {
+      name: /ver el detalle del pago de Kevin Sabando/i,
+    });
+    expect(decided[0]).toHaveTextContent("Detalle");
+  });
+});
+
+describe("PaymentsPage — cash vs transfer review (admin v4)", () => {
+  it("marks a cash review at a glance and swaps the receipt viewer for a cash confirmation", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([CASH_REQUEST]);
+    renderPage();
+    await openRequest(CASH_REQUEST.studentName);
+
+    expect(await screen.findByText("Pago en efectivo")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /confirmación de efectivo/i })).toBeInTheDocument();
+    expect(screen.getByText("Monto a recibir")).toBeInTheDocument();
+    expect(screen.queryByText("Comprobante adjunto")).not.toBeInTheDocument();
+  });
+
+  it("labels a transfer as a transfer and explains the missing receipt exception", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([{ ...PENDING_REQUEST, proofPreviewUrl: undefined }]);
+    renderPage();
+    await openRequest(PENDING_REQUEST.studentName);
+
+    expect(await screen.findByText("Pago por transferencia")).toBeInTheDocument();
+    expect(screen.getByText(/indique el motivo de la excepción/i)).toBeInTheDocument();
+    expect(screen.queryByText("Monto a recibir")).not.toBeInTheDocument();
+  });
+
+  it("keeps a single decision block with the reason next to a disabled approve", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST]);
+    renderPage();
+    await openRequest("Juan Pérez");
+
+    const approve = await screen.findByRole("button", { name: /aprobar pago/i });
+    expect(approve).toBeDisabled();
+    expect(approve.parentElement!.parentElement).toHaveTextContent(/faltan \d+ puntos de la lista/i);
+    expect(screen.getByRole("button", { name: /rechazar pago/i })).toBeEnabled();
   });
 });

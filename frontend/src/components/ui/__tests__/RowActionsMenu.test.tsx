@@ -142,3 +142,21 @@ describe("RowActionsMenu", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 });
+
+describe("RowActionsMenu with a visible trigger label", () => {
+  it("shows the label as text, keeps the row-specific accessible name, and still opens", () => {
+    render(
+      <RowActionsMenu
+        label="Más acciones para Ana Paz"
+        triggerLabel="Más"
+        items={[{ label: "Editar Ana Paz", onSelect: vi.fn() }]}
+      />,
+    );
+    const trigger = screen.getByRole("button", { name: "Más acciones para Ana Paz" });
+
+    expect(trigger).toHaveTextContent("Más");
+    expect(trigger).toHaveAttribute("title", "Más acciones para Ana Paz");
+    fireEvent.click(trigger);
+    expect(screen.getByRole("menuitem", { name: "Editar Ana Paz" })).toBeInTheDocument();
+  });
+});

@@ -474,7 +474,10 @@ const SCREENS: Screen[] = [
         fulfillJson(r, { items: DISCOUNTS, total: DISCOUNTS.length, skip: 0, limit: 200 }),
       );
       await page.goto("/discounts");
-      await expect(page.locator("table tbody tr").first()).toBeVisible({ timeout: 20_000 });
+      // The catalog is a card grid now (no table): wait on its first card.
+      await expect(page.getByTestId("discounts-cards").locator("li").first()).toBeVisible({
+        timeout: 20_000,
+      });
     },
   },
   {

@@ -326,7 +326,8 @@ describe("admin dashboard — two independent columns", () => {
     const main = screen.getByTestId("dashboard-main");
     const rail = screen.getByTestId("dashboard-rail");
     expect(within(main).getByTestId("activity-feed")).toBeInTheDocument();
-    expect(within(rail).getByTestId("attendance-distribution")).toBeInTheDocument();
+    expect(within(main).getByTestId("attendance-distribution")).toBeInTheDocument();
+    expect(within(rail).getByRole("heading", { name: "Qué hacer hoy" })).toBeInTheDocument();
     expect(within(rail).getByTestId("payment-queue")).toBeInTheDocument();
     expect(main).toHaveAttribute("data-dash-col");
     expect(rail).toHaveAttribute("data-dash-col");

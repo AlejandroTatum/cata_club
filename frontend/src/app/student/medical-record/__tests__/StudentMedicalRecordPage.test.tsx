@@ -333,3 +333,12 @@ describe("StudentMedicalRecordPage — emergency card rail", () => {
     expect(within(screen.getByTestId("emergency-card")).getByText("Penicilina")).toBeInTheDocument();
   });
 });
+
+describe("StudentMedicalRecordPage — the guide", () => {
+  it("tells a guardian how to complete the ficha, below the editor", async () => {
+    render(<StudentMedicalRecordPage />);
+
+    const guide = await screen.findByRole("heading", { name: "Cómo completar la ficha médica" });
+    expect(within(guide.parentElement as HTMLElement).getByText(/obligatorios/i)).toBeInTheDocument();
+  });
+});

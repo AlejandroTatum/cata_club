@@ -61,6 +61,7 @@ import {
   Badge,
   EmptyState,
   ErrorState,
+  InfoPanel,
   LoadingState,
   PAGE_RAIL,
   buttonClasses,
@@ -216,9 +217,12 @@ function SessionList({
   profile,
   /** The dependent's given name, or `null` when the reader IS the student. */
   studentName,
+  fill = false,
 }: {
   profile: StudentProfileSummary;
   studentName: string | null;
+  /** Stretch to the rail's height, closing the gap with ghost rows. */
+  fill?: boolean;
 }): React.ReactElement {
   const sessions = profile.recentSessions;
   const empty = sessions.length === 0;
@@ -229,7 +233,7 @@ function SessionList({
     // legend of what each row will say once the trainer takes attendance.
     <section
       data-testid="sessions-card"
-      className="card flex flex-col overflow-hidden"
+      className={cn("card flex flex-col overflow-hidden", fill && "lg:flex-1")}
       aria-labelledby="sessions-title"
     >
       <div className="flex items-center gap-3 border-b border-line px-5 py-4">
@@ -303,7 +307,55 @@ function SessionList({
           ))}
         </ul>
       )}
+      {fill && !empty && <GhostSessionRows />}
     </section>
+  );
+}
+
+/**
+ * Placeholder rows under a short record: they show the shape a session row
+ * takes (date, time slot, state chip) so a few sessions read as "more will
+ * appear here". The block takes the height the rail leaves over and clips.
+ * Decorative only — hidden from assistive tech.
+ */
+function GhostSessionRows(): React.ReactElement {
+  return (
+    <div className="relative hidden min-h-0 flex-1 lg:block">
+      <ul
+        aria-hidden="true"
+        data-testid="session-ghost-rows"
+        className="absolute inset-0 flex flex-col divide-y divide-line overflow-hidden border-t border-line"
+      >
+        {Array.from({ length: 8 }, (_, i) => (
+          <li
+            key={i}
+            className="flex min-h-drow flex-none items-center gap-4 px-5 py-2"
+            style={{ opacity: Math.max(0.1, 0.6 - i * 0.08) }}
+          >
+            <span className="h-2 w-[92px] flex-none rounded-full bg-line" />
+            <span className="h-2.5 w-40 max-w-full flex-1 rounded-full bg-line/70" />
+            <span className="h-5 w-20 flex-none rounded-full bg-line/50" />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** What the rail's guide says: who records, what each state means. */
+function AttendanceGuide(): React.ReactElement {
+  return (
+    <InfoPanel title="Cómo se registra la asistencia" as="div" className="min-w-0">
+      <p>El entrenador toma lista en cada sesión. Si un registro no es correcto, pida la corrección al club.</p>
+      <ul className="flex flex-col gap-2">
+        {ATTENDANCE_LEGEND.map(({ estado, meaning }) => (
+          <li key={estado} className="flex items-center gap-2.5">
+            <Badge tone={getAttendanceBadgeTone(estado)}>{getAttendanceLabel(estado)}</Badge>
+            <span className="text-xs text-ink-3">{meaning}</span>
+          </li>
+        ))}
+      </ul>
+    </InfoPanel>
   );
 }
 
@@ -459,15 +511,18 @@ function AttendanceView({
           </div>
         </>
       ) : (
-        <div className={PAGE_RAIL}>
+        <div className={cn(PAGE_RAIL, "lg:items-stretch")}>
           {/* `gap-section` — the declared step between the parts of one block,
               not the 12px this wrote by hand. */}
           <div className="flex min-w-0 flex-col gap-section">
-            <SessionList profile={selectedProfile} studentName={studentName} />
+            <SessionList profile={selectedProfile} studentName={studentName} fill />
             <PortalWindowNote />
           </div>
 
-          <AttendanceRecap profile={selectedProfile} studentName={studentName} />
+          <div className="flex min-w-0 flex-col gap-page lg:self-start">
+            <AttendanceRecap profile={selectedProfile} studentName={studentName} />
+            <AttendanceGuide />
+          </div>
         </div>
       )}
 

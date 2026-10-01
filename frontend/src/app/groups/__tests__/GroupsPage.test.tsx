@@ -552,6 +552,9 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
       "lun", "mar", "mie", "jue", "vie", "sab", "dom",
     ]);
     // COMPETITIVO may meet Lunes–Sábado; these rows only use Lun/Mié/Vie.
+    // Days that run are carbon, never red.
+    expect(boxes.find((box) => box.dataset.day === "lun")?.className).toContain("bg-coal");
+    expect(boxes.some((box) => box.className.includes("bg-cata-red"))).toBe(false);
     expect(stateOf(boxes, "lun")).toBe("activo");
     expect(stateOf(boxes, "mie")).toBe("activo");
     expect(stateOf(boxes, "vie")).toBe("activo");
@@ -853,15 +856,39 @@ describe("GroupsPage — categoria title + labeled Ver alumnos button (PR1 layou
     expect(within(card()).queryByText(/nivel intermedio/i)).not.toBeInTheDocument();
   });
 
-  it("renders 'Ver alumnos' as a labeled button that calls openAlumnosTab (opens the alumnos panel)", async () => {
+  it("renders 'Agregar alumnos' as the most prominent (carbon, not red) row action and opens the roster on the add selector", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
-    const verAlumnosButton = within(card()).getByRole("button", { name: /ver alumnos/i });
-    expect(verAlumnosButton).toHaveTextContent(/ver alumnos/i);
+    const agregar = within(card()).getByRole("button", { name: /agregar alumnos/i });
+    expect(agregar).toHaveTextContent(/agregar alumnos/i);
+    // Repeated per-row actions are carbon: red is reserved for one primary.
+    expect(agregar.className).toContain("bg-coal");
+    expect(agregar.className).not.toContain("bg-cata-red");
+    // Editar is secondary: no red fill.
+    expect(within(card()).getByRole("button", { name: /^editar/i }).className).not.toContain("bg-cata-red");
 
-    fireEvent.click(verAlumnosButton);
+    fireEvent.click(agregar);
     await screen.findByRole("heading", { name: "Alumnos de Competitivo" });
+    expect(screen.getByLabelText("Seleccionar alumno")).toHaveFocus();
+  });
+
+  it("opens the roster from the 'N inscritos' count without focusing the add selector", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    fireEvent.click(await within(card()).findByRole("button", { name: /ver alumnos/i }));
+    await screen.findByRole("heading", { name: "Alumnos de Competitivo" });
+    expect(screen.getByLabelText("Seleccionar alumno")).not.toHaveFocus();
+  });
+
+  it("labels the landing toggle in words and explains it in a tooltip", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    const toggle = within(card()).getByRole("button", { name: /de la landing pública/i });
+    expect(toggle).toHaveTextContent("Ocultar de la landing");
+    expect(toggle).toHaveAttribute("title", expect.stringMatching(/sitio público/i));
   });
 });
 
@@ -1083,6 +1110,25 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
     expect(cardA.contains(heading)).toBe(true);
   });
 
+  it("clicking Editar again collapses the edit panel and reports aria-expanded", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    const [cardA] = cards();
+    const toggle = within(cardA).getByRole("button", { name: /^editar /i });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle);
+    await screen.findByRole("heading", { name: "Editar categoría" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(toggle).toHaveTextContent("Cerrar edición");
+
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(screen.queryByRole("heading", { name: "Editar categoría" })).not.toBeInTheDocument();
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("expanding group B's edit form collapses group A's — only one group expanded at a time", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
@@ -1213,7 +1259,8 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await waitForHorarios();
 
     expect(screen.queryByText("Alumnos asignados")).not.toBeInTheDocument();
-    expect(screen.queryByText("Carla Ruiz")).not.toBeInTheDocument();
+    // The rail's "Sin grupo" list may name her; no categoría row may.
+    for (const row of cards()) expect(within(row).queryByText("Carla Ruiz")).not.toBeInTheDocument();
   });
 
   it("shows each student's age next to their name in the roster (Fix 1)", async () => {
@@ -2370,5 +2417,72 @@ describe("GroupsPage — summary strip", () => {
 
     const strip = await screen.findByTestId("groups-summary");
     expect(within(strip).getByText("Alumnos en grupos").parentElement).toHaveTextContent("—");
+  });
+});
+
+describe("GroupsPage — rail", () => {
+  beforeEach(() => {
+    mockFetchHorarios.mockReset().mockResolvedValue([
+      { id: 101, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
+    ]);
+    mockFetchMembers.mockReset().mockResolvedValue({
+      accounts: [
+        {
+          estudiantes: [
+            { id: 1, nombres: "Ana", apellidos: "Paz", activo: true },
+            { id: 2, nombres: "Luis", apellidos: "Mora", activo: true },
+          ],
+        },
+      ],
+    });
+    mockFetchRosterDeTodosLosHorarios.mockReset().mockResolvedValue([{ horarioId: 101, personaId: 1 }]);
+  });
+
+  it("always shows the indications card, including what Ocultar does", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    const rail = await screen.findByTestId("groups-rail");
+    expect(within(rail).getByRole("complementary", { name: "Cómo funciona" })).toBeInTheDocument();
+    expect(within(rail).getByText(/quita la categoría del sitio público/i)).toBeInTheDocument();
+  });
+
+  it("lists active students without a schedule and makes the stat an attention card", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    const list = await screen.findByTestId("sin-grupo-list");
+    expect(within(list).getByText("Luis Mora")).toBeInTheDocument();
+    expect(within(list).queryByText("Ana Paz")).not.toBeInTheDocument();
+    const stat = within(screen.getByTestId("groups-summary")).getByText("Sin grupo").closest("a");
+    expect(stat).toHaveAttribute("href", "#sin-grupo");
+  });
+
+  it("pages the unassigned list five at a time", async () => {
+    mockFetchMembers.mockReset().mockResolvedValue({
+      accounts: [
+        {
+          estudiantes: Array.from({ length: 7 }, (_, i) => ({
+            id: 10 + i,
+            nombres: `Alumno${i + 1}`,
+            apellidos: "Prueba",
+            activo: true,
+          })),
+        },
+      ],
+    });
+    mockFetchRosterDeTodosLosHorarios.mockReset().mockResolvedValue([]);
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    const list = await screen.findByTestId("sin-grupo-list");
+    expect(within(list).getAllByRole("listitem")).toHaveLength(5);
+    expect(screen.getByText("1–5 de 7")).toBeInTheDocument();
+    expect(screen.queryByText(/y 2 más/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
+    expect(within(screen.getByTestId("sin-grupo-list")).getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByText("6–7 de 7")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /siguiente/i })).toBeDisabled();
   });
 });

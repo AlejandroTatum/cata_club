@@ -47,6 +47,7 @@ import {
   cn,
   ErrorState,
   FilterPill,
+  InfoPanel,
   LoadingState,
   PAGE_RAIL,
   SearchInput,
@@ -64,6 +65,7 @@ import CompactEmpty from "@/components/dashboard/CompactEmpty";
 import DashboardSection from "@/components/dashboard/DashboardSection";
 import KpiTile from "@/components/dashboard/KpiTile";
 import PaymentsAction from "@/components/dashboard/PaymentsAction";
+import TimelineDayList from "@/components/dashboard/TimelineDayList";
 import SectionNotice from "@/components/dashboard/SectionNotice";
 import { buildContextLine } from "@/components/dashboard/context-line";
 import {
@@ -107,7 +109,7 @@ import {
 const ACTIVITY_POOL = 18;
 
 /** Rows the feed shows once filtered. */
-const ACTIVITY_LIMIT = 10;
+const ACTIVITY_LIMIT = 5;
 
 /** Receipts previewed in the payments block before deferring to the full queue. */
 const QUEUE_LIMIT = 4;
@@ -293,6 +295,43 @@ export default function DashboardPage(): React.ReactElement {
     (entry) => entry.status === "taken",
   ).length;
 
+  const listsMissing = todayClasses.filter(
+    (entry) => entry.status === "missing",
+  ).length;
+  const todoItems: {
+    key: string;
+    label: string;
+    hint: string;
+    href: string;
+    count: number;
+    tone: BadgeTone;
+  }[] = [
+    {
+      key: "payments",
+      label: "Pagos por validar",
+      hint: "Revise cada comprobante y apruébelo o recházelo.",
+      href: "/payments",
+      count: stats?.pendingPayments ?? 0,
+      tone: "warn",
+    },
+    {
+      key: "attendance",
+      label: "Asistencias sin lista",
+      hint: "Clases de hoy ya terminadas sin lista tomada.",
+      href: "/attendance",
+      count: listsMissing,
+      tone: "bad",
+    },
+    {
+      key: "members",
+      label: "Miembros sin datos",
+      hint: "Personas sin membresía: complete su ficha.",
+      href: "/members",
+      count: stats?.personasSinMembresia ?? 0,
+      tone: "warn",
+    },
+  ];
+
   const pendingPayments = stats?.pendingPayments ?? 0;
   const overAWeek = countPaymentsWaitingOverAWeek(payments);
   const activeMemberships = stats?.activeMemberships ?? 0;
@@ -388,11 +427,15 @@ export default function DashboardPage(): React.ReactElement {
                         onRetry={() => void loadRecords()}
                       />
                     )}
+                    {/* On a phone the proportional track crushes short sessions into unreadable chips:
+                        keep its summary and legend, hide the track, and list the sessions in full. */}
                     <Timeline
                       items={timelineItems}
                       nowMinutes={clubNowMinutes()}
                       ariaLabel={`Clases de hoy: ${timelineItems.length} ${plural(timelineItems.length, "sesión", "sesiones")}, ${listsTaken} con lista tomada`}
+                      className="max-lg:[&_[role=group]]:hidden [&_[data-testid=timeline-now-label]]:bg-coal"
                     />
+                    <TimelineDayList items={timelineItems} className="lg:hidden" />
                   </>
                 ) : (
                   <CompactEmpty
@@ -474,6 +517,7 @@ export default function DashboardPage(): React.ReactElement {
                   />
                 }
                 caption={`${totalAlumnos} alumnos · ${staff} staff`}
+                captionClassName="max-lg:min-h-[44px]"
                 href="/members"
               />
               <KpiTile
@@ -654,6 +698,47 @@ export default function DashboardPage(): React.ReactElement {
                 />
               )}
             </DashboardSection>
+
+            <DashboardSection
+              title="Asistencia por estado"
+              testId="attendance-distribution"
+              action={
+                <Link
+                  href="/attendance"
+                  className={buttonClasses("secondary", "sm")}
+                >
+                  Ver asistencia
+                </Link>
+              }
+            >
+              {recordsStatus === "loading" ? (
+                <LoadingState label="Cargando asistencias…" />
+              ) : recordsStatus === "error" ? (
+                <SectionNotice
+                  message="No se pudo cargar la asistencia."
+                  onRetry={() => void loadRecords()}
+                />
+              ) : weeklyStatusTotal > 0 ? (
+                <div className="p-[18px]">
+                  <StackedBars
+                    series={attendanceChartSeries()}
+                    columns={weeklyStatus.map((week) => ({
+                      key: week.startIso,
+                      label: `Sem. ${formatDate(week.startIso).slice(0, 5)}`,
+                      values: week.counts,
+                    }))}
+                    ariaLabel={`Asistencia por estado en las últimas ${CHART_WEEKS} semanas, ${weeklyStatusTotal} registros`}
+                    tableCaption={`Asistencia por estado, ${CHART_WEEKS} semanas`}
+                    periodLabel="Semana"
+                  />
+                </div>
+              ) : (
+                <CompactEmpty
+                  title="Sin asistencias registradas"
+                  description="El gráfico se dibuja con la primera lista."
+                />
+              )}
+            </DashboardSection>
           </div>
 
           <div
@@ -746,47 +831,48 @@ export default function DashboardPage(): React.ReactElement {
               )}
             </DashboardSection>
 
-            <DashboardSection
-              title="Asistencia por estado"
-              testId="attendance-distribution"
-              action={
-                <Link
-                  href="/attendance"
-                  className={buttonClasses("secondary", "sm")}
-                >
-                  Ver asistencia
-                </Link>
-              }
-            >
-              {recordsStatus === "loading" ? (
-                <LoadingState label="Cargando asistencias…" />
-              ) : recordsStatus === "error" ? (
-                <SectionNotice
-                  message="No se pudo cargar la asistencia."
-                  onRetry={() => void loadRecords()}
-                />
-              ) : weeklyStatusTotal > 0 ? (
-                <div className="p-[18px]">
-                  <StackedBars
-                    series={attendanceChartSeries()}
-                    columns={weeklyStatus.map((week) => ({
-                      key: week.startIso,
-                      label: `Sem. ${formatDate(week.startIso).slice(0, 5)}`,
-                      values: week.counts,
-                    }))}
-                    ariaLabel={`Asistencia por estado en las últimas ${CHART_WEEKS} semanas, ${weeklyStatusTotal} registros`}
-                    tableCaption={`Asistencia por estado, ${CHART_WEEKS} semanas`}
-                    periodLabel="Semana"
-                    heightClass="h-32"
-                  />
-                </div>
-              ) : (
-                <CompactEmpty
-                  title="Sin asistencias registradas"
-                  description="El gráfico se dibuja con la primera lista."
-                />
-              )}
-            </DashboardSection>
+            <InfoPanel title="Qué hacer hoy" as="div">
+              <p>Revise en este orden; cada punto abre su pantalla.</p>
+              <div className="grid gap-3">
+                {todoItems.map((item) => (
+                  <div key={item.key} className="flex items-start gap-2">
+                    <Badge tone={item.count > 0 ? item.tone : "ok"}>
+                      {item.count}
+                    </Badge>
+                    <span>
+                      <Link
+                        href={item.href}
+                        className="font-semibold text-ink underline underline-offset-2"
+                      >
+                        {item.label}
+                      </Link>
+                      <span className="block">{item.hint}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <dl className="m-0 grid gap-1.5 border-t border-line pt-3">
+                <dt className="font-semibold text-ink">
+                  Cómo leer «Hoy en el club»
+                </dt>
+                <dd className="m-0">
+                  <b className="font-semibold text-ink">Lista tomada</b>: ya se
+                  pasó asistencia.
+                </dd>
+                <dd className="m-0">
+                  <b className="font-semibold text-ink">En curso</b>: la clase
+                  está ocurriendo ahora.
+                </dd>
+                <dd className="m-0">
+                  <b className="font-semibold text-ink">Pendiente</b>: aún no
+                  empieza.
+                </dd>
+                <dd className="m-0">
+                  <b className="font-semibold text-ink">Sin lista</b>: terminó y
+                  falta pasar asistencia.
+                </dd>
+              </dl>
+            </InfoPanel>
           </div>
         </div>
       </AppShell>

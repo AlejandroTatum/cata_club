@@ -129,9 +129,27 @@ test.describe("content measure", () => {
     test(`keeps a stat tile readable at ${viewport.width}`, async ({ page }) => {
       await page.setViewportSize(viewport);
       await loginAsAdmin(page);
-      await page.goto("/members");
+      // Not /members: its counts moved into the filter chips, so `main .grid`
+      // there is the filter/list grid and no longer a row of stat tiles. The
+      // dashboard still draws its four-figure KPI row.
+      await page.route("**/api/dashboard", (route) =>
+        fulfillJson(route, {
+          totalPersonas: 40,
+          totalAlumnos: 36,
+          activeMemberships: 30,
+          pendingPayments: 3,
+          todaySchedules: 2,
+          personasSinMembresia: 6,
+        }),
+      );
+      // Real pagination answers `{ items, total }`, which the `[]` catch-all
+      // would hand the dashboard's payments feed as a bare array.
+      await page.route("**/api/payments*", (route) =>
+        fulfillJson(route, { items: [], total: 0 }),
+      );
+      await page.goto("/dashboard");
 
-      const tiles = page.locator("main .grid > *").first();
+      const tiles = page.getByTestId("dashboard-kpis").locator("> *").first();
       await expect(tiles).toBeVisible();
 
       const tileWidth = await tiles.evaluate((el) => el.getBoundingClientRect().width);
@@ -178,14 +196,19 @@ test.describe("the discounts rail", () => {
     );
     await page.goto("/discounts");
 
-    const table = page.locator("table");
-    await expect(table).toBeVisible();
-    const before = await table.evaluate((el) => el.getBoundingClientRect().top);
+    // The catalog is a card grid now; its top edge is what must not move.
+    const catalog = page.getByTestId("discounts-cards");
+    await expect(catalog).toBeVisible();
+    const before = await catalog.evaluate((el) => el.getBoundingClientRect().top);
 
-    await page.getByRole("row", { name: /Beca municipal/ }).getByRole("button", { name: /editar/i }).click();
+    await page
+      .getByTestId("discounts-cards")
+      .locator("li", { hasText: "Beca municipal" })
+      .getByRole("button", { name: /editar/i })
+      .click();
     await expect(page.getByLabel(/nombre/i)).toBeVisible();
 
-    const after = await table.evaluate((el) => el.getBoundingClientRect().top);
+    const after = await catalog.evaluate((el) => el.getBoundingClientRect().top);
 
     await testInfo.attach("catalog-top-before-after", {
       body: `${Math.round(before)} → ${Math.round(after)}`,
@@ -282,12 +305,16 @@ test.describe("the login brand measure", () => {
       expect(m.cluster / m.panel, `cluster share at ${m.width}`).toBeGreaterThan(0.5);
     }
 
-    // The defect itself, stated as the one thing a frozen cap cannot do. This
-    // fails on the old code no matter what the bounds are, because 440px at
-    // 1440 and 440px at 1920 are the same number.
-    const [at1440, at1920] = measured;
+    // The geometry contract of the v4 split: the brand PANEL grows with the
+    // viewport (5/12 of the width, parked in gutters past 120rem) while the
+    // brand cluster holds one fixed 448px measure (`max-w-md`). Widening it
+    // instead collapses the motto to a single line at 1920 (measured: 576px
+    // cluster -> 1 line), which the 2-3 line bound above forbids — so the
+    // panel absorbs the extra width and the cluster stays centred in it.
+    const [at1440, at1920, at2560] = measured;
     expect(at1920.panel).toBeGreaterThan(at1440.panel);
-    expect(at1920.cluster).toBeGreaterThan(at1440.cluster);
+    expect(at1920.cluster).toBe(at1440.cluster);
+    expect(at2560.cluster).toBe(at1440.cluster);
   });
 
   for (const width of [1440, 1920, 390]) {

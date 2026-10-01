@@ -389,29 +389,30 @@ describe("TrainerAttendanceHistoryPage", () => {
     mockFetchAttendanceRecords.mockResolvedValue(RECORDS);
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
 
-    await waitFor(() => {
-      expect(screen.getByText("Lunes 15:00 — 16:00")).toBeInTheDocument();
-    });
+    expect((await screen.findAllByRole("row")).length).toBeGreaterThan(1);
+    expect(screen.queryByText(/No se pudieron cargar los registros/)).not.toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------
   // Filter parity with `/attendance` — the three controls the trainer lost
   // -------------------------------------------------------------------------
 
-  it("narrows by horario, with every schedule offered as an option", async () => {
+  it("narrows by slot then day, mapping the day to its horarioId", async () => {
     render(<TrainerAttendanceHistoryPage />);
     await screen.findAllByRole("row");
-    await waitFor(() => {
-      expect(screen.getByRole("option", { name: /Lunes 15:00 — 16:00/ })).toBeInTheDocument();
-    });
+    const slot = await screen.findByRole("option", { name: /^Sin categoría · 15:00–16:00$/ });
+    expect(screen.getByLabelText("Filtrar por día")).toBeDisabled();
     mockFetchAttendanceRecords.mockClear();
 
-    fireEvent.change(screen.getByLabelText("Filtrar por horario"), { target: { value: "9" } });
+    fireEvent.change(screen.getByLabelText("Filtrar por horario"), {
+      target: { value: (slot as HTMLOptionElement).value },
+    });
+    expect(screen.getByLabelText("Filtrar por día")).toBeEnabled();
+    fireEvent.change(screen.getByLabelText("Filtrar por día"), { target: { value: "7" } });
 
     await waitFor(() => {
-      expect(mockFetchAttendanceRecords).toHaveBeenCalledTimes(1);
+      expect(mockFetchAttendanceRecords.mock.calls.at(-1)?.[0]).toMatchObject({ horarioId: 7 });
     });
-    expect(mockFetchAttendanceRecords.mock.calls[0][0]).toMatchObject({ horarioId: 9 });
   });
 
   it("offers a custom range, and only queries once both ends are set and ordered", async () => {
@@ -701,6 +702,13 @@ describe("TrainerAttendanceHistoryPage — las tres cifras del período", () => 
     // El viernes 14 es la única sesión programada que no tiene lista.
     const link = within(missing).getByRole("link", { name: /Pasar lista del/ });
     expect(link).toHaveAttribute("href", expect.stringContaining("fecha=2026-08-14"));
+  });
+
+  it("lleva siempre una tarjeta de indicaciones «Cómo leer el historial» en el aside", async () => {
+    render(<TrainerAttendanceHistoryPage />);
+
+    await screen.findAllByRole("row");
+    expect(screen.getByRole("heading", { name: "Cómo leer el historial" })).toBeInTheDocument();
   });
 
   it("rellena una lista corta con filas fantasma en vez de dejar el vacío bajo la tabla", async () => {

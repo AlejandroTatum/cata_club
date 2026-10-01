@@ -1,10 +1,18 @@
 import Link from "next/link";
 import type { LegalBlock } from "./legal-content";
 import { LegalDocumentProse } from "@/components/legal/LegalReviewDialog";
+import { cn } from "@/components/ui/cn";
+import { PAGE_RAIL } from "@/components/ui/layout";
 
 interface LegalDocumentPageProps {
   title: string;
   blocks: readonly LegalBlock[];
+  /**
+   * Optional side summary. A document too short to fill the viewport passes
+   * one: the page then becomes a document surface beside a rail instead of a
+   * narrow column floating over an empty canvas.
+   */
+  aside?: React.ReactNode;
 }
 
 /**
@@ -64,16 +72,28 @@ interface LegalDocumentPageProps {
  * landmark — it keeps the `contenido` id it already had, now on an element
  * that means where the content begins.
  */
-export default function LegalDocumentPage({ title, blocks }: LegalDocumentPageProps): React.ReactElement {
-  return (
-    /*
-     * `max-w-measure` sits on the OUTER element, not on the `<article>`, so the
-     * kicker, the title, the prose and the document links all share one column
-     * edge. `text-base` is here for the same reason: `ch` resolves against the
-     * element's own font size, so pinning it to the body step is what makes the
-     * measure the article's measure rather than the browser default's.
-     */
-    <main id="contenido" className="mx-auto w-full max-w-measure text-base py-8 sm:py-12">
+export default function LegalDocumentPage({ title, blocks, aside }: LegalDocumentPageProps): React.ReactElement {
+  /*
+   * `max-w-measure` sits on the OUTER element, not on the `<article>`, so the
+   * kicker, the title, the prose and the document links all share one column
+   * edge. `text-base` is here for the same reason: `ch` resolves against the
+   * element's own font size, so pinning it to the body step is what makes the
+   * measure the article's measure rather than the browser default's.
+   */
+  const related = (
+      <nav aria-label="Otros documentos públicos" className={cn(aside === undefined ? "mt-16 border-t border-cata-border pt-8" : "card p-6 sm:p-8")}>
+        {/* A label for the link group, and no red rule: the rule is the
+            document's kicker and it stays singular to keep meaning anything. */}
+        <p className="mb-3 text-2xs font-extrabold uppercase tracking-caps text-ink-3-strong">Otros documentos públicos</p>
+        <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-cata-red-dark underline underline-offset-4">
+          <Link href="/terminos">Términos de uso</Link>
+          <Link href="/privacidad">Aviso de privacidad</Link>
+          <Link href="/permiso-imagen-fetm">Permiso público de imagen FETM</Link>
+        </div>
+      </nav>
+  );
+  const doc = (
+    <>
       {/*
        * No `focus-visible:*` utilities here. `globals.css:330-344` gives every
        * `a[href]` outside the landing the two-tone coal + ball ring from a
@@ -135,16 +155,35 @@ export default function LegalDocumentPage({ title, blocks }: LegalDocumentPagePr
        * that much air between lines pulls a paragraph apart into stripes.
        */}
       <LegalDocumentProse blocks={blocks} className="mt-10 space-y-6 leading-prose text-cata-text" />
-      <nav aria-label="Otros documentos públicos" className="mt-16 border-t border-cata-border pt-8">
-        {/* A label for the link group, and no red rule: the rule is the
-            document's kicker and it stays singular to keep meaning anything. */}
-        <p className="mb-3 text-2xs font-extrabold uppercase tracking-caps text-ink-3-strong">Otros documentos públicos</p>
-        <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-cata-red-dark underline underline-offset-4">
-          <Link href="/terminos">Términos de uso</Link>
-          <Link href="/privacidad">Aviso de privacidad</Link>
-          <Link href="/permiso-imagen-fetm">Permiso público de imagen FETM</Link>
+      {aside === undefined && related}
+    </>
+  );
+  return (
+    <main id="contenido" className={cn("mx-auto w-full text-base py-8 sm:py-12", aside === undefined ? "max-w-measure" : "max-w-6xl")}>
+      {aside === undefined ? (
+        doc
+      ) : (
+        <div className="grid content-start gap-page">
+          <div className={PAGE_RAIL}>
+            <div className="grid content-start gap-page">
+              {/* The card is as wide as its column and so is the text: a
+                  document this short reads fine on the full card width. */}
+              <div className="card p-6 sm:p-10">{doc}</div>
+              <section aria-labelledby="preguntas-permiso" className="card p-6 sm:p-8">
+                <p id="preguntas-permiso" className="mb-3 text-2xs font-extrabold uppercase tracking-caps text-ink-3-strong">
+                  Preguntas sobre este permiso
+                </p>
+                <p className="text-sm leading-prose text-cata-text">
+                  Si tiene dudas sobre el alcance de la difusión de imagen, consulte con la persona entrenadora o con la administración del club
+                  antes de aceptar el permiso. Puede revisar este documento las veces que lo necesite.
+                </p>
+              </section>
+            </div>
+            {aside}
+          </div>
+          {related}
         </div>
-      </nav>
+      )}
     </main>
   );
 }

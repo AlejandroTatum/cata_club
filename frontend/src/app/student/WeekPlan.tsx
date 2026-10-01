@@ -112,7 +112,7 @@ export default function WeekPlan({ sessions, now = new Date() }: WeekPlanProps):
               aria-label={name}
               className={cn(
                 "flex flex-col items-center justify-center gap-0.5 rounded-ctl border px-1 py-2.5 text-center",
-                state === "next" && "border-cata-red bg-cata-red text-white",
+                state === "next" && "border-ink bg-ink text-white",
                 state === "active" && "border-line-2 bg-paper text-ink",
                 state === "idle" && "border-transparent bg-sunken text-ink-3-strong",
                 isPast && state !== "next" && "opacity-55",

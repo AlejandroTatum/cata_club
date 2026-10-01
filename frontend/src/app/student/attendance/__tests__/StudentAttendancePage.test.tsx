@@ -279,7 +279,7 @@ describe("StudentAttendancePage — the socio nuevo", () => {
     }
   });
 
-  it("does not stretch the record once there is a single session in it", async () => {
+  it("stretches a single-session record to the rail, filled with ghost rows", async () => {
     mockFetchStudentPortal
       .mockReset()
       .mockResolvedValue(portalWith([FIVE_SESSIONS[0]]));
@@ -287,7 +287,8 @@ describe("StudentAttendancePage — the socio nuevo", () => {
     render(<StudentAttendancePage />);
 
     const card = await screen.findByTestId("sessions-card");
-    expect(card.className).not.toMatch(/\bflex-1\b/);
+    expect(card.className).toMatch(/\blg:flex-1\b/);
+    expect(within(card).getByTestId("session-ghost-rows")).toBeInTheDocument();
   });
 });
 
@@ -353,5 +354,32 @@ describe("StudentAttendancePage — the way back", () => {
     const back = await screen.findByRole("link", { name: /volver a mi cuenta/i });
     const title = screen.getByRole("heading", { name: "Asistencias" });
     expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("StudentAttendancePage — the rail guide", () => {
+  it("always shows how attendance is recorded, with every state's meaning", async () => {
+    render(<StudentAttendancePage />);
+
+    const guide = await screen.findByRole("heading", { name: "Cómo se registra la asistencia" });
+    const panel = guide.parentElement as HTMLElement;
+    expect(within(panel).getByText("Faltó por enfermedad")).toBeInTheDocument();
+    expect(within(panel).getByText("Avisó que no podía ir")).toBeInTheDocument();
+  });
+
+  it("closes the gap under a short record with decorative ghost rows", async () => {
+    render(<StudentAttendancePage />);
+
+    const ghost = await screen.findByTestId("session-ghost-rows");
+    expect(ghost).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("keeps the socio nuevo on one column, with no guide rail", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue(portalWith([]));
+    render(<StudentAttendancePage />);
+
+    await screen.findByTestId("sessions-card");
+    expect(screen.queryByRole("heading", { name: "Cómo se registra la asistencia" })).toBeNull();
+    expect(screen.queryByTestId("session-ghost-rows")).toBeNull();
   });
 });

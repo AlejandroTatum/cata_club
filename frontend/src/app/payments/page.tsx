@@ -84,6 +84,10 @@ import {
   FileText,
   ChevronLeft,
   ChevronRight,
+  ArrowRight,
+  Banknote,
+  CreditCard,
+  Landmark,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import type {
@@ -126,9 +130,13 @@ import {
   ErrorState,
   FilterPanel,
   FilterPill,
+  InfoPanel,
   LoadingState,
+  PAGE_RAIL,
   ResponsiveList,
   SearchInput,
+  STAT_GRID,
+  StatCard,
   TableCell,
   TableHeaderCell,
   TableNameCell,
@@ -285,6 +293,31 @@ function buildRowFields(req: PaymentValidationRequest): RowFields {
   };
 }
 
+/**
+ * Cash vs transfer, readable before the label is: an icon tile plus the
+ * method's own label. Cash wears the `ok` tint and everything else stays
+ * neutral, so the two kinds the reviewer decides differently are never
+ * confused in a list of ten.
+ */
+function methodVisual(method: string): { Icon: typeof Banknote; tile: string } {
+  const kind = classifyPaymentMethod(method);
+  if (kind === "efectivo") return { Icon: Banknote, tile: "bg-state-ok-bg text-state-ok" };
+  if (kind === "transferencia") return { Icon: Landmark, tile: "bg-sunken text-ink" };
+  return { Icon: CreditCard, tile: "bg-sunken text-ink-2" };
+}
+
+function MethodTag({ method }: { method: string }): React.ReactElement {
+  const { Icon, tile } = methodVisual(method);
+  return (
+    <span className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
+      <span className={`flex h-7 w-7 flex-none items-center justify-center rounded-ctl ${tile}`}>
+        <Icon size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+      </span>
+      {method}
+    </span>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Detail sub-views
 // ---------------------------------------------------------------------------
@@ -342,7 +375,7 @@ function ProofViewer({
   onExpand: () => void;
 }): React.ReactElement {
   return (
-    <div className="card overflow-hidden lg:sticky lg:top-6">
+    <div className="card flex flex-col overflow-hidden lg:sticky lg:top-6 lg:h-full">
       {/* Issue #510: the two facts the decision turns on repeat here, right
           above the file itself — intentional redundancy (documented in the
           design artifact), not a stray duplicate. "Detalle de la solicitud"
@@ -374,14 +407,14 @@ function ProofViewer({
         )}
       </div>
 
-      <div className="flex min-h-[280px] items-center justify-center bg-canvas p-4">
+      <div className="flex flex-1 items-center justify-center bg-canvas p-4 lg:min-h-96">
         {request.proofPreviewUrl && !previewUnavailable ? (
           // A PDF never renders in an <img>; it needs its own viewport.
           request.proofFileType === "pdf" ? (
             <iframe
               src={request.proofPreviewUrl}
               title="Vista previa del comprobante de pago"
-              className="h-[420px] w-full border-0"
+              className="h-[560px] w-full border-0"
             />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
@@ -389,7 +422,7 @@ function ProofViewer({
               src={request.proofPreviewUrl}
               alt="Vista previa del comprobante de pago"
               onError={onPreviewError}
-              className="max-h-[420px] w-full object-contain"
+              className="max-h-[560px] w-full object-contain"
             />
           )
         ) : request.proofPreviewUrl ? (
@@ -420,9 +453,22 @@ function ProofViewer({
           // it. That wording belongs to a file that exists but cannot be
           // rendered (handled by the `previewUnavailable` branch above),
           // never to the absence of one.
-          <div className="space-y-section text-center">
-            <FileText size={ICON.lg} strokeWidth={1.5} className="mx-auto text-ink-3" aria-hidden="true" />
-            <p className="text-xs text-ink-3">Este pago no tiene ningún comprobante adjunto.</p>
+          <div className="grid max-w-sm content-start justify-items-center gap-3 text-center">
+            <FileText size={ICON.lg} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
+            <p className="text-sm font-semibold text-ink">Este pago no tiene ningún comprobante adjunto.</p>
+            {/* A transfer with nothing to read is the audited exception, not a
+                silent path: say what the reviewer can do instead of leaving
+                an empty box. */}
+            <ul className="grid gap-2 text-left text-xs text-ink-2">
+              <li>
+                Si no puede verificar el depósito, rechace el pago para que el responsable suba un
+                comprobante.
+              </li>
+              <li>
+                Si ya verificó el depósito en la cuenta del club, apruebe e indique el motivo de la
+                excepción en el bloque de decisión.
+              </li>
+            </ul>
           </div>
         )}
       </div>
@@ -449,6 +495,47 @@ function ProofViewer({
   );
 }
 
+/**
+ * The right column of a cash payment with no receipt. There is nothing to
+ * compare against a document, so the column carries what the reviewer is
+ * actually confirming: how much money should have changed hands, and from whom.
+ */
+function CashConfirmationPanel({
+  request,
+  payer,
+}: {
+  request: PaymentValidationRequest;
+  payer: string;
+}): React.ReactElement {
+  return (
+    <div className="card flex flex-col overflow-hidden lg:sticky lg:top-6 lg:h-full">
+      <div className="flex items-center gap-3 border-b border-line bg-state-ok-bg px-4 py-3 text-state-ok">
+        <Banknote size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
+        <h2 className="text-sm font-bold">Confirmación de efectivo</h2>
+      </div>
+      <div className="grid gap-1.5 px-[18px] py-6">
+        <DetailLabel>Monto a recibir</DetailLabel>
+        <p className="text-display font-extrabold tabular-nums text-ink">
+          {formatCurrency(request.expectedAmount)}
+        </p>
+        <p className="text-xs text-ink-2">{humanizePaymentPeriod(request.membershipPeriod)}</p>
+      </div>
+      <dl className="grid gap-px border-y border-line bg-line">
+        <DetailCell label="Entrega el dinero">{payer}</DetailCell>
+        <DetailCell label="Para la membresía de">{request.studentName}</DetailCell>
+      </dl>
+      <ol className="grid gap-2 px-[18px] py-4 text-sm text-ink-2">
+        <li>1. Reciba el dinero en mano, sin comprobante bancario.</li>
+        <li>2. Verifique que el monto entregado sea el indicado arriba.</li>
+        <li>3. Marque la recepción en la lista de la izquierda y apruebe el pago.</li>
+      </ol>
+      <p className="mt-auto border-t border-line px-[18px] py-4 text-xs text-ink-3">
+        Si el monto entregado no coincide, rechace el pago e indique el motivo al responsable.
+      </p>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -456,6 +543,9 @@ function ProofViewer({
 // ---------------------------------------------------------------------------
 
 /** Marks a queue row's action button so focus can find it again on the way back. */
+/** Phone stat tiles: label + figure only, so the first pending card clears the fold. */
+const STAT_COMPACT = "max-lg:min-h-0 max-lg:gap-1 max-lg:px-3 max-lg:py-2.5";
+
 const QUEUE_ACTION_ATTR = "data-payment-action";
 
 /**
@@ -785,6 +875,17 @@ export default function PaymentsPage(): React.ReactElement {
 
   const queue = findQueueNeighbours(pending, selectedId ?? "");
 
+  // Figures for the stat strip and the rail, all derived from the drained
+  // pending queue — no extra request.
+  const pendingTotalAmount = pending.reduce((sum, r) => sum + r.expectedAmount, 0);
+  const pendingCashCount = pending.filter(
+    (r) => classifyPaymentMethod(r.paymentMethod) === "efectivo",
+  ).length;
+  const pendingTransferCount = pending.length - pendingCashCount;
+  /** Placeholders that pad a short first page up to a full-looking list. */
+  const GHOST_ROWS_TARGET = 5;
+  const ghostRowCount = page === 1 ? Math.max(0, GHOST_ROWS_TARGET - visibleItems.length) : 0;
+
   /**
    * The questions come from the payment, not from a constant: a cash payment
    * has no voucher to read, so asking whether the voucher is legible is a box
@@ -1082,13 +1183,20 @@ export default function PaymentsPage(): React.ReactElement {
             column. "Nunca hay dos botones rojos en una pantalla" — the real
             decision is "Aprobar pago" inside the detail, so this stays the
             neutral action that leads to it, not a second red. */}
+        {/* Hierarchy inside the row: a pending payment is the work of the day,
+            so its action is the outlined secondary with an arrow; a decided
+            one is only a lookup and drops to the low-weight tertiary. */}
         <Button
           size="sm"
+          variant={req.validationStatus === "pendiente" ? "secondary" : "tertiary"}
           aria-label={actionLabel(req)}
           data-payment-action={req.id}
           onClick={() => setSelectedId(req.id)}
         >
           {req.validationStatus === "pendiente" ? "Revisar" : "Detalle"}
+          {req.validationStatus === "pendiente" && (
+            <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+          )}
         </Button>
       </>
     );
@@ -1097,6 +1205,38 @@ export default function PaymentsPage(): React.ReactElement {
   function renderQueue(): React.ReactElement {
     return (
       <>
+        {/* One stat row, all figures already loaded for the pills and the
+            navigator: nothing extra is fetched for it. */}
+        <div className={STAT_GRID} data-testid="payments-stats">
+          <StatCard
+            className={STAT_COMPACT}
+            label="Pendientes por validar"
+            value={pendingAllLoading || pendingAllError ? "—" : pendingAll.length}
+            hint={<span className="max-lg:hidden">esperan su revisión</span>}
+            variant="hot"
+          />
+          <StatCard
+            className={STAT_COMPACT}
+            label="Monto pendiente"
+            value={pendingAllLoading || pendingAllError ? "—" : formatCurrency(pendingTotalAmount)}
+            hint={<span className="max-lg:hidden">por confirmar en total</span>}
+          />
+          <StatCard
+            className={STAT_COMPACT}
+            label="Validados"
+            value={filterCounts.validado ?? "—"}
+            hint={<span className="max-lg:hidden">pagos aprobados</span>}
+          />
+          <StatCard
+            className={STAT_COMPACT}
+            label="Rechazados"
+            value={filterCounts.rechazado ?? "—"}
+            hint={<span className="max-lg:hidden">pidieron un comprobante nuevo</span>}
+          />
+        </div>
+
+        <div className={PAGE_RAIL}>
+          <div className="flex min-w-0 flex-col gap-page lg:min-h-[calc(100dvh-23rem)]">
         {/* This screen used to read the other way round — chips first, search
             on its own line underneath — which was the exact inverse of
             Members. `FilterPanel` renders the slots in one fixed order, so the
@@ -1241,7 +1381,9 @@ export default function PaymentsPage(): React.ReactElement {
                   />
                   <TableCell type="text">{fields.period}</TableCell>
                   <TableCell type="number">{fields.amount}</TableCell>
-                  <TableCell type="text">{fields.method}</TableCell>
+                  <TableCell type="text">
+                    <MethodTag method={fields.method} />
+                  </TableCell>
                       <TableCell type="text">
                         <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
                           {VALIDATION_STATUS_LABELS[req.validationStatus]}
@@ -1266,9 +1408,10 @@ export default function PaymentsPage(): React.ReactElement {
                     </p>
                     <p className="truncate text-2xs tracking-flat text-ink-3">{fields.payer}</p>
                   </div>
-                  <p className="text-xs text-ink-2">
-                    {fields.period} · {fields.method}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-field text-xs text-ink-2">
+                    <span>{fields.period}</span>
+                    <MethodTag method={fields.method} />
+                  </div>
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
                           <DataBox variant="numeric">{fields.amount}</DataBox>
@@ -1294,6 +1437,91 @@ export default function PaymentsPage(): React.ReactElement {
             }}
           />
         )}
+
+        {/* A short list used to end after three rows and leave the canvas
+            empty beside a tall rail. Dashed placeholders keep the column the
+            height of a full page without pretending to be data. */}
+        {!visibleLoading && !visibleError && visibleItems.length > 0 && ghostRowCount > 0 && (
+          <div aria-hidden="true" className="hidden flex-1 flex-col gap-2 md:flex">
+            {Array.from({ length: ghostRowCount }, (_, index) => (
+              <div
+                key={index}
+                className={`flex min-h-14 items-center justify-center rounded-ctl border border-dashed border-line-2 text-xs text-ink-3${index === ghostRowCount - 1 ? " flex-1" : ""}`}
+              >
+                {index === 0 ? "Aquí aparecerán las próximas solicitudes" : ""}
+              </div>
+            ))}
+          </div>
+        )}
+          </div>
+
+          <div className="grid min-w-0 content-start gap-page">
+            <InfoPanel title="Cola de revisión">
+              <p>
+                {pendingAllError
+                  ? "No se pudo leer la cola de pendientes."
+                  : pending.length === 0
+                    ? "La cola está al día: no hay pagos por validar."
+                    : `${pending.length} ${pending.length === 1 ? "pago espera" : "pagos esperan"} su revisión: ${pendingTransferCount} por transferencia y ${pendingCashCount} en efectivo.`}
+              </p>
+              <Button
+                variant="primary"
+                disabled={pending.length === 0}
+                onClick={() => setSelectedId(pending[0]?.id ?? null)}
+              >
+                Revisar siguiente pendiente
+              </Button>
+            </InfoPanel>
+
+            <InfoPanel title="Cómo se revisa un pago">
+              <dl className="grid gap-2">
+                <div className="flex gap-2">
+                  <dt className="flex-none">
+                    <Landmark size={ICON.sm} strokeWidth={1.5} className="mt-0.5" aria-hidden="true" />
+                    <span className="sr-only">Transferencia</span>
+                  </dt>
+                  <dd>
+                    <span className="font-semibold text-ink">Transferencia:</span> compare el
+                    comprobante con el monto y el período antes de aprobar.
+                  </dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="flex-none">
+                    <Banknote size={ICON.sm} strokeWidth={1.5} className="mt-0.5" aria-hidden="true" />
+                    <span className="sr-only">Efectivo</span>
+                  </dt>
+                  <dd>
+                    <span className="font-semibold text-ink">Efectivo:</span> confirme que recibió
+                    el dinero; no hay comprobante que revisar.
+                  </dd>
+                </div>
+              </dl>
+              <dl className="grid gap-2 border-t border-line pt-3">
+                <div className="flex items-center gap-2">
+                  <dt>
+                    <Badge tone="warn">Pendiente de validar</Badge>
+                  </dt>
+                  <dd>Espera su decisión.</dd>
+                </div>
+                <div className="flex items-center gap-2">
+                  <dt>
+                    <Badge tone="ok">Validado</Badge>
+                  </dt>
+                  <dd>Aprobado: la membresía queda cubierta.</dd>
+                </div>
+                <div className="flex items-center gap-2">
+                  <dt>
+                    <Badge tone="bad">Rechazado</Badge>
+                  </dt>
+                  <dd>El responsable debe subir un comprobante nuevo.</dd>
+                </div>
+              </dl>
+              <p className="border-t border-line pt-3 text-xs text-ink-3">
+                Al aprobar o rechazar, la pantalla pasa sola al siguiente pago pendiente.
+              </p>
+            </InfoPanel>
+          </div>
+        </div>
       </>
     );
   }
@@ -1306,59 +1534,84 @@ export default function PaymentsPage(): React.ReactElement {
     const payer = request.responsablePagoName || request.representativeName || request.studentName;
     const isPending = request.validationStatus === "pendiente";
     const membership = membershipBadge(request);
-    const hideProofPanel =
-      classifyPaymentMethod(request.paymentMethod) === "efectivo" && !request.proofPreviewUrl;
+    const paymentKind = classifyPaymentMethod(request.paymentMethod);
+    const hideProofPanel = paymentKind === "efectivo" && !request.proofPreviewUrl;
+    const { Icon: MethodIcon, tile: methodTile } = methodVisual(request.paymentMethod);
 
     return (
-      <div>
-        <div className="mb-5 flex flex-wrap items-center gap-2">
-          {/* The detail's own BackLink moved ABOVE the page title (#1396): it
-              is now the `back` slot the AppShell draws before the header.
-              This row keeps the view-state furniture that belongs inside the
-              detail — the position in the pending queue and the status. */}
-          <span className="flex-1" />
-          {queue.position > 0 && (
-            <>
-              <span className="text-xs font-semibold tabular-nums text-ink-3">
-                Pendiente {queue.position} de {queue.total}
-              </span>
-              <Button
-                size="sm"
-                aria-label="Pendiente anterior"
-                disabled={queue.previousId === null}
-                onClick={() => setSelectedId(queue.previousId)}
-              >
-                <ChevronLeft size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                Anterior
-              </Button>
-              <Button
-                size="sm"
-                aria-label="Pendiente siguiente"
-                disabled={queue.nextId === null}
-                onClick={() => setSelectedId(queue.nextId)}
-              >
-                Siguiente
-                <ChevronRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-              </Button>
-            </>
-          )}
-          <Badge tone={VALIDATION_STATUS_TONES[request.validationStatus]}>
-            {VALIDATION_STATUS_LABELS[request.validationStatus]}
-          </Badge>
+      <div className="grid content-start gap-page">
+        {/* One header row for the whole view: what kind of payment this is,
+            for whom, and where it sits in the queue. The method tint is the
+            at-a-glance cue: cash is green with a banknote, a transfer is
+            neutral with a bank. The BackLink lives above the page title
+            (#1396), so this row only carries view-state furniture. */}
+        <div
+          data-payment-kind={paymentKind}
+          className={`card flex flex-wrap items-center gap-x-4 gap-y-section px-[18px] py-3 ${
+            paymentKind === "efectivo" ? "bg-state-ok-bg" : ""
+          }`}
+        >
+          <span
+            className={`flex h-10 w-10 flex-none items-center justify-center rounded-ctl ${
+              paymentKind === "efectivo" ? "bg-paper text-state-ok" : methodTile
+            }`}
+          >
+            <MethodIcon size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-2xs font-bold uppercase text-ink-3">
+              {paymentKind === "efectivo"
+                ? "Pago en efectivo"
+                : paymentKind === "transferencia"
+                  ? "Pago por transferencia"
+                  : `Pago: ${request.paymentMethod}`}
+            </p>
+            <p className="truncate text-lg font-bold text-ink">
+              {request.studentName}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {queue.position > 0 && (
+              <>
+                <span className="text-xs font-semibold tabular-nums text-ink-2">
+                  Pendiente {queue.position} de {queue.total}
+                </span>
+                <Button
+                  size="sm"
+                  aria-label="Pendiente anterior"
+                  disabled={queue.previousId === null}
+                  onClick={() => setSelectedId(queue.previousId)}
+                >
+                  <ChevronLeft size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                  Anterior
+                </Button>
+                <Button
+                  size="sm"
+                  aria-label="Pendiente siguiente"
+                  disabled={queue.nextId === null}
+                  onClick={() => setSelectedId(queue.nextId)}
+                >
+                  Siguiente
+                  <ChevronRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                </Button>
+              </>
+            )}
+            <Badge tone={VALIDATION_STATUS_TONES[request.validationStatus]}>
+              {VALIDATION_STATUS_LABELS[request.validationStatus]}
+            </Badge>
+          </div>
         </div>
 
-        {/* Data left, proof right and always visible: validating is comparing
-            a document against a set of numbers, and scrolling between the two
-            was the problem (prototype 10). */}
-        {/* Cash with no receipt has nothing to compare, so the proof column
-            is not rendered at all (a transfer without a voucher keeps it: the
-            missing proof is a meaningful warning there). The data column then
-            takes the full width instead of leaving an empty gap. */}
-        <div className="grid gap-5 lg:grid-cols-5">
-          <div
-            className={`flex flex-col gap-5 ${hideProofPanel ? "lg:col-span-5" : "lg:col-span-3"}`}
-          >
-            <section className="card overflow-hidden">
+        {/* Data left, proof (or the cash confirmation) right and always
+            visible: validating is comparing a document against a set of
+            numbers, and scrolling between the two was the problem
+            (prototype 10). Cash with no receipt has nothing to compare, so
+            its right column becomes the cash confirmation panel instead of
+            a receipt viewer; a transfer without a voucher keeps the viewer,
+            where the missing proof is a meaningful warning. */}
+        <div className="grid gap-page lg:min-h-[calc(100dvh-20rem)] lg:grid-cols-5 lg:items-start">
+          <div className="grid min-w-0 content-start gap-page lg:col-span-3 lg:self-stretch lg:grid-rows-[1fr]">
+            <section className="card overflow-clip">
               {/* `tabIndex={-1}` so the effect above can put focus here when
                   the detail opens: reachable programmatically, never a Tab
                   stop of its own.
@@ -1382,13 +1635,13 @@ export default function PaymentsPage(): React.ReactElement {
                   whether they match. They lead, at a size you can check
                   against the proof without hunting for them. */}
               <div className="grid grid-cols-2 gap-px border-b border-line bg-line">
-                <div className="flex min-h-drow flex-col justify-center gap-1.5 bg-canvas px-[18px] py-3">
+                <div className="flex min-h-drow flex-col justify-center gap-1.5 bg-canvas px-[18px] py-4">
                   <DetailLabel>Monto esperado</DetailLabel>
-                  <span className="text-xl font-extrabold leading-none tabular-nums text-ink">
+                  <span className="text-2xl font-extrabold leading-none tabular-nums text-ink">
                     {formatCurrency(request.expectedAmount)}
                   </span>
                 </div>
-                <div className="flex min-h-drow flex-col justify-center gap-1.5 bg-canvas px-[18px] py-3">
+                <div className="flex min-h-drow flex-col justify-center gap-1.5 bg-canvas px-[18px] py-4">
                   <DetailLabel>Período</DetailLabel>
                   <span className="text-base font-bold leading-tight text-ink">
                     {humanizePaymentPeriod(request.membershipPeriod)}
@@ -1398,7 +1651,7 @@ export default function PaymentsPage(): React.ReactElement {
 
               {/* Everything else, paired two-up: still every field, at a third
                   of the height and with no gutter to read across. */}
-              <dl className="grid gap-px bg-line sm:grid-cols-2">
+              <dl className="grid gap-px bg-line sm:grid-cols-3">
                 {/* Estudiante and Responsable stay plain text — an identity,
                     not a value: the same rule `DataRow` already draws
                     between a name and its boxed metadata. Método, Subido el
@@ -1425,27 +1678,34 @@ export default function PaymentsPage(): React.ReactElement {
                   labels instead of independent borders/shadows per card.
                   Nothing about the checklist, the approval/rejection logic,
                   or the API calls below changed — only the container. */}
+              {/* One decision block: the checklist that gates approval, the
+                  exception reason when it applies, and the two actions with
+                  the reason a disabled button is disabled sitting next to it.
+                  It stays inside the same `.card` as the detail (issue #510). */}
               {isPending && (
-                <section aria-labelledby="antes-de-aprobar" className="border-t border-line">
-                  <div className="flex items-center gap-3 border-b border-line px-[18px] py-4">
-                    <h2 id="antes-de-aprobar" className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">
-                      Antes de aprobar
-                    </h2>
-                    <Badge tone={checklistComplete ? "ok" : "warn"}>
-                      {checklist.items.length - remainingChecks} de {checklist.items.length}
-                    </Badge>
-                  </div>
+                <section aria-label="Decisión del pago" className="border-t border-line">
+                <div className="flex items-center justify-between gap-3 border-b border-line px-[18px] py-4">
+                  <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Decisión</h2>
+                  <Badge tone={checklistComplete ? "ok" : "warn"}>
+                    {checklist.items.length - remainingChecks} de {checklist.items.length}
+                  </Badge>
+                </div>
+
+                <div className="flex flex-col gap-4 px-[18px] py-4">
+                  <h3 id="antes-de-aprobar" className="text-2xs font-bold uppercase text-ink-3">
+                    Antes de aprobar
+                  </h3>
                   {/* `checklist.note` no se dibuja: las preguntas ya dicen qué
                       verificar. Los checkboxes habilitan el botón de aprobar. */}
                   <div
                     role="group"
                     aria-labelledby="antes-de-aprobar"
-                    className="flex flex-col px-[18px] py-2"
+                    className="-mt-2 flex flex-col"
                   >
                     {checklist.items.map((item) => (
                       <label
                         key={item.key}
-                        className="flex cursor-pointer items-center gap-3 py-2.5 text-sm text-ink-2"
+                        className="flex cursor-pointer items-center gap-3 py-2 text-sm text-ink-2"
                       >
                         <input
                           type="checkbox"
@@ -1459,16 +1719,6 @@ export default function PaymentsPage(): React.ReactElement {
                       </label>
                     ))}
                   </div>
-                </section>
-              )}
-
-              {isPending && (
-                <div className="border-t border-line">
-                <div className="flex items-center justify-between gap-3 border-b border-line px-[18px] py-4">
-                  <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Decisión</h2>
-                </div>
-
-                <div className="flex flex-col gap-3 px-[18px] py-4">
                 {!showRejectForm ? (
                   <>
                     {/* No editable "Período de vigencia" here (issue #400):
@@ -1517,7 +1767,16 @@ export default function PaymentsPage(): React.ReactElement {
                         />
                       </label>
                     )}
-                    <div className="flex flex-wrap gap-2">
+                    {/* Below `lg` the decision lives in a bar pinned above the
+                        admin tab bar (62px, `AppShell`), so the buttons stay
+                        reachable however long the checklist is. The shell's
+                        `pb-[78px]` already keeps the end of the page clear of
+                        both. From `lg` it is the plain inline row. */}
+                    <div
+                      data-testid="payment-decision-bar"
+                      className="sticky bottom-[62px] z-10 -mx-[18px] -mb-4 flex flex-col gap-1.5 border-t border-line bg-paper/95 px-[18px] py-3 backdrop-blur lg:static lg:m-0 lg:flex-row lg:flex-wrap lg:items-center lg:gap-2 lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
                       <Button
                         variant="primary"
                         disabled={!checklistComplete || actionLoading !== null}
@@ -1529,11 +1788,24 @@ export default function PaymentsPage(): React.ReactElement {
                         {actionLoading === "approve" ? "Procesando…" : "Aprobar pago"}
                       </Button>
                       <Button
+                        className="text-state-bad"
                         disabled={actionLoading !== null}
                         onClick={() => setShowRejectForm(true)}
                       >
                         Rechazar pago…
                       </Button>
+                      </div>
+                    {!checklistComplete && (
+                      <p className="min-w-0 text-xs text-ink-3 lg:flex-1">
+                        {remainingChecks > 0 && needsExceptionReason
+                          ? `Faltan ${remainingChecks} puntos de la lista y el motivo de la excepción para poder aprobar.`
+                          : remainingChecks > 0
+                          ? remainingChecks === 1
+                            ? "Falta confirmar 1 punto de la lista para poder aprobar."
+                            : `Faltan ${remainingChecks} puntos de la lista para poder aprobar.`
+                          : "Falta indicar el motivo de la excepción para poder aprobar."}
+                      </p>
+                    )}
                     </div>
                     {/* El aviso del deshacer se movió al desplegable «Cómo se
                         decide», arriba en el encabezado de esta misma tarjeta.
@@ -1554,17 +1826,6 @@ export default function PaymentsPage(): React.ReactElement {
                         vigencia": issue #400 le saca a administración la
                         posibilidad de tipear la fecha al aprobar, así que ya
                         no hay nada que pueda divergir del período pedido.) */}
-                    {!checklistComplete && (
-                      <p className="text-xs text-ink-3">
-                        {remainingChecks > 0 && needsExceptionReason
-                          ? `Faltan ${remainingChecks} puntos de la lista y el motivo de la excepción para poder aprobar.`
-                          : remainingChecks > 0
-                          ? remainingChecks === 1
-                            ? "Falta confirmar 1 punto de la lista para poder aprobar."
-                            : `Faltan ${remainingChecks} puntos de la lista para poder aprobar.`
-                          : "Falta indicar el motivo de la excepción para poder aprobar."}
-                      </p>
-                    )}
                   </>
                 ) : (
                   <div className="flex flex-col gap-4">
@@ -1654,7 +1915,7 @@ export default function PaymentsPage(): React.ReactElement {
                   </div>
                 )}
                 </div>
-              </div>
+                </section>
               )}
             </section>
 
@@ -1690,8 +1951,10 @@ export default function PaymentsPage(): React.ReactElement {
             )}
           </div>
 
-          {!hideProofPanel && (
-            <div className="lg:col-span-2">
+          <div className="min-w-0 lg:col-span-2 lg:self-stretch">
+            {hideProofPanel ? (
+              <CashConfirmationPanel request={request} payer={payer} />
+            ) : (
               <ProofViewer
                 request={request}
                 previewUnavailable={previewUnavailable}
@@ -1699,8 +1962,8 @@ export default function PaymentsPage(): React.ReactElement {
                 onRetryPreview={() => setPreviewUnavailable(false)}
                 onExpand={() => setVoucherModalOpen(true)}
               />
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     );
@@ -1724,6 +1987,7 @@ export default function PaymentsPage(): React.ReactElement {
             second-level screen. */}
       <AppShell
         title="Pagos"
+        subtitle="Valide los pagos por transferencia y efectivo de los miembros."
         back={
           selectedRequest ? (
             <BackLink
