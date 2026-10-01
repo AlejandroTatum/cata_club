@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within, fireEvent } from "@testing-library/react";
 import AyudaPage from "@/app/ayuda/page";
 import { FAQ_SECTIONS } from "@/app/ayuda/faq-content";
+import { PAGE_RAIL } from "@/components/ui";
 import type { UserRole } from "@/types/domain";
 
 /**
@@ -143,7 +144,7 @@ describe("AyudaPage — FAQ grid (#203)", () => {
     const grid = screen.getByTestId("faq-grid");
 
     expect(grid).toHaveClass("grid-cols-1");
-    expect(grid).toHaveClass("lg:grid-cols-2");
+    expect(grid).toHaveClass("xl:grid-cols-2");
   });
 
   it("keeps every section, and all of its questions, inside one grid cell", () => {
@@ -335,5 +336,81 @@ describe("AyudaPage — the FAQ is the whole surface (#1374 correction)", () => 
     for (const link of links) {
       expect(link).toHaveAttribute("href", "/#horarios");
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// admin v4 — search, categories and a rail that always carries the guidance
+// ---------------------------------------------------------------------------
+
+describe("AyudaPage — search, categories and rail (admin v4)", () => {
+  it("splits the page with PAGE_RAIL: the FAQ on the left, the guidance rail on the right", () => {
+    render(<AyudaPage />);
+    const split = screen.getByTestId("faq-split");
+
+    expect(split.className).toBe(PAGE_RAIL);
+    expect(within(split.children[0] as HTMLElement).getByTestId("faq-grid")).toBeInTheDocument();
+    const rail = within(split.children[1] as HTMLElement);
+    expect(rail.getByRole("heading", { name: "Cómo usar esta página" })).toBeVisible();
+    expect(rail.getByRole("heading", { name: "¿No encontró su respuesta?" })).toBeVisible();
+    expect(rail.getByRole("button", { name: "Reportar un problema" })).toBeInTheDocument();
+  });
+
+  it("narrows the sections to the typed question, ignoring case and accents", () => {
+    render(<AyudaPage />);
+    const entry = FAQ_SECTIONS[0].entries[0];
+    const needle = entry.question.slice(1, 12).toUpperCase();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar una pregunta" }), {
+      target: { value: needle },
+    });
+
+    expect(screen.getByRole("button", { name: entry.question })).toBeInTheDocument();
+    const total = FAQ_SECTIONS.reduce((n, section) => n + section.entries.length, 0);
+    const shown = within(screen.getByTestId("faq-grid")).getAllByRole("button").length;
+    expect(shown).toBeLessThan(total);
+  });
+
+  it("shows an empty state when nothing matches", () => {
+    render(<AyudaPage />);
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar una pregunta" }), {
+      target: { value: "zzzxqj" },
+    });
+
+    expect(screen.getByText("Sin resultados")).toBeInTheDocument();
+    expect(screen.queryByTestId("faq-grid")?.children).toHaveLength(0);
+  });
+
+  it("filters to one category and returns to all of them", () => {
+    render(<AyudaPage />);
+    const only = FAQ_SECTIONS[1];
+
+    fireEvent.click(screen.getByRole("button", { name: only.title, pressed: false }));
+    const grid = screen.getByTestId("faq-grid");
+    expect(grid.querySelectorAll(":scope > section")).toHaveLength(1);
+    expect(within(grid).getByRole("heading", { name: only.title })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Todas" }));
+    expect(screen.getByTestId("faq-grid").querySelectorAll(":scope > section")).toHaveLength(
+      FAQ_SECTIONS.length,
+    );
+  });
+
+  it("offers quick links by role", () => {
+    mockRole = "admin";
+    const { unmount } = render(<AyudaPage />);
+    expect(screen.getByRole("link", { name: "Miembros" })).toHaveAttribute("href", "/members");
+    unmount();
+
+    mockRole = "estudiante";
+    render(<AyudaPage />);
+    expect(screen.getByRole("link", { name: "Mis pagos" })).toHaveAttribute("href", "/student/payments");
+  });
+
+  it("offers sign-in and the public site to a signed-out visitor", () => {
+    render(<AyudaPage />);
+
+    expect(screen.getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute("href", "/login");
   });
 });
