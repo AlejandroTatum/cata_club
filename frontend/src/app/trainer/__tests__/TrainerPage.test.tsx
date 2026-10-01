@@ -18,6 +18,7 @@ import type { TrainingSchedule, AttendanceRecord } from "@/app/attendance/attend
 import type { AlumnoHorario, RecentAttendanceSession } from "@/services/api";
 import { createAuthenticatedAuth, createLoadingAuth } from "@/components/__tests__/test-utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { CLUB_TIME_ZONE } from "@/lib/club-date";
 
 vi.mock("@/components/ProtectedRoute", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -346,7 +347,15 @@ describe("TrainerPage — Mi día", () => {
     render(<TrainerPage />);
 
     const today = within(await screen.findByTestId("trainer-today"));
-    expect(today.getByTestId("timeline-now-label")).toHaveTextContent("Ahora 14:35");
+    // The page reads the clock in the club's time zone, so the expected label
+    // must too; NOW is built in the runner's local time.
+    const clubClock = new Intl.DateTimeFormat("en-GB", {
+      timeZone: CLUB_TIME_ZONE,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(NOW);
+    expect(today.getByTestId("timeline-now-label")).toHaveTextContent(`Ahora ${clubClock}`);
     expect(today.getAllByTestId("timeline-block")[0]).toHaveAttribute("data-status", "done");
     expect(today.getAllByTestId("timeline-block")[1]).toHaveAttribute("data-status", "pending");
   });
