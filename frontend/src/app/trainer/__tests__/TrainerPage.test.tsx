@@ -420,6 +420,14 @@ describe("TrainerPage — Mi día", () => {
   // 7th and 14th — six sessions, newest first, capped at five.
   // -------------------------------------------------------------------------
 
+  it("keeps an always-visible 'Cómo funciona su día' guide in the rail", async () => {
+    render(<TrainerPage />);
+
+    const guide = await screen.findByRole("complementary", { name: "Cómo funciona su día" });
+    expect(within(screen.getByTestId("trainer-rail")).getByText("Cómo funciona su día")).toBeInTheDocument();
+    expect(guide).toHaveTextContent("Sesiones sin lista");
+  });
+
   it("lists the month's sessions that never got a list, newest first and capped at five, each linking into the wizard", async () => {
     render(<TrainerPage />);
 

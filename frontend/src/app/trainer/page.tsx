@@ -46,6 +46,7 @@ import {
 import {
   ErrorState,
   LoadingState,
+  InfoPanel,
   PAGE_RAIL,
   buttonClasses,
 } from "@/components/ui";
@@ -373,6 +374,11 @@ export default function TrainerPage(): React.ReactElement {
                 <section className="card flex flex-col gap-4 p-[18px]">
                   <SessionsWithoutList missing={missingSessions} />
                 </section>
+                <InfoPanel title="Cómo funciona su día">
+                  <p>El botón principal abre la lista de la próxima sesión; la línea de «Hoy» muestra el estado de cada una.</p>
+                  <p>«Sesiones sin lista» reúne las del mes que nadie registró: use «Pasar lista» para completarlas.</p>
+                  <p>«Alumnos a seguir» marca a quienes faltaron dos veces o más este mes.</p>
+                </InfoPanel>
               </div>
             </div>
           </>

@@ -583,6 +583,26 @@ describe("maestro–detalle en escritorio", () => {
     expect(mockFetchFichaEmergencia).not.toHaveBeenCalled();
   });
 
+  it("la columna lateral trae siempre la guía «Cómo usar la nómina»", async () => {
+    setDesktop(true);
+    render(<TrainerStudentsPage />);
+
+    expect(await screen.findByRole("complementary", { name: "Cómo usar la nómina" })).toBeInTheDocument();
+    expect(screen.getByTestId("ficha-panel-ghost")).toBeInTheDocument();
+  });
+
+  it("el resumen por grupo filtra la nómina al tocar un grupo", async () => {
+    setDesktop(true);
+    render(<TrainerStudentsPage />);
+
+    const resumen = await screen.findByTestId("students-by-group");
+    fireEvent.click(within(resumen).getByRole("button", { name: "Filtrar el grupo de las 17:00, 1" }));
+
+    expect(screen.queryByTestId("student-row-7")).not.toBeInTheDocument();
+    expect(screen.getByTestId("student-row-3")).toBeInTheDocument();
+    expect(within(resumen).getByRole("button", { name: /17:00/ })).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("al tocar Ficha médica llena el panel lateral, sin abrir el diálogo", async () => {
     setDesktop(true);
     render(<TrainerStudentsPage />);
@@ -660,13 +680,13 @@ describe("maestro–detalle en escritorio", () => {
     render(<TrainerStudentsPage />);
 
     await screen.findByTestId("student-row-7");
-    expect(screen.getByText("alumnos", { exact: false, selector: "p" })).toHaveTextContent("3 alumnos");
+    expect(document.querySelector("p[aria-live=polite]")).toHaveTextContent("3 alumnos");
 
     // Melany trains at 18:00, Diego at 17:00, Sofía at 09:00.
     fireEvent.click(screen.getByRole("button", { name: "Grupo de las 17:00, 1" }));
     expect(screen.queryByTestId("student-row-7")).not.toBeInTheDocument();
     expect(screen.getByTestId("student-row-3")).toBeInTheDocument();
-    expect(screen.getByText("alumno", { exact: false, selector: "p" })).toHaveTextContent("1 alumno de 3");
+    expect(document.querySelector("p[aria-live=polite]")).toHaveTextContent("1 alumno de 3");
 
     fireEvent.click(screen.getByRole("button", { name: "Todos, 3" }));
     expect(screen.getByTestId("student-row-7")).toBeInTheDocument();
