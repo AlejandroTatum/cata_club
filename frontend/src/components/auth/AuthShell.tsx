@@ -9,9 +9,11 @@
  * screens park the leftover width in gutters instead of inside a pane:
  *
  *   · Brand panel — coal, 5/12 of the width from `split` (980px) up. Content is
- *     anchored top and bottom instead of floating in the middle: the lockup and
- *     the way back on top, the motto in the middle, the club facts and the
- *     copyright at the foot.
+ *     anchored top and bottom instead of floating in the middle: the way back
+ *     (top-left) and the wordmark (top-right) on top, the club's crest as a
+ *     centred emblem in the room between, the motto, the club facts and the
+ *     copyright at the foot. The crest is what fills the middle (QA registro:
+ *     the field above the motto read as dead space).
  *   · Form panel — paper, the rest of the width. The form owns a 448px column
  *     (`max-w-md`) centred in the pane, with a real heading hierarchy
  *     (eyebrow, title, subtitle) and the secondary small print grouped under a
@@ -19,7 +21,7 @@
  *     surface.
  *
  * Phones stack, they do not hide: the coal panel collapses to a compact header
- * (lockup, way back and the motto) above the form; the supporting line, the
+ * (way back, the small crest and the motto) above the form; the supporting line, the
  * facts and the copyright only exist from `split` up.
  *
  * ## The facts are public and verifiable
@@ -211,56 +213,68 @@ export default function AuthShell({
         />
 
         {/*
-         * The banner landmark (#820): lockup, way back, motto and facts. The way
-         * back is `BackLink`'s coal tone, the system's single back control; it
-         * sits in the top row's flow now instead of pinned absolutely, so it can
-         * never overlap the lockup on a narrow phone.
+         * The banner landmark (#820): way back, lockup, crest, motto and facts.
+         * The way back is `BackLink`'s coal tone, the system's single back
+         * control; it opens the top row on the left (QA registro) and sits in
+         * the row's flow rather than pinned absolutely, so it can never overlap
+         * the lockup on a narrow phone.
          */}
-        {/*
-         * The watermark: the club's crest in its white cut, faded to a whisper
-         * and cropped by the panel's edge, so the middle of the coal field has
-         * the club in it instead of nothing. Decorative, split-only.
-         */}
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-24 top-[14%] hidden h-[30rem] w-[30rem] opacity-[0.07] split:block"
-        >
-          <Image
-            src="/brand/cata-club-crest-256-light.png"
-            alt=""
-            fill
-            sizes="480px"
-            className="object-contain"
-          />
-        </span>
-
         <header
           aria-label="Marca de Cata Club"
           className="relative z-[1] flex flex-1 flex-col justify-between gap-8 split:gap-10"
         >
           <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <span className="relative block h-10 w-10 shrink-0 overflow-hidden rounded-full border-2 border-white/[0.12] split:h-14 split:w-14 split:border-4">
-                <Image
-                  src="/brand/cata-club-logo.jpeg"
-                  alt="Cata Club"
-                  fill
-                  sizes="56px"
-                  className="object-cover"
-                  priority
-                />
-              </span>
-              <span className="hidden font-display text-lg uppercase tracking-flat split:inline">
-                Cata Club
-              </span>
-            </div>
-            {!hideBack && (
+            {!hideBack ? (
               <BackLink
                 href={backHref}
                 tone="coal"
                 className="ring-1 ring-inset ring-white/20"
               />
+            ) : (
+              <span aria-hidden="true" />
             )}
+            {/*
+             * The lockup lives in the opposite corner. On a phone it is the
+             * small crest (there is no room for the emblem); from `split` the
+             * emblem below carries the crest and the corner keeps the name.
+             */}
+            <div data-testid="auth-lockup" className="flex items-center gap-3">
+              <span className="relative block h-10 w-10 shrink-0 overflow-hidden rounded-full border-2 border-white/[0.12] split:hidden">
+                <Image
+                  src="/brand/cata-club-logo.jpeg"
+                  alt=""
+                  fill
+                  sizes="40px"
+                  className="object-cover"
+                />
+              </span>
+              <span className="font-display text-lg uppercase tracking-flat">
+                Cata Club
+              </span>
+            </div>
+          </div>
+
+          {/*
+           * The emblem: the club's own badge, centred in the room between the
+           * top row and the motto, so the middle of the coal field has the club
+           * in it instead of nothing. Its height follows the viewport (the lesser
+           * of 18rem and 28vh) so a short laptop screen never pushes the motto
+           * off. Split-only; the one accessible logo of the screen.
+           */}
+          <div
+            data-testid="auth-crest"
+            className="mx-auto hidden aspect-square h-[min(18rem,28vh)] shrink-0 split:block"
+          >
+            <span className="relative block h-full w-full overflow-hidden rounded-full border-4 border-white/[0.12] shadow-[0_0_80px_rgba(255,255,255,0.08)]">
+              <Image
+                src="/brand/cata-club-logo.jpeg"
+                alt="Cata Club"
+                fill
+                sizes="288px"
+                className="object-cover"
+                priority
+              />
+            </span>
           </div>
 
           {/* The motto and its supporting line, anchored above the facts. */}
@@ -323,18 +337,10 @@ export default function AuthShell({
         className="flex flex-1 flex-col bg-paper px-6 py-8 text-ink split:px-16 split:py-12"
       >
         {/*
-         * One column, one axis: the top label, the form and the help footer
-         * share the same 448px column (same max-width, same left edge).
+         * One column, one axis: the form and the help footer share the same 448px column (same max-width, same left edge).
          */}
         <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
-        {/* Top anchor: who is asking for the sign-in. Phones already have the
-            brand header above, so it only exists from `split` up. */}
-        <p className="hidden items-center gap-2 text-xs font-semibold text-ink-3-strong split:flex">
-          <span aria-hidden="true" className="h-2 w-2 rounded-full bg-ball" />
-          Escuela de tenis de mesa
-        </p>
-
-        {/* Centred in the room under the label. From `split` it is nudged up by
+        {/* Centred in the column. From `split` it is nudged up by
             the bottom padding so the form sits in the upper-middle; on a phone
             the help footer anchors the foot, so the form centres in the room
             between the brand header and that footer instead of leaving the

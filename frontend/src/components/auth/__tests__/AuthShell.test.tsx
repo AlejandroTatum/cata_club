@@ -237,12 +237,11 @@ describe("AuthShell — rebalanced split", () => {
     expect(column.className).not.toMatch(/\b(border|shadow-hero|rounded-\[18px\])\b/);
   });
 
-  it("keeps the top label, the form and the help footer in one column", () => {
+  it("keeps the form and the help footer in one column", () => {
     renderShell();
 
     const column = screen.getByTestId("auth-card").parentElement?.parentElement as HTMLElement;
     expect(column.className).toContain("max-w-md");
-    expect(column).toContainElement(screen.getByText("Escuela de tenis de mesa"));
     expect(column).toContainElement(screen.getByTestId("auth-help"));
   });
 
@@ -457,13 +456,14 @@ describe("AuthShell — hideBack lets one authenticated screen opt out", () => {
     expect(screen.getByTestId("auth-brand-cluster")).toBeInTheDocument();
   });
 
-  it("fills the brand panel's middle with a decorative crest watermark", () => {
+  it("fills the brand panel's middle with the club's crest as a centred emblem", () => {
     renderShell();
 
-    const watermark = screen.getByTestId("auth-panel-dark").querySelector('img[src*="crest"]');
-    expect(watermark).not.toBeNull();
-    expect(watermark).toHaveAttribute("alt", "");
-    expect(watermark?.closest("span")).toHaveAttribute("aria-hidden", "true");
+    const emblem = screen.getByTestId("auth-crest");
+    expect(screen.getByTestId("auth-panel-dark")).toContainElement(emblem);
+    // Centred in the room between the top row and the motto, not cropped by an edge.
+    expect(emblem.className).toContain("mx-auto");
+    expect(emblem.querySelector("img")).toHaveAttribute("alt", "Cata Club");
   });
 
   it("anchors the form column between a top label and a help footer", () => {
@@ -476,5 +476,36 @@ describe("AuthShell — hideBack lets one authenticated screen opt out", () => {
       expect.stringContaining("wa.me/"),
     );
     expect(screen.getByTestId("auth-panel-light")).toContainElement(help);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// QA registro: the "Escuela de tenis de mesa" pill is gone, the way back sits
+// top-left of the coal panel and the lockup moves to the opposite corner.
+// ---------------------------------------------------------------------------
+
+describe("AuthShell — QA registro layout", () => {
+  it("no longer renders the 'Escuela de tenis de mesa' pill", () => {
+    renderShell();
+
+    expect(screen.queryByText(/escuela de tenis de mesa/i)).not.toBeInTheDocument();
+  });
+
+  it("puts the way back first in the banner, ahead of the lockup", () => {
+    renderShell();
+
+    const banner = screen.getByRole("banner", { name: "Marca de Cata Club" });
+    const back = screen.getByRole("link", { name: /volver al inicio/i });
+    const lockup = screen.getByTestId("auth-lockup");
+    expect(back.compareDocumentPosition(lockup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(banner).toContainElement(lockup);
+    expect(lockup).toHaveTextContent(/cata club/i);
+  });
+
+  it("keeps the lockup in the top row even when the way back is hidden", () => {
+    renderHiddenBackShell();
+
+    expect(screen.getByTestId("auth-lockup")).toBeInTheDocument();
+    expect(screen.getByTestId("auth-crest")).toBeInTheDocument();
   });
 });
