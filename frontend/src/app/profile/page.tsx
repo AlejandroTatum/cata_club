@@ -155,9 +155,18 @@ import {
   resolveCoverageEnd,
 } from "@/app/student/student-utils";
 import SessionsCard from "./SessionsCard";
-import { ActionTile, CoverageMeter, HeroStats, daysUntil, type HeroStat } from "./ProfileParts";
+import {
+  ActionTile,
+  CoverageMeter,
+  HeroStats,
+  IconTile,
+  SectionHead,
+  daysUntil,
+  type AccentTone,
+  type HeroStat,
+} from "./ProfileParts";
 import { clubToday } from "@/lib/club-date";
-import { Badge, Button, DataBox, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
+import { Badge, Button, DataBox, ErrorState, LoadingState, PAGE_RAIL, buttonClasses } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui/Badge";
 import { MEMBERSHIP_STATUS_LABELS, MEMBERSHIP_STATUS_TONE } from "@/app/members/members-utils";
 import { getAttendanceBadgeTone, getAttendanceLabel } from "@/app/attendance/attendance-utils";
@@ -166,7 +175,24 @@ import { getAttendanceBadgeTone, getAttendanceLabel } from "@/app/attendance/att
 // it's a pure value object with no server-only APIs, safe in a client bundle.
 import { MEMBERSHIP_STATUS_BY_ESTADO } from "@/lib/membership-status";
 import { backendRoleForUserRole, getBackendRoleLabel, getRoleLabel } from "@/lib/auth-utils";
-import { Loader2, Save, X, Camera, ArrowRight, Lock, Monitor, LogOut } from "lucide-react";
+import {
+  Activity,
+  ArrowRight,
+  BadgeCheck,
+  Camera,
+  IdCard,
+  LifeBuoy,
+  Loader2,
+  Lock,
+  LogOut,
+  Monitor,
+  Save,
+  ShieldCheck,
+  User,
+  Users,
+  X,
+  Zap,
+} from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { formatDate } from "@/lib/format-utils";
 import { toUserMessage } from "@/lib/error-message";
@@ -180,6 +206,25 @@ import { PhoneField } from "@/components/wizard-fields";
 
 /** Roles with no staff profile here — they see the student-branch content in the unified layout instead. */
 const STUDENT_SUMMARY_ROLES: ReadonlySet<UserRole> = new Set(["representante", "estudiante"]);
+
+interface RoleShortcut {
+  label: string;
+  hint: string;
+  href: string;
+}
+
+const ADMIN_SHORTCUTS: RoleShortcut[] = [
+  { label: "Panel de Control", hint: "Resumen del día del club", href: "/dashboard" },
+  { label: "Miembros", hint: "Cuentas, roles y membresías", href: "/members" },
+  { label: "Pagos", hint: "Revisar y aprobar comprobantes", href: "/payments" },
+  { label: "Asistencias", hint: "Registros de entrenamiento", href: "/attendance" },
+];
+
+const TRAINER_SHORTCUTS: RoleShortcut[] = [
+  { label: "Mi día", hint: "Sus próximas sesiones", href: "/trainer" },
+  { label: "Pasar lista", hint: "Registrar la asistencia", href: "/trainer/attendance" },
+  { label: "Alumnos del club", hint: "Consultar a sus alumnos", href: "/trainer/students" },
+];
 
 function toErrorMessage(error: unknown, fallback: string): string {
   return toUserMessage(error, fallback);
@@ -367,49 +412,106 @@ function ProfileShell({
   );
 }
 
+function AccountSummary({
+  roleLabels,
+  correo,
+  memberSince,
+  active,
+}: {
+  roleLabels: string[];
+  correo: string;
+  memberSince: string | null;
+  /** Staff accounts are always active; students read their state from the membership card. */
+  active: boolean;
+}): React.ReactElement {
+  return (
+    <dl data-testid="profile-account-summary" className="grid gap-3 text-sm">
+      <div className="grid gap-1">
+        <dt className="text-xs text-ink-3-strong">Rol</dt>
+        <dd className="flex flex-wrap gap-1.5">
+          {roleLabels.map((label) => (
+            <Badge key={label} tone="neutral">
+              {label}
+            </Badge>
+          ))}
+        </dd>
+      </div>
+      <div className="grid gap-1">
+        <dt className="text-xs text-ink-3-strong">Correo de acceso</dt>
+        <dd className="break-words font-semibold text-ink">{correo}</dd>
+      </div>
+      {active && (
+        <div className="grid gap-1">
+          <dt className="text-xs text-ink-3-strong">Estado</dt>
+          <dd>
+            <Badge tone="ok">Activa</Badge>
+          </dd>
+        </div>
+      )}
+      {memberSince && (
+        <div className="grid gap-1">
+          <dt className="text-xs text-ink-3-strong">Cuenta creada</dt>
+          <dd className="text-ink">{memberSince}</dd>
+        </div>
+      )}
+    </dl>
+  );
+}
+
 function CardSection({
   title,
   subtitle,
+  icon,
+  tone,
   action,
   testId,
   children,
 }: {
   title: string;
-  /** The prototype's `.section-head p` — a short caption to the right of the
-   *  title (e.g. "Información de tu cuenta", "Acciones de acceso"). */
+  /** A short caption to the right of the title (e.g. "Acciones de acceso"). */
   subtitle?: string;
+  icon: React.ReactNode;
+  tone: AccentTone;
   action?: React.ReactNode;
   testId?: string;
   children: React.ReactNode;
 }): React.ReactElement {
   return (
     <section data-testid={testId} className="card overflow-hidden">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-field border-b border-line px-5 py-4">
-        {/*
-          `DESIGN.md`'s `title` step: Graduate, 20px, uppercase, weight 400.
-
-          Every one of these was `text-sm font-bold` — 13.5px of Barlow, which
-          is the DENSE step, the size a table cell takes. So the title of a
-          card and the values inside it were set at the same size and told
-          apart by a weight alone, and the screen had no typographic step
-          between "this is a section" and "this is a datum". `PageHeader` made
-          exactly this correction one level up.
-
-          No weight class: Graduate ships a single 400 cut (`lib/fonts.ts`), so
-          asking for bold makes the browser synthesise one and smear the
-          strokes. `tracking-flat` cancels the -0.02em `text-lg` carries for
-          Barlow, which on a wide flat face reads as letters running together.
-        */}
-        <h2 className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">
-          {title}
-        </h2>
-        {subtitle && <p className="text-xs text-ink-3">{subtitle}</p>}
-        {action}
-      </div>
+      <SectionHead title={title} subtitle={subtitle} icon={icon} tone={tone} action={action} />
       {children}
     </section>
   );
 }
+
+/** Rail card: the same tinted header as the section cards, with the guidance below it. */
+function RailCard({
+  title,
+  icon,
+  tone,
+  children,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  tone: AccentTone;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <aside aria-label={title} className="card overflow-hidden">
+      <SectionHead title={title} icon={icon} tone={tone} />
+      <div className="flex flex-col gap-2 p-[18px] text-sm text-ink-2">{children}</div>
+    </aside>
+  );
+}
+
+/** Role-specific accent: one hue per account type, reused by the hero-adjacent cards. */
+const ROLE_TONE: Record<UserRole, AccentTone> = {
+  admin: "red",
+  trainer: "trainer",
+  representante: "info",
+  estudiante: "ball",
+  unsupported: "neutral",
+};
 
 // ---------------------------------------------------------------------------
 // IdentityPanel — the compact ~292px identity surface (issue #204).
@@ -440,8 +542,18 @@ interface IdentityPanelProps {
   fotoError: string | null;
   fotoInputRef: React.RefObject<HTMLInputElement>;
   onFotoChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  /** The screen's profile actions (edit / save / cancel), rendered inside the band. */
+  actions?: React.ReactNode;
 }
 
+/**
+ * The identity band: one coal surface across the main column that carries who
+ * the person is (avatar, name, role, account date, correo) and what they can do
+ * about it (edit data, change photo). The ball-yellow ring on the avatar and
+ * the role pill are the only accents; two soft discs of ball and red give the
+ * flat coal some depth without spending a solid red field (the red stays on
+ * the one primary button). Nothing truncates: the name and correo wrap.
+ */
 function IdentityPanel({
   name,
   initials,
@@ -455,106 +567,43 @@ function IdentityPanel({
   fotoError,
   fotoInputRef,
   onFotoChange,
+  actions,
 }: IdentityPanelProps): React.ReactElement {
-  // The 292px width belongs to the COLUMN this card sits in (see the layout
-  // note in `ProfileLayout`), not to the card: the membership card below it
-  // has to measure the same, and one number written in two places drifts.
   return (
     <section
       data-testid="profile-hero"
       aria-label={`Identidad de la cuenta de ${name}`}
-      className="card flex flex-col overflow-hidden"
+      className="relative isolate flex flex-col overflow-hidden rounded-card bg-coal text-white shadow-elevated"
     >
-      {/*
-        THE SHOULDER (D7), and it replaces a 100px red field this card used to
-        wear across its top edge.
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-16 -top-24 -z-10 h-72 w-72 rounded-full bg-ball/10"
+      />
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute -bottom-28 right-40 -z-10 h-64 w-64 rounded-full bg-cata-red/15"
+      />
 
-        That field was the single loudest gesture on the screen, and
-        `DESIGN.md` forbids it by name: *"Don't dibujar una barra de color al
-        borde de una tarjeta. Es el recurso más repetido de las interfaces
-        genéricas y es exactamente el reproche que originó este sistema."* It
-        was also spending the red — the token reserved for the action and the
-        destructive intent — on 100px of decoration, next to a "Cambiar foto"
-        button that was red for a real reason and could no longer be told apart
-        from it.
-
-        The approved signature for a card that asks somebody to do something is
-        the coal shoulder: a bar with its eyebrow in yellow. This card asks —
-        it holds the photo trigger — and it is the only card on the screen that
-        wears one, which is the other half of the rule (*"como mucho una por
-        fila: si lo llevan las cuatro, no marca nada"*).
-
-        The eyebrow says what the person IS at the club rather than repeating
-        the card's own name. That both gives the shoulder a job and retires a
-        badge: the role used to be a grey chip in the quick-recognition block,
-        one of three chips where one of them ("Cuenta activa") said nothing.
-
-        Contrast comes free: `ball` on `coal` is 13.13:1, the pair the rail
-        already spends and `color-contrast.test.ts` already owns. The field it
-        replaces held `text-ink` at 3.6:1 and grey at ~1.1:1, and needed 112px
-        of padding to keep any text off it.
-      */}
-      {/* `justify-end`: the avatar bridges this bar at its LEFT edge, so an
-          eyebrow starting there renders behind it — measured at 1440x900 on
-          the first build of this change, where "JUGADOR" came out two thirds
-          covered. The bar has two occupants and they take an end each. */}
-      <div className="flex items-center justify-end bg-coal px-5 py-2">
-        <p
-          data-testid="profile-shoulder"
-          className="text-2xs font-bold uppercase tracking-caps-wide text-ball"
-        >
-          {roleLabel}
-        </p>
-      </div>
-
-      {/*
-        `items-start` still, and the avatar still bridges an edge — the coal one
-        now. At 72px with `-mt-9` (36px) it crosses the shoulder's lower half,
-        separated from it by its own 4px paper ring, so the "avatar carbón
-        puenteando" the redesign asked for survives the change of what it
-        bridges. `pt-4` replaces `pt-[112px]`: with no colour field below the
-        shoulder, the identity block starts where a card's content starts.
-      */}
-      <div className="relative flex flex-col gap-5 px-5 pb-5 pt-4 lg:flex-row lg:items-center lg:gap-8">
-      <div className="flex min-w-0 flex-1 items-start gap-4">
-        <div className="relative -mt-9 flex-none">
-          <div className="flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full border-4 border-paper bg-coal text-xl font-extrabold text-ball shadow-elevated">
+      <div className="flex flex-col gap-6 px-6 py-7 md:flex-row md:items-center md:gap-8 lg:px-8">
+        <div className="flex-none">
+          <div className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-full bg-coal-3 text-2xl font-extrabold text-ball ring-4 ring-ball ring-offset-4 ring-offset-coal">
             {fotoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset
-              <img
-                src={fotoUrl}
-                alt="Foto de perfil"
-                className="h-[72px] w-[72px] rounded-full object-cover"
-              />
+              <img src={fotoUrl} alt="Foto de perfil" className="h-28 w-28 rounded-full object-cover" />
             ) : (
               <span aria-hidden="true">{initials}</span>
             )}
           </div>
         </div>
 
-        {/*
-          The "quick recognition" block: the name, and — only when there is a
-          real one — the membership estado.
-
-          Two things left it in this pass, and both were absences wearing the
-          clothes of facts. "Cuenta activa" was argued for at length in this
-          file's own docstring: reaching the page proves `sesion_vigente`, so
-          the badge is TRUE. It is also unfalsifiable — no reader has ever seen
-          it absent and none ever will — and a badge that cannot vary is not a
-          status, it is a decoration that looks like one. The role chip moved
-          up into the shoulder rather than being deleted.
-
-          What is left is one badge that can actually say something else
-          tomorrow.
-        */}
-        <div className="min-w-0 flex-1 pb-1">
-          {/* DESIGN.md's `title` step: Graduate at 20px, uppercase, weight 400
-              — this is the title of the identity card. `break-words` stays and
-              does the work the face makes heavier: uppercase Graduate runs ~35%
-              wider than Barlow-800 at 20px, and this line never truncates, so a
-              long name wraps rather than being cut. `tracking-flat` cancels the
-              -0.02em the size step carries for Barlow. */}
-          <h2 className="break-words font-display text-lg uppercase leading-tight tracking-flat text-ink">
+        <div className="min-w-0 flex-1">
+          <p
+            data-testid="profile-shoulder"
+            className="inline-flex rounded-full border border-ball/40 bg-ball/10 px-3 py-1 text-2xs font-bold uppercase tracking-caps-wide text-ball"
+          >
+            {roleLabel}
+          </p>
+          <h2 className="mt-3 break-words font-display text-xl uppercase leading-tight tracking-flat text-white">
             {name}
           </h2>
           {statusBadge && (
@@ -562,73 +611,20 @@ function IdentityPanel({
               <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
             </div>
           )}
-          {/*
-            Account metadata, not personal data — "Cuenta creada el" lives HERE
-            only, and only when there is a date to state. It used to fall back
-            to "Cuenta creada el —", which is `DESIGN.md`'s Identity cell rule
-            broken in four characters: *"Nunca nombra una ausencia."*
-
-            The photo-state line that sat under it is gone for the same reason.
-            "Foto de perfil: Sin foto cargada" was a sentence explaining what
-            the avatar 12px to its left was already showing — initials instead
-            of a face is what "no photo" looks like — and the only actionable
-            half of it, the trigger, is the button below.
-          */}
-          {memberSince && <p className="mt-2 text-xs text-ink-3">{memberSince}</p>}
+          <div className="mt-3 grid gap-1 text-sm text-white/70">
+            {memberSince && <p>{memberSince}</p>}
+            <p className="break-words font-semibold text-white">{correo}</p>
+            <p className="text-xs text-white/60">El correo lo gestiona el club, no se edita aquí.</p>
+          </div>
         </div>
-      </div>
-      {stats.length > 0 && <HeroStats stats={stats} />}
-      </div>
 
-      {fotoError && (
-        <p role="alert" className="px-5 pb-3 text-xs text-state-bad">
-          {fotoError}
-        </p>
-      )}
-
-      {/*
-        ONE rail action, and it is secondary.
-
-        There were two, and between them they broke both halves of the rule of
-        the red. "Cambiar foto" was `primary`, so a staff account mid-edit had
-        two red buttons on screen at once — this one and "Guardar" in the
-        header — and the red stopped meaning "this is THE action". It is
-        secondary now: the header owns the primary, and this is a card-local
-        trigger for the surface it sits on.
-
-        "Cerrar sesión" left the panel entirely. It called the same `logout()`
-        as the Seguridad row 400px below, under a different word ("Salir"), so
-        the screen had one action with two names in two places — the last of
-        the three defects `DESIGN.md`'s Don'ts close on. Seguridad kept it
-        because the other two session actions already live there, and a group
-        of three with one member somewhere else is not a group.
-      */}
-
-      {/* The one full-width row at the foot of the panel — never squeezed
-          beside anything else, so the full correo always has the panel's
-          whole width to wrap into.
-
-          The two muted lines take `ink-3-strong`, not `ink-3`: this row is the
-          one `sunken` surface in the panel, and `ink-3` measures 4.21:1 there
-          (see the token's own note in tailwind.config.ts) — under AA for text
-          this small. `ink-3-strong` is the AA companion the ramp defines for
-          exactly this case at 5.40:1, and it is already what the identical
-          `bg-sunken` footnote further down this file uses. */}
-      {/* The one full-width row at the foot of the panel — never squeezed
-          beside anything else, so the full correo always has the panel's whole
-          width to wrap into. */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-section border-t border-line bg-sunken px-5 py-3">
-        <div className="min-w-0 flex-1 basis-64">
-          <p className="text-2xs font-bold uppercase tracking-wide text-ink-3-strong">Correo de acceso</p>
-          <p className="mt-1 break-words text-sm font-semibold text-ink">{correo}</p>
-          <p className="mt-1 text-xs text-ink-3-strong">El correo lo gestiona el club, no se edita aquí.</p>
-        </div>
-        <div className="flex-none">
+        <div className="flex flex-none flex-wrap items-center gap-2 md:flex-col md:items-stretch">
+          {actions}
           <button
             type="button"
             onClick={() => fotoInputRef.current?.click()}
             disabled={uploadingFoto}
-            className={buttonClasses("secondary", "sm", "justify-center")}
+            className={buttonClasses("onCoal", "md", "justify-center")}
           >
             {uploadingFoto ? (
               <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
@@ -647,6 +643,14 @@ function IdentityPanel({
           />
         </div>
       </div>
+
+      {stats.length > 0 && <HeroStats stats={stats} />}
+
+      {fotoError && (
+        <p role="alert" className="border-t border-white/10 bg-coal-2 px-6 py-3 text-xs text-white lg:px-8">
+          {fotoError}
+        </p>
+      )}
     </section>
   );
 }
@@ -735,11 +739,11 @@ function MembershipCard({
 
   return (
     <section data-testid="profile-membership" className="card flex flex-none flex-col overflow-hidden">
-      <div className="border-b border-line px-5 py-4">
-        <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
-          Su membresía
-        </h2>
-      </div>
+      <SectionHead
+        title="Su membresía"
+        icon={<BadgeCheck size={ICON.sm} strokeWidth={1.5} />}
+        tone="ball"
+      />
       {coverageEnd && <CoverageMeter daysLeft={daysUntil(coverageEnd, clubToday())} />}
       {plan && <PanelFact label="Plan">{plan}</PanelFact>}
       {!modalidadIsRedundant && <PanelFact label="Modalidad">{modalidadLabel}</PanelFact>}
@@ -772,12 +776,12 @@ function RecentSessionsCard({
 }): React.ReactElement {
   return (
     <section data-testid="profile-activity" className="card overflow-hidden">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-field border-b border-line px-5 py-4">
-        <h2 className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">
-          Últimas asistencias
-        </h2>
-        <p className="text-xs text-ink-3">Lo que registró el club</p>
-      </div>
+      <SectionHead
+        title="Últimas asistencias"
+        subtitle="Lo que registró el club"
+        icon={<Activity size={ICON.sm} strokeWidth={1.5} />}
+        tone="ok"
+      />
       <ul className="divide-y divide-line">
         {sessions.map((session) => (
           <li
@@ -1158,9 +1162,9 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   // this screen, and retiring the link to make room would trade a navigation
   // for an edit nobody asked to lose. The trigger is withheld only when there
   // is no `perfil` to seed from — see `startEditing`.
-  const headerAction = editing ? (
+  const profileActions = editing ? (
     <>
-      <Button variant="tertiary" onClick={cancelEditing} disabled={saving}>
+      <Button variant="onCoal" onClick={cancelEditing} disabled={saving}>
         <X size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
         Cancelar
       </Button>
@@ -1176,14 +1180,18 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   ) : (
     <>
       {perfil !== null && <Button onClick={startEditing}>Editar datos</Button>}
-      {props.kind === "student" && (
-        <Link href="/student" className={buttonClasses("secondary")}>
-          Ver portal completo
-          <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-        </Link>
-      )}
     </>
   );
+  // The student portal link stays in the page header: leaving the screen is
+  // not a profile action, so it does not belong in the identity band.
+  const headerAction =
+    !editing && props.kind === "student" ? (
+      <Link href="/student" className={buttonClasses("secondary")}>
+        Ver portal completo
+        <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+      </Link>
+    ) : undefined;
+  const roleTone = ROLE_TONE[props.role];
 
   return (
     <ProfileShell actions={headerAction} subtitle={roleCopy.lede}>
@@ -1219,6 +1227,8 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
       {/* Hero across the full measure, then two balanced columns: who the
           person is (data, role, dependants) and how the account stands
           (membership, security, activity). */}
+      <div data-testid="profile-split" className={PAGE_RAIL}>
+      <div className="grid min-w-0 content-start gap-5">
       <IdentityPanel
         name={fullName}
         initials={initials}
@@ -1232,9 +1242,10 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
         fotoError={fotoError}
         fotoInputRef={fotoInputRef}
         onFotoChange={(e) => void handleFotoChange(e)}
+        actions={profileActions}
       />
 
-      <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+      <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
         <div className="flex min-w-0 flex-col gap-5">
           {/* Datos personales — one datum per row. Correo and Rol are
               deliberately repeated from the identity panel (issue #204's own
@@ -1243,6 +1254,8 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
           <CardSection
             title="Datos personales"
             subtitle="Información de su cuenta"
+            icon={<User size={ICON.sm} strokeWidth={1.5} />}
+            tone="info"
             testId="profile-column-info"
           >
             <DetailRow label="Nombres">{fullName}</DetailRow>
@@ -1282,6 +1295,8 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
           <CardSection
             title="Información de su rol"
             subtitle={roleCopy.roleCaption}
+            icon={<IdCard size={ICON.sm} strokeWidth={1.5} />}
+            tone={roleTone}
             testId="profile-role-info"
           >
             <div className="border-b border-line px-5 py-3">
@@ -1359,6 +1374,34 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             )}
           </CardSection>
 
+          {/* Staff only: where this role's work happens. Students and
+              representantes already get their portal link in the header. */}
+          {props.kind === "staff" && (
+            <CardSection
+              title="Atajos de su rol"
+              subtitle="Ir directo a su trabajo"
+              icon={<Zap size={ICON.sm} strokeWidth={1.5} />}
+              tone="ball"
+              testId="profile-shortcuts"
+            >
+              <div className="grid gap-3 p-4 sm:grid-cols-2">
+                {(props.role === "trainer" ? TRAINER_SHORTCUTS : ADMIN_SHORTCUTS).map((shortcut) => (
+                  <Link
+                    key={shortcut.href}
+                    href={shortcut.href}
+                    className="flex items-center gap-3 rounded-ctl border border-line-2 bg-paper p-3.5 text-sm transition-colors hover:border-coal hover:bg-ball/10"
+                  >
+                    <IconTile icon={<ArrowRight size={ICON.sm} strokeWidth={1.5} />} tone={roleTone} />
+                    <span className="grid min-w-0 flex-1 gap-0.5">
+                      <span className="font-bold text-ink">{shortcut.label}</span>
+                      <span className="text-xs text-ink-3-strong">{shortcut.hint}</span>
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </CardSection>
+          )}
+
           {/* Estudiantes a mi cargo — representante only, ALWAYS present for
               that role (even with zero representados: an explicit empty
               state, not a silently missing section), because for a
@@ -1366,6 +1409,8 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
           {props.kind === "student" && props.role === "representante" && (
             <CardSection
               title="Estudiantes a mi cargo"
+              icon={<Users size={ICON.sm} strokeWidth={1.5} />}
+              tone="info"
               testId="profile-dependants"
               action={
                 <Link href="/student/add-dependent" className={buttonClasses("secondary", "sm")}>
@@ -1388,21 +1433,20 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
         </div>
 
         <div className="flex min-w-0 flex-col gap-5">
-          {selfMembership && (
-            <MembershipCard membership={selfMembership} coverageEnd={coverageEnd} />
-          )}
-
           <div className="flex flex-col gap-3">
             {/* Seguridad: the same row shape as "Datos personales", label on
                 the left and the action on the right. */}
             <CardSection
               title="Seguridad"
               subtitle="Acciones de acceso"
+              icon={<ShieldCheck size={ICON.sm} strokeWidth={1.5} />}
+              tone="coal"
               testId="profile-column-status"
             >
-              <div className="grid gap-3 p-4 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+              <div className="grid gap-3 p-4 sm:grid-cols-3 xl:grid-cols-1">
                 <ActionTile
                   icon={<Lock size={ICON.sm} strokeWidth={1.5} />}
+                  tone="ball"
                   title={requestingPassword ? "Enviando…" : "Cambiar contraseña"}
                   description="Le enviamos un enlace de cambio a su correo"
                   onClick={() => void handleChangePassword()}
@@ -1410,12 +1454,14 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
                 />
                 <ActionTile
                   icon={<LogOut size={ICON.sm} strokeWidth={1.5} />}
+                  tone="neutral"
                   title="Cerrar sesión"
                   description="Cerrar sesión en este equipo"
                   onClick={() => void logout()}
                 />
                 <ActionTile
                   icon={<Monitor size={ICON.sm} strokeWidth={1.5} />}
+                  tone="warn"
                   title={invalidatingSessions ? "Cerrando…" : "Cerrar otras sesiones"}
                   description="Cierra su sesión en todos los demás dispositivos; este equipo sigue conectado"
                   onClick={() => setConfirmingInvalidation(true)}
@@ -1464,19 +1510,65 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
           {recentSessions.length > 0 && <RecentSessionsCard sessions={recentSessions} />}
 
           {/*
-            Lo que cierra el hueco que este archivo venía documentando: "a
-            staff account, which has no membership card, keeps a taller gap".
-            Va para TODOS los roles, no solo staff -- un alumno también tiene
-            derecho a ver desde dónde entró, y con la tarjeta de membresía
-            arriba la columna simplemente queda mejor servida.
+              Lo que cierra el hueco que este archivo venía documentando: "a
+              staff account, which has no membership card, keeps a taller gap".
+              Va para TODOS los roles, no solo staff -- un alumno también tiene
+              derecho a ver desde dónde entró, y con la tarjeta de membresía
+              arriba la columna simplemente queda mejor servida.
 
-            Se monta sin condición y decide sola si vale la pena renderizarse:
-            sin filas devuelve `null`, y un fallo de red la deja invisible en
-            vez de gritar. Es contenido de compañía; nadie abre esta pantalla
-            para leerlo.
-          */}
+              Se monta sin condición y decide sola si vale la pena renderizarse:
+              sin filas devuelve `null`, y un fallo de red la deja invisible en
+              vez de gritar. Es contenido de compañía; nadie abre esta pantalla
+              para leerlo.
+            */}
           <SessionsCard refreshKey={sessionsRefresh} />
+
         </div>
+      </div>
+      </div>
+
+      {/* The rail: who this account is at a glance, the club's side of it
+          (membership) and how to keep it safe — always visible. */}
+      <div className="grid min-w-0 content-start gap-5">
+        <RailCard title="Su cuenta" icon={<User size={ICON.sm} strokeWidth={1.5} />} tone={roleTone}>
+          <AccountSummary
+            roleLabels={
+              assignedRoles.length > 0
+                ? assignedRoles.map((rol) => getBackendRoleLabel(rol))
+                : [roleLabel]
+            }
+            correo={correoDisplay}
+            memberSince={fechaCreacion ? formatDate(fechaCreacion) : null}
+            active={props.kind === "staff"}
+          />
+        </RailCard>
+        {selfMembership && (
+          <MembershipCard membership={selfMembership} coverageEnd={coverageEnd} />
+        )}
+        <RailCard title="Cómo proteger su cuenta" icon={<ShieldCheck size={ICON.sm} strokeWidth={1.5} />} tone="coal">
+          <ul className="grid list-disc gap-2 pl-4">
+            <li>Use una contraseña que no repita en otros sitios y cámbiela si sospecha de un acceso ajeno.</li>
+            <li>Si inició sesión en un equipo compartido, use «Cerrar sesión» al terminar.</li>
+            <li>Revise «Sus sesiones»: si ve un equipo que no reconoce, use «Cerrar otras sesiones».</li>
+            <li>No comparta su contraseña ni el enlace de cambio que le llega por correo.</li>
+            <li>El correo de acceso lo gestiona el club; para cambiarlo, escriba a administración.</li>
+          </ul>
+        </RailCard>
+        <RailCard title="Qué hacer si necesita ayuda" icon={<LifeBuoy size={ICON.sm} strokeWidth={1.5} />} tone="ball">
+          <p>
+            Revise las respuestas en{" "}
+            <Link
+              href="/ayuda"
+              className="font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink"
+            >
+              Preguntas frecuentes
+            </Link>
+            .
+          </p>
+          <p>Si no la encuentra, use «Reportar un problema» en el menú lateral.</p>
+          <p>Para corregir su correo, nombres o rol, escriba a la administración del club.</p>
+        </RailCard>
+      </div>
       </div>
     </ProfileShell>
   );
