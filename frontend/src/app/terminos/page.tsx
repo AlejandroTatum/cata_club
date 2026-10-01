@@ -4,7 +4,7 @@ import { legalBlocks, summary } from "./content";
 
 export const metadata: Metadata = { title: "Términos de uso", description: "Términos de uso públicos de Cata Club, versión 1.0." };
 
-const PHOTO = { src: "/landing/photo-podium-away.jpeg", alt: "Deportistas del club en el podio de un torneo de tenis de mesa, con sus medallas.", position: "50% 35%" } as const;
+const PHOTO = { src: "/landing/vision-team-1329.jpg", alt: "Equipo de Cata Club con la camiseta del club, junto a sus entrenadores, en la sala de entrenamiento.", position: "50% 60%" } as const;
 
 export default function TermsPage(): React.ReactElement {
   return <LegalDocumentPage title="Términos de uso de Cata Club" blocks={legalBlocks} summary={summary} photo={PHOTO} path="/terminos" />;

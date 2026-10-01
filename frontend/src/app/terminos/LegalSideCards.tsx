@@ -44,7 +44,7 @@ export function LegalQuestions({ className }: { className?: string }): React.Rea
         ¿Dudas?
       </h2>
       <p className="text-sm leading-prose text-ink-2">Escríbanos y le responderemos de forma administrativa.</p>
-      <p className="grid gap-1 text-sm font-semibold text-cata-red-dark underline underline-offset-4">
+      <p className="flex flex-wrap gap-x-5 gap-y-1 text-sm font-semibold text-cata-red-dark underline underline-offset-4">
         <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
         {whatsapp.map((number) => (
           <a key={number} href={toWhatsAppLink(number)} target="_blank" rel="noreferrer">

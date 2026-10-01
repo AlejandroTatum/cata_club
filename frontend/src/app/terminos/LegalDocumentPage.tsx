@@ -128,7 +128,7 @@ export default function LegalDocumentPage({ title, blocks, aside, summary, path,
    * dialog's and has no ids to give.
    */
   const article = (
-    <article className={cn("space-y-6 leading-prose text-cata-text", hasToc ? "mt-8" : "mt-6 text-lg sm:text-xl")}>
+    <article className={cn("space-y-6 leading-prose text-cata-text", hasToc ? "mt-8" : "mt-6 text-lg sm:text-xl xl:text-2xl 2xl:text-5xl")}>
       {blocks.map((block, index) =>
         block.kind === "heading" ? (
           <h2
@@ -146,22 +146,21 @@ export default function LegalDocumentPage({ title, blocks, aside, summary, path,
   );
 
   /*
-   * A short document, composed as a short page. Nothing is stretched to a
-   * neighbour's height and no min-height holds the page open: the hero is as
-   * tall as its statement, the photo fills the hero's own cell, and the row
-   * below is content-height cards. The footer follows the content.
+   * A short document, composed as a short page. The photo spans the height of
+   * the statement and the four cards beside it (its own grid cell, the only
+   * thing that takes a neighbour's height); every card is content-height and no
+   * min-height holds the page open. The footer follows the content.
    */
   const shortDocument = (
-    <>
-        <div className="card grid overflow-hidden lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-          {photo !== undefined && <LegalPhoto photo={photo} bare className="aspect-[4/3] lg:aspect-auto" sizes="(min-width: 1024px) 45vw, 100vw" />}
-          {/* A DIV, not a `<header>`: the institutional bar is the page's one banner. */}
-          <div className="min-w-0 p-6 sm:p-10">
-            {header}
-            {article}
-          </div>
+    <div className="grid gap-page lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+      {photo !== undefined && <LegalPhoto photo={photo} className="aspect-[4/3] lg:aspect-auto" sizes="(min-width: 1024px) 40vw, 100vw" />}
+      <div className="grid min-w-0 content-start gap-page">
+        {/* A DIV, not a `<header>`: the institutional bar is the page's one banner. */}
+        <div className="card p-6 sm:p-10 2xl:p-20">
+          {header}
+          {article}
         </div>
-        <div className="grid items-start gap-page sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid items-start gap-page sm:grid-cols-2">
           {aside}
           <section aria-labelledby="preguntas-permiso" className="card p-5">
             <h2 id="preguntas-permiso" className={cn(SIDE_TITLE, "mb-2")}>
@@ -174,7 +173,8 @@ export default function LegalDocumentPage({ title, blocks, aside, summary, path,
           <LegalRelated path={path} />
           <LegalQuestions />
         </div>
-    </>
+      </div>
+    </div>
   );
 
   /*
@@ -221,14 +221,7 @@ export default function LegalDocumentPage({ title, blocks, aside, summary, path,
   );
 
   return (
-    <main
-      id="contenido"
-      className={cn(
-        "w-full text-base",
-        BREAKOUT,
-        hasToc ? cn(PAGE_RAIL, "xl:grid-cols-[minmax(232px,260px)_minmax(0,1fr)_minmax(300px,380px)]") : "grid gap-page",
-      )}
-    >
+    <main id="contenido" className={cn("w-full text-base", BREAKOUT, hasToc ? cn(PAGE_RAIL, "xl:grid-cols-[minmax(232px,260px)_minmax(0,1fr)_minmax(300px,380px)]") : "grid gap-page")}>
       {hasToc ? longDocument : shortDocument}
     </main>
   );

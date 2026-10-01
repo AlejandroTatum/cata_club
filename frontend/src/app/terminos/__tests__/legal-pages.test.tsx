@@ -184,7 +184,7 @@ describe("public legal documents", () => {
   it.each(pages)("%s carries a real club photograph with a description", (_name, Page) => {
     const html = renderToStaticMarkup(<Page />);
     expect(html).toMatch(/<img[^>]*alt="[^"]{20,}"/);
-    expect(html).toMatch(/landing%2Fphoto-|\/landing\/photo-/);
+    expect(html).toMatch(/landing%2F|\/landing\//);
   });
 
   it.each([
@@ -196,9 +196,9 @@ describe("public legal documents", () => {
     expect(html).toContain('aria-label="En este documento"');
   });
 
-  it("composes FETM as a hero plus a row of content-height cards", () => {
+  it("composes FETM as a photo beside the statement and its content-height cards", () => {
     const html = renderToStaticMarkup(<FETMPage />);
-    expect(html).toContain("lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]");
+    expect(html).toContain("lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]");
     for (const card of ["Qué autoriza este permiso", "Preguntas sobre este permiso", "Otros documentos públicos", "¿Dudas?"]) expect(html).toContain(card);
     expect(html).not.toContain("xl:sticky");
   });

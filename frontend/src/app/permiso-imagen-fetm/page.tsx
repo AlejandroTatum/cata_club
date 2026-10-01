@@ -16,9 +16,9 @@ function PermissionSummary(): React.ReactElement {
 }
 
 const PHOTO = {
-  src: "/landing/photo-podium-home.jpeg",
-  alt: "Niñas del club levantando los brazos sobre el podio de un torneo de tenis de mesa, con sus medallas.",
-  position: "50% 30%",
+  src: "/landing/hero-competition.jpg",
+  alt: "Dos deportistas de Cata Club con la camiseta del club, de pie en la sala de competencia.",
+  position: "50% 35%",
 } as const;
 
 export default function FETMImagePermissionPage(): React.ReactElement {
