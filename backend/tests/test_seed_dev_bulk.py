@@ -1,4 +1,5 @@
 import importlib.util
+import re
 from pathlib import Path
 
 from sqlalchemy import create_engine, func, select
@@ -164,6 +165,72 @@ def test_main_no_inventa_justificativo_ni_estado_justificativo():
         f"{len(con_justificativo_inventado)} de {len(asistencias)} asistencias con "
         "justificativo/estado_justificativo inventado por el seed"
     )
+
+
+def _identidades_para_pool_de_vus(sesion):
+    """Espejo ORM del SQL del helper de credenciales
+    (`scripts/load/build_credentials_pool.py`): cuentas con rol ALUMNO puro
+    (sin REPRESENTANTE), auto-gestionadas (sin representante), activas y con
+    correo verificado — el criterio de elegibilidad del pool 1:1 del steady
+    de 100 VUs."""
+    identidades = []
+    for u in sesion.execute(select(Usuario)).scalars():
+        roles = {r.tipo_rol.value for r in u.roles}
+        if roles != {"ALUMNO"}:
+            continue
+        persona = u.persona
+        if (
+            u.activo
+            and u.correo_verificado
+            and u.correo
+            and persona is not None
+            and persona.activo
+            and persona.representante_id is None
+        ):
+            identidades.append(u.correo)
+    return sorted(identidades)
+
+
+def test_el_pool_de_carga_tiene_al_menos_cien_identidades_unicas():
+    """Decisión del owner (100-user-load-test): el seed masivo debe proveer
+    >= 100 identidades ALUMNO auto-gestionadas usables para un pool 1:1 de
+    100 VUs, con correos determinísticos y únicos."""
+    modulo_base = _load_base_seed_module()
+    modulo_bulk = _load_seed_module()
+    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
+
+    modulo_base.main()
+    modulo_bulk.main()
+
+    with SessionLocal() as verificacion:
+        identidades = _identidades_para_pool_de_vus(verificacion)
+
+    assert len(identidades) >= 100, (
+        f"el pool 1:1 necesita >= 100 identidades; hay {len(identidades)}"
+    )
+    assert len(set(identidades)) == len(identidades), "correos duplicados en el pool"
+    # Determinismo: bulk = nombre+apellido+indice; base = nombre simple
+    # (ana/luis/maria/pedro). Ningún correo aleatorio ni opaco.
+    patrones = re.compile(r"^[a-z]+\d*@cataclub\.com$")
+    fuera_de_patron = [i for i in identidades if not patrones.match(i)]
+    assert fuera_de_patron == [], f"correos no determinísticos: {fuera_de_patron[:5]}"
+
+
+def test_el_pool_de_identidades_es_idempotente_entre_corridas():
+    modulo_base = _load_base_seed_module()
+    modulo_bulk = _load_seed_module()
+    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
+
+    modulo_base.main()
+    modulo_bulk.main()
+    with SessionLocal() as verificacion:
+        primera = _identidades_para_pool_de_vus(verificacion)
+
+    modulo_bulk.main()
+    with SessionLocal() as verificacion:
+        segunda = _identidades_para_pool_de_vus(verificacion)
+
+    assert segunda == primera, "la segunda corrida cambió el pool de identidades"
 
 
 def test_todas_las_cuentas_del_bulk_nacen_con_el_correo_verificado():
