@@ -46,6 +46,9 @@ export type { IdentityCellProps, MemberRole } from "./IdentityCell";
 
 export { PAGE_RAIL } from "./layout";
 
+export { default as InfoPanel } from "./InfoPanel";
+export type { InfoPanelProps } from "./InfoPanel";
+
 export { default as LoadingState } from "./LoadingState";
 export type { LoadingStateProps } from "./LoadingState";
 

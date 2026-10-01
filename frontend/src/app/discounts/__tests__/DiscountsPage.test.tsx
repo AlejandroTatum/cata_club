@@ -472,40 +472,40 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
 // ---------------------------------------------------------------------------
 
 describe("DiscountsPage — la segunda columna", () => {
-  it("keeps the catalog on one column while no form is open", async () => {
-    // The rail holds the form, and nothing else. It used to be reserved the
-    // instant the catalog had a row, so the ORDINARY state of this screen — a
-    // short table with nobody editing — stood beside 340px of empty column.
-    // #199 is why it was empty: the permanent "Cómo funciona el catálogo"
-    // card moved into the header's disclosure and nothing replaced it. A
-    // track reserved for content that no longer exists is not a layout, it is
-    // a leftover.
+  it("shows the catalog summary in the rail while no form is open", async () => {
+    // The rail is always drawn: a short table on a wide page read as a page
+    // that ran out of content, so the resting state holds a summary of the
+    // catalog instead of 340px of nothing.
     renderPage();
     await screen.findByTestId("discounts-table");
 
-    expect(screen.getByTestId("discounts-split").className).not.toBe(PAGE_RAIL);
-    expect(screen.queryByTestId("discounts-rail")).not.toBeInTheDocument();
+    expect(screen.getByTestId("discounts-split").className).toBe(PAGE_RAIL);
+    const rail = screen.getByTestId("discounts-rail");
+    expect(within(rail).getByRole("heading", { name: /resumen del catálogo/i })).toBeInTheDocument();
+    expect(within(rail).getByText(/descuentos? activos?/i)).toBeInTheDocument();
   });
 
-  it("opens the second column only when there is a form to put in it", async () => {
+  it("replaces the summary with the form when there is one to show", async () => {
     renderPage();
     await screen.findByTestId("discounts-table");
 
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
 
-    expect(screen.getByTestId("discounts-split").className).toBe(PAGE_RAIL);
-    expect(screen.getByTestId("discounts-rail")).toBeInTheDocument();
+    const rail = screen.getByTestId("discounts-rail");
+    expect(within(rail).getByLabelText(/nombre/i)).toBeInTheDocument();
+    expect(within(rail).queryByText(/resumen del catálogo/i)).not.toBeInTheDocument();
   });
 
-  it("gives the column back when the form is dismissed", async () => {
+  it("brings the summary back when the form is dismissed", async () => {
     renderPage();
     await screen.findByTestId("discounts-table");
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
 
     fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
 
-    expect(screen.getByTestId("discounts-split").className).not.toBe(PAGE_RAIL);
-    expect(screen.queryByTestId("discounts-rail")).not.toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("discounts-rail")).getByText(/resumen del catálogo/i),
+    ).toBeInTheDocument();
   });
 
   it("does not stretch the catalog card past its own rows", async () => {

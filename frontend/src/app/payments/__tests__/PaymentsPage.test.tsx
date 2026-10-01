@@ -372,7 +372,7 @@ describe("PaymentsPage — the way back sits above the page title", () => {
    * and a screen reader's read-out meet "back" before the screen's own name.
    */
   function expectBeforeTitle(back: HTMLElement): void {
-    const title = screen.getByRole("heading", { name: "Membresías y Pagos" });
+    const title = screen.getByRole("heading", { name: "Pagos" });
     expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   }
 
@@ -388,7 +388,7 @@ describe("PaymentsPage — the way back sits above the page title", () => {
     renderPage();
     await openRequest("Juan Pérez");
 
-    const back = await screen.findByRole("link", { name: /volver a membresías y pagos/i });
+    const back = await screen.findByRole("link", { name: /volver a pagos/i });
     expect(back).toHaveAttribute("href", "/payments");
     expectBeforeTitle(back);
 
@@ -770,9 +770,9 @@ describe("PaymentsPage — focus follows the queue ⇄ detail swap", () => {
   it("returns focus to the row action it came from", async () => {
     renderPage();
     await openRequest("Juan Pérez");
-    await screen.findByRole("link", { name: /volver a membresías y pagos/i });
+    await screen.findByRole("link", { name: /volver a pagos/i });
 
-    fireEvent.click(screen.getByRole("link", { name: /volver a membresías y pagos/i }));
+    fireEvent.click(screen.getByRole("link", { name: /volver a pagos/i }));
 
     await screen.findByTestId("payments-table");
     const action = within(queueTable()).getByRole("button", {
@@ -784,7 +784,7 @@ describe("PaymentsPage — focus follows the queue ⇄ detail swap", () => {
   it("does not pretend to be a modal", async () => {
     renderPage();
     await openRequest("Juan Pérez");
-    await screen.findByRole("link", { name: /volver a membresías y pagos/i });
+    await screen.findByRole("link", { name: /volver a pagos/i });
 
     // An in-page view swap, not a dialog: no `role="dialog"`, no `aria-modal`,
     // no focus trap. Calling it a dialog would promise a background that is

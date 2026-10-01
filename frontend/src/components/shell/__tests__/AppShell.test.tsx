@@ -289,7 +289,7 @@ describe("AppShell", (): void => {
     // two links by design.
     const sidebarNav = within(screen.getByRole("navigation", { name: "Navegación principal" }));
     expect(sidebarNav.getByRole("link", { name: /Miembros/i })).toBeInTheDocument();
-    expect(sidebarNav.getByRole("link", { name: "Horarios" })).toBeInTheDocument();
+    expect(sidebarNav.getByRole("link", { name: "Grupos y horarios" })).toBeInTheDocument();
     // "Inicio" is represented by the brand logo link, not a separate nav row.
     expect(screen.queryByRole("link", { name: /^Inicio$/i })).not.toBeInTheDocument();
   });
@@ -475,8 +475,8 @@ describe("AppShell", (): void => {
 
     fireEvent.change(input, { target: { value: "pagos" } });
 
-    expect(screen.getByRole("option", { name: /Membresías y Pagos/i })).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: /^Horarios$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /^Pagos$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /^Grupos y horarios$/i })).not.toBeInTheDocument();
   });
 
   it("shows an empty-results message when nothing matches", (): void => {
@@ -535,7 +535,7 @@ describe("AppShell", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 
     fireEvent.click(screen.getByRole("button", { name: "Buscar secciones" }));
-    fireEvent.click(screen.getByRole("option", { name: "Horarios" }));
+    fireEvent.click(screen.getByRole("option", { name: "Grupos y horarios" }));
 
     expect(mockPush).toHaveBeenCalledWith("/groups");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -560,11 +560,11 @@ describe("AppShell", (): void => {
     fireEvent.click(screen.getByRole("button", { name: /Colapsar menú/i }));
 
     expect(container.querySelector("aside")).toHaveClass("lg:w-[76px]");
-    const groupsLink = screen.getByRole("link", { name: "Horarios" });
-    expect(groupsLink).toHaveAttribute("title", "Horarios");
+    const groupsLink = screen.getByRole("link", { name: "Grupos y horarios" });
+    expect(groupsLink).toHaveAttribute("title", "Grupos y horarios");
     // The visible label is hidden at `lg`, so the accessible name must not
     // depend on it — a native `title` tooltip is not a substitute.
-    expect(groupsLink).toHaveAttribute("aria-label", "Horarios");
+    expect(groupsLink).toHaveAttribute("aria-label", "Grupos y horarios");
     expect(groupsLink.querySelector("span:not([aria-hidden])")).toHaveClass("lg:hidden");
     expect(screen.getByRole("button", { name: /Expandir menú/i })).toBeInTheDocument();
   });
