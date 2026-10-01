@@ -84,7 +84,7 @@ afterEach(() => {
 });
 
 describe("EnrollPage — tarifas públicas antes del primer campo", () => {
-  it("muestra las tarifas antes del primer botón interactivo del paso 1, en orden DOM", async () => {
+  it("muestra las tarifas en el paso 1 antes de elegir tipo, debajo de las opciones", async () => {
     vi.mocked(fetchTarifas).mockResolvedValue(FAKE_TARIFAS);
 
     render(<EnrollPage />);
@@ -96,7 +96,10 @@ describe("EnrollPage — tarifas públicas antes del primer campo", () => {
     const jugadorCard = screen.getByRole("button", { name: /Me inscribo yo al club/i });
 
     // eslint-disable-next-line no-bitwise -- DOM position bitmask is the standard API for this.
-    expect(tariffNode.compareDocumentPosition(jugadorCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // They sit UNDER the choice grid now (same columns), but nothing has been
+    // chosen yet: the price is on screen before the visitor commits.
+    expect(jugadorCard.compareDocumentPosition(tariffNode) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(jugadorCard).toHaveAttribute("aria-pressed", "true");
     expect(
       screen.getByRole("button", { name: /Gestiono la inscripción de un hijo/i }),
     ).toBeInTheDocument();

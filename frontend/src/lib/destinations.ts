@@ -75,8 +75,8 @@ export const DESTINATIONS: Record<string, Destination> = {
   // --- Admin ---------------------------------------------------------------
   "/dashboard": { label: "Panel de Control", preposition: "al" },
   "/members": { label: "Miembros", preposition: "a" },
-  "/groups": { label: "Horarios", preposition: "a" },
-  "/payments": { label: "Membresías y Pagos", preposition: "a" },
+  "/groups": { label: "Grupos y horarios", preposition: "a" },
+  "/payments": { label: "Pagos", preposition: "a" },
   "/discounts": { label: "Descuentos", preposition: "a" },
   "/sponsors": { label: "Patrocinadores", preposition: "a" },
   // La galería de la landing es contenido del club igual que los

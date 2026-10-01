@@ -414,8 +414,16 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
   // after the fixed +593, and this rule validates the local (mobile-or-
   // landline) form those digits canonicalize to.
   telefono: (d) => phoneFieldRule(d.telefono, "El teléfono"),
-  correo: (d) => (isEmail(d.correo) ? null : "El correo electrónico no es válido."),
-  contrasenia: (d) => passwordRule(d.contrasenia, "La contraseña"),
+  correo: (d) =>
+    d.correo.trim().length === 0
+      ? "El correo electrónico es obligatorio."
+      : isEmail(d.correo)
+        ? null
+        : "El correo electrónico no es válido.",
+  contrasenia: (d) =>
+    d.contrasenia.length === 0
+      ? "La contraseña es obligatoria."
+      : passwordRule(d.contrasenia, "La contraseña"),
   contraseniaConfirmacion: (d) => passwordConfirmRule(d.contraseniaConfirmacion, d.contrasenia),
   nombreRepresentante: (d) => personNameRule(d.nombreRepresentante, "Los nombres del representante"),
   apellidosRepresentante: (d) =>
@@ -442,9 +450,15 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
   },
   telefonoRepresentante: (d) => phoneRule(d.telefonoRepresentante, "El teléfono del representante"),
   correoRepresentante: (d) =>
-    isEmail(d.correoRepresentante) ? null : "El correo del representante no es válido.",
+    d.correoRepresentante.trim().length === 0
+      ? "El correo del representante es obligatorio."
+      : isEmail(d.correoRepresentante)
+        ? null
+        : "El correo del representante no es válido.",
   contraseniaRepresentante: (d) =>
-    passwordRule(d.contraseniaRepresentante, "La contraseña del representante"),
+    d.contraseniaRepresentante.length === 0
+      ? "La contraseña del representante es obligatoria."
+      : passwordRule(d.contraseniaRepresentante, "La contraseña del representante"),
   contraseniaRepresentanteConfirmacion: (d) =>
     passwordConfirmRule(d.contraseniaRepresentanteConfirmacion, d.contraseniaRepresentante),
   tipoSangre: (d) => (isBloodType(d.tipoSangre) ? null : "El tipo de sangre es obligatorio."),
@@ -559,45 +573,6 @@ export function shouldFocusStepHeadingOnJump(
   current: WizardStep,
 ): boolean {
   return destination !== current;
-}
-
-/** Field → the label the visitor actually reads on screen, for the blocked-button explanation. */
-const FIELD_LABELS: Partial<Record<EnrollField, string>> = {
-  nombres: "Nombres",
-  apellidos: "Apellidos",
-  fechaNacimiento: "Fecha de nacimiento",
-  cedula: "Cédula de identidad",
-  telefono: "Teléfono",
-  correo: "Correo electrónico",
-  contrasenia: "Contraseña",
-  contraseniaConfirmacion: "Confirmar contraseña",
-  nombreRepresentante: "Nombres del representante",
-  apellidosRepresentante: "Apellidos del representante",
-  cedulaRepresentante: "Cédula del representante",
-  fechaNacimientoRepresentante: "Fecha de nacimiento del representante",
-  telefonoRepresentante: "Teléfono del representante",
-  correoRepresentante: "Correo del representante",
-  contraseniaRepresentante: "Contraseña del representante",
-  contraseniaRepresentanteConfirmacion: "Confirmar contraseña del representante",
-  tipoSangre: "Tipo de sangre",
-  contactoEmergencia: "Nombre del contacto de emergencia",
-  telefonoEmergencia: "Teléfono de emergencia",
-};
-
-/**
- * Why "Siguiente" is disabled, in one sentence naming the fields.
- *
- * A disabled control that does not say what is missing is a dead end — the
- * audit's error-prevention finding. Returns `null` when nothing is missing.
- */
-export function describeStepBlocker(errors: EnrollFieldErrors): string | null {
-  const labels = (Object.keys(errors) as EnrollField[])
-    .map((field) => FIELD_LABELS[field])
-    .filter((label): label is string => Boolean(label));
-  if (labels.length === 0) return null;
-  if (labels.length === 1) return `Para continuar, revise: ${labels[0]}.`;
-  const last = labels[labels.length - 1];
-  return `Para continuar, revise: ${labels.slice(0, -1).join(", ")} y ${last}.`;
 }
 
 function validateStudent(data: EnrollFormData): string[] {

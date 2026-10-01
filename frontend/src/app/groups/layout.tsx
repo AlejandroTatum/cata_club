@@ -8,7 +8,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Horarios",
+  title: "Grupos y horarios",
 };
 
 export default function GroupsLayout({

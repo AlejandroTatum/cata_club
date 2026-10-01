@@ -445,10 +445,8 @@ const SCREENS: Screen[] = [
   {
     name: "groups roster",
     paginated: true,
-    // The roster paginates, but it lives INSIDE `/groups`, so it is drawn on
-    // the same short measure as the collapsed accordion. Both states are
-    // measured for exactly that reason.
-    short: true,
+    // The roster paginates, but it lives INSIDE `/groups`, which shares the
+    // admin content measure with every other module. Both states are measured.
     open: async (page, n) => {
       await mockGroups(page, n);
       await page
@@ -468,7 +466,6 @@ const SCREENS: Screen[] = [
   {
     name: "discounts",
     paginated: false,
-    short: true,
     open: async (page) => {
       await mockSession(page, "admin");
       // Paginated backend (issue #814): `fetchDescuentos` unwraps `{items,
@@ -483,7 +480,6 @@ const SCREENS: Screen[] = [
   {
     name: "groups collapsed",
     paginated: false,
-    short: true,
     open: async (page) => {
       await mockGroups(page, 1);
       await expect(page.getByRole("button", { name: /^Ver alumnos de / }).first()).toBeVisible({

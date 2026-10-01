@@ -755,7 +755,7 @@ describe("TrainerAttendanceHistoryPage — las tres cifras del período", () => 
 
     const back = screen.getByRole("link", { name: /Volver a Mi día/ });
     expect(back).toHaveAttribute("href", "/trainer");
-    const title = screen.getByRole("heading", { name: "Historial de asistencias", level: 1 });
+    const title = screen.getByRole("heading", { name: "Historial", level: 1 });
     expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
