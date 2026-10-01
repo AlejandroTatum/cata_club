@@ -162,6 +162,14 @@ describe("validateEnrollFields", () => {
     expect(errors.correoRepresentante).toBe("El correo del representante no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.");
   });
 
+  it("asks for the representante's birth date when it is empty", () => {
+    const errors = validateEnrollFields(
+      "representative",
+      validForm({ enrollmentType: "child", fechaNacimientoRepresentante: "" }),
+    );
+    expect(errors.fechaNacimientoRepresentante).toBe("Indique la fecha de nacimiento del representante.");
+  });
+
   it("rejects an underage representante's birth date", () => {
     const errors = validateEnrollFields(
       "representative",

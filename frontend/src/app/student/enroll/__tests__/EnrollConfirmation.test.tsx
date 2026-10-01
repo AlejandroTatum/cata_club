@@ -39,6 +39,26 @@ describe("EnrollConfirmation", () => {
     expect(screen.getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute("href", "/login");
   });
 
+  it("shows the unconfirmed-session notice as an alert on the card, and only then", () => {
+    const { unmount } = render(
+      <EnrollConfirmation
+        studentName="Lucas Martinez"
+        isSelf={false}
+        sessionConfirmed={false}
+        sessionNotice="No pudimos iniciar su sesión. Inicie sesión con su correo."
+        accountAreaLink={null}
+        onReset={vi.fn()}
+      />,
+    );
+    const notice = screen.getByRole("alert");
+    expect(notice).toHaveTextContent("No pudimos iniciar su sesión. Inicie sesión con su correo.");
+    expect(notice).toHaveAttribute("data-testid", "enroll-session-not-confirmed");
+    unmount();
+
+    renderConfirmation();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("keeps one primary action and a secondary 'Nueva inscripción' that resets", () => {
     const props = renderConfirmation();
     expect(screen.getByRole("link", { name: "Ir a mi cuenta" })).toHaveAttribute("href", "/student");
