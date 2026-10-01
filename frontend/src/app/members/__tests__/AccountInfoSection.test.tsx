@@ -35,6 +35,15 @@ beforeEach(() => {
 });
 
 describe("AccountInfoSection", () => {
+  it("left-aligns the typed Nombres/Apellidos text like every other field in the dialog", () => {
+    render(<AccountInfoSection account={ACCOUNT} />);
+
+    for (const label of ["Nombres", "Apellidos"]) {
+      const input = screen.getByLabelText(label);
+      expect(input).not.toHaveClass("text-right");
+    }
+  });
+
   it("saves the trimmed nombres/apellidos/telefono on file normally", async () => {
     render(<AccountInfoSection account={ACCOUNT} />);
 

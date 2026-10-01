@@ -206,11 +206,14 @@ function MembershipCard({
    * said "su".
    */
   studentName,
+  approvedCount,
   children,
 }: {
   membership: MembershipSummary | null;
   coverageEnd: string | null;
   studentName: string | null;
+  /** Approved payments in the history below; shown as a fact when there are any. */
+  approvedCount?: number;
   children?: React.ReactNode;
 }): React.ReactElement {
   // Issue #815: `coverageEnd` — `MembershipSummary.cubiertoHasta` (issue
@@ -240,6 +243,12 @@ function MembershipCard({
   if (membership?.montoAplicado && !membership.esGratuidadFamiliar) {
     facts.push({ label: "Valor mensual", value: formatCurrency(membership.montoAplicado) });
   }
+  // Both already loaded: they sit beside the heading so the card's right side
+  // carries the membership's facts instead of staying blank on a wide screen.
+  if (membership?.fechaActivacion) {
+    facts.push({ label: "Socio desde", value: formatDate(membership.fechaActivacion) });
+  }
+  if (approvedCount) facts.push({ label: "Pagos aprobados", value: String(approvedCount) });
 
   return (
     <section
@@ -251,56 +260,57 @@ function MembershipCard({
           reader came for. The badge used to say the same thing as the heading
           in coarser words ("Al día"), which is a second, weaker judgement of
           data that already speaks for itself. */}
-      <div className="px-5 py-[18px]">
-        <div className="mb-2 flex flex-wrap items-center gap-2.5">
-          <p className="text-2xs font-bold uppercase text-ink-3">
-            {studentName ? `Membresía de ${studentName}` : "Su membresía"}
+      <div className="flex flex-wrap items-center justify-between gap-x-10 gap-y-section px-5 py-[18px]">
+        <div className="min-w-0 flex-1 basis-72 sm:flex-none sm:basis-[26rem]">
+          <div className="mb-2 flex flex-wrap items-center gap-2.5">
+            <p className="text-2xs font-bold uppercase text-ink-3">
+              {studentName ? `Membresía de ${studentName}` : "Su membresía"}
+            </p>
+            <Badge tone={state.tone}>{state.label}</Badge>
+          </div>
+          <h2 id="membership-status-title" className="text-base font-bold tracking-tight text-ink">
+            {coverageEnd ? (
+              <>
+                Pagado hasta el <span className="tabular-nums">{formatDate(coverageEnd)}</span>
+              </>
+            ) : (
+              "Todavía no hay ningún pago aprobado"
+            )}
+          </h2>
+          <p className="mt-1.5 text-sm text-ink-3">
+            {coverageEnd
+              ? "Es la fecha del pago aprobado que llega más lejos en su historial."
+              : "En cuanto el club apruebe un pago, aquí aparecerá hasta qué fecha queda cubierto."}
           </p>
-          <Badge tone={state.tone}>{state.label}</Badge>
         </div>
-        <h2 id="membership-status-title" className="text-base font-bold tracking-tight text-ink">
-          {coverageEnd ? (
-            <>
-              Pagado hasta el <span className="tabular-nums">{formatDate(coverageEnd)}</span>
-            </>
-          ) : (
-            "Todavía no hay ningún pago aprobado"
-          )}
-        </h2>
-        <p className="mt-1.5 text-sm text-ink-3">
-          {coverageEnd
-            ? "Es la fecha del pago aprobado que llega más lejos en su historial."
-            : "En cuanto el club apruebe un pago, aquí aparecerá hasta qué fecha queda cubierto."}
-        </p>
+
+        {facts.length > 0 && (
+          <dl className="flex min-w-[16rem] flex-1 flex-wrap justify-evenly gap-x-8 gap-y-section">
+            {facts.map((fact) => (
+              <div key={fact.label}>
+                <dt className="text-2xs font-bold uppercase text-ink-3-strong">{fact.label}</dt>
+                <dd className="mt-1 text-base font-bold tabular-nums text-ink">{fact.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
       </div>
 
-      {facts.length > 0 && (
-        <dl className="flex flex-wrap gap-x-8 gap-y-section border-t border-line bg-sunken px-5 py-3.5">
-          {facts.map((fact) => (
-            <div key={fact.label}>
-              <dt className="text-2xs font-bold uppercase text-ink-3-strong">
-                {fact.label}
-              </dt>
-              <dd className="mt-0.5 text-sm font-bold tabular-nums text-ink">{fact.value}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
-
-      {/* Issue #513 (Propuesta B, idea 1): a compact status-footer dot,
-          placed at the very foot of the status block — immediately above
-          the CTA below. The `Badge` at the top already carries the state
+      {/* Issue #513 (Propuesta B, idea 1): a compact status-footer dot, in the
+          same row as the CTA below — the `Badge` at the top carries the state
           for a reader scanning down from the title; this repeats it right
           where the eye lands before acting, so status and action read
-          together without a scroll back up. */}
+          together without a scroll back up. One row rather than two: a thin
+          footer line above a button left a blank band to the right of both. */}
       {children && (
-        <div className="flex items-center gap-1.5 border-t border-line bg-sunken px-5 py-2">
-          <span aria-hidden="true" className={cn("h-1.5 w-1.5 flex-none rounded-full bg-current", STATUS_DOT_TEXT[state.tone])} />
-          <span className={cn("text-2xs font-bold uppercase", STATUS_DOT_TEXT[state.tone])}>{state.label}</span>
+        <div className="flex flex-col gap-x-6 gap-y-section border-t border-line px-5 py-3.5 sm:flex-row sm:items-start">
+          <span className="flex h-ctl flex-none items-center gap-1.5 sm:w-44">
+            <span aria-hidden="true" className={cn("h-1.5 w-1.5 flex-none rounded-full bg-current", STATUS_DOT_TEXT[state.tone])} />
+            <span className={cn("text-2xs font-bold uppercase", STATUS_DOT_TEXT[state.tone])}>{state.label}</span>
+          </span>
+          <div className="min-w-0 flex-1 self-center">{children}</div>
         </div>
       )}
-
-      {children && <div className="border-t border-line px-5 py-4">{children}</div>}
     </section>
   );
 }
@@ -1020,18 +1030,26 @@ function RenewPaymentForm({
     return (
       <p className="text-sm text-ink-2">
         {studentName
-          ? `Ya hay un pago de ${studentName} esperando validación. Espere a que el club lo apruebe para registrar otro.`
-          : "Ya tiene un pago esperando validación. Espere a que el club lo apruebe para registrar otro."}
+          ? `Ya hay un pago de ${studentName} esperando validación. Espere a que el club lo apruebe para registrar otro; en el historial de abajo verá si queda aprobado o rechazado.`
+          : "Ya tiene un pago esperando validación. Espere a que el club lo apruebe para registrar otro; en el historial de abajo verá si queda aprobado o rechazado."}
       </p>
     );
   }
 
   if (!action.showForm) {
     return (
-      <Button variant="primary" onClick={action.open}>
-        <Plus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-        {studentName ? `Registrar un pago de ${studentName}` : "Registrar un pago"}
-      </Button>
+      // The hint sits beside the button so the card's foot is a sentence long
+      // rather than a lone button with a blank row to its right.
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-field">
+        <Button variant="primary" onClick={action.open}>
+          <Plus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+          {studentName ? `Registrar un pago de ${studentName}` : "Registrar un pago"}
+        </Button>
+        <p className="min-w-0 flex-1 basis-64 text-sm text-ink-3">
+          Elija los meses y la forma de pago; el club valida cada pago y lo verá «En revisión» en
+          el historial.
+        </p>
+      </div>
     );
   }
 
@@ -2351,6 +2369,7 @@ function PaymentsContent({
         membership={selectedProfile.membership}
         coverageEnd={coverageEnd}
         studentName={studentName}
+        approvedCount={counts.APROBADO}
       >
         {/* Issue #400 (slice 06): shown BEFORE any payment control, blocked
             or not — a reader who cannot pay from here (a minor on their own
@@ -2654,19 +2673,6 @@ function PaymentsPageContent(): React.ReactElement {
       // reader this screen most often serves — a representante paying for a
       // dependent, who has no membership of her own.
       title="Pagos"
-      // `measure="short"` (D11b). With the "cómo se registra un pago" rail
-      // behind "Ver ayuda" this screen is one column, and one column on the
-      // product's WIDEST measure is what the rail was hiding: at 1356px the
-      // membership card carried "Pagado hasta el 02/09/2026" on the left and
-      // 600px of nothing on its right, and a payment row — an amount, a badge
-      // and one meta line — ran the full width for the same reason. The
-      // horizontal half of "espacios vacíos" is the same complaint as the
-      // vertical one.
-      //
-      // It qualifies on the rule `AppShell`'s `CONTENT_MEASURE` note states,
-      // not on taste: this page's height is a function of how many payments
-      // EXIST, and it has no pager.
-      measure="short"
       // A minor with no dependants of their own cannot register anything from
       // here — the gate below is deliberate and stays. Telling them to
       // "registre un pago" in the page's own subtitle was an instruction the

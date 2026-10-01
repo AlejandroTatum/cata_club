@@ -224,20 +224,11 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
       : "Consulte y corrija sus propios datos de salud.";
 
   return (
-    // `measure="short"` (D11b): this screen measured the worst dead air in the
-    // product — 57% as an adult titular, 42% as a guardian, at 1440x900 — and
-    // it is the one place where that is PURE layout. Five controls that never
-    // grow with data were being drawn on `max-w-8xl`, the product's WIDEST
-    // measure, for its narrowest content: a 1356px column carrying a 300px
-    // form.
-    //
-    // `short` is the instrument `AppShell` already documents for exactly this
-    // shape, and until now only `/discounts` and `/groups` used it. It is
-    // honest about what it does: the canvas under the last card does not
-    // shrink, the block above it stops reading as a page that ran out of rows.
-    // There is nothing else to put here — no history, no trend, no "última
-    // actualización" — and inventing one would break D14's own rule.
-    <AppShell title="Ficha médica" subtitle={subtitle} measure="short">
+    // Default measure, like every other screen: the page column no longer
+    // narrows per screen (content would change left edge between pages). The
+    // form is five controls that never grow with data, so what stays narrow is
+    // the form itself — `max-w-3xl` below — not the page it sits in.
+    <AppShell title="Ficha médica" subtitle={subtitle}>
       {state.status === "loading" && (
         <div className="card">
           <LoadingState label="Cargando su cuenta…" />
@@ -247,13 +238,17 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
         <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />
       )}
       {state.status === "ready" && role === "representante" && (
-        <RepresentanteMedicalRecordView data={state.data} accountPersonaId={personaId} />
+        <div className="w-full max-w-3xl">
+          <RepresentanteMedicalRecordView data={state.data} accountPersonaId={personaId} />
+        </div>
       )}
       {state.status === "ready" && role === "estudiante" && state.data.self && (
-        <MedicalRecordEditor
-          personaId={Number(state.data.self.personaId)}
-          studentName={firstNameOf(state.data.self.nombres)}
-        />
+        <div className="w-full max-w-3xl">
+          <MedicalRecordEditor
+            personaId={Number(state.data.self.personaId)}
+            studentName={firstNameOf(state.data.self.nombres)}
+          />
+        </div>
       )}
       {state.status === "ready" && role === "estudiante" && !state.data.self && (
         <ErrorState

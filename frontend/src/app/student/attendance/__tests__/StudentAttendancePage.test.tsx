@@ -253,30 +253,30 @@ describe("StudentAttendancePage — the record", () => {
 });
 
 /**
- * D11b — the socio nuevo is the state this screen is designed for FIRST.
- *
- * Measured at 1440x900 against QA before this batch: **434px, 48% of the
- * window**, under an empty record card that stopped at 466px. It is the same
- * shape `/student` and `/student/payments` closed in tanda 1 — `AppShell`
- * stretches `<main>` to the window and no first-level child of this screen
- * claimed the surplus, so everything the content did not use piled up under
- * the last block.
- *
- * The fix is the one `/student/payments` measured, not a new one: the record
- * claims the leftover WHEN AND ONLY WHEN it has nothing to list. Claiming it
- * unconditionally was measured and rejected there — with one row on file the
- * card stretches to the foot of the window and draws an empty frame under a
- * single line, which is the same emptiness moved inside a border and made
- * more visible than the canvas it replaced.
+ * The socio nuevo: nothing to list, so the record is ONE guiding line plus the
+ * legend of states — never a card stretched to the window, which only draws
+ * an empty frame (the hole relocated inside a border).
  */
 describe("StudentAttendancePage — the socio nuevo", () => {
-  it("lets the record claim the page's leftover height when it has nothing to list", async () => {
+  it("does not stretch the record when it has nothing to list", async () => {
     mockFetchStudentPortal.mockReset().mockResolvedValue(portalWith([]));
 
     render(<StudentAttendancePage />);
 
     const card = await screen.findByTestId("sessions-card");
-    expect(card.className).toMatch(/\bflex-1\b/);
+    expect(card.className).not.toMatch(/\bflex-1\b/);
+  });
+
+  it("guides with one line and the states a session can carry", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue(portalWith([]));
+
+    render(<StudentAttendancePage />);
+
+    const empty = await screen.findByTestId("sessions-empty");
+    expect(within(empty).getByText(/aún no hay asistencias registradas/i)).toBeInTheDocument();
+    for (const label of ["Presente", "Ausente", "Tardanza", "Justificado"]) {
+      expect(within(empty).getByText(label)).toBeInTheDocument();
+    }
   });
 
   it("does not stretch the record once there is a single session in it", async () => {
@@ -288,24 +288,6 @@ describe("StudentAttendancePage — the socio nuevo", () => {
 
     const card = await screen.findByTestId("sessions-card");
     expect(card.className).not.toMatch(/\bflex-1\b/);
-  });
-
-  /**
-   * `EmptyState`'s `fill` centres the statement inside the stretched surface.
-   * Without it the three lines pin to the top of a full-height card and the
-   * hole is merely relocated inside a border — the reversion `SessionCard`
-   * already recorded and `/student/payments` already measured.
-   */
-  it("centres the statement inside the stretched card instead of pinning it to the top", async () => {
-    mockFetchStudentPortal.mockReset().mockResolvedValue(portalWith([]));
-
-    render(<StudentAttendancePage />);
-
-    // `EmptyState` renders its title as the box's own `<b>`, so the box is
-    // that element's parent — no test hook needed on the primitive.
-    const box = (await screen.findByText(/aún no hay asistencias registradas/i)).parentElement;
-    expect(box?.className).toMatch(/\bflex-1\b/);
-    expect(box?.className).toMatch(/\bjustify-center\b/);
   });
 });
 

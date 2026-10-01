@@ -90,6 +90,9 @@ async function mockMembersRuntime(page: Page): Promise<void> {
     roles: ["ADMINISTRADOR"],
     loggedInAt: "2026-07-21T00:00:00.000Z",
   }));
+  // AppShell's pending-payments badge calls this; unmocked it 401s, the refresh
+  // 401s too, and the session is dropped before the Pagos dialog can open.
+  await page.route("**/api/dashboard", (route: Route) => fulfillJson(route, {}));
   await page.route("**/api/members", (route: Route) =>
     fulfillJson(route, { accounts: [ACCOUNT], personasCapped: false }),
   );
@@ -229,7 +232,9 @@ test("no field in the Pagos dialog is small enough to make a phone zoom", async 
 
   await page.keyboard.press("Escape");
 
-  const editar = page.getByRole("button", { name: "Editar María González" }).first();
+  // Editar lives in the row's overflow menu now; the card's visible actions
+  // (Pagos and the menu trigger) must stay inside the card at 320px.
+  const editar = page.getByRole("button", { name: "Más acciones para María González" }).first();
   await expect(editar).toBeVisible();
   const overflow = await editar.evaluate((el) => {
     const card = el.closest("[class*='overflow-hidden']") ?? document.body;
