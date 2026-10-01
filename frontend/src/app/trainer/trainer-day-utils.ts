@@ -19,7 +19,15 @@
  */
 
 import type { EstadoAsistencia } from "@/types/domain";
-import { buildDateRange, diaSemanaOfCalendarDate, todayDiaSemana, type DateRange } from "@/lib/club-date";
+import {
+  buildDateRange,
+  calendarIsoDate,
+  clubToday,
+  diaSemanaOfCalendarDate,
+  todayDiaSemana,
+  type DateRange,
+} from "@/lib/club-date";
+import { buildWeeklyStatusBreakdown } from "@/app/dashboard/dashboard-utils";
 import type {
   AttendanceDayStats,
   AttendanceRecord,
@@ -720,4 +728,132 @@ export function formatMissingSessionDate(fecha: string): string {
   if (!dia) return "";
   const [, month, day] = fecha.split("-");
   return `${formatDay(dia).slice(0, 3).toLowerCase()} ${day}/${month}`;
+}
+
+// ---------------------------------------------------------------------------
+// Attendance trend and per-student dots
+// ---------------------------------------------------------------------------
+
+export interface WeeklyTrendPoint {
+  /** "YYYY-MM-DD" of the first day of the 7-day window. */
+  startIso: string;
+  total: number;
+  /** Records of people who trained: presente MÁS tardanza (same rule as the month tile). */
+  attended: number;
+  /** Whole percent; 0 for a week with no records. */
+  ratePercent: number;
+}
+
+/**
+ * The last N 7-day windows of attendance, oldest first, as a rate of quienes
+ * entrenaron. Windowing is `buildWeeklyStatusBreakdown`'s (trailing weeks ending
+ * today), so the trainer's trend and the admin's chart agree on what a week is.
+ */
+export function buildWeeklyAttendanceTrend(
+  records: AttendanceRecord[],
+  now: Date = new Date(),
+  weeks = 6,
+): WeeklyTrendPoint[] {
+  return buildWeeklyStatusBreakdown(records, now, weeks).map((week) => {
+    const attended = week.counts.present + week.counts.late;
+    return {
+      startIso: week.startIso,
+      total: week.total,
+      attended,
+      ratePercent: week.total > 0 ? Math.round((attended / week.total) * 100) : 0,
+    };
+  });
+}
+
+/** From the first day of the trailing N-week window through today (club dates). */
+export function trailingWeeksRange(now: Date = new Date(), weeks = 6): DateRange {
+  const today = clubToday(now);
+  const start = new Date(today.getTime());
+  start.setDate(today.getDate() - (weeks * 7 - 1));
+  return { fechaInicio: calendarIsoDate(start), fechaFin: calendarIsoDate(today) };
+}
+
+/** The newest `limit` states of one student, oldest first (so the dots read left to right as time passes). */
+export function recentStatesOfStudent(
+  records: AttendanceRecord[],
+  estudiante: string,
+  limit = 6,
+): { fecha: string; estado: EstadoAsistencia }[] {
+  return records
+    .filter((record) => record.estudiante === estudiante)
+    .sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0))
+    .slice(0, limit)
+    .reverse()
+    .map((record) => ({ fecha: record.fecha, estado: record.estado }));
+}
+
+/** "AP" for "Ana Pérez" — up to two initials. */
+export function initialsOf(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean).slice(0, 2);
+  return words.length === 0 ? "?" : words.map((word) => word[0].toUpperCase()).join("");
+}
+
+/** Enrolled students' names per horario id, for the roster preview. */
+export function buildRosterNamesByHorario(
+  todaySchedules: TrainingSchedule[],
+  roster: AlumnoHorario[],
+): Record<number, string[]> {
+  const names: Record<number, string[]> = {};
+  for (const schedule of todaySchedules) names[schedule.id] = [];
+  for (const alumno of roster) {
+    if (alumno.horarioId in names) names[alumno.horarioId].push(alumno.personaNombreCompleto);
+  }
+  return names;
+}
+
+export interface LastSessionSummary {
+  /** "YYYY-MM-DD" of the last list taken for this horario before today. */
+  fecha: string;
+  attended: number;
+  total: number;
+}
+
+/**
+ * How the previous session of one horario went: who trained (presente MÁS
+ * tardanza, the same rule as every other rate on this screen) out of the list.
+ * `null` when no earlier list is loaded for it.
+ */
+export function buildLastSessionSummary(
+  records: AttendanceRecord[],
+  horarioId: number,
+  hoy: string,
+): LastSessionSummary | null {
+  const byDate = new Map<string, AttendanceRecord[]>();
+  for (const record of records) {
+    if (record.horarioId !== horarioId || record.fecha >= hoy) continue;
+    const list = byDate.get(record.fecha) ?? [];
+    list.push(record);
+    byDate.set(record.fecha, list);
+  }
+  const latest = [...byDate.keys()].sort().pop();
+  if (!latest) return null;
+  const list = byDate.get(latest) ?? [];
+  return {
+    fecha: latest,
+    attended: list.filter((record) => record.estado === "present" || record.estado === "late").length,
+    total: list.length,
+  };
+}
+
+/** Minutes the countdown bar spans before a session starts. */
+export const COUNTDOWN_WINDOW_MINUTES = 180;
+
+/**
+ * 0–100 progress of the hero's thin bar: towards the start while the session is
+ * still to come (the last three hours), through its own duration once running.
+ */
+export function buildHeroProgress(state: SessionCardNext | SessionCardLive): number {
+  if (state.kind === "next") {
+    const window = Math.min(state.minutesAway, COUNTDOWN_WINDOW_MINUTES);
+    return Math.round((1 - window / COUNTDOWN_WINDOW_MINUTES) * 100);
+  }
+  const start = parseHoraToMinutes(state.schedule.horaInicio);
+  const end = parseHoraToMinutes(state.schedule.horaFin);
+  if (start === null || end === null || end <= start) return 0;
+  return Math.min(100, Math.max(0, Math.round((state.minutesElapsed / (end - start)) * 100)));
 }
