@@ -1592,12 +1592,13 @@ describe("StudentPage — próximos entrenamientos", () => {
   // Fix 12c (docs/archive/fixes/12-mi-cuenta-carnet.md): the chosen maquette (Propuesta
   // 2, "El carnet manda") marks the closest upcoming session with a distinct
   // row background (`.row.next`), not with a badge that only fires when that
-  // session happens to land on today's date. Real system time on purpose,
-  // unlike the fake-timer tests above: `findNextTrainingSessions` always
-  // returns its rows soonest-first regardless of what day "today" is, so the
-  // row ordering itself is enough to prove the highlight tracks position
-  // (`first`), not a date coincidence.
+  // session happens to land on today's date. The clock is pinned to a Monday
+  // morning: the week plan only marks a day `next` when the soonest session
+  // falls inside the current Monday-to-Sunday week, so real system time would
+  // make this assertion depend on the weekday the suite runs.
   it("highlights the nearest session's day instead of only badging it 'Hoy'", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-20T09:00:00-05:00"));
     mockFetchHorariosPorAlumno.mockResolvedValue([
       asignacion("LUNES", "15:00:00", "16:00:00", 1),
       asignacion("MARTES", "16:00:00", "17:00:00", 2),
@@ -1611,13 +1612,11 @@ describe("StudentPage — próximos entrenamientos", () => {
       expect(within(panel).getByTestId("week-plan")).toBeInTheDocument();
     });
 
-    // Real system time on purpose: whichever of the three days comes first
-    // from "today" is the one marked, so the marker tracks position and not a
-    // date coincidence. Exactly one day is `next`; the other two only train.
+    // Monday 09:00: Monday's 15:00 session is the nearest one, so exactly one
+    // day is `next`; the other two only train.
     const states = within(panel).getAllByRole("listitem").map((day) => day.getAttribute("data-state"));
-    expect(states.filter((state) => state === "next")).toHaveLength(1);
-    expect(states.filter((state) => state === "active")).toHaveLength(2);
-    expect(states.filter((state) => state === "idle")).toHaveLength(4);
+    vi.useRealTimers();
+    expect(states).toEqual(["next", "active", "active", "idle", "idle", "idle", "idle"]);
   });
 });
 
