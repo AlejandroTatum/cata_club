@@ -257,7 +257,7 @@ test.describe("Back navigation + toasts", () => {
     // spellings it replaced, so asserting it here was asserting the defect.
     // A back control names its DESTINATION, and the destination is the
     // section, not the shape it happens to have on that screen.
-    await page.getByRole("link", { name: /volver a membresías y pagos/i }).click();
+    await page.getByRole("link", { name: /volver a pagos/i }).click();
     await expect(openRequest).toBeVisible();
 
     await home.click();

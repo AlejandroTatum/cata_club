@@ -25,7 +25,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import EnrollPage from "@/app/student/enroll/page";
 import { resetTestHistory, useTestSearchParams } from "@/lib/__tests__/next-navigation-double";
 import {
@@ -229,23 +229,20 @@ describe("the titles are in the club's face", () => {
 // the stepper's three states each have to be tellable apart.
 // ---------------------------------------------------------------------------
 
-describe("the enrollment wash marks only the wizard's own header/context", () => {
-  it("carries the wash and the 3px red accent on the header block, and nowhere else", () => {
+describe("the enrollment frame is a coal brand panel beside the form", () => {
+  it("carries the title in the coal panel, and the pink wash appears nowhere", () => {
     const { container } = render(<EnrollPage />);
 
-    const header = screen.getByTestId("enroll-wizard-header");
-    expect(header.className).toContain("bg-enroll-wash");
-    expect(header.className).toContain("border-l-cata-red");
-    expect(header).toContainElement(
-      screen.getByRole("heading", { name: /inscripción de estudiante/i }),
+    const panel = screen.getByTestId("enroll-brand-panel");
+    expect(panel.className).toContain("bg-coal");
+    expect(panel).toContainElement(
+      screen.getByRole("heading", { level: 1, name: /inscripción de estudiante/i }),
     );
-    expect(header).toContainElement(
+    // Narrow layouts keep the compact stepper in the navigation row.
+    expect(screen.getByTestId("enroll-nav")).toContainElement(
       screen.getByRole("list", { name: /pasos de la inscripción/i }),
     );
-
-    // The wash is this ONE block's surface — nothing else on the screen
-    // repeats it.
-    expect(container.querySelectorAll(".bg-enroll-wash")).toHaveLength(1);
+    expect(container.querySelectorAll(".bg-enroll-wash")).toHaveLength(0);
   });
 
   it("keeps the form card off the wash and the info panel on sunken", () => {
@@ -256,15 +253,20 @@ describe("the enrollment wash marks only the wizard's own header/context", () =>
   });
 });
 
+/** The named stepper — the rail's own checklist repeats the step names. */
+function stepperList(): HTMLElement {
+  return screen.getByRole("list", { name: /pasos de la inscripción/i });
+}
+
 describe("the stepper's three states are tellable apart without colour alone", () => {
   it("marks the current step coal and the pending ones sunken, not paper", () => {
     render(<EnrollPage />);
 
-    const current = screen.getByText("Tipo");
+    const current = within(stepperList()).getByText("Tipo");
     expect(current).toHaveAttribute("data-state", "current");
     expect(current.className).toContain("bg-coal");
 
-    const pending = screen.getByText("Estudiante");
+    const pending = within(stepperList()).getByText("Estudiante");
     expect(pending).toHaveAttribute("data-state", "upcoming");
     expect(pending.className).toContain("bg-sunken");
     expect(pending.className).not.toMatch(/\bbg-paper\b/);
@@ -274,7 +276,7 @@ describe("the stepper's three states are tellable apart without colour alone", (
     render(<EnrollPage />);
     next(); // type -> personal
 
-    const done = screen.getByText("Tipo");
+    const done = within(stepperList()).getByText("Tipo");
     expect(done).toHaveAttribute("data-state", "done");
     expect(done.className).toContain("bg-state-ok-bg");
     // The non-colour marker survives the fill change: a real check glyph.

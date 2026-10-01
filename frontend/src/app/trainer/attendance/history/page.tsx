@@ -54,7 +54,6 @@ import { fetchAttendanceRecords, fetchTrainingSchedules } from "@/services/api";
 import AttendanceFilters, { useAttendanceFilters } from "@/components/attendance/AttendanceFilters";
 import {
   Button,
-  EmptyState,
   ErrorState,
   LoadingState,
   Pagination,
@@ -237,7 +236,8 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
   return (
     <ProtectedRoute allowedRoles={["trainer", "admin"]}>
       <AppShell
-        title="Historial de asistencias"
+        title="Historial"
+        subtitle="Las listas que se pasaron, sesión por sesión."
         back={<BackLink href="/trainer" />}
         /*
          * The same link, with the same label and the same arrow, that `/attendance`
@@ -253,7 +253,15 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
           </Link>
         }
       >
-        <AttendanceFilters filters={filters} schedules={schedules} layout="row" />
+        {/* The date column gets the wider track: with three equal ones the four
+            presets wrapped onto a second row and left a blank band under the
+            student and horario fields. */}
+        <AttendanceFilters
+          filters={filters}
+          schedules={schedules}
+          layout="row"
+          className="lg:grid-cols-[1fr_1.7fr_1fr]"
+        />
 
         {/*
           Las tres cifras del período, arriba de la tabla.
@@ -287,27 +295,34 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
         {!loading && !error && (
           <div className="card overflow-hidden">
             {sessions.length === 0 ? (
-              <EmptyState surface="inset"
-                icon={<ClipboardList size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-                title="No hay listas en este período"
-                description={
-                  query === null
-                    // Covers both unusable states — one end missing, or the
-                    // two ends inverted — because "complete las dos fechas"
-                    // is wrong advice when both are already filled in.
-                    ? "Ajuste el rango de fechas para ver las listas."
-                    : "Cambie el rango o los filtros, o pase lista para que aparezca aquí."
-                }
-                action={
-                  // Issue #1273: the header already carries the page's one
-                  // primary CTA (`primary-action.test.ts` pins it there).
-                  // This is still the honest way out of an empty period, just
-                  // not a second red button for the same verb.
-                  <Link href="/trainer/attendance" className={buttonClasses("secondary")}>
-                    Pasar lista
-                  </Link>
-                }
-              />
+              // One row, not a centred column in a tall card: the period having
+              // no lists is one sentence and one way out.
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-section px-5 py-4">
+                <ClipboardList
+                  size={ICON.lg}
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                  className="flex-none text-ink-3"
+                />
+                <div className="min-w-0 flex-1 basis-64">
+                  <p className="text-sm font-bold text-ink">No hay listas en este período</p>
+                  <p className="mt-0.5 text-sm text-ink-3">
+                    {query === null
+                      // Covers both unusable states — one end missing, or the
+                      // two ends inverted — because "complete las dos fechas"
+                      // is wrong advice when both are already filled in.
+                      ? "Ajuste el rango de fechas para ver las listas."
+                      : "Cambie el rango o los filtros, o pase lista para que aparezca aquí."}
+                  </p>
+                </div>
+                {/* Issue #1273: the header already carries the page's one
+                    primary CTA (`primary-action.test.ts` pins it there).
+                    This is still the honest way out of an empty period, just
+                    not a second red button for the same verb. */}
+                <Link href="/trainer/attendance" className={buttonClasses("secondary")}>
+                  Pasar lista
+                </Link>
+              </div>
             ) : (
                 <ResponsiveListTable
                   items={visible}

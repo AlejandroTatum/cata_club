@@ -54,7 +54,7 @@ export default function AttendanceCommitBar({
   return (
     <div
       data-testid="attendance-commit-bar"
-      className="sticky bottom-0 -mx-5 mt-5 flex flex-wrap items-center gap-3 border-t border-line bg-paper/95 px-5 py-3.5 backdrop-blur sm:-mx-6 sm:px-6"
+      className="sticky bottom-0 -mx-5 -mb-5 mt-5 flex rounded-b-card flex-wrap items-center gap-3 border-t border-line bg-paper/95 px-5 py-3.5 backdrop-blur sm:-mx-6 sm:-mb-6 sm:px-6"
     >
       {!isFirst && (
         <Button type="button" variant="tertiary" onClick={onBack} disabled={submitting}>
@@ -77,6 +77,16 @@ export default function AttendanceCommitBar({
           <Undo2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
           Deshacer
         </Button>
+      )}
+
+      {/* The first step has nothing to summarise yet, so the bar's left side
+          says what the button will do instead of standing empty. */}
+      {step === "select-session" && (
+        <p className="text-sm text-ink-3">
+          {selectedScheduleId === null
+            ? "Elija un horario de la lista para ver a sus alumnos y marcar la asistencia de cada uno."
+            : "Horario elegido: siga para ver a sus alumnos y marcar la asistencia de cada uno."}
+        </p>
       )}
 
       {step === "mark-attendance" && (
