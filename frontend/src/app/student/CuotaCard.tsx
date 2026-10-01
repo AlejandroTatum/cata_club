@@ -90,7 +90,7 @@ export default function CuotaCard({
       className="card overflow-hidden"
     >
       <div className="flex items-center gap-3 border-b border-line px-5 py-3">
-        <h2 className="flex-1 text-sm font-bold text-ink">Cuota</h2>
+        <h2 className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">Cuota</h2>
         <Link
           href={viewPagosHref}
           // `MIN_TARGET_CLASS` (issue #818, WCAG 2.5.8 AA): the link used to

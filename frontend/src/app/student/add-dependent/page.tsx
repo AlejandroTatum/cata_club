@@ -50,7 +50,7 @@ import {
   CEDULA_DIGITS,
   CEDULA_HINT,
 } from "@/components/wizard-fields";
-import { BackLink, Stepper, buttonClasses, PAGE_RAIL } from "@/components/ui";
+import { BackLink, InfoPanel, Stepper, buttonClasses, cn, PAGE_RAIL } from "@/components/ui";
 import { SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
 import type { TipoSangre } from "@/types/domain";
 import {
@@ -717,13 +717,13 @@ function AddDependentContent(): React.ReactElement {
     >
       {/* Full dashboard measure: the form card keeps a readable column and a
           rail carries the "what you need" help instead of stretching inputs. */}
-      <div className={PAGE_RAIL}>
+      <div className={cn(PAGE_RAIL, "lg:flex-1 lg:items-stretch")}>
       <div className="flex min-w-0 flex-col gap-page">
 
       {/* Named stepper — the same contract as the other two wizards. The
           counter's wrapper `<div>` is gone: it carried nothing and made the
           `gap-page` column count a block where there was only a line. */}
-      <p className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
+      <p className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong max-sm:hidden">
         Paso {createdDependentId !== null ? 4 : currentIndex + 1} de {payNow ? 4 : ADD_DEPENDENT_STEP_ORDER.length}
       </p>
 
@@ -734,7 +734,7 @@ function AddDependentContent(): React.ReactElement {
       />
 
       {/* Form card */}
-      <div className="card p-6 sm:p-8">
+      <div className="card p-6 sm:p-8 lg:flex-1">
         {/* The `title` step: 20px Graduate, uppercase, weight 400. It used to
             be `text-sm font-bold` — 13.5px, the DENSE step, SMALLER than the
             14px labels of the fields inside the card it names. No weight
@@ -782,7 +782,8 @@ function AddDependentContent(): React.ReactElement {
         </form>
       </div>
       </div>
-      <aside aria-label="Antes de empezar" className="card flex flex-col gap-3 p-5 lg:sticky lg:top-4">
+      <div className="flex min-w-0 flex-col gap-page lg:sticky lg:top-4 lg:self-start">
+      <aside aria-label="Antes de empezar" className="card flex flex-col gap-3 p-5">
         <h2 className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">Antes de empezar</h2>
         <ul className="flex flex-col gap-2.5 text-sm leading-relaxed text-ink-2">
           <li>Tenga a mano el nombre completo, la fecha de nacimiento y el documento del dependiente.</li>
@@ -790,6 +791,14 @@ function AddDependentContent(): React.ReactElement {
           <li>Si el dependiente ya está registrado, el sistema se lo indicará sin duplicar datos.</li>
         </ul>
       </aside>
+      <InfoPanel title="Cómo se agrega un dependiente">
+        <ol className="flex list-decimal flex-col gap-2 pl-4">
+          <li>Estudiante: nombres, apellidos, fecha de nacimiento y cédula.</li>
+          <li>Salud: tipo de sangre y contacto de emergencia (puede dejarlo para después).</li>
+          <li>Confirmar: revise el resumen y agregue; el dependiente aparecerá en su cuenta.</li>
+        </ol>
+      </InfoPanel>
+      </div>
       </div>
     </AppShell>
   );

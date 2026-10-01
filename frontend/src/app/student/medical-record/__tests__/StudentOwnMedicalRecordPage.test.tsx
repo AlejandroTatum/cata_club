@@ -177,3 +177,15 @@ describe("StudentOwnMedicalRecordPage", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /reintentar/i })).toBeInTheDocument());
   });
 });
+
+describe("StudentOwnMedicalRecordPage — the guide", () => {
+  it("shows the same guide to an adult titular", async () => {
+    mockUseAuth.mockReturnValue(estudianteSession("70"));
+    mockFetchStudentPortal.mockResolvedValue(portal(ADULT_SELF));
+    render(<StudentOwnMedicalRecordPage />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Cómo completar la ficha médica" }),
+    ).toBeInTheDocument();
+  });
+});

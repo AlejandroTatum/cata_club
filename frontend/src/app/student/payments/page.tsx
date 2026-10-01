@@ -53,7 +53,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 import { fetchStudentPortal, fetchPagosDePersona, fetchCoberturasDePersona, fetchBeneficio, subirVoucherPago, registrarPago } from "@/services/api";
 import type { StudentPortalSummary, PagoPersona, MembershipSummary, BeneficioAsignado, CoberturaBonificada } from "@/services/api";
-import { BackLink, Badge, Button, EmptyState, ErrorState, FilterPanel, FilterPill, LoadingState, PAGE_RAIL, StatCard, buttonClasses, cn } from "@/components/ui";
+import { BackLink, Badge, Button, EmptyState, ErrorState, FilterPanel, FilterPill, InfoPanel, LoadingState, PAGE_RAIL, StatCard, buttonClasses, cn } from "@/components/ui";
 
 import { describePaymentSituation, firstNameOf, isMinor } from "../student-utils";
 import ManagedStudentPicker, { useManagedProfiles, withSelectedStudent } from "../ManagedStudentPicker";
@@ -497,7 +497,7 @@ function PaymentsContent({
         <aside
           data-dash-col
           aria-label="Membresía y registro de pagos"
-          className="flex min-w-0 flex-col gap-page lg:col-start-2 lg:row-start-1 lg:self-start lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto"
+          className="flex min-w-0 flex-col gap-page max-lg:contents lg:col-start-2 lg:row-start-1 lg:self-start lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto"
         >
       <MembershipCard
         membership={selectedProfile.membership}
@@ -544,9 +544,18 @@ function PaymentsContent({
         )}
       </MembershipCard>
 
+      <InfoPanel title="Cómo pagar y validar" as="div" className="max-lg:order-2">
+        <ol className="flex list-decimal flex-col gap-2 pl-4">
+          <li>Registre el pago con el valor y el medio que usó (efectivo o transferencia).</li>
+          <li>Si fue transferencia, suba la foto o el PDF del recibo.</li>
+          <li>El club lo revisa: queda «Pendiente de validación» hasta que lo apruebe o rechace.</li>
+          <li>Al aprobarse, la cobertura de la membresía se extiende.</li>
+        </ol>
+      </InfoPanel>
+
         </aside>
 
-        <div data-dash-col className="flex min-w-0 flex-col gap-page lg:col-start-1 lg:row-start-1">
+        <div data-dash-col className="flex min-w-0 flex-col gap-page max-lg:order-1 lg:col-start-1 lg:row-start-1">
       {pagosState.status === "ready" && (
         <div className="grid grid-cols-2 gap-section xl:grid-cols-[1.5fr_1fr_1fr_1fr]">
           <StatCard
@@ -610,7 +619,7 @@ function PaymentsContent({
         // claims the column's remaining height (the grid row is as tall as the
         // rail), and short lists are topped up with ghost rows so both columns
         // end together instead of leaving a void under the last payment.
-        <section className="card flex flex-1 flex-col overflow-hidden" aria-labelledby="pagos-title">
+        <section className="card flex flex-1 flex-col overflow-hidden lg:min-h-[calc(100dvh-27rem)]" aria-labelledby="pagos-title">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-field px-5 py-4">
             <h2 id="pagos-title" className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
               Historial de pagos

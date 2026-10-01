@@ -138,3 +138,16 @@ describe("the role-change notice only appears for a non-representative caller", 
     );
   });
 });
+
+describe("the add-dependent rail guide", () => {
+  it("keeps the checklist and adds how the three steps work", () => {
+    authState.roles = ["REPRESENTANTE"];
+    authState.role = "representante";
+    render(<AddDependentPage />);
+
+    expect(screen.getByRole("complementary", { name: "Antes de empezar" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Cómo se agrega un dependiente" }),
+    ).toBeInTheDocument();
+  });
+});

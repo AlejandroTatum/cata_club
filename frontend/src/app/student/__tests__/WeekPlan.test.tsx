@@ -108,7 +108,7 @@ describe("WeekPlan — the strip is one calendar week", () => {
     expect(cells.map((c) => c.textContent?.replace(/\D/g, "").slice(0, 2))).toEqual(["28", "29", "30", "01", "02", "03", "04"]);
   });
 
-  it("marks today, mutes the days already gone and keeps the next session red", () => {
+  it("marks today, mutes the days already gone and keeps the next session in carbon", () => {
     const { cells } = renderAt("2026-09-30T12:00:00-05:00");
     expect(cells.map((c) => c.getAttribute("data-today"))).toEqual(["false", "false", "true", "false", "false", "false", "false"]);
     expect(cells.map((c) => c.getAttribute("data-past"))).toEqual(["true", "true", "false", "false", "false", "false", "false"]);

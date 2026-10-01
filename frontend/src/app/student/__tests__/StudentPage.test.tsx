@@ -2107,21 +2107,27 @@ describe("StudentPage — the page's leftover height is claimed, not abandoned",
     expect(grid?.className).toMatch(/\bflex-1\b/);
   });
 
-  it("keeps the rail column at its content height so no card carries slack", async () => {
+  it("stretches the rail column but lets only the account-actions card absorb the slack", async () => {
     render(<StudentPage />);
 
     const panel = await screen.findByTestId("student-situation");
-    expect(panel.parentElement?.className).not.toMatch(/self-stretch/);
+    // Both columns reach the grid's bottom (the audit's viewport budget); the
+    // cuota card keeps its content height and the actions card takes the rest.
+    expect(panel.parentElement?.className).toMatch(/self-stretch/);
     expect(panel.className).not.toMatch(/\bflex-1\b/);
+    const actions = await screen.findByRole("region", { name: "Acciones de la cuenta" });
+    expect(actions.className).toMatch(/\bflex-1\b/);
   });
 
   it("still leaves the carnet at its natural height inside the stretched grid", async () => {
     render(<StudentPage />);
 
     const panel = await screen.findByTestId("student-carnet-panel");
-    // Fix 12b again: the grid grows, the carnet does not.
+    // Fix 12b again: the grid grows, the carnet does not. Its column now
+    // stretches, but the slack is absorbed by the "Qué puede hacer aquí" card
+    // under it, never inside the carnet panel.
     expect(panel.className).not.toMatch(/\bflex-1\b/);
-    expect(panel.parentElement?.className).not.toMatch(/self-stretch/);
+    expect(panel.parentElement?.className).toMatch(/self-stretch/);
 
     // THE PROPORTION IS THE FUNDA'S, NOT THE CREDENTIAL'S — and this reversal
     // is the whole lock.

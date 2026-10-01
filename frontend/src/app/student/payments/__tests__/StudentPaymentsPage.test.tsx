@@ -1894,3 +1894,14 @@ describe("StudentPaymentsPage — el descuento que el club ya aplicó", () => {
     expect(screen.queryByText(/descuento/i)).not.toBeInTheDocument();
   });
 });
+
+describe("StudentPaymentsPage — the rail guide", () => {
+  it("explains how a payment is registered and validated, always visible", async () => {
+    render(<StudentPaymentsPage />);
+
+    const guide = await screen.findByRole("heading", { name: "Cómo pagar y validar" });
+    const panel = guide.parentElement as HTMLElement;
+    expect(within(panel).getByText(/pendiente de validación/i)).toBeInTheDocument();
+    expect(panel.closest("details")).toBeNull();
+  });
+});
