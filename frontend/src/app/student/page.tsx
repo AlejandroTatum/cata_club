@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { buildContextLine } from "@/components/dashboard/context-line";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
@@ -34,11 +35,13 @@ import {
 // strip's, already owned by `/groups` — see `toStripDia`'s own comment for why
 // the two tables are joined by the WORD they both print and not by position.
 import { toStripDias } from "@/app/groups/groups-page-utils";
-import ManagedStudentPicker, {
+import {
   useManagedProfiles,
   withSelectedStudent,
 } from "./ManagedStudentPicker";
+import FamilyStrip from "./FamilyStrip";
 import CuotaCard from "./CuotaCard";
+import WeekPlan from "./WeekPlan";
 import JoinAsPlayerAction from "./JoinAsPlayerAction";
 import {
   derivePortalMode,
@@ -54,7 +57,7 @@ import {
   daysUntil,
   type UpcomingTraining,
 } from "./student-utils";
-import { CalendarDays, ShieldCheck, User, UserPlus, ArrowRight } from "lucide-react";
+import { CalendarDays, ShieldCheck, Stethoscope, User, UserPlus, ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
 import { subirFotoDeArchivo } from "@/lib/photo-upload";
@@ -500,7 +503,7 @@ function Carnet({
           paper", and it is what makes the coal object read as HELD by the
           panel rather than as the panel's own surface. On white the same card
           reads as a hole cut in the page. */}
-      <div className="flex justify-center bg-sunken px-5 py-5">
+      <div className="flex justify-center px-5 py-4">
         {/* THE CREDENTIAL — the object, and the only thing that prints.
             `role="group"` rather than a second `<section>`: the panel around it
             is already a landmark, and two nested regions announce twice for one
@@ -766,66 +769,6 @@ function SituationLink({ href, children }: { href: string; children: React.React
   );
 }
 
-/** One upcoming session, on the product's 56px detail row. */
-function TrainingRow({ session, first }: { session: UpcomingTraining; first: boolean }): React.ReactElement {
-  return (
-    /*
-     * `flex-1` between `min-h-drow` and a ceiling: the card is stretched to
-     * the height the page now claims, and with at most three sessions all the
-     * slack used to pool into one dead band between the last row and the
-     * footer. The rows share it instead. `items-center` already had the
-     * content centred, so a taller row just breathes more.
-     *
-     * The ceiling is the correction that came out of measuring this pass. With
-     * the page's leftover finally reaching the panel (see the grid in
-     * `ActivePortalView`), three rows dividing it grew to 168px each at
-     * 1440x900 — a 56px row rendered nearly triple, its `bg-sunken` marker a
-     * grey slab, and the label floating in the middle of it. That is the
-     * client's own "espacios vacíos" reappearing inside the row that was
-     * supposed to absorb them. 112px is the largest a row reads as a row here:
-     * it holds the day, the date and the badge with real air and still stacks
-     * three of them into a panel. Whatever is left over past that stops at the
-     * footer, which `mt-auto` now genuinely pins to the bottom.
-     *
-     * `first && "bg-sunken"` (fix 12c): the chosen maquette (Propuesta 2,
-     * `.row.next`) marks the closest upcoming session with a distinct row
-     * background, not with a badge — the "Hoy" pill below only fires when
-     * that session happens to land on today's date, so on its own it left the
-     * nearest-of-the-week row looking like any other one.
-     */
-    <li
-      className={cn(
-        "flex min-h-drow max-h-[112px] flex-1 flex-wrap items-center gap-x-4 gap-y-field border-b border-line px-5 py-3 last:border-b-0",
-        first && "bg-sunken",
-      )}
-    >
-      <div className="min-w-0 flex-1">
-        <p className="flex flex-wrap items-center gap-2 text-base font-bold tracking-tight text-ink">
-          {session.diaLabel}
-          {session.isToday && (
-            <span className="h-badge inline-flex items-center gap-1.5 rounded-full bg-coal px-[11px] text-2xs tracking-flat font-bold text-white">
-              <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-ball" />
-              Hoy
-            </span>
-          )}
-        </p>
-        <p className="mt-0.5 text-xs tabular-nums text-ink-3-strong">
-          {formatDate(session.fecha)}
-        </p>
-      </div>
-      <span
-        className={
-          first
-            ? "flex-none text-base font-extrabold tabular-nums tracking-dense text-ink"
-            : "flex-none text-base font-bold tabular-nums text-ink-2"
-        }
-      >
-        {session.horaInicio} — {session.horaFin}
-      </span>
-    </li>
-  );
-}
-
 function TrainingPanel({
   profile,
   horariosState,
@@ -881,7 +824,7 @@ function TrainingPanel({
       // the WHOLE stretched column", squeezing `CuotaCard` below its own
       // content height and letting its `overflow-hidden` silently clip the
       // payment button. `flex-1` takes only what `CuotaCard` doesn't need.
-      className="card flex flex-1 min-h-0 flex-col overflow-hidden"
+      className="card flex flex-col overflow-hidden"
     >
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-field px-5 pb-3.5 pt-[18px]">
         <h2 className="text-base font-bold tracking-tight text-ink">Esta semana</h2>
@@ -909,52 +852,34 @@ function TrainingPanel({
 
       {horariosState.status === "ready" &&
         (sessions.length > 0 ? (
-          <ul className="flex flex-1 flex-col border-t border-line">
-            {sessions.map((session, index) => (
-              <TrainingRow
-                key={`${session.fecha}-${session.horaInicio}`}
-                session={session}
-                first={index === 0}
-              />
-            ))}
-          </ul>
+          <div className="border-t border-line pt-4">
+            <WeekPlan sessions={sessions} />
+          </div>
         ) : (
-          <div className="flex flex-1 flex-col border-t border-line">
-            {/* D11 — an empty state has three parts, and this one had two:
-                what is missing, and why. The third, "qué hacer", was a
-                sentence telling the reader to "consulte en administración"
-                with nothing to click. `/ayuda` is where the club answers that
-                question, and the label is the destination's registered name
-                (D12b), not a phrase invented here.
-
-                `fill` because the panel around it is stretched now: without
-                it the statement would sit at the top of a tall card with
-                canvas below it, which is the defect this pass exists to
-                close, moved inside the card. */}
-            <EmptyState
-              surface="inset"
-              fill
-              icon={<CalendarDays size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-              title={
-                viewingOwnProfile
+          // One line with its way out (D11: what is missing, why, what to
+          // do). `/ayuda` is where the club answers "who assigns a schedule",
+          // labelled with the destination's registered name (D12b). A tall
+          // empty card here would only stretch the column beside the carnet.
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-field border-t border-line px-5 py-4">
+            <p className="min-w-0 flex-1 text-sm text-ink-2">
+              <span className="font-semibold text-ink">
+                {viewingOwnProfile
                   ? "Todavía no tiene un horario asignado"
-                  : `${studentName} todavía no tiene un horario asignado`
-              }
-              description="El club asigna los días y las horas de entrenamiento. Escriba a administración para que le asignen uno."
-              action={
-                <Link href="/ayuda" className={buttonClasses("secondary", "sm")}>
-                  Preguntas frecuentes
-                  <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-                </Link>
-              }
-            />
+                  : `${studentName} todavía no tiene un horario asignado`}
+              </span>
+              . El club asigna los días y las horas; escriba a administración para que le asignen uno.
+            </p>
+            <Link href="/ayuda" className={buttonClasses("secondary", "sm")}>
+              Preguntas frecuentes
+              <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+            </Link>
           </div>
         ))}
 
       {/* One line, not a second panel: it is the same subject — training —
           and it is the fact a family checks right after "when is the next
           one". The record itself lives on `/student/attendance`. */}
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-x-5 gap-y-field border-t border-line bg-sunken px-5 py-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-field border-t border-line bg-sunken px-5 py-3.5">
         <p className="text-xs leading-relaxed text-ink-3-strong">
           {recap ? (
             // La CIFRA se fue a la tile "Asistencia" de la fila de pulso: acá
@@ -1211,7 +1136,7 @@ function ActivePortalView({
   // del representante" — which is gone (independence is now a PRESENCIAL
   // command an ADMINISTRADOR runs from "Miembros", never self-service). That
   // account has nothing left to trigger from its own portal, so it no longer
-  // counts toward `hasAccountActions`.
+  // counts toward the account-actions card.
   //
   // #1318: "Agregar hijo o dependiente" is no longer gated on `representative`
   // alone — a self-managed player (`isPlayer`, no dependents yet) can reach
@@ -1226,7 +1151,6 @@ function ActivePortalView({
   const selfRepresented = data.self?.representanteId != null;
   const showAddDependentCta = (representative || isPlayer) && !selfRepresented;
   const showJoinAsPlayerCta = !isPlayer;
-  const hasAccountActions = showAddDependentCta || showJoinAsPlayerCta;
 
   /**
    * The one thing this screen exists to answer, resolved once and rendered
@@ -1271,12 +1195,7 @@ function ActivePortalView({
       {/* Guardian → dependent switcher. The audit named this genuinely
           club-specific: a representante lands on one child and swaps to the
           next without leaving the page. */}
-      <ManagedStudentPicker
-        id="student-select"
-        profiles={managedProfiles}
-        value={selectedId}
-        onChange={setSelectedId}
-      />
+      <FamilyStrip profiles={managedProfiles} value={selectedId} onChange={setSelectedId} />
 
       {selectedProfile === null || paymentSituation === null ? (
         <EmptyState
@@ -1369,6 +1288,7 @@ function ActivePortalView({
         <div data-testid="student-pulse" className={STAT_GRID}>
           <StatCard
             label="Cobertura"
+            href={withSelectedStudent("/student/payments", selectedPersonaId)}
             value={diasDeCobertura === null ? "—" : Math.abs(diasDeCobertura)}
             unit={diasDeCobertura === null ? undefined : diasDeCobertura === 1 || diasDeCobertura === -1 ? "día" : "días"}
             hint={
@@ -1381,11 +1301,12 @@ function ActivePortalView({
           />
           <StatCard
             label="Asistencia"
+            href={withSelectedStudent("/student/attendance", selectedPersonaId)}
             value={asistencia === null ? "—" : asistencia.porcentaje}
             unit={asistencia === null ? undefined : "%"}
             hint={
               asistencia === null ? (
-                "sin listas tomadas todavía"
+                "Aparece cuando el entrenador tome lista"
               ) : (
                 <span className="flex flex-col gap-y-field">
                   <StatTrack value={asistencia.attended} total={asistencia.total} />
@@ -1401,13 +1322,17 @@ function ActivePortalView({
           />
           <StatCard
             label="Pagos en revisión"
+            href={withSelectedStudent("/student/payments", selectedPersonaId)}
             value={pendingPagos}
             hint={pendingPagos === 0 ? "nada esperando validación" : "esperan validación del club"}
           />
         </div>
 
         <div className={cn(PAGE_RAIL, "lg:!grid-cols-[minmax(0,336px)_minmax(0,1fr)]", "flex-1")}>
-          <div className="flex flex-col gap-5">
+          {/* Below `lg` the wrapper dissolves (`contents`) so the account
+              actions can drop to the end of the page: a phone reads carnet,
+              cuota, this week, and only then the occasional actions. */}
+          <div className="flex flex-col gap-5 max-lg:contents">
             <Carnet
               profile={selectedProfile}
               coverageEnd={coverageEnd}
@@ -1442,6 +1367,7 @@ function ActivePortalView({
                 </span>
               </section>
             )}
+
           </div>
 
           {/* Below `lg` this is the SECOND stacked block (see `PAGE_RAIL`'s
@@ -1457,7 +1383,7 @@ function ActivePortalView({
               under its fact grid, which is the same emptiness moved rather
               than closed. A carnet has a carnet's proportions; a panel of
               rows does not. */}
-          <div className="flex flex-col gap-5 lg:self-stretch">
+          <div className="flex flex-col gap-5">
             <CuotaCard
               situation={paymentSituation}
               coverageEnd={coverageEnd}
@@ -1486,54 +1412,52 @@ function ActivePortalView({
               viewingOwnProfile={viewingOwnProfile}
               studentName={firstNameOf(selectedProfile.nombres)}
             />
+
+            {/* A minor manages nothing on their own account — no dependents, no
+                joining — but the ficha médica is theirs to read.
+
+                #1318 reopened "Agregar hijo o dependiente" for a self-managed
+                adult player, not just an existing representante;
+                `/student/add-dependent` grants REPRESENTANTE on save. #1132:
+                "Unirme como jugador" is gated on `isPlayer` (role OR own
+                active membership), never the role alone, and creates the
+                membership for `accountPersonaId`, never the selected profile.
+                #1137: independence is a PRESENCIAL admin command, not here. */}
+            <section
+              aria-label="Acciones de la cuenta"
+              className="card overflow-hidden"
+            >
+              <div className="border-b border-line px-5 py-3">
+                <h2 className="text-sm font-bold text-ink">Acciones de la cuenta</h2>
+              </div>
+              <div className="flex flex-wrap items-stretch gap-2 px-5 py-4 [&>*]:flex-1 [&>*]:justify-center">
+                {!selfIsMinor && showAddDependentCta && (
+                  <Link href="/student/add-dependent" className={buttonClasses("secondary")}>
+                    <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                    Agregar hijo o dependiente
+                    <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                  </Link>
+                )}
+                {!selfIsMinor && showJoinAsPlayerCta && (
+                  <JoinAsPlayerAction accountPersonaId={accountPersonaId} />
+                )}
+                <Link
+                  href={withSelectedStudent("/student/medical-record", selectedPersonaId)}
+                  className={buttonClasses("secondary")}
+                >
+                  <Stethoscope size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                  {viewingOwnProfile
+                    ? "Ficha médica"
+                    : `Ficha médica de ${firstNameOf(selectedProfile.nombres)}`}
+                  <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                </Link>
+              </div>
+            </section>
           </div>
         </div>
         </>
       )}
 
-      {/* A minor manages nothing on their own account: no dependents, no
-          payments. Everything below is gated on that.
-
-          #1318 reopened "Agregar hijo o dependiente" for a self-managed
-          adult player, not just an existing representante: `/student/
-          add-dependent` now posts to `POST /personas/me/representados`,
-          which grants the representative role on save if the account
-          doesn't have it yet — so this CTA is finally honest for that visitor too (it used
-          to point at the PUBLIC enrolment wizard, which created a whole
-          second account, or was hidden entirely because the honest route
-          was gated to `representante`).
-
-          `hasAccountActions` is kept as its own named condition — never a
-          bare `true` — even though `derivePortalMode` guarantees at least
-          one of `showAddDependentCta`/`showJoinAsPlayerCta` for any account
-          that reaches THIS view (a zero-signal account lands on
-          `PendingEnrollmentView` instead, above): the payments CTA already
-          lives in `CuotaCard` in the rail above, on the fact it acts on, so
-          this row stays conditionally rendered rather than assumed. #1137:
-          "Independizarse del representante" is gone too — independence is a
-          PRESENCIAL command an ADMINISTRADOR runs from "Miembros", not
-          self-service. */}
-      {!selfIsMinor && hasAccountActions && (
-        <div className="flex flex-wrap gap-3 pt-1">
-          {showAddDependentCta && (
-            <Link href="/student/add-dependent" className={buttonClasses("secondary")}>
-              <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-              Agregar hijo o dependiente
-              <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-            </Link>
-          )}
-          {/* Issue #1132: gated on `isPlayer` (role OR own active membership),
-              never on the role alone — a representante who already paid a
-              membership for themselves must not be offered this CTA again.
-              This used to point at `/student/enroll?type=self`, the PUBLIC
-              wizard — for an already-authenticated representante it opened a
-              SECOND account instead of a membership for their existing one.
-              `JoinAsPlayerAction` picks a plan and creates that membership
-              for `accountPersonaId` (never the selected profile, which can
-              be a dependent) — see its own doc comment. */}
-          {showJoinAsPlayerCta && <JoinAsPlayerAction accountPersonaId={accountPersonaId} />}
-        </div>
-      )}
     </>
   );
 }
@@ -1594,9 +1518,13 @@ function StudentPortalContent(): React.ReactElement {
     state.status === "ready"
       ? derivePortalMode(isPlayer, state.data.representados.length)
       : null;
+  const roleLabel =
+    state.status === "ready" && isRepresentative(state.data.representados.length)
+      ? "Representante"
+      : "Estudiante";
   const subtitle =
     portalMode === "active" && greetingName
-      ? `Hola, ${greetingName}. Esto es lo que el club tiene registrado.`
+      ? buildContextLine(`Hola, ${greetingName} · ${roleLabel}`)
       : undefined;
 
   return (

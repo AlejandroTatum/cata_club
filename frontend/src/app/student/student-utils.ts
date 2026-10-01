@@ -189,7 +189,7 @@ export function breakdownAttendance(sessions: StudentSessionSummary[]): Attendan
 // ---------------------------------------------------------------------------
 
 /** Backend `DiaSemana` → the Spanish label the rest of the app already uses. */
-const DIA_LABELS: Record<string, string> = {
+export const DIA_LABELS: Record<string, string> = {
   LUNES: "Lunes",
   MARTES: "Martes",
   MIERCOLES: "Miércoles",
@@ -210,7 +210,7 @@ const DIA_JS_DAY: Record<string, number> = {
   SABADO: 6,
 };
 
-const WEEK_ORDER = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO", "DOMINGO"];
+export const WEEK_ORDER = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO", "DOMINGO"];
 
 /** One weekday's continuous training window — "Lunes 15:00 — 18:00". */
 export interface WeeklyTrainingSlot {
@@ -956,6 +956,37 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
 // ---------------------------------------------------------------------------
 
 /**
+ * The ONE coloured signal of the Cuota card: a short badge that says the state
+ * in the fewest words. The card's headline explains it; this is what a family
+ * reads at a glance. `ending-soon` warns rather than alarms — the card is calm
+ * on purpose, and only an expired or never-paid cuota is `bad`.
+ */
+export function describeCuotaBadge(situation: PaymentSituation): { label: string; tone: BadgeTone } {
+  switch (situation.kind) {
+    case "expired":
+      return { label: "Vencida", tone: "bad" };
+    case "never-paid":
+      return { label: "Sin pagos", tone: "bad" };
+    case "ending-soon": {
+      const days = situation.figure?.value;
+      return days
+        ? { label: `Vence en ${days} ${days === 1 ? "día" : "días"}`, tone: "warn" }
+        : { label: "Vence hoy", tone: "warn" };
+    }
+    case "covered":
+      return { label: "Al día", tone: "ok" };
+    case "awaiting-validation":
+      return { label: "En revisión", tone: "neutral" };
+    case "no-membership":
+      return { label: "Sin membresía", tone: "neutral" };
+    case "gratuitous":
+      return { label: "Sin costo", tone: "ok" };
+    case "minor-blocked":
+      return { label: "Lo gestiona el club", tone: "neutral" };
+  }
+}
+
+/**
  * The verdict's weight: `"bad"` is something to resolve now, `"ok"` is a
  * family that is up to date, `"neutral"` is a state with something to explain
  * but nothing to act on.
@@ -999,4 +1030,35 @@ export function contarEntrenamientosSemanales(
   rows: Pick<AlumnoHorario, "horarioDia" | "horarioHoraInicio" | "horarioHoraFin">[],
 ): number {
   return buildWeeklyTrainingSchedule(rows).length;
+}
+
+// ---------------------------------------------------------------------------
+// Family strip — one short coverage status per dependent
+// ---------------------------------------------------------------------------
+
+export interface FamilyCoverageStatus {
+  label: string;
+  tone: "ok" | "warn" | "bad" | "neutral";
+}
+
+/**
+ * The one fact a guardian scans a family for: is this child covered. Read from
+ * `MembershipSummary.cubiertoHasta` that the portal summary already carries
+ * for every dependent — no per-child request behind it. `warn` covers the
+ * last week (`COVERAGE_ENDING_SOON_DAYS`), the same window the rest of the
+ * portal calls "por vencer".
+ */
+export function describeFamilyCoverage(
+  membership: { cubiertoHasta?: string | null } | null | undefined,
+  today: Date = new Date(),
+): FamilyCoverageStatus {
+  if (!membership) return { label: "Sin membresía", tone: "neutral" };
+  const days = daysUntil(membership.cubiertoHasta ?? null, today);
+  if (days === null) return { label: "Sin pago aprobado", tone: "warn" };
+  if (days < 0) return { label: "Vencida", tone: "bad" };
+  if (days === 0) return { label: "Vence hoy", tone: "warn" };
+  return {
+    label: `${days} ${days === 1 ? "día" : "días"} de cobertura`,
+    tone: days <= COVERAGE_ENDING_SOON_DAYS ? "warn" : "ok",
+  };
 }

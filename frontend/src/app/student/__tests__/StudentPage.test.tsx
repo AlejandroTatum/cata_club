@@ -252,10 +252,10 @@ describe("StudentPage — the dependent selection survives navigation", () => {
   it("writes an explicit switch to both the URL and the store", async () => {
     render(<StudentPage />);
 
-    const select = await screen.findByLabelText("Estudiante");
+    await screen.findByRole("group", { name: "Estudiante" });
     expect(await carnetName()).toBe("Carnet de socio de Sofía Vera");
 
-    fireEvent.change(select, { target: { value: "42" } });
+    fireEvent.click(screen.getByRole("button", { name: /Martín/ }));
 
     expect(await carnetName()).toBe("Carnet de socio de Martín Vera");
     await waitFor(() => {
@@ -1060,7 +1060,8 @@ describe("StudentPage — the carnet prints as a standalone credential", () => {
     // inside paper, which is what makes the dark object read as held rather
     // than as the panel's own surface.
     const credential = within(panel).getByTestId("student-carnet");
-    expect(credential.parentElement?.className).toMatch(/\bbg-sunken\b/);
+    // No grey band around the credential: it was padding with nothing in it.
+    expect(credential.parentElement?.className).not.toMatch(/\bbg-sunken\b/);
   });
 
   // THIS LOCK INVERTS. It used to pin the status band inside a `print:hidden`
@@ -1363,9 +1364,11 @@ describe("StudentPage — the carnet's franja agrees with the assigned schedule"
 
     const panel = await screen.findByTestId("student-situation");
     await waitFor(() => {
-      expect(within(panel).getAllByText("20:00 — 21:15").length).toBeGreaterThan(0);
+      expect(within(panel).getAllByText(/20:00 – 21:15/).length).toBeGreaterThan(0);
     });
-    const windowOnTheList = within(panel).getAllByText("20:00 — 21:15")[0].textContent;
+    // The panel states the window with an en dash, the carnet with its own em
+    // dash: same window, two typographies.
+    const windowOnTheList = within(panel).getAllByText(/20:00 – 21:15/)[0].textContent!.replace("·", "").trim().replace("–", "—");
 
     const carnet = await screen.findByTestId("student-carnet");
     await waitFor(() => {
@@ -1492,25 +1495,21 @@ describe("StudentPage — próximos entrenamientos", () => {
 
     const panel = await screen.findByTestId("student-situation");
     await waitFor(() => {
-      expect(within(panel).getByText("Miércoles")).toBeInTheDocument();
+      expect(within(panel).getByTestId("week-plan-next")).toBeInTheDocument();
     });
-    expect(within(panel).getAllByText("15:00 — 18:00")).toHaveLength(2);
+    // Both sessions share the window, so it is stated once.
+    expect(within(panel).getByTestId("week-plan-same-time")).toBeInTheDocument();
     // Today's window has not closed at 09:00, so today IS the next session.
-    expect(within(panel).getByText("Hoy")).toBeInTheDocument();
-    expect(within(panel).getByText("22/07/2026")).toBeInTheDocument();
-    expect(within(panel).getByText("24/07/2026")).toBeInTheDocument();
+    expect(within(panel).getByTestId("week-plan-next")).toHaveTextContent(
+      "Próximo: hoy, miércoles 22/07 · 15:00 – 18:00",
+    );
+    expect(within(panel).getByRole("listitem", { name: /Miércoles 22\/07\/2026/ })).toBeInTheDocument();
+    expect(within(panel).getByRole("listitem", { name: /Viernes 24\/07\/2026/ })).toBeInTheDocument();
 
     vi.useRealTimers();
   });
 
-  it("lets the training rows absorb the card's spare height instead of pooling it", async () => {
-    /*
-     * The card is `h-full` so it matches the taller card beside it, the list is
-     * `flex-1` and the footer is `mt-auto`. With at most three rows, all the
-     * leftover height collected into one dead band between the last row and the
-     * footer. Sharing it across the rows keeps the card full without inventing
-     * content or letting the footer float.
-     */
+  it("draws the week as seven fixed days instead of one tall row per session", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-07-22T09:00:00-05:00"));
     mockFetchHorariosPorAlumno.mockResolvedValue([
@@ -1521,14 +1520,9 @@ describe("StudentPage — próximos entrenamientos", () => {
 
     const panel = await screen.findByTestId("student-situation");
     await waitFor(() => {
-      expect(within(panel).getByText("Miércoles")).toBeInTheDocument();
+      expect(within(panel).getByTestId("week-plan")).toBeInTheDocument();
     });
-
-    const rows = within(panel).getAllByRole("listitem");
-    expect(rows.length).toBeGreaterThan(0);
-    for (const row of rows) {
-      expect(row.className).toMatch(/\bflex-1\b/);
-    }
+    expect(within(panel).getAllByRole("listitem")).toHaveLength(7);
 
     vi.useRealTimers();
   });
@@ -1545,9 +1539,11 @@ describe("StudentPage — próximos entrenamientos", () => {
 
     const panel = await screen.findByTestId("student-situation");
     await waitFor(() => {
-      expect(within(panel).getByText("29/07/2026")).toBeInTheDocument();
+      expect(within(panel).getByTestId("week-plan-next")).toHaveTextContent(
+        "Próximo: miércoles 29/07 · 15:00 – 18:00",
+      );
     });
-    expect(within(panel).queryByText("Hoy")).not.toBeInTheDocument();
+    expect(within(panel).getByTestId("week-plan-next")).not.toHaveTextContent(/hoy/i);
 
     vi.useRealTimers();
   });
@@ -1577,7 +1573,8 @@ describe("StudentPage — próximos entrenamientos", () => {
         within(panel).getByText(/todavía no tiene un horario asignado/i),
       ).toBeInTheDocument();
     });
-    expect(within(panel).queryByText("15:00 — 18:00")).not.toBeInTheDocument();
+    expect(within(panel).queryByText(/15:00/)).not.toBeInTheDocument();
+    expect(within(panel).queryByTestId("week-plan")).not.toBeInTheDocument();
   });
 
   it("keeps the Cuota card standing when the schedule lookup fails", async () => {
@@ -1595,12 +1592,13 @@ describe("StudentPage — próximos entrenamientos", () => {
   // Fix 12c (docs/archive/fixes/12-mi-cuenta-carnet.md): the chosen maquette (Propuesta
   // 2, "El carnet manda") marks the closest upcoming session with a distinct
   // row background (`.row.next`), not with a badge that only fires when that
-  // session happens to land on today's date. Real system time on purpose,
-  // unlike the fake-timer tests above: `findNextTrainingSessions` always
-  // returns its rows soonest-first regardless of what day "today" is, so the
-  // row ordering itself is enough to prove the highlight tracks position
-  // (`first`), not a date coincidence.
-  it("highlights the nearest session's row instead of only badging it 'Hoy'", async () => {
+  // session happens to land on today's date. The clock is pinned to a Monday
+  // morning: the week plan only marks a day `next` when the soonest session
+  // falls inside the current Monday-to-Sunday week, so real system time would
+  // make this assertion depend on the weekday the suite runs.
+  it("highlights the nearest session's day instead of only badging it 'Hoy'", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-20T09:00:00-05:00"));
     mockFetchHorariosPorAlumno.mockResolvedValue([
       asignacion("LUNES", "15:00:00", "16:00:00", 1),
       asignacion("MARTES", "16:00:00", "17:00:00", 2),
@@ -1610,14 +1608,15 @@ describe("StudentPage — próximos entrenamientos", () => {
     render(<StudentPage />);
 
     const panel = await screen.findByTestId("student-situation");
-    let rows: HTMLElement[] = [];
     await waitFor(() => {
-      rows = within(panel).getAllByRole("listitem");
-      expect(rows.length).toBeGreaterThan(1);
+      expect(within(panel).getByTestId("week-plan")).toBeInTheDocument();
     });
 
-    expect(rows[0].className).toMatch(/bg-sunken/);
-    expect(rows[1].className).not.toMatch(/bg-sunken/);
+    // Monday 09:00: Monday's 15:00 session is the nearest one, so exactly one
+    // day is `next`; the other two only train.
+    const states = within(panel).getAllByRole("listitem").map((day) => day.getAttribute("data-state"));
+    vi.useRealTimers();
+    expect(states).toEqual(["next", "active", "active", "idle", "idle", "idle", "idle"]);
   });
 });
 
@@ -1894,37 +1893,17 @@ describe("StudentPage — the Cuota card earns its space when the cuota is up to
     });
     expect(verdict).toHaveAttribute("data-tone", "bad");
     expect(within(verdict).getByText(/venció/i)).toBeInTheDocument();
+    // ONE coloured signal: the badge.
+    expect(within(verdict).getByText("Vencida")).toBeInTheDocument();
 
     const cuota = screen.getByTestId("student-cuota-card");
-    expect(cuota).toHaveAttribute("data-compact", "false");
     // The verdict reads FIRST, before the evidence and the action.
     const detalle = within(cuota).getByText("A pagar");
     expect(verdict.compareDocumentPosition(detalle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(cuota).getByText("Registrar un pago")).toBeInTheDocument();
   });
 
-  // The figure line under the headline ("29 DÍAS VENCIDA") is `text-2xs` —
-  // 10.5px, i.e. NORMAL text for WCAG 1.4.3 — printed on the verdict's tone
-  // fill. On `state-bad-bg` the muted `ink-3` measures 3.95:1; `ink-3-strong`
-  // is the companion that exists for the surfaces that are not `paper`, and it
-  // clears AA on all three fills the verdict can wear (`color-contrast.test.ts`).
-  // The assertion reads the exact class TOKEN, because `text-ink-3-strong`
-  // CONTAINS `text-ink-3`: a substring check would pass on the failing class.
-  it("prints the overdue figure in the muted ink that clears AA on the tinted fill", async () => {
-    mockFetchStudentPortal.mockReset().mockResolvedValue(portalWithMembership("2026-07-31"));
-    mockFetchPagosDePersona.mockResolvedValue([PAGO_APROBADO]);
-
-    render(<StudentPage />);
-
-    const verdict = await screen.findByTestId("cuota-verdict");
-    const figure = await within(verdict).findByText(/vencida/i);
-    const classes = figure.className.split(/\s+/);
-
-    expect(classes).toContain("text-ink-3-strong");
-    expect(classes).not.toContain("text-ink-3");
-  });
-
-  it("states the al día verdict itself and stays compact when the cuota is up to date", async () => {
+  it("states the al día verdict itself when the cuota is up to date", async () => {
     // `cubiertoHasta` stretches well past today plus the "ending soon" window.
     mockFetchStudentPortal.mockReset().mockResolvedValue(portalWithMembership("2026-12-31"));
     mockFetchPagosDePersona.mockResolvedValue([
@@ -1944,13 +1923,9 @@ describe("StudentPage — the Cuota card earns its space when the cuota is up to
 
     const cuota = screen.getByTestId("student-cuota-card");
     expect(verdict.closest('[data-testid="student-cuota-card"]')).toBe(cuota);
-    // Still compact: the verdict is one line, not a reason to reopen the card.
-    expect(cuota).toHaveAttribute("data-compact", "true");
-    // The compressed card gives up the amount row and the full-width button
-    // an overdue family still needs — that is the whole point of compressing
-    // it — but the action itself survives, as a quiet text link rather than
-    // a button, so a family paying ahead of time is never blocked.
-    expect(within(cuota).queryByText("A pagar")).not.toBeInTheDocument();
+    expect(within(verdict).getByText("Al día")).toBeInTheDocument();
+    // The action survives as the same content-sized button, so a family paying
+    // ahead of time is never blocked.
     const link = within(cuota).getByText("Registrar un pago").closest("a");
     expect(link?.className).not.toMatch(/w-full/);
   });
@@ -2132,12 +2107,12 @@ describe("StudentPage — the page's leftover height is claimed, not abandoned",
     expect(grid?.className).toMatch(/\bflex-1\b/);
   });
 
-  it("stretches the rail column so the panel's own flex-1 and mt-auto can bite", async () => {
+  it("keeps the rail column at its content height so no card carries slack", async () => {
     render(<StudentPage />);
 
     const panel = await screen.findByTestId("student-situation");
-    const railColumn = panel.parentElement;
-    expect(railColumn?.className).toMatch(/lg:self-stretch/);
+    expect(panel.parentElement?.className).not.toMatch(/self-stretch/);
+    expect(panel.className).not.toMatch(/\bflex-1\b/);
   });
 
   it("still leaves the carnet at its natural height inside the stretched grid", async () => {
@@ -2182,16 +2157,10 @@ describe("StudentPage — the page's leftover height is claimed, not abandoned",
 });
 
 /**
- * D11c — "la ayuda no vive suelta".
- *
- * The switcher used to carry a permanent sentence explaining how the selection
- * behaves across the four family screens. It is a "cómo funciona", not a
- * "qué es", so it belongs behind "Ver ayuda" like every other procedure note
- * in the product (`/discounts`, `/members`, `/student/enroll`). It rode along
- * on all four socio screens at once, which is four copies of the same floating
- * paragraph.
+ * The dashboard's family strip carries no "Ver ayuda": the selection note
+ * still lives on the picker screens (payments, attendance, medical record).
  */
-describe("StudentPage — the switcher's procedure note is disclosed, not permanent", () => {
+describe("StudentPage — the family strip has no help toggle", () => {
   const GUARDIAN_PORTAL: StudentPortalSummary = {
     self: null,
     representados: [
@@ -2205,25 +2174,12 @@ describe("StudentPage — the switcher's procedure note is disclosed, not perman
     mockFetchStudentPortal.mockReset().mockResolvedValue(GUARDIAN_PORTAL);
   });
 
-  it("keeps the note behind 'Ver ayuda' instead of printing it beside the select", async () => {
+  it("does not show a help toggle on the dashboard", async () => {
     render(<StudentPage />);
 
-    await screen.findByLabelText("Estudiante");
+    await screen.findByRole("group", { name: "Estudiante" });
+    expect(screen.queryByText("Ver ayuda")).toBeNull();
     expect(screen.queryByText(/Se mantiene en Mi cuenta/i)).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Cómo funciona esta elección" }));
-
-    // Every screen the picker is mounted on, named in one sentence: the note
-    // is the promise that the choice survives the SIDEBAR's own links, and
-    // those links are `/student`, `/student/payments`, `/student/attendance`
-    // and `/student/medical-record`. Leaving any of them out was the same
-    // omission the sentence exists to prevent — reading "Pagos" and wondering
-    // about the screen she came from. Scoped to the panel: "Mi cuenta" is
-    // also the sidebar's row and this page's own title.
-    const panel = screen.getByRole("region", { name: "Cómo funciona esta elección" });
-    expect(panel).toHaveTextContent(
-      /Se mantiene en Mi cuenta, Pagos, Asistencias y Ficha médica/i,
-    );
   });
 });
 
@@ -2250,17 +2206,15 @@ describe("StudentPage — the no-schedule state fills its box and offers a way o
     expect(action).toHaveAttribute("href", "/ayuda");
   });
 
-  it("fills the stretched panel instead of leaving canvas above and below", async () => {
+  it("stays one line instead of a tall empty card", async () => {
     mockFetchHorariosPorAlumno.mockResolvedValue([]);
 
     render(<StudentPage />);
 
     const panel = await screen.findByTestId("student-situation");
     const title = await within(panel).findByText(/todavía no tiene un horario asignado/i);
-    // `EmptyState`'s `fill` — `flex-1 justify-center` on the statement's own box.
-    const emptyState = title.parentElement;
-    expect(emptyState?.className).toMatch(/\bflex-1\b/);
-    expect(emptyState?.className).toMatch(/justify-center/);
+    expect(title.parentElement?.className ?? "").not.toMatch(/\bflex-1\b.*justify-center|justify-center.*\bflex-1\b/);
+    expect(panel.querySelector('[data-testid="week-plan"]')).toBeNull();
   });
 });
 
@@ -2853,7 +2807,11 @@ describe("StudentPage — la fila de pulso", () => {
 
     const panel = await screen.findByTestId("student-situation");
     await waitFor(() => {
-      expect(within(panel).getAllByRole("listitem")).toHaveLength(5);
+      expect(
+        within(panel)
+          .getAllByRole("listitem")
+          .filter((day) => day.getAttribute("data-state") !== "idle"),
+      ).toHaveLength(5);
     });
   });
 
@@ -2935,5 +2893,94 @@ describe("StudentPage — a pure representative with no dependents and no member
     await screen.findByText(/todavía no tiene una matrícula activa/i);
     const link = screen.getByRole("link", { name: /inscribir a un hijo o dependiente/i });
     expect(link).toHaveAttribute("href", "/student/enroll?type=child");
+  });
+});
+
+describe("StudentPage — encabezado y pulso navegables", () => {
+  it("dice el rol y la fecha larga junto al saludo", async () => {
+    render(<StudentPage />);
+    await screen.findByTestId("student-pulse");
+
+    expect(
+      screen.getByText(/^Hola, .+ · (Estudiante|Representante) · \p{L}+, \d{1,2} de \p{L}+ de \d{4}$/u),
+    ).toBeInTheDocument();
+  });
+
+  it("lleva cada cifra a la pantalla donde se trabaja", async () => {
+    render(<StudentPage />);
+    const pulso = within(await screen.findByTestId("student-pulse"));
+
+    expect(pulso.getByText("Cobertura").closest("a")?.getAttribute("href")).toMatch(/^\/student\/payments/);
+    expect(pulso.getByText("Asistencia").closest("a")?.getAttribute("href")).toMatch(/^\/student\/attendance/);
+    expect(pulso.getByText("Pagos en revisión").closest("a")?.getAttribute("href")).toMatch(/^\/student\/payments/);
+  });
+});
+
+describe("StudentPage — second-pass organisation", () => {
+  const GUARDIAN: StudentPortalSummary = {
+    self: null,
+    representados: [
+      { ...PORTAL.self!, personaId: "41", nombres: "Sofía", apellidos: "Vera" },
+      { ...PORTAL.self!, personaId: "42", nombres: "Martín", apellidos: "Vera" },
+    ],
+    membershipPlans: [],
+  };
+
+  it("puts the account actions in a card in the rail column instead of floating at the page bottom", async () => {
+    render(<StudentPage />);
+
+    const actions = await screen.findByRole("region", { name: "Acciones de la cuenta" });
+    expect(within(actions).getByRole("link", { name: /Agregar hijo o dependiente/ })).toHaveAttribute(
+      "href",
+      "/student/add-dependent",
+    );
+    expect(within(actions).getByRole("link", { name: /Ficha médica/ })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/student/medical-record"),
+    );
+    // Under Esta semana, so the two columns end at about the same height.
+    const railColumn = screen.getByTestId("student-situation").parentElement!;
+    expect(railColumn.contains(actions)).toBe(true);
+  });
+
+  it("shows the family strip with each dependent's coverage for a guardian with two dependents", async () => {
+    mockFetchStudentPortal.mockResolvedValue(GUARDIAN);
+    render(<StudentPage />);
+
+    const group = await screen.findByRole("group", { name: "Estudiante" });
+    expect(within(group).getAllByRole("button")).toHaveLength(2);
+    // No dropdown any more: the strip is the switcher.
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  });
+
+  it("keeps the dropdown-free layout for a single profile: no strip at all", async () => {
+    render(<StudentPage />);
+
+    await screen.findByTestId("student-carnet");
+    expect(screen.queryByRole("group", { name: "Estudiante" })).not.toBeInTheDocument();
+  });
+
+  it("does not stretch the payment action across the whole card, and does not stack a red button on the red verdict", async () => {
+    mockFetchStudentPortal.mockResolvedValue({
+      ...PORTAL,
+      self: {
+        ...PORTAL.self!,
+        membership: { id: 3, estado: "ACTIVA", personaId: 9, montoAplicado: "40.00", categoria: "Mensual", modalidad: "MENSUAL", fechaActivacion: null, fechaFin: null, cubiertoHasta: "2020-01-01" },
+      },
+    });
+    render(<StudentPage />);
+
+    const cuota = await screen.findByTestId("student-cuota-card");
+    const link = within(cuota).getByText("Registrar un pago").closest("a")!;
+    expect(link.className).not.toMatch(/\bw-full\b/);
+    expect(link.className).not.toMatch(/\bbg-cata-red\b/);
+    expect(within(cuota).getByTestId("cuota-verdict")).toHaveAttribute("data-urgent", "true");
+  });
+
+  it("tells a family what will make the attendance tile fill in", async () => {
+    render(<StudentPage />);
+
+    const pulse = await screen.findByTestId("student-pulse");
+    expect(within(pulse).getByText(/Aparece cuando el entrenador tome lista/)).toBeInTheDocument();
   });
 });

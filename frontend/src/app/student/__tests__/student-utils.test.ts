@@ -20,6 +20,8 @@ import {
   contarEntrenamientosSemanales,
   findNextTrainingSessions,
   COVERAGE_ENDING_SOON_DAYS,
+  describeFamilyCoverage,
+  describeCuotaBadge,
 } from "../student-utils";
 import type { PaymentSituationInput, StudentPortalMode } from "../student-utils";
 import type { PagoPersona, StudentSessionSummary } from "@/services/api";
@@ -987,5 +989,66 @@ describe("contarEntrenamientosSemanales", () => {
 
   it("es cero para un alumno sin horarios asignados", () => {
     expect(contarEntrenamientosSemanales([])).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// describeFamilyCoverage — one short status per dependent, from data the
+// portal summary already carries.
+// ---------------------------------------------------------------------------
+
+describe("describeFamilyCoverage", () => {
+  const TODAY = new Date(2026, 8, 29);
+  const membership = (cubiertoHasta: string | null) =>
+    ({ id: 1, estado: "ACTIVA", personaId: 1, montoAplicado: "40.00", categoria: null, modalidad: null, fechaActivacion: null, fechaFin: null, cubiertoHasta }) as never;
+
+  it("says there is no membership when the profile has none", () => {
+    expect(describeFamilyCoverage(null, TODAY)).toEqual({ label: "Sin membresía", tone: "neutral" });
+  });
+
+  it("says there is no approved payment yet when coverage is unknown", () => {
+    expect(describeFamilyCoverage(membership(null), TODAY)).toEqual({ label: "Sin pago aprobado", tone: "warn" });
+  });
+
+  it("flags expired coverage as bad", () => {
+    expect(describeFamilyCoverage(membership("2026-09-20"), TODAY)).toEqual({ label: "Vencida", tone: "bad" });
+  });
+
+  it("warns for the last days and reads ok beyond that", () => {
+    expect(describeFamilyCoverage(membership("2026-09-29"), TODAY)).toEqual({ label: "Vence hoy", tone: "warn" });
+    expect(describeFamilyCoverage(membership("2026-10-03"), TODAY)).toEqual({ label: "4 días de cobertura", tone: "warn" });
+    expect(describeFamilyCoverage(membership("2026-09-30"), TODAY)).toEqual({ label: "1 día de cobertura", tone: "warn" });
+    expect(describeFamilyCoverage(membership("2026-11-29"), TODAY)).toEqual({ label: "61 días de cobertura", tone: "ok" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// describeCuotaBadge — the ONE coloured signal the Cuota card carries.
+// ---------------------------------------------------------------------------
+
+describe("describeCuotaBadge", () => {
+  const situation = (kind: string, figure: { value: number; unit: string } | null = null) =>
+    ({ kind, figure, headline: "", detail: "", priceNote: null, canRegister: true, urgent: false }) as never;
+
+  it("names an expired coverage as Vencida, bad", () => {
+    expect(describeCuotaBadge(situation("expired", { value: 3, unit: "días vencida" }))).toEqual({ label: "Vencida", tone: "bad" });
+  });
+
+  it("counts the days left when coverage is about to lapse, and warns rather than alarms", () => {
+    expect(describeCuotaBadge(situation("ending-soon", { value: 4, unit: "días de cobertura" }))).toEqual({ label: "Vence en 4 días", tone: "warn" });
+    expect(describeCuotaBadge(situation("ending-soon", { value: 1, unit: "día de cobertura" }))).toEqual({ label: "Vence en 1 día", tone: "warn" });
+    expect(describeCuotaBadge(situation("ending-soon"))).toEqual({ label: "Vence hoy", tone: "warn" });
+  });
+
+  it("reads Al día, ok, for covered coverage", () => {
+    expect(describeCuotaBadge(situation("covered", { value: 40, unit: "días de cobertura" }))).toEqual({ label: "Al día", tone: "ok" });
+  });
+
+  it("gives every other state a short neutral or specific label", () => {
+    expect(describeCuotaBadge(situation("never-paid"))).toEqual({ label: "Sin pagos", tone: "bad" });
+    expect(describeCuotaBadge(situation("awaiting-validation"))).toEqual({ label: "En revisión", tone: "neutral" });
+    expect(describeCuotaBadge(situation("no-membership"))).toEqual({ label: "Sin membresía", tone: "neutral" });
+    expect(describeCuotaBadge(situation("gratuitous"))).toEqual({ label: "Sin costo", tone: "ok" });
+    expect(describeCuotaBadge(situation("minor-blocked"))).toEqual({ label: "Lo gestiona el club", tone: "neutral" });
   });
 });
