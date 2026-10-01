@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import SessionsCard from "@/app/profile/SessionsCard";
 import type { SesionPropia } from "@/services/api";
 
@@ -102,5 +102,52 @@ describe("SessionsCard", () => {
     await screen.findByTestId("sesion-1");
 
     expect(mockFetchMisSesiones).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("SessionsCard collapsing", () => {
+  const five = [
+    sesion({ id: 1, dispositivo: "A" }),
+    sesion({ id: 2, dispositivo: "B" }),
+    sesion({ id: 3, dispositivo: "C", actual: true }),
+    sesion({ id: 4, dispositivo: "D" }),
+    sesion({ id: 5, dispositivo: "E" }),
+  ];
+
+  it("shows only two sessions by default, the current one first", async () => {
+    mockFetchMisSesiones.mockResolvedValue(five);
+    render(<SessionsCard />);
+
+    await screen.findByTestId("sesion-3");
+    const rows = screen.getAllByTestId(/^sesion-\d+$/);
+    expect(rows.map((r) => r.dataset.testid)).toEqual(["sesion-3", "sesion-1"]);
+  });
+
+  it("expands and collapses the full list in place", async () => {
+    mockFetchMisSesiones.mockResolvedValue(five);
+    render(<SessionsCard />);
+
+    const toggle = await screen.findByRole("button", { name: "Ver todas las sesiones (5)" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    const controlled = toggle.getAttribute("aria-controls");
+    expect(controlled).toBeTruthy();
+    expect(document.getElementById(controlled as string)).toBe(screen.getByRole("list"));
+
+    fireEvent.click(toggle);
+    expect(screen.getAllByTestId(/^sesion-\d+$/)).toHaveLength(5);
+    const less = screen.getByRole("button", { name: "Mostrar menos" });
+    expect(less).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(less);
+    expect(screen.getAllByTestId(/^sesion-\d+$/)).toHaveLength(2);
+  });
+
+  it("offers no toggle when there are two sessions or fewer", async () => {
+    mockFetchMisSesiones.mockResolvedValue([sesion({ id: 1 }), sesion({ id: 2 })]);
+    render(<SessionsCard />);
+
+    await screen.findByTestId("sesion-1");
+    expect(screen.getAllByTestId(/^sesion-\d+$/)).toHaveLength(2);
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 });

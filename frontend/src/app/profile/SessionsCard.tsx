@@ -37,13 +37,18 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { fetchMisSesiones, type SesionPropia } from "@/services/api";
 import { formatDateTime } from "@/lib/format-utils";
 import { Badge } from "@/components/ui";
 
+/** Rows visible before the user asks for the full history. */
+const COLLAPSED_COUNT = 2;
+
 export default function SessionsCard(): React.ReactElement | null {
   const [sesiones, setSesiones] = useState<SesionPropia[]>([]);
+  const [expandida, setExpandida] = useState(false);
+  const listId = useId();
 
   useEffect((): (() => void) => {
     let cancelado = false;
@@ -66,6 +71,13 @@ export default function SessionsCard(): React.ReactElement | null {
   // hueco de antes, ahora con un borde alrededor.
   if (sesiones.length === 0) return null;
 
+  // The caller's own session leads (stable sort keeps the backend's recency
+  // order for the rest), so the collapsed pair is "this device" + the most
+  // recent other one.
+  const ordenadas = [...sesiones].sort((a, b) => Number(b.actual) - Number(a.actual));
+  const colapsable = ordenadas.length > COLLAPSED_COUNT;
+  const visibles = colapsable && !expandida ? ordenadas.slice(0, COLLAPSED_COUNT) : ordenadas;
+
   return (
     <section
       data-testid="profile-sessions"
@@ -77,8 +89,8 @@ export default function SessionsCard(): React.ReactElement | null {
         </h2>
       </div>
 
-      <ul className="m-0 flex list-none flex-col p-0">
-        {sesiones.map((sesion) => (
+      <ul id={listId} className="m-0 flex list-none flex-col p-0">
+        {visibles.map((sesion) => (
           <li
             key={sesion.id}
             data-testid={`sesion-${sesion.id}`}
@@ -100,6 +112,18 @@ export default function SessionsCard(): React.ReactElement | null {
           </li>
         ))}
       </ul>
+
+      {colapsable && (
+        <button
+          type="button"
+          aria-expanded={expandida}
+          aria-controls={listId}
+          onClick={() => setExpandida((v) => !v)}
+          className="border-t border-line px-5 py-3 text-left text-sm font-semibold text-ink-2 hover:text-ink"
+        >
+          {expandida ? "Mostrar menos" : `Ver todas las sesiones (${ordenadas.length})`}
+        </button>
+      )}
     </section>
   );
 }
