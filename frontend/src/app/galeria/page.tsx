@@ -152,7 +152,7 @@ export default function GaleriaPage(): React.ReactElement {
             </span>
           </div>
           {error && <p ref={errorRef} id="galeria-error" role="alert" tabIndex={-1} className="text-sm text-state-bad">{error}</p>}
-          <Button type="submit" variant="primary" disabled={saving} className="self-start">{saving ? "Publicando…" : "Publicar foto"}</Button>
+          <Button type="submit" variant="primary" disabled={saving || !archivo} className="self-start">{saving ? "Publicando…" : "Publicar foto"}</Button>
         </form>
         <section aria-label="Fotos publicadas" className="flex min-w-0 flex-col lg:col-start-1 lg:row-start-1 lg:self-stretch">
           {cargando ? <LoadingState label="Cargando fotos…" />
