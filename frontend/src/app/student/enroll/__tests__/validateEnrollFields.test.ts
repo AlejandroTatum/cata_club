@@ -185,7 +185,7 @@ describe("validateEnrollFields", () => {
       "representative",
       validForm({ enrollmentType: "child", fechaNacimientoRepresentante: "1800-01-15" }),
     );
-    expect(errors.fechaNacimientoRepresentante).toMatch(/entre 18 y 95 años; con esa fecha resultan \d+\. Revise el año de nacimiento\./);
+    expect(errors.fechaNacimientoRepresentante).toMatch(/entre 18 y 95 años; la fecha ingresada corresponde a \d+ años?\. Revise el año de nacimiento\./);
   });
 
   it("validates the health step's blood type and emergency contact", () => {

@@ -533,7 +533,7 @@ export function studentBirthDateRule(value: string, today: Date = new Date()): s
   if (isFutureBirthDate(value, today)) return "La fecha de nacimiento no puede ser posterior a hoy. Revise el año.";
   const age = calculatePersonAge(value, today);
   if (age < EDAD_MINIMA_ALUMNO || age > EDAD_MAXIMA_ALUMNO) {
-    return `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; con esa fecha resultan ${age}. Revise el año de nacimiento.`;
+    return `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a ${age} ${age === 1 ? "año" : "años"}. Revise el año de nacimiento.`;
   }
   return null;
 }

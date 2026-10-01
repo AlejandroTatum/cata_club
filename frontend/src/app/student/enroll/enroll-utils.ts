@@ -462,7 +462,7 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
     const edad = calculatePersonAge(d.fechaNacimientoRepresentante);
     return edad >= EDAD_MAYORIA_EDAD && edad <= EDAD_MAXIMA_ALUMNO
       ? null
-      : `El representante debe tener entre ${EDAD_MAYORIA_EDAD} y ${EDAD_MAXIMA_ALUMNO} años; con esa fecha resultan ${edad}. Revise el año de nacimiento.`;
+      : `El representante debe tener entre ${EDAD_MAYORIA_EDAD} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a ${edad} ${edad === 1 ? "año" : "años"}. Revise el año de nacimiento.`;
   },
   telefonoRepresentante: (d) => phoneRule(d.telefonoRepresentante, "El teléfono del representante"),
   correoRepresentante: (d) =>
