@@ -47,9 +47,29 @@ describe("GaleriaPage", () => {
   });
   it("requires the title, the description and a photo before publishing", async () => {
     render(<GaleriaPage />); await screen.findByText("En juego");
+    fireEvent.change(screen.getByLabelText("Foto (JPG o PNG)"), { target: { files: [fotoValida()] } });
     fireEvent.click(screen.getByRole("button", { name: "Publicar foto" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/título, la descripción y seleccione/i);
     expect(crearEntradaGaleria).not.toHaveBeenCalled();
+  });
+  it("keeps Publicar foto disabled until a photo is chosen", async () => {
+    render(<GaleriaPage />); await screen.findByText("En juego");
+    expect(screen.getByRole("button", { name: "Publicar foto" })).toBeDisabled();
+  });
+  it("enables Publicar foto once a valid photo is chosen, without needing title or description", async () => {
+    render(<GaleriaPage />); await screen.findByText("En juego");
+    fireEvent.change(screen.getByLabelText("Foto (JPG o PNG)"), { target: { files: [fotoValida()] } });
+    expect(screen.getByRole("button", { name: "Publicar foto" })).toBeEnabled();
+  });
+  it("keeps Publicar foto disabled after an invalid photo is rejected", async () => {
+    render(<GaleriaPage />); await screen.findByText("En juego");
+    fireEvent.change(screen.getByLabelText("Foto (JPG o PNG)"), { target: { files: [new File(["gif"], "foto.gif", { type: "image/gif" })] } });
+    expect(await screen.findByRole("alert")).toHaveTextContent(/debe ser un archivo JPG o PNG/);
+    expect(screen.getByRole("button", { name: "Publicar foto" })).toBeDisabled();
+    const pesada = new File([new ArrayBuffer(5 * 1024 * 1024 + 1)], "foto.jpg", { type: "image/jpeg" });
+    fireEvent.change(screen.getByLabelText("Foto (JPG o PNG)"), { target: { files: [pesada] } });
+    expect(await screen.findByRole("alert")).toHaveTextContent(/supera el límite de 5 MB/);
+    expect(screen.getByRole("button", { name: "Publicar foto" })).toBeDisabled();
   });
   it("publishes a filled form and reloads the list", async () => {
     render(<GaleriaPage />); await completarFormularioValido();
