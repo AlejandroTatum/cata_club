@@ -15,12 +15,13 @@ vi.mock("@/contexts/AuthContext", () => ({ useAuth: vi.fn() }));
 
 // Honours `allowedRoles` like the real guard, so "non-admin is blocked" is
 // really a statement about what the page asked for.
-vi.mock("@/components/ProtectedRoute", () => ({
-  default: ({ children, allowedRoles }: { children: React.ReactNode; allowedRoles: string[] }) => {
+vi.mock("@/components/ProtectedRoute", () => {
+  function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles: string[] }): React.ReactElement {
     const { session } = useAuth();
     return allowedRoles.includes(session?.user?.role ?? "") ? <>{children}</> : <p>Acceso denegado</p>;
-  },
-}));
+  }
+  return { default: ProtectedRoute };
+});
 
 vi.mock("@/components/shell/AppShell", () => ({
   default: ({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) => (
