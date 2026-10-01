@@ -153,7 +153,7 @@ function pensar() {
 // Tokens live in this in-memory cache only — never logged, never persisted.
 const cookiesPorVU = new Map();
 
-function loginYCachea(credential) {
+function loginYCachea(credential, faseTags) {
   // Step 1 — login through the BFF (OAuth2 re-encoding happens server-side).
   const login = http.post(`${BASE_URL}/api/auth/login`, JSON.stringify(credential), {
     headers: JSON_HEADERS,
@@ -204,7 +204,7 @@ export function authenticatedReadJourney(credential, tagsExtra) {
   // Login once per VU; later iterations reuse the cached session.
   let cache = cookiesPorVU.get(__VU);
   if (!cache) {
-    cache = loginYCachea(credential);
+    cache = loginYCachea(credential, faseTags);
     if (!cache) {
       journeyFailureRate.add(1);
       // Think time applies even after a failed login: without it, a down or

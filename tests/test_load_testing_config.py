@@ -147,6 +147,9 @@ class TestAceptacionPorPlatoYPoolSuficiente:
         texto = _leer(DIR_K6 / "common.js")
         assert re.search(r"export function authenticatedReadJourney\(credential, tagsExtra\)", texto)
         assert texto.count("...faseTags") >= 3, "login, sesión y lectura llevan la fase"
+        # faseTags lives in the journey's scope: the login helper must receive it.
+        assert re.search(r"function loginYCachea\(credential, faseTags\)", texto)
+        assert "loginYCachea(credential, faseTags)" in texto
 
     def test_steady_exige_pool_de_tantas_identidades_como_vus(self):
         texto = _leer(DIR_K6 / "steady_100.js")
