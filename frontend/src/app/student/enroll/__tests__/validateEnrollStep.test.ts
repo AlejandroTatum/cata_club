@@ -233,8 +233,20 @@ describe("validateEnrollStep — personal step", () => {
   // ---- Student credentials for self-enrollment (required) ----
 
   it("requires valid email for self-enrollment", () => {
-    const errors = validateEnrollStep("personal", validForm({ correo: "" }));
+    const errors = validateEnrollStep("personal", validForm({ correo: "sin-arroba" }));
     expect(errors).toContain("El correo electrónico no es válido.");
+  });
+
+  it("says the email is required, not invalid, when it is empty", () => {
+    const errors = validateEnrollStep("personal", validForm({ correo: "" }));
+    expect(errors).toContain("El correo electrónico es obligatorio.");
+    expect(errors).not.toContain("El correo electrónico no es válido.");
+  });
+
+  it("says the password is required, not too short, when it is empty", () => {
+    const errors = validateEnrollStep("personal", validForm({ contrasenia: "" }));
+    expect(errors).toContain("La contraseña es obligatoria.");
+    expect(errors).not.toContain("La contraseña debe tener al menos 8 caracteres.");
   });
 
   it("requires password of at least 8 characters for self-enrollment", () => {
@@ -365,7 +377,27 @@ describe("validateEnrollStep — representative step", () => {
         contraseniaRepresentante: "password8",
       }),
     );
+    expect(errors).toContain("El correo del representante es obligatorio.");
+    expect(errors).not.toContain("El correo del representante no es válido.");
+  });
+
+  it("flags a non-empty malformed representative email as invalid", () => {
+    const errors = validateEnrollStep(
+      "representative",
+      validForm({ enrollmentType: "child", correoRepresentante: "maria@correo" }),
+    );
     expect(errors).toContain("El correo del representante no es válido.");
+  });
+
+  it("says the representative password is required, not too short, when empty", () => {
+    const errors = validateEnrollStep(
+      "representative",
+      validForm({ enrollmentType: "child", contraseniaRepresentante: "" }),
+    );
+    expect(errors).toContain("La contraseña del representante es obligatoria.");
+    expect(errors).not.toContain(
+      "La contraseña del representante debe tener al menos 8 caracteres.",
+    );
   });
 
   it("requires representative password of at least 8 characters", () => {

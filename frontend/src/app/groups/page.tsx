@@ -1,8 +1,8 @@
 /**
- * Horarios — Admin page for managing training schedules.
+ * Grupos y horarios — Admin page for managing training schedules.
  *
  * NAMING (three names, one thing — read this before renaming anything):
- *   - USER-FACING name: **Horarios**. That is what the nav says
+ *   - USER-FACING name: **Grupos y horarios**. That is what the nav says
  *     (`lib/auth-utils.ts`), what the page title says, and what the approved
  *     prototype says (`docs/archive/prototypes/prototipos/14-horarios.html`). It is the only
  *     name a user ever sees.
@@ -97,7 +97,7 @@ import {
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import { Button, Badge, DataBox, DataRow, DataRowList, EmptyState, ErrorState, LoadingState, Pagination, WeekStrip } from "@/components/ui";
+import { Button, Badge, DataBox, DataRow, DataRowList, EmptyState, ErrorState, LoadingState, Pagination, STAT_GRID, StatCard, WeekStrip } from "@/components/ui";
 import { getTotalPages, paginateRecords } from "@/app/attendance/attendance-utils";
 import { useGroupRoster } from "./useGroupRoster";
 import {
@@ -203,7 +203,7 @@ const CELL_LABEL = "text-2xs font-bold uppercase text-ink-3-strong";
 // `categoriaLabel(card.categoria)`, the exact value the "Nueva categoría" /
 // "Editar categoría" controls on this same screen already name — a third
 // word for the same thing was the finding, not the column itself. The
-// user-facing screen name stays "Horarios" (see the NAMING note at the top
+// user-facing screen name stays "Grupos y horarios" (see the NAMING note at the top
 // of this file): that rename is deliberately out of scope, this one is not.
 const COLUMNS = ["Categoría", "Horario", "Alumnos", "Acciones"] as const;
 
@@ -641,6 +641,25 @@ export default function GroupsPage(): React.ReactElement {
    * Competitivo?") are about the group, and the weekday was never the subject.
    */
   const categoriaCards = useMemo(() => buildCategoriaCards(horarioGroups), [horarioGroups]);
+
+  /**
+   * The summary strip above the list, from data the screen already holds.
+   *
+   * Enrollment figures are `null` until EVERY schedule's roster has answered
+   * (see `personasPorHorario`): a partial union would undercount, and this is
+   * the figure the club plans around.
+   */
+  const summary = useMemo(() => {
+    const rostersLoaded =
+      horarios.length > 0 && horarios.every((horario) => personasPorHorario[horario.id] !== undefined);
+    if (!rostersLoaded) return { inscriptos: null, sinGrupo: null };
+    const assigned = new Set<number>();
+    for (const horario of horarios) {
+      for (const personaId of personasPorHorario[horario.id]) assigned.add(personaId);
+    }
+    const sinGrupo = allStudents.filter((student) => student.activo && !assigned.has(Number(student.id))).length;
+    return { inscriptos: assigned.size, sinGrupo };
+  }, [horarios, personasPorHorario, allStudents]);
 
   /**
    * Catalog categorías with no schedules yet, shown as their own cards.
@@ -1471,16 +1490,7 @@ export default function GroupsPage(): React.ReactElement {
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
-        title="Horarios"
-        /*
-         * One card per categoría, and there are as many categorías as the club
-         * defines — five today. Like `/discounts` this list has no pager, so
-         * its canvas (508/640/820px) is a record count rather than a page size.
-         * The roster inside a card DOES paginate, and it was measured at this
-         * measure too: it fills the page at every viewport either way. See
-         * `CONTENT_MEASURE`.
-         */
-        measure="short"
+        title="Grupos y horarios"
         actions={
           // Disabled while `categorias` (part of `loadData`'s Promise.all,
           // same as `horarios`/`allStudents`) hasn't loaded yet — the create
@@ -1521,6 +1531,19 @@ export default function GroupsPage(): React.ReactElement {
             {renderHorarioForm()}
           </div>
         )}
+
+        {!loading && categoriaCards.length > 0 ? (
+          <div data-testid="groups-summary" className={STAT_GRID}>
+            <StatCard label="Categorías" value={categoriaCards.length} />
+            <StatCard label="Horarios" value={horarios.length} />
+            <StatCard label="Alumnos en grupos" value={summary.inscriptos ?? "—"} />
+            <StatCard
+              label="Sin grupo"
+              value={summary.sinGrupo ?? "—"}
+              hint="Alumnos activos sin ningún horario"
+            />
+          </div>
+        ) : null}
 
         {loading ? (
           <div className="card">

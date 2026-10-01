@@ -12,6 +12,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { getRowAction, getRowActionsTrigger } from "./row-actions";
 import MembersPage from "@/app/members/page";
 import type { MemberAccount, MemberStudentSummary } from "@/app/members/members-utils";
 import type { DescuentoCatalogo } from "@/services/api";
@@ -269,9 +270,9 @@ async function findAccountCard(): Promise<HTMLElement> {
   return card as HTMLElement;
 }
 
-/** Each rendering carries exactly one "Editar <name>" trigger. */
+/** Each rendering carries exactly one "Editar <name>" action, inside the row's overflow menu. */
 function getEditButton(container: HTMLElement): HTMLElement {
-  return within(container).getAllByRole("button", { name: /^editar/i })[0];
+  return getRowAction(container, /^editar/i);
 }
 
 describe("MembersPage — Editar member modal", () => {
@@ -349,10 +350,16 @@ describe("MembersPage — Editar member modal", () => {
     const row = await findAccountRow();
     const card = await findAccountCard();
 
-    // One in the row, one in the phone card — not two stacked in the same
-    // cell, which is what the audit found.
-    expect(within(row).getAllByRole("button", { name: /^editar/i })).toHaveLength(1);
-    expect(within(card).getAllByRole("button", { name: /^editar/i })).toHaveLength(1);
+    // One in the row's overflow menu, one in the phone card's — not two
+    // stacked in the same cell, which is what the audit found.
+    for (const container of [row, card]) {
+      const trigger = getRowActionsTrigger(container);
+      fireEvent.click(trigger);
+      const menu = document.getElementById(trigger.getAttribute("aria-controls") ?? "") as HTMLElement;
+      expect(within(menu).getAllByRole("menuitem", { name: /^editar/i })).toHaveLength(1);
+      fireEvent.click(trigger);
+    }
+    expect(within(row).queryAllByRole("button", { name: /^editar/i })).toHaveLength(0);
     expect(within(row).queryByRole("button", { name: /^roles$/i })).not.toBeInTheDocument();
     expect(within(row).queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -956,11 +963,13 @@ describe("MembersPage — Editar member modal", () => {
     );
     const row = await findAccountRow();
 
-    const editButton = getEditButton(row);
-    fireEvent.click(editButton);
+    // Editar lives in the overflow menu, which closes on selection, so the
+    // dialog hands focus back to the menu's trigger.
+    const trigger = getRowActionsTrigger(row);
+    fireEvent.click(getEditButton(row));
     fireEvent.click(screen.getByRole("button", { name: "Cerrar ventana" }));
 
-    expect(document.activeElement).toBe(editButton);
+    expect(document.activeElement).toBe(trigger);
   });
 
   it("does not carry a stale error into a freshly reopened modal", async () => {
@@ -2742,7 +2751,7 @@ describe("MembersPage — missing emergency data reads as informational, not an 
     // backend never requires — assert it is gone, not just that new text
     // exists alongside it.
     expect(within(row).queryByText("Sin datos de emergencia")).not.toBeInTheDocument();
-    const ficha = within(row).getByRole("button", { name: "Ficha médica de María González" });
+    const ficha = getRowAction(row, /^ficha médica de maría gonzález$/i);
     // No inline status text and no hidden status suffix on the trigger — the
     // explicit "Sin ficha médica" status lives INSIDE the dialog only.
     expect(within(row).queryByText(/ficha médica cargada/i)).not.toBeInTheDocument();
@@ -2759,7 +2768,7 @@ describe("MembersPage — missing emergency data reads as informational, not an 
     const card = await findAccountCard();
 
     expect(within(card).queryByText("Sin datos de emergencia")).not.toBeInTheDocument();
-    expect(within(card).getByRole("button", { name: "Ficha médica de María González" })).toBeInTheDocument();
+    expect(getRowAction(card, /^ficha médica de maría gonzález$/i)).toBeInTheDocument();
     expect(within(card).queryByText(/sin ficha médica/i)).not.toBeInTheDocument();
   });
 
@@ -2790,7 +2799,7 @@ describe("MembersPage — missing emergency data reads as informational, not an 
       </ToastProvider>,
     );
     const row = await findAccountRow();
-    fireEvent.click(within(row).getByRole("button", { name: "Ficha médica de María González" }));
+    fireEvent.click(getRowAction(row, /^ficha médica de maría gonzález$/i));
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByRole("status")).toHaveTextContent("Sin ficha médica");
@@ -2813,7 +2822,7 @@ describe("MembersPage — missing emergency data reads as informational, not an 
       </ToastProvider>,
     );
     const row = await findAccountRow();
-    fireEvent.click(within(row).getByRole("button", { name: "Ficha médica de María González" }));
+    fireEvent.click(getRowAction(row, /^ficha médica de maría gonzález$/i));
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).queryByRole("status")).not.toBeInTheDocument();
@@ -2863,7 +2872,7 @@ describe("MembersPage — the repeated row trigger is tertiary (D5)", () => {
       </ToastProvider>,
     );
     const row = await findAccountRow();
-    const trigger = getEditButton(row);
+    const trigger = getRowAction(row, /^pagos/i);
 
     // `secondary` is `bg-paper border-line-2` — on a paper table that is a
     // visible box drawn once per row, forty-five of them down the page, all
@@ -3546,7 +3555,7 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
   });
 
   function getRowButton(container: HTMLElement, name: RegExp): HTMLElement {
-    return within(container).getAllByRole("button", { name })[0];
+    return getRowAction(container, name);
   }
 
   it("gives each rendering exactly one Ficha médica and one Pagos trigger, alongside Editar", async () => {
@@ -3559,9 +3568,15 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     const card = await findAccountCard();
 
     for (const container of [row, card]) {
-      expect(within(container).getAllByRole("button", { name: /^editar/i })).toHaveLength(1);
-      expect(within(container).getAllByRole("button", { name: /^ficha médica/i })).toHaveLength(1);
+      // Pagos is the one visible action; Editar and Ficha médica sit in the menu.
       expect(within(container).getAllByRole("button", { name: /^pagos/i })).toHaveLength(1);
+      expect(within(container).queryAllByRole("button", { name: /^(editar|ficha médica)/i })).toHaveLength(0);
+      const trigger = getRowActionsTrigger(container);
+      fireEvent.click(trigger);
+      const menu = document.getElementById(trigger.getAttribute("aria-controls") ?? "") as HTMLElement;
+      expect(within(menu).getAllByRole("menuitem", { name: /^editar/i })).toHaveLength(1);
+      expect(within(menu).getAllByRole("menuitem", { name: /^ficha médica/i })).toHaveLength(1);
+      fireEvent.click(trigger);
     }
   });
 
@@ -3577,38 +3592,34 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     expect(getRowButton(row, /^pagos/i)).toHaveAccessibleName("Pagos de María González");
   });
 
-  it("matches Editar's touch target size on both new triggers", async () => {
+  it("keeps Pagos and the overflow trigger at the in-table control height", async () => {
     render(
       <ToastProvider>
         <MembersPage />
       </ToastProvider>,
     );
     const row = await findAccountRow();
-    const editar = getRowButton(row, /^editar/i);
-    const ficha = getRowButton(row, /^ficha médica/i);
     const pagos = getRowButton(row, /^pagos/i);
+    const overflow = getRowActionsTrigger(row);
 
     // `Button size="sm"` — the same in-table control height (`h-ctl-sm`) the
-    // audit already granted `EditAccountButton`.
-    expect(ficha.className).toContain("h-ctl-sm");
+    // audit already granted the row's actions.
     expect(pagos.className).toContain("h-ctl-sm");
-    expect(editar.className).toContain("h-ctl-sm");
+    expect(overflow.className).toContain("h-ctl-sm");
   });
 
-  it("gives the Ficha médica trigger a visible border and leaves Pagos borderless", async () => {
+  it("leaves Pagos as the only visible action, drawn borderless, with the rest in the menu", async () => {
     render(
       <ToastProvider>
         <MembersPage />
       </ToastProvider>,
     );
     const row = await findAccountRow();
-    const ficha = getRowButton(row, /^ficha médica/i);
-    const pagos = getRowButton(row, /^pagos/i);
 
-    // Medical uses the bordered secondary skin; the payments trigger keeps the
-    // quiet tertiary skin — the visible border applies to Medical only.
-    expect(ficha.className).toContain("border-line-2");
-    expect(pagos.className).toContain("border-transparent");
+    expect(getRowButton(row, /^pagos/i).className).toContain("border-transparent");
+    expect(within(row).queryByRole("button", { name: /^ficha médica/i })).not.toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: /^editar/i })).not.toBeInTheDocument();
+    expect(getRowActionsTrigger(row)).toHaveAccessibleName("Más acciones para María González");
   });
 
   it("keeps the derived debt inside the Pagos dialog when the table label is stripped", async () => {
@@ -3784,9 +3795,9 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
       </ToastProvider>,
     );
     const row = await findAccountRow();
-    const trigger = getRowButton(row, /^ficha médica/i);
+    const trigger = getRowActionsTrigger(row);
 
-    fireEvent.click(trigger);
+    fireEvent.click(getRowButton(row, /^ficha médica/i));
     await screen.findByRole("dialog");
     fireEvent.click(screen.getByRole("button", { name: "Cerrar ventana" }));
 
@@ -3870,7 +3881,7 @@ describe("MembersPage — mobile-safe dialog viewport (issue #659)", () => {
   });
 
   function getRowButton(container: HTMLElement, name: RegExp): HTMLElement {
-    return within(container).getAllByRole("button", { name })[0];
+    return getRowAction(container, name);
   }
 
   it.each([
@@ -3976,7 +3987,7 @@ describe("MembersPage — the dialog follows the visual viewport (issue #767)", 
   });
 
   function getRowButton(container: HTMLElement, name: RegExp): HTMLElement {
-    return within(container).getAllByRole("button", { name })[0];
+    return getRowAction(container, name);
   }
 
   /**
@@ -4089,8 +4100,8 @@ describe("MembersPage — the dialog follows the visual viewport (issue #767)", 
       </ToastProvider>,
     );
     const card = await findAccountCard();
-    const editar = within(card).getAllByRole("button", { name: /^editar/i })[0];
-    const group = editar.parentElement as HTMLElement;
+    const pagos = within(card).getAllByRole("button", { name: /^pagos/i })[0];
+    const group = pagos.parentElement as HTMLElement;
 
     expect(group.className).toContain("flex-wrap");
     // …and the group must be allowed to give up width, or wrapping inside it
@@ -4217,7 +4228,7 @@ describe("MembersPage — representative-only row actions (issue #1199, #1211)",
 
     expect(within(row).queryByRole("button", { name: /^ficha médica/i })).not.toBeInTheDocument();
     expect(within(row).queryByRole("button", { name: /^pagos/i })).not.toBeInTheDocument();
-    expect(within(row).getByRole("button", { name: /^editar/i })).toBeInTheDocument();
+    expect(getRowAction(row, /^editar/i)).toBeInTheDocument();
   });
 
   it('still offers "Ficha médica" and "Pagos" once the representative also carries her own membership', async () => {
@@ -4244,7 +4255,7 @@ describe("MembersPage — representative-only row actions (issue #1199, #1211)",
     const matches = await screen.findAllByText("Laura Suárez");
     const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
 
-    expect(within(row).getByRole("button", { name: /^ficha médica/i })).toBeInTheDocument();
+    expect(getRowAction(row, /^ficha médica/i)).toBeInTheDocument();
     expect(within(row).getByRole("button", { name: /^pagos/i })).toBeInTheDocument();
   });
 
@@ -4278,9 +4289,9 @@ describe("MembersPage — representative-only row actions (issue #1199, #1211)",
     const matches = await screen.findAllByText("Sofía Suárez");
     const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
 
-    expect(within(row).getByRole("button", { name: /^ficha médica/i })).toBeInTheDocument();
+    expect(getRowAction(row, /^ficha médica/i)).toBeInTheDocument();
     expect(within(row).getByRole("button", { name: /^pagos/i })).toBeInTheDocument();
-    expect(within(row).getByRole("button", { name: /^editar/i })).toBeInTheDocument();
+    expect(getRowAction(row, /^editar/i)).toBeInTheDocument();
   });
 
   it("offers \"Ficha médica\" and \"Pagos\" on a represented student that already has a membership", async () => {
@@ -4316,9 +4327,9 @@ describe("MembersPage — representative-only row actions (issue #1199, #1211)",
     const matches = await screen.findAllByText("Sofía Suárez");
     const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
 
-    expect(within(row).getByRole("button", { name: /^ficha médica/i })).toBeInTheDocument();
+    expect(getRowAction(row, /^ficha médica/i)).toBeInTheDocument();
     expect(within(row).getByRole("button", { name: /^pagos/i })).toBeInTheDocument();
-    expect(within(row).getByRole("button", { name: /^editar/i })).toBeInTheDocument();
+    expect(getRowAction(row, /^editar/i)).toBeInTheDocument();
   });
 });
 

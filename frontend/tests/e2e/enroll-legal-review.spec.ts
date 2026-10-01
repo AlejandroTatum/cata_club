@@ -148,8 +148,8 @@ test.describe("Revisión legal desde el asistente de inscripción (#1368)", () =
     await reachSummaryAsRepresentative(page);
 
     // Los datos del representante están en el resumen ANTES de revisar nada.
-    await expect(page.getByText(`${DEPENDENT.nombres} ${DEPENDENT.apellidos}`)).toBeVisible();
-    await expect(page.getByText(`${REPRESENTATIVE.nombres} ${REPRESENTATIVE.apellidos}`)).toBeVisible();
+    await expect(page.getByTestId("enroll-wizard-card").getByText(`${DEPENDENT.nombres} ${DEPENDENT.apellidos}`)).toBeVisible();
+    await expect(page.getByTestId("enroll-wizard-card").getByText(`${REPRESENTATIVE.nombres} ${REPRESENTATIVE.apellidos}`)).toBeVisible();
 
     // --- Documento 1: abrir, contenido real, Escape devuelve al resumen.
     await page.getByRole("button", { name: "Términos de uso" }).click();
@@ -198,9 +198,9 @@ test.describe("Revisión legal desde el asistente de inscripción (#1368)", () =
     // misma decisión de consentimiento, y la URL nunca salió del asistente.
     await expect(page).toHaveURL(/\/student\/enroll/);
     await expect(page.getByRole("heading", { name: /resumen y confirmación/i })).toBeVisible();
-    await expect(page.getByText(`${DEPENDENT.nombres} ${DEPENDENT.apellidos}`)).toBeVisible();
-    await expect(page.getByText(`${REPRESENTATIVE.nombres} ${REPRESENTATIVE.apellidos}`)).toBeVisible();
-    await expect(page.getByText(REPRESENTATIVE.correo)).toBeVisible();
+    await expect(page.getByTestId("enroll-wizard-card").getByText(`${DEPENDENT.nombres} ${DEPENDENT.apellidos}`)).toBeVisible();
+    await expect(page.getByTestId("enroll-wizard-card").getByText(`${REPRESENTATIVE.nombres} ${REPRESENTATIVE.apellidos}`)).toBeVisible();
+    await expect(page.getByTestId("enroll-wizard-card").getByText(REPRESENTATIVE.correo)).toBeVisible();
     await expect(page.getByRole("checkbox")).toBeChecked();
     await expect(page.getByRole("button", { name: /confirmar inscripción/i })).toBeEnabled();
   });

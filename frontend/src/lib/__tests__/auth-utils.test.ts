@@ -214,26 +214,44 @@ describe("getNavGroupsForRoles", () => {
     ]);
   });
 
-  it("puts every admin destination under Administrar", () => {
+  it("splits the admin destinations into three headed sections, in order", () => {
     const groups = getNavGroupsForRoles(["admin"]);
     expect(groups[0].links).toEqual([{ href: "/", label: "Inicio" }]);
-    expect(groups[1]).toEqual({
-      heading: "Administrar",
-      links: [
-        { href: "/dashboard", label: "Panel de Control" },
-        { href: "/members", label: "Miembros" },
-        { href: "/groups", label: "Horarios" },
-        { href: "/payments", label: "Membresías y Pagos" },
-        { href: "/discounts", label: "Descuentos" },
-        { href: "/sponsors", label: "Patrocinadores" },
-        { href: "/galeria", label: "Galería" },
-        { href: "/admin/reportes-error", label: "Reportes de error" },
-        { href: "/tarifas", label: "Tarifas" },
-        { href: "/attendance", label: "Asistencias" },
-        { href: "/reports", label: "Reportes" },
-      ],
-    });
-    expect(groups).toHaveLength(2);
+    expect(groups.slice(1)).toEqual([
+      {
+        heading: "Operación",
+        links: [
+          { href: "/dashboard", label: "Panel de Control" },
+          { href: "/members", label: "Miembros" },
+          { href: "/payments", label: "Pagos" },
+          { href: "/attendance", label: "Asistencias" },
+          { href: "/groups", label: "Grupos y horarios" },
+          { href: "/reports", label: "Reportes" },
+        ],
+      },
+      {
+        heading: "Catálogo y tarifas",
+        links: [
+          { href: "/tarifas", label: "Tarifas" },
+          { href: "/discounts", label: "Descuentos" },
+        ],
+      },
+      {
+        heading: "Sitio y soporte",
+        links: [
+          { href: "/galeria", label: "Galería" },
+          { href: "/sponsors", label: "Patrocinadores" },
+          { href: "/admin/reportes-error", label: "Reportes de error" },
+        ],
+      },
+    ]);
+    expect(groups).toHaveLength(4);
+  });
+
+  it("still offers all eleven admin destinations, none twice", () => {
+    const hrefs = sectionHrefs(getNavGroupsForRoles(["admin"]));
+    expect(hrefs).toHaveLength(11);
+    expect(new Set(hrefs).size).toBe(11);
   });
 
   // The four trainer destinations, in the exact order the sidebar shows them.
@@ -244,18 +262,23 @@ describe("getNavGroupsForRoles", () => {
   // "Alumnos del club" va última: es consulta, no trabajo del día. Las tres
   // primeras son la secuencia de una sesión (mirar el día, pasar lista, revisar
   // lo pasado) y meter el padrón en medio partiría esa secuencia.
-  it("gives trainer exactly Mi día, Pasar lista, Historial and Alumnos del club under Entrenar", () => {
+  it("gives trainer Mi día and Pasar lista under Hoy, Historial and Alumnos del club under Seguimiento", () => {
     const groups = getNavGroupsForRoles(["trainer"]);
     expect(groups[1]).toEqual({
-      heading: "Entrenar",
+      heading: "Hoy",
       links: [
         { href: "/trainer", label: "Mi día" },
         { href: "/trainer/attendance", label: "Pasar lista" },
+      ],
+    });
+    expect(groups[2]).toEqual({
+      heading: "Seguimiento",
+      links: [
         { href: "/trainer/attendance/history", label: "Historial" },
         { href: "/trainer/students", label: "Alumnos del club" },
       ],
     });
-    expect(groups).toHaveLength(2);
+    expect(groups).toHaveLength(3);
   });
 
   it("gives representante Mi cuenta, Pagos, Asistencias and Ficha médica", () => {
@@ -266,6 +289,11 @@ describe("getNavGroupsForRoles", () => {
         { href: "/student", label: "Mi cuenta" },
         { href: "/student/payments", label: "Pagos" },
         { href: "/student/attendance", label: "Asistencias" },
+      ],
+    });
+    expect(groups[2]).toEqual({
+      heading: "Salud y familia",
+      links: [
         // Only a representante has a representado whose medical record they can
         // manage — see `PoliticaAccesoPersona`'s `incluir_titular=False` on
         // `/fichas-medicas/*`, which still excludes a self-managed titular. An
@@ -306,7 +334,8 @@ describe("getNavGroupsForRoles", () => {
 
   it("adds a Ficha médica row for an adult estudiante", () => {
     const groups = getNavGroupsForRoles(["estudiante"], true);
-    expect(groups[1].links.at(-1)).toEqual({
+    expect(groups[2].heading).toBe("Salud y familia");
+    expect(groups[2].links.at(-1)).toEqual({
       href: "/student/medical-record",
       label: "Ficha médica",
     });
@@ -348,8 +377,12 @@ describe("getNavGroupsForRoles", () => {
     expect(headings(getNavGroupsForRoles(["estudiante"]))).toEqual(["Mi cuenta"]);
   });
 
-  it("draws one group for someone who administers", () => {
-    expect(headings(getNavGroupsForRoles(["admin"]))).toEqual(["Administrar"]);
+  it("draws the three admin sections for someone who administers", () => {
+    expect(headings(getNavGroupsForRoles(["admin"]))).toEqual([
+      "Operación",
+      "Catálogo y tarifas",
+      "Sitio y soporte",
+    ]);
   });
 
   // The 18 accounts that already exist. Both roles name the same section of the
@@ -357,7 +390,7 @@ describe("getNavGroupsForRoles", () => {
   // two groups called "Mi cuenta" side by side.
   it("draws a single Mi cuenta for someone who plays and represents", () => {
     const groups = getNavGroupsForRoles(["representante", "estudiante"]);
-    expect(headings(groups)).toEqual(["Mi cuenta"]);
+    expect(headings(groups)).toEqual(["Mi cuenta", "Salud y familia"]);
     expect(sectionHrefs(groups)).toEqual([
       "/student",
       "/student/payments",
@@ -369,9 +402,9 @@ describe("getNavGroupsForRoles", () => {
   // The case the product cannot express today: a trainer who also plays saw
   // only the trainer's panel, so his own fees and his own attendance did not
   // exist for him.
-  it("draws Entrenar and Mi cuenta for someone who trains and plays", () => {
+  it("draws Hoy, Seguimiento and Mi cuenta for someone who trains and plays", () => {
     const groups = getNavGroupsForRoles(["trainer", "estudiante"]);
-    expect(headings(groups)).toEqual(["Entrenar", "Mi cuenta"]);
+    expect(headings(groups)).toEqual(["Hoy", "Seguimiento", "Mi cuenta"]);
     expect(sectionHrefs(groups)).toEqual([
       "/trainer",
       "/trainer/attendance",
@@ -410,9 +443,22 @@ describe("getNavGroupsForRoles", () => {
   });
 
   it("orders the groups the same way whatever order the roles arrive in", () => {
-    const expected = ["Administrar", "Entrenar", "Mi cuenta"];
-    expect(headings(getNavGroupsForRoles(["admin", "trainer", "estudiante"]))).toEqual(expected);
-    expect(headings(getNavGroupsForRoles(["estudiante", "trainer", "admin"]))).toEqual(expected);
+    const expected = [
+      "Operación",
+      "Catálogo y tarifas",
+      "Sitio y soporte",
+      "Hoy",
+      "Seguimiento",
+      "Mi cuenta",
+      "Salud y familia",
+    ];
+    // `true`: an adult estudiante is the one who gets Salud y familia.
+    expect(headings(getNavGroupsForRoles(["admin", "trainer", "estudiante"], true))).toEqual(
+      expected,
+    );
+    expect(headings(getNavGroupsForRoles(["estudiante", "trainer", "admin"], true))).toEqual(
+      expected,
+    );
     expect(headings(getNavGroupsForRoles(["trainer", "admin", "representante"]))).toEqual(expected);
   });
 

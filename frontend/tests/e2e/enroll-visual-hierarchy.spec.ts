@@ -57,12 +57,12 @@ for (const [viewportName, viewport] of Object.entries({ desktop: DESKTOP, mobile
       await page.setViewportSize(viewport);
     });
 
-    test("the header block, the form card and the info panel resolve to three different fills", async ({
+    test("the brand panel, the form card and the info panel resolve to three different fills", async ({
       page,
     }) => {
       await goToEnroll(page);
 
-      const header = await bg(page, '[data-testid="enroll-wizard-header"]');
+      const header = await bg(page, '[data-testid="enroll-brand-panel"]');
       const card = await bg(page, '[data-testid="enroll-wizard-card"]');
       const panel = await bg(page, '[data-testid="enroll-info-panel"]');
 
@@ -74,15 +74,15 @@ for (const [viewportName, viewport] of Object.entries({ desktop: DESKTOP, mobile
       }
       expect(new Set([header, card, panel]).size).toBe(3);
 
-      // The header carries the wash's own resolved rgb — #FFF7F7.
-      expect(header).toBe("rgb(255, 247, 247)");
+      // The brand panel is `coal` — #131316.
+      expect(header).toBe("rgb(19, 19, 22)");
       // The panel is `sunken` — #F4F4F7.
       expect(panel).toBe("rgb(244, 244, 247)");
       // The card is `paper` — plain white.
       expect(card).toBe("rgb(255, 255, 255)");
     });
 
-    test("the current step pill resolves to coal", async ({ page }) => {
+    test("the current step resolves to coal (compact dot) or white-on-coal (vertical list)", async ({ page }) => {
       await goToEnroll(page);
 
       // #1321: below `sm:` the wrapped pill row (`display:none`, so it is
@@ -99,13 +99,15 @@ for (const [viewportName, viewport] of Object.entries({ desktop: DESKTOP, mobile
         return;
       }
 
+      // From `lg` the steps are a vertical list on the coal panel: the current
+      // one is named, marked `aria-current`, and its label is white on coal.
       const stepper = page.getByRole("list", { name: /pasos de la inscripción/i });
       const current = stepper.locator('[data-state="current"]');
       await expect(current).toHaveText(/tipo/i);
+      await expect(stepper.locator('li[aria-current="step"]')).toHaveCount(1);
 
-      const fill = await current.evaluate((el) => getComputedStyle(el).backgroundColor);
-      // `coal` — #131316.
-      expect(fill).toBe("rgb(19, 19, 22)");
+      const ink = await current.evaluate((el) => getComputedStyle(el).color);
+      expect(ink).toBe("rgb(255, 255, 255)");
     });
 
     test("the selected choice card resolves its border to cata-red", async ({ page }) => {
