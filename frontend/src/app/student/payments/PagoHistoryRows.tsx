@@ -449,5 +449,6 @@ export function GhostPagoRows({
   );
   // Filling: the list is taken out of flow inside a growing wrapper, so its own
   // height never sets the column's — only the space the rail leaves over does.
-  return fill ? <div className="relative min-h-16 flex-1">{list}</div> : list;
+  // Below lg the columns stack, so there is no rail edge to meet: no filler.
+  return fill ? <div className="relative hidden min-h-16 flex-1 lg:block">{list}</div> : list;
 }
