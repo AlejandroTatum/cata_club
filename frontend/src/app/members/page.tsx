@@ -34,6 +34,7 @@ import {
   LoadingState,
   Pagination,
   ResponsiveListTable,
+  RowActionsMenu,
   SearchInput,
   STAT_GRID,
   StatCard,
@@ -372,33 +373,6 @@ function EditAccountButton({
 }
 
 /**
- * Issue #505: direct entry point into `MedicalRecordDialog` — no need to
- * open `EditAccountButton`'s dialog first and toggle an internal "Ficha
- * médica" control. Same trigger level, size and focus-before-open pattern as
- * `EditAccountButton`, so the audit's D5-tertiary/touch-target answer for
- * this row applies here too.
- */
-function MedicalRecordAccessButton({
-  account,
-  onMedical,
-}: Pick<AccountListItemProps, "account" | "onMedical">): React.ReactElement {
-  return (
-    <Button
-      variant="secondary"
-      size="sm"
-      onClick={(event) => {
-        event.currentTarget.focus();
-        onMedical();
-      }}
-      aria-label={`Ficha médica de ${account.nombres} ${account.apellidos}`}
-    >
-      <Stethoscope size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-      Ficha médica
-    </Button>
-  );
-}
-
-/**
  * Issue #505: direct entry point into `PaymentsDialog` — no need to open
  * `EditAccountButton`'s dialog first and scroll past roles/estado to reach
  * the membership/payment forms. Same trigger level, size and
@@ -421,6 +395,50 @@ function PaymentsAccessButton({
       <Wallet size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
       Pagos
     </Button>
+  );
+}
+
+/**
+ * A row's actions: ONE primary button plus an overflow menu.
+ *
+ * The row used to repeat three buttons (Ficha médica, Pagos, Editar) on every
+ * account. Pagos stays visible because registering and regularising payments
+ * is the recurring task an admin comes to this list for; editing an account
+ * and reading a medical record are occasional, so they live in the "Más
+ * acciones para <nombre>" menu. The representative's own row has no student to
+ * show a ficha or payments for, so Editar is its only action and stays as the
+ * visible button, with no menu.
+ */
+function AccountRowActions({
+  account,
+  showStudentActions,
+  onEdit,
+  onMedical,
+  onPayments,
+}: AccountListItemProps & { showStudentActions: boolean }): React.ReactElement {
+  const fullName = `${account.nombres} ${account.apellidos}`;
+
+  if (!showStudentActions) return <EditAccountButton account={account} onEdit={onEdit} />;
+
+  return (
+    <>
+      <PaymentsAccessButton account={account} onPayments={onPayments} />
+      <RowActionsMenu
+        label={`Más acciones para ${fullName}`}
+        items={[
+          {
+            label: `Editar ${fullName}`,
+            icon: <Pencil size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+            onSelect: onEdit,
+          },
+          {
+            label: `Ficha médica de ${fullName}`,
+            icon: <Stethoscope size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+            onSelect: onMedical,
+          },
+        ]}
+      />
+    </>
   );
 }
 
@@ -460,9 +478,13 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
       </TableCell>
       <TableCell type="action">
         <div className="flex flex-wrap items-center justify-end gap-1.5">
-          {showStudentActions && <MedicalRecordAccessButton account={account} onMedical={onMedical} />}
-          {showStudentActions && <PaymentsAccessButton account={account} onPayments={onPayments} />}
-          <EditAccountButton account={account} onEdit={onEdit} />
+          <AccountRowActions
+            account={account}
+            showStudentActions={showStudentActions}
+            onEdit={onEdit}
+            onMedical={onMedical}
+            onPayments={onPayments}
+          />
         </div>
       </TableCell>
     </TableRow>
@@ -503,9 +525,13 @@ function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItem
       }
       actions={
         <>
-          {showStudentActions && <MedicalRecordAccessButton account={account} onMedical={onMedical} />}
-          {showStudentActions && <PaymentsAccessButton account={account} onPayments={onPayments} />}
-          <EditAccountButton account={account} onEdit={onEdit} />
+          <AccountRowActions
+            account={account}
+            showStudentActions={showStudentActions}
+            onEdit={onEdit}
+            onMedical={onMedical}
+            onPayments={onPayments}
+          />
         </>
       }
     />
