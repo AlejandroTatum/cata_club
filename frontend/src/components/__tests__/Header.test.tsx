@@ -281,18 +281,29 @@ describe("Header", (): void => {
     expect(screen.getByText("Admin Cata Club")).toBeInTheDocument();
   });
 
-  // The document's own navigation belongs to the PAGE, not to the visitor: a
-  // signed-in reader of the terms must still be able to reach the club's
-  // sections from here, and the six links are locked by
-  // `site-navigation-parity.test.tsx`.
-  it("keeps the institutional sections on a legal route for a signed-in user", (): void => {
-    mockPathname.mockReturnValue("/terminos");
-    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
+  // Client QA: the legal bar is the logo and the session slot, nothing else.
+  // The landing's section links lead off the document the visitor came to
+  // read, so they are not drawn here at all (they stay on the landing's own bar).
+  it.each(LEGAL_ROUTES)("draws only the logo and the session slot on %s", (route): void => {
+    mockPathname.mockReturnValue(route);
 
     render(<Header />);
 
-    expect(screen.getByRole("link", { name: "Horarios" })).toHaveAttribute("href", "/#horarios");
-    expect(screen.getByRole("link", { name: "Contacto" })).toBeInTheDocument();
+    for (const label of ["Inicio", "Horarios", "Valores", "Galería", "Contacto"]) {
+      expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByRole("button", { name: /Abrir menú/i })).not.toBeInTheDocument();
+    // The logo is the one way home.
+    expect(screen.getByRole("link", { name: /Cata Club/i })).toHaveAttribute("href", "/");
+  });
+
+  it("keeps the session slot visible below md on a legal route", (): void => {
+    mockPathname.mockReturnValue("/terminos");
+
+    render(<Header />);
+
+    const login = screen.getByRole("link", { name: /Iniciar sesión/i });
+    expect(login.closest("div.hidden")).toBeNull();
   });
 
   it("opens Perfil and Cerrar Sesión from the account menu on a legal route", (): void => {
@@ -322,7 +333,7 @@ describe("Header", (): void => {
     expect(screen.queryByRole("button", { name: /Menú de cuenta/i })).not.toBeInTheDocument();
     // The part that depends on no session is already drawn, so the bar does
     // not arrive in two pieces either.
-    expect(screen.getByRole("link", { name: "Horarios" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Cata Club/i })).toBeInTheDocument();
 
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
     rerender(<Header />);
@@ -345,21 +356,7 @@ describe("Header", (): void => {
     expect(screen.getByRole("link", { name: /Iniciar sesión/i })).toBeInTheDocument();
   });
 
-  it("replaces the legal mobile menu's login item with the account items", (): void => {
-    mockPathname.mockReturnValue("/permiso-imagen-fetm");
-    mockUseAuth.mockReturnValue(createAuthenticatedAuth("representante", "Carlos Martinez"));
-
-    render(<Header />);
-
-    fireEvent.click(screen.getByRole("button", { name: /Abrir menú/i }));
-
-    expect(screen.queryByRole("link", { name: /Iniciar sesión/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Perfil/i })).toHaveAttribute("href", "/profile");
-    expect(screen.getByRole("button", { name: /Cerrar Sesión/i })).toBeInTheDocument();
-    expect(screen.getAllByText("Carlos Martinez").length).toBeGreaterThan(0);
-  });
-
-  it("calls logout from the legal mobile menu", (): void => {
+  it("calls logout from the account menu on a legal route", (): void => {
     const mockLogout = vi.fn();
     mockPathname.mockReturnValue("/terminos");
     mockUseAuth.mockReturnValue(
@@ -368,7 +365,7 @@ describe("Header", (): void => {
 
     render(<Header />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Abrir menú/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Menú de cuenta/i }));
     fireEvent.click(screen.getByRole("button", { name: /Cerrar Sesión/i }));
 
     expect(mockLogout).toHaveBeenCalledTimes(1);
