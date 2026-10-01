@@ -19,7 +19,6 @@ import { Loader2, Pencil, Percent, Plus, Power } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import ContextualHelp from "@/components/ContextualHelp";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import {
   Badge,
@@ -477,47 +476,11 @@ export default function DiscountsPage(): React.ReactElement {
               }
             />
 
-            {/*
-             * The catalog block, and the home the "Ver ayuda" disclosure never
-             * had.
-             *
-             * It shipped as a bare child of the shell — no wrapper, no
-             * className, a 16px underlined control alone in a 20px-gapped band
-             * between the error slot and the grid. That was already the known
-             * loose end: it lost the `mt-3` it used to hold itself up with when
-             * `ContextualHelp` stopped carrying vertical margin, and nothing
-             * caught it afterwards.
-             *
-             * D11c says where it goes: help belongs to the block it explains.
-             * Every one of its three rules is about the CATALOG — a discount is
-             * deactivated rather than deleted, editing never rewrites history,
-             * and applying one happens on another screen — so its block is the
-             * catalog card, in the header strip beside that card's title. That
-             * is the same slot `/members` gives its own caveat, which is the
-             * last slot of the block that owns it.
-             */}
             <section className={cn("card flex min-w-0 flex-col overflow-hidden", fillsHeight && "flex-1")}>
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-[18px] py-3">
                 <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
                   Catálogo de descuentos
                 </h2>
-                <ContextualHelp title="Cómo funciona el catálogo">
-                  <ul className="flex flex-col gap-field">
-                    <li>
-                      Un descuento no se elimina: se{" "}
-                      <b className="font-semibold text-ink">desactiva</b>. Deja de ofrecerse al
-                      registrar pagos y sigue en la lista para reactivarlo.
-                    </li>
-                    <li>
-                      Los pagos que ya lo usaron conservan el valor que tenía cuando se aplicó, así
-                      que editarlo nunca reescribe el historial.
-                    </li>
-                    <li>
-                      El descuento se aplica al registrar el pago, en Pagos — no desde
-                      esta pantalla.
-                    </li>
-                  </ul>
-                </ContextualHelp>
               </div>
 
               {loading ? (

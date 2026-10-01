@@ -64,7 +64,6 @@ import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
 
 import { MembershipCard } from "./MembershipAside";
-import { HowToPay } from "./HowToPay";
 import { BeneficioNote, PaymentOrBenefitForm } from "./PaymentForms";
 import { VoucherUploadPreview } from "./VoucherUploadPreview";
 import { GhostPagoRows, PagoRow, CoberturaRow } from "./PagoHistoryRows";
@@ -356,38 +355,6 @@ function PaymentsContent({
   const isGratuitous = selectedProfile?.membership?.esGratuidadFamiliar ?? false;
 
   /**
-   * The two states whose next step IS the procedure behind "Ver ayuda", where
-   * the disclosure is therefore open on mount (see `HowToPay`).
-   *
-   * "No tiene ningún pago aprobado" and "su cobertura venció" are the only
-   * ones `describePaymentSituation` gives an urgent CTA AND a procedure to
-   * follow: the reader has something to do and the screen owes them the how.
-   * `ending-soon` is urgent too but still covered — renewing early is not the
-   * same as catching up — so it keeps the collapsed default, as do the two
-   * states that describe a situation rather than an action (`minor-blocked`,
-   * `gratuitous`) and the healthy `covered` one.
-   *
-   * Read only from a RESOLVED history: while `pagos` is still empty every
-   * profile looks like "never paid", which would seed the panel open for a
-   * family that is up to date. `HowToPay` is mounted no earlier than the
-   * settled state below for the same reason.
-   */
-  const howToPayOpensByDefault = false;
-
-  /**
-   * The history has stopped loading — `ready` or `error` — which is the first
-   * moment the reader's situation is a fact rather than a default.
-   *
-   * `HowToPay` mounts here and not before, so its open/closed initial state is
-   * seeded from that fact. On an ERROR the panel still renders (collapsed): the
-   * help describes the form above it, which is unaffected by the history, and
-   * removing it would answer a failed lookup with a missing paragraph. What a
-   * failed lookup may not do is OPEN the disclosure, which is why
-   * `howToPayOpensByDefault` additionally requires `ready`.
-   */
-  const pagosSettled = pagosState.status !== "loading";
-
-  /**
    * Whether the form above is actually reachable for this reader — the only
    * condition under which the empty history may offer "Registrar un pago" as
    * its way out (D11). It restates the four gates `RenewPaymentForm` already
@@ -577,19 +544,6 @@ function PaymentsContent({
         )}
       </MembershipCard>
 
-      {/* Mounted once the history has settled — see `pagosSettled`. */}
-      {pagosSettled && (
-        <div className="max-md:[&_button]:min-h-10">
-          <HowToPay
-            studentName={studentName}
-            blocked={blockedAsMinor}
-            gratuitous={isGratuitous}
-            hasMembership={selectedProfile.membership != null}
-            monthlyPrice={selectedProfile.membership?.montoAplicado ?? null}
-            openByDefault={howToPayOpensByDefault}
-          />
-        </div>
-      )}
         </aside>
 
         <div data-dash-col className="flex min-w-0 flex-col gap-page lg:col-start-1 lg:row-start-1">

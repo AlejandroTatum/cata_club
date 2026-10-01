@@ -120,7 +120,7 @@ describe("a page splits into a main column and a rail one way", () => {
     // Was 5 until the socio redesign pass (docs/ux/comparaciones/socio.html).
     // `/student/payments` leaves for the same reason and by the same test: its
     // rail held exactly one block, "Cómo se registra un pago", and that block
-    // is a procedure, so D11c moved it behind "Ver ayuda". With nothing left to
+    // was a procedure, which has since been removed. With nothing left to
     // put beside the membership card, keeping a 340px column for its own sake
     // is precisely the "a rail does NOT close vertical emptiness" mistake
     // `PAGE_RAIL`'s own doc comment warns about. Four users remain —
