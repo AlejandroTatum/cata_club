@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import Link from "next/link";
 import { createPortal } from "react-dom";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -34,10 +35,9 @@ import {
   Pagination,
   ResponsiveListTable,
   RowActionsMenu,
+  InfoPanel,
+  PAGE_RAIL,
   SearchInput,
-  STAT_GRID,
-  StatCard,
-  StatTrack,
   TableCell,
   TableHeaderCell,
   TableRow,
@@ -61,10 +61,13 @@ import {
   UserMinus,
   X,
   Wallet,
+  ChevronRight,
+  AlertTriangle,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { fetchMembers, fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
 import { getUserInitials } from "@/lib/auth-utils";
+import MemberDialogHeader from "./MemberDialogHeader";
 import {
   buildMemberStats,
   formatMembershipPeriod,
@@ -97,7 +100,7 @@ import { type MembresiaCallbacks } from "./StudentMembershipActions";
 import LinkRepresentativeSection from "./LinkRepresentativeSection";
 import ReassignRepresentativeSection from "./ReassignRepresentativeSection";
 import IndependizarSection from "./IndependizarSection";
-import { useNativeDialog, NATIVE_DIALOG_SHELL_CLASS, NATIVE_DIALOG_BODY_CLASS } from "./useNativeDialog";
+import { useNativeDialog, NATIVE_DIALOG_WIDE_SHELL_CLASS, NATIVE_DIALOG_BODY_CLASS } from "./useNativeDialog";
 import MedicalRecordDialog from "./MedicalRecordDialog";
 import PaymentsDialog from "./PaymentsDialog";
 
@@ -105,11 +108,9 @@ const FILTER_CHIPS: { flag: MemberFilterFlag; label: string }[] = [
   { flag: "all", label: "Todos" },
   { flag: "vencida", label: "Membresía vencida" },
   { flag: "pendiente", label: "Pago pendiente" },
-  // Issue #730. The stat tile above has counted this population since #362,
-  // but a count is not a worklist: an admin could read "42" and had no route
-  // from that number to the 42 rows behind it. The chip is that route — and
-  // from each row, the edit dialog's medical-record editor is where it gets
-  // fixed, so no new page was needed for either step.
+  // Issue #730. A count is not a worklist: the chip is both the number and
+  // the route to the rows behind it — and from each row, the edit dialog's
+  // medical-record editor is where it gets fixed.
   { flag: "sin-emergencia", label: "Sin datos de emergencia" },
 ];
 
@@ -355,8 +356,9 @@ function EditAccountButton({
 }: Pick<AccountListItemProps, "account" | "onEdit">): React.ReactElement {
   return (
     <Button
-      variant="tertiary"
+      variant="secondary"
       size="sm"
+      className="w-full !px-2"
       // Focus the trigger explicitly: the dialog restores focus to whatever was
       // focused at mount, and a mouse click does not reliably move focus to a
       // <button> on its own.
@@ -383,8 +385,9 @@ function PaymentsAccessButton({
 }: Pick<AccountListItemProps, "account" | "onPayments">): React.ReactElement {
   return (
     <Button
-      variant="tertiary"
+      variant="secondary"
       size="sm"
+      className="w-full !px-2"
       onClick={(event) => {
         event.currentTarget.focus();
         onPayments();
@@ -396,6 +399,9 @@ function PaymentsAccessButton({
     </Button>
   );
 }
+
+/** Fixed width of one action slot, so rows with and without a menu stay aligned. */
+const ROW_ACTION_SLOT = "w-20";
 
 /**
  * A row's actions: ONE primary button plus an overflow menu.
@@ -417,13 +423,30 @@ function AccountRowActions({
 }: AccountListItemProps & { showStudentActions: boolean }): React.ReactElement {
   const fullName = `${account.nombres} ${account.apellidos}`;
 
-  if (!showStudentActions) return <EditAccountButton account={account} onEdit={onEdit} />;
+  // Every row draws the same two slots at the same width, so the buttons line
+  // up down the column. The representative's row has nothing to put in the
+  // menu slot; it stays an empty, aria-hidden spacer instead of shifting the
+  // primary slot to the right.
+  if (!showStudentActions) {
+    return (
+      <>
+        <div className={ROW_ACTION_SLOT}>
+          <EditAccountButton account={account} onEdit={onEdit} />
+        </div>
+        <div className={ROW_ACTION_SLOT} aria-hidden="true" />
+      </>
+    );
+  }
 
   return (
     <>
-      <PaymentsAccessButton account={account} onPayments={onPayments} />
+      <div className={ROW_ACTION_SLOT}>
+        <PaymentsAccessButton account={account} onPayments={onPayments} />
+      </div>
+      <div className={ROW_ACTION_SLOT}>
       <RowActionsMenu
         label={`Más acciones para ${fullName}`}
+        triggerLabel="Más"
         items={[
           {
             label: `Editar ${fullName}`,
@@ -437,6 +460,7 @@ function AccountRowActions({
           },
         ]}
       />
+      </div>
     </>
   );
 }
@@ -476,7 +500,7 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
         <Badge tone={accountBadge.tone}>{accountBadge.label}</Badge>
       </TableCell>
       <TableCell type="action">
-        <div className="flex flex-wrap items-center justify-end gap-1.5">
+        <div className="flex items-center justify-end gap-1.5">
           <AccountRowActions
             account={account}
             showStudentActions={showStudentActions}
@@ -566,7 +590,6 @@ function MemberEditDialog({
   // which is exactly the "summary hardcoded as active" the issue reports. The
   // "Estado de la cuenta" toggle further down still needs the hook: it is the
   // control that MUTATES the state, not a read of it.
-  const accountBadge = getAccountStateBadge(account);
   const personaId = Number(account.id);
 
   // Issue #460: `LinkRepresentativeSection` only makes sense for a minor —
@@ -607,80 +630,26 @@ function MemberEditDialog({
             aria-modal="true"
             aria-labelledby={`edit-member-title-${account.id}`}
             onCancel={(event) => event.preventDefault()}
-            className={NATIVE_DIALOG_SHELL_CLASS}
+            className={NATIVE_DIALOG_WIDE_SHELL_CLASS}
             style={shellStyle}
           >
-            {/* Header — avatar, name, phone, status badge, close. Sits on
-                `sunken` rather than flush `paper`: the body below is `canvas`,
-                so a plain white band between two greys was the "very flat"
-                header — one more step on the surface ladder gives it its own
-                plane, the same way a card reads as an object against the page. */}
-            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line bg-sunken px-5 py-4">
-              <div className="flex min-w-0 items-center gap-3">
-                {/* Identity accent, not a status or a CTA — `coal`, never the
-                    brand red reserved for primary actions and destructive
-                    intent (see `cata.red`'s own doc comment in
-                    tailwind.config.ts). */}
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-coal/[0.08] text-base font-bold text-coal">
-                  {getUserInitials(`${account.nombres} ${account.apellidos}`)}
-                </div>
-                <div className="min-w-0">
-                  {/* DESIGN.md's `title` step — Graduate at 20px, uppercase,
-                      weight 400 — because this IS the dialog's title: the
-                      element `aria-labelledby` points at. The case is a
-                      `text-transform`, so the accessible name stays the person's
-                      name as written. `tracking-flat` cancels the -0.02em
-                      `text-lg` carries for Barlow's lowercase.
-
-                      Measured cost, since the line truncates: at 20px the face
-                      runs ~35% wider than Barlow-800 — "María González" is
-                      177.2px against 131.6px, and a full four-part name 391.7px
-                      against 295.5px. The dialog gives this block ~450px at
-                      `max-w-2xl`, so nothing is cut on a desktop; below ~420px
-                      viewport width a two-part name starts to ellipsize where
-                      Barlow just fit. The full name is never lost — it is in the
-                      row behind and in the identity fields below. */}
-                  <h2
-                    id={`edit-member-title-${account.id}`}
-                    className="truncate font-display text-lg uppercase leading-tight tracking-flat text-ink"
-                  >
-                    {account.nombres} {account.apellidos}
-                  </h2>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                    <DataBox>{account.telefono}</DataBox>
-                    <span className="text-xs text-ink-3">{getPayerTypeLabel(account.role)}</span>
-                  </div>
-                  {/* This used to read "Los cambios se guardan al instante",
-                      which was true of roles and estado and false of the
-                      identity fields and the membership form. Each group now
-                      states its own contract in its own header, so the header
-                      only says where to look. */}
-                  <p className="mt-1.5 text-xs text-ink-2">
-                    Cada bloque indica si se guarda solo o si necesita un botón.
-                  </p>
-                </div>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <Badge tone={accountBadge.tone}>{accountBadge.label}</Badge>
-                <button
-                  ref={closeButtonRef}
-                  type="button"
-                  onClick={onClose}
-                  // Distinct from the footer's "Cerrar": two identically
-                  // named buttons in one dialog give screen-reader users no
-                  // way to tell them apart in a controls list.
-                  aria-label="Cerrar ventana"
-                  className="rounded-lg p-1.5 text-ink-3 transition-colors hover:bg-sunken hover:text-ink"
-                >
-                  <X size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-                </button>
-              </div>
-            </div>
+            <MemberDialogHeader
+              account={account}
+              titleId={`edit-member-title-${account.id}`}
+              purpose="Editar cuenta"
+              closeButtonRef={closeButtonRef}
+              onClose={onClose}
+            />
 
             {/* Scrollable body. Four groups, each declaring how it persists:
                 identity needs a button, roles and estado save themselves, and
                 each student's membership/ficha médica has its own save. */}
             <div className={NATIVE_DIALOG_BODY_CLASS}>
+              {/* Two columns from `lg`: what is edited and saved by hand on the
+                  left, what saves itself on the right — so the contract in each
+                  header also reads as a position. Stacks on a phone. */}
+              <div className="grid gap-section lg:grid-cols-2 lg:items-start">
+              <div className="grid min-w-0 content-start gap-section">
               <ModalSection title="Datos de la cuenta" saveMode="manual">
                 <AccountInfoSection account={account} />
               </ModalSection>
@@ -743,6 +712,9 @@ function MemberEditDialog({
                 </ModalSection>
               )}
 
+              </div>
+
+              <div className="grid min-w-0 content-start gap-section">
               <ModalSection title="Estado de la cuenta" saveMode="instant">
                 <div className="flex flex-wrap items-center gap-3">
                   <button
@@ -871,6 +843,9 @@ function MemberEditDialog({
                 </>
               </ModalSection>
 
+              </div>
+              </div>
+
               {/* Issue #1221: the personas THIS account represents
                   (`representanteId` pointing here), never this account's own
                   `estudiantes[0]` — see `members-adapter.ts#
@@ -929,6 +904,136 @@ function MemberEditDialog({
 }
 
 // ---------------------------------------------------------------------------
+// List fill + rail
+// ---------------------------------------------------------------------------
+
+/** Rows the list card keeps drawn, so a short result does not leave a hole under it. */
+const MIN_LIST_ROWS = 6;
+
+/**
+ * Placeholder rows below a short, single-page result. Purely decorative
+ * (`aria-hidden`, not `<tr>`s), so row counts, roles and tests never see them;
+ * they only keep the card as tall as a normal list instead of letting it
+ * collapse to one or two rows beside a taller rail.
+ */
+function GhostRows({ shown }: { shown: number }): React.ReactElement | null {
+  const missing = MIN_LIST_ROWS - shown;
+  if (missing <= 0) return null;
+  return (
+    <div aria-hidden="true" data-testid="members-ghost-rows" className="hidden sm:block">
+      {Array.from({ length: missing }, (_, index) => (
+        <div key={index} className="flex h-[60px] items-center gap-3 border-t border-line px-4">
+          <div className="h-9 w-9 rounded-full bg-sunken" />
+          <div className="grid gap-1.5">
+            <div className="h-2.5 w-40 rounded-full bg-sunken" />
+            <div className="h-2 w-24 rounded-full bg-sunken/70" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const RAIL_ROW =
+  "flex min-h-[44px] w-full items-center gap-3 rounded-ctl px-3 text-left text-sm text-ink transition-colors hover:bg-sunken";
+
+function AttentionRow({
+  label,
+  count,
+  tone,
+}: {
+  label: string;
+  count: React.ReactNode;
+  tone: "warn" | "neutral";
+}): React.ReactElement {
+  return (
+    <>
+      <span className="flex-1">{label}</span>
+      <Badge tone={tone}>{count}</Badge>
+      <ChevronRight size={ICON.sm} strokeWidth={1.5} className="shrink-0 text-ink-3" aria-hidden="true" />
+    </>
+  );
+}
+
+function MembersRail({
+  stats,
+  onFilter,
+}: {
+  stats: ReturnType<typeof buildMemberStats>;
+  onFilter: (flag: MemberFilterFlag) => void;
+}): React.ReactElement {
+  return (
+    <div className="grid content-start gap-page" data-testid="members-rail">
+      <InfoPanel
+        title="Requiere atención"
+        className="border-state-warn/30"
+      >
+        <ul className="-mx-3 grid gap-1">
+          <li>
+            <Link href="/payments" className={RAIL_ROW}>
+              <AttentionRow
+                label="Pagos por validar"
+                count={stats.pendingPayments}
+                tone={stats.pendingPayments > 0 ? "warn" : "neutral"}
+              />
+            </Link>
+          </li>
+          <li>
+            <button type="button" className={RAIL_ROW} onClick={() => onFilter("sin-emergencia")}>
+              <AttentionRow
+                label="Sin datos de emergencia"
+                count={stats.sinDatosEmergencia}
+                tone={stats.sinDatosEmergencia > 0 ? "warn" : "neutral"}
+              />
+            </button>
+          </li>
+        </ul>
+        <p className="flex items-start gap-1.5 text-xs text-ink-3">
+          <AlertTriangle size={ICON.sm} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
+          Sin datos de emergencia: no tiene representante ni ficha médica cargada.
+        </p>
+      </InfoPanel>
+
+      <InfoPanel title="Cómo usar el listado">
+        <p>Empiece por los pagos pendientes: filtre por «Pago pendiente» y valide cada uno.</p>
+        <dl className="grid gap-2">
+          <div>
+            <dt className="font-semibold text-ink">Pagos</dt>
+            <dd>Registrar un pago, regularizar deuda, cambiar de plan o suspender la membresía.</dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-ink">Editar</dt>
+            <dd>Datos de la cuenta, estado (activa o inactiva) y roles.</dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-ink">Más</dt>
+            <dd>Abre la ficha médica y el resto de acciones de la fila.</dd>
+          </div>
+        </dl>
+        <dl className="grid gap-2 border-t border-line pt-3">
+          <div className="flex items-center gap-2">
+            <dt><Badge tone="ok">Activo</Badge></dt>
+            <dd>Membresía al día.</dd>
+          </div>
+          <div className="flex items-center gap-2">
+            <dt><Badge tone="warn">Pago pendiente</Badge></dt>
+            <dd>Hay un pago por validar.</dd>
+          </div>
+          <div className="flex items-center gap-2">
+            <dt><Badge tone="bad">Vencida</Badge></dt>
+            <dd>Debe regularizar pagos.</dd>
+          </div>
+          <div className="flex items-center gap-2">
+            <dt><Badge tone="neutral">Sin membresía</Badge></dt>
+            <dd>Aún no tiene plan.</dd>
+          </div>
+        </dl>
+      </InfoPanel>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page component
 // ---------------------------------------------------------------------------
 
@@ -939,7 +1044,6 @@ export default function MembersPage(): React.ReactElement {
   const [accounts, setAccounts] = useState<MemberAccount[]>([]);
   const [personasCapped, setPersonasCapped] = useState(false);
   /** At least one membership could not be read upstream — see `MembersResponse`. */
-  const [membresiasDegraded, setMembresiasDegraded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   /**
@@ -973,11 +1077,9 @@ export default function MembersPage(): React.ReactElement {
       const {
         accounts: membersData,
         personasCapped: upstreamPersonasCapped,
-        membresiasDegraded: upstreamMembresiasDegraded = false,
       } = await fetchMembers();
       setAccounts(membersData);
       setPersonasCapped(upstreamPersonasCapped);
-      setMembresiasDegraded(upstreamMembresiasDegraded);
     } catch {
       // A failed silent refresh must not contradict the success the user just
       // saw: the write itself succeeded, only the re-read did not.
@@ -1043,88 +1145,8 @@ export default function MembersPage(): React.ReactElement {
           />
         )}
 
-        {/* Stats row — `07-miembros.html`'s four tiles. Figures are ink; the
-            old version put a red icon disc beside every one of them, which
-            made four neutral counts read as four alerts.
-
-            D7 asks these four to stop wearing one shape for four different
-            jobs. The RULE OF THE SHOULDER gives the coal tile to the one thing
-            that asks somebody to come and do it — payments waiting to be
-            validated is a queue of work; the other three report a state of the
-            world — and only to that one, because a shoulder on all four marks
-            nothing. The RULE OF SHAPE gives the bar to the one figure that is
-            a proportion.
-
-            The two counts stay quiet, and that is a finding rather than a
-            preference: `MemberAccount` carries id, role, name, phone and
-            students, and nothing anywhere on this screen is dated at account
-            or student level. There is no "+6 this month" to draw, so none is
-            drawn. */}
-        <div className={STAT_GRID}>
-          <StatCard label="Cuentas" value={stats.totalAccounts} hint="responsables de pago" />
-          <StatCard label="Estudiantes" value={stats.totalStudents} hint="perfiles registrados" />
-          {/*
-              The label names the POPULATION this counts, because it is not the
-              same population `/dashboard` counts. Here the numerator walks the
-              account tree and counts STUDENTS with an active membership, so the
-              denominator has to be students too — it used to read "de 44
-              cuentas" beside a count of students, which is two different things
-              in one sentence. `/dashboard` counts membership rows over all 86
-              personas, staff included; both are true, and now both say so.
-
-              When the upstream membership lookup degraded, this shows an em
-              dash instead of a hard "0": an unreadable count is not a count of
-              zero, and it is what made this tile contradict the dashboard and
-              the student portals.
-          */}
-          <StatCard
-            label="Con membresía activa"
-            value={membresiasDegraded ? "—" : stats.activeMemberships}
-            hint={
-              membresiasDegraded
-                ? "No disponible ahora mismo"
-                : // The count itself already sits in the "Estudiantes" tile
-                  // right beside this one — repeating it here just echoed that
-                  // figure. The population it's measured against still has to
-                  // be named, because it is students, not accounts.
-                  //
-                  // The bar is what carries the DENOMINATOR now: 21 out of 69
-                  // and 21 out of 25 are the same tile until something on it
-                  // takes the shape of a proportion, and a bar says which one
-                  // without reprinting the neighbour's own figure.
-                  //
-                  // No bar when the upstream lookup degraded: a share of an
-                  // unreadable numerator would draw at 0%, which is exactly
-                  // the "0 is not the same as unknown" lie the em dash above
-                  // exists to avoid.
-                  <span className="flex flex-col gap-y-field">
-                    <StatTrack value={stats.activeMemberships} total={stats.totalStudents} />
-                    <span>de los estudiantes</span>
-                  </span>
-            }
-          />
-          {/* The only tile on this row that is a pile of work somebody has to
-              clear. `hot` also spends the ball dot on its foot line, which is
-              D7's "pie con punto de estado": a bare 15 is neither good news
-              nor bad, and "por validar" is what makes it a queue. */}
-          <StatCard
-            label="Pagos pendientes"
-            value={stats.pendingPayments}
-            hint="por validar"
-            variant="hot"
-          />
-          {/* Issue #362. `default` variant, not `hot`: `hot` is reserved for
-              the one tile that is a queue of work to clear
-              (`StatCard.tsx`'s own doc comment), and this is a state of the
-              roster, not a queue — the same reasoning that keeps "Cuentas"
-              and "Estudiantes" quiet above. */}
-          <StatCard
-            label="Sin datos de emergencia"
-            value={stats.sinDatosEmergencia}
-            hint="sin representante ni ficha médica"
-          />
-        </div>
-
+        <div className={PAGE_RAIL}>
+          <div className="grid min-w-0 content-start gap-page">
         {/* Search + filter chips. They used to sit loose on the canvas as two
             unrelated rows; `FilterPanel` frames them and fixes their order.
             Account creation is intentionally absent: new members use the
@@ -1261,6 +1283,7 @@ export default function MembersPage(): React.ReactElement {
                 ) : undefined
               }
             />
+            {totalPages <= 1 && <GhostRows shown={paginatedAccounts.length} />}
           </div>
         ) : null}
 
@@ -1298,6 +1321,13 @@ export default function MembersPage(): React.ReactElement {
             }
           />
         )}
+          </div>
+
+          <MembersRail
+            stats={stats}
+            onFilter={setActiveFlag}
+          />
+        </div>
 
         {/* One dialog for the whole page, keyed so switching accounts remounts
             it with fresh state. Rendering it per row would portal two copies

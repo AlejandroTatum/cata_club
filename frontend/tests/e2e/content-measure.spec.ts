@@ -129,9 +129,27 @@ test.describe("content measure", () => {
     test(`keeps a stat tile readable at ${viewport.width}`, async ({ page }) => {
       await page.setViewportSize(viewport);
       await loginAsAdmin(page);
-      await page.goto("/members");
+      // Not /members: its counts moved into the filter chips, so `main .grid`
+      // there is the filter/list grid and no longer a row of stat tiles. The
+      // dashboard still draws its four-figure KPI row.
+      await page.route("**/api/dashboard", (route) =>
+        fulfillJson(route, {
+          totalPersonas: 40,
+          totalAlumnos: 36,
+          activeMemberships: 30,
+          pendingPayments: 3,
+          todaySchedules: 2,
+          personasSinMembresia: 6,
+        }),
+      );
+      // Real pagination answers `{ items, total }`, which the `[]` catch-all
+      // would hand the dashboard's payments feed as a bare array.
+      await page.route("**/api/payments*", (route) =>
+        fulfillJson(route, { items: [], total: 0 }),
+      );
+      await page.goto("/dashboard");
 
-      const tiles = page.locator("main .grid > *").first();
+      const tiles = page.getByTestId("dashboard-kpis").locator("> *").first();
       await expect(tiles).toBeVisible();
 
       const tileWidth = await tiles.evaluate((el) => el.getBoundingClientRect().width);
