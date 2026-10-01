@@ -46,7 +46,7 @@ function row(href: string): NavLinkDef {
  */
 export interface NavGroup {
   /**
-   * The rótulo above the block — "Entrenar", "Mi cuenta", "Administrar".
+   * The rótulo above the block — "Entrenar", "Mi cuenta", "Operación".
    *
    * `null` for the rows that name no section of the product (Inicio, and
    * Iniciar sesión while signed out). They are not a group with a heading
@@ -85,8 +85,26 @@ export interface NavGroup {
  * to remove. Within the group the roles are listed in dedup precedence:
  * representante's rows are the superset.
  */
-const RAIL_GROUPS: readonly { heading: string; roles: readonly UserRole[] }[] = [
-  { heading: "Administrar", roles: ["admin"] },
+const RAIL_GROUPS: readonly {
+  heading: string;
+  roles: readonly UserRole[];
+  /** Restricts the group to these destinations; omitted, it takes every row its roles grant. */
+  hrefs?: readonly string[];
+}[] = [
+  // Eleven flat rows were a list to read, not a menu to scan, so the admin
+  // section is split by what the admin is doing: running the club day to day,
+  // pricing it, or curating what the public sees and what users report.
+  {
+    heading: "Operación",
+    roles: ["admin"],
+    hrefs: ["/dashboard", "/members", "/payments", "/attendance", "/groups", "/reports"],
+  },
+  { heading: "Catálogo y tarifas", roles: ["admin"], hrefs: ["/tarifas", "/discounts"] },
+  {
+    heading: "Sitio y soporte",
+    roles: ["admin"],
+    hrefs: ["/galeria", "/sponsors", "/admin/reportes-error"],
+  },
   { heading: "Entrenar", roles: ["trainer"] },
   { heading: "Mi cuenta", roles: ["representante", "estudiante"] },
 ];
@@ -111,15 +129,15 @@ function sectionsForRole(role: UserRole, studentIsAdult: boolean): NavLinkDef[] 
       links.push(
         row("/dashboard"),
         row("/members"),
-        row("/groups"),
         row("/payments"),
-        row("/discounts"),
-        row("/sponsors"),
-        row("/galeria"),
-        row("/admin/reportes-error"),
-        row("/tarifas"),
         row("/attendance"),
+        row("/groups"),
         row("/reports"),
+        row("/tarifas"),
+        row("/discounts"),
+        row("/galeria"),
+        row("/sponsors"),
+        row("/admin/reportes-error"),
       );
       break;
     case "trainer":
@@ -253,6 +271,7 @@ export function getNavGroupsForRoles(
       if (!held.has(role)) continue;
       for (const link of sectionsForRole(role, studentIsAdult)) {
         if (placed.has(link.href)) continue;
+        if (group.hrefs && !group.hrefs.includes(link.href)) continue;
         placed.add(link.href);
         links.push(link);
       }

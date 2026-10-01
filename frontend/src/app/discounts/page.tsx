@@ -29,6 +29,7 @@ import {
   EmptyState,
   ErrorState,
   FilterPanel,
+  InfoPanel,
   LoadingState,
   PAGE_RAIL,
   ResponsiveListTable,
@@ -239,27 +240,14 @@ export default function DiscountsPage(): React.ReactElement {
   }
 
   /**
-   * Whether the screen is a two-column split at all: only while a form is open.
-   *
-   * The track used to be reserved the instant the catalog had a row, on the
-   * anti-jump argument #81 gave the dashboard — a split that appears with the
-   * form is a layout that moves under the admin every time they open one. The
-   * argument is sound; the price it was paying stopped being worth it once
-   * #199 emptied the rail. That issue moved the permanent "Cómo funciona el
-   * catálogo" card into the header's disclosure and put nothing back, so the
-   * ORDINARY state of this screen — a short table with nobody editing — was a
-   * card beside 340px of reserved nothing. A track held open for content that
-   * no longer exists is not a layout, it is a leftover.
-   *
-   * What the jump actually costs here is smaller than the #81 wording
-   * suggests, and that is the reason this is affordable: #81 was about a form
-   * that STACKED, pushing the row being edited ~200px down and out of view.
-   * This form is a sibling of the table, so opening it reflows the table
-   * horizontally and leaves every row on its own line. The guarantee #81 was
-   * really buying — "the row you clicked does not run away from you" — is
-   * pinned by the "puts the form beside the table" test, not by this flag.
+   * The rail always exists: it holds the form while one is open and a calm
+   * summary of the catalog otherwise. The track used to be dropped when no form
+   * was open (#199 left it empty), which put a short table on a wide page with
+   * nothing beside it; the summary is what now keeps the column honest.
    */
   const splitting = form !== null;
+  /** An empty catalog centres its own empty state; a rail beside it would only crowd it. */
+  const showRail = splitting || descuentos.length > 0;
 
   /** The catalog narrowed by the search box — issue A3. */
   const filteredDescuentos = filterDescuentos(descuentos, searchTerm);
@@ -302,6 +290,32 @@ export default function DiscountsPage(): React.ReactElement {
           {descuento.activo ? "Desactivar" : "Reactivar"}
         </Button>
       </>
+    );
+  }
+
+  /** The rail's resting state: what the catalog holds, from what is loaded. */
+  function renderSummary(): React.ReactElement {
+    const activos = descuentos.filter((d) => d.activo).length;
+    const inactivos = descuentos.length - activos;
+    return (
+      <InfoPanel title="Resumen del catálogo">
+        {descuentos.length > 0 ? (
+          <p>
+            {activos === 1 ? "1 descuento activo" : `${activos} descuentos activos`}
+            {inactivos > 0
+              ? ` y ${inactivos === 1 ? "1 inactivo" : `${inactivos} inactivos`}`
+              : ""}
+            .
+          </p>
+        ) : null}
+        <p>
+          Un descuento puede ser un porcentaje o un monto fijo y se elige al registrar un pago.
+        </p>
+        <p>
+          Un descuento desactivado deja de aplicarse a pagos nuevos; los pagos ya registrados
+          no cambian.
+        </p>
+      </InfoPanel>
     );
   }
 
@@ -411,14 +425,6 @@ export default function DiscountsPage(): React.ReactElement {
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
         title="Descuentos"
-        /*
-         * The catalog has no pager: it renders `descuentos.map(...)` whole, so
-         * its height is "how many discounts the club has" and no layout choice
-         * on this screen makes it taller. The short measure does not close the
-         * canvas under it — see `CONTENT_MEASURE` — it stops the four rows
-         * being stretched across 1356px first.
-         */
-        measure="short"
         actions={
           <Button variant="dark" onClick={openCreateForm}>
             <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
@@ -450,7 +456,7 @@ export default function DiscountsPage(): React.ReactElement {
          */}
         <div
           data-testid="discounts-split"
-          className={splitting ? PAGE_RAIL : "flex min-w-0 flex-1 flex-col"}
+          className={showRail ? PAGE_RAIL : "flex min-w-0 flex-1 flex-col"}
         >
           <div className="flex min-w-0 flex-1 flex-col gap-page">
             {/*
@@ -507,7 +513,7 @@ export default function DiscountsPage(): React.ReactElement {
                       que editarlo nunca reescribe el historial.
                     </li>
                     <li>
-                      El descuento se aplica al registrar el pago, en Membresías y Pagos — no desde
+                      El descuento se aplica al registrar el pago, en Pagos — no desde
                       esta pantalla.
                     </li>
                   </ul>
@@ -617,14 +623,9 @@ export default function DiscountsPage(): React.ReactElement {
             </section>
           </div>
 
-          {/*
-           * The rail is the form's column and only the form's column, so it
-           * is not drawn when there is no form — see `splitting` for why the
-           * always-on track was retired. The catalog rules that used to live
-           * here are the `ContextualHelp` in the card header now (#199), which
-           * is what left this track holding nothing in the first place.
-           */}
-          {splitting ? <div data-testid="discounts-rail">{renderForm()}</div> : null}
+          {showRail ? (
+            <div data-testid="discounts-rail">{splitting ? renderForm() : renderSummary()}</div>
+          ) : null}
         </div>
 
         <ConfirmDialog
