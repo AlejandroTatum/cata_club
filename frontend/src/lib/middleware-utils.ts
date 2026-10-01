@@ -45,8 +45,10 @@ export function buildContentSecurityPolicy(nonce: string): string {
     // (issue #1072): the expiring download endpoint is what the backend
     // returns for them, and they render inside <img>. Keep it alongside
     // frame-src, which already loads PDFs from the same host. blob: covers the
-    // local previews of a picked file (URL.createObjectURL).
-    "img-src 'self' blob: https://res.cloudinary.com https://api.cloudinary.com https://*.tile.openstreetmap.org",
+    // local previews of a picked file (URL.createObjectURL). data: is what
+    // html-to-image loads the page snapshot through (an SVG data: URL) for the
+    // report-a-problem capture; it never leaves the browser unless consented.
+    "img-src 'self' blob: data: https://res.cloudinary.com https://api.cloudinary.com https://*.tile.openstreetmap.org",
     "frame-src https://api.cloudinary.com",
     "connect-src 'self'",
     "font-src 'self'",

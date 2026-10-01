@@ -58,7 +58,19 @@ describe("agruparAlumnosDelPadron", () => {
       nombreCompleto: "Melany Quimis",
       edad: 12,
       horarios: "Lun 18:00 · Mié 18:00 · Vie 18:00",
+      horariosCompactos: "Lun, Mié, Vie 18:00",
+      grupo: "18:00",
     });
+  });
+
+  it("junta cinco días corridos en un rango y deja sueltos los salteados", () => {
+    const corrido = agruparAlumnosDelPadron(
+      ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"].map((dia) =>
+        fila(1, "Ana", 10, dia, "15:00:00", "16:00:00"),
+      ),
+    );
+    expect(corrido[0].horariosCompactos).toBe("Lun–Vie 15:00");
+    expect(corrido[0].grupo).toBe("15:00");
   });
 
   it("ordena los horarios por día de la semana, no por el orden en que llegaron", () => {
@@ -100,9 +112,7 @@ describe("agruparAlumnosDelPadron", () => {
     // Un día que el build no reconoce se descarta en vez de imprimirse como
     // "undefined 18:00". Sin ventanas válidas no hay frase que decir, y la
     // pantalla tiene que poder distinguir eso de "todavía no cargó".
-    const alumnos = agruparAlumnosDelPadron([
-      fila(4, "Luis López", 16, "LUNGAR", "18:00:00", "19:00:00"),
-    ]);
+    const alumnos = agruparAlumnosDelPadron([fila(4, "Luis López", 16, "LUNGAR", "18:00:00", "19:00:00")]);
 
     expect(alumnos).toHaveLength(1);
     expect(alumnos[0].horarios).toBeNull();

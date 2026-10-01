@@ -59,7 +59,7 @@ import { useNotificaciones } from "@/lib/useNotificaciones";
 import { usePendingPaymentsCount } from "@/lib/usePendingPayments";
 import { NAV_ICON_MAP } from "@/components/Header";
 import NotificationBell from "@/components/NotificationBell";
-import ReportProblemDialog from "@/components/ReportProblemDialog";
+import { useReportProblem } from "@/components/report-problem/useReportProblem";
 import { PageHeader } from "@/components/ui";
 
 export interface AppShellProps {
@@ -206,6 +206,9 @@ export const MAIN_CONTENT_ID = "contenido-principal";
 
 /** The one nav entry that carries a count badge (prototype `_nav-admin.html`). */
 const COUNT_BADGE_HREF = "/payments";
+
+/** The drawer slide-out is `duration-200`; the capture waits slightly longer. */
+const DRAWER_CLOSE_MS = 280;
 
 /** Tailwind's `lg` breakpoint — where the sidebar stops being a mobile drawer. */
 const DESKTOP_MEDIA_QUERY = "(min-width: 1024px)";
@@ -379,7 +382,7 @@ export default function AppShell({
   const { notificaciones, loadError, markRead, marcarTodasLeidas, marcandoTodas, errorMarcarTodas } =
     useNotificaciones(!!session);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [reportOpen, setReportOpen] = useState(false);
+  const report = useReportProblem();
   const isDesktopViewport = useIsDesktopViewport();
   // Desktop-only collapse state, independent from the mobile drawer
   // (`sidebarOpen` above). Initialized from localStorage so the preference
@@ -667,6 +670,7 @@ export default function AppShell({
        * @touch-target Reached by switch and thumb alike; matches the landing.
        */}
       <a
+        data-report-ignore
         href={`#${MAIN_CONTENT_ID}`}
         className="fixed left-4 top-[-100px] z-50 inline-flex min-h-[48px] items-center rounded-ctl bg-cata-red px-5 text-sm font-bold text-white transition-[top] duration-150 focus-visible:top-4"
       >
@@ -685,6 +689,7 @@ export default function AppShell({
        * with `transform` so the closing slide-out still renders.
        */}
       <aside
+        data-report-ignore={!isDesktopViewport || undefined}
         aria-hidden={drawerHidden || undefined}
         className={`fixed inset-y-0 left-0 z-40 flex w-[236px] flex-col bg-coal text-white transition-[transform,visibility] duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
           collapsed ? "lg:w-[76px]" : ""
@@ -793,7 +798,7 @@ export default function AppShell({
 
         {/* `.side .foot-nav` — help, then account rows, then the user card. */}
         <div className="flex flex-col gap-2 border-t border-white/[0.08] p-2.5">
-          <button type="button" onClick={() => setReportOpen(true)} className={`${NAV_ITEM_CLASSES} ${NAV_ITEM_IDLE_CLASSES}`}>
+          <button type="button" onClick={(): void => { const wasOpen = sidebarOpen; setSidebarOpen(false); report.open(wasOpen ? DRAWER_CLOSE_MS : 0); }} disabled={report.busy} className={`${NAV_ITEM_CLASSES} ${NAV_ITEM_IDLE_CLASSES}`}>
             <CircleHelp size={ICON.base} aria-hidden="true" />
             <span className={collapsed ? "lg:hidden" : ""}>Reportar un problema</span>
           </button>
@@ -889,6 +894,7 @@ export default function AppShell({
       {/* Mobile backdrop */}
       {sidebarOpen && (
         <div
+          data-report-ignore
           className="fixed inset-0 z-30 bg-black/40 lg:hidden"
           onClick={(): void => setSidebarOpen(false)}
           aria-hidden="true"
@@ -1187,7 +1193,7 @@ export default function AppShell({
           </div>
         </div>
       )}
-      {reportOpen && <ReportProblemDialog onClose={() => setReportOpen(false)} />}
+      {report.dialog}
     </div>
   );
 }

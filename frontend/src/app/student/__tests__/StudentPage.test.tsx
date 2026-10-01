@@ -2156,10 +2156,7 @@ describe("StudentPage — the page's leftover height is claimed, not abandoned",
   });
 });
 
-/**
- * The dashboard's family strip carries no "Ver ayuda": the selection note
- * still lives on the picker screens (payments, attendance, medical record).
- */
+/** The dashboard's family strip carries no help toggle. */
 describe("StudentPage — the family strip has no help toggle", () => {
   const GUARDIAN_PORTAL: StudentPortalSummary = {
     self: null,
@@ -2178,7 +2175,7 @@ describe("StudentPage — the family strip has no help toggle", () => {
     render(<StudentPage />);
 
     await screen.findByRole("group", { name: "Estudiante" });
-    expect(screen.queryByText("Ver ayuda")).toBeNull();
+    expect(screen.queryByRole("button", { name: /ayuda/i })).toBeNull();
     expect(screen.queryByText(/Se mantiene en Mi cuenta/i)).toBeNull();
   });
 });

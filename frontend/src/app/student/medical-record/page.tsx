@@ -158,6 +158,8 @@ function RepresentanteMedicalRecordView({
         key={selectedProfile.personaId}
         personaId={Number(selectedProfile.personaId)}
         studentName={studentName}
+        withEmergencyCard
+        viewerIsOwner={false}
       />
     </>
   );
@@ -224,10 +226,9 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
       : "Consulte y corrija sus propios datos de salud.";
 
   return (
-    // Default measure, like every other screen: the page column no longer
-    // narrows per screen (content would change left edge between pages). The
-    // form is five controls that never grow with data, so what stays narrow is
-    // the form itself — `max-w-3xl` below — not the page it sits in.
+    // Default measure, like every other screen: the page column never narrows
+    // per screen (content would change left edge between pages). The editor
+    // composes form + emergency-card rail instead of capping its width.
     <AppShell title="Ficha médica" subtitle={subtitle}>
       {state.status === "loading" && (
         <div className="card">
@@ -238,17 +239,14 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
         <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />
       )}
       {state.status === "ready" && role === "representante" && (
-        <div className="w-full max-w-3xl">
-          <RepresentanteMedicalRecordView data={state.data} accountPersonaId={personaId} />
-        </div>
+        <RepresentanteMedicalRecordView data={state.data} accountPersonaId={personaId} />
       )}
       {state.status === "ready" && role === "estudiante" && state.data.self && (
-        <div className="w-full max-w-3xl">
-          <MedicalRecordEditor
-            personaId={Number(state.data.self.personaId)}
-            studentName={firstNameOf(state.data.self.nombres)}
-          />
-        </div>
+        <MedicalRecordEditor
+          personaId={Number(state.data.self.personaId)}
+          studentName={firstNameOf(state.data.self.nombres)}
+          withEmergencyCard
+        />
       )}
       {state.status === "ready" && role === "estudiante" && !state.data.self && (
         <ErrorState

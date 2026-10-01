@@ -32,6 +32,17 @@ describe("/api/reportes-error", () => {
     expect((await POST(request("POST", form, "req-123"))).status).toBe(201);
     expect(global.fetch).toHaveBeenCalledWith("http://backend/api/v1/reportes-error/", expect.objectContaining({ method: "POST", headers: expect.objectContaining({ "X-Request-ID": "req-123" }) }));
   });
+  it("forwards the browser User-Agent so the inbox shows the real device", async () => {
+    const form = new FormData();
+    form.set("descripcion", "Falla");
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response(JSON.stringify({ id: 2 }), { status: 201 }));
+    const req = new NextRequest("http://localhost/api/reportes-error", {
+      method: "POST", body: form, headers: { cookie: `${ACCESS_TOKEN_COOKIE}=${token}`, "user-agent": "Mozilla/5.0 Chrome/153" },
+    });
+    await POST(req);
+    const init = vi.mocked(global.fetch).mock.calls[0][1] as { headers: Record<string, string> };
+    expect(new Headers(init.headers).get("user-agent")).toBe("Mozilla/5.0 Chrome/153");
+  });
   it("preserves the failed backend request ID", async () => {
     const form = new FormData();
     form.set("descripcion", "Error");

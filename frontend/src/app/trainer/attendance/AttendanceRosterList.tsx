@@ -16,10 +16,10 @@ interface AttendanceRosterListProps {
 }
 
 /**
- * Issue #318/#25 (K9), desktop only: its own bounded, internally-scrolling
- * box, so the page itself never scrolls past the `sticky bottom-0` commit
- * bar — see `TrainerAttendancePage`'s own note on why padding cannot fix
- * this.
+ * The roster uses the page's width: one row per student, two columns from
+ * `2xl`. It no longer scrolls inside its own box — the commit bar is `sticky`
+ * (mobile) or lives in the sticky aside (desktop), so the page itself can
+ * scroll without ever losing the action (issue #318/#25, answered by layout).
  */
 export default function AttendanceRosterList({
   students,
@@ -31,7 +31,7 @@ export default function AttendanceRosterList({
   return (
     <ul
       data-testid="attendance-roster-scroll"
-      className="flex flex-col gap-2 sm:max-h-[calc(100vh-660px)] sm:min-h-[120px] sm:overflow-y-auto sm:overscroll-contain sm:pr-1"
+      className="grid gap-2"
     >
       {filteredStudents.map((student) => (
         <AttendanceRosterRow

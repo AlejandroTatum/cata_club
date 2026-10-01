@@ -22,7 +22,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import StudentMedicalRecordPage from "@/app/student/medical-record/page";
 import type { StudentPortalSummary, StudentProfileSummary } from "@/services/api";
 
@@ -234,7 +234,8 @@ describe("StudentMedicalRecordPage — reusing MedicalRecordEditor per represent
     render(<StudentMedicalRecordPage />);
 
     // En reposo el valor guardado se LEE; recién al editar vuelve a ser input.
-    expect(await screen.findByText("Polvo")).toBeInTheDocument();
+    // The saved value shows in the record rows AND the live emergency card.
+    expect((await screen.findAllByText("Polvo")).length).toBeGreaterThanOrEqual(2);
     fireEvent.click(screen.getByRole("button", { name: "Editar" }));
     expect(screen.getByLabelText<HTMLInputElement>("Alergias").value).toBe("Polvo");
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
@@ -270,18 +271,13 @@ describe("StudentMedicalRecordPage — no representados", () => {
   });
 });
 
-/**
- * The ficha médica is five controls that never grow with data, so the FORM is
- * kept to a reading width — but on its own wrapper. The page column stays on
- * the default measure so the content keeps the same left edge as every other
- * screen of the role (the short measure used to shift it).
- */
-describe("StudentMedicalRecordPage — narrow form on the default page measure", () => {
-  it("constrains the form, not the page column", async () => {
+/** Width rule (uv3): the page draws on the dashboard measure, no inner cap. */
+describe("StudentMedicalRecordPage — dashboard measure", () => {
+  it("does not cap the page or the editor below the shell measure", async () => {
     const { container } = render(<StudentMedicalRecordPage />);
 
     await screen.findByRole("button", { name: "Editar" });
-    expect(container.querySelector(".max-w-3xl")).not.toBeNull();
+    expect(container.querySelector(".max-w-3xl")).toBeNull();
     expect(container.querySelector(".max-w-5xl")).toBeNull();
     expect(container.querySelector(".max-w-8xl")).not.toBeNull();
   });
@@ -306,5 +302,34 @@ describe("StudentMedicalRecordPage — the no-representados state fills its page
     const emptyState = title.parentElement;
     expect(emptyState?.className).toMatch(/\bflex-1\b/);
     expect(emptyState?.className).toMatch(/justify-center/);
+  });
+});
+
+describe("StudentMedicalRecordPage — emergency card rail", () => {
+  it("draws the live emergency card, completeness and visibility beside the record", async () => {
+    render(<StudentMedicalRecordPage />);
+
+    const card = await screen.findByTestId("emergency-card");
+    expect(within(card).getByText("Tarjeta de emergencia")).toBeInTheDocument();
+    expect(within(card).getByRole("progressbar", { name: /completitud/i })).toBeInTheDocument();
+    expect(within(card).getByText("Quién puede ver estos datos")).toBeInTheDocument();
+  });
+
+  it("reads 'Sangre —' in the card header while no blood type is known, not a bare '?'", async () => {
+    mockFetchFichaMedica.mockReset().mockResolvedValue(ficha({ tipoSangre: "" }));
+    render(<StudentMedicalRecordPage />);
+
+    const blood = await screen.findByTestId("emergency-card-blood");
+    expect(blood).toHaveTextContent("Sangre —");
+    expect(blood.textContent).not.toContain("?");
+  });
+
+  it("updates the emergency card while the form is being edited", async () => {
+    render(<StudentMedicalRecordPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+
+    fireEvent.change(screen.getByLabelText(/alergias/i), { target: { value: "Penicilina" } });
+
+    expect(within(screen.getByTestId("emergency-card")).getByText("Penicilina")).toBeInTheDocument();
   });
 });

@@ -36,8 +36,6 @@ describe("ScheduleDayGroup", () => {
       <ScheduleDayGroup
         group={buildGroup([buildSchedule({ categoriaLabel: "Competitivo" })])}
         today="mar"
-        isExpanded
-        onToggle={noop}
         selectedScheduleId={null}
         onSelectSchedule={vi.fn()}
         weekRecordCounts={new Map()}
@@ -53,8 +51,6 @@ describe("ScheduleDayGroup", () => {
       <ScheduleDayGroup
         group={buildGroup([buildSchedule({ categoriaLabel: undefined })])}
         today="mar"
-        isExpanded
-        onToggle={noop}
         selectedScheduleId={null}
         onSelectSchedule={vi.fn()}
         weekRecordCounts={new Map()}
@@ -72,8 +68,6 @@ describe("ScheduleDayGroup", () => {
           buildSchedule({ id: 2, categoriaLabel: "Adultos" }),
         ])}
         today="mar"
-        isExpanded
-        onToggle={noop}
         selectedScheduleId={null}
         onSelectSchedule={vi.fn()}
         weekRecordCounts={new Map()}

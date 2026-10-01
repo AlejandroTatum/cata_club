@@ -282,13 +282,10 @@ describe("the way back sits above the page title", () => {
     expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  /** The wizard caps its column at 760px; the shell draws `back` as a
-   *  full-canvas sibling of `<main>`, so the wrapper must carry the same cap
-   *  or the control starts left of the column below it. */
-  it("keeps the back control inside the wizard's 760px column", () => {
-    render(<AddDependentPage />);
+  /** Width rule (uv3): no 760px cap — the wizard draws on the shell measure. */
+  it("does not cap the wizard column at 760px", () => {
+    const { container } = render(<AddDependentPage />);
 
-    const back = screen.getByRole("link", { name: /volver a mi cuenta/i });
-    expect(back.parentElement?.className).toMatch(/max-w-\[760px\]/);
+    expect(container.querySelector('[class*="max-w-[760px]"]')).toBeNull();
   });
 });

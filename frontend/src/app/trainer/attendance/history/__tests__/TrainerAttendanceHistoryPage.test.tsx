@@ -200,8 +200,10 @@ describe("TrainerAttendanceHistoryPage", () => {
     expect(resultCell.querySelector(".sr-only")).toBeNull();
     expect(resultCell).toHaveTextContent("2 presentes");
     expect(resultCell).toHaveTextContent("1 tardanza");
-    expect(resultCell).toHaveTextContent("0 justificados");
     expect(resultCell).toHaveTextContent("1 ausente");
+    // Compact result: a state nobody is in is not printed (the bar's accessible
+    // name still carries every count).
+    expect(resultCell).not.toHaveTextContent("justificados");
   });
 
   it("draws the session's composition as the one bar the panel already uses, named for a screen reader", async () => {
@@ -689,6 +691,26 @@ describe("TrainerAttendanceHistoryPage — las tres cifras del período", () => 
     expect(tile("Sesiones programadas")).toHaveTextContent("4");
     // El viernes 14: programado y sin lista.
     expect(tile("Sin lista (estimado)")).toHaveTextContent("1");
+  });
+
+  it("lista en el aside las sesiones sin lista del período, cada una con su salida al pase de lista", async () => {
+    render(<TrainerAttendanceHistoryPage />);
+
+    await screen.findAllByRole("row");
+    const missing = screen.getByRole("region", { name: "Sin lista en el período" });
+    // El viernes 14 es la única sesión programada que no tiene lista.
+    const link = within(missing).getByRole("link", { name: /Pasar lista del/ });
+    expect(link).toHaveAttribute("href", expect.stringContaining("fecha=2026-08-14"));
+  });
+
+  it("rellena una lista corta con filas fantasma en vez de dejar el vacío bajo la tabla", async () => {
+    render(<TrainerAttendanceHistoryPage />);
+
+    await screen.findAllByRole("row");
+    // Three sessions on the page -> seven ghost rows up to a full page of ten.
+    const ghost = screen.getByTestId("history-ghost-rows");
+    expect(ghost.querySelectorAll("li")).toHaveLength(7);
+    expect(ghost).toHaveAttribute("aria-hidden", "true");
   });
 
   it("declara la estimación con una palabra que se lee, no con un asterisco", async () => {

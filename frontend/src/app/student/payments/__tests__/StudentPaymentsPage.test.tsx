@@ -192,7 +192,7 @@ function historyTable(): HTMLElement {
 }
 
 function historyCards(): HTMLElement {
-  return screen.getByTestId("student-payments-cards");
+  return historyTable();
 }
 
 /**
@@ -724,7 +724,7 @@ describe("StudentPaymentsPage — the history", () => {
     expect(screen.queryByText(PAGO_START, { exact: false })).not.toBeInTheDocument();
   });
 
-  it("states the rejection reason in full, behind the row's own accordion (#513)", async () => {
+  it("states the rejection reason inline on the rejected row, with no accordion to open", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([
       makePago({ estadoPago: "RECHAZADO", motivoRechazo: "El comprobante es ilegible" }),
     ]);
@@ -732,28 +732,21 @@ describe("StudentPaymentsPage — the history", () => {
     render(<StudentPaymentsPage />);
     await screen.findByTestId("student-payments-table");
 
-    // Closed by default (issue #513): the panel is in the DOM (a plain
-    // text query cannot tell — `hidden` is not a text query's concern) but
-    // not visible, exactly the native-`hidden` contract `Accordion.tsx`
-    // already established for this product.
-    expect(within(historyTable()).getByText("El comprobante es ilegible")).not.toBeVisible();
-    openHistoryDetail();
-
-    expect(within(historyTable()).getByText("El comprobante es ilegible")).toBeInTheDocument();
-    expect(within(historyTable()).getByText("Motivo del rechazo")).toBeInTheDocument();
+    expect(within(historyTable()).getByText("El comprobante es ilegible")).toBeVisible();
+    expect(within(historyTable()).getByText("Motivo del rechazo:")).toBeInTheDocument();
+    expect(within(historyTable()).queryByRole("button", { name: /detalle/i })).not.toBeInTheDocument();
   });
 
   // Issue #400 (criterio 8): el comprobante OFICIAL que genera el club al
   // aprobar es distinto del voucher que sube el socio (`voucherUrl` /
   // "Ver el comprobante") — solo aparece cuando el backend lo pobló.
-  it("shows a 'Descargar comprobante oficial' link, behind the accordion, when comprobanteOficialUrl is populated", async () => {
+  it("surfaces a 'Descargar comprobante oficial' link on the row when comprobanteOficialUrl is populated", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([
       makePago({ estadoPago: "APROBADO", comprobanteOficialUrl: "https://files.example/comprobante-oficial.pdf" }),
     ]);
 
     render(<StudentPaymentsPage />);
     await screen.findByTestId("student-payments-table");
-    openHistoryDetail();
 
     const link = within(historyTable()).getByRole("link", { name: /descargar comprobante oficial/i });
     expect(link).toHaveAttribute("href", "https://files.example/comprobante-oficial.pdf");
@@ -806,6 +799,8 @@ describe("StudentPaymentsPage — the history", () => {
 
     expect(await screen.findByText("No hay pagos rechazados.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ver todos los pagos" })).toBeInTheDocument();
+    // The empty box keeps the list's shape with decorative ghost rows.
+    expect(screen.getByTestId("pago-ghost-rows")).toHaveAttribute("aria-hidden", "true");
   });
 
   /**
@@ -897,7 +892,6 @@ describe("StudentPaymentsPage — the history", () => {
 
     render(<StudentPaymentsPage />);
     await screen.findByTestId("student-payments-table");
-    openHistoryDetail();
 
     expect(within(historyTable()).getByText("El comprobante no coincide")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /subir comprobante/i })).not.toBeInTheDocument();
@@ -1102,9 +1096,9 @@ describe("StudentPaymentsPage — the merged coverage rows (issue #1369)", () =>
     await screen.findByTestId("student-payments-table");
 
     const table = historyTable();
-    expect(within(table).getByText("Cobertura bonificada — 100%")).toBeInTheDocument();
+    expect(within(table).getByText(/Cobertura bonificada — 100%/)).toBeInTheDocument();
     expect(within(table).getByText(shownRange("2026-08-01", "2026-08-31"))).toBeInTheDocument();
-    expect(within(table).getByText("Otorgada el")).toBeInTheDocument();
+    expect(within(table).getByText(/Otorgada el/)).toBeInTheDocument();
     // A coverage never charged anything (#400): the amount cell is a dash,
     // never a fabricated "$0,00".
     expect(within(table).queryByText("$0,00")).not.toBeInTheDocument();
@@ -1140,28 +1134,22 @@ describe("StudentPaymentsPage — the merged coverage rows (issue #1369)", () =>
 });
 
 describe("StudentPaymentsPage — the row accordion (#513)", () => {
-  it("opens a row's detail from the table, and the mobile card's own copy opens with it", async () => {
+  it("opens a row's detail from its own toggle", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([
-      makePago({ estadoPago: "RECHAZADO", motivoRechazo: "El comprobante es ilegible" }),
+      makePago({ estadoPago: "APROBADO", motivoExcepcionSinComprobante: "Verificado en la cuenta del club" }),
     ]);
 
     render(<StudentPaymentsPage />);
     await screen.findByTestId("student-payments-table");
 
-    const tableToggle = within(historyTable()).getByRole("button", { name: /detalle/i });
-    const cardToggle = within(historyCards()).getByRole("button", { name: /detalle/i });
-    expect(tableToggle).toHaveAttribute("aria-expanded", "false");
-    expect(cardToggle).toHaveAttribute("aria-expanded", "false");
-    expect(within(historyCards()).getByText("El comprobante es ilegible")).not.toBeVisible();
+    const toggle = within(historyTable()).getByRole("button", { name: /detalle/i });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(within(historyTable()).getByText("Verificado en la cuenta del club")).not.toBeVisible();
 
-    fireEvent.click(tableToggle);
+    fireEvent.click(toggle);
 
-    expect(tableToggle).toHaveAttribute("aria-expanded", "true");
-    // Same logical row: opening the table's toggle opens the card's own
-    // copy too, even though only one of the two is visible in a real
-    // browser at any given width.
-    expect(cardToggle).toHaveAttribute("aria-expanded", "true");
-    expect(within(historyCards()).getByText("El comprobante es ilegible")).toBeVisible();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(within(historyTable()).getByText("Verificado en la cuenta del club")).toBeVisible();
   });
 
   it("gives a row with nothing to disclose no accordion toggle at all", async () => {
@@ -1171,36 +1159,38 @@ describe("StudentPaymentsPage — the row accordion (#513)", () => {
     await screen.findByTestId("student-payments-table");
 
     expect(within(historyTable()).queryByRole("button", { name: /detalle/i })).not.toBeInTheDocument();
-    expect(within(historyCards()).queryByRole("button", { name: /detalle/i })).not.toBeInTheDocument();
   });
 
-  it("ports the admin queue's exact column vocabulary — Estado, Monto, Período, Método, Acción", async () => {
-    render(<StudentPaymentsPage />);
-
-    const headers = within(await screen.findByTestId("student-payments-table")).getAllByRole(
-      "columnheader",
-    );
-    expect(headers.map((header) => header.textContent)).toEqual([
-      "Estado",
-      "Monto",
-      "Período",
-      "Método",
-      "Acción",
+  it("always draws the receipt slot: a link when the club issued it, a disabled state otherwise", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ id: 1, estadoPago: "APROBADO", comprobanteOficialUrl: "https://files.example/r1.pdf" }),
+      makePago({ id: 2, estadoPago: "APROBADO", comprobanteOficialUrl: null }),
+      makePago({ id: 3, estadoPago: "PENDIENTE_VALIDACION", comprobanteOficialUrl: null }),
     ]);
+
+    render(<StudentPaymentsPage />);
+    const list = await screen.findByTestId("student-payments-table");
+
+    expect(within(list).getByRole("link", { name: /descargar comprobante oficial/i })).toHaveTextContent(
+      "Recibo oficial",
+    );
+    expect(within(list).getByRole("button", { name: "Recibo en preparación" })).toBeDisabled();
+    expect(within(list).getByRole("button", { name: "Disponible al aprobarse" })).toBeDisabled();
+  });
+
+  it("summarises the account in a stat strip above the history", async () => {
+    render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
+
+    for (const label of ["Pagado hasta", "Pagos aprobados", "En revisión"]) {
+      expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+    }
+    expect(screen.getByText(/^Último pago/)).toBeInTheDocument();
   });
 });
 
-/**
- * The screenshot finding: on a narrow phone a REJECTED payment's row actions
- * ("Registrar un pago nuevo" + "Detalle") sat BESIDE the metadata in one
- * `flex-wrap` row whose info block was `flex-1` — basis 0, so it never
- * wrapped and the actions claimed the width, squeezing the metadata into a
- * ~50px column (the same basis-0 failure `DataRow`'s own comment documents
- * for /tarifas, issue #660). The card now stacks: facts, then actions. The
- * desktop table row keeps its side-by-side action cell — it has the width.
- */
-describe("StudentPaymentsPage — the mobile card keeps its metadata readable", () => {
-  function renderRejectedPayment(): Promise<HTMLElement> {
+describe("StudentPaymentsPage — a row keeps its actions visible", () => {
+  it("offers 'Registrar un pago nuevo' on a rejected row, next to the inline reason", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([
       makePago({
         id: 8,
@@ -1211,61 +1201,20 @@ describe("StudentPaymentsPage — the mobile card keeps its metadata readable", 
       }),
     ]);
     render(<StudentPaymentsPage />);
-    return screen.findByTestId("student-payments-cards");
-  }
+    const row = within(await screen.findByTestId("student-payments-table")).getByRole("listitem");
 
-  it("stacks a rejected payment's actions under its metadata instead of beside it", async () => {
-    await renderRejectedPayment();
-
-    const card = within(historyCards()).getByRole("listitem");
-    // The metadata line ("Transferencia · Registrado el … · Cubre …") is the
-    // info block's own paragraph — the card's first stacked child.
-    const metadata = card.querySelector("p");
-    expect(metadata).not.toBeNull();
-    expect(metadata!.textContent).toContain("Transferencia");
-    expect(metadata!.textContent).toContain("Cubre");
-    const infoBlock = metadata!.parentElement as HTMLElement;
-
-    // Both blocks are DIRECT children of the stacked `li` — the old markup
-    // nested them side by side inside an intermediate flex-wrap row, which
-    // is exactly the containment that produced the squeezed column.
-    expect(infoBlock.parentElement).toBe(card);
-    const actionsBlock = infoBlock.nextElementSibling as HTMLElement;
-    expect(actionsBlock.parentElement).toBe(card);
-
-    // The "Registrar un pago nuevo" link lives in the actions block, never
-    // inside the metadata's block.
-    const registerLink = /registrar un pago nuevo/i;
-    expect(within(infoBlock).queryByRole("link", { name: registerLink })).not.toBeInTheDocument();
-    expect(within(actionsBlock).getByRole("link", { name: registerLink })).toBeInTheDocument();
-    expect(within(actionsBlock).getByRole("button", { name: /detalle/i })).toBeInTheDocument();
+    expect(within(row).getByText(/El comprobante no coincide/)).toBeInTheDocument();
+    expect(within(row).getByRole("link", { name: /registrar un pago nuevo/i })).toBeInTheDocument();
   });
 
-  // Triangulates: the stacking is the card's own shape, not something only a
-  // rejected payment gets — an ordinary approved row stacks the same way.
-  it("keeps the same stacked shape for an approved payment's upload action", async () => {
+  it("offers the upload retry on a pending transfer with no proof", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([
-      makePago({
-        id: 9,
-        estadoPago: "PENDIENTE_VALIDACION",
-        tipoPago: "TRANSFERENCIA",
-        voucherUrl: null,
-      }),
+      makePago({ id: 9, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "TRANSFERENCIA", voucherUrl: null }),
     ]);
     render(<StudentPaymentsPage />);
-    await screen.findByTestId("student-payments-cards");
+    const row = within(await screen.findByTestId("student-payments-table")).getByRole("listitem");
 
-    const card = within(historyCards()).getByRole("listitem");
-    const infoBlock = (card.querySelector("p") as HTMLElement).parentElement as HTMLElement;
-    expect(infoBlock.parentElement).toBe(card);
-    const actionsBlock = infoBlock.nextElementSibling as HTMLElement;
-    expect(actionsBlock.parentElement).toBe(card);
-    expect(
-      within(infoBlock).queryByRole("button", { name: /subir comprobante/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(actionsBlock).getByRole("button", { name: /subir comprobante/i }),
-    ).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /subir comprobante/i })).toBeInTheDocument();
   });
 });
 
@@ -1488,23 +1437,41 @@ describe("StudentPaymentsPage — registering a payment", () => {
     expect(screen.queryByRole("button", { name: /registrar un pago/i })).not.toBeInTheDocument();
   });
 
-  // WCAG 2.2 SC 2.5.8 — the detach control was a bare 14px ✕ inside a button
-  // with no padding, i.e. a 14x14 target, and it is the only way back from
-  // attaching the wrong file. It gets 24x24 of hit area; the glyph stays 14px.
-  it("gives the detach control a 24x24 target around its 14px glyph", async () => {
-    render(<StudentPaymentsPage />);
-
+  // uv3: the picked proof is previewed BEFORE submitting — thumbnail for an
+  // image, a document tile for a PDF — with replace/remove actions.
+  async function pickProof(file: File): Promise<void> {
     fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
+    fireEvent.change(screen.getByTestId("renew-voucher-input"), { target: { files: [file] } });
+  }
 
-    // Transferencia is the default method, so the voucher row is already up.
-    const fileInput = screen.getByTestId("renew-voucher-input") as HTMLInputElement;
-    fireEvent.change(fileInput, {
-      target: { files: [new File(["x"], "comprobante.pdf", { type: "application/pdf" })] },
-    });
+  it("previews a picked image proof as a thumbnail with its name and size", async () => {
+    render(<StudentPaymentsPage />);
+    await pickProof(new File(["x"], "comprobante.png", { type: "image/png" }));
 
-    const detach = await screen.findByRole("button", { name: /quitar el comprobante/i });
-    expect(detach).toHaveClass("h-6", "w-6");
-    expect(detach).toHaveClass("items-center", "justify-center");
+    const preview = await screen.findByTestId("renew-proof-preview");
+    expect(within(preview).getByRole("img")).toHaveAttribute("src", "blob:mock-voucher-preview");
+    expect(within(preview).getByText("comprobante.png")).toBeInTheDocument();
+    expect(within(preview).getByRole("button", { name: /cambiar archivo/i })).toBeInTheDocument();
+  });
+
+  it("previews a picked PDF proof as a document tile instead of an image", async () => {
+    render(<StudentPaymentsPage />);
+    await pickProof(new File(["x"], "comprobante.pdf", { type: "application/pdf" }));
+
+    const preview = await screen.findByTestId("renew-proof-preview");
+    expect(within(preview).getByTestId("renew-proof-pdf-tile")).toBeInTheDocument();
+    expect(within(preview).queryByRole("img")).not.toBeInTheDocument();
+    expect(within(preview).getByText("comprobante.pdf")).toBeInTheDocument();
+  });
+
+  it("removes the previewed proof and offers the picker again", async () => {
+    render(<StudentPaymentsPage />);
+    await pickProof(new File(["x"], "comprobante.pdf", { type: "application/pdf" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /quitar el comprobante/i }));
+
+    expect(screen.queryByTestId("renew-proof-preview")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /seleccionar archivo/i })).toBeInTheDocument();
   });
 
   // Issue #488: switching to Efectivo removes the Comprobante field, but the
@@ -1771,139 +1738,6 @@ describe("StudentPaymentsPage — the dependent selection survives navigation", 
 });
 
 /**
- * D11c — "la ayuda no vive suelta".
- *
- * "Cómo se registra un pago" is a procedure, top to bottom: three numbered
- * steps saying what the form will ask for and who validates it. The subtitle
- * of the page already says WHAT this screen is; everything that explains HOW
- * it works belongs behind "Ver ayuda", which is the contract the admin panel
- * has honoured since #199 and the family screens never adopted.
- *
- * It was also the layout defect. The rail was a block of FIXED height, so in
- * the thin state — one payment, or none — it was the tallest item on the
- * screen and its height became the row's. The comment it carried admitted as
- * much ("dejaba un hueco de 170px"); moving it behind the disclosure removes
- * the item that was setting the height, rather than compensating for it.
- */
-describe("StudentPaymentsPage — the procedure is disclosed, not a permanent rail", () => {
-  it("keeps the three steps behind 'Ver ayuda' instead of printing them beside the card", async () => {
-    render(<StudentPaymentsPage />);
-
-    await screen.findByTestId("membership-status");
-    expect(screen.queryByText(/Son tres pasos y terminan en el club/i)).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Cómo se registra un pago" }),
-    ).toHaveAttribute("aria-expanded", "false");
-
-    fireEvent.click(screen.getByRole("button", { name: "Cómo se registra un pago" }));
-
-    expect(screen.getByText(/Son tres pasos y terminan en el club/i)).toBeInTheDocument();
-    expect(screen.getByText(/hasta 5 MB/i)).toBeInTheDocument();
-  });
-
-  /**
-   * The complement of D11c, and the one case where the disclosure's default
-   * is wrong: `expired` and `never-paid` are the only two states whose whole
-   * point is "registre un pago", so the steps are the reader's next step and
-   * not an explanation of the screen. `ending-soon` still has coverage in
-   * force and `covered` has nothing to do; for those the collapsed default
-   * stands, and so it does for the minor-blocked and gratuitous variants,
-   * which describe situations rather than a procedure to follow.
-   */
-  it("starts OPEN when coverage has lapsed — the steps are the reader's next move", async () => {
-    mockFetchStudentPortal.mockReset().mockResolvedValue({
-      ...PORTAL,
-      self: { ...SELF, membership: { ...SELF.membership!, cubiertoHasta: COVERAGE_END_PAST } },
-    });
-    mockFetchPagosDePersona
-      .mockReset()
-      .mockResolvedValue([makePago({ fechaInicio: PAGO_START_PAST, fechaFin: COVERAGE_END_PAST })]);
-
-    render(<StudentPaymentsPage />);
-
-    await screen.findByTestId("membership-status");
-    expect(await screen.findByText(/Son tres pasos y terminan en el club/i)).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Cómo se registra un pago" }),
-    ).toHaveAttribute("aria-expanded", "true");
-  });
-
-  it("starts OPEN for a student with no approved payment at all (triangulation)", async () => {
-    mockFetchStudentPortal.mockReset().mockResolvedValue({
-      ...PORTAL,
-      self: { ...SELF, membership: { ...SELF.membership!, cubiertoHasta: null } },
-    });
-    mockFetchPagosDePersona.mockReset().mockResolvedValue([]);
-
-    render(<StudentPaymentsPage />);
-
-    await screen.findByTestId("membership-status");
-    expect(await screen.findByText(/Son tres pasos y terminan en el club/i)).toBeInTheDocument();
-  });
-
-  it("leaves the procedure collapsed while coverage is still in force — ending soon", async () => {
-    // 2026-07-18 is three days past the frozen clock and inside
-    // `COVERAGE_ENDING_SOON_DAYS`: urgent, but still covered, so the reader is
-    // renewing early rather than catching up.
-    mockFetchPagosDePersona
-      .mockReset()
-      .mockResolvedValue([makePago({ fechaFin: "2026-07-18" })]);
-
-    render(<StudentPaymentsPage />);
-
-    await screen.findByTestId("membership-status");
-    expect(screen.queryByText(/Son tres pasos y terminan en el club/i)).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Cómo se registra un pago" }),
-    ).toHaveAttribute("aria-expanded", "false");
-  });
-
-  /**
-   * The half of the initial state that decides it must not be guessed: before
-   * the history resolves every profile reads as "never paid", and a panel
-   * seeded from that would stay open for a family that is up to date. A failed
-   * lookup is the same trap with no retry to hide behind, so the procedure is
-   * still shown — the form it explains does not depend on the history — but
-   * still collapsed.
-   */
-  it("does not open the procedure from a failed or unresolved history (triangulation)", async () => {
-    mockFetchPagosDePersona.mockReset().mockRejectedValue(new Error("No se pudo cargar los pagos."));
-
-    render(<StudentPaymentsPage />);
-
-    expect(await screen.findByRole("alert")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Cómo se registra un pago" }),
-    ).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText(/Son tres pasos y terminan en el club/i)).toBeNull();
-  });
-
-  it("discloses the club-registers-it variant for a minor on their own account", async () => {
-    mockUseAuth.mockReturnValue(authSession("estudiante"));
-    mockFetchStudentPortal.mockResolvedValue({
-      self: { ...SELF, fechaNacimiento: MINOR_BIRTH_DATE },
-      representados: [],
-      membershipPlans: [],
-    });
-
-    render(<StudentPaymentsPage />);
-
-    await screen.findByTestId("membership-status");
-    // A blocked minor is not an unpaid one: nothing about this state is a
-    // procedure to carry out, so the panel stays folded.
-    expect(screen.queryByRole("region", { name: "Cómo se paga esta membresía" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Cómo se paga esta membresía" }));
-
-    // Scoped to the disclosed region: issue #460 added a second, unrelated
-    // mention of "administración del club" to `situation.detail` above this
-    // panel (the minor-blocked message now also names the self-service path),
-    // so a page-wide `getByText` here would match both and fail as ambiguous.
-    const panel = screen.getByRole("region", { name: "Cómo se paga esta membresía" });
-    expect(within(panel).getByText(/Acérquese a administración del club/i)).toBeInTheDocument();
-  });
-});
-
-/**
  * D11b — the history is the block that grows with the family's real record, so
  * it is the one that claims the height `main` already reserved. Everything
  * else on this screen is a fixed summary.
@@ -1929,11 +1763,12 @@ describe("StudentPaymentsPage — the history claims the page's leftover height"
    * statement in the box, which is the empty case — and that is also the case
    * D11b says to design for first, because a socio nuevo has no payments.
    */
-  it("leaves the card at its own height while there are rows to show", async () => {
+  it("always claims the column's leftover height, topping a short list up with ghost rows", async () => {
     render(<StudentPaymentsPage />);
 
     const history = await screen.findByLabelText("Historial de pagos");
-    expect(history.className).not.toMatch(/\bflex-1\b/);
+    expect(history.className).toMatch(/\bflex-1\b/);
+    expect(within(history).getByTestId("pago-ghost-rows")).toBeInTheDocument();
   });
 
   it("claims the page's leftover height only when there is nothing to list", async () => {
