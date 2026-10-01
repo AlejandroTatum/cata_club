@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type CSSProperties, type RefObject } from "react";
 
+import { useBodyScrollLock } from "@/components/ui/useBodyScrollLock";
 import { useVisualViewportGeometry } from "@/lib/useVisualViewport";
 
 interface NativeDialogHandles {
@@ -90,6 +91,14 @@ export const NATIVE_DIALOG_SHELL_CLASS =
   "flex-col overflow-hidden rounded-2xl border border-line bg-paper p-0 shadow-elevated backdrop:bg-coal/40";
 
 /**
+ * The same shell at `max-w-5xl` (1024px) for the dialogs that lay their content
+ * out in two columns at `lg` — the account editor and the payments dialog.
+ * Derived from the base string so the viewport/keyboard/safe-area contract
+ * above has exactly one definition.
+ */
+export const NATIVE_DIALOG_WIDE_SHELL_CLASS = NATIVE_DIALOG_SHELL_CLASS.replace("max-w-2xl", "max-w-5xl");
+
+/**
  * The scrolling BODY of those same three dialogs — one string for the same
  * reason the shell above is one string. It was hand-copied verbatim into
  * `PaymentsDialog`, `MedicalRecordDialog` and `MemberEditDialog`, which is
@@ -168,6 +177,8 @@ export function useNativeDialog(onClose: () => void): NativeDialogHandles {
   // Always measuring: this hook only runs while a dialog is mounted, and these
   // dialogs are mounted only while open. There is no closed state to gate.
   const viewport = useVisualViewportGeometry(true);
+  // Mounted only while open, so the page behind is frozen for exactly that span.
+  useBodyScrollLock(true);
 
   useEffect(() => {
     const dialog = dialogRef.current;

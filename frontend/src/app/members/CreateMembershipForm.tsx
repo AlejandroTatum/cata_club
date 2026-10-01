@@ -20,6 +20,7 @@ import { CheckCircle2, Plus } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useToast } from "@/contexts/ToastContext";
 import { crearMembresia } from "@/services/api";
+import { PRIMARY_ACTION_TRIGGER } from "./payment-action-styles";
 import TipoSelectorForm from "@/components/admin/TipoSelectorForm";
 
 interface CreateMembershipFormProps {
@@ -37,6 +38,7 @@ export default function CreateMembershipForm({
   return (
     <TipoSelectorForm
       triggerLabel="Crear membresía"
+      triggerClassName={PRIMARY_ACTION_TRIGGER}
       TriggerIcon={Plus}
       submitLabel="Crear"
       SubmitIcon={Plus}

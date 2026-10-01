@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { Loader2, Save, CheckCircle2, Stethoscope, Pencil, X } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
@@ -138,6 +138,10 @@ interface MedicalRecordEditorProps {
   withEmergencyCard?: boolean;
   /** Whose record this is relative to the reader; only read with `withEmergencyCard`. */
   viewerIsOwner?: boolean;
+  /** The caller already announces "no record yet"; skip the editor's own notice. */
+  hideNewNotice?: boolean;
+  /** Extra card stacked under the emergency card in the rail; only read with `withEmergencyCard`. */
+  railFooter?: ReactNode;
 }
 
 export default function MedicalRecordEditor({
@@ -145,6 +149,8 @@ export default function MedicalRecordEditor({
   studentName,
   withEmergencyCard = false,
   viewerIsOwner = true,
+  hideNewNotice = false,
+  railFooter,
 }: MedicalRecordEditorProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
   const [state, setState] = useState<
@@ -490,7 +496,7 @@ export default function MedicalRecordEditor({
 
       {editing && (
       <div>
-      {state.isNew && (
+      {state.isNew && !hideNewNotice && (
         <p className="mb-3 rounded-ctl border border-line bg-sunken px-3 py-2 text-xs text-ink-3-strong">
           Todavía no hay una ficha médica cargada para esta persona. Complete los datos y guárdelos.
         </p>
@@ -604,15 +610,21 @@ export default function MedicalRecordEditor({
             app shares (fixed +593, local digits, no trunk 0) — this editor's
             own hand-rolled markup (label/input/error/hint) is retired in
             favor of it. */}
-        <PhoneField
-          idPrefix="telefono"
-          field={String(personaId)}
-          label="Teléfono de emergencia"
-          value={telefonoEmergencia}
-          onChange={setTelefonoEmergencia}
-          required
-          error={fieldErrors.telefonoEmergencia}
-        />
+        {/* `PhoneField` draws its label at `text-sm`; every other label in
+            this form is `text-xs`, which left the two emergency-contact inputs
+            5px out of line side by side. Restyled from here because the field
+            is shared with the wizards. */}
+        <div className="[&_label]:mb-1 [&_label]:text-xs [&_label]:text-ink-2">
+          <PhoneField
+            idPrefix="telefono"
+            field={String(personaId)}
+            label="Teléfono de emergencia"
+            value={telefonoEmergencia}
+            onChange={setTelefonoEmergencia}
+            required
+            error={fieldErrors.telefonoEmergencia}
+          />
+        </div>
       </div>
 
       {/* El botón de guardar se fue al encabezado pegado; acá quedan sólo los
@@ -645,7 +657,14 @@ export default function MedicalRecordEditor({
   return (
     <div className={`${PAGE_RAIL} lg:items-stretch`}>
       <div className="flex min-w-0 flex-col [&>[data-testid=medical-record-card]]:mt-0 [&>[data-testid=medical-record-card]]:flex-1">{recordCard}</div>
-      <EmergencyCard studentName={studentName} values={cardValues} ownerIsViewer={viewerIsOwner} />
+      {railFooter ? (
+        <div className="flex min-w-0 flex-col gap-section">
+          <EmergencyCard studentName={studentName} values={cardValues} ownerIsViewer={viewerIsOwner} />
+          {railFooter}
+        </div>
+      ) : (
+        <EmergencyCard studentName={studentName} values={cardValues} ownerIsViewer={viewerIsOwner} />
+      )}
     </div>
   );
 }

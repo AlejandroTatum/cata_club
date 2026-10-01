@@ -33,6 +33,7 @@ import {
   MENSAJE_MESES_MAXIMO_EXCEDIDO,
 } from "@/app/student/payments/payments-utils";
 import { MIN_TARGET_CLASS } from "@/lib/target-size";
+import { ACTION_TRIGGER, PRIMARY_ACTION_TRIGGER } from "./payment-action-styles";
 
 interface RegularizarDeudaFormProps {
   /** Backend membership id (the one the admin BFF aggregates, not the display label). */
@@ -52,6 +53,8 @@ interface RegularizarDeudaFormProps {
   esGratuidadFamiliar?: boolean;
   /** Called after a successful regularization so the page can refetch its data. */
   onRegularized: () => void;
+  /** Draw the trigger as the dialog's one red primary (when there is debt to clear). */
+  primary?: boolean;
 }
 
 export default function RegularizarDeudaForm({
@@ -59,6 +62,7 @@ export default function RegularizarDeudaForm({
   montoMensual,
   esGratuidadFamiliar = false,
   onRegularized,
+  primary = false,
 }: RegularizarDeudaFormProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
 
@@ -195,11 +199,11 @@ export default function RegularizarDeudaForm({
   }
 
   return (
-    <div className="mt-2.5">
+    <div>
       <button
         type="button"
         onClick={open ? handleClose : handleOpen}
-        className={`inline-flex items-center gap-1 rounded-lg bg-ink/10 px-2.5 py-1 text-2xs tracking-flat font-semibold text-ink transition-colors hover:bg-ink/20 ${MIN_TARGET_CLASS}`}
+        className={primary ? PRIMARY_ACTION_TRIGGER : ACTION_TRIGGER}
       >
         <Wallet size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
         Regularizar deuda

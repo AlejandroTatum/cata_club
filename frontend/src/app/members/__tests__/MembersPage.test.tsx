@@ -1862,7 +1862,7 @@ describe("MembersPage — Beneficio del club", () => {
     expect(within(dialog).getByRole("button", { name: /^asignar$/i })).toBeDisabled();
     expect(within(dialog).getByText(/supera la tarifa mensual/i)).toBeInTheDocument();
     // Actionable in local currency, not a bare number.
-    expect(within(dialog).getByText(/\$\s?80/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/supera la tarifa mensual/)).toHaveTextContent(/\$\s?80/);
     expect(mockAsignarBeneficio).not.toHaveBeenCalled();
   });
 
@@ -2785,9 +2785,13 @@ describe("MembersPage — missing emergency data reads as informational, not an 
     fireEvent.click(getRowAction(row, /^ficha médica de maría gonzález$/i));
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByRole("status")).toHaveTextContent("Sin ficha médica");
+    expect(within(dialog).getByRole("status")).toHaveTextContent("Complete los datos y guárdelos.");
+    // The status itself is stated once, by the editor's "Nueva" chip.
+    expect(within(dialog).queryByText(/Sin ficha médica/)).not.toBeInTheDocument();
     // The editor stays fully available: the banner is additive.
     expect(await within(dialog).findByText("Tipo de sangre")).toBeInTheDocument();
+    // One empty-state message only: the editor's own notice is suppressed.
+    expect(within(dialog).queryByText(/Todavía no hay una ficha/)).not.toBeInTheDocument();
   });
 
   it("does not show the 'Sin ficha médica' banner once emergency data is present", async () => {

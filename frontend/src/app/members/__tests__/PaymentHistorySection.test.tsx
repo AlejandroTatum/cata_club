@@ -20,13 +20,14 @@ beforeEach(() => {
  * tested on the student's own /student/payments screen.
  */
 describe("PaymentHistorySection", () => {
-  it("does not fetch until the toggle is opened — collapsed by default", () => {
+  it("is always visible under its own heading and fetches once on mount — no toggle", async () => {
+    mockFetchPagosDePersona.mockResolvedValue([]);
     render(<PaymentHistorySection personaId={10} />);
-    expect(mockFetchPagosDePersona).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: /historial de pagos/i })).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
+
+    expect(screen.getByRole("heading", { name: /historial de pagos/i })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /historial de pagos/i })).not.toBeInTheDocument();
+    await waitFor(() => expect(mockFetchPagosDePersona).toHaveBeenCalledTimes(1));
+    expect(mockFetchPagosDePersona).toHaveBeenCalledWith("10");
   });
 
   it("fetches and renders every payment with its validation status badge on open", async () => {
@@ -85,7 +86,6 @@ describe("PaymentHistorySection", () => {
     ]);
 
     render(<PaymentHistorySection personaId={10} />);
-    fireEvent.click(screen.getByRole("button", { name: /historial de pagos/i }));
 
     expect(mockFetchPagosDePersona).toHaveBeenCalledWith("10");
 
@@ -122,7 +122,6 @@ describe("PaymentHistorySection", () => {
     ]);
 
     render(<PaymentHistorySection personaId={10} />);
-    fireEvent.click(screen.getByRole("button", { name: /historial de pagos/i }));
 
     await waitFor(() => {
       expect(screen.getByText("Falta el comprobante")).toBeInTheDocument();
@@ -133,7 +132,6 @@ describe("PaymentHistorySection", () => {
     mockFetchPagosDePersona.mockResolvedValue([]);
 
     render(<PaymentHistorySection personaId={10} />);
-    fireEvent.click(screen.getByRole("button", { name: /historial de pagos/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/todavía no hay pagos registrados/i)).toBeInTheDocument();
@@ -153,22 +151,8 @@ describe("PaymentHistorySection", () => {
     mockFetchPagosDePersona.mockRejectedValue(rejection);
 
     render(<PaymentHistorySection personaId={10} />);
-    fireEvent.click(screen.getByRole("button", { name: /historial de pagos/i }));
 
     const alert = await screen.findByRole("alert");
     expect(within(alert).getByText("El historial de pagos no está disponible por ahora.")).toBeInTheDocument();
-  });
-
-  it("does not re-fetch on a second open of an already-loaded history", async () => {
-    mockFetchPagosDePersona.mockResolvedValue([]);
-    render(<PaymentHistorySection personaId={10} />);
-    const toggle = screen.getByRole("button", { name: /historial de pagos/i });
-
-    fireEvent.click(toggle); // open — fetches
-    await waitFor(() => expect(mockFetchPagosDePersona).toHaveBeenCalledTimes(1));
-    fireEvent.click(toggle); // close
-    fireEvent.click(toggle); // reopen
-
-    expect(mockFetchPagosDePersona).toHaveBeenCalledTimes(1);
   });
 });

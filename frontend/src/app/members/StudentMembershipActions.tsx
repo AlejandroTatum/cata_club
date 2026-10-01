@@ -7,7 +7,88 @@ import RegisterPaymentForm from "./RegisterPaymentForm";
 import RegularizarDeudaForm from "./RegularizarDeudaForm";
 import SuspenderReactivarForm from "./SuspenderReactivarForm";
 import CambiarPlanForm from "./CambiarPlanForm";
-import type { MemberStudentSummary } from "./members-utils";
+import { Badge, DataBox, PAGE_RAIL } from "@/components/ui";
+import { formatCurrency } from "@/lib/format-utils";
+import {
+  formatMembershipPeriod,
+  getMembershipStatusBadge,
+  type MemberStudentSummary,
+} from "./members-utils";
+
+/**
+ * The header strip of a student's Pagos block: where the membership stands
+ * before any action is offered. Everything here is read from the row's own
+ * data (no extra fetch), so it is correct the moment the dialog opens.
+ */
+function MembershipSummary({ student }: { student: MemberStudentSummary }): React.ReactElement {
+  const { membresia } = student;
+  if (!membresia) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-ctl border border-line bg-sunken px-4 py-3 text-sm text-ink-2">
+        <Badge tone="neutral">Sin membresía</Badge>
+        Cree una membresía para poder registrar pagos.
+      </div>
+    );
+  }
+  const { label, tone } = getMembershipStatusBadge(student);
+  const period = formatMembershipPeriod(membresia.fechaInicio, membresia.fechaFin);
+  return (
+    <dl
+      aria-label="Resumen de la membresía"
+      className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-ctl border border-line bg-sunken px-4 py-3 text-xs"
+    >
+      <div>
+        <dt className="text-ink-3">Estado</dt>
+        <dd className="mt-1">
+          <Badge tone={tone}>{label}</Badge>
+        </dd>
+      </div>
+      <div>
+        <dt className="text-ink-3">Plan</dt>
+        <dd className="mt-1">
+          <DataBox>{membresia.tipo}</DataBox>
+        </dd>
+      </div>
+      <div>
+        <dt className="text-ink-3">Tarifa mensual</dt>
+        <dd className="mt-1">
+          <DataBox>{membresia.esGratuidadFamiliar ? "Gratuidad familiar" : formatCurrency(membresia.monto)}</DataBox>
+        </dd>
+      </div>
+      <div>
+        <dt className="text-ink-3">Vigencia</dt>
+        <dd className="mt-1">{period ? <DataBox>{period}</DataBox> : <span className="text-ink-3">—</span>}</dd>
+      </div>
+    </dl>
+  );
+}
+
+/** One action of the dialog: a line saying what it does, then its trigger/form. */
+function ActionTile({
+  description,
+  children,
+  ...dataAttrs
+}: {
+  description: string;
+  children: React.ReactNode;
+  "data-primary-action"?: string;
+  "data-secondary-action"?: string;
+}): React.ReactElement {
+  return (
+    <div {...dataAttrs} className="grid gap-2 rounded-ctl border border-line bg-paper p-3">
+      <p className="text-xs text-ink-2">{description}</p>
+      {children}
+    </div>
+  );
+}
+
+/** Rows the history column is padded to so it matches the actions column's height. */
+const HISTORY_MIN_ROWS = 7;
+
+const ACTION_DESCRIPTION = {
+  "registrar-pago": "Efectivo o transferencia, por período.",
+  "regularizar-deuda": "Pagos atrasados de meses ya vencidos.",
+} as const;
 
 /**
  * The three refetch callbacks shared by every membership/payment write flow
@@ -68,7 +149,9 @@ export default function StudentMembershipActions({
     return (
       <>
         <output className="text-xs text-ink-3">Inactivo/Archivado: historial disponible, acciones deshabilitadas.</output>
-        <PaymentHistorySection personaId={personaId} />
+        <div className="mt-3">
+          <PaymentHistorySection personaId={personaId} />
+        </div>
       </>
     );
   }
@@ -98,60 +181,101 @@ export default function StudentMembershipActions({
       montoMensual={membresia.monto ?? 0}
       esGratuidadFamiliar={membresia.esGratuidadFamiliar}
       onRegularized={onDebtRegularized}
+      primary={hasDebt}
     />
   );
   const registerPayment = membresia && (
-    <RegisterPaymentForm personaId={personaId} membresia={membresia} onPaymentRegistered={onPaymentRegistered} />
+    <RegisterPaymentForm
+      personaId={personaId}
+      membresia={membresia}
+      onPaymentRegistered={onPaymentRegistered}
+      primary={!hasDebt}
+    />
   );
   const primaryAction = hasDebt
-    ? { name: "regularizar-deuda", content: regularizeDebt }
-    : { name: "registrar-pago", content: registerPayment };
+    ? { name: "regularizar-deuda" as const, content: regularizeDebt }
+    : { name: "registrar-pago" as const, content: registerPayment };
   const secondaryAction = hasDebt
-    ? { name: "registrar-pago", content: registerPayment }
-    : { name: "regularizar-deuda", content: regularizeDebt };
+    ? { name: "registrar-pago" as const, content: registerPayment }
+    : { name: "regularizar-deuda" as const, content: regularizeDebt };
 
   return (
-    <>
-      {/* Beneficio del club attaches to the PERSONA, not the membership
-          (issue #398) — shown in the dedicated Pagos entry point.
-          `tarifaMensual` (issue #665) is the pre-submit UX hint that mirrors
-          the backend's own assign-time gate; `undefined` when there is no
-          membership yet, same as the backend's own gate skipping then. */}
-      <BeneficioSection personaId={personaId} tarifaMensual={membresia?.monto} />
+    <div className="grid gap-section">
+      <div className={PAGE_RAIL}>
+        {/* Actions first in the DOM (and on a phone) so the primary one is
+            reachable without scrolling past the history; from `lg` the history
+            takes the wide column and the actions the rail. */}
+        <section aria-label="Acciones" className="grid content-start gap-3 lg:order-2">
+          <h3 className="text-sm font-bold text-ink">Acciones</h3>
 
-      {/* Issue #615: the row's "Último pago" only ever shows the most recent
-          payment — this is the FULL history, any status, reusing the same
-          tokens `student/payments/page.tsx` already established. */}
-      <PaymentHistorySection personaId={personaId} />
-
-      {!membresia && (
-        <CreateMembershipForm personaId={personaId} onCreated={onMembershipCreated} />
-      )}
-      {membresia && (
-        <div className="mt-2.5">
-          {debtUnavailable && (
-            <p className="mb-2 text-2xs text-ink-3" role="status">
-              Estado de deuda no disponible; las acciones actuales siguen disponibles.
-            </p>
+          {!membresia && (
+            <ActionTile description="Asigna un plan para poder registrar pagos.">
+              <CreateMembershipForm personaId={personaId} onCreated={onMembershipCreated} />
+            </ActionTile>
           )}
-          <div data-primary-action={primaryAction.name} className="rounded-lg border border-cata-red/40 p-2">
-            {primaryAction.content}
+
+          {membresia && (
+            <>
+              {debtUnavailable && (
+                <p className="text-2xs text-ink-3" role="status">
+                  Estado de deuda no disponible; las acciones actuales siguen disponibles.
+                </p>
+              )}
+              <ActionTile
+                data-primary-action={primaryAction.name}
+                description={ACTION_DESCRIPTION[primaryAction.name]}
+              >
+                {primaryAction.content}
+              </ActionTile>
+              <ActionTile
+                data-secondary-action={secondaryAction.name}
+                description={ACTION_DESCRIPTION[secondaryAction.name]}
+              >
+                {secondaryAction.content}
+              </ActionTile>
+            </>
+          )}
+
+          {/* Beneficio del club attaches to the PERSONA, not the membership
+              (issue #398) — shown in the dedicated Pagos entry point.
+              `tarifaMensual` (issue #665) is the pre-submit UX hint that mirrors
+              the backend's own assign-time gate; `undefined` when there is no
+              membership yet, same as the backend's own gate skipping then. */}
+          <div className="rounded-ctl border border-line bg-paper p-3">
+            <BeneficioSection personaId={personaId} tarifaMensual={membresia?.monto} />
           </div>
-          <div data-secondary-action={secondaryAction.name}>
-            {secondaryAction.content}
-          </div>
+
           {/* Suspension/reactivation and plan changes remain revealed secondary actions. */}
-          <SuspenderReactivarForm
-            membresiaId={Number(membresia.id)}
-            estado={membresia.estado}
-            onChanged={onMembresiaChanged}
-          />
-          <CambiarPlanForm
-            membresiaId={Number(membresia.id)}
-            onChanged={onMembresiaChanged}
-          />
+          {membresia && (membresia.estado === "activa" || membresia.estado === "suspendida") && (
+            <ActionTile
+              description={
+                membresia.estado === "activa"
+                  ? "Pausa los cobros hasta que se reactive."
+                  : "Vuelve a activar la membresía."
+              }
+            >
+              <SuspenderReactivarForm
+                membresiaId={Number(membresia.id)}
+                estado={membresia.estado}
+                onChanged={onMembresiaChanged}
+              />
+            </ActionTile>
+          )}
+          {membresia && (
+            <ActionTile description="La nueva tarifa rige desde el próximo pago.">
+              <CambiarPlanForm membresiaId={Number(membresia.id)} onChanged={onMembresiaChanged} />
+            </ActionTile>
+          )}
+        </section>
+
+        {/* Issue #615: the row's "Último pago" only ever shows the most recent
+            payment — this is the FULL history, any status, reusing the same
+            tokens `student/payments/page.tsx` already established. */}
+        <div className="grid min-w-0 content-start gap-section lg:order-1">
+          <MembershipSummary student={student} />
+          <PaymentHistorySection personaId={personaId} minRows={HISTORY_MIN_ROWS} />
         </div>
-      )}
-    </>
+      </div>
+    </div>
   );
 }

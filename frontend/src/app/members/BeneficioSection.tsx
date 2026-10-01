@@ -26,6 +26,7 @@ import { descuentosActivos, descuentoExcedeTarifa, descuentoValorLabel } from "@
 import { toUserMessage } from "@/lib/error-message";
 import { formatCurrency } from "@/lib/format-utils";
 import { MIN_TARGET_CLASS } from "@/lib/target-size";
+import { ACTION_TRIGGER, DESTRUCTIVE_ACTION_TRIGGER } from "./payment-action-styles";
 
 interface BeneficioSectionProps {
   personaId: number;
@@ -127,11 +128,12 @@ export default function BeneficioSection({ personaId, tarifaMensual }: Beneficio
     seleccionado !== null && tarifaMensual !== undefined && descuentoExcedeTarifa(seleccionado, tarifaMensual);
 
   return (
-    <div className="mt-2.5 rounded-ctl border border-line bg-sunken p-3">
-      <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-ink-2">
+    <div>
+      <p className="flex items-center gap-1.5 text-xs font-semibold text-ink-2">
         <Gift size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
         Beneficio del club
       </p>
+      <p className="mb-2 text-xs text-ink-2">Rebaja fija en todos los pagos.</p>
 
       {loading && <LoadingState label="Cargando beneficio…" />}
 
@@ -159,7 +161,7 @@ export default function BeneficioSection({ personaId, tarifaMensual }: Beneficio
             type="button"
             onClick={() => setPendingRetiro(true)}
             disabled={retiroLoading}
-            className={`inline-flex items-center gap-1 rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-ink-2 transition-colors hover:bg-paper disabled:opacity-50 ${MIN_TARGET_CLASS}`}
+            className={DESTRUCTIVE_ACTION_TRIGGER}
           >
             {retiroLoading ? <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" /> : null}
             Retirar beneficio
@@ -174,7 +176,7 @@ export default function BeneficioSection({ personaId, tarifaMensual }: Beneficio
             <button
               type="button"
               onClick={openAssign}
-              className={`inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-xs font-semibold text-cata-red transition-colors hover:bg-cata-red/25 ${MIN_TARGET_CLASS}`}
+              className={ACTION_TRIGGER}
             >
               <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
               Asignar beneficio

@@ -76,29 +76,31 @@ export default function AccountInfoSection({ account }: AccountInfoSectionProps)
 
   return (
     <>
-      <div className="mb-4">
-        <label htmlFor={`nombres-${account.id}`} className="mb-field block text-sm font-semibold text-ink">
-          Nombres
-        </label>
-        <input
-          id={`nombres-${account.id}`}
-          type="text"
-          value={nombres}
-          onChange={(e) => setNombres(e.target.value)}
-          className="input-field w-full"
-        />
-      </div>
-      <div className="mb-4">
-        <label htmlFor={`apellidos-${account.id}`} className="mb-field block text-sm font-semibold text-ink">
-          Apellidos
-        </label>
-        <input
-          id={`apellidos-${account.id}`}
-          type="text"
-          value={apellidos}
-          onChange={(e) => setApellidos(e.target.value)}
-          className="input-field w-full"
-        />
+      <div className="mb-4 grid gap-4 sm:grid-cols-2">
+        <div>
+          <label htmlFor={`nombres-${account.id}`} className="mb-field block text-sm font-semibold text-ink">
+            Nombres
+          </label>
+          <input
+            id={`nombres-${account.id}`}
+            type="text"
+            value={nombres}
+            onChange={(e) => setNombres(e.target.value)}
+            className="input-field w-full"
+          />
+        </div>
+        <div>
+          <label htmlFor={`apellidos-${account.id}`} className="mb-field block text-sm font-semibold text-ink">
+            Apellidos
+          </label>
+          <input
+            id={`apellidos-${account.id}`}
+            type="text"
+            value={apellidos}
+            onChange={(e) => setApellidos(e.target.value)}
+            className="input-field w-full"
+          />
+        </div>
       </div>
       {/* Issue #1296: the same `PhoneField` every other phone field on the
           app shares (fixed +593, local digits, no trunk 0) — the only site

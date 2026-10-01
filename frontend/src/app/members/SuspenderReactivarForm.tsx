@@ -21,6 +21,7 @@ import { toUserMessage } from "@/lib/error-message";
 import type { EstadoMembresia } from "@/types/domain";
 import CampoFormularioAdmin from "@/components/admin/CampoFormularioAdmin";
 import { MIN_TARGET_CLASS } from "@/lib/target-size";
+import { ACTION_TRIGGER, DESTRUCTIVE_ACTION_TRIGGER } from "./payment-action-styles";
 
 interface SuspenderReactivarFormProps {
   membresiaId: number;
@@ -89,11 +90,11 @@ export default function SuspenderReactivarForm({
   }
 
   return (
-    <div className="mt-2.5">
+    <div>
       <button
         type="button"
         onClick={open ? () => setOpen(false) : handleOpen}
-        className={`inline-flex items-center gap-1 rounded-lg bg-ink/10 px-2.5 py-1 text-2xs tracking-flat font-semibold text-ink transition-colors hover:bg-ink/20 ${MIN_TARGET_CLASS}`}
+        className={accion === "suspender" ? DESTRUCTIVE_ACTION_TRIGGER : ACTION_TRIGGER}
       >
         <Icon size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
         {triggerLabel}

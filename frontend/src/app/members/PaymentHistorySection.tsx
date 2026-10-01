@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown, ChevronUp, History } from "lucide-react";
+import { useEffect, useState } from "react";
+import { History } from "lucide-react";
 import { Badge, EmptyState, ErrorState, LoadingState } from "@/components/ui";
 import { ICON } from "@/lib/icon-size";
 import { fetchPagosDePersona, type PagoPersona } from "@/services/api";
@@ -14,19 +14,28 @@ import {
   sortPagosByDate,
   TIPO_PAGO_LABEL,
 } from "@/app/student/payments/payments-utils";
-import { MIN_TARGET_CLASS } from "@/lib/target-size";
 
 interface PaymentHistorySectionProps {
+  /**
+   * From `lg`, pad a short list with empty placeholder rows up to this many,
+   * so a column beside a taller one (the Pagos dialog's actions) does not end
+   * in a blank band. Placeholders are decorative and hidden from assistive tech.
+   */
+  minRows?: number;
   personaId: number;
 }
 
 type LoadState =
-  | { status: "idle" }
   | { status: "loading" }
   | { status: "error"; message: string }
   | { status: "ready"; pagos: PagoPersona[] };
 
 /**
+ * (Admin redesign v4) The history is a section of its own in the Pagos dialog:
+ * it used to hide behind an unlabelled chevron and fetched lazily on the first
+ * open. It is now always visible and fetched when the dialog opens — the dialog
+ * is the only place it renders, and an account holds the one persona.
+ *
  * Issue #615: the row above this only ever surfaced `student.ultimoPago` —
  * the SINGLE last payment. An admin checking whether a payment rejected two
  * months ago was ever fixed had no way to see it without leaving the members
@@ -41,19 +50,15 @@ type LoadState =
  * authorizes dueño, representante, OR admin (`listar_pagos_de_persona`,
  * membresia_pago_servicio.py); no backend change was needed for this issue.
  *
- * Collapsed by default and fetched lazily on first open, same contract as
- * the per-row accordion in `student/payments/page.tsx` (issue #513): a
- * `PaymentsDialog` can hold several students at once, and eagerly fetching
- * every one of their full histories on open would be several unwanted round
- * trips. Loading/error/empty are distinct states — a payment's real
+ * Loading/error/empty are distinct states — a payment's real
  * `estadoPago` is always what renders; nothing here defaults to a reassuring
  * "validado" while data is missing or still in flight.
  */
 export default function PaymentHistorySection({
   personaId,
+  minRows = 0,
 }: PaymentHistorySectionProps): React.ReactElement {
-  const [open, setOpen] = useState(false);
-  const [state, setState] = useState<LoadState>({ status: "idle" });
+  const [state, setState] = useState<LoadState>({ status: "loading" });
 
   function load(): void {
     setState({ status: "loading" });
@@ -67,71 +72,71 @@ export default function PaymentHistorySection({
       });
   }
 
-  function toggle(): void {
-    const next = !open;
-    setOpen(next);
-    if (next && state.status === "idle") load();
-  }
+  useEffect(() => {
+    load();
+    // `load` only reads `personaId`, which is the dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [personaId]);
 
-  const panelId = `payment-history-${personaId}`;
+  const titleId = `payment-history-${personaId}`;
 
   return (
-    <div className="mt-2.5 border-t border-line pt-2.5">
-      <button
-        type="button"
-        onClick={toggle}
-        aria-expanded={open}
-        aria-controls={panelId}
-        className={`flex w-full items-center justify-between gap-2 text-left text-xs font-semibold text-ink ${MIN_TARGET_CLASS}`}
-      >
-        <span className="inline-flex items-center gap-1.5">
-          <History size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          Historial de pagos
-        </span>
-        {open ? (
-          <ChevronUp size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-        ) : (
-          <ChevronDown size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-        )}
-      </button>
+    <section aria-labelledby={titleId}>
+      <h3 id={titleId} className="mb-2 flex items-center gap-1.5 text-sm font-bold text-ink">
+        <History size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+        Historial de pagos
+      </h3>
 
-      {open && (
-        <div id={panelId} className="mt-2">
-          {state.status === "loading" && <LoadingState label="Cargando historial…" />}
-          {state.status === "error" && <ErrorState message={state.message} onRetry={load} />}
-          {state.status === "ready" && state.pagos.length === 0 && (
-            <EmptyState title="Todavía no hay pagos registrados." surface="inset" />
-          )}
-          {state.status === "ready" && state.pagos.length > 0 && (
-            <ul className="flex flex-col gap-2">
-              {state.pagos.map((pago) => {
-                const estado = describePagoEstado(pago.estadoPago);
-                const faltaComprobante = pagoFaltaComprobante(pago);
-                return (
-                  <li key={pago.id} className="rounded-lg border border-line bg-sunken p-2.5 text-xs">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-bold text-ink">{formatPagoMonto(pago.monto)}</span>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <Badge tone={estado.tone}>{estado.label}</Badge>
-                        {faltaComprobante && <Badge tone="bad">Falta el comprobante</Badge>}
-                      </div>
-                    </div>
-                    <p className="mt-1 text-2xs text-ink-3">
-                      {TIPO_PAGO_LABEL[pago.tipoPago]} · Cubre {formatDateRange(pago.fechaInicio, pago.fechaFin)}
-                    </p>
-                    <p className="text-2xs text-ink-3">
+      {state.status === "loading" && <LoadingState label="Cargando historial…" />}
+      {state.status === "error" && <ErrorState message={state.message} onRetry={load} />}
+      {state.status === "ready" && state.pagos.length === 0 && (
+        <EmptyState title="Todavía no hay pagos registrados." surface="inset" />
+      )}
+      {state.status === "ready" && state.pagos.length > 0 && (
+        <div className="overflow-hidden rounded-ctl border border-line">
+          <div
+            aria-hidden="true"
+            className="hidden grid-cols-[1fr_1.4fr_auto] gap-3 bg-sunken px-3 py-2 text-2xs font-semibold text-ink-3 sm:grid"
+          >
+            <span>Monto</span>
+            <span>Cobertura</span>
+            <span>Estado</span>
+          </div>
+          <ul className="divide-y divide-line">
+            {state.pagos.map((pago) => {
+              const estado = describePagoEstado(pago.estadoPago);
+              const faltaComprobante = pagoFaltaComprobante(pago);
+              return (
+                <li key={pago.id} className="grid gap-1 px-3 py-2.5 text-xs sm:grid-cols-[1fr_1.4fr_auto] sm:gap-3">
+                  <div>
+                    <span className="font-bold text-ink">{formatPagoMonto(pago.monto)}</span>
+                    <p className="text-2xs text-ink-3">{TIPO_PAGO_LABEL[pago.tipoPago]}</p>
+                  </div>
+                  <div className="text-2xs text-ink-3">
+                    <p>Cubre {formatDateRange(pago.fechaInicio, pago.fechaFin)}</p>
+                    <p>
                       Registrado el {formatDate(pago.fechaRegistro)}
                       {pago.estadoPago === "RECHAZADO" && pago.motivoRechazo
                         ? ` · Motivo: ${pago.motivoRechazo}`
                         : ""}
                     </p>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+                  </div>
+                  <div className="flex flex-wrap items-start gap-1.5 sm:justify-end">
+                    <Badge tone={estado.tone}>{estado.label}</Badge>
+                    {faltaComprobante && <Badge tone="bad">Falta el comprobante</Badge>}
+                  </div>
+                </li>
+              );
+            })}
+            {Array.from({ length: Math.max(0, minRows - state.pagos.length) }, (_, index) => (
+              <li key={`ghost-${index}`} aria-hidden="true" className="hidden h-[3.375rem] items-center px-3 lg:flex">
+                <span className="h-2 w-16 rounded-full bg-sunken" />
+                <span className="ml-auto h-2 w-40 rounded-full bg-sunken" />
+              </li>
+            ))}
+          </ul>
         </div>
       )}
-    </div>
+    </section>
   );
 }
