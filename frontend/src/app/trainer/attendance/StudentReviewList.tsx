@@ -97,11 +97,11 @@ export default function StudentReviewList({
               {getUserInitials(student.name)}
             </span>
             <span className="flex min-w-0 flex-1 flex-col">
-              <span className="truncate text-sm font-semibold text-ink" title={student.name}>
+              <span className="break-words text-sm font-semibold text-ink" title={student.name}>
                 {student.name}
               </span>
               {student.justificativo && (
-                <span className="truncate text-xs text-ink-3" title={student.justificativo}>
+                <span className="break-words text-xs text-ink-3" title={student.justificativo}>
                   {student.justificativo}
                 </span>
               )}

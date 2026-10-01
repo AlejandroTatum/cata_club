@@ -980,7 +980,7 @@ describe("TrainerAttendancePage — teclado y rótulos del radiogroup de asisten
     expect(document.activeElement).toBe(competencia);
   });
 
-  it("keeps a visible label under each icon from desktop width up, not just sm:", async () => {
+  it("keeps a visible label under each icon at every width, phones included", async () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
 
@@ -989,8 +989,7 @@ describe("TrainerAttendancePage — teclado y rótulos del radiogroup de asisten
     // Old class hid it from 640px up (`sm:sr-only`) — a laptop-width screen
     // never saw it. It stays hidden only below `lg` (1024px, where the fiche
     // is a narrow column with no room) and is visible from there on.
-    expect(label.className).not.toContain("sm:sr-only");
-    expect(label.className).toContain("lg:not-sr-only");
+    expect(label.className).not.toContain("sr-only");
   });
 });
 

@@ -213,7 +213,18 @@ describe("un alumno es una persona, no una asignación", () => {
     render(<TrainerStudentsPage />);
 
     const melany = await screen.findByTestId("student-row-7");
-    expect(within(melany).getAllByRole("button")).toHaveLength(2);
+    // The name (tap target), "Ficha médica" and "Horario" — one ficha button, not three.
+    expect(within(melany).getAllByRole("button", { name: /^Ficha médica de/ })).toHaveLength(1);
+  });
+
+  it("debajo de lg tocar el nombre abre el diálogo de la ficha", async () => {
+    render(<TrainerStudentsPage />);
+
+    const melany = await screen.findByTestId("student-row-7");
+    fireEvent.click(within(melany).getByText("Melany Quimis"));
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(mockFetchFichaEmergencia).toHaveBeenCalledWith(7);
   });
 });
 
@@ -449,7 +460,8 @@ describe("la nómina es la tabla compartida del producto (issue #1156)", () => {
     const tarjetas = within(moviles).getAllByTestId(/^student-card-/);
     expect(tarjetas).toHaveLength(3);
     for (const tarjeta of tarjetas) {
-      expect(within(tarjeta).getAllByRole("button")).toHaveLength(2);
+      // Name (opens the ficha), "Ficha médica" and "Horario".
+      expect(within(tarjeta).getAllByRole("button")).toHaveLength(3);
     }
   });
 });

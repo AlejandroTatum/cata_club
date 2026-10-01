@@ -413,13 +413,13 @@ export default function TrainerStudentsPage(): React.ReactElement {
                          * candidato válido y lo acota al ancho de la
                          * tarjeta.
                          */}
-                        <span
-                          className="block min-w-0 truncate text-sm font-semibold text-ink"
-                          title={alumno.nombreCompleto}
+                        <button
+                          type="button"
+                          className="block w-full min-w-0 text-left"
+                          onClick={() => abrirFicha(alumno)}
                         >
-                          {alumno.nombreCompleto}
-                        </span>
-                        <span className="block text-xs text-ink-3">{descripcion(alumno)}</span>
+                          <NombreYDetalle alumno={alumno} />
+                        </button>
                         <div className="flex flex-wrap gap-2">
                           <BotonFichaMedica alumno={alumno} onAbrir={() => abrirFicha(alumno)} />
                           <BotonHorario
@@ -435,12 +435,10 @@ export default function TrainerStudentsPage(): React.ReactElement {
                       <TableRow
                         data-testid={`student-row-${alumno.personaId}`}
                         // On desktop the whole row selects; the name is the keyboard target.
-                        onClick={esEscritorio ? () => abrirFicha(alumno) : undefined}
-                        className={
-                          esEscritorio
-                            ? `cursor-pointer ${seleccionadoId === alumno.personaId ? "bg-ink/5" : "hover:bg-ink/5"}`
-                            : undefined
-                        }
+                        onClick={() => abrirFicha(alumno)}
+                        className={`cursor-pointer ${
+                          esEscritorio && seleccionadoId === alumno.personaId ? "bg-ink/5" : "hover:bg-ink/5"
+                        }`}
                       >
                         <TableCell>
                           {esEscritorio ? (
@@ -454,7 +452,15 @@ export default function TrainerStudentsPage(): React.ReactElement {
                               <NombreYDetalle alumno={alumno} />
                             </button>
                           ) : (
-                            <NombreYDetalle alumno={alumno} />
+                            // Below `lg` the same tap opens the dialog; the visible
+                            // "Ficha médica" button keeps its own accessible name.
+                            <button
+                              type="button"
+                              className="block w-full text-left"
+                              onClick={() => abrirFicha(alumno)}
+                            >
+                              <NombreYDetalle alumno={alumno} />
+                            </button>
                           )}
                         </TableCell>
                         <TableCell type="action">
