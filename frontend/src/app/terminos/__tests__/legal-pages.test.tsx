@@ -124,7 +124,7 @@ describe("public legal documents", () => {
    */
   it("lays the document out as contents, document and summary zones", () => {
     const html = renderToStaticMarkup(<TermsPage />);
-    expect(html).toContain("xl:grid-cols-[240px_minmax(0,1fr)_300px]");
+    expect(html).toContain("xl:grid-cols-[minmax(240px,320px)_minmax(0,1fr)_minmax(300px,380px)]");
     expect(html).not.toContain("max-w-measure");
   });
 
@@ -162,6 +162,17 @@ describe("public legal documents", () => {
     const html = renderToStaticMarkup(<FETMPage />);
     expect(html).toContain("Qué autoriza este permiso");
     expect(html).not.toContain('aria-label="En este documento"');
+  });
+
+  it.each(pages)("%s has no link back to the landing inside the document", (_name, Page) => {
+    const html = renderToStaticMarkup(<Page />);
+    expect(html).not.toContain("Volver a Cata Club");
+    expect(html).not.toMatch(/<a[^>]*href="\/"/);
+  });
+
+  it("uses the wide three-zone grid for long documents", () => {
+    const html = renderToStaticMarkup(<TermsPage />);
+    expect(html).toContain("xl:w-[min(1600px,calc(100vw-7rem))]");
   });
 
   it("offers the club contact beside the document", () => {

@@ -122,12 +122,14 @@ export default function LegalDocumentPage({ title, blocks, aside, summary, path 
       </section>
     ) : null;
   const questions = (
-    <section aria-labelledby="legal-dudas" className="card grid gap-2 p-5">
+    <section aria-labelledby="legal-dudas" className="card grid content-start gap-2 p-5">
       <h2 id="legal-dudas" className={SIDE_TITLE}>
         ¿Dudas?
       </h2>
       <p className="text-sm leading-prose text-ink-2">Escríbanos y le responderemos de forma administrativa.</p>
-      <p className="grid gap-1 text-sm font-semibold text-cata-red-dark underline underline-offset-4">
+      {/* On a short document this card stretches to the page's bottom edge, so
+          its links become roomy divided rows instead of leaving the slack empty. */}
+      <p className={cn("grid text-sm font-semibold text-cata-red-dark underline underline-offset-4", hasToc ? "gap-1" : "divide-y divide-cata-border [&>a]:py-3.5")}>
         <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
         {whatsapp.map((number) => (
           <a key={number} href={toWhatsAppLink(number)} target="_blank" rel="noreferrer">
@@ -141,22 +143,31 @@ export default function LegalDocumentPage({ title, blocks, aside, summary, path 
   return (
     <main
       id="contenido"
-      className={cn("mx-auto w-full max-w-7xl py-8 text-base sm:py-12", PAGE_RAIL, hasToc && "xl:grid-cols-[240px_minmax(0,1fr)_300px]")}
+      className={cn(
+        "grid w-full gap-page text-base",
+        // A short document has no scroll of its own to fill the viewport with,
+        // so its columns stretch to meet it: one composed block ending on a
+        // common edge, not cards floating over an empty canvas. The heights
+        // are the header (65px) plus the wrapper's vertical padding (2 x 40px).
+        !hasToc && "lg:min-h-[calc(100dvh-9.5rem)] lg:!items-stretch",
+        // From `xl` the page leaves the layout wrapper's 88rem cap (`.app-main`
+        // in the root layout, which this page cannot edit) and takes up to
+        // 1600px, so a wide monitor gets columns instead of grey margins. The
+        // `7rem` is the wrapper's own 48px side padding twice plus a classic
+        // scrollbar, which keeps the page aligned with the header's content.
+        "xl:relative xl:left-1/2 xl:w-[min(1600px,calc(100vw-7rem))] xl:-translate-x-1/2",
+        hasToc
+          ? cn(PAGE_RAIL, "xl:grid-cols-[minmax(240px,320px)_minmax(0,1fr)_minmax(300px,380px)]")
+          : cn(PAGE_RAIL, "lg:grid-cols-[minmax(0,1fr)_minmax(300px,380px)]"),
+      )}
     >
       {hasToc && (
-        <div className="hidden xl:sticky xl:top-24 xl:block">
+        <div className="hidden xl:sticky xl:top-24 xl:block xl:max-h-[calc(100dvh-8rem)] xl:overflow-y-auto">
           <LegalToc items={sections} />
         </div>
       )}
-      <div className="grid min-w-0 content-start gap-page max-lg:order-2">
-        <div className="card p-6 sm:p-10">
-          {/*
-           * No `focus-visible:*` utilities here: `globals.css` gives every
-           * `a[href]` outside the landing the two-tone focus ring.
-           */}
-          <Link href="/" className="mb-10 inline-flex text-sm font-semibold text-cata-red-dark underline-offset-4 hover:underline">
-            Volver a Cata Club
-          </Link>
+      <div className={cn("grid min-w-0 gap-page max-lg:order-2", hasToc ? "content-start" : "content-start lg:grid-rows-[1fr_auto]")}>
+        <div className={cn("card p-6 sm:p-10", !hasToc && "flex flex-col")}>
           {/* A DIV, not a `<header>`: the institutional bar is the page's one banner. */}
           <div className="border-b border-cata-border pb-8">
             {/* The landing's eyebrow: a red rule fill, a `cata-red-dark` label (AA as text). */}
@@ -182,7 +193,7 @@ export default function LegalDocumentPage({ title, blocks, aside, summary, path 
            * each heading needs for the contents list; that renderer is also the
            * wizard dialog's and has no ids to give.
            */}
-          <article className="mt-10 space-y-6 leading-prose text-cata-text">
+          <article className={cn("space-y-6 leading-prose text-cata-text", hasToc ? "mt-10" : "flex flex-1 flex-col justify-center py-10 text-xl sm:text-2xl xl:text-3xl")}>
             {blocks.map((block, index) =>
               block.kind === "heading" ? (
                 <h2
@@ -214,7 +225,7 @@ export default function LegalDocumentPage({ title, blocks, aside, summary, path 
        * Below `lg` the rail dissolves (`contents`) so the summary reads before the
        * document and the reference cards (version, related, contact) after it.
        */}
-      <div className="grid content-start gap-page max-lg:contents lg:sticky lg:top-24">
+      <div className={cn("grid gap-page max-lg:contents", hasToc ? "content-start" : "lg:grid-rows-[auto_1fr]")}>
         {keyPoints !== null && <div className="grid max-lg:order-1">{keyPoints}</div>}
         {aside === undefined && (
           <section aria-label="Versión y vigencia" className="card p-5 text-sm text-ink-2 max-lg:order-3">
@@ -222,7 +233,10 @@ export default function LegalDocumentPage({ title, blocks, aside, summary, path 
             <p>Versión 1.0, vigente desde el 27 de agosto de 2026.</p>
           </section>
         )}
-        <div className="grid gap-page max-lg:order-3">
+        {/* Only the short reference cards stay pinned: the whole rail can be
+            taller than the viewport, and a pinned element that tall hides its
+            own bottom. */}
+        <div className={cn("grid gap-page max-lg:order-3", hasToc ? "lg:sticky lg:top-24" : "lg:grid-rows-[auto_1fr]")}>
           {related}
           {questions}
         </div>
