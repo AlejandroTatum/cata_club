@@ -11,7 +11,7 @@
  * skips the confirmation dialog entirely (see `handleCreateSubmit`).
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Pencil, Plus, Tag } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -20,26 +20,23 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import { NUMERIC_FIELD_LIMIT_MESSAGE } from "@/lib/numeric-input";
 import { useNumericFieldMasking } from "@/lib/use-numeric-field-masking";
 import {
+  Badge,
   Button,
-  DataBox,
-  DataRow,
   EmptyState,
   ErrorState,
   InfoPanel,
   LoadingState,
   PAGE_RAIL,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeaderCell,
-  TableNameCell,
-  TableRow,
 } from "@/components/ui";
+import { cn } from "@/components/ui/cn";
 import { useToast } from "@/contexts/ToastContext";
 import { fetchTiposMembresia, actualizarTipoMembresia, crearTipoMembresia } from "@/services/api";
 import type { ActualizarTipoMembresiaInput, TipoMembresiaCatalogo } from "@/services/api";
 import { toUserMessage } from "@/lib/error-message";
+import TarifaUsage from "./TarifaUsage";
+
+/** Both columns reach the bottom of the screen (page header and padding above, ~24px margin below). */
+const FILL_SCREEN = "lg:min-h-[calc(100dvh-10rem)] lg:grid-rows-[auto_1fr]";
 
 const MODALIDAD_LABEL: Record<TipoMembresiaCatalogo["modalidad"], string> = {
   MENSUAL: "Mensual",
@@ -75,8 +72,9 @@ function normalizePrecio(value: string): string {
   return value.trim().replace(",", ".");
 }
 
+/** Price field: full-width control with the "$" adornment inside the box. */
 const PRECIO_INPUT_CLASS =
-  "h-ctl w-28 rounded-ctl border border-line-2 bg-paper px-3 text-right text-sm text-ink tabular-nums outline-none focus:border-cata-red";
+  "h-ctl w-full rounded-ctl border border-line-2 bg-paper pl-7 pr-3 text-sm text-ink tabular-nums outline-none focus:border-cata-red";
 
 /** Mirrors the backend's own bound (`membresia_pago_schemas.py`'s
  *  `categoria: Optional[str] = Field(None, min_length=1, max_length=80)`) so
@@ -86,7 +84,7 @@ const CATEGORIA_ERROR_VACIA = "Ingrese un nombre para la tarifa.";
 const CATEGORIA_ERROR_LARGA = `El nombre no puede superar los ${CATEGORIA_MAX_LENGTH} caracteres.`;
 
 const CATEGORIA_INPUT_CLASS =
-  "h-ctl w-full min-w-[10rem] rounded-ctl border border-line-2 bg-paper px-3 text-sm text-ink outline-none focus:border-cata-red";
+  "h-ctl w-full rounded-ctl border border-line-2 bg-paper px-3 text-sm text-ink outline-none focus:border-cata-red";
 
 /** The new-tariff form's field skin — same tokens `discounts/page.tsx` draws
  *  its own "Nuevo descuento" form with, spelled once. */
@@ -111,6 +109,15 @@ const EMPTY_NEW_TARIFA = {
   modalidad: "MENSUAL" as TipoMembresiaCatalogo["modalidad"],
 };
 
+/** Brings a just-opened form into view and focuses its first field. On mobile
+ *  the rail sits below the list, so without this the open button looks dead. */
+function revealForm(container: HTMLElement | null): void {
+  if (!container) return;
+  const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  container.scrollIntoView?.({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  container.querySelector<HTMLElement>("input, select, textarea")?.focus({ preventScroll: true });
+}
+
 export default function TarifasPage(): React.ReactElement {
   const { showSuccess, showError } = useToast();
 
@@ -127,6 +134,8 @@ export default function TarifasPage(): React.ReactElement {
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [revealTick, setRevealTick] = useState(0);
+  const createFormRef = useRef<HTMLDivElement>(null);
   const [newTarifa, setNewTarifa] = useState(EMPTY_NEW_TARIFA);
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -307,7 +316,12 @@ export default function TarifasPage(): React.ReactElement {
   // the price edit above): creating a new catalog row has no existing pagos
   // or future charges to warn about, the way changing one does.
 
+  useEffect(() => {
+    if (revealTick > 0) revealForm(createFormRef.current);
+  }, [revealTick]);
+
   function openCreateForm(): void {
+    setRevealTick((tick) => tick + 1);
     setNewTarifa(EMPTY_NEW_TARIFA);
     setCreateError(null);
     setCreateOpen(true);
@@ -355,29 +369,41 @@ export default function TarifasPage(): React.ReactElement {
    *  wrapper, so its own error message surfaces from `renderMeta` instead. */
   function renderNombreInput(tarifa: TipoMembresiaCatalogo): React.ReactElement {
     return (
-      <input
-        type="text"
-        value={categoriaInput}
-        onChange={(e) => {
-          setCategoriaInput(e.target.value);
-          setCategoriaError(null);
-        }}
-        className={CATEGORIA_INPUT_CLASS}
-        aria-label={`Nombre de ${tarifa.categoria}`}
-        disabled={saving}
-      />
+      <label className={FIELD_LABEL}>
+        Nombre
+        <input
+          type="text"
+          value={categoriaInput}
+          onChange={(e) => {
+            setCategoriaInput(e.target.value);
+            setCategoriaError(null);
+          }}
+          className={CATEGORIA_INPUT_CLASS}
+          aria-label={`Nombre de ${tarifa.categoria}`}
+          disabled={saving}
+        />
+        {categoriaError && (
+          <span className="text-xs font-normal normal-case text-state-bad" role="alert">
+            {categoriaError}
+          </span>
+        )}
+      </label>
     );
   }
 
-  function renderMeta(tarifa: TipoMembresiaCatalogo): React.ReactElement {
-    if (editingId === tarifa.id) {
-      return (
-        <div className="flex flex-col gap-field">
-          {categoriaError && (
-            <p className="text-xs text-state-bad" role="alert">
-              {categoriaError}
-            </p>
-          )}
+  /** Edit-mode price field plus its inline errors, aligned with the name
+   *  field above it. Read mode shows the price as the card's headline. */
+  function renderPrecioEditor(tarifa: TipoMembresiaCatalogo): React.ReactElement {
+    return (
+      <label className={FIELD_LABEL}>
+        Precio mensual
+        <span className="relative block">
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-bold text-ink-3"
+          >
+            $
+          </span>
           <input
             type="text"
             inputMode="decimal"
@@ -389,25 +415,19 @@ export default function TarifasPage(): React.ReactElement {
             aria-label={`Precio de ${tarifa.categoria}`}
             disabled={saving}
           />
-          {inputError ? (
-            <p className="text-xs text-state-bad" role="alert">
-              {inputError}
-            </p>
-          ) : (
-            precioMasking.limitReached && (
-              <p aria-live="polite" className="text-xs font-semibold text-state-warn">
-                {NUMERIC_FIELD_LIMIT_MESSAGE.amount}
-              </p>
-            )
-          )}
-        </div>
-      );
-    }
-    return (
-      <>
-        <DataBox>{`$ ${tarifa.precio}`}</DataBox>
-        <DataBox>{MODALIDAD_LABEL[tarifa.modalidad]}</DataBox>
-      </>
+        </span>
+        {inputError ? (
+          <span className="text-xs font-normal normal-case text-state-bad" role="alert">
+            {inputError}
+          </span>
+        ) : (
+          precioMasking.limitReached && (
+            <span aria-live="polite" className="text-xs font-semibold normal-case text-state-warn">
+              {NUMERIC_FIELD_LIMIT_MESSAGE.amount}
+            </span>
+          )
+        )}
+      </label>
     );
   }
 
@@ -437,21 +457,37 @@ export default function TarifasPage(): React.ReactElement {
     );
   }
 
-  /** The rail's resting state: how the catalog is read, from what is loaded. */
+  /** Compact catalog summary: count and price range, from what is loaded. */
+  function renderSummary(): React.ReactElement | null {
+    if (tarifas.length === 0) return null;
+    const prices = tarifas.map((t) => Number.parseFloat(t.precio)).filter(Number.isFinite);
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const range = min === max ? `$ ${min.toFixed(2)}` : `$ ${min.toFixed(2)} – $ ${max.toFixed(2)}`;
+    return (
+      <InfoPanel title="Resumen del catálogo">
+        <dl className="grid grid-cols-2 gap-section">
+          <div>
+            <dt className="text-2xs font-bold uppercase text-ink-3">Tarifas</dt>
+            <dd className="text-2xl font-extrabold tabular-nums text-ink">{tarifas.length}</dd>
+          </div>
+          <div>
+            <dt className="text-2xs font-bold uppercase text-ink-3">Rango de precios</dt>
+            <dd className="text-sm font-bold tabular-nums text-ink">{range}</dd>
+          </div>
+        </dl>
+      </InfoPanel>
+    );
+  }
+
+  /** The rail's indications card: always visible, never collapsible. */
   function renderGuidance(): React.ReactElement {
     return (
       <InfoPanel title="Cómo se aplican las tarifas">
-        {tarifas.length > 0 ? (
-          <p>
-            {tarifas.length === 1 ? "1 tarifa" : `${tarifas.length} tarifas`} en el catálogo.
-          </p>
-        ) : null}
+        <p>Cada tarifa define el precio y la modalidad de una membresía.</p>
         <p>
-          Cada membresía nueva toma el precio de su tarifa en el momento de crearse o de
-          registrar el pago.
-        </p>
-        <p>
-          Cambiar un precio solo afecta a los pagos futuros; los ya registrados no cambian.
+          <strong className="text-ink">Al editar un precio</strong>, el cambio aplica solo a los
+          pagos futuros; las membresías y los pagos ya registrados no se modifican.
         </p>
         <p>Para sumar una categoría o modalidad, use «Nueva tarifa».</p>
       </InfoPanel>
@@ -460,7 +496,7 @@ export default function TarifasPage(): React.ReactElement {
 
   function renderCreateForm(): React.ReactElement {
     return (
-      <div className="card flex flex-col gap-section p-[18px]">
+      <div ref={createFormRef} className="card flex flex-col gap-section p-[18px]">
         <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
           Nueva tarifa
         </h2>
@@ -546,6 +582,7 @@ export default function TarifasPage(): React.ReactElement {
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
         title="Tarifas"
+        subtitle="El precio y la modalidad de cada membresía del club."
         actions={
           <Button variant="dark" onClick={openCreateForm}>
             <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
@@ -556,17 +593,18 @@ export default function TarifasPage(): React.ReactElement {
         {loadError && <ErrorState message={loadError} onRetry={() => void loadCatalog()} />}
 
         <div data-testid="tarifas-split" className={PAGE_RAIL}>
-          <div className="flex min-w-0 flex-1 flex-col gap-page">
-            <section className="card flex min-w-0 flex-col overflow-hidden">
-              <div className="flex items-center justify-between gap-2 border-b border-line px-[18px] py-3">
-                <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
-                  Catálogo de tarifas
-                </h2>
-              </div>
-
-              {loading ? (
+          <div
+            className={cn(
+              "grid min-w-0 content-start gap-page",
+              !loading && tarifas.length > 0 && FILL_SCREEN,
+            )}
+          >
+            {loading ? (
+              <section className="card flex min-w-0 flex-col overflow-hidden">
                 <LoadingState label="Cargando tarifas…" />
-              ) : !loadError && tarifas.length === 0 ? (
+              </section>
+            ) : !loadError && tarifas.length === 0 ? (
+              <section className="card flex min-w-0 flex-col overflow-hidden">
                 <EmptyState
                   surface="inset"
                   fill
@@ -580,84 +618,73 @@ export default function TarifasPage(): React.ReactElement {
                     </Button>
                   }
                 />
-              ) : tarifas.length > 0 ? (
-                <>
-                  <ul data-testid="tarifas-cards" className="divide-y divide-line sm:hidden">
-                    {tarifas.map((tarifa) => (
-                      <DataRow
-                        key={tarifa.id}
-                        name={
-                          editingId === tarifa.id ? renderNombreInput(tarifa) : tarifa.categoria
-                        }
-                        // Opt-in only (#660): long tarifa/descuento names were
-                        // truncating to "M…" on mobile. `nameWrap` is scoped
-                        // to this page — the other five DataRow callers keep
-                        // truncating by default. Read mode only: edit mode
-                        // renders an input instead of the wrapped text.
-                        nameWrap
-                        // Bundled into `meta` rather than `DataRow`'s own
-                        // per-row `actions` prop: this row's actions are
-                        // "Editar"/"Guardar"/"Cancelar", distinct from
-                        // the header's own "Nueva tarifa" (#507). `meta`
-                        // renders the same trailing flex row, so nothing
-                        // about the card layout changes.
-                        meta={
-                          <>
-                            {renderMeta(tarifa)}
-                            {renderAcciones(tarifa)}
-                          </>
-                        }
-                      />
-                    ))}
-                  </ul>
-
-                  <div data-testid="tarifas-table" className="hidden overflow-x-auto sm:block">
-                    <Table>
-                      <TableHead>
-                        <TableRow>
-                          <TableHeaderCell>Categoría</TableHeaderCell>
-                          <TableHeaderCell>Precio</TableHeaderCell>
-                          <TableHeaderCell>Modalidad</TableHeaderCell>
-                          <TableHeaderCell align="right">
-                            <span className="sr-only">Acciones</span>
-                          </TableHeaderCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {tarifas.map((tarifa) => (
-                          <TableRow key={tarifa.id}>
-                            <TableNameCell
-                              name={
-                                editingId === tarifa.id
-                                  ? renderNombreInput(tarifa)
-                                  : tarifa.categoria
-                              }
-                            />
-                            <TableCell>
-                              {editingId === tarifa.id ? (
-                                renderMeta(tarifa)
-                              ) : (
-                                `$ ${tarifa.precio}`
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {editingId === tarifa.id ? "" : MODALIDAD_LABEL[tarifa.modalidad]}
-                            </TableCell>
-                            <TableCell align="right">
-                              <div className="flex justify-end gap-2">{renderAcciones(tarifa)}</div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </>
-              ) : null}
-            </section>
+              </section>
+            ) : tarifas.length > 0 ? (
+              <ul
+                data-testid="tarifas-cards"
+                aria-label="Catálogo de tarifas"
+                className="grid gap-page sm:grid-cols-2 2xl:grid-cols-3"
+              >
+                {tarifas.map((tarifa) => {
+                  const isEditing = editingId === tarifa.id;
+                  return (
+                    <li
+                      key={tarifa.id}
+                      className={cn(
+                        "card flex min-w-0 flex-col gap-section p-[18px]",
+                        !isEditing && "lg:min-h-56",
+                      )}
+                    >
+                      {isEditing ? (
+                        <>
+                          <h3 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
+                            Editar tarifa
+                          </h3>
+                          {renderNombreInput(tarifa)}
+                          {renderPrecioEditor(tarifa)}
+                          <p className="text-xs text-ink-3">
+                            El nuevo precio aplica solo a los pagos futuros.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <h3 className="min-w-0 flex-1 basis-full sm:basis-56 break-words font-display text-lg uppercase leading-tight tracking-flat text-ink">
+                              {tarifa.categoria}
+                            </h3>
+                            <Badge>{MODALIDAD_LABEL[tarifa.modalidad]}</Badge>
+                          </div>
+                          <div className="grid gap-1">
+                            <p className="text-4xl font-extrabold tabular-nums text-ink">{`$ ${tarifa.precio}`}</p>
+                            <p className="text-xs text-ink-3">
+                              Se usa en inscripción, pagos y cambio de plan.
+                            </p>
+                          </div>
+                        </>
+                      )}
+                      <div className={cn("flex gap-2", !isEditing && "mt-auto")}>{renderAcciones(tarifa)}</div>
+                    </li>
+                  );
+                })}
+                <li className="flex sm:col-span-2 2xl:col-span-1">
+                  <button
+                    type="button"
+                    onClick={openCreateForm}
+                    className="flex min-h-24 w-full flex-col items-center justify-center gap-2 rounded-card lg:min-h-56 border border-dashed border-line-2 text-sm font-bold text-ink-2 transition-colors hover:border-cata-red hover:text-cata-red"
+                  >
+                    <Plus size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />
+                    Agregar tarifa
+                  </button>
+                </li>
+              </ul>
+            ) : null}
+            {!loading && tarifas.length > 0 ? <TarifaUsage /> : null}
           </div>
 
-          <div data-testid="tarifas-rail">
-            {createOpen ? renderCreateForm() : renderGuidance()}
+          <div data-testid="tarifas-rail" className="grid content-start gap-page">
+            {createOpen ? renderCreateForm() : null}
+            {renderSummary()}
+            {renderGuidance()}
           </div>
         </div>
 
