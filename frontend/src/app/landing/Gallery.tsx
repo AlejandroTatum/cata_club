@@ -215,6 +215,26 @@ export default function Gallery(): React.ReactElement {
     releasePinAfterWindow(target);
   };
 
+  // The press flag only separates a click's focus from a keyboard's, so it
+  // must end with the press however the press ends: released outside the
+  // strip, cancelled (touch scroll takeover), capture lost, or the page hidden.
+  // Focus lands between pointerdown and these, so clearing here is safe.
+  useEffect((): (() => void) => {
+    const endPress = (): void => { pointerFocusRef.current = false; };
+    document.addEventListener("pointerup", endPress);
+    document.addEventListener("pointercancel", endPress);
+    document.addEventListener("lostpointercapture", endPress);
+    document.addEventListener("visibilitychange", endPress);
+    window.addEventListener("blur", endPress);
+    return (): void => {
+      document.removeEventListener("pointerup", endPress);
+      document.removeEventListener("pointercancel", endPress);
+      document.removeEventListener("lostpointercapture", endPress);
+      document.removeEventListener("visibilitychange", endPress);
+      window.removeEventListener("blur", endPress);
+    };
+  }, []);
+
   // A tap anywhere outside the strip releases the pin (touch has no leave).
   // The browse controls are part of the strip's surface: activating one must
   // not be mistaken for the outside click it physically is.
@@ -272,7 +292,7 @@ export default function Gallery(): React.ReactElement {
               focusRef.current = true;
               syncHold();
             }}
-            onBlur={(): void => { focusRef.current = false; syncHold(); }}
+            onBlur={(): void => { pointerFocusRef.current = false; focusRef.current = false; syncHold(); }}
             onKeyDown={(event): void => {
               pointerFocusRef.current = false;
               // Arrow keys browse on the same terms as the buttons, from
