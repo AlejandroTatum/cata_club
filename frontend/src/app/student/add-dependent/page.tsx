@@ -50,7 +50,7 @@ import {
   CEDULA_DIGITS,
   CEDULA_HINT,
 } from "@/components/wizard-fields";
-import { BackLink, Stepper, buttonClasses } from "@/components/ui";
+import { BackLink, Stepper, buttonClasses, PAGE_RAIL } from "@/components/ui";
 import { SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
 import type { TipoSangre } from "@/types/domain";
 import {
@@ -712,16 +712,13 @@ function AddDependentContent(): React.ReactElement {
       // Issue #1396: through the shell's `back` slot, so the control precedes
       // the title in document order — `PageHeader` is drawn above `<main>`,
       // so a back control among the children lands after the title by
-      // construction. The wrapper carries the wizard's own 760px cap:
-      // `back` draws at full canvas width as a sibling of `<main>`, and an
-      // uncapped control would start left of the capped column below it.
-      back={
-        <div className="w-full max-w-[760px]">
-          <BackLink href="/student" />
-        </div>
-      }
+      // construction.
+      back={<BackLink href="/student" />}
     >
-      <div className="flex w-full max-w-[760px] flex-col gap-page">
+      {/* Full dashboard measure: the form card keeps a readable column and a
+          rail carries the "what you need" help instead of stretching inputs. */}
+      <div className={PAGE_RAIL}>
+      <div className="flex min-w-0 flex-col gap-page">
 
       {/* Named stepper — the same contract as the other two wizards. The
           counter's wrapper `<div>` is gone: it carried nothing and made the
@@ -784,6 +781,15 @@ function AddDependentContent(): React.ReactElement {
           </>}
         </form>
       </div>
+      </div>
+      <aside aria-label="Antes de empezar" className="card flex flex-col gap-3 p-5 lg:sticky lg:top-4">
+        <h2 className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">Antes de empezar</h2>
+        <ul className="flex flex-col gap-2.5 text-sm leading-relaxed text-ink-2">
+          <li>Tenga a mano el nombre completo, la fecha de nacimiento y el documento del dependiente.</li>
+          <li>La ficha médica puede completarse ahora o más tarde desde “Ficha médica”.</li>
+          <li>Si el dependiente ya está registrado, el sistema se lo indicará sin duplicar datos.</li>
+        </ul>
+      </aside>
       </div>
     </AppShell>
   );
