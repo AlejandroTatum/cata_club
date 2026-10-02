@@ -941,13 +941,19 @@ test.describe("Landing page", () => {
 
       const card = page.locator(".landing-schedule-card");
       await expect(card).toBeVisible();
-      const heights = await page.evaluate(() => ({
-        card: document.querySelector(".landing-schedule-card")!.getBoundingClientRect().height,
-        copy: document.querySelector(".landing-schedule-copy")!.getBoundingClientRect().height,
-      }));
-      // The photo column is absolutely positioned and the rail no longer
-      // stretches the row, so the card is never taller than its copy.
-      expect(heights.card).toBeLessThanOrEqual(heights.copy + 2);
+      const heights = await page.evaluate(() => {
+        const cardEl = document.querySelector(".landing-schedule-card")!;
+        const style = getComputedStyle(cardEl);
+        return {
+          card: cardEl.getBoundingClientRect().height,
+          copy: document.querySelector(".landing-schedule-copy")!.getBoundingClientRect().height,
+          frame: parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth),
+        };
+      });
+      // The card is its copy alone (no photo) plus its own padding and border,
+      // and the rail no longer stretches the row: it is never taller than that.
+      expect(heights.card).toBeLessThanOrEqual(heights.copy + heights.frame + 2);
+      await expect(card.locator("img, figure")).toHaveCount(0);
     });
   });
 });

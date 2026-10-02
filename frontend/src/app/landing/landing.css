@@ -249,7 +249,7 @@
    outright — the old version's `::before` em-dash separator belonged to the
    previous side-by-side layout and has no place once the index and the label
    stack. */
-.landing-pillars { display: grid; width: 100%; max-width: 760px; margin-inline: auto; grid-template-columns: minmax(0, 1fr); gap: 40px; align-items: start; }
+.landing-pillars { display: grid; width: 100%; max-width: 720px; margin-inline: auto; grid-template-columns: minmax(0, 1fr); gap: 40px; align-items: start; }
 /* Each pillar mirrors its parent's own 1fr/1fr split — copy on the left,
    photo on the right — with a tighter 32px inner gap (vs. the 72px outer
    gap between the two pillars themselves), since these two columns belong
@@ -488,7 +488,7 @@
    stretches the other: the card is exactly as tall as its copy. */
 .landing-schedule-side { display: flex; min-width: 0; flex-direction: column; gap: var(--landing-space-snug); }
 .landing-schedule-list { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--landing-border); }
-.landing-schedule-tab { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 58px; padding: 12px 8px 12px 0; border: 0; border-bottom: 1px solid var(--landing-border); background: transparent; color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; text-align: left; cursor: pointer; position: relative; transition: color 220ms ease; }
+.landing-schedule-tab { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 46px; padding: 8px 8px 8px 0; border: 0; border-bottom: 1px solid var(--landing-border); background: transparent; color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; text-align: left; cursor: pointer; position: relative; transition: color 220ms ease; }
 .landing-schedule-tab::before { content: ""; position: absolute; left: -16px; top: 12px; bottom: 12px; width: 4px; background: var(--landing-action); border-radius: 2px; transform: scaleY(0); transition: transform 320ms ease; }
 .landing-schedule-tab[aria-selected="true"]::before { transform: scaleY(1); }
 .landing-schedule-tab:focus-visible { outline: 3px solid var(--landing-focus); outline-offset: 2px; }
@@ -504,22 +504,22 @@
 /* The one card. Its decorative corner circle picks up the selected
    category's color; the ball fill/ink pair does the same so a lit day stays
    legible against every swatch in `CATEGORY_COLORS`. */
-.landing-schedule-card { position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.5fr); border: 1px solid var(--landing-border); border-radius: 20px; background: var(--landing-surface); box-shadow: 0 24px 48px -32px color-mix(in srgb, var(--landing-brand-black) 40%, transparent); }
-/* Copy column and photo column. The photo is the card's second half, so the
-   card never has a wide blank right side; the category swatch becomes the
-   edge between them. */
-.landing-schedule-copy { position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: 22px; padding: 28px 36px; }
-.landing-schedule-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
+.landing-schedule-card { position: relative; overflow: hidden; padding: 56px 48px; border: 1px solid var(--landing-border); border-left: 6px solid var(--landing-cat, var(--landing-action)); transition: border-color 400ms ease; border-radius: 20px; background: var(--landing-surface); box-shadow: 0 24px 48px -32px color-mix(in srgb, var(--landing-brand-black) 40%, transparent); }
+/* The card is its copy and nothing else. Laid out as a small ledger so the
+   width is spent on content, not left blank: the category header across the
+   top, hours and days side by side, the enquiry button on its own row. The
+   category swatch is the card's left edge. */
+.landing-schedule-copy { position: relative; z-index: 1; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 36px 40px; }
+.landing-schedule-head { grid-column: 1; grid-row: 1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
 .landing-schedule-group { display: flex; flex-direction: column; gap: 8px; }
-.landing-schedule-copy > * { position: relative; z-index: 1; }
-.landing-schedule-copy::after { content: ""; position: absolute; right: -60px; top: -60px; z-index: 0; width: 220px; height: 220px; border-radius: 50%; background: var(--landing-cat, var(--landing-action)); opacity: 0.12; transition: background 400ms ease; }
-.landing-schedule-photo { position: relative; min-height: 100%; margin: 0; overflow: hidden; border-left: 6px solid var(--landing-cat, var(--landing-action)); background: var(--landing-vitrina-photo-bg); transition: border-color 400ms ease; }
-.landing-schedule-photo img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 30%; }
-.landing-schedule-card h3 { margin: 0; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(24px, 2.4vw, 40px); letter-spacing: 1px; text-transform: uppercase; }
+.landing-schedule-group:last-child { grid-column: 2; grid-row: 1; align-self: stretch; justify-content: center; gap: 14px; }
+.landing-schedule-group:last-child .landing-button { justify-content: center; min-height: 56px; flex: 1 1 auto; white-space: nowrap; }
+.landing-schedule-card::after { content: ""; position: absolute; right: -60px; top: -60px; z-index: 0; width: 220px; height: 220px; border-radius: 50%; background: var(--landing-cat, var(--landing-action)); opacity: 0.12; transition: background 400ms ease; }
+.landing-schedule-card h3 { margin: 0; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(32px, 3.4vw, 64px); letter-spacing: 1px; text-transform: uppercase; }
 .landing-schedule-audience { margin: 0; color: var(--landing-text); font-weight: 600; }
 .landing-schedule-label { display: block; margin-bottom: 2px; color: var(--landing-text-muted); font-size: 11.5px; font-weight: 800; letter-spacing: 2.4px; text-transform: uppercase; }
 
-.landing-schedule-time { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin: 0; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(44px, 4.6vw, 76px); line-height: 1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.landing-schedule-time { white-space: nowrap; display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin: 0; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(44px, 5.6vw, 104px); line-height: 1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
 .landing-schedule-time small { color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 15px; font-weight: 600; letter-spacing: 0.5px; text-transform: none; }
 .landing-schedule-dash { color: var(--landing-action); }
 /* Each `HH:MM` half is a run of one span per character (`DigitRun`, for the
@@ -534,13 +534,14 @@
 .landing-schedule-time--animate .landing-schedule-digit { animation: landing-schedule-digit-roll 520ms ease both; }
 @keyframes landing-schedule-digit-roll { from { transform: translateY(40%); opacity: 0; } to { transform: none; opacity: 1; } }
 
-.landing-schedule-days { display: flex; gap: clamp(10px, 1vw, 18px); margin: 0; }
-.landing-schedule-day { width: clamp(52px, 3.6vw, 68px); height: clamp(52px, 3.6vw, 68px); display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--landing-border); color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 16px; font-weight: 700; letter-spacing: 0.5px; background: var(--landing-surface); transition: background 320ms ease, border-color 320ms ease, color 320ms ease; }
+.landing-schedule-days { display: grid; grid-template-columns: repeat(3, max-content); justify-content: start; gap: clamp(10px, 0.9vw, 16px); margin: 0; }
+.landing-schedule-day { width: clamp(52px, 3.8vw, 72px); height: clamp(52px, 3.8vw, 72px); display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--landing-border); color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 16px; font-weight: 700; letter-spacing: 0.5px; background: var(--landing-surface); transition: background 320ms ease, border-color 320ms ease, color 320ms ease; }
 .landing-schedule-day--on { background: var(--landing-cat, var(--landing-action)); border-color: var(--landing-cat, var(--landing-action)); color: var(--landing-cat-ink, var(--landing-text-strong)); }
 .landing-schedule-day--pop { animation: landing-schedule-day-pop 560ms ease both; }
 @keyframes landing-schedule-day-pop { 0% { transform: scale(0.7); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
 
 .landing-schedule-second { margin: 10px 0 0; padding-top: 16px; border-top: 1px dashed var(--landing-border); color: var(--landing-text); font-size: 15px; }
+.landing-schedule-group:last-child .landing-schedule-second { margin: 0; padding-top: 14px; }
 .landing-schedule-second b { color: var(--landing-text-strong); font-variant-numeric: tabular-nums; }
 
 .landing-location { background: var(--landing-background); }
@@ -777,9 +778,10 @@
   .landing-schedule-tab::before { display: none; }
   .landing-schedule-tab[aria-selected="true"] { background: var(--landing-brand-black); color: var(--landing-surface); border-color: var(--landing-brand-black); }
   .landing-schedule-tab-hours { display: none; }
-  .landing-schedule-card { grid-template-columns: 1fr; }
-  .landing-schedule-copy { padding: 26px 22px; }
-  .landing-schedule-photo { order: -1; min-height: 0; height: 160px; border-left: 0; border-bottom: 6px solid var(--landing-cat, var(--landing-action)); }
+  .landing-schedule-card { padding: 26px 22px; border-left-width: 5px; }
+  .landing-schedule-copy { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .landing-schedule-head, .landing-schedule-group:last-child { grid-column: 1; grid-row: auto; }
+  .landing-schedule-group:last-child .landing-button { justify-content: flex-start; }
   /* Only just overflows at the base `clamp(38px, 5vw, 56px)`: the widest
      reported range ("20:00 – 21:15") measures ~296px against the ~288px of
      content width this padding leaves on a 390px phone. Smaller gap and a
@@ -788,7 +790,7 @@
      the range now fits with room to spare at both widths. */
   .landing-schedule-time { gap: 8px; font-size: clamp(30px, 8.5vw, 38px); }
   .landing-schedule-day { width: 44px; height: 44px; }
-  .landing-schedule-days { gap: 6px; }
+  .landing-schedule-days { display: flex; gap: 6px; }
   .landing-motto { padding: 52px 28px; }
   .landing-motto .landing-motto-lead { font-size: 28px; }
   .landing-visit { grid-template-columns: 1fr; }
@@ -823,7 +825,7 @@
      its own `useReducedMotion` hook reads this same preference; these rules
      are the CSS-only backstop for the same two keyframes. */
   .landing-schedule-time--animate .landing-schedule-digit, .landing-schedule-day--pop { animation: none; }
-  .landing-schedule-tab, .landing-schedule-dot, .landing-schedule-tab::before, .landing-schedule-day, .landing-schedule-copy::after, .landing-schedule-photo { transition: none; }
+  .landing-schedule-tab, .landing-schedule-dot, .landing-schedule-tab::before, .landing-schedule-day, .landing-schedule-card::after, .landing-schedule-card { transition: none; }
   /* The gallery's motion runtime never loads under reduced motion, so the
      same strip markup presents as a complete wrapped layout — every photo
      and caption reachable, zero movement — and the loop-only visual clones

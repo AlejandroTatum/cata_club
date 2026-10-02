@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import { ArrowRight } from "lucide-react";
 import { defaultScheduleIndex, type LandingSchedule } from "./schedule-data";
 import { landingConfig, toWhatsAppLink } from "./landing-config";
-import { SCHEDULE_PHOTO_SIZES } from "./landing-image-sizes";
 
 /**
  * The simple card, decided 2026-09-02 over the prototype `horarios-simple.html`
@@ -22,19 +20,6 @@ const CATEGORY_COLORS = [
 ] as const;
 /** The ink each swatch above needs under its ball's letter to stay legible. */
 const CATEGORY_INK = ["#fff", "var(--landing-brand-black)", "#fff", "var(--landing-brand-black)", "#fff", "#fff"] as const;
-
-/**
- * One club photograph per category, cycled in the same order as the swatches:
- * selecting a category changes the picture beside its card as well as its
- * accent. The set mixes landscape and portrait shots on purpose — the image
- * column crops to cover, and both read.
- */
-const CATEGORY_PHOTOS = [
-  { src: "/landing/gallery-04-training.jpg", width: 1600, height: 1200 },
-  { src: "/landing/gallery-01-group.jpg", width: 1068, height: 1600 },
-  { src: "/landing/gallery-03-play.jpg", width: 1600, height: 1200 },
-  { src: "/landing/gallery-19-group.jpg", width: 1200, height: 1600 },
-] as const;
 
 const DAY_BALLS = ["L", "M", "X", "J", "V", "S"] as const;
 const DAY_FULL_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"] as const;
@@ -111,7 +96,6 @@ export default function ScheduleSelector({ schedules, header }: ScheduleSelector
   const litDays = activeDayIndexes(main.days);
   const color = CATEGORY_COLORS[selected % CATEGORY_COLORS.length];
   const ink = CATEGORY_INK[selected % CATEGORY_INK.length];
-  const photo = CATEGORY_PHOTOS[selected % CATEGORY_PHOTOS.length];
   const waLink = `${toWhatsAppLink(landingConfig.contact.whatsapp[0])}?text=${encodeURIComponent(`Hola, quiero consultar cupo en ${active.category}.`)}`;
 
   const select = (index: number): void => { setSelected(index); tabRefs.current[index]?.focus(); };
@@ -187,12 +171,6 @@ export default function ScheduleSelector({ schedules, header }: ScheduleSelector
           ))}
         </div>
       </div>
-      {/* Decorative: the tab already names the category, and the picture
-          changes with it, so a described image would be re-announced on every
-          selection. */}
-      <figure className="landing-schedule-photo" aria-hidden="true">
-        <Image key={photo.src} src={photo.src} alt="" width={photo.width} height={photo.height} loading="lazy" sizes={SCHEDULE_PHOTO_SIZES} />
-      </figure>
     </div>
   </div>;
 }
