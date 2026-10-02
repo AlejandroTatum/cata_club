@@ -176,7 +176,7 @@ import {
   RoleShortcuts,
   buttonClasses,
 } from "@/components/ui";
-import type { RoleShortcut } from "@/components/ui";
+import type { RoleShortcut, RoleShortcutTone } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui/Badge";
 import { MEMBERSHIP_STATUS_LABELS, MEMBERSHIP_STATUS_TONE } from "@/app/members/members-utils";
 import { getAttendanceBadgeTone, getAttendanceLabel } from "@/app/attendance/attendance-utils";
@@ -539,7 +539,7 @@ function RailCard({
 }
 
 /** Role-specific accent: one hue per account type, reused by the hero-adjacent cards. */
-const ROLE_TONE: Record<UserRole, AccentTone> = {
+const ROLE_TONE: Record<UserRole, RoleShortcutTone> = {
   admin: "red",
   trainer: "trainer",
   representante: "info",
