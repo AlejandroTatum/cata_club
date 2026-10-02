@@ -2107,16 +2107,17 @@ describe("StudentPage — the page's leftover height is claimed, not abandoned",
     expect(grid?.className).toMatch(/\bflex-1\b/);
   });
 
-  it("stretches the rail column but lets only the account-actions card absorb the slack", async () => {
+  it("stretches the rail column but keeps every card at its content height", async () => {
     render(<StudentPage />);
 
     const panel = await screen.findByTestId("student-situation");
     // Both columns reach the grid's bottom (the audit's viewport budget); the
-    // cuota card keeps its content height and the actions card takes the rest.
+    // cuota card and the actions card keep their content height: a stretched
+    // actions card was a blank white area under its two buttons.
     expect(panel.parentElement?.className).toMatch(/self-stretch/);
     expect(panel.className).not.toMatch(/\bflex-1\b/);
     const actions = await screen.findByRole("region", { name: "Acciones de la cuenta" });
-    expect(actions.className).toMatch(/\bflex-1\b/);
+    expect(actions.className).not.toMatch(/\bflex-1\b/);
   });
 
   it("still leaves the carnet at its natural height inside the stretched grid", async () => {

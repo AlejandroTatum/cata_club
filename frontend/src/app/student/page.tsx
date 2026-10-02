@@ -58,7 +58,17 @@ import {
   daysUntil,
   type UpcomingTraining,
 } from "./student-utils";
-import { CalendarDays, ShieldCheck, Stethoscope, User, UserPlus, ArrowRight } from "lucide-react";
+import {
+  CalendarDays,
+  CalendarCheck,
+  Dumbbell,
+  Hourglass,
+  ShieldCheck,
+  Stethoscope,
+  User,
+  UserPlus,
+  ArrowRight,
+} from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
 import { subirFotoDeArchivo } from "@/lib/photo-upload";
@@ -1289,6 +1299,8 @@ function ActivePortalView({
         <div data-testid="student-pulse" className={STAT_GRID}>
           <StatCard
             label="Cobertura"
+            tone={diasDeCobertura !== null && diasDeCobertura < 0 ? "warn" : "ok"}
+            icon={<ShieldCheck size={ICON.sm} strokeWidth={1.75} />}
             href={withSelectedStudent("/student/payments", selectedPersonaId)}
             value={diasDeCobertura === null ? "—" : Math.abs(diasDeCobertura)}
             unit={diasDeCobertura === null ? undefined : diasDeCobertura === 1 || diasDeCobertura === -1 ? "día" : "días"}
@@ -1302,6 +1314,8 @@ function ActivePortalView({
           />
           <StatCard
             label="Asistencia"
+            tone="info"
+            icon={<CalendarCheck size={ICON.sm} strokeWidth={1.75} />}
             href={withSelectedStudent("/student/attendance", selectedPersonaId)}
             value={asistencia === null ? "—" : asistencia.porcentaje}
             unit={asistencia === null ? undefined : "%"}
@@ -1318,11 +1332,15 @@ function ActivePortalView({
           />
           <StatCard
             label="Entrenamientos"
+            tone="ball"
+            icon={<Dumbbell size={ICON.sm} strokeWidth={1.75} />}
             value={entrenamientosSemanales ?? "—"}
             hint={entrenamientosSemanales === null ? "horario no disponible" : "por semana"}
           />
           <StatCard
             label="Pagos en revisión"
+            tone={pendingPagos > 0 ? "warn" : "neutral"}
+            icon={<Hourglass size={ICON.sm} strokeWidth={1.75} />}
             href={withSelectedStudent("/student/payments", selectedPersonaId)}
             value={pendingPagos}
             hint={pendingPagos === 0 ? "nada esperando validación" : "esperan validación del club"}
@@ -1474,7 +1492,7 @@ function ActivePortalView({
                 #1137: independence is a PRESENCIAL admin command, not here. */}
             <section
               aria-label="Acciones de la cuenta"
-              className="card flex flex-col overflow-hidden lg:flex-1"
+              className="card flex flex-col overflow-hidden"
             >
               <div className="border-b border-line px-5 py-3">
                 <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Acciones de la cuenta</h2>
