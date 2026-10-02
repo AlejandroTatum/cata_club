@@ -73,10 +73,10 @@ function scheduleFetchCalls(): unknown[] {
     String(input).includes("/api/schedules"));
 }
 
-/** The contact card's `Horario` row — label and value, whatever it says. */
+/** The contact sheet's `Horario` row — label and value, whatever it says. */
 function contactHoursRow(): HTMLElement {
-  const card = screen.getByRole("heading", { name: "Información de contacto" }).closest("aside");
-  return within(card as HTMLElement).getByText("Horario").closest("p") as HTMLElement;
+  const sheet = document.querySelector(".landing-contact") as HTMLElement;
+  return within(sheet).getByText("Horario").closest(".landing-contact-row") as HTMLElement;
 }
 
 /** The gallery section — the one the public navbar's "Galería" anchor names. */
@@ -269,7 +269,7 @@ describe("LandingPage", (): void => {
       // and the latest end of everything the API published, Saturday included.
       expect(contactHoursRow()).toHaveTextContent("Lun – Sáb · 08:00 – 21:15");
       // A settled row states hours; it is not a live region announcing them.
-      expect(contactHoursRow()).not.toHaveAttribute("role", "status");
+      expect(within(contactHoursRow()).queryByRole("status")).not.toBeInTheDocument();
     });
 
     it("asks the API for the catalog exactly once for the whole page", async (): Promise<void> => {
@@ -331,7 +331,7 @@ describe("LandingPage", (): void => {
       expect(within(section).getByRole("status")).toHaveTextContent("Aún no hay horarios publicados.");
       // The row keeps its label and becomes a live region, so the visitor is
       // told what happened instead of reading a range nobody published.
-      expect(contactHoursRow()).toHaveAttribute("role", "status");
+      expect(within(contactHoursRow()).getByRole("status")).toHaveTextContent(/Aún no hay horarios|No se pudieron/);
       expect(contactHoursRow()).toHaveTextContent("Horario");
       expect(within(section).queryByRole("tablist")).not.toBeInTheDocument();
     });
@@ -352,7 +352,7 @@ describe("LandingPage", (): void => {
       });
       const section = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section") as HTMLElement;
       expect(within(section).getByRole("status")).toHaveTextContent("No se pudieron cargar los horarios.");
-      expect(contactHoursRow()).toHaveAttribute("role", "status");
+      expect(within(contactHoursRow()).getByRole("status")).toHaveTextContent(/Aún no hay horarios|No se pudieron/);
     });
 
     it("invents no hours when the catalog arrives malformed", async (): Promise<void> => {
@@ -378,7 +378,7 @@ describe("LandingPage", (): void => {
     });
   });
 
-  it("renders the arrival photo at the head of the contact card", (): void => {
+  it("renders the arrival photo beside the map, ahead of the contact sheet", (): void => {
     render(<LandingPage />);
 
     const arrival = screen.getByRole("img", { name: /entrada de cata club/i });
@@ -387,7 +387,10 @@ describe("LandingPage", (): void => {
     expect(arrival).toHaveAttribute("height", "1200");
     expect(arrival).toHaveAttribute("loading", "lazy");
     expect(screen.getByText("Así se ve al llegar")).toBeInTheDocument();
-    expect(arrival.closest(".landing-contact")?.firstElementChild).toBe(arrival.closest(".landing-arrival"));
+    const visit = arrival.closest(".landing-visit");
+    expect(visit?.firstElementChild).toBe(arrival.closest(".landing-arrival"));
+    expect(visit?.querySelector(".landing-map-stage")).not.toBeNull();
+    expect(visit?.nextElementSibling).toBe(document.querySelector(".landing-contact"));
   });
 
   it("renders Mission and Vision as two typographic pillars, each with its own photo (v2 redesign)", (): void => {
@@ -863,25 +866,20 @@ describe("LandingPage", (): void => {
     render(<LandingPage />);
 
     landingConfig.contact.whatsapp.forEach((number): void => {
-      expect(screen.getByRole("link", { name: number })).toHaveAttribute("href", toWhatsAppLink(number));
+      expect(within(document.querySelector(".landing-contact") as HTMLElement).getByRole("link", { name: number })).toHaveAttribute("href", toWhatsAppLink(number));
     });
   });
 
-  it("closes the contact card with a primary WhatsApp CTA and demotes the directions link", (): void => {
+  it("gives the WhatsApp row its own action, and the address row the directions", (): void => {
     render(<LandingPage />);
 
-    const contact = document.querySelector(".landing-contact");
-    expect(contact).not.toBeNull();
-
-    const whatsappCta = within(contact as HTMLElement).getByRole("link", { name: /escríbanos por whatsapp/i });
+    const contact = document.querySelector(".landing-contact") as HTMLElement;
+    const whatsappCta = within(contact).getByRole("link", { name: /escríbenos por whatsapp/i });
     expect(whatsappCta).toHaveAttribute("href", toWhatsAppLink(landingConfig.contact.whatsapp[0]));
-    expect(whatsappCta.className).toContain("landing-button");
-    // Both actions close the card, the WhatsApp one last.
-    expect(contact?.querySelector(".landing-contact-actions")?.lastElementChild).toBe(whatsappCta);
-    expect(contact?.lastElementChild).toBe(whatsappCta.parentElement);
+    expect(whatsappCta.closest(".landing-contact-row")).toHaveTextContent("WhatsApp");
 
-    const directions = within(contact as HTMLElement).getByRole("link", { name: /cómo llegar/i });
-    expect(directions.className).toContain("landing-button-outline");
+    const directions = within(contact).getByRole("link", { name: /cómo llegar/i });
+    expect(directions.closest(".landing-contact-row")).toHaveTextContent("Dirección");
   });
 
   it("points the directions link at the shared club coordinate", (): void => {
@@ -1380,9 +1378,9 @@ describe("LandingPage", (): void => {
     const links = Array.from(navLinks.querySelectorAll("a"));
     expect(links.map((link): [string | null, string | null] => [link.textContent, link.getAttribute("href")])).toEqual([
       ["Inicio", "#inicio"],
-      ["Horarios", "#horarios"],
       ["Valores", "#valores"],
       ["Galería", "#galeria"],
+      ["Horarios", "#horarios"],
       ["Contacto", "#contacto"],
     ]);
   });
@@ -1680,8 +1678,8 @@ describe("LandingPage", (): void => {
        * fetched. The label and the status sit adjacent in the markup, so
        * neither can be satisfied without the other.
        */
-      expect(html).toContain("<strong>Horario</strong><span>Cargando horarios…</span>");
-      expect(html).not.toMatch(/<strong>Horario<\/strong><span>\s*<\/span>/);
+      expect(html).toContain("<dt>Horario</dt><dd role=\"status\">Cargando horarios…</dd>");
+      expect(html).not.toMatch(/<dt>Horario<\/dt><dd[^>]*>\s*<\/dd>/);
       /*
        * The gallery's entries live behind GET /api/galeria, and that fetch is
        * an effect — server rendering never runs it. The static output carries

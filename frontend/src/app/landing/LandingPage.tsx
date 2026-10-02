@@ -24,7 +24,7 @@ import Sponsors from "./Sponsors";
 import Ticker from "./Ticker";
 import { CLUB_PLUS_CODE, clubOpenStreetMapUrl } from "./club-location";
 import { buildLandingStats, deriveContactHours, landingConfig, toWhatsAppLink } from "./landing-config";
-import { ARRIVAL_PHOTO_SIZES, FOOTER_PHOTO_SIZES, MISSION_VISION_PHOTO_SIZES, STATS_PHOTO_SIZES } from "./landing-image-sizes";
+import { ARRIVAL_PHOTO_SIZES, FOOTER_PHOTO_SIZES, MISSION_VISION_PHOTO_SIZES } from "./landing-image-sizes";
 import { mapPublicSchedules, type LandingSchedule } from "./schedule-data";
 import { SITE_NAV_SECTIONS, landingSectionHref } from "@/lib/site-navigation";
 
@@ -39,7 +39,7 @@ interface ValueCardProps {
 }
 
 /**
- * Where every "inscríbete" affordance points.
+ * Where every "inscríbase" affordance points.
  *
  * `/student/enroll` is the real public enrollment wizard: it POSTs to the
  * backend's public /enrollment, persists the student and auto-logs the user
@@ -215,20 +215,8 @@ function Hero(): React.ReactElement {
 function Stats(): React.ReactElement {
   return (
     <section className="landing-stats" aria-label="Datos del club" data-motion-section data-testid="motion-section">
-      {/* A real training photo is the band's first cell: the figures sit beside
-          it instead of floating in a strip with nothing under them. */}
-      <figure className="landing-stats-photo" data-reveal>
-        <Image
-          src="/landing/gallery-08-coaching.jpg"
-          alt="Jugador de Cata Club entrenando junto a la mesa, con su entrenador al fondo."
-          width={1600}
-          height={1200}
-          loading="lazy"
-          sizes={STATS_PHOTO_SIZES}
-        />
-      </figure>
-      {buildLandingStats().map((stat, index): React.ReactElement => (
-        <div className={index === 0 ? "landing-stat landing-stat--lead" : "landing-stat"} key={stat.label} data-reveal>
+      {buildLandingStats().map((stat): React.ReactElement => (
+        <div className="landing-stat" key={stat.label} data-reveal>
           {/* Text, never a count-up target: see buildLandingStats. */}
           <strong className="landing-display">{stat.value}</strong>
           <span>{stat.label}</span>
@@ -375,58 +363,73 @@ function Location(): React.ReactElement {
   return (
     <section className="landing-section landing-location" id="contacto" data-motion-section data-testid="motion-section">
       <SectionHeader eyebrow="Visítenos" title="Cómo llegar" />
-      <div className="landing-location-row">
+      {/* Where first: the entrance photograph and the map answer "which door"
+          and "which street"; the ruled sheet below answers when and how to
+          reach us, one fact per row with its action at the row's end. */}
+      <div className="landing-visit">
+        <figure className="landing-arrival" data-reveal>
+          <Image
+            src="/landing/photo-arrival.jpeg"
+            alt="Entrada de Cata Club junto al Coliseo Ciudad de Loja"
+            width={1600}
+            height={1200}
+            loading="lazy"
+            sizes={ARRIVAL_PHOTO_SIZES}
+          />
+          <figcaption>Así se ve al llegar</figcaption>
+        </figure>
         <div className="landing-map-stage">
           <LandingMap />
         </div>
-        <aside className="landing-contact" data-reveal>
-          {/* The photograph of the entrance heads the card instead of floating
-              over the map: a visitor reads where to go, then what the place
-              looks like, then how to get in touch. It is a real view of the
-              club grounds, not a street-facing photograph, so it grounds the
-              map without pretending to be one. */}
-          <figure className="landing-arrival">
-            <Image
-              src="/landing/photo-arrival.jpeg"
-              alt="Entrada de Cata Club junto al Coliseo Ciudad de Loja"
-              width={1600}
-              height={1200}
-              loading="lazy"
-              sizes={ARRIVAL_PHOTO_SIZES}
-            />
-            <figcaption>Así se ve al llegar</figcaption>
-          </figure>
-          <h3>Información de contacto</h3>
-          {/* Street address, landmark, and Plus Code, in that order: the way a
-              visitor narrows down a place. The Coliseo stays — it is the
-              reference the product owner gives, and #641 resolved to the club
-              being beside it, not near a plaza. The Plus Code closes the last
-              gap, since the street here carries no number. The opening hours
-              follow at once: where and when are the two things a visit needs. */}
-          <p><MapPin aria-hidden="true" /><span>Av. Manuel Agustín Aguirre, Barrio Perpetuo Socorro, Loja, Ecuador — junto al Coliseo Ciudad de Loja ({CLUB_PLUS_CODE})</span></p>
-          {/* A live region only while it is unsettled, so the visitor hears
-              what happened; once it states real hours it is ordinary copy. */}
-          <p role={settled ? undefined : "status"}><CalendarDays aria-hidden="true" /><strong>Horario</strong><span>{hours}</span></p>
-          <p>
-            <Phone className="landing-icon-whatsapp" aria-hidden="true" /><strong>WhatsApp</strong>
-            <span className="landing-contact-numbers">
-              {contact.whatsapp.map((number): React.ReactElement => (
-                <a key={number} href={toWhatsAppLink(number)} target="_blank" rel="noreferrer">{number}</a>
-              ))}
-            </span>
-          </p>
-          <p><Facebook className="landing-icon-facebook" aria-hidden="true" /><strong>Facebook</strong><a href={contact.facebook} target="_blank" rel="noreferrer">Cata Club Loja</a></p>
-          <p><Instagram className="landing-icon-instagram" aria-hidden="true" /><strong>Instagram</strong><a href={contact.instagram} target="_blank" rel="noreferrer">@cataclub_tenis_de_mesa</a></p>
-          <div className="landing-contact-actions">
-            <a className="landing-button landing-button-outline" href={clubOpenStreetMapUrl()} target="_blank" rel="noreferrer">
+      </div>
+      <dl className="landing-contact" data-reveal>
+        {/* Street address, landmark, and Plus Code, in that order: the way a
+            visitor narrows down a place. The Coliseo stays — it is the
+            reference the product owner gives, and #641 resolved to the club
+            being beside it, not near a plaza. The Plus Code closes the last
+            gap, since the street here carries no number. */}
+        <div className="landing-contact-row">
+          <dt>Dirección</dt>
+          <dd>Av. Manuel Agustín Aguirre, Barrio Perpetuo Socorro, Loja, Ecuador — junto al Coliseo Ciudad de Loja ({CLUB_PLUS_CODE})</dd>
+          <dd>
+            <a className="landing-contact-action" href={clubOpenStreetMapUrl()} target="_blank" rel="noreferrer">
               <Navigation aria-hidden="true" /> Cómo llegar
             </a>
-            <a className="landing-button" href={toWhatsAppLink(contact.whatsapp[0])} target="_blank" rel="noreferrer">
-              <MessageCircle aria-hidden="true" /> Escríbanos por WhatsApp
+          </dd>
+        </div>
+        {/* A live region only while it is unsettled, so the visitor hears
+            what happened; once it states real hours it is ordinary copy. */}
+        <div className="landing-contact-row">
+          <dt>Horario</dt>
+          <dd role={settled ? undefined : "status"}>{hours}</dd>
+          <dd>
+            <a className="landing-contact-action" href="#horarios">
+              <CalendarDays aria-hidden="true" /> Ver horarios
             </a>
-          </div>
-        </aside>
-      </div>
+          </dd>
+        </div>
+        <div className="landing-contact-row">
+          <dt>WhatsApp</dt>
+          <dd className="landing-contact-numbers">
+            {contact.whatsapp.map((number): React.ReactElement => (
+              <a key={number} href={toWhatsAppLink(number)} target="_blank" rel="noreferrer">{number}</a>
+            ))}
+          </dd>
+          <dd>
+            <a className="landing-contact-action" href={toWhatsAppLink(contact.whatsapp[0])} target="_blank" rel="noreferrer">
+              <MessageCircle aria-hidden="true" /> Escríbenos por WhatsApp
+            </a>
+          </dd>
+        </div>
+        <div className="landing-contact-row">
+          <dt>Redes</dt>
+          <dd className="landing-contact-social">
+            <a href={contact.facebook} target="_blank" rel="noreferrer"><Facebook className="landing-icon-facebook" aria-hidden="true" />Cata Club Loja</a>
+            <a href={contact.instagram} target="_blank" rel="noreferrer"><Instagram className="landing-icon-instagram" aria-hidden="true" />@cataclub_tenis_de_mesa</a>
+          </dd>
+          <dd aria-hidden="true" />
+        </div>
+      </dl>
     </section>
   );
 }

@@ -880,4 +880,74 @@ test.describe("Landing page", () => {
     await expect(location).toContainText(/junto al Coliseo Ciudad de Loja/i);
     await expect(location).toContainText("XQVW+J63, 110102 Loja");
   });
+
+  /**
+   * Final composition: the stats band is a ruled ledger (figure with its
+   * caption beside it, no photo cell), and Visítenos pairs the arrival photo
+   * with the map before a ruled contact sheet.
+   */
+  test.describe("final composition", () => {
+    test("sets each stat's figure and caption on one row, with no photo cell", async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.goto("/");
+
+      await expect(page.locator(".landing-stats-photo")).toHaveCount(0);
+      const rows = await page.evaluate(() =>
+        Array.from(document.querySelectorAll<HTMLElement>(".landing-stats .landing-stat")).map((stat) => {
+          const figure = stat.querySelector("strong")!.getBoundingClientRect();
+          const caption = stat.querySelector("span")!.getBoundingClientRect();
+          return { captionBeside: caption.left >= figure.right - 1, sameRow: caption.top < figure.bottom && caption.bottom > figure.top };
+        }),
+      );
+      expect(rows).toHaveLength(3);
+      for (const row of rows) {
+        expect(row.captionBeside, "caption sits to the right of its figure").toBe(true);
+        expect(row.sameRow, "caption shares the figure's row").toBe(true);
+      }
+    });
+
+    test("pairs the arrival photo with the map above the ruled contact sheet", async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.goto("/");
+
+      const geometry = await page.evaluate(() => {
+        const arrival = document.querySelector(".landing-visit .landing-arrival")?.getBoundingClientRect();
+        const map = document.querySelector(".landing-visit .landing-map-stage")?.getBoundingClientRect();
+        const sheet = document.querySelector(".landing-contact")?.getBoundingClientRect();
+        if (!arrival || !map || !sheet) return null;
+        return { photoLeftOfMap: arrival.right <= map.left + 1, sameTop: Math.abs(arrival.top - map.top) <= 1, sheetBelow: sheet.top >= Math.max(arrival.bottom, map.bottom) };
+      });
+      expect(geometry, "photo, map and contact sheet render").not.toBeNull();
+      expect(geometry?.photoLeftOfMap).toBe(true);
+      expect(geometry?.sameTop).toBe(true);
+      expect(geometry?.sheetBelow).toBe(true);
+
+      const labels = await page.locator(".landing-contact dt").allTextContents();
+      expect(labels).toEqual(["Dirección", "Horario", "WhatsApp", "Redes"]);
+    });
+
+    test("keeps the schedule card as tall as its own copy, whatever the rail holds", async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.route("**/api/schedules", (route) => route.fulfill({
+        json: [
+          { category: "Formativo", ages: "5 a 10 años", blocks: [{ days: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"], startTime: "15:00", endTime: "16:00" }] },
+          { category: "Infantil", ages: "8 a 12 años", blocks: [{ days: ["LUNES", "MIERCOLES", "VIERNES"], startTime: "16:00", endTime: "17:00" }] },
+          { category: "Juvenil", ages: "Mayores de 12 años", blocks: [{ days: ["LUNES", "MARTES"], startTime: "17:00", endTime: "18:00" }] },
+          { category: "Adultos", ages: "Mayores de 18 años", blocks: [{ days: ["LUNES", "JUEVES"], startTime: "08:00", endTime: "09:15" }] },
+          { category: "Competitivo", ages: "Selección", blocks: [{ days: ["SABADO"], startTime: "18:00", endTime: "20:00" }] },
+        ],
+      }));
+      await page.goto("/");
+
+      const card = page.locator(".landing-schedule-card");
+      await expect(card).toBeVisible();
+      const heights = await page.evaluate(() => ({
+        card: document.querySelector(".landing-schedule-card")!.getBoundingClientRect().height,
+        copy: document.querySelector(".landing-schedule-copy")!.getBoundingClientRect().height,
+      }));
+      // The photo column is absolutely positioned and the rail no longer
+      // stretches the row, so the card is never taller than its copy.
+      expect(heights.card).toBeLessThanOrEqual(heights.copy + 2);
+    });
+  });
 });

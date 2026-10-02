@@ -13,14 +13,11 @@
  */
 
 /**
- * `.landing-arrival`, the photo that heads the contact card. The card is a
- * fixed 420px wide on desktop (360px at 1024) and the photo spans it edge to
- * edge, so 420 is an upper estimate everywhere above the mobile breakpoint.
+ * `.landing-arrival`, the entrance photograph beside the map. The visit row is
+ * `4fr 8fr` above the mobile breakpoint, so at 1920 (about 1600px of content,
+ * a 24px gap) it renders near 520px; below it the frame spans the column.
  */
-export const ARRIVAL_PHOTO_SIZES = "(max-width: 768px) 420px, 420px";
-
-/** `.landing-stats-photo`, the first cell of the stats band (about a third of it). */
-export const STATS_PHOTO_SIZES = "(max-width: 768px) 420px, 480px";
+export const ARRIVAL_PHOTO_SIZES = "(max-width: 768px) 768px, 540px";
 
 /** `.landing-footer-photo`, the footer's closing column. */
 export const FOOTER_PHOTO_SIZES = "(max-width: 768px) 420px, 360px";

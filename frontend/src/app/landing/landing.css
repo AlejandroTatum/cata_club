@@ -201,12 +201,7 @@
 /* Warm band, distinct from ENTRENAMIENTOS' white surface below it (issue
    #691), closed off with a hairline so the boundary reads on every screen
    even where the background step alone is too subtle to notice. */
-.landing-stats { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, max-content); padding: 0 8.33vw; overflow: hidden; border-bottom: 1px solid var(--landing-border); background: var(--landing-stats-bg); }
-/* The band's first cell is a club photograph that bleeds to the viewport's
-   left edge: the figures read as the caption of a real place, and the cell
-   takes whatever height the figures need instead of leaving the band empty. */
-.landing-stats-photo { position: relative; z-index: 1; min-height: 100%; margin: 0 0 0 calc(-1 * var(--landing-gutter)); overflow: hidden; background: var(--landing-vitrina-photo-bg); }
-.landing-stats-photo img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 35%; }
+.landing-stats { position: relative; display: flex; padding: 48px 8.33vw; overflow: hidden; border-bottom: 1px solid var(--landing-border); background: var(--landing-stats-bg); }
 /* Same grid, lower contrast: the warm ground under it already sits closer to
    the ink than plain white, so the line opacity drops to keep the grid as
    quiet here as it is everywhere else. */
@@ -215,18 +210,17 @@
    `landing-valores-b-tablero.html`) — the grid texture every other section
    carries would fight the tablero's own black-tile grid. */
 .landing-section:not(.landing-motto):not(.landing-values)::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: repeating-linear-gradient(0deg,color-mix(in srgb, var(--landing-brand-black) 2.2%, transparent) 0 1px,transparent 1px 22px),repeating-linear-gradient(90deg,color-mix(in srgb, var(--landing-brand-black) 2.2%, transparent) 0 1px,transparent 1px 22px); }
-.landing-stat { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: var(--landing-space-snug) clamp(24px, 3vw, 64px); text-align: center; }
-/* Hairline cells, desktop only: mobile turns the same stats into cards. */
-@media (min-width: 769px) {
-  .landing-stats .landing-stat + .landing-stat { border-left: 1px solid var(--landing-border); }
-}
+/* A printed ledger rather than three centred blobs: each figure sits on the
+   left of its own column with its caption beside it behind a short red bar,
+   set small and tracked, so "Desde el 10 de octubre" reads as the dateline of
+   the 2013 next to it instead of a loose sentence under it. Hairlines, not
+   cards, divide the columns. */
+.landing-stat { position: relative; flex: 1; display: flex; align-items: center; gap: 20px; padding-inline: 40px; }
+.landing-stat:first-child { padding-left: 0; }
+.landing-stat + .landing-stat { border-left: 1px solid var(--landing-border); }
 .landing-stat strong, .landing-section-header h2 { color: var(--landing-text-strong); }
-.landing-stat strong { font-size: 80px; line-height: 1; }
-/* Years is the lead figure: it is the one a visitor can weigh, so it carries
-   the band's scale; the date and the city are its supporting facts. */
-.landing-stat--lead strong { font-size: clamp(96px, 8vw, 128px); line-height: 0.9; color: var(--landing-action); }
-
-.landing-stat span { max-width: 18ch; color: var(--landing-text); font-size: 16px; font-weight: 600; line-height: 1.35; }
+.landing-stat strong { font-size: clamp(60px, 5.4vw, 96px); line-height: 0.95; }
+.landing-stat span { max-width: 15ch; padding-left: 14px; border-left: 3px solid var(--landing-action); color: var(--landing-text); font-size: 13px; font-weight: 800; letter-spacing: 2.4px; line-height: 1.5; text-transform: uppercase; }
 
 .landing-section { position: relative; display: flex; flex-direction: column; align-items: center; gap: 44px; padding: 76px 8.33vw; overflow: hidden; }
 .landing-section > * { position: relative; z-index: 1; }
@@ -236,7 +230,6 @@
 .landing-section-header .landing-eyebrow { display: flex; align-items: center; gap: 14px; font-size: 12.5px; }
 .landing-section-header .landing-eyebrow::before { content: ""; width: 34px; height: 2px; background: currentColor; }
 .landing-section-header h2 { max-width: 15ch; font-family: var(--font-landing-barlow); font-weight: 800; font-size: clamp(30px, 4.2vw, 48px); line-height: 1.08; letter-spacing: -0.02em; text-transform: uppercase; }
-.landing-location-row { display: flex; width: 100%; gap: 24px; }
 
 /* Mission/Vision pillars — v2 redesign (issue #611 rhythm; approved
    prototype `landing-mision-vision-v2-texto.html`). Two typographic
@@ -298,7 +291,6 @@
    pillar mirrors the first so the photographs alternate sides down the page. */
 .landing-pillar--flip .landing-pillar-copy { grid-column: 2; grid-row: 1; }
 .landing-pillar--flip .landing-pillar-photo { grid-column: 1; grid-row: 1; }
-.landing-contact h3 { font-family: var(--font-landing-barlow); font-size: 20px; text-transform: uppercase; }
 
 /* Valores tablero redesign: the scroll-scrubbed rally (ball, guide,
    scoreboard counter, dimming) was rejected for breaking on mobile and for
@@ -485,13 +477,14 @@
 /* The simple card (issue #988): a tablist of categories drives one card that
    states the first slot's schedule, never a bar chart of every published
    block — the timeline this replaced said nothing the facts below didn't. */
-.landing-schedule-layout { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 32px; align-items: stretch; width: 100%; }
+.landing-schedule-layout { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 32px; align-items: start; width: 100%; }
 
-/* The category rail: section header on top, tabs filling the rest of the column,
-   so the rail is as tall as the card beside it. */
+/* The category rail: section header on top, the tabs under it. Rail and card
+   each take their own content height (`align-items: start` above), so neither
+   stretches the other: the card is exactly as tall as its copy. */
 .landing-schedule-side { display: flex; min-width: 0; flex-direction: column; gap: var(--landing-space-snug); }
-.landing-schedule-list { display: flex; flex: 1; flex-direction: column; gap: 0; border-top: 1px solid var(--landing-border); }
-.landing-schedule-tab { display: flex; flex: 1 1 auto; align-items: center; gap: 14px; width: 100%; min-height: 64px; padding: 12px 8px 12px 0; border: 0; border-bottom: 1px solid var(--landing-border); background: transparent; color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; text-align: left; cursor: pointer; position: relative; transition: color 220ms ease; }
+.landing-schedule-list { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--landing-border); }
+.landing-schedule-tab { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 58px; padding: 12px 8px 12px 0; border: 0; border-bottom: 1px solid var(--landing-border); background: transparent; color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; text-align: left; cursor: pointer; position: relative; transition: color 220ms ease; }
 .landing-schedule-tab::before { content: ""; position: absolute; left: -16px; top: 12px; bottom: 12px; width: 4px; background: var(--landing-action); border-radius: 2px; transform: scaleY(0); transition: transform 320ms ease; }
 .landing-schedule-tab[aria-selected="true"]::before { transform: scaleY(1); }
 .landing-schedule-tab:focus-visible { outline: 3px solid var(--landing-focus); outline-offset: 2px; }
@@ -507,11 +500,11 @@
 /* The one card. Its decorative corner circle picks up the selected
    category's color; the ball fill/ink pair does the same so a lit day stays
    legible against every swatch in `CATEGORY_COLORS`. */
-.landing-schedule-card { position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); border: 1px solid var(--landing-border); border-radius: 20px; background: var(--landing-surface); box-shadow: 0 24px 48px -32px color-mix(in srgb, var(--landing-brand-black) 40%, transparent); }
+.landing-schedule-card { position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.5fr); border: 1px solid var(--landing-border); border-radius: 20px; background: var(--landing-surface); box-shadow: 0 24px 48px -32px color-mix(in srgb, var(--landing-brand-black) 40%, transparent); }
 /* Copy column and photo column. The photo is the card's second half, so the
    card never has a wide blank right side; the category swatch becomes the
    edge between them. */
-.landing-schedule-copy { position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: var(--landing-space-snug); padding: 34px 36px 32px; }
+.landing-schedule-copy { position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: 22px; padding: 28px 36px; }
 .landing-schedule-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
 .landing-schedule-group { display: flex; flex-direction: column; gap: 8px; }
 .landing-schedule-copy > * { position: relative; z-index: 1; }
@@ -522,7 +515,7 @@
 .landing-schedule-audience { margin: 0; color: var(--landing-text); font-weight: 600; }
 .landing-schedule-label { display: block; margin-bottom: 2px; color: var(--landing-text-muted); font-size: 11.5px; font-weight: 800; letter-spacing: 2.4px; text-transform: uppercase; }
 
-.landing-schedule-time { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin: 0; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(48px, 5.6vw, 96px); line-height: 1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.landing-schedule-time { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin: 0; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(44px, 4.6vw, 76px); line-height: 1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
 .landing-schedule-time small { color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 15px; font-weight: 600; letter-spacing: 0.5px; text-transform: none; }
 .landing-schedule-dash { color: var(--landing-action); }
 /* Each `HH:MM` half is a run of one span per character (`DigitRun`, for the
@@ -547,37 +540,29 @@
 .landing-schedule-second b { color: var(--landing-text-strong); font-variant-numeric: tabular-nums; }
 
 .landing-location { background: var(--landing-background); }
-.landing-location-row { align-items: stretch; }
-.landing-map-stage { position: relative; z-index: 1; min-width: 0; min-height: 348px; flex: 1; }
-.landing-map { position: relative; z-index: 1; width: 100%; height: 100%; min-height: 348px; border: 3px solid var(--landing-surface); border-radius: 14px; box-shadow: 0 4px 18px color-mix(in srgb, var(--landing-brand-black) 12%, transparent); }
+.landing-visit { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); gap: 24px; width: 100%; align-items: stretch; }
+.landing-arrival { position: relative; min-height: 380px; margin: 0; overflow: hidden; border-radius: 14px; background: var(--landing-vitrina-photo-bg); }
+.landing-arrival img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
+.landing-arrival figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 28px 18px 14px; background: linear-gradient(0deg, color-mix(in srgb, var(--landing-brand-black) 78%, transparent), transparent); color: var(--landing-surface); font-size: 12px; font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase; }
+.landing-map-stage { position: relative; z-index: 1; min-width: 0; min-height: 380px; }
+.landing-map { position: relative; z-index: 1; width: 100%; height: 100%; min-height: 380px; border: 3px solid var(--landing-surface); border-radius: 14px; box-shadow: 0 4px 18px color-mix(in srgb, var(--landing-brand-black) 12%, transparent); }
 .landing-map-loading { display: grid; place-items: center; color: var(--landing-text); background: var(--landing-border); }
-.landing-contact { width: 420px; display: flex; flex: none; flex-direction: column; gap: 16px; padding: 0 32px 32px; overflow: hidden; border: 1px solid var(--landing-border); border-radius: 18px; background: var(--landing-surface); box-shadow: 0 2px 14px color-mix(in srgb, var(--landing-brand-black) 6%, transparent); }
-/* The entrance photo heads the card, edge to edge. Its caption rides the same
-   scrim the gallery uses, in the label voice the map inset had. */
-.landing-arrival { position: relative; margin: 0 -32px 4px; overflow: hidden; background: var(--landing-brand-black); }
-.landing-arrival img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
-.landing-arrival::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, color-mix(in srgb, var(--landing-brand-black) 72%, transparent) 0%, transparent 46%); }
-.landing-arrival figcaption { position: absolute; inset-inline: 0; bottom: 0; z-index: 1; padding: 14px 20px; color: var(--landing-surface); font-size: 11.5px; font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; }
-.landing-contact h3 { font-family: var(--font-landing-barlow); font-size: 17px; text-transform: uppercase; }
-.landing-contact p { display: flex; align-items: center; gap: 12px; color: var(--landing-text); font-size: 17px; }
-.landing-contact p:first-of-type { align-items: flex-start; line-height: 1.6; }
-.landing-contact p svg { width: 19px; height: 19px; flex: none; color: var(--landing-action); }
-.landing-contact p .landing-icon-whatsapp { color: var(--landing-third-party-whatsapp); }
-.landing-contact p .landing-icon-facebook { color: var(--landing-third-party-facebook); }
-.landing-contact p .landing-icon-instagram { color: var(--landing-third-party-instagram); }
-.landing-contact p strong { color: var(--landing-text-strong); }
-.landing-contact p a { color: var(--landing-text); text-decoration: none; }
-.landing-contact p a:hover { text-decoration: underline; }
-.landing-contact-numbers { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+/* The ruled contact sheet: label, fact, action — one row per way to reach us. */
+.landing-contact { width: 100%; margin: 0; border-top: 2px solid var(--landing-text-strong); }
+.landing-contact-row { display: grid; grid-template-columns: 160px minmax(0, 1fr) auto; align-items: center; gap: 24px; padding: 18px 0; border-bottom: 1px solid var(--landing-border); }
+.landing-contact dt { color: var(--landing-text-muted); font-size: 12px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; }
+.landing-contact dd { margin: 0; min-width: 0; color: var(--landing-text-strong); font-size: 19px; font-weight: 600; line-height: 1.4; font-variant-numeric: tabular-nums; }
+.landing-contact a { color: var(--landing-text-strong); text-decoration: underline; text-decoration-color: var(--landing-border); text-decoration-thickness: 2px; text-underline-offset: 6px; }
+.landing-contact a:hover { color: var(--landing-link-hover); text-decoration-color: var(--landing-link-hover); }
+.landing-contact a:focus-visible { outline: 3px solid var(--landing-focus); outline-offset: 2px; }
+.landing-contact-numbers, .landing-contact-social { display: flex; flex-wrap: wrap; gap: 6px 28px; }
 .landing-contact-numbers a { white-space: nowrap; }
-/* Both actions close the card, pushed to its floor so a map taller than the
-   card's copy never leaves a gap between the last row and the buttons. */
-.landing-contact-actions { display: flex; flex-direction: column; gap: 12px; margin-top: auto; padding-top: 4px; }
-.landing-contact-actions .landing-button { width: 100%; }
-/* The contact card sits on a light surface, so the hero's white-on-red outline
-   variant is invisible here — restate it in brand red. */
-.landing-contact .landing-button-outline { border-color: var(--landing-action); color: var(--landing-action); }
-.landing-contact .landing-button-outline:hover { border-color: var(--landing-action-hover); background: var(--landing-action-hover); color: var(--landing-on-action); }
+.landing-contact-social a { display: inline-flex; align-items: center; gap: 8px; }
+.landing-contact-social svg { width: 20px; height: 20px; flex: none; }
+.landing-contact .landing-icon-facebook { color: var(--landing-third-party-facebook); }
+.landing-contact .landing-icon-instagram { color: var(--landing-third-party-instagram); }
+.landing-contact a.landing-contact-action { display: inline-flex; min-height: 44px; align-items: center; gap: 8px; color: var(--landing-action-hover); font-size: 13px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; text-decoration-color: var(--landing-action); white-space: nowrap; }
+.landing-contact-action svg { width: 17px; height: 17px; flex: none; }
 
 /* Sponsor data remains deliberately provisional until the club supplies
    approved names/logos. The visual strip repeats once so its CSS marquee can
@@ -662,7 +647,7 @@
   .landing-hero { gap: 40px; }
   .landing-page { --landing-gutter: 48px; }
   .landing-section, .landing-stats, .landing-footer { padding-inline: 48px; }
-  .landing-contact { width: 360px; }
+  .landing-contact-row { grid-template-columns: 120px minmax(0, 1fr) auto; gap: 16px; }
   /* Brand across the top, the three link columns beneath it, the photo as a
      closing strip: five columns would leave each under 170px at this width. */
   .landing-footer-top { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -730,27 +715,18 @@
   /* Same arithmetic as the desktop rule, shifted 4px to match the narrower
      mobile gap `.landing-hero-nav-prev` opens above. */
   .landing-hero-counter { top: 20px; right: calc(var(--landing-gutter) + 114px); }
-  /* Issue #1399: on phones the three institutional stats stop sharing one
-     undivided strip and become three distinct cards — white surface and
-     hairline border over the warm band ground — so each figure reads as its
-     own fact. The pair of numbers keeps side-by-side columns; Loja spans the
-     full row so the odd count never strands an empty grid cell. The cards
-     own the breathing room now, so the old 36px row gap collapses to the
-     shared 12px and the band's padding tightens: same readability in
-     measurably less vertical space. Desktop keeps the bare, undivided band
-     — the card treatment exists only inside this breakpoint. */
-  .landing-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 32px 16px; }
-  .landing-stat { gap: 6px; padding: 20px 14px; border: 1px solid var(--landing-border); border-radius: 16px; background: var(--landing-surface); box-shadow: 0 12px 24px -20px color-mix(in srgb, var(--landing-brand-black) 40%, transparent); }
-  .landing-stat:last-child { grid-column: 1 / -1; }
-  /* The full-width card sets its figure and caption side by side: stacked, they would leave a hollow either side of "Loja". */
-  .landing-stat:last-child { flex-direction: row; justify-content: center; gap: 20px; text-align: left; }
-  .landing-stat strong { font-size: 44px; }
-  .landing-stat--lead strong { font-size: 64px; }
+  /* On a phone the ledger becomes three ruled rows: figure left, caption
+     right of it (the figures share one width, so the captions line up), and
+     the band stays as short as its content. */
+  .landing-stats { flex-direction: column; padding: 8px 24px; }
+  .landing-stat { flex: none; gap: 16px; padding: 18px 0; }
+  .landing-stat:first-child { padding-left: 0; }
+  .landing-stat + .landing-stat { border-left: 0; border-top: 1px solid var(--landing-border); }
+  .landing-stat strong { flex: none; min-width: 124px; font-size: 44px; }
+  .landing-stat span { flex: 1; max-width: none; font-size: 12px; letter-spacing: 1.8px; }
   .landing-page { --landing-gutter: 24px; --landing-space-snug: 24px; --landing-space-tight: 36px; --landing-space-dense: 48px; --landing-space-section: 64px; --landing-space-chapter: 88px; }
-  .landing-stats-photo { grid-column: 1 / -1; min-height: 0; height: 180px; margin: 0; border-radius: 16px; }
   .landing-carousel { --landing-slide-height: 340px; }
   .landing-section, .landing-footer { padding: 64px 24px; }
-  .landing-location-row { flex-direction: column; }
   /* Two columns, reordered into tile,tile / text,text / tile,tile / text,text
      instead of the auto-flow's tile-pair / tile-pair / text-pair / text-pair
      block — same reorder the approved prototype uses. Only the second tile
@@ -814,9 +790,15 @@
   .landing-schedule-days { gap: 6px; }
   .landing-motto { padding: 52px 28px; }
   .landing-motto .landing-motto-lead { font-size: 28px; }
-  .landing-map-stage { width: 100%; min-height: 348px; height: 348px; flex: none; }
-  .landing-map { width: 100%; height: 100%; min-height: 0; flex: none; }
-  .landing-contact { width: 100%; }
+  .landing-visit { grid-template-columns: 1fr; }
+  .landing-arrival { min-height: 0; aspect-ratio: 16 / 9; }
+  .landing-map-stage { width: 100%; min-height: 320px; height: 320px; }
+  .landing-map { width: 100%; height: 100%; min-height: 0; }
+  .landing-contact-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "term ask" "value value"; gap: 4px 16px; padding: 16px 0; }
+  .landing-contact dt { grid-area: term; }
+  .landing-contact dd:nth-of-type(1) { grid-area: value; font-size: 18px; }
+  .landing-contact dd:nth-of-type(2) { grid-area: ask; }
+  .landing-contact dd[aria-hidden="true"] { display: none; }
   .landing-sponsors { padding-inline: 24px; }
   .landing-sponsors-copy { --landing-sponsor-gap: 12px; }
   .landing-ticker-copy { gap: 28px; }

@@ -2,15 +2,15 @@
 
 /**
  * Issue #1399: on phones the institutional-stats band («2013 / 12 años /
- * Loja») becomes three distinct readable cards instead of one undivided
- * strip, with the grid's odd third cell filled by a full-width Loja card.
+ * Loja») becomes three hairline-ruled rows (figure beside its caption)
+ * instead of one undivided strip.
  *
  * jsdom performs no layout and cannot match media queries, so — the same
  * convention `landing-stats-band.test.ts` and `landing-vertical-space.test.ts`
  * use — the mobile treatment is locked by reading the authored stylesheet's
  * `(max-width: 768px)` block directly. What lives here is the contract that
- * the card treatment exists ONLY at that breakpoint: the base `.landing-stat`
- * rule must stay bare (desktop keeps the undivided band, the #691 locks in
+ * the row treatment exists ONLY at that breakpoint: the base `.landing-stat`
+ * rule must stay bare (desktop keeps the ledger columns, the #691 locks in
  * `landing-stats-band.test.ts` still guard it), and the rendered DOM must
  * stay three separate stat blocks carrying the same factual figures.
  */
@@ -70,14 +70,14 @@ describe("landing stats mobile cards (#1399)", (): void => {
     }) as MockedMediaQueryList));
   });
 
-  it("gives each stat a distinct card surface, hairline border and radius at the mobile breakpoint", (): void => {
-    const rule = ruleIn(mobileBlock(landingCss()), ".landing-stat");
-    expect(rule).toContain("background: var(--landing-surface)");
-    expect(rule).toContain("border: 1px solid var(--landing-border)");
-    expect(rule).toMatch(/border-radius:\s*\d+px/);
+  it("turns the ledger into hairline-ruled rows with the figure beside its caption", (): void => {
+    const css = mobileBlock(landingCss());
+    expect(ruleIn(css, ".landing-stat strong")).toContain("min-width: 124px");
+    expect(ruleIn(css, ".landing-stat + .landing-stat")).toContain("border-top: 1px solid var(--landing-border)");
+    expect(ruleIn(css, ".landing-stat + .landing-stat")).toContain("border-left: 0");
   });
 
-  it("keeps the card treatment out of the base rule, so desktop keeps the undivided band", (): void => {
+  it("keeps the ruled treatment out of the base rule, so desktop keeps the left-aligned columns", (): void => {
     const baseRule = landingCss().match(/\.landing-stat \{[^}]*\}/)?.[0] ?? "";
     expect(baseRule).not.toMatch(/background/);
     expect(baseRule).not.toMatch(/border/);
@@ -85,18 +85,10 @@ describe("landing stats mobile cards (#1399)", (): void => {
     expect(baseRule).not.toMatch(/border-radius/);
   });
 
-  it("fills the odd grid with a full-width third card instead of an empty cell", (): void => {
-    const css = mobileBlock(landingCss());
-    expect(css).toContain(".landing-stat:last-child { grid-column: 1 / -1; }");
-  });
-
-  it("spends less band space than the shared strip it replaces", (): void => {
-    // The cards own the breathing room now: the uniform 12px gap and the
-    // tightened band padding replace #691's 36px row gap / 42px padding.
+  it("stacks the three rows in one column instead of leaving an empty grid cell", (): void => {
     const statsRule = ruleIn(mobileBlock(landingCss()), ".landing-stats");
-    expect(statsRule).toContain("gap: 12px");
-    expect(statsRule).toContain("padding: 32px 16px");
-    expect(ruleIn(mobileBlock(landingCss()), ".landing-stat")).toMatch(/padding:\s*\d+px/);
+    expect(statsRule).toContain("flex-direction: column");
+    expect(statsRule).not.toContain("grid-template-columns");
   });
 
   it("leaves the band's own warm background untouched at the mobile breakpoint", (): void => {
@@ -104,18 +96,18 @@ describe("landing stats mobile cards (#1399)", (): void => {
     expect(statsRule).not.toMatch(/background/);
   });
 
-  it("renders the band as exactly three separate stat cards with the factual figures preserved", async (): Promise<void> => {
+  it("renders the band as exactly three separate stat blocks with the factual figures preserved", async (): Promise<void> => {
     const { container } = render(<LandingPage />);
     const stats = Array.from(container.querySelectorAll(".landing-stats .landing-stat"));
     expect(stats).toHaveLength(3);
     expect(stats.map((stat): string => stat.querySelector("strong")?.textContent ?? "")).toEqual([
-      "12",
       "2013",
+      "12",
       "Loja",
     ]);
     expect(stats.map((stat): string => stat.querySelector("span")?.textContent ?? "")).toEqual([
-      "Años formando deportistas",
       "Desde el 10 de octubre",
+      "Años formando deportistas",
       "Junto al Coliseo Ciudad de Loja",
     ]);
   });
