@@ -242,16 +242,17 @@ describe("getNavGroupsForRoles", () => {
           { href: "/galeria", label: "Galería" },
           { href: "/sponsors", label: "Patrocinadores" },
           { href: "/admin/reportes-error", label: "Reportes de error" },
+          { href: "/admin/actividad", label: "Actividad del club" },
         ],
       },
     ]);
     expect(groups).toHaveLength(4);
   });
 
-  it("still offers all eleven admin destinations, none twice", () => {
+  it("still offers all twelve admin destinations, none twice", () => {
     const hrefs = sectionHrefs(getNavGroupsForRoles(["admin"]));
-    expect(hrefs).toHaveLength(11);
-    expect(new Set(hrefs).size).toBe(11);
+    expect(hrefs).toHaveLength(12);
+    expect(new Set(hrefs).size).toBe(12);
   });
 
   // The four trainer destinations, in the exact order the sidebar shows them.

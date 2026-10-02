@@ -25,6 +25,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -424,12 +425,17 @@ class TestRegresionesVerificacionIndependiente:
     def test_el_runner_acepta_ipv6_loopback(self):
         # Debe PASAR el guard de host y fallar después por credenciales
         # ausentes — no con PROHIBIDO.
-        proc = subprocess.run(
-            [str(DIR_SCRIPTS / "run_load_test.sh"), "baseline"],
-            env={**os.environ, "LOAD_BASE_URL": "http://[::1]:3000"},
-            capture_output=True,
-            text=True,
-        )
+        # Hermético: sin credenciales/LOAD_* heredados y con docker/curl
+        # falsos en el PATH, esto jamás puede lanzar una corrida real.
+        with tempfile.TemporaryDirectory() as tmp:
+            entorno = _entorno_hermetico(Path(tmp), LOAD_BASE_URL="http://[::1]:3000")
+            proc = subprocess.run(
+                [str(DIR_SCRIPTS / "run_load_test.sh"), "baseline"],
+                env=entorno,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
         assert proc.returncode == 1, proc.stdout + proc.stderr
         assert "PROHIBIDO" not in proc.stderr
         assert "credenciales" in proc.stderr
@@ -903,3 +909,288 @@ class TestPasoAntesDespuesEnElRunner:
         doc = _leer(RAIZ / "docs" / "operations" / "load-testing.md")
         assert "server-metrics.json" in doc
         assert "server_metrics.py" in doc
+
+
+# ─── 9. Avisos de la revisión del harness (follow-up #1314) ─────────────────
+
+
+def _correr_common_js(cuerpo: str, env_k6: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+    """Ejecuta common.js con node contra stubs de k6 (sin red, sin k6).
+
+    `cuerpo` es JS de módulo con `common` (el módulo importado) y `rastro`
+    (llamadas registradas por los stubs) disponibles.
+    """
+    assert shutil.which("node"), "node es requerido para ejecutar common.js"
+    import json
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="common-js-") as tmp:
+        base = Path(tmp)
+        (base / "package.json").write_text('{"type":"module"}', encoding="utf-8")
+        for nombre in ("common.js", "local_guard.js"):
+            (base / nombre).write_text(_leer(DIR_K6 / nombre), encoding="utf-8")
+        stubs = {
+            "http": (
+                "export default {\n"
+                "  post(url, body, params) { globalThis.rastro.posts.push({ url, params });"
+                " return globalThis.respuestaLogin; },\n"
+                "  get() { throw new Error('get inesperado'); },\n"
+                "};\n"
+            ),
+            "index": (
+                "export function check(_v, checks) {\n"
+                "  return Object.values(checks).every((fn) => { try { return fn(_v); }"
+                " catch { return false; } });\n"
+                "}\n"
+                "export function sleep(s) { globalThis.rastro.sleeps.push(s); }\n"
+            ),
+            "metrics": (
+                "export class Trend { constructor(n) { this.n = n; } add() {} }\n"
+                "export class Rate { constructor(n) { this.n = n; }"
+                " add(v, tags) { globalThis.rastro.rates.push({ n: this.n, v, tags }); } }\n"
+            ),
+        }
+        paquete = base / "node_modules" / "k6"
+        paquete.mkdir(parents=True)
+        (paquete / "package.json").write_text(
+            '{"name":"k6","type":"module","exports":{".":"./index.js","./http":"./http.js",'
+            '"./metrics":"./metrics.js"}}',
+            encoding="utf-8",
+        )
+        for nombre, contenido in stubs.items():
+            (paquete / f"{nombre}.js").write_text(contenido, encoding="utf-8")
+        entorno_k6 = json.dumps(env_k6 or {})
+        (base / "run.mjs").write_text(
+            "globalThis.rastro = { posts: [], rates: [], sleeps: [] };\n"
+            f"globalThis.__ENV = {entorno_k6};\n"
+            "globalThis.__VU = 1;\n"
+            "globalThis.respuestaLogin = { status: 401, timings: { duration: 1 }, cookies: {},"
+            " json() { return null; } };\n"
+            "const rastro = globalThis.rastro;\n"
+            "const common = await import('./common.js');\n" + cuerpo,
+            encoding="utf-8",
+        )
+        return subprocess.run(
+            [shutil.which("node"), str(base / "run.mjs")], capture_output=True, text=True, timeout=30
+        )
+
+
+CANARIO_SETUP = "canario-setup-secreto-7q"
+
+
+class TestResumenNuncaLlevaSecretos:
+    """R1 WARNING: el resumen no puede serializar datos de setup() (pool de
+    credenciales) ni valores de cookie/token."""
+
+    def test_handle_summary_no_serializa_setup_data(self):
+        cuerpo = (
+            "const data = {\n"
+            "  metrics: { iterations: { values: { count: 3 } } },\n"
+            "  state: { testRunDurationMs: 1000 },\n"
+            f"  setup_data: {{ pool: [{{ email: 'a@b.c', password: '{CANARIO_SETUP}' }}] }},\n"
+            f"  root_group: {{ note: 'x' }},\n"
+            "};\n"
+            "const out = common.buildHandleSummary()(data);\n"
+            "const todo = Object.values(out).join('\\n');\n"
+            f"if (todo.includes('{CANARIO_SETUP}')) {{ console.error('FUGA'); process.exit(1); }}\n"
+            "if (!Object.keys(out).some((k) => k.endsWith('summary.json'))) process.exit(2);\n"
+            "console.log('SIN-FUGA');\n"
+        )
+        proc = _correr_common_js(cuerpo, {"LOAD_RESULTS_DIR": "/tmp/x"})
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert "SIN-FUGA" in proc.stdout
+
+    def test_el_resumen_conserva_las_metricas(self):
+        cuerpo = (
+            "const out = common.buildHandleSummary()({\n"
+            "  metrics: { iterations: { values: { count: 3 } } }, state: {},\n"
+            "  setup_data: { pool: [] },\n"
+            "});\n"
+            "const llave = Object.keys(out).find((k) => k.endsWith('summary.json'));\n"
+            "const payload = JSON.parse(out[llave]);\n"
+            "if (payload.sessions.sessions_completed !== 3) process.exit(1);\n"
+            "if ('setup_data' in payload) process.exit(2);\n"
+            "console.log('OK');\n"
+        )
+        proc = _correr_common_js(cuerpo)
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+class TestLoginFallidoLlevaTagsDeFase:
+    """R3/R4: un login fallido debe contar en los umbrales del plato."""
+
+    def test_journey_failure_rate_del_login_fallido_lleva_la_fase(self):
+        cuerpo = (
+            "common.authenticatedReadJourney({ email: 'a@b.c', password: 'x' }, { phase: 'plateau' });\n"
+            "const fallos = rastro.rates.filter((r) => r.n === 'journey_failure_rate' && r.v === 1);\n"
+            "if (fallos.length !== 1) process.exit(1);\n"
+            "if (!fallos[0].tags || fallos[0].tags.phase !== 'plateau') process.exit(2);\n"
+            "console.log('OK');\n"
+        )
+        proc = _correr_common_js(cuerpo)
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+FALSO_DOCKER = """#!/usr/bin/env bash
+# Stub hermético: jamás habla con un Docker real.
+case "$1" in
+  run)
+    echo $$ >"$FAKE_K6_PIDFILE"
+    exec sleep 300
+    ;;
+  ps) exit 0 ;;
+  image) exit 0 ;;
+  *) exit 1 ;;
+esac
+"""
+
+FALSO_CURL = "#!/usr/bin/env bash\nexit 0\n"
+FALSO_DOCKER_SIN_ARGS = (
+    '#!/usr/bin/env bash\necho "$@" >>"$FAKE_DOCKER_LOG"\n'
+    'case "$1" in run) exit 0 ;; ps) exit 0 ;; image) exit 0 ;; *) exit 1 ;; esac\n'
+)
+
+
+def _entorno_hermetico(tmp: Path, docker: str = FALSO_DOCKER, **extra: str) -> dict[str, str]:
+    """PATH con docker/curl falsos y sin credenciales/LOAD_* heredados."""
+    bin_dir = tmp / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    for nombre, texto in (("docker", docker), ("curl", FALSO_CURL)):
+        ruta = bin_dir / nombre
+        ruta.write_text(texto, encoding="utf-8")
+        ruta.chmod(0o755)
+    base = {k: v for k, v in os.environ.items() if not k.startswith("LOAD_") and k != "K6_IMAGE"}
+    base["PATH"] = f"{bin_dir}:{base['PATH']}"
+    base["FAKE_K6_PIDFILE"] = str(tmp / "k6.pid")
+    base["FAKE_DOCKER_LOG"] = str(tmp / "docker.log")
+    base.update(extra)
+    return base
+
+
+def _pid_vivo(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+class TestRunnerInterrumpidoYForwardeos:
+    def test_term_al_runner_detiene_k6_y_el_monitor_y_sale_distinto_de_cero(self, tmp_path):
+        import signal
+        import time
+
+        entorno = _entorno_hermetico(
+            tmp_path, LOAD_EMAIL="a@b.c", LOAD_PASSWORD="x", LOAD_MONITOR_INTERVAL="1"
+        )
+        proc = subprocess.Popen(
+            [str(DIR_SCRIPTS / "run_load_test.sh"), "baseline"],
+            env=entorno, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        pidfile = tmp_path / "k6.pid"
+        try:
+            for _ in range(100):
+                if pidfile.exists() and pidfile.read_text().strip():
+                    break
+                time.sleep(0.1)
+            assert pidfile.exists(), "el k6 falso no arrancó"
+            k6_pid = int(pidfile.read_text().strip())
+            assert _pid_vivo(k6_pid)
+            proc.send_signal(signal.SIGTERM)
+            salida, error = proc.communicate(timeout=30)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+        assert proc.returncode != 0, salida + error
+        # Dar un instante a que el kernel reciba la muerte del proceso.
+        for _ in range(30):
+            if not _pid_vivo(k6_pid):
+                break
+            time.sleep(0.1)
+        assert not _pid_vivo(k6_pid), "k6 quedó huérfano tras TERM"
+        run_dir = re.search(r"Evidencia de la corrida: (\S+)", salida)
+        assert run_dir, salida + error
+        ruta = Path(run_dir.group(1))
+        try:
+            pgrep = subprocess.run(
+                ["pgrep", "-f", f"monitor_resources.sh {ruta}"], capture_output=True, text=True
+            )
+            assert pgrep.returncode != 0, "el monitor quedó huérfano tras TERM"
+            assert (ruta / "run.json").is_file(), "debe escribir la evidencia disponible"
+        finally:
+            shutil.rmtree(ruta, ignore_errors=True)
+
+    def test_el_runner_reenvia_los_knobs_de_think_time_a_k6(self, tmp_path):
+        entorno = _entorno_hermetico(
+            tmp_path,
+            docker=FALSO_DOCKER_SIN_ARGS,
+            LOAD_EMAIL="a@b.c",
+            LOAD_PASSWORD="x",
+            LOAD_THINK_TIME_MIN="7",
+            LOAD_THINK_TIME_MAX="9",
+            LOAD_PID_WAIT_SECONDS="1",
+        )
+        proc = subprocess.run(
+            [str(DIR_SCRIPTS / "run_load_test.sh"), "baseline"],
+            env=entorno, capture_output=True, text=True, timeout=60,
+        )
+        run_dir = re.search(r"Evidencia de la corrida: (\S+)", proc.stdout)
+        try:
+            registro = (tmp_path / "docker.log").read_text(encoding="utf-8")
+            corrida = next(l for l in registro.splitlines() if l.startswith("run "))
+            assert "-e LOAD_THINK_TIME_MIN" in corrida, corrida
+            assert "-e LOAD_THINK_TIME_MAX" in corrida, corrida
+        finally:
+            if run_dir:
+                shutil.rmtree(run_dir.group(1), ignore_errors=True)
+
+    def test_el_monitor_tolera_un_primer_arranque_lento(self):
+        texto = _leer(DIR_SCRIPTS / "monitor_resources.sh")
+        asignacion = re.search(r"LOAD_PID_WAIT_SECONDS:-(\d+)", texto)
+        assert asignacion and int(asignacion.group(1)) >= 600, (
+            "la espera de k6.pid debe cubrir un docker pull lento (>= 600 s)"
+        )
+
+    def test_el_monitor_explica_como_ampliar_la_espera(self, tmp_path):
+        proc = subprocess.run(
+            [str(DIR_SCRIPTS / "monitor_resources.sh"), str(tmp_path)],
+            env={**os.environ, "LOAD_PID_WAIT_SECONDS": "1"},
+            capture_output=True, text=True, timeout=30,
+        )
+        assert proc.returncode == 0
+        assert "LOAD_PID_WAIT_SECONDS" in proc.stderr
+        assert "docker pull" in proc.stderr
+
+
+class TestPoolNoSigueSymlinks:
+    def test_el_helper_rechaza_escribir_a_traves_de_un_symlink(self, tmp_path):
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "build_credentials_pool", DIR_SCRIPTS / "build_credentials_pool.py"
+        )
+        modulo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modulo)
+        objetivo = tmp_path / "victima.txt"
+        objetivo.write_text("intacto", encoding="utf-8")
+        enlace = tmp_path / "pool.json"
+        enlace.symlink_to(objetivo)
+        try:
+            modulo.escribir_pool_seguro(str(enlace), [{"email": "a@b.c", "password": "x"}])
+        except SystemExit:
+            pass
+        else:  # pragma: no cover
+            raise AssertionError("debe negarse a escribir a través de un symlink")
+        assert objetivo.read_text(encoding="utf-8") == "intacto"
+
+    def test_el_helper_crea_el_pool_con_0600(self, tmp_path):
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "build_credentials_pool", DIR_SCRIPTS / "build_credentials_pool.py"
+        )
+        modulo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modulo)
+        destino = tmp_path / "pool.json"
+        modulo.escribir_pool_seguro(str(destino), [{"email": "a@b.c", "password": "x"}])
+        assert (destino.stat().st_mode & 0o777) == 0o600

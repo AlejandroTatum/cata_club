@@ -10,7 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from prometheus_client import REGISTRY
-from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_fastapi_instrumentator import Instrumentator, metrics
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.exc import TimeoutError as TimeoutDePool
@@ -18,7 +18,7 @@ from sqlalchemy.pool import NullPool
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.infraestructura.db import TIMEOUT_POOL_SEGUNDOS
-from app.infraestructura.metricas import colector_outbox
+from app.infraestructura.metricas import BUCKETS_LATENCIA_POR_RUTA, colector_outbox
 from app.servicios_negocio.gestor_permisos import GestorPermisos
 from app.soporte_transversal.circuito_breaker import resumen_circuitos
 from app.soporte_transversal.configuracion import settings, urls_documentacion
@@ -39,6 +39,7 @@ from app.presentacion.routers import (
     galeria_router,
     supresion_datos_router,
     reporte_error_router,
+    actividad_router,
 )
 from app.dominio.excepciones import (
     EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida,
@@ -81,7 +82,15 @@ app = FastAPI(
 # encima. `.expose(...)`, que registra el endpoint GET /metrics en sí, se
 # llama más abajo junto al resto de las rutas de salud (`_instrumentator`
 # guarda la instancia para eso).
-_instrumentator = Instrumentator(should_instrument_requests_inprogress=True).instrument(app)
+#
+# Issue #1314: `metrics.default(latency_lowr_buckets=...)` es la MISMA
+# instrumentación por defecto (mismos nombres de serie) con buckets más finos
+# en el histograma por ruta -- ver `BUCKETS_LATENCIA_POR_RUTA` para el porqué.
+_instrumentator = (
+    Instrumentator(should_instrument_requests_inprogress=True)
+    .add(metrics.default(latency_lowr_buckets=BUCKETS_LATENCIA_POR_RUTA))
+    .instrument(app)
+)
 
 # --- Respuesta de error consistente para frontend + backend -----------------
 # El frontend (Next.js) espera `message`; el backend original usa `detail`.
@@ -397,6 +406,7 @@ app.include_router(sponsors_router.router, prefix="/api/v1")
 app.include_router(galeria_router.router, prefix="/api/v1")
 app.include_router(supresion_datos_router.router, prefix="/api/v1")
 app.include_router(reporte_error_router.router, prefix="/api/v1")
+app.include_router(actividad_router.router, prefix="/api/v1")
 
 
 # --- Métricas internas (issue #1309): exponer el endpoint --------------------

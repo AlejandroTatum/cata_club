@@ -259,6 +259,10 @@ RUTAS_ROLES_REQUERIDOS = {
     # necesita el nombre de un alumno para esta tarjeta.
     ("GET", "/asistencias/ultimas-listas"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/dashboard/stats"): frozenset({"ADMINISTRADOR"}),
+    # Issue #1314: pantalla "Actividad del club", solo administradores (cualquiera
+    # ve también la vista avanzada). Agregados nada más.
+    ("GET", "/actividad/resumen"): frozenset({"ADMINISTRADOR"}),
+    ("GET", "/actividad/avanzadas"): frozenset({"ADMINISTRADOR"}),
     # Resumen de circuit breakers (P2, feat/diagnostico-circuitos-http): le
     # dice a quien la lea QUÉ dependencia externa está caída y CUÁNDO
     # golpear -- inteligencia operativa, no un simple up/down -- por eso

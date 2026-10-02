@@ -71,6 +71,8 @@ import {
   reactivarMembresia,
   cambiarPlanMembresia,
   aplicarBeneficio,
+  fetchActividadResumen,
+  fetchActividadAvanzadas,
 } from "../api";
 
 const API_ROOT = path.resolve(
@@ -273,6 +275,9 @@ describe("API client URLs resolve to a real BFF route handler", () => {
     // the coberturas history is a NEW route directory; if it moves or is
     // renamed, this call must fail here, not as a Next.js HTML 404.
     ["fetchCoberturasDePersona", () => fetchCoberturasDePersona("3")],
+    // Issue #1314: the admin activity screen reads two NEW route directories.
+    ["fetchActividadResumen", () => fetchActividadResumen("7d")],
+    ["fetchActividadAvanzadas", () => fetchActividadAvanzadas("1h")],
   ];
 
   it.each(CASES)("%s targets an existing route handler", async (_name, call) => {
