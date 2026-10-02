@@ -505,6 +505,11 @@ describe("StudentPaymentsPage — the membership card", () => {
     expect(within(card).queryByText("Membresía activa")).not.toBeInTheDocument();
     // Badge and status-footer dot, both reading the coverage the heading shows.
     expect(within(card).getAllByText("Cobertura vencida")).toHaveLength(2);
+    // The helper copy follows the same reading: the coverage ended, it is not
+    // "cubierta hasta" a date that already went by.
+    expect(
+      within(card).getByText("Su cobertura terminó en esta fecha, según sus pagos aprobados."),
+    ).toBeInTheDocument();
   });
 
   // The other half of the same rule: reading coverage instead of `estado` must
@@ -526,6 +531,10 @@ describe("StudentPaymentsPage — the membership card", () => {
     });
     expect(within(card).getAllByText("Membresía activa")).toHaveLength(2);
     expect(within(card).queryByText(/cobertura vencida/i)).not.toBeInTheDocument();
+    expect(
+      within(card).getByText("Su membresía está cubierta hasta esta fecha según sus pagos aprobados."),
+    ).toBeInTheDocument();
+    expect(within(card).queryByText(/llega más lejos/i)).not.toBeInTheDocument();
   });
 
   // The card can be reached with a membership row but no approved payment at
