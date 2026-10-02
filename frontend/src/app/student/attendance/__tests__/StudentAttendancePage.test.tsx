@@ -258,13 +258,14 @@ describe("StudentAttendancePage — the record", () => {
  * an empty frame (the hole relocated inside a border).
  */
 describe("StudentAttendancePage — the socio nuevo", () => {
-  it("does not stretch the record when it has nothing to list", async () => {
+  it("fills the rail's height with ghost rows instead of leaving a dead region", async () => {
     mockFetchStudentPortal.mockReset().mockResolvedValue(portalWith([]));
 
     render(<StudentAttendancePage />);
 
     const card = await screen.findByTestId("sessions-card");
-    expect(card.className).not.toMatch(/\bflex-1\b/);
+    expect(card.className).toMatch(/\blg:flex-1\b/);
+    expect(within(card).getByTestId("session-ghost-rows")).toBeInTheDocument();
   });
 
   it("guides with one line and the states a session can carry", async () => {
@@ -274,8 +275,9 @@ describe("StudentAttendancePage — the socio nuevo", () => {
 
     const empty = await screen.findByTestId("sessions-empty");
     expect(within(empty).getByText(/aún no hay asistencias registradas/i)).toBeInTheDocument();
+    // The legend rides in the rail's guide, beside the record.
     for (const label of ["Presente", "Ausente", "Tardanza", "Justificado"]) {
-      expect(within(empty).getByText(label)).toBeInTheDocument();
+      expect(screen.getByText(label)).toBeInTheDocument();
     }
   });
 
@@ -374,12 +376,12 @@ describe("StudentAttendancePage — the rail guide", () => {
     expect(ghost).toHaveAttribute("aria-hidden", "true");
   });
 
-  it("keeps the socio nuevo on one column, with no guide rail", async () => {
+  it("gives the socio nuevo the guide rail but no counted recap", async () => {
     mockFetchStudentPortal.mockReset().mockResolvedValue(portalWith([]));
     render(<StudentAttendancePage />);
 
     await screen.findByTestId("sessions-card");
-    expect(screen.queryByRole("heading", { name: "Cómo se registra la asistencia" })).toBeNull();
-    expect(screen.queryByTestId("session-ghost-rows")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Cómo se registra la asistencia" })).toBeInTheDocument();
+    expect(screen.queryByText(/asistió a/i)).toBeNull();
   });
 });
