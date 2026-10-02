@@ -139,6 +139,28 @@ describe("StudentOwnMedicalRecordPage", () => {
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
+  it("offers a BackLink to Mi cuenta, ahead of the page title", async () => {
+    mockUseAuth.mockReturnValue(estudianteSession("70"));
+    mockFetchStudentPortal.mockResolvedValue(portal(ADULT_SELF));
+    render(<StudentOwnMedicalRecordPage />);
+
+    const back = await screen.findByRole("link", { name: /volver a mi cuenta/i });
+    expect(back).toHaveAttribute("href", "/student");
+    const title = screen.getByRole("heading", { name: "Ficha médica" });
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("sizes the record card to its content instead of stretching it to the rail", async () => {
+    mockUseAuth.mockReturnValue(estudianteSession("70"));
+    mockFetchStudentPortal.mockResolvedValue(portal(ADULT_SELF));
+    render(<StudentOwnMedicalRecordPage />);
+
+    const card = await screen.findByTestId("medical-record-card");
+    expect(card.className).not.toMatch(/\b(?:h-full|flex-1)\b/);
+    expect(card.parentElement?.parentElement?.className).toMatch(/\blg:items-start\b/);
+    expect(card.parentElement?.parentElement?.className).not.toMatch(/items-stretch/);
+  });
+
   // The lock for the age decision on the frontend side: defense in depth for
   // a minor who reaches this URL directly (the nav entry already hides it —
   // see auth-utils.test.ts). The backend would 403 this call regardless
