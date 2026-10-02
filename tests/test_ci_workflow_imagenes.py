@@ -167,20 +167,26 @@ def test_publicacion_exige_todos_los_gates_y_solo_corre_en_push_a_main():
     assert (job.get("permissions") or {}).get("packages") == "write"
 
 
-def test_publicacion_reusa_los_scopes_de_cache_y_publica_ambos_tags():
+def test_publicacion_empuja_las_imagenes_verificadas_sin_reconstruir():
     job = job_de_publicacion(cargar())
-    builds = [p for p in job["steps"] if "docker/build-push-action" in str(p.get("uses", ""))]
-    assert {(b["with"]["context"], b["with"]["cache-from"]) for b in builds} == {
-        ("./backend", "type=gha,scope=backend"),
-        ("./frontend", "type=gha,scope=frontend"),
-    }
-    for b in builds:
-        assert b["with"]["push"] is True
-        assert "load" not in b["with"]
-        assert ":${{ env.IMAGE_TAG }}" in b["with"]["tags"]
-        assert ":latest" in b["with"]["tags"]
-    front = next(b for b in builds if b["with"]["context"] == "./frontend")
-    assert build_args(front).get("BUILD_SHA") == "${{ env.IMAGE_TAG }}"
+    pasos = job["steps"]
+    assert not any("docker/build-push-action" in str(p.get("uses", "")) for p in pasos)
+    assert any("actions/download-artifact" in str(p.get("uses", "")) for p in pasos)
+    corridas = "\n".join(str(p.get("run", "")) for p in pasos)
+    assert "docker load" in corridas
+    assert '"$IMAGEN_BACKEND" "$IMAGEN_FRONTEND"' in corridas
+    assert 'docker push "$IMG:$IMAGE_TAG"' in corridas
+    assert 'docker push "$IMG:latest"' in corridas
+
+
+def test_docker_images_guarda_y_sube_las_imagenes_verificadas_solo_en_push_a_main():
+    pasos = job_de_imagenes(cargar())["steps"]
+    guardar = next(p for p in pasos if "docker save" in str(p.get("run", "")))
+    subir = next(p for p in pasos if "actions/upload-artifact" in str(p.get("uses", "")))
+    for p in (guardar, subir):
+        assert "github.event_name == 'push'" in p["if"]
+        assert "github.ref == 'refs/heads/main'" in p["if"]
+    assert subir["with"]["retention-days"] == 1
 
 
 def test_todos_los_jobs_declaran_timeout_minutes():

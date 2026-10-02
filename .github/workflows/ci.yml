@@ -667,6 +667,19 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
           docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --no-color --tail=200
 
+      - name: Save verified images
+        # Se publican EXACTAMENTE estas imágenes, sin reconstruir.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: docker save "$IMAGEN_BACKEND:$IMAGE_TAG" "$IMAGEN_FRONTEND:$IMAGE_TAG" | gzip > imagenes-verificadas.tar.gz
+
+      - name: Upload verified images
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: imagenes-verificadas
+          path: imagenes-verificadas.tar.gz
+          retention-days: 1
+
       - name: Tear down
         if: always()
         run: docker compose -f docker-compose.yml -f docker-compose.prod.yml down -v --remove-orphans
@@ -676,9 +689,8 @@ jobs:
   # frontend, migraciones y la verificación de arranque de imágenes
   # terminaron en `success` -- un skipped/failure/cancelled de cualquiera lo
   # bloquea (en push todos corren, así que skipped también es anómalo). Los
-  # PRs (y en especial los de forks) nunca llegan acá. Reconstruye con
-  # `cache-from` de los mismos scopes gha que escribió `docker-images`, así
-  # que reusa las capas ya verificadas y los build-args son idénticos.
+  # PRs (y en especial los de forks) nunca llegan acá. No reconstruye: carga
+  # y publica las imágenes exactas que `docker-images` verificó.
   publicar-imagenes:
     name: Publicar imagenes en GHCR
     runs-on: ubuntu-latest
@@ -701,11 +713,6 @@ jobs:
       IMAGEN_BACKEND: ghcr.io/alejandrotatum/cata_club-backend
       IMAGEN_FRONTEND: ghcr.io/alejandrotatum/cata_club-frontend
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-
       - name: Log in to GHCR
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
@@ -719,30 +726,16 @@ jobs:
       #   - latest: movil. Es el default de `${IMAGE_TAG:-latest}` en
       #     docker-compose.yml, o sea lo que arrastra un `docker compose
       #     pull` sin variables en el droplet.
-      - name: Publish backend image
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+      - name: Download verified images
+        uses: actions/download-artifact@v4
         with:
-          context: ./backend
-          push: true
-          provenance: false
-          tags: |
-            ${{ env.IMAGEN_BACKEND }}:${{ env.IMAGE_TAG }}
-            ${{ env.IMAGEN_BACKEND }}:latest
-          cache-from: type=gha,scope=backend
+          name: imagenes-verificadas
 
-      - name: Publish frontend image
-        # Mismos build-args que el build verificado en `docker-images`.
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: ./frontend
-          push: true
-          provenance: false
-          tags: |
-            ${{ env.IMAGEN_FRONTEND }}:${{ env.IMAGE_TAG }}
-            ${{ env.IMAGEN_FRONTEND }}:latest
-          build-args: |
-            NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
-            NEXT_PUBLIC_APP_NAME=Cata Club Admin
-            NEXT_PUBLIC_USE_MOCKS=false
-            BUILD_SHA=${{ env.IMAGE_TAG }}
-          cache-from: type=gha,scope=frontend
+      - name: Load, tag and push verified images
+        run: |
+          gunzip -c imagenes-verificadas.tar.gz | docker load
+          for IMG in "$IMAGEN_BACKEND" "$IMAGEN_FRONTEND"; do
+            docker tag "$IMG:$IMAGE_TAG" "$IMG:latest"
+            docker push "$IMG:$IMAGE_TAG"
+            docker push "$IMG:latest"
+          done
