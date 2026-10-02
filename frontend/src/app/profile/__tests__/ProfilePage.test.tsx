@@ -2107,6 +2107,36 @@ describe("ProfilePage — the club on the screen (faro: perfil y login)", () => 
     return `${date.getFullYear()}-${month}-${day}`;
   }
 
+  it("offers the student's role shortcuts, only to routes the student has", async () => {
+    await renderStudent();
+
+    const shortcuts = within(await screen.findByTestId("profile-shortcuts"));
+    expect(shortcuts.getByRole("link", { name: /Mi cuenta/ })).toHaveAttribute("href", "/student");
+    expect(shortcuts.getByRole("link", { name: /Pagos/ })).toHaveAttribute("href", "/student/payments");
+    expect(shortcuts.getByRole("link", { name: /Asistencias/ })).toHaveAttribute("href", "/student/attendance");
+    expect(shortcuts.getByRole("link", { name: /Ficha médica/ })).toHaveAttribute(
+      "href",
+      "/student/medical-record",
+    );
+  });
+
+  it("offers the representante's role shortcuts, including adding a dependent", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("representante"));
+    mockFetchStudentPortal.mockResolvedValueOnce({ self: null, representados: [], membershipPlans: [] });
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+
+    const shortcuts = within(await screen.findByTestId("profile-shortcuts"));
+    expect(shortcuts.getByRole("link", { name: /Mi cuenta/ })).toHaveAttribute("href", "/student");
+    expect(shortcuts.getByRole("link", { name: /Agregar estudiante/ })).toHaveAttribute(
+      "href",
+      "/student/add-dependent",
+    );
+  });
+
   it("states the plan and the joining date the portal payload already carried", async () => {
     await renderStudent();
 

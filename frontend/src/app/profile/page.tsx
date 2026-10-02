@@ -166,7 +166,17 @@ import {
   type HeroStat,
 } from "./ProfileParts";
 import { clubToday } from "@/lib/club-date";
-import { Badge, Button, DataBox, ErrorState, LoadingState, PAGE_RAIL, buttonClasses } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  DataBox,
+  ErrorState,
+  LoadingState,
+  PAGE_RAIL,
+  RoleShortcuts,
+  buttonClasses,
+} from "@/components/ui";
+import type { RoleShortcut } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui/Badge";
 import { MEMBERSHIP_STATUS_LABELS, MEMBERSHIP_STATUS_TONE } from "@/app/members/members-utils";
 import { getAttendanceBadgeTone, getAttendanceLabel } from "@/app/attendance/attendance-utils";
@@ -207,24 +217,48 @@ import { PhoneField } from "@/components/wizard-fields";
 /** Roles with no staff profile here — they see the student-branch content in the unified layout instead. */
 const STUDENT_SUMMARY_ROLES: ReadonlySet<UserRole> = new Set(["representante", "estudiante"]);
 
-interface RoleShortcut {
-  label: string;
-  hint: string;
-  href: string;
-}
-
 const ADMIN_SHORTCUTS: RoleShortcut[] = [
-  { label: "Panel de Control", hint: "Resumen del día del club", href: "/dashboard" },
-  { label: "Miembros", hint: "Cuentas, roles y membresías", href: "/members" },
-  { label: "Pagos", hint: "Revisar y aprobar comprobantes", href: "/payments" },
-  { label: "Asistencias", hint: "Registros de entrenamiento", href: "/attendance" },
+  { title: "Panel de Control", description: "Resumen del día del club", href: "/dashboard" },
+  { title: "Miembros", description: "Cuentas, roles y membresías", href: "/members" },
+  { title: "Pagos", description: "Revisar y aprobar comprobantes", href: "/payments" },
+  { title: "Asistencias", description: "Registros de entrenamiento", href: "/attendance" },
 ];
 
 const TRAINER_SHORTCUTS: RoleShortcut[] = [
-  { label: "Mi día", hint: "Sus próximas sesiones", href: "/trainer" },
-  { label: "Pasar lista", hint: "Registrar la asistencia", href: "/trainer/attendance" },
-  { label: "Alumnos del club", hint: "Consultar a sus alumnos", href: "/trainer/students" },
+  { title: "Mi día", description: "Sus próximas sesiones", href: "/trainer" },
+  { title: "Pasar lista", description: "Registrar la asistencia", href: "/trainer/attendance" },
+  { title: "Alumnos del club", description: "Consultar a sus alumnos", href: "/trainer/students" },
 ];
+
+const STUDENT_SHORTCUTS: RoleShortcut[] = [
+  { title: "Mi cuenta", description: "Su resumen y próximas sesiones", href: "/student" },
+  { title: "Pagos", description: "Sus cuotas y comprobantes", href: "/student/payments" },
+  { title: "Asistencias", description: "Su historial de entrenamientos", href: "/student/attendance" },
+  { title: "Ficha médica", description: "Mantener sus datos de salud", href: "/student/medical-record" },
+];
+
+const REPRESENTANTE_SHORTCUTS: RoleShortcut[] = [
+  { title: "Mi cuenta", description: "El resumen de su familia", href: "/student" },
+  { title: "Pagos", description: "Cuotas y comprobantes", href: "/student/payments" },
+  { title: "Asistencias", description: "Entrenamientos de sus representados", href: "/student/attendance" },
+  { title: "Ficha médica", description: "Datos de salud de sus representados", href: "/student/medical-record" },
+  { title: "Agregar estudiante", description: "Sumar a otra persona a su cargo", href: "/student/add-dependent" },
+];
+
+function shortcutsForRole(role: UserRole): RoleShortcut[] {
+  switch (role) {
+    case "admin":
+      return ADMIN_SHORTCUTS;
+    case "trainer":
+      return TRAINER_SHORTCUTS;
+    case "representante":
+      return REPRESENTANTE_SHORTCUTS;
+    case "estudiante":
+      return STUDENT_SHORTCUTS;
+    default:
+      return [];
+  }
+}
 
 function toErrorMessage(error: unknown, fallback: string): string {
   return toUserMessage(error, fallback);
@@ -1192,6 +1226,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
       </Link>
     ) : undefined;
   const roleTone = ROLE_TONE[props.role];
+  const roleShortcuts = shortcutsForRole(props.role);
 
   return (
     <ProfileShell actions={headerAction} subtitle={roleCopy.lede}>
@@ -1374,9 +1409,8 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             )}
           </CardSection>
 
-          {/* Staff only: where this role's work happens. Students and
-              representantes already get their portal link in the header. */}
-          {props.kind === "staff" && (
+          {/* Where this role's work happens — the same tiles for every role. */}
+          {roleShortcuts.length > 0 && (
             <CardSection
               title="Atajos de su rol"
               subtitle="Ir directo a su trabajo"
@@ -1384,20 +1418,8 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
               tone="ball"
               testId="profile-shortcuts"
             >
-              <div className="grid gap-3 p-4 sm:grid-cols-2">
-                {(props.role === "trainer" ? TRAINER_SHORTCUTS : ADMIN_SHORTCUTS).map((shortcut) => (
-                  <Link
-                    key={shortcut.href}
-                    href={shortcut.href}
-                    className="flex items-center gap-3 rounded-ctl border border-line-2 bg-paper p-3.5 text-sm transition-colors hover:border-coal hover:bg-ball/10"
-                  >
-                    <IconTile icon={<ArrowRight size={ICON.sm} strokeWidth={1.5} />} tone={roleTone} />
-                    <span className="grid min-w-0 flex-1 gap-0.5">
-                      <span className="font-bold text-ink">{shortcut.label}</span>
-                      <span className="text-xs text-ink-3-strong">{shortcut.hint}</span>
-                    </span>
-                  </Link>
-                ))}
+              <div className="p-4">
+                <RoleShortcuts shortcuts={roleShortcuts} tone={roleTone} label="Atajos de su rol" />
               </div>
             </CardSection>
           )}
