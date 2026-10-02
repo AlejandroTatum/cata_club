@@ -65,6 +65,16 @@ beforeEach(() => {
 });
 
 describe("RegularizarDeudaForm — el monto no puede comprar más de 12 meses (#666)", () => {
+  it("collapses the form with a Cancelar button without submitting", async () => {
+    await open();
+    expect(screen.getByRole("form", { name: "Regularizar deuda" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(screen.queryByRole("form", { name: "Regularizar deuda" })).not.toBeInTheDocument();
+    expect(mockRegularizarDeuda).not.toHaveBeenCalled();
+  });
+
   it("caps the monto input's max at 12 months of the known monthly price", async () => {
     await open();
     // 25 * 12 = 300.

@@ -285,6 +285,16 @@ describe("GroupsPage — categoría form is typed input, not a locked catalog se
     expect(heading).not.toHaveClass("sr-only");
   });
 
+  it("states the 24 h format under each time field and reads the chosen time back in 12 h", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
+
+    expect(screen.getAllByText(/Formato 24 h \(ej\. 17:00 = 5:00 p\. m\.\)/)).toHaveLength(2);
+    fireEvent.change(screen.getByLabelText(/^Hora de inicio/), { target: { value: "17:00" } });
+    expect(screen.getByText(/Elegido: 5:00 p\. m\./)).toBeInTheDocument();
+  });
+
   it("the create form has a free-text nombre input and editable hora_inicio/hora_fin — no categoría <select> left", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
@@ -2158,7 +2168,8 @@ describe("GroupsPage — per-field mirror of the training window and día cap (#
 
     await expectMarked(diasFieldset(), "Seleccione al menos un día.");
     expect(horaInicio()).not.toHaveAttribute("aria-invalid");
-    expect(horaInicio()).not.toHaveAttribute("aria-describedby");
+    // Only the always-on 24 h hint remains, never an error id.
+    expect(horaInicio()).toHaveAttribute("aria-describedby", "categoria-hora-inicio-ayuda");
   });
 
   it("keeps the shared banner for a server error the client could not predict", async () => {

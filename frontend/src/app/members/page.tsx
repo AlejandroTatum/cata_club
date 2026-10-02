@@ -22,6 +22,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import {
+  BackLink,
   Badge,
   Button,
   DataBox,
@@ -1134,6 +1135,7 @@ export default function MembersPage(): React.ReactElement {
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
+        back={<BackLink href="/dashboard" />}
         title="Miembros"
         subtitle="Las cuentas que pagan y los jugadores que tienen a cargo."
       >

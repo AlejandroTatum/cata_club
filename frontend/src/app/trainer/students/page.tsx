@@ -44,12 +44,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BookUser, ChevronRight, SearchX, Stethoscope } from "lucide-react";
+import { BookUser, SearchX, Stethoscope } from "lucide-react";
 
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import {
   BackLink,
+  Badge,
   Button,
   EmptyState,
   ErrorState,
@@ -115,22 +116,25 @@ function useIsDesktop(): boolean {
 function BotonFichaMedica({
   alumno,
   onAbrir,
-  seleccionado = false,
+  seleccionado,
+  destacado = false,
 }: {
   alumno: AlumnoDelClub;
   onAbrir: () => void;
   seleccionado?: boolean;
+  /** Desktop: the ficha is the point of the screen, so it wears the primary skin. */
+  destacado?: boolean;
 }): React.ReactElement {
   return (
     <Button
-      variant="secondary"
+      variant={destacado ? "primary" : "secondary"}
       className="flex-none"
       onClick={(event) => {
         event.currentTarget.focus();
         onAbrir();
       }}
       aria-label={`Ficha médica de ${alumno.nombreCompleto}`}
-      aria-pressed={seleccionado || undefined}
+      aria-pressed={seleccionado}
     >
       <Stethoscope size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
       Ficha médica
@@ -169,7 +173,14 @@ function descripcion(alumno: AlumnoDelClub): string {
 }
 
 /** Name (truncating on its own element, #664) over the compact age-and-schedule line. */
-function NombreYDetalle({ alumno }: { alumno: AlumnoDelClub }): React.ReactElement {
+function NombreYDetalle({
+  alumno,
+  soloEdad = false,
+}: {
+  alumno: AlumnoDelClub;
+  /** Desktop: the schedule has its own column, so the line keeps only the age. */
+  soloEdad?: boolean;
+}): React.ReactElement {
   return (
     <>
       <span
@@ -178,7 +189,7 @@ function NombreYDetalle({ alumno }: { alumno: AlumnoDelClub }): React.ReactEleme
       >
         {alumno.nombreCompleto}
       </span>
-      <span className="block text-xs text-ink-3">{descripcion(alumno)}</span>
+      <span className="block text-xs text-ink-3">{soloEdad ? `${alumno.edad} años` : descripcion(alumno)}</span>
     </>
   );
 }
@@ -398,6 +409,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
                               de pantalla anuncia en blanco; un encabezado
                               visible "Acciones" no le dice nada a un lector
                               vidente que los botones de abajo no digan ya. */}
+                        <TableHeaderCell>Grupo y horario</TableHeaderCell>
                         <TableHeaderCell type="action">
                           <span className="sr-only">Acciones</span>
                         </TableHeaderCell>
@@ -443,40 +455,33 @@ export default function TrainerStudentsPage(): React.ReactElement {
                         }`}
                       >
                         <TableCell>
-                          {esEscritorio ? (
-                            <button
-                              type="button"
-                              className="block w-full text-left"
-                              aria-label={`Ficha médica de ${alumno.nombreCompleto}`}
-                              aria-pressed={seleccionadoId === alumno.personaId}
-                              onClick={() => abrirFicha(alumno)}
-                            >
-                              <NombreYDetalle alumno={alumno} />
-                            </button>
-                          ) : (
-                            // Below `lg` the same tap opens the dialog; the visible
-                            // "Ficha médica" button keeps its own accessible name.
-                            <button
-                              type="button"
-                              className="block w-full text-left"
-                              onClick={() => abrirFicha(alumno)}
-                            >
-                              <NombreYDetalle alumno={alumno} />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            className="block w-full text-left"
+                            onClick={() => abrirFicha(alumno)}
+                          >
+                            <NombreYDetalle alumno={alumno} soloEdad={esEscritorio} />
+                          </button>
+                        </TableCell>
+                        {/*
+                         * The roster payload carries no emergency-data flag (and
+                         * one call per row is not an option), so the middle
+                         * column shows what the row already knows: group and week.
+                         */}
+                        <TableCell>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {alumno.grupo && <Badge tone="ok">Grupo {alumno.grupo}</Badge>}
+                            <Badge>{alumno.horariosCompactos ?? "Sin horario"}</Badge>
+                          </div>
                         </TableCell>
                         <TableCell type="action">
                           <div className="flex flex-wrap items-center justify-end gap-1.5">
-                            {esEscritorio ? (
-                              <ChevronRight
-                                size={ICON.base}
-                                strokeWidth={2}
-                                aria-hidden="true"
-                                className={seleccionadoId === alumno.personaId ? "text-ink" : "text-ink-3/50"}
-                              />
-                            ) : (
-                              <BotonFichaMedica alumno={alumno} onAbrir={() => abrirFicha(alumno)} />
-                            )}
+                            <BotonFichaMedica
+                              alumno={alumno}
+                              onAbrir={() => abrirFicha(alumno)}
+                              seleccionado={esEscritorio && seleccionadoId === alumno.personaId}
+                              destacado={esEscritorio}
+                            />
                             <BotonHorario
                               alumno={alumno}
                               onAbrir={() =>
@@ -538,7 +543,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
                 <StudentFichaPanel student={seleccionado} />
                 <InfoPanel title="Cómo usar la nómina">
                   <p>Busque por nombre o filtre por grupo; un alumno en varios horarios aparece una sola vez.</p>
-                  <p>Toque un renglón para ver su ficha médica y a quién llamar en una emergencia.</p>
+                  <p>Toque el botón «Ficha médica» de un renglón para ver sus datos médicos y a quién llamar en una emergencia.</p>
                   <p>«Horario» muestra los días y horas en que entrena cada alumno.</p>
                 </InfoPanel>
               </div>
