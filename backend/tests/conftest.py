@@ -176,6 +176,26 @@ def _reiniciar_circuitos_breaker():
     notificaciones_servicio_mod._circuito_smtp.reiniciar()
 
 
+@pytest.fixture(autouse=True)
+def _presencia_en_memoria(monkeypatch):
+    """La dependencia de autenticación toca la presencia en Redis y escribe la
+    actividad de la franja (issue #1314). La suite no tiene Redis, y la
+    escritura de actividad abre una sesión PROPIA con commit real: contra la
+    base compartida dejaría filas fuera del aislamiento por savepoint. Se
+    reemplazan ambos por dobles en memoria; `test_presencia.py` y
+    `test_actividad_registro.py` ejercitan las piezas reales."""
+    from unittest.mock import MagicMock
+
+    from app.infraestructura import actividad, presencia
+    from tests.redis_falso import RedisFalso
+
+    monkeypatch.setattr(presencia, "_cliente_redis", RedisFalso())
+    monkeypatch.setattr(actividad, "_sesion_factory", lambda: MagicMock())
+    presencia.reiniciar_estado_local()
+    yield
+    presencia.reiniciar_estado_local()
+
+
 @pytest.fixture()
 def persona_sin_usuario(db_session):
     """Crea una Persona (sin Usuario asociado) directamente vía ORM, para

@@ -17,11 +17,11 @@ from decimal import Decimal
 from typing import List, Optional
 
 from sqlalchemy import (
-    String, CHAR, ForeignKey, Numeric, DateTime, Date, Time, Boolean, Integer, LargeBinary, Table, Column,
+    String, CHAR, ForeignKey, Numeric, DateTime, Date, Time, Boolean, Integer, SmallInteger, Float, LargeBinary, Table, Column,
     CheckConstraint, Index, UniqueConstraint, text, func, event,
     Enum as SAEnum, inspect as inspeccionar_orm,
 )
-from sqlalchemy.dialects.postgresql import ExcludeConstraint
+from sqlalchemy.dialects.postgresql import ExcludeConstraint, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 from app.dominio.cedula import es_cedula_valida
@@ -318,6 +318,10 @@ class Usuario(Base):
     # (solo default de Python), esta columna SÍ lleva `server_default`: un
     # INSERT crudo que salte el ORM no debe dejarla en NULL.
     version_sesion: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    # Issue #1314: último instante en que la cuenta tocó la aplicación
+    # (login, refresh o primera petición autenticada de una franja). Es un
+    # dato de "visto por última vez": nunca decide acceso -- eso es la sesión.
+    ultimo_acceso: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), unique=True)
     persona: Mapped["Persona"] = relationship(back_populates="usuario")
@@ -2540,3 +2544,81 @@ class EntradaGaleria(Base):
     imagen_url: Mapped[str] = mapped_column(String(500))
     # Identificador interno para retirar el recurso del proveedor al borrar.
     imagen_public_id: Mapped[str] = mapped_column(String(64), unique=True)
+
+
+# ---------------------------------------------------------------------------
+# Actividad del club (issue #1314)
+# ---------------------------------------------------------------------------
+class ActividadUsuario(Base):
+    """Una fila por usuario, día y franja de 2 horas en que tocó la app.
+
+    Existe porque `Usuario.ultimo_acceso` solo guarda el ÚLTIMO instante: no
+    puede responder "cuántas personas DISTINTAS entraron cada día / cada 2
+    horas", que es lo que dibuja "Actividad del club". La franja (0..11, hora
+    del club // 2) es lo que permite la vista de 24 horas sin guardar un
+    evento por petición: como mucho 12 filas por usuario y día, y el
+    `INSERT ... ON CONFLICT DO NOTHING` que la escribe es idempotente.
+
+    Día y franja son del CLUB (`America/Guayaquil`, ver `tiempo.py`), no de
+    UTC: la franja de las 19:00-21:00 del club cae en dos días UTC distintos.
+
+    La clave primaria compuesta ya cubre las FK (`usuario_id` a la izquierda);
+    el índice `(fecha, franja)` sirve las consultas por rango de tiempo.
+    """
+
+    __tablename__ = "actividad_usuario"
+    __table_args__ = (Index("ix_actividad_usuario_fecha_franja", "fecha", "franja"),)
+
+    usuario_id: Mapped[int] = mapped_column(
+        ForeignKey("usuario.id", ondelete="CASCADE"), primary_key=True
+    )
+    fecha: Mapped[date] = mapped_column(Date, primary_key=True)
+    franja: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+
+
+class MetricaInstantanea(Base):
+    """Una lectura por minuto del estado del sistema (issue #1314).
+
+    Solo agregados: ni IPs, ni hosts, ni versiones, ni identidades. Las
+    columnas escalares guardan lo que se grafica o se compara directo; los
+    JSONB guardan las partes de forma variable (buckets del histograma de
+    latencia, rutas con tráfico, contenedores) y siguen siendo pequeñas -- una
+    fila pesa ~2 KB y la retención es de 7 días (~10 mil filas).
+
+    Los contadores (`peticiones`, `errores_*`, `logins_*`, buckets) son DELTAS
+    contra la lectura anterior, no acumulados: así un reinicio del backend no
+    deja un salto negativo en la serie y sumar un rango es sumar filas. Son
+    NULL en la primera lectura tras un arranque, cuando no hay anterior.
+
+    Las columnas `host_*` son NULL cuando el archivo del host faltaba o
+    estaba viejo: "sin dato" no es lo mismo que 0.
+    """
+
+    __tablename__ = "metrica_instantanea"
+
+    capturada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    intervalo_s: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    peticiones: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    errores_5xx: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    errores_4xx: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    latencia_buckets: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    rutas: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    outbox_pendientes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    outbox_mas_antiguo_s: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    cola_celery: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    db_conexiones: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    db_conexiones_max: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    redis_usado_mb: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    redis_max_mb: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    logins_ok: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    logins_fallidos: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    conectados: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    conectados_por_rol: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    host_actualizado_en: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    host_cpu_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    host_ram_usada_mb: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    host_ram_total_mb: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    host_swap_usada_mb: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    host_swap_total_mb: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    host_disco_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    host_contenedores: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)

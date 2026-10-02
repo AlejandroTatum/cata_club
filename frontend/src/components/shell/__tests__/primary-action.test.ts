@@ -72,6 +72,10 @@ const NO_HEADER_ACTION: Record<string, string> = {
   // Same shape, same reason (issue #1372): the gallery upload needs título,
   // descripción and the photo file beside its submit control.
   "app/galeria/page.tsx": "upload form — the submit action belongs with its required fields",
+  // Read-only monitoring screen (issue #1314): it only looks, so there is no
+  // verb to promote. Its view and period controls change what is drawn, not the
+  // data, and live with the figures they filter.
+  "app/admin/actividad/page.tsx": "read-only monitoring screen",
   // --- The five family screens, decided in #43 -----------------------------
   // A wizard. Its buttons are "Continuar" and "Confirmar asistencia": they move
   // through the steps rather than act on the page, and which one is showing is

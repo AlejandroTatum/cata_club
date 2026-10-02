@@ -24,6 +24,7 @@ import type { PerfilPropio } from "@/types/domain";
 import type { MembershipSummary, PagoPersona, StudentProfileSummary } from "@/services/api";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { buildUstedRegisterRegex } from "@/lib/__tests__/usted-register-lock";
+import { clubToday } from "@/lib/club-date";
 import { formatDate } from "@/lib/format-utils";
 
 // ---------------------------------------------------------------------------
@@ -2097,7 +2098,9 @@ describe("ProfilePage — the club on the screen (faro: perfil y login)", () => 
    * calendar. This keeps the fixtures relative and the assertions absolute.
    */
   function isoDaysFromToday(days: number): string {
-    const date = new Date();
+    // Anchor to the club's calendar day, the same "today" the page reads:
+    // the runner's local date differs from Guayaquil's for five hours a day.
+    const date = clubToday();
     date.setDate(date.getDate() + days);
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const day = String(date.getDate()).padStart(2, "0");

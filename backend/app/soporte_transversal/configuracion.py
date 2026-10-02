@@ -197,6 +197,14 @@ _CAMPOS_EXCLUIDOS_A_PROPOSITO: dict[str, str] = {
         "coordenada de red interna fijada en docker-compose.yml "
         "(redis://redis:6379/0), no un secreto por despliegue"
     ),
+    "metricas_url_scrape": (
+        "coordenada de red interna fijada por defecto (http://backend:8000/metrics), "
+        "no un secreto por despliegue"
+    ),
+    "metricas_archivo_host": (
+        "ruta dentro del contenedor del bind mount de solo lectura de "
+        "docker-compose.prod.yml; ausente en desarrollo es VÁLIDO (host no disponible)"
+    ),
     "celery_broker_url": "vacío es VÁLIDO: broker_url_efectivo (:213) cae a redis_url",
     "celery_result_backend": "vacío es VÁLIDO: result_backend_efectivo (:217) cae a redis_url",
     "celery_result_expira_segundos": "default operativo (24h), independiente del despliegue",
@@ -470,6 +478,12 @@ class Settings(BaseSettings):
     celery_broker_url: str = ""   # si vacío, se derivation de redis_url
     celery_result_backend: str = ""
     celery_result_expira_segundos: int = 60 * 60 * 24  # 24h
+    # Issue #1314: de dónde lee el colector de métricas. `/metrics` solo es
+    # alcanzable por la red de Compose (nunca por el borde público), y el
+    # snapshot del host lo escribe un cron del host en un directorio que
+    # `docker-compose.prod.yml` monta de solo lectura en `celery-worker`.
+    metricas_url_scrape: str = "http://backend:8000/metrics"
+    metricas_archivo_host: str = "/host-metricas/host.json"
     celery_hora_automatizaciones: str = "02:30"  # HH:MM (Hora local) para tareas diarias
     # Techo de filas que UNA corrida de una despachadora de outbox puede
     # reclamar (issue #841). Las tres despachadoras corren cada minuto sobre

@@ -70,6 +70,26 @@ def contenedor_db():
     return ids[0] if ids else None
 
 
+def escribir_pool_seguro(ruta, pool):
+    """Escribe el pool con 0600 y se niega a seguir un symlink en la ruta."""
+    directorio = os.path.dirname(ruta)
+    if directorio:
+        os.makedirs(directorio, exist_ok=True)
+    if os.path.islink(ruta):
+        morir(f"{ruta} es un symlink; me niego a escribir credenciales a través de él")
+    # O_NOFOLLOW cierra la carrera entre el chequeo y la apertura; sin
+    # O_TRUNC para no vaciar nada antes de validar el descriptor.
+    flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW
+    try:
+        descriptor = os.open(ruta, flags, 0o600)
+    except OSError as error:
+        morir(f"no pude abrir {ruta} de forma segura: {error.strerror}")
+    with os.fdopen(descriptor, "w", encoding="utf-8") as archivo:
+        os.fchmod(archivo.fileno(), 0o600)
+        archivo.truncate(0)
+        json.dump(pool, archivo, indent=1)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tamanio", type=int, default=100,
@@ -114,13 +134,7 @@ def main():
               "haya corrido el seed masivo actualizado")
 
     pool = [{"email": correo, "password": contrasenia_seed} for correo in correos]
-    directorio = os.path.dirname(args.salida)
-    if directorio:
-        os.makedirs(directorio, exist_ok=True)
-    descriptor = os.open(args.salida, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(descriptor, "w", encoding="utf-8") as archivo:
-        json.dump(pool, archivo, indent=1)
-    os.chmod(args.salida, 0o600)
+    escribir_pool_seguro(args.salida, pool)
 
     # Solo conteos y ruta: jamás el contenido del pool.
     print(f"Pool de credenciales: {len(pool)} identidades → {args.salida}")

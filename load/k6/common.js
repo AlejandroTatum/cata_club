@@ -206,7 +206,7 @@ export function authenticatedReadJourney(credential, tagsExtra) {
   if (!cache) {
     cache = loginYCachea(credential, faseTags);
     if (!cache) {
-      journeyFailureRate.add(1);
+      journeyFailureRate.add(1, faseTags);
       // Think time applies even after a failed login: without it, a down or
       // struggling backend turns the harness into a hot-loop hammer (observed:
       // 171k failed iterations in 30 s during the stack-down smoke).
@@ -302,7 +302,10 @@ export function buildHandleSummary() {
       '',
     ].join('\n');
 
-    const payload = Object.assign({}, data, {
+    // k6 hands handleSummary the setup() return value as data.setup_data —
+    // here that is the whole credential pool. It must never reach disk.
+    const { setup_data: _omitido, ...dataSinSetup } = data;
+    const payload = Object.assign({}, dataSinSetup, {
       sessions: {
         definition:
           'VUs = concurrent users at an instant; sessions = total authenticated journeys completed over the whole run (iterations)',
