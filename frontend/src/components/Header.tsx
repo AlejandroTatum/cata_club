@@ -24,6 +24,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import type { LucideProps } from "lucide-react";
 import {
+  Activity,
   LayoutGrid,
   CreditCard,
   ClipboardCheck,
@@ -97,6 +98,9 @@ export const NAV_ICON_MAP: Record<string, React.ForwardRefExoticComponent<
   // fallback silencioso que este mapa existe para evitar.
   "/galeria": Images,
   "/admin/reportes-error": ClipboardCheck,
+  // `Activity` — a pulse line, which is what the screen draws. Its neighbour
+  // in the rail is already `ClipboardCheck`.
+  "/admin/actividad": Activity,
   "/tarifas": Tag,
   "/attendance": ClipboardCheck,
   "/trainer": LayoutGrid,
