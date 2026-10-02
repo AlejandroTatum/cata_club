@@ -11,12 +11,16 @@ Ver `app.servicios_negocio.membresia_pago_servicio.PagoServicio.regularizar_deud
 para las decisiones conservadoras (APROBADO directo, sin tocar membresía, sin
 notificaciones/PDF/regla familiar).
 """
+from contextlib import contextmanager
 from datetime import date
 from decimal import Decimal
 
+import app.infraestructura.tareas.alertas_tareas as alertas_mod
 import app.servicios_negocio.membresia_pago_servicio as mps
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoPago
-from app.dominio.modelos import Pago
+from app.dominio.modelos import Pago, Persona, Usuario
+from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
+from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
 from app.servicios_negocio.membresia_pago_servicio import PagoServicio
 from tests.fabricas_pagos import crear_persona_orm, crear_tipo_membresia_orm, crear_membresia_orm
 
@@ -280,3 +284,101 @@ def test_registrar_pago_sigue_anclando_en_hoy(client, db_session, monkeypatch):
     pago = resp.json()
     assert pago["fechaInicio"] == "2026-08-15"
     assert pago["fechaFin"] == "2026-09-15"
+
+
+# --- Migración desde el cuaderno (issue #1492) ---------------------------------
+
+HOY_MIGRACION = date(2026, 10, 5)
+
+
+def _crear_membresia_inactiva(sesion, representante_id: int | None = None):
+    """Socio recién registrado: membresía INACTIVA, sin ningún pago aprobado.
+    Con `representante_id` la persona es un representado (menor), lo que
+    permite listarla por `listar_membresias_activas_por_representante`."""
+    persona = Persona(
+        nombres="Socio", apellidos="Migrado", cedula="1710034065",
+        fecha_nacimiento=date(2015, 1, 1) if representante_id else date(1990, 1, 1),
+        telefono="0990001111", representante_id=representante_id,
+    )
+    sesion.add(persona)
+    sesion.flush()
+    tipo = crear_tipo_membresia_orm(sesion, precio=Decimal("30.00"))
+    membresia = crear_membresia_orm(
+        sesion, persona, tipo, EstadoMembresia.INACTIVA,
+        monto_aplicado=Decimal("30.00"),
+    )
+    return persona, membresia
+
+
+def _regularizar(client, membresia_id: int, inicio: str, fin: str):
+    return client.post(
+        f"/api/v1/membresias/{membresia_id}/regularizar-deuda",
+        json={
+            "monto": "30.00", "fecha_inicio": inicio, "fecha_fin": fin,
+            "motivo": "Migración cuaderno",
+        },
+    )
+
+
+def test_regularizacion_que_cubre_hoy_activa_y_queda_vigente(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: HOY_MIGRACION)
+    representante = crear_persona_orm(db_session, "1710034040")
+    _, membresia = _crear_membresia_inactiva(db_session, representante.id)
+
+    resp = _regularizar(client, membresia.id, "2026-09-15", "2026-10-15")
+    assert resp.status_code == 201, resp.text
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+    vigentes = MembresiaRepositorio(db_session).listar_membresias_activas_por_representante(
+        representante.id, HOY_MIGRACION,
+    )
+    assert [m.id for m in vigentes] == [membresia.id]
+
+
+def test_regularizacion_solo_pasada_deja_la_membresia_inactiva(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: HOY_MIGRACION)
+    _, membresia = _crear_membresia_inactiva(db_session)
+
+    resp = _regularizar(client, membresia.id, "2026-08-15", "2026-09-15")
+    assert resp.status_code == 201, resp.text
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.INACTIVA
+
+
+def test_registrar_pago_tras_migracion_ancla_en_fecha_fin_regularizada(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: HOY_MIGRACION)
+    persona, membresia = _crear_membresia_inactiva(db_session)
+    assert _regularizar(client, membresia.id, "2026-09-15", "2026-10-15").status_code == 201
+
+    resp = client.post(
+        "/api/v1/membresias/pagos",
+        json={
+            "meses": 1, "tipo_pago": "TRANSFERENCIA",
+            "persona_id": persona.id, "membresia_id": membresia.id,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["fechaInicio"] == "2026-10-15"
+    assert resp.json()["fechaFin"] == "2026-11-15"
+
+
+def test_alerta_de_5_dias_incluye_la_membresia_migrada(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: HOY_MIGRACION)
+    persona, membresia = _crear_membresia_inactiva(db_session)
+    db_session.add(Usuario(correo="migrado@cataclub.test", contrasenia="hash", persona_id=persona.id))
+    db_session.flush()
+    assert _regularizar(client, membresia.id, "2026-09-15", "2026-10-15").status_code == 201
+
+    @contextmanager
+    def _factory():
+        yield db_session
+
+    monkeypatch.setattr(alertas_mod, "SessionLocal", _factory)
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: date(2026, 10, 10))
+    monkeypatch.setattr(ServicioNotificaciones, "enviar_correo", lambda self, **kwargs: None)
+
+    resultado = alertas_mod.alertar_vencimientos_hoy_mas_5()
+
+    assert resultado["total_alertas"] == 1
