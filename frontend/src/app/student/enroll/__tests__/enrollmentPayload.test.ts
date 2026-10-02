@@ -1,3 +1,4 @@
+import { MENSAJE_IDENTIDAD_DUPLICADA, isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import { describe, expect, it } from "vitest";
 import { BLOOD_TYPES } from "@/types/enrollment";
 import { ApiClientError } from "@/services/api";
@@ -106,23 +107,31 @@ describe("buildEnrollmentRequest", () => {
 
 describe("getEnrollmentErrorMessage", () => {
   it("surfaces backend message for 400 when present", () => {
-    expect(getEnrollmentErrorMessage(apiError("Ya existe una persona con la cedula 1712345678", 400)))
-      .toBe("Ya existe una persona con la cedula 1712345678");
+    expect(getEnrollmentErrorMessage(apiError("El alumno ya tiene una inscripción activa.", 400)))
+      .toBe("El alumno ya tiene una inscripción activa.");
+  });
+
+  it("restates the anti-enumeration duplicate answer with the next move, still recognised as a duplicate", () => {
+    const message = getEnrollmentErrorMessage(apiError(MENSAJE_IDENTIDAD_DUPLICADA, 409));
+    expect(message).toBe(
+      "Ya existe una cuenta registrada con la cédula o el correo que ingresó. Si es suya, inicie sesión; si no, revise que los datos estén bien escritos.",
+    );
+    expect(isDuplicateIdentityError(message)).toBe(true);
   });
 
   it("names the email field for an identifiable backend 422", () => {
     const error = apiError("No se pudo completar la inscripción.", 422, ["body", "credenciales_alumno", "correo"]);
-    expect(getEnrollmentErrorMessage(error)).toBe("Revise el correo electrónico e intente nuevamente.");
+    expect(getEnrollmentErrorMessage(error)).toBe("El servidor no aceptó el correo electrónico. Corríjalo en el paso «Datos del estudiante» e intente de nuevo.");
   });
 
   it("names the representative email field for an identifiable backend 422", () => {
     const error = apiError("No se pudo completar la inscripción.", 422, ["body", "representante", "correo"]);
-    expect(getEnrollmentErrorMessage(error)).toBe("Revise el correo electrónico del representante e intente nuevamente.");
+    expect(getEnrollmentErrorMessage(error)).toBe("El servidor no aceptó el correo electrónico del representante. Corríjalo en el paso «Datos del representante» e intente de nuevo.");
   });
 
   it("falls back to generic message for an unidentifiable 422", () => {
     expect(getEnrollmentErrorMessage(apiError("", 422)))
-      .toBe("No se pudo validar la inscripción. Revise sus datos e intente nuevamente.");
+      .toBe("No pudimos registrar la inscripción. Revise los datos de cada paso e intente de nuevo.");
   });
 
   it("returns the one rate-limit sentence for 429", () => {

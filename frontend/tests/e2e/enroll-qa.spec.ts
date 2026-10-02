@@ -52,6 +52,13 @@ import { birthDatePart, fillBirthDate } from "./helpers/birth-date";
 // vez que el mensaje cambie, exactamente lo que le pasó a este archivo.
 import { MENSAJE_IDENTIDAD_DUPLICADA } from "../../src/lib/duplicate-identity";
 
+/**
+ * What the visitor reads when the server answers with `MENSAJE_IDENTIDAD_DUPLICADA`:
+ * the wizard restates it with the next move (`DUPLICATE_IDENTITY_COPY` in
+ * `enroll-utils.ts`, not exported). Kept literal so a copy change shows up here.
+ */
+const WIZARD_DUPLICATE_COPY = "Ya existe una cuenta registrada con la cédula o el correo que ingresó.";
+
 const SHOT_DIR = process.env.ENROLL_QA_SHOT_DIR ?? "test-results/enroll-qa";
 
 /** Captura de página completa nombrada por el id del caso del informe. */
@@ -515,7 +522,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     await birthDatePart(page, F.fechaNacimiento, "dia").focus();
     await birthDatePart(page, F.fechaNacimiento, "dia").blur();
     await expect(fieldError(page, F.fechaNacimiento)).toHaveText(
-      "La fecha de nacimiento es obligatoria.",
+      "Indique la fecha de nacimiento del alumno.",
     );
     await shot(page, "P13", "fecha-vacia");
   });
@@ -523,7 +530,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
   test("P14 · un menor de edad no puede autoinscribirse", async ({ page }) => {
     await fillAndBlur(page, F.fechaNacimiento, isoYearsAgo(12));
     await expect(fieldError(page, F.fechaNacimiento)).toContainText(
-      "Los menores de edad no pueden autoinscribirse.",
+      "el alumno es menor de edad y no puede inscribirse por su cuenta.",
     );
     await expectStepBlocked(page);
     await shot(page, "P14", "menor-autoinscripcion");
@@ -544,7 +551,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     const iso = `${almost.getFullYear()}-${String(almost.getMonth() + 1).padStart(2, "0")}-${String(almost.getDate()).padStart(2, "0")}`;
     await fillAndBlur(page, F.fechaNacimiento, iso);
     await expect(fieldError(page, F.fechaNacimiento)).toContainText(
-      "Los menores de edad no pueden autoinscribirse.",
+      "el alumno es menor de edad y no puede inscribirse por su cuenta.",
     );
     await shot(page, "P16", "borde-17-anios-11-meses");
   });
@@ -552,7 +559,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
   test("P17 · correo sin arroba", async ({ page }) => {
     await fillAndBlur(page, F.correo, "juanexample.com");
     await expect(fieldError(page, F.correo)).toHaveText(
-      "El correo electrónico no es válido.",
+      "El correo electrónico no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.",
     );
     await shot(page, "P17", "correo-sin-arroba");
   });
@@ -560,7 +567,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
   test("P18 · correo sin dominio de primer nivel", async ({ page }) => {
     await fillAndBlur(page, F.correo, "juan@example");
     await expect(fieldError(page, F.correo)).toHaveText(
-      "El correo electrónico no es válido.",
+      "El correo electrónico no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.",
     );
     await shot(page, "P18", "correo-sin-tld");
   });
@@ -568,7 +575,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
   test("P19 · correo con espacios", async ({ page }) => {
     await fillAndBlur(page, F.correo, "juan perez@example.com");
     await expect(fieldError(page, F.correo)).toHaveText(
-      "El correo electrónico no es válido.",
+      "El correo electrónico no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.",
     );
     await shot(page, "P19", "correo-con-espacios");
   });
@@ -618,7 +625,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     await field(page, F.contrasenia).fill(VALID_CREDENTIALS.contrasenia);
     await fillAndBlur(page, F.contraseniaConfirmacion, "otra-clave-9");
     await expect(fieldError(page, F.contraseniaConfirmacion)).toHaveText(
-      "Las contraseñas no coinciden.",
+      "Las contraseñas no coinciden. Escriba la misma contraseña en los dos campos.",
     );
     await expectStepBlocked(page);
     await shot(page, "P24", "confirmacion-no-coincide");
@@ -696,7 +703,7 @@ test.describe("R · Datos del representante", () => {
   test("R03 · un representante de 17 años queda fuera del piso de edad", async ({ page }) => {
     await fillAndBlur(page, F.fechaNacimientoRepresentante, isoYearsAgo(17));
     await expect(fieldError(page, F.fechaNacimientoRepresentante)).toHaveText(
-      "El representante debe tener entre 18 y 95 años (calculado: 17).",
+      "El representante debe tener entre 18 y 95 años; la fecha ingresada corresponde a 17 años. Revise el año de nacimiento.",
     );
     await expectStepBlocked(page);
     await shot(page, "R03", "representante-menor");
@@ -709,7 +716,7 @@ test.describe("R · Datos del representante", () => {
     // quedando afuera.
     await fillAndBlur(page, F.fechaNacimientoRepresentante, isoYearsAgo(96));
     await expect(fieldError(page, F.fechaNacimientoRepresentante)).toHaveText(
-      "El representante debe tener entre 18 y 95 años (calculado: 96).",
+      "El representante debe tener entre 18 y 95 años; la fecha ingresada corresponde a 96 años. Revise el año de nacimiento.",
     );
     await shot(page, "R04", "representante-sobre-el-techo");
   });
@@ -733,7 +740,7 @@ test.describe("R · Datos del representante", () => {
     // contenía, y la regla de las palabras no admite abreviaturas. El número
     // sigue estando, en la rama que sí puede nombrarlo (R05, "entre 18 y 95").
     await expect(fieldError(page, F.fechaNacimientoRepresentante)).toHaveText(
-      "El representante debe ser mayor de edad.",
+      "Indique la fecha de nacimiento del representante.",
     );
     await shot(page, "R06", "fecha-representante-vacia");
   });
@@ -741,7 +748,7 @@ test.describe("R · Datos del representante", () => {
   test("R07 · correo del representante inválido", async ({ page }) => {
     await fillAndBlur(page, F.correoRepresentante, "maria@correo");
     await expect(fieldError(page, F.correoRepresentante)).toHaveText(
-      "El correo del representante no es válido.",
+      "El correo del representante no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.",
     );
     await shot(page, "R07", "correo-representante-invalido");
   });
@@ -794,7 +801,7 @@ test.describe("H · Salud y emergencia", () => {
     const select = field(page, F.tipoSangre);
     await select.focus();
     await select.blur();
-    await expect(page.getByText("El tipo de sangre es obligatorio.")).toBeVisible();
+    await expect(page.getByText("Seleccione el tipo de sangre del alumno.")).toBeVisible();
     await shot(page, "H02", "tipo-de-sangre-vacio");
   });
 
@@ -881,9 +888,9 @@ test.describe("S · Resumen, envío y errores del servidor", () => {
     await goToSummary(page);
     const confirmar = page.getByRole("button", { name: /confirmar inscripción/i });
     await expect(confirmar).toBeEnabled();
-    await expect(page.getByText(/marque la casilla de confirmación/i)).toHaveCount(0);
+    await expect(page.getByText(/marque la casilla de aceptación/i)).toHaveCount(0);
     await confirmar.click();
-    await expect(page.getByText(/marque la casilla de confirmación/i)).toBeVisible();
+    await expect(page.getByText(/marque la casilla de aceptación/i)).toBeVisible();
     await shot(page, "S01", "resumen-sin-confirmar");
   });
 
@@ -926,7 +933,7 @@ test.describe("S · Resumen, envío y errores del servidor", () => {
     await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: /confirmar inscripción/i }).click();
 
-    await expect(stepAlert(page)).toContainText(DUPLICADO_REAL);
+    await expect(stepAlert(page)).toContainText(WIZARD_DUPLICATE_COPY);
     // Y no se declara éxito por un error.
     await expect(page.getByRole("heading", { name: /inscripción completada/i })).toHaveCount(0);
     await shot(page, "S03", "identidad-duplicada-400");
@@ -1144,7 +1151,7 @@ test.describe("S07 · idempotencia de reintentos", () => {
     // candado.
     const toast = page.locator('[role="alert"].toast-error');
     await expect(toast).toHaveCount(0, { timeout: 1000 });
-    await expect(stepAlert(page)).toContainText(DUPLICADO);
+    await expect(stepAlert(page)).toContainText(WIZARD_DUPLICATE_COPY);
     await shot(page, "M01", "mensaje-duplicado-solo-en-alerta");
   });
 
@@ -1257,7 +1264,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     // antes leía la edad negativa como "menor de edad" sobre alguien que
     // todavía no nació.
     await expect(fieldError(page, F.fechaNacimiento)).toHaveText(
-      "La fecha de nacimiento no puede ser en el futuro.",
+      "La fecha de nacimiento no puede ser posterior a hoy. Revise el año.",
     );
     await expectStepBlocked(page);
     await shot(page, "G01", "fecha-futura-mensaje-correcto");
@@ -1275,7 +1282,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     // autoinscripción o dependiente: corre siempre (#224). Un alumno con
     // fecha de nacimiento del año que viene bloquea el paso, no lo pasa.
     await expect(fieldError(page, F.fechaNacimiento)).toHaveText(
-      "La fecha de nacimiento no puede ser en el futuro.",
+      "La fecha de nacimiento no puede ser posterior a hoy. Revise el año.",
     );
     await expectStepBlocked(page);
     await shot(page, "G02", "dependiente-fecha-futura-rechazada");
@@ -1293,7 +1300,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     // tipo de inscripción, así que la misma persona ya no puede ser rechazada
     // como representante y aceptada como jugador (ver también G04).
     await expect(fieldError(page, F.fechaNacimiento)).toContainText(
-      "La edad del alumno debe estar entre 5 y 95 años",
+      "La edad del alumno debe estar entre 3 y 95 años",
     );
     await expectStepBlocked(page);
     await shot(page, "G03", "techo-de-edad-jugador-120");
@@ -1306,7 +1313,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     await fillAndBlur(page, F.fechaNacimiento, "1750-03-15");
 
     await expect(fieldError(page, F.fechaNacimiento)).toContainText(
-      "La edad del alumno debe estar entre 5 y 95 años",
+      "La edad del alumno debe estar entre 3 y 95 años",
     );
     await expectStepBlocked(page);
     await shot(page, "G04", "jugador-anio-1750-rechazado");
@@ -1333,19 +1340,22 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     );
   });
 
-  test("G08 · un dependiente de 3 años ya no pasa: el piso de 5 años ahora se aplica", async ({ page }) => {
+  test("G08 · el piso de edad del alumno es 3 años: 3 pasa, 2 se rechaza", async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Representante");
     await fillValidChildStudent(page);
-    await fillAndBlur(page, F.fechaNacimiento, isoYearsAgo(3));
 
-    // La regla compartida trae el mismo piso que ya exigía el backend (#224):
-    // un dependiente de 3 años bloquea en el primer paso, no en el resumen.
+    // El piso bajó de 5 a 3 años: un dependiente de 3 años ya es admisible…
+    await fillAndBlur(page, F.fechaNacimiento, isoYearsAgo(3, 1, 1));
+    await expectFieldValid(page, F.fechaNacimiento);
+
+    // …y uno de 2 años bloquea en el primer paso, no en el resumen.
+    await fillAndBlur(page, F.fechaNacimiento, isoYearsAgo(2, 1, 1));
     await expect(fieldError(page, F.fechaNacimiento)).toContainText(
-      "La edad del alumno debe estar entre 5 y 95 años",
+      "La edad del alumno debe estar entre 3 y 95 años; la fecha ingresada corresponde a 2 años.",
     );
     await expectStepBlocked(page);
-    await shot(page, "G08", "dependiente-menor-de-5-rechazado");
+    await shot(page, "G08", "dependiente-menor-de-3-rechazado");
   });
 
   test("G07 · un nombre de solo espacios se rechaza como vacío, no como corto", async ({ page }) => {
@@ -1577,7 +1587,7 @@ test.describe("D · Borrador en sessionStorage tras un alta fallida", () => {
     });
     await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: /confirmar inscripción/i }).click();
-    await expect(stepAlert(page)).toContainText(DUPLICADO);
+    await expect(stepAlert(page)).toContainText(WIZARD_DUPLICATE_COPY);
 
     const draft = await readDraft(page);
     expect(draft).not.toBeNull();
