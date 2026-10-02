@@ -73,10 +73,10 @@ function scheduleFetchCalls(): unknown[] {
     String(input).includes("/api/schedules"));
 }
 
-/** The contact card's `Horario` row — label and value, whatever it says. */
+/** The contact sheet's `Horario` row — label and value, whatever it says. */
 function contactHoursRow(): HTMLElement {
-  const card = screen.getByRole("heading", { name: "Información de contacto" }).closest("aside");
-  return within(card as HTMLElement).getByText("Horario").closest("p") as HTMLElement;
+  const sheet = document.querySelector(".landing-contact") as HTMLElement;
+  return within(sheet).getByText("Horario").closest(".landing-contact-row") as HTMLElement;
 }
 
 /** The gallery section — the one the public navbar's "Galería" anchor names. */
@@ -269,7 +269,7 @@ describe("LandingPage", (): void => {
       // and the latest end of everything the API published, Saturday included.
       expect(contactHoursRow()).toHaveTextContent("Lun – Sáb · 08:00 – 21:15");
       // A settled row states hours; it is not a live region announcing them.
-      expect(contactHoursRow()).not.toHaveAttribute("role", "status");
+      expect(within(contactHoursRow()).queryByRole("status")).not.toBeInTheDocument();
     });
 
     it("asks the API for the catalog exactly once for the whole page", async (): Promise<void> => {
@@ -331,7 +331,7 @@ describe("LandingPage", (): void => {
       expect(within(section).getByRole("status")).toHaveTextContent("Aún no hay horarios publicados.");
       // The row keeps its label and becomes a live region, so the visitor is
       // told what happened instead of reading a range nobody published.
-      expect(contactHoursRow()).toHaveAttribute("role", "status");
+      expect(within(contactHoursRow()).getByRole("status")).toHaveTextContent(/Aún no hay horarios|No se pudieron/);
       expect(contactHoursRow()).toHaveTextContent("Horario");
       expect(within(section).queryByRole("tablist")).not.toBeInTheDocument();
     });
@@ -352,7 +352,7 @@ describe("LandingPage", (): void => {
       });
       const section = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section") as HTMLElement;
       expect(within(section).getByRole("status")).toHaveTextContent("No se pudieron cargar los horarios.");
-      expect(contactHoursRow()).toHaveAttribute("role", "status");
+      expect(within(contactHoursRow()).getByRole("status")).toHaveTextContent(/Aún no hay horarios|No se pudieron/);
     });
 
     it("invents no hours when the catalog arrives malformed", async (): Promise<void> => {
@@ -378,7 +378,7 @@ describe("LandingPage", (): void => {
     });
   });
 
-  it("renders the arrival inset photo", (): void => {
+  it("renders the arrival photo beside the map, ahead of the contact sheet", (): void => {
     render(<LandingPage />);
 
     const arrival = screen.getByRole("img", { name: /entrada de cata club/i });
@@ -387,6 +387,10 @@ describe("LandingPage", (): void => {
     expect(arrival).toHaveAttribute("height", "1200");
     expect(arrival).toHaveAttribute("loading", "lazy");
     expect(screen.getByText("Así se ve al llegar")).toBeInTheDocument();
+    const visit = arrival.closest(".landing-visit");
+    expect(visit?.firstElementChild).toBe(arrival.closest(".landing-arrival"));
+    expect(visit?.querySelector(".landing-map-stage")).not.toBeNull();
+    expect(visit?.nextElementSibling).toBe(document.querySelector(".landing-contact"));
   });
 
   it("renders Mission and Vision as two typographic pillars, each with its own photo (v2 redesign)", (): void => {
@@ -473,19 +477,26 @@ describe("LandingPage", (): void => {
     expect(competitivoSecond[0]).toHaveTextContent("También 18:00–20:00 los sábado.");
   });
 
-  it("orders the main content Hero → Ticker → Stats → Horarios → rest", async (): Promise<void> => {
+  it("orders the main content Hero → Ticker → Nosotros → Valores → Stats → Galería → Horarios → CTA → Visítenos", async (): Promise<void> => {
     const { container } = render(<LandingPage />);
     const main = container.querySelector("main");
     await waitFor((): void => { expect(container.querySelector(".landing-schedule-layout")).toBeInTheDocument(); });
     expect(main).not.toBeNull();
-    const sections = Array.from(main?.querySelectorAll("section, header") ?? []);
+    const sections = Array.from(main?.children ?? []);
     expect(sections[0]?.getAttribute("id")).toBe("inicio");
-    // The moving black ticker and the stats block ("Desde 2013" / "Desde el
-    // 10 de octubre") come BEFORE Horarios; the schedule is the third
-    // content block.
+    // Proposal C: who we are (Nosotros, Valores), the proof (Stats, Galería),
+    // then training, the join CTA and the visit — see `.local-preview/plan-C.md`.
     expect(sections[1]?.classList.contains("landing-credentials-ticker")).toBe(true);
-    expect(sections[2]?.classList.contains("landing-stats")).toBe(true);
-    expect(sections[3]?.querySelector(".landing-schedule-layout")).not.toBeNull();
+    expect(sections.slice(2).map((section): string => section.id || (section.classList.contains("landing-motto") ? "motto" : "stats"))).toEqual([
+      "nosotros",
+      "valores",
+      "stats",
+      "galeria",
+      "horarios",
+      "motto",
+      "contacto",
+    ]);
+    expect(sections[6]?.querySelector(".landing-schedule-layout")).not.toBeNull();
   });
 
   /**
@@ -591,7 +602,7 @@ describe("LandingPage", (): void => {
 
     const hero = document.querySelector(".landing-hero");
     expect(hero).not.toBeNull();
-    const heroPrimary = within(hero as HTMLElement).getByRole("link", { name: /inscríbete/i });
+    const heroPrimary = within(hero as HTMLElement).getByRole("link", { name: /inscríbase/i });
     expect(heroPrimary).toHaveAttribute("href", "/student/enroll");
     expect(within(hero as HTMLElement).getByRole("link", { name: "Ver horarios" })).toHaveAttribute("href", "#horarios");
   });
@@ -828,7 +839,7 @@ describe("LandingPage", (): void => {
     const mottoCta = within(motto as HTMLElement).getByRole("link");
     expect(mottoCta).toHaveAttribute("data-motto-cta", "true");
     expect(mottoCta).toHaveAttribute("href", "/student/enroll");
-    expect(mottoCta).toHaveTextContent("Inscríbete ya");
+    expect(mottoCta).toHaveTextContent("Inscríbase ya");
   });
 
   it("embeds the official crest inside the motto paddle as pure decoration", (): void => {
@@ -846,32 +857,29 @@ describe("LandingPage", (): void => {
 
     // Decorative only: the club name must not be duplicated for screen
     // readers inside the motto, and the CTA's accessible name stays exactly
-    // "Inscríbete ya" — no extra noise leaked into the accessible tree.
+    // "Inscríbase ya" — no extra noise leaked into the accessible tree.
     expect(within(motto).queryByText(/cata club/i)).toBeNull();
-    expect(within(motto).getByRole("link", { name: "Inscríbete ya" })).toHaveAttribute("data-motto-cta", "true");
+    expect(within(motto).getByRole("link", { name: "Inscríbase ya" })).toHaveAttribute("data-motto-cta", "true");
   });
 
   it("turns every WhatsApp contact number into a wa.me link", (): void => {
     render(<LandingPage />);
 
     landingConfig.contact.whatsapp.forEach((number): void => {
-      expect(screen.getByRole("link", { name: number })).toHaveAttribute("href", toWhatsAppLink(number));
+      expect(within(document.querySelector(".landing-contact") as HTMLElement).getByRole("link", { name: number })).toHaveAttribute("href", toWhatsAppLink(number));
     });
   });
 
-  it("closes the contact card with a primary WhatsApp CTA and demotes the directions link", (): void => {
+  it("gives the WhatsApp row its own action, and the address row the directions", (): void => {
     render(<LandingPage />);
 
-    const contact = document.querySelector(".landing-contact");
-    expect(contact).not.toBeNull();
-
-    const whatsappCta = within(contact as HTMLElement).getByRole("link", { name: /escríbenos por whatsapp/i });
+    const contact = document.querySelector(".landing-contact") as HTMLElement;
+    const whatsappCta = within(contact).getByRole("link", { name: /escríbanos por whatsapp/i });
     expect(whatsappCta).toHaveAttribute("href", toWhatsAppLink(landingConfig.contact.whatsapp[0]));
-    expect(whatsappCta.className).toContain("landing-button");
-    expect(contact?.lastElementChild).toBe(whatsappCta);
+    expect(whatsappCta.closest(".landing-contact-row")).toHaveTextContent("WhatsApp");
 
-    const directions = within(contact as HTMLElement).getByRole("link", { name: /cómo llegar/i });
-    expect(directions.className).toContain("landing-button-outline");
+    const directions = within(contact).getByRole("link", { name: /cómo llegar/i });
+    expect(directions.closest(".landing-contact-row")).toHaveTextContent("Dirección");
   });
 
   it("points the directions link at the shared club coordinate", (): void => {
@@ -1170,6 +1178,111 @@ describe("LandingPage", (): void => {
     holds.stop();
   });
 
+  /**
+   * QA regression (landing gallery "se queda parada"): a mouse or touch click
+   * on a slide also gives it DOM focus, and that focus used to count as a
+   * keyboard read that only a blur could release — so after the visitor
+   * stopped interacting the loop stayed frozen until they clicked elsewhere.
+   * Pointer-driven focus must not hold, and a tap pin must lapse by itself.
+   */
+  it("resumes the loop on its own once a pointer interaction ends", async (): Promise<void> => {
+    publishGallery(TWO_PHOTOS);
+    render(<LandingPage />);
+
+    await within(gallerySection()).findAllByRole("img");
+    const figure = galleryFigures()[0];
+    const track = document.querySelector("[data-carousel]") as HTMLElement;
+    const holds = trackHolds();
+
+    vi.useFakeTimers();
+    try {
+      // What a real click does: pointer down, focus lands on the slide, click.
+      fireEvent.mouseOver(track);
+      fireEvent.pointerDown(figure);
+      figure.focus();
+      fireEvent.click(figure);
+      expect(holds.held.at(-1)).toBe(true);
+
+      // The pointer leaves; nothing else is touched or clicked.
+      fireEvent.mouseOut(track);
+      await act(async (): Promise<void> => { await vi.advanceTimersByTimeAsync(GALLERY_BROWSE_HOLD_MS); });
+
+      expect(document.activeElement).toBe(figure);
+      expect(figure).not.toHaveClass("is-open");
+      expect(holds.held.at(-1)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+      holds.stop();
+    }
+  });
+
+  it("still holds for as long as keyboard focus rests on a slide", async (): Promise<void> => {
+    publishGallery(TWO_PHOTOS);
+    render(<LandingPage />);
+
+    await within(gallerySection()).findAllByRole("img");
+    const figure = galleryFigures()[0];
+    const next = within(gallerySection()).getByRole("button", { name: "Foto siguiente" });
+    const holds = trackHolds();
+
+    vi.useFakeTimers();
+    try {
+      // Tab onto the slide, as a keyboard user does: focus arrives with no
+      // pointer press before it.
+      figure.focus();
+      await act(async (): Promise<void> => { await vi.advanceTimersByTimeAsync(GALLERY_BROWSE_HOLD_MS * 3); });
+      expect(holds.held.at(-1)).toBe(true);
+
+      // Tab onward to the next focusable element outside the strip: real
+      // focus movement, so the strip sees a genuine focusout.
+      next.focus();
+      expect(document.activeElement).toBe(next);
+      expect(holds.held.at(-1)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+      holds.stop();
+    }
+  });
+
+  /**
+   * Touch order: a tap fires pointerdown, pointerup, lostpointercapture and
+   * only THEN the compatibility mousedown that moves focus. That focus is the
+   * tap's, not a reader's, so it must not hold the loop.
+   */
+  it("does not hold the loop for the focus a touch tap delivers after pointerup", async (): Promise<void> => {
+    publishGallery(TWO_PHOTOS);
+    render(<LandingPage />);
+
+    await within(gallerySection()).findAllByRole("img");
+    const figure = galleryFigures()[0];
+    const holds = trackHolds();
+
+    fireEvent.pointerDown(figure);
+    fireEvent.pointerUp(figure);
+    fireEvent.lostPointerCapture(figure);
+    figure.focus();
+
+    expect(holds.held.at(-1)).not.toBe(true);
+    holds.stop();
+  });
+
+  it("holds again for keyboard focus once a key is pressed after a pointer interaction", async (): Promise<void> => {
+    publishGallery(TWO_PHOTOS);
+    render(<LandingPage />);
+
+    await within(gallerySection()).findAllByRole("img");
+    const [first, second] = galleryFigures();
+    const holds = trackHolds();
+
+    fireEvent.pointerDown(first);
+    fireEvent.pointerUp(first);
+    fireEvent.keyDown(document.body, { key: "Tab" });
+    second.focus();
+
+    expect(holds.held.at(-1)).toBe(true);
+    holds.stop();
+  });
+
   it("browses with the arrow keys from wherever focus sits inside the strip", async (): Promise<void> => {
     publishGallery(TWO_PHOTOS);
     render(<LandingPage />);
@@ -1265,9 +1378,9 @@ describe("LandingPage", (): void => {
     const links = Array.from(navLinks.querySelectorAll("a"));
     expect(links.map((link): [string | null, string | null] => [link.textContent, link.getAttribute("href")])).toEqual([
       ["Inicio", "#inicio"],
-      ["Horarios", "#horarios"],
       ["Valores", "#valores"],
       ["Galería", "#galeria"],
+      ["Horarios", "#horarios"],
       ["Contacto", "#contacto"],
     ]);
   });
@@ -1565,8 +1678,8 @@ describe("LandingPage", (): void => {
        * fetched. The label and the status sit adjacent in the markup, so
        * neither can be satisfied without the other.
        */
-      expect(html).toContain("<strong>Horario</strong><span>Cargando horarios…</span>");
-      expect(html).not.toMatch(/<strong>Horario<\/strong><span>\s*<\/span>/);
+      expect(html).toContain("<dt>Horario</dt><dd role=\"status\">Cargando horarios…</dd>");
+      expect(html).not.toMatch(/<dt>Horario<\/dt><dd[^>]*>\s*<\/dd>/);
       /*
        * The gallery's entries live behind GET /api/galeria, and that fetch is
        * an effect — server rendering never runs it. The static output carries

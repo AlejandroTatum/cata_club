@@ -97,9 +97,9 @@ vi.mock("@/lib/useNotificaciones", (): { useNotificaciones: () => unknown } => (
  */
 const APPROVED_NAV: ReadonlyArray<{ label: string; section: string }> = [
   { label: "Inicio", section: "inicio" },
-  { label: "Horarios", section: "horarios" },
   { label: "Valores", section: "valores" },
   { label: "Galería", section: "galeria" },
+  { label: "Horarios", section: "horarios" },
   { label: "Contacto", section: "contacto" },
 ];
 

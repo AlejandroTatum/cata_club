@@ -122,7 +122,7 @@ describe("Mission/Vision pillars (v2 redesign)", (): void => {
 
     const pillarRule = ruleAt(css, ".landing-pillar");
     expect(pillarRule).toContain("display: grid");
-    expect(pillarRule).toContain("grid-template-columns: 1fr 1fr");
+    expect(pillarRule).toContain("grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)");
 
     // `.landing-pillar-photo` must not carry the old stacked layout's
     // `margin-top` outside the mobile block — that spacing only makes sense

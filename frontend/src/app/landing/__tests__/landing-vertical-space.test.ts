@@ -127,10 +127,11 @@ describe("Valores tablero redesign", (): void => {
 // edit cannot quietly split the rule in two and let the columns drift apart.
 // ---------------------------------------------------------------------------
 describe("Mission/Vision pillar photos", (): void => {
-  it("forces both photos to one shared square ratio, cropped from the bottom", (): void => {
+  it("keeps both photos square beside their copy, cropped from the bottom", (): void => {
     const css = landingCss();
     const rule = ruleAt(css, ".landing-pillar-photo");
     expect(rule).toContain("aspect-ratio: 1 / 1");
+    expect(rule).toContain("height: auto");
     expect(rule).toContain("object-fit: cover");
     // Crops toward the top of the frame (i.e. trims the bottom) rather than
     // centring: vision-coaching.jpeg's two faces sit close enough to its top
@@ -147,5 +148,7 @@ describe("Mission/Vision pillar photos", (): void => {
     // cap themselves to, so the photo never outgrows the text beside it.
     expect(maxWidth).toBeGreaterThanOrEqual(330);
     expect(maxWidth).toBeLessThanOrEqual(375);
+    // The stacked mobile pillar crops to a landscape frame so two photos do not add a screen of height.
+    expect(mobileRule).toContain("aspect-ratio: 3 / 2");
   });
 });

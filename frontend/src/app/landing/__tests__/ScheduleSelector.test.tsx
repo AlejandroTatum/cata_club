@@ -60,6 +60,13 @@ function litBallLabels(): string[] {
 describe("ScheduleSelector", (): void => {
   afterEach(resetLandingTestEnvironment);
 
+  it("shows the category content alone, with no photo in the card", (): void => {
+    renderCard();
+    const card = document.querySelector(".landing-schedule-card") as HTMLElement;
+    expect(card.querySelector("img, figure")).toBeNull();
+    expect(card.querySelector(".landing-schedule-copy")).not.toBeNull();
+  });
+
   it("lights L, M, X, J, V for a category running Monday to Friday", (): void => {
     renderCard();
     expect(litBallLabels()).toEqual(["L", "M", "X", "J", "V"]);
