@@ -16,6 +16,7 @@ import os
 from datetime import date as _date_cls
 import pytest
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 from fastapi.testclient import TestClient
@@ -59,6 +60,54 @@ if not TEST_DATABASE_URL:
         "postgresql+psycopg://usuario:password@localhost:5436/cataclub_test "
         "(ver docker-compose.yml). Ya no existe una rama SQLite de respaldo."
     )
+
+
+def url_de_worker(url_suite: str, worker_id: str | None) -> str:
+    """URL de la base de ESTE proceso de pytest.
+
+    Sin xdist (`worker_id` vacío) devuelve `url_suite` intacta. Bajo xdist
+    cada worker (`gw0`, `gw1`, ...) recibe su propia base
+    (`cataclub_test_gw0`): `esquema_migrado` hace `DROP SCHEMA public
+    CASCADE`, y dos workers sobre la misma base se destruirían el esquema."""
+    if not worker_id:
+        return url_suite
+    url = make_url(url_suite)
+    return url.set(database=f"{url.database}_{worker_id}").render_as_string(
+        hide_password=False
+    )
+
+
+def _crear_bd_del_worker(url_suite: str, url_worker: str) -> None:
+    """Recrea la base del worker desde la base de mantenimiento `postgres`
+    (`CREATE DATABASE` no corre dentro de una transacción).
+
+    Se recrea en vez de reutilizar a propósito: arrancar de una base vacía
+    hace trivial el `DROP SCHEMA public CASCADE` de `esquema_migrado`. Sobre
+    una base ya migrada, N workers haciéndolo a la vez agotan la tabla de
+    locks compartida del servidor (`out of shared memory`)."""
+    nombre = make_url(url_worker).database
+    mantenimiento = create_engine(
+        make_url(url_suite).set(database="postgres"),
+        poolclass=NullPool, isolation_level="AUTOCOMMIT",
+    )
+    try:
+        with mantenimiento.connect() as conexion:
+            conexion.execute(text(f'DROP DATABASE IF EXISTS "{nombre}" WITH (FORCE)'))
+            conexion.execute(text(f'CREATE DATABASE "{nombre}"'))
+    finally:
+        mantenimiento.dispose()
+
+
+# Bajo pytest-xdist cada worker usa su propia base (ver `url_de_worker`). Se
+# resuelve ACÁ, antes de los imports de `app.*`, y se reescribe el env var:
+# `settings`, Alembic y los tests que leen `TEST_DATABASE_URL` directo ven la
+# URL del worker sin tocar nada más. Serial: `TEST_DATABASE_URL` sin cambios.
+_WORKER_XDIST = os.environ.get("PYTEST_XDIST_WORKER")
+if _WORKER_XDIST:
+    _URL_SUITE = TEST_DATABASE_URL
+    TEST_DATABASE_URL = url_de_worker(_URL_SUITE, _WORKER_XDIST)
+    _crear_bd_del_worker(_URL_SUITE, TEST_DATABASE_URL)
+    os.environ["TEST_DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 from app.dominio.modelos import Persona, Usuario, Rol

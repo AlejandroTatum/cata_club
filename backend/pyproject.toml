@@ -46,6 +46,7 @@ dev = [
     # `uv` no tiene subcomando de audit propio; se instala como cualquier
     # herramienta de dev, mismo patron que ruff e import-linter.
     "pip-audit>=2.7.0",
+    "pytest-xdist>=3.6.0",
 ]
 
 [tool.pytest.ini_options]
