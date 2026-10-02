@@ -269,3 +269,13 @@ proceso; el scraper de Prometheus/Grafana es exactamente el alcance de #1314
 y NO forma parte de este harness. El runner ya hace el mínimo necesario:
 scrapea antes y después de cada corrida y vuelca los deltas en
 `server-metrics.json` (ver «Sección server-side»).
+
+## Interrupciones, primer arranque y secretos (follow-up #1314)
+
+- `Ctrl-C`/`SIGTERM` al runner detiene k6 y el monitor (sin huérfanos), escribe
+  la evidencia disponible (`run.json`) y sale con 130/143.
+- El monitor espera el `k6.pid` hasta `LOAD_PID_WAIT_SECONDS` (default 900 s)
+  para tolerar un `docker pull` lento de la imagen de k6 en el primer arranque.
+- `LOAD_THINK_TIME_MIN`/`LOAD_THINK_TIME_MAX` llegan a k6 a través del runner.
+- `summary.json` nunca incluye los datos de `setup()` (el pool de credenciales).
+- `make load-pool` se niega a escribir a través de un symlink y crea el archivo con 0600.

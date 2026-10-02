@@ -103,7 +103,7 @@ const RAIL_GROUPS: readonly {
   {
     heading: "Sitio y soporte",
     roles: ["admin"],
-    hrefs: ["/galeria", "/sponsors", "/admin/reportes-error"],
+    hrefs: ["/galeria", "/sponsors", "/admin/reportes-error", "/admin/actividad"],
   },
   // Same split for the trainer: what they do today, versus what they look up.
   { heading: "Hoy", roles: ["trainer"], hrefs: ["/trainer", "/trainer/attendance"] },
@@ -156,6 +156,10 @@ function sectionsForRole(role: UserRole, studentIsAdult: boolean): NavLinkDef[] 
         row("/galeria"),
         row("/sponsors"),
         row("/admin/reportes-error"),
+        // Read-only follow-up on how the club uses the app and whether it is
+        // healthy: the companion of the error inbox, not a daily task, so it
+        // sits with "Sitio y soporte" rather than in "Operación".
+        row("/admin/actividad"),
       );
       break;
     case "trainer":

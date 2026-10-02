@@ -81,6 +81,41 @@ puerta adentro de Compose (mismo criterio que las dos sondas de arriba, ver
 que lo scrapee de verdad queda fuera de alcance: se decide después de que la
 serie exista.
 
+## Snapshot del host para «Actividad del club» (issue #1314)
+
+La vista «Métricas avanzadas» muestra CPU, RAM, swap, disco y memoria por
+contenedor. Eso solo se ve desde el host, así que un cron del HOST escribe un
+JSON cada minuto y el `celery-worker` lo lee por un bind mount de solo lectura
+(ver [`metricas.md`](metricas.md#actividad-del-club-colector-endpoints-y-retención-issue-1314)).
+No requiere ningún contenedor nuevo ni montar el socket de Docker.
+
+Instalación única en el host (no la hace `deploy.sh install-cron`, que no toca
+estas líneas pero tampoco las agrega):
+
+```
+sudo install -d -m 755 -o "$(id -un)" -g "$(id -gn)" /var/lib/cata-club/metricas
+(crontab -l 2>/dev/null | grep -v 'host-snapshot.sh' || true
+ printf '* * * * * cd %s && ./scripts/metrics/host-snapshot.sh >> /var/log/cata-club-host-snapshot.log 2>&1\n' "$STACK_DIR"
+) | crontab -
+```
+
+(`STACK_DIR` es el checkout que usa el resto de los crons; el log debe poder
+escribirlo el usuario del cron, igual que el del backup.) El script usa
+`docker stats --no-stream` y `/proc`, y reemplaza el archivo de forma atómica.
+
+Verificación:
+
+```
+cat /var/lib/cata-club/metricas/host.json     # escrito hace < 1 min
+docker compose exec celery-worker cat /host-metricas/host.json
+```
+
+Si el cron se cae, a los 3 minutos el archivo se considera viejo y la pantalla
+muestra el host como no disponible; no rompe nada más. El script sale con 2 y NO
+escribe si no puede leer `/proc`, para que el archivo envejezca en vez de mentir.
+El directorio lo debe crear el operador: si no existe, Compose lo crea como root
+vacío y el colector reporta el host como no disponible.
+
 ## Logs de contenedores
 
 `docker-compose.prod.yml` declara `logging.driver: journald` en los ocho

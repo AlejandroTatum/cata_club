@@ -44,6 +44,12 @@ export interface StackedBarsProps {
   /** What the layers count, for the tooltip total ("registros"). */
   unit?: string;
   heightClass?: string;
+  /**
+   * From `lg` up, let the plot take whatever height its card has left (never
+   * less than `heightClass`), so the legend and the table stay at the foot of a
+   * card stretched beside a taller neighbour. Below `lg` the height is fixed.
+   */
+  fill?: boolean;
   className?: string;
 }
 
@@ -57,6 +63,7 @@ export default function StackedBars({
   periodLabel,
   unit = "registros",
   heightClass = "h-44",
+  fill = false,
   className,
 }: StackedBarsProps): ReactElement {
   const { active, show, hide } = useActiveIndex();
@@ -81,9 +88,9 @@ export default function StackedBars({
   };
 
   return (
-    <div data-testid="stacked-bars" className={cn("flex flex-col gap-3", className)}>
-      <div role="group" aria-label={`${ariaLabel}. Use los botones de estado para mostrar u ocultar capas.`} className="flex flex-col gap-1.5">
-        <div className={cn("relative", heightClass)}>
+    <div data-testid="stacked-bars" className={cn("flex flex-col gap-3", fill && "lg:flex-1", className)}>
+      <div role="group" aria-label={`${ariaLabel}. Use los botones de estado para mostrar u ocultar capas.`} className={cn("flex flex-col gap-1.5", fill && "lg:flex-1")}>
+        <div className={cn("relative", heightClass, fill && "lg:h-auto lg:min-h-44 lg:flex-1")}>
           <svg
             aria-hidden="true"
             viewBox={`0 0 100 ${VIEW_HEIGHT}`}
