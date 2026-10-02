@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
+from prometheus_client import Counter
 from prometheus_client.core import GaugeMetricFamily
 from prometheus_client.registry import Collector
 from sqlalchemy import func, select, text
@@ -40,6 +41,34 @@ ESTADO_PENDIENTE = "PENDIENTE"
 # corto porque el costo de fallar rápido (un `scrape_ok 0`) es minúsculo
 # comparado con el de arrastrar el pool entero a una espera sin límite.
 TIMEOUT_SCRAPE_SENTENCIA_MS = 2000
+
+# Buckets (segundos) del histograma de latencia POR RUTA
+# (`http_request_duration_seconds{handler,method}`), issue #1314. El default de
+# la librería es (0.1, 0.5, 1): con tres bordes, el p95 de casi cualquier ruta
+# cae entre dos de ellos y "Endpoints más lentos" no distingue 120 ms de
+# 450 ms. Once bordes cubren de 25 ms a 10 s; los nombres de las series no
+# cambian. Costo: por cada par (handler, método) con tráfico pasan de 3+1 a
+# 11+1 series `_bucket` (ver `docs/operations/metricas.md`).
+BUCKETS_LATENCIA_POR_RUTA = (0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2.5, 5, 10)
+
+# Logins resueltos, SIN etiquetas de identidad: solo el resultado. El colector
+# de métricas (`colector_metricas.py`) guarda su delta por minuto. "ok" cuenta
+# credenciales verificadas y sesión abierta; "fallido" cualquier rechazo del
+# login (credenciales, cuenta suspendida, persona de baja).
+_LOGINS = Counter(
+    "cata_login",
+    "Logins resueltos por resultado (ok/fallido).",
+    ["resultado"],
+)
+# Las dos series existen desde el arranque, en 0: un `rate()` o un delta sobre
+# una serie que aparece recién con el primer evento pierde ese primer evento.
+_LOGINS.labels("ok")
+_LOGINS.labels("fallido")
+
+
+def contar_login(ok: bool) -> None:
+    _LOGINS.labels("ok" if ok else "fallido").inc()
+
 
 # (nombre real de tabla, clase ORM). El nombre expuesto en la etiqueta
 # `tabla` es el `__tablename__`, no un alias: tiene que coincidir 1:1 con lo

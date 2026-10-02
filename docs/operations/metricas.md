@@ -52,11 +52,28 @@ coinciden):
 
 - `http_request_duration_seconds_*` (`_bucket`, `_sum`, `_count`, `_created`)
   -- histograma de latencia.
+  Los buckets por ruta (`handler`, `method`) son once, en segundos:
+  `0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2.5, 5, 10` (+ `+Inf`),
+  `BUCKETS_LATENCIA_POR_RUTA` en `backend/app/infraestructura/metricas.py`
+  (issue #1314). El default de la librería eran tres (`0.1, 0.5, 1`), con los
+  que el p95 de casi cualquier ruta caía entre dos bordes. Costo: por cada par
+  (ruta, método) con tráfico, de 7 a 15 series (`_bucket` x12, `_sum`,
+  `_count`, `_created`); con las 138 operaciones del OpenAPI el techo teórico
+  pasa de 966 a 2070 series, y en la práctica solo cuentan las rutas que
+  recibieron una petición. La serie agregada `http_request_duration_highr_seconds`
+  no cambia.
 - `http_requests_total` -- conteo de requests por handler y status.
 - `http_requests_inprogress` -- requests siendo atendidos en este momento.
   El gauge de in-flight es opt-in en la librería
   (`should_instrument_requests_inprogress=True` en `backend/main.py`); sin
   eso, la serie ni siquiera aparece en el scrape.
+
+### Logins (contador propio)
+
+`cata_login_total{resultado="ok"|"fallido"}` cuenta los logins resueltos por
+`AuthServicio.login`. La única etiqueta es el resultado: nunca un correo, un
+usuario ni una IP. Las dos series existen desde el arranque, en 0. El colector
+de "Actividad del club" (abajo) guarda su delta por minuto.
 
 ### Profundidad de las colas outbox (colector propio)
 
@@ -116,3 +133,84 @@ bien, es más probable una consulta lenta específica de las tablas outbox.
   superó el `statement_timeout` de 2000 ms del scrape (ver la sección
   anterior). No es solo "la base está abajo"; cruzar contra `/health/ready`
   para distinguir cuál de las dos causas es.
+
+## Actividad del club: colector, endpoints y retención (issue #1314)
+
+La pantalla de administración «Actividad del club» tiene dos vistas, y las dos
+leen de la base -- nunca de `/metrics` en vivo ni de Docker:
+
+- **Resumen** (`GET /api/v1/actividad/resumen?rango=24h|7d|30d`): personas que
+  ingresaron por rol, asistencias, pagos, inscripciones y el estado del sistema.
+- **Métricas avanzadas** (`GET /api/v1/actividad/avanzadas?rango=1h|24h|7d`):
+  servicio (req/min, % de 5xx y 4xx, p50/p95/p99, endpoints más lentos), host,
+  runtime (memoria por contenedor, conexiones de Postgres, Redis, colas) y
+  usuarios (conectados ahora, logins, sesiones por rol).
+
+Ambos son **solo ADMINISTRADOR**, exigido en el backend con `GestorPermisos`
+(sin sesión 401, otro rol 403); cualquier administrador ve la vista avanzada.
+Solo agregados: ni correos, ni ids, ni IPs, ni hostnames, ni versiones. Las
+rutas son plantillas (`/api/v1/personas/{persona_id}`), nunca URLs concretas.
+`/metrics` sigue sin ruta en Caddy ni en el BFF.
+
+### De dónde sale cada cifra
+
+| Cifra | Fuente |
+| --- | --- |
+| Personas que ingresaron | `actividad_usuario` (usuario, día del club, franja de 2 h), escrita en login, refresh y la primera petición autenticada de cada franja. Una persona cuenta una vez por columna; el KPI cuenta personas distintas. El administrador no entra en la gráfica. |
+| Asistencias | `asistencia` con estado `PRESENTE`/`ATRASADO`, por `fecha_registro` (cuándo se anotó; `fecha_entrenamiento` es solo un día). |
+| Pagos | `pago` de cualquier estado, por `fecha_registro` (comprobantes recibidos). |
+| Inscripciones nuevas | altas de `persona`, por `fecha_registro`. |
+| Estado del sistema | última `metrica_instantanea` y la ventana de los últimos 15 min, con los umbrales de `activity-utils.ts`. Sin instantáneas: `unknown`. Instantánea de más de 5 min: `app` en `bad`, el resto `unknown`. |
+| Conectados ahora | sorted set de Redis (`presencia:*`, score = último instante visto, ventana de 5 min). |
+
+Día y franja son del club (`America/Guayaquil`), no de UTC.
+
+### Conectados ahora: por qué Redis
+
+La dependencia de autenticación corre en cada petición. Escribir "visto por
+última vez" en la base sería una escritura caliente sobre `usuario` en el
+camino de todo; Redis ya está en el stack y `ZCOUNT` responde en O(log n). Una
+memoria local por proceso lo reduce a una ida y vuelta (un pipeline) por
+usuario y minuto; el resto de las peticiones es una consulta a un dict. El mismo
+pipeline decide con `SET NX` si es la primera petición del usuario en la franja,
+y solo entonces se escribe `actividad_usuario` (como mucho 12 filas por usuario
+y día, `ON CONFLICT DO NOTHING`). Si Redis no responde, nada falla: la puerta de
+franja cae a la memoria local y "conectados" queda sin dato.
+
+### Colector (celery-beat, cada minuto)
+
+`app.infraestructura.tareas.metricas_tareas.capturar_metricas` corre en el
+`celery-worker`: un scrape HTTP de `http://backend:8000/metrics` por la red de
+Compose y un insert en `metrica_instantanea`, más `pg_stat_activity`, `INFO
+memory` y `LLEN celery` de Redis y la presencia. Guarda DELTAS contra el scrape
+anterior (que recuerda en Redis, clave `metricas:estado_previo`); un reinicio del
+backend se detecta porque un acumulado baja. Sin lectura previa las columnas de
+delta quedan en NULL, no en 0. Si el scrape falla no se inserta nada: la
+ausencia de filas es lo que el resumen lee como «sin datos recientes».
+
+La consulta a Postgres usa el mismo `statement_timeout` de 2000 ms que los
+gauges de outbox (#1309/#1313). Las sondas (`/health`, `/health/ready`,
+`/metrics`, `/`) no cuentan como peticiones. El p50/p95/p99 sale de sumar los
+buckets por ruta de todas las instantáneas del rango (no de promediar
+percentiles); el p95 que cae en el bucket `+Inf` se acota a 10 s.
+
+Una fila pesa ~2 KB: columnas escalares más tres JSONB pequeños (buckets de
+latencia, las 15 rutas con más tráfico del minuto, memoria por contenedor).
+
+### Retención
+
+`purgar_metricas_y_actividad` (03:20 del club, diario): instantáneas de más de
+7 días y `actividad_usuario` de más de 35 días (el rango de 30 días del Resumen
+más el día en curso).
+
+### Snapshot del host
+
+Los contenedores no ven el host y el socket de Docker no se monta en ninguno
+(solo `autoheal`, ver `docker-compose.prod.yml`). En su lugar un cron del HOST
+escribe un JSON cada minuto (`scripts/metrics/host-snapshot.sh`: CPU %, RAM,
+swap, disco %, memoria por contenedor contra su `mem_limit`, con el nombre del
+servicio de Compose) en `/var/lib/cata-club/metricas/host.json`, que
+`celery-worker` monta de solo lectura en `/host-metricas`. Si el archivo falta,
+está corrupto o tiene más de 3 minutos, el colector guarda el host como no
+disponible (columnas NULL) y el endpoint devuelve `host: null`. Instalación y
+verificación: [`monitoring.md`](monitoring.md#snapshot-del-host-para-actividad-del-club-issue-1314).

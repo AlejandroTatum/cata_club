@@ -12,6 +12,7 @@ from app.soporte_transversal.configuracion import settings
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoRol
 from app.dominio.excepciones import CredencialesInvalidas, PermisosInsuficientes
 from app.dominio.modelos import HistorialEstadoMembresia, Membresia, Pago, Persona
+from app.infraestructura import presencia
 from app.infraestructura.db import obtener_sesion
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
 
@@ -392,4 +393,10 @@ class GestorAutenticacion:
                 "Su cuenta aún no está habilitada para acceder a este módulo.",
                 seguro_mostrar=True,
             )
+        # Issue #1314: presencia ("conectados ahora") y actividad por franja.
+        # Detrás de TODA validación: solo una petición autenticada y admitida
+        # cuenta como uso. `tocar` no lanza y cuesta una consulta a un dict
+        # salvo una vez por minuto y usuario (ver `presencia.py`).
+        if presencia.tocar(usuario.id, payload.get("roles", [])):
+            presencia.registrar_primera_de_franja(usuario.id)
         return payload
