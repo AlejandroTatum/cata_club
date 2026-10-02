@@ -249,7 +249,7 @@
    outright — the old version's `::before` em-dash separator belonged to the
    previous side-by-side layout and has no place once the index and the label
    stack. */
-.landing-pillars { display: grid; width: 100%; grid-template-columns: minmax(0, 1fr); gap: 96px; align-items: start; }
+.landing-pillars { display: grid; width: 100%; max-width: 760px; margin-inline: auto; grid-template-columns: minmax(0, 1fr); gap: 40px; align-items: start; }
 /* Each pillar mirrors its parent's own 1fr/1fr split — copy on the left,
    photo on the right — with a tighter 32px inner gap (vs. the 72px outer
    gap between the two pillars themselves), since these two columns belong
@@ -262,16 +262,19 @@
    block), stacking the photo under the copy again: side-by-side inside an
    already single-column `.landing-pillars` would leave neither half legible
    on a phone. */
-.landing-pillar { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: center; border-top: 1px solid var(--landing-text-strong); padding-top: 28px; }
+.landing-pillar { display: grid; grid-template-columns: minmax(0, 1fr) 266px; gap: 32px; align-items: stretch; border-top: 1px solid var(--landing-text-strong); padding-top: 28px; }
 .landing-index { color: var(--landing-text-muted); font-family: var(--font-landing-barlow); font-size: 15px; letter-spacing: 3px; }
-.landing-pillars .landing-index { display: flex; align-items: center; gap: 24px; margin: 0; font-weight: 800; font-size: clamp(64px, 4.4vw, 84px); line-height: 1; letter-spacing: normal; color: var(--landing-action); }
-/* The rule after the numeral spends the row's width instead of leaving it
-   empty, and it is the same 2px stroke the section eyebrows use. */
-.landing-pillars .landing-index::after { content: ""; flex: 1; height: 2px; background: var(--landing-border); }
+.landing-pillars .landing-index { display: block; margin: 0; font-weight: 800; font-size: 64px; line-height: 1; letter-spacing: normal; color: var(--landing-action); }
+/* The label sits on the numeral's baseline instead of under it, so the row
+   beside "01" carries text rather than a blank band. */
+.landing-pillar-copy { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 16px; align-items: end; }
+.landing-pillar-copy > * { grid-column: 1 / -1; }
+.landing-pillar-copy > .landing-index { grid-column: 1; }
+.landing-pillar-copy > .landing-index-label { grid-column: 2; grid-row: 1; margin: 0 0 8px; }
 .landing-index-label { display: block; margin-top: 4px; color: var(--landing-text-strong); font-size: 12px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; }
-.landing-pillar h3 { margin-top: 18px; color: var(--landing-text-strong); font-family: var(--font-landing-barlow); font-weight: 800; font-size: clamp(30px, 2.2vw, 42px); letter-spacing: -0.01em; line-height: 1.1; text-transform: uppercase; }
-.landing-lead { margin: 18px 0 0; max-width: 28ch; color: var(--landing-text-strong); font-weight: 600; font-size: clamp(26px, 2.1vw, 40px); line-height: 1.35; }
-.landing-pillar p:not(.landing-lead) { margin: 14px 0 0; max-width: 50ch; color: var(--landing-text); font-size: clamp(18px, 1.25vw, 24px); line-height: 1.7; }
+.landing-pillar h3 { margin-top: 18px; color: var(--landing-text-strong); font-family: var(--font-landing-barlow); font-weight: 800; font-size: 30px; letter-spacing: -0.01em; line-height: 1.1; text-transform: uppercase; }
+.landing-lead { margin: 18px 0 0; max-width: 30ch; color: var(--landing-text-strong); font-weight: 600; font-size: 22px; line-height: 1.35; }
+.landing-pillar p:not(.landing-lead) { margin: 14px 0 0; max-width: 44ch; color: var(--landing-text); font-size: 17px; line-height: 1.7; }
 /* The two source photos arrive at different native ratios (mission-focus.jpeg
    is 1080x1090 ≈ 0.99, vision-coaching.jpeg is 1080x1257 ≈ 0.86), but the
    pillars are one symmetric pair — `data-reveal-together` on the section
@@ -286,9 +289,10 @@
    level with the copy beside it; the 24px gap from the old stacked layout
    only applies once the mobile breakpoint below collapses the pillar back
    to one column. */
-.landing-pillar-photo { display: block; width: 100%; aspect-ratio: 3 / 2; border-radius: 14px; object-fit: cover; object-position: center 20%; }
+.landing-pillar-photo { display: block; width: 100%; height: 100%; min-height: 0; aspect-ratio: auto; object-fit: cover; object-position: top; }
 /* Order, not DOM: the copy stays first for a screen reader, and the second
    pillar mirrors the first so the photographs alternate sides down the page. */
+.landing-pillar--flip { grid-template-columns: 266px minmax(0, 1fr); }
 .landing-pillar--flip .landing-pillar-copy { grid-column: 2; grid-row: 1; }
 .landing-pillar--flip .landing-pillar-photo { grid-column: 1; grid-row: 1; }
 
@@ -635,7 +639,6 @@
    `dense`. `.landing-page` in front of each selector outranks the mobile
    `.landing-section` padding, so the block only sets the vertical axis and the
    gutter stays as the breakpoints define it. */
-.landing-page .landing-section#nosotros { padding-block: var(--landing-space-chapter); gap: 72px; }
 .landing-page .landing-values { padding-block: var(--landing-space-dense); }
 .landing-page .landing-gallery { padding-block: var(--landing-space-tight); }
 .landing-page .landing-schedule { padding-block: var(--landing-space-chapter) var(--landing-space-section); }
@@ -745,8 +748,7 @@
   .landing-tablero-tile { height: 140px; padding: 16px; font-size: clamp(56px, 16vw, 80px); }
   .landing-tablero-item h3 { font-size: 19px; }
   .landing-tablero-item p { font-size: 15px; margin-top: 10px; }
-  .landing-pillars { grid-template-columns: 1fr; row-gap: 56px; }
-  .landing-page .landing-section#nosotros { gap: 48px; }
+  .landing-pillars { grid-template-columns: 1fr; row-gap: 40px; }
   /* Undoes the desktop side-by-side split: below this breakpoint
      `.landing-pillars` itself is already one column, so a photo beside the
      copy would squeeze both into an unreadable sliver. Back to one column
@@ -757,15 +759,14 @@
      alone it would also apply as a ROW gap between the stacked copy and
      photo here, stacking on top of the photo's own `margin-top: 24px`
      below and doubling the intended spacing. */
-  .landing-pillar { grid-template-columns: 1fr; gap: 0; align-items: start; }
+  .landing-pillar { grid-template-columns: 1fr; gap: 0; }
   /* Stacked into one column the pillar itself can reach ~720px wide, but a
      1:1 square at that width would tower over the text it illustrates — the
      lead and body copy above cap themselves to ~330-375px (30ch / 44ch).
      Capping the photo near that same width keeps it proportionate to its
      own column instead of becoming the tallest thing on the mobile page. */
-  .landing-lead { font-size: 24px; }
   .landing-schedule .landing-section-header h2 { max-width: none; }
-  .landing-pillar-photo { max-width: 360px; margin-top: 24px; }
+  .landing-pillar-photo { aspect-ratio: 3 / 2; max-width: 360px; margin-top: 24px; }
   .landing-pillar--flip .landing-pillar-copy, .landing-pillar--flip .landing-pillar-photo { grid-column: 1; grid-row: auto; }
   /* The list becomes horizontal chips with scroll instead of a stacked
      vertical list — the accent bar and the tab's own hours line are

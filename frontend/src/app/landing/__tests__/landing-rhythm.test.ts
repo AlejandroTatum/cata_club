@@ -28,7 +28,7 @@ describe("landing section rhythm", (): void => {
 
   it("opens the training chapter airy and keeps the proof and visit chapters tight", (): void => {
     const css = landingCss();
-    expect(css).toContain(".landing-page .landing-section#nosotros { padding-block: var(--landing-space-chapter);");
+    expect(css).not.toContain("#nosotros { padding-block");
     expect(css).toContain(".landing-page .landing-schedule { padding-block: var(--landing-space-chapter) var(--landing-space-section); }");
     expect(css).toContain(".landing-page .landing-gallery { padding-block: var(--landing-space-tight); }");
     expect(css).toContain(".landing-page .landing-location { padding-block: var(--landing-space-tight) var(--landing-space-section); }");
