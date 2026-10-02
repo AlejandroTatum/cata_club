@@ -385,6 +385,32 @@ const EMPTY_FORM: HorarioFormData = {
  */
 const HORA_MINIMA_ENTRENAMIENTO = "06:00";
 const HORA_MAXIMA_ENTRENAMIENTO = "22:00";
+
+/** 24 h "17:00" -> "5:00 p. m." — the native time input renders 12 h or 24 h
+ *  by browser locale, so the form states the unambiguous reading itself. */
+function formatHora12(hora: string): string | null {
+  const match = /^(\d{2}):(\d{2})$/.exec(hora);
+  if (!match) return null;
+  const h = Number(match[1]);
+  const m = match[2];
+  if (h > 23 || Number(m) > 59) return null;
+  return `${h % 12 === 0 ? 12 : h % 12}:${m} ${h < 12 ? "a. m." : "p. m."}`;
+}
+
+function HoraAyuda({ id, value }: { id: string; value: string }): React.ReactElement {
+  const legible = formatHora12(value);
+  return (
+    <p id={id} className="text-2xs normal-case tracking-normal text-ink-3">
+      Formato 24 h (ej. 17:00 = 5:00 p. m.)
+      {legible && <span className="font-semibold text-ink-2"> · Elegido: {legible}</span>}
+    </p>
+  );
+}
+
+/** Field skin shared with the tarifas/discounts forms. */
+const FIELD_LABEL = "flex flex-col gap-field text-2xs font-bold uppercase text-ink-3";
+const FIELD_CONTROL =
+  "h-ctl w-full rounded-ctl border border-line-2 bg-paper px-3 text-sm text-ink outline-none focus:border-cata-red";
 const MAXIMO_DIAS_POR_CATEGORIA = 6;
 
 /**
@@ -1161,14 +1187,14 @@ export default function GroupsPage(): React.ReactElement {
           same attribute for the same reason.
         */}
         <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" noValidate>
-          <div className="sm:col-span-2">
-            <label htmlFor="categoria-nombre" className="mb-1 block text-xs font-semibold text-ink-2">
+          <div className="flex flex-col gap-field sm:col-span-2">
+            <label htmlFor="categoria-nombre" className={FIELD_LABEL}>
               Nombre <span aria-hidden="true" className="text-state-bad">*</span>
             </label>
             <input
               id="categoria-nombre"
               type="text"
-              className={`input-field w-full ${fieldErrors.nombre ? "border-state-bad" : ""}`}
+              className={`${FIELD_CONTROL} ${fieldErrors.nombre ? "border-state-bad" : ""}`}
               value={formData.nombre}
               onChange={(e) => setFormData((prev) => ({ ...prev, nombre: e.target.value }))}
               placeholder="Ej: Preinfantil"
@@ -1191,14 +1217,14 @@ export default function GroupsPage(): React.ReactElement {
             on this form every other field is required, so the absence of an
             asterisk is not by itself a statement.
           */}
-          <div className="sm:col-span-2">
-            <label htmlFor="categoria-edades" className="mb-1 block text-xs font-semibold text-ink-2">
+          <div className="flex flex-col gap-field sm:col-span-2">
+            <label htmlFor="categoria-edades" className={FIELD_LABEL}>
               Edades <span className="font-normal text-ink-3">(opcional)</span>
             </label>
             <input
               id="categoria-edades"
               type="text"
-              className="input-field w-full"
+              className={FIELD_CONTROL}
               value={formData.edades}
               onChange={(e) => setFormData((prev) => ({ ...prev, edades: e.target.value }))}
               placeholder="Ej: 5 a 10 años"
@@ -1212,14 +1238,14 @@ export default function GroupsPage(): React.ReactElement {
             handling, and jsdom ignores them entirely. `validarCategoria` is
             the one that decides, and the backend decides after it.
           */}
-          <div>
-            <label htmlFor="categoria-hora-inicio" className="mb-1 block text-xs font-semibold text-ink-2">
+          <div className="flex flex-col gap-field">
+            <label htmlFor="categoria-hora-inicio" className={FIELD_LABEL}>
               Hora de inicio <span aria-hidden="true" className="text-state-bad">*</span>
             </label>
             <input
               id="categoria-hora-inicio"
               type="time"
-              className={`input-field w-full ${fieldErrors.horaInicio || fieldErrors.franja ? "border-state-bad" : ""}`}
+              className={`${FIELD_CONTROL} ${fieldErrors.horaInicio || fieldErrors.franja ? "border-state-bad" : ""}`}
               value={formData.horaInicio}
               onChange={(e) => setFormData((prev) => ({ ...prev, horaInicio: e.target.value }))}
               required
@@ -1227,23 +1253,28 @@ export default function GroupsPage(): React.ReactElement {
               max={HORA_MAXIMA_ENTRENAMIENTO}
               aria-invalid={fieldErrors.horaInicio || fieldErrors.franja ? true : undefined}
               aria-describedby={
-                fieldErrors.horaInicio ? HORA_INICIO_ERROR_ID : fieldErrors.franja ? FRANJA_ERROR_ID : undefined
+                fieldErrors.horaInicio
+                  ? HORA_INICIO_ERROR_ID
+                  : fieldErrors.franja
+                    ? FRANJA_ERROR_ID
+                    : "categoria-hora-inicio-ayuda"
               }
             />
+            <HoraAyuda id="categoria-hora-inicio-ayuda" value={formData.horaInicio} />
             {fieldErrors.horaInicio && (
               <p id={HORA_INICIO_ERROR_ID} role="alert" className={FIELD_ERROR_CLASSES}>
                 {fieldErrors.horaInicio}
               </p>
             )}
           </div>
-          <div>
-            <label htmlFor="categoria-hora-fin" className="mb-1 block text-xs font-semibold text-ink-2">
+          <div className="flex flex-col gap-field">
+            <label htmlFor="categoria-hora-fin" className={FIELD_LABEL}>
               Hora de fin <span aria-hidden="true" className="text-state-bad">*</span>
             </label>
             <input
               id="categoria-hora-fin"
               type="time"
-              className={`input-field w-full ${fieldErrors.horaFin || fieldErrors.franja ? "border-state-bad" : ""}`}
+              className={`${FIELD_CONTROL} ${fieldErrors.horaFin || fieldErrors.franja ? "border-state-bad" : ""}`}
               value={formData.horaFin}
               onChange={(e) => setFormData((prev) => ({ ...prev, horaFin: e.target.value }))}
               required
@@ -1251,9 +1282,14 @@ export default function GroupsPage(): React.ReactElement {
               max={HORA_MAXIMA_ENTRENAMIENTO}
               aria-invalid={fieldErrors.horaFin || fieldErrors.franja ? true : undefined}
               aria-describedby={
-                fieldErrors.horaFin ? HORA_FIN_ERROR_ID : fieldErrors.franja ? FRANJA_ERROR_ID : undefined
+                fieldErrors.horaFin
+                  ? HORA_FIN_ERROR_ID
+                  : fieldErrors.franja
+                    ? FRANJA_ERROR_ID
+                    : "categoria-hora-fin-ayuda"
               }
             />
+            <HoraAyuda id="categoria-hora-fin-ayuda" value={formData.horaFin} />
             {fieldErrors.horaFin && (
               <p id={HORA_FIN_ERROR_ID} role="alert" className={FIELD_ERROR_CLASSES}>
                 {fieldErrors.horaFin}
