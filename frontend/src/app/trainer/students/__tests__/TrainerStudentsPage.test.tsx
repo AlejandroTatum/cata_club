@@ -419,7 +419,7 @@ describe("la nómina es la tabla compartida del producto (issue #1156)", () => {
     // Ficha médica y Horario se fusionaron en una única columna de acciones
     // sr-only (issue #1291): el layout automático ya no reparte el ancho
     // sobrante entre tres columnas.
-    expect(encabezados).toEqual(["Estudiante", "Acciones"]);
+    expect(encabezados).toEqual(["Estudiante", "Grupo y horario", "Acciones"]);
   });
 
   it("los dos botones de un renglón viven en la misma celda de acciones (issue #1291)", async () => {
@@ -427,8 +427,8 @@ describe("la nómina es la tabla compartida del producto (issue #1156)", () => {
 
     const tabla = await screen.findByTestId("students-desktop-table");
     const encabezados = within(tabla).getAllByRole("columnheader");
-    expect(encabezados).toHaveLength(2);
-    expect(encabezados[1]).toHaveAccessibleName("Acciones");
+    expect(encabezados).toHaveLength(3);
+    expect(encabezados[2]).toHaveAccessibleName("Acciones");
 
     const melany = await screen.findByTestId("student-row-7");
     const ficha = within(melany).getByRole("button", { name: "Ficha médica de Melany Quimis" });
@@ -650,19 +650,54 @@ describe("maestro–detalle en escritorio", () => {
     expect(screen.queryByTestId("ficha-panel-ghost")).not.toBeInTheDocument();
   });
 
-  it("en escritorio la fila selecciona: el nombre es el botón y no hay un botón de ficha por fila", async () => {
+  it("en escritorio cada fila trae un botón «Ficha médica» visible que llena el panel", async () => {
     setDesktop(true);
     render(<TrainerStudentsPage />);
 
-    const fila = await screen.findByTestId("student-row-7");
-    const nombre = within(fila).getByRole("button", { name: "Ficha médica de Melany Quimis" });
-    expect(nombre).toHaveAttribute("aria-pressed", "false");
-    expect(within(fila).queryByText("Ficha médica")).not.toBeInTheDocument();
+    for (const id of [7, 3, 9]) {
+      const fila = await screen.findByTestId(`student-row-${id}`);
+      expect(within(fila).getByRole("button", { name: /^Ficha médica de/ })).toHaveTextContent("Ficha médica");
+    }
+
+    const fila = screen.getByTestId("student-row-7");
+    const boton = within(fila).getByRole("button", { name: "Ficha médica de Melany Quimis" });
+    expect(boton).toHaveAttribute("aria-pressed", "false");
     expect(within(fila).getByRole("button", { name: "Horario de Melany Quimis" })).toBeInTheDocument();
 
-    fireEvent.click(fila);
+    fireEvent.click(boton);
     expect(await screen.findByTestId("ficha-panel")).toBeInTheDocument();
-    expect(nombre).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(boton).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("en escritorio un clic en la fila sigue seleccionando", async () => {
+    setDesktop(true);
+    render(<TrainerStudentsPage />);
+
+    fireEvent.click(await screen.findByTestId("student-row-7"));
+    expect(await screen.findByTestId("ficha-panel")).toBeInTheDocument();
+  });
+
+  it("en escritorio la columna del medio muestra grupo y horario como chips, desde el padrón", async () => {
+    setDesktop(true);
+    render(<TrainerStudentsPage />);
+
+    const tabla = await screen.findByTestId("students-desktop-table");
+    expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual([
+      "Estudiante",
+      "Grupo y horario",
+      "Acciones",
+    ]);
+    const fila = within(tabla).getByTestId("student-row-3");
+    expect(within(fila).getByText("Grupo 17:00")).toBeInTheDocument();
+  });
+
+  it("la guía menciona el botón Ficha médica", async () => {
+    setDesktop(true);
+    render(<TrainerStudentsPage />);
+
+    const guia = await screen.findByRole("complementary", { name: "Cómo usar la nómina" });
+    expect(within(guia).getByText(/botón «Ficha médica»/)).toBeInTheDocument();
   });
 
   it("Horario no selecciona la fila", async () => {
