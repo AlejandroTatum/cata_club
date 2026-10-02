@@ -278,27 +278,31 @@ function ActivationPageContent(): React.ReactElement {
           {resendMessage && <p role="status" className="text-sm leading-relaxed text-state-ok">{resendMessage}</p>}
           {resendError && <p role="alert" className="text-sm leading-relaxed text-state-bad">{resendError}</p>}
 
-          <div className="flex flex-col items-start gap-2 text-left">
-            <button
-              type="button"
-              onClick={checkStatus}
-              disabled={resending}
-              className={buttonClasses("tertiary", "sm")}
-            >
-              Ya verifiqué mi correo
-            </button>
-            {stillUnverified && (
-              <p role="status" className="text-sm leading-relaxed text-ink-2">
-                Todavía no encontramos la verificación. Abra el enlace del correo y vuelva a intentar.
-              </p>
-            )}
-          </div>
+          {/*
+           * One column, one width, one height (QA registro): the actions used
+           * to be three sizes on two alignments. Rank now comes from the skin
+           * alone — primary above, secondary for the two account checks, the
+           * quietest fill for the exit — never from the size.
+           */}
+          <button
+            type="button"
+            onClick={checkStatus}
+            disabled={resending}
+            className={buttonClasses("secondary", "md", "w-full")}
+          >
+            Ya verifiqué mi correo
+          </button>
+          {stillUnverified && (
+            <p role="status" className="text-sm leading-relaxed text-ink-2">
+              Todavía no encontramos la verificación. Abra el enlace del correo y vuelva a intentar.
+            </p>
+          )}
 
           {!emailCorrectionOpen && (
             <button
               type="button"
               onClick={() => setEmailCorrectionOpen(true)}
-              className={buttonClasses("tertiary", "sm")}
+              className={buttonClasses("secondary", "md", "w-full")}
             >
               ¿Correo equivocado? Corregirlo
             </button>
@@ -322,7 +326,7 @@ function ActivationPageContent(): React.ReactElement {
                 />
               </div>
               <div className="flex gap-2">
-                <Button type="submit" variant="primary" disabled={emailCorrectionSubmitting} className="w-full">
+                <Button type="submit" variant="primary" disabled={emailCorrectionSubmitting} className="flex-1">
                   {emailCorrectionSubmitting ? "Guardando…" : "Guardar correo"}
                 </Button>
                 <Button
@@ -351,8 +355,8 @@ function ActivationPageContent(): React.ReactElement {
            * "Cerrar sesión" is the one action here the shell has no
            * equivalent for, so it is the only thing left in this row.
            */}
-          <div className="flex flex-col items-start gap-2 text-left text-sm">
-            <button type="button" onClick={() => void logout()} className={buttonClasses("tertiary", "sm")}>
+          <div className="border-t border-line pt-4">
+            <button type="button" onClick={() => void logout()} className={buttonClasses("tertiary", "md", "w-full")}>
               Cerrar sesión
             </button>
           </div>
@@ -395,9 +399,9 @@ function ActivationPageContent(): React.ReactElement {
         </Button>
         {resendError && <p role="alert" className="text-sm leading-relaxed text-state-bad">{resendError}</p>}
 
-        <div className="flex flex-col items-start gap-2 text-left text-sm">
+        <div className="flex flex-col gap-4 border-t border-line pt-4">
           <Link href="/ayuda" className={AUTH_LINK_CLASSES}>Necesito ayuda</Link>
-          <button type="button" onClick={() => void logout()} className={buttonClasses("tertiary", "sm")}>
+          <button type="button" onClick={() => void logout()} className={buttonClasses("tertiary", "md", "w-full")}>
             Cerrar sesión
           </button>
         </div>
