@@ -14,6 +14,7 @@ Repository of record: `origin` → https://github.com/AlejandroTatum/cata_club. 
    - Merge a slice into the integration branch with `gh pr merge --squash` once its own PR checks are green. Do not enable auto-merge on slice PRs and do not wait for other slices or for `main`.
    - Keep the integration branch current by merging `main` into it (never rebase or force-push it).
    - When every slice has landed, open one PR from the integration branch to `main` and enable auto-merge with **squash**. That PR is the only one that waits on `main`.
+   - `make feature-start`, `slice-start`, `slice-pr`, `slice-merge`, `feature-sync` and `feature-pr` implement this flow (`scripts/feature_flow.sh`).
 6. Bug fixes require a linked GitHub issue documenting the root cause (`Closes #N` in the PR body). Features, refactors, and docs do not require an issue.
 7. Do not block the next PR on post-merge `main` CI. With branch protection requiring a current branch, the merged PR already passed CI on the exact tree that landed. As soon as a PR merges, update the next queued PR with `main` (`gh pr update-branch`) and re-enable its auto-merge. Monitor post-merge `main` CI in the background; if it turns red, stop all merges to `main` until it is classified and fixed. Once it is green, run the housekeeping workflow: `git switch main && git pull`, delete the merged local branch and its worktree, and run `git worktree prune`.
 

@@ -8,7 +8,8 @@
        install install-backend install-frontend \
        docker-up docker-down docker-build \
        migrate migrate-create db-reset seed seed-bulk clean \
-       qa-up qa-down qa-seed qa-reset qa-live qa-logs qa-pdf-delivery-check
+       qa-up qa-down qa-seed qa-reset qa-live qa-logs qa-pdf-delivery-check \
+       feature-start slice-start slice-pr slice-merge feature-sync feature-pr
 
 # ─── Default ────────────────────────────────────────────────────────────────
 help: ## Show this help
@@ -30,6 +31,33 @@ dev-backend: ## Start backend services only (Docker)
 
 dev-frontend: ## Start frontend only (local)
 	cd frontend && pnpm dev
+
+# ─── Feature integration branch (CLAUDE.md rule 5) ──────────────────────────
+feature-start: ## Create and push feat/<FEATURE> from fresh main (FEATURE=)
+	@test -n "$(FEATURE)" || { echo "Error: FEATURE is required. Use: make feature-start FEATURE=<name>" >&2; exit 2; }
+	@scripts/feature_flow.sh feature-start "$(FEATURE)"
+
+slice-start: ## Cut slice branch feat/<FEATURE>-<SLICE> from the integration branch (FEATURE= SLICE=)
+	@test -n "$(FEATURE)" || { echo "Error: FEATURE is required. Use: make slice-start FEATURE=<name> SLICE=<slice>" >&2; exit 2; }
+	@test -n "$(SLICE)" || { echo "Error: SLICE is required. Use: make slice-start FEATURE=<name> SLICE=<slice>" >&2; exit 2; }
+	@scripts/feature_flow.sh slice-start "$(FEATURE)" "$(SLICE)"
+
+slice-pr: ## Push the slice and open its PR against feat/<FEATURE> (FEATURE=)
+	@test -n "$(FEATURE)" || { echo "Error: FEATURE is required. Use: make slice-pr FEATURE=<name>" >&2; exit 2; }
+	@scripts/feature_flow.sh slice-pr "$(FEATURE)"
+
+slice-merge: ## Squash-merge a green slice PR into feat/<FEATURE> (FEATURE= PR=)
+	@test -n "$(FEATURE)" || { echo "Error: FEATURE is required. Use: make slice-merge FEATURE=<name> PR=<number>" >&2; exit 2; }
+	@test -n "$(PR)" || { echo "Error: PR is required. Use: make slice-merge FEATURE=<name> PR=<number>" >&2; exit 2; }
+	@scripts/feature_flow.sh slice-merge "$(FEATURE)" "$(PR)"
+
+feature-sync: ## Merge main into feat/<FEATURE> and push, no rebase (FEATURE=)
+	@test -n "$(FEATURE)" || { echo "Error: FEATURE is required. Use: make feature-sync FEATURE=<name>" >&2; exit 2; }
+	@scripts/feature_flow.sh feature-sync "$(FEATURE)"
+
+feature-pr: ## Open feat/<FEATURE> -> main PR and enable auto-merge squash (FEATURE=)
+	@test -n "$(FEATURE)" || { echo "Error: FEATURE is required. Use: make feature-pr FEATURE=<name>" >&2; exit 2; }
+	@scripts/feature_flow.sh feature-pr "$(FEATURE)"
 
 # ─── Install ────────────────────────────────────────────────────────────────
 install: install-backend install-frontend ## Install all dependencies
