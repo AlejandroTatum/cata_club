@@ -65,7 +65,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { fetchStudentPortal } from "@/services/api";
 import type { StudentPortalSummary } from "@/services/api";
-import { EmptyState, ErrorState, InfoPanel, LoadingState, buttonClasses } from "@/components/ui";
+import { BackLink, EmptyState, ErrorState, InfoPanel, LoadingState, buttonClasses } from "@/components/ui";
 import MedicalRecordEditor from "@/app/members/MedicalRecordEditor";
 import ManagedStudentPicker, { useManagedProfiles } from "../ManagedStudentPicker";
 import { firstNameOf, isMinor } from "../student-utils";
@@ -246,7 +246,7 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
     // Default measure, like every other screen: the page column never narrows
     // per screen (content would change left edge between pages). The editor
     // composes form + emergency-card rail instead of capping its width.
-    <AppShell title="Ficha médica" subtitle={subtitle}>
+    <AppShell title="Ficha médica" subtitle={subtitle} back={<BackLink href="/student" />}>
       {state.status === "loading" && (
         <div className="card">
           <LoadingState label="Cargando su cuenta…" />
