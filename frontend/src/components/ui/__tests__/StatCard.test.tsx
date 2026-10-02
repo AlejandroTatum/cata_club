@@ -363,6 +363,16 @@ describe("StatCard — icon and tone", () => {
     expect(card()).toContainElement(tile);
   });
 
+  it("adds a tone-tinted top accent border only when an icon is given", () => {
+    const { rerender } = render(
+      <StatCard label="Miembros" value={86} tone="warn" icon={<svg />} />,
+    );
+    expect(card().className).toMatch(/border-t-\[3px\]/);
+    expect(card().className).toMatch(/border-t-state-warn/);
+    rerender(<StatCard label="Miembros" value={86} />);
+    expect(card().className).not.toMatch(/border-t-/);
+  });
+
   it("ignores the icon on the hot variant", () => {
     render(<StatCard label="Miembros" value={86} variant="hot" icon={<svg />} />);
     expect(screen.queryByTestId("statcard-icon")).toBeNull();

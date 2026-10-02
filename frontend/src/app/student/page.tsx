@@ -1492,7 +1492,7 @@ function ActivePortalView({
                 #1137: independence is a PRESENCIAL admin command, not here. */}
             <section
               aria-label="Acciones de la cuenta"
-              className="card flex flex-col overflow-hidden lg:flex-1"
+              className="card flex flex-col overflow-hidden"
             >
               <div className="border-b border-line px-5 py-3">
                 <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Acciones de la cuenta</h2>

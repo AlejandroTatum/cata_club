@@ -228,12 +228,11 @@ function SessionList({
   const empty = sessions.length === 0;
 
   return (
-    // Empty: one guiding line; the legend of states lives in the rail's guide.
-    // With `fill` the frame takes the rail's height and shows ghost rows, so
-    // the empty record is not a one-line card above a dead canvas.
+    // Empty: one guiding line, card height = content (ghost rows would read
+    // as "still loading"); the legend of states lives in the rail's guide.
     <section
       data-testid="sessions-card"
-      className={cn("card flex flex-col overflow-hidden", fill && "lg:flex-1")}
+      className={cn("card flex flex-col overflow-hidden", fill && !empty && "lg:flex-1")}
       aria-labelledby="sessions-title"
     >
       <div className="flex items-center gap-3 border-b border-line px-5 py-4">
@@ -290,7 +289,7 @@ function SessionList({
           ))}
         </ul>
       )}
-      {fill && <GhostSessionRows />}
+      {fill && !empty && <GhostSessionRows />}
     </section>
   );
 }
@@ -472,10 +471,10 @@ function AttendanceView({
       ) : selectedProfile.recentSessions.length === 0 ? (
         /*
          * The socio nuevo: the same two columns as a record with sessions, but
-         * the rail holds only the guide. The counted recap stays out — at zero
-         * it would repeat the record's sentence over four zeros. The record
-         * fills the rail's height with ghost rows, so a lone sentence does not
-         * leave a dead region beside and below it.
+         * the rail holds only the guide, which fills the width beside the
+         * record. The counted recap stays out — at zero it would repeat the
+         * record's sentence over four zeros. The record keeps its content
+         * height: ghost rows under "Aún no hay asistencias" read as loading.
          */
         <div className={cn(PAGE_RAIL, "lg:items-stretch")}>
           <div className="flex min-w-0 flex-col gap-section">

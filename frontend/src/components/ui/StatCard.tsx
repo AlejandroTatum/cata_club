@@ -194,13 +194,19 @@ export type StatCardVariant = "default" | "hot";
  */
 export type StatCardTone = "ball" | "ok" | "info" | "warn" | "trainer" | "neutral";
 
-const STAT_TONE: Record<StatCardTone, string> = {
-  ball: "bg-ball/20 text-ink",
-  ok: "bg-state-ok-bg text-state-ok",
-  info: "bg-cuenta-representante-bg text-cuenta-representante",
-  warn: "bg-state-warn-bg text-state-warn",
-  trainer: "bg-cuenta-entrenador-bg text-cuenta-entrenador",
-  neutral: "bg-state-neutral-bg text-state-neutral",
+const STAT_TONE: Record<StatCardTone, { icon: string; accent: string }> = {
+  ball: { icon: "bg-ball/25 text-ink", accent: "border-t-ball bg-ball/5" },
+  ok: { icon: "bg-state-ok-bg text-state-ok", accent: "border-t-state-ok bg-state-ok-bg/30" },
+  info: {
+    icon: "bg-cuenta-representante-bg text-cuenta-representante",
+    accent: "border-t-cuenta-representante bg-cuenta-representante-bg/30",
+  },
+  warn: { icon: "bg-state-warn-bg text-state-warn", accent: "border-t-state-warn bg-state-warn-bg/30" },
+  trainer: {
+    icon: "bg-cuenta-entrenador-bg text-cuenta-entrenador",
+    accent: "border-t-cuenta-entrenador bg-cuenta-entrenador-bg/30",
+  },
+  neutral: { icon: "bg-state-neutral-bg text-state-neutral", accent: "border-t-ink-3 bg-sunken/50" },
 };
 
 export interface StatCardProps {
@@ -248,7 +254,7 @@ export default function StatCard({
     <div
       className={cn(
         "relative min-h-stat rounded-card border px-[18px] py-4 flex flex-col justify-between",
-        hot ? "bg-coal border-coal" : "bg-paper border-line",
+        hot ? "bg-coal border-coal" : showIcon ? cn("border-line border-t-[3px]", STAT_TONE[tone].accent) : "bg-paper border-line",
         href && "h-full transition-colors hover:border-ink-3",
         className,
       )}
@@ -258,8 +264,8 @@ export default function StatCard({
           data-testid="statcard-icon"
           aria-hidden="true"
           className={cn(
-            "absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-ctl",
-            STAT_TONE[tone],
+            "absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-ctl",
+            STAT_TONE[tone].icon,
           )}
         >
           {icon}
@@ -270,7 +276,7 @@ export default function StatCard({
         className={cn(
           "text-2xs font-bold uppercase",
           hot ? "text-white/45" : "text-ink-3",
-          showIcon && "pr-9",
+          showIcon && "pr-11",
         )}
       >
         {label}

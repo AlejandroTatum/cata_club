@@ -258,14 +258,14 @@ describe("StudentAttendancePage — the record", () => {
  * an empty frame (the hole relocated inside a border).
  */
 describe("StudentAttendancePage — the socio nuevo", () => {
-  it("fills the rail's height with ghost rows instead of leaving a dead region", async () => {
+  it("keeps the card at its content height, with no ghost rows that read as loading", async () => {
     mockFetchStudentPortal.mockReset().mockResolvedValue(portalWith([]));
 
     render(<StudentAttendancePage />);
 
     const card = await screen.findByTestId("sessions-card");
-    expect(card.className).toMatch(/\blg:flex-1\b/);
-    expect(within(card).getByTestId("session-ghost-rows")).toBeInTheDocument();
+    expect(card.className).not.toMatch(/\bflex-1\b/);
+    expect(screen.queryByTestId("session-ghost-rows")).toBeNull();
   });
 
   it("guides with one line and the states a session can carry", async () => {
