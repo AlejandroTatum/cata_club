@@ -387,16 +387,12 @@ export default function MedicalRecordEditor({
         };
 
   const recordCard = (
-    // `flex flex-1 flex-col` — D11b's "regla del aire" (`DESIGN.md`), the
-    // same mechanism `EmptyState`'s `fill` already uses: the callers of this
-    // editor (`/student/medical-record`) sit as a direct child of `AppShell`'s
-    // `<main className="flex flex-1 flex-col …">`, so stretching this card
-    // absorbs the column's leftover height instead of leaving it as bare
-    // canvas below the card (57% dead air as a titular, 42% as a
-    // representante, both measured by #266).
+    // Sized to its content, never stretched to the emergency-card rail: three
+    // read-mode rows in a card as tall as the rail left a large empty area
+    // under them (QA round 2). The rail aligns to the top (`lg:items-start`).
     <div
       data-testid="medical-record-card"
-      className={`mt-3 rounded-2xl border border-line bg-paper${withEmergencyCard ? " flex h-full flex-col" : ""}`}
+      className="mt-3 rounded-2xl border border-line bg-paper"
     >
       {/* `sticky top-0`, not a plain header: on a narrow screen this card's
           own fields can outgrow the viewport, and the student's identity —
@@ -458,7 +454,7 @@ export default function MedicalRecordEditor({
         )}
       </header>
 
-      <div className={withEmergencyCard ? "flex flex-1 flex-col p-3 sm:p-4" : "p-3 sm:p-4"}>
+      <div className="p-3 sm:p-4">
       {!editing && state.status === "ready" && !state.isNew && (
         /* El reposo: filas etiqueta-valor, no la grilla de dos columnas de
          * abajo. Son dos formas distintas porque dicen dos cosas distintas —
@@ -520,7 +516,7 @@ export default function MedicalRecordEditor({
        * are one fact written in two boxes. */}
       {/* In page mode the card is stretched to the rail's height; the rows
           spread over that height instead of leaving a void under the last. */}
-      <div className={`grid gap-3 sm:grid-cols-2${withEmergencyCard ? " flex-1 lg:content-between" : ""}`}>
+      <div className={`grid gap-3 sm:grid-cols-2`}>
         {withEmergencyCard && <GroupHeading className="sm:col-span-2">Salud</GroupHeading>}
         <div>
           {/* The asterisk sits OUTSIDE the `<label>` on purpose: inside, it
@@ -655,8 +651,8 @@ export default function MedicalRecordEditor({
   if (!withEmergencyCard) return recordCard;
 
   return (
-    <div className={`${PAGE_RAIL} lg:items-stretch`}>
-      <div className="flex min-w-0 flex-col [&>[data-testid=medical-record-card]]:mt-0 [&>[data-testid=medical-record-card]]:flex-1">{recordCard}</div>
+    <div className={PAGE_RAIL}>
+      <div className="min-w-0 [&>[data-testid=medical-record-card]]:mt-0">{recordCard}</div>
       {railFooter ? (
         <div className="flex min-w-0 flex-col gap-section">
           <EmergencyCard studentName={studentName} values={cardValues} ownerIsViewer={viewerIsOwner} />
