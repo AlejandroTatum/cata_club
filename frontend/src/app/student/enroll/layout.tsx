@@ -16,14 +16,14 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: { absolute: "Inscripción — Cata Club" },
   description:
-    "Inscríbete en Cata Club, club formativo de tenis de mesa en Loja, Ecuador. Completa la inscripción en línea como jugador o como representante de un estudiante.",
+    "Inscríbase en Cata Club, club formativo de tenis de mesa en Loja, Ecuador. Complete la inscripción en línea como jugador o como representante de un estudiante.",
   openGraph: {
     type: "website",
     locale: "es_EC",
     siteName: "Cata Club",
     title: "Inscripción — Cata Club",
     description:
-      "Completa la inscripción en línea en Cata Club: como jugador o como representante de un estudiante.",
+      "Complete la inscripción en línea en Cata Club: como jugador o como representante de un estudiante.",
   },
 };
 
