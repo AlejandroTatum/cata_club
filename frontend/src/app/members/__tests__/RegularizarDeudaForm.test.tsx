@@ -118,3 +118,15 @@ describe("RegularizarDeudaForm — el monto no puede comprar más de 12 meses (#
     });
   });
 });
+
+describe("RegularizarDeudaForm — uso para migrar socios del cuaderno (#1492)", () => {
+  it("explains that the form also loads existing payments and activates the membership when the period covers today", async () => {
+    await open();
+    expect(
+      screen.getByText(
+        "También sirve para cargar el pago vigente de un socio desde el cuaderno del club al migrar. " +
+          "Si el período cubre hoy, la membresía queda activa.",
+      ),
+    ).toBeInTheDocument();
+  });
+});
