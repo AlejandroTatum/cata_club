@@ -19,5 +19,5 @@ function PermissionSummary(): React.ReactElement {
 }
 
 export default function FETMImagePermissionPage(): React.ReactElement {
-  return <LegalDocumentPage title="Permiso público de difusión de imagen FETM" blocks={legalBlocks} aside={<PermissionSummary />} />;
+  return <LegalDocumentPage title="Permiso público de difusión de imagen FETM" blocks={legalBlocks} aside={<PermissionSummary />} path="/permiso-imagen-fetm" />;
 }

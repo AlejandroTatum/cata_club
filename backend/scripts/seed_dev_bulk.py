@@ -16,8 +16,10 @@ Creates (idempotent -- safe to run multiple times, following the same
 `_obtener_o_crear` check-before-insert pattern as seed_dev_base.py):
 
   - ~16 representante (parent) accounts, each with 1-4 managed children.
-  - ~20 self-managed adult student accounts (student IS their own payer).
-  - Total students across everyone: ~55-65.
+  - 110 self-managed adult student accounts (student IS their own payer) --
+    enough for the load harness's 1:1 pool of >= 100 distinct ALUMNO
+    identities (see docs/operations/load-testing.md).
+  - Total students across everyone: ~145-155.
   - Membresias in a mix of estados (ACTIVA / VENCIDA / INACTIVA), across both
     TipoMembresia categories seeded by seed_dev_base.py.
   - Pagos in a mix of estados (APROBADO / PENDIENTE_VALIDACION / RECHAZADO),
@@ -173,7 +175,14 @@ HIJOS_POR_REPRESENTANTE = [3, 2, 4, 1, 3, 2, 4, 1, 2, 3, 2, 4, 1, 3, 2, 2]
 # Alumnos adultos auto-gestionados (sin representante): son su propio
 # responsable de pago, matching la regla de dominio ya documentada en el
 # frontend (members/page.tsx).
-CANTIDAD_AUTOGESTIONADOS = 20
+#
+# 110, no 20: el harness de carga (100-user-load-test) necesita un pool 1:1
+# de >= 100 identidades ALUMNO auto-gestionadas para el steady de 100 VUs --
+# el backend limita /personas/{id}/representados a 30/min POR USUARIO y el
+# login a 60/min por IP, así que compartir identidades entre VUs invalida la
+# evidencia (ver docs/operations/load-testing.md). El margen sobre 100 cubre
+# cuentas que el operador haya desactivado en QA.
+CANTIDAD_AUTOGESTIONADOS = 110
 
 # ---------------------------------------------------------------------------
 # Catálogos (issue de QA con 0 dev seed): institución educativa, sponsor y

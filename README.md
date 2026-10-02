@@ -38,6 +38,7 @@ repo aparte: **[`cata_club-docs`](https://github.com/AlejandroTatum/cata_club-do
 | Quién aprueba qué | [`reference/ownership.md`](https://github.com/AlejandroTatum/cata_club-docs/blob/main/reference/ownership.md) |
 | Qué datos personales guardamos y por cuánto tiempo | [`security/privacy-retention.md`](https://github.com/AlejandroTatum/cata_club-docs/blob/main/security/privacy-retention.md) |
 | Algo que se hizo antes y ya no está vigente | [`archive/`](https://github.com/AlejandroTatum/cata_club-docs/blob/main/archive/README.md) |
+| Medir a cuánto aguanta el backend (100 VUs, QA local) | [`docs/operations/load-testing.md`](docs/operations/load-testing.md) — `make load-steady` tras `make qa-up` |
 | El índice completo de la documentación | [`cata_club-docs`](https://github.com/AlejandroTatum/cata_club-docs) |
 
 ### Dónde NO buscar
@@ -209,6 +210,22 @@ make qa-down    # Destruir contenedores, red y datos
 
 `make qa-reset` usa `backend/scripts/reset_dev_db.py`; el detalle de sus guards
 está en `backend/scripts/RUNBOOK_reset_db.md`.
+
+### Pruebas de carga sobre el QA local
+
+Con el stack de QA arriba, el harness k6 mide el viaje autenticado real
+(login → sesión → lectura del rol) con la imagen oficial `grafana/k6` fijada
+y las credenciales por entorno (nada versionado):
+
+```bash
+make load-preflight                                  # salud: db-test :5436 + QA :3000/:8000
+LOAD_EMAIL='...' LOAD_PASSWORD='...' make load-baseline   # 1 VU, calibración
+LOAD_CREDENTIALS_FILE=load/results/credentials-pool.json make load-steady VUS=30   # 30 VUs, 10m (default 100)
+```
+
+Fail-closed: solo apunta a `localhost`/`127.0.0.1`/`[::1]` — staging y
+producción son blancos prohibidos. Umbrales, abortos, VU-vs-sesiones y la
+lectura de resultados: [`docs/operations/load-testing.md`](docs/operations/load-testing.md).
 
 ## Testing
 

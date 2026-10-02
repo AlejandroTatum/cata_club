@@ -1,8 +1,16 @@
 import Link from "next/link";
-import type { LegalBlock } from "./legal-content";
-import { LegalDocumentProse } from "@/components/legal/LegalReviewDialog";
+import { sectionId, type LegalBlock } from "./legal-content";
+import LegalToc from "./LegalToc";
 import { cn } from "@/components/ui/cn";
 import { PAGE_RAIL } from "@/components/ui/layout";
+import { landingConfig, toWhatsAppLink } from "../landing/landing-config";
+
+const CONTACT_EMAIL = "cataclub.loja@proton.me";
+const DOCUMENTS = [
+  { href: "/terminos", label: "Términos de uso" },
+  { href: "/privacidad", label: "Aviso de privacidad" },
+  { href: "/permiso-imagen-fetm", label: "Permiso público de imagen FETM" },
+] as const;
 
 interface LegalDocumentPageProps {
   title: string;
@@ -13,6 +21,10 @@ interface LegalDocumentPageProps {
    * narrow column floating over an empty canvas.
    */
   aside?: React.ReactNode;
+  /** Three to five key points, shown under "En resumen" in the right column. */
+  summary?: readonly string[];
+  /** The document's own route, marked as current in the document links. */
+  path?: string;
 }
 
 /**
@@ -72,118 +84,149 @@ interface LegalDocumentPageProps {
  * landmark — it keeps the `contenido` id it already had, now on an element
  * that means where the content begins.
  */
-export default function LegalDocumentPage({ title, blocks, aside }: LegalDocumentPageProps): React.ReactElement {
-  /*
-   * `max-w-measure` sits on the OUTER element, not on the `<article>`, so the
-   * kicker, the title, the prose and the document links all share one column
-   * edge. `text-base` is here for the same reason: `ch` resolves against the
-   * element's own font size, so pinning it to the body step is what makes the
-   * measure the article's measure rather than the browser default's.
-   */
+const SIDE_TITLE = "font-display text-lg uppercase leading-tight tracking-flat text-ink";
+
+export default function LegalDocumentPage({ title, blocks, aside, summary, path }: LegalDocumentPageProps): React.ReactElement {
+  const sections = blocks.flatMap((block, index) => (block.kind === "heading" ? [{ id: sectionId(block.text, index), label: block.text }] : []));
+  const hasToc = sections.length > 1;
+  const { whatsapp } = landingConfig.contact;
   const related = (
-      <nav aria-label="Otros documentos públicos" className={cn(aside === undefined ? "mt-16 border-t border-cata-border pt-8" : "card p-6 sm:p-8")}>
-        {/* A label for the link group, and no red rule: the rule is the
-            document's kicker and it stays singular to keep meaning anything. */}
-        <p className="mb-3 text-2xs font-extrabold uppercase tracking-caps text-ink-3-strong">Otros documentos públicos</p>
-        <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-cata-red-dark underline underline-offset-4">
-          <Link href="/terminos">Términos de uso</Link>
-          <Link href="/privacidad">Aviso de privacidad</Link>
-          <Link href="/permiso-imagen-fetm">Permiso público de imagen FETM</Link>
-        </div>
-      </nav>
+    <nav aria-label="Otros documentos públicos" className="card p-5">
+      {/* A label for the link group, and no red rule: the rule is the
+          document's kicker and it stays singular to keep meaning anything. */}
+      <p className="mb-3 text-2xs font-extrabold uppercase tracking-caps text-ink-3-strong">Otros documentos públicos</p>
+      <ul className="grid gap-2 text-sm font-semibold text-cata-red-dark underline underline-offset-4">
+        {DOCUMENTS.map((doc) => (
+          <li key={doc.href}>
+            <Link href={doc.href} aria-current={doc.href === path ? "page" : undefined}>
+              {doc.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
-  const doc = (
-    <>
-      {/*
-       * No `focus-visible:*` utilities here. `globals.css:330-344` gives every
-       * `a[href]` outside the landing the two-tone coal + ball ring from a
-       * selector at specificity 0,3,0 — so the `focus-visible:outline-2
-       * focus-visible:outline-offset-4` this link used to carry (0,2,0) could
-       * never win, and only made it look like the link had a ring of its own.
-       * It focuses exactly like the three document links at the foot.
-       */}
-      <Link href="/" className="mb-10 inline-flex text-sm font-semibold text-cata-red-dark underline-offset-4 hover:underline">
-        Volver a Cata Club
-      </Link>
-      {/**
-       * A DIV, not a `<header>`. The sticky bar `Header` draws on the three
-       * legal routes (`InstitutionalHeader`) is the page's ONE banner; a
-       * `<header>` here became a second banner, and someone navigating by
-       * banner landed on document metadata instead of the site's navigation.
-       * The block keeps every class — it is a heading group, not a landmark.
-       */}
-      <div className="border-b border-cata-border pb-8">
-        {/*
-         * The landing's eyebrow, transcribed: a 2px red rule, a gap, then an
-         * uppercase wide-tracked label. `cata-red` is the rule because a rule
-         * is a FILL; the label is `cata-red-dark` because the same red as TEXT
-         * measures 4.10:1 on the page grey and misses AA.
-         */}
-        <p className="mb-4 flex items-center gap-3 text-xs font-extrabold uppercase tracking-caps-wide text-cata-red-dark">
-          <span aria-hidden="true" className="h-0.5 w-8 flex-none bg-cata-red" />
-          Documento público
-        </p>
-        <h1 className="text-balance font-display text-xl uppercase leading-crisp tracking-flat text-cata-text sm:text-2xl">{title}</h1>
-        {/*
-         * Metadata, not headings: the label step in Barlow. Both values are
-         * load-bearing — the public enrollment's grouped consent records which
-         * version of which document was accepted, so the version and the
-         * effective date are part of the document, not a byline.
-         */}
-        <dl className="mt-8 grid gap-4 sm:grid-cols-2 sm:gap-x-8">
-          <div>
-            <dt className="text-2xs font-extrabold uppercase tracking-caps text-ink-3-strong">Versión</dt>
-            <dd className="mt-1 text-sm font-semibold text-cata-text">1.0</dd>
-          </div>
-          <div>
-            <dt className="text-2xs font-extrabold uppercase tracking-caps text-ink-3-strong">Vigente desde</dt>
-            <dd className="mt-1 text-sm font-semibold text-cata-text">27 de agosto de 2026</dd>
-          </div>
-        </dl>
-      </div>
-      {/**
-       * The blocks render through the SHARED `LegalDocumentProse` — the one
-       * renderer a legal document's blocks have. The wizard's in-flow review
-       * (`LegalReviewDialog`, #1368) passes `headingLevel={3}` because its
-       * document title owns the h2; this page sits under the document h1 and
-       * keeps h2. Every other class is the renderer's, so a heading stays a
-       * heading and the prose reads identically in both places.
-       *
-       * `leading-prose` (1.55) is the step the config names for exactly this —
-       * "long-form paragraph: help text, legal copy, empty-state prose". The
-       * `leading-8` it replaced was a raw 32px, i.e. 2.13 at the body size, and
-       * that much air between lines pulls a paragraph apart into stripes.
-       */}
-      <LegalDocumentProse blocks={blocks} className="mt-10 space-y-6 leading-prose text-cata-text" />
-      {aside === undefined && related}
-    </>
+  const keyPoints =
+    aside !== undefined ? (
+      aside
+    ) : summary !== undefined ? (
+      <section aria-labelledby="legal-resumen" className="card grid gap-3 p-5">
+        <h2 id="legal-resumen" className={SIDE_TITLE}>
+          En resumen
+        </h2>
+        <ul className="grid list-disc gap-2 pl-5 text-sm leading-prose text-ink-2">
+          {summary.map((point) => (
+            <li key={point}>{point}</li>
+          ))}
+        </ul>
+      </section>
+    ) : null;
+  const questions = (
+    <section aria-labelledby="legal-dudas" className="card grid gap-2 p-5">
+      <h2 id="legal-dudas" className={SIDE_TITLE}>
+        ¿Dudas?
+      </h2>
+      <p className="text-sm leading-prose text-ink-2">Escríbanos y le responderemos de forma administrativa.</p>
+      <p className="grid gap-1 text-sm font-semibold text-cata-red-dark underline underline-offset-4">
+        <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+        {whatsapp.map((number) => (
+          <a key={number} href={toWhatsAppLink(number)} target="_blank" rel="noreferrer">
+            WhatsApp {number}
+            <span className="sr-only"> (abre en una pestaña nueva)</span>
+          </a>
+        ))}
+      </p>
+    </section>
   );
   return (
-    <main id="contenido" className={cn("mx-auto w-full text-base py-8 sm:py-12", aside === undefined ? "max-w-measure" : "max-w-6xl")}>
-      {aside === undefined ? (
-        doc
-      ) : (
-        <div className="grid content-start gap-page">
-          <div className={PAGE_RAIL}>
-            <div className="grid content-start gap-page">
-              {/* The card is as wide as its column and so is the text: a
-                  document this short reads fine on the full card width. */}
-              <div className="card p-6 sm:p-10">{doc}</div>
-              <section aria-labelledby="preguntas-permiso" className="card p-6 sm:p-8">
-                <p id="preguntas-permiso" className="mb-3 text-2xs font-extrabold uppercase tracking-caps text-ink-3-strong">
-                  Preguntas sobre este permiso
-                </p>
-                <p className="text-sm leading-prose text-cata-text">
-                  Si tiene dudas sobre el alcance de la difusión de imagen, consulte con la persona entrenadora o con la administración del club
-                  antes de aceptar el permiso. Puede revisar este documento las veces que lo necesite.
-                </p>
-              </section>
-            </div>
-            {aside}
-          </div>
-          {related}
+    <main
+      id="contenido"
+      className={cn("mx-auto w-full max-w-7xl py-8 text-base sm:py-12", PAGE_RAIL, hasToc && "xl:grid-cols-[240px_minmax(0,1fr)_300px]")}
+    >
+      {hasToc && (
+        <div className="hidden xl:sticky xl:top-24 xl:block">
+          <LegalToc items={sections} />
         </div>
       )}
+      <div className="grid min-w-0 content-start gap-page max-lg:order-2">
+        <div className="card p-6 sm:p-10">
+          {/*
+           * No `focus-visible:*` utilities here: `globals.css` gives every
+           * `a[href]` outside the landing the two-tone focus ring.
+           */}
+          <Link href="/" className="mb-10 inline-flex text-sm font-semibold text-cata-red-dark underline-offset-4 hover:underline">
+            Volver a Cata Club
+          </Link>
+          {/* A DIV, not a `<header>`: the institutional bar is the page's one banner. */}
+          <div className="border-b border-cata-border pb-8">
+            {/* The landing's eyebrow: a red rule fill, a `cata-red-dark` label (AA as text). */}
+            <p className="mb-4 flex items-center gap-3 text-xs font-extrabold uppercase tracking-caps-wide text-cata-red-dark">
+              <span aria-hidden="true" className="h-0.5 w-8 flex-none bg-cata-red" />
+              Documento público
+            </p>
+            <h1 className="text-balance font-display text-xl uppercase leading-crisp tracking-flat text-cata-text sm:text-2xl">{title}</h1>
+            {/* The consent record keeps which version was accepted, so these are part of the document. */}
+            <dl className="mt-8 grid gap-4 sm:grid-cols-2 sm:gap-x-8">
+              <div>
+                <dt className="text-2xs font-extrabold uppercase tracking-caps text-ink-3-strong">Versión</dt>
+                <dd className="mt-1 text-sm font-semibold text-cata-text">1.0</dd>
+              </div>
+              <div>
+                <dt className="text-2xs font-extrabold uppercase tracking-caps text-ink-3-strong">Vigente desde</dt>
+                <dd className="mt-1 text-sm font-semibold text-cata-text">27 de agosto de 2026</dd>
+              </div>
+            </dl>
+          </div>
+          {/*
+           * Same classes as the shared `LegalDocumentProse`, plus the anchor id
+           * each heading needs for the contents list; that renderer is also the
+           * wizard dialog's and has no ids to give.
+           */}
+          <article className="mt-10 space-y-6 leading-prose text-cata-text">
+            {blocks.map((block, index) =>
+              block.kind === "heading" ? (
+                <h2
+                  key={`${index}-${block.text.slice(0, 24)}`}
+                  id={sectionId(block.text, index)}
+                  className="scroll-mt-24 pt-8 font-display text-lg uppercase leading-tight tracking-flat text-cata-text first:pt-0"
+                >
+                  {block.text}
+                </h2>
+              ) : (
+                <p key={`${index}-${block.text.slice(0, 24)}`}>{block.text}</p>
+              ),
+            )}
+          </article>
+        </div>
+        {aside !== undefined && (
+          <section aria-labelledby="preguntas-permiso" className="card p-6 sm:p-8">
+            <p id="preguntas-permiso" className="mb-3 text-2xs font-extrabold uppercase tracking-caps text-ink-3-strong">
+              Preguntas sobre este permiso
+            </p>
+            <p className="text-sm leading-prose text-cata-text">
+              Si tiene dudas sobre el alcance de la difusión de imagen, consulte con la persona entrenadora o con la administración del club
+              antes de aceptar el permiso. Puede revisar este documento las veces que lo necesite.
+            </p>
+          </section>
+        )}
+      </div>
+      {/*
+       * Below `lg` the rail dissolves (`contents`) so the summary reads before the
+       * document and the reference cards (version, related, contact) after it.
+       */}
+      <div className="grid content-start gap-page max-lg:contents lg:sticky lg:top-24">
+        {keyPoints !== null && <div className="grid max-lg:order-1">{keyPoints}</div>}
+        {aside === undefined && (
+          <section aria-label="Versión y vigencia" className="card p-5 text-sm text-ink-2 max-lg:order-3">
+            <p className="mb-1 text-2xs font-extrabold uppercase tracking-caps text-ink-3-strong">Versión y vigencia</p>
+            <p>Versión 1.0, vigente desde el 27 de agosto de 2026.</p>
+          </section>
+        )}
+        <div className="grid gap-page max-lg:order-3">
+          {related}
+          {questions}
+        </div>
+      </div>
     </main>
   );
 }
