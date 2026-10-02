@@ -207,6 +207,20 @@ def test_backend_reporta_las_pruebas_mas_lentas():
     assert "--durations=25" in corrida
 
 
+def test_backend_corre_las_pruebas_en_paralelo_sin_perder_cobertura():
+    """Issue #1505: la suite serial tardaba ~17 min. `-n auto` reparte las
+    pruebas entre workers (una BD por worker, ver `url_de_worker` en
+    `backend/tests/conftest.py`); `--dist worksteal` es necesario porque con
+    `load` los tests lentos de `test_seed_dev_bulk` se amontonaban en un
+    worker (medido: 13:53 con `load` vs 5:51 con `worksteal`, `-n 4`).
+    `--cov=app` sigue activo: el piso `fail_under` aplica sobre el total."""
+    pasos = cargar()["jobs"]["backend"]["steps"]
+    corrida = next(p["run"] for p in pasos if p.get("name") == "Run tests")
+    assert "-n auto" in corrida
+    assert "--dist worksteal" in corrida
+    assert "--cov=app" in corrida
+
+
 def test_el_build_del_backend_no_declara_build_sha():
     """Decisión deliberada, no un olvido: el backend no expone superficie de
     revisión (Caddy solo publica `/health/ready`) y comparte el mismo

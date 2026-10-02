@@ -197,6 +197,9 @@ jobs:
         run: uv run --frozen --no-build pip-audit
 
       - name: Run tests
+        # En paralelo (pytest-xdist, issue #1505): una BD por worker, derivada
+        # de TEST_DATABASE_URL por `backend/tests/conftest.py`. `-v` se quitó:
+        # bajo xdist solo agrega ruido y `--durations=25` ya señala lo lento.
         # Solo TEST_DATABASE_URL. `AMBIENTE` y `JWT_SECRET_KEY` los pone
         # `backend/tests/conftest.py` con `setdefault`, que es el único lugar
         # donde vive el contrato de entorno de la suite (issue #101). NO se
@@ -205,7 +208,7 @@ jobs:
         # solo funciona en CI. Que este paso corra sin ellas ES la prueba.
         env:
           TEST_DATABASE_URL: postgresql+psycopg://usuario:password@localhost:5432/cataclub_test
-        run: uv run --frozen --no-build pytest tests/ -v --durations=25 --cov=app --cov-report=term-missing
+        run: uv run --frozen --no-build pytest tests/ -n auto --dist worksteal --durations=25 --cov=app --cov-report=term-missing
 
       - name: Install age (cifrado de backups)
         # `tests/test_backup_controls.py` verifica que el dump cifrado no
