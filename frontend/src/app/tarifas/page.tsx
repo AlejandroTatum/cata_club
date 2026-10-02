@@ -27,6 +27,7 @@ import {
   InfoPanel,
   LoadingState,
   PAGE_RAIL,
+  MoneyInput,
 } from "@/components/ui";
 import { cn } from "@/components/ui/cn";
 import { useToast } from "@/contexts/ToastContext";
@@ -73,8 +74,6 @@ function normalizePrecio(value: string): string {
 }
 
 /** Price field: full-width control with the "$" adornment inside the box. */
-const PRECIO_INPUT_CLASS =
-  "h-ctl w-full rounded-ctl border border-line-2 bg-paper pl-7 pr-3 text-sm text-ink tabular-nums outline-none focus:border-cata-red";
 
 /** Mirrors the backend's own bound (`membresia_pago_schemas.py`'s
  *  `categoria: Optional[str] = Field(None, min_length=1, max_length=80)`) so
@@ -397,25 +396,14 @@ export default function TarifasPage(): React.ReactElement {
     return (
       <label className={FIELD_LABEL}>
         Precio mensual
-        <span className="relative block">
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-bold text-ink-3"
-          >
-            $
-          </span>
-          <input
-            type="text"
-            inputMode="decimal"
-            value={precioInput}
-            onChange={(e) => precioMasking.onChange(e.target.value)}
-            onKeyDown={precioMasking.onKeyDown}
-            onPaste={precioMasking.onPaste}
-            className={PRECIO_INPUT_CLASS}
-            aria-label={`Precio de ${tarifa.categoria}`}
-            disabled={saving}
-          />
-        </span>
+        <MoneyInput
+          value={precioInput}
+          onChange={(e) => precioMasking.onChange(e.target.value)}
+          onKeyDown={precioMasking.onKeyDown}
+          onPaste={precioMasking.onPaste}
+          aria-label={`Precio de ${tarifa.categoria}`}
+          disabled={saving}
+        />
         {inputError ? (
           <span className="text-xs font-normal normal-case text-state-bad" role="alert">
             {inputError}
@@ -519,15 +507,12 @@ export default function TarifasPage(): React.ReactElement {
           </label>
           <label className={FIELD_LABEL}>
             Precio <span aria-hidden="true" className="text-state-bad">*</span>
-            <input
-              type="text"
-              inputMode="decimal"
+            <MoneyInput
               required
               value={newTarifa.precioInput}
               onChange={(e) => newPrecioMasking.onChange(e.target.value)}
               onKeyDown={newPrecioMasking.onKeyDown}
               onPaste={newPrecioMasking.onPaste}
-              className={FIELD_CONTROL}
               placeholder="45.00"
               disabled={creating}
             />

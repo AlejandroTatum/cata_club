@@ -12,7 +12,8 @@
  *     never passed them and pulled the entire table every time.
  *   · Dates are humanised ("Hoy, 23 jul"), because the question this log
  *     answers is "how recent is this?".
- *   · "← Volver al Panel" is gone: the sidebar already does that.
+ *   · "Volver al Panel de Control" is back, by explicit product request (QA2):
+ *     the sidebar alone left admins without an in-page way out.
  *
  * Domain rule (issue #13): schedules are NOT trainer-owned and attendance
  * does not record who taught the session — any trainer operates any session.
@@ -43,6 +44,7 @@ import { ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { fetchTrainingSchedules, fetchAttendanceRecords } from "@/services/api";
 import {
+  BackLink,
   buttonClasses,
   ErrorState,
   LoadingState,
@@ -147,6 +149,7 @@ export default function AttendancePage(): React.ReactElement {
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
+        back={<BackLink href="/dashboard" />}
         title="Asistencias"
         subtitle="El registro de quién entrenó, y cuándo."
         actions={

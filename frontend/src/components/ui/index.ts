@@ -84,6 +84,9 @@ export type { ScrollableTableProps } from "./ScrollableTable";
 // `/payments`' focus behavior — follow-up, not a merge-time call.
 export { default as ResponsiveList } from "./ResponsiveList";
 
+export { default as RoleShortcuts } from "./RoleShortcuts";
+export type { RoleShortcut, RoleShortcutsProps, RoleShortcutTone } from "./RoleShortcuts";
+
 export { default as SearchInput } from "./SearchInput";
 export type { SearchInputProps } from "./SearchInput";
 
@@ -119,3 +122,5 @@ export { default as WeekStrip } from "./WeekStrip";
 export type { WeekStripProps, WeekStripVariant } from "./WeekStrip";
 
 export { cn } from "./cn";
+export { default as MoneyInput } from "./MoneyInput";
+export type { MoneyInputProps } from "./MoneyInput";
