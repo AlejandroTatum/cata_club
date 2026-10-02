@@ -39,18 +39,18 @@ test.describe("public navigation (issue #771)", () => {
     const header = await navEntries(page, HEADER_NAV);
     expect(header.map(([label]): string => label)).toEqual([
       "Inicio",
-      "Horarios",
       "Valores",
       "Galería",
+      "Horarios",
       "Contacto",
     ]);
     // Every href carries the landing's path. A bare `#horarios` here would name
     // a section of the legal page, which has none: the click would do nothing.
     expect(header.map(([, href]): string => href)).toEqual([
       "/#inicio",
-      "/#horarios",
       "/#valores",
       "/#galeria",
+      "/#horarios",
       "/#contacto",
     ]);
 

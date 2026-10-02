@@ -41,16 +41,17 @@ export interface SiteNavSection {
 }
 
 /**
- * The approved order. `Location` answers to "Contacto"; `#nosotros` (Misión y
- * Visión) is deliberately not here — the footer's "Nosotros" column is where
- * that section is named. Issue #1372 removed Logros from both the landing and
+ * The approved order, which is also the order the sections sit on the page.
+ * `Location` answers to "Contacto"; `#nosotros` (Misión y Visión) is
+ * deliberately not here — the footer's "Nosotros" column is where that section
+ * is named. Issue #1372 removed Logros from both the landing and
  * this list; the gallery (#1372) is where published results photos live now.
  */
 export const SITE_NAV_SECTIONS: readonly SiteNavSection[] = [
   { id: "inicio", label: "Inicio" },
-  { id: "horarios", label: "Horarios" },
   { id: "valores", label: "Valores" },
   { id: "galeria", label: "Galería" },
+  { id: "horarios", label: "Horarios" },
   { id: "contacto", label: "Contacto" },
 ];
 
