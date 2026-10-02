@@ -516,7 +516,7 @@ export default function MedicalRecordEditor({
        * are one fact written in two boxes. */}
       {/* In page mode the card is stretched to the rail's height; the rows
           spread over that height instead of leaving a void under the last. */}
-      <div className={`grid gap-3 sm:grid-cols-2`}>
+      <div className="grid gap-3 sm:grid-cols-2">
         {withEmergencyCard && <GroupHeading className="sm:col-span-2">Salud</GroupHeading>}
         <div>
           {/* The asterisk sits OUTSIDE the `<label>` on purpose: inside, it
