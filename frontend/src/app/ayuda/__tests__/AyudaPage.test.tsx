@@ -397,20 +397,30 @@ describe("AyudaPage — search, categories and rail (admin v4)", () => {
     );
   });
 
-  it("offers quick links by role", () => {
+  it("offers quick links by role as shortcut tiles", () => {
     mockRole = "admin";
     const { unmount } = render(<AyudaPage />);
-    expect(screen.getByRole("link", { name: "Miembros" })).toHaveAttribute("href", "/members");
+    const adminTiles = within(screen.getByRole("list", { name: "Accesos rápidos" }));
+    expect(adminTiles.getByRole("link", { name: /Miembros/ })).toHaveAttribute("href", "/members");
+    expect(adminTiles.getByRole("link", { name: /Miembros/ })).toHaveTextContent("Cuentas, roles y membresías");
     unmount();
 
     mockRole = "estudiante";
+    const second = render(<AyudaPage />);
+    expect(screen.getByRole("link", { name: /Mis pagos/ })).toHaveAttribute("href", "/student/payments");
+    second.unmount();
+
+    mockRole = "representante";
     render(<AyudaPage />);
-    expect(screen.getByRole("link", { name: "Mis pagos" })).toHaveAttribute("href", "/student/payments");
+    expect(screen.getByRole("link", { name: /Agregar estudiante/ })).toHaveAttribute(
+      "href",
+      "/student/add-dependent",
+    );
   });
 
   it("offers sign-in and the public site to a signed-out visitor", () => {
     render(<AyudaPage />);
 
-    expect(screen.getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute("href", "/login");
+    expect(screen.getByRole("link", { name: /Iniciar sesión/ })).toHaveAttribute("href", "/login");
   });
 });

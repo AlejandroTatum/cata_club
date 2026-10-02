@@ -15,7 +15,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { Dumbbell, Rocket, ShieldCheck, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -29,9 +28,10 @@ import {
   FilterPill,
   InfoPanel,
   PAGE_RAIL,
+  RoleShortcuts,
   SearchInput,
-  buttonClasses,
 } from "@/components/ui";
+import type { RoleShortcut } from "@/components/ui";
 import { useReportProblem } from "@/components/report-problem/useReportProblem";
 import { useAuth } from "@/contexts/AuthContext";
 import { backHrefForRole } from "@/lib/auth-utils";
@@ -132,45 +132,40 @@ function AnswerWithLink({ question, answer }: { question: string; answer: string
 /** Rows share the viewport's height left under the page header (no dead band). */
 const FILL_SCREEN = "xl:min-h-[calc(100dvh-25rem)] xl:auto-rows-fr";
 
-interface QuickLink {
-  label: string;
-  href: string;
-}
-
 /**
  * Where each audience most often goes next. Destinations only — every one is
  * a route the role's own navigation already reaches.
  */
-const QUICK_LINKS_BY_ROLE: Partial<Record<UserRole, QuickLink[]>> = {
+const QUICK_LINKS_BY_ROLE: Partial<Record<UserRole, RoleShortcut[]>> = {
   admin: [
-    { label: "Panel de Control", href: "/dashboard" },
-    { label: "Miembros", href: "/members" },
-    { label: "Pagos", href: "/payments" },
-    { label: "Asistencias", href: "/attendance" },
+    { title: "Panel de Control", description: "Resumen del día del club", href: "/dashboard" },
+    { title: "Miembros", description: "Cuentas, roles y membresías", href: "/members" },
+    { title: "Pagos", description: "Revisar y aprobar comprobantes", href: "/payments" },
+    { title: "Asistencias", description: "Registros de entrenamiento", href: "/attendance" },
   ],
   trainer: [
-    { label: "Mi día", href: "/trainer" },
-    { label: "Asistencias", href: "/trainer/attendance" },
-    { label: "Mi perfil", href: "/profile" },
+    { title: "Mi día", description: "Sus próximas sesiones", href: "/trainer" },
+    { title: "Asistencias", description: "Registrar la asistencia", href: "/trainer/attendance" },
+    { title: "Mi perfil", description: "Sus datos y su cuenta", href: "/profile" },
   ],
   estudiante: [
-    { label: "Mi cuenta", href: "/student" },
-    { label: "Mis pagos", href: "/student/payments" },
-    { label: "Mi asistencia", href: "/student/attendance" },
-    { label: "Mi perfil", href: "/profile" },
+    { title: "Mi cuenta", description: "Su resumen y próximas sesiones", href: "/student" },
+    { title: "Mis pagos", description: "Sus cuotas y comprobantes", href: "/student/payments" },
+    { title: "Mi asistencia", description: "Su historial de entrenamientos", href: "/student/attendance" },
+    { title: "Mi perfil", description: "Sus datos y su cuenta", href: "/profile" },
   ],
   representante: [
-    { label: "Mi cuenta", href: "/student" },
-    { label: "Mis pagos", href: "/student/payments" },
-    { label: "Agregar estudiante", href: "/student/add-dependent" },
-    { label: "Mi perfil", href: "/profile" },
+    { title: "Mi cuenta", description: "El resumen de su familia", href: "/student" },
+    { title: "Mis pagos", description: "Cuotas y comprobantes", href: "/student/payments" },
+    { title: "Agregar estudiante", description: "Sumar a otra persona a su cargo", href: "/student/add-dependent" },
+    { title: "Mi perfil", description: "Sus datos y su cuenta", href: "/profile" },
   ],
 };
 
-const PUBLIC_QUICK_LINKS: QuickLink[] = [
-  { label: "Iniciar sesión", href: "/login" },
-  { label: "Horarios del club", href: "/#horarios" },
-  { label: "Página principal", href: "/" },
+const PUBLIC_QUICK_LINKS: RoleShortcut[] = [
+  { title: "Iniciar sesión", description: "Ingresar a su cuenta", href: "/login" },
+  { title: "Horarios del club", description: "Días y horas de entrenamiento", href: "/#horarios" },
+  { title: "Página principal", description: "Conocer el club", href: "/" },
 ];
 
 /** Case- and accent-insensitive, so "inscripcion" finds "inscripción". */
@@ -322,15 +317,7 @@ export default function AyudaPage(): React.ReactElement {
           </ul>
         </InfoPanel>
         <InfoPanel title="Accesos rápidos">
-          <ul className="grid gap-2" aria-label="Accesos rápidos">
-            {quickLinks.map((link) => (
-              <li key={link.href + link.label}>
-                <Link href={link.href} className={buttonClasses("tertiary", "sm")}>
-                  {link.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <RoleShortcuts shortcuts={quickLinks} label="Accesos rápidos" className="sm:grid-cols-1" />
         </InfoPanel>
       </div>
       </div>
