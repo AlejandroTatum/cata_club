@@ -19,17 +19,28 @@ function renderConfirmation(overrides: Partial<EnrollConfirmationProps> = {}) {
 describe("EnrollConfirmation", () => {
   it("shows a real, local club photo with a text alternative", () => {
     renderConfirmation();
-    const photo = screen.getByRole("img", { name: /cata club reunidos en el club/i });
-    expect(decodeURIComponent(photo.getAttribute("src") ?? "")).toContain("/landing/hero-community.jpg");
+    const photo = screen.getByRole("img", { name: /cata club entrenando en las mesas/i });
+    expect(decodeURIComponent(photo.getAttribute("src") ?? "")).toContain("/landing/hero-training.jpg");
   });
 
-  it("lays the next steps out as four numbered cards", () => {
+  it("lays the next steps out as one ordered sequence of four", () => {
     renderConfirmation();
+    expect(screen.getByRole("heading", { level: 2, name: "Qué sigue" })).toBeInTheDocument();
     const steps = within(screen.getByRole("list")).getAllByRole("listitem");
     expect(steps).toHaveLength(4);
-    steps.forEach((step, index) => expect(step).toHaveTextContent(String(index + 1)));
+    ["Su cuenta", "Su correo", "El club", "Su membresía"].forEach((title, index) =>
+      expect(within(steps[index]).getByRole("heading", { level: 3, name: title })).toBeInTheDocument(),
+    );
     expect(steps[0]).toHaveTextContent("Su cuenta ya está creada y la sesión, iniciada.");
     expect(steps[3]).toHaveTextContent("El club lo valida y ahí se activa la membresía.");
+  });
+
+  it("puts the student's name first and the success state in the page heading", () => {
+    renderConfirmation();
+    expect(screen.getByRole("heading", { level: 1, name: /inscripción completada/i })).toBeInTheDocument();
+    expect(screen.getByText("Lucas Martinez")).toBeInTheDocument();
+    expect(screen.getByText("¡Le damos la bienvenida a Cata Club!")).toBeInTheDocument();
+    expect(screen.getByText("Su camino en el tenis de mesa comienza aquí.")).toBeInTheDocument();
   });
 
   it("only claims the session when it was confirmed", () => {
