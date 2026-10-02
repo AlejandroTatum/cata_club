@@ -228,12 +228,11 @@ function SessionList({
   const empty = sessions.length === 0;
 
   return (
-    // No stretch when empty: a tall frame around one sentence is the hole
-    // relocated inside a border. The empty state is one guiding line plus the
-    // legend of what each row will say once the trainer takes attendance.
+    // Empty: one guiding line, card height = content (ghost rows would read
+    // as "still loading"); the legend of states lives in the rail's guide.
     <section
       data-testid="sessions-card"
-      className={cn("card flex flex-col overflow-hidden", fill && "lg:flex-1")}
+      className={cn("card flex flex-col overflow-hidden", fill && !empty && "lg:flex-1")}
       aria-labelledby="sessions-title"
     >
       <div className="flex items-center gap-3 border-b border-line px-5 py-4">
@@ -270,23 +269,6 @@ function SessionList({
                 le haya asignado.
               </p>
             </div>
-            {/* The scope line lives here for an empty record: a footnote under
-                a one-line card would only float in the canvas. */}
-            <p className="hidden max-w-xs text-right text-xs text-ink-3 lg:block">
-              El portal muestra las {PORTAL_SESSION_WINDOW} sesiones más recientes; para un período
-              anterior, pídalo al club.
-            </p>
-          </div>
-          <div className="border-t border-line bg-sunken px-5 py-3">
-            <p className="text-2xs font-bold uppercase text-ink-3-strong">Estados posibles</p>
-            <ul className="mt-2 grid gap-x-8 gap-y-field sm:grid-cols-2 xl:grid-cols-3">
-              {ATTENDANCE_LEGEND.map(({ estado, meaning }) => (
-                <li key={estado} className="flex items-center gap-2.5">
-                  <Badge tone={getAttendanceBadgeTone(estado)}>{getAttendanceLabel(estado)}</Badge>
-                  <span className="text-xs text-ink-3">{meaning}</span>
-                </li>
-              ))}
-            </ul>
           </div>
         </div>
       ) : (
@@ -488,28 +470,21 @@ function AttendanceView({
         />
       ) : selectedProfile.recentSessions.length === 0 ? (
         /*
-         * The socio nuevo: ONE column, and the record is it.
-         *
-         * The rail exists to hold the counted recap, and at zero sessions
-         * there is nothing counted — the card would read "Todavía no hay
-         * sesiones registradas" over four zeros, which is the same sentence
-         * the record already says two hundred pixels to its left, plus a
-         * tally of nothing. `/student/payments` dropped its own rail for the
-         * same reason once the block that justified it moved out: a 340px
-         * column kept for its own sake is the "un riel no cierra un vacío
-         * vertical" mistake `PAGE_RAIL`'s own note warns about.
-         *
-         * With the rail gone the record is a direct child of `<main>`, which
-         * is the flex column that already holds the window's full height, so
-         * its `flex-1` finally has something to claim. The scope footnote
-         * stays where a footnote goes: under it, at the foot.
+         * The socio nuevo: the same two columns as a record with sessions, but
+         * the rail holds only the guide, which fills the width beside the
+         * record. The counted recap stays out — at zero it would repeat the
+         * record's sentence over four zeros. The record keeps its content
+         * height: ghost rows under "Aún no hay asistencias" read as loading.
          */
-        <>
-          <SessionList profile={selectedProfile} studentName={studentName} />
-          <div className="lg:hidden">
+        <div className={cn(PAGE_RAIL, "lg:items-stretch")}>
+          <div className="flex min-w-0 flex-col gap-section">
+            <SessionList profile={selectedProfile} studentName={studentName} fill />
             <PortalWindowNote />
           </div>
-        </>
+          <div className="flex min-w-0 flex-col gap-page lg:self-start">
+            <AttendanceGuide />
+          </div>
+        </div>
       ) : (
         <div className={cn(PAGE_RAIL, "lg:items-stretch")}>
           {/* `gap-section` — the declared step between the parts of one block,
