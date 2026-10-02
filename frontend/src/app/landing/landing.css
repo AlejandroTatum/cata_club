@@ -513,7 +513,7 @@
 .landing-schedule-audience { margin: 0; color: var(--landing-text); font-weight: 600; }
 .landing-schedule-label { display: block; margin-bottom: 2px; color: var(--landing-text-muted); font-size: 11.5px; font-weight: 800; letter-spacing: 2.4px; text-transform: uppercase; }
 
-.landing-schedule-time { white-space: nowrap; display: flex; align-items: baseline; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin: 0; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(40px, 3.9vw, 64px); line-height: 1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.landing-schedule-time { white-space: nowrap; display: flex; align-items: baseline; flex-wrap: wrap; justify-content: flex-start; gap: 0.3em; margin: 0; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(40px, 3.9vw, 64px); line-height: 1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
 .landing-schedule-time small { color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 15px; font-weight: 600; letter-spacing: 0.5px; text-transform: none; }
 .landing-schedule-dash { color: var(--landing-action); }
 /* Each `HH:MM` half is a run of one span per character (`DigitRun`, for the
@@ -783,7 +783,7 @@
      lower clamp ceiling buy real margin — measured with the Playwright lock
      below at both 412px (`mobile-chromium`'s Pixel 7) and a 360px extreme:
      the range now fits with room to spare at both widths. */
-  .landing-schedule-time { gap: 8px; font-size: clamp(30px, 8.5vw, 38px); }
+  .landing-schedule-time { font-size: clamp(30px, 8.5vw, 38px); }
   .landing-schedule-day { width: 40px; height: 40px; }
   .landing-schedule-days { gap: 6px; }
   .landing-motto { padding: 52px 28px; }
