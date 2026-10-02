@@ -110,7 +110,9 @@ export function MembershipCard({
         </h2>
         <p className="mt-1.5 text-sm text-ink-3">
           {coverageEnd
-            ? "Es la fecha del pago aprobado que llega más lejos en su historial."
+            ? state.tone === "bad"
+              ? "Su cobertura terminó en esta fecha, según sus pagos aprobados."
+              : "Su membresía está cubierta hasta esta fecha según sus pagos aprobados."
             : "En cuanto el club apruebe un pago, aquí aparecerá hasta qué fecha queda cubierto."}
         </p>
 

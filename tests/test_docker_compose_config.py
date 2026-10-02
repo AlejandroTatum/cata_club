@@ -749,6 +749,33 @@ def test_el_sidecar_de_autoheal_monta_el_socket_de_docker_de_solo_lectura():
     )
 
 
+def test_el_snapshot_del_host_llega_al_worker_por_un_bind_mount_de_solo_lectura():
+    """Issue #1314: el cron del host (`scripts/metrics/host-snapshot.sh`) escribe
+    un JSON y el colector, que corre en `celery-worker`, lo lee. El puente es un
+    directorio del host montado de SOLO LECTURA: el contenedor no puede escribir
+    ni falsear lo que el host dice de sí mismo, y no hace falta darle el socket
+    de Docker para que conozca la memoria de sus vecinos."""
+    worker = _config_produccion()["services"]["celery-worker"]
+    montajes = [m for m in worker.get("volumes", []) if m.get("target") == "/host-metricas"]
+    assert len(montajes) == 1, "celery-worker debe montar el directorio de métricas del host"
+    assert montajes[0]["type"] == "bind"
+    assert montajes[0]["source"] == "/var/lib/cata-club/metricas"
+    assert montajes[0].get("read_only") is True
+
+
+def test_solo_autoheal_monta_el_socket_de_docker():
+    """El socket de Docker equivale a root sobre el host. Las métricas del host
+    (#1314) se obtienen con un cron en el HOST, justamente para que ningún
+    contenedor nuevo lo necesite: el único que lo monta sigue siendo autoheal."""
+    servicios = _config_produccion()["services"]
+    con_socket = sorted(
+        nombre
+        for nombre, servicio in servicios.items()
+        if any("docker.sock" in str(m.get("source", "")) for m in servicio.get("volumes", []))
+    )
+    assert con_socket == ["autoheal"]
+
+
 def test_la_imagen_de_autoheal_esta_pineada_a_una_version_exacta():
     """Mismo criterio que el resto de las imágenes de este compose
     (`caddy:2.8-alpine`, `postgres:16-alpine`): un `latest` móvil deja que

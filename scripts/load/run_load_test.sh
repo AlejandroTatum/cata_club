@@ -129,8 +129,23 @@ limpiar() {
   fi
 }
 trap limpiar EXIT
-trap 'limpiar; exit 130' INT
-trap 'limpiar; exit 143' TERM
+
+# INT/TERM: detener k6 y el monitor (no dejarlos huérfanos), registrar la
+# señal y seguir al cierre normal para escribir la evidencia disponible; el
+# runner sale con 130/143. Antes de lanzar k6 no hay nada más que cortar.
+SENAL_RECIBIDA=0
+K6_PID=""
+al_interrumpir() {
+  SENAL_RECIBIDA="$1"
+  if [ -n "$K6_PID" ]; then
+    kill -TERM "$K6_PID" 2>/dev/null || true
+  else
+    limpiar
+    exit "$1"
+  fi
+}
+trap 'al_interrumpir 130' INT
+trap 'al_interrumpir 143' TERM
 
 INICIO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
@@ -185,6 +200,8 @@ K6_DOCKER_ARGS=(
   -e LOAD_CREDENTIALS_JSON
   -e LOAD_EMAIL
   -e LOAD_PASSWORD
+  -e LOAD_THINK_TIME_MIN
+  -e LOAD_THINK_TIME_MAX
   -e LOAD_STEADY_DURATION
   -e LOAD_STEADY_VUS
   -e LOAD_BASELINE_DURATION
@@ -204,12 +221,18 @@ echo "$K6_PID" >"$RUN_DIR/k6.pid"
 
 wait "$K6_PID"
 CODIGO_K6=$?
+if [ "$SENAL_RECIBIDA" != 0 ]; then
+  # wait volvió por la señal: esperar de verdad a que k6 termine (reap).
+  wait "$K6_PID" 2>/dev/null
+  CODIGO_K6=$?
+fi
 set -e
 
 # ── Cerrar el monitor ────────────────────────────────────────────────────────
 touch "$RUN_DIR/stop"
 if [ -n "$MONITOR_PID" ]; then
-  wait "$MONITOR_PID" || true
+  [ "$SENAL_RECIBIDA" = 0 ] || kill "$MONITOR_PID" 2>/dev/null || true
+  wait "$MONITOR_PID" 2>/dev/null || true
 fi
 
 FIN="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -270,6 +293,9 @@ PY
 
 echo "Corrida terminada (k6 exit $CODIGO_K6). Evidencia en: $RUN_DIR"
 cat "$RUN_DIR/run.json"
+
+# Interrumpido por el operador: salir con la señal aunque k6 haya terminado limpio.
+[ "$SENAL_RECIBIDA" = 0 ] || exit "$SENAL_RECIBIDA"
 
 # Reflejar el resultado de k6: un umbral de aceptación incumplido debe romper
 # el make target, no pasar desapercibido.

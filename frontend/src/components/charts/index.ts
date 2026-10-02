@@ -6,6 +6,8 @@ export { default as Ring } from "./Ring";
 export type { RingProps } from "./Ring";
 export { default as SegmentBar } from "./SegmentBar";
 export type { Segment, SegmentBarProps } from "./SegmentBar";
+export { default as Sparkline } from "./Sparkline";
+export type { SparklineProps } from "./Sparkline";
 export { default as StackedBars } from "./StackedBars";
 export type { StackedBarsProps, StackedColumn } from "./StackedBars";
 export { default as Timeline } from "./Timeline";

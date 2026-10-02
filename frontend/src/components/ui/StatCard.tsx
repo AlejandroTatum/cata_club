@@ -187,6 +187,28 @@ export function StatSpark({ values, className }: StatSparkProps): ReactElement |
 
 export type StatCardVariant = "default" | "hot";
 
+/**
+ * The tinted icon tile's palette: the same soft-background / strong-foreground
+ * pairs the account screens' `IconTile` uses, so the pulse row and `/profile`
+ * share one accent vocabulary. The figure itself stays ink.
+ */
+export type StatCardTone = "ball" | "ok" | "info" | "warn" | "trainer" | "neutral";
+
+const STAT_TONE: Record<StatCardTone, { icon: string; accent: string }> = {
+  ball: { icon: "bg-ball/25 text-ink", accent: "border-t-ball bg-ball/5" },
+  ok: { icon: "bg-state-ok-bg text-state-ok", accent: "border-t-state-ok bg-state-ok-bg/30" },
+  info: {
+    icon: "bg-cuenta-representante-bg text-cuenta-representante",
+    accent: "border-t-cuenta-representante bg-cuenta-representante-bg/30",
+  },
+  warn: { icon: "bg-state-warn-bg text-state-warn", accent: "border-t-state-warn bg-state-warn-bg/30" },
+  trainer: {
+    icon: "bg-cuenta-entrenador-bg text-cuenta-entrenador",
+    accent: "border-t-cuenta-entrenador bg-cuenta-entrenador-bg/30",
+  },
+  neutral: { icon: "bg-state-neutral-bg text-state-neutral", accent: "border-t-ink-3 bg-sunken/50" },
+};
+
 export interface StatCardProps {
   /** Uppercase key, e.g. "Membresías activas". */
   label: string;
@@ -197,6 +219,14 @@ export interface StatCardProps {
   /** Bottom line — a short qualifier, a link, or a sparkline/track element. */
   hint?: ReactNode;
   variant?: StatCardVariant;
+  /**
+   * Optional decorative icon, drawn in a small tinted tile in the tile's
+   * top-right corner. Ignored on the `hot` variant, which already carries its
+   * own accent (the ball dot).
+   */
+  icon?: ReactNode;
+  /** Tint of the icon tile. Defaults to `neutral`. Only read with `icon`. */
+  tone?: StatCardTone;
   /**
    * The module this figure comes from. When set the whole tile is one link, so
    * a number that raises a question is one click from the list that answers it.
@@ -212,24 +242,41 @@ export default function StatCard({
   unit,
   hint,
   variant = "default",
+  icon,
+  tone = "neutral",
   href,
   className,
 }: StatCardProps): ReactElement {
   const hot = variant === "hot";
+  const showIcon = icon != null && !hot;
 
   const tile = (
     <div
       className={cn(
-        "min-h-stat rounded-card border px-[18px] py-4 flex flex-col justify-between",
-        hot ? "bg-coal border-coal" : "bg-paper border-line",
+        "relative min-h-stat rounded-card border px-[18px] py-4 flex flex-col justify-between",
+        hot ? "bg-coal border-coal" : showIcon ? cn("border-line border-t-[3px]", STAT_TONE[tone].accent) : "bg-paper border-line",
         href && "h-full transition-colors hover:border-ink-3",
         className,
       )}
     >
+      {showIcon ? (
+        <span
+          data-testid="statcard-icon"
+          aria-hidden="true"
+          className={cn(
+            "absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-ctl",
+            STAT_TONE[tone].icon,
+          )}
+        >
+          {icon}
+        </span>
+      ) : null}
+
       <span
         className={cn(
           "text-2xs font-bold uppercase",
           hot ? "text-white/45" : "text-ink-3",
+          showIcon && "pr-11",
         )}
       >
         {label}

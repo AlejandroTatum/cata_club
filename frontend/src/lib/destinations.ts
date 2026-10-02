@@ -83,6 +83,7 @@ export const DESTINATIONS: Record<string, Destination> = {
   // patrocinadores: se administra adentro y se publica afuera (issue #1372).
   "/galeria": { label: "Galería", preposition: "a" },
   "/admin/reportes-error": { label: "Reportes de error", preposition: "a" },
+  "/admin/actividad": { label: "Actividad del club", preposition: "a" },
   "/tarifas": { label: "Tarifas", preposition: "a" },
   "/attendance": { label: "Asistencias", preposition: "a" },
   "/reports": { label: "Reportes", preposition: "a" },
