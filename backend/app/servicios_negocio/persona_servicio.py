@@ -48,11 +48,11 @@ logger = logging.getLogger("cataclub.servicios.personas")
 
 
 # --- Restricciones de dominio: edad y tutor legal ---------------------------
-# Solo se admiten alumnos entre 5 y 95 años. Si el alumno es menor de edad
-# (5 a 17 años), el Representante/Tutor legal es OBLIGATORIO; no basta con
+# Solo se admiten alumnos entre 3 y 95 años. Si el alumno es menor de edad
+# (3 a 17 años), el Representante/Tutor legal es OBLIGATORIO; no basta con
 # que la columna sea nullable a nivel de BD: la regla se aplica en el
 # servicio de dominio, no en el ORM ni en el router.
-EDAD_MINIMA_ALUMNO = 5
+EDAD_MINIMA_ALUMNO = 3
 EDAD_MAXIMA_ALUMNO = 95
 # `EDAD_MAYORIA_EDAD` se movió a `app.dominio.reglas_negocio` (issue #1139):
 # `rol_servicio.cambiar_estado_cuenta` también la necesita y no puede
@@ -127,7 +127,7 @@ class PersonaServicio:
             )
         if EDAD_MINIMA_ALUMNO <= edad < EDAD_MAYORIA_EDAD and not datos.representante_id:
             raise OperacionInvalida(
-                "El alumno es menor de edad (5 a 17 años): debe indicar los datos "
+                "El alumno es menor de edad (3 a 17 años): debe indicar los datos "
                 "del representante o tutor legal.",
                 detalle_tecnico="falta representante_id en un alta de alumno menor",
             )

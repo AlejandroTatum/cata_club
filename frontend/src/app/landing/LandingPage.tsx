@@ -24,7 +24,7 @@ import Sponsors from "./Sponsors";
 import Ticker from "./Ticker";
 import { CLUB_PLUS_CODE, clubOpenStreetMapUrl } from "./club-location";
 import { buildLandingStats, deriveContactHours, landingConfig, toWhatsAppLink } from "./landing-config";
-import { MAP_INSET_SIZES, MISSION_VISION_PHOTO_SIZES } from "./landing-image-sizes";
+import { ARRIVAL_PHOTO_SIZES, FOOTER_PHOTO_SIZES, MISSION_VISION_PHOTO_SIZES } from "./landing-image-sizes";
 import { mapPublicSchedules, type LandingSchedule } from "./schedule-data";
 import { SITE_NAV_SECTIONS, landingSectionHref } from "@/lib/site-navigation";
 
@@ -39,7 +39,7 @@ interface ValueCardProps {
 }
 
 /**
- * Where every "inscríbete" affordance points.
+ * Where every "inscríbase" affordance points.
  *
  * `/student/enroll` is the real public enrollment wizard: it POSTs to the
  * backend's public /enrollment, persists the student and auto-logs the user
@@ -198,9 +198,9 @@ function Hero(): React.ReactElement {
           it as slack — see `.landing-hero-copy`'s gap. */}
       <div className="landing-hero-copy">
         <h1 className="landing-display" data-split>FORMANDO <span className="landing-hero-accent">CAMPEONES</span> PARA LA VIDA</h1>
-        <p>Únete a nuestro club, donde la técnica y el carácter forjan en cada punto.</p>
+        <p>Únase a nuestro club, donde la técnica y el carácter forjan en cada punto.</p>
         <div className="landing-hero-actions">
-          <Link className="landing-button" href={ENROLL_HREF}>Inscríbete <ArrowRight aria-hidden="true" /></Link>
+          <Link className="landing-button" href={ENROLL_HREF}>Inscríbase <ArrowRight aria-hidden="true" /></Link>
           <a className="landing-button landing-button-outline" href="#horarios">Ver horarios</a>
         </div>
         <div className="landing-hero-note"><Stars /><span>Club deportivo formativo · Desde 2013</span></div>
@@ -320,14 +320,14 @@ function Values(): React.ReactElement {
 
 function Motto(): React.ReactElement {
   return (
-    <section className="landing-section landing-motto" aria-label="Únete al club" data-motion-section data-motto data-testid="motion-section">
+    <section className="landing-section landing-motto" aria-label="Únase al club" data-motion-section data-motto data-testid="motion-section">
       <span className="landing-halftone" aria-hidden="true" />
       <span className="landing-paddle" data-motto-paddle aria-hidden="true">
         <Image className="landing-paddle-crest" src={CREST_SRC} alt="" width={62} height={62} unoptimized />
         <i />
       </span>
-      <p className="landing-motto-lead" data-motto-copy>Cada entrenamiento es una oportunidad para superarte.</p>
-      <Link className="landing-button" data-motto-cta href={ENROLL_HREF}>Inscríbete ya <ArrowRight aria-hidden="true" /></Link>
+      <p className="landing-motto-lead" data-motto-copy>Cada entrenamiento es una oportunidad para superarse.</p>
+      <Link className="landing-button" data-motto-cta href={ENROLL_HREF}>Inscríbase ya <ArrowRight aria-hidden="true" /></Link>
       <Stars />
     </section>
   );
@@ -335,13 +335,15 @@ function Motto(): React.ReactElement {
 
 function Schedule(): React.ReactElement {
   const state = useContext(SchedulesContext);
+  // Once the catalog is ready the header leads the category rail (the
+  // selector draws it); until then it stands alone above the status line.
+  const header = <SectionHeader eyebrow="Entrenamientos" title="Elija una categoría" />;
 
   return (
     <section className="landing-section landing-schedule" id="horarios" data-motion-section data-testid="motion-section">
-      <SectionHeader eyebrow="Entrenamientos" title="Elija una categoría" />
       {state.kind === "ready"
-        ? <ScheduleSelector schedules={state.schedules} />
-        : <p className="landing-schedule-status" role="status">{SCHEDULE_STATUS[state.kind]}</p>}
+        ? <ScheduleSelector schedules={state.schedules} header={header} />
+        : <>{header}<p className="landing-schedule-status" role="status">{SCHEDULE_STATUS[state.kind]}</p></>}
     </section>
   );
 }
@@ -360,59 +362,80 @@ function Location(): React.ReactElement {
   const hours = settled ? deriveContactHours(state.schedules) : SCHEDULE_STATUS[state.kind];
   return (
     <section className="landing-section landing-location" id="contacto" data-motion-section data-testid="motion-section">
-      <SectionHeader eyebrow="Visítanos" title="Cómo llegar" />
-      <div className="landing-location-row">
+      <SectionHeader eyebrow="Visítenos" title="Cómo llegar" />
+      {/* Where first: the entrance photograph and the map answer "which door"
+          and "which street"; the ruled sheet below answers when and how to
+          reach us, one fact per row with its action at the row's end. */}
+      <div className="landing-visit">
+        <figure className="landing-arrival" data-reveal>
+          <Image
+            src="/landing/photo-arrival.jpeg"
+            alt="Entrada de Cata Club junto al Coliseo Ciudad de Loja"
+            width={1600}
+            height={1200}
+            loading="lazy"
+            sizes={ARRIVAL_PHOTO_SIZES}
+          />
+          <figcaption>Así se ve al llegar</figcaption>
+        </figure>
         <div className="landing-map-stage">
           <LandingMap />
-          {/* A small, real view of the club grounds the map without pretending
-              it is a street-facing photograph. It remains non-interactive so
-              Leaflet's map and controls retain their expected behavior. */}
-          <figure className="landing-map-inset">
-            <Image
-              src="/landing/photo-arrival.jpeg"
-              alt="Entrada de Cata Club junto al Coliseo Ciudad de Loja"
-              width={1600}
-              height={1200}
-              loading="lazy"
-              sizes={MAP_INSET_SIZES}
-            />
-            <figcaption>Así se ve al llegar</figcaption>
-          </figure>
         </div>
-        <aside className="landing-contact" data-reveal>
-          <h3>Información de contacto</h3>
-          {/* Street address, landmark, and Plus Code, in that order: the way a
-              visitor narrows down a place. The Coliseo stays — it is the
-              reference the product owner gives, and #641 resolved to the club
-              being beside it, not near a plaza. The Plus Code closes the last
-              gap, since the street here carries no number. */}
-          <p><MapPin aria-hidden="true" /><span>Av. Manuel Agustín Aguirre, Barrio Perpetuo Socorro, Loja, Ecuador — junto al Coliseo Ciudad de Loja ({CLUB_PLUS_CODE})</span></p>
-          <p>
-            <Phone className="landing-icon-whatsapp" aria-hidden="true" /><strong>WhatsApp</strong>
-            <span className="landing-contact-numbers">
-              {contact.whatsapp.map((number): React.ReactElement => (
-                <a key={number} href={toWhatsAppLink(number)} target="_blank" rel="noreferrer">{number}</a>
-              ))}
-            </span>
-          </p>
-          <p><Facebook className="landing-icon-facebook" aria-hidden="true" /><strong>Facebook</strong><a href={contact.facebook} target="_blank" rel="noreferrer">Cata Club Loja</a></p>
-          <p><Instagram className="landing-icon-instagram" aria-hidden="true" /><strong>Instagram</strong><a href={contact.instagram} target="_blank" rel="noreferrer">@cataclub_tenis_de_mesa</a></p>
-          {/* A live region only while it is unsettled, so the visitor hears
-              what happened; once it states real hours it is ordinary copy. */}
-          <p role={settled ? undefined : "status"}><CalendarDays aria-hidden="true" /><strong>Horario</strong><span>{hours}</span></p>
-          <a className="landing-button landing-button-outline" href={clubOpenStreetMapUrl()} target="_blank" rel="noreferrer">
-            <Navigation aria-hidden="true" /> Cómo llegar
-          </a>
-          <a className="landing-button landing-button-block" href={toWhatsAppLink(contact.whatsapp[0])} target="_blank" rel="noreferrer">
-            <MessageCircle aria-hidden="true" /> Escríbenos por WhatsApp
-          </a>
-        </aside>
       </div>
+      <dl className="landing-contact" data-reveal>
+        {/* Street address, landmark, and Plus Code, in that order: the way a
+            visitor narrows down a place. The Coliseo stays — it is the
+            reference the product owner gives, and #641 resolved to the club
+            being beside it, not near a plaza. The Plus Code closes the last
+            gap, since the street here carries no number. */}
+        <div className="landing-contact-row">
+          <dt>Dirección</dt>
+          <dd>Av. Manuel Agustín Aguirre, Barrio Perpetuo Socorro, Loja, Ecuador — junto al Coliseo Ciudad de Loja ({CLUB_PLUS_CODE})</dd>
+          <dd>
+            <a className="landing-contact-action" href={clubOpenStreetMapUrl()} target="_blank" rel="noreferrer">
+              <Navigation aria-hidden="true" /> Cómo llegar
+            </a>
+          </dd>
+        </div>
+        {/* A live region only while it is unsettled, so the visitor hears
+            what happened; once it states real hours it is ordinary copy. */}
+        <div className="landing-contact-row">
+          <dt>Horario</dt>
+          <dd role={settled ? undefined : "status"}>{hours}</dd>
+          <dd>
+            <a className="landing-contact-action" href="#horarios">
+              <CalendarDays aria-hidden="true" /> Ver horarios
+            </a>
+          </dd>
+        </div>
+        <div className="landing-contact-row">
+          <dt>WhatsApp</dt>
+          <dd className="landing-contact-numbers">
+            {contact.whatsapp.map((number): React.ReactElement => (
+              <a key={number} href={toWhatsAppLink(number)} target="_blank" rel="noreferrer">{number}</a>
+            ))}
+          </dd>
+          <dd>
+            <a className="landing-contact-action" href={toWhatsAppLink(contact.whatsapp[0])} target="_blank" rel="noreferrer">
+              <MessageCircle aria-hidden="true" /> Escríbanos por WhatsApp
+            </a>
+          </dd>
+        </div>
+        <div className="landing-contact-row">
+          <dt>Redes</dt>
+          <dd className="landing-contact-social">
+            <a href={contact.facebook} target="_blank" rel="noreferrer"><Facebook className="landing-icon-facebook" aria-hidden="true" />Cata Club Loja</a>
+            <a href={contact.instagram} target="_blank" rel="noreferrer"><Instagram className="landing-icon-instagram" aria-hidden="true" />@cataclub_tenis_de_mesa</a>
+          </dd>
+          <dd aria-hidden="true" />
+        </div>
+      </dl>
     </section>
   );
 }
 
 function Footer(): React.ReactElement {
+  const { contact } = landingConfig;
   return (
     <footer className="landing-footer" data-motion-section data-testid="motion-section">
       <span className="landing-halftone" aria-hidden="true" />
@@ -432,14 +455,30 @@ function Footer(): React.ReactElement {
               its own largest consumer. `width`/`height` stay at 58 so the
               element's aspect ratio — and therefore the rendered box — is
               exactly what it was before. */}
-          <div><span><Image src="/brand/cata-club-logo-176.jpeg" alt="" width={58} height={58} unoptimized /></span><b className="landing-display"><small>TENIS DE MESA</small>Cata Club</b></div>
-          <p>Formando campeones de tenis de mesa en Loja desde 2013.</p><Stars />
+          <div><span><Image src="/brand/cata-club-logo-176.jpeg" alt="" width={58} height={58} unoptimized /></span><b className="landing-display"><small>TENIS DE MESA</small>Cata Club</b><Stars /></div>
+          <p>Formando campeones de tenis de mesa en Loja desde 2013.</p>
+          <p className="landing-footer-place"><MapPin aria-hidden="true" /><span>Av. Manuel Agustín Aguirre, Loja, Ecuador</span></p>
+          <div className="landing-footer-social">
+            <a href={toWhatsAppLink(contact.whatsapp[0])} target="_blank" rel="noreferrer"><Phone aria-hidden="true" /><span>WhatsApp</span></a>
+            <a href={contact.facebook} target="_blank" rel="noreferrer"><Facebook aria-hidden="true" /><span>Facebook</span></a>
+            <a href={contact.instagram} target="_blank" rel="noreferrer"><Instagram aria-hidden="true" /><span>Instagram</span></a>
+          </div>
         </div>
         <nav aria-label="Servicios"><h2>Servicios</h2><a href="#horarios">Horarios y categorías</a><Link href={ENROLL_HREF}>Inscripciones</Link><a href="#contacto">Contacto</a></nav>
         <nav aria-label="Nosotros"><h2>Nosotros</h2><a href="#nosotros">Misión y Visión</a><a href="#valores">Valores</a><a href="#galeria">Galería</a><a href="#contacto">Ubicación</a></nav>
         <nav aria-label="Información legal"><h2>Información legal</h2><Link href="/terminos">Términos de uso</Link><Link href="/privacidad">Aviso de privacidad</Link><Link href="/permiso-imagen-fetm">Permiso público de imagen FETM</Link></nav>
+        <figure className="landing-footer-photo">
+          <Image
+            src="/landing/vision-team-1329.jpg"
+            alt="Alumnos y entrenadores de Cata Club reunidos en la sala de entrenamiento."
+            width={1600}
+            height={1200}
+            loading="lazy"
+            sizes={FOOTER_PHOTO_SIZES}
+          />
+        </figure>
       </div>
-      <div className="landing-footer-bottom">© {new Date().getFullYear()} Cata Club · Tenis de Mesa. Todos los derechos reservados.</div>
+      <div className="landing-footer-bottom"><span>© {new Date().getFullYear()} Cata Club · Tenis de Mesa. Todos los derechos reservados.</span><span>Loja, Ecuador</span></div>
     </footer>
   );
 }
@@ -463,7 +502,7 @@ export default function LandingPage(): React.ReactElement {
           so the landmark structure below is exactly what it was. */}
       <PublicSchedules>
         <main>
-          <Hero /><Ticker /><Stats /><Schedule /><MissionVision /><Values /><Motto /><Gallery /><Location />
+          <Hero /><Ticker /><MissionVision /><Values /><Stats /><Gallery /><Schedule /><Motto /><Location />
         </main>
       </PublicSchedules>
       {/* The sponsor strip sits between the page's main landmark and the footer:

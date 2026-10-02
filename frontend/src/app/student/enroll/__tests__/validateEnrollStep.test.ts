@@ -82,7 +82,7 @@ describe("validateEnrollStep — personal step", () => {
 
   it("requires fechaNacimiento", () => {
     const errors = validateEnrollStep("personal", validForm({ fechaNacimiento: "" }));
-    expect(errors).toContain("La fecha de nacimiento es obligatoria.");
+    expect(errors).toContain("Indique la fecha de nacimiento del alumno.");
   });
 
   it("requires cedula", () => {
@@ -108,7 +108,7 @@ describe("validateEnrollStep — personal step", () => {
     expect(errors.length).toBeGreaterThanOrEqual(4);
     expect(errors).toContain("Los nombres son obligatorios.");
     expect(errors).toContain("Los apellidos son obligatorios.");
-    expect(errors).toContain("La fecha de nacimiento es obligatoria.");
+    expect(errors).toContain("Indique la fecha de nacimiento del alumno.");
     expect(errors).toContain("La cédula de identidad es obligatoria.");
   });
 
@@ -123,9 +123,7 @@ describe("validateEnrollStep — personal step", () => {
       }),
     );
     expect(errors).toContain(
-      "Los menores de edad no pueden autoinscribirse. " +
-      "Seleccione 'Inscribo a un hijo / dependiente' o un " +
-      "representante debe completar la inscripción.",
+      "Por la fecha indicada, el alumno es menor de edad y no puede inscribirse por su cuenta. Vuelva al primer paso y elija «Inscribo a un hijo / dependiente», o pida a su representante que complete la inscripción.",
     );
   });
 
@@ -179,8 +177,7 @@ describe("validateEnrollStep — personal step", () => {
       }),
     );
     expect(errors).toContain(
-      "Un mayor de edad no puede inscribirse con representante. " +
-      "Seleccione 'Me inscribo yo' para gestionar su propia cuenta.",
+      "Por la fecha indicada, el alumno ya es mayor de edad y gestiona su propia cuenta. Vuelva al primer paso y elija «Me inscribo yo».",
     );
   });
 
@@ -195,8 +192,7 @@ describe("validateEnrollStep — personal step", () => {
       }),
     );
     expect(errors).toContain(
-      "Un mayor de edad no puede inscribirse con representante. " +
-      "Seleccione 'Me inscribo yo' para gestionar su propia cuenta.",
+      "Por la fecha indicada, el alumno ya es mayor de edad y gestiona su propia cuenta. Vuelva al primer paso y elija «Me inscribo yo».",
     );
   });
 
@@ -211,8 +207,7 @@ describe("validateEnrollStep — personal step", () => {
       }),
     );
     expect(errors).not.toContain(
-      "Un mayor de edad no puede inscribirse con representante. " +
-      "Seleccione 'Me inscribo yo' para gestionar su propia cuenta.",
+      "Por la fecha indicada, el alumno ya es mayor de edad y gestiona su propia cuenta. Vuelva al primer paso y elija «Me inscribo yo».",
     );
   });
 
@@ -225,8 +220,7 @@ describe("validateEnrollStep — personal step", () => {
       }),
     );
     expect(errors).not.toContain(
-      "Un mayor de edad no puede inscribirse con representante. " +
-      "Seleccione 'Me inscribo yo' para gestionar su propia cuenta.",
+      "Por la fecha indicada, el alumno ya es mayor de edad y gestiona su propia cuenta. Vuelva al primer paso y elija «Me inscribo yo».",
     );
   });
 
@@ -234,18 +228,18 @@ describe("validateEnrollStep — personal step", () => {
 
   it("requires valid email for self-enrollment", () => {
     const errors = validateEnrollStep("personal", validForm({ correo: "sin-arroba" }));
-    expect(errors).toContain("El correo electrónico no es válido.");
+    expect(errors).toContain("El correo electrónico no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.");
   });
 
   it("says the email is required, not invalid, when it is empty", () => {
     const errors = validateEnrollStep("personal", validForm({ correo: "" }));
-    expect(errors).toContain("El correo electrónico es obligatorio.");
-    expect(errors).not.toContain("El correo electrónico no es válido.");
+    expect(errors).toContain("Escriba su correo electrónico: lo usará para iniciar sesión.");
+    expect(errors).not.toContain("El correo electrónico no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.");
   });
 
   it("says the password is required, not too short, when it is empty", () => {
     const errors = validateEnrollStep("personal", validForm({ contrasenia: "" }));
-    expect(errors).toContain("La contraseña es obligatoria.");
+    expect(errors).toContain("Cree una contraseña para su cuenta.");
     expect(errors).not.toContain("La contraseña debe tener al menos 8 caracteres.");
   });
 
@@ -281,7 +275,7 @@ describe("validateEnrollStep — personal step", () => {
       validForm({ enrollmentType: "child", correo: "invalid" }),
     );
     expect(errors).not.toContain("El correo del estudiante no es válido.");
-    expect(errors).not.toContain("El correo electrónico no es válido.");
+    expect(errors).not.toContain("El correo electrónico no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.");
   });
 
   it("ignores a short student password on a child enrollment's personal step", () => {
@@ -377,8 +371,8 @@ describe("validateEnrollStep — representative step", () => {
         contraseniaRepresentante: "password8",
       }),
     );
-    expect(errors).toContain("El correo del representante es obligatorio.");
-    expect(errors).not.toContain("El correo del representante no es válido.");
+    expect(errors).toContain("Escriba el correo electrónico del representante: lo usará para iniciar sesión.");
+    expect(errors).not.toContain("El correo del representante no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.");
   });
 
   it("flags a non-empty malformed representative email as invalid", () => {
@@ -386,7 +380,7 @@ describe("validateEnrollStep — representative step", () => {
       "representative",
       validForm({ enrollmentType: "child", correoRepresentante: "maria@correo" }),
     );
-    expect(errors).toContain("El correo del representante no es válido.");
+    expect(errors).toContain("El correo del representante no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.");
   });
 
   it("says the representative password is required, not too short, when empty", () => {
@@ -394,7 +388,7 @@ describe("validateEnrollStep — representative step", () => {
       "representative",
       validForm({ enrollmentType: "child", contraseniaRepresentante: "" }),
     );
-    expect(errors).toContain("La contraseña del representante es obligatoria.");
+    expect(errors).toContain("Cree una contraseña para la cuenta del representante.");
     expect(errors).not.toContain(
       "La contraseña del representante debe tener al menos 8 caracteres.",
     );

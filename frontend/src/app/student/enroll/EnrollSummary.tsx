@@ -18,6 +18,7 @@ import {
   isPlausibleHumanAge,
   toStoredPhone,
 } from "@/lib/identity-validation";
+import { formatAgeYears } from "@/components/wizard-fields";
 import Badge from "@/components/ui/Badge";
 import { cn } from "@/components/ui/cn";
 import {
@@ -150,7 +151,7 @@ export default function EnrollSummary({
             <p className={cn("text-xs", dark ? "text-white/75" : "text-ink-3-strong")}>
               {agePlausible ? (
                 <>
-                  {age} años
+                  {formatAgeYears(age)}
                   {age < 18 && (
                     <span className={dark ? "text-ball" : "text-state-warn"}> · menor de edad</span>
                   )}

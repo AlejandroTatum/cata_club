@@ -8,10 +8,12 @@
  * Two panes, edge to edge, capped at `split:max-w-[120rem]` so ultra-wide
  * screens park the leftover width in gutters instead of inside a pane:
  *
- *   · Brand panel — coal, 5/12 of the width from `split` (980px) up. Content is
- *     anchored top and bottom instead of floating in the middle: the lockup and
- *     the way back on top, the motto in the middle, the club facts and the
- *     copyright at the foot.
+ *   · Brand panel — coal, 5/12 of the width from `split` (980px) up. A club
+ *     photo fills it edge to edge under a coal gradient, so the field has the
+ *     club in it instead of empty coal, and the copy stays legible. Content is
+ *     anchored top and bottom: the way back (top-left) and the original lockup
+ *     (small crest + wordmark, top-right) on top, the motto, the club facts
+ *     and the copyright at the foot.
  *   · Form panel — paper, the rest of the width. The form owns a 448px column
  *     (`max-w-md`) centred in the pane, with a real heading hierarchy
  *     (eyebrow, title, subtitle) and the secondary small print grouped under a
@@ -19,7 +21,7 @@
  *     surface.
  *
  * Phones stack, they do not hide: the coal panel collapses to a compact header
- * (lockup, way back and the motto) above the form; the supporting line, the
+ * (way back, the lockup and the motto) above the form; the photo is split-only; the supporting line, the
  * facts and the copyright only exist from `split` up.
  *
  * ## The facts are public and verifiable
@@ -102,11 +104,11 @@ export const AUTH_LINK_CLASSES =
   "hover:decoration-cata-red-dark";
 
 /**
- * The muted ink used on coal (`#8B8B93`) and the brighter supporting line
+ * The muted ink used on coal (`#A3A3AB`, lifted from #8B8B93 now that a photo sits behind it) and the brighter supporting line
  * (`#B9B9C1`). Both are prototype literals with no product token: the `ink-*`
  * ramp is defined for light surfaces only.
  */
-const ON_COAL_MUTED = "text-[#8B8B93]";
+const ON_COAL_MUTED = "text-[#A3A3AB]";
 const ON_COAL_SUPPORT = "text-[#B9B9C1]";
 
 /** The founding year, from the landing's constant of record. */
@@ -200,46 +202,52 @@ export default function AuthShell({
         className="relative flex flex-col justify-between gap-8 overflow-hidden bg-coal px-6 py-5 text-left text-white split:w-5/12 split:shrink-0 split:gap-10 split:px-14 split:py-12"
       >
         {/*
-         * The lit stage: one soft radial behind the motto so the dark field has
-         * depth. Phones have no air to light, so it only exists from `split` up.
-         * It fades out at 68% of its 340px radius; the muted lines sit outside
-         * it, and even muted ink at the exact centre holds 4.53:1 on it.
+         * The photo: a real club shot, full bleed behind everything, with a coal
+         * gradient over it (light at the top where only the buttons sit, near
+         * solid under the quote and facts) so the white and #B9B9C1 copy keeps
+         * AA contrast. Decorative (`alt=""`), split-only and NOT `priority`:
+         * on a phone it is `display:none`, and a lazy image there is never
+         * fetched.
          */}
-        <span
+        <div
+          data-testid="auth-photo"
           aria-hidden="true"
-          className="pointer-events-none absolute left-1/2 top-1/2 hidden h-[680px] w-[680px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.075),rgba(255,255,255,0)_68%)] split:block"
-        />
-
-        {/*
-         * The banner landmark (#820): lockup, way back, motto and facts. The way
-         * back is `BackLink`'s coal tone, the system's single back control; it
-         * sits in the top row's flow now instead of pinned absolutely, so it can
-         * never overlap the lockup on a narrow phone.
-         */}
-        {/*
-         * The watermark: the club's crest in its white cut, faded to a whisper
-         * and cropped by the panel's edge, so the middle of the coal field has
-         * the club in it instead of nothing. Decorative, split-only.
-         */}
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-24 top-[14%] hidden h-[30rem] w-[30rem] opacity-[0.07] split:block"
+          className="pointer-events-none absolute inset-0 hidden split:block"
         >
           <Image
-            src="/brand/cata-club-crest-256-light.png"
+            src="/landing/gallery-12-team.jpg"
             alt=""
             fill
-            sizes="480px"
-            className="object-contain"
+            sizes="(min-width: 980px) 42vw, 0px"
+            quality={85}
+            className="object-cover object-[50%_40%]"
           />
-        </span>
+          <span className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(17,17,20,0.55)_0%,rgba(17,17,20,0.35)_22%,rgba(17,17,20,0.88)_58%,rgba(17,17,20,0.96)_100%)]" />
+        </div>
 
+        {/*
+         * The banner landmark (#820): way back, lockup, motto and facts.
+         * The way back is `BackLink`'s coal tone, the system's single back
+         * control; it opens the top row on the left (QA registro) and sits in
+         * the row's flow rather than pinned absolutely, so it can never overlap
+         * the lockup on a narrow phone.
+         */}
         <header
           aria-label="Marca de Cata Club"
           className="relative z-[1] flex flex-1 flex-col justify-between gap-8 split:gap-10"
         >
           <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
+            {!hideBack ? (
+              <BackLink
+                href={backHref}
+                tone="coal"
+                className="ring-1 ring-inset ring-white/20"
+              />
+            ) : (
+              <span aria-hidden="true" />
+            )}
+            {/* The original lockup, unchanged: small crest + wordmark. */}
+            <div data-testid="auth-lockup" className="flex items-center gap-3">
               <span className="relative block h-10 w-10 shrink-0 overflow-hidden rounded-full border-2 border-white/[0.12] split:h-14 split:w-14 split:border-4">
                 <Image
                   src="/brand/cata-club-logo.jpeg"
@@ -250,17 +258,10 @@ export default function AuthShell({
                   priority
                 />
               </span>
-              <span className="hidden font-display text-lg uppercase tracking-flat split:inline">
+              <span className="font-display text-lg uppercase tracking-flat">
                 Cata Club
               </span>
             </div>
-            {!hideBack && (
-              <BackLink
-                href={backHref}
-                tone="coal"
-                className="ring-1 ring-inset ring-white/20"
-              />
-            )}
           </div>
 
           {/* The motto and its supporting line, anchored above the facts. */}
@@ -323,18 +324,10 @@ export default function AuthShell({
         className="flex flex-1 flex-col bg-paper px-6 py-8 text-ink split:px-16 split:py-12"
       >
         {/*
-         * One column, one axis: the top label, the form and the help footer
-         * share the same 448px column (same max-width, same left edge).
+         * One column, one axis: the form and the help footer share the same 448px column (same max-width, same left edge).
          */}
         <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
-        {/* Top anchor: who is asking for the sign-in. Phones already have the
-            brand header above, so it only exists from `split` up. */}
-        <p className="hidden items-center gap-2 text-xs font-semibold text-ink-3-strong split:flex">
-          <span aria-hidden="true" className="h-2 w-2 rounded-full bg-ball" />
-          Escuela de tenis de mesa
-        </p>
-
-        {/* Centred in the room under the label. From `split` it is nudged up by
+        {/* Centred in the column. From `split` it is nudged up by
             the bottom padding so the form sits in the upper-middle; on a phone
             the help footer anchors the foot, so the form centres in the room
             between the brand header and that footer instead of leaving the

@@ -30,7 +30,11 @@ const BALL_STAGGER_MS = 70;
 
 const HOURS_PATTERN = /(\d{1,2}:\d{2})\D+(\d{1,2}:\d{2})/;
 
-interface ScheduleSelectorProps { schedules: LandingSchedule[] }
+interface ScheduleSelectorProps {
+  schedules: LandingSchedule[];
+  /** The section's own header, set at the head of the category rail instead of above the grid. */
+  header?: React.ReactNode;
+}
 
 /**
  * Reads `(prefers-reduced-motion: reduce)` the same way `LandingMotionLoader`
@@ -80,7 +84,7 @@ function DigitRun({ text, animate }: { text: string; animate: boolean }): React.
   ))}</>;
 }
 
-export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): React.ReactElement {
+export default function ScheduleSelector({ schedules, header }: ScheduleSelectorProps): React.ReactElement {
   const [selected, setSelected] = useState((): number => defaultScheduleIndex(schedules));
   const animate = !useReducedMotion();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -102,6 +106,8 @@ export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): 
   };
 
   return <div className="landing-schedule-layout">
+    <div className="landing-schedule-side">
+      {header}
     <div className="landing-schedule-list" role="tablist" aria-label="Categorías" aria-orientation="vertical" ref={listRef} onKeyDown={onKeyDown}>
       {schedules.map((schedule, index): React.ReactElement => <button
         key={schedule.category} type="button" role="tab" id={`schedule-tab-${index}`}
@@ -116,45 +122,57 @@ export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): 
         <em className="landing-schedule-tab-hours">{splitHours(schedule.slots[0].hours).join("–")}</em>
       </button>)}
     </div>
+    </div>
 
     <div
       className="landing-schedule-card" role="tabpanel" id="schedule-panel"
       aria-labelledby={`schedule-tab-${selected}`} aria-live="polite"
       style={{ "--landing-cat": color, "--landing-cat-ink": ink } as React.CSSProperties}
     >
-      <h3>{active.category}</h3>
-      {active.audience ? <p className="landing-schedule-audience">{active.audience}</p> : null}
+      <div className="landing-schedule-copy">
+        <div className="landing-schedule-head">
+          <h3>{active.category}</h3>
+          {active.audience ? <p className="landing-schedule-audience">{active.audience}</p> : null}
+        </div>
 
-      <span className="landing-schedule-label">Horario</span>
-      <p className={`landing-schedule-time${animate ? " landing-schedule-time--animate" : ""}`}>
-        <span className="landing-schedule-time-part"><DigitRun text={start} animate={animate} /></span>
-        <span className="landing-schedule-dash">–</span>
-        <span className="landing-schedule-time-part"><DigitRun text={end} animate={animate} /></span>
-      </p>
+        <div className="landing-schedule-row">
+        <div className="landing-schedule-group">
+          <span className="landing-schedule-label">Horario</span>
+          <p className={`landing-schedule-time${animate ? " landing-schedule-time--animate" : ""}`}>
+            <span className="landing-schedule-time-part"><DigitRun text={start} animate={animate} /></span>
+            <span className="landing-schedule-dash">–</span>
+            <span className="landing-schedule-time-part"><DigitRun text={end} animate={animate} /></span>
+          </p>
+        </div>
 
-      <span className="landing-schedule-label">Días</span>
-      <div className="landing-schedule-days" aria-label={main.days}>
-        {DAY_BALLS.map((label, index): React.ReactElement => {
-          const on = litDays[index];
-          return <span
-            key={label} aria-hidden="true"
-            className={`landing-schedule-day${on ? " landing-schedule-day--on" : ""}${on && animate ? " landing-schedule-day--pop" : ""}`}
-            style={on && animate ? { animationDelay: `${index * BALL_STAGGER_MS}ms` } : undefined}
-          >
-            {label}
-          </span>;
-        })}
+        <div className="landing-schedule-group">
+          <span className="landing-schedule-label">Días</span>
+          <div className="landing-schedule-days" aria-label={main.days}>
+            {DAY_BALLS.map((label, index): React.ReactElement => {
+              const on = litDays[index];
+              return <span
+                key={label} aria-hidden="true"
+                className={`landing-schedule-day${on ? " landing-schedule-day--on" : ""}${on && animate ? " landing-schedule-day--pop" : ""}`}
+                style={on && animate ? { animationDelay: `${index * BALL_STAGGER_MS}ms` } : undefined}
+              >
+                {label}
+              </span>;
+            })}
+          </div>
+        </div>
+        </div>
+
+        <div className="landing-schedule-group">
+          <a className="landing-button" href={waLink} target="_blank" rel="noreferrer">
+            Consultar cupo por WhatsApp <ArrowRight aria-hidden="true" />
+          </a>
+          {rest.map((slot, index): React.ReactElement => (
+            <p className="landing-schedule-second" key={`${active.category}-${index}`}>
+              También <b>{splitHours(slot.hours).join("–")}</b> los {slot.days.toLowerCase()}.
+            </p>
+          ))}
+        </div>
       </div>
-
-      <a className="landing-button" href={waLink} target="_blank" rel="noreferrer">
-        Consultar cupo por WhatsApp <ArrowRight aria-hidden="true" />
-      </a>
-
-      {rest.map((slot, index): React.ReactElement => (
-        <p className="landing-schedule-second" key={`${active.category}-${index}`}>
-          También <b>{splitHours(slot.hours).join("–")}</b> los {slot.days.toLowerCase()}.
-        </p>
-      ))}
     </div>
   </div>;
 }

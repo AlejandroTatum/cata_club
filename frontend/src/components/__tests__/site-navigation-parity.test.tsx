@@ -97,9 +97,9 @@ vi.mock("@/lib/useNotificaciones", (): { useNotificaciones: () => unknown } => (
  */
 const APPROVED_NAV: ReadonlyArray<{ label: string; section: string }> = [
   { label: "Inicio", section: "inicio" },
-  { label: "Horarios", section: "horarios" },
   { label: "Valores", section: "valores" },
   { label: "Galería", section: "galeria" },
+  { label: "Horarios", section: "horarios" },
   { label: "Contacto", section: "contacto" },
 ];
 
@@ -138,7 +138,9 @@ function targetSectionOf(href: string): string {
 
 describe("public navigation parity (issue #771)", (): void => {
   beforeEach((): void => {
-    mockPathname.mockReturnValue("/terminos");
+    // The full institutional bar. The legal documents draw a minimal one
+    // (logo and session only), so they no longer carry these links.
+    mockPathname.mockReturnValue("/");
     stubLandingGlobals();
   });
 
@@ -159,6 +161,17 @@ describe("public navigation parity (issue #771)", (): void => {
     expect(hrefsOf(landingNavAnchors(landing)).map(targetSectionOf)).toEqual(expectedSections);
     expect(hrefsOf(headerNavAnchors(header)).map(targetSectionOf)).toEqual(expectedSections);
   });
+
+  it.each(["/terminos", "/privacidad", "/permiso-imagen-fetm"])(
+    "leaves the section links off the minimal bar on %s",
+    (route): void => {
+      mockPathname.mockReturnValue(route);
+      const header = render(<Header />).container;
+
+      expect(header.querySelector("nav ul")).toBeNull();
+      expect(header.querySelectorAll('a[href*="#"]')).toHaveLength(0);
+    },
+  );
 
   it("keeps the mobile panel on the same list as the bar above it", (): void => {
     const header = render(<Header />).container;
@@ -186,7 +199,7 @@ describe("public navigation parity (issue #771)", (): void => {
       APPROVED_NAV.map((entry): string => `#${entry.section}`),
     );
 
-    // From `/terminos` the same fragment would name a section this page does
+    // From any other route the same fragment would name a section this page does
     // not have — a link to nothing. The href has to carry the landing's path
     // as well, so the click navigates there and then to the section.
     expect(hrefsOf(headerNavAnchors(header))).toEqual(

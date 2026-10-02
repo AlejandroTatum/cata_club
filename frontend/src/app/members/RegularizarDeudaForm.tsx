@@ -9,6 +9,10 @@
  * backend validates no-overlap with approved coverage and that the monto is a
  * multiple of the monthly price, then the payment enters APROBADO directly.
  *
+ * It doubles as the migration tool for existing members (issue #1492): the
+ * admin loads the real paid dates from the club's notebook, and when the
+ * period covers today the backend also activates the membership.
+ *
  * Partial regularization is allowed: covering 1 of 4 months settles that month
  * and the other 3 stay visible as debt on the next fetch.
  *
@@ -253,6 +257,11 @@ export default function RegularizarDeudaForm({
               No se pudo calcular la deuda; registre el período directamente.
             </p>
           )}
+
+          <p className="mb-2 text-2xs text-ink-3">
+            También sirve para cargar el pago vigente de un socio desde el cuaderno del club al
+            migrar. Si el período cubre hoy, la membresía queda activa.
+          </p>
 
           <div className="grid grid-cols-2 gap-2">
             <CampoFormularioAdmin
