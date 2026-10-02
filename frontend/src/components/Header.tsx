@@ -269,7 +269,17 @@ function InstitutionalAccountMobile({ onNavigate }: { onNavigate: () => void }):
   );
 }
 
-export function InstitutionalHeader(): React.ReactElement {
+interface InstitutionalHeaderProps {
+  /**
+   * The legal documents' bar: the logo and the session slot, and nothing else.
+   * The landing's section links lead away from the document a visitor came to
+   * read, so they are not drawn there (client QA). The logo stays a link home:
+   * it is the one way out that costs the page no space.
+   */
+  minimal?: boolean;
+}
+
+export function InstitutionalHeader({ minimal = false }: InstitutionalHeaderProps = {}): React.ReactElement {
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = useCallback((): void => setMenuOpen(false), []);
 
@@ -282,7 +292,7 @@ export function InstitutionalHeader(): React.ReactElement {
     <header aria-label="Cabecera del sitio" className="sticky top-0 z-50 border-b border-white/10 bg-cata-dark/95 backdrop-blur-md">
       <nav
         aria-label="Navegación principal"
-        className="mx-auto flex max-w-8xl items-center justify-between px-4 py-3 sm:px-8 lg:px-12"
+        className={`mx-auto flex ${minimal ? "max-w-[106rem]" : "max-w-8xl"} items-center justify-between px-4 py-3 sm:px-8 lg:px-12`}
       >
         {/* Brand — real logo as identity anchor */}
         <Link href="/" className="flex items-center gap-3">
@@ -311,37 +321,42 @@ export function InstitutionalHeader(): React.ReactElement {
             to a section of the landing, so none of them is the current one. The
             comparison that used to sit here weighed `pathname` against `#inicio`
             and could not be true on any route. */}
-        <ul className="hidden items-center gap-1 md:flex">
-          {INSTITUTIONAL_LINKS.map((link): React.ReactElement => (
-            <li key={link.label}>
-              <Link
-                href={link.href}
-                className="rounded-xl px-3.5 py-2 text-sm font-semibold text-white/65 transition-all duration-200 hover:text-white"
-              >
-                {link.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
+        {!minimal && (
+          <ul className="hidden items-center gap-1 md:flex">
+            {INSTITUTIONAL_LINKS.map((link): React.ReactElement => (
+              <li key={link.label}>
+                <Link
+                  href={link.href}
+                  className="rounded-xl px-3.5 py-2 text-sm font-semibold text-white/65 transition-all duration-200 hover:text-white"
+                >
+                  {link.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
 
-        {/* Session slot — see `InstitutionalAccount` */}
-        <div className="hidden md:flex items-center gap-3">
+        {/* Session slot — see `InstitutionalAccount`. The minimal bar has no
+            mobile menu to hold it, so there it is drawn at every width. */}
+        <div className={minimal ? "flex items-center gap-3" : "hidden md:flex items-center gap-3"}>
           <InstitutionalAccount />
         </div>
 
         {/* Mobile menu button */}
-        <button
-          type="button"
-          onClick={() => setMenuOpen(!menuOpen)}
-          className="rounded-xl p-2.5 text-white/65 hover:bg-white/[0.08] hover:text-cata-fuchsia md:hidden"
-          aria-label={menuOpen ? "Cerrar menú" : "Abrir menú"}
-        >
-          {menuOpen ? <X size={ICON.base} strokeWidth={1.5} /> : <Menu size={ICON.base} strokeWidth={1.5} />}
-        </button>
+        {!minimal && (
+          <button
+            type="button"
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="rounded-xl p-2.5 text-white/65 hover:bg-white/[0.08] hover:text-cata-fuchsia md:hidden"
+            aria-label={menuOpen ? "Cerrar menú" : "Abrir menú"}
+          >
+            {menuOpen ? <X size={ICON.base} strokeWidth={1.5} /> : <Menu size={ICON.base} strokeWidth={1.5} />}
+          </button>
+        )}
       </nav>
 
       {/* Mobile nav panel */}
-      {menuOpen && (
+      {!minimal && menuOpen && (
         <div className="border-t border-white/10 bg-cata-dark md:hidden shadow-soft">
           <ul className="space-y-0.5 px-4 py-4">
             {INSTITUTIONAL_LINKS.map((link) => (
@@ -395,8 +410,8 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
     return null;
   }
 
-  // The legal documents keep the institutional bar whoever is reading them:
-  // the sections it names belong to the PAGE, not to the visitor. What used to
+  // The legal documents keep the institutional bar, in its minimal form (logo
+  // and session slot), whoever is reading them. What used to
   // be wrong is that this branch also decided the session question — it is
   // taken before any auth check, so every reader was offered "Iniciar sesión",
   // including the administrator who had just clicked through from inside the
@@ -404,7 +419,7 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
   // where it can be given per visitor instead of per route.
   const isPublicLegalRoute = ["/terminos", "/privacidad", "/permiso-imagen-fetm"].includes(pathname);
   if (isPublicLegalRoute) {
-    return <InstitutionalHeader />;
+    return <InstitutionalHeader minimal />;
   }
 
   // Which routes own their chrome lives in `lib/shell-routes.ts` and is

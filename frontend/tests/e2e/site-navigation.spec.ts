@@ -12,14 +12,13 @@
  * landing's own click still stays inside the document instead of remounting the
  * page — only a real browser can say.
  *
- * Two `page.goto` calls, deliberately: the landing is the heaviest page in the
- * product and the e2e budget on a 4-vCPU runner is the constraint. The trip
- * from `/terminos` ends ON the landing, so the "does this section exist"
- * sweep over all five links rides along for free.
+ * The landing is the heaviest page in the product and the e2e budget on a
+ * 4-vCPU runner is the constraint, so the legal-page check stays a single
+ * lightweight `page.goto`.
  */
 import { test, expect, type Page } from "@playwright/test";
 
-/** The header's own nav on the legal pages, never the footer's link columns. */
+/** The header's own nav, which the legal pages no longer draw. */
 const HEADER_NAV = "header nav ul";
 /** The landing's own navbar. */
 const LANDING_NAV = ".landing-nav-links";
@@ -33,46 +32,35 @@ async function navEntries(page: Page, selector: string): Promise<Array<[string, 
 }
 
 test.describe("public navigation (issue #771)", () => {
-  test("from a legal page, the menu travels to the landing and lands on the section", async ({ page }) => {
+  test("a legal page draws no section menu, only the way home", async ({ page }) => {
     await page.goto("/terminos");
 
-    const header = await navEntries(page, HEADER_NAV);
-    expect(header.map(([label]): string => label)).toEqual([
+    // The minimal legal header (client QA): logo and session slot. The landing's
+    // section links lead away from the document being read.
+    await expect(page.locator(HEADER_NAV)).toHaveCount(0);
+    await expect(page.locator("header a[href='/']")).toHaveCount(1);
+  });
+
+  test("on the landing, every menu link reaches a real section", async ({ page }) => {
+    await page.goto("/");
+
+    const landing = await navEntries(page, LANDING_NAV);
+    expect(landing.map(([label]): string => label)).toEqual([
       "Inicio",
       "Valores",
       "Galería",
       "Horarios",
       "Contacto",
     ]);
-    // Every href carries the landing's path. A bare `#horarios` here would name
-    // a section of the legal page, which has none: the click would do nothing.
-    expect(header.map(([, href]): string => href)).toEqual([
-      "/#inicio",
-      "/#valores",
-      "/#galeria",
-      "/#horarios",
-      "/#contacto",
-    ]);
 
-    await page.locator(`${HEADER_NAV} a`, { hasText: "Horarios" }).click();
-
-    await expect(page).toHaveURL(/\/#horarios$/);
-    const schedule = page.locator("#horarios");
-    await expect(schedule).toBeInViewport();
-
-    // Now that we are on the landing, resolve every destination the header
-    // offered. This is the "a link to nothing is worse than an inconsistent
-    // menu" clause, checked against the rendered document rather than a list.
+    // "A link to nothing is worse than an inconsistent menu", checked against
+    // the rendered document rather than a list.
     const missing = await page.evaluate(
       (hrefs: string[]): string[] =>
-        hrefs.filter((href): boolean => document.getElementById(href.slice(2)) === null),
-      header.map(([, href]): string => href),
+        hrefs.filter((href): boolean => document.getElementById(href.replace(/^\/?#/, "")) === null),
+      landing.map(([, href]): string => href),
     );
     expect(missing).toEqual([]);
-
-    // Same menu, same order, on the page we just arrived at.
-    const landing = await navEntries(page, LANDING_NAV);
-    expect(landing.map(([label]): string => label)).toEqual(header.map(([label]): string => label));
   });
 
   test("on the landing, the same menu scrolls in place without reloading the page", async ({ page }) => {
