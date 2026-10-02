@@ -8,9 +8,14 @@ Repository of record: `origin` → https://github.com/AlejandroTatum/cata_club. 
 2. Branch from a fresh `main`, named `type/short-description` (e.g. `fix/niveles-pagination`). Valid types are the Conventional Commit types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`, `perf`, `build`, `style`, `revert`.
 3. Commits follow Conventional Commits (`type(scope): description`): one logical change per commit, imperative mood, subject ≤72 chars, no AI attribution trailers.
 4. PR titles use the same conventional format. For a standard PR targeting `main`, enable GitHub auto-merge with **squash** after opening it. Branch protection must require all checks green and the branch current with `main`; never bypass it or merge manually while checks are pending or red. The remote branch is auto-deleted on merge (repo setting).
-5. Chained/stacked PRs are the exception, used only when a change will exceed ~400 changed lines — decided **before** starting, following the `chained-pr` skill. Do not enable auto-merge on an intermediate PR whose base is another feature branch; enable it only after the chain is eligible to land into `main`.
+5. Large features — more than ~400 changed lines or more than one reviewable slice, decided **before** starting — use a **feature integration branch** instead of a serial chain into `main`:
+   - Create `feat/<feature>` from a fresh `main` and push it. Slice branches are cut from it and their PRs target it.
+   - Each slice keeps the full methodology (focused tests, `make pre-pr`, review) and stays within the `chained-pr` review budget.
+   - Merge a slice into the integration branch with `gh pr merge --squash` once its own PR checks are green. Do not enable auto-merge on slice PRs and do not wait for other slices or for `main`.
+   - Keep the integration branch current by merging `main` into it (never rebase or force-push it).
+   - When every slice has landed, open one PR from the integration branch to `main` and enable auto-merge with **squash**. That PR is the only one that waits on `main`.
 6. Bug fixes require a linked GitHub issue documenting the root cause (`Closes #N` in the PR body). Features, refactors, and docs do not require an issue.
-7. After every merge, confirm post-merge `main` CI is green. Then run the housekeeping workflow: `git switch main && git pull`, delete the merged local branch and its worktree, and run `git worktree prune`.
+7. Do not block the next PR on post-merge `main` CI. With branch protection requiring a current branch, the merged PR already passed CI on the exact tree that landed. As soon as a PR merges, update the next queued PR with `main` (`gh pr update-branch`) and re-enable its auto-merge. Monitor post-merge `main` CI in the background; if it turns red, stop all merges to `main` until it is classified and fixed. Once it is green, run the housekeeping workflow: `git switch main && git pull`, delete the merged local branch and its worktree, and run `git worktree prune`.
 
 ## Implementation and verification workflow
 
