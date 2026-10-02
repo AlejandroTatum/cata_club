@@ -27,6 +27,7 @@ celery_app = Celery(
         "app.infraestructura.tareas.contador_correo_tareas",
         "app.infraestructura.tareas.recordatorio_sesion_tareas",
         "app.infraestructura.tareas.reporte_error_tareas",
+        "app.infraestructura.tareas.metricas_tareas",
     ],
 )
 
@@ -78,6 +79,17 @@ celery_app.conf.beat_schedule = {
     "purgar-reportes-error-diario": {
         "task": "app.infraestructura.tareas.reporte_error_tareas.purgar_reportes_error",
         "schedule": _parsear_hora_crontab("03:10"),
+    },
+    # Issue #1314: una instantánea por minuto (un scrape + un insert) y la
+    # purga diaria de lo que ya no se dibuja. 03:20, entre la purga de
+    # reportes (03:10) y nada más: no compite con la banda de 02:30-02:40.
+    "capturar-metricas-cada-minuto": {
+        "task": "app.infraestructura.tareas.metricas_tareas.capturar_metricas",
+        "schedule": crontab(minute="*/1"),
+    },
+    "purgar-metricas-y-actividad-diario": {
+        "task": "app.infraestructura.tareas.metricas_tareas.purgar_metricas_y_actividad",
+        "schedule": _parsear_hora_crontab("03:20"),
     },
     "despachar-inscripcion-notificaciones-cada-minuto": {
         "task": "app.infraestructura.tareas.enrollment_notificacion_tareas.despachar_inscripcion_notificaciones",

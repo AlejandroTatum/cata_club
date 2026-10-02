@@ -21,6 +21,8 @@ from app.dominio.mensajes import (
     MENSAJE_IDENTIDAD_DUPLICADA, MENSAJE_REPRESENTADO_SIN_CREDENCIALES_PROPIAS,
     MENSAJE_VERIFICACION_ENVIADA,
 )
+from app.infraestructura import actividad
+from app.infraestructura.metricas import contar_login
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.restricciones_identidad import identidad_en_conflicto
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
@@ -205,12 +207,17 @@ class AuthServicio:
         try:
             usuario = self._verificar_credenciales(correo, contrasenia)
         except CredencialesInvalidas:
+            contar_login(ok=False)
             self._penalizar_intento_fallido(clave)
             raise
 
+        contar_login(ok=True)
         _INTENTOS_FALLIDOS_LOGIN.pop(clave, None)
         sesion = self._registrar_sesion(usuario, user_agent)
-        return self._emitir_par_tokens(usuario, sesion_id=sesion.id)
+        tokens = self._emitir_par_tokens(usuario, sesion_id=sesion.id)
+        # Issue #1314: último, y sin poder fallar el login (ver `actividad`).
+        actividad.registrar_sin_fallar(self.db, usuario.id)
+        return tokens
 
     def _registrar_sesion(self, usuario: Usuario, user_agent: str | None) -> Sesion:
         """Deja constancia de un login. Nada más que constancia.
@@ -596,6 +603,7 @@ class AuthServicio:
         access_token = GestorAutenticacion.crear_token_acceso(
             claims, version_sesion=usuario.version_sesion,
         )
+        actividad.registrar_sin_fallar(self.db, usuario.id)
         return {"access_token": access_token, "token_type": "bearer"}
 
     # --- E01: invalidación de sesión (primitiva compartida) -----------------
@@ -629,7 +637,10 @@ class AuthServicio:
         """
         usuario = self._bombear_epoch_sesion(correo)
         sesion = self._registrar_sesion(usuario, user_agent)
-        return self._emitir_par_tokens(usuario, sesion_id=sesion.id)
+        tokens = self._emitir_par_tokens(usuario, sesion_id=sesion.id)
+        # Issue #1314: último, y sin poder fallar el login (ver `actividad`).
+        actividad.registrar_sin_fallar(self.db, usuario.id)
+        return tokens
 
     # --- TRA-10: POST /auth/logout -------------------------------------------
     def cerrar_sesion(self, correo: str) -> dict:
