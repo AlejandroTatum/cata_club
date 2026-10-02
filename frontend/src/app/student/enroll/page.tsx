@@ -40,6 +40,7 @@ import {
   PhoneField,
   EmergencyContactFields,
   birthDatePartIds,
+  formatAgeYears,
   example,
   CEDULA_HINT,
   PHONE_HINT,
@@ -865,12 +866,12 @@ function EnrollWizard(): React.ReactElement {
       return {
         hint:
           formData.enrollmentType === ENROLLMENT_TYPES.SELF
-            ? `${age} años · menor de edad: requiere un representante.`
-            : `${age} años · menor de edad.`,
+            ? `${formatAgeYears(age)} · menor de edad: requiere un representante.`
+            : `${formatAgeYears(age)} · menor de edad.`,
         hintTone: "warn",
       };
     }
-    return { hint: `${age} años` };
+    return { hint: formatAgeYears(age) };
   }
 
   function renderPersonalStep(): React.ReactElement {
@@ -1290,7 +1291,7 @@ function EnrollWizard(): React.ReactElement {
 
   function renderSummary(): React.ReactElement {
     const age = formData.fechaNacimiento ? calculatePersonAge(formData.fechaNacimiento) : null;
-    const ageLabel = age !== null && !Number.isNaN(age) ? ` · ${age} años` : "";
+    const ageLabel = age !== null && !Number.isNaN(age) ? ` · ${formatAgeYears(age)}` : "";
     const isChild = formData.enrollmentType === ENROLLMENT_TYPES.CHILD;
     return (
       <div className="flex flex-col gap-section">

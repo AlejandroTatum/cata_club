@@ -55,6 +55,11 @@ const ACCENTED_CHARS: Record<string, string> = {
  */
 const OPTIONAL_MARKER = "(opcional)";
 
+/** "1 año" / "14 años": the age as the wizard writes it, singular for one. */
+export function formatAgeYears(age: number): string {
+  return `${age} ${age === 1 ? "año" : "años"}`;
+}
+
 /**
  * How a placeholder announces that it is an example.
  *
@@ -790,7 +795,7 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
         <div className="rounded-ctl bg-sunken p-3 text-xs text-ink-3-strong">
           Edad calculada:{" "}
           <span className="font-semibold text-ink">
-            {agePlausible ? `${age} años` : ageValid ? "Revise el año." : "—"}
+            {agePlausible ? formatAgeYears(age) : ageValid ? "Revise el año." : "—"}
           </span>
           {agePlausible && props.renderAgeWarning?.(age)}
         </div>
