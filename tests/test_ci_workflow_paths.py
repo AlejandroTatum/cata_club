@@ -259,32 +259,28 @@ def test_tabla_de_verdad_frontend(nombre, resultados, salidas, push, _, esperado
     assert evaluar_condicion(condi_de(cargar(), "frontend"), resultados, salidas, push) is esperado_frontend, nombre
 
 
-def test_docker_bloquea_fallas_y_corre_para_ambas_imagenes():
-    """El job de imágenes: corre ante cambios de cualquiera de las dos imágenes
-    (saltarlo en frontend-only fue rechazado como insano), se bloquea si un
-    upstream falló o se canceló (candado #552), y hace fail-open si el
-    detector no corrió."""
+def test_docker_corre_para_ambas_imagenes_sin_esperar_a_los_tests():
+    """El job de imágenes (build + arranque real) ya no espera a los jobs de
+    tests: corre ante cambios de cualquiera de las dos imágenes, hace
+    fail-open si el detector no corrió y jamás corre con el guard en rojo. El
+    candado #552 vive en el job de publicación."""
     wf = cargar()
+    job = wf["jobs"]["docker-images"]
+    assert set(job["needs"]) == {"guard-secretos", "cambios"}
     cond = condi_de(wf, "docker-images")
-    base = {"guard-secretos": "success", "backend": "success", "frontend": "success", "migraciones-desde-cero": "success", "cambios": "success"}
-    # Frontend-only con upstreams verdes: corre.
+    for dep in ("backend", "frontend", "migraciones-desde-cero"):
+        assert f"needs.{dep}." not in cond
+    base = {"guard-secretos": "success", "cambios": "success"}
     assert evaluar_condicion(cond, base, {"docker": "true"}) is True
     # Output ausente con detector exitoso (config rota): fail-open.
     assert evaluar_condicion(cond, base, {}) is True
-    # Backend falló aunque los paths matcheen: BLOQUEA.
-    assert evaluar_condicion(cond, {**base, "backend": "failure"}, {"docker": "true"}) is False
-    # Upstream cancelado: bloquea.
-    assert evaluar_condicion(cond, {**base, "frontend": "cancelled"}, {"docker": "true"}) is False
-    # Upstream SALTADO (p.ej. docs-only): habilita si el grupo docker matchea.
-    saltados = {**base, "backend": "skipped", "frontend": "skipped", "migraciones-desde-cero": "skipped"}
-    assert evaluar_condicion(cond, saltados, {"docker": "false"}) is False
-    assert evaluar_condicion(cond, saltados, {"docker": "true"}) is True
-    # Detector falla: fail-open; en ese caso los otros jobs pesados también
-    # corren (misma política), así que el escenario realista es upstreams
-    # exitosos y docker corre igual con outputs vacíos.
-    assert evaluar_condicion(cond, {"guard-secretos": "success", "backend": "success", "frontend": "success", "migraciones-desde-cero": "success", "cambios": "failure"}, {}) is True
+    # Docs-only: se saltea.
+    assert evaluar_condicion(cond, base, {"docker": "false"}) is False
+    # Detector falla o se cancela: fail-open.
+    assert evaluar_condicion(cond, {**base, "cambios": "failure"}, {}) is True
+    assert evaluar_condicion(cond, {**base, "cambios": "cancelled"}, {}) is True
     # Guard en rojo: jamás corre.
-    assert evaluar_condicion(cond, {**saltados, "guard-secretos": "failure"}, {"docker": "true"}) is False
+    assert evaluar_condicion(cond, {**base, "guard-secretos": "failure"}, {"docker": "true"}) is False
     # Push a main con detector saltado: corre siempre.
     assert evaluar_condicion(cond, {**base, "cambios": "skipped"}, {}, push=True) is True
 

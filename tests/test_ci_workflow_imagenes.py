@@ -46,10 +46,22 @@ def job_de_imagenes(wf):
         job
         for job in (wf.get("jobs") or {}).values()
         if (job.get("env") or {}).get("IMAGE_TAG") == "${{ github.sha }}"
+        and any((p.get("with") or {}).get("load") is True for p in job.get("steps", []))
     ]
     assert len(candidatos) == 1, (
-        f"se esperaba exactamente un job con IMAGE_TAG=github.sha, hay {len(candidatos)}"
+        f"se esperaba exactamente un job de verificación con IMAGE_TAG=github.sha, hay {len(candidatos)}"
     )
+    return candidatos[0]
+
+
+def job_de_publicacion(wf):
+    """El job que publica a GHCR (el único con `docker/login-action`)."""
+    candidatos = [
+        job
+        for job in (wf.get("jobs") or {}).values()
+        if any("docker/login-action" in str(p.get("uses", "")) for p in job.get("steps", []))
+    ]
+    assert len(candidatos) == 1, f"se esperaba un único job que haga login a GHCR, hay {len(candidatos)}"
     return candidatos[0]
 
 
@@ -107,10 +119,9 @@ def test_el_build_del_frontend_declara_build_sha():
     assert args.get("BUILD_SHA") == "${{ env.IMAGE_TAG }}"
 
 
-def test_la_verificacion_de_revision_corre_entre_el_healthy_y_el_login_a_ghcr():
+def test_la_verificacion_de_revision_corre_despues_del_healthy():
     """Un paso tiene que consultar `/api/health` contra `IMAGE_TAG` DESPUÉS de
-    que el stack esté sano y ANTES de autenticar contra GHCR: así una imagen
-    que mienta su revisión nunca llega a publicarse."""
+    que el stack esté sano. La publicación vive en otro job que exige este."""
     job = job_de_imagenes(cargar())
     pasos = job.get("steps", [])
 
@@ -124,11 +135,70 @@ def test_la_verificacion_de_revision_corre_entre_el_healthy_y_el_login_a_ghcr():
     indice_healthy = indice_de(
         job, lambda p: "Wait until every healthchecked service is healthy" == p.get("name")
     )
-    indice_login = indice_de(job, lambda p: "docker/login-action" in str(p.get("uses", "")))
-
     for i in verificaciones:
         assert i > indice_healthy, "la verificación de revisión corre antes de que el stack esté sano"
-        assert i < indice_login, "la verificación de revisión corre después del login a GHCR"
+
+
+def test_docker_images_no_publica_ni_espera_a_los_jobs_de_tests():
+    """Fuera del camino crítico de los PRs: el job de verificación no depende
+    de backend/frontend/migraciones y no tiene ningún paso de GHCR."""
+    job = job_de_imagenes(cargar())
+    assert set(job["needs"]) == {"guard-secretos", "cambios"}
+    assert "packages" not in (job.get("permissions") or {})
+    for p in job.get("steps", []):
+        assert "docker/login-action" not in str(p.get("uses", ""))
+        assert "docker push" not in str(p.get("run", ""))
+        assert (p.get("with") or {}).get("push") is not True
+
+
+def test_publicacion_exige_todos_los_gates_y_solo_corre_en_push_a_main():
+    """Candado #552: GHCR solo recibe imágenes de un run donde backend,
+    frontend, migraciones y la verificación de imágenes terminaron en success."""
+    wf = cargar()
+    job = job_de_publicacion(wf)
+    assert set(job["needs"]) == {
+        "guard-secretos", "backend", "frontend", "migraciones-desde-cero", "docker-images",
+    }
+    cond = job["if"]
+    assert "github.event_name == 'push'" in cond
+    assert "github.ref == 'refs/heads/main'" in cond
+    for necesario in job["needs"]:
+        assert f"needs.{necesario}.result == 'success'" in cond, necesario
+    assert (job.get("permissions") or {}).get("packages") == "write"
+
+
+def test_publicacion_reusa_los_scopes_de_cache_y_publica_ambos_tags():
+    job = job_de_publicacion(cargar())
+    builds = [p for p in job["steps"] if "docker/build-push-action" in str(p.get("uses", ""))]
+    assert {(b["with"]["context"], b["with"]["cache-from"]) for b in builds} == {
+        ("./backend", "type=gha,scope=backend"),
+        ("./frontend", "type=gha,scope=frontend"),
+    }
+    for b in builds:
+        assert b["with"]["push"] is True
+        assert "load" not in b["with"]
+        assert ":${{ env.IMAGE_TAG }}" in b["with"]["tags"]
+        assert ":latest" in b["with"]["tags"]
+    front = next(b for b in builds if b["with"]["context"] == "./frontend")
+    assert build_args(front).get("BUILD_SHA") == "${{ env.IMAGE_TAG }}"
+
+
+def test_todos_los_jobs_declaran_timeout_minutes():
+    jobs = cargar()["jobs"]
+    esperados = {
+        "cambios": 5, "guard-secretos": 5, "backend": 40,
+        "migraciones-desde-cero": 10, "frontend": 25, "docker-images": 20,
+    }
+    for clave, job in jobs.items():
+        assert isinstance(job.get("timeout-minutes"), int), f"{clave} sin timeout-minutes"
+    for clave, minutos in esperados.items():
+        assert jobs[clave]["timeout-minutes"] == minutos, clave
+
+
+def test_backend_reporta_las_pruebas_mas_lentas():
+    pasos = cargar()["jobs"]["backend"]["steps"]
+    corrida = next(p["run"] for p in pasos if p.get("name") == "Run tests")
+    assert "--durations=25" in corrida
 
 
 def test_el_build_del_backend_no_declara_build_sha():
