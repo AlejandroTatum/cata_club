@@ -41,6 +41,7 @@ const PATRONES_IDENTIDAD_DUPLICADA = [
   // Legacy clients may still return these variants; recognizing them does not
   // expose or restore the retired account-creation capability.
   /ya existe una persona con la c[eé]dula/i,
+  /ya existe una cuenta registrada con la c[eé]dula o el correo/i,
   /el correo (del representante )?ya est[aá] en uso/i,
 ];
 

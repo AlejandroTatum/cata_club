@@ -13,11 +13,14 @@
  */
 
 /**
- * `.landing-map-inset`, the small photo pinned over the map. Its width is
- * capped outright by landing.css — `min(48%, 220px)` on mobile and
- * `min(42%, 230px)` above it — so these are exact, not upper estimates.
+ * `.landing-arrival`, the entrance photograph beside the map. The visit row is
+ * `4fr 8fr` above the mobile breakpoint, so at 1920 (about 1600px of content,
+ * a 24px gap) it renders near 520px; below it the frame spans the column.
  */
-export const MAP_INSET_SIZES = "(max-width: 768px) 220px, 230px";
+export const ARRIVAL_PHOTO_SIZES = "(max-width: 768px) 768px, 540px";
+
+/** `.landing-footer-photo`, the footer's closing column. */
+export const FOOTER_PHOTO_SIZES = "(max-width: 768px) 420px, 360px";
 
 /**
  * `.landing-pillar-photo`, the Mission/Vision photograph beside each

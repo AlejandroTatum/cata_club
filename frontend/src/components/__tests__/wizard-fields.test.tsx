@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { BirthDateField, WizardInput } from "@/components/wizard-fields";
+import { BirthDateField, WizardInput, formatAgeYears } from "@/components/wizard-fields";
 
 const base = {
   idPrefix: "t",
@@ -44,5 +44,14 @@ describe("hint tone", () => {
   it("supports the tone on the birth-date field too", () => {
     render(<BirthDateField {...base} hint="14 años" hintTone="warn" />);
     expect(screen.getByText("14 años")).toHaveClass("text-state-warn");
+  });
+});
+
+describe("formatAgeYears", () => {
+  it("writes the age in the singular for one year and the plural otherwise", () => {
+    expect(formatAgeYears(1)).toBe("1 año");
+    expect(formatAgeYears(0)).toBe("0 años");
+    expect(formatAgeYears(2)).toBe("2 años");
+    expect(formatAgeYears(14)).toBe("14 años");
   });
 });

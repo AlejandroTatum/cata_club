@@ -72,7 +72,7 @@ describe("landing images declare the width they are actually rendered at", (): v
   it("keeps the thumbnail sizes free of vw units, which would raise the srcset floor to 640", (): void => {
     const { container } = render(<LandingPage />);
 
-    const images = Array.from(container.querySelectorAll<HTMLImageElement>(".landing-map-inset img"));
+    const images = Array.from(container.querySelectorAll<HTMLImageElement>(".landing-arrival img"));
     expect(images.length).toBeGreaterThan(0);
     for (const img of images) {
       const sizes = img.getAttribute("sizes");

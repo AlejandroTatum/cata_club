@@ -630,41 +630,45 @@ describe("edad del alumno", () => {
 
   describe("studentBirthDateRule — issue #224's five reproduction cases", () => {
     it("requires a value", () => {
-      expect(studentBirthDateRule("", FROZEN_TODAY)).toBe("La fecha de nacimiento es obligatoria.");
+      expect(studentBirthDateRule("", FROZEN_TODAY)).toBe("Indique la fecha de nacimiento del alumno.");
     });
 
     it("rejects an invalid calendar date", () => {
       expect(studentBirthDateRule("2024-02-30", FROZEN_TODAY)).toBe(
-        "La fecha de nacimiento ingresada no es válida.",
+        "La fecha de nacimiento no existe. Revise el día, el mes y el año.",
       );
     });
 
     it("rejects a future date by naming it future, never as a bogus negative age", () => {
       const message = studentBirthDateRule("2030-01-01", FROZEN_TODAY);
-      expect(message).toBe("La fecha de nacimiento no puede ser en el futuro.");
+      expect(message).toBe("La fecha de nacimiento no puede ser posterior a hoy. Revise el año.");
       expect(message).not.toContain("menor");
     });
 
-    it("rejects a birth date 3 years ago, naming the computed age", () => {
-      expect(studentBirthDateRule("2026-01-01", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 3).`,
+    it("pins the club's minimum player age at 3 years", () => {
+      expect(EDAD_MINIMA_ALUMNO).toBe(3);
+    });
+
+    it("rejects a birth date 2 years ago, naming the computed age", () => {
+      expect(studentBirthDateRule("2027-01-01", FROZEN_TODAY)).toBe(
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 2 años. Revise el año de nacimiento.`,
       );
     });
 
     it("rejects a birth date 120 years ago, naming the computed age", () => {
       expect(studentBirthDateRule("1909-01-01", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 120).`,
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 120 años. Revise el año de nacimiento.`,
       );
     });
 
     it("rejects an implausible historical date (1750), naming the computed age", () => {
       expect(studentBirthDateRule("1750-03-15", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 278).`,
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 278 años. Revise el año de nacimiento.`,
       );
     });
 
-    it("accepts the minimum boundary (exactly 5 years old today)", () => {
-      expect(studentBirthDateRule("2024-01-01", FROZEN_TODAY)).toBeNull();
+    it("accepts the minimum boundary (exactly 3 years old today)", () => {
+      expect(studentBirthDateRule("2026-01-01", FROZEN_TODAY)).toBeNull();
     });
 
     it("accepts the maximum boundary (exactly 95 years old today)", () => {
@@ -673,13 +677,13 @@ describe("edad del alumno", () => {
 
     it("rejects one day past the maximum boundary (96 years old)", () => {
       expect(studentBirthDateRule("1933-01-01", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 96).`,
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 96 años. Revise el año de nacimiento.`,
       );
     });
 
-    it("rejects one day short of the minimum boundary (4 years old)", () => {
-      expect(studentBirthDateRule("2024-01-02", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 4).`,
+    it("rejects one day short of the minimum boundary (2 years old)", () => {
+      expect(studentBirthDateRule("2026-01-02", FROZEN_TODAY)).toBe(
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 2 años. Revise el año de nacimiento.`,
       );
     });
   });

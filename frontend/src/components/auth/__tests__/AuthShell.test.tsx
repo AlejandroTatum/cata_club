@@ -237,12 +237,11 @@ describe("AuthShell — rebalanced split", () => {
     expect(column.className).not.toMatch(/\b(border|shadow-hero|rounded-\[18px\])\b/);
   });
 
-  it("keeps the top label, the form and the help footer in one column", () => {
+  it("keeps the form and the help footer in one column", () => {
     renderShell();
 
     const column = screen.getByTestId("auth-card").parentElement?.parentElement as HTMLElement;
     expect(column.className).toContain("max-w-md");
-    expect(column).toContainElement(screen.getByText("Escuela de tenis de mesa"));
     expect(column).toContainElement(screen.getByTestId("auth-help"));
   });
 
@@ -457,16 +456,29 @@ describe("AuthShell — hideBack lets one authenticated screen opt out", () => {
     expect(screen.getByTestId("auth-brand-cluster")).toBeInTheDocument();
   });
 
-  it("fills the brand panel's middle with a decorative crest watermark", () => {
+  it("fills the brand panel with a real club photo, decorative and behind the copy", () => {
     renderShell();
 
-    const watermark = screen.getByTestId("auth-panel-dark").querySelector('img[src*="crest"]');
-    expect(watermark).not.toBeNull();
-    expect(watermark).toHaveAttribute("alt", "");
-    expect(watermark?.closest("span")).toHaveAttribute("aria-hidden", "true");
+    const photo = screen.getByTestId("auth-photo");
+    expect(screen.getByTestId("auth-panel-dark")).toContainElement(photo);
+    const img = photo.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute("src") ?? "").toMatch(/gallery-12-team/);
+    // The photo is atmosphere; the lockup is the panel's one accessible logo.
+    expect(img).toHaveAttribute("alt", "");
+    // Hidden on phones, so it must not be fetched eagerly.
+    expect(img).not.toHaveAttribute("fetchpriority", "high");
+    expect(photo.className).toContain("hidden");
   });
 
-  it("anchors the form column between a top label and a help footer", () => {
+  it("no longer renders the big crest disc or the old watermark silhouette", () => {
+    renderShell();
+
+    expect(screen.queryByTestId("auth-crest")).not.toBeInTheDocument();
+    expect(document.querySelector('img[src*="cata-club-crest"]')).toBeNull();
+  });
+
+  it("anchors the form column above a help footer", () => {
     renderShell();
 
     const help = screen.getByTestId("auth-help");
@@ -476,5 +488,47 @@ describe("AuthShell — hideBack lets one authenticated screen opt out", () => {
       expect.stringContaining("wa.me/"),
     );
     expect(screen.getByTestId("auth-panel-light")).toContainElement(help);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// QA registro: the "Escuela de tenis de mesa" pill is gone, the way back sits
+// top-left of the coal panel and the original lockup (small crest + wordmark)
+// sits in the opposite corner.
+// ---------------------------------------------------------------------------
+
+describe("AuthShell — QA registro layout", () => {
+  it("no longer renders the 'Escuela de tenis de mesa' pill", () => {
+    renderShell();
+
+    expect(screen.queryByText(/escuela de tenis de mesa/i)).not.toBeInTheDocument();
+  });
+
+  it("puts the way back first in the banner, ahead of the lockup", () => {
+    renderShell();
+
+    const banner = screen.getByRole("banner", { name: "Marca de Cata Club" });
+    const back = screen.getByRole("link", { name: /volver al inicio/i });
+    const lockup = screen.getByTestId("auth-lockup");
+    expect(back.compareDocumentPosition(lockup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(banner).toContainElement(lockup);
+    expect(lockup).toHaveTextContent(/cata club/i);
+  });
+
+  it("keeps the lockup in the top row even when the way back is hidden", () => {
+    renderHiddenBackShell();
+
+    expect(screen.getByTestId("auth-lockup")).toBeInTheDocument();
+  });
+
+  it("keeps the original lockup: the small crest as the accessible logo beside the wordmark", () => {
+    renderShell();
+
+    const lockup = screen.getByTestId("auth-lockup");
+    const logo = lockup.querySelector("img");
+    expect(logo).toHaveAttribute("alt", "Cata Club");
+    expect(logo?.getAttribute("src") ?? "").toMatch(/cata-club-logo/);
+    expect(lockup).toHaveTextContent(/cata club/i);
+    expect(screen.getAllByRole("img", { name: "Cata Club" })).toHaveLength(1);
   });
 });

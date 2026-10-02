@@ -143,7 +143,7 @@ describe("validateEnrollFields", () => {
       "personal",
       validForm({ enrollmentType: "self", fechaNacimiento: "2015-06-15" }),
     );
-    expect(errors.fechaNacimiento).toMatch(/menores de edad no pueden autoinscribirse/);
+    expect(errors.fechaNacimiento).toMatch(/el alumno es menor de edad y no puede inscribirse por su cuenta/);
   });
 
   it("does not apply the minors rule to the student of a child enrollment", () => {
@@ -159,7 +159,15 @@ describe("validateEnrollFields", () => {
       "representative",
       validForm({ enrollmentType: "child", correoRepresentante: "no-es-correo" }),
     );
-    expect(errors.correoRepresentante).toBe("El correo del representante no es válido.");
+    expect(errors.correoRepresentante).toBe("El correo del representante no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.");
+  });
+
+  it("asks for the representante's birth date when it is empty", () => {
+    const errors = validateEnrollFields(
+      "representative",
+      validForm({ enrollmentType: "child", fechaNacimientoRepresentante: "" }),
+    );
+    expect(errors.fechaNacimientoRepresentante).toBe("Indique la fecha de nacimiento del representante.");
   });
 
   it("rejects an underage representante's birth date", () => {
@@ -185,7 +193,7 @@ describe("validateEnrollFields", () => {
       "representative",
       validForm({ enrollmentType: "child", fechaNacimientoRepresentante: "1800-01-15" }),
     );
-    expect(errors.fechaNacimientoRepresentante).toMatch(/entre 18 y 95 años \(calculado: \d+\)/);
+    expect(errors.fechaNacimientoRepresentante).toMatch(/entre 18 y 95 años; la fecha ingresada corresponde a \d+ años?\. Revise el año de nacimiento\./);
   });
 
   it("validates the health step's blood type and emergency contact", () => {
@@ -193,7 +201,7 @@ describe("validateEnrollFields", () => {
       "health",
       validForm({ tipoSangre: "", telefonoEmergencia: "123" }),
     );
-    expect(errors.tipoSangre).toBe("El tipo de sangre es obligatorio.");
+    expect(errors.tipoSangre).toBe("Seleccione el tipo de sangre del alumno.");
     expect(errors.telefonoEmergencia).toBe(
       "El teléfono de emergencia debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
     );
@@ -208,7 +216,7 @@ describe("validateEnrollFields", () => {
    */
   it("rejects DESCONOCIDO as if the blood type had been left blank", () => {
     const errors = validateEnrollFields("health", validForm({ tipoSangre: BLOOD_TYPES.DESCONOCIDO }));
-    expect(errors.tipoSangre).toBe("El tipo de sangre es obligatorio.");
+    expect(errors.tipoSangre).toBe("Seleccione el tipo de sangre del alumno.");
   });
 
   it("leaves the optional medical details optional", () => {
@@ -335,8 +343,8 @@ describe("validateEnrollFields", () => {
   describe("password confirmation matrix (#876)", () => {
     it.each([
       ["matches", "password8", "password8", undefined],
-      ["mismatches", "password8", "otraClave9", "Las contraseñas no coinciden."],
-      ["is left empty", "password8", "", "La confirmación de contraseña es obligatoria."],
+      ["mismatches", "password8", "otraClave9", "Las contraseñas no coinciden. Escriba la misma contraseña en los dos campos."],
+      ["is left empty", "password8", "", "Repita la contraseña para confirmarla."],
     ])("student confirmation that %s", (_label, contrasenia, contraseniaConfirmacion, expected) => {
       const errors = validateEnrollFields("personal", validForm({ contrasenia, contraseniaConfirmacion }));
       expect(errors.contraseniaConfirmacion).toBe(expected);
@@ -344,8 +352,8 @@ describe("validateEnrollFields", () => {
 
     it.each([
       ["matches", "password8", "password8", undefined],
-      ["mismatches", "password8", "otraClave9", "Las contraseñas no coinciden."],
-      ["is left empty", "password8", "", "La confirmación de contraseña es obligatoria."],
+      ["mismatches", "password8", "otraClave9", "Las contraseñas no coinciden. Escriba la misma contraseña en los dos campos."],
+      ["is left empty", "password8", "", "Repita la contraseña para confirmarla."],
     ])(
       "representante confirmation that %s",
       (_label, contraseniaRepresentante, contraseniaRepresentanteConfirmacion, expected) => {

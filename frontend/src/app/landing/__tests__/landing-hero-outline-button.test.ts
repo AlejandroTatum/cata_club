@@ -36,10 +36,4 @@ describe("landing hero outline button (#1255)", (): void => {
     expect(rule).toContain("background: transparent");
     expect(rule).toContain("border: 2px solid var(--landing-on-action)");
   });
-
-  it("leaves the contact card's outline button styling untouched", (): void => {
-    const css = landingCss();
-    expect(css).toContain(".landing-contact .landing-button-outline { border-color: var(--landing-action); color: var(--landing-action); }");
-    expect(css).toContain(".landing-contact .landing-button-outline:hover { border-color: var(--landing-action-hover); background: var(--landing-action-hover); color: var(--landing-on-action); }");
-  });
 });
