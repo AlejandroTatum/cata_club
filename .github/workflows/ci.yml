@@ -21,6 +21,7 @@ jobs:
   cambios:
     name: "Deteccion de rutas cambiadas"
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
       # Exigido por la doc oficial de dorny/paths-filter para resolver la
@@ -84,6 +85,7 @@ jobs:
   guard-secretos:
     name: "Guard: sin .env reales trackeados"
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     # Corre como PRIMER job a propósito: un `.env` committeado queda en el
     # historial para siempre aunque se borre después, así que el candado
     # debe disparar lo antes posible y sin depender de que el resto del
@@ -117,6 +119,7 @@ jobs:
   backend:
     name: Backend (Python)
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     # Escoping por rutas (issue #1217) con criterio FAIL-OPEN: ante cambios
     # de backend o archivos compartidos corre escopado; en push a main,
     # siempre; y si el detector falla, se cancela o no expone outputs, corre
@@ -202,7 +205,7 @@ jobs:
         # solo funciona en CI. Que este paso corra sin ellas ES la prueba.
         env:
           TEST_DATABASE_URL: postgresql+psycopg://usuario:password@localhost:5432/cataclub_test
-        run: uv run --frozen --no-build pytest tests/ -v --cov=app --cov-report=term-missing
+        run: uv run --frozen --no-build pytest tests/ -v --durations=25 --cov=app --cov-report=term-missing
 
       - name: Install age (cifrado de backups)
         # `tests/test_backup_controls.py` verifica que el dump cifrado no
@@ -237,6 +240,7 @@ jobs:
   migraciones-desde-cero:
     name: Migraciones desde DB vacia (empty -> head)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Mismo grupo que `backend` (las migraciones viven en backend/) y mismo
     # criterio fail-open ante un detector roto (issue #1217).
     needs: [guard-secretos, cambios]
@@ -300,6 +304,7 @@ jobs:
   frontend:
     name: Frontend (Node)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     # Mismo criterio fail-open que backend (issue #1217).
     needs: [guard-secretos, cambios]
     if: >
@@ -378,33 +383,25 @@ jobs:
   docker-images:
     name: Imagenes Docker (build, arranque real y publicacion en GHCR)
     runs-on: ubuntu-latest
-    # `needs` sobre el job COMPLETO, no solo sobre los pasos de publicación:
-    # sin esto, en un push a main este job publicaba `:sha` y `:latest` a
-    # GHCR aunque backend/frontend/migraciones estuvieran FALLANDO en ese
-    # mismo run (issue #552) — el droplet arrastra `:latest` con `docker
-    # compose pull`, así que una suite roja terminaba en producción. El
-    # costo asumido: en PRs (donde nada se publica) el build de imágenes
-    # ahora espera a que los otros jobs terminen en vez de correr en
-    # paralelo. Se prefiere igual el `needs` simple sobre el job entero
-    # antes que condicionales por-paso más finos pero frágiles: la
-    # verificación de arranque sigue corriendo en todos los PRs, solo que
-    # después de los gates baratos. `guard-secretos` también entra: jamás
-    # construir ni publicar imágenes de un árbol que committeó un `.env`.
-    needs: [guard-secretos, cambios, backend, frontend, migraciones-desde-cero]
-    # Escoping por rutas (issue #1217) + candado del #552 intacto: corre ante
-    # cambios que afecten CUALQUIERA de las dos imágenes (backend/ o frontend/
-    # -- saltarlo en frontend-only fue evaluado y rechazado), ante archivos
-    # compartidos, o siempre en push a main (ahí publica). FAIL-OPEN ante un
+    timeout-minutes: 20
+    # Fuera del camino crítico de los PRs (issue #1505): este job solo
+    # construye y verifica el arranque real de las imágenes, así que NO espera
+    # a backend/frontend/migraciones y corre en paralelo con ellos. NO publica
+    # nada: el candado del #552 (jamás publicar a GHCR desde un run donde
+    # backend/frontend/migraciones fallaron -- el droplet arrastra `:latest`
+    # con `docker compose pull`, una suite roja terminaba en producción) vive
+    # ahora en `publicar-imagenes`, que exige el éxito de TODOS los gates más
+    # este job y solo corre en push a main. `guard-secretos` sigue acá:
+    # jamás construir imágenes de un árbol que committeó un `.env`.
+    needs: [guard-secretos, cambios]
+    # Escoping por rutas (issue #1217): corre ante cambios que afecten
+    # CUALQUIERA de las dos imágenes (backend/ o frontend/ -- saltarlo en
+    # frontend-only fue evaluado y rechazado), ante archivos compartidos, o
+    # siempre en push a main (ahí habilita la publicación). FAIL-OPEN ante un
     # detector roto/cancelado/sin outputs: corre completo, nunca se saltea.
-    # Los upstream exitosos O SALTEADOS habilitan; un failure/cancelled real
-    # de backend/frontend/migraciones bloquea -- jamás se construye una imagen
-    # de un run rojo.
     if: >
       always() &&
       needs.guard-secretos.result == 'success' &&
-      (needs.backend.result == 'success' || needs.backend.result == 'skipped') &&
-      (needs.frontend.result == 'success' || needs.frontend.result == 'skipped') &&
-      (needs.migraciones-desde-cero.result == 'success' || needs.migraciones-desde-cero.result == 'skipped') &&
       (github.event_name == 'push' ||
        needs.cambios.result != 'success' ||
        needs.cambios.outputs.docker != 'false')
@@ -430,15 +427,12 @@ jobs:
     permissions:
       # Alcance mínimo y acotado a ESTE job (el workflow no declara
       # `permissions` global, así que el resto de jobs conserva el default):
-      # leer el código para el checkout y escribir paquetes para el push a
-      # GHCR. Se autentica con el GITHUB_TOKEN integrado -- no hace falta
-      # ningún secreto nuevo.
+      # solo leer el código. Escribir paquetes es exclusivo de
+      # `publicar-imagenes`.
       contents: read
-      packages: write
     env:
       # Tag inmutable = SHA del commit. Es el que consume la pila durante la
-      # verificación, así que lo que se arranca y lo que se publica es
-      # literalmente la misma imagen.
+      # verificación y el mismo que publica `publicar-imagenes`.
       IMAGE_TAG: ${{ github.sha }}
       IMAGEN_BACKEND: ghcr.io/alejandrotatum/cata_club-backend
       IMAGEN_FRONTEND: ghcr.io/alejandrotatum/cata_club-frontend
@@ -513,8 +507,8 @@ jobs:
 
       - name: Build backend image
         # `load: true` deja la imagen en el daemon local para que Compose la
-        # consuma por referencia y, si toca publicar, se empuje EXACTAMENTE el
-        # mismo artefacto que se acaba de verificar (nada se reconstruye).
+        # consuma por referencia. `publicar-imagenes` la reconstruye con el
+        # mismo cache (scope gha) que este paso escribe.
         # `provenance: false` porque los attestations no son compatibles con
         # `load`. Cache de GitHub Actions (type=gha) con scope propio por
         # imagen para que las dos no se pisen entre sí.
@@ -673,35 +667,75 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
           docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --no-color --tail=200
 
-      - name: Log in to GHCR
-        # Solo en `push` a main: un PR (y en especial uno desde un fork) NUNCA
-        # debe poder publicar imágenes. Y va DESPUÉS de la verificación de
-        # arranque, así que una imagen que no levanta jamás llega al registro.
+      - name: Save verified images
+        # Se publican EXACTAMENTE estas imágenes, sin reconstruir.
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: docker save "$IMAGEN_BACKEND:$IMAGE_TAG" "$IMAGEN_FRONTEND:$IMAGE_TAG" | gzip > imagenes-verificadas.tar.gz
+
+      - name: Upload verified images
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: imagenes-verificadas
+          path: imagenes-verificadas.tar.gz
+          retention-days: 1
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml down -v --remove-orphans
+
+  # Publicación a GHCR (issue #1505, candado #552): único job con permiso de
+  # escritura de paquetes. Solo corre en push a main y SOLO si backend,
+  # frontend, migraciones y la verificación de arranque de imágenes
+  # terminaron en `success` -- un skipped/failure/cancelled de cualquiera lo
+  # bloquea (en push todos corren, así que skipped también es anómalo). Los
+  # PRs (y en especial los de forks) nunca llegan acá. No reconstruye: carga
+  # y publica las imágenes exactas que `docker-images` verificó.
+  publicar-imagenes:
+    name: Publicar imagenes en GHCR
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [guard-secretos, backend, frontend, migraciones-desde-cero, docker-images]
+    if: >
+      always() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.guard-secretos.result == 'success' &&
+      needs.backend.result == 'success' &&
+      needs.frontend.result == 'success' &&
+      needs.migraciones-desde-cero.result == 'success' &&
+      needs.docker-images.result == 'success'
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+      IMAGEN_BACKEND: ghcr.io/alejandrotatum/cata_club-backend
+      IMAGEN_FRONTEND: ghcr.io/alejandrotatum/cata_club-frontend
+    steps:
+      - name: Log in to GHCR
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push images to GHCR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        # Dos tags por imagen, a propósito:
-        #   - <sha del commit>: inmutable. Es a lo que se debe fijar un deploy
-        #     para poder reproducirlo o hacer rollback exacto; nunca cambia de
-        #     contenido.
-        #   - latest: movil. Es el default de `${IMAGE_TAG:-latest}` en
-        #     docker-compose.yml, o sea lo que arrastra un `docker compose
-        #     pull` sin variables en el droplet.
-        # Se publica el binario ya cargado y verificado (`docker tag` + `push`),
-        # no una reconstrucción: lo que se probó es bit a bit lo que se sube.
-        run: |
-          for imagen in "$IMAGEN_BACKEND" "$IMAGEN_FRONTEND"; do
-            docker tag "$imagen:$IMAGE_TAG" "$imagen:latest"
-            docker push "$imagen:$IMAGE_TAG"
-            docker push "$imagen:latest"
-          done
+      # Dos tags por imagen, a propósito:
+      #   - <sha del commit>: inmutable. Es a lo que se debe fijar un deploy
+      #     para poder reproducirlo o hacer rollback exacto.
+      #   - latest: movil. Es el default de `${IMAGE_TAG:-latest}` en
+      #     docker-compose.yml, o sea lo que arrastra un `docker compose
+      #     pull` sin variables en el droplet.
+      - name: Download verified images
+        uses: actions/download-artifact@v4
+        with:
+          name: imagenes-verificadas
 
-      - name: Tear down
-        if: always()
-        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml down -v --remove-orphans
+      - name: Load, tag and push verified images
+        run: |
+          gunzip -c imagenes-verificadas.tar.gz | docker load
+          for IMG in "$IMAGEN_BACKEND" "$IMAGEN_FRONTEND"; do
+            docker tag "$IMG:$IMAGE_TAG" "$IMG:latest"
+            docker push "$IMG:$IMAGE_TAG"
+            docker push "$IMG:latest"
+          done
