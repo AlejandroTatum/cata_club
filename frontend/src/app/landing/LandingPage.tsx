@@ -24,7 +24,7 @@ import Sponsors from "./Sponsors";
 import Ticker from "./Ticker";
 import { CLUB_PLUS_CODE, clubOpenStreetMapUrl } from "./club-location";
 import { buildLandingStats, deriveContactHours, landingConfig, toWhatsAppLink } from "./landing-config";
-import { MAP_INSET_SIZES, MISSION_VISION_PHOTO_SIZES } from "./landing-image-sizes";
+import { ARRIVAL_PHOTO_SIZES, FOOTER_PHOTO_SIZES, MISSION_VISION_PHOTO_SIZES, STATS_PHOTO_SIZES } from "./landing-image-sizes";
 import { mapPublicSchedules, type LandingSchedule } from "./schedule-data";
 import { SITE_NAV_SECTIONS, landingSectionHref } from "@/lib/site-navigation";
 
@@ -215,8 +215,20 @@ function Hero(): React.ReactElement {
 function Stats(): React.ReactElement {
   return (
     <section className="landing-stats" aria-label="Datos del club" data-motion-section data-testid="motion-section">
-      {buildLandingStats().map((stat): React.ReactElement => (
-        <div className="landing-stat" key={stat.label} data-reveal>
+      {/* A real training photo is the band's first cell: the figures sit beside
+          it instead of floating in a strip with nothing under them. */}
+      <figure className="landing-stats-photo" data-reveal>
+        <Image
+          src="/landing/gallery-08-coaching.jpg"
+          alt="Jugador de Cata Club entrenando junto a la mesa, con su entrenador al fondo."
+          width={1600}
+          height={1200}
+          loading="lazy"
+          sizes={STATS_PHOTO_SIZES}
+        />
+      </figure>
+      {buildLandingStats().map((stat, index): React.ReactElement => (
+        <div className={index === 0 ? "landing-stat landing-stat--lead" : "landing-stat"} key={stat.label} data-reveal>
           {/* Text, never a count-up target: see buildLandingStats. */}
           <strong className="landing-display">{stat.value}</strong>
           <span>{stat.label}</span>
@@ -258,7 +270,7 @@ function MissionVision(): React.ReactElement {
             sizes={MISSION_VISION_PHOTO_SIZES}
           />
         </article>
-        <article className="landing-pillar" data-reveal>
+        <article className="landing-pillar landing-pillar--flip" data-reveal>
           <div className="landing-pillar-copy">
             <span className="landing-index" aria-hidden="true">02</span>
             <span className="landing-index-label" aria-hidden="true">Horizonte</span>
@@ -335,13 +347,15 @@ function Motto(): React.ReactElement {
 
 function Schedule(): React.ReactElement {
   const state = useContext(SchedulesContext);
+  // Once the catalog is ready the header leads the category rail (the
+  // selector draws it); until then it stands alone above the status line.
+  const header = <SectionHeader eyebrow="Entrenamientos" title="Elija una categoría" />;
 
   return (
     <section className="landing-section landing-schedule" id="horarios" data-motion-section data-testid="motion-section">
-      <SectionHeader eyebrow="Entrenamientos" title="Elija una categoría" />
       {state.kind === "ready"
-        ? <ScheduleSelector schedules={state.schedules} />
-        : <p className="landing-schedule-status" role="status">{SCHEDULE_STATUS[state.kind]}</p>}
+        ? <ScheduleSelector schedules={state.schedules} header={header} />
+        : <>{header}<p className="landing-schedule-status" role="status">{SCHEDULE_STATUS[state.kind]}</p></>}
     </section>
   );
 }
@@ -360,33 +374,39 @@ function Location(): React.ReactElement {
   const hours = settled ? deriveContactHours(state.schedules) : SCHEDULE_STATUS[state.kind];
   return (
     <section className="landing-section landing-location" id="contacto" data-motion-section data-testid="motion-section">
-      <SectionHeader eyebrow="Visítanos" title="Cómo llegar" />
+      <SectionHeader eyebrow="Visítenos" title="Cómo llegar" />
       <div className="landing-location-row">
         <div className="landing-map-stage">
           <LandingMap />
-          {/* A small, real view of the club grounds the map without pretending
-              it is a street-facing photograph. It remains non-interactive so
-              Leaflet's map and controls retain their expected behavior. */}
-          <figure className="landing-map-inset">
+        </div>
+        <aside className="landing-contact" data-reveal>
+          {/* The photograph of the entrance heads the card instead of floating
+              over the map: a visitor reads where to go, then what the place
+              looks like, then how to get in touch. It is a real view of the
+              club grounds, not a street-facing photograph, so it grounds the
+              map without pretending to be one. */}
+          <figure className="landing-arrival">
             <Image
               src="/landing/photo-arrival.jpeg"
               alt="Entrada de Cata Club junto al Coliseo Ciudad de Loja"
               width={1600}
               height={1200}
               loading="lazy"
-              sizes={MAP_INSET_SIZES}
+              sizes={ARRIVAL_PHOTO_SIZES}
             />
             <figcaption>Así se ve al llegar</figcaption>
           </figure>
-        </div>
-        <aside className="landing-contact" data-reveal>
           <h3>Información de contacto</h3>
           {/* Street address, landmark, and Plus Code, in that order: the way a
               visitor narrows down a place. The Coliseo stays — it is the
               reference the product owner gives, and #641 resolved to the club
               being beside it, not near a plaza. The Plus Code closes the last
-              gap, since the street here carries no number. */}
+              gap, since the street here carries no number. The opening hours
+              follow at once: where and when are the two things a visit needs. */}
           <p><MapPin aria-hidden="true" /><span>Av. Manuel Agustín Aguirre, Barrio Perpetuo Socorro, Loja, Ecuador — junto al Coliseo Ciudad de Loja ({CLUB_PLUS_CODE})</span></p>
+          {/* A live region only while it is unsettled, so the visitor hears
+              what happened; once it states real hours it is ordinary copy. */}
+          <p role={settled ? undefined : "status"}><CalendarDays aria-hidden="true" /><strong>Horario</strong><span>{hours}</span></p>
           <p>
             <Phone className="landing-icon-whatsapp" aria-hidden="true" /><strong>WhatsApp</strong>
             <span className="landing-contact-numbers">
@@ -397,15 +417,14 @@ function Location(): React.ReactElement {
           </p>
           <p><Facebook className="landing-icon-facebook" aria-hidden="true" /><strong>Facebook</strong><a href={contact.facebook} target="_blank" rel="noreferrer">Cata Club Loja</a></p>
           <p><Instagram className="landing-icon-instagram" aria-hidden="true" /><strong>Instagram</strong><a href={contact.instagram} target="_blank" rel="noreferrer">@cataclub_tenis_de_mesa</a></p>
-          {/* A live region only while it is unsettled, so the visitor hears
-              what happened; once it states real hours it is ordinary copy. */}
-          <p role={settled ? undefined : "status"}><CalendarDays aria-hidden="true" /><strong>Horario</strong><span>{hours}</span></p>
-          <a className="landing-button landing-button-outline" href={clubOpenStreetMapUrl()} target="_blank" rel="noreferrer">
-            <Navigation aria-hidden="true" /> Cómo llegar
-          </a>
-          <a className="landing-button landing-button-block" href={toWhatsAppLink(contact.whatsapp[0])} target="_blank" rel="noreferrer">
-            <MessageCircle aria-hidden="true" /> Escríbenos por WhatsApp
-          </a>
+          <div className="landing-contact-actions">
+            <a className="landing-button landing-button-outline" href={clubOpenStreetMapUrl()} target="_blank" rel="noreferrer">
+              <Navigation aria-hidden="true" /> Cómo llegar
+            </a>
+            <a className="landing-button" href={toWhatsAppLink(contact.whatsapp[0])} target="_blank" rel="noreferrer">
+              <MessageCircle aria-hidden="true" /> Escríbanos por WhatsApp
+            </a>
+          </div>
         </aside>
       </div>
     </section>
@@ -413,6 +432,7 @@ function Location(): React.ReactElement {
 }
 
 function Footer(): React.ReactElement {
+  const { contact } = landingConfig;
   return (
     <footer className="landing-footer" data-motion-section data-testid="motion-section">
       <span className="landing-halftone" aria-hidden="true" />
@@ -432,14 +452,30 @@ function Footer(): React.ReactElement {
               its own largest consumer. `width`/`height` stay at 58 so the
               element's aspect ratio — and therefore the rendered box — is
               exactly what it was before. */}
-          <div><span><Image src="/brand/cata-club-logo-176.jpeg" alt="" width={58} height={58} unoptimized /></span><b className="landing-display"><small>TENIS DE MESA</small>Cata Club</b></div>
-          <p>Formando campeones de tenis de mesa en Loja desde 2013.</p><Stars />
+          <div><span><Image src="/brand/cata-club-logo-176.jpeg" alt="" width={58} height={58} unoptimized /></span><b className="landing-display"><small>TENIS DE MESA</small>Cata Club</b><Stars /></div>
+          <p>Formando campeones de tenis de mesa en Loja desde 2013.</p>
+          <p className="landing-footer-place"><MapPin aria-hidden="true" /><span>Av. Manuel Agustín Aguirre, Loja, Ecuador</span></p>
+          <div className="landing-footer-social">
+            <a href={toWhatsAppLink(contact.whatsapp[0])} target="_blank" rel="noreferrer"><Phone aria-hidden="true" /><span>WhatsApp</span></a>
+            <a href={contact.facebook} target="_blank" rel="noreferrer"><Facebook aria-hidden="true" /><span>Facebook</span></a>
+            <a href={contact.instagram} target="_blank" rel="noreferrer"><Instagram aria-hidden="true" /><span>Instagram</span></a>
+          </div>
         </div>
         <nav aria-label="Servicios"><h2>Servicios</h2><a href="#horarios">Horarios y categorías</a><Link href={ENROLL_HREF}>Inscripciones</Link><a href="#contacto">Contacto</a></nav>
         <nav aria-label="Nosotros"><h2>Nosotros</h2><a href="#nosotros">Misión y Visión</a><a href="#valores">Valores</a><a href="#galeria">Galería</a><a href="#contacto">Ubicación</a></nav>
         <nav aria-label="Información legal"><h2>Información legal</h2><Link href="/terminos">Términos de uso</Link><Link href="/privacidad">Aviso de privacidad</Link><Link href="/permiso-imagen-fetm">Permiso público de imagen FETM</Link></nav>
+        <figure className="landing-footer-photo">
+          <Image
+            src="/landing/vision-team-1329.jpg"
+            alt="Alumnos y entrenadores de Cata Club reunidos en la sala de entrenamiento."
+            width={1600}
+            height={1200}
+            loading="lazy"
+            sizes={FOOTER_PHOTO_SIZES}
+          />
+        </figure>
       </div>
-      <div className="landing-footer-bottom">© {new Date().getFullYear()} Cata Club · Tenis de Mesa. Todos los derechos reservados.</div>
+      <div className="landing-footer-bottom"><span>© {new Date().getFullYear()} Cata Club · Tenis de Mesa. Todos los derechos reservados.</span><span>Loja, Ecuador</span></div>
     </footer>
   );
 }
@@ -463,7 +499,7 @@ export default function LandingPage(): React.ReactElement {
           so the landmark structure below is exactly what it was. */}
       <PublicSchedules>
         <main>
-          <Hero /><Ticker /><Stats /><Schedule /><MissionVision /><Values /><Motto /><Gallery /><Location />
+          <Hero /><Ticker /><MissionVision /><Values /><Stats /><Gallery /><Schedule /><Motto /><Location />
         </main>
       </PublicSchedules>
       {/* The sponsor strip sits between the page's main landmark and the footer:

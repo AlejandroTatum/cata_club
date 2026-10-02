@@ -59,6 +59,15 @@
   /* The section gutter, as a variable so the full-bleed carousel can cancel
      exactly the padding its section applies at every breakpoint. */
   --landing-gutter: 8.33vw;
+  /* The page's vertical rhythm. Sections do not share one padding: a chapter
+     opener breathes (`chapter`), related sections sit close (`tight`), and the
+     dense bands in between use `dense`. Mobile drops each step, never the
+     ratio between them (see the 768px block). */
+  --landing-space-snug: 32px;
+  --landing-space-tight: 44px;
+  --landing-space-dense: 60px;
+  --landing-space-section: 76px;
+  --landing-space-chapter: 112px;
   --landing-footer: var(--landing-brand-black);
   color: var(--landing-text);
   /* `clip` (not `hidden`) so the page never becomes a scroll container —
@@ -192,7 +201,12 @@
 /* Warm band, distinct from ENTRENAMIENTOS' white surface below it (issue
    #691), closed off with a hairline so the boundary reads on every screen
    even where the background step alone is too subtle to notice. */
-.landing-stats { position: relative; display: flex; padding: 48px 8.33vw; overflow: hidden; border-bottom: 1px solid var(--landing-border); background: var(--landing-stats-bg); }
+.landing-stats { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, max-content); padding: 0 8.33vw; overflow: hidden; border-bottom: 1px solid var(--landing-border); background: var(--landing-stats-bg); }
+/* The band's first cell is a club photograph that bleeds to the viewport's
+   left edge: the figures read as the caption of a real place, and the cell
+   takes whatever height the figures need instead of leaving the band empty. */
+.landing-stats-photo { position: relative; z-index: 1; min-height: 100%; margin: 0 0 0 calc(-1 * var(--landing-gutter)); overflow: hidden; background: var(--landing-vitrina-photo-bg); }
+.landing-stats-photo img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 35%; }
 /* Same grid, lower contrast: the warm ground under it already sits closer to
    the ink than plain white, so the line opacity drops to keep the grid as
    quiet here as it is everywhere else. */
@@ -201,10 +215,18 @@
    `landing-valores-b-tablero.html`) — the grid texture every other section
    carries would fight the tablero's own black-tile grid. */
 .landing-section:not(.landing-motto):not(.landing-values)::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: repeating-linear-gradient(0deg,color-mix(in srgb, var(--landing-brand-black) 2.2%, transparent) 0 1px,transparent 1px 22px),repeating-linear-gradient(90deg,color-mix(in srgb, var(--landing-brand-black) 2.2%, transparent) 0 1px,transparent 1px 22px); }
-.landing-stat { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.landing-stat { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: var(--landing-space-snug) clamp(24px, 3vw, 64px); text-align: center; }
+/* Hairline cells, desktop only: mobile turns the same stats into cards. */
+@media (min-width: 769px) {
+  .landing-stats .landing-stat + .landing-stat { border-left: 1px solid var(--landing-border); }
+}
 .landing-stat strong, .landing-section-header h2 { color: var(--landing-text-strong); }
-.landing-stat strong { font-size: 48px; }
-.landing-stat span { color: var(--landing-text); font-size: 16px; font-weight: 600; }
+.landing-stat strong { font-size: 80px; line-height: 1; }
+/* Years is the lead figure: it is the one a visitor can weigh, so it carries
+   the band's scale; the date and the city are its supporting facts. */
+.landing-stat--lead strong { font-size: clamp(96px, 8vw, 128px); line-height: 0.9; color: var(--landing-action); }
+
+.landing-stat span { max-width: 18ch; color: var(--landing-text); font-size: 16px; font-weight: 600; line-height: 1.35; }
 
 .landing-section { position: relative; display: flex; flex-direction: column; align-items: center; gap: 44px; padding: 76px 8.33vw; overflow: hidden; }
 .landing-section > * { position: relative; z-index: 1; }
@@ -234,7 +256,7 @@
    outright — the old version's `::before` em-dash separator belonged to the
    previous side-by-side layout and has no place once the index and the label
    stack. */
-.landing-pillars { display: grid; width: 100%; grid-template-columns: 1fr 1fr; gap: 72px; align-items: start; }
+.landing-pillars { display: grid; width: 100%; grid-template-columns: minmax(0, 1fr); gap: 96px; align-items: start; }
 /* Each pillar mirrors its parent's own 1fr/1fr split — copy on the left,
    photo on the right — with a tighter 32px inner gap (vs. the 72px outer
    gap between the two pillars themselves), since these two columns belong
@@ -247,13 +269,16 @@
    block), stacking the photo under the copy again: side-by-side inside an
    already single-column `.landing-pillars` would leave neither half legible
    on a phone. */
-.landing-pillar { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; border-top: 1px solid var(--landing-text-strong); padding-top: 28px; }
+.landing-pillar { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: center; border-top: 1px solid var(--landing-text-strong); padding-top: 28px; }
 .landing-index { color: var(--landing-text-muted); font-family: var(--font-landing-barlow); font-size: 15px; letter-spacing: 3px; }
-.landing-pillars .landing-index { display: block; margin: 0; font-weight: 800; font-size: 64px; line-height: 1; letter-spacing: normal; color: var(--landing-action); }
+.landing-pillars .landing-index { display: flex; align-items: center; gap: 24px; margin: 0; font-weight: 800; font-size: clamp(64px, 4.4vw, 84px); line-height: 1; letter-spacing: normal; color: var(--landing-action); }
+/* The rule after the numeral spends the row's width instead of leaving it
+   empty, and it is the same 2px stroke the section eyebrows use. */
+.landing-pillars .landing-index::after { content: ""; flex: 1; height: 2px; background: var(--landing-border); }
 .landing-index-label { display: block; margin-top: 4px; color: var(--landing-text-strong); font-size: 12px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; }
-.landing-pillar h3 { margin-top: 18px; color: var(--landing-text-strong); font-family: var(--font-landing-barlow); font-weight: 800; font-size: 30px; letter-spacing: -0.01em; line-height: 1.1; text-transform: uppercase; }
-.landing-lead { margin: 18px 0 0; max-width: 30ch; color: var(--landing-text-strong); font-weight: 600; font-size: 22px; line-height: 1.35; }
-.landing-pillar p:not(.landing-lead) { margin: 14px 0 0; max-width: 44ch; color: var(--landing-text); font-size: 17px; line-height: 1.7; }
+.landing-pillar h3 { margin-top: 18px; color: var(--landing-text-strong); font-family: var(--font-landing-barlow); font-weight: 800; font-size: clamp(30px, 2.2vw, 42px); letter-spacing: -0.01em; line-height: 1.1; text-transform: uppercase; }
+.landing-lead { margin: 18px 0 0; max-width: 28ch; color: var(--landing-text-strong); font-weight: 600; font-size: clamp(26px, 2.1vw, 40px); line-height: 1.35; }
+.landing-pillar p:not(.landing-lead) { margin: 14px 0 0; max-width: 50ch; color: var(--landing-text); font-size: clamp(18px, 1.25vw, 24px); line-height: 1.7; }
 /* The two source photos arrive at different native ratios (mission-focus.jpeg
    is 1080x1090 ≈ 0.99, vision-coaching.jpeg is 1080x1257 ≈ 0.86), but the
    pillars are one symmetric pair — `data-reveal-together` on the section
@@ -268,7 +293,11 @@
    level with the copy beside it; the 24px gap from the old stacked layout
    only applies once the mobile breakpoint below collapses the pillar back
    to one column. */
-.landing-pillar-photo { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; object-position: top; }
+.landing-pillar-photo { display: block; width: 100%; aspect-ratio: 3 / 2; border-radius: 14px; object-fit: cover; object-position: center 20%; }
+/* Order, not DOM: the copy stays first for a screen reader, and the second
+   pillar mirrors the first so the photographs alternate sides down the page. */
+.landing-pillar--flip .landing-pillar-copy { grid-column: 2; grid-row: 1; }
+.landing-pillar--flip .landing-pillar-photo { grid-column: 1; grid-row: 1; }
 .landing-contact h3 { font-family: var(--font-landing-barlow); font-size: 20px; text-transform: uppercase; }
 
 /* Valores tablero redesign: the scroll-scrubbed rally (ball, guide,
@@ -456,10 +485,13 @@
 /* The simple card (issue #988): a tablist of categories drives one card that
    states the first slot's schedule, never a bar chart of every published
    block — the timeline this replaced said nothing the facts below didn't. */
-.landing-schedule-layout { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 32px; align-items: start; width: 100%; }
+.landing-schedule-layout { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 32px; align-items: stretch; width: 100%; }
 
-.landing-schedule-list { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--landing-border); }
-.landing-schedule-tab { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 64px; padding: 12px 8px 12px 0; border: 0; border-bottom: 1px solid var(--landing-border); background: transparent; color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; text-align: left; cursor: pointer; position: relative; transition: color 220ms ease; }
+/* The category rail: section header on top, tabs filling the rest of the column,
+   so the rail is as tall as the card beside it. */
+.landing-schedule-side { display: flex; min-width: 0; flex-direction: column; gap: var(--landing-space-snug); }
+.landing-schedule-list { display: flex; flex: 1; flex-direction: column; gap: 0; border-top: 1px solid var(--landing-border); }
+.landing-schedule-tab { display: flex; flex: 1 1 auto; align-items: center; gap: 14px; width: 100%; min-height: 64px; padding: 12px 8px 12px 0; border: 0; border-bottom: 1px solid var(--landing-border); background: transparent; color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; text-align: left; cursor: pointer; position: relative; transition: color 220ms ease; }
 .landing-schedule-tab::before { content: ""; position: absolute; left: -16px; top: 12px; bottom: 12px; width: 4px; background: var(--landing-action); border-radius: 2px; transform: scaleY(0); transition: transform 320ms ease; }
 .landing-schedule-tab[aria-selected="true"]::before { transform: scaleY(1); }
 .landing-schedule-tab:focus-visible { outline: 3px solid var(--landing-focus); outline-offset: 2px; }
@@ -475,13 +507,22 @@
 /* The one card. Its decorative corner circle picks up the selected
    category's color; the ball fill/ink pair does the same so a lit day stays
    legible against every swatch in `CATEGORY_COLORS`. */
-.landing-schedule-card { position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 8px; padding: 34px 36px 32px; border: 1px solid var(--landing-border); border-radius: 20px; background: var(--landing-surface); box-shadow: 0 24px 48px -32px color-mix(in srgb, var(--landing-brand-black) 40%, transparent); }
-.landing-schedule-card::after { content: ""; position: absolute; right: -60px; top: -60px; width: 220px; height: 220px; border-radius: 50%; background: var(--landing-cat, var(--landing-action)); opacity: 0.12; transition: background 400ms ease; }
-.landing-schedule-card h3 { margin: 0; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(21px, 2.2vw, 28px); letter-spacing: 1px; text-transform: uppercase; }
-.landing-schedule-audience { margin: 0 0 12px; color: var(--landing-text); }
+.landing-schedule-card { position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); border: 1px solid var(--landing-border); border-radius: 20px; background: var(--landing-surface); box-shadow: 0 24px 48px -32px color-mix(in srgb, var(--landing-brand-black) 40%, transparent); }
+/* Copy column and photo column. The photo is the card's second half, so the
+   card never has a wide blank right side; the category swatch becomes the
+   edge between them. */
+.landing-schedule-copy { position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: var(--landing-space-snug); padding: 34px 36px 32px; }
+.landing-schedule-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
+.landing-schedule-group { display: flex; flex-direction: column; gap: 8px; }
+.landing-schedule-copy > * { position: relative; z-index: 1; }
+.landing-schedule-copy::after { content: ""; position: absolute; right: -60px; top: -60px; z-index: 0; width: 220px; height: 220px; border-radius: 50%; background: var(--landing-cat, var(--landing-action)); opacity: 0.12; transition: background 400ms ease; }
+.landing-schedule-photo { position: relative; min-height: 100%; margin: 0; overflow: hidden; border-left: 6px solid var(--landing-cat, var(--landing-action)); background: var(--landing-vitrina-photo-bg); transition: border-color 400ms ease; }
+.landing-schedule-photo img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 30%; }
+.landing-schedule-card h3 { margin: 0; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(24px, 2.4vw, 40px); letter-spacing: 1px; text-transform: uppercase; }
+.landing-schedule-audience { margin: 0; color: var(--landing-text); font-weight: 600; }
 .landing-schedule-label { display: block; margin-bottom: 2px; color: var(--landing-text-muted); font-size: 11.5px; font-weight: 800; letter-spacing: 2.4px; text-transform: uppercase; }
 
-.landing-schedule-time { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin: 0 0 8px; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(38px, 5vw, 56px); line-height: 1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.landing-schedule-time { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin: 0; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(48px, 5.6vw, 96px); line-height: 1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
 .landing-schedule-time small { color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 15px; font-weight: 600; letter-spacing: 0.5px; text-transform: none; }
 .landing-schedule-dash { color: var(--landing-action); }
 /* Each `HH:MM` half is a run of one span per character (`DigitRun`, for the
@@ -496,13 +537,13 @@
 .landing-schedule-time--animate .landing-schedule-digit { animation: landing-schedule-digit-roll 520ms ease both; }
 @keyframes landing-schedule-digit-roll { from { transform: translateY(40%); opacity: 0; } to { transform: none; opacity: 1; } }
 
-.landing-schedule-days { display: flex; gap: 10px; margin: 0 0 26px; }
-.landing-schedule-day { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--landing-border); color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 16px; font-weight: 700; letter-spacing: 0.5px; background: var(--landing-surface); transition: background 320ms ease, border-color 320ms ease, color 320ms ease; }
+.landing-schedule-days { display: flex; gap: clamp(10px, 1vw, 18px); margin: 0; }
+.landing-schedule-day { width: clamp(52px, 3.6vw, 68px); height: clamp(52px, 3.6vw, 68px); display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--landing-border); color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 16px; font-weight: 700; letter-spacing: 0.5px; background: var(--landing-surface); transition: background 320ms ease, border-color 320ms ease, color 320ms ease; }
 .landing-schedule-day--on { background: var(--landing-cat, var(--landing-action)); border-color: var(--landing-cat, var(--landing-action)); color: var(--landing-cat-ink, var(--landing-text-strong)); }
 .landing-schedule-day--pop { animation: landing-schedule-day-pop 560ms ease both; }
 @keyframes landing-schedule-day-pop { 0% { transform: scale(0.7); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
 
-.landing-schedule-second { margin: 18px 0 0; padding-top: 16px; border-top: 1px dashed var(--landing-border); color: var(--landing-text); font-size: 15px; }
+.landing-schedule-second { margin: 10px 0 0; padding-top: 16px; border-top: 1px dashed var(--landing-border); color: var(--landing-text); font-size: 15px; }
 .landing-schedule-second b { color: var(--landing-text-strong); font-variant-numeric: tabular-nums; }
 
 .landing-location { background: var(--landing-background); }
@@ -510,14 +551,14 @@
 .landing-map-stage { position: relative; z-index: 1; min-width: 0; min-height: 348px; flex: 1; }
 .landing-map { position: relative; z-index: 1; width: 100%; height: 100%; min-height: 348px; border: 3px solid var(--landing-surface); border-radius: 14px; box-shadow: 0 4px 18px color-mix(in srgb, var(--landing-brand-black) 12%, transparent); }
 .landing-map-loading { display: grid; place-items: center; color: var(--landing-text); background: var(--landing-border); }
-/* A small, real view of the club grounds the map without pretending it is a
-   street-facing photograph. It remains non-interactive so Leaflet's map and
-   controls retain their expected behavior. */
-.landing-map-inset { position: absolute; z-index: 700; right: 18px; bottom: 18px; width: min(42%, 230px); margin: 0; overflow: hidden; border: 3px solid var(--landing-surface); border-radius: 12px; background: var(--landing-brand-black); box-shadow: 0 10px 26px color-mix(in srgb, var(--landing-brand-black) 36%, transparent); pointer-events: none; }
-.landing-map-inset img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
-.landing-map-inset figcaption { padding: 8px 10px; color: var(--landing-surface); font-size: 10.5px; font-weight: 800; letter-spacing: 1.1px; text-transform: uppercase; }
-.landing-contact { width: 420px; height: fit-content; display: flex; flex: none; flex-direction: column; gap: 18px; padding: 32px; border: 1px solid var(--landing-border); border-radius: 18px; background: var(--landing-surface); box-shadow: 0 2px 14px color-mix(in srgb, var(--landing-brand-black) 6%, transparent); }
-.landing-contact h3 { font-size: 17px; }
+.landing-contact { width: 420px; display: flex; flex: none; flex-direction: column; gap: 16px; padding: 0 32px 32px; overflow: hidden; border: 1px solid var(--landing-border); border-radius: 18px; background: var(--landing-surface); box-shadow: 0 2px 14px color-mix(in srgb, var(--landing-brand-black) 6%, transparent); }
+/* The entrance photo heads the card, edge to edge. Its caption rides the same
+   scrim the gallery uses, in the label voice the map inset had. */
+.landing-arrival { position: relative; margin: 0 -32px 4px; overflow: hidden; background: var(--landing-brand-black); }
+.landing-arrival img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+.landing-arrival::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, color-mix(in srgb, var(--landing-brand-black) 72%, transparent) 0%, transparent 46%); }
+.landing-arrival figcaption { position: absolute; inset-inline: 0; bottom: 0; z-index: 1; padding: 14px 20px; color: var(--landing-surface); font-size: 11.5px; font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; }
+.landing-contact h3 { font-family: var(--font-landing-barlow); font-size: 17px; text-transform: uppercase; }
 .landing-contact p { display: flex; align-items: center; gap: 12px; color: var(--landing-text); font-size: 17px; }
 .landing-contact p:first-of-type { align-items: flex-start; line-height: 1.6; }
 .landing-contact p svg { width: 19px; height: 19px; flex: none; color: var(--landing-action); }
@@ -529,7 +570,10 @@
 .landing-contact p a:hover { text-decoration: underline; }
 .landing-contact-numbers { display: flex; flex-wrap: wrap; gap: 4px 10px; }
 .landing-contact-numbers a { white-space: nowrap; }
-.landing-contact .landing-button { margin-top: 4px; }
+/* Both actions close the card, pushed to its floor so a map taller than the
+   card's copy never leaves a gap between the last row and the buttons. */
+.landing-contact-actions { display: flex; flex-direction: column; gap: 12px; margin-top: auto; padding-top: 4px; }
+.landing-contact-actions .landing-button { width: 100%; }
 /* The contact card sits on a light surface, so the hero's white-on-red outline
    variant is invisible here — restate it in brand red. */
 .landing-contact .landing-button-outline { border-color: var(--landing-action); color: var(--landing-action); }
@@ -566,21 +610,51 @@
 /* Two equal logical copies make -50% exactly one complete track width. */
 @keyframes landing-sponsors-marquee { to { transform: translateX(-50%); } }
 
-.landing-footer { position: relative; display: flex; flex-direction: column; gap: 34px; padding: 60px 8.33vw 44px; overflow: hidden; background: var(--landing-footer); }
+.landing-footer { position: relative; display: flex; flex-direction: column; gap: 16px; padding: var(--landing-space-dense) 8.33vw 36px; overflow: hidden; background: var(--landing-footer); }
 .landing-footer .landing-halftone { mask-image: radial-gradient(circle at 96% 100%,var(--landing-brand-black),transparent 42%); }
-.landing-footer-top { position: relative; display: flex; gap: 64px; align-items: flex-start; }
-.landing-footer-brand { flex: 1; display: flex; flex-direction: column; gap: 14px; }
-.landing-footer-brand > div { display: flex; align-items: center; gap: 14px; }
+/* Brand, three link columns, one photograph. The photo is the closing cell:
+   it takes the row's height, so the shorter link columns are never left with a
+   hollow under them. */
+.landing-footer-top { position: relative; display: grid; grid-template-columns: minmax(0, 1.8fr) repeat(3, minmax(0, 1fr)) minmax(0, 1.2fr); gap: 40px; align-items: stretch; }
+.landing-footer-brand { display: flex; flex-direction: column; gap: 14px; }
+.landing-footer-brand > div:first-child { display: flex; align-items: center; gap: 14px; }
+.landing-footer-brand .landing-stars { margin-left: auto; }
 .landing-footer-brand > div > span { padding: 6px; border-radius: 12px; background: var(--landing-surface); }
 .landing-footer-brand img { display: block; height: 52px; width: auto; }
 .landing-footer-brand b { color: var(--landing-surface); font-size: 17px; letter-spacing: 1px; }
 .landing-footer-brand small { color: var(--landing-highlight); }
-.landing-footer-brand p { color: var(--landing-surface); font-size: 14px; }
-.landing-footer nav { width: 240px; display: flex; flex-direction: column; gap: 13px; }
-.landing-footer nav h2 { color: var(--landing-highlight); font-family: var(--font-landing-barlow); font-size: 12.5px; letter-spacing: 1px; text-transform: uppercase; }
-.landing-footer nav a { color: var(--landing-surface); font-size: 16px; font-weight: 500; }
+.landing-footer-brand p { color: var(--landing-surface); font-size: 14px; line-height: 1.5; }
+.landing-footer-place { display: flex; align-items: flex-start; gap: 10px; }
+.landing-footer-place svg { width: 17px; height: 17px; flex: none; margin-top: 2px; color: var(--landing-highlight); }
+.landing-footer-social { display: flex; gap: 10px; margin-top: auto; }
+.landing-footer-social span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* 48px-tall pills: footer social links are tapped as often as the page's CTAs. */
+.landing-footer-social a { display: grid; flex: 1; place-items: center; height: 48px; border: 1px solid color-mix(in srgb, var(--landing-surface) 30%, transparent); border-radius: 999px; color: var(--landing-surface); transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease; }
+.landing-footer-social a:hover { border-color: var(--landing-highlight); background: var(--landing-highlight); color: var(--landing-on-highlight); }
+.landing-footer-social svg { width: 19px; height: 19px; }
+.landing-footer nav { display: flex; flex-direction: column; }
+.landing-footer nav h2 { margin-bottom: 6px; color: var(--landing-highlight); font-family: var(--font-landing-barlow); font-size: 12.5px; letter-spacing: 1px; text-transform: uppercase; }
+/* Rows, not a loose stack: each link is a full-width hairline row, so the
+   column reads as a list that fills its width and a link is a 48px target. */
+.landing-footer nav a { display: flex; flex: 1 1 auto; align-items: center; min-height: 48px; border-top: 1px solid color-mix(in srgb, var(--landing-surface) 16%, transparent); color: var(--landing-surface); font-size: 16px; font-weight: 500; }
 .landing-footer nav a:hover { color: var(--landing-highlight); }
-.landing-footer-bottom { position: relative; padding-top: 34px; border-top: 1px solid var(--landing-border); color: var(--landing-surface); font-size: 15px; }
+.landing-footer-photo { position: relative; min-height: 100%; margin: 0; overflow: hidden; border-radius: 14px; background: var(--landing-vitrina-photo-bg); }
+.landing-footer-photo img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 40%; }
+.landing-footer-bottom { position: relative; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; padding-top: 12px; border-top: 1px solid var(--landing-border); color: var(--landing-surface); font-size: 14px; }
+
+/* Section rhythm — the page does not use one padding. Chapters (see the order
+   in `LandingPage`): identity (Nosotros + Valores), proof (Stats + Galería),
+   training (Horarios), join and visit (Motto + Visítenos), close. A chapter
+   opener gets `chapter`, the sections inside a chapter sit `tight` or `dense`,
+   and the bands whose own colour already marks the seam (Valores, Motto) keep
+   `dense`. `.landing-page` in front of each selector outranks the mobile
+   `.landing-section` padding, so the block only sets the vertical axis and the
+   gutter stays as the breakpoints define it. */
+.landing-page .landing-section#nosotros { padding-block: var(--landing-space-chapter); gap: 72px; }
+.landing-page .landing-values { padding-block: var(--landing-space-dense); }
+.landing-page .landing-gallery { padding-block: var(--landing-space-tight); }
+.landing-page .landing-schedule { padding-block: var(--landing-space-chapter) var(--landing-space-section); }
+.landing-page .landing-location { padding-block: var(--landing-space-tight) var(--landing-space-section); }
 
 @media (max-width: 1024px) {
   .landing-navbar { padding-inline: 32px; }
@@ -589,6 +663,12 @@
   .landing-page { --landing-gutter: 48px; }
   .landing-section, .landing-stats, .landing-footer { padding-inline: 48px; }
   .landing-contact { width: 360px; }
+  /* Brand across the top, the three link columns beneath it, the photo as a
+     closing strip: five columns would leave each under 170px at this width. */
+  .landing-footer-top { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .landing-footer-brand { grid-column: 1 / -1; }
+  .landing-footer-social { margin-top: 4px; }
+  .landing-footer-photo { grid-column: 1 / -1; min-height: 220px; }
   .landing-sponsors-copy { --landing-sponsor-gap: 14px; }
 }
 
@@ -662,8 +742,12 @@
   .landing-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 32px 16px; }
   .landing-stat { gap: 6px; padding: 20px 14px; border: 1px solid var(--landing-border); border-radius: 16px; background: var(--landing-surface); box-shadow: 0 12px 24px -20px color-mix(in srgb, var(--landing-brand-black) 40%, transparent); }
   .landing-stat:last-child { grid-column: 1 / -1; }
-  .landing-stat strong { font-size: 38px; }
-  .landing-page { --landing-gutter: 24px; }
+  /* The full-width card sets its figure and caption side by side: stacked, they would leave a hollow either side of "Loja". */
+  .landing-stat:last-child { flex-direction: row; justify-content: center; gap: 20px; text-align: left; }
+  .landing-stat strong { font-size: 44px; }
+  .landing-stat--lead strong { font-size: 64px; }
+  .landing-page { --landing-gutter: 24px; --landing-space-snug: 24px; --landing-space-tight: 36px; --landing-space-dense: 48px; --landing-space-section: 64px; --landing-space-chapter: 88px; }
+  .landing-stats-photo { grid-column: 1 / -1; min-height: 0; height: 180px; margin: 0; border-radius: 16px; }
   .landing-carousel { --landing-slide-height: 340px; }
   .landing-section, .landing-footer { padding: 64px 24px; }
   .landing-location-row { flex-direction: column; }
@@ -685,7 +769,8 @@
   .landing-tablero-tile { height: 140px; padding: 16px; font-size: clamp(56px, 16vw, 80px); }
   .landing-tablero-item h3 { font-size: 19px; }
   .landing-tablero-item p { font-size: 15px; margin-top: 10px; }
-  .landing-pillars { grid-template-columns: 1fr; row-gap: 40px; }
+  .landing-pillars { grid-template-columns: 1fr; row-gap: 56px; }
+  .landing-page .landing-section#nosotros { gap: 48px; }
   /* Undoes the desktop side-by-side split: below this breakpoint
      `.landing-pillars` itself is already one column, so a photo beside the
      copy would squeeze both into an unreadable sliver. Back to one column
@@ -696,13 +781,16 @@
      alone it would also apply as a ROW gap between the stacked copy and
      photo here, stacking on top of the photo's own `margin-top: 24px`
      below and doubling the intended spacing. */
-  .landing-pillar { grid-template-columns: 1fr; gap: 0; }
+  .landing-pillar { grid-template-columns: 1fr; gap: 0; align-items: start; }
   /* Stacked into one column the pillar itself can reach ~720px wide, but a
      1:1 square at that width would tower over the text it illustrates — the
      lead and body copy above cap themselves to ~330-375px (30ch / 44ch).
      Capping the photo near that same width keeps it proportionate to its
      own column instead of becoming the tallest thing on the mobile page. */
+  .landing-lead { font-size: 24px; }
+  .landing-schedule .landing-section-header h2 { max-width: none; }
   .landing-pillar-photo { max-width: 360px; margin-top: 24px; }
+  .landing-pillar--flip .landing-pillar-copy, .landing-pillar--flip .landing-pillar-photo { grid-column: 1; grid-row: auto; }
   /* The list becomes horizontal chips with scroll instead of a stacked
      vertical list — the accent bar and the tab's own hours line are
      desktop-only reads, so both drop rather than crowd a 44px-tall pill. */
@@ -712,7 +800,9 @@
   .landing-schedule-tab::before { display: none; }
   .landing-schedule-tab[aria-selected="true"] { background: var(--landing-brand-black); color: var(--landing-surface); border-color: var(--landing-brand-black); }
   .landing-schedule-tab-hours { display: none; }
-  .landing-schedule-card { padding: 26px 22px; }
+  .landing-schedule-card { grid-template-columns: 1fr; }
+  .landing-schedule-copy { padding: 26px 22px; }
+  .landing-schedule-photo { order: -1; min-height: 0; height: 160px; border-left: 0; border-bottom: 6px solid var(--landing-cat, var(--landing-action)); }
   /* Only just overflows at the base `clamp(38px, 5vw, 56px)`: the widest
      reported range ("20:00 – 21:15") measures ~296px against the ~288px of
      content width this padding leaves on a 390px phone. Smaller gap and a
@@ -726,15 +816,19 @@
   .landing-motto .landing-motto-lead { font-size: 28px; }
   .landing-map-stage { width: 100%; min-height: 348px; height: 348px; flex: none; }
   .landing-map { width: 100%; height: 100%; min-height: 0; flex: none; }
-  .landing-map-inset { right: 12px; bottom: 12px; width: min(48%, 220px); }
   .landing-contact { width: 100%; }
   .landing-sponsors { padding-inline: 24px; }
   .landing-sponsors-copy { --landing-sponsor-gap: 12px; }
   .landing-ticker-copy { gap: 28px; }
       .landing-sponsors-item { width: 300px; }
   .landing-sponsor { height: 168px; }
-  .landing-footer-top { flex-direction: column; gap: 36px; }
-  .landing-footer nav { width: 100%; }
+  .landing-footer-top { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .landing-footer-photo { min-height: 200px; }
+  /* Labelled pills across the full width: three bare circles would leave the
+     right half of the brand block empty on a phone. */
+  .landing-footer-social { gap: 8px; }
+  .landing-footer-social a { gap: 8px; grid-auto-flow: column; font-size: 13px; font-weight: 700; }
+  .landing-footer-social span { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -746,7 +840,7 @@
      its own `useReducedMotion` hook reads this same preference; these rules
      are the CSS-only backstop for the same two keyframes. */
   .landing-schedule-time--animate .landing-schedule-digit, .landing-schedule-day--pop { animation: none; }
-  .landing-schedule-tab, .landing-schedule-dot, .landing-schedule-tab::before, .landing-schedule-day, .landing-schedule-card::after { transition: none; }
+  .landing-schedule-tab, .landing-schedule-dot, .landing-schedule-tab::before, .landing-schedule-day, .landing-schedule-copy::after, .landing-schedule-photo { transition: none; }
   /* The gallery's motion runtime never loads under reduced motion, so the
      same strip markup presents as a complete wrapped layout — every photo
      and caption reachable, zero movement — and the loop-only visual clones

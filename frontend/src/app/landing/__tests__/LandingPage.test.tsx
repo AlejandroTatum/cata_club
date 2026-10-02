@@ -378,7 +378,7 @@ describe("LandingPage", (): void => {
     });
   });
 
-  it("renders the arrival inset photo", (): void => {
+  it("renders the arrival photo at the head of the contact card", (): void => {
     render(<LandingPage />);
 
     const arrival = screen.getByRole("img", { name: /entrada de cata club/i });
@@ -387,6 +387,7 @@ describe("LandingPage", (): void => {
     expect(arrival).toHaveAttribute("height", "1200");
     expect(arrival).toHaveAttribute("loading", "lazy");
     expect(screen.getByText("Así se ve al llegar")).toBeInTheDocument();
+    expect(arrival.closest(".landing-contact")?.firstElementChild).toBe(arrival.closest(".landing-arrival"));
   });
 
   it("renders Mission and Vision as two typographic pillars, each with its own photo (v2 redesign)", (): void => {
@@ -473,19 +474,26 @@ describe("LandingPage", (): void => {
     expect(competitivoSecond[0]).toHaveTextContent("También 18:00–20:00 los sábado.");
   });
 
-  it("orders the main content Hero → Ticker → Stats → Horarios → rest", async (): Promise<void> => {
+  it("orders the main content Hero → Ticker → Nosotros → Valores → Stats → Galería → Horarios → CTA → Visítenos", async (): Promise<void> => {
     const { container } = render(<LandingPage />);
     const main = container.querySelector("main");
     await waitFor((): void => { expect(container.querySelector(".landing-schedule-layout")).toBeInTheDocument(); });
     expect(main).not.toBeNull();
-    const sections = Array.from(main?.querySelectorAll("section, header") ?? []);
+    const sections = Array.from(main?.children ?? []);
     expect(sections[0]?.getAttribute("id")).toBe("inicio");
-    // The moving black ticker and the stats block ("Desde 2013" / "Desde el
-    // 10 de octubre") come BEFORE Horarios; the schedule is the third
-    // content block.
+    // Proposal C: who we are (Nosotros, Valores), the proof (Stats, Galería),
+    // then training, the join CTA and the visit — see `.local-preview/plan-C.md`.
     expect(sections[1]?.classList.contains("landing-credentials-ticker")).toBe(true);
-    expect(sections[2]?.classList.contains("landing-stats")).toBe(true);
-    expect(sections[3]?.querySelector(".landing-schedule-layout")).not.toBeNull();
+    expect(sections.slice(2).map((section): string => section.id || (section.classList.contains("landing-motto") ? "motto" : "stats"))).toEqual([
+      "nosotros",
+      "valores",
+      "stats",
+      "galeria",
+      "horarios",
+      "motto",
+      "contacto",
+    ]);
+    expect(sections[6]?.querySelector(".landing-schedule-layout")).not.toBeNull();
   });
 
   /**
@@ -865,10 +873,12 @@ describe("LandingPage", (): void => {
     const contact = document.querySelector(".landing-contact");
     expect(contact).not.toBeNull();
 
-    const whatsappCta = within(contact as HTMLElement).getByRole("link", { name: /escríbenos por whatsapp/i });
+    const whatsappCta = within(contact as HTMLElement).getByRole("link", { name: /escríbanos por whatsapp/i });
     expect(whatsappCta).toHaveAttribute("href", toWhatsAppLink(landingConfig.contact.whatsapp[0]));
     expect(whatsappCta.className).toContain("landing-button");
-    expect(contact?.lastElementChild).toBe(whatsappCta);
+    // Both actions close the card, the WhatsApp one last.
+    expect(contact?.querySelector(".landing-contact-actions")?.lastElementChild).toBe(whatsappCta);
+    expect(contact?.lastElementChild).toBe(whatsappCta.parentElement);
 
     const directions = within(contact as HTMLElement).getByRole("link", { name: /cómo llegar/i });
     expect(directions.className).toContain("landing-button-outline");

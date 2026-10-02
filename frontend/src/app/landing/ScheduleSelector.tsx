@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { ArrowRight } from "lucide-react";
 import { defaultScheduleIndex, type LandingSchedule } from "./schedule-data";
 import { landingConfig, toWhatsAppLink } from "./landing-config";
+import { SCHEDULE_PHOTO_SIZES } from "./landing-image-sizes";
 
 /**
  * The simple card, decided 2026-09-02 over the prototype `horarios-simple.html`
@@ -21,6 +23,19 @@ const CATEGORY_COLORS = [
 /** The ink each swatch above needs under its ball's letter to stay legible. */
 const CATEGORY_INK = ["#fff", "var(--landing-brand-black)", "#fff", "var(--landing-brand-black)", "#fff", "#fff"] as const;
 
+/**
+ * One club photograph per category, cycled in the same order as the swatches:
+ * selecting a category changes the picture beside its card as well as its
+ * accent. The set mixes landscape and portrait shots on purpose — the image
+ * column crops to cover, and both read.
+ */
+const CATEGORY_PHOTOS = [
+  { src: "/landing/gallery-04-training.jpg", width: 1600, height: 1200 },
+  { src: "/landing/gallery-01-group.jpg", width: 1068, height: 1600 },
+  { src: "/landing/gallery-03-play.jpg", width: 1600, height: 1200 },
+  { src: "/landing/gallery-19-group.jpg", width: 1200, height: 1600 },
+] as const;
+
 const DAY_BALLS = ["L", "M", "X", "J", "V", "S"] as const;
 const DAY_FULL_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"] as const;
 
@@ -30,7 +45,11 @@ const BALL_STAGGER_MS = 70;
 
 const HOURS_PATTERN = /(\d{1,2}:\d{2})\D+(\d{1,2}:\d{2})/;
 
-interface ScheduleSelectorProps { schedules: LandingSchedule[] }
+interface ScheduleSelectorProps {
+  schedules: LandingSchedule[];
+  /** The section's own header, set at the head of the category rail instead of above the grid. */
+  header?: React.ReactNode;
+}
 
 /**
  * Reads `(prefers-reduced-motion: reduce)` the same way `LandingMotionLoader`
@@ -80,7 +99,7 @@ function DigitRun({ text, animate }: { text: string; animate: boolean }): React.
   ))}</>;
 }
 
-export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): React.ReactElement {
+export default function ScheduleSelector({ schedules, header }: ScheduleSelectorProps): React.ReactElement {
   const [selected, setSelected] = useState((): number => defaultScheduleIndex(schedules));
   const animate = !useReducedMotion();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -92,6 +111,7 @@ export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): 
   const litDays = activeDayIndexes(main.days);
   const color = CATEGORY_COLORS[selected % CATEGORY_COLORS.length];
   const ink = CATEGORY_INK[selected % CATEGORY_INK.length];
+  const photo = CATEGORY_PHOTOS[selected % CATEGORY_PHOTOS.length];
   const waLink = `${toWhatsAppLink(landingConfig.contact.whatsapp[0])}?text=${encodeURIComponent(`Hola, quiero consultar cupo en ${active.category}.`)}`;
 
   const select = (index: number): void => { setSelected(index); tabRefs.current[index]?.focus(); };
@@ -102,6 +122,8 @@ export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): 
   };
 
   return <div className="landing-schedule-layout">
+    <div className="landing-schedule-side">
+      {header}
     <div className="landing-schedule-list" role="tablist" aria-label="Categorías" aria-orientation="vertical" ref={listRef} onKeyDown={onKeyDown}>
       {schedules.map((schedule, index): React.ReactElement => <button
         key={schedule.category} type="button" role="tab" id={`schedule-tab-${index}`}
@@ -116,45 +138,61 @@ export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): 
         <em className="landing-schedule-tab-hours">{splitHours(schedule.slots[0].hours).join("–")}</em>
       </button>)}
     </div>
+    </div>
 
     <div
       className="landing-schedule-card" role="tabpanel" id="schedule-panel"
       aria-labelledby={`schedule-tab-${selected}`} aria-live="polite"
       style={{ "--landing-cat": color, "--landing-cat-ink": ink } as React.CSSProperties}
     >
-      <h3>{active.category}</h3>
-      {active.audience ? <p className="landing-schedule-audience">{active.audience}</p> : null}
+      <div className="landing-schedule-copy">
+        <div className="landing-schedule-head">
+          <h3>{active.category}</h3>
+          {active.audience ? <p className="landing-schedule-audience">{active.audience}</p> : null}
+        </div>
 
-      <span className="landing-schedule-label">Horario</span>
-      <p className={`landing-schedule-time${animate ? " landing-schedule-time--animate" : ""}`}>
-        <span className="landing-schedule-time-part"><DigitRun text={start} animate={animate} /></span>
-        <span className="landing-schedule-dash">–</span>
-        <span className="landing-schedule-time-part"><DigitRun text={end} animate={animate} /></span>
-      </p>
+        <div className="landing-schedule-group">
+          <span className="landing-schedule-label">Horario</span>
+          <p className={`landing-schedule-time${animate ? " landing-schedule-time--animate" : ""}`}>
+            <span className="landing-schedule-time-part"><DigitRun text={start} animate={animate} /></span>
+            <span className="landing-schedule-dash">–</span>
+            <span className="landing-schedule-time-part"><DigitRun text={end} animate={animate} /></span>
+          </p>
+        </div>
 
-      <span className="landing-schedule-label">Días</span>
-      <div className="landing-schedule-days" aria-label={main.days}>
-        {DAY_BALLS.map((label, index): React.ReactElement => {
-          const on = litDays[index];
-          return <span
-            key={label} aria-hidden="true"
-            className={`landing-schedule-day${on ? " landing-schedule-day--on" : ""}${on && animate ? " landing-schedule-day--pop" : ""}`}
-            style={on && animate ? { animationDelay: `${index * BALL_STAGGER_MS}ms` } : undefined}
-          >
-            {label}
-          </span>;
-        })}
+        <div className="landing-schedule-group">
+          <span className="landing-schedule-label">Días</span>
+          <div className="landing-schedule-days" aria-label={main.days}>
+            {DAY_BALLS.map((label, index): React.ReactElement => {
+              const on = litDays[index];
+              return <span
+                key={label} aria-hidden="true"
+                className={`landing-schedule-day${on ? " landing-schedule-day--on" : ""}${on && animate ? " landing-schedule-day--pop" : ""}`}
+                style={on && animate ? { animationDelay: `${index * BALL_STAGGER_MS}ms` } : undefined}
+              >
+                {label}
+              </span>;
+            })}
+          </div>
+        </div>
+
+        <div className="landing-schedule-group">
+          <a className="landing-button" href={waLink} target="_blank" rel="noreferrer">
+            Consultar cupo por WhatsApp <ArrowRight aria-hidden="true" />
+          </a>
+          {rest.map((slot, index): React.ReactElement => (
+            <p className="landing-schedule-second" key={`${active.category}-${index}`}>
+              También <b>{splitHours(slot.hours).join("–")}</b> los {slot.days.toLowerCase()}.
+            </p>
+          ))}
+        </div>
       </div>
-
-      <a className="landing-button" href={waLink} target="_blank" rel="noreferrer">
-        Consultar cupo por WhatsApp <ArrowRight aria-hidden="true" />
-      </a>
-
-      {rest.map((slot, index): React.ReactElement => (
-        <p className="landing-schedule-second" key={`${active.category}-${index}`}>
-          También <b>{splitHours(slot.hours).join("–")}</b> los {slot.days.toLowerCase()}.
-        </p>
-      ))}
+      {/* Decorative: the tab already names the category, and the picture
+          changes with it, so a described image would be re-announced on every
+          selection. */}
+      <figure className="landing-schedule-photo" aria-hidden="true">
+        <Image key={photo.src} src={photo.src} alt="" width={photo.width} height={photo.height} loading="lazy" sizes={SCHEDULE_PHOTO_SIZES} />
+      </figure>
     </div>
   </div>;
 }

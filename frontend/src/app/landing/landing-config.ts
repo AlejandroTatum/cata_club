@@ -76,8 +76,10 @@ export function buildLandingStats(now: Date = new Date()): LandingStat[] {
     // Every figure is rendered statically. An odometer counting 0 → 2013 reads
     // as a bug, and a count-up on a two-digit number adds nothing while it can
     // still strand the band at 0 whenever its trigger does not fire.
-    { value: String(FOUNDING_DATE.year), label: "Desde el 10 de octubre" },
+    // The lead figure is the one a visitor can weigh: years of work, then the
+    // date it started, then where.
     { value: String(years), label: "Años formando deportistas" },
+    { value: String(FOUNDING_DATE.year), label: "Desde el 10 de octubre" },
     { value: "Loja", label: "Junto al Coliseo Ciudad de Loja" },
   ];
 }

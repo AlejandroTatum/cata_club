@@ -127,15 +127,15 @@ describe("Valores tablero redesign", (): void => {
 // edit cannot quietly split the rule in two and let the columns drift apart.
 // ---------------------------------------------------------------------------
 describe("Mission/Vision pillar photos", (): void => {
-  it("forces both photos to one shared square ratio, cropped from the bottom", (): void => {
+  it("forces both photos to one shared 3:2 landscape ratio, cropped toward the top", (): void => {
     const css = landingCss();
     const rule = ruleAt(css, ".landing-pillar-photo");
-    expect(rule).toContain("aspect-ratio: 1 / 1");
+    expect(rule).toContain("aspect-ratio: 3 / 2");
     expect(rule).toContain("object-fit: cover");
-    // Crops toward the top of the frame (i.e. trims the bottom) rather than
-    // centring: vision-coaching.jpeg's two faces sit close enough to its top
-    // edge that a centred crop would risk clipping them.
-    expect(rule).toContain("object-position: top");
+    // Anchored near the top of the frame rather than centred: the 4:3 crop
+    // takes a third off vision-coaching.jpeg and a third off mission-focus.jpeg,
+    // and both subjects' faces sit in the upper fifth of their photographs.
+    expect(rule).toContain("object-position: center 20%");
   });
 
   it("caps the photo near the text column's own width once mobile stacks to one column", (): void => {
@@ -143,7 +143,7 @@ describe("Mission/Vision pillar photos", (): void => {
     const mobileBlock = css.indexOf("@media (max-width: 768px)");
     const mobileRule = ruleAt(css, ".landing-pillar-photo", mobileBlock);
     const maxWidth = pxIn(mobileRule, "max-width");
-    // Matches the ~330-375px the lead (30ch) and body (44ch) copy already
+    // Matches the ~330-375px the lead (28ch) and body (50ch) copy already
     // cap themselves to, so the photo never outgrows the text beside it.
     expect(maxWidth).toBeGreaterThanOrEqual(330);
     expect(maxWidth).toBeLessThanOrEqual(375);

@@ -13,36 +13,38 @@
  */
 
 /**
- * `.landing-map-inset`, the small photo pinned over the map. Its width is
- * capped outright by landing.css — `min(48%, 220px)` on mobile and
- * `min(42%, 230px)` above it — so these are exact, not upper estimates.
+ * `.landing-arrival`, the photo that heads the contact card. The card is a
+ * fixed 420px wide on desktop (360px at 1024) and the photo spans it edge to
+ * edge, so 420 is an upper estimate everywhere above the mobile breakpoint.
  */
-export const MAP_INSET_SIZES = "(max-width: 768px) 220px, 230px";
+export const ARRIVAL_PHOTO_SIZES = "(max-width: 768px) 420px, 420px";
+
+/** `.landing-stats-photo`, the first cell of the stats band (about a third of it). */
+export const STATS_PHOTO_SIZES = "(max-width: 768px) 420px, 480px";
+
+/** `.landing-footer-photo`, the footer's closing column. */
+export const FOOTER_PHOTO_SIZES = "(max-width: 768px) 420px, 360px";
+
+/** `.landing-schedule-photo`, the card's image column (about 40% of it). */
+export const SCHEDULE_PHOTO_SIZES = "(max-width: 768px) 420px, 360px";
 
 /**
  * `.landing-pillar-photo`, the Mission/Vision photograph beside each
  * pillar's body copy.
  *
- * Above the mobile breakpoint `.landing-pillars` is `1fr 1fr` with a 72px
- * gap, and each `.landing-pillar` itself now mirrors that split — another
- * `1fr 1fr`, copy left / photo right, with a tighter 32px inner gap — so
- * the photo fills only half of what a whole pillar column used to give it.
- * `.landing-section` pads the row `8.33vw` on each side. At 1440px — one
- * of the reference viewports (1280/1440/1920) this landing is already
- * checked against, see the hero carousel's comment in landing.css — that
- * is ~120px of padding per side, so one pillar is
- * `(1440 - 2*120 - 72) / 2 = 564px` wide, and the photo's own column is
- * `(564 - 32) / 2 ≈ 266px`. This narrowed the slot from the 564px it used
- * to render at when the photo closed the column below the copy instead of
- * beside it — serving the old, wider `sizes` value here would over-request
- * bytes for a box that shrank by more than half.
+ * Above the mobile breakpoint each `.landing-pillar` is its own full-width
+ * row, a `1fr 1fr` split with the photo alternating sides (the second pillar
+ * is flipped). `.landing-section` pads the row `8.33vw` on each side, so at
+ * 1440px — one of the reference viewports (1280/1440/1920) — a row is
+ * `1440 - 2*120 = 1200px` and the photo's own column is `(1200 - 72) / 2 =
+ * 564px`; 560 covers it at the narrower desktop widths too.
  *
  * Below the breakpoint the pillar collapses back to one column (copy above,
  * photo below, `.landing-pillar { grid-template-columns: 1fr; }` in the
  * 768px block), so the column itself can reach ~720px, but landing.css caps
  * the photo's own `max-width` at 360px there — close to the ~330-375px the
- * lead (`30ch`) and body (`44ch`) text already max out at, so the photo
+ * lead (`28ch`) and body (`50ch`) text already max out at, so the photo
  * never outgrows the copy it illustrates. 360px is therefore the true
  * rendered width, not the wider column.
  */
-export const MISSION_VISION_PHOTO_SIZES = "(max-width: 768px) 360px, 266px";
+export const MISSION_VISION_PHOTO_SIZES = "(max-width: 768px) 360px, 560px";

@@ -482,15 +482,21 @@ test.describe("Landing page", () => {
       );
       expect(deadLinks).toEqual([]);
 
-      // Values now flows straight into the CTA band that followed Logros.
+      // Proposal C: Values closes the identity chapter and flows straight
+      // into the stats band that opens the proof chapter, and the CTA band
+      // now hands over to the visit section.
       const flow = await page.evaluate(() => {
         const values = document.querySelector<HTMLElement>(".landing-values");
         const motto = document.querySelector<HTMLElement>(".landing-motto");
         if (!values || !motto) return null;
-        return { mottoIsNextSection: values.nextElementSibling === motto };
+        return {
+          statsFollowValues: values.nextElementSibling?.classList.contains("landing-stats") ?? false,
+          locationFollowsMotto: motto.nextElementSibling?.id === "contacto",
+        };
       });
       expect(flow, "Values and the CTA band render").not.toBeNull();
-      expect(flow?.mottoIsNextSection, "The CTA band follows Values directly").toBe(true);
+      expect(flow?.statsFollowValues, "The stats band follows Values directly").toBe(true);
+      expect(flow?.locationFollowsMotto, "Visítenos follows the CTA band directly").toBe(true);
     });
   });
 
