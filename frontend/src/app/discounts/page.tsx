@@ -28,6 +28,7 @@ import {
   FilterPanel,
   InfoPanel,
   LoadingState,
+  MoneyInput,
   PAGE_RAIL,
   SearchInput,
 } from "@/components/ui";
@@ -420,15 +421,16 @@ export default function DiscountsPage(): React.ReactElement {
         </label>
         <label className={FIELD_LABEL}>
           Valor <span aria-hidden="true" className="text-state-bad">*</span>
-          <input
+          <MoneyInput
             type="number"
+            symbol={current.modalidad === "PORCENTAJE" ? "%" : "$"}
+            symbolPosition={current.modalidad === "PORCENTAJE" ? "end" : "start"}
             required
             min="0"
             max={current.modalidad === "PORCENTAJE" ? 100 : AMOUNT_MAX_VALUE}
             step="0.01"
             value={current.valor}
             onChange={(e) => setForm({ ...current, valor: e.target.value })}
-            className={FIELD_CONTROL}
             placeholder={current.modalidad === "PORCENTAJE" ? "50" : "10.00"}
           />
         </label>
