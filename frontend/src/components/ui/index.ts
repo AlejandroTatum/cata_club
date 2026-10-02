@@ -122,3 +122,5 @@ export { default as WeekStrip } from "./WeekStrip";
 export type { WeekStripProps, WeekStripVariant } from "./WeekStrip";
 
 export { cn } from "./cn";
+export { default as MoneyInput } from "./MoneyInput";
+export type { MoneyInputProps } from "./MoneyInput";

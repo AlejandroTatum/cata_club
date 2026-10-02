@@ -275,6 +275,16 @@ function getEditButton(container: HTMLElement): HTMLElement {
   return getRowAction(container, /^editar/i);
 }
 
+describe("MembersPage — back link", () => {
+  it("offers a way back to the Panel de Control", async () => {
+    render(<MembersPage />);
+    expect(await screen.findByRole("link", { name: /volver al panel de control/i })).toHaveAttribute(
+      "href",
+      "/dashboard",
+    );
+  });
+});
+
 describe("MembersPage — Editar member modal", () => {
   beforeEach(() => {
     mockFetchMembers.mockReset();

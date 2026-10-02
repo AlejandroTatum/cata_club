@@ -317,6 +317,14 @@ export default function RegularizarDeudaForm({
               )}
               {regularized ? "Regularizada" : "Regularizar"}
             </button>
+            <button
+              type="button"
+              onClick={handleClose}
+              disabled={loading}
+              className={`inline-flex items-center rounded-lg border border-line-2 bg-paper px-2.5 py-1 text-2xs tracking-flat font-semibold text-ink-2 transition-colors hover:bg-surface disabled:opacity-50 ${MIN_TARGET_CLASS}`}
+            >
+              Cancelar
+            </button>
           </div>
         </form>
       )}
