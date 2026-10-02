@@ -473,22 +473,22 @@
 /* The simple card (issue #988): a tablist of categories drives one card that
    states the first slot's schedule, never a bar chart of every published
    block — the timeline this replaced said nothing the facts below didn't. */
-.landing-schedule-layout { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 32px; align-items: start; width: 100%; }
+.landing-schedule-layout { display: grid; grid-template-columns: minmax(0, 45fr) minmax(0, 40fr); justify-content: space-between; gap: 24px 56px; align-items: start; width: 100%; }
 
 /* The category rail: section header on top, the tabs under it. Rail and card
    each take their own content height (`align-items: start` above), so neither
    stretches the other: the card is exactly as tall as its copy. */
 .landing-schedule-side { display: flex; min-width: 0; flex-direction: column; gap: var(--landing-space-snug); }
 .landing-schedule-list { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--landing-border); }
-.landing-schedule-tab { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 46px; padding: 8px 8px 8px 0; border: 0; border-bottom: 1px solid var(--landing-border); background: transparent; color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; text-align: left; cursor: pointer; position: relative; transition: color 220ms ease; }
+.landing-schedule-tab { display: flex; align-items: center; gap: 18px; width: 100%; min-height: 68px; padding: 12px 8px 12px 0; border: 0; border-bottom: 1px solid var(--landing-border); background: transparent; color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; text-align: left; cursor: pointer; position: relative; transition: color 220ms ease; }
 .landing-schedule-tab::before { content: ""; position: absolute; left: -16px; top: 12px; bottom: 12px; width: 4px; background: var(--landing-action); border-radius: 2px; transform: scaleY(0); transition: transform 320ms ease; }
 .landing-schedule-tab[aria-selected="true"]::before { transform: scaleY(1); }
 .landing-schedule-tab:focus-visible { outline: 3px solid var(--landing-focus); outline-offset: 2px; }
 /* One accent per category, carried from the list dot to the card it owns. */
-.landing-schedule-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--landing-cat, var(--landing-action)); flex: none; transition: transform 260ms ease; }
+.landing-schedule-dot { width: 16px; height: 16px; border-radius: 50%; background: var(--landing-cat, var(--landing-action)); flex: none; transition: transform 260ms ease; }
 .landing-schedule-tab[aria-selected="true"] .landing-schedule-dot { transform: scale(1.3); }
-.landing-schedule-tab-name { flex: 1; font-family: var(--font-landing-barlow), sans-serif; font-size: 19px; letter-spacing: 1px; text-transform: uppercase; }
-.landing-schedule-tab-hours { font-style: normal; font-family: var(--font-landing-barlow), sans-serif; font-size: 13px; letter-spacing: 0.5px; opacity: 0.6; }
+.landing-schedule-tab-name { flex: 1; font-family: var(--font-landing-barlow), sans-serif; font-size: 28px; letter-spacing: 1px; text-transform: uppercase; }
+.landing-schedule-tab-hours { font-style: normal; font-family: var(--font-landing-barlow), sans-serif; font-size: 19px; letter-spacing: 0.5px; opacity: 0.7; }
 .landing-schedule-tab:hover { color: var(--landing-text); }
 .landing-schedule-tab[aria-selected="true"] { color: var(--landing-text-strong); }
 .landing-schedule-tab[aria-selected="true"] .landing-schedule-tab-hours { color: var(--landing-action); opacity: 1; }
@@ -496,22 +496,24 @@
 /* The one card. Its decorative corner circle picks up the selected
    category's color; the ball fill/ink pair does the same so a lit day stays
    legible against every swatch in `CATEGORY_COLORS`. */
-.landing-schedule-card { position: relative; overflow: hidden; padding: 56px 48px; border: 1px solid var(--landing-border); border-left: 6px solid var(--landing-cat, var(--landing-action)); transition: border-color 400ms ease; border-radius: 20px; background: var(--landing-surface); box-shadow: 0 24px 48px -32px color-mix(in srgb, var(--landing-brand-black) 40%, transparent); }
+.landing-schedule-card { position: relative; overflow: hidden; align-self: center; max-width: 520px; width: 100%; justify-self: end; padding: 32px 32px 28px; border: 1px solid var(--landing-border); border-left: 6px solid var(--landing-cat, var(--landing-action)); transition: border-color 400ms ease; border-radius: 20px; background: var(--landing-surface); box-shadow: 0 24px 48px -32px color-mix(in srgb, var(--landing-brand-black) 40%, transparent); }
 /* The card is its copy and nothing else. Laid out as a small ledger so the
    width is spent on content, not left blank: the category header across the
    top, hours and days side by side, the enquiry button on its own row. The
    category swatch is the card's left edge. */
-.landing-schedule-copy { position: relative; z-index: 1; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 36px 40px; }
-.landing-schedule-head { grid-column: 1; grid-row: 1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
-.landing-schedule-group { display: flex; flex-direction: column; gap: 8px; }
-.landing-schedule-group:last-child { grid-column: 2; grid-row: 1; align-self: stretch; justify-content: center; gap: 14px; }
-.landing-schedule-group:last-child .landing-button { justify-content: center; min-height: 56px; flex: 1 1 auto; white-space: nowrap; }
-.landing-schedule-card::after { content: ""; position: absolute; right: -60px; top: -60px; z-index: 0; width: 220px; height: 220px; border-radius: 50%; background: var(--landing-cat, var(--landing-action)); opacity: 0.12; transition: background 400ms ease; }
-.landing-schedule-card h3 { margin: 0; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(32px, 3.4vw, 64px); letter-spacing: 1px; text-transform: uppercase; }
+.landing-schedule-copy { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 22px; }
+.landing-schedule-row { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 22px 24px; }
+
+.landing-schedule-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+.landing-schedule-group { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.landing-schedule-copy > .landing-schedule-group:last-child { gap: 14px; }
+.landing-schedule-copy > .landing-schedule-group:last-child .landing-button { justify-content: center; width: 100%; min-height: 56px; white-space: nowrap; }
+.landing-schedule-card::after { content: ""; position: absolute; right: -60px; top: -60px; z-index: 0; width: 160px; height: 160px; border-radius: 50%; background: var(--landing-cat, var(--landing-action)); opacity: 0.12; transition: background 400ms ease; }
+.landing-schedule-card h3 { margin: 0; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(30px, 2.6vw, 44px); letter-spacing: 1px; text-transform: uppercase; }
 .landing-schedule-audience { margin: 0; color: var(--landing-text); font-weight: 600; }
 .landing-schedule-label { display: block; margin-bottom: 2px; color: var(--landing-text-muted); font-size: 11.5px; font-weight: 800; letter-spacing: 2.4px; text-transform: uppercase; }
 
-.landing-schedule-time { white-space: nowrap; display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin: 0; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(44px, 5.6vw, 104px); line-height: 1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.landing-schedule-time { white-space: nowrap; display: flex; align-items: baseline; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin: 0; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(40px, 3.9vw, 64px); line-height: 1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
 .landing-schedule-time small { color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 15px; font-weight: 600; letter-spacing: 0.5px; text-transform: none; }
 .landing-schedule-dash { color: var(--landing-action); }
 /* Each `HH:MM` half is a run of one span per character (`DigitRun`, for the
@@ -526,14 +528,14 @@
 .landing-schedule-time--animate .landing-schedule-digit { animation: landing-schedule-digit-roll 520ms ease both; }
 @keyframes landing-schedule-digit-roll { from { transform: translateY(40%); opacity: 0; } to { transform: none; opacity: 1; } }
 
-.landing-schedule-days { display: grid; grid-template-columns: repeat(3, max-content); justify-content: start; gap: clamp(10px, 0.9vw, 16px); margin: 0; }
-.landing-schedule-day { width: clamp(52px, 3.8vw, 72px); height: clamp(52px, 3.8vw, 72px); display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--landing-border); color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 16px; font-weight: 700; letter-spacing: 0.5px; background: var(--landing-surface); transition: background 320ms ease, border-color 320ms ease, color 320ms ease; }
+.landing-schedule-days { display: grid; display: flex; flex-wrap: nowrap; justify-content: space-between; gap: 6px; margin: 0; }
+.landing-schedule-day { width: clamp(42px, 3.4vw, 56px); height: clamp(42px, 3.4vw, 56px); flex: none; display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--landing-border); color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 16px; font-weight: 700; letter-spacing: 0.5px; background: var(--landing-surface); transition: background 320ms ease, border-color 320ms ease, color 320ms ease; }
 .landing-schedule-day--on { background: var(--landing-cat, var(--landing-action)); border-color: var(--landing-cat, var(--landing-action)); color: var(--landing-cat-ink, var(--landing-text-strong)); }
 .landing-schedule-day--pop { animation: landing-schedule-day-pop 560ms ease both; }
 @keyframes landing-schedule-day-pop { 0% { transform: scale(0.7); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
 
 .landing-schedule-second { margin: 10px 0 0; padding-top: 16px; border-top: 1px dashed var(--landing-border); color: var(--landing-text); font-size: 15px; }
-.landing-schedule-group:last-child .landing-schedule-second { margin: 0; padding-top: 14px; }
+.landing-schedule-copy > .landing-schedule-group:last-child .landing-schedule-second { margin: 0; padding-top: 14px; }
 .landing-schedule-second b { color: var(--landing-text-strong); font-variant-numeric: tabular-nums; }
 
 .landing-location { background: var(--landing-background); }
@@ -638,11 +640,11 @@
 .landing-page .landing-location { padding-block: var(--landing-space-tight) var(--landing-space-section); }
 
 @media (max-width: 1024px) {
-  .landing-navbar { padding-inline: 32px; }
-  .landing-nav-links { gap: 18px; }
   .landing-pillars { gap: 40px; }
   .landing-pillar { grid-template-columns: 1fr; gap: 0; }
   .landing-pillar-photo { max-width: 360px; margin-top: 24px; }
+  .landing-navbar { padding-inline: 32px; }
+  .landing-nav-links { gap: 18px; }
   .landing-hero { gap: 40px; }
   .landing-page { --landing-gutter: 48px; }
   .landing-section, .landing-stats, .landing-footer { padding-inline: 48px; }
@@ -774,8 +776,7 @@
   .landing-schedule-tab-hours { display: none; }
   .landing-schedule-card { padding: 26px 22px; border-left-width: 5px; }
   .landing-schedule-copy { grid-template-columns: minmax(0, 1fr); gap: 20px; }
-  .landing-schedule-head, .landing-schedule-group:last-child { grid-column: 1; grid-row: auto; }
-  .landing-schedule-group:last-child .landing-button { justify-content: flex-start; }
+  .landing-schedule-head, .landing-schedule-copy > .landing-schedule-group:last-child { grid-column: 1; grid-row: auto; }
   /* Only just overflows at the base `clamp(38px, 5vw, 56px)`: the widest
      reported range ("20:00 – 21:15") measures ~296px against the ~288px of
      content width this padding leaves on a 390px phone. Smaller gap and a
@@ -783,8 +784,8 @@
      below at both 412px (`mobile-chromium`'s Pixel 7) and a 360px extreme:
      the range now fits with room to spare at both widths. */
   .landing-schedule-time { gap: 8px; font-size: clamp(30px, 8.5vw, 38px); }
-  .landing-schedule-day { width: 44px; height: 44px; }
-  .landing-schedule-days { display: flex; gap: 6px; }
+  .landing-schedule-day { width: 40px; height: 40px; }
+  .landing-schedule-days { gap: 6px; }
   .landing-motto { padding: 52px 28px; }
   .landing-motto .landing-motto-lead { font-size: 28px; }
   .landing-visit { grid-template-columns: 1fr; }

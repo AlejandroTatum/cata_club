@@ -135,6 +135,7 @@ export default function ScheduleSelector({ schedules, header }: ScheduleSelector
           {active.audience ? <p className="landing-schedule-audience">{active.audience}</p> : null}
         </div>
 
+        <div className="landing-schedule-row">
         <div className="landing-schedule-group">
           <span className="landing-schedule-label">Horario</span>
           <p className={`landing-schedule-time${animate ? " landing-schedule-time--animate" : ""}`}>
@@ -158,6 +159,7 @@ export default function ScheduleSelector({ schedules, header }: ScheduleSelector
               </span>;
             })}
           </div>
+        </div>
         </div>
 
         <div className="landing-schedule-group">
