@@ -87,7 +87,9 @@ case "$cmd" in
     [[ "$pr" =~ ^[0-9]+$ ]] || die "PR number must be numeric, got '$pr'"
     base="$(gh pr view "$pr" --json baseRefName --jq .baseRefName)"
     [[ "$base" == "$integration" ]] || die "PR #$pr targets '$base', not $integration; refusing to merge"
-    gh pr checks "$pr" --required || die "required checks on PR #$pr are failing or pending; refusing to merge"
+    # Sin `--required`: las ramas feat/* no tienen protección, así que no hay
+    # checks requeridos y gh fallaría siempre. Se exigen TODOS los checks.
+    gh pr checks "$pr" || die "checks on PR #$pr are failing or pending; refusing to merge"
     gh pr merge "$pr" --squash --delete-branch
     ;;
 
@@ -95,6 +97,10 @@ case "$cmd" in
     [[ "$(git branch --show-current)" == "$integration" ]] || die "current branch must be $integration"
     require_clean_tree
     git fetch "$REMOTE"
+    # Primero alcanza la rama remota (slices mergeados desde GitHub); si no,
+    # el push final sería rechazado por no ser fast-forward.
+    git merge --ff-only "$REMOTE/$integration" ||
+      die "$integration has diverged from $REMOTE/$integration; reconcile it manually"
     git merge --no-edit "$REMOTE/main" ||
       die "merge conflict with $REMOTE/main: resolve it, commit, then run 'git push'"
     git push "$REMOTE" "$integration"

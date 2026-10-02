@@ -19,7 +19,11 @@ FAKE_GH = """#!/usr/bin/env bash
 echo "$*" >> "$GH_LOG"
 case "$1 $2" in
   "pr view") echo "${GH_BASE:-}" ;;
-  "pr checks") exit "${GH_CHECKS_RC:-0}" ;;
+  "pr checks")
+    # Como el gh real: `--required` falla si la base no tiene protección,
+    # que es el caso de toda rama de integración `feat/*`.
+    [[ " $* " == *" --required "* ]] && { echo "no required checks reported" >&2; exit 1; }
+    exit "${GH_CHECKS_RC:-0}" ;;
 esac
 exit 0
 """
@@ -177,7 +181,7 @@ def test_slice_merge_refuses_base_main(repo):
 def test_slice_merge_refuses_failing_or_pending_checks(repo):
     r = flow(repo, "slice-merge", "demo", "7", GH_BASE="feat/demo", GH_CHECKS_RC="8")
     assert r.returncode != 0 and "checks" in r.stderr.lower()
-    assert any("pr checks 7 --required" in c for c in gh_calls(repo))
+    assert "pr checks 7" in gh_calls(repo)
     assert not any("pr merge" in c for c in gh_calls(repo))
 
 
@@ -209,6 +213,20 @@ def test_feature_sync_merges_main_and_pushes(repo):
     assert (repo / "m.txt").exists()
     assert git(repo, "rev-parse", "HEAD") == git(repo, "rev-parse", "origin/feat/demo")
     assert len(git(repo, "rev-list", "--parents", "-n1", "HEAD").split()) == 3  # merge commit
+
+
+def test_feature_sync_catches_up_a_stale_local_integration_branch(repo, tmp_path):
+    start_feature(repo)
+    other = tmp_path / "other"
+    subprocess.run(["git", "clone", "-q", "-b", "feat/demo", str(tmp_path / "origin.git"), str(other)], check=True)
+    (other / "s.txt").write_text("slice\n")
+    git(other, "add", "s.txt")
+    git(other, "commit", "-q", "-m", "slice merged elsewhere")
+    git(other, "push", "-q")
+    r = flow(repo, "feature-sync", "demo")
+    assert r.returncode == 0, r.stderr
+    assert (repo / "s.txt").exists()
+    assert git(repo, "rev-parse", "HEAD") == git(repo, "rev-parse", "origin/feat/demo")
 
 
 def test_feature_sync_refuses_wrong_branch_and_dirty_tree(repo):
