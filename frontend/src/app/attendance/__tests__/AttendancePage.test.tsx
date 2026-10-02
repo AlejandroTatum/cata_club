@@ -128,11 +128,14 @@ describe("AttendancePage — Horarios section removed, Tomar asistencia in the h
     expect(links[0]).toHaveAttribute("href", "/trainer/attendance");
   });
 
-  it("drops the redundant 'Volver al Panel' link the sidebar already provides", async () => {
+  it("offers a back link to the Panel de Control", async () => {
     renderPage();
     await screen.findAllByRole("row");
 
-    expect(screen.queryByRole("link", { name: /volver al panel/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /volver al panel de control/i })).toHaveAttribute(
+      "href",
+      "/dashboard",
+    );
   });
 });
 

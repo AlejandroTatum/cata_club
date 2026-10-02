@@ -30,10 +30,13 @@ end-to-end delivery workflow in `CLAUDE.md`: use an isolated worktree and branch
 with one writer/integrator, run applicable focused and canonical validation,
 commit conventionally, push, and open a PR. For a standard PR targeting `main`,
 enable GitHub auto-merge with squash; branch protection must require all checks
-and a branch current with `main`. Never enable auto-merge on an intermediate
-stacked PR whose base is another feature branch. After the automatic merge,
-confirm post-merge `main` CI is green, then delete the local branch and worktree
-and prune worktrees.
+and a branch current with `main`. Large features use the feature integration
+branch flow in `CLAUDE.md`: merging a slice PR into its integration branch with
+squash once that PR's checks are green is covered by this authorization; never
+enable auto-merge on a slice PR. Do not wait for post-merge `main` CI before
+updating the next queued PR; monitor it in the background, stop merges to
+`main` if it turns red, and once it is green delete the local branch and
+worktree and prune worktrees.
 
 This standing authorization never permits force-pushes, red or pending CI
 merges, manual bypass of branch protection, direct `main` commits, production
