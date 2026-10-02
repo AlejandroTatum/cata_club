@@ -20,7 +20,12 @@ export default defineConfig({
       "tests/e2e/helpers/**/*.unit.test.ts",
     ],
     allowOnly: false,
-    fileParallelism: false,
+    // Files run in parallel on the default `forks` pool. Workers are capped
+    // so CI (4 vCPU) and local runs behave predictably (#1505).
+    maxWorkers: 4,
+    // Heavy interaction tests (paginating 205 rows, multi-step confirm flows)
+    // sit near the 5 s default once workers contend for CPU under coverage.
+    testTimeout: 15_000,
     setupFiles: ["./src/test-setup.ts"],
     coverage: {
       // Pisos apenas debajo de la cobertura real medida el 2026-07-30
