@@ -1508,16 +1508,26 @@ class PagoServicio:
         cubrir casos puntuales con fechas retroactivas explícitas; admite cubrir
         una parte (1 de 4 meses salda ese mes y el resto sigue visible como deuda).
 
+        También sirve para migrar socios existentes desde el cuaderno de pagos
+        del club (issue #1492): el admin carga las fechas reales pagadas.
+
         Decisiones conservadoras (documentadas en el PR):
           * El pago entra APROBADO directo (no PENDIENTE_VALIDACION): es
             bookkeeping del admin, no un pago del cliente; la accountability
             viene de la auditoría (regularizada_por_persona_id, motivo, fecha).
-          * NO activa ni toca el estado de la membresía, NO dispara
-            notificaciones, PDF ni la regla familiar: la deuda parcial debe
-            seguir visible.
+          * Si el período regularizado cubre HOY (`fecha_inicio <= hoy <=
+            fecha_fin`) la persona tiene cobertura real, así que la membresía
+            se activa con `_activar_membresia_con_red_de_seguridad` (la misma
+            de `validar_pago`) en el mismo commit que el pago; así es vigente,
+            recibe el aviso de 5 días y entra en la transición a VENCIDA. Una
+            regularización puramente retroactiva (`fecha_fin < hoy`) no toca
+            el estado: la deuda parcial debe seguir visible.
+          * NO dispara notificaciones, PDF ni la regla familiar.
+          * Lockea la `Membresia` con `FOR UPDATE` antes de escribir, mismo
+            orden (Membresia primero) que el resto de la clase.
           * `motivo` es OBLIGATORIO (ya validado por el DTO; se doble-chequea acá).
         """
-        membresia = self.repo_membresia.obtener_por_id(membresia_id)
+        membresia = self.repo_membresia.obtener_por_id_con_bloqueo(membresia_id)
         if not membresia:
             raise EntidadNoEncontrada(f"Membresía con id {membresia_id} no encontrada")
 
@@ -1565,6 +1575,8 @@ class PagoServicio:
             motivo_regularizacion=datos.motivo,
         )
         resultado = self.repo.crear(pago)
+        if datos.fecha_inicio <= hoy <= datos.fecha_fin:
+            self._activar_membresia_con_red_de_seguridad(membresia)
         self.db.commit()
         if inspeccionar_orm(resultado).expired:
             self.db.refresh(resultado)
@@ -2442,12 +2454,11 @@ class PagoServicio:
         `flush()` que la vuelve visible a consultas posteriores en esta
         misma transacción.
 
-        Compartido por `validar_pago` (aprobar un pago) y
-        `aplicar_beneficio_bonificado` (otorgar cobertura 100% bonificada):
-        los dos caminos hacen que la persona reciba cobertura REAL, así que
-        los dos deben dejar la membresía ACTIVA -- a diferencia de
-        `regularizar_deuda`, que es bookkeeping retroactivo del admin y
-        deliberadamente NO activa nada.
+        Compartido por `validar_pago` (aprobar un pago),
+        `aplicar_beneficio_bonificado` (otorgar cobertura 100% bonificada)
+        y `regularizar_deuda` (solo cuando el período cubre hoy, issue
+        #1492): los tres caminos hacen que la persona reciba
+        cobertura REAL, así que los tres deben dejar la membresía ACTIVA.
 
         Issue #1225: `fecha_activacion` SOLO se escribe cuando la membresía
         todavía está INACTIVA al entrar acá -- la primera activación real.
