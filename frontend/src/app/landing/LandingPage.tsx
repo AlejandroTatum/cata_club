@@ -198,9 +198,9 @@ function Hero(): React.ReactElement {
           it as slack — see `.landing-hero-copy`'s gap. */}
       <div className="landing-hero-copy">
         <h1 className="landing-display" data-split>FORMANDO <span className="landing-hero-accent">CAMPEONES</span> PARA LA VIDA</h1>
-        <p>Únete a nuestro club, donde la técnica y el carácter forjan en cada punto.</p>
+        <p>Únase a nuestro club, donde la técnica y el carácter forjan en cada punto.</p>
         <div className="landing-hero-actions">
-          <Link className="landing-button" href={ENROLL_HREF}>Inscríbete <ArrowRight aria-hidden="true" /></Link>
+          <Link className="landing-button" href={ENROLL_HREF}>Inscríbase <ArrowRight aria-hidden="true" /></Link>
           <a className="landing-button landing-button-outline" href="#horarios">Ver horarios</a>
         </div>
         <div className="landing-hero-note"><Stars /><span>Club deportivo formativo · Desde 2013</span></div>
@@ -320,14 +320,14 @@ function Values(): React.ReactElement {
 
 function Motto(): React.ReactElement {
   return (
-    <section className="landing-section landing-motto" aria-label="Únete al club" data-motion-section data-motto data-testid="motion-section">
+    <section className="landing-section landing-motto" aria-label="Únase al club" data-motion-section data-motto data-testid="motion-section">
       <span className="landing-halftone" aria-hidden="true" />
       <span className="landing-paddle" data-motto-paddle aria-hidden="true">
         <Image className="landing-paddle-crest" src={CREST_SRC} alt="" width={62} height={62} unoptimized />
         <i />
       </span>
-      <p className="landing-motto-lead" data-motto-copy>Cada entrenamiento es una oportunidad para superarte.</p>
-      <Link className="landing-button" data-motto-cta href={ENROLL_HREF}>Inscríbete ya <ArrowRight aria-hidden="true" /></Link>
+      <p className="landing-motto-lead" data-motto-copy>Cada entrenamiento es una oportunidad para superarse.</p>
+      <Link className="landing-button" data-motto-cta href={ENROLL_HREF}>Inscríbase ya <ArrowRight aria-hidden="true" /></Link>
       <Stars />
     </section>
   );
@@ -417,7 +417,7 @@ function Location(): React.ReactElement {
           </dd>
           <dd>
             <a className="landing-contact-action" href={toWhatsAppLink(contact.whatsapp[0])} target="_blank" rel="noreferrer">
-              <MessageCircle aria-hidden="true" /> Escríbenos por WhatsApp
+              <MessageCircle aria-hidden="true" /> Escríbanos por WhatsApp
             </a>
           </dd>
         </div>

@@ -602,7 +602,7 @@ describe("LandingPage", (): void => {
 
     const hero = document.querySelector(".landing-hero");
     expect(hero).not.toBeNull();
-    const heroPrimary = within(hero as HTMLElement).getByRole("link", { name: /inscríbete/i });
+    const heroPrimary = within(hero as HTMLElement).getByRole("link", { name: /inscríbase/i });
     expect(heroPrimary).toHaveAttribute("href", "/student/enroll");
     expect(within(hero as HTMLElement).getByRole("link", { name: "Ver horarios" })).toHaveAttribute("href", "#horarios");
   });
@@ -839,7 +839,7 @@ describe("LandingPage", (): void => {
     const mottoCta = within(motto as HTMLElement).getByRole("link");
     expect(mottoCta).toHaveAttribute("data-motto-cta", "true");
     expect(mottoCta).toHaveAttribute("href", "/student/enroll");
-    expect(mottoCta).toHaveTextContent("Inscríbete ya");
+    expect(mottoCta).toHaveTextContent("Inscríbase ya");
   });
 
   it("embeds the official crest inside the motto paddle as pure decoration", (): void => {
@@ -857,9 +857,9 @@ describe("LandingPage", (): void => {
 
     // Decorative only: the club name must not be duplicated for screen
     // readers inside the motto, and the CTA's accessible name stays exactly
-    // "Inscríbete ya" — no extra noise leaked into the accessible tree.
+    // "Inscríbase ya" — no extra noise leaked into the accessible tree.
     expect(within(motto).queryByText(/cata club/i)).toBeNull();
-    expect(within(motto).getByRole("link", { name: "Inscríbete ya" })).toHaveAttribute("data-motto-cta", "true");
+    expect(within(motto).getByRole("link", { name: "Inscríbase ya" })).toHaveAttribute("data-motto-cta", "true");
   });
 
   it("turns every WhatsApp contact number into a wa.me link", (): void => {
@@ -874,7 +874,7 @@ describe("LandingPage", (): void => {
     render(<LandingPage />);
 
     const contact = document.querySelector(".landing-contact") as HTMLElement;
-    const whatsappCta = within(contact).getByRole("link", { name: /escríbenos por whatsapp/i });
+    const whatsappCta = within(contact).getByRole("link", { name: /escríbanos por whatsapp/i });
     expect(whatsappCta).toHaveAttribute("href", toWhatsAppLink(landingConfig.contact.whatsapp[0]));
     expect(whatsappCta.closest(".landing-contact-row")).toHaveTextContent("WhatsApp");
 
