@@ -35,9 +35,9 @@ describe("landing section rhythm", (): void => {
     expect(css).toContain(".landing-page .landing-values { padding-block: var(--landing-space-dense); }");
   });
 
-  it("mirrors the second pillar without touching the DOM order", (): void => {
+  it("lays the two pillars side by side without a flipped variant", (): void => {
     const css = landingCss();
-    expect(css).toContain(".landing-pillar--flip .landing-pillar-photo { grid-column: 1; grid-row: 1; }");
-    expect(css).toContain(".landing-pillar--flip .landing-pillar-copy { grid-column: 2; grid-row: 1; }");
+    expect(css).toContain(".landing-pillars { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr));");
+    expect(css).not.toContain("landing-pillar--flip");
   });
 });

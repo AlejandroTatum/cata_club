@@ -258,7 +258,7 @@ function MissionVision(): React.ReactElement {
             sizes={MISSION_VISION_PHOTO_SIZES}
           />
         </article>
-        <article className="landing-pillar landing-pillar--flip" data-reveal>
+        <article className="landing-pillar" data-reveal>
           <div className="landing-pillar-copy">
             <span className="landing-index" aria-hidden="true">02</span>
             <span className="landing-index-label" aria-hidden="true">Horizonte</span>

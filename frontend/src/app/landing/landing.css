@@ -249,7 +249,7 @@
    outright — the old version's `::before` em-dash separator belonged to the
    previous side-by-side layout and has no place once the index and the label
    stack. */
-.landing-pillars { display: grid; width: 100%; max-width: 720px; margin-inline: auto; grid-template-columns: minmax(0, 1fr); gap: 40px; align-items: start; }
+.landing-pillars { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 72px; align-items: start; }
 /* Each pillar mirrors its parent's own 1fr/1fr split — copy on the left,
    photo on the right — with a tighter 32px inner gap (vs. the 72px outer
    gap between the two pillars themselves), since these two columns belong
@@ -262,16 +262,13 @@
    block), stacking the photo under the copy again: side-by-side inside an
    already single-column `.landing-pillars` would leave neither half legible
    on a phone. */
-.landing-pillar { display: grid; grid-template-columns: minmax(0, 1fr) 266px; gap: 32px; align-items: stretch; border-top: 1px solid var(--landing-text-strong); padding-top: 28px; }
+.landing-pillar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: start; border-top: 1px solid var(--landing-text-strong); padding-top: 28px; }
 .landing-index { color: var(--landing-text-muted); font-family: var(--font-landing-barlow); font-size: 15px; letter-spacing: 3px; }
-.landing-pillars .landing-index { display: block; margin: 0; font-weight: 800; font-size: 64px; line-height: 1; letter-spacing: normal; color: var(--landing-action); }
+.landing-pillars .landing-index { display: block; margin: 0; font-weight: 800; font-size: 60px; line-height: 1; letter-spacing: normal; color: var(--landing-action); }
 /* The label sits on the numeral's baseline instead of under it, so the row
    beside "01" carries text rather than a blank band. */
-.landing-pillar-copy { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 16px; align-items: end; }
-.landing-pillar-copy > * { grid-column: 1 / -1; }
-.landing-pillar-copy > .landing-index { grid-column: 1; }
-.landing-pillar-copy > .landing-index-label { grid-column: 2; grid-row: 1; margin: 0 0 8px; }
-.landing-index-label { display: block; margin-top: 4px; color: var(--landing-text-strong); font-size: 12px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; }
+.landing-pillar-copy { display: block; min-width: 0; }
+.landing-index-label { display: block; margin-top: 10px; color: var(--landing-text-strong); font-size: 12px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; }
 .landing-pillar h3 { margin-top: 18px; color: var(--landing-text-strong); font-family: var(--font-landing-barlow); font-weight: 800; font-size: 30px; letter-spacing: -0.01em; line-height: 1.1; text-transform: uppercase; }
 .landing-lead { margin: 18px 0 0; max-width: 30ch; color: var(--landing-text-strong); font-weight: 600; font-size: 22px; line-height: 1.35; }
 .landing-pillar p:not(.landing-lead) { margin: 14px 0 0; max-width: 44ch; color: var(--landing-text); font-size: 17px; line-height: 1.7; }
@@ -289,12 +286,7 @@
    level with the copy beside it; the 24px gap from the old stacked layout
    only applies once the mobile breakpoint below collapses the pillar back
    to one column. */
-.landing-pillar-photo { display: block; width: 100%; height: 100%; min-height: 0; aspect-ratio: auto; object-fit: cover; object-position: top; }
-/* Order, not DOM: the copy stays first for a screen reader, and the second
-   pillar mirrors the first so the photographs alternate sides down the page. */
-.landing-pillar--flip { grid-template-columns: 266px minmax(0, 1fr); }
-.landing-pillar--flip .landing-pillar-copy { grid-column: 2; grid-row: 1; }
-.landing-pillar--flip .landing-pillar-photo { grid-column: 1; grid-row: 1; }
+.landing-pillar-photo { display: block; width: 100%; height: auto; aspect-ratio: 1 / 1; object-fit: cover; object-position: top; }
 
 /* Valores tablero redesign: the scroll-scrubbed rally (ball, guide,
    scoreboard counter, dimming) was rejected for breaking on mobile and for
@@ -648,6 +640,9 @@
 @media (max-width: 1024px) {
   .landing-navbar { padding-inline: 32px; }
   .landing-nav-links { gap: 18px; }
+  .landing-pillars { gap: 40px; }
+  .landing-pillar { grid-template-columns: 1fr; gap: 0; }
+  .landing-pillar-photo { max-width: 360px; margin-top: 24px; }
   .landing-hero { gap: 40px; }
   .landing-page { --landing-gutter: 48px; }
   .landing-section, .landing-stats, .landing-footer { padding-inline: 48px; }
@@ -768,7 +763,6 @@
      own column instead of becoming the tallest thing on the mobile page. */
   .landing-schedule .landing-section-header h2 { max-width: none; }
   .landing-pillar-photo { aspect-ratio: 3 / 2; max-width: 360px; margin-top: 24px; }
-  .landing-pillar--flip .landing-pillar-copy, .landing-pillar--flip .landing-pillar-photo { grid-column: 1; grid-row: auto; }
   /* The list becomes horizontal chips with scroll instead of a stacked
      vertical list — the accent bar and the tab's own hours line are
      desktop-only reads, so both drop rather than crowd a 44px-tall pill. */

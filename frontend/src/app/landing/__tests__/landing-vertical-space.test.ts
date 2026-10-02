@@ -127,11 +127,11 @@ describe("Valores tablero redesign", (): void => {
 // edit cannot quietly split the rule in two and let the columns drift apart.
 // ---------------------------------------------------------------------------
 describe("Mission/Vision pillar photos", (): void => {
-  it("stretches both photos to their copy column, cropped from the bottom", (): void => {
+  it("keeps both photos square beside their copy, cropped from the bottom", (): void => {
     const css = landingCss();
     const rule = ruleAt(css, ".landing-pillar-photo");
-    expect(rule).toContain("aspect-ratio: auto");
-    expect(rule).toContain("height: 100%");
+    expect(rule).toContain("aspect-ratio: 1 / 1");
+    expect(rule).toContain("height: auto");
     expect(rule).toContain("object-fit: cover");
     // Crops toward the top of the frame (i.e. trims the bottom) rather than
     // centring: vision-coaching.jpeg's two faces sit close enough to its top
