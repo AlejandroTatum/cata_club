@@ -150,11 +150,11 @@ const SHAPES: Record<AvanzadasRange, { points: number; stepMinutes: number }> = 
 };
 
 const SLOW_ENDPOINTS: readonly Omit<SlowEndpoint, "requests">[] = [
-  { method: "GET", route: "/api/v1/reportes/asistencia/resumen", p95Ms: 1180 },
-  { method: "GET", route: "/api/v1/pagos/pendientes", p95Ms: 640 },
+  { method: "GET", route: "/api/v1/asistencias/reportes", p95Ms: 1180 },
+  { method: "GET", route: "/api/v1/membresias/pagos", p95Ms: 640 },
   { method: "GET", route: "/api/v1/personas/{persona_id}", p95Ms: 410 },
   { method: "POST", route: "/api/v1/auth/login", p95Ms: 380 },
-  { method: "GET", route: "/api/v1/dashboard", p95Ms: 350 },
+  { method: "GET", route: "/api/v1/dashboard/stats", p95Ms: 350 },
 ];
 
 /** Requests per endpoint over the whole range. */
