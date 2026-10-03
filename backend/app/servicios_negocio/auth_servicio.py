@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 import jwt
-from sqlalchemy import case
+from sqlalchemy import case, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -15,7 +15,7 @@ from app.dominio.modelos import (
 )
 from app.dominio.excepciones import (
     CredencialesInvalidas, EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida,
-    ServicioNoDisponible,
+    PermisosInsuficientes, ServicioNoDisponible,
 )
 from app.dominio.mensajes import (
     MENSAJE_IDENTIDAD_DUPLICADA, MENSAJE_REPRESENTADO_SIN_CREDENCIALES_PROPIAS,
@@ -98,6 +98,24 @@ _UMBRAL_RETRASO_INTENTOS = 3
 _TECHO_RETRASO_SEGUNDOS = 60
 
 
+# REG-10: lo que lee quien intenta entrar con una cuenta dada de baja o
+# suspendida. Espejo verbatim del texto que el frontend muestra para
+# `account_inactive` (`frontend/src/app/login/page.tsx`).
+MENSAJE_CUENTA_INACTIVA = (
+    "Su cuenta está inactiva. Comuníquese con el club para reactivarla."
+)
+
+
+class CuentaInactiva(PermisosInsuficientes):
+    """Las credenciales son correctas pero la cuenta (o la persona) está
+    inactiva (-> HTTP 403, por herencia de `PermisosInsuficientes`).
+
+    Distinta de `CredencialesInvalidas` a propósito: solo se lanza DESPUÉS de
+    verificar la contraseña, así que decirlo no es un oráculo -- únicamente lo
+    lee quien ya conoce la contraseña de esa cuenta. Quien se equivoca de
+    contraseña sigue recibiendo el mismo 401 que una cuenta inexistente."""
+
+
 def _purgar_entradas_expiradas(ahora: float) -> None:
     """Desaloja del FRENTE de `_INTENTOS_FALLIDOS_LOGIN` -- el frente es
     siempre lo menos recientemente tocado, ver `_registrar_intento_fallido`
@@ -141,6 +159,11 @@ def _registrar_intento_fallido(clave: str) -> int:
 # "¿desde dónde entré últimamente?", no "dame la bitácora completa". Es un
 # corte de LECTURA: la tabla conserva todo.
 LIMITE_SESIONES_LISTADAS = 10
+
+# GAP-01: tiempo mínimo entre dos correos del mismo tipo (recuperación o
+# verificación) para una misma cuenta. Protege el cupo diario del proveedor.
+ENFRIAMIENTO_REENVIO_CORREO = timedelta(minutes=2)
+MENSAJE_RECUPERACION_ENVIADA = "Si el correo está registrado, se envió un enlace de recuperación"
 
 
 @dataclass(frozen=True)
@@ -206,6 +229,11 @@ class AuthServicio:
         clave = correo.strip().lower()
         try:
             usuario = self._verificar_credenciales(correo, contrasenia)
+        except CuentaInactiva:
+            # La contraseña era correcta: no es un intento de adivinarla, así
+            # que no suma al freno progresivo, pero tampoco es un login exitoso.
+            contar_login(ok=False)
+            raise
         except CredencialesInvalidas:
             contar_login(ok=False)
             self._penalizar_intento_fallido(clave)
@@ -247,12 +275,13 @@ class AuthServicio:
         if not usuario or not GestorAutenticacion.verificar_contrasenia(contrasenia, usuario.contrasenia):
             raise CredencialesInvalidas("Correo o contraseña incorrectos")
         # E01-RF013: una cuenta suspendida por el Administrador no puede
-        # loguearse, aunque la contraseña sea correcta. Mismo tipo de
-        # excepción que credenciales inválidas: no se revela si la cuenta
-        # existe pero está inactiva vs. si la contraseña es incorrecta,
-        # para no filtrar información de cuentas ajenas.
+        # loguearse, aunque la contraseña sea correcta. REG-10: llegados acá la
+        # contraseña YA fue verificada, así que decir que la cuenta está
+        # inactiva no revela nada a un tercero -- solo lo lee quien la conoce --
+        # y le da una salida (escribir al club) en lugar de un "Correo o
+        # contraseña incorrectos" que lo mandaba en círculo.
         if not usuario.activo:
-            raise CredencialesInvalidas("Correo o contraseña incorrectos")
+            raise CuentaInactiva(MENSAJE_CUENTA_INACTIVA, seguro_mostrar=True)
         # Baja lógica de la PERSONA: quien ya no es miembro del club no entra,
         # aunque su cuenta figure como activa. No es redundante con el chequeo
         # de arriba: dar de baja a una persona desactiva su `Usuario`, pero
@@ -260,7 +289,7 @@ class AuthServicio:
         # operación independiente que no reincorpora a nadie al club. Sin esta
         # línea, ese camino le devolvería el acceso a un ex-miembro.
         if not usuario.persona.activo:
-            raise CredencialesInvalidas("Correo o contraseña incorrectos")
+            raise CuentaInactiva(MENSAJE_CUENTA_INACTIVA, seguro_mostrar=True)
         return usuario
 
     def _penalizar_intento_fallido(self, clave: str) -> None:
@@ -760,6 +789,25 @@ class AuthServicio:
         ]
 
     # --- E01-RF003: recuperación de contraseña -------------------------------
+    def _en_enfriamiento(self, modelo, usuario_id: int) -> bool:
+        """GAP-01: ¿esta cuenta ya recibió (o tiene recién encolado) un correo
+        de este tipo hace menos de `ENFRIAMIENTO_REENVIO_CORREO`?
+
+        Se mide contra la fila más reciente de CUALQUIER estado: el índice
+        parcial único solo cubre las activas, así que una fila ya `ENVIADO`
+        no frenaría nada por sí sola. Quien llama responde exactamente igual
+        que en el camino normal: el enfriamiento no puede delatar si la
+        cuenta existe."""
+        limite = datetime.now(timezone.utc) - ENFRIAMIENTO_REENVIO_CORREO
+        return self.db.query(
+            self.db.query(modelo)
+            .filter(
+                modelo.usuario_id == usuario_id,
+                or_(modelo.created_at >= limite, modelo.sent_at >= limite),
+            )
+            .exists()
+        ).scalar()
+
     def solicitar_recuperacion(self, correo: str) -> dict:
         """Registra la solicitud localmente; el worker enviará el enlace.
 
@@ -778,6 +826,8 @@ class AuthServicio:
                 .first()
             )
             if evento is None:
+                if self._en_enfriamiento(RecuperacionOutbox, usuario.id):
+                    return {"mensaje": MENSAJE_RECUPERACION_ENVIADA}
                 self.db.add(
                     RecuperacionOutbox(
                         usuario_id=usuario.id,
@@ -810,7 +860,7 @@ class AuthServicio:
                 raise ServicioNoDisponible(
                     "No se pudo procesar la solicitud. Intente nuevamente más tarde"
                 )
-        return {"mensaje": "Si el correo está registrado, se envió un enlace de recuperación"}
+        return {"mensaje": MENSAJE_RECUPERACION_ENVIADA}
 
     def restablecer_contrasenia(self, token: str, nueva_contrasenia: str) -> None:
         payload = GestorAutenticacion.decodificar_token_recuperacion(token)
@@ -830,6 +880,9 @@ class AuthServicio:
         if not usuario.activo or not usuario.persona.activo:
             raise CredencialesInvalidas("El enlace de recuperación es inválido o expiró")
 
+        if GestorAutenticacion.verificar_contrasenia(nueva_contrasenia, usuario.contrasenia):
+            raise OperacionInvalida("La nueva contraseña debe ser distinta de la actual.")
+
         usuario.contrasenia = GestorAutenticacion.obtener_hash_contrasenia(nueva_contrasenia)
         usuario.version_contrasenia += 1
         # Criterio unificado (issue #4): restablecer la contraseña RETIRA el
@@ -838,6 +891,35 @@ class AuthServicio:
         # sobrevivir al reset.
         usuario.revocar_sesiones()
         self.db.commit()
+
+    def cambiar_contrasenia(
+        self, correo: str, contrasenia_actual: str, nueva_contrasenia: str,
+        user_agent: str | None = None,
+    ) -> dict:
+        """POST /auth/contrasenia/cambiar (FAM-17): cambio desde el perfil.
+
+        Exige la contraseña actual y rechaza una nueva igual a ella. Igual que
+        el restablecimiento, retira el acceso previo (bombea el epoch); como
+        quien cambia la clave sigue en su equipo, se le reemite un par nuevo
+        -- mismo mecanismo que `invalidar_otras_sesiones`. Las demás sesiones
+        mueren porque nacieron bajo el epoch anterior.
+        """
+        usuario = self.obtener_usuario_actual(correo)
+        if not GestorAutenticacion.verificar_contrasenia(contrasenia_actual, usuario.contrasenia):
+            raise OperacionInvalida("La contraseña actual es incorrecta.")
+        if GestorAutenticacion.verificar_contrasenia(nueva_contrasenia, usuario.contrasenia):
+            raise OperacionInvalida("La nueva contraseña debe ser distinta de la actual.")
+
+        usuario.contrasenia = GestorAutenticacion.obtener_hash_contrasenia(nueva_contrasenia)
+        usuario.version_contrasenia += 1
+        usuario.revocar_sesiones()
+        self.db.commit()
+        self.db.refresh(usuario)
+
+        sesion = self._registrar_sesion(usuario, user_agent)
+        tokens = self._emitir_par_tokens(usuario, sesion_id=sesion.id)
+        actividad.registrar_sin_fallar(self.db, usuario.id)
+        return tokens
 
     # --- Issue #790: verificación de la dirección de correo ------------------
     def solicitar_verificacion_correo(self, correo: str) -> dict:
@@ -861,6 +943,8 @@ class AuthServicio:
                 .first()
             )
             if evento is None:
+                if self._en_enfriamiento(VerificacionCorreoOutbox, usuario.id):
+                    return {"mensaje": MENSAJE_VERIFICACION_ENVIADA}
                 self.db.add(
                     VerificacionCorreoOutbox(
                         usuario_id=usuario.id,

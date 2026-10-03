@@ -28,7 +28,7 @@ import {
   PHONE_LOCAL_HINT,
   toPhoneFieldDigits,
 } from "@/lib/identity-validation";
-import { Button } from "@/components/ui";
+import { Button, Select } from "@/components/ui";
 import { DuplicateIdentityHelp, type DuplicateIdentityAudience } from "@/components/DuplicateIdentityHelp";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import { NUMERIC_FIELD_LIMIT_MESSAGE, type NumericFieldMode } from "@/lib/numeric-input";
@@ -466,7 +466,6 @@ export function BirthDateField(opts: BirthDateFieldProps): ReactElement {
     <fieldset
       id={fieldId}
       disabled={opts.disabled}
-      aria-required={opts.required || undefined}
       aria-invalid={hasError || undefined}
       aria-describedby={describedBy}
       className="mb-4"
@@ -483,6 +482,7 @@ export function BirthDateField(opts: BirthDateFieldProps): ReactElement {
           </label>
           <input
             id={partIds.day}
+            aria-required={opts.required || undefined}
             type="text"
             inputMode="numeric"
             maxLength={2}
@@ -498,8 +498,9 @@ export function BirthDateField(opts: BirthDateFieldProps): ReactElement {
           <label htmlFor={partIds.month} className="mb-1 block text-2xs font-semibold text-ink-3">
             Mes
           </label>
-          <select
+          <Select
             id={partIds.month}
+            aria-required={opts.required || undefined}
             ref={monthRef}
             autoComplete="bday-month"
             value={month}
@@ -513,7 +514,7 @@ export function BirthDateField(opts: BirthDateFieldProps): ReactElement {
                 {name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div>
           <label htmlFor={partIds.year} className="mb-1 block text-2xs font-semibold text-ink-3">
@@ -521,6 +522,7 @@ export function BirthDateField(opts: BirthDateFieldProps): ReactElement {
           </label>
           <input
             id={partIds.year}
+            aria-required={opts.required || undefined}
             type="text"
             inputMode="numeric"
             maxLength={4}

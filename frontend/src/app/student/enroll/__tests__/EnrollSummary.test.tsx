@@ -30,3 +30,16 @@ describe("EnrollSummary age", () => {
     expect(screen.getByText("30 años")).toBeInTheDocument();
   });
 });
+
+// REG-19: a long value wraps inside the rail instead of being cut off with an
+// ellipsis the visitor cannot expand.
+describe("EnrollSummary values", () => {
+  it("lets a long fact wrap instead of truncating it", () => {
+    const formData: EnrollFormData = { ...initialFormData, correo: "una.direccion.muy.larga@ejemplo.com.ec" };
+    render(<EnrollSummary formData={formData} steps={["personal"] as never} currentStep={"personal" as never} />);
+
+    const value = screen.getByText("una.direccion.muy.larga@ejemplo.com.ec");
+    expect(value.className).not.toContain("truncate");
+    expect(value.className).toContain("break-words");
+  });
+});

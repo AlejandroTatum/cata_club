@@ -66,9 +66,7 @@ export interface BackendEnrollmentCreateDTO {
  * `EnrollmentFichaMedicaDTO` has no free-text notes field — only a
  * structured `enfermedades` list and a bounded `alergias` string.
  * `condicionesSalud` (a free-text textarea in the wizard) is split on commas
- * into discrete entries to fit `enfermedades`. `observaciones` has no
- * backend destination at all; it is intentionally dropped rather than
- * stuffed into an unrelated field.
+ * into discrete entries to fit `enfermedades`.
  */
 function buildFichaMedica(fichaMedica: EnrollmentMedicalRecord): BackendEnrollmentFichaMedica {
   // Belt and braces: route.ts's isMedicalRecord is the gate that guarantees

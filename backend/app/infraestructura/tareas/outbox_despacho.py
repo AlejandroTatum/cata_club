@@ -36,7 +36,9 @@ from typing import Callable, Optional
 
 from sqlalchemy import delete, func, or_, select
 
+from app.dominio.excepciones import CupoCorreoDiarioAgotado
 from app.infraestructura.repositorios import outbox_auditoria_entrega as auditoria
+from app.infraestructura.repositorios import outbox_cupo
 from app.soporte_transversal.configuracion import settings
 
 
@@ -213,6 +215,19 @@ def entregar_fila(
 
         try:
             entregar(destinatario)
+        except CupoCorreoDiarioAgotado:
+            # El tope diario se agotó ANTES de abrir SMTP: no hubo envío ni
+            # fallo. La fila espera al día siguiente sin gastar intentos
+            # (MAIL-CAP); cerrarla `ENVIADO` perdería el enlace en silencio.
+            outbox_cupo.diferir_hasta_manana(evento)
+            usuario_id = evento.usuario_id
+            db.commit()
+            logger.warning(
+                "%s diferido por tope diario de correos: fila %s del usuario "
+                "%s, se reintenta al día siguiente",
+                etiqueta, evento_id, usuario_id,
+            )
+            return {"evento_id": evento_id, "enviado": False, "diferido_por_cupo": True}
         except Exception as error:
             repositorio(db).requeue(evento, error)
             # `requeue` decide entre PENDIENTE y AGOTADO; se leen antes del

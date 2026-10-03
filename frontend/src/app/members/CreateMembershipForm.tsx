@@ -16,10 +16,12 @@
 
 "use client";
 
+import { useState } from "react";
+import Link from "next/link";
 import { CheckCircle2, Plus } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useToast } from "@/contexts/ToastContext";
-import { crearMembresia } from "@/services/api";
+import { ApiClientError, crearMembresia } from "@/services/api";
 import { PRIMARY_ACTION_TRIGGER } from "./payment-action-styles";
 import TipoSelectorForm from "@/components/admin/TipoSelectorForm";
 
@@ -34,8 +36,11 @@ export default function CreateMembershipForm({
   onCreated,
 }: CreateMembershipFormProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
+  // QA3 ADM-08: id of the membership that blocked the creation, if any.
+  const [pendienteId, setPendienteId] = useState<number | null>(null);
 
   return (
+    <>
     <TipoSelectorForm
       triggerLabel="Crear membresía"
       triggerClassName={PRIMARY_ACTION_TRIGGER}
@@ -51,7 +56,15 @@ export default function CreateMembershipForm({
         // but it is NOT sent: the backend resolves the current tariff from
         // `tipoMembresiaId` (issue #400). Echoing the price back would make
         // the number the club charges with editable in transit.
-        await crearMembresia({ personaId, tipoMembresiaId });
+        setPendienteId(null);
+        try {
+          await crearMembresia({ personaId, tipoMembresiaId });
+        } catch (err) {
+          if (err instanceof ApiClientError && err.membresiaId !== undefined) {
+            setPendienteId(err.membresiaId);
+          }
+          throw err;
+        }
         showSuccess("Membresía creada correctamente.");
         onCreated();
       }}
@@ -62,5 +75,17 @@ export default function CreateMembershipForm({
         </p>
       )}
     />
+    {pendienteId !== null && (
+      <p className="mt-1 text-xs">
+        <Link
+          href="/payments"
+          data-membresia-id={pendienteId}
+          className="font-semibold text-cata-red underline"
+        >
+          Ver la membresía pendiente
+        </Link>
+      </p>
+    )}
+    </>
   );
 }

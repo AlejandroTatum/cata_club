@@ -25,6 +25,7 @@ token expirado y cuenta desactivada.
 from datetime import datetime, timezone
 
 from app.dominio.cedula import cedula_valida
+from tests.nombres_validos import nombre_unico
 from app.dominio.modelos import Usuario
 from app.seguridad.gestor_auth import GestorAutenticacion
 
@@ -34,7 +35,7 @@ MENSAJE_ERROR_GENERICO = "No se pudo procesar la solicitud. Intente nuevamente m
 
 def _crear_persona(client, cedula):
     payload = {
-        "nombres": "Test", "apellidos": cedula, "cedula": cedula,
+        "nombres": "Test", "apellidos": nombre_unico(cedula), "cedula": cedula,
         "fecha_nacimiento": "2000-05-14", "telefono": "0991234567",
     }
     return client.post("/api/v1/personas/", json=payload).json()
@@ -145,7 +146,7 @@ def test_restablecer_con_token_expirado_falla(client):
     assert "inválido o expiró" in resp.json()["detail"]
 
 
-def test_restablecer_con_cuenta_desactivada_falla(client, db_session):
+def test_restablecer_con_cuenta_desactivada_falla(client, db_session, admin_ajeno):
     """Una cuenta suspendida por el Administrador no debe recuperar acceso
     vía restablecimiento de contraseña. Mismo error genérico que un token
     inválido: no se revela el estado de la cuenta."""
@@ -170,3 +171,33 @@ def test_restablecer_con_cuenta_desactivada_falla(client, db_session):
     # La contraseña original sigue intacta.
     usuario = db_session.query(Usuario).filter_by(correo="suspendido@x.com").one()
     assert GestorAutenticacion.verificar_contrasenia("unaClaveSegura1", usuario.contrasenia)
+
+
+# --- GAP-02: la nueva contraseña no puede ser la actual ---------------------
+def test_restablecer_con_la_contrasenia_actual_se_rechaza_sin_tocar_la_cuenta(client, db_session):
+    persona = _crear_persona(client, cedula_valida(543))
+    _registrar_credenciales(client, persona["cedula"], "igual@x.com", "unaClaveSegura1")
+    usuario = db_session.query(Usuario).filter_by(correo="igual@x.com").one()
+    version_sesion = usuario.version_sesion
+    version_contrasenia = usuario.version_contrasenia
+    token = GestorAutenticacion.crear_token_recuperacion(
+        "igual@x.com", version_contrasenia=version_contrasenia
+    )
+
+    resp = client.post(
+        "/api/v1/auth/restablecer-contrasenia",
+        json={"token": token, "nueva_contrasenia": "unaClaveSegura1"},
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "La nueva contraseña debe ser distinta de la actual."
+    db_session.refresh(usuario)
+    assert usuario.version_sesion == version_sesion
+    assert usuario.version_contrasenia == version_contrasenia
+
+    # El mismo enlace sigue siendo válido para una contraseña distinta.
+    resp = client.post(
+        "/api/v1/auth/restablecer-contrasenia",
+        json={"token": token, "nueva_contrasenia": "otraClaveSegura2"},
+    )
+    assert resp.status_code == 204

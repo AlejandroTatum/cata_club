@@ -4,7 +4,14 @@ import { Badge } from "@/components/ui";
 import { getAttendanceBadgeTone, getAttendanceBadgeTokens } from "@/app/attendance/attendance-utils";
 import { getUserInitials } from "@/lib/auth-utils";
 import type { EstadoAsistencia } from "@/types/domain";
-import { ATTENDANCE_LABELS, ATTENDANCE_STATES, UNMARKED, isReviewed, type SessionStudent } from "./attendance-utils";
+import {
+  ATTENDANCE_LABELS,
+  ATTENDANCE_STATES,
+  UNMARKED,
+  isBeforeEnrollment,
+  isReviewed,
+  type SessionStudent,
+} from "./attendance-utils";
 
 const ATTENDANCE_ICONS: Record<EstadoAsistencia, React.ReactNode> = {
   present: <UserCheck size={ICON.sm} strokeWidth={2} aria-hidden="true" />,
@@ -20,6 +27,8 @@ const ATTENDANCE_ICONS: Record<EstadoAsistencia, React.ReactNode> = {
 interface AttendanceRosterRowProps {
   student: SessionStudent;
   studentIndex: number;
+  /** The session's day — a date before the student's enrolment gets a notice (ENT-07). */
+  sessionDate?: string | null;
   onCycleAttendance: (studentIndex: number) => void;
   onDirectAttendanceSet: (studentIndex: number, state: EstadoAsistencia) => void;
   onRadioKeyDown: (
@@ -46,6 +55,7 @@ interface AttendanceRosterRowProps {
 export default function AttendanceRosterRow({
   student,
   studentIndex,
+  sessionDate = null,
   onCycleAttendance,
   onDirectAttendanceSet,
   onRadioKeyDown,
@@ -83,6 +93,15 @@ export default function AttendanceRosterRow({
         <span id={nameId} className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
           {student.name}
         </span>
+        {isBeforeEnrollment(student, sessionDate) && (
+          // ENT-07: allowed, but flagged for the admin's review once saved.
+          <span
+            className="flex-none"
+            title="Esta fecha es anterior a su inscripción. Se registrará y quedará marcada para revisión."
+          >
+            <Badge tone="warn">Anterior a su inscripción</Badge>
+          </span>
+        )}
         {reviewed && !isUnmarked ? (
           <Badge tone={getAttendanceBadgeTone(student.attendance)} className="flex-none">
             {stateLabel}

@@ -440,6 +440,17 @@ def client(db_session):
 
 
 @pytest.fixture()
+def admin_ajeno(client):
+    """Reapunta el token del `client` a un administrador que NO es ninguna de
+    las personas del test (QA3 ADM-10: un admin no desactiva su propia cuenta,
+    y el `client` por defecto es la persona 1, que los tests suelen crear
+    primero). El teardown de `client` limpia los overrides."""
+    app.dependency_overrides[GestorAutenticacion.decodificar_token] = lambda: {
+        "sub": "admin-ajeno@cataclub.test", "persona_id": 9999, "roles": ["ADMINISTRADOR"],
+    }
+
+
+@pytest.fixture()
 def client_sin_permisos(db_session):
     """Cliente autenticado pero SIN rol ADMINISTRADOR, para probar 403."""
 
@@ -542,3 +553,17 @@ def contar_selects(db_session):
             event.remove(engine, "after_cursor_execute", _contar)
 
     return _medir
+
+
+@pytest.fixture()
+def sin_ventana_de_registro(monkeypatch):
+    """Neutraliza SOLO el tope hacia atrás de fechas de asistencia (ENT-02).
+
+    Los tests de mecánica de asistencia/reportes usan fechas fijas de
+    2026-07/08 que, con el reloj real, envejecen fuera de la ventana de
+    30 días. La regla de la ventana se prueba aparte
+    (`test_asistencias_lote.py`); acá se aparta para que esas fechas fijas
+    sigan ejerciendo lo suyo. La regla de "fecha futura" sigue activa."""
+    import app.servicios_negocio.asistencia_servicio as servicio
+
+    monkeypatch.setattr(servicio, "VENTANA_REGISTRO_ASISTENCIA_DIAS", 36500)

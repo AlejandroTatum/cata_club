@@ -25,9 +25,10 @@ function buildStudent(overrides: Partial<SessionStudent> = {}): SessionStudent {
 
 interface RenderRowOptions {
   student?: SessionStudent;
+  sessionDate?: string | null;
 }
 
-function renderRow({ student = buildStudent() }: RenderRowOptions = {}) {
+function renderRow({ student = buildStudent(), sessionDate = null }: RenderRowOptions = {}) {
   const handlers = {
     onCycleAttendance: vi.fn(),
     onDirectAttendanceSet: vi.fn(),
@@ -38,6 +39,7 @@ function renderRow({ student = buildStudent() }: RenderRowOptions = {}) {
       <AttendanceRosterRow
         student={student}
         studentIndex={0}
+        sessionDate={sessionDate}
         {...handlers}
       />
     </ul>,
@@ -121,5 +123,27 @@ describe("AttendanceRosterRow — the row never clips its own radiogroup (#1373)
       expect(radio.className).toContain("min-w-[44px]");
       expect(radio.className).toContain("min-h-[44px]");
     });
+  });
+});
+
+// ENT-07: attendance is allowed for a date before the student's enrolment, but
+// the trainer is told — and the backend flags the row for the admin's review.
+describe("AttendanceRosterRow — enrolled after the session (ENT-07)", () => {
+  it("shows a notice when the session date is before the student's enrolment", () => {
+    renderRow({ student: buildStudent({ assignedOn: "2026-10-02" }), sessionDate: "2026-09-28" });
+
+    expect(screen.getByText("Anterior a su inscripción")).toBeInTheDocument();
+  });
+
+  it("shows nothing for a session on or after the enrolment day", () => {
+    renderRow({ student: buildStudent({ assignedOn: "2026-09-28" }), sessionDate: "2026-09-28" });
+
+    expect(screen.queryByText("Anterior a su inscripción")).not.toBeInTheDocument();
+  });
+
+  it("shows nothing when the enrolment date is unknown", () => {
+    renderRow({ student: buildStudent(), sessionDate: "2026-09-28" });
+
+    expect(screen.queryByText("Anterior a su inscripción")).not.toBeInTheDocument();
   });
 });

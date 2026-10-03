@@ -826,35 +826,35 @@ describe("contraseña", () => {
   describe("buildPasswordCompositionSignals (issue #1395 — advisory only)", () => {
     it("reports every recommendation pending for an empty password", () => {
       expect(buildPasswordCompositionSignals("")).toEqual([
-        { label: "Al menos 10 caracteres", met: false },
         { label: "Mayúsculas y minúsculas", met: false },
         { label: "Al menos un número", met: false },
         { label: "Al menos un símbolo (por ejemplo, ! o #)", met: false },
       ]);
     });
 
-    it("recommends 10 characters — above the 8 the policy enforces, never replacing it", () => {
-      // Preview feedback (#1395) read the old 12 as too demanding; 10 is the
-      // correction, and the hard floor stays exactly where the policy put it.
+    // GAP-11: the length floor lives in the enforcing checklist only; the
+    // advisory list repeating it with a different figure contradicted it.
+    it("lists no length signal — the hard checklist owns the minimum", () => {
+      expect(buildPasswordCompositionSignals("nubesverde").map((signal) => signal.label)).not.toContain(
+        "Al menos 10 caracteres",
+      );
       expect(PASSWORD_ADVISORY_MIN_LENGTH).toBe(10);
       expect(PASSWORD_MIN_LENGTH).toBe(8);
-      expect(buildPasswordCompositionSignals("nubesverd")[0].met).toBe(false); // 9 chars
-      expect(buildPasswordCompositionSignals("nubesverde")[0].met).toBe(true); // 10 chars
     });
 
     it("ticks the case-mix signal only when BOTH cases appear", () => {
-      expect(buildPasswordCompositionSignals("nubesverdes")[1].met).toBe(false);
-      expect(buildPasswordCompositionSignals("NUBESVERDES")[1].met).toBe(false);
-      expect(buildPasswordCompositionSignals("Nubesverdes")[1].met).toBe(true);
+      expect(buildPasswordCompositionSignals("nubesverdes")[0].met).toBe(false);
+      expect(buildPasswordCompositionSignals("NUBESVERDES")[0].met).toBe(false);
+      expect(buildPasswordCompositionSignals("Nubesverdes")[0].met).toBe(true);
     });
 
     it("counts tildes and ñ as letters, never as the symbol category", () => {
       // A Spanish-language product whose own meter read "ñ" as a special
       // character would be advising people to avoid their own alphabet.
-      expect(buildPasswordCompositionSignals("niñoseguro")[3].met).toBe(false);
-      expect(buildPasswordCompositionSignals("niñoseguro")[1].met).toBe(false);
-      expect(buildPasswordCompositionSignals("Niñoseguro")[1].met).toBe(true);
-      expect(buildPasswordCompositionSignals("niño-seguro")[3].met).toBe(true);
+      expect(buildPasswordCompositionSignals("niñoseguro")[2].met).toBe(false);
+      expect(buildPasswordCompositionSignals("niñoseguro")[0].met).toBe(false);
+      expect(buildPasswordCompositionSignals("Niñoseguro")[0].met).toBe(true);
+      expect(buildPasswordCompositionSignals("niño-seguro")[2].met).toBe(true);
     });
 
     it("never turns a recommendation into a requirement: the policy verdict is unchanged", () => {

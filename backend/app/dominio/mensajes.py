@@ -37,7 +37,8 @@ implementación de un servicio en particular.
 # (`tests/test_mensajes_identidad_duplicada.py`).
 MENSAJE_IDENTIDAD_DUPLICADA = (
     "Alguno de los datos ingresados, cédula o correo, ya pertenece a una "
-    "cuenta registrada."
+    "cuenta registrada. Si ya fue socio del club, comuníquese con nosotros "
+    "para reactivar su cuenta."
 )
 
 # INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1, guardarraíl 3): respuesta

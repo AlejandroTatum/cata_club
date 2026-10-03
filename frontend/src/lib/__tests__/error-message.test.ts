@@ -511,3 +511,33 @@ describe("the rewritten copy speaks to a member, not to a machine (issue #355)",
     assertPlainLanguage("STATUS_MESSAGES[429]", STATUS_MESSAGES[429]);
   });
 });
+
+describe("toUserMessage — pydantic's English validation messages reach the user in Spanish (REG-08)", () => {
+  const FALLBACK = "No se pudo completar la operación.";
+  const apiError = (message: string, status = 422): Error => Object.assign(new Error(message), { status });
+
+  it.each([
+    ["Field required", "Falta completar un dato obligatorio."],
+    ["String should have at most 32 characters", "El texto no puede superar los 32 caracteres."],
+    ["String should have at least 1 character", "El texto debe tener al menos 1 carácter."],
+    ["String should have at least 8 characters", "El texto debe tener al menos 8 caracteres."],
+    ["Input should be a valid integer, unable to parse string as an integer", "El valor ingresado no es válido."],
+    ["Input should be 'A' or 'B'", "El valor ingresado no es válido."],
+  ])("translates %j", (raw, spanish) => {
+    expect(toUserMessage(apiError(raw), FALLBACK)).toBe(spanish);
+    expect(toUserMessage(apiError(raw, 400), FALLBACK)).toBe(spanish);
+  });
+
+  it("leaves an English sentence that is not a known pydantic message to the fallback", () => {
+    expect(toUserMessage(apiError("The value is not what we expected"), FALLBACK)).toBe(FALLBACK);
+  });
+
+  it("leaves numeric bounds to the caller's fallback, which knows what the number is", () => {
+    expect(toUserMessage(apiError("Input should be less than or equal to 12"), FALLBACK)).toBe(FALLBACK);
+    expect(toUserMessage(apiError("Input should be greater than 0"), FALLBACK)).toBe(FALLBACK);
+  });
+
+  it("does not translate on statuses outside the input statuses", () => {
+    expect(toUserMessage(apiError("Field required", 404), FALLBACK)).not.toBe("Falta completar un dato obligatorio.");
+  });
+});

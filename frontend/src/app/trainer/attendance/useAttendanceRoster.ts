@@ -16,6 +16,8 @@ import {
   attendanceDraftKey,
   buildRosterFromAlumnoHorarios,
   countUnreviewed,
+  isSessionClosed,
+  isSessionPartial,
   loadAttendanceDraft,
   markRosterClosed,
   type SessionStudent,
@@ -36,8 +38,13 @@ export interface AttendanceRoster {
   requestedDate: string | null;
   restoredFromDraft: boolean;
   setRestoredFromDraft: (value: boolean) => void;
-  /** Issue #389: at least one record already exists for this (horario, fecha) — closed for everyone. */
+  /** Issue #389/ENT-03: EVERY roster student already has a row for this (horario, fecha) — closed for everyone. */
   sessionAlreadyRegistered: boolean;
+  /**
+   * ENT-03/ENT-04: some students have a row and some do not (a half-saved list,
+   * or one another trainer left unfinished). Editable only for those without a row.
+   */
+  partialSession: boolean;
   readOnly: boolean;
   /**
    * Load a horario's roster and land on `target` — see the page's own note
@@ -62,6 +69,7 @@ export function useAttendanceRoster(): AttendanceRoster {
   const [restoredFromDraft, setRestoredFromDraft] = useState(false);
   const [requestedDate, setRequestedDate] = useState<string | null>(null);
   const [sessionAlreadyRegistered, setSessionAlreadyRegistered] = useState(false);
+  const [partialSession, setPartialSession] = useState(false);
 
   const openRoster = useCallback(
     async (
@@ -89,8 +97,13 @@ export function useAttendanceRoster(): AttendanceRoster {
         const draft = loadAttendanceDraft(attendanceDraftKey(horarioId, fecha));
         const withDraft = applyAttendanceDraft(roster, draft);
 
-        const closed = existingRecords.length > 0;
+        // ENT-03: closed only when every roster student has a row. A session
+        // with no roster at all but with rows on file (everyone since
+        // unassigned) stays closed, as before.
+        const closed =
+          existingRecords.length > 0 && (roster.length === 0 || isSessionClosed(roster));
         setSessionAlreadyRegistered(closed);
+        setPartialSession(isSessionPartial(roster));
         setSessionDate(fecha);
         setRequestedDate(requestedDateArg);
         setRestoredFromDraft(
@@ -126,6 +139,7 @@ export function useAttendanceRoster(): AttendanceRoster {
     setStudents([]);
     serverRosterRef.current = [];
     setSessionAlreadyRegistered(false);
+    setPartialSession(false);
   }, []);
 
   return {
@@ -141,6 +155,7 @@ export function useAttendanceRoster(): AttendanceRoster {
     restoredFromDraft,
     setRestoredFromDraft,
     sessionAlreadyRegistered,
+    partialSession,
     readOnly: sessionAlreadyRegistered,
     openRoster,
     resetRoster,

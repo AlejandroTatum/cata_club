@@ -12,19 +12,24 @@ from reportlab.lib import colors
 from reportlab.platypus import Paragraph
 
 from app.dominio.cedula import cedula_valida
+from tests.nombres_validos import nombre_unico
 from app.dominio.modelos import Pago, Persona
 from app.infraestructura import generador_pdf
 from app.infraestructura.generador_pdf import generar_reporte_pdf
 from app.presentacion.routers.asistencias_router import _COLUMNAS_ASISTENCIA_PDF
 from app.presentacion.routers.membresias_pagos_router import _COLUMNAS_PAGOS_PDF
 from app.presentacion.routers.personas_router import _COLUMNAS_PERSONAS_PDF
+from tests.fabricas_pagos import nombre_tarifa_unico
+
+# Fechas fijas de 2026: ver `sin_ventana_de_registro` en conftest.py (ENT-02).
+pytestmark = pytest.mark.usefixtures("sin_ventana_de_registro")
 
 
 def _crear_persona(client, cedula):
     return client.post(
         "/api/v1/personas/",
         json={
-            "nombres": "Test", "apellidos": cedula, "cedula": cedula,
+            "nombres": "Test", "apellidos": nombre_unico(cedula), "cedula": cedula,
             "fecha_nacimiento": "2000-05-14", "telefono": "0991234567",
         },
     ).json()
@@ -53,7 +58,7 @@ def _crear_tipo_membresia(client, modalidad="MENSUAL"):
     return client.post(
         "/api/v1/membresias/tipos",
         json={
-            "categoria": "Adultos",
+            "categoria": nombre_tarifa_unico(),
             "precio": "35.00", "modalidad": modalidad,
         },
     ).json()

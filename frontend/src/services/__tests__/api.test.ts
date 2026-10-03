@@ -46,6 +46,8 @@ import {
   exportAsistenciaReportePdf,
   fetchMembresiaDeuda,
   regularizarDeuda,
+  crearMembresia,
+  fetchCotizacionRegularizacion,
   fetchTarifas,
   crearTipoMembresia,
 } from "../api";
@@ -373,6 +375,19 @@ describe("ApiClientError.retryAfterSeconds", () => {
 // ---------------------------------------------------------------------------
 // ApiClientError.safe (issue #355) — the backend's "safe to show" marker
 // ---------------------------------------------------------------------------
+
+describe("ApiClientError.membresiaId (QA3 ADM-08)", () => {
+  it("carries the existing membership id the backend named", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      errorResponse(400, { message: "Ya tiene una membresía pendiente de pago.", membresia_id: 157 }),
+    );
+
+    await expect(crearMembresia({ personaId: 1, tipoMembresiaId: 2 })).rejects.toMatchObject({
+      status: 400,
+      membresiaId: 157,
+    });
+  });
+});
 
 describe("ApiClientError.safe", () => {
   it("is true when the body's mensaje_seguro is strictly true", async () => {
@@ -1392,6 +1407,18 @@ describe("fetchMembresiaDeuda / regularizarDeuda — deuda (issue #284)", () => 
 
     expect(result).toEqual(deuda);
     expect(String(vi.mocked(global.fetch).mock.calls[0]?.[0])).toBe("/api/membresias/9/deuda");
+  });
+
+  it("fetchCotizacionRegularizacion GETs the quote with the period as query params", async () => {
+    const cotizacion = { meses: 2, montoBase: "60.00", descuentoAplicado: "30.00", montoEsperado: "30.00" };
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(cotizacion));
+
+    const result = await fetchCotizacionRegularizacion(3, "2026-04-01", "2026-05-31");
+
+    expect(result).toEqual(cotizacion);
+    expect(String(vi.mocked(global.fetch).mock.calls[0]?.[0])).toBe(
+      "/api/membresias/3/regularizar-deuda/cotizacion?fechaInicio=2026-04-01&fechaFin=2026-05-31",
+    );
   });
 
   it("regularizarDeuda POSTs the explicit dates + motivo and parses the APROBADO payment", async () => {

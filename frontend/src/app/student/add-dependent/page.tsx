@@ -34,6 +34,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
+import { isActivationComplete, type ActivationSession } from "@/lib/activation-reasons";
 import {
   crearRepresentadoPropio, fetchInstituciones, fetchTiposMembresia,
   inscribirRepresentadoConPago, subirVoucherPago,
@@ -50,7 +51,7 @@ import {
   CEDULA_DIGITS,
   CEDULA_HINT,
 } from "@/components/wizard-fields";
-import { BackLink, InfoPanel, Stepper, buttonClasses, cn, PAGE_RAIL } from "@/components/ui";
+import { BackLink, InfoPanel, Select, Stepper, buttonClasses, cn, PAGE_RAIL } from "@/components/ui";
 import { SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
 import type { TipoSangre } from "@/types/domain";
 import {
@@ -116,6 +117,17 @@ function AddDependentContent(): React.ReactElement {
   // gated on.
   const isRepresentative = session?.roles.includes("REPRESENTANTE") ?? false;
 
+  // REG-12: a representative may add dependents as soon as their email is
+  // verified; the middleware lets this route through while activation is
+  // pending (`PUBLIC_EXCEPTIONS`), so the verified-email check lives here.
+  const emailUnverified = (session as ActivationSession | null)?.correoVerificado === false;
+  useEffect(() => {
+    if (emailUnverified) router.replace("/login/activacion");
+  }, [emailUnverified, router]);
+  // Paying right away goes through the membership endpoints, which stay
+  // closed to an account whose activation is still pending.
+  const canPayNow = session ? isActivationComplete(session) : false;
+
   /**
    * A URL may address any step the guardian could have walked to on their own,
    * and no further — a reloaded or shared link must not open the summary of a
@@ -137,7 +149,12 @@ function AddDependentContent(): React.ReactElement {
   // keystroke, shown only for fields the visitor has already left.
   const fieldErrors = useMemo(() => validateAddDependentFields(step, formData), [step, formData]);
   const stepComplete = Object.keys(fieldErrors).length === 0;
-  const blockedReason = describeAddDependentBlocker(fieldErrors);
+  // VIS-17: an empty form is not an error yet. The reason line stays quiet
+  // until the guardian has touched at least one field it names.
+  const blockerTouched = (Object.keys(fieldErrors) as AddDependentField[]).some((field) =>
+    touched.has(field),
+  );
+  const blockedReason = blockerTouched ? describeAddDependentBlocker(fieldErrors) : null;
 
   function shownError(field: AddDependentField): string | undefined {
     return touched.has(field) ? fieldErrors[field] : undefined;
@@ -401,7 +418,7 @@ function AddDependentContent(): React.ReactElement {
             >
               Tipo de escuela
             </label>
-            <select
+            <Select
               id={ADD_DEPENDENT_SCHOOL_TYPE_ID}
               value={tipoEscuelaFilter}
               onChange={(e) => {
@@ -416,7 +433,7 @@ function AddDependentContent(): React.ReactElement {
               <option value="FISCAL">Fiscal</option>
               <option value="FISCOMISIONAL">Fiscomisional</option>
               <option value="MUNICIPAL">Municipal</option>
-            </select>
+            </Select>
 
             <label
               htmlFor={addDependentFieldId("institucionId")}
@@ -427,7 +444,7 @@ function AddDependentContent(): React.ReactElement {
             <p className="mb-2 text-xs text-ink-3">
               Seleccione la institución educativa del estudiante (opcional).
             </p>
-            <select
+            <Select
               id={addDependentFieldId("institucionId")}
               value={formData.institucionId}
               onChange={(e) => updateField("institucionId", e.target.value)}
@@ -442,7 +459,7 @@ function AddDependentContent(): React.ReactElement {
                     {inst.nombre} ({inst.tipoEscuela})
                   </option>
                 ))}
-            </select>
+            </Select>
           </div>
         )}
       </div>
@@ -473,7 +490,7 @@ function AddDependentContent(): React.ReactElement {
           >
             Tipo de sangre <span aria-hidden="true" className="text-state-bad">*</span>
           </label>
-          <select
+          <Select
             id={addDependentFieldId("tipoSangre")}
             value={formData.tipoSangre}
             onChange={(e) => updateField("tipoSangre", e.target.value as TipoSangre)}
@@ -497,7 +514,7 @@ function AddDependentContent(): React.ReactElement {
                 {bloodType.replace("_", " ")}
               </option>
             ))}
-          </select>
+          </Select>
           {shownError("tipoSangre") && (
             <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-state-bad">
               <AlertTriangle size={ICON.sm} strokeWidth={2} className="shrink-0" aria-hidden="true" />
@@ -641,10 +658,10 @@ function AddDependentContent(): React.ReactElement {
 
         <div className="rounded-ctl border border-line-2 bg-canvas p-4 text-sm text-ink-2">
           <label htmlFor="dependent-pay-choice">¿Cuándo desea pagar?</label>
-          <select id="dependent-pay-choice" className="input-field mt-2" value={payNow ? "now" : "later"} onChange={(e) => setPayNow(e.target.value === "now")}>
+          <Select id="dependent-pay-choice" wrapperClassName="mt-2" value={payNow ? "now" : "later"} onChange={(e) => setPayNow(e.target.value === "now")}>
             <option value="later">Agregar dependiente y pagar más tarde</option>
-            <option value="now">Agregar dependiente y registrar el pago ahora</option>
-          </select>
+            {canPayNow && <option value="now">Agregar dependiente y registrar el pago ahora</option>}
+          </Select>
         </div>
 
         <label className="flex cursor-pointer items-start gap-3 rounded-ctl border border-line-2 bg-canvas p-4 text-sm text-ink-2">
@@ -673,17 +690,17 @@ function AddDependentContent(): React.ReactElement {
       <div className="space-y-section">
         <p className="text-sm text-ink-2">El dependiente ya fue agregado. Seleccione el plan y registre su primer pago. Administración lo validará antes de activar la membresía.</p>
         <label className="block text-sm text-ink-2" htmlFor="dependent-plan">Plan de membresía</label>
-        <select id="dependent-plan" className="input-field" value={planId} onChange={(e) => setPlanId(e.target.value)} disabled={submitting}>
+        <Select id="dependent-plan" className="input-field" value={planId} onChange={(e) => setPlanId(e.target.value)} disabled={submitting}>
           <option value="">Seleccione un plan</option>
           {plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.categoria} — ${plan.precio}</option>)}
-        </select>
+        </Select>
         <label className="block text-sm text-ink-2" htmlFor="dependent-months">Meses a pagar</label>
         <input id="dependent-months" type="number" className="input-field" min={1} max={12} value={months} onChange={(e) => setMonths(Number(e.target.value))} disabled={submitting} />
         <label className="block text-sm text-ink-2" htmlFor="dependent-method">Medio de pago</label>
-        <select id="dependent-method" className="input-field" value={method} onChange={(e) => { setMethod(e.target.value as typeof method); setPendingPaymentId(null); }} disabled={submitting || pendingPaymentId !== null}>
+        <Select id="dependent-method" className="input-field" value={method} onChange={(e) => { setMethod(e.target.value as typeof method); setPendingPaymentId(null); }} disabled={submitting || pendingPaymentId !== null}>
           <option value="TRANSFERENCIA">Transferencia</option>
           <option value="EFECTIVO">Efectivo</option>
-        </select>
+        </Select>
         {method === "TRANSFERENCIA" && <>
           <label className="block text-sm text-ink-2" htmlFor="dependent-voucher">Comprobante de transferencia (JPG, PNG o PDF; máximo 5 MB)</label>
           <input id="dependent-voucher" type="file" accept="image/jpeg,image/png,application/pdf" onChange={(e) => setVoucher(e.target.files?.[0] ?? null)} disabled={submitting} />
@@ -700,6 +717,10 @@ function AddDependentContent(): React.ReactElement {
   }
 
   // ---- Render ----
+
+  // REG-12: nothing here waits for the club to activate the account — only
+  // for the email to be verified, which the backend also enforces on save.
+  if (emailUnverified) return <></>;
 
   return (
     // This wizard is reached from a button on `/student`, so it keeps

@@ -75,6 +75,7 @@ _INVENTARIO_ESPERADO: dict[object, dict[str, str]] = {
         "actualizar_foto_perfil": "10/minute",
         "refrescar": "120/minute",
         "invalidar_sesiones": "5/minute",
+        "cambiar_contrasenia": "10/minute",
         "solicitar_recuperacion": "10/minute",
         "restablecer_contrasenia": "20/minute",
         # Issue #790: mismos tiers que sus gemelos de recuperación, y por el

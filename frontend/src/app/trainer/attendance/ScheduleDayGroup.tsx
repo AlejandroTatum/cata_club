@@ -13,6 +13,8 @@ interface ScheduleDayGroupProps {
   selectedScheduleId: number | null;
   onSelectSchedule: (id: number) => void;
   weekRecordCounts: Map<number, number>;
+  /** Horarios whose list is complete (ENT-03) — the only ones the tile locks. */
+  closedHorarios: Set<number>;
 }
 
 type SessionTiming = "now" | "upcoming" | "done";
@@ -46,6 +48,7 @@ export default function ScheduleDayGroup({
   selectedScheduleId,
   onSelectSchedule,
   weekRecordCounts,
+  closedHorarios,
 }: ScheduleDayGroupProps): React.ReactElement {
   const panelId = `schedule-day-${group.day}`;
   const now = clubTimeHHMM();
@@ -59,7 +62,7 @@ export default function ScheduleDayGroup({
       {group.schedules.map((sched: TrainingSchedule) => {
         const isActive = sched.id === selectedScheduleId;
         const recordedCount = weekRecordCounts.get(sched.id) ?? 0;
-        const takenForThisUser = recordedCount > 0;
+        const takenForThisUser = closedHorarios.has(sched.id);
         const timing = group.day === today ? sessionTiming(sched, now) : null;
         return (
           <button
@@ -97,7 +100,12 @@ export default function ScheduleDayGroup({
               <span className="flex items-center gap-1 text-2xs font-bold text-state-ok">
                 <CheckCircle2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                 <span>
-                  {group.day === today ? "Lista tomada hoy" : "Lista tomada"} · {recordedCount}{" "}
+                  {takenForThisUser
+                    ? group.day === today
+                      ? "Lista tomada hoy"
+                      : "Lista tomada"
+                    : "Lista incompleta"}{" "}
+                  · {recordedCount}{" "}
                   {recordedCount === 1 ? "registro" : "registros"}
                 </span>
               </span>

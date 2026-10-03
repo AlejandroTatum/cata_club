@@ -35,7 +35,7 @@ import pytest
 from app.dominio.excepciones import CredencialesInvalidas
 from app.dominio.modelos import Persona, Sesion, Usuario
 from app.seguridad.gestor_auth import GestorAutenticacion
-from app.servicios_negocio.auth_servicio import AuthServicio
+from app.servicios_negocio.auth_servicio import AuthServicio, CuentaInactiva
 from app.soporte_transversal.dispositivo import describir_dispositivo
 
 
@@ -159,7 +159,8 @@ class TestRegistroEnLogin:
         usuario.activo = False
         db_session.commit()
 
-        with pytest.raises(CredencialesInvalidas):
+        # REG-10: con la contraseña correcta el rechazo nombra el estado.
+        with pytest.raises(CuentaInactiva):
             AuthServicio(db_session).login("ana@cataclub.test", "clave12345", user_agent="curl/8.7.1")
 
         assert _sesiones_de(db_session, usuario.id) == []

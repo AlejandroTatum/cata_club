@@ -3,6 +3,7 @@ from datetime import date
 import pytest
 
 from app.dominio.cedula import cedula_valida
+from tests.nombres_validos import nombre_unico
 from app.dominio.enums import TipoRol
 from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
 from app.dominio.modelos import Persona, Rol, Usuario, FichaMedica
@@ -537,7 +538,7 @@ def _crear_personas_buscables(client, cantidad: int) -> None:
         client.post(
             "/api/v1/personas/",
             json={
-                "nombres": f"Alumno{i}", "apellidos": "Torres",
+                "nombres": nombre_unico(i, "Alumno"), "apellidos": "Torres",
                 "cedula": cedula_valida(522 + i), "fecha_nacimiento": "2010-05-14",
                 "telefono": "0991234567",
             },

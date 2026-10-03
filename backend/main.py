@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse, Response
 from prometheus_client import REGISTRY
 from prometheus_fastapi_instrumentator import Instrumentator, metrics
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.exc import TimeoutError as TimeoutDePool
 from sqlalchemy.pool import NullPool
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -42,7 +42,7 @@ from app.presentacion.routers import (
     actividad_router,
 )
 from app.dominio.excepciones import (
-    EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida,
+    EntidadNoEncontrada, EntidadDuplicada, NombreDuplicado, OperacionInvalida,
     CredencialesInvalidas, PermisosInsuficientes, ServicioNoDisponible,
     ConflictoConcurrencia,
 )
@@ -102,10 +102,15 @@ _instrumentator = (
 # `excepciones.py`). El parámetro por defecto en `False` cubre además a
 # cualquier caller que arme la respuesta sin pasar por una `ErrorDominio`
 # (`HTTPException`, `RequestValidationError`, `IntegrityError` no manejado).
-def _respuesta_error(codigo: int, mensaje: str, *, mensaje_seguro: bool = False) -> JSONResponse:
+def _respuesta_error(
+    codigo: int, mensaje: str, *, mensaje_seguro: bool = False, extra: dict | None = None,
+) -> JSONResponse:
     return JSONResponse(
         status_code=codigo,
-        content={"detail": mensaje, "message": mensaje, "mensaje_seguro": mensaje_seguro},
+        content={
+            "detail": mensaje, "message": mensaje, "mensaje_seguro": mensaje_seguro,
+            **(extra or {}),
+        },
     )
 
 
@@ -169,6 +174,7 @@ _MAPA_EXCEPCIONES = {
     PermisosInsuficientes: status.HTTP_403_FORBIDDEN,
     ServicioNoDisponible: status.HTTP_503_SERVICE_UNAVAILABLE,
     ConflictoConcurrencia: status.HTTP_409_CONFLICT,
+    NombreDuplicado: status.HTTP_409_CONFLICT,
 }
 
 for _excepcion, _codigo in _MAPA_EXCEPCIONES.items():
@@ -190,8 +196,10 @@ for _excepcion, _codigo in _MAPA_EXCEPCIONES.items():
                     getattr(request.state, "request_id", "-"),
                     detalle,
                 )
+            membresia_id = getattr(exc, "membresia_id", None)
             return _respuesta_error(
-                codigo, exc.mensaje, mensaje_seguro=getattr(exc, "seguro_mostrar", False)
+                codigo, exc.mensaje, mensaje_seguro=getattr(exc, "seguro_mostrar", False),
+                extra={"membresia_id": membresia_id} if membresia_id is not None else None,
             )
         return _handler
     app.add_exception_handler(_excepcion, _crear_handler(_codigo))
@@ -224,6 +232,27 @@ async def _integrity_error_handler(request: Request, exc: IntegrityError):
     return _respuesta_error(
         status.HTTP_409_CONFLICT,
         "La operación entra en conflicto con el estado actual de los datos.",
+    )
+
+
+# --- DataError: un valor que la base no puede almacenar es un 422, no un 500 -
+# (API-05, QA3). Un id de ruta por encima de int32 (`/personas/99999999999`) o
+# un texto/número que desborda su columna llega hasta PostgreSQL, que responde
+# `NumericValueOutOfRange`/`StringDataRightTruncation`; sin este manejador
+# salía como 500. El detalle (SQL y parámetros) va solo al log, nunca al
+# cuerpo. No hace falta tocar la sesión: `obtener_sesion` la cierra (y con eso
+# revierte la transacción abortada) al terminar el request.
+@app.exception_handler(DataError)
+async def _data_error_handler(request: Request, exc: DataError):
+    _log.exception(
+        "DataError no manejado en %s %s [request_id=%s]",
+        request.method,
+        request.url.path,
+        getattr(request.state, "request_id", "-"),
+    )
+    return _respuesta_error(
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        "Uno de los valores enviados no es válido. Revise los datos e intente nuevamente.",
     )
 
 

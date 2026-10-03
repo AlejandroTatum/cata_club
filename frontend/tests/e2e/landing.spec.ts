@@ -54,9 +54,9 @@ test.describe("Landing page", () => {
       await page.setViewportSize({ width, height: 900 });
       await page.goto("/");
       // Auto-wait for the ready state before measuring the stacked layout.
-      await expect(page.locator(".landing-schedule-layout")).toBeVisible();
+      await expect(page.locator(".landing-schedule-grid")).toBeVisible();
       const layout = await page.evaluate(() => {
-        const sched = document.querySelector(".landing-schedule-layout");
+        const sched = document.querySelector(".landing-schedule-grid");
         if (!sched) return null;
         const cs = getComputedStyle(sched);
         return {
@@ -79,6 +79,18 @@ test.describe("Landing page", () => {
           { id: 1, nombre: "Municipio", logoUrl: "https://res.cloudinary.com/cata-club/image/upload/v1/logos/a.png" },
           { id: 2, nombre: "Municipio", logoUrl: "https://res.cloudinary.com/cata-club/image/upload/v1/logos/b.png" },
         ]),
+      })
+    );
+    // Sponsors.tsx swaps a failed logo for the sponsor's name, so the fake
+    // Cloudinary URLs must resolve to a real image for the <img> to stay.
+    await page.route("https://res.cloudinary.com/**", (route): Promise<void> =>
+      route.fulfill({
+        status: 200,
+        contentType: "image/png",
+        body: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
+          "base64"
+        ),
       })
     );
     await page.goto("/");
@@ -553,7 +565,7 @@ test.describe("Landing page", () => {
         route.fulfill({ status: 200, contentType: "image/png", body: PHOTO_PNG }));
     };
 
-    test("says the gallery is empty until the club publishes photos", async ({ page }) => {
+    test("hides the gallery section until the club publishes photos", async ({ page }) => {
       // The empty catalog is the production truth for a fresh club, so the
       // payload is answered here: the e2e harness (lane and CI alike) starts
       // no backend and sets no BACKEND_API_URL, and an unanswerable BFF makes
@@ -566,10 +578,8 @@ test.describe("Landing page", () => {
         route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
 
       await page.goto("/");
-      const gallery = page.locator("#galeria");
-      await expect(gallery.getByRole("heading", { name: "Galería" })).toBeVisible();
-      await expect(gallery.getByRole("status")).toHaveText(/Aún no hay fotos en la galería\./);
-      await expect(gallery.locator("img")).toHaveCount(0);
+      // VIS-03: an empty catalog renders no section at all, not an apology.
+      await expect(page.locator("#galeria")).toHaveCount(0);
     });
 
     test("runs the restored loop over a one-photo catalog with silent clones", async ({ page }) => {
@@ -926,34 +936,29 @@ test.describe("Landing page", () => {
       expect(labels).toEqual(["Dirección", "Horario", "WhatsApp", "Redes"]);
     });
 
-    test("keeps the schedule card as tall as its own copy, whatever the rail holds", async ({ page }) => {
+    test("renders one schedule card per category with age headline, time, days and WhatsApp link", async ({ page }) => {
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.route("**/api/schedules", (route) => route.fulfill({
         json: [
           { category: "Formativo", ages: "5 a 10 años", blocks: [{ days: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"], startTime: "15:00", endTime: "16:00" }] },
           { category: "Infantil", ages: "8 a 12 años", blocks: [{ days: ["LUNES", "MIERCOLES", "VIERNES"], startTime: "16:00", endTime: "17:00" }] },
-          { category: "Juvenil", ages: "Mayores de 12 años", blocks: [{ days: ["LUNES", "MARTES"], startTime: "17:00", endTime: "18:00" }] },
-          { category: "Adultos", ages: "Mayores de 18 años", blocks: [{ days: ["LUNES", "JUEVES"], startTime: "08:00", endTime: "09:15" }] },
           { category: "Competitivo", ages: "Selección", blocks: [{ days: ["SABADO"], startTime: "18:00", endTime: "20:00" }] },
         ],
       }));
       await page.goto("/");
 
-      const card = page.locator(".landing-schedule-card");
-      await expect(card).toBeVisible();
-      const heights = await page.evaluate(() => {
-        const cardEl = document.querySelector(".landing-schedule-card")!;
-        const style = getComputedStyle(cardEl);
-        return {
-          card: cardEl.getBoundingClientRect().height,
-          copy: document.querySelector(".landing-schedule-copy")!.getBoundingClientRect().height,
-          frame: parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth),
-        };
-      });
-      // The card is its copy alone (no photo) plus its own padding and border,
-      // and the rail no longer stretches the row: it is never taller than that.
-      expect(heights.card).toBeLessThanOrEqual(heights.copy + heights.frame + 2);
-      await expect(card.locator("img, figure")).toHaveCount(0);
+      const layout = page.locator(".landing-schedule-layout");
+      await expect(layout).toBeVisible();
+      const cards = layout.locator(".landing-schedule-tile:not(.landing-schedule-help)");
+      await expect(cards).toHaveCount(3);
+      for (const category of ["Formativo", "Infantil", "Competitivo"]) {
+        const card = cards.filter({ has: page.getByRole("heading", { level: 3, name: category }) });
+        await expect(card.locator(".landing-schedule-ages")).not.toBeEmpty();
+        await expect(card.locator(".landing-schedule-time")).toContainText(":");
+        await expect(card.locator(".landing-schedule-days")).not.toBeEmpty();
+        await expect(card.getByRole("link", { name: `Consultar cupo en ${category} por WhatsApp` })).toHaveAttribute("href", /wa\.me|whatsapp/i);
+      }
+      await expect(layout.locator(".landing-schedule-help").getByRole("link", { name: /abrir whatsapp/i })).toBeVisible();
     });
   });
 });

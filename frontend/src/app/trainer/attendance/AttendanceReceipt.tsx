@@ -5,7 +5,7 @@ import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
 import { formatDateTime } from "@/lib/format-utils";
 import type { RegisterAttendanceResult } from "@/services/api";
 import type { EstadoAsistencia } from "@/types/domain";
-import type { SessionStudent } from "./attendance-utils";
+import { formatSessionDateLabel, type SessionStudent } from "./attendance-utils";
 import SessionDonut from "./SessionDonut";
 import FailedRecordsNotice from "./FailedRecordsNotice";
 import SessionReceiptBreakdown from "./SessionReceiptBreakdown";
@@ -15,6 +15,8 @@ interface AttendanceReceiptProps {
   confirmationHeadingRef: React.RefObject<HTMLHeadingElement>;
   result: RegisterAttendanceResult | null;
   confirmedAt: Date | null;
+  /** The session's day ("YYYY-MM-DD") — the list is filed FOR this date, not for when it was saved. */
+  sessionDate: string | null;
   students: SessionStudent[];
   receiptCounts: Record<EstadoAsistencia, number>;
   receiptTotal: number;
@@ -37,6 +39,7 @@ export default function AttendanceReceipt({
   confirmationHeadingRef,
   result,
   confirmedAt,
+  sessionDate,
   students,
   receiptCounts,
   receiptTotal,
@@ -74,6 +77,9 @@ export default function AttendanceReceipt({
               ? `${formatDay(selectedSchedule.diaSemana)} ${selectedSchedule.horaInicio} — ${selectedSchedule.horaFin}`
               : "Horario seleccionado"}
           </h2>
+          {sessionDate && (
+            <p className="mt-0.5 text-sm font-semibold text-ink-2">{formatSessionDateLabel(sessionDate)}</p>
+          )}
         </div>
 
         {/* The identity band: what quedó archivado, sobre cuántos, cuándo y quién. */}

@@ -361,6 +361,9 @@ export const MAX_VOUCHER_BYTES = 5 * 1024 * 1024;
  * caught before the payment ever exists.
  */
 export function voucherFileSizeError(file: File): string | null {
+  // FAM-09: the backend rejects an empty upload too, but only after the
+  // payment exists.
+  if (file.size === 0) return "El comprobante está vacío.";
   if (file.size <= MAX_VOUCHER_BYTES) return null;
   const mb = new Intl.NumberFormat("es-EC", {
     minimumFractionDigits: 1,

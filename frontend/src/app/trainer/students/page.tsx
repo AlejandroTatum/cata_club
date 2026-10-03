@@ -200,7 +200,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
   const [fallo, setFallo] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const [pagina, setPagina] = useState(1);
-  /** The group filter: a start time from the roster, or `null` for everyone. */
+  /** The group filter: a categoría código from the roster, or `null` for everyone. */
   const [grupo, setGrupo] = useState<string | null>(null);
   const esEscritorio = useIsDesktop();
   /** The student shown in the side panel (desktop). */
@@ -234,9 +234,15 @@ export default function TrainerStudentsPage(): React.ReactElement {
 
   const nomina = useMemo(() => agruparAlumnosDelPadron(padron), [padron]);
   const grupos = useMemo(() => {
-    const cuentas = new Map<string, number>();
-    for (const a of nomina) if (a.grupo) cuentas.set(a.grupo, (cuentas.get(a.grupo) ?? 0) + 1);
-    return [...cuentas.entries()].sort(([a], [b]) => a.localeCompare(b));
+    const cuentas = new Map<string, { etiqueta: string; cuenta: number }>();
+    for (const a of nomina) {
+      if (!a.grupo) continue;
+      const previa = cuentas.get(a.grupo);
+      cuentas.set(a.grupo, { etiqueta: a.grupoEtiqueta ?? a.grupo, cuenta: (previa?.cuenta ?? 0) + 1 });
+    }
+    return [...cuentas.entries()]
+      .map(([valor, { etiqueta, cuenta }]) => ({ valor, etiqueta, cuenta }))
+      .sort((a, b) => a.etiqueta.localeCompare(b.etiqueta, "es"));
   }, [nomina]);
   const encontrados = useMemo(
     () => filtrarPorNombre(nomina, busqueda).filter((a) => grupo === null || a.grupo === grupo),
@@ -320,16 +326,16 @@ export default function TrainerStudentsPage(): React.ReactElement {
           }
           chips={
             grupos.length > 1 ? (
-              <div role="group" aria-label="Grupo" className="flex flex-wrap gap-1.5">
+              <div role="group" aria-label="Categoría" className="flex flex-wrap gap-1.5">
                 {[
                   { valor: null, etiqueta: "Todos", cuenta: nomina.length },
-                  ...grupos.map(([v, c]) => ({ valor: v, etiqueta: v, cuenta: c })),
+                  ...grupos,
                 ].map(({ valor, etiqueta, cuenta }) => (
                   <button
                     key={etiqueta}
                     type="button"
                     aria-pressed={grupo === valor}
-                    aria-label={valor ? `Grupo de las ${valor}, ${cuenta}` : `Todos, ${cuenta}`}
+                    aria-label={valor ? `Categoría ${etiqueta}, ${cuenta}` : `Todos, ${cuenta}`}
                     onClick={() => elegirGrupo(valor)}
                     className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold transition-colors ${
                       grupo === valor
@@ -409,7 +415,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
                               de pantalla anuncia en blanco; un encabezado
                               visible "Acciones" no le dice nada a un lector
                               vidente que los botones de abajo no digan ya. */}
-                        <TableHeaderCell>Grupo y horario</TableHeaderCell>
+                        <TableHeaderCell>Categoría y horario</TableHeaderCell>
                         <TableHeaderCell type="action">
                           <span className="sr-only">Acciones</span>
                         </TableHeaderCell>
@@ -470,7 +476,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
                          */}
                         <TableCell>
                           <div className="flex flex-wrap items-center gap-1.5">
-                            {alumno.grupo && <Badge tone="ok">Grupo {alumno.grupo}</Badge>}
+                            {alumno.grupoEtiqueta && <Badge tone="ok">Categoría {alumno.grupoEtiqueta}</Badge>}
                             <Badge>{alumno.horariosCompactos ?? "Sin horario"}</Badge>
                           </div>
                         </TableCell>
@@ -515,19 +521,19 @@ export default function TrainerStudentsPage(): React.ReactElement {
               )}
             </div>
             {esEscritorio && !estadoVacio && grupos.length > 0 && (
-              <section aria-label="Alumnos por grupo" data-testid="students-by-group" className="card flex flex-col gap-2 p-[18px]">
-                <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Alumnos por grupo</h2>
+              <section aria-label="Alumnos por categoría" data-testid="students-by-group" className="card flex flex-col gap-2 p-[18px]">
+                <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Alumnos por categoría</h2>
                 <ul className="m-0 flex list-none flex-col p-0">
-                  {grupos.map(([hora, cuenta]) => (
-                    <li key={hora} className="border-b border-line last:border-b-0">
+                  {grupos.map(({ valor: codigo, etiqueta, cuenta }) => (
+                    <li key={codigo} className="border-b border-line last:border-b-0">
                       <button
                         type="button"
-                        onClick={() => elegirGrupo(hora)}
-                        aria-pressed={grupo === hora}
-                        aria-label={`Filtrar el grupo de las ${hora}, ${cuenta}`}
+                        onClick={() => elegirGrupo(codigo)}
+                        aria-pressed={grupo === codigo}
+                        aria-label={`Filtrar la categoría ${etiqueta}, ${cuenta}`}
                         className="flex min-h-drow w-full items-center justify-between gap-3 text-left text-sm hover:bg-ink/5"
                       >
-                        <span className="font-semibold text-ink">Grupo de las {hora}</span>
+                        <span className="font-semibold text-ink">Categoría {etiqueta}</span>
                         <span className="text-ink-2">
                           <b className="font-bold tabular-nums text-ink">{cuenta}</b> {cuenta === 1 ? "alumno" : "alumnos"}
                         </span>
@@ -542,7 +548,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
               <div className="flex min-w-0 flex-col gap-page">
                 <StudentFichaPanel student={seleccionado} />
                 <InfoPanel title="Cómo usar la nómina">
-                  <p>Busque por nombre o filtre por grupo; un alumno en varios horarios aparece una sola vez.</p>
+                  <p>Busque por nombre o filtre por categoría; un alumno en varios horarios aparece una sola vez.</p>
                   <p>Toque el botón «Ficha médica» de un renglón para ver sus datos médicos y a quién llamar en una emergencia.</p>
                   <p>«Horario» muestra los días y horas en que entrena cada alumno.</p>
                 </InfoPanel>

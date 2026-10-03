@@ -44,6 +44,23 @@ describe("SessionHistoryList", () => {
     expect(screen.queryByRole("columnheader", { name: "Acciones" })).not.toBeInTheDocument();
   });
 
+  // ENT-07: a session holding records flagged for review says so in the list, so
+  // the admin does not have to open every session to find them.
+  it("flags the sessions that hold records to review, and only those", async () => {
+    render(
+      <SessionHistoryList
+        pageSize={10}
+        sessions={[session(2, { reviewCount: 2 }), session(1, { reviewCount: 0 })]}
+        rangeInvalid={false}
+        emptyAction={EMPTY_ACTION}
+      />,
+    );
+
+    const rows = (await screen.findAllByRole("row")).slice(1);
+    expect(rows[0]).toHaveTextContent("2 por revisar");
+    expect(rows[1]).not.toHaveTextContent("por revisar");
+  });
+
   it("says why the list is empty, differently for an unusable range", () => {
     const { rerender } = render(
       <SessionHistoryList pageSize={10} sessions={[]} rangeInvalid={false} emptyAction={EMPTY_ACTION} />,

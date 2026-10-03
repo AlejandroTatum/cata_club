@@ -235,6 +235,16 @@ describe("Header", (): void => {
     expect(classes).not.toContain("text-cata-red");
   });
 
+  // VIS-06: below `sm` the generic bar kept the logo and dropped the club's
+  // name, so a visitor on a phone (on the 404, say) saw an anonymous mark.
+  it("keeps the club name visible on a phone, not only from sm up", (): void => {
+    mockPathname.mockReturnValue("/no-existe");
+    render(<Header />);
+
+    const name = screen.getByText("Cata Club");
+    expect(name.className.split(/\s+/)).not.toContain("hidden");
+  });
+
   it("shows institutional mobile menu on landing", () => {
     mockPathname.mockReturnValue("/");
     render(<Header />);
@@ -279,6 +289,39 @@ describe("Header", (): void => {
     expect(screen.queryByRole("link", { name: /Iniciar sesión/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Menú de cuenta/i })).toBeInTheDocument();
     expect(screen.getByText("Admin Cata Club")).toBeInTheDocument();
+  });
+
+  // VIS-05: `/ayuda` is an app-shell route only for someone with a session. A
+  // visitor without one gets the public bar, like the legal pages beside it.
+  it("draws the public bar on /ayuda for an anonymous visitor", (): void => {
+    mockPathname.mockReturnValue("/ayuda");
+
+    render(<Header />);
+
+    expect(screen.getByRole("link", { name: /Iniciar sesión/i })).toHaveAttribute("href", "/login");
+  });
+
+  // VIS-03: with no gallery photos «Galería» must not be offered. The public bar
+  // on /ayuda is the minimal one, so it carries no section link at all — pinned
+  // here so a future link list cannot bring `/#galeria` back unconditionally.
+  it("draws no landing section link, «Galería» included, on the /ayuda public bar", (): void => {
+    mockPathname.mockReturnValue("/ayuda");
+
+    render(<Header />);
+
+    for (const label of ["Inicio", "Horarios", "Valores", "Galería", "Contacto"]) {
+      expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
+    }
+    expect(document.querySelector('a[href="/#galeria"]')).toBeNull();
+  });
+
+  it("draws nothing on /ayuda once there is a session, because the app shell owns the chrome", (): void => {
+    mockPathname.mockReturnValue("/ayuda");
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
+
+    const { container } = render(<Header />);
+
+    expect(container).toBeEmptyDOMElement();
   });
 
   // Client QA: the legal bar is the logo and the session slot, nothing else.

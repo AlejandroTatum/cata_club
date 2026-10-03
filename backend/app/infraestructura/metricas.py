@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from prometheus_client import Counter
 from prometheus_client.core import GaugeMetricFamily
 from prometheus_client.registry import Collector
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import (
@@ -25,6 +25,7 @@ from app.dominio.modelos import (
     VerificacionCorreoOutbox,
 )
 from app.infraestructura.db import SessionLocal
+from app.infraestructura.repositorios.outbox_cupo import MARCA_CUPO_AGOTADO
 
 _log = logging.getLogger("cataclub.infraestructura.metricas")
 
@@ -94,7 +95,15 @@ def calcular_pendientes_por_tabla(db: Session) -> dict[str, tuple[int, float]]:
     for nombre_tabla, modelo in _TABLAS_OUTBOX:
         cantidad, mas_antigua = db.execute(
             select(func.count(modelo.id), func.min(modelo.created_at))
-            .where(modelo.status == ESTADO_PENDIENTE)
+            .where(
+                modelo.status == ESTADO_PENDIENTE,
+                # Diferida por el tope diario (MAIL-CAP): ya se informa como
+                # "en espera por cupo" y no es una cola atascada.
+                or_(
+                    modelo.last_error_redacted.is_(None),
+                    modelo.last_error_redacted.not_like(f"{MARCA_CUPO_AGOTADO}%"),
+                ),
+            )
         ).one()
         if mas_antigua is None:
             edad_segundos = 0.0

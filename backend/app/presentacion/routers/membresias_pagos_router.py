@@ -9,13 +9,15 @@ from datetime import date
 from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.tiempo import hoy_club
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
-from app.dominio.enums import EstadoPago
+from app.dominio.enums import EstadoMembresia, EstadoPago
+from app.infraestructura.repositorios.membresia_repositorio import HistorialEstadoMembresiaRepositorio
 from app.servicios_negocio.dtos.membresia_pago_schemas import (
     MembresiaCreateDTO, MembresiaEstadisticasResponseDTO, MembresiaPropiaCreateDTO, MembresiaResponseDTO,
     PagoCreateDTO, PagoResponseDTO, PagoValidarDTO, PagoListItemDTO,
     ComprobantePagoCreateDTO, ComprobantePagoResponseDTO,
     TipoMembresiaCreateDTO, TipoMembresiaUpdateDTO, TipoMembresiaResponseDTO, TarifaPublicaDTO,
-    DeudaMembresiaResponseDTO, DeudaMembresiaBulkItemDTO, RegularizacionDeudaDTO, SuspensionReactivacionDTO,
+    DeudaMembresiaResponseDTO, DeudaMembresiaBulkItemDTO, RegularizacionDeudaDTO,
+    CotizacionRegularizacionResponseDTO, SuspensionReactivacionDTO,
     CorreccionPagoDTO, CorreccionPagoResponseDTO, CorreccionPagoResultadoDTO,
     CambioPlanMembresiaDTO, InscripcionRepresentadoPagoDTO,
 )
@@ -208,9 +210,14 @@ def _con_cubierto_hasta(db: Session, membresias: list) -> List[MembresiaResponse
     cobertura_por_id = PagoServicio(db).fecha_fin_maxima_combinada_bulk(
         [membresia.id for membresia in membresias]
     )
+    suspendidas = [m.id for m in membresias if m.estado == EstadoMembresia.SUSPENDIDA]
+    motivo_por_id = HistorialEstadoMembresiaRepositorio(db).motivo_ultima_suspension_bulk(suspendidas)
     return [
         MembresiaResponseDTO.model_validate(membresia).model_copy(
-            update={"cubierto_hasta": cobertura_por_id.get(membresia.id)}
+            update={
+                "cubierto_hasta": cobertura_por_id.get(membresia.id),
+                "motivo_suspension": motivo_por_id.get(membresia.id),
+            }
         )
         for membresia in membresias
     ]
@@ -451,6 +458,26 @@ def obtener_deuda_membresias_bulk(
 )
 def obtener_deuda_membresia(membresia_id: int, db: Session = Depends(obtener_sesion)):
     return PagoServicio(db).obtener_deuda(membresia_id)
+
+
+@router.get(
+    "/{membresia_id}/regularizar-deuda/cotizacion",
+    response_model=CotizacionRegularizacionResponseDTO,
+    dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
+)
+def cotizar_regularizacion_membresia(
+    membresia_id: int,
+    fecha_inicio: date,
+    fecha_fin: date,
+    db: Session = Depends(obtener_sesion),
+):
+    cotizacion = PagoServicio(db).cotizar_regularizacion(membresia_id, fecha_inicio, fecha_fin)
+    return {
+        "meses": cotizacion.meses,
+        "monto_base": cotizacion.monto_base,
+        "descuento_aplicado": cotizacion.descuento_aplicado,
+        "monto_esperado": cotizacion.monto_esperado,
+    }
 
 
 @router.post(

@@ -65,7 +65,14 @@ describe("POST /api/membresias/[id]/regularizar-deuda", () => {
     const [url, init] = fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit];
     expect(String(url)).toBe("http://localhost:8000/api/v1/membresias/3/regularizar-deuda");
     expect(init.method).toBe("POST");
-    expect(JSON.parse(String(init.body))).toEqual(payload);
+    // The backend DTO (`RegularizacionDeudaDTO`) only accepts snake_case dates;
+    // camelCase made every submit fail with 422 "Field required" (QA3 ADM-02).
+    expect(JSON.parse(String(init.body))).toEqual({
+      monto: 120,
+      fecha_inicio: "2026-04-01",
+      fecha_fin: "2026-07-31",
+      motivo: "Demora del club",
+    });
   });
 
   it("rejects a non-numeric id with 400 without calling the backend", async () => {

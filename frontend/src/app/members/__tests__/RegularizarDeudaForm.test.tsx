@@ -1,13 +1,7 @@
 /**
- * Issue #666: `RegularizarDeudaForm`'s "Monto" field is the second unbounded
- * free-amount `<input type="number">` the issue names — an admin regularizing
- * debt could type 50,000,000 with no upper bound at all (the backend's
- * `RegularizacionDeudaDTO.monto` only checks `gt=0` and that it is a multiple
- * of the plan's monthly price; nothing caps how many months' worth it is).
- * This form does not compute a date from `monto` (fechaInicio/fechaFin are
- * typed independently), so there is no absurd preview date bug here — but the
- * amount itself must still respect the real, owner-confirmed 12-month cap
- * (`MAX_MESES_COBERTURA`), the same one `RegisterPaymentForm` enforces.
+ * QA3 ADM-09: the regularization amount is no longer typed. The form asks the
+ * backend for a quote (monthly price x months of the period, minus the active
+ * discount), shows it, and submits exactly that amount.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -16,10 +10,13 @@ import RegularizarDeudaForm from "../RegularizarDeudaForm";
 
 const mockFetchMembresiaDeuda = vi.fn();
 const mockRegularizarDeuda = vi.fn();
+const mockFetchCotizacion = vi.fn();
 
 vi.mock("@/services/api", () => ({
   fetchMembresiaDeuda: (membresiaId: number) => mockFetchMembresiaDeuda(membresiaId),
   regularizarDeuda: (membresiaId: number, data: unknown) => mockRegularizarDeuda(membresiaId, data),
+  fetchCotizacionRegularizacion: (id: number, inicio: string, fin: string) =>
+    mockFetchCotizacion(id, inicio, fin),
 }));
 
 vi.mock("@/contexts/ToastContext", () => ({
@@ -62,9 +59,15 @@ beforeEach(() => {
     ultimaCoberturaFin: "2025-12-31",
     montoMensual: 25,
   });
+  mockFetchCotizacion.mockResolvedValue({
+    meses: 1,
+    montoBase: "25.00",
+    descuentoAplicado: "0.00",
+    montoEsperado: "25.00",
+  });
 });
 
-describe("RegularizarDeudaForm — el monto no puede comprar más de 12 meses (#666)", () => {
+describe("RegularizarDeudaForm — monto cotizado por el backend (ADM-09)", () => {
   it("collapses the form with a Cancelar button without submitting", async () => {
     await open();
     expect(screen.getByRole("form", { name: "Regularizar deuda" })).toBeInTheDocument();
@@ -75,19 +78,89 @@ describe("RegularizarDeudaForm — el monto no puede comprar más de 12 meses (#
     expect(mockRegularizarDeuda).not.toHaveBeenCalled();
   });
 
-  it("caps the monto input's max at 12 months of the known monthly price", async () => {
+  it("has no free-typed monto field", async () => {
     await open();
-    // 25 * 12 = 300.
-    expect(screen.getByRole("spinbutton", { name: /^Monto/ })).toHaveAttribute("max", "300");
+    expect(screen.queryByRole("spinbutton", { name: /^Monto/ })).not.toBeInTheDocument();
   });
 
-  it("rejects an amount past the 12-month cap and does not submit it", async () => {
+  it("quotes the period and shows the discounted amount", async () => {
+    mockFetchCotizacion.mockResolvedValue({
+      meses: 2,
+      montoBase: "50.00",
+      descuentoAplicado: "25.00",
+      montoEsperado: "25.00",
+    });
     await open();
     fillRequiredFields();
-    // 25 * 13 = 325.
-    fireEvent.change(screen.getByRole("spinbutton", { name: /^Monto/ }), {
-      target: { value: "325" },
+
+    await waitFor(() => expect(mockFetchCotizacion).toHaveBeenCalledWith(42, "2026-01-01", "2026-01-31"));
+    expect(await screen.findByText("$25,00")).toBeInTheDocument();
+    expect(screen.getByText(/2 meses/)).toBeInTheDocument();
+    expect(screen.getByText(/beneficio de \$25,00/)).toBeInTheDocument();
+  });
+
+  it("submits exactly the quoted amount", async () => {
+    mockRegularizarDeuda.mockResolvedValue({ id: 99 });
+    await open();
+    fillRequiredFields();
+    await screen.findByText("$25,00");
+
+    fireEvent.click(screen.getByRole("button", { name: /^Regularizar$/ }));
+
+    await waitFor(() => {
+      expect(mockRegularizarDeuda).toHaveBeenCalledWith(42, {
+        monto: 25,
+        fechaInicio: "2026-01-01",
+        fechaFin: "2026-01-31",
+        motivo: "Demora del club",
+      });
     });
+  });
+
+  it("shows $0 and submits it when a 100% discount covers the whole period", async () => {
+    mockFetchCotizacion.mockResolvedValue({
+      meses: 1,
+      montoBase: "25.00",
+      descuentoAplicado: "25.00",
+      montoEsperado: "0.00",
+    });
+    mockRegularizarDeuda.mockResolvedValue({ id: 99 });
+    await open();
+    fillRequiredFields();
+    await screen.findByText("$0,00");
+
+    fireEvent.click(screen.getByRole("button", { name: /^Regularizar$/ }));
+
+    await waitFor(() => {
+      expect(mockRegularizarDeuda).toHaveBeenCalledWith(42, {
+        monto: 0,
+        fechaInicio: "2026-01-01",
+        fechaFin: "2026-01-31",
+        motivo: "Demora del club",
+      });
+    });
+  });
+
+  it("does not submit while there is no quote", async () => {
+    await open();
+    fireEvent.change(screen.getByLabelText(/^Motivo/), { target: { value: "Demora del club" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Regularizar$/ }));
+
+    expect(await screen.findByText("Las fechas son obligatorias.")).toBeInTheDocument();
+    expect(mockRegularizarDeuda).not.toHaveBeenCalled();
+  });
+
+  it("rejects a period past the 12-month cap", async () => {
+    mockFetchCotizacion.mockResolvedValue({
+      meses: 13,
+      montoBase: "325.00",
+      descuentoAplicado: "0.00",
+      montoEsperado: "325.00",
+    });
+    await open();
+    fillRequiredFields();
+    await screen.findByText("$325,00");
+
     fireEvent.click(screen.getByRole("button", { name: /^Regularizar$/ }));
 
     expect(
@@ -96,36 +169,14 @@ describe("RegularizarDeudaForm — el monto no puede comprar más de 12 meses (#
     expect(mockRegularizarDeuda).not.toHaveBeenCalled();
   });
 
-  it("accepts exactly the 12-month boundary", async () => {
-    mockRegularizarDeuda.mockResolvedValue({ id: 99 });
+  it("shows the backend's message when the quote fails", async () => {
+    mockFetchCotizacion.mockRejectedValue(new Error("La fecha de inicio debe ser anterior a la de fin."));
     await open();
     fillRequiredFields();
-    // 25 * 12 = 300.
-    fireEvent.change(screen.getByRole("spinbutton", { name: /^Monto/ }), {
-      target: { value: "300" },
-    });
+
+    await waitFor(() => expect(mockFetchCotizacion).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: /^Regularizar$/ }));
-
-    await waitFor(() => {
-      expect(mockRegularizarDeuda).toHaveBeenCalledWith(
-        42,
-        expect.objectContaining({ monto: 300 }),
-      );
-    });
-  });
-
-  it("derives the same 12-month cap from the fetched debt price when the prop's price is not yet known", async () => {
-    mockFetchMembresiaDeuda.mockResolvedValue({
-      mesesAdeudados: 1,
-      ultimaCoberturaFin: "2025-12-31",
-      montoMensual: 40,
-    });
-    await open({ montoMensual: 0 });
-
-    await waitFor(() => {
-      // 40 * 12 = 480.
-      expect(screen.getByRole("spinbutton", { name: /^Monto/ })).toHaveAttribute("max", "480");
-    });
+    expect(mockRegularizarDeuda).not.toHaveBeenCalled();
   });
 });
 

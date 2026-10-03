@@ -110,6 +110,44 @@ def test_clave_reutilizada_con_otro_payload_es_conflicto_409_de_servicio(db_sess
     assert db_session.query(Persona).filter_by(cedula=cedula_valida(303)).count() == 0
 
 
+def test_misma_clave_y_cedula_con_otro_correo_o_contrasena_es_conflicto(db_session):
+    """REG-06: la huella cubre TODO el payload, no solo la cédula -- un replay
+    con la misma clave y la misma cédula pero otras credenciales no puede
+    devolver los tokens de la cuenta original."""
+    servicio = EnrollmentServicio(db_session)
+    cedula = cedula_valida(310)
+    original = servicio.enroll(_payload(cedula, "original@example.com"), idempotency_key="clave-huella")
+
+    otro_correo = _cuerpo(cedula, "atacante@example.com")
+    otra_contrasena = _cuerpo(cedula, "original@example.com")
+    otra_contrasena["credenciales_alumno"]["contrasenia"] = "OtraClave-99x"
+
+    for cuerpo in (otro_correo, otra_contrasena):
+        with pytest.raises(ConflictoIdempotencia, match=MENSAJE_IDEMPOTENCIA_REUTILIZADA) as error:
+            servicio.enroll(EnrollmentCreateDTO(**cuerpo), idempotency_key="clave-huella")
+        assert error.value.retry_after is None
+
+    # Y el replay con el MISMO payload sigue devolviendo el resultado original.
+    replay = servicio.enroll(_payload(cedula, "original@example.com"), idempotency_key="clave-huella")
+    assert replay["persona_id"] == original["persona_id"]
+
+
+def test_api_misma_clave_y_cedula_con_otro_cuerpo_responde_409(client, db_session):
+    cedula = cedula_valida(311)
+    primera = client.post(
+        "/api/v1/enrollment/", json=_cuerpo(cedula, "uno-api@example.com"),
+        headers={"Idempotency-Key": "clave-api-huella"},
+    )
+    atacante = client.post(
+        "/api/v1/enrollment/", json=_cuerpo(cedula, "atacante-api@example.com"),
+        headers={"Idempotency-Key": "clave-api-huella"},
+    )
+
+    assert primera.status_code == 201
+    assert atacante.status_code == 409
+    assert "access_token" not in atacante.text
+
+
 def test_clave_pendiente_es_conflicto_en_vuelo_con_retry_after(db_session):
     InscripcionIdempotenciaRepositorio(db_session).crear_pendiente(
         "clave-pendiente", "otra-huella", vence_en=_ahora_utc() + timedelta(hours=24)

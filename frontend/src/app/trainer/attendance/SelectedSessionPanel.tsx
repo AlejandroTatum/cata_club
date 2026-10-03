@@ -11,6 +11,8 @@ interface SelectedSessionPanelProps {
   schedule: TrainingSchedule | null;
   today: DiaSemana;
   recordedCount: number;
+  /** Every roster student has a record (ENT-03); otherwise a partial list reads as incomplete. */
+  listClosed: boolean;
   preview: SchedulePreview;
   /** The stacked commit bar ("Continuar"), hosted under the details. */
   commitBar: React.ReactNode;
@@ -25,6 +27,7 @@ export default function SelectedSessionPanel({
   schedule,
   today,
   recordedCount,
+  listClosed,
   preview,
   commitBar,
 }: SelectedSessionPanelProps): React.ReactElement {
@@ -45,7 +48,7 @@ export default function SelectedSessionPanel({
               {schedule.categoriaLabel && <p className="text-sm text-ink-2">{schedule.categoriaLabel}</p>}
               <p className="text-xs text-ink-3">
                 {recordedCount > 0
-                  ? `Lista tomada${schedule.diaSemana === today ? " hoy" : ""} · ${recordedCount} ${recordedCount === 1 ? "registro" : "registros"}`
+                  ? `${listClosed ? `Lista tomada${schedule.diaSemana === today ? " hoy" : ""}` : "Lista incompleta"} · ${recordedCount} ${recordedCount === 1 ? "registro" : "registros"}`
                   : schedule.diaSemana === today
                     ? "Sin lista tomada hoy"
                     : "Sin lista tomada esta semana"}

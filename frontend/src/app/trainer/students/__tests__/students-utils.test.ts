@@ -41,6 +41,8 @@ function fila(
     horarioHoraInicio: horaInicio,
     horarioHoraFin: horaFin,
     fechaAsignacion: "2026-01-15T00:00:00",
+    horarioCategoria: "JUVENIL",
+    horarioCategoriaLabel: "Juvenil",
   };
 }
 
@@ -59,7 +61,8 @@ describe("agruparAlumnosDelPadron", () => {
       edad: 12,
       horarios: "Lun 18:00 · Mié 18:00 · Vie 18:00",
       horariosCompactos: "Lun, Mié, Vie 18:00",
-      grupo: "18:00",
+      grupo: "JUVENIL",
+      grupoEtiqueta: "Juvenil",
     });
   });
 
@@ -70,7 +73,7 @@ describe("agruparAlumnosDelPadron", () => {
       ),
     );
     expect(corrido[0].horariosCompactos).toBe("Lun–Vie 15:00");
-    expect(corrido[0].grupo).toBe("15:00");
+    expect(corrido[0].grupo).toBe("JUVENIL");
   });
 
   it("ordena los horarios por día de la semana, no por el orden en que llegaron", () => {

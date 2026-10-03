@@ -24,7 +24,7 @@ import pytest
 
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import Categoria, DiaSemana, EstadoAsistencia, EstadoMembresia, EstadoPago, TipoPago
-from app.dominio.excepciones import OperacionInvalida
+from app.dominio.excepciones import ConflictoConcurrencia
 from app.dominio.modelos import AlumnoHorario, Asistencia, HorarioEntrenamiento, Pago, Persona
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
 from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
@@ -63,7 +63,7 @@ def test_eliminar_horario_con_historial_no_deja_al_alumno_desasignado(db_session
     Todo o nada: el alumno debe seguir asignado."""
     horario, alumno = _crear_horario_con_historial(db_session)
 
-    with pytest.raises(OperacionInvalida):
+    with pytest.raises(ConflictoConcurrencia):
         AsistenciaServicio(db_session).eliminar_horario(horario.id)
 
     asignaciones = (

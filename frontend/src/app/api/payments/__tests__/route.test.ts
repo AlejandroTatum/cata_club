@@ -248,7 +248,7 @@ describe("GET /api/payments", () => {
 
     expect(response.status).toBe(200);
     expect(body.items[0].currentMembershipStatus).toBe("vencida");
-    expect(body.items[0].membershipType).toBe("Sin tipo");
+    expect(body.items[0].membershipType).toBe("Plan sin asignar");
   });
 
   it("falls back to an inactive/untyped membership when the bulk membresia lookup returns empty", async () => {
@@ -264,7 +264,7 @@ describe("GET /api/payments", () => {
 
     expect(response.status).toBe(200);
     expect(body.items[0].currentMembershipStatus).toBe("vencida");
-    expect(body.items[0].membershipType).toBe("Sin tipo");
+    expect(body.items[0].membershipType).toBe("Plan sin asignar");
   });
 
   it("propagates the backend's status and message when /membresias/pagos fails", async () => {

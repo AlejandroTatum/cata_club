@@ -71,7 +71,7 @@ import { getUserInitials } from "@/lib/auth-utils";
 import MemberDialogHeader from "./MemberDialogHeader";
 import {
   buildMemberStats,
-  formatMembershipPeriod,
+  formatMembershipCoverage,
   filterAccounts,
   accountMatchesFlag,
   countAccountsMatchingFlag,
@@ -82,7 +82,6 @@ import {
   paginateAccounts,
   getTotalPages,
   MEMBERS_PAGE_SIZE,
-  MEMBERS_AGGREGATE_LIMIT,
   PAYMENT_STATUS_LABELS,
   PAYMENT_STATUS_TONE,
   getPayerTypeLabel,
@@ -283,7 +282,7 @@ function StudentEditPanel({ student }: StudentRowProps): React.ReactElement {
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <LabeledDataBox label="Plan">{student.membresia.tipo}</LabeledDataBox>
           <LabeledDataBox label="Vigencia">
-            {formatMembershipPeriod(student.membresia.fechaInicio, student.membresia.fechaFin)}
+            {formatMembershipCoverage(student.membresia.cubiertoHasta)}
           </LabeledDataBox>
           <LabeledDataBox label="Precio del plan">
             {formatCurrency(student.membresia.monto)}
@@ -1043,7 +1042,6 @@ export default function MembersPage(): React.ReactElement {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeFlag, setActiveFlag] = useState<MemberFilterFlag>("all");
   const [accounts, setAccounts] = useState<MemberAccount[]>([]);
-  const [personasCapped, setPersonasCapped] = useState(false);
   /** At least one membership could not be read upstream — see `MembersResponse`. */
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1073,14 +1071,9 @@ export default function MembersPage(): React.ReactElement {
   const loadMembers = useCallback(async ({ silent = false } = {}): Promise<void> => {
     if (!silent) setLoading(true);
     setError(null);
-    setPersonasCapped(false);
     try {
-      const {
-        accounts: membersData,
-        personasCapped: upstreamPersonasCapped,
-      } = await fetchMembers();
+      const { accounts: membersData } = await fetchMembers();
       setAccounts(membersData);
-      setPersonasCapped(upstreamPersonasCapped);
     } catch {
       // A failed silent refresh must not contradict the success the user just
       // saw: the write itself succeeded, only the re-read did not.
@@ -1116,7 +1109,6 @@ export default function MembersPage(): React.ReactElement {
   const filteredAccounts = filterAccounts(accounts, searchTerm).filter((account) =>
     accountMatchesFlag(account, activeFlag),
   );
-  const aggregateIsCapped = personasCapped;
 
   const totalPages = useMemo(() => getTotalPages(filteredAccounts.length), [filteredAccounts]);
   const paginatedAccounts = useMemo(
@@ -1210,12 +1202,6 @@ export default function MembersPage(): React.ReactElement {
                     {filteredAccounts.length}{" "}
                     {filteredAccounts.length === 1 ? "resultado mostrado" : "resultados mostrados"}
                   </p>
-                  {aggregateIsCapped && (
-                    <p role="alert" className="max-w-md text-state-bad">
-                      La fuente devuelve hasta {MEMBERS_AGGREGATE_LIMIT} registros; este listado puede estar
-                      incompleto.
-                    </p>
-                  )}
                 </div>
               }
               renderCard={(account) => (

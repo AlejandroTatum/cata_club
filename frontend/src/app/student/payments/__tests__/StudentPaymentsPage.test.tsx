@@ -365,6 +365,25 @@ describe("StudentPaymentsPage — arriving from the home band", () => {
     expect(screen.queryByRole("button", { name: /^registrar un pago$/i })).not.toBeInTheDocument();
   });
 
+  it("keeps the side column unclipped: no inner scroll box that hides the end of the payment form (FAM-11)", async () => {
+    searchParams = new URLSearchParams("registrar=1");
+
+    render(<StudentPaymentsPage />);
+
+    await screen.findByText("Período que cubre");
+    const aside = screen.getByRole("complementary", { name: /membresía y registro de pagos/i });
+    expect(aside.className).not.toMatch(/overflow-y-auto|max-h-\[/);
+  });
+
+  it("does not put aria-required on the month stepper's fieldset, where it is not a valid attribute", async () => {
+    searchParams = new URLSearchParams("registrar=1");
+
+    const { container } = render(<StudentPaymentsPage />);
+
+    await screen.findByText("Período que cubre");
+    expect(container.querySelector("fieldset[aria-required]")).toBeNull();
+  });
+
   it("waits for the payment history before opening, so the period starts where coverage ends", async () => {
     searchParams = new URLSearchParams("registrar=1");
     mockFetchStudentPortal.mockReset().mockResolvedValue({
@@ -1239,7 +1258,7 @@ describe("StudentPaymentsPage — registering a payment", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
 
-    expect(screen.getByRole("group", { name: /^Meses a pagar/ })).toHaveAttribute("aria-required", "true");
+    expect(screen.getByRole("group", { name: /^Meses a pagar/ })).not.toHaveAttribute("aria-required");
     expect(screen.getByLabelText(/^Forma de pago/)).toBeRequired();
     expect(screen.getByTestId("renew-voucher-input")).toHaveAttribute("aria-required", "true");
 

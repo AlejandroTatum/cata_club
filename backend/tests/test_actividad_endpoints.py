@@ -9,6 +9,7 @@ correos, ids de usuario, IPs, hosts ni versiones.
 from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
+from sqlalchemy.dialects.postgresql import JSONB
 
 from app.dominio.enums import Categoria, DiaSemana, EstadoAsistencia, EstadoMembresia, EstadoPago, TipoRol
 from app.dominio.modelos import Asistencia, HorarioEntrenamiento, MetricaInstantanea
@@ -127,7 +128,7 @@ def test_resumen_24h_tiene_la_forma_del_demo(client, db_session):
 
     cuerpo = client.get(RUTA_RESUMEN + "?rango=24h").json()
 
-    assert set(cuerpo) == {"range", "generatedAt", "span", "periods", "uniqueVisitors", "status"}
+    assert set(cuerpo) == {"range", "generatedAt", "span", "periods", "uniqueVisitors", "status", "queuedByQuota"}
     assert cuerpo["range"] == "24h" and cuerpo["span"] == "2h"
     assert cuerpo["generatedAt"] == "2026-10-01T15:30:00-05:00"
     periodos = cuerpo["periods"]
@@ -201,6 +202,25 @@ def test_resumen_30d_son_cinco_columnas_de_seis_dias(client, db_session):
     assert cuerpo["periods"][3]["visitors"]["representantes"] == 1   # el ingreso del 24/09
     assert cuerpo["periods"][4]["visitors"]["alumnos"] == 3          # alumno1, alumno2, alumno3
     assert cuerpo["uniqueVisitors"]["total"] == 5
+
+
+def test_resumen_informa_los_correos_en_espera_por_el_tope_diario(client, db_session):
+    """MAIL-CAP: el administrador ve cuántos enlaces esperan el reinicio del cupo."""
+    from app.dominio.cedula import cedula_valida
+    from app.dominio.modelos import RecuperacionOutbox
+    from app.infraestructura.repositorios import outbox_cupo
+    from tests.fabricas_auth import crear_usuario_auth
+
+    assert client.get(RUTA_RESUMEN + "?rango=7d").json()["queuedByQuota"] == 0
+    usuario = crear_usuario_auth(db_session, correo="cupo@cataclub.test", cedula=cedula_valida(8420))
+    db_session.add(RecuperacionOutbox(
+        usuario_id=usuario.id,
+        expires_at=AHORA + timedelta(hours=48),
+        last_error_redacted=f"{outbox_cupo.MARCA_CUPO_AGOTADO}: diferido hasta el día siguiente",
+    ))
+    db_session.commit()
+
+    assert client.get(RUTA_RESUMEN + "?rango=7d").json()["queuedByQuota"] == 1
 
 
 def test_resumen_sin_actividad_devuelve_ceros_no_errores(client):
@@ -331,6 +351,23 @@ def _sembrar_avanzadas(db):
         host_contenedores=[{"nombre": "backend", "usado_mb": 262, "limite_mb": 320}],
     ))
     db.flush()
+
+
+@pytest.mark.parametrize("malo", [JSONB.NULL, {"x": 1}, 7, [1, "a"]])
+def test_avanzadas_ignora_buckets_json_nulos_o_que_no_son_arreglo(client, db_session, malo):
+    """ADM-04: un JSON `null` pasa `isnot(None)` y rompía la suma con un 500."""
+    _instantanea(db_session, hace_min=2, intervalo_s=60, peticiones=10, latencia_buckets=malo)
+    _instantanea(db_session, hace_min=1, intervalo_s=60, peticiones=10, latencia_buckets=[10] * 12)
+
+    for ruta in (RUTA_AVANZADAS + "?rango=1h", RUTA_RESUMEN + "?rango=7d"):
+        assert client.get(ruta).status_code == 200
+
+
+def test_avanzadas_tolera_buckets_de_distinta_longitud(client, db_session):
+    _instantanea(db_session, hace_min=2, intervalo_s=60, peticiones=10, latencia_buckets=[10] * 12)
+    _instantanea(db_session, hace_min=1, intervalo_s=60, peticiones=10, latencia_buckets=[10] * 8)
+
+    assert client.get(RUTA_AVANZADAS + "?rango=1h").status_code == 200
 
 
 @pytest.mark.parametrize("rango", ["1h", "24h", "7d"])

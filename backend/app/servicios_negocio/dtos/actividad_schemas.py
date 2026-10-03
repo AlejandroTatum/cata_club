@@ -54,6 +54,8 @@ class ResumenResponse(BaseModel):
     periods: list[PeriodoResumen]
     uniqueVisitors: VisitantesUnicos
     status: list[EstadoSistema]
+    # Correos de las colas de salida que esperan el reinicio del tope diario.
+    queuedByQuota: int
 
 
 class Serie(BaseModel):

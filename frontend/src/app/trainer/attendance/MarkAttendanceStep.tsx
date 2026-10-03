@@ -9,11 +9,13 @@ import RosterProgressHeader from "./RosterProgressHeader";
 import AttendanceRosterList from "./AttendanceRosterList";
 import FilteredRosterEmptyState from "./FilteredRosterEmptyState";
 import { clubIsoDate } from "@/lib/club-date";
-import { type SessionStudent } from "./attendance-utils";
+import { isFiled, type SessionStudent } from "./attendance-utils";
 
 interface MarkAttendanceStepProps {
   selectedSchedule: TrainingSchedule | null;
   readOnly: boolean;
+  /** ENT-03/ENT-04: some students already have a row — only the rest are editable. */
+  partialSession?: boolean;
   students: SessionStudent[];
   sessionDate: string | null;
   isAdmin: boolean;
@@ -44,6 +46,7 @@ interface MarkAttendanceStepProps {
 export default function MarkAttendanceStep({
   selectedSchedule,
   readOnly,
+  partialSession = false,
   students,
   sessionDate,
   isAdmin,
@@ -96,10 +99,27 @@ export default function MarkAttendanceStep({
     );
   }
 
+  const filedStudents = partialSession ? students.filter(isFiled) : [];
+  const pendingCount = students.length - filedStudents.length;
+  const editableStudents = partialSession ? filteredStudents.filter((s) => !isFiled(s)) : filteredStudents;
+
   return (
     <div className={PAGE_RAIL}>
       <div data-dash-col className="card flex flex-col gap-4 p-5 sm:p-6">
         {headingEl}
+        {partialSession && (
+          <div
+            role="status"
+            className="rounded-ctl border border-state-warn/30 bg-state-warn-bg p-4 text-sm text-state-warn"
+          >
+            <p className="font-semibold">Esta lista está incompleta.</p>
+            <p>
+              {filedStudents.length} de {students.length} alumnos ya tienen asistencia registrada y no
+              se pueden cambiar desde aquí. Complete solo a{" "}
+              {pendingCount === 1 ? "el alumno que falta" : `los ${pendingCount} alumnos que faltan`}.
+            </p>
+          </div>
+        )}
         {restoredFromDraft && (
           <p className="rounded-ctl border border-line bg-canvas px-3.5 py-2.5 text-xs text-ink-2">
             Recuperamos las marcas que ya había hecho en esta sesión. Revíselas antes de continuar.
@@ -140,7 +160,7 @@ export default function MarkAttendanceStep({
               )}
             </div>
 
-            {filteredStudents.length === 0 ? (
+            {editableStudents.length === 0 ? (
               <FilteredRosterEmptyState
                 onlyUnreviewed={onlyUnreviewed}
                 unreviewedCount={unreviewedCount}
@@ -150,11 +170,25 @@ export default function MarkAttendanceStep({
             ) : (
               <AttendanceRosterList
                 students={students}
-                filteredStudents={filteredStudents}
+                filteredStudents={editableStudents}
+                sessionDate={sessionDate}
                 onCycleAttendance={onCycleAttendance}
                 onDirectAttendanceSet={onDirectAttendanceSet}
                 onRadioKeyDown={onRadioKeyDown}
               />
+            )}
+            {filedStudents.length > 0 && (
+              <ul className="flex flex-col gap-2" aria-label="Ya registrados (solo lectura)">
+                {filedStudents.map((student) => (
+                  <AttendanceCorrectionRow
+                    key={student.id}
+                    student={student}
+                    sessionDate={sessionDate ?? clubIsoDate()}
+                    canCorrect={isAdmin}
+                    onCorrected={onRowCorrected}
+                  />
+                ))}
+              </ul>
             )}
           </>
         )}

@@ -38,7 +38,7 @@ def _enviar_enlace(usuario: Usuario) -> None:
     token = GestorAutenticacion.crear_token_recuperacion(
         usuario.correo, usuario.version_contrasenia
     )
-    ServicioNotificaciones().enviar_recuperacion_contrasenia(usuario.correo, token)
+    ServicioNotificaciones(levantar_si_cupo_agotado=True).enviar_recuperacion_contrasenia(usuario.correo, token)
 
 
 @celery_app.task(

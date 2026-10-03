@@ -199,6 +199,7 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("PATCH", "/ranking/notificaciones/{notificacion_id}/leer"), # (b) - propio via `persona_id` del token
     ("POST", "/auth/me/foto"),                                   # (b) - propio via `sub`
     ("POST", "/auth/sesiones/invalidar"),                        # (b) - propio via `sub`
+    ("POST", "/auth/contrasenia/cambiar"),                       # (b) - propio via `sub`, exige la clave actual
     ("POST", "/membresias/{membresia_id}/aplicar-beneficio"),     # (b) - dueño/representante validado en el servicio
     ("POST", "/membresias/pagos"),                                # (b) - dueño/admin validado en el servicio
     ("POST", "/membresias/pagos/{pago_id}/voucher"),             # (b) - dueño/admin validado en el servicio
@@ -323,6 +324,7 @@ RUTAS_ROLES_REQUERIDOS = {
     # `corregir` (auditoría de registros que pueden ser de menores).
     ("GET", "/asistencias/{asistencia_id}/correcciones"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/asistencias/"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
+    ("POST", "/asistencias/lote"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/asistencias/asignar-alumno"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/asistencias/horarios"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/auth/registro"): frozenset({"ADMINISTRADOR"}),
@@ -337,6 +339,7 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/membresias/propia"): frozenset({"REPRESENTANTE", "ALUMNO"}),
     ("POST", "/membresias/representado/pago"): frozenset({"REPRESENTANTE"}),
     ("POST", "/membresias/{membresia_id}/regularizar-deuda"): frozenset({"ADMINISTRADOR"}),
+    ("GET", "/membresias/{membresia_id}/regularizar-deuda/cotizacion"): frozenset({"ADMINISTRADOR"}),
     # Issue #400 (slice 5b): corregir un campo financiero congelado de un
     # pago ya aprobado es tan sensible como crear el pago mismo -- admin-only,
     # mismo criterio que regularizar-deuda/suspender/reactivar.

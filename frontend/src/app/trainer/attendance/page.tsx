@@ -327,6 +327,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
             confirmationHeadingRef={submission.confirmationHeadingRef}
             result={submission.result}
             confirmedAt={submission.confirmedAt}
+            sessionDate={roster.sessionDate}
             students={roster.students}
             receiptCounts={submission.receiptCounts}
             receiptTotal={submission.receiptTotal}
@@ -372,6 +373,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                       selectedScheduleId={schedules.selectedScheduleId}
                       onSelectSchedule={schedules.setSelectedScheduleId}
                       weekRecordCounts={schedules.weekRecordCounts}
+                      closedHorarios={schedules.closedHorarios}
                       selectedListTaken={schedules.selectedListTaken}
                       rosterError={roster.rosterError}
                     />
@@ -382,6 +384,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                       commitBar={commitBar}
                       selectedSchedule={schedules.selectedSchedule}
                       readOnly={roster.readOnly}
+                      partialSession={roster.partialSession}
                       students={roster.students}
                       sessionDate={roster.sessionDate}
                       isAdmin={isAdmin}
