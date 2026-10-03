@@ -204,14 +204,14 @@ describe("GroupsPage — the landing-publication toggle", () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
-    expect(screen.getByText("Oculta en la landing")).toBeInTheDocument();
+    expect(screen.getByText("Oculta en el sitio")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Mostrar Competitivo en la landing pública" }),
+      screen.getByRole("button", { name: "Mostrar Competitivo en el sitio" }),
     ).toBeInTheDocument();
     // And the visible sibling keeps its own action name — the toggle is per
     // categoría, never one global switch.
     expect(
-      screen.getByRole("button", { name: "Ocultar Formativo de la landing pública" }),
+      screen.getByRole("button", { name: "Ocultar Formativo del sitio" }),
     ).toBeInTheDocument();
   });
 
@@ -221,18 +221,18 @@ describe("GroupsPage — the landing-publication toggle", () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
-    fireEvent.click(screen.getByRole("button", { name: "Mostrar Competitivo en la landing pública" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar Competitivo en el sitio" }));
 
     await waitFor(() => expect(mockCambiarPublicacion).toHaveBeenCalledWith("COMPETITIVO", true));
     // The state flip is local and immediate: the badge goes away and the
     // action flips to Ocultar without a refetch.
     await waitFor(() => {
-      expect(screen.queryByText("Oculta en la landing")).not.toBeInTheDocument();
+      expect(screen.queryByText("Oculta en el sitio")).not.toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: "Ocultar Competitivo de la landing pública" }),
+        screen.getByRole("button", { name: "Ocultar Competitivo del sitio" }),
       ).toBeInTheDocument();
     });
-    expect(await screen.findByText("La categoría vuelve a publicarse en la landing.")).toBeInTheDocument();
+    expect(await screen.findByText("La categoría vuelve a publicarse en el sitio.")).toBeInTheDocument();
   });
 
   it("hides a published categoría on click, PATCHes false, and marks the card", async () => {
@@ -246,12 +246,12 @@ describe("GroupsPage — the landing-publication toggle", () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
-    fireEvent.click(screen.getByRole("button", { name: "Ocultar Competitivo de la landing pública" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ocultar Competitivo del sitio" }));
 
     await waitFor(() => expect(mockCambiarPublicacion).toHaveBeenCalledWith("COMPETITIVO", false));
-    expect(await screen.findByText("Oculta en la landing")).toBeInTheDocument();
+    expect(await screen.findByText("Oculta en el sitio")).toBeInTheDocument();
     expect(
-      await screen.findByText("La categoría no se publica en la landing."),
+      await screen.findByText("La categoría no se publica en el sitio."),
     ).toBeInTheDocument();
   });
 
@@ -265,12 +265,12 @@ describe("GroupsPage — the landing-publication toggle", () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
-    fireEvent.click(screen.getByRole("button", { name: "Ocultar Competitivo de la landing pública" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ocultar Competitivo del sitio" }));
 
     expect(await screen.findByText("No se pudo cambiar la publicación de la categoría.")).toBeInTheDocument();
     // The card stays published: no badge appeared, the action is still Ocultar.
     expect(
-      screen.getByRole("button", { name: "Ocultar Competitivo de la landing pública" }),
+      screen.getByRole("button", { name: "Ocultar Competitivo del sitio" }),
     ).toBeInTheDocument();
   });
 });
@@ -313,7 +313,10 @@ describe("GroupsPage — categoría form is typed input, not a locked catalog se
     expect(screen.getByLabelText(/^Nombre/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hora de inicio" })).toBeInTheDocument();
     expect(screen.getByLabelText(/^Nombre/)).toBeRequired();
-    expect(screen.getByRole("group", { name: /^Días/ })).toHaveAttribute("aria-required", "true");
+    const dias = screen.getByRole("group", { name: /^Días/ });
+    // ADMB-25: aria-required is not valid on a fieldset (axe: aria-allowed-attr).
+    expect(dias).not.toHaveAttribute("aria-required");
+    expect(dias).toHaveAccessibleName(/obligatorio/i);
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 
@@ -904,8 +907,8 @@ describe("GroupsPage — categoria title + labeled Ver alumnos button (PR1 layou
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
-    const toggle = within(card()).getByRole("button", { name: /de la landing pública/i });
-    expect(toggle).toHaveTextContent("Ocultar de la landing");
+    const toggle = within(card()).getByRole("button", { name: /del sitio/i });
+    expect(toggle).toHaveTextContent("Ocultar del sitio");
     expect(toggle).toHaveAttribute("title", expect.stringMatching(/sitio público/i));
   });
 });
@@ -1016,8 +1019,10 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/2/)).toBeInTheDocument();
-    expect(within(dialog).getByText(/mié/i)).toBeInTheDocument();
+    // ADMB-04: the server blocks this, so the dialog must not promise to unassign.
+    expect(within(dialog).getByText(/no puede quitar miércoles mientras haya 2 alumnos inscritos/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/pase primero a esos alumnos a otra categoría/i)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/desasignad/i)).not.toBeInTheDocument();
     expect(mockActualizarCategoria).not.toHaveBeenCalled();
 
     fireEvent.click(within(dialog).getByRole("button", { name: /cancelar/i }));
@@ -1036,7 +1041,7 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /confirmar/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /guardar de todos modos/i }));
 
     await waitFor(() => {
       expect(mockActualizarCategoria).toHaveBeenCalledWith(
@@ -1083,7 +1088,7 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /confirmar/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /guardar de todos modos/i }));
 
     expect(await screen.findByText("La categoría ya tiene ese nombre.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Editar «Formativo»" })).not.toBeInTheDocument();
@@ -1219,7 +1224,7 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
     const horario = document.getElementById("categoria-horario-label") as HTMLElement;
     expect(horario.className).not.toMatch(/flex-col/);
     expect(horario.textContent?.replace(/\s+/g, " ").trim()).toBe("Horario · 24 h");
-    expect(screen.getByRole("group", { name: "Días" })).toHaveAttribute("aria-required", "true");
+    expect(screen.getByRole("group", { name: /^Días/ })).not.toHaveAttribute("aria-required");
   });
 });
 
@@ -1628,9 +1633,14 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     // The mock was already faithful — a 500 from the assign endpoint. What
     // was fiction is the assertion: a 5xx `detail` describes the server's
     // failure, so the row reports the server, not the body of the 500.
+    // FAM-21: the WhatsApp address is a link now, so the sentence is split around it.
     expect(
-      await screen.findByText("Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: https://wa.me/593994219619"),
+      await screen.findByText(/Tuvimos un problema de nuestro lado y no pudimos completar esto/),
     ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /wa\.me\/593994219619/ })).toHaveAttribute(
+      "href",
+      "https://wa.me/593994219619",
+    );
     expect(screen.queryByText(/asignado correctamente/i)).not.toBeInTheDocument();
   });
 
@@ -1717,9 +1727,14 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await waitFor(() => {
       expect(mockDesasignarAlumnoDeHorario).toHaveBeenCalledTimes(1);
     });
+    // FAM-21: the WhatsApp address is a link now, so the sentence is split around it.
     expect(
-      await screen.findByText("Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: https://wa.me/593994219619"),
+      await screen.findByText(/Tuvimos un problema de nuestro lado y no pudimos completar esto/),
     ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /wa\.me\/593994219619/ })).toHaveAttribute(
+      "href",
+      "https://wa.me/593994219619",
+    );
     expect(screen.queryByText("Alumno desasignado del horario.")).not.toBeInTheDocument();
   });
 
@@ -1843,10 +1858,12 @@ describe("GroupsPage — deleting removes la categoría entera atomically (docs/
 
     const dialog = await screen.findByRole("dialog");
     // Total across all 3 días (1 + 0 + 1), not just the first row's count.
-    expect(within(dialog).getByText(/2/)).toBeInTheDocument();
-    expect(within(dialog).getByText(/lun/i)).toBeInTheDocument();
-    expect(within(dialog).getByText(/mié/i)).toBeInTheDocument();
-    expect(within(dialog).getByText(/vie/i)).toBeInTheDocument();
+    // ADMB-04: blocked copy, not a promise to unassign.
+    expect(
+      within(dialog).getByText(/no puede eliminar la categoría mientras haya 2 alumnos inscritos/i),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText(/pase primero a esos alumnos a otra categoría/i)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/desasignad/i)).not.toBeInTheDocument();
     expect(mockEliminarCategoria).not.toHaveBeenCalled();
   });
 
@@ -1865,7 +1882,7 @@ describe("GroupsPage — deleting removes la categoría entera atomically (docs/
 
     await openDeleteFromEditPanel();
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /confirmar/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /eliminar de todos modos/i }));
 
     await waitFor(() => {
       expect(mockEliminarCategoria).toHaveBeenCalledWith("COMPETITIVO");
@@ -1902,7 +1919,9 @@ describe("GroupsPage — deleting removes la categoría entera atomically (docs/
 
     await openDeleteFromEditPanel();
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /confirmar/i }));
+    // No students: the plain confirmation, with the verb of the action (ADMB-22).
+    expect(within(dialog).getByText(/se eliminará la categoría completa/i)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Eliminar categoría" }));
 
     expect(
       await screen.findByText(/el historial no se borra/i),
@@ -1917,6 +1936,36 @@ describe("GroupsPage — deleting removes la categoría entera atomically (docs/
 // open and shows the server's message instead of closing/resyncing when the
 // save fails" in the "atomic categoría save" describe block above, which
 // replaces this guard for the new (impossible-to-partially-fail) shape.
+
+describe("GroupsPage — server errors carrying a link render it clickable (FAM-21)", () => {
+  const GROUP_ROWS = [
+    { id: 801, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
+  ];
+
+  beforeEach(() => {
+    mockFetchMembers.mockReset();
+    mockFetchHorarios.mockReset();
+    mockActualizarCategoria.mockReset();
+    mockFetchAlumnosPorHorario.mockReset();
+    mockFetchMembers.mockResolvedValue({ accounts: [] });
+    mockFetchHorarios.mockResolvedValue(GROUP_ROWS);
+    mockFetchAlumnosPorHorario.mockResolvedValue([]);
+  });
+
+  it("turns a wa.me address in the form banner into a link", async () => {
+    mockActualizarCategoria.mockRejectedValue(
+      new ApiClientError("No se pudo guardar. Escríbanos a https://wa.me/593999999999.", 409),
+    );
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    fireEvent.click(screen.getAllByRole("button", { name: /^editar /i })[0]);
+    await screen.findByRole("heading", { name: "Editar categoría" });
+    fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    const links = await screen.findAllByRole("link", { name: /wa\.me\/593999999999/ });
+    expect(links[0]).toHaveAttribute("href", "https://wa.me/593999999999");
+  });
+});
 
 describe("GroupsPage — sin selector de entrenador (issue #13)", () => {
   const GROUP_ROWS = [

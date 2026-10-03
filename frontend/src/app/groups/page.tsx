@@ -120,6 +120,8 @@ import {
 } from "@/lib/groups-utils";
 import { cargarCategorias, type Categoria, type CategoriaInfo } from "@/services/categorias";
 import {
+  alumnosInscritosLabel,
+  mensajeCategoriaConAlumnos,
   countUniqueAlumnos,
   buildCategoriaCards,
   buildCatalogoSinHorarios,
@@ -139,6 +141,7 @@ import {
 } from "./groups-page-utils";
 import { toUserMessage } from "@/lib/error-message";
 import { joinWithY } from "@/lib/format-utils";
+import LinkifiedText from "@/components/LinkifiedText";
 
 /**
  * The días of a destructive confirmation, in whole words.
@@ -158,6 +161,32 @@ import { joinWithY } from "@/lib/format-utils";
  */
 function diaListLabel(dias: readonly string[]): string {
   return joinWithY(dias.map((dia) => DIA_LABELS[dia] ?? dia));
+}
+
+/** The dialog's body. With students enrolled the server will refuse (409), so
+ *  the copy says what to do first (ADMB-04); without them it is the plain
+ *  irreversible-delete warning. */
+function pendingDeletionsMessage(
+  pending: { diaSemana: string; alumnos: AlumnoHorario[] }[],
+  scope: "days" | "group",
+): string {
+  const alumnos = countUniqueAlumnos(pending);
+  const dias = diaListLabel(pending.map((p) => p.diaSemana));
+  if (alumnos > 0) {
+    return scope === "group"
+      ? mensajeCategoriaConAlumnos({ accion: "eliminar", alumnos })
+      : mensajeCategoriaConAlumnos({ accion: "quitar-dias", dias, alumnos });
+  }
+  return `Se eliminará la categoría completa (todos sus días: ${dias}). Esta acción no se puede deshacer.`;
+}
+
+function pendingDeletionsConfirmLabel(
+  pending: { alumnos: AlumnoHorario[] }[] | null,
+  scope: "days" | "group",
+): string {
+  const conAlumnos = pending !== null && countUniqueAlumnos(pending) > 0;
+  if (scope === "group") return conAlumnos ? "Eliminar de todos modos" : "Eliminar categoría";
+  return "Guardar de todos modos";
 }
 
 function extractErrorMessage(err: unknown, fallback: string): string {
@@ -916,8 +945,8 @@ export default function GroupsPage(): React.ReactElement {
       showNotification(
         "success",
         visibleAhora
-          ? "La categoría no se publica en la landing."
-          : "La categoría vuelve a publicarse en la landing.",
+          ? "La categoría no se publica en el sitio."
+          : "La categoría vuelve a publicarse en el sitio.",
       );
     } catch (error: unknown) {
       showNotification("error", toUserMessage(error, "No se pudo cambiar la publicación de la categoría."));
@@ -944,8 +973,8 @@ export default function GroupsPage(): React.ReactElement {
         }
         aria-label={
           visible
-            ? `Ocultar ${label} de la landing pública`
-            : `Mostrar ${label} en la landing pública`
+            ? `Ocultar ${label} del sitio`
+            : `Mostrar ${label} en el sitio`
         }
       >
         {isToggling ? (
@@ -955,7 +984,7 @@ export default function GroupsPage(): React.ReactElement {
         ) : (
           <EyeOff size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
         )}
-        {visible ? "Ocultar de la landing" : "Mostrar en la landing"}
+        {visible ? "Ocultar del sitio" : "Mostrar en el sitio"}
       </Button>
     );
   }
@@ -1175,7 +1204,7 @@ export default function GroupsPage(): React.ReactElement {
         </h3>
         {formError && (
           <div className="mb-4">
-            <div className="alert-error" role="alert">{formError}</div>
+            <div className="alert-error" role="alert"><LinkifiedText text={formError} /></div>
             {duplicateCategoriaCodigo && (
               <div className="mt-2">
                 <Button size="sm" onClick={() => openCategoriaEdit(duplicateCategoriaCodigo)}>
@@ -1326,12 +1355,11 @@ export default function GroupsPage(): React.ReactElement {
           */}
           <fieldset
             className="min-w-0"
-            aria-required="true"
             aria-invalid={fieldErrors.dias ? true : undefined}
             aria-describedby={fieldErrors.dias ? DIAS_ERROR_ID : undefined}
           >
             <legend className={`${FIELD_LABEL} mb-field`}>
-              Días
+              Días<span className="sr-only"> (obligatorio)</span>
             </legend>
             <div className="flex h-ctl overflow-hidden rounded-ctl border border-line-2">
               {DIA_ORDER.map((dia) => {
@@ -1390,8 +1418,8 @@ export default function GroupsPage(): React.ReactElement {
             <div className="min-w-[220px] flex-1">
               <p className="text-sm font-semibold text-state-bad">Eliminar esta categoría</p>
               <p className="text-xs text-ink-3">
-                Se eliminan todos sus días y los alumnos quedan sin horario asignado. No se puede
-                si alguno de sus días tiene asistencias registradas.
+                Se eliminan todos sus días. No se puede mientras tenga alumnos inscritos
+                (reasígnelos primero) ni si alguno de sus días tiene asistencias registradas.
               </p>
             </div>
             <Button
@@ -1645,7 +1673,7 @@ export default function GroupsPage(): React.ReactElement {
               </dd>
             </div>
             <div>
-              <dt className="font-semibold text-ink">Ocultar de la landing</dt>
+              <dt className="font-semibold text-ink">Ocultar del sitio</dt>
               <dd>
                 Quita la categoría del sitio público. Sigue activa para inscripciones y asistencia, y puede volver a
                 mostrarla cuando quiera.
@@ -1755,7 +1783,7 @@ export default function GroupsPage(): React.ReactElement {
             ) : (
               <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             )}
-            {notification.message}
+            <span><LinkifiedText text={notification.message} /></span>
           </div>
         )}
 
@@ -1772,8 +1800,8 @@ export default function GroupsPage(): React.ReactElement {
               value={categoriaCards.length}
               hint={
                 categoriasOcultas > 0
-                  ? `${categoriasOcultas} oculta${categoriasOcultas === 1 ? "" : "s"} en la landing`
-                  : "Todas visibles en la landing"
+                  ? `${categoriasOcultas} oculta${categoriasOcultas === 1 ? "" : "s"} en el sitio`
+                  : "Todas visibles en el sitio"
               }
             />
             <StatCard label="Horarios" value={horarios.length} hint="Sesiones por semana, sumando todos los días" />
@@ -1880,7 +1908,7 @@ export default function GroupsPage(): React.ReactElement {
                               STATE, so the card never makes the admin infer
                               one from the other. */}
                           {!(categorias[card.categoria as Categoria]?.visible ?? true) && (
-                            <Badge tone="neutral">Oculta en la landing</Badge>
+                            <Badge tone="neutral">Oculta en el sitio</Badge>
                           )}
                         </div>
                         <div className="mt-2">
@@ -1986,7 +2014,7 @@ export default function GroupsPage(): React.ReactElement {
                         <b className="text-base text-ink">{entry.label}</b>
                         <Badge tone="warn">Sin horarios de entrenamiento todavía</Badge>
                         {!(categorias[entry.categoria as Categoria]?.visible ?? true) && (
-                          <Badge tone="neutral">Oculta en la landing</Badge>
+                          <Badge tone="neutral">Oculta en el sitio</Badge>
                         )}
                       </div>
                       <div className="mt-2">{renderPublicacionToggle(entry.categoria, entry.label, false)}</div>
@@ -2055,18 +2083,15 @@ export default function GroupsPage(): React.ReactElement {
         <ConfirmDialog
           open={pendingDeletions !== null && pendingDeletions.length > 0}
           variant="danger"
-          title={pendingDeletionScope === "group" ? "Eliminar categoría completa" : "Desasignar alumnos y quitar días"}
-          message={
-            pendingDeletions
-              ? pendingDeletionScope === "group"
-                ? `Se eliminará la categoría completa (todos sus días: ${diaListLabel(
-                    pendingDeletions.map((p) => p.diaSemana),
-                  )}) y ${countUniqueAlumnos(pendingDeletions)} alumno(s) quedarán desasignados. Esta acción no se puede deshacer.`
-                : `${countUniqueAlumnos(pendingDeletions)} alumno(s) quedarán desasignados de: ${diaListLabel(
-                    pendingDeletions.map((p) => p.diaSemana),
-                  )}. ¿Confirma guardar la categoría con esos días quitados?`
-              : ""
+          title={
+            pendingDeletions && countUniqueAlumnos(pendingDeletions) > 0
+              ? "Categoría con alumnos inscritos"
+              : "Eliminar categoría completa"
           }
+          message={
+            pendingDeletions ? pendingDeletionsMessage(pendingDeletions, pendingDeletionScope) : ""
+          }
+          confirmLabel={pendingDeletionsConfirmLabel(pendingDeletions, pendingDeletionScope)}
           onConfirm={() => void handleConfirmPendingDeletions()}
           onCancel={handleCancelPendingDeletions}
         />
