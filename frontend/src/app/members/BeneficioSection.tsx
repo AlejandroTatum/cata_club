@@ -133,7 +133,7 @@ export default function BeneficioSection({ personaId, tarifaMensual }: Beneficio
         <Gift size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
         Beneficio del club
       </p>
-      <p className="mb-2 text-xs text-ink-2">Rebaja fija en todos los pagos.</p>
+      <p className="mb-2 text-xs text-ink-2">Rebaja que se aplica a todos los pagos.</p>
 
       {loading && <LoadingState label="Cargando beneficio…" />}
 
@@ -194,7 +194,7 @@ export default function BeneficioSection({ personaId, tarifaMensual }: Beneficio
                   onChange={(e) => setSelectedDescuentoId(e.target.value ? Number(e.target.value) : "")}
                   className="input-field text-xs"
                 >
-                  <option value="">Seleccionar descuento…</option>
+                  <option value="">Elija un descuento</option>
                   {ofrecidos.map((descuento) => (
                     <option key={descuento.id} value={descuento.id}>
                       {descuento.nombre} · {descuentoValorLabel(descuento)}

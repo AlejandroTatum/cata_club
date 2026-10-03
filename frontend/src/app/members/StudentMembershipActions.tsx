@@ -263,7 +263,7 @@ export default function StudentMembershipActions({
           )}
           {membresia && (
             <ActionTile description="La nueva tarifa rige desde el próximo pago.">
-              <CambiarPlanForm membresiaId={Number(membresia.id)} onChanged={onMembresiaChanged} />
+              <CambiarPlanForm membresiaId={Number(membresia.id)} tipoActual={membresia.tipo} onChanged={onMembresiaChanged} />
             </ActionTile>
           )}
         </section>

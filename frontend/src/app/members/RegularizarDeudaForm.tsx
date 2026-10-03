@@ -263,8 +263,8 @@ export default function RegularizarDeudaForm({
           )}
 
           <p className="mb-2 text-2xs text-ink-3">
-            También sirve para cargar el pago vigente de un socio desde el cuaderno del club al
-            migrar. Si el período cubre hoy, la membresía queda activa.
+            Registre aquí los meses atrasados que el alumno ya pagó o debe regularizar. Si el
+            período incluye hoy, la membresía queda activa.
           </p>
 
           <div className="grid grid-cols-2 gap-2">
@@ -313,7 +313,7 @@ export default function RegularizarDeudaForm({
             type="textarea"
             value={motivo}
             onChange={setMotivo}
-            placeholder="Por qué se regulariza (p. ej. demora del club, acuerdo con el socio)"
+            placeholder="Por qué se regulariza (p. ej. demora del club, acuerdo con el alumno)"
             labelClassName="mt-2 block text-2xs text-ink-3"
             required
           />

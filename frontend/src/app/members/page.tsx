@@ -1151,7 +1151,7 @@ export default function MembersPage(): React.ReactElement {
           search={
             <SearchInput
               label="Buscar miembros"
-              placeholder="Buscar por nombre o correo…"
+              placeholder="Buscar por nombre o cédula…"
               value={searchTerm}
               onChange={setSearchTerm}
             />

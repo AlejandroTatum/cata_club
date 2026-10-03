@@ -497,21 +497,25 @@ export function filterAccounts(
   accounts: MemberAccount[],
   searchTerm: string,
 ): MemberAccount[] {
-  const term = normalizeText(searchTerm.trim());
-  if (!term) return [...accounts];
+  const words = normalizeText(searchTerm).split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [...accounts];
+
+  // ADMA-02: every word must appear, in any order — "Alexander Vera" finds
+  // "Alexander Alcivar Vera". Each searchable field is checked on its own so
+  // words never match across unrelated fields.
+  const matches = (field: string | undefined) => {
+    if (!field) return false;
+    const text = normalizeText(field);
+    return words.every((word) => text.includes(word));
+  };
 
   return accounts.filter((account) => {
-    if (normalizeText(`${account.nombres} ${account.apellidos}`).includes(term)) {
-      return true;
-    }
-    if (account.email && normalizeText(account.email).includes(term)) {
-      return true;
-    }
-    if (normalizeText(account.representadoPor ?? "").includes(term)) {
-      return true;
-    }
-    return account.estudiantes.some((a) =>
-      normalizeText(`${a.nombres} ${a.apellidos}`).includes(term),
+    if (matches(`${account.nombres} ${account.apellidos}`)) return true;
+    if (matches(account.email)) return true;
+    if (matches(account.representadoPor)) return true;
+    // ADMA-01: cédula, complete or partial. It lives on the person's own summary.
+    return account.estudiantes.some(
+      (a) => matches(`${a.nombres} ${a.apellidos}`) || matches(a.cedula),
     );
   });
 }

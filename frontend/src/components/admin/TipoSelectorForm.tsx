@@ -19,7 +19,7 @@ import { Loader2 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { fetchTiposMembresia } from "@/services/api";
 import type { TipoMembresiaCatalogo } from "@/services/api";
-import { formatCurrency } from "@/lib/format-utils";
+import { planOptionLabel } from "@/app/student/enroll/enroll-utils";
 import { toUserMessage } from "@/lib/error-message";
 import { MIN_TARGET_CLASS } from "@/lib/target-size";
 
@@ -29,6 +29,10 @@ interface TipoSelectorFormProps {
   submitLabel: string;
   SubmitIcon: LucideIcon;
   selectPlaceholder: string;
+  /** Label of the `<select>`. Defaults to "Tipo de membresía". */
+  fieldLabel?: string;
+  /** Plan category to leave out of the list (the plan already assigned). */
+  excludeCategoria?: string;
   submitFailureMessage: string;
   /** The real write — throws on failure (translated here with
    *  `toUserMessage`), resolves on success. Owns its own success toast and
@@ -73,6 +77,8 @@ export default function TipoSelectorForm({
   submitLabel,
   SubmitIcon,
   selectPlaceholder,
+  fieldLabel = "Tipo de membresía",
+  excludeCategoria,
   submitFailureMessage,
   onSubmit,
   onSubmitError,
@@ -142,7 +148,7 @@ export default function TipoSelectorForm({
   return (
     <div className="mt-2.5 space-y-section rounded-ctl border border-line bg-sunken p-3">
       <label htmlFor="tipo-membresia" className="block text-xs font-semibold text-ink-2">
-        Tipo de membresía <span aria-hidden="true" className="text-state-bad">*</span>
+        {fieldLabel} <span aria-hidden="true" className="text-state-bad">*</span>
       </label>
       <select
         id="tipo-membresia"
@@ -152,11 +158,13 @@ export default function TipoSelectorForm({
         className="input-field text-xs"
       >
         <option value="">{selectPlaceholder}</option>
-        {tipos.map((tipo) => (
-          <option key={tipo.id} value={tipo.id}>
-            {tipo.categoria} — {formatCurrency(tipo.precio)} ({tipo.modalidad})
-          </option>
-        ))}
+        {tipos
+          .filter((tipo) => tipo.categoria !== excludeCategoria)
+          .map((tipo) => (
+            <option key={tipo.id} value={tipo.id}>
+              {planOptionLabel(tipo.categoria, tipo.precio)}
+            </option>
+          ))}
       </select>
       {error && <p className="text-xs text-state-bad">{error}</p>}
       <div className="flex flex-wrap gap-1.5">
