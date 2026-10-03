@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { fontVariables } from "@/lib/fonts";
+import { SITE_DESCRIPTION, resolveSiteUrl, socialMetadata } from "@/lib/seo";
 import Header from "@/components/Header";
 import AuthProviderWrapper from "@/components/AuthProviderWrapper";
 import { ToastProvider } from "@/contexts/ToastContext";
@@ -21,17 +22,37 @@ interface RootLayoutProps {
   children: React.ReactNode;
 }
 
-export const metadata: Metadata = {
-  title: {
-    default: APP_NAME,
-    template: `%s | ${APP_NAME}`,
-  },
-  description:
-    "Cata Club — Sistema de administración del club de Tenis de Mesa. Gestión de membresías, pagos, horarios y reservas de canchas.",
-  icons: {
-    icon: "/brand/cata-club-logo.jpeg",
-  },
-};
+/**
+ * Resolved per request (see `lib/seo.ts`). Every route is `noindex` by
+ * default; only the public pages opt in through `publicPageMetadata`.
+ *
+ * One icon declaration, all of them square crest files: Google Search needs a
+ * square favicon whose side is a multiple of 48px at a stable, crawlable URL,
+ * and falls back to a generic globe otherwise.
+ */
+export function generateMetadata(): Metadata {
+  const siteUrl = resolveSiteUrl();
+  return {
+    ...(siteUrl ? { metadataBase: new URL(siteUrl) } : {}),
+    title: {
+      default: APP_NAME,
+      template: `%s | ${APP_NAME}`,
+    },
+    description: SITE_DESCRIPTION,
+    robots: { index: false, follow: false },
+    icons: {
+      icon: [
+        { url: "/favicon.ico", sizes: "16x16 32x32 48x48" },
+        { url: "/brand/icons/icon-48.png", sizes: "48x48", type: "image/png" },
+        { url: "/brand/icons/icon-96.png", sizes: "96x96", type: "image/png" },
+        { url: "/brand/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+        { url: "/brand/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+      ],
+      apple: [{ url: "/brand/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    },
+    ...socialMetadata(),
+  };
+}
 
 export default function RootLayout({
   children,
