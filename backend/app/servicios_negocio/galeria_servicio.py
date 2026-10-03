@@ -29,7 +29,7 @@ class GaleriaServicio:
         # `leer_con_limite` antes de llegar acá, pero este chequeo protege a
         # cualquier llamador directo del servicio que no pase por esa ruta.
         if len(contenido) > self.TAMANO_MAXIMO_IMAGEN_BYTES:
-            raise OperacionInvalida("La imagen no puede superar 5 MB.")
+            raise OperacionInvalida("La imagen pesa más de 5 MB. Elija una más liviana.")
         if content_type not in ("image/jpeg", "image/png"):
             raise OperacionInvalida("La imagen debe ser un archivo JPG o PNG.")
         # La firma binaria real debe coincidir con el tipo declarado: el
@@ -38,7 +38,7 @@ class GaleriaServicio:
         # y la subida de voucher).
         if not es_firma_valida(contenido, content_type):
             raise OperacionInvalida(
-                "El contenido del archivo no coincide con el formato declarado"
+                "Ese archivo no es una imagen válida. Elija una foto JPG o PNG."
             )
 
         public_id = str(uuid4())

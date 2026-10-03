@@ -406,9 +406,8 @@ class AuthServicio:
         cuenta_con_ese_correo = self.repo.obtener_por_correo(correo_normalizado)
         if cuenta_con_ese_correo is not None and cuenta_con_ese_correo.persona_id != persona.id:
             raise EntidadDuplicada(
-                "Ese correo ya pertenece a la cuenta de otra persona. "
-                "Verificá con el titular otra dirección actual antes de "
-                "continuar.",
+                "Ese correo ya pertenece a otra persona. Pídale al titular "
+                "otra dirección actual y vuelva a intentarlo.",
                 detalle_tecnico=(
                     f"correo normalizado ya usado por persona_id="
                     f"{cuenta_con_ese_correo.persona_id}; pedido para "
@@ -510,13 +509,15 @@ class AuthServicio:
         # Content-Type que manda el cliente no prueba nada sobre el
         # contenido real (decisión de diseño 2.3, sdd/production-readiness).
         if not es_firma_valida(contenido, content_type):
+            if not contenido:
+                raise OperacionInvalida("La imagen está vacía o dañada. Elija otra foto JPG o PNG.")
             raise OperacionInvalida(
-                "El contenido del archivo no coincide con el formato declarado"
+                "Ese archivo no es una imagen válida. Elija una foto JPG o PNG."
             )
         # Defensa en profundidad: el router ya acota la lectura vía
         # `leer_con_limite` antes de llegar acá.
         if len(contenido) > self.TAMANO_MAXIMO_FOTO_PERFIL_BYTES:
-            raise OperacionInvalida("El archivo excede el tamaño máximo de 5MB")
+            raise OperacionInvalida("La imagen pesa más de 5 MB. Elija una más liviana.")
 
         from app.infraestructura.cloudinary_cliente import (
             componer_valor_foto_perfil,

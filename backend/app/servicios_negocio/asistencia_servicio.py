@@ -84,6 +84,12 @@ def _sluggificar_nombre(nombre: str) -> str:
     return slug[:_CODIGO_MAX_LEN] or "CATEGORIA"
 
 
+def _dia_en_plural(dia: DiaSemana) -> str:
+    """"jueves" -> "jueves", "sábado" -> "sábados" (para "el horario es de los …")."""
+    nombre = dia_en_castellano(dia)
+    return nombre if nombre.endswith("s") else f"{nombre}s"
+
+
 class AsistenciaServicio:
     def __init__(self, db: Session):
         self.db = db
@@ -425,7 +431,7 @@ class AsistenciaServicio:
 
         # ADM-13: quitar un día borra su horario; con alumnos asignados se
         # rechaza la edición entera, igual que `eliminar_horario`.
-        self._validar_sin_alumnos_asignados(horarios_a_borrar)
+        self._validar_sin_alumnos_asignados(horarios_a_borrar, categoria.label, "quitar")
 
         # Decisión #3: backfillear a los alumnos ya inscriptos en la
         # categoria dentro de cada día nuevo -- se calcula ANTES de crear
@@ -508,6 +514,8 @@ class AsistenciaServicio:
                 ),
             )
 
+        self._validar_sin_alumnos_asignados(horarios, categoria.label, "eliminar")
+
         alumno_horario_a_borrar = [
             a
             for h in horarios
@@ -546,15 +554,30 @@ class AsistenciaServicio:
         self.db.commit()
         return self._a_horario_dto(resultado, categoria.label)
 
-    def _validar_sin_alumnos_asignados(self, horarios: list[HorarioEntrenamiento]) -> None:
+    def _validar_sin_alumnos_asignados(
+        self, horarios: list[HorarioEntrenamiento], categoria_label: str, accion: str,
+    ) -> None:
         """ADM-13: borrar un horario desasignaba en silencio a sus alumnos.
-        Ahora se rechaza (-> 409) y hay que reasignarlos primero."""
-        asignados = sum(self.repo_alumno_horario.contar_asignaciones_por_horario(h.id) for h in horarios)
-        if asignados:
+        Ahora se rechaza (-> 409) y hay que reasignarlos primero. ADMB-04: el
+        mensaje dice qué hacer, con cuántos alumnos y de qué día."""
+        personas = self.repo_alumno_horario.listar_personas_de_horarios([h.id for h in horarios])
+        if not personas:
+            return
+        n = len(personas)
+        alumnos = "al alumno" if n == 1 else f"a los {n} alumnos"
+        detalle = f"horario_ids={[h.id for h in horarios]} alumnos={n}"
+        if accion == "eliminar":
             raise ConflictoConcurrencia(
-                f"Tiene {asignados} alumnos asignados; reasígnelos primero.",
-                detalle_tecnico=f"horario_ids={[h.id for h in horarios]} asignados={asignados}",
+                f"No puede eliminar la categoría {categoria_label} mientras tenga alumnos. "
+                f"Reasigne primero {alumnos} de {categoria_label} a otra categoría.",
+                detalle_tecnico=detalle,
             )
+        dias = ", ".join(dia_en_castellano(h.dia_semana) for h in horarios)
+        raise ConflictoConcurrencia(
+            f"No puede quitar el día {dias} de {categoria_label} mientras tenga alumnos. "
+            f"Reasigne primero {alumnos} de {categoria_label} a otra categoría.",
+            detalle_tecnico=detalle,
+        )
 
     def eliminar_horario(self, horario_id: int) -> None:
         """Un horario con alumnos asignados no se borra (ADM-13, 409), ni uno
@@ -563,7 +586,8 @@ class AsistenciaServicio:
         horario = self.repo_horario.obtener_por_id(horario_id)
         if not horario:
             raise EntidadNoEncontrada(f"Horario con id {horario_id} no encontrado")
-        self._validar_sin_alumnos_asignados([horario])
+        categoria = self.repo_categoria.obtener_por_codigo(horario.categoria)
+        self._validar_sin_alumnos_asignados([horario], categoria.label, "quitar")
         self.repo_horario.eliminar(horario)
         self.db.commit()
 
@@ -596,9 +620,9 @@ class AsistenciaServicio:
         dia_de_la_fecha = _WEEKDAY_A_DIA_SEMANA[fecha.weekday()]
         if dia_de_la_fecha != horario.dia_semana:
             raise OperacionInvalida(
-                f"La fecha {fecha.isoformat()} es "
-                f"{dia_en_castellano(dia_de_la_fecha)}, pero el horario es de "
-                f"{dia_en_castellano(horario.dia_semana)}.",
+                f"La fecha {fecha.strftime('%d/%m/%Y')} es "
+                f"{dia_en_castellano(dia_de_la_fecha)}, pero el horario es de los "
+                f"{_dia_en_plural(horario.dia_semana)}.",
                 detalle_tecnico=(
                     f"fecha_entrenamiento={fecha.isoformat()} "
                     f"({dia_de_la_fecha.value}) horario_id={horario.id} "

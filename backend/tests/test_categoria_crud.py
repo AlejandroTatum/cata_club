@@ -276,7 +276,10 @@ def test_actualizar_categoria_quitar_dia_con_alumnos_asignados_bloquea_con_confl
         servicio.actualizar_categoria(categoria.codigo, CategoriaUpdateDTO(
             nombre="Otro nombre", dias=[DiaSemana.MIERCOLES],
         ))
-    assert "Tiene 1 alumnos asignados; reasígnelos primero." in str(exc_info.value)
+    assert str(exc_info.value) == (
+        "No puede quitar el día lunes de Preinfantil mientras tenga alumnos. "
+        "Reasigne primero al alumno de Preinfantil a otra categoría."
+    )
 
     assert db_session.get(CategoriaHorario, categoria.codigo).label == "Preinfantil"
     assert len(servicio.listar_horarios(categoria.codigo)) == 2
@@ -295,6 +298,30 @@ def test_eliminar_categoria_sin_historial_borra_categoria_dias_y_horarios(db_ses
     assert db_session.get(CategoriaHorario, categoria.codigo) is None
     assert servicio.listar_horarios(categoria.codigo) == []
     assert db_session.get(CategoriaHorarioDia, (categoria.codigo, DiaSemana.LUNES)) is None
+
+
+def test_eliminar_categoria_con_alumnos_bloquea_con_mensaje_accionable(db_session, client):
+    """ADMB-04: el 409 dice qué hacer, no un conflicto genérico."""
+    servicio = AsistenciaServicio(db_session)
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES, DiaSemana.MIERCOLES],
+    ))
+    alumno = _crear_persona_api(client)
+    _habilitar_como_jugador(db_session, alumno["id"])
+    servicio.asignar_alumno_a_horario(AlumnoHorarioCreateDTO(
+        persona_id=alumno["id"], horario_id=servicio.listar_horarios(categoria.codigo)[0].id,
+    ))
+
+    with pytest.raises(ConflictoConcurrencia) as exc_info:
+        servicio.eliminar_categoria(categoria.codigo)
+
+    assert str(exc_info.value) == (
+        "No puede eliminar la categoría Preinfantil mientras tenga alumnos. "
+        "Reasigne primero al alumno de Preinfantil a otra categoría."
+    )
+    assert db_session.get(CategoriaHorario, categoria.codigo) is not None
+    assert len(servicio.listar_horarios(categoria.codigo)) == 2
 
 
 def test_eliminar_categoria_con_asistencias_bloquea_y_no_borra_nada(db_session, client):

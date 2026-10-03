@@ -81,7 +81,7 @@ class HorarioRepositorio:
         eliminar_o_error_de_dominio(
             self.db, horario,
             "No se puede eliminar este horario porque tiene asistencias "
-            "registradas o alumnos asignados. Elimina esos registros primero.",
+            "registradas o alumnos asignados. Elimine esos registros primero.",
         )
 
 

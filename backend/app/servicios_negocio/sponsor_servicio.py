@@ -4,7 +4,7 @@ from uuid import uuid4
 from sqlalchemy import inspect as inspeccionar_orm
 from sqlalchemy.orm import Session
 
-from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
+from app.dominio.excepciones import EntidadDuplicada, EntidadNoEncontrada, OperacionInvalida
 from app.dominio.modelos import Sponsor
 from app.infraestructura.cloudinary_cliente import eliminar_logo_sponsor, subir_logo_sponsor
 from app.infraestructura.repositorios.sponsor_repositorio import SponsorRepositorio
@@ -29,7 +29,7 @@ class SponsorServicio:
         # `leer_con_limite` antes de llegar acá, pero este chequeo protege a
         # cualquier llamador directo del servicio que no pase por esa ruta.
         if len(contenido) > self.TAMANO_MAXIMO_LOGO_BYTES:
-            raise OperacionInvalida("El logo no puede superar 5 MB.")
+            raise OperacionInvalida("El logo pesa más de 5 MB. Elija uno más liviano.")
         if content_type not in ("image/jpeg", "image/png"):
             raise OperacionInvalida("El logo debe ser una imagen JPG o PNG.")
         # La firma binaria real debe coincidir con el tipo declarado: el
@@ -38,13 +38,19 @@ class SponsorServicio:
         # `PersonaServicio.actualizar_foto` y la subida de voucher).
         if not es_firma_valida(contenido, content_type):
             raise OperacionInvalida(
-                "El contenido del archivo no coincide con el formato declarado"
+                "Ese archivo no es una imagen válida. Elija una foto JPG o PNG."
             )
+
+        # ADMB-33: dos logos con el mismo nombre salían repetidos en la franja
+        # pública; la pantalla no lo impedía y la API tampoco.
+        nombre = datos.nombre.strip()
+        if any(s.nombre.strip().casefold() == nombre.casefold() for s in self.repo.listar()):
+            raise EntidadDuplicada("Ya existe un patrocinador con ese nombre.")
 
         public_id = str(uuid4())
         logo_url = subir_logo_sponsor(contenido, public_id, content_type)
         resultado = self.repo.crear(Sponsor(
-            nombre=datos.nombre.strip(), logo_url=logo_url, logo_public_id=public_id,
+            nombre=nombre, logo_url=logo_url, logo_public_id=public_id,
         ))
         self.db.commit()
         # Issue #826 (ver el comentario de `PersonaServicio.crear_representado`):

@@ -181,6 +181,10 @@ def test_registrar_asistencia_rechaza_fecha_que_no_coincide_con_el_dia_del_horar
     detalle = resp.json()["detail"].lower()
     assert "domingo" in detalle
     assert "miércoles" in detalle
+    # ENT-16: fecha en dd/mm/aaaa, nunca ISO.
+    assert resp.json()["detail"] == (
+        "La fecha 16/08/2026 es domingo, pero el horario es de los miércoles."
+    )
 
     # Nada quedó creado: el rechazo es total, no una fila corrupta más.
     historial = client.get(f"/api/v1/asistencias/persona/{alumno['id']}")

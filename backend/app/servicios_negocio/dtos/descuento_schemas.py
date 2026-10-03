@@ -19,6 +19,12 @@ _MENSAJE_EXCLUSIVIDAD = (
 )
 
 
+# ADMB-10: mismos límites que las tarifas ($1,00 a $1000,00, 2 decimales); sin
+# tope, un cero de más dejaba pagos en $0 o negativos.
+MONTO_MINIMO_DESCUENTO = Decimal("1.00")
+MONTO_MAXIMO_DESCUENTO = Decimal("1000.00")
+
+
 def _nombre_normalizado_no_vacio(valor: str) -> str:
     normalizado = normalizar_nombre(valor)
     if not normalizado:
@@ -28,8 +34,10 @@ def _nombre_normalizado_no_vacio(valor: str) -> str:
 
 class DescuentoCreateDTO(BaseModel):
     nombre: str = Field(..., min_length=1, max_length=100)
-    porcentaje: Optional[Decimal] = Field(None, gt=0, le=100)
-    monto: Optional[Decimal] = Field(None, gt=0)
+    porcentaje: Optional[Decimal] = Field(None, gt=0, le=100, decimal_places=2)
+    monto: Optional[Decimal] = Field(
+        None, ge=MONTO_MINIMO_DESCUENTO, le=MONTO_MAXIMO_DESCUENTO, decimal_places=2,
+    )
     activo: bool = True
 
     @field_validator("nombre")
@@ -51,8 +59,10 @@ class DescuentoUpdateDTO(BaseModel):
     la exclusividad del estado FINAL la valida el servicio, que es quien
     conoce los valores vigentes."""
     nombre: Optional[str] = Field(None, min_length=1, max_length=100)
-    porcentaje: Optional[Decimal] = Field(None, gt=0, le=100)
-    monto: Optional[Decimal] = Field(None, gt=0)
+    porcentaje: Optional[Decimal] = Field(None, gt=0, le=100, decimal_places=2)
+    monto: Optional[Decimal] = Field(
+        None, ge=MONTO_MINIMO_DESCUENTO, le=MONTO_MAXIMO_DESCUENTO, decimal_places=2,
+    )
     activo: Optional[bool] = None
 
     @field_validator("nombre")

@@ -180,7 +180,7 @@ class EnrollmentServicio:
         if edad < EDAD_MINIMA_ALUMNO or edad > EDAD_MAXIMA_ALUMNO:
             raise OperacionInvalida(
                 f"La edad del alumno debe estar entre {EDAD_MINIMA_ALUMNO} "
-                f"y {EDAD_MAXIMA_ALUMNO} años (calculado: {edad})."
+                f"y {EDAD_MAXIMA_ALUMNO} años; según la fecha de nacimiento, tiene {edad} años."
             )
 
         hay_representante = datos.representante is not None
@@ -211,13 +211,13 @@ class EnrollmentServicio:
             if edad_rep < EDAD_MAYORIA_EDAD:
                 raise OperacionInvalida(
                     f"El representante legal debe ser mayor de edad "
-                    f"({EDAD_MAYORIA_EDAD} años o más); la edad calculada "
-                    f"es {edad_rep} años."
+                    f"({EDAD_MAYORIA_EDAD} años o más); según su fecha de nacimiento, "
+                    f"tiene {edad_rep} años."
                 )
             if edad_rep > EDAD_MAXIMA_ALUMNO:
                 raise OperacionInvalida(
                     f"El representante legal debe tener como máximo "
-                    f"{EDAD_MAXIMA_ALUMNO} años (calculado: {edad_rep})."
+                    f"{EDAD_MAXIMA_ALUMNO} años; según su fecha de nacimiento, tiene {edad_rep} años."
                 )
 
         # Validar cédula única del alumno. Antes corría DESPUÉS de crear la

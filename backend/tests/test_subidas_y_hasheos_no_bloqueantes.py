@@ -155,7 +155,7 @@ def test_subida_lenta_de_logo_no_bloquea_el_event_loop(client, monkeypatch):
         # ningún choque de unicidad frena la 2da/3ra repetición.
         lambda _iteracion: client.post(
             RUTA_SPONSORS,
-            data={"nombre": "Municipio"},
+            data={"nombre": f"Municipio {_iteracion}"},
             files={"archivo": ("logo.jpg", JPEG_VALIDO, "image/jpeg")},
         ),
         en_vuelo,

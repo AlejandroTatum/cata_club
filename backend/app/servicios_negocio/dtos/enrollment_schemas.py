@@ -8,7 +8,7 @@ request transaccional, y retorna tokens JWT para auto-login inmediato.
 """
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from datetime import date
-from typing import Any, Optional, List, Union
+from typing import Any, Optional, Union
 
 from app.dominio.enums import NivelTecnicoAlumno, TipoManoDominante
 from app.servicios_negocio.dtos.validadores import (
@@ -17,7 +17,7 @@ from app.servicios_negocio.dtos.validadores import (
     ContactoEmergenciaValidado,
     ContraseniaValidada,
     CorreoValidado,
-    EnfermedadValidada,
+    EnfermedadesValidadas,
     NombreValidado,
     TelefonoValidado,
     TipoSangreValidado,
@@ -97,7 +97,7 @@ class EnrollmentFichaMedicaDTO(BaseModel):
     diferencia es deliberada.
     """
     tipo_sangre: TipoSangreValidado
-    enfermedades: List[EnfermedadValidada] = Field(default_factory=list)
+    enfermedades: EnfermedadesValidadas = Field(default_factory=list)
     alergias: Optional[str] = Field(default=None, max_length=255)
     contacto_emergencia: ContactoEmergenciaValidado = Field(..., min_length=1, max_length=150)
     telefono_emergencia: TelefonoValidado = Field(..., max_length=32)
@@ -120,7 +120,7 @@ class EnrollmentFichaMedicaMenorDTO(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     tipo_sangre: TipoSangreValidado
-    enfermedades: List[EnfermedadValidada] = Field(default_factory=list)
+    enfermedades: EnfermedadesValidadas = Field(default_factory=list)
     alergias: Optional[str] = Field(default=None, max_length=255)
 
 
