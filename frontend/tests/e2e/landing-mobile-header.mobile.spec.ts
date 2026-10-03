@@ -1,8 +1,8 @@
 /**
- * Two defects reported from a real phone (~390 CSS px wide), neither visible
- * to jsdom: it performs no real layout, so it can assert a class was written
- * but never that the navbar actually wraps to a second row or that a number
- * actually breaks across two lines. Only a layout engine answers those,
+ * Defects reported from a real phone (~390 CSS px wide), none visible to
+ * jsdom: it performs no real layout, so it can assert a class was written
+ * but never that the navbar actually wraps to a second row or that a time
+ * range actually breaks across two lines. Only a layout engine answers those,
  * which is `mobile-chromium`'s reason to carry this spec at all — the same
  * reasoning `landing-schedule-card.mobile.spec.ts` gives for issue #988.
  *
@@ -29,47 +29,9 @@ async function mockSchedules(page: import("@playwright/test").Page): Promise<voi
   );
 }
 
-/**
- * Every `.landing-schedule-digit` inside one `.landing-schedule-time-part`
- * shares the same `y` (never split by a wrap) and the part's own box height
- * stays within a single line — the assertion that catches "21:1" / "5"
- * landing on two lines even though each individual digit box looks fine.
- */
-async function expectTimePartsUnbroken(page: import("@playwright/test").Page): Promise<void> {
-  const parts = page.locator(".landing-schedule-time-part");
-  await expect(parts).toHaveCount(2);
-  const partCount = await parts.count();
-
-  for (let index = 0; index < partCount; index += 1) {
-    const part = parts.nth(index);
-    const partBox = await part.boundingBox();
-    expect(partBox, `part ${index} box`).not.toBeNull();
-
-    const digitYs = await part.locator(".landing-schedule-digit").evaluateAll((digits) =>
-      digits.map((digit) => digit.getBoundingClientRect().y),
-    );
-    expect(digitYs.length, `part ${index} digit count`).toBeGreaterThan(0);
-    digitYs.forEach((y, digitIndex) => {
-      expect(y, `part ${index} digit ${digitIndex} y vs first`).toBeCloseTo(digitYs[0], 0);
-    });
-
-    const digitHeights = await part.locator(".landing-schedule-digit").evaluateAll((digits) =>
-      digits.map((digit) => digit.getBoundingClientRect().height),
-    );
-    const maxDigitHeight = Math.max(...digitHeights);
-    // A part whose own box is taller than a single digit's own line height
-    // wrapped internally — that is exactly the defect this lock exists for.
-    expect(partBox!.height, `part ${index} height vs a single digit's own line`).toBeLessThanOrEqual(maxDigitHeight + 1);
-  }
-}
-
 test.describe("Landing header and schedule hours on a real mobile engine", () => {
-  // The digit-roll stagger animation (35ms per character) puts individual
-  // digits at different transform states for ~700ms after mount — real but
-  // irrelevant to the wrap defects this spec locks down, and it makes the
-  // per-digit `y` comparisons below flaky. Reduced motion withholds
-  // `ScheduleSelector`'s own `--animate` class, so digits render at their
-  // final position immediately.
+  // Reduced motion withholds the cards' entrance animation, so they are
+  // measured at their final position immediately.
   test.use({ reducedMotion: "reduce" });
 
   test("the navbar link row never wraps to a second row and stays a tappable, page-safe scroll strip", async ({ page }) => {
@@ -108,20 +70,17 @@ test.describe("Landing header and schedule hours on a real mobile engine", () =>
     }
   });
 
-  test("the schedule hours never break mid-number and stay inside the card", async ({ page }) => {
+  test("the schedule hours stay on one line and inside their card", async ({ page }) => {
     await mockSchedules(page);
     await page.goto("/");
 
-    const card = page.locator(".landing-schedule-card");
+    const card = page.locator(".landing-schedule-tile:not(.landing-schedule-help)");
     await expect(card).toBeVisible();
-    const time = page.locator(".landing-schedule-time");
+    const time = card.locator(".landing-schedule-time");
     await expect(time).toBeVisible();
     await expect(time).toHaveText("20:00–21:15");
 
-    await expectTimePartsUnbroken(page);
-
-    // The whole range fits on one line: a wrapped range paints as more than
-    // one client rect (one per visual line) for its own box.
+    // A wrapped range paints as more than one client rect (one per visual line).
     const rectCount = await time.evaluate((el) => el.getClientRects().length);
     expect(rectCount).toBe(1);
 
@@ -132,19 +91,20 @@ test.describe("Landing header and schedule hours on a real mobile engine", () =>
     expect(timeBox!.x + timeBox!.width, "time right edge vs card right edge").toBeLessThanOrEqual(cardBox!.x + cardBox!.width + 0.5);
   });
 
-  // The difference between "fits today" and "can never break a number": at
-  // an even narrower width the range itself is allowed to wrap onto two
-  // lines (`.landing-schedule-time` keeps `flex-wrap: wrap`), but neither
-  // half may ever split across that wrap.
-  test("at 360px the range may wrap as a whole, but never splits a number", async ({ page }) => {
+  test("at 360px the hours stay inside the card without scrolling the page", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 800 });
     await mockSchedules(page);
     await page.goto("/");
 
-    const time = page.locator(".landing-schedule-time");
+    const card = page.locator(".landing-schedule-tile:not(.landing-schedule-help)");
+    await expect(card).toBeVisible();
+    const time = card.locator(".landing-schedule-time");
     await expect(time).toBeVisible();
-
-    await expectTimePartsUnbroken(page);
+    const timeBox = await time.boundingBox();
+    const cardBox = await card.boundingBox();
+    expect(timeBox!.x + timeBox!.width, "time right edge vs card right edge").toBeLessThanOrEqual(cardBox!.x + cardBox!.width + 0.5);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
   });
 
   // Issue found on the nav strip once it became a real scroll container:

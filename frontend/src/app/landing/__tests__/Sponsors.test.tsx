@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Sponsors, { mapSponsor, type PublicSponsorPayload } from "../Sponsors";
 
@@ -97,6 +97,24 @@ describe("Sponsors", (): void => {
     // The strip header is the canonical public term, not "Nos acompañan".
     expect(screen.getByText("Patrocinadores")).toBeInTheDocument();
     expect(screen.queryByText(/Auspiciantes|Nos acompañan/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the sponsor's name instead of a broken image when the logo fails to load", async (): Promise<void> => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(jsonResponse([
+      { id: 1, nombre: "Nutrideportes", logoUrl: "https://cdn/missing.png" },
+    ]));
+    const { container } = render(<Sponsors />);
+    // The marquee repeats the roster; every repeat loads (and fails) on its own.
+    (await screen.findAllByAltText("Nutrideportes")).forEach((logo): void => { fireEvent.error(logo); });
+    expect(screen.queryByAltText("Nutrideportes")).toBeNull();
+    expect(container.querySelector(".landing-sponsor-name")?.textContent).toBe("Nutrideportes");
+  });
+
+  it("sets the sponsors on a defined band with raised tiles, apart from the contact sheet", (): void => {
+    const css = landingCss();
+    expect(css).toMatch(/\.landing-sponsors \{[^}]*background: var\(--landing-highlight\)/);
+    expect(css).toMatch(/\.landing-location \{ background: var\(--landing-stats-bg\); \}/);
+    expect(css.match(/\.landing-sponsor \{[^}]*\}/)?.[0]).toMatch(/background: var\(--landing-surface\);.*box-shadow/);
   });
 
   it("renders each sponsor logo at ~double the previous size while preserving aspect via contain", async (): Promise<void> => {

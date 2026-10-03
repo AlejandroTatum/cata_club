@@ -1,20 +1,18 @@
 /** @vitest-environment jsdom */
 
 /**
- * The simple card, decided 2026-09-02 over the prototype `horarios-simple.html`
- * (see `~/devwork/.projects/apps/cata_club-prototipos/horarios-simple.html`).
- * Issue #988 replaces the timeline (`schedule-timeline.ts`, deleted) with one
- * category list and one card that always shows the first slot's schedule in
- * large type, six day balls, the WhatsApp CTA and one line per extra slot.
+ * Proposal C of the Horarios prototypes (`odd/prototipos/horarios-v3`): every
+ * category is a card on screen at once — age as the headline, an age bar that
+ * shows overlaps, time, days and a WhatsApp button — plus a "no sabe cuál
+ * elegir" card. Nothing here is interactive beyond plain links.
  *
- * Reuses `stubLandingGlobals`/`resetLandingTestEnvironment` for the
- * `matchMedia`/`ResizeObserver` doubles the component's reduced-motion hook
- * reads, and `category`/`weekSlot`/`satSlot` from `schedule-fixtures.ts` for
- * the input catalog — the same builders `landing-config.test.ts` already
- * shares, so this file adds no second copy of either.
+ * Builders come from `schedule-fixtures.ts`, the same ones `landing-config`'s
+ * suite shares, so no second copy of a catalog lives in this file.
  */
 
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { act, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LandingSchedule } from "@/app/landing/schedule-data";
 import ScheduleSelector from "@/app/landing/ScheduleSelector";
@@ -26,163 +24,160 @@ const WEEKDAYS = "Lunes, Martes, Miércoles, Jueves y Viernes";
 const MON_WED_FRI = "Lunes, Miércoles y Viernes";
 
 const SCHEDULES: LandingSchedule[] = [
+  category("Competitivo", [weekSlot("18:00 – 20:00", WEEKDAYS), satSlot("18:00 – 20:00")], "Selección"),
+  category("Adultos", [weekSlot("20:00 – 21:15", WEEKDAYS)], "Mayores de 18 años"),
+  category("Infantil", [weekSlot("16:00 – 17:00", MON_WED_FRI)], "8 a 12 años"),
   category("Formativo", [weekSlot("15:00 – 16:00", WEEKDAYS)], "5 a 10 años"),
-  category("Infantil", [weekSlot("16:00 – 17:00", MON_WED_FRI)]),
-  category("Competitivo", [weekSlot("18:00 – 20:00", WEEKDAYS), satSlot("18:00 – 20:00")]),
+  category("Juvenil", [weekSlot("17:00 – 18:00", WEEKDAYS)], "Mayores de 12 años"),
+  category("Juego Libre", [satSlot("15:00 – 18:00")]),
 ];
 
-/** Reduced motion by default, like every other landing suite's quietest answer. */
-function renderCard(schedules: LandingSchedule[] = SCHEDULES): ReturnType<typeof render> {
+const WA = toWhatsAppLink(landingConfig.contact.whatsapp[0]);
+
+function renderCards(schedules: LandingSchedule[] = SCHEDULES): ReturnType<typeof render> {
   stubLandingGlobals();
   return render(<ScheduleSelector schedules={schedules} />);
 }
 
-/** Overrides the shared stub so `(prefers-reduced-motion: reduce)` reports false. */
-function allowMotion(): void {
-  vi.stubGlobal("matchMedia", vi.fn((query: string): MediaQueryList => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  } as unknown as MediaQueryList)));
+function card(name: string): HTMLElement {
+  return screen.getByRole("heading", { level: 3, name }).closest("li") as HTMLElement;
 }
 
-function litBallLabels(): string[] {
-  return Array.from(document.querySelectorAll(".landing-schedule-day--on")).map(
-    (ball): string => ball.textContent ?? "",
-  );
+function litCells(target: HTMLElement): number[] {
+  return Array.from(target.querySelectorAll(".landing-schedule-scale i")).flatMap((cell, index): number[] =>
+    cell.classList.contains("landing-schedule-scale-on") ? [index] : []);
 }
 
-describe("ScheduleSelector", (): void => {
+describe("ScheduleSelector (cards side by side)", (): void => {
   afterEach(resetLandingTestEnvironment);
 
-  it("shows the category content alone, with no photo in the card", (): void => {
-    renderCard();
-    const card = document.querySelector(".landing-schedule-card") as HTMLElement;
-    expect(card.querySelector("img, figure")).toBeNull();
-    expect(card.querySelector(".landing-schedule-copy")).not.toBeNull();
+  it("renders one card per category in a list, youngest first and unnumbered labels last, then the help card", (): void => {
+    renderCards();
+    const list = screen.getByRole("list", { name: "Categorías" });
+    const names = within(list).getAllByRole("heading", { level: 3 }).map((heading): string => heading.textContent ?? "");
+    expect(names).toEqual(["Formativo", "Infantil", "Juvenil", "Adultos", "Competitivo", "Juego Libre", "¿No sabe cuál elegir?"]);
   });
 
-  it("lights L, M, X, J, V for a category running Monday to Friday", (): void => {
-    renderCard();
-    expect(litBallLabels()).toEqual(["L", "M", "X", "J", "V"]);
+  it("leads each card with its age label, and omits it when the category publishes none", (): void => {
+    renderCards();
+    expect(within(card("Formativo")).getByText("5 a 10 años")).toBeInTheDocument();
+    expect(within(card("Competitivo")).getByText("Selección")).toBeInTheDocument();
+    expect(card("Juego Libre").querySelector(".landing-schedule-ages")).toBeNull();
+    // "Edad" labels an age; a squad name like "Selección" is not one.
+    expect(within(card("Formativo")).getByText("Edad")).toBeInTheDocument();
+    expect(within(card("Competitivo")).queryByText("Edad")).toBeNull();
   });
 
-  it("does not repeat the day sentence beneath the main time", (): void => {
-    renderCard();
-    const panel = screen.getByRole("tabpanel");
-    expect(panel.querySelector(".landing-schedule-time")).not.toHaveTextContent(WEEKDAYS);
-    expect(within(panel).getByText("Días")).toBeInTheDocument();
-    expect(within(panel).getByLabelText(WEEKDAYS)).toBeInTheDocument();
+  it("shows the time and compacted days from the data, one line per extra slot", (): void => {
+    renderCards();
+    const formativo = card("Formativo");
+    expect(formativo.querySelector(".landing-schedule-time")).toHaveTextContent("15:00 – 16:00");
+    expect(within(formativo).getByText("Lunes a viernes")).toBeInTheDocument();
+    expect(within(card("Infantil")).getByText(MON_WED_FRI)).toBeInTheDocument();
+
+    const competitivo = card("Competitivo");
+    expect(competitivo.querySelectorAll(".landing-schedule-slot")).toHaveLength(2);
+    expect(within(competitivo).getByText("Sábado")).toBeInTheDocument();
   });
 
-  it("lights only L, X, V for a category running Monday, Wednesday and Friday", (): void => {
-    renderCard();
-    fireEvent.click(screen.getByRole("tab", { name: /infantil/i }));
-    expect(litBallLabels()).toEqual(["L", "X", "V"]);
-  });
-
-  it("lights only S for a Saturday-only first slot", (): void => {
-    renderCard([category("Sabatino", [satSlot("15:00 – 18:00")])]);
-    expect(litBallLabels()).toEqual(["S"]);
-  });
-
-  it("shows a secondary line only for slots after the first", (): void => {
-    renderCard();
-    const panel = screen.getByRole("tabpanel");
-    expect(within(panel).queryByText(/también/i)).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("tab", { name: /competitivo/i }));
-    expect(within(panel).getByText(/También/)).toHaveTextContent("También 18:00–20:00 los sábado.");
-  });
-
-  it("adds no animation class to the digits or the lit balls with reduced motion", (): void => {
-    renderCard();
-    const panel = screen.getByRole("tabpanel");
-    expect(panel.querySelector(".landing-schedule-time--animate")).toBeNull();
-    expect(panel.querySelector(".landing-schedule-day--pop")).toBeNull();
-  });
-
-  it("adds the animation class to the digits and the lit balls without reduced motion", (): void => {
-    allowMotion();
-    render(<ScheduleSelector schedules={SCHEDULES} />);
-    const panel = screen.getByRole("tabpanel");
-    expect(panel.querySelector(".landing-schedule-time--animate")).not.toBeNull();
-    expect(panel.querySelectorAll(".landing-schedule-day--pop").length).toBeGreaterThan(0);
-  });
-
-  it("points the CTA at the club's first WhatsApp number with a category-specific prefilled message", (): void => {
-    renderCard();
-    const cta = screen.getByRole("link", { name: /consultar cupo por whatsapp/i });
-    expect(cta).toHaveAttribute(
-      "href",
-      `${toWhatsAppLink(landingConfig.contact.whatsapp[0])}?text=${encodeURIComponent("Hola, quiero consultar cupo en Formativo.")}`,
-    );
-    expect(cta).toHaveAttribute("target", "_blank");
-    expect(cta).toHaveAttribute("rel", "noreferrer");
-
-    fireEvent.click(screen.getByRole("tab", { name: /infantil/i }));
-    expect(screen.getByRole("link", { name: /consultar cupo por whatsapp/i })).toHaveAttribute(
-      "href",
-      `${toWhatsAppLink(landingConfig.contact.whatsapp[0])}?text=${encodeURIComponent("Hola, quiero consultar cupo en Infantil.")}`,
-    );
-  });
-
-  it("moves selection and focus with the arrow keys, keeping the tablist/tab/tabpanel roles", (): void => {
-    renderCard();
-    const tablist = screen.getByRole("tablist", { name: "Categorías" });
-    const tabs = within(tablist).getAllByRole("tab");
-
-    fireEvent.keyDown(tablist, { key: "ArrowDown" });
-    expect(tabs[1]).toHaveAttribute("aria-selected", "true");
-    expect(tabs[1]).toHaveFocus();
-
-    fireEvent.keyDown(tablist, { key: "ArrowUp" });
-    expect(tabs[0]).toHaveAttribute("aria-selected", "true");
-    expect(tabs[0]).toHaveFocus();
-
-    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-live", "polite");
-  });
-
-  it("wraps every hour digit in its own unbreakable time-part, never bare in the time row", (): void => {
-    renderCard();
-    const panel = screen.getByRole("tabpanel");
-    const parts = panel.querySelectorAll(".landing-schedule-time-part");
-    expect(parts).toHaveLength(2);
-    const digits = panel.querySelectorAll(".landing-schedule-digit");
-    expect(digits.length).toBeGreaterThan(0);
-    digits.forEach((digit): void => {
-      expect(digit.closest(".landing-schedule-time-part")).not.toBeNull();
+  it("links every card to the club's first WhatsApp number with a message naming its category", (): void => {
+    renderCards();
+    SCHEDULES.forEach((schedule): void => {
+      const link = within(card(schedule.category)).getByRole("link", { name: `Consultar cupo en ${schedule.category} por WhatsApp` });
+      expect(link).toHaveAttribute("href", `${WA}?text=${encodeURIComponent(`Hola, quiero consultar cupo en ${schedule.category}.`)}`);
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", "noreferrer");
     });
   });
 
-  it("keeps the day balls decorative and names the days in text on the group", (): void => {
-    renderCard();
-    const group = document.querySelector(".landing-schedule-days") as HTMLElement;
-    expect(group).toHaveAttribute("aria-label", WEEKDAYS);
-    within(group).queryAllByText(/^[LMXJVS]$/).forEach((ball): void => {
-      expect(ball).toHaveAttribute("aria-hidden", "true");
-    });
+  it("marks on the age bar exactly the ages of each category, so overlaps are visible", (): void => {
+    renderCards();
+    // Scale 5..18 → 14 cells; index = age - 5.
+    expect(litCells(card("Formativo"))).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(litCells(card("Infantil"))).toEqual([3, 4, 5, 6, 7]);
+    expect(litCells(card("Juvenil"))).toEqual([8, 9, 10, 11, 12]);
+    expect(litCells(card("Adultos"))).toEqual([13]);
+    const formativo = card("Formativo");
+    expect(formativo.querySelectorAll(".landing-schedule-scale i")).toHaveLength(14);
+    expect(formativo.querySelector(".landing-schedule-scale-labels")).toHaveTextContent("518+");
+    expect(formativo.querySelector(".landing-schedule-scale")).toHaveAttribute("aria-hidden", "true");
   });
 
-  /**
-   * Issue #1256: the hero addresses a parent of a 6-17 year old, so the
-   * selector must not default to whichever category the API happened to
-   * list first — here an adult category placed deliberately at index 0.
-   */
-  it("opens on the youngest category's tab even when the API lists an adult category first", (): void => {
-    const schedules = [
-      category("Adultos", [weekSlot("19:00 – 20:00", WEEKDAYS)], "Mayores de 18 años"),
-      category("Formativo", [weekSlot("15:00 – 16:00", WEEKDAYS)], "5 a 10 años"),
-    ];
-    renderCard(schedules);
-    const tabs = screen.getAllByRole("tab");
-    expect(tabs[1]).toHaveAttribute("aria-selected", "true");
-    expect(tabs[0]).toHaveAttribute("aria-selected", "false");
-    expect(screen.getByRole("tabpanel")).toHaveTextContent("Formativo");
+  it("draws no bar for a category without numeric ages", (): void => {
+    renderCards();
+    expect(card("Competitivo").querySelector(".landing-schedule-scale")).toBeNull();
+    expect(card("Juego Libre").querySelector(".landing-schedule-scale")).toBeNull();
+  });
+
+  it("draws no bars at all when no category publishes a numeric age", (): void => {
+    const { container } = renderCards([category("Libre", [satSlot("15:00 – 18:00")])]);
+    expect(container.querySelector(".landing-schedule-scale")).toBeNull();
+    expect(container.querySelector(".landing-schedule-note")).toBeNull();
+  });
+
+  it("closes with a 'no sabe cuál elegir' card that asks for help over WhatsApp", (): void => {
+    renderCards();
+    const help = screen.getByRole("heading", { level: 3, name: "¿No sabe cuál elegir?" }).closest("li") as HTMLElement;
+    expect(within(help).getByRole("link", { name: /abrir whatsapp/i })).toHaveAttribute(
+      "href",
+      `${WA}?text=${encodeURIComponent("Hola, quiero ayuda para elegir categoría.")}`,
+    );
+    expect(help.parentElement?.lastElementChild).toBe(help);
+  });
+
+  it("has no tabs, day balls or rolling digits left from the old selector", (): void => {
+    const { container } = renderCards();
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(container.querySelector(".landing-schedule-day, .landing-schedule-digit")).toBeNull();
+  });
+
+  it("renders a card per category from whatever the club publishes, never a fixed list", (): void => {
+    renderCards([category("Nocturno", [weekSlot("22:00 – 23:00", MON_WED_FRI)], "6 a 9 años")]);
+    expect(screen.getAllByRole("heading", { level: 3 }).map((heading): string => heading.textContent ?? "")).toEqual([
+      "Nocturno",
+      "¿No sabe cuál elegir?",
+    ]);
+  });
+
+  describe("entrance and hover motion", (): void => {
+    const css = (): string => readFileSync(resolve(process.cwd(), "src/app/landing/landing.css"), "utf8");
+
+    function stubObserver(): { fire: () => void } {
+      let callback: IntersectionObserverCallback = (): void => undefined;
+      vi.stubGlobal("IntersectionObserver", class {
+        constructor(cb: IntersectionObserverCallback) { callback = cb; }
+        observe(): void {}
+        disconnect(): void {}
+      });
+      return { fire: (): void => callback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver) };
+    }
+
+    it("arms the grid when mounted and reveals it on first scroll into view", (): void => {
+      const observer = stubObserver();
+      stubLandingGlobals();
+      vi.stubGlobal("matchMedia", vi.fn((query: string) => ({ matches: false, media: query })));
+      vi.stubGlobal("IntersectionObserver", globalThis.IntersectionObserver);
+      const { container } = render(<ScheduleSelector schedules={SCHEDULES} />);
+      const grid = container.querySelector(".landing-schedule-grid") as HTMLElement;
+      expect(grid.dataset.scheduleReveal).toBe("armed");
+      act((): void => observer.fire());
+      expect(grid.dataset.scheduleReveal).toBe("in");
+    });
+
+    it("leaves the cards visible, never armed, under reduced motion", (): void => {
+      stubObserver();
+      stubLandingGlobals();
+      vi.stubGlobal("matchMedia", vi.fn((query: string) => ({ matches: query.includes("reduce"), media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+      const { container } = render(<ScheduleSelector schedules={SCHEDULES} />);
+      expect((container.querySelector(".landing-schedule-grid") as HTMLElement).dataset.scheduleReveal).toBeUndefined();
+    });
+
+    it("styles the stagger, the hover/focus lift and the reduced-motion reset in the stylesheet", (): void => {
+      const sheet = css();
+      expect(sheet).toContain('[data-schedule-reveal="in"] .landing-schedule-tile');
+      expect(sheet).toContain(".landing-schedule-tile:focus-within { transform: translateY(");
+      const reduced = sheet.slice(sheet.lastIndexOf("@media (prefers-reduced-motion: reduce)"));
+      expect(reduced).toMatch(/\.landing-schedule-grid \.landing-schedule-tile \{ animation: none; opacity: 1; transform: none/);
+    });
   });
 });
