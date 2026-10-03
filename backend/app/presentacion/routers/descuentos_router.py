@@ -1,9 +1,11 @@
 """
 Catálogo de descuentos (issue #11). CRUD exclusivo del ADMINISTRADOR: el
 catálogo es del club y la decisión de aplicar es del admin (modelo firmado
-§4, sin motor de reglas). No hay DELETE: la baja es SUAVE vía `activo`
-(PATCH), coherente con la filosofía de conservar historia del sistema --
-las aplicaciones históricas referencian al descuento por FK.
+§4, sin motor de reglas). La baja es SUAVE vía `activo` (PATCH),
+coherente con la filosofía de conservar historia del sistema -- las
+aplicaciones históricas referencian al descuento por FK. `DELETE` existe solo
+para un descuento que nunca se usó (409 si algún pago o beneficio lo
+referencia).
 
 La APLICACIÓN de un descuento a un pago no vive aquí: desde el issue #398/3c
 el pago YA NO recibe ningún campo de descuento -- `PagoServicio.
@@ -65,3 +67,9 @@ async def actualizar_descuento(
     descuento_id: int, datos: DescuentoUpdateDTO, db: Session = Depends(obtener_sesion),
 ):
     return DescuentoServicio(db).actualizar(descuento_id, datos)
+
+
+@router.delete("/{descuento_id}", status_code=204,
+               dependencies=[Depends(GestorPermisos(ROL_ADMIN))])
+async def eliminar_descuento(descuento_id: int, db: Session = Depends(obtener_sesion)):
+    DescuentoServicio(db).eliminar(descuento_id)

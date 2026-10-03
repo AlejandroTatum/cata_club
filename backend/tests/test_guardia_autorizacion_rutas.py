@@ -275,6 +275,7 @@ RUTAS_ROLES_REQUERIDOS = {
     # listado incluye inactivos (vista de administración), por eso ni la
     # lectura es de "cualquier autenticado".
     ("GET", "/descuentos/"): frozenset({"ADMINISTRADOR"}),
+    ("DELETE", "/descuentos/{descuento_id}"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/descuentos/{descuento_id}"): frozenset({"ADMINISTRADOR"}),
     # Issue #360: el club no asigna entrenadores a horarios, así que el
     # acceso se acota por DATO (siete campos de emergencia, no la ficha
