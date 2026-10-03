@@ -25,6 +25,7 @@ from app.dominio.mensajes import (
 from app.infraestructura import actividad
 from app.infraestructura.metricas import contar_login
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
+from app.infraestructura.tareas.outbox_despacho import encolar_despacho_tras_commit
 from app.infraestructura.repositorios.restricciones_identidad import identidad_en_conflicto
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
 from app.servicios_negocio.dtos.auth_schemas import RegistroUsuarioDTO, ActualizarPerfilPropioDTO
@@ -931,6 +932,10 @@ class AuthServicio:
                 evento.next_attempt_at = min(
                     evento.next_attempt_at, datetime.now(timezone.utc)
                 )
+            if evento is None or evento.status == "PENDIENTE":
+                encolar_despacho_tras_commit(
+                    self.db, "app.infraestructura.tareas.recuperacion_tareas.despachar_recuperaciones_pendientes"
+                )
             try:
                 self.db.commit()
             except Exception:
@@ -1044,6 +1049,10 @@ class AuthServicio:
                 # toca: está reclamada por un worker y su lease manda.
                 evento.next_attempt_at = min(
                     evento.next_attempt_at, datetime.now(timezone.utc)
+                )
+            if evento is None or evento.status == "PENDIENTE":
+                encolar_despacho_tras_commit(
+                    self.db, "app.infraestructura.tareas.verificacion_correo_tareas.despachar_verificaciones_pendientes"
                 )
             try:
                 self.db.commit()

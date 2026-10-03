@@ -50,6 +50,7 @@ from app.infraestructura.repositorios.usuario_ficha_repositorio import (
 from app.infraestructura.repositorios.antecedentes_club_repositorio import AntecedentesClubRepositorio
 from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
 from app.infraestructura.repositorios.enrollment_notificacion_outbox_repositorio import EnrollmentNotificacionOutboxRepositorio
+from app.infraestructura.tareas.outbox_despacho import encolar_despacho_tras_commit
 from app.infraestructura.repositorios.inscripcion_idempotencia_repositorio import (
     ESTADO_PENDIENTE,
     InscripcionIdempotenciaRepositorio,
@@ -70,11 +71,11 @@ from app.servicios_negocio.persona_servicio import (
 # de ESTE flujo: el router de autoinscripción lo traduce a HTTP 409 / 425 +
 # `Retry-After` (ver `enrollment_router.py`).
 MENSAJE_IDEMPOTENCIA_EN_VUELO = (
-    "La inscripción ya está en proceso. Espere unos segundos e intente nuevamente."
+    "La inscripción ya está en proceso. Espera unos segundos e intenta nuevamente."
 )
 MENSAJE_IDEMPOTENCIA_REUTILIZADA = (
-    "Esta solicitud de inscripción ya fue utilizada. Reinicie la inscripción "
-    "e intente nuevamente."
+    "Esta solicitud de inscripción ya fue utilizada. Reinicia la inscripción "
+    "e intenta nuevamente."
 )
 # Ventana que el cliente debe esperar antes de reintentar un intento en vuelo
 # (PENDIENTE). Segundos, HTTP `Retry-After`.
@@ -92,7 +93,7 @@ REINTENTO_SEGUNDOS_EN_VUELO = 2
 # (`frontend/src/lib/identity-validation.ts`); cambiar uno sin el otro las
 # hace divergir.
 MENSAJE_CEDULA_REPRESENTANTE_IGUAL_ALUMNO = (
-    "La cédula del representante debe ser diferente de la cédula del estudiante."
+    "La cédula del representante debe ser diferente de la cédula del jugador."
 )
 
 
@@ -174,12 +175,12 @@ class EnrollmentServicio:
 
         # === Fase 1: validar TODO antes de escribir una sola fila =========
         if datos.acepta_consentimientos is not True:
-            raise OperacionInvalida("Debe aceptar los consentimientos legales para continuar.")
+            raise OperacionInvalida("Debes aceptar los consentimientos legales para continuar.")
 
         edad = _calcular_edad(datos.alumno.fecha_nacimiento)
         if edad < EDAD_MINIMA_ALUMNO or edad > EDAD_MAXIMA_ALUMNO:
             raise OperacionInvalida(
-                f"La edad del alumno debe estar entre {EDAD_MINIMA_ALUMNO} "
+                f"La edad del jugador debe estar entre {EDAD_MINIMA_ALUMNO} "
                 f"y {EDAD_MAXIMA_ALUMNO} años; según la fecha de nacimiento, tiene {edad} años."
             )
 
@@ -235,7 +236,7 @@ class EnrollmentServicio:
         # Validar regla de menores
         if EDAD_MINIMA_ALUMNO <= edad < EDAD_MAYORIA_EDAD and not hay_representante:
             raise OperacionInvalida(
-                "El alumno es menor de edad y requiere un representante legal."
+                "El jugador es menor de edad y requiere un representante legal."
             )
 
         # Validar correo único de la autoinscripción sin representante
@@ -541,6 +542,10 @@ class EnrollmentServicio:
             expires_at=_ahora_utc() + timedelta(hours=24),
         ))
         self.db.flush()
+        encolar_despacho_tras_commit(
+            self.db,
+            "app.infraestructura.tareas.verificacion_correo_tareas.despachar_verificaciones_pendientes",
+        )
 
     def _notificar_nueva_inscripcion(self, alumno: Persona) -> None:
         """Encola en el outbox un aviso por cada administrador.
@@ -554,7 +559,7 @@ class EnrollmentServicio:
         rol_admin = self.repo_rol.obtener_por_tipo_con_usuarios(TipoRol.ADMINISTRADOR)
         admins = [u.persona for u in rol_admin.usuarios if u.persona] if rol_admin else []
         nombre_alumno = acortar_nombre_para_notificacion(nombre_completo(alumno.nombres, alumno.apellidos))
-        mensaje_del_club = f"Nuevo alumno inscrito: {nombre_alumno} (cédula: {alumno.cedula})."
+        mensaje_del_club = f"Nuevo jugador inscrito: {nombre_alumno} (cédula: {alumno.cedula})."
         mensajes = {admin.id: mensaje_del_club for admin in admins}
         if alumno.representante_id and alumno.representante_id not in mensajes:
             # QA4 FAM-06: la familia no necesita la cédula del menor ni un texto
@@ -565,3 +570,8 @@ class EnrollmentServicio:
             )
         for destinatario_id, mensaje in mensajes.items():
             repo_outbox.crear(destinatario_id, alumno.id, mensaje)
+        if mensajes:
+            encolar_despacho_tras_commit(
+                self.db,
+                "app.infraestructura.tareas.enrollment_notificacion_tareas.despachar_inscripcion_notificaciones",
+            )

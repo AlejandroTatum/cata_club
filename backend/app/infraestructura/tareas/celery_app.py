@@ -106,13 +106,16 @@ celery_app.conf.beat_schedule = {
         "task": "app.infraestructura.tareas.metricas_tareas.purgar_metricas_y_actividad",
         "schedule": _parsear_hora_crontab("03:20"),
     },
-    # PERF-10 / REG-20: el despacho de correo y notificaciones (outbox) se
-    # queda en 1 min; no hay encolado inmediato tras el commit, así que el
-    # barrido ES la latencia percibida. Lo mismo vale para recuperaciones y
-    # verificaciones de más abajo.
-    "despachar-inscripcion-notificaciones-cada-minuto": {
+    # PERF-10 / REG-20: los tres barridos del outbox (inscripciones,
+    # recuperaciones y verificaciones) son RESPALDO cada 5 min: el despacho
+    # sale al instante, tras el commit de la fila
+    # (`outbox_despacho.encolar_despacho_tras_commit`), y el barrido solo
+    # recoge lo que ese publicar perdió (broker caído, worker reiniciado) y
+    # los reintentos con backoff. Pasar de 1440 a 288 corridas por día no
+    # cambia la latencia percibida del correo.
+    "despachar-inscripcion-notificaciones-cada-5-minutos": {
         "task": "app.infraestructura.tareas.enrollment_notificacion_tareas.despachar_inscripcion_notificaciones",
-        "schedule": crontab(minute="*/1"),
+        "schedule": crontab(minute="*/5"),
     },
     "limpiar-inscripcion-notificaciones-diaria": {
         "task": "app.infraestructura.tareas.enrollment_notificacion_tareas.limpiar_inscripcion_notificaciones",
@@ -138,18 +141,19 @@ celery_app.conf.beat_schedule = {
     },
     "despachar-recuperaciones-pendientes": {
         "task": "app.infraestructura.tareas.recuperacion_tareas.despachar_recuperaciones_pendientes",
-        "schedule": crontab(minute="*/1"),
+        "schedule": crontab(minute="*/5"),
     },
     "limpiar-recuperaciones-expiradas": {
         "task": "app.infraestructura.tareas.recuperacion_tareas.limpiar_recuperaciones_expiradas",
         "schedule": crontab(minute=5),
     },
     # Issue #790. Mismo ritmo que la recuperación: quien acaba de inscribirse
-    # en el club está mirando la pantalla, y un enlace que tarda más de un
-    # minuto en salir se vive como que no llegó.
+    # en el club está mirando la pantalla y un enlace que tarda en salir se
+    # vive como que no llegó -- por eso el despacho sale al commit y este
+    # barrido de 5 min es solo el respaldo.
     "despachar-verificaciones-pendientes": {
         "task": "app.infraestructura.tareas.verificacion_correo_tareas.despachar_verificaciones_pendientes",
-        "schedule": crontab(minute="*/1"),
+        "schedule": crontab(minute="*/5"),
     },
     "limpiar-verificaciones-expiradas": {
         "task": "app.infraestructura.tareas.verificacion_correo_tareas.limpiar_verificaciones_expiradas",
