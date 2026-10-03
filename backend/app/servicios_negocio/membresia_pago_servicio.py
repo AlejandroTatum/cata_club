@@ -2752,7 +2752,11 @@ class PagoServicio:
         # Solo cuando el aviso va a OTRA persona el cuerpo nombra al alumno;
         # si el destinatario es el propio alumno, el texto de siempre queda
         # correcto y no cambia.
-        nombre_alumno = persona.nombres if destinatario.id != persona.id else None
+        nombre_alumno = (
+            nombre_completo(persona.nombres, persona.apellidos)
+            if destinatario.id != persona.id
+            else None
+        )
         try:
             servicio = ServicioNotificaciones()
             if tipo == TipoNotificacion.PAGO_APROBADO:
@@ -2760,6 +2764,7 @@ class PagoServicio:
                     correo=destinatario.usuario.correo,
                     nombre=destinatario.nombres,
                     nombre_alumno=nombre_alumno,
+                    monto=pago.monto,
                     plan=pago.membresia.tipo_membresia.categoria,
                     fecha_inicio=pago.fecha_inicio,
                     fecha_fin=pago.fecha_fin,
@@ -2777,6 +2782,10 @@ class PagoServicio:
                     nombre=destinatario.nombres,
                     motivo_rechazo=pago.motivo_rechazo,
                     nombre_alumno=nombre_alumno,
+                    monto=pago.monto,
+                    fecha_inicio=pago.fecha_inicio,
+                    fecha_fin=pago.fecha_fin,
+                    alumno_id=persona.id,
                 )
         except (RuntimeError, ServicioNoDisponible) as exc:
             logger.warning(

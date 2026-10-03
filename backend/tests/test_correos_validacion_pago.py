@@ -227,7 +227,7 @@ def test_pago_aprobado_cuenta_plan_periodo_vigencia_y_agradecimiento(smtp_captur
     assert texto.startswith("Pago aprobado\n\nHola Ana Ficticia,")
     # Detalle del evento como filas etiqueta/valor (layout v2 de #1375).
     assert f"Plan: {PLAN}" in texto
-    assert f"Período: {INICIO_TXT} al {FIN_TXT}" in texto
+    assert "Período:" not in texto, "duplica 'Vigente hasta'"
     assert f"Vigente hasta: {FIN_TXT}" in texto
     assert "Gracias" in texto
     # En el HTML la etiqueta y el valor van en celdas separadas.
@@ -478,7 +478,7 @@ def test_validar_pago_rechazado_de_representado_avisa_al_representante(
     assert [envio["destinatario"] for envio in smtp_capturado] == [CORREO_REPRESENTANTE]
     texto = _texto(smtp_capturado[0])
     assert texto.startswith("Pago rechazado\n\nHola Marta,")
-    assert "El club no pudo aprobar el pago de Nico." in texto
+    assert "El club no pudo aprobar el pago de Nico Torres." in texto
     assert MOTIVO_RECHAZO in texto
 
 
@@ -498,3 +498,89 @@ def test_validar_pago_de_representado_sin_representante_alcanzable_no_falla(
     assert resultado.estado_pago == EstadoPago.APROBADO
     assert smtp_capturado == []
     assert db_session.get(Membresia, membresia.id).estado == EstadoMembresia.ACTIVA
+
+
+# --- QA3 GAP-04: correo de pago rechazado accionable ----------------------
+
+def _rechazo_completo(**extra):
+    ServicioNotificaciones().enviar_pago_rechazado(
+        correo=CORREO_FICTICIO, nombre="Ana Ficticia", motivo_rechazo=MOTIVO_RECHAZO,
+        monto=Decimal("40"), fecha_inicio=date(2027, 1, 2), fecha_fin=date(2027, 2, 2),
+        alumno_id=77, **extra,
+    )
+
+
+def test_pago_rechazado_ordena_motivo_monto_periodo(smtp_capturado):
+    _rechazo_completo()
+
+    texto = _texto(smtp_capturado[0])
+    motivo = texto.index(f"Motivo: {MOTIVO_RECHAZO}")
+    monto = texto.index("Monto: $40,00")
+    periodo = texto.index("Período: 02/01/2027 al 02/02/2027")
+    assert motivo < monto < periodo
+
+
+def test_pago_rechazado_cuerpo_lleva_el_motivo_y_un_solo_boton(smtp_capturado):
+    _rechazo_completo(nombre_alumno="Nico Torres")
+
+    texto = _texto(smtp_capturado[0])
+    enlace = "https://app.cataclub.test/student/payments?alumno=77"
+    assert f"El club no pudo aprobar el pago de Nico Torres. Motivo: {MOTIVO_RECHAZO}." in texto
+    assert f"Ir a registrar un pago: {enlace}" in texto
+    assert texto.count(enlace) == 1, "la URL no se repite en el cuerpo"
+    assert "El formulario está en" not in texto
+    html = _html(smtp_capturado[0])
+    assert html.count("Ir a registrar un pago") == 1
+
+
+def test_pago_rechazado_sin_alumno_id_enlaza_a_pagos_sin_filtro(smtp_capturado):
+    ServicioNotificaciones().enviar_pago_rechazado(
+        correo=CORREO_FICTICIO, nombre=None, motivo_rechazo=None,
+    )
+
+    texto = _texto(smtp_capturado[0])
+    assert "https://app.cataclub.test/student/payments\n" in texto + "\n"
+    assert "?alumno=" not in texto
+
+
+def test_validar_pago_rechazado_pasa_monto_periodo_y_alumno(db_session, smtp_capturado):
+    admin, titular, membresia, pago = _pago_pendiente(db_session, con_cuenta=True)
+
+    PagoServicio(db_session).validar_pago(
+        pago.id,
+        PagoValidarDTO(estado_pago=EstadoPago.RECHAZADO, motivo_rechazo=MOTIVO_RECHAZO),
+        actor_persona_id=admin.id,
+    )
+
+    texto = _texto(smtp_capturado[0])
+    assert "Monto: $30,00" in texto
+    assert f"Período: {INICIO_TXT} al {FIN_TXT}" in texto
+    assert f"/student/payments?alumno={titular.id}" in texto
+
+
+# --- QA3 GAP-05: correo de pago aprobado con monto y recibo ---------------
+
+def test_pago_aprobado_muestra_monto_y_boton_al_recibo(smtp_capturado):
+    ServicioNotificaciones().enviar_pago_aprobado(
+        correo=CORREO_REPRESENTANTE, nombre="Marta Torres", plan=PLAN,
+        fecha_inicio=INICIO, fecha_fin=FIN, vigente_hasta=FIN,
+        nombre_alumno="Nico Torres", monto=Decimal("40"),
+    )
+
+    texto = _texto(smtp_capturado[0])
+    assert "Alumno: Nico Torres" in texto
+    assert "Monto: $40,00" in texto
+    assert "Ver recibo oficial: https://app.cataclub.test/student/payments" in texto
+    assert _html(smtp_capturado[0]).count("Ver recibo oficial") == 1
+
+
+def test_validar_pago_aprobado_pasa_monto_y_nombre_completo(db_session, smtp_capturado):
+    admin, representante, representado, membresia, pago = _pago_de_representado(db_session)
+
+    PagoServicio(db_session).validar_pago(
+        pago.id, PagoValidarDTO(estado_pago=EstadoPago.APROBADO), actor_persona_id=admin.id,
+    )
+
+    texto = _texto(smtp_capturado[0])
+    assert "Monto: $30,00" in texto
+    assert f"Alumno: {representado.nombres} {representado.apellidos}" in texto

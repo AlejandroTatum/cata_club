@@ -94,6 +94,13 @@ class ServicioNoDisponible(ErrorDominio):
     pass
 
 
+class CupoCorreoDiarioAgotado(ServicioNoDisponible):
+    """El tope diario de correos se agotó. Solo se levanta cuando quien envía
+    lo pide (`ServicioNotificaciones(levantar_si_cupo_agotado=True)`): una cola
+    de salida necesita saber que NO se envió para dejar la fila pendiente y
+    reintentarla al día siguiente, en vez de darla por entregada."""
+
+
 class DestinatarioRechazadoPermanentemente(ServicioNoDisponible):
     """El proveedor rechazó de forma DEFINITIVA a UNA dirección concreta, y
     solo a esa (issue #837): un 5xx por destinatario ("no such user"), no una

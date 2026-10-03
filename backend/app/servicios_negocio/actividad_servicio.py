@@ -30,6 +30,7 @@ from app.dominio.modelos import (
 )
 from app.infraestructura.actividad import FRANJAS_POR_DIA, HORAS_POR_FRANJA, fecha_y_franja_del_club
 from app.infraestructura.colector_metricas import percentil_ms
+from app.infraestructura.repositorios.outbox_cupo import contar_en_espera_por_cupo
 from app.servicios_negocio.dtos.actividad_schemas import (
     AvanzadasResponse, BaseDeDatos, Colas, ConteoPorRol, ContenedorMemoria, EndpointLento, EstadoSistema,
     HostAvanzado, Latencia, MemoriaConSerie, PeriodoResumen, RangoAvanzadas, RangoResumen, RedisMemoria,
@@ -129,6 +130,7 @@ class ActividadServicio:
             periods=periodos,
             uniqueVisitors=self._visitantes_unicos(rango, ventana),
             status=self._estado_del_sistema(ahora),
+            queuedByQuota=contar_en_espera_por_cupo(self.db),
         )
 
     @staticmethod

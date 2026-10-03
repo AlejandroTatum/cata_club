@@ -10,7 +10,7 @@ Reglas del servicio:
 from __future__ import annotations
 
 import io
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from decimal import Decimal
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -26,7 +26,8 @@ from reportlab.platypus import (
     HRFlowable,
 )
 
-from app.soporte_transversal.tiempo import ahora_club
+from app.soporte_transversal.formato import formatear_monto_usd
+from app.soporte_transversal.tiempo import ZONA_HORARIA_CLUB, ahora_club
 
 _LOGO_PATH = Path(__file__).parent / "assets" / "cata-club-logo.jpeg"
 _ROJO_INSTITUCIONAL = "#D92128"
@@ -69,7 +70,7 @@ def generar_comprobante_pago_pdf(
     pago_id: int,
     persona_nombre: str,
     persona_cedula: str,
-    persona_telefono: str,
+    persona_telefono: str | None,
     membresia_id: int,
     membresia_categoria: str,
     monto: Decimal,
@@ -101,6 +102,12 @@ def generar_comprobante_pago_pdf(
     El buffer se cierra internamente para liberar conexiones de ReportLab.
     """
     buffer = io.BytesIO()
+    # La fecha impresa es una hora que una familia lee en papel: se muestra en
+    # la zona del club, no en la UTC con que se guarda. Un valor sin zona se
+    # toma como UTC, que es el contrato de almacenamiento.
+    if fecha_aprobacion.tzinfo is None:
+        fecha_aprobacion = fecha_aprobacion.replace(tzinfo=timezone.utc)
+    fecha_aprobacion = fecha_aprobacion.astimezone(ZONA_HORARIA_CLUB)
 
     doc = SimpleDocTemplate(
         buffer,
@@ -139,7 +146,8 @@ def generar_comprobante_pago_pdf(
 
         Paragraph(f"<b>Nº de comprobante:</b> P-{fecha_aprobacion.year}-{pago_id:06d}", cuerpo),
         Paragraph(
-            f"<b>Fecha de aprobación:</b> {fecha_aprobacion.strftime('%d/%m/%Y %H:%M')}",
+            f"<b>Fecha de aprobación:</b> "
+            f"{fecha_aprobacion.strftime('%d/%m/%Y %H:%M')} (hora de Ecuador)",
             cuerpo,
         ),
         Spacer(1, 10),
@@ -147,7 +155,7 @@ def generar_comprobante_pago_pdf(
         Paragraph("<b>Datos del alumno</b>", estilos["Heading3"]),
         Paragraph(f"Nombre: {escape(persona_nombre)}", cuerpo),
         Paragraph(f"Cédula: {escape(persona_cedula)}", cuerpo),
-        Paragraph(f"Teléfono: {escape(persona_telefono)}", cuerpo),
+        Paragraph(f"Teléfono: {escape(persona_telefono or 'No registrado')}", cuerpo),
         Spacer(1, 10),
 
         Paragraph("<b>Detalle de la membresía</b>", estilos["Heading3"]),
@@ -160,8 +168,8 @@ def generar_comprobante_pago_pdf(
 
     tabla_datos: list[list[str]] = [
         ["Concepto", "Valor"],
-        ["Monto pagado", f"USD {monto:.2f}"],
-        ["Monto aplicado", f"USD {monto_aplicado:.2f}"],
+        ["Monto pagado", formatear_monto_usd(monto)],
+        ["Monto aplicado", formatear_monto_usd(monto_aplicado)],
         ["Tipo de pago", tipo_pago],
         ["Estado", estado_pago],
         ["Vigencia desde", fecha_inicio.strftime("%d/%m/%Y")],

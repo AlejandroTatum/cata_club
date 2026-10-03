@@ -72,6 +72,7 @@ const RESUMEN: Record<ResumenRange, ResumenData> = {
     ),
     uniqueVisitors: { alumnos: 74, entrenadores: 7, representantes: 52, total: 129 },
     status: STATUS,
+    queuedByQuota: 0,
   },
   "7d": {
     range: "7d",
@@ -93,6 +94,7 @@ const RESUMEN: Record<ResumenRange, ResumenData> = {
     ),
     uniqueVisitors: { alumnos: 132, entrenadores: 9, representantes: 87, total: 222 },
     status: STATUS,
+    queuedByQuota: 0,
   },
   "30d": {
     range: "30d",
@@ -110,6 +112,7 @@ const RESUMEN: Record<ResumenRange, ResumenData> = {
     ),
     uniqueVisitors: { alumnos: 171, entrenadores: 11, representantes: 118, total: 291 },
     status: STATUS,
+    queuedByQuota: 0,
   },
 };
 

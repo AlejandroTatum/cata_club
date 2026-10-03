@@ -15,6 +15,7 @@ import logging
 import smtplib
 from collections.abc import Mapping
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -24,6 +25,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.dominio.enums import TipoNotificacion, TipoRol
 from app.dominio.excepciones import (
+    CupoCorreoDiarioAgotado,
     DestinatarioRechazadoPermanentemente,
     ServicioNoDisponible,
 )
@@ -48,6 +50,7 @@ from app.infraestructura.plantillas_correo import (
 )
 from app.soporte_transversal.circuito_breaker import CircuitoBreaker
 from app.soporte_transversal.configuracion import settings
+from app.soporte_transversal.formato import formatear_monto_usd
 from app.soporte_transversal.resiliencia import (
     CIRCUITO_SMTP_COOLDOWN_SEGUNDOS,
     CIRCUITO_SMTP_UMBRAL_FALLOS,
@@ -276,7 +279,8 @@ def _mensaje_cupo_agotado(omitidos: int) -> str:
     """
     return (
         f"Se alcanzó el tope diario de correos ({settings.limite_correos_diario}) "
-        f"y {omitidos} envío(s) quedaron sin salir hoy. "
+        f"y {omitidos} envío(s) quedaron sin salir hoy; "
+        f"se enviarán automáticamente al día siguiente. "
         f"Las notificaciones dentro de la aplicación no se ven afectadas."
     )
 
@@ -357,7 +361,11 @@ def _avisar_cupo_agotado(omitidos: int) -> None:
 class ServicioNotificaciones:
     """Adaptador SMTP para el envío de correos transaccionales."""
 
-    def __init__(self) -> None:
+    def __init__(self, levantar_si_cupo_agotado: bool = False) -> None:
+        # Las colas de salida lo activan: con el cupo agotado necesitan saber
+        # que el correo NO salió para diferir la fila (ver `outbox_cupo`). El
+        # resto de los llamadores sigue con el contrato de omitir sin levantar.
+        self._levantar_si_cupo_agotado = levantar_si_cupo_agotado
         self._host = settings.smtp_host
         self._port = settings.smtp_port
         self._user = settings.smtp_user
@@ -365,6 +373,22 @@ class ServicioNotificaciones:
         self._from = settings.smtp_from
         self._starttls = settings.smtp_starttls
         self._frontend_url = settings.frontend_url.rstrip("/")
+
+    def _omitir_por_cupo(self, destinatario: str, asunto: str, reserva: _ReservaCupo) -> None:
+        """Cupo agotado: se loguea, se avisa a los administradores y el envío
+        se omite. Levanta `CupoCorreoDiarioAgotado` solo si el llamador lo pidió
+        (colas de salida); para el resto es un retorno normal."""
+        logger.warning(
+            "Límite diario de correos alcanzado (limite_correos_diario=%s): "
+            "envío omitido a %s con asunto '%s'",
+            settings.limite_correos_diario,
+            _enmascarar_correo(destinatario), asunto,
+        )
+        _avisar_cupo_agotado(reserva.omitidos_hoy)
+        if self._levantar_si_cupo_agotado:
+            raise CupoCorreoDiarioAgotado(
+                "Tope diario de correos alcanzado: el envío queda para el día siguiente"
+            )
 
     def enviar_correo(
         self,
@@ -429,13 +453,7 @@ class ServicioNotificaciones:
         # best-effort por la misma razón: ver `_avisar_cupo_agotado`.
         reserva = _reservar_cupo_de_envio_diario()
         if not reserva.permitido:
-            logger.warning(
-                "Límite diario de correos alcanzado (limite_correos_diario=%s): "
-                "envío omitido a %s con asunto '%s'",
-                settings.limite_correos_diario,
-                _enmascarar_correo(destinatario), asunto,
-            )
-            _avisar_cupo_agotado(reserva.omitidos_hoy)
+            self._omitir_por_cupo(destinatario, asunto, reserva)
             return
 
         msg = MIMEMultipart("alternative")
@@ -578,14 +596,15 @@ class ServicioNotificaciones:
         fecha_fin: date,
         vigente_hasta: date,
         nombre_alumno: Optional[str] = None,
+        monto: Optional[Decimal] = None,
     ) -> None:
         """Avisa al titular que su pago quedó aprobado (PR 1, mejoras de la
         experiencia del alumno).
 
         Informa, nunca cobra ni presiona: plan, período cubierto por ESTE
-        pago, hasta cuándo queda vigente la membresía y una línea corta de
-        agradecimiento. Sin montos -- el club es flexible y el dinero se
-        conversa en el club, no por correo.
+        pago, el monto aprobado, hasta cuándo queda vigente la membresía y una
+        línea corta de agradecimiento, con un botón al recibo oficial. El
+        período no va como fila aparte: "Vigente hasta" ya lo resume.
 
         `vigente_hasta` llega resuelto por el llamador (la cobertura más
         lejana de la membresía, no solo la de este pago): aprobar un pago
@@ -601,8 +620,6 @@ class ServicioNotificaciones:
         """
         asunto = ASUNTO_PAGO_APROBADO
         saludo = f"Hola {nombre}," if nombre else "Hola,"
-        inicio_txt = fecha_inicio.strftime("%d/%m/%Y")
-        fin_txt = fecha_fin.strftime("%d/%m/%Y")
         vigencia_txt = vigente_hasta.strftime("%d/%m/%Y")
         alumno = (nombre_alumno or "").strip()
         # Layout v2 (#1375): los datos del evento van como filas de detalle
@@ -612,7 +629,8 @@ class ServicioNotificaciones:
         filas = [("Plan", plan)]
         if alumno:
             filas.append(("Alumno", alumno))
-        filas.append(("Período", f"{inicio_txt} al {fin_txt}"))
+        if monto is not None:
+            filas.append(("Monto", formatear_monto_usd(monto)))
         filas.append(("Vigente hasta", vigencia_txt))
         parrafo_confirmacion = (
             f"El club aprobó el pago de {alumno} y quedó registrado en su historial."
@@ -629,6 +647,8 @@ class ServicioNotificaciones:
             ),
             filas=filas,
             chip=("Aprobado", "exito"),
+            cta_etiqueta="Ver recibo oficial",
+            cta_url=f"{self._frontend_url}/student/payments",
         )
         self.enviar_correo(correo, asunto, texto, html)
         logger.info("[PAGO_APROBADO] correo=%s", _enmascarar_correo(correo))
@@ -639,6 +659,10 @@ class ServicioNotificaciones:
         nombre: Optional[str],
         motivo_rechazo: Optional[str] = None,
         nombre_alumno: Optional[str] = None,
+        monto: Optional[Decimal] = None,
+        fecha_inicio: Optional[date] = None,
+        fecha_fin: Optional[date] = None,
+        alumno_id: Optional[int] = None,
     ) -> None:
         """Avisa al titular que el club no pudo aprobar su pago (PR 1,
         mejoras de la experiencia del alumno).
@@ -658,6 +682,11 @@ class ServicioNotificaciones:
         destinatario NO es el alumno (un representado sin cuenta: el aviso
         viaja a su representante). El cuerpo pasa de "su pago" a "el pago
         de Ana" para que el representante sepa de quién es el pago.
+
+        `monto`, `fecha_inicio`/`fecha_fin` y `alumno_id` son opcionales: el
+        monto y el período van como filas de detalle tras el motivo, y
+        `alumno_id` hace que el botón abra el formulario ya posicionado en
+        ese alumno (`?alumno=`).
         """
         asunto = ASUNTO_PAGO_RECHAZADO
         saludo = f"Hola {nombre}," if nombre else "Hola,"
@@ -665,27 +694,41 @@ class ServicioNotificaciones:
         alumno = (nombre_alumno or "").strip()
         sujeto = f"el pago de {alumno}" if alumno else "su pago"
         enlace = f"{self._frontend_url}/student/payments"
-        # Layout v2 (#1375): el motivo deja la prosa y viaja como fila de
-        # detalle (solo cuando existe); el chip rojo marca el estado.
-        filas = [("Motivo", motivo)] if motivo else None
+        if alumno_id is not None:
+            enlace += f"?alumno={alumno_id}"
+        # Layout v2 (#1375): motivo, monto y período viajan como filas de
+        # detalle (solo los que existen); el chip rojo marca el estado.
+        filas = []
+        if motivo:
+            filas.append(("Motivo", motivo))
+        if monto is not None:
+            filas.append(("Monto", formatear_monto_usd(monto)))
+        if fecha_inicio is not None and fecha_fin is not None:
+            filas.append((
+                "Período",
+                f"{fecha_inicio.strftime('%d/%m/%Y')} al {fecha_fin.strftime('%d/%m/%Y')}",
+            ))
+        frase = f"El club no pudo aprobar {sujeto}."
+        if motivo:
+            frase += f" Motivo: {motivo}."
         # Issue #1375: motivo y nombres viajan escapados por el layout
         # compartido; los pasos son párrafos numerados (en el HTML quedan
-        # como líneas propias, en el texto como la misma lista).
+        # como líneas propias, en el texto como la misma lista). El enlace
+        # vive solo en el botón: no se repite en el cuerpo.
         texto, html = construir_correo(
             titulo="Pago rechazado",
             preheader="Qué pasó y cómo volver a intentarlo.",
             saludo=saludo,
             parrafos=(
-                f"El club no pudo aprobar {sujeto}.",
+                frase,
                 "Para volver a intentarlo, el procedimiento es el mismo de siempre:",
                 "1. Ingrese a \"Registrar un pago\" y elija cuántos meses va a pagar "
                 "y la forma de pago.",
                 "2. Si paga por transferencia, adjunte el comprobante (PDF, JPG o PNG).",
                 "3. El pago queda en revisión en su historial hasta que el club lo apruebe.",
-                f"El formulario está en {enlace}.",
                 "Ante cualquier duda, escríbanos por WhatsApp.",
             ),
-            filas=filas,
+            filas=filas or None,
             chip=("Rechazado", "error"),
             cta_etiqueta="Ir a registrar un pago",
             cta_url=enlace,
@@ -714,7 +757,7 @@ class ServicioNotificaciones:
                 "Próximos pasos:",
                 "1. El primer pago se hace en persona, en administración del club.",
                 "2. El club registra ese pago y activa su membresía.",
-                "Cuando la membresía esté activa, va a poder verla en su cuenta.",
+                "Cuando la membresía esté activa, podrá verla en su cuenta.",
             ),
         )
         self.enviar_correo(correo, asunto, texto, html)

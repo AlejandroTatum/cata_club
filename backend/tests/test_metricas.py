@@ -456,3 +456,24 @@ def test_scrape_fija_el_statement_timeout_y_no_escapa_de_su_transaccion(motor_te
         assert post_commit == default_previo
     finally:
         conexion.close()
+
+
+def test_gauge_de_pendientes_excluye_filas_diferidas_por_cupo(db_session):
+    from app.infraestructura.repositorios import outbox_cupo
+
+    _vaciar_tablas_outbox(db_session)
+    usuario = _usuario(db_session, 40)
+    hace_un_dia = datetime.now(timezone.utc) - timedelta(hours=20)
+    diferida = RecuperacionOutbox(
+        usuario_id=usuario.id,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=48),
+        created_at=hace_un_dia,
+        last_error_redacted=f"{outbox_cupo.MARCA_CUPO_AGOTADO}: diferido hasta el día siguiente",
+    )
+    db_session.add(diferida)
+    db_session.commit()
+
+    cantidad, edad = calcular_pendientes_por_tabla(db_session)["recuperacion_outbox"]
+
+    assert cantidad == 0
+    assert edad == 0.0, "una fila diferida por cupo no es una cola atascada"
