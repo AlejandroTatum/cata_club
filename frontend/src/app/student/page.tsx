@@ -1212,7 +1212,7 @@ function ActivePortalView({
         <EmptyState
           icon={<User size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
           title="No se encontraron estudiantes asociados a esta cuenta"
-          description="Inscríbase como jugador o agregue un hijo o dependiente para empezar."
+          description="Inscríbete como jugador o agregue un hijo o dependiente para empezar."
         />
       ) : (
         // "El carnet manda" (docs/archive/fixes/12-mi-cuenta-carnet.md, Propuesta 2):
