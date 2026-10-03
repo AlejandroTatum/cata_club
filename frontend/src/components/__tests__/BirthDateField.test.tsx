@@ -17,6 +17,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { fireEvent } from "@testing-library/react";
+import { studentBirthDateRule } from "@/lib/identity-validation";
 import { BirthDateField, type BirthDateFieldProps } from "../wizard-fields";
 
 function renderField(overrides: Partial<BirthDateFieldProps> = {}) {
@@ -42,16 +43,26 @@ function renderField(overrides: Partial<BirthDateFieldProps> = {}) {
 describe("BirthDateField — emits the ISO value only for a real calendar date", () => {
   it.each([
     ["a complete real date", "15", "03", "1986", "1986-03-15"],
-    ["Feb 31, which does not exist in any year", "31", "02", "2024", ""],
+    ["Feb 31, which does not exist in any year (REG-06: stays non-empty so the caller says «no existe»)", "31", "02", "2024", "2024-02-31"],
     ["Feb 29 on a leap year", "29", "02", "2024", "2024-02-29"],
-    ["Feb 29 on a non-leap year", "29", "02", "2023", ""],
-    ["Apr 31, which does not exist (30-day month)", "31", "04", "2020", ""],
+    ["Feb 29 on a non-leap year", "29", "02", "2023", "2023-02-29"],
+    ["Apr 31, which does not exist (30-day month)", "31", "04", "2020", "2020-04-31"],
+    ["day 0", "0", "03", "1990", "1990-03-00"],
   ])("%s", (_description, day, month, year, expectedIso) => {
     const { day: dayInput, month: monthInput, year: yearInput, onChange } = renderField();
     fireEvent.change(dayInput, { target: { value: day } });
     fireEvent.change(monthInput, { target: { value: month } });
     fireEvent.change(yearInput, { target: { value: year } });
     expect(onChange).toHaveBeenLastCalledWith(expectedIso);
+  });
+
+  it("REG-06: the emitted Feb 31 reaches the rule as «no existe», not «Indique la fecha»", () => {
+    const { day, month, year, onChange } = renderField();
+    fireEvent.change(day, { target: { value: "31" } });
+    fireEvent.change(month, { target: { value: "02" } });
+    fireEvent.change(year, { target: { value: "1990" } });
+    const emitted = onChange.mock.calls.at(-1)?.[0] as string;
+    expect(studentBirthDateRule(emitted)).toContain("no existe");
   });
 
   it("emits an empty string while any part is still missing", () => {

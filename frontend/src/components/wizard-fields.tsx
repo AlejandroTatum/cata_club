@@ -22,7 +22,6 @@ import { ICON } from "@/lib/icon-size";
 import {
   calculatePersonAge,
   isPlausibleHumanAge,
-  isValidCalendarDate,
   studentBirthDateBounds,
   PHONE_FORMAT_HINT,
   PHONE_LOCAL_HINT,
@@ -341,16 +340,11 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
  * one `WizardInput type="date"` already had: it still emits the ISO
  * `YYYY-MM-DD` string every caller's own validation
  * (`studentBirthDateRule`, `crear-cuenta-utils`, `enroll-utils`) already
- * checks, so those rules keep firing unchanged. An empty, partial, or
+ * checks, so those rules keep firing unchanged. An empty or partial date
+ * emits `""`, the same as an empty native field did. A complete but
  * calendrically impossible date (31/02, 30/02, 29/02 on a non-leap year)
- * emits `""`, the same as an empty native field did.
- *
- * Real-date validation reuses `isValidCalendarDate` rather than a
- * hand-rolled days-in-month table: it already round-trips the value through
- * a component-wise `Date` construction and rejects any mismatch (Feb 31
- * rolls over to Mar 3, which fails the check) — the safe form of the
- * "build a `Date`, then verify it" technique, and the one this codebase's
- * age/validity checks already rely on everywhere else.
+ * is emitted as typed so the caller's `isValidCalendarDate` check reports
+ * «no existe» instead of «Indique la fecha» (REG-06).
  */
 export interface BirthDateFieldProps {
   idPrefix: string;
@@ -407,8 +401,10 @@ function splitBirthDateIso(value: string): { day: string; month: string; year: s
 
 function joinBirthDateParts(day: string, month: string, year: string): string {
   if (!day || !month || year.length !== 4) return "";
-  const iso = `${year}-${month}-${day.padStart(2, "0")}`;
-  return isValidCalendarDate(iso) ? iso : "";
+  // An impossible date (31/02) is still emitted: `""` read as "empty" and
+  // the caller said «Indique la fecha». Every caller validates with
+  // `studentBirthDateRule`, which rejects it as «no existe» (REG-06).
+  return `${year}-${month}-${day.padStart(2, "0")}`;
 }
 
 export function BirthDateField(opts: BirthDateFieldProps): ReactElement {
