@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import { publicPageMetadata } from "@/lib/seo";
 import InfoPanel from "@/components/ui/InfoPanel";
 import LegalDocumentPage from "../terminos/LegalDocumentPage";
 import { legalBlocks } from "./content";
 
-export const metadata: Metadata = { title: "Permiso público de imagen FETM", description: "Permiso público de difusión de imagen FETM, versión 1.0." };
+export const metadata: Metadata = { title: "Permiso público de imagen FETM", description: "Permiso público de difusión de imagen FETM, versión 1.0.", ...publicPageMetadata("/permiso-imagen-fetm") };
 
 /** The document is one paragraph long, so a card beside it says what it authorizes. */
 function PermissionSummary(): React.ReactElement {

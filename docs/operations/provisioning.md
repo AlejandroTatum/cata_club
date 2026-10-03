@@ -23,6 +23,20 @@ export MIGRATION_COMPATIBILITY=none  # o backward-compatible
 ./scripts/deploy/deploy.sh
 ```
 
+Antes del primer deploy productivo (reconversión de staging a producción),
+valida el `.env` del host con `scripts/ops/check-prod-env.sh` (falla cerrado y
+solo imprime nombres de variable): `DOMINIO_INDEXABLE == DOMINIO`, `DOMINIO_ALIAS_WWW == www.$DOMINIO`, sin
+`staging.` en `DOMINIO`/`CORS_ORIGENES`/`FRONTEND_URL`, sin `staging` en las
+carpetas de Cloudinary y `JWT_SECRET_KEY`/`POSTGRES_PASSWORD` reales. Con
+`--previous-env <.env-viejo>` comprueba por hash que ambos secretos fueron
+rotados. El preflight lo ejecuta solo cuando el host es el indexable
+(`DOMINIO == DOMINIO_INDEXABLE` en el `.env`), así que un olvido no lo salta;
+staging, que usa el mismo preflight, tiene un `DOMINIO_INDEXABLE` distinto y
+queda fuera. `PREFLIGHT_REQUIRE_PRODUCTION_ENV=1` lo fuerza y `=0` lo omite
+(`PREVIOUS_ENV_FILE=<ruta>` opcional). El validador acepta la sintaxis de
+`env_file` de Compose (`KEY=v`, `export KEY=v`, comentarios) y informa las
+líneas no parseables solo por número, nunca por contenido.
+
 `preflight-production.sh` solo lee la configuración: exige `.env`, comprueba que
 `git rev-parse HEAD` sea exactamente `IMAGE_TAG`, valida el render de Compose,
 deriva la imagen del servicio `backend` y comprueba que Docker esté disponible y
@@ -71,6 +85,12 @@ El `Caddyfile` del host entra por `./Caddyfile:/etc/caddy/Caddyfile:ro` y Caddy
 lo compila una sola vez, al arrancar: sin una recreación explícita, un `git
 pull` que trae una ruta nueva no llega al borde y el contenedor sigue sirviendo
 la configuración con la que arrancó.
+
+El alias `www` (`DOMINIO_ALIAS_WWW=www.<dominio>`) redirige con 301 a
+`https://$DOMINIO` conservando path y query. Sin la variable, Caddy usa
+`www.localhost` y no pide ningún certificado, así que staging y las previews no
+necesitan DNS para `www`. En producción el DNS de `www` debe apuntar al host
+antes del deploy, o Let's Encrypt no podrá emitir su certificado.
 
 Por eso `deploy.sh` hace, en este orden:
 
@@ -464,14 +484,17 @@ default `0000000000`, que no es un teléfono válido (issue #828): un dato de
 identidad se pide, no se inventa. Si alguna no calza, el script se niega
 diciendo cuál corregir y no deja rastro en la base.
 
-## Límite conocido: staging
+## Staging persistente retirado
 
-Este repositorio no describe ningún entorno de *staging*. Los únicos
-despliegues que puede documentar son el de producción (`docker-compose.yml` +
-`docker-compose.prod.yml`, vía `preflight-production.sh` y `deploy.sh`) y el de
-QA local (`docker-compose.qa.yml`, vía `make qa-up`). Si existe un staging, su
-suministro de secretos no está versionado acá y hay que tratarlo con el mismo
-procedimiento de producción, confirmando a mano dónde vive su `.env`.
+Decisión del dueño (2026-10-02): hay **un solo VPS** y el droplet que servía
+staging se reconvierte en el lugar a producción (`cataclub.com`). Ya no existe
+un staging persistente: QA corre en local (`make qa-up`, `docker-compose.qa.yml`)
+o en droplets desechables creados desde un snapshot. La conversión se hace con
+[production-cutover.md](production-cutover.md), que reemplaza a
+[staging-redeploy.md](staging-redeploy.md) para este host. Un staging desechable
+usa su propio `.env` con `DOMINIO_INDEXABLE` distinto de `DOMINIO` (queda
+`noindex` y el preflight no exige el chequeo de producción) y no hereda secretos
+ni el bucket o heartbeat de producción.
 
 ## Límite de compatibilidad de migraciones
 

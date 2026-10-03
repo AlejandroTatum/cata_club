@@ -1,5 +1,12 @@
 # Redeploy de staging
 
+> **Staging persistente retirado (2026-10-02).** El droplet de staging se
+> reconvierte en el lugar a producción (`cataclub.com`); el procedimiento vigente
+> es [production-cutover.md](production-cutover.md), que reemplaza a este
+> runbook para ese host. Este archivo se conserva como referencia histórica de
+> las comprobaciones (SHA, migraciones, prechecks) y para un staging desechable
+> futuro; las URL y la IP de abajo ya no aplican.
+
 > **No es producción.** Este procedimiento usa datos reales de staging y exige el
 > mismo cuidado de secretos y PII que producción. No lo ejecutes contra otro host.
 

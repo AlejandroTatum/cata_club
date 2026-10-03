@@ -28,6 +28,7 @@ celery_app = Celery(
         "app.infraestructura.tareas.recordatorio_sesion_tareas",
         "app.infraestructura.tareas.reporte_error_tareas",
         "app.infraestructura.tareas.metricas_tareas",
+        "app.infraestructura.tareas.latido_tareas",
     ],
 )
 
@@ -76,6 +77,14 @@ def _parsear_hora_crontab(hhmm: str) -> crontab:
 
 _hora_diaria = _parsear_hora_crontab(settings.celery_hora_automatizaciones)
 celery_app.conf.beat_schedule = {
+    # PC-2: latido para el monitor externo (`/health/workers`). `expires`
+    # descarta un latido que esperó en la cola más que el TTL: ejecutarlo tarde
+    # escribiría "ahora" y taparía un worker atascado.
+    "registrar-latido-workers-cada-minuto": {
+        "task": "app.infraestructura.tareas.latido_tareas.registrar_latido",
+        "schedule": crontab(minute="*/1"),
+        "options": {"expires": 120},
+    },
     "purgar-reportes-error-diario": {
         "task": "app.infraestructura.tareas.reporte_error_tareas.purgar_reportes_error",
         "schedule": _parsear_hora_crontab("03:10"),

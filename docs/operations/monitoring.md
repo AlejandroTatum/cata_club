@@ -2,7 +2,7 @@
 
 El monitoreo externo se contrató con **UptimeRobot**. La decisión no es
 técnica: es el proveedor que el club puede administrar sin nadie de guardia, con
-plan gratuito suficiente para los dos monitores de abajo y notificación por
+plan gratuito suficiente para los monitores de abajo y notificación por
 correo. El repositorio no guarda ninguna credencial suya; lo único que el host
 conoce es la URL del heartbeat, en un archivo de root (ver
 `docs/operations/provisioning.md`).
@@ -12,7 +12,7 @@ Las dos mitades se complementan y ninguna reemplaza a la otra:
 - Un monitor que solo mira el sitio no sabe nada del backup.
 - Un chequeo que solo corre en el host se muere junto con el host.
 
-## Los dos monitores
+## Los monitores
 
 ### 1. Readiness HTTPS (¿la app puede atender?)
 
@@ -31,6 +31,29 @@ El endpoint contesta por GET y por HEAD, con el mismo veredicto (HEAD no
 devuelve cuerpo). El HEAD existe porque el plan gratuito de UptimeRobot sondea
 con ese método y elegirlo es un control pago: sin un handler propio la sonda
 recibía `405` (issue #862), porque FastAPI no deriva HEAD del GET.
+
+### 1b. Latido de workers HTTPS (¿Celery está procesando?)
+
+`https://<dominio>/health/workers`, segundo monitor HTTP, cada 5 minutos,
+esperando `200`.
+
+`/health/ready` no mira Celery: si el worker o el beat mueren entre las
+corridas de las 07:00 nadie se entera, y de Celery salen los correos y el
+outbox. El beat despacha `registrar_latido` cada 60 s; el worker lo ejecuta y
+escribe `cataclub:latido:workers` en Redis con TTL de 180 s. La clave existe
+solo si beat, broker y worker funcionaron en los últimos 3 minutos; si
+cualquiera muere el TTL la hace expirar y el endpoint pasa a `503` (también si
+Redis no contesta). El latido lleva `expires` de 120 s: uno que esperó en la
+cola no se ejecuta tarde y no tapa un worker atascado.
+
+La respuesta es `200` o `503` sin cuerpo (GET y HEAD), sin decir qué falló, y
+cuesta un `GET` de Redis. Caddy enruta ese path exacto al backend, igual que
+`/health/ready`.
+
+**No lo uses en ningún healthcheck de Docker ni en `autoheal`.** Es una señal
+para el monitor externo: si el backend se reiniciara porque Celery se colgó,
+se convertiría un fallo de segundo plano en una caída del sitio. Un test de
+`tests/test_docker_compose_config.py` lo impide.
 
 ### 2. Heartbeat de backup, Celery y memoria (¿siguen vivos?)
 
@@ -67,7 +90,7 @@ fallar.
 
 ### 3. Métricas internas (issue #1309, sin consumidor todavía)
 
-Los dos monitores de arriba dicen "vivo/muerto"; no dicen "lento", "devolviendo
+Los monitores de arriba dicen "vivo/muerto"; no dicen "lento", "devolviendo
 5xx" ni "la cola de correo pendiente crece". `GET /metrics` cubre esa parte:
 latencia y conteo por ruta/status vía `prometheus-fastapi-instrumentator`, más
 gauges propios sobre las tres colas outbox (filas `PENDIENTE` y edad de la más
