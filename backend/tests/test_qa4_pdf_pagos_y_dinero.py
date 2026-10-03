@@ -35,8 +35,46 @@ def _pago(**cambios) -> PagoListItemDTO:
 
 def test_columnas_del_pdf_de_pagos_usan_los_nombres_de_la_pantalla():
     assert _COLUMNAS_PAGOS_PDF == [
-        "Estudiante", "Desde", "Hasta", "Monto", "Método", "Fecha de registro", "Estado",
+        "Estudiante", "Responsable de pago", "Desde", "Hasta", "Monto", "Método",
+        "Fecha de registro", "Estado",
     ]
+
+
+# --- ADMB-06: «Responsable de pago» viaja en el listado y en el PDF ----------
+
+def test_fila_de_pago_trae_el_responsable_de_pago():
+    fila = _pagos_a_filas([_pago(responsable_pago_nombre_completo="Rosa Mora")])[0]
+    assert fila[_COLUMNAS_PAGOS_PDF.index("Responsable de pago")] == "Rosa Mora"
+
+
+def test_fila_de_pago_sin_responsable_queda_vacia_y_nunca_none():
+    fila = _pagos_a_filas([_pago()])[0]
+    assert fila[_COLUMNAS_PAGOS_PDF.index("Responsable de pago")] == ""
+    assert "None" not in fila
+
+
+def test_listado_de_pagos_expone_el_representante_como_responsable(client, db_session):
+    from app.dominio.enums import EstadoMembresia
+    from tests.fabricas_pagos import (
+        crear_membresia_orm, crear_pago_orm, crear_persona_orm, crear_tipo_membresia_orm,
+    )
+
+    representante = crear_persona_orm(db_session, "1710034065", nombres="Rosa", apellidos="Mora")
+    menor = crear_persona_orm(
+        db_session, "1710034081", nombres="Luis", apellidos="Mora",
+        fecha_nacimiento=date(2015, 1, 1),
+    )
+    menor.representante_id = representante.id
+    tipo = crear_tipo_membresia_orm(db_session)
+    membresia = crear_membresia_orm(db_session, menor, tipo, EstadoMembresia.INACTIVA)
+    crear_pago_orm(db_session, menor, membresia, EstadoPago.PENDIENTE_VALIDACION)
+    db_session.flush()
+
+    resp = client.get("/api/v1/membresias/pagos")
+
+    assert resp.status_code == 200, resp.text
+    item = next(i for i in resp.json()["items"] if i["personaId"] == menor.id)
+    assert item["responsablePagoNombreCompleto"] == "Rosa Mora"
 
 
 @pytest.mark.parametrize(
@@ -71,7 +109,7 @@ def test_fila_de_pago_usa_el_dinero_del_club_y_fechas_dd_mm_aaaa():
     fila = _pagos_a_filas([_pago(monto=Decimal("1240"))])[0]
 
     assert fila == [
-        "Ana Pérez", "01/10/2026", "31/10/2026", "$1.240,00",
+        "Ana Pérez", "", "01/10/2026", "31/10/2026", "$1.240,00",
         "Regularización", "03/10/2026", "Pendiente",
     ]
 

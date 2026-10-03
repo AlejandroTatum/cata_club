@@ -42,10 +42,10 @@ from app.soporte_transversal.rate_limit import limiter
 logger = logging.getLogger("cataclub.membresias_pagos")
 
 # Mismos nombres que la pantalla `/reports` y el Excel (QA4 ADMB-06): quien
-# compara el PDF con el Excel no debe creer que son datos distintos. El
-# responsable de pago no viaja en `PagoListItemDTO`, así que no se imprime.
+# compara el PDF con el Excel no debe creer que son datos distintos.
 _COLUMNAS_PAGOS_PDF = [
-    "Estudiante", "Desde", "Hasta", "Monto", "Método", "Fecha de registro", "Estado",
+    "Estudiante", "Responsable de pago", "Desde", "Hasta", "Monto", "Método",
+    "Fecha de registro", "Estado",
 ]
 
 
@@ -56,6 +56,7 @@ def _pagos_a_filas(pagos: List[PagoListItemDTO]) -> list[list[str]]:
     return [
         [
             p.persona_nombre_completo,
+            p.responsable_pago_nombre_completo or "",
             p.fecha_inicio.strftime("%d/%m/%Y"),
             p.fecha_fin.strftime("%d/%m/%Y"),
             formatear_monto_usd(p.monto),

@@ -2423,6 +2423,10 @@ class PagoServicio:
                 fecha_fin=p.fecha_fin,
                 persona_id=p.persona_id,
                 persona_nombre_completo=nombre_completo(p.persona.nombres, p.persona.apellidos),
+                responsable_pago_nombre_completo=(
+                    nombre_completo(p.persona.representante.nombres, p.persona.representante.apellidos)
+                    if p.persona.representante is not None else None
+                ),
                 membresia_id=p.membresia_id,
                 voucher_url=self._url_entrega_voucher(p),
                 voucher_formato=p.voucher_formato,

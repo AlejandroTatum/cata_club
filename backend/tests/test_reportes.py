@@ -989,7 +989,7 @@ _REPORTES_PEOR_CASO = [
         "pagos",
         _COLUMNAS_PAGOS_PDF,
         [[
-            _ESTUDIANTE_LARGO, "01/03/2026", "31/03/2026", "$1.200,00",
+            _ESTUDIANTE_LARGO, _ESTUDIANTE_LARGO, "01/03/2026", "31/03/2026", "$1.200,00",
             "Regularización", "17/08/2026", "Pendiente",
         ]],
     ),
