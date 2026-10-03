@@ -124,7 +124,7 @@ function Service({ service, now }: { service: ServiceMetrics | null; now: string
           caption="Tráfico de la aplicación"
         />
         <MetricBlock
-          label="Errores 5xx"
+          label="Errores del servidor"
           value={formatOrDash(rate5xx, percent)}
           unit={rate5xx === null ? undefined : "%"}
           tone={tone5xx}
@@ -132,17 +132,17 @@ function Service({ service, now }: { service: ServiceMetrics | null; now: string
           series={service.errorRate5xx}
           formatValue={percent}
           threshold={ERROR_5XX_LIMITS.warn}
-          caption="Fallas del servidor"
+          caption="Fallas de la aplicación"
         />
         <MetricBlock
-          label="Errores 4xx"
+          label="Solicitudes rechazadas"
           value={formatOrDash(rate4xx, percent)}
           unit={rate4xx === null ? undefined : "%"}
           tone={tone4xx}
           statusLabel={tone4xx === "bad" ? "Crítico" : "Atención"}
           series={service.errorRate4xx}
           formatValue={percent}
-          caption="Solicitudes rechazadas"
+          caption="Por ejemplo, una contraseña incorrecta"
         />
       </div>
 
@@ -479,8 +479,9 @@ export default function AvanzadasView({ data, now }: { data: AvanzadasData; now:
             </dd>
             <dt className="mt-2 font-semibold text-ink">Errores</dt>
             <dd className="m-0">
-              <b className="font-semibold text-ink">5xx</b>: fallas del servidor. <b className="font-semibold text-ink">4xx</b>:
-              solicitudes rechazadas, por ejemplo una contraseña incorrecta.
+              <b className="font-semibold text-ink">Del servidor</b>: fallas de la aplicación.{" "}
+              <b className="font-semibold text-ink">Rechazadas</b>: solicitudes que no se aceptaron, por ejemplo una
+              contraseña incorrecta.
             </dd>
           </dl>
         </InfoPanel>

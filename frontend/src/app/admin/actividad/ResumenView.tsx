@@ -101,7 +101,7 @@ export default function ResumenView({ data, now }: { data: ResumenData; now: str
       label: "Pagos registrados",
       value: sum((p) => p.payments),
       bars: payments,
-      caption: `Comprobantes recibidos en ${phrase}`,
+      caption: `Registrados en ${phrase}`,
     },
     {
       label: "Inscripciones nuevas",
@@ -160,7 +160,7 @@ export default function ResumenView({ data, now }: { data: ResumenData; now: str
                   }))}
                   ariaLabel={`Personas que ingresaron en ${phrase}, por rol`}
                   tableCaption={`Personas que ingresaron por rol, ${phrase}`}
-                  periodLabel="Periodo"
+                  periodLabel="Período"
                   unit="ingresos"
                 />
                 <p className="m-0 mt-section text-xs text-ink-3-strong">
@@ -214,8 +214,8 @@ export default function ResumenView({ data, now }: { data: ResumenData; now: str
               registran y si todo funciona con normalidad.
             </p>
             <p>
-              Cambie el periodo con los botones de arriba. Si necesita revisar el detalle técnico del servidor,
-              abra «Métricas avanzadas».
+              Cambie el período con los botones de arriba. Para ver el detalle técnico, abra «Métricas
+              avanzadas».
             </p>
           </InfoPanel>
         </div>

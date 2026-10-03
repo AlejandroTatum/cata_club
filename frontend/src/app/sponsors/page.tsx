@@ -137,8 +137,8 @@ export default function SponsorsPage(): React.ReactElement {
                 {/* eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset */}
                 <img src={sponsor.logoUrl} alt={`Logo de ${sponsor.nombre}`} loading="lazy" width={200} height={80} className="size-full object-contain p-2" />
               </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="min-w-0 truncate text-sm font-semibold" title={sponsor.nombre}>{sponsor.nombre}</span>
+              <div className="flex items-start justify-between gap-2">
+                <span className="line-clamp-2 min-w-0 break-words text-sm font-semibold" title={sponsor.nombre}>{sponsor.nombre}</span>
                 <Button size="sm" className="shrink-0 text-state-bad" aria-label={`Eliminar ${sponsor.nombre}`} onClick={() => setPorEliminar(sponsor)}>
                   <Trash2 size={ICON.sm} aria-hidden="true" />
                 </Button>
