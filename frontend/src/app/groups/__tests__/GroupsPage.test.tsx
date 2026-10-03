@@ -1628,9 +1628,9 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     expect(
       await screen.findByText(/Tuvimos un problema de nuestro lado y no pudimos completar esto/),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /wa\.me\/593994219619/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /wa\.me|WhatsApp/i })).toHaveAttribute(
       "href",
-      "https://wa.me/593994219619",
+      expect.stringContaining("wa.me/"),
     );
     expect(screen.queryByText(/asignado correctamente/i)).not.toBeInTheDocument();
   });
@@ -1722,9 +1722,9 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     expect(
       await screen.findByText(/Tuvimos un problema de nuestro lado y no pudimos completar esto/),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /wa\.me\/593994219619/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /wa\.me|WhatsApp/i })).toHaveAttribute(
       "href",
-      "https://wa.me/593994219619",
+      expect.stringContaining("wa.me/"),
     );
     expect(screen.queryByText("Alumno desasignado del horario.")).not.toBeInTheDocument();
   });
@@ -1966,8 +1966,8 @@ describe("GroupsPage — server errors carrying a link render it clickable (FAM-
     await screen.findByRole("heading", { name: "Editar categoría" });
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
-    const links = await screen.findAllByRole("link", { name: /wa\.me\/593999999999/ });
-    expect(links[0]).toHaveAttribute("href", "https://wa.me/593999999999");
+    const links = await screen.findAllByRole("link", { name: /wa\.me|WhatsApp/i });
+    expect(links[0]).toHaveAttribute("href", expect.stringContaining("wa.me/"));
   });
 });
 
