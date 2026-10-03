@@ -124,3 +124,5 @@ export type { WeekStripProps, WeekStripVariant } from "./WeekStrip";
 export { cn } from "./cn";
 export { default as MoneyInput } from "./MoneyInput";
 export type { MoneyInputProps } from "./MoneyInput";
+export { default as TimePicker24 } from "./TimePicker24";
+export type { TimePicker24Props } from "./TimePicker24";
