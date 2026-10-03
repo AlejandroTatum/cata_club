@@ -51,6 +51,12 @@ export interface AlumnoDelClub {
   grupo: string | null;
   /** The categoría's display name (`"Juvenil"`); falls back to the código. */
   grupoEtiqueta: string | null;
+  /**
+   * Every categoría the alumno has a horario in, once each, sorted by label.
+   * `grupo` is only the first row's; the chips and their filter use this list
+   * so a chip counts the same people the list shows.
+   */
+  categorias: { codigo: string; etiqueta: string }[];
 }
 
 /**
@@ -109,6 +115,18 @@ function compactarHorarios(filas: AlumnoHorario[]): string | null {
     .join(" · ");
 }
 
+function categoriasDe(filas: AlumnoHorario[]): { codigo: string; etiqueta: string }[] {
+  const porCodigo = new Map<string, string>();
+  for (const f of filas) {
+    if (f.horarioCategoria && !porCodigo.has(f.horarioCategoria)) {
+      porCodigo.set(f.horarioCategoria, f.horarioCategoriaLabel ?? f.horarioCategoria);
+    }
+  }
+  return [...porCodigo.entries()]
+    .map(([codigo, etiqueta]) => ({ codigo, etiqueta }))
+    .sort((a, b) => a.etiqueta.localeCompare(b.etiqueta, "es"));
+}
+
 /**
  * El padrón agregado del club, convertido en la nómina que se muestra.
  *
@@ -139,6 +157,7 @@ export function agruparAlumnosDelPadron(filas: AlumnoHorario[]): AlumnoDelClub[]
       grupo: filasDeLaPersona[0].horarioCategoria ?? null,
       grupoEtiqueta:
         filasDeLaPersona[0].horarioCategoriaLabel ?? filasDeLaPersona[0].horarioCategoria ?? null,
+      categorias: categoriasDe(filasDeLaPersona),
     }))
     .sort((a, b) => a.nombreCompleto.localeCompare(b.nombreCompleto, "es"));
 }
