@@ -1203,6 +1203,24 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
       expect(card.contains(heading)).toBe(false);
     }
   });
+
+  it("form labels are single inline lines, with required semantics kept in attributes", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
+    await screen.findByRole("heading", { name: "Nueva categoría" });
+
+    const nombre = screen.getByLabelText("Nombre");
+    const label = document.querySelector('label[for="categoria-nombre"]') as HTMLElement;
+    expect(label.className).not.toMatch(/flex-col/);
+    expect(label.textContent?.trim()).toBe("Nombre");
+    expect(nombre).toBeRequired();
+    const horario = document.getElementById("categoria-horario-label") as HTMLElement;
+    expect(horario.className).not.toMatch(/flex-col/);
+    expect(horario.textContent?.replace(/\s+/g, " ").trim()).toBe("Horario · 24 h");
+    expect(screen.getByRole("group", { name: "Días" })).toHaveAttribute("aria-required", "true");
+  });
 });
 
 describe("GroupsPage — grupo-level roster: union across días, assign/unassign to every día (bugfix)", () => {

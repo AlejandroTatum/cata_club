@@ -408,7 +408,7 @@ function duracionLabel(inicio: string, fin: string): string | null {
 }
 
 /** Field skin shared with the tarifas/discounts forms. */
-const FIELD_LABEL = "flex flex-col gap-field text-2xs font-bold uppercase text-ink-3";
+const FIELD_LABEL = "block text-2xs font-bold uppercase text-ink-3";
 const FIELD_CONTROL =
   "h-ctl w-full rounded-ctl border border-line-2 bg-paper px-3 text-sm text-ink outline-none focus:border-cata-red";
 const MAXIMO_DIAS_POR_CATEGORIA = 6;
@@ -1199,7 +1199,7 @@ export default function GroupsPage(): React.ReactElement {
         <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-5 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6" noValidate>
           <div className="flex flex-col gap-field">
             <label htmlFor="categoria-nombre" className={FIELD_LABEL}>
-              Nombre <span aria-hidden="true" className="text-state-bad">*</span>
+              Nombre
             </label>
             <input
               id="categoria-nombre"
@@ -1249,9 +1249,7 @@ export default function GroupsPage(): React.ReactElement {
           */}
           <div role="group" aria-labelledby="categoria-horario-label" className="flex flex-col gap-field">
             <div id="categoria-horario-label" className={FIELD_LABEL}>
-              <span>
-                Horario <span className="font-medium normal-case text-ink-3">· 24 h</span>
-              </span>
+              Horario <span className="font-medium normal-case text-ink-3">· 24 h</span>
             </div>
             <div className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2.5">
               <TimePicker24
@@ -1333,7 +1331,7 @@ export default function GroupsPage(): React.ReactElement {
             aria-describedby={fieldErrors.dias ? DIAS_ERROR_ID : undefined}
           >
             <legend className={`${FIELD_LABEL} mb-field`}>
-              Días <span aria-hidden="true" className="text-state-bad">*</span>
+              Días
             </legend>
             <div className="flex h-ctl overflow-hidden rounded-ctl border border-line-2">
               {DIA_ORDER.map((dia) => {
