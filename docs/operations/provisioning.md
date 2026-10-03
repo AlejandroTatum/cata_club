@@ -25,7 +25,7 @@ export MIGRATION_COMPATIBILITY=none  # o backward-compatible
 
 Antes del primer deploy productivo (reconversión de staging a producción),
 valida el `.env` del host con `scripts/ops/check-prod-env.sh` (falla cerrado y
-solo imprime nombres de variable): `DOMINIO_INDEXABLE == DOMINIO`, sin
+solo imprime nombres de variable): `DOMINIO_INDEXABLE == DOMINIO`, `DOMINIO_ALIAS_WWW == www.$DOMINIO`, sin
 `staging.` en `DOMINIO`/`CORS_ORIGENES`/`FRONTEND_URL`, sin `staging` en las
 carpetas de Cloudinary y `JWT_SECRET_KEY`/`POSTGRES_PASSWORD` reales. Con
 `--previous-env <.env-viejo>` comprueba por hash que ambos secretos fueron
@@ -81,6 +81,12 @@ El `Caddyfile` del host entra por `./Caddyfile:/etc/caddy/Caddyfile:ro` y Caddy
 lo compila una sola vez, al arrancar: sin una recreación explícita, un `git
 pull` que trae una ruta nueva no llega al borde y el contenedor sigue sirviendo
 la configuración con la que arrancó.
+
+El alias `www` (`DOMINIO_ALIAS_WWW=www.<dominio>`) redirige con 301 a
+`https://$DOMINIO` conservando path y query. Sin la variable, Caddy usa
+`www.localhost` y no pide ningún certificado, así que staging y las previews no
+necesitan DNS para `www`. En producción el DNS de `www` debe apuntar al host
+antes del deploy, o Let's Encrypt no podrá emitir su certificado.
 
 Por eso `deploy.sh` hace, en este orden:
 

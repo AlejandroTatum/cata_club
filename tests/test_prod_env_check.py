@@ -20,6 +20,7 @@ PG_PASSWORD = "pg-Zk39xQ-real-password"
 VALID = {
     "DOMINIO": "app.cataclub.com",
     "DOMINIO_INDEXABLE": "app.cataclub.com",
+    "DOMINIO_ALIAS_WWW": "www.app.cataclub.com",
     "CORS_ORIGENES": "https://app.cataclub.com",
     "FRONTEND_URL": "https://app.cataclub.com",
     "JWT_SECRET_KEY": JWT,
@@ -208,3 +209,10 @@ def test_preflight_runs_the_check_only_when_opted_in():
     preflight = (ROOT / "scripts/ops/preflight-production.sh").read_text()
     assert "check-prod-env.sh" in preflight
     assert "PREFLIGHT_REQUIRE_PRODUCTION_ENV" in preflight
+
+
+@pytest.mark.parametrize("value", [None, "", "www.otro.com", "<alias-www>"])
+def test_alias_www_must_be_www_of_dominio(tmp_path, value):
+    result = check_env(tmp_path, DOMINIO_ALIAS_WWW=value)
+    assert result.returncode != 0
+    assert "DOMINIO_ALIAS_WWW" in result.stderr

@@ -1670,3 +1670,49 @@ def test_celery_worker_concurrencia_es_uno():
         f"'celery-worker' declara --concurrency={match.group(1)}, se esperaba 1 "
         f"para un droplet de 2GB"
     )
+
+
+# Default reservado del alias `www`: mismo valor en el Caddyfile y en el
+# overlay de producción. `www.localhost` es local para Caddy, que no pide
+# certificado ACME para él (a diferencia de `*.invalid`).
+_ALIAS_WWW_POR_DEFECTO = "www.localhost"
+
+
+def test_el_caddyfile_redirige_el_alias_www_al_dominio_canonico():
+    """El alias `www` responde con redirección PERMANENTE al dominio canónico
+    conservando path y query (`{uri}`), con un bloque de sitio propio y el
+    default local del alias para que un host sin la variable no pida un
+    certificado ACME para un nombre sin DNS."""
+    contenido = (RAIZ / "Caddyfile").read_text()
+    assert f"{{$DOMINIO_ALIAS_WWW:{_ALIAS_WWW_POR_DEFECTO}}} {{" in contenido, (
+        "el Caddyfile no declara un bloque de sitio "
+        f"`{{$DOMINIO_ALIAS_WWW:{_ALIAS_WWW_POR_DEFECTO}}}`"
+    )
+    assert "redir https://{$DOMINIO}{uri} permanent" in contenido, (
+        "el alias `www` no redirige de forma permanente a "
+        "`https://{$DOMINIO}{uri}` (path y query tienen que conservarse)"
+    )
+
+
+@pytest.mark.parametrize("alias", [None, "www.cataclub.com"])
+def test_el_render_de_produccion_pasa_el_alias_www_a_caddy(alias):
+    """La variable llega al contenedor, y sin ella cae al default local (el
+    render NO debe fallar: staging no la define)."""
+    if alias is None:
+        resultado = _ejecutar_config(
+            "docker-compose.yml",
+            "docker-compose.prod.yml",
+            omitir=("DOMINIO_ALIAS_WWW",),
+        )
+        assert resultado.returncode == 0, resultado.stderr
+        config = json.loads(resultado.stdout)
+        esperado = _ALIAS_WWW_POR_DEFECTO
+    else:
+        config = _renderizar(
+            "docker-compose.yml",
+            "docker-compose.prod.yml",
+            entorno={"DOMINIO_ALIAS_WWW": alias},
+        )
+        esperado = alias
+    entorno_caddy = config["services"]["caddy"]["environment"]
+    assert entorno_caddy.get("DOMINIO_ALIAS_WWW") == esperado

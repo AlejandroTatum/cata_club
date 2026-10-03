@@ -229,6 +229,13 @@ services:
       # puede coincidir, así que el default deja el sitio `noindex` en vez
       # de indexable. Mismo valor que el default del Caddyfile, a propósito.
       DOMINIO_INDEXABLE: "${DOMINIO_INDEXABLE:-ninguno.invalid}"
+      # Host `www` que redirige (301) a https://DOMINIO. SIN `:?` y con
+      # default local, a propósito: staging y las previews usan este mismo
+      # overlay sin DNS para `www`, y un host público sin DNS dispararía
+      # pedidos ACME fallidos (límite de tasa de Let's Encrypt).
+      # `www.localhost` nunca recibe certificado ACME; ver el comentario del
+      # bloque en ./Caddyfile. Mismo default que allá, a propósito.
+      DOMINIO_ALIAS_WWW: "${DOMINIO_ALIAS_WWW:-www.localhost}"
     depends_on:
       # `condition: service_started`, NO `service_healthy`: un ingress tiene
       # que ser lo último en caerse. Si el stack reinicia con el frontend

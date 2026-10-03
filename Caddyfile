@@ -14,6 +14,28 @@
 	email {$ACME_EMAIL}
 }
 
+# ── Alias `www`: redirección permanente al dominio canónico ──────────────
+#
+# El dominio canónico es `{$DOMINIO}`; `www` solo existe para no perder a
+# quien lo escribe. `permanent` (301) y `{uri}` conservan path y query.
+# Bloque propio y mínimo: una redirección no sirve contenido, así que no
+# necesita los headers del sitio. El HSTS del sitio principal ya cubre a
+# `www` por `includeSubDomains`; se repite acá para que no dependa de que el
+# visitante haya pasado antes por el apex.
+#
+# Este archivo se despliega en CUALQUIER host, y Caddy pide un certificado
+# ACME para todo nombre público que declare -- sin DNS apuntando acá,
+# Let's Encrypt rechaza y suma intentos fallidos al límite de tasa. Por eso
+# el default de la variable NO PUEDE ser un nombre público: `www.localhost`
+# es local para Caddy (emisor interno, jamás ACME) y ningún visitante real
+# llega con ese Host, así que el bloque queda inerte. (`*.invalid` no sirve:
+# Caddy sí le arma una política ACME.) Producción exporta
+# `DOMINIO_ALIAS_WWW=www.<dominio>`; `scripts/ops/check-prod-env.sh` lo exige.
+{$DOMINIO_ALIAS_WWW:www.localhost} {
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	redir https://{$DOMINIO}{uri} permanent
+}
+
 {$DOMINIO} {
 	# TLS automático vía Let's Encrypt: comportamiento por defecto de Caddy
 	# 2.x para cualquier dirección que no sea `localhost` ni una IP -- no

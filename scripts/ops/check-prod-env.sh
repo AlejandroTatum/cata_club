@@ -6,6 +6,7 @@
 # migrations, SMTP and backups; this script covers the leftovers of a
 # staging-to-production reconversion:
 #   - DOMINIO_INDEXABLE == DOMINIO (otherwise Caddy ships `noindex` to prod);
+#   - DOMINIO_ALIAS_WWW == www.$DOMINIO (www 301-redirects to the apex);
 #   - no `staging.` in DOMINIO / CORS_ORIGENES / FRONTEND_URL, which must
 #     reference https://$DOMINIO;
 #   - no `staging` in the Cloudinary folder names;
@@ -75,6 +76,13 @@ if [ -z "$INDEXABLE" ]; then
   fail "DOMINIO_INDEXABLE falta o está vacío: producción saldría con noindex"
 elif [ "$INDEXABLE" != "$DOMINIO" ]; then
   fail "DOMINIO_INDEXABLE debe ser idéntico a DOMINIO"
+fi
+
+ALIAS_WWW="$(val DOMINIO_ALIAS_WWW)"
+if [ -z "$ALIAS_WWW" ] || is_placeholder "$ALIAS_WWW"; then
+  fail "DOMINIO_ALIAS_WWW falta o sin reemplazar: www no redirigiría al dominio canónico"
+elif [ -n "$DOMINIO" ] && [ "$ALIAS_WWW" != "www.${DOMINIO}" ]; then
+  fail "DOMINIO_ALIAS_WWW debe ser www.\$DOMINIO"
 fi
 
 if [ -n "$DOMINIO" ] && ! is_placeholder "$DOMINIO"; then
