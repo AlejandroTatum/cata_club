@@ -7,7 +7,7 @@ entre varias IPs, o simplemente entra dentro del cupo por minuto. La decisión
 de negocio (docs/product/decisiones-de-negocio-2026-08-11.md, sección 3) descarta un
 bloqueo duro -- eso regala un ataque nuevo, dejar a un socio afuera sin saber
 ninguna contraseña -- y elige un retraso creciente por CUENTA: 1s al tercer
-intento fallido, 2s al cuarto, 4s al quinto, duplicando, techo de 60s. Un
+intento fallido, 2s al cuarto, 4s al quinto, duplicando, techo de 8s. Un
 login exitoso resetea el contador.
 
 Anti-enumeración: el contador y el retraso se aplican sobre el string de
@@ -58,7 +58,7 @@ def test_tercer_intento_fallido_retrasa_un_segundo(db_session):
     assert espia.llamadas == [1]
 
 
-def test_retraso_duplica_y_tiene_techo_de_60_segundos(db_session):
+def test_retraso_duplica_y_tiene_techo_de_8_segundos(db_session):
     _crear_usuario(db_session, correo="ana@cataclub.test")
     espia = SleeperEspia()
     servicio = AuthServicio(db_session, dormir=espia)
@@ -67,8 +67,34 @@ def test_retraso_duplica_y_tiene_techo_de_60_segundos(db_session):
         with pytest.raises(CredencialesInvalidas):
             servicio.login("ana@cataclub.test", "mal")
 
-    # Intentos 3..10 -> 1, 2, 4, 8, 16, 32, 64(techo->60), 128(techo->60)
-    assert espia.llamadas == [1, 2, 4, 8, 16, 32, 60, 60]
+    # Intentos 3..10 -> 1, 2, 4, 8, 16(techo->8), 32(techo->8), 64, 128 (techo->8)
+    assert espia.llamadas == [1, 2, 4, 8, 8, 8, 8, 8]
+
+
+def test_techo_de_8_segundos_cabe_en_el_timeout_de_la_interfaz(db_session):
+    """REG-02: la interfaz corta a los 10 s; ninguna espera puede acercarse."""
+    assert auth_servicio_modulo._TECHO_RETRASO_SEGUNDOS == 8
+
+
+def test_el_techo_acota_la_espera_no_el_conteo_de_intentos(db_session):
+    """REG-02: el techo recorta solo el sleep. El contador sigue creciendo
+    (el freno no se relaja ni se reinicia al llegar al techo), y un login
+    exitoso lo resetea igual que antes."""
+    _crear_usuario(db_session, correo="ana@cataclub.test", contrasenia="clave-correcta")
+    espia = SleeperEspia()
+    servicio = AuthServicio(db_session, dormir=espia)
+
+    for _ in range(10):
+        with pytest.raises(CredencialesInvalidas):
+            servicio.login("ana@cataclub.test", "mal")
+
+    assert auth_servicio_modulo._INTENTOS_FALLIDOS_LOGIN["ana@cataclub.test"][0] == 10
+    assert max(espia.llamadas) == 8
+
+    # Ni una clave correcta salta el freno: sigue pasando por la misma
+    # verificación, y solo el éxito resetea el contador.
+    servicio.login("ana@cataclub.test", "clave-correcta")
+    assert "ana@cataclub.test" not in auth_servicio_modulo._INTENTOS_FALLIDOS_LOGIN
 
 
 def test_contador_es_por_cuenta_no_global(db_session):

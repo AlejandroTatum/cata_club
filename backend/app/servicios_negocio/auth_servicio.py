@@ -71,8 +71,8 @@ _log = logging.getLogger(__name__)
 #
 # Por qué el TTL es DESLIZANTE (se toca en cada fallo, no fijo desde la
 # creación): un ataque dirigido de verdad contra UNA cuenta sigue tocando esa
-# clave en cada intento -- incluso escalado al techo de 60s entre intentos,
-# eso son come mucho ~60s de silencio entre toques, muy por debajo de los 15
+# clave en cada intento -- incluso escalado al techo de 8s entre intentos,
+# eso son como mucho ~8s de silencio entre toques, muy por debajo de los 15
 # minutos de TTL -- así que la cuenta atacada nunca se resetea mientras el
 # ataque siga activo. Solo se resetea una clave que quedó IDLE 15 minutos:
 # o basura del atacante que dejó de insistir en ese string puntual, o un
@@ -95,7 +95,11 @@ _INTENTOS_FALLIDOS_LOGIN: "OrderedDict[str, tuple[int, float]]" = OrderedDict()
 _MAX_ENTRADAS_INTENTOS_LOGIN = 50_000
 _TTL_INTENTOS_LOGIN_SEGUNDOS = 15 * 60
 _UMBRAL_RETRASO_INTENTOS = 3
-_TECHO_RETRASO_SEGUNDOS = 60
+# QA4 REG-02: el techo era 60 s, pero la interfaz corta a los 10 s y culpaba a
+# la conexión. 8 s deja margen bajo ese corte. Acota SOLO el sleep: el
+# contador sigue creciendo y se resetea igual, y cada intento sigue pagando
+# ese retraso (con el rate limiter de 60/min por IP encima).
+_TECHO_RETRASO_SEGUNDOS = 8
 
 
 # REG-10: lo que lee quien intenta entrar con una cuenta dada de baja o
@@ -187,7 +191,7 @@ class SesionVista:
 def _calcular_retraso_login(intentos_fallidos: int) -> int:
     """Decisión de negocio (docs/product/decisiones-de-negocio-2026-08-11.md, sección
     3): sin retraso antes del 3er intento fallido; 1s al 3ro, duplicando en
-    cada intento siguiente, con techo de 60s. Nunca bloqueo duro -- eso
+    cada intento siguiente, con techo de 8s (REG-02). Nunca bloqueo duro -- eso
     regala un ataque nuevo (dejar a un socio afuera sin saber ninguna
     contraseña)."""
     if intentos_fallidos < _UMBRAL_RETRASO_INTENTOS:

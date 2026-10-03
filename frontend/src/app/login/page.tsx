@@ -63,6 +63,8 @@ function welcomeDescriptionFor(route: string): string {
 
 /** Written once because two fields point at it through `aria-describedby`. */
 const CREDENTIALS_ERROR_ID = "credentials-error";
+/** The server slows its answers from the 3rd consecutive wrong password (REG-02). */
+const TOO_MANY_ATTEMPTS_THRESHOLD = 3;
 
 /*
  * The skin of a link on this card now lives in `AuthShell` as
@@ -187,6 +189,13 @@ function LoginPageContent(): React.ReactElement {
    */
   const [credentialsRejected, setCredentialsRejected] = useState(false);
   /**
+   * REG-02: consecutive `invalid_credentials` answers in this visit. From the
+   * 3rd the server starts slowing each answer down (at most 8 s), so the
+   * person is told it is "too many attempts" — not left to blame the
+   * connection. Reset by any other outcome.
+   */
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  /**
    * The login succeeded but the browser did not keep the session cookies —
    * `session_not_persisted`. Held on the CARD, not only in the toast, for the
    * same reason `sessionExpired` gets a static banner: this is the one
@@ -279,6 +288,7 @@ function LoginPageContent(): React.ReactElement {
       // the cookies — are not the person's typing, and painting their fields
       // red would send them to re-check something that was never wrong.
       setCredentialsRejected(isCredentialsError);
+      setFailedAttempts((previous: number): number => (isCredentialsError ? previous + 1 : 0));
       setSessionNotPersisted(isCookieError);
       setSubmitting(false);
       return;
@@ -496,6 +506,15 @@ function LoginPageContent(): React.ReactElement {
               className="mt-1.5 text-base font-semibold text-state-bad"
             >
               El correo y la contraseña no coinciden. Verifique los dos e intente nuevamente.
+            </p>
+          )}
+          {/* REG-02. New copy is in «tú» (TXT-N1). The backend caps its delay
+              at 8 s, under the 10 s the BFF waits, so this is what a slow
+              answer after several misses means. */}
+          {credentialsRejected && failedAttempts >= TOO_MANY_ATTEMPTS_THRESHOLD && (
+            <p data-testid="too-many-attempts" role="status" className="mt-1.5 text-sm text-cata-text/80">
+              Demasiados intentos. Espera unos segundos y vuelve a intentarlo. Si no recuerdas tu contraseña, usa
+              el enlace para recuperarla.
             </p>
           )}
         </div>

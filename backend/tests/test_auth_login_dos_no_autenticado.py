@@ -24,7 +24,7 @@ Dos mitades independientes:
 
 No repite acá la curva de retraso completa contra una cuenta real -- ya
 existe, sin cambios, en `test_auth_freno_login.py::
-test_retraso_duplica_y_tiene_techo_de_60_segundos`, y sigue en verde después
+test_retraso_duplica_y_tiene_techo_de_8_segundos`, y sigue en verde después
 de este fix: eso YA prueba la no-regresión. Lo que sí es específico de esta
 suite (`test_cuenta_atacada_no_es_desalojada_por_relleno_de_entradas_falsas`
 más abajo) es que esa misma cuenta sobrevive un relleno de basura antes de

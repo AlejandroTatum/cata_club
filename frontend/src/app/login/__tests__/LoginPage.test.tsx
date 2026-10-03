@@ -286,6 +286,48 @@ describe("LoginPage", () => {
       expect(document.querySelector(".alert-error")).not.toBeInTheDocument();
     });
 
+    // REG-02: from the 3rd wrong password the server slows each answer (max
+    // 8 s). The person must read that as "too many attempts", not as a broken
+    // connection — and be pointed at the recovery link.
+    it("adds a «demasiados intentos» notice from the 3rd consecutive wrong password, not before", async () => {
+      const mockLogin = vi.fn().mockResolvedValue({ ok: false, error: "invalid_credentials" });
+      mockUseAuth.mockReturnValue({ ...createUnauthenticatedAuth(false), login: mockLogin });
+
+      render(<LoginPage />);
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        submitLoginForm();
+        await screen.findByTestId("credentials-error");
+        await waitFor(() => expect(mockLogin).toHaveBeenCalledTimes(attempt));
+        expect(screen.queryByTestId("too-many-attempts")).not.toBeInTheDocument();
+      }
+
+      submitLoginForm();
+      const notice = await screen.findByTestId("too-many-attempts");
+      expect(notice).toHaveTextContent("Demasiados intentos. Espera unos segundos y vuelve a intentarlo.");
+      expect(notice).toHaveTextContent(/enlace para recuperarla/);
+    });
+
+    it("drops the notice when a different failure follows, so it never blames the wrong thing", async () => {
+      const mockLogin = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: false, error: "invalid_credentials" })
+        .mockResolvedValueOnce({ ok: false, error: "invalid_credentials" })
+        .mockResolvedValueOnce({ ok: false, error: "invalid_credentials" })
+        .mockResolvedValueOnce({ ok: false, error: "backend_unavailable" });
+      mockUseAuth.mockReturnValue({ ...createUnauthenticatedAuth(false), login: mockLogin });
+
+      render(<LoginPage />);
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        submitLoginForm();
+        await waitFor(() => expect(mockLogin).toHaveBeenCalledTimes(attempt));
+      }
+      await screen.findByTestId("too-many-attempts");
+
+      submitLoginForm();
+      await screen.findByText("No se pudo conectar con el servidor");
+      expect(screen.queryByTestId("too-many-attempts")).not.toBeInTheDocument();
+    });
+
     it("names the problem and the recovery inline for a server failure, with no toast", async () => {
       const mockLogin = vi.fn().mockResolvedValue({ ok: false, error: "backend_unavailable" });
       mockUseAuth.mockReturnValue({
