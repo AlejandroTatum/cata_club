@@ -328,6 +328,34 @@ export const REJECTION_REASONS: RejectionReasonOption[] = [
 ];
 
 /**
+ * Rejection reasons for a cash payment (QA3 ADM-16): there is no voucher to
+ * read, duplicate or misread, so the proof-based reasons do not apply. Keys
+ * stay distinct from `REJECTION_REASONS` so `composeRejectionReason` can
+ * resolve either list from the key alone.
+ */
+export const EFECTIVO_REJECTION_REASONS: RejectionReasonOption[] = [
+  { key: "monto-efectivo", label: "El monto recibido no coincide" },
+  { key: "fuera-periodo-efectivo", label: "La fecha está fuera del período" },
+];
+
+/** The reasons the admin can pick for this kind of payment. */
+export function rejectionReasonsFor(kind: PaymentMethodKind): RejectionReasonOption[] {
+  return kind === "efectivo" ? EFECTIVO_REJECTION_REASONS : REJECTION_REASONS;
+}
+
+/** What the payer is told will happen with a rejection, per payment method. */
+export function rejectionPayerNotice(kind: PaymentMethodKind, payer: string): string {
+  return kind === "efectivo"
+    ? `${payer} va a recibir este motivo tal cual y deberá comunicarse con el club para regularizar su pago.`
+    : `${payer} va a recibir este motivo tal cual y va a tener que subir un comprobante nuevo.`;
+}
+
+/** Label of the detail cell holding `uploadedAt`: a cash payment is recorded, not uploaded. */
+export function uploadedAtLabel(kind: PaymentMethodKind): string {
+  return kind === "efectivo" ? "Registrado el" : "Subido el";
+}
+
+/**
  * How long the free-text note can be before `composeRejectionReason` below
  * would build a `rejectionReason` the backend refuses.
  *
@@ -356,7 +384,9 @@ export const REJECTION_NOTE_MAX_LENGTH = 200;
  * submit blocked — the backend contract still requires a non-empty reason.
  */
 export function composeRejectionReason(reasonKey: string, note: string): string {
-  const reason = REJECTION_REASONS.find((r) => r.key === reasonKey);
+  const reason = [...REJECTION_REASONS, ...EFECTIVO_REJECTION_REASONS].find(
+    (r) => r.key === reasonKey,
+  );
   if (!reason) return "";
   const trimmedNote = note.trim();
   return trimmedNote ? `${reason.label} — ${trimmedNote}` : reason.label;

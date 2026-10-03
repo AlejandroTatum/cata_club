@@ -339,6 +339,7 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/membresias/propia"): frozenset({"REPRESENTANTE", "ALUMNO"}),
     ("POST", "/membresias/representado/pago"): frozenset({"REPRESENTANTE"}),
     ("POST", "/membresias/{membresia_id}/regularizar-deuda"): frozenset({"ADMINISTRADOR"}),
+    ("GET", "/membresias/{membresia_id}/regularizar-deuda/cotizacion"): frozenset({"ADMINISTRADOR"}),
     # Issue #400 (slice 5b): corregir un campo financiero congelado de un
     # pago ya aprobado es tan sensible como crear el pago mismo -- admin-only,
     # mismo criterio que regularizar-deuda/suspender/reactivar.

@@ -244,6 +244,19 @@ describe("passthroughBackendError", () => {
     expect(await response.json()).toEqual({ message: "No se pudo", mensaje_seguro: false });
   });
 
+  it("forwards the numeric `membresia_id` the backend attaches (QA3 ADM-08)", async () => {
+    const response = await passthroughBackendError(
+      jsonResponse({ detail: "Ya tiene una membresía pendiente de pago.", membresia_id: 157 }, 400),
+      "fallback",
+    );
+
+    expect(await response.json()).toEqual({
+      message: "Ya tiene una membresía pendiente de pago.",
+      mensaje_seguro: false,
+      membresia_id: 157,
+    });
+  });
+
   it("prefers `message` over `detail` when the backend sends both", async () => {
     const response = await passthroughBackendError(
       jsonResponse({ message: "Mensaje", detail: "Detalle" }, 400),

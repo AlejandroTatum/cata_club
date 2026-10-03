@@ -19,6 +19,10 @@ import {
   classifyPaymentMethod,
   composeRejectionReason,
   REJECTION_REASONS,
+  EFECTIVO_REJECTION_REASONS,
+  rejectionReasonsFor,
+  rejectionPayerNotice,
+  uploadedAtLabel,
   REJECTION_NOTE_MAX_LENGTH,
 } from "../payments-utils";
 
@@ -287,9 +291,38 @@ describe("composeRejectionReason", () => {
   it("REJECTION_NOTE_MAX_LENGTH leaves every label under the backend's 255-character limit", () => {
     const MOTIVO_RECHAZO_BACKEND_LIMIT = 255;
     const noteAtLimit = "x".repeat(REJECTION_NOTE_MAX_LENGTH);
-    for (const reason of REJECTION_REASONS) {
+    for (const reason of [...REJECTION_REASONS, ...EFECTIVO_REJECTION_REASONS]) {
       const composed = composeRejectionReason(reason.key, noteAtLimit);
       expect(composed.length).toBeLessThanOrEqual(MOTIVO_RECHAZO_BACKEND_LIMIT);
     }
+  });
+});
+
+describe("per-method rejection copy (ADM-16)", () => {
+  it("offers cash-specific reasons for efectivo and the voucher reasons otherwise", () => {
+    expect(rejectionReasonsFor("efectivo").map((r) => r.label)).toEqual([
+      "El monto recibido no coincide",
+      "La fecha está fuera del período",
+    ]);
+    expect(rejectionReasonsFor("transferencia")).toBe(REJECTION_REASONS);
+    expect(rejectionReasonsFor("otro")).toBe(REJECTION_REASONS);
+  });
+
+  it("composes a cash reason from its own key", () => {
+    expect(composeRejectionReason("monto-efectivo", "")).toBe("El monto recibido no coincide");
+  });
+
+  it("tells the payer what to do next, per method", () => {
+    expect(rejectionPayerNotice("efectivo", "María")).toBe(
+      "María va a recibir este motivo tal cual y deberá comunicarse con el club para regularizar su pago.",
+    );
+    expect(rejectionPayerNotice("transferencia", "María")).toBe(
+      "María va a recibir este motivo tal cual y va a tener que subir un comprobante nuevo.",
+    );
+  });
+
+  it("labels the timestamp cell by method", () => {
+    expect(uploadedAtLabel("efectivo")).toBe("Registrado el");
+    expect(uploadedAtLabel("transferencia")).toBe("Subido el");
   });
 });

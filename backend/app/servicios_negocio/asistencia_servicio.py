@@ -13,8 +13,10 @@ from app.dominio.modelos import (
 from app.dominio.enums import DiaSemana, EstadoAsistencia, EstadoMembresia, EstadoPago
 from app.dominio.etiquetas import dia_en_castellano
 from app.dominio.excepciones import (
-    ConflictoConcurrencia, EntidadNoEncontrada, OperacionInvalida, PermisosInsuficientes,
+    ConflictoConcurrencia, EntidadNoEncontrada, NombreDuplicado, OperacionInvalida,
+    PermisosInsuficientes,
 )
+from app.dominio.nombres_catalogo import existe_nombre, normalizar_nombre
 from app.dominio.nombre_propio import nombre_completo
 from app.dominio.reglas_negocio import (
     HORA_MAXIMA_ENTRENAMIENTO, HORA_MINIMA_ENTRENAMIENTO,
@@ -281,15 +283,23 @@ class AsistenciaServicio:
                 f"Una categoría no puede entrenar más de {MAXIMO_DIAS_POR_CATEGORIA} días."
             )
 
+    def _exigir_nombre_de_categoria_libre(
+        self, nombre: str, excluir_codigo: Optional[str] = None,
+    ) -> None:
+        """QA3 ADM-11: sin duplicados por mayúsculas ni espacios (las tildes
+        distinguen)."""
+        otros = [c.label for c in self.repo_categoria.listar() if c.codigo != excluir_codigo]
+        if existe_nombre(nombre, otros):
+            raise NombreDuplicado(f'Ya existe una categoría llamada "{nombre}".')
+
     def crear_categoria(self, datos: CategoriaCreateDTO) -> CategoriaResponseDTO:
         """Alta atómica (docs/archive/fixes/24-abm-categorias.md, pedido del dueño):
         una sola operación crea la categoria, sus días permitidos y un
         `horario_entrenamiento` por cada día marcado."""
-        nombre = datos.nombre.strip()
+        nombre = normalizar_nombre(datos.nombre)
         if not nombre:
             raise OperacionInvalida("El nombre de la categoría no puede estar vacío.")
-        if self.repo_categoria.existe_label(nombre):
-            raise OperacionInvalida(f'Ya existe una categoría llamada "{nombre}".')
+        self._exigir_nombre_de_categoria_libre(nombre)
         if datos.hora_inicio >= datos.hora_fin:
             raise OperacionInvalida("La hora de inicio debe ser anterior a la hora de fin.")
         self._validar_ventana_de_entrenamiento(datos.hora_inicio, datos.hora_fin)
@@ -368,11 +378,10 @@ class AsistenciaServicio:
         self._validar_ventana_de_entrenamiento(nueva_hora_inicio, nueva_hora_fin)
 
         if datos.nombre is not None:
-            nombre = datos.nombre.strip()
+            nombre = normalizar_nombre(datos.nombre)
             if not nombre:
                 raise OperacionInvalida("El nombre de la categoría no puede estar vacío.")
-            if nombre != categoria.label and self.repo_categoria.existe_label(nombre, excluir_codigo=codigo):
-                raise OperacionInvalida(f'Ya existe una categoría llamada "{nombre}".')
+            self._exigir_nombre_de_categoria_libre(nombre, excluir_codigo=codigo)
         else:
             nombre = categoria.label
 

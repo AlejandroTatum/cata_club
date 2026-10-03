@@ -122,7 +122,7 @@ const PAYMENT_STATUS_BY_ESTADO_PAGO: Record<BackendEstadoPago, PaymentStatus> = 
 // hours; a membership type is a price, and the hours belong to the horarios
 // the club assigns each student.
 function buildMembershipTypeLabel(tipo: BackendTipoMembresia | undefined): string {
-  return tipo ? tipo.categoria : "Sin tipo";
+  return tipo ? tipo.categoria : "Plan sin asignar";
 }
 
 /**
@@ -233,6 +233,9 @@ function buildMemberStudentSummary(
           // an invented range.
           fechaInicio: pago?.fechaInicio ?? "",
           fechaFin: pago?.fechaFin ?? "",
+          // QA3 ADM-14: "Vigencia" is the membership's real coverage, not the
+          // last payment's period above.
+          cubiertoHasta: membresia.cubiertoHasta ?? null,
           // Issue #313 (K5 hallazgo #44): SIEMPRE el precio del plan
           // (`montoAplicado`), nunca el monto del último pago. Antes este
           // campo tomaba `pago.monto` cuando había un pago, así que una

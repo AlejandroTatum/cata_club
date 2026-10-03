@@ -695,7 +695,9 @@ class PersonaServicio:
 
 
     # --- Baja lógica (reemplaza el borrado duro) --------------------------
-    def cambiar_estado(self, persona_id: int, activo: bool) -> Persona:
+    def cambiar_estado(
+        self, persona_id: int, activo: bool, persona_id_solicitante: int | None = None,
+    ) -> Persona:
         """Da de baja o reincorpora a una persona SIN borrar nada.
 
         Reemplaza al viejo `eliminar_persona`, que hacía un DELETE real y se
@@ -720,6 +722,9 @@ class PersonaServicio:
         usuario = self.repo_usuario.obtener_por_persona_id(persona_id)
 
         if not activo and usuario is not None:
+            RolServicio(self.db).asegurar_que_no_se_desactiva_a_si_mismo(
+                persona_id, persona_id_solicitante
+            )
             RolServicio(self.db)._asegurar_que_queda_otro_administrador(
                 usuario, "dar de baja a esta persona"
             )

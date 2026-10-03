@@ -68,6 +68,16 @@ class OperacionInvalida(ErrorDominio):
     pass
 
 
+class MembresiaPendienteDePago(OperacionInvalida):
+    """La persona ya tiene una membresía INACTIVA con un pago pendiente
+    (-> HTTP 400). Lleva el id de esa membresía para que la UI la enlace;
+    el manejador global lo agrega al cuerpo como `membresia_id`."""
+
+    def __init__(self, mensaje: str, membresia_id: int):
+        super().__init__(mensaje)
+        self.membresia_id = membresia_id
+
+
 class CredencialesInvalidas(ErrorDominio):
     """Login fallido (-> HTTP 401)."""
     pass
@@ -109,6 +119,13 @@ class DestinatarioRechazadoPermanentemente(ServicioNoDisponible):
     `detalle_tecnico` lleva el código y el texto del proveedor ya redactados
     (`notificaciones_servicio._redactar_detalle_sensible`), que es lo que se
     persiste como auditoría."""
+    pass
+
+
+class NombreDuplicado(ErrorDominio):
+    """El nombre de un elemento de catálogo ya lo tiene otro (-> HTTP 409,
+    QA3 ADM-11). Ver `app.dominio.nombres_catalogo` para qué cuenta como el
+    mismo nombre."""
     pass
 
 

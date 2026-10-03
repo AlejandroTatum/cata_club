@@ -115,7 +115,7 @@ def test_porcentaje_fuera_de_rango_es_rechazado(client):
 def test_nombre_de_descuento_duplicado_es_rechazado(client):
     assert crear_descuento_api(client, "Beca municipal", porcentaje="100").status_code == 201
     respuesta = crear_descuento_api(client, "Beca municipal", porcentaje="50")
-    assert respuesta.status_code == 400
+    assert respuesta.status_code == 409
 
 
 def test_listado_admin_incluye_inactivos(client):

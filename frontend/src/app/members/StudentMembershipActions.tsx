@@ -10,7 +10,7 @@ import CambiarPlanForm from "./CambiarPlanForm";
 import { Badge, DataBox, PAGE_RAIL } from "@/components/ui";
 import { formatCurrency } from "@/lib/format-utils";
 import {
-  formatMembershipPeriod,
+  formatMembershipCoverage,
   getMembershipStatusBadge,
   type MemberStudentSummary,
 } from "./members-utils";
@@ -31,7 +31,7 @@ function MembershipSummary({ student }: { student: MemberStudentSummary }): Reac
     );
   }
   const { label, tone } = getMembershipStatusBadge(student);
-  const period = formatMembershipPeriod(membresia.fechaInicio, membresia.fechaFin);
+  const period = formatMembershipCoverage(membresia.cubiertoHasta);
   return (
     <dl
       aria-label="Resumen de la membresía"

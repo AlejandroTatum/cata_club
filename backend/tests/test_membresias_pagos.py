@@ -14,6 +14,7 @@ from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.dtos.membresia_pago_schemas import MembresiaResponseDTO
 from app.servicios_negocio.membresia_pago_servicio import PagoServicio
 from tests.fabricas_pagos import (
+    nombre_tarifa_unico,
     crear_membresia_api, crear_membresia_orm, crear_pago_orm, crear_persona_api,
     crear_persona_orm, crear_tipo_membresia_api, crear_tipo_membresia_orm,
     registrar_pago_api,
@@ -34,7 +35,7 @@ def _crear_tipo_membresia(client, modalidad="MENSUAL"):
     return client.post(
         "/api/v1/membresias/tipos",
         json={
-            "categoria": "Adultos",
+            "categoria": nombre_tarifa_unico(),
             "precio": "35.00", "modalidad": modalidad,
         },
     ).json()

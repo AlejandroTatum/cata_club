@@ -42,7 +42,7 @@ from app.presentacion.routers import (
     actividad_router,
 )
 from app.dominio.excepciones import (
-    EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida,
+    EntidadNoEncontrada, EntidadDuplicada, NombreDuplicado, OperacionInvalida,
     CredencialesInvalidas, PermisosInsuficientes, ServicioNoDisponible,
     ConflictoConcurrencia,
 )
@@ -102,10 +102,15 @@ _instrumentator = (
 # `excepciones.py`). El parámetro por defecto en `False` cubre además a
 # cualquier caller que arme la respuesta sin pasar por una `ErrorDominio`
 # (`HTTPException`, `RequestValidationError`, `IntegrityError` no manejado).
-def _respuesta_error(codigo: int, mensaje: str, *, mensaje_seguro: bool = False) -> JSONResponse:
+def _respuesta_error(
+    codigo: int, mensaje: str, *, mensaje_seguro: bool = False, extra: dict | None = None,
+) -> JSONResponse:
     return JSONResponse(
         status_code=codigo,
-        content={"detail": mensaje, "message": mensaje, "mensaje_seguro": mensaje_seguro},
+        content={
+            "detail": mensaje, "message": mensaje, "mensaje_seguro": mensaje_seguro,
+            **(extra or {}),
+        },
     )
 
 
@@ -169,6 +174,7 @@ _MAPA_EXCEPCIONES = {
     PermisosInsuficientes: status.HTTP_403_FORBIDDEN,
     ServicioNoDisponible: status.HTTP_503_SERVICE_UNAVAILABLE,
     ConflictoConcurrencia: status.HTTP_409_CONFLICT,
+    NombreDuplicado: status.HTTP_409_CONFLICT,
 }
 
 for _excepcion, _codigo in _MAPA_EXCEPCIONES.items():
@@ -190,8 +196,10 @@ for _excepcion, _codigo in _MAPA_EXCEPCIONES.items():
                     getattr(request.state, "request_id", "-"),
                     detalle,
                 )
+            membresia_id = getattr(exc, "membresia_id", None)
             return _respuesta_error(
-                codigo, exc.mensaje, mensaje_seguro=getattr(exc, "seguro_mostrar", False)
+                codigo, exc.mensaje, mensaje_seguro=getattr(exc, "seguro_mostrar", False),
+                extra={"membresia_id": membresia_id} if membresia_id is not None else None,
             )
         return _handler
     app.add_exception_handler(_excepcion, _crear_handler(_codigo))

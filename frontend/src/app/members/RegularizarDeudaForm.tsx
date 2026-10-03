@@ -6,8 +6,10 @@
  * The debt is DERIVED (no stored column): owed months from the last approved
  * coverage to today, fetched from the backend when the form opens. The admin
  * records explicit retroactive dates (inicio/fin) + a mandatory motivo; the
- * backend validates no-overlap with approved coverage and that the monto is a
- * multiple of the monthly price, then the payment enters APROBADO directly.
+ * backend validates no-overlap with approved coverage, then the payment enters
+ * APROBADO directly. The monto is NOT typed (QA3 ADM-09): the backend quotes it
+ * from the period (monthly price x months, minus the person's active discount)
+ * and rejects any other amount, so the form shows that quote and submits it.
  *
  * It doubles as the migration tool for existing members (issue #1492): the
  * admin loads the real paid dates from the club's notebook, and when the
@@ -26,13 +28,17 @@ import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, Loader2, Wallet } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useToast } from "@/contexts/ToastContext";
-import { fetchMembresiaDeuda, regularizarDeuda } from "@/services/api";
+import {
+  fetchCotizacionRegularizacion,
+  fetchMembresiaDeuda,
+  regularizarDeuda,
+  type CotizacionRegularizacion,
+} from "@/services/api";
 import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
 import { formatCurrency, formatDate } from "@/lib/format-utils";
 import { toUserMessage } from "@/lib/error-message";
 import CampoFormularioAdmin from "@/components/admin/CampoFormularioAdmin";
 import {
-  excedeMesesMaximo,
   MAX_MESES_COBERTURA,
   MENSAJE_MESES_MAXIMO_EXCEDIDO,
 } from "@/app/student/payments/payments-utils";
@@ -42,17 +48,17 @@ import { ACTION_TRIGGER, PRIMARY_ACTION_TRIGGER } from "./payment-action-styles"
 interface RegularizarDeudaFormProps {
   /** Backend membership id (the one the admin BFF aggregates, not the display label). */
   membresiaId: number;
-  /** Monthly price (monto_aplicado) — prefills the monto field. */
+  /** Monthly price (monto_aplicado) — shown as a hint next to the quoted amount. */
   montoMensual: number;
   /**
    * `Membresia.esGratuidadFamiliar` (issue #400, slice 4c-b) — since that
    * slice `montoMensual` stays the real, nonzero tariff even for a
    * gratuitous membership (E04-RF002 stopped zeroing it), so this form
-   * would otherwise prefill a real dollar amount as if it were owed. It is
-   * not: the backend's `RegularizacionDeudaDTO.monto` requires `> 0`
-   * (there is no honest zero to submit), and a member who does not pay has
+   * would otherwise quote a real dollar amount as if it were owed. It is
+   * not: the backend only accepts $0 when a 100% discount
+   * quotes it, and a gratuitous member who does not pay has
    * no dollar amount to "catch up on" — the form is blocked entirely for
-   * this case rather than prefilling a number that does not apply.
+   * this case rather than showing a number that does not apply.
    */
   esGratuidadFamiliar?: boolean;
   /** Called after a successful regularization so the page can refetch its data. */
@@ -76,18 +82,13 @@ export default function RegularizarDeudaForm({
   const [deudaError, setDeudaError] = useState(false);
   const [fechaInicio, setFechaInicio] = useState<string>(() => clubIsoDate());
   const [fechaFin, setFechaFin] = useState<string>("");
-  const [monto, setMonto] = useState<string>(montoMensual > 0 ? String(montoMensual) : "");
+  const [cotizacion, setCotizacion] = useState<CotizacionRegularizacion | null>(null);
+  const [cotizando, setCotizando] = useState(false);
+  const [cotizacionError, setCotizacionError] = useState<string | null>(null);
   const [motivo, setMotivo] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [regularized, setRegularized] = useState(false);
-  // Issue #666: the bound for the "Monto" field below. `montoMensual` is
-  // usually a real, known plan price; the rare case it is not (`<= 0`) is
-  // exactly the `if (montoMensual <= 0)` branch `loadDeuda` already had —
-  // this mirrors it so the 12-month cap can still be computed once the
-  // fetched debt names the plan's real price.
-  const [montoMensualDeuda, setMontoMensualDeuda] = useState<number>(0);
-  const precioParaLimite = montoMensual > 0 ? montoMensual : montoMensualDeuda;
 
   const loadDeuda = useCallback(async (): Promise<void> => {
     setDeudaError(false);
@@ -95,16 +96,12 @@ export default function RegularizarDeudaForm({
       const deuda = await fetchMembresiaDeuda(membresiaId);
       setMesesAdeudados(deuda.mesesAdeudados);
       setUltimaCoberturaFin(deuda.ultimaCoberturaFin);
-      if (montoMensual <= 0) {
-        setMonto(deuda.montoMensual > 0 ? String(deuda.montoMensual) : "");
-        setMontoMensualDeuda(deuda.montoMensual > 0 ? deuda.montoMensual : 0);
-      }
     } catch {
       // The tool still works without the number (the backend is the authority);
       // the row just shows the debt as unknown.
       setDeudaError(true);
     }
-  }, [membresiaId, montoMensual]);
+  }, [membresiaId]);
 
   function handleOpen(): void {
     setOpen(true);
@@ -112,7 +109,8 @@ export default function RegularizarDeudaForm({
     setRegularized(false);
     setFechaInicio(clubIsoDate());
     setFechaFin("");
-    setMonto(montoMensual > 0 ? String(montoMensual) : "");
+    setCotizacion(null);
+    setCotizacionError(null);
     setMotivo("");
     void loadDeuda();
   }
@@ -130,6 +128,31 @@ export default function RegularizarDeudaForm({
     }
   }, [open, regularized, loadDeuda]);
 
+  // QA3 ADM-09: quote the amount whenever a valid period is set. `cancelado`
+  // drops a stale answer when the dates change again mid-flight.
+  useEffect(() => {
+    setCotizacion(null);
+    setCotizacionError(null);
+    if (!open || !fechaInicio || !fechaFin || fechaInicio >= fechaFin) return;
+    let cancelado = false;
+    setCotizando(true);
+    fetchCotizacionRegularizacion(membresiaId, fechaInicio, fechaFin)
+      .then((resultado) => {
+        if (!cancelado) setCotizacion(resultado);
+      })
+      .catch((err: unknown) => {
+        if (!cancelado) {
+          setCotizacionError(toUserMessage(err, "No se pudo calcular el monto de la regularización."));
+        }
+      })
+      .finally(() => {
+        if (!cancelado) setCotizando(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [open, membresiaId, fechaInicio, fechaFin]);
+
   // Issue #400 (slice 4c-b): after every hook above, so this stays a
   // conditional RENDER, not a conditional HOOK CALL (React's rules of
   // hooks — a `useState`/`useEffect` above this line must run on every
@@ -144,30 +167,14 @@ export default function RegularizarDeudaForm({
     );
   }
 
-  /**
-   * Issue #666: this form's "Monto" is the second unbounded free-amount
-   * input the issue names. It never computes a date from `monto` (unlike
-   * `RegisterPaymentForm`, `fechaInicio`/`fechaFin` here are typed
-   * independently), but the amount itself must still respect the real
-   * 12-month cap.
-   *
-   * This used to be entirely native-`required`-driven with no JS-side
-   * validation at all — adding `max` to the "Monto" `<input>` below changed
-   * that: an HTML5 `<form>` blocks its own `submit` event when a control
-   * violates a constraint like `max` (unlike `RegisterPaymentForm`, which
-   * has no `<form>` at all and submits via a plain button's `onClick`), so
-   * `handleSubmit` would simply never run and the admin would see nothing
-   * but a native, unstyled, English browser tooltip in a Spanish product.
-   * The form now opts out of native constraint validation (`noValidate`
-   * below) and this replaces it in full — including the `required` checks
-   * native validation used to own — so every rejection still gets the
-   * product's own Spanish message.
-   */
-  function validate(montoNum: number): string | null {
+  function validate(): string | null {
     if (!fechaInicio || !fechaFin) return "Las fechas son obligatorias.";
+    if (fechaInicio >= fechaFin) return "La fecha de inicio debe ser anterior a la de fin.";
     if (!motivo.trim()) return "Debe indicar el motivo de la regularización.";
-    if (!montoNum || montoNum <= 0) return "El monto debe ser mayor a 0.";
-    if (excedeMesesMaximo(montoNum, precioParaLimite)) return MENSAJE_MESES_MAXIMO_EXCEDIDO;
+    if (!cotizacion) return cotizacionError ?? "Espere a que se calcule el monto de la regularización.";
+    if (cotizacion.meses > MAX_MESES_COBERTURA) return MENSAJE_MESES_MAXIMO_EXCEDIDO;
+    // $0 is valid: a 100% discount quotes zero and the backend accepts exactly that.
+    if (!(Number(cotizacion.montoEsperado) >= 0)) return "El monto a regularizar no es válido.";
     return null;
   }
 
@@ -175,18 +182,17 @@ export default function RegularizarDeudaForm({
     event.preventDefault();
     setError(null);
 
-    const montoNum = Number(monto) || 0;
-    const invalid = validate(montoNum);
-    if (invalid) {
+    const invalid = validate();
+    if (invalid || !cotizacion) {
       setError(invalid);
-      showError(invalid);
+      if (invalid) showError(invalid);
       return;
     }
 
     setLoading(true);
     try {
       await regularizarDeuda(membresiaId, {
-        monto: montoNum,
+        monto: Number(cotizacion.montoEsperado),
         fechaInicio,
         fechaFin,
         motivo: motivo.trim(),
@@ -216,11 +222,9 @@ export default function RegularizarDeudaForm({
       {open && (
         <form
           onSubmit={handleSubmit}
-          // Issue #666 — see `validate()`'s own comment: `noValidate` hands
-          // every check (including the `required` fields this used to rely
-          // on the browser for) to `validate()`, so the "Monto" field's
-          // `max` (below) can never silently swallow the `submit` event
-          // before the product's own Spanish message gets a chance to run.
+          // `noValidate` hands every check (including the `required` fields)
+          // to `validate()`, so the browser never swallows the `submit` event
+          // with a native, English tooltip before the Spanish message runs.
           noValidate
           className="mt-2 rounded-lg border border-line bg-surface p-3"
           aria-label="Regularizar deuda"
@@ -281,25 +285,28 @@ export default function RegularizarDeudaForm({
             />
           </div>
 
-          <CampoFormularioAdmin
-            label="Monto"
-            type="number"
-            value={monto}
-            onChange={setMonto}
-            labelClassName="mt-2 block text-2xs text-ink-3"
-            // Issue #666: caps at MAX_MESES_COBERTURA months of the known
-            // monthly price — omitted (no attribute) when the price is not
-            // yet known, same as every other price-derived hint in this form.
-            {...(precioParaLimite > 0
-              ? { numberMax: String(precioParaLimite * MAX_MESES_COBERTURA) }
-              : {})}
-            required
-          />
-          {montoMensual > 0 && (
-            <p className="mt-0.5 text-2xs text-ink-3">
-              Precio mensual: {formatCurrency(montoMensual)} — el monto debe ser múltiplo.
-            </p>
-          )}
+          <div className="mt-2" aria-live="polite">
+            <p className="text-2xs text-ink-3">Monto a regularizar</p>
+            {cotizando && <p className="text-xs text-ink-3">Calculando…</p>}
+            {!cotizando && cotizacion && (
+              <>
+                <p className="text-sm font-semibold text-ink">
+                  {formatCurrency(Number(cotizacion.montoEsperado))}
+                </p>
+                <p className="mt-0.5 text-2xs text-ink-3">
+                  {cotizacion.meses} {cotizacion.meses === 1 ? "mes" : "meses"}
+                  {montoMensual > 0 ? ` × ${formatCurrency(montoMensual)}` : ""}
+                  {Number(cotizacion.descuentoAplicado) > 0
+                    ? ` − beneficio de ${formatCurrency(Number(cotizacion.descuentoAplicado))}`
+                    : ""}
+                </p>
+              </>
+            )}
+            {!cotizando && !cotizacion && !cotizacionError && (
+              <p className="text-xs text-ink-3">Indique las fechas para calcular el monto.</p>
+            )}
+            {cotizacionError && <p className="text-2xs text-cata-red">{cotizacionError}</p>}
+          </div>
 
           <CampoFormularioAdmin
             label="Motivo (obligatorio)"

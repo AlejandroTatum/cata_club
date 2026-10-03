@@ -99,6 +99,12 @@ export interface BackendMembresia {
    * behaves as "no gratuity" instead of throwing.
    */
   esGratuidadFamiliar?: boolean;
+  /**
+   * `MembresiaResponseDTO.cubierto_hasta` — the real coverage end (latest end
+   * across approved payments and bonified coverage). Present on
+   * `GET /membresias/` list items; optional like the other late additions.
+   */
+  cubiertoHasta?: string | null;
 }
 
 export interface BackendTipoMembresia {
@@ -162,7 +168,7 @@ export function buildPaymentValidationRequest(
     // strings, which `formatDateRange` anchors at noon UTC — the rendered
     // calendar day is the same whether Node runs in UTC or America/Guayaquil.
     membershipPeriod: formatDateRange(pago.fechaInicio, pago.fechaFin),
-    membershipType: tipoMembresia ? tipoMembresia.categoria : "Sin tipo",
+    membershipType: tipoMembresia ? tipoMembresia.categoria : "Plan sin asignar",
     expectedAmount: Number(pago.monto),
     paymentMethod: PAYMENT_METHOD_BY_TIPO_PAGO[pago.tipoPago],
     uploadedAt: pago.fechaRegistro,

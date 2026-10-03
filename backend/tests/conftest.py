@@ -440,6 +440,17 @@ def client(db_session):
 
 
 @pytest.fixture()
+def admin_ajeno(client):
+    """Reapunta el token del `client` a un administrador que NO es ninguna de
+    las personas del test (QA3 ADM-10: un admin no desactiva su propia cuenta,
+    y el `client` por defecto es la persona 1, que los tests suelen crear
+    primero). El teardown de `client` limpia los overrides."""
+    app.dependency_overrides[GestorAutenticacion.decodificar_token] = lambda: {
+        "sub": "admin-ajeno@cataclub.test", "persona_id": 9999, "roles": ["ADMINISTRADOR"],
+    }
+
+
+@pytest.fixture()
 def client_sin_permisos(db_session):
     """Cliente autenticado pero SIN rol ADMINISTRADOR, para probar 403."""
 
