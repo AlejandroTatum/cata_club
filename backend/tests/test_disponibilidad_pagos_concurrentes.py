@@ -77,6 +77,7 @@ from unittest.mock import patch
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from tests.archivos_validos import jpeg_valido
 
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia
@@ -353,7 +354,7 @@ def test_subida_de_voucher_lenta_no_bloquea_el_proceso():
             pago_id_a, pago_id_b = pago_a.json()["id"], pago_b.json()["id"]
 
             async def _subir_voucher(pago_id: int):
-                archivos = {"archivo": ("voucher.jpg", b"\xff\xd8\xff\xe0" + b"0" * 20, "image/jpeg")}
+                archivos = {"archivo": ("voucher.jpg", jpeg_valido(), "image/jpeg")}
                 return await cliente.post(f"/api/v1/membresias/pagos/{pago_id}/voucher", files=archivos)
 
             async def _health_medido():

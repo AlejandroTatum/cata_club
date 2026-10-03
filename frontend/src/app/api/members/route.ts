@@ -23,7 +23,7 @@ import {
   type BackendPersonaFull,
   type DeudaBulkItem,
 } from "@/lib/server/members-adapter";
-import { fetchAllPages, type PaginatedPage } from "@/lib/server/paged-fetch";
+import { fetchAllPages } from "@/lib/server/paged-fetch";
 import type { BackendMembresia, BackendPagoListItem, BackendTipoMembresia } from "@/lib/server/payments-adapter";
 import type { BackendTipoRol } from "@/types/domain";
 
@@ -31,7 +31,15 @@ const PERSONAS_PAGE_LIMIT = 200;
 const MEMBRESIAS_PAGE_LIMIT = 200;
 const PAGOS_PAGE_LIMIT = 200;
 
-type PaginatedPersonas = PaginatedPage<BackendPersonaFull>;
+/** The backend caps every `?persona_ids=` bulk lookup at 200 ids per request. */
+const BULK_IDS_LIMIT = 200;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
+  return chunks;
+}
+
 type MembershipMaps = {
   byId: Map<number, BackendMembresia>;
   byPersona: Map<number, BackendMembresia>;
@@ -75,11 +83,15 @@ async function fetchMedicalRecordIds(
   request: NextRequest,
   personas: BackendPersonaFull[],
 ): Promise<Set<number>> {
-  const query = personas.map((persona) => `persona_ids=${persona.id}`).join("&");
-  const result = await backendFetchAuthed(request, `/fichas-medicas/existe?${query}`);
-  if (!result.ok || !result.response.ok) return new Set();
-  const body = (await result.response.json()) as { personaIdsConFicha?: number[] };
-  return new Set(body.personaIdsConFicha ?? []);
+  const ids = new Set<number>();
+  for (const group of chunk(personas, BULK_IDS_LIMIT)) {
+    const query = group.map((persona) => `persona_ids=${persona.id}`).join("&");
+    const result = await backendFetchAuthed(request, `/fichas-medicas/existe?${query}`);
+    if (!result.ok || !result.response.ok) continue;
+    const body = (await result.response.json()) as { personaIdsConFicha?: number[] };
+    for (const id of body.personaIdsConFicha ?? []) ids.add(id);
+  }
+  return ids;
 }
 
 type BackendRolesBulkItem = { personaId: number; roles: BackendTipoRol[] };
@@ -95,11 +107,15 @@ async function fetchRolesByPersonaId(
   request: NextRequest,
   personas: BackendPersonaFull[],
 ): Promise<Map<number, BackendTipoRol[]>> {
-  const query = personas.map((persona) => `persona_ids=${persona.id}`).join("&");
-  const result = await backendFetchAuthed(request, `/personas/roles/bulk?${query}`);
-  if (!result.ok || !result.response.ok) return new Map();
-  const items = (await result.response.json()) as BackendRolesBulkItem[];
-  return new Map(items.map((item) => [item.personaId, item.roles]));
+  const roles = new Map<number, BackendTipoRol[]>();
+  for (const group of chunk(personas, BULK_IDS_LIMIT)) {
+    const query = group.map((persona) => `persona_ids=${persona.id}`).join("&");
+    const result = await backendFetchAuthed(request, `/personas/roles/bulk?${query}`);
+    if (!result.ok || !result.response.ok) continue;
+    const items = (await result.response.json()) as BackendRolesBulkItem[];
+    for (const item of items) roles.set(item.personaId, item.roles);
+  }
+  return roles;
 }
 
 async function fetchDebtByMembership(
@@ -113,15 +129,20 @@ async function fetchDebtByMembership(
     const membresia = resolveMembresiaParaPersona(persona.id, latest.get(persona.id), maps.byId, maps.byPersona);
     if (membresia && readsAsVencida(membresia.estado)) ids.add(membresia.id);
   }
-  if (!ids.size) return new Map();
-  const query = Array.from(ids, (id) => `membresia_ids=${id}`).join("&");
-  const result = await backendFetchAuthed(request, `/membresias/deuda/bulk?${query}`);
-  if (!result.ok || !result.response.ok) return new Map();
-  const items = (await result.response.json()) as BackendDeudaBulkItem[];
-  return new Map(items.map((item) => [item.membresiaId, {
-    mesesAdeudados: item.mesesAdeudados,
-    montoMensual: Number(item.montoMensual),
-  }]));
+  const debts = new Map<number, DeudaBulkItem>();
+  for (const group of chunk(Array.from(ids), BULK_IDS_LIMIT)) {
+    const query = group.map((id) => `membresia_ids=${id}`).join("&");
+    const result = await backendFetchAuthed(request, `/membresias/deuda/bulk?${query}`);
+    if (!result.ok || !result.response.ok) continue;
+    const items = (await result.response.json()) as BackendDeudaBulkItem[];
+    for (const item of items) {
+      debts.set(item.membresiaId, {
+        mesesAdeudados: item.mesesAdeudados,
+        montoMensual: Number(item.montoMensual),
+      });
+    }
+  }
+  return debts;
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -134,28 +155,35 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
    * the dispatch order, which is what the positional fetch mocks in
    * `__tests__/route.test.ts` assert against.
    *
-   * The two `fetchAllPages` calls are drained page by page because both those
-   * tables outgrow the persona table — memberships accumulate per persona
-   * over time (vencida, inactiva, la activa) and payments accumulate one row
-   * per renewal — so `personasCapped` further down would stay false while a
-   * real chunk of either map was already gone. See `lib/server/paged-fetch.ts`
+   * The three `fetchAllPages` calls are drained page by page: personas (QA3
+   * ADM-03: a single capped page left everyone past row 200 unreachable) and
+   * the two tables that outgrow it — memberships accumulate per persona over
+   * time (vencida, inactiva, la activa) and payments accumulate one row per
+   * renewal. See `lib/server/paged-fetch.ts`
    * for why truncation, not failure, is the hazard those loops exist to
    * prevent, and for what happens when a source outgrows the loop's bound.
    */
-  const [personasResult, pagosFetch, tiposResult, membresiasFetch] = await Promise.all([
-    backendFetchAuthed(request, `/personas/?limit=${PERSONAS_PAGE_LIMIT}`),
+  const [personasFetch, pagosFetch, tiposResult, membresiasFetch] = await Promise.all([
+    fetchAllPages<BackendPersonaFull>(request, "/personas/", PERSONAS_PAGE_LIMIT),
     fetchAllPages<BackendPagoListItem>(request, "/membresias/pagos", PAGOS_PAGE_LIMIT),
     backendFetchAuthed(request, "/membresias/tipos"),
     fetchAllPages<BackendMembresia>(request, "/membresias/", MEMBRESIAS_PAGE_LIMIT),
   ]);
 
-  if (!personasResult.ok) {
-    return NextResponse.json({ message: "No se pudieron cargar las personas." }, { status: personasResult.status });
+  // Every persona or none (QA3 ADM-03): `fetchAllPages` never hands back a
+  // prefix, so a failure here keeps the backend's own status when it has one
+  // and is a 502 when the drain only ran out of its page bound.
+  if (!personasFetch.ok) {
+    const failure = personasFetch.failure;
+    if (failure && !failure.ok) {
+      return NextResponse.json({ message: "No se pudieron cargar las personas." }, { status: failure.status });
+    }
+    if (failure) {
+      return passthroughBackendError(failure.response, "No se pudieron cargar las personas.");
+    }
+    return NextResponse.json({ message: "No se pudieron cargar las personas." }, { status: 502 });
   }
-  if (!personasResult.response.ok) {
-    return passthroughBackendError(personasResult.response, "No se pudieron cargar las personas.");
-  }
-  const personasBody = (await personasResult.response.json()) as PaginatedPersonas;
+  const personasBody = { items: personasFetch.items };
 
   const pagos: BackendPagoListItem[] = pagosFetch.ok ? pagosFetch.items : [];
   const tipos: BackendTipoMembresia[] =
@@ -222,7 +250,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
    * `resolveMembresiaParaPersona`, the SAME resolution `buildMemberAccounts`
    * uses per row, so this only ever queries ids that are actually about to
    * be displayed (never every historical VENCIDA row a persona has
-   * accumulated) — and stays bounded by `PERSONAS_PAGE_LIMIT` (200), the
+   * accumulated) — and goes out in chunks of `BULK_IDS_LIMIT` (200), the
    * backend's own per-request cap on this endpoint.
    *
    * Best-effort, same fallback shape as `fichasFetch` above: a failed or
@@ -248,10 +276,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     rolesByPersonaId,
   );
 
-  const personasCapped = personasBody.total >= PERSONAS_PAGE_LIMIT;
-  const response = NextResponse.json({ accounts, personasCapped, membresiasDegraded });
-  if (personasResult.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: personasResult.refreshedAccessToken });
+  const response = NextResponse.json({ accounts, membresiasDegraded });
+  if (personasFetch.refreshedAccessToken) {
+    setAuthCookies(response, { accessToken: personasFetch.refreshedAccessToken });
   }
   return response;
 }

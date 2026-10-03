@@ -86,7 +86,7 @@ describe("GET /api/attendance/records", () => {
       {
         id: "1", fecha: "2026-07-18", horario: "Lunes 15:00 — 16:30", horarioId: 1, personaId: 3,
         estudiante: "Sofia Alumna", estado: "present", registradoPorId: 7, registradoPorNombre: "Carlos Ruiz",
-        justificativo: null, estadoJustificativo: null, correctable: true,
+        justificativo: null, estadoJustificativo: null, correctable: true, requiereRevision: false,
       },
     ]);
   });
@@ -207,10 +207,10 @@ describe("POST /api/attendance/records", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("issues one POST /asistencias/ per student and reports createdCount", async () => {
-    vi.mocked(global.fetch)
-      .mockResolvedValueOnce(jsonResponse(asistencia, 201))
-      .mockResolvedValueOnce(jsonResponse({ ...asistencia, id: 2, personaId: 7 }, 201));
+  it("issues ONE POST /asistencias/lote for the whole roster and reports createdCount", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ creados: 2, fallidos: [], registradoPorNombre: "Carlos Ruiz" }, 201),
+    );
 
     const access = makeJwt(3600);
     const response = await POST(
@@ -230,25 +230,37 @@ describe("POST /api/attendance/records", () => {
 
     expect(response.status).toBe(201);
     expect(body).toEqual({ createdCount: 2, failed: [], registradoPorNombre: "Carlos Ruiz" });
-    expect(global.fetch).toHaveBeenNthCalledWith(
-      1,
-      "http://localhost:8000/api/v1/asistencias/",
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/asistencias/lote",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
-          fecha_entrenamiento: "2026-07-18",
-          estado: "PRESENTE",
-          persona_id: 3,
           horario_id: 1,
+          fecha: "2026-07-18",
+          items: [
+            { persona_id: 3, estado: "PRESENTE" },
+            { persona_id: 7, estado: "AUSENTE" },
+          ],
         }),
       }),
     );
   });
 
-  it("tolerates partial failure — one bad persona doesn't fail the whole batch", async () => {
-    vi.mocked(global.fetch)
-      .mockResolvedValueOnce(jsonResponse(asistencia, 201))
-      .mockResolvedValueOnce(jsonResponse({ detail: "Persona con id 99 no encontrada" }, 404));
+  it("tolerates partial failure — keeps the backend's per-student report and who already recorded", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse(
+        {
+          creados: 1,
+          fallidos: [
+            { personaId: 99, motivo: "La persona no existe.", registradoPorNombre: null, yaRegistrada: false },
+            { personaId: 8, motivo: "La asistencia de Ana ya fue registrada por Luis.", registradoPorNombre: "Luis", yaRegistrada: true },
+          ],
+          registradoPorNombre: "Carlos Ruiz",
+        },
+        201,
+      ),
+    );
 
     const access = makeJwt(3600);
     const response = await POST(
@@ -258,6 +270,7 @@ describe("POST /api/attendance/records", () => {
           students: [
             { personaId: 3, estado: "present" },
             { personaId: 99, estado: "absent" },
+            { personaId: 8, estado: "present" },
           ],
         },
         `${ACCESS_TOKEN_COOKIE}=${access}`,
@@ -267,15 +280,44 @@ describe("POST /api/attendance/records", () => {
 
     expect(response.status).toBe(201);
     expect(body.createdCount).toBe(1);
-    expect(body.failed).toEqual([{ personaId: 99, message: "Persona con id 99 no encontrada" }]);
+    expect(body.failed).toEqual([
+      { personaId: 99, message: "La persona no existe.", registradoPorNombre: null, alreadyRegistered: false },
+      {
+        personaId: 8,
+        message: "La asistencia de Ana ya fue registrada por Luis.",
+        registradoPorNombre: "Luis",
+        alreadyRegistered: true,
+      },
+    ]);
+  });
+
+  it("answers 201 with the report when the batch is accepted but nobody could be saved", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse(
+        {
+          creados: 0,
+          fallidos: [{ personaId: 3, motivo: "Ya registrada.", registradoPorNombre: "Luis", yaRegistrada: true }],
+          registradoPorNombre: null,
+        },
+        201,
+      ),
+    );
+
+    const access = makeJwt(3600);
+    const response = await POST(
+      postRequest({ horarioId: 1, students: [{ personaId: 3, estado: "present" }] }, `${ACCESS_TOKEN_COOKIE}=${access}`),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(body.createdCount).toBe(0);
+    expect(body.failed[0]).toMatchObject({ personaId: 3, alreadyRegistered: true, registradoPorNombre: "Luis" });
   });
 
   // Corrige el candado anterior de esta suite ("returns 502 when every
-  // student fails to register"), que le había enseñado a la suite a aceptar
-  // la degradación del issue #309: exigía 502 para un 404 real del backend.
-  // La ruta BFF debe propagar el status real del backend, nunca inventar uno
-  // propio a partir de si `createdCount` llegó a cero.
-  it("propaga el status real del backend cuando todos los estudiantes fallan, en vez de inventar 502", async () => {
+  // student fails to register"): la ruta BFF debe propagar el status real del
+  // backend, nunca inventar uno propio (issue #309).
+  it("propaga el status real del backend cuando el lote entero se rechaza, en vez de inventar 502", async () => {
     vi.mocked(global.fetch).mockResolvedValue(jsonResponse({ detail: "Horario no encontrado" }, 404));
 
     const access = makeJwt(3600);
@@ -289,17 +331,12 @@ describe("POST /api/attendance/records", () => {
 
     expect(response.status).toBe(404);
     expect(body.createdCount).toBe(0);
+    expect(body.failed).toEqual([{ personaId: 3, message: "Horario no encontrado" }]);
   });
 
-  // Candado exigido por el issue #309 (hallazgo #21 / #60): el backend
-  // levanta `PermisosInsuficientes` y `main.py` ya lo mapea a 403 — la ruta
-  // BFF no debe degradarlo a 502. Un 502 le dice al entrenador "el servidor
-  // se cayó" para una regla de permisos que reintentar jamás resuelve.
+  // Candado exigido por el issue #309: `PermisosInsuficientes` ya se mapea a
+  // 403 — la ruta BFF no debe degradarlo a 502.
   it("propaga un 403 del backend (regla de permisos) como 403, no como 502", async () => {
-    // `mockImplementation`, no `mockResolvedValue`: dos POST concurrentes
-    // (uno por estudiante) comparten el mismo mock, y un `Response` ya
-    // consumido por el primer `.json()` no puede leerse dos veces — cada
-    // llamada necesita su propia instancia.
     vi.mocked(global.fetch).mockImplementation(async () =>
       jsonResponse({ detail: "Solo el administrador puede corregir asistencias ya registradas." }, 403),
     );
@@ -339,7 +376,7 @@ describe("POST /api/attendance/records", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-24T01:30:00Z"));
     try {
-      vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(asistencia, 201));
+      vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ creados: 1, fallidos: [] }, 201));
 
       const access = makeJwt(3600);
       await POST(
@@ -351,9 +388,9 @@ describe("POST /api/attendance/records", () => {
 
       const [, init] = vi.mocked(global.fetch).mock.calls[0];
       const sent = JSON.parse(String((init as RequestInit).body));
-      expect(sent.fecha_entrenamiento).toBe("2026-07-23");
+      expect(sent.fecha).toBe("2026-07-23");
       // Belt and braces: name the value the old implementation would have sent.
-      expect(sent.fecha_entrenamiento).not.toBe("2026-07-24");
+      expect(sent.fecha).not.toBe("2026-07-24");
     } finally {
       vi.useRealTimers();
     }

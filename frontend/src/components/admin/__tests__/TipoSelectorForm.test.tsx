@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Repeat } from "lucide-react";
 import TipoSelectorForm from "@/components/admin/TipoSelectorForm";
 import * as api from "@/services/api";
@@ -45,5 +45,25 @@ describe("TipoSelectorForm trigger", () => {
     const trigger = screen.getByRole("button", { name: "Cambiar plan" });
     expect(trigger).toHaveClass("bg-cata-red/15");
     expect(trigger).toHaveClass("mt-2.5");
+  });
+});
+
+describe("TipoSelectorForm catalog", () => {
+  it("asks only for visible tariffs: a hidden one can never be picked", async () => {
+    render(
+      <TipoSelectorForm
+        triggerLabel="Cambiar plan"
+        TriggerIcon={Repeat}
+        submitLabel="Confirmar"
+        SubmitIcon={Repeat}
+        selectPlaceholder="Seleccionar plan…"
+        submitFailureMessage="No se pudo cambiar el plan."
+        onSubmit={async () => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cambiar plan" }));
+
+    await waitFor(() => expect(api.fetchTiposMembresia).toHaveBeenCalledWith({ soloActivas: true }));
   });
 });

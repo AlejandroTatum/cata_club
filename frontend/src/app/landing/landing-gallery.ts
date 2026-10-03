@@ -89,6 +89,8 @@ export const DEFAULT_SLIDE_ASPECT = 3 / 2;
 
 /** Fired on `document` once the track holds its full planned run. */
 export const GALLERY_READY_EVENT = "landing:gallery-ready";
+/** Fired on `document` when the club has published no photo at all (VIS-03): the section and its nav entries go away. */
+export const GALLERY_EMPTY_EVENT = "landing:gallery-empty";
 /** Fired on `document` when a card becomes (or stops being) worth reading. */
 export const GALLERY_HOLD_EVENT = "landing:gallery-hold";
 /** Fired on `document` when a visitor asks the strip to bring one photo forward. */

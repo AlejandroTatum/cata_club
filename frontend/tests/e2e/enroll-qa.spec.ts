@@ -313,7 +313,7 @@ async function enterFromLogin(page: Page): Promise<void> {
 
 /** Elige el tipo y avanza al paso "Datos del Estudiante". */
 async function goToPersonal(page: Page, type: "Jugador" | "Representante"): Promise<void> {
-  await page.getByRole("button", { name: new RegExp(`^${type}`) }).click();
+  await page.getByRole("radio", { name: new RegExp(`^${type}`) }).click();
   await nextButton(page).click();
   await expect(page.getByRole("heading", { name: /datos del estudiante/i })).toBeVisible();
 }
@@ -376,14 +376,14 @@ test.describe("T · Entrada desde el login y tipo de inscripción", () => {
   test("T2 · el tipo por defecto es Jugador y se puede cambiar a Representante", async ({ page }) => {
     await enterFromLogin(page);
 
-    const jugador = page.getByRole("button", { name: /^Jugador/ });
-    const representante = page.getByRole("button", { name: /^Representante/ });
-    await expect(jugador).toHaveAttribute("aria-pressed", "true");
-    await expect(representante).toHaveAttribute("aria-pressed", "false");
+    const jugador = page.getByRole("radio", { name: /^Jugador/ });
+    const representante = page.getByRole("radio", { name: /^Representante/ });
+    await expect(jugador).toHaveAttribute("aria-checked", "true");
+    await expect(representante).toHaveAttribute("aria-checked", "false");
 
     await representante.click();
-    await expect(representante).toHaveAttribute("aria-pressed", "true");
-    await expect(jugador).toHaveAttribute("aria-pressed", "false");
+    await expect(representante).toHaveAttribute("aria-checked", "true");
+    await expect(jugador).toHaveAttribute("aria-checked", "false");
     await shot(page, "T2", "cambio-de-tipo");
   });
 

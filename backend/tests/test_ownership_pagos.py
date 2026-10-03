@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, urlparse
 
 from app.dominio.cedula import cedula_valida
 from app.seguridad.gestor_auth import GestorAutenticacion
+from tests.archivos_validos import jpeg_valido
 
 
 # --- helpers comunes (mismo esquema que test_voucher_pago.py) ---------------
@@ -207,7 +208,7 @@ def test_representante_si_sube_voucher_del_pago_de_su_representado(_mock_cloudin
     ).json()
 
     _autenticar_como(representante["id"], ["REPRESENTANTE"])
-    contenido = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100  # JPEG-ish
+    contenido = jpeg_valido()
     resp = client.post(
         f"/api/v1/membresias/pagos/{pago['id']}/voucher",
         files={"archivo": ("voucher.jpg", contenido, "image/jpeg")},

@@ -26,8 +26,8 @@ const USES = [
 ];
 
 /** Main-column block under the tariff cards: where each price is used. It
- *  grows with the column so the page reaches the viewport bottom with content,
- *  not with a stretched empty card. */
+ *  keeps its natural height at any tariff count — a column that hands its
+ *  leftover height to this list only stretches the three cards. */
 export default function TarifaUsage(): React.ReactElement {
   return (
     <section
@@ -46,7 +46,7 @@ export default function TarifaUsage(): React.ReactElement {
           El precio de cada tarifa interviene en tres momentos del ciclo de una membresía.
         </p>
       </div>
-      <ul className="grid flex-1 gap-page sm:grid-cols-3">
+      <ul className="grid gap-page sm:grid-cols-3">
         {USES.map(({ key, icon: Icon, title, what, note }) => (
           <li
             key={key}

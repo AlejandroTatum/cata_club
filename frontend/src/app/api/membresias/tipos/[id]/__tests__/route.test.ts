@@ -11,7 +11,7 @@
  */
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PATCH } from "../route";
+import { DELETE, PATCH } from "../route";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/server/auth";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -141,5 +141,84 @@ describe("PATCH /api/membresias/tipos/[id]", () => {
     });
 
     expect(response.status).toBe(403);
+  });
+});
+
+function deleteRequest(cookie = ""): NextRequest {
+  return new NextRequest("http://localhost/api/membresias/tipos/1", {
+    method: "DELETE",
+    headers: cookie ? { cookie } : {},
+  });
+}
+
+describe("PATCH /api/membresias/tipos/[id] — activo", () => {
+  beforeEach(() => {
+    vi.spyOn(global, "fetch");
+    process.env.BACKEND_API_URL = "http://localhost:8000/api/v1";
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.BACKEND_API_URL;
+  });
+
+  it("forwards activo:false (hide) to the backend", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(jsonResponse({ id: 1, activo: false }));
+
+    const response = await PATCH(patchRequest({ activo: false }, TOKEN()), {
+      params: Promise.resolve({ id: "1" }),
+    });
+
+    expect(response.status).toBe(200);
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({ activo: false });
+  });
+});
+
+describe("DELETE /api/membresias/tipos/[id]", () => {
+  beforeEach(() => {
+    vi.spyOn(global, "fetch");
+    process.env.BACKEND_API_URL = "http://localhost:8000/api/v1";
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.BACKEND_API_URL;
+  });
+
+  it("returns 401 without an access-token cookie", async () => {
+    const response = await DELETE(deleteRequest(), { params: Promise.resolve({ id: "1" }) });
+
+    expect(response.status).toBe(401);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for a non-numeric id without calling the backend", async () => {
+    const response = await DELETE(deleteRequest(TOKEN()), { params: Promise.resolve({ id: "abc" }) });
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("proxies DELETE /membresias/tipos/{id} and answers 204", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(new Response(null, { status: 204 }));
+
+    const response = await DELETE(deleteRequest(TOKEN()), { params: Promise.resolve({ id: "1" }) });
+
+    expect(response.status).toBe(204);
+    const [url, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(String(url)).toContain("/membresias/tipos/1");
+    expect((init as RequestInit).method).toBe("DELETE");
+  });
+
+  it("relays the backend's 409 message instead of flattening it", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      jsonResponse({ detail: "No se puede eliminar la tarifa 'Junior' porque ya se usó en membresías." }, 409),
+    );
+
+    const response = await DELETE(deleteRequest(TOKEN()), { params: Promise.resolve({ id: "1" }) });
+
+    expect(response.status).toBe(409);
+    expect((await response.json()).message).toContain("ya se usó en membresías");
   });
 });

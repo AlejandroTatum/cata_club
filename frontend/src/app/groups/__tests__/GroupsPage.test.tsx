@@ -166,6 +166,14 @@ async function waitForHorarios(): Promise<void> {
  * hidden STATE reads as its own badge on the card, and a failed PATCH
  * leaves the state untouched.
  */
+/** Drives the 24 h popover picker the way an admin does: open, hour, minute. */
+function elegirHora(label: "Hora de inicio" | "Hora de fin", hhmm: string): void {
+  const [hh, mm] = hhmm.split(":");
+  fireEvent.click(screen.getByRole("button", { name: label }));
+  fireEvent.click(within(screen.getByRole("group", { name: "Hora" })).getByRole("button", { name: hh }));
+  fireEvent.click(within(screen.getByRole("group", { name: "Minutos" })).getByRole("button", { name: mm }));
+}
+
 describe("GroupsPage — the landing-publication toggle", () => {
   const RECURRING_ROWS = [
     { id: 101, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
@@ -285,14 +293,16 @@ describe("GroupsPage — categoría form is typed input, not a locked catalog se
     expect(heading).not.toHaveClass("sr-only");
   });
 
-  it("states the 24 h format under each time field and reads the chosen time back in 12 h", async () => {
+  it("shows one 24 h format only — no 12 h helper and no a. m./p. m. anywhere", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
     fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
 
-    expect(screen.getAllByText(/Formato 24 h \(ej\. 17:00 = 5:00 p\. m\.\)/)).toHaveLength(2);
-    fireEvent.change(screen.getByLabelText(/^Hora de inicio/), { target: { value: "17:00" } });
-    expect(screen.getByText(/Elegido: 5:00 p\. m\./)).toBeInTheDocument();
+    expect(screen.queryByText(/Formato 24 h/)).not.toBeInTheDocument();
+    expect(screen.getByText(/· 24 h/)).toBeInTheDocument();
+    elegirHora("Hora de inicio", "17:00");
+    expect(screen.getByRole("button", { name: "Hora de inicio" })).toHaveTextContent("17:00");
+    expect(document.body.textContent).not.toMatch(/a\. ?m\.|p\. ?m\./i);
   });
 
   it("the create form has a free-text nombre input and editable hora_inicio/hora_fin — no categoría <select> left", async () => {
@@ -301,21 +311,19 @@ describe("GroupsPage — categoría form is typed input, not a locked catalog se
     fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
 
     expect(screen.getByLabelText(/^Nombre/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/^Hora de inicio/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/^Hora de fin/)).toBeRequired();
+    expect(screen.getByRole("button", { name: "Hora de inicio" })).toBeInTheDocument();
     expect(screen.getByLabelText(/^Nombre/)).toBeRequired();
-    expect(screen.getByLabelText(/^Hora de inicio/)).toBeRequired();
-    expect(screen.getByRole("group", { name: /^Días de la semana/ })).toHaveAttribute("aria-required", "true");
+    expect(screen.getByRole("group", { name: /^Días/ })).toHaveAttribute("aria-required", "true");
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 
-  it("offers all seven días as checkboxes — not restricted to a fixed allowed set", async () => {
+  it("offers all seven días as toggle buttons — not restricted to a fixed allowed set", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
     fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
 
     for (const dia of ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]) {
-      expect(screen.getByLabelText(dia)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: dia })).toBeInTheDocument();
     }
   });
 });
@@ -358,9 +366,9 @@ describe("GroupsPage — optional edades label on the categoría form (#789)", (
     fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
     await screen.findByRole("heading", { name: "Nueva categoría" });
     fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "Preinfantil" } });
-    fireEvent.change(screen.getByLabelText(/^Hora de inicio/), { target: { value: "15:00" } });
-    fireEvent.change(screen.getByLabelText(/^Hora de fin/), { target: { value: "16:00" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: "Lunes" }));
+    elegirHora("Hora de inicio", "15:00");
+    elegirHora("Hora de fin", "16:00");
+    fireEvent.click(screen.getByRole("button", { name: "Lunes" }));
   }
 
   async function openEditForm(): Promise<void> {
@@ -969,7 +977,7 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
   it("ticking a new día saves the categoría with the whole new day-set in ONE actualizarCategoria call", async () => {
     await openEditAndSubmit();
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Viernes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Viernes" }));
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     await waitFor(() => {
@@ -985,7 +993,7 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
     mockFetchAlumnosPorHorario.mockResolvedValue([]);
     await openEditAndSubmit();
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Miércoles" }));
+    fireEvent.click(screen.getByRole("button", { name: "Miércoles" }));
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     await waitFor(() => {
@@ -1004,7 +1012,7 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
     ]);
     await openEditAndSubmit();
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Miércoles" }));
+    fireEvent.click(screen.getByRole("button", { name: "Miércoles" }));
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     const dialog = await screen.findByRole("dialog");
@@ -1024,7 +1032,7 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
     ]);
     await openEditAndSubmit();
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Miércoles" }));
+    fireEvent.click(screen.getByRole("button", { name: "Miércoles" }));
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     const dialog = await screen.findByRole("dialog");
@@ -1071,7 +1079,7 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
     // `handleSubmit`'s direct call at the bottom — confirming it calls
     // `submitCategoria()` directly from `handleConfirmPendingDeletions`,
     // the path issue #1343 flagged as uncovered.
-    fireEvent.click(screen.getByRole("checkbox", { name: "Miércoles" }));
+    fireEvent.click(screen.getByRole("button", { name: "Miércoles" }));
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     const dialog = await screen.findByRole("dialog");
@@ -1194,6 +1202,24 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
     for (const card of cards()) {
       expect(card.contains(heading)).toBe(false);
     }
+  });
+
+  it("form labels are single inline lines, with required semantics kept in attributes", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
+    await screen.findByRole("heading", { name: "Nueva categoría" });
+
+    const nombre = screen.getByLabelText("Nombre");
+    const label = document.querySelector('label[for="categoria-nombre"]') as HTMLElement;
+    expect(label.className).not.toMatch(/flex-col/);
+    expect(label.textContent?.trim()).toBe("Nombre");
+    expect(nombre).toBeRequired();
+    const horario = document.getElementById("categoria-horario-label") as HTMLElement;
+    expect(horario.className).not.toMatch(/flex-col/);
+    expect(horario.textContent?.replace(/\s+/g, " ").trim()).toBe("Horario · 24 h");
+    expect(screen.getByRole("group", { name: "Días" })).toHaveAttribute("aria-required", "true");
   });
 });
 
@@ -1921,9 +1947,9 @@ describe("GroupsPage — sin selector de entrenador (issue #13)", () => {
     fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
 
     fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "Preinfantil" } });
-    fireEvent.change(screen.getByLabelText(/^Hora de inicio/), { target: { value: "15:00" } });
-    fireEvent.change(screen.getByLabelText(/^Hora de fin/), { target: { value: "16:00" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: "Lunes" }));
+    elegirHora("Hora de inicio", "15:00");
+    elegirHora("Hora de fin", "16:00");
+    fireEvent.click(screen.getByRole("button", { name: "Lunes" }));
     fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
 
     await waitFor(() => {
@@ -2011,9 +2037,7 @@ describe("GroupsPage — categoria catalog fetch failure does not blank the page
  * caller that skips the form is still refused by `AsistenciaServicio`.
  */
 describe("GroupsPage — per-field mirror of the training window and día cap (#861)", () => {
-  const FUERA_DE_VENTANA = "Los entrenamientos deben programarse entre las 06:00 y las 22:00.";
   const FRANJA_INVERTIDA = "La hora de inicio debe ser anterior a la hora de fin.";
-  const TOPE_DE_DIAS = "Una categoría no puede entrenar más de 6 días.";
   const SEIS_DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
 
   beforeEach(() => {
@@ -2035,9 +2059,9 @@ describe("GroupsPage — per-field mirror of the training window and día cap (#
   /** Fills every field of the open create form and submits it. */
   function submitWith(horaInicio: string, horaFin: string, dias: readonly string[]): void {
     fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "Preinfantil" } });
-    fireEvent.change(screen.getByLabelText(/^Hora de inicio/), { target: { value: horaInicio } });
-    fireEvent.change(screen.getByLabelText(/^Hora de fin/), { target: { value: horaFin } });
-    for (const dia of dias) fireEvent.click(screen.getByRole("checkbox", { name: dia }));
+    if (horaInicio) elegirHora("Hora de inicio", horaInicio);
+    if (horaFin) elegirHora("Hora de fin", horaFin);
+    for (const dia of dias) fireEvent.click(screen.getByRole("button", { name: dia }));
     fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
   }
 
@@ -2049,9 +2073,9 @@ describe("GroupsPage — per-field mirror of the training window and día cap (#
     expect(control).toHaveAttribute("aria-invalid", "true");
   }
 
-  const horaInicio = (): HTMLElement => screen.getByLabelText(/^Hora de inicio/);
-  const horaFin = (): HTMLElement => screen.getByLabelText(/^Hora de fin/);
-  const diasFieldset = (): HTMLElement => screen.getByRole("group", { name: /^Días de la semana/ });
+  const horaInicio = (): HTMLElement => screen.getByRole("button", { name: "Hora de inicio" });
+  const horaFin = (): HTMLElement => screen.getByRole("button", { name: "Hora de fin" });
+  const diasFieldset = (): HTMLElement => screen.getByRole("group", { name: /^Días/ });
 
   it("submits through its own validation instead of letting the browser block it", async () => {
     await openCreateForm();
@@ -2061,21 +2085,26 @@ describe("GroupsPage — per-field mirror of the training window and día cap (#
     expect((form as HTMLFormElement).noValidate).toBe(true);
   });
 
-  it("bounds both time inputs to the club's window in the picker itself", async () => {
+  it("bounds both pickers to the club's window — hours 06 to 22 only", async () => {
     await openCreateForm();
 
-    for (const input of [horaInicio(), horaFin()]) {
-      expect(input).toHaveAttribute("min", "06:00");
-      expect(input).toHaveAttribute("max", "22:00");
+    for (const label of ["Hora de inicio", "Hora de fin"] as const) {
+      fireEvent.click(screen.getByRole("button", { name: label }));
+      const horas = within(screen.getByRole("group", { name: "Hora" }));
+      expect(horas.getByRole("button", { name: "06" })).toBeInTheDocument();
+      expect(horas.getByRole("button", { name: "22" })).toBeInTheDocument();
+      expect(horas.queryByRole("button", { name: "05" })).not.toBeInTheDocument();
+      expect(horas.queryByRole("button", { name: "23" })).not.toBeInTheDocument();
+      fireEvent.keyDown(document, { key: "Escape" });
     }
   });
 
   it("marks the nombre input itself when it is left empty", async () => {
     await openCreateForm();
 
-    fireEvent.change(horaInicio(), { target: { value: "15:00" } });
-    fireEvent.change(horaFin(), { target: { value: "16:00" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: "Lunes" }));
+    elegirHora("Hora de inicio", "15:00");
+    elegirHora("Hora de fin", "16:00");
+    fireEvent.click(screen.getByRole("button", { name: "Lunes" }));
     fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
 
     await expectMarked(screen.getByLabelText(/^Nombre/), "Ingrese un nombre para la categoría.");
@@ -2089,24 +2118,6 @@ describe("GroupsPage — per-field mirror of the training window and día cap (#
 
     await expectMarked(horaInicio(), "Ingrese la hora de inicio.");
     await expectMarked(horaFin(), "Ingrese la hora de fin.");
-  });
-
-  it("rejects a start one minute before the club opens", async () => {
-    await openCreateForm();
-
-    submitWith("05:59", "20:00", ["Lunes"]);
-
-    await expectMarked(horaInicio(), FUERA_DE_VENTANA);
-    expect(mockCrearCategoria).not.toHaveBeenCalled();
-  });
-
-  it("rejects an end one minute after the club closes", async () => {
-    await openCreateForm();
-
-    submitWith("20:00", "22:01", ["Lunes"]);
-
-    await expectMarked(horaFin(), FUERA_DE_VENTANA);
-    expect(mockCrearCategoria).not.toHaveBeenCalled();
   });
 
   it("accepts the window's own borders — 06:00 and 22:00 are inside", async () => {
@@ -2128,13 +2139,26 @@ describe("GroupsPage — per-field mirror of the training window and día cap (#
     expect(horaFin()).toHaveAttribute("aria-describedby", screen.getByText(FRANJA_INVERTIDA).id);
   });
 
-  it("rejects the full week on the fieldset that groups the checkboxes", async () => {
+  it("does not add a 7th día and explains the cap inline instead of disabling it", async () => {
     await openCreateForm();
 
-    submitWith("15:00", "16:00", [...SEIS_DIAS, "Domingo"]);
+    for (const dia of SEIS_DIAS) fireEvent.click(screen.getByRole("button", { name: dia }));
+    const domingo = screen.getByRole("button", { name: "Domingo" });
+    expect(domingo).not.toBeDisabled();
+    fireEvent.click(domingo);
 
-    await expectMarked(diasFieldset(), TOPE_DE_DIAS);
-    expect(mockCrearCategoria).not.toHaveBeenCalled();
+    expect(domingo).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.getByText("Máximo 6 días por categoría. Quite uno para agregar domingo."),
+    ).toHaveAttribute("role", "alert");
+    expect(screen.getAllByRole("button", { pressed: true })).toHaveLength(6);
+
+    fireEvent.click(screen.getByRole("button", { name: "Sábado" }));
+    expect(
+      screen.queryByText(/Máximo 6 días por categoría/),
+    ).not.toBeInTheDocument();
+    fireEvent.click(domingo);
+    expect(domingo).toHaveAttribute("aria-pressed", "true");
   });
 
   it("marks the fieldset when no día is ticked at all", async () => {
@@ -2160,16 +2184,15 @@ describe("GroupsPage — per-field mirror of the training window and día cap (#
   // resubmit: a mark that vanished because the whole form did proves nothing.
   it("clears a field's mark once the admin fixes what it complained about", async () => {
     await openCreateForm();
-    submitWith("05:00", "20:00", []);
-    await expectMarked(horaInicio(), FUERA_DE_VENTANA);
+    submitWith("", "20:00", []);
+    await expectMarked(horaInicio(), "Ingrese la hora de inicio.");
 
-    fireEvent.change(horaInicio(), { target: { value: "15:00" } });
+    elegirHora("Hora de inicio", "15:00");
     fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
 
     await expectMarked(diasFieldset(), "Seleccione al menos un día.");
     expect(horaInicio()).not.toHaveAttribute("aria-invalid");
-    // Only the always-on 24 h hint remains, never an error id.
-    expect(horaInicio()).toHaveAttribute("aria-describedby", "categoria-hora-inicio-ayuda");
+    expect(horaInicio()).not.toHaveAttribute("aria-describedby");
   });
 
   it("keeps the shared banner for a server error the client could not predict", async () => {
@@ -2262,10 +2285,10 @@ describe("GroupsPage — catalog categorías visible on a fresh install (issue #
     await screen.findByRole("heading", { name: "Editar categoría" });
 
     expect(screen.getByLabelText(/^Nombre/)).toHaveValue("Infantil");
-    expect(screen.getByLabelText(/^Hora de inicio/)).toHaveValue("16:00");
-    expect(screen.getByLabelText(/^Hora de fin/)).toHaveValue("17:00");
-    expect(screen.getByRole("checkbox", { name: "Lunes" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Sábado" })).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Hora de inicio" })).toHaveTextContent("16:00");
+    expect(screen.getByRole("button", { name: "Hora de fin" })).toHaveTextContent("17:00");
+    expect(screen.getByRole("button", { name: "Lunes" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Sábado" })).toHaveAttribute("aria-pressed", "false");
 
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
@@ -2340,9 +2363,9 @@ describe("GroupsPage — catalog categorías visible on a fresh install (issue #
 
     fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
     fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "Formativo" } });
-    fireEvent.change(screen.getByLabelText(/^Hora de inicio/), { target: { value: "15:00" } });
-    fireEvent.change(screen.getByLabelText(/^Hora de fin/), { target: { value: "16:00" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: "Lunes" }));
+    elegirHora("Hora de inicio", "15:00");
+    elegirHora("Hora de fin", "16:00");
+    fireEvent.click(screen.getByRole("button", { name: "Lunes" }));
     fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
 
     const action = await screen.findByRole("button", { name: "Editar «Formativo»" });
@@ -2361,9 +2384,9 @@ describe("GroupsPage — catalog categorías visible on a fresh install (issue #
 
     fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
     fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "Formativo" } });
-    fireEvent.change(screen.getByLabelText(/^Hora de inicio/), { target: { value: "15:00" } });
-    fireEvent.change(screen.getByLabelText(/^Hora de fin/), { target: { value: "16:00" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: "Lunes" }));
+    elegirHora("Hora de inicio", "15:00");
+    elegirHora("Hora de fin", "16:00");
+    fireEvent.click(screen.getByRole("button", { name: "Lunes" }));
     fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
 
     await screen.findByRole("button", { name: "Editar «Formativo»" });
@@ -2371,7 +2394,7 @@ describe("GroupsPage — catalog categorías visible on a fresh install (issue #
     // A different problem now — no días selected — stops the submit before it
     // ever reaches the server. The banner from the LAST attempt must not keep
     // pointing at a categoría this attempt never named.
-    fireEvent.click(screen.getByRole("checkbox", { name: "Lunes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Lunes" }));
     fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
 
     await screen.findByText("Seleccione al menos un día.");
@@ -2379,6 +2402,70 @@ describe("GroupsPage — catalog categorías visible on a fresh install (issue #
       screen.queryByText('Ya existe una categoría llamada "Formativo".'),
     ).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Editar «Formativo»" })).not.toBeInTheDocument();
+  });
+});
+
+describe("GroupsPage — 24 h category form redesign", () => {
+  beforeEach(() => {
+    mockFetchMembers.mockReset();
+    mockFetchHorarios.mockReset();
+    mockCrearCategoria.mockReset();
+    mockFetchMembers.mockResolvedValue({ accounts: [] });
+    mockFetchHorarios.mockResolvedValue([]);
+    mockCrearCategoria.mockResolvedValue({});
+  });
+
+  it("pre-fills the edit pickers from the category's times, trimmed to HH:MM", async () => {
+    mockFetchHorarios.mockResolvedValue([
+      { id: 101, diaSemana: "LUNES", horaInicio: "18:00:00", horaFin: "20:15:00", categoria: "COMPETITIVO" },
+    ]);
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    fireEvent.click(screen.getAllByRole("button", { name: /^editar /i })[0]);
+    await screen.findByRole("heading", { name: "Editar categoría" });
+
+    expect(screen.getByRole("button", { name: "Hora de inicio" })).toHaveTextContent(/^18:00$/);
+    expect(screen.getByRole("button", { name: "Hora de fin" })).toHaveTextContent(/^20:15$/);
+    expect(screen.getByText("2 h 15 min")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lunes" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("shows the duration chip, flags an end before the start, and hides it while a time is empty", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
+
+    expect(screen.getByRole("button", { name: "Hora de inicio" })).toHaveTextContent("Elegir hora");
+    elegirHora("Hora de inicio", "15:00");
+    expect(screen.queryByText(/^(\d+ h|\d+ h \d+ min|\d+ min)$/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Fin antes del inicio")).not.toBeInTheDocument();
+
+    elegirHora("Hora de fin", "16:15");
+    expect(screen.getByText("1 h 15 min")).toBeInTheDocument();
+    elegirHora("Hora de fin", "16:00");
+    expect(screen.getByText("1 h")).toBeInTheDocument();
+    elegirHora("Hora de fin", "15:45");
+    expect(screen.getByText("45 min")).toBeInTheDocument();
+    elegirHora("Hora de fin", "14:00");
+    expect(screen.getByText("Fin antes del inicio")).toBeInTheDocument();
+  });
+
+  it("sends HH:MM strictly when creating through the pickers", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
+    fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "Preinfantil" } });
+    elegirHora("Hora de inicio", "15:00");
+    elegirHora("Hora de fin", "16:00");
+    fireEvent.click(screen.getByRole("button", { name: "Lunes" }));
+    fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
+
+    await waitFor(() =>
+      expect(mockCrearCategoria).toHaveBeenCalledWith(
+        expect.objectContaining({ hora_inicio: "15:00", hora_fin: "16:00", dias: ["LUNES"] }),
+      ),
+    );
   });
 });
 

@@ -37,11 +37,12 @@ vi.mock("@/components/ProtectedRoute", () => ({
   },
 }));
 
+let searchParams = new URLSearchParams();
 const mockReplace = vi.fn();
 vi.mock("next/navigation", () => ({
   usePathname: () => "/student/medical-record",
   useRouter: () => ({ push: vi.fn(), replace: mockReplace }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => searchParams,
 }));
 
 const mockUseAuth = vi.fn();
@@ -110,6 +111,7 @@ function portal(self: StudentProfileSummary | null): StudentPortalSummary {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  searchParams = new URLSearchParams();
   mockFetchFichaMedica.mockResolvedValue({
     id: 1,
     personaId: 70,
@@ -131,6 +133,30 @@ describe("StudentOwnMedicalRecordPage", () => {
   });
 
   it("renders the editor for the session's OWN persona when the titular is an adult", async () => {
+    mockUseAuth.mockReturnValue(estudianteSession("70"));
+    mockFetchStudentPortal.mockResolvedValue(portal(ADULT_SELF));
+    render(<StudentOwnMedicalRecordPage />);
+
+    await waitFor(() => expect(mockFetchFichaMedica).toHaveBeenCalledWith(70));
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  // FAM-13: an estudiante has no picker, so a hand-edited `?alumno=` used to
+  // stay in the address bar over their own record. The URL now says whose
+  // record this is.
+  it("rewrites a hand-edited ?alumno= to the session's own persona id", async () => {
+    searchParams = new URLSearchParams("alumno=7&otro=1");
+    mockUseAuth.mockReturnValue(estudianteSession("70"));
+    mockFetchStudentPortal.mockResolvedValue(portal(ADULT_SELF));
+    render(<StudentOwnMedicalRecordPage />);
+
+    await waitFor(() =>
+      expect(mockReplace).toHaveBeenCalledWith("/student/medical-record?alumno=70&otro=1", { scroll: false }),
+    );
+  });
+
+  it("leaves the URL alone when ?alumno= already names the session's own persona", async () => {
+    searchParams = new URLSearchParams("alumno=70");
     mockUseAuth.mockReturnValue(estudianteSession("70"));
     mockFetchStudentPortal.mockResolvedValue(portal(ADULT_SELF));
     render(<StudentOwnMedicalRecordPage />);

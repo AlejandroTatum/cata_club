@@ -32,6 +32,13 @@ class PersonaRepositorio:
     def obtener_por_id(self, persona_id: int) -> Optional[Persona]:
         return self.db.get(Persona, persona_id)
 
+    def listar_por_ids(self, persona_ids: list[int]) -> dict[int, Persona]:
+        """Varias personas en UNA consulta IN (lote de asistencia, ENT-01)."""
+        if not persona_ids:
+            return {}
+        filas = self.db.query(Persona).filter(Persona.id.in_(persona_ids)).all()
+        return {p.id: p for p in filas}
+
     def obtener_por_cedula(self, cedula: str) -> Optional[Persona]:
         return self.db.query(Persona).filter(Persona.cedula == cedula).first()
 

@@ -250,6 +250,8 @@ export class ApiClientError extends Error {
   public readonly validationLoc: string[] | undefined;
   /** Backend correlation ID, when exposed by the failed request. */
   public readonly requestId: string | undefined;
+  /** Existing membership the backend named in the failure (QA3 ADM-08), if any. */
+  public membresiaId: number | undefined;
 
   constructor(message: string, status: number, safe = false, code?: string, retryAfterSeconds?: number, validationLoc?: string[], requestId?: string) {
     super(message);
@@ -509,9 +511,11 @@ async function request<T>(
       let code: string | undefined;
       let errorBody: unknown;
       let validationLoc: string[] | undefined;
+      let membresiaId: number | undefined;
       try {
         errorBody = await response.json();
         if (isApiErrorBody(errorBody)) {
+          if (typeof errorBody.membresia_id === "number") membresiaId = errorBody.membresia_id;
           // A structured 422 detail is intentionally not rendered; only its safe location is retained.
           message = typeof errorBody.detail === "string" ? errorBody.detail : errorBody.message ?? message;
           safe = errorBody.mensaje_seguro === true;
@@ -522,7 +526,9 @@ async function request<T>(
         // ignore parse errors — use default message
       }
       const retryAfterSeconds = parseRetryAfterSeconds(response.headers.get("Retry-After"));
-      throw new ApiClientError(message, response.status, safe, code, retryAfterSeconds, validationLoc, response.headers.get("X-Request-ID") ?? undefined);
+      const apiError = new ApiClientError(message, response.status, safe, code, retryAfterSeconds, validationLoc, response.headers.get("X-Request-ID") ?? undefined);
+      apiError.membresiaId = membresiaId;
+      throw apiError;
     }
 
     // 204 No Content never carries a body — calling response.json() on it
@@ -724,10 +730,20 @@ export interface RegisterAttendanceRequest {
   students: AttendanceStudentMark[];
 }
 
-/** Result of a `registerAttendance` batch — tolerates partial failure (one POST per student). */
+/** One student the batch could not save. */
+export interface RegisterAttendanceFailure {
+  personaId: number;
+  message: string;
+  /** ENT-04: the student already had a record for this session — first one wins. */
+  alreadyRegistered?: boolean;
+  /** Who filed that earlier record, when the backend knows (historic rows have no author). */
+  registradoPorNombre?: string | null;
+}
+
+/** Result of a `registerAttendance` batch — tolerates partial failure per student. */
 export interface RegisterAttendanceResult {
   createdCount: number;
-  failed: { personaId: number; message: string }[];
+  failed: RegisterAttendanceFailure[];
   /** Who took the list (issue #263), persisted by the backend — surfaced on the receipt. */
   registradoPorNombre?: string | null;
 }
@@ -820,7 +836,7 @@ export async function fetchRecentAttendanceSessions(limit = 5): Promise<RecentAt
   return request<RecentAttendanceSession[]>(apiEndpoint(`/attendance/recent-sessions?limit=${limit}`));
 }
 
-/** Persist attendance for a session (one real `POST /asistencias` per student, partial-failure-tolerant). */
+/** Persist attendance for a session (ONE `POST /asistencias/lote`, partial-failure-tolerant per student). */
 export async function registerAttendance(data: RegisterAttendanceRequest): Promise<RegisterAttendanceResult> {
   return request<RegisterAttendanceResult>(apiEndpoint("/attendance/records"), {
     method: "POST",
@@ -1058,10 +1074,9 @@ export async function eliminarCategoria(codigo: string): Promise<void> {
 // Members & Groups API Methods (Fase 4)
 // ---------------------------------------------------------------------------
 
-/** Aggregated member response, including whether the upstream persona page reached its cap before accounts were grouped. */
+/** Aggregated member response: EVERY persona, drained page by page by the BFF. */
 export interface MembersResponse {
   accounts: MemberAccount[];
-  personasCapped: boolean;
   /**
    * `true` when at least one membership could not be resolved upstream, so
    * `estudiante.membresia` is `null` for reasons that are NOT "this student has
@@ -1210,7 +1225,7 @@ export async function fetchTarifas(): Promise<TarifaPublica[]> {
 
 function isApiErrorBody(
   value: unknown,
-): value is { message?: string; detail?: string | unknown[]; mensaje_seguro?: unknown; code?: unknown; validation_loc?: unknown } {
+): value is { message?: string; detail?: string | unknown[]; mensaje_seguro?: unknown; code?: unknown; validation_loc?: unknown; membresia_id?: unknown } {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const body = value as Record<string, unknown>;
   return (typeof body.message === "string" && body.message.length > 0) ||
@@ -1302,6 +1317,8 @@ export interface MembershipSummary {
    * normalizes it to `null` server-side.
    */
   cubiertoHasta?: string | null;
+  /** Why the club suspended this membership (FAM-05); `null` unless it is SUSPENDIDA. */
+  motivoSuspension?: string | null;
 }
 
 /** A real `TipoMembresia` catalog entry (`GET /membresias/tipos`) — replaces the old hardcoded `membershipPlans` array. */
@@ -2106,6 +2123,32 @@ export async function fetchMembresiaDeuda(membresiaId: number): Promise<DeudaMem
   });
 }
 
+/** Amount a regularization must carry for a period — mirrors backend
+ *  `CotizacionRegularizacionResponseDTO` (QA3 ADM-09). Decimals arrive as
+ *  strings. */
+export interface CotizacionRegularizacion {
+  meses: number;
+  montoBase: string;
+  descuentoAplicado: string;
+  montoEsperado: string;
+}
+
+/** Quote a regularization — `GET /api/membresias/{id}/regularizar-deuda/cotizacion`
+ *  (admin only): monthly price x months of the period, minus the person's
+ *  active discount. The admin never types the amount. */
+export async function fetchCotizacionRegularizacion(
+  membresiaId: number,
+  fechaInicio: string,
+  fechaFin: string,
+): Promise<CotizacionRegularizacion> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  const query = new URLSearchParams({ fechaInicio, fechaFin });
+  return request<CotizacionRegularizacion>(
+    apiEndpoint(`/membresias/${membresiaId}/regularizar-deuda/cotizacion?${query.toString()}`),
+    { headers: mockHeaders },
+  );
+}
+
 /** Register an admin regularization — `POST /api/membresias/{id}/regularizar-deuda`.
  *  The payment enters APROBADO directly (admin-operated bookkeeping, not a
  *  client payment) with explicit retroactive dates and a mandatory reason. */
@@ -2128,11 +2171,24 @@ export interface TipoMembresiaCatalogo {
   categoria: string;
   precio: string;
   modalidad: "PERSONALIZADA" | "MENSUAL";
+  /** `false` = hidden: off the web and off enrollment, still valid for who already has it. */
+  activo: boolean;
+  /** `true` once any membresía used it — the backend refuses to delete it then. */
+  enUso: boolean;
 }
 
-/** List all available membership plan types — `GET /api/membresias/tipos`. */
-export async function fetchTiposMembresia(): Promise<TipoMembresiaCatalogo[]> {
-  return request<TipoMembresiaCatalogo[]>(apiEndpoint("/membresias/tipos"));
+/**
+ * List the membership plan types — `GET /api/membresias/tipos`.
+ *
+ * The admin catalog screen wants every tariff (hidden ones included, to show
+ * them again). Anything that lets someone PICK a tariff passes
+ * `soloActivas: true` so a hidden one cannot be chosen.
+ */
+export async function fetchTiposMembresia(
+  options: { soloActivas?: boolean } = {},
+): Promise<TipoMembresiaCatalogo[]> {
+  const query = options.soloActivas ? "?solo_activas=true" : "";
+  return request<TipoMembresiaCatalogo[]>(apiEndpoint(`/membresias/tipos${query}`));
 }
 
 /** Fields an admin may change on a catalog tariff. All optional: the backend
@@ -2141,6 +2197,8 @@ export interface ActualizarTipoMembresiaInput {
   categoria?: string;
   precio?: string;
   modalidad?: "PERSONALIZADA" | "MENSUAL";
+  /** `false` hides the tariff, `true` shows it again. */
+  activo?: boolean;
 }
 
 /**
@@ -2151,8 +2209,8 @@ export interface ActualizarTipoMembresiaInput {
  * routing it through a JS number would introduce binary-float rounding into
  * the one value the club charges with.
  *
- * There is no delete: `TipoMembresia` has no soft-delete column, so retiring
- * a plan is not available (out of scope for #394 as written).
+ * `activo` hides/shows the tariff; removing one for good is
+ * `eliminarTipoMembresia`.
  */
 export async function actualizarTipoMembresia(
   id: number,
@@ -2162,6 +2220,14 @@ export async function actualizarTipoMembresia(
     method: "PATCH",
     body: JSON.stringify(data),
   });
+}
+
+/**
+ * Admin-only: delete a tariff nobody ever used — `DELETE /api/membresias/tipos/:id`.
+ * A tariff that was used answers 409 with a Spanish message meant for the admin.
+ */
+export async function eliminarTipoMembresia(id: number): Promise<void> {
+  await request<void>(apiEndpoint(`/membresias/tipos/${id}`), { method: "DELETE" });
 }
 
 /** Fields to create a new catalog tariff. All three required — unlike the
@@ -2238,7 +2304,10 @@ export interface DescuentoCatalogo {
   nombre: string;
   porcentaje: string | null;
   monto: string | null;
+  /** `false` = hidden: it can no longer be assigned, applied ones are kept. */
   activo: boolean;
+  /** `true` once it was applied or assigned — the backend refuses to delete it then. */
+  enUso: boolean;
 }
 
 /** Payload for creating a catalog discount — exactly one of porcentaje/monto. */
@@ -2292,8 +2361,7 @@ export async function crearDescuento(data: CrearDescuentoInput): Promise<Descuen
 }
 
 /** Admin-only: partial update / soft toggle — `PATCH /api/descuentos/:id`.
- *  There is no DELETE: deactivating is the only "removal" (history keeps
- *  referencing the discount by FK; applied values stay frozen). */
+ *  `activo` hides/shows it (applied values stay frozen either way). */
 export async function actualizarDescuento(
   id: number,
   data: ActualizarDescuentoInput,
@@ -2302,6 +2370,12 @@ export async function actualizarDescuento(
     method: "PATCH",
     body: JSON.stringify(data),
   });
+}
+
+/** Admin-only: delete a discount nobody ever received — `DELETE /api/descuentos/:id`.
+ *  One that was applied or assigned answers 409 with a Spanish message. */
+export async function eliminarDescuento(id: number): Promise<void> {
+  await request<void>(apiEndpoint(`/descuentos/${id}`), { method: "DELETE" });
 }
 
 // ---------------------------------------------------------------------------
@@ -2724,6 +2798,25 @@ export async function invalidarOtrasSesiones(): Promise<{ mensaje: string }> {
   });
 }
 
+/**
+ * Change the signed-in user's password — POST /api/auth/contrasenia/cambiar
+ * (FAM-17). The backend verifies the current password, rejects a new one equal
+ * to it, revokes every other session and reissues this device's token pair as
+ * HttpOnly cookies; the body only carries a confirmation message.
+ */
+export async function cambiarContrasenia(
+  contraseniaActual: string,
+  nuevaContrasenia: string,
+): Promise<{ mensaje: string }> {
+  return request<{ mensaje: string }>(apiEndpoint("/auth/contrasenia/cambiar"), {
+    method: "POST",
+    body: JSON.stringify({
+      contrasenia_actual: contraseniaActual,
+      nueva_contrasenia: nuevaContrasenia,
+    }),
+  });
+}
+
 /** Longer than DEFAULT_TIMEOUT_MS (10s) — subirFotoPerfil is the only caller
  * that uploads a binary body (up to the backend's 5MB cap), which can take
  * longer than a small JSON payload on a slow connection. */
@@ -2901,6 +2994,9 @@ export interface AlumnoHorario {
   horarioHoraInicio: string;
   horarioHoraFin: string;
   fechaAsignacion: string;
+  /** Categoría del horario (código y nombre); el nombre solo viaja en el padrón completo. */
+  horarioCategoria?: string;
+  horarioCategoriaLabel?: string | null;
 }
 
 export interface AsignarAlumnoHorarioDTO {

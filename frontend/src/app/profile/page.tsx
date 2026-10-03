@@ -130,6 +130,8 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
+import AvatarPhoto from "@/components/AvatarPhoto";
+import ChangePasswordCard from "./ChangePasswordCard";
 import {
   fetchMiPerfil,
   actualizarMiPerfil,
@@ -206,6 +208,15 @@ import {
 import { ICON } from "@/lib/icon-size";
 import { formatDate } from "@/lib/format-utils";
 import { toUserMessage } from "@/lib/error-message";
+
+/** Lifetime of the password-recovery link (backend `crear_token_recuperacion`, 30 min). */
+const RESET_LINK_VALID_MINUTES = 30;
+/** Wait before the recovery link can be requested again. */
+const RESET_RESEND_COOLDOWN_SECONDS = 120;
+
+function formatCountdown(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
 import { toPhoneFieldDigits, toStoredPhone } from "@/lib/identity-validation";
 import { revisarFoto, subirFotoDeArchivo } from "@/lib/photo-upload";
 import { PhoneField } from "@/components/wizard-fields";
@@ -621,12 +632,11 @@ function IdentityPanel({
       <div className="flex flex-col gap-6 px-6 py-7 md:flex-row md:items-center md:gap-8 lg:px-8">
         <div className="flex-none">
           <div className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-full bg-coal-3 text-2xl font-extrabold text-ball ring-4 ring-ball ring-offset-4 ring-offset-coal">
-            {fotoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset
-              <img src={fotoUrl} alt="Foto de perfil" className="h-28 w-28 rounded-full object-cover" />
-            ) : (
-              <span aria-hidden="true">{initials}</span>
-            )}
+            <AvatarPhoto
+              fotoUrl={fotoUrl}
+              initials={initials}
+              className="h-28 w-28 rounded-full object-cover"
+            />
           </div>
         </div>
 
@@ -897,6 +907,15 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   const [requestingPassword, setRequestingPassword] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  // GAP-06: the link lasts 30 minutes (`crear_token_recuperacion`), and a new one
+  // can be asked for only after `RESET_RESEND_COOLDOWN_SECONDS`.
+  const [resendSecondsLeft, setResendSecondsLeft] = useState(0);
+
+  useEffect(() => {
+    if (resendSecondsLeft <= 0) return;
+    const timer = setTimeout(() => setResendSecondsLeft((n) => n - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendSecondsLeft]);
 
   // ---- "Cerrar otras sesiones" (E01, slice B4) ---------------------------
   const [confirmingInvalidation, setConfirmingInvalidation] = useState(false);
@@ -1017,11 +1036,12 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     setPasswordError(null);
     setPasswordMessage(null);
     try {
-      const result = await solicitarRecuperacion(
-        props.kind === "staff" ? props.accountEmail : correoDisplay,
-      );
-      setPasswordMessage(result.mensaje);
-      showSuccess(result.mensaje);
+      const destino = props.kind === "staff" ? props.accountEmail : correoDisplay;
+      await solicitarRecuperacion(destino);
+      const message = `Le enviamos un enlace a ${destino} para cambiar su contraseña. Es válido por ${RESET_LINK_VALID_MINUTES} minutos.`;
+      setPasswordMessage(message);
+      setResendSecondsLeft(RESET_RESEND_COOLDOWN_SECONDS);
+      showSuccess(message);
     } catch (error: unknown) {
       const message = toErrorMessage(error, "No se pudo enviar el correo de recuperación.");
       setPasswordError(message);
@@ -1061,6 +1081,9 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
 
   const self = props.kind === "student" ? props.data.self : null;
   const representados = props.kind === "student" ? props.data.representados : [];
+  const fallbackStatedByDependants =
+    props.role === "representante" &&
+    representados.some((dependant) => describeMembership(dependant.membership) === null);
 
   const fullName =
     props.kind === "staff"
@@ -1381,7 +1404,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
                       only when there is not, as this honest note. */}
                 {!membership && (
                   <DetailRow label="Membresía">
-                    <span className="text-sm font-normal text-ink-2">{NO_MEMBERSHIP_FALLBACK}</span>
+                    <MembershipFallback stated={fallbackStatedByDependants} />
                   </DetailRow>
                 )}
                 {self.representante && (
@@ -1404,7 +1427,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
                   text elsewhere is careful about. */}
             {props.role === "representante" && !self && (
               <DetailRow label="Membresía propia">
-                <span className="text-sm font-normal text-ink-2">{NO_MEMBERSHIP_FALLBACK}</span>
+                <MembershipFallback stated={fallbackStatedByDependants} />
               </DetailRow>
             )}
           </CardSection>
@@ -1441,9 +1464,16 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
               }
             >
               {representados.length > 0 ? (
-                representados.map((dependant) => (
-                  <DependantRow key={dependant.personaId} profile={dependant} />
-                ))
+                <>
+                  {representados.map((dependant) => (
+                    <DependantRow key={dependant.personaId} profile={dependant} />
+                  ))}
+                  {fallbackStatedByDependants && (
+                    <p className="px-5 py-3 text-xs text-ink-3">
+                      «—» indica que no hay membresía visible. {NO_MEMBERSHIP_FALLBACK}.
+                    </p>
+                  )}
+                </>
               ) : (
                 <p className="px-5 py-4 text-sm text-ink-2">
                   Todavía no hay estudiantes representados vinculados a esta cuenta.
@@ -1469,10 +1499,10 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
                 <ActionTile
                   icon={<Lock size={ICON.sm} strokeWidth={1.5} />}
                   tone="ball"
-                  title={requestingPassword ? "Enviando…" : "Cambiar contraseña"}
-                  description="Le enviamos un enlace de cambio a su correo"
+                  title={requestingPassword ? "Enviando…" : "Restablecer por correo"}
+                  description="Le enviamos un enlace para restablecer su contraseña"
                   onClick={() => void handleChangePassword()}
-                  disabled={requestingPassword}
+                  disabled={requestingPassword || resendSecondsLeft > 0}
                 />
                 <ActionTile
                   icon={<LogOut size={ICON.sm} strokeWidth={1.5} />}
@@ -1491,6 +1521,8 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
                 />
               </div>
             </CardSection>
+
+            <ChangePasswordCard />
 
             {sessionsMessage && (
               <p role="status" className="text-sm text-state-ok">
@@ -1515,9 +1547,24 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             />
 
             {passwordMessage && (
-              <p role="status" className="text-sm text-state-ok">
-                {passwordMessage}
-              </p>
+              <div className="grid gap-2">
+                <p role="status" className="text-sm text-state-ok">
+                  {passwordMessage}
+                </p>
+                <button
+                  type="button"
+                  className="justify-self-start text-sm font-semibold underline underline-offset-2 disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60"
+                  onClick={() => void handleChangePassword()}
+                  disabled={requestingPassword || resendSecondsLeft > 0}
+                >
+                  Reenviar enlace
+                </button>
+                {resendSecondsLeft > 0 && (
+                  <p className="text-xs text-ink-3-strong">
+                    Podrá reenviarlo en {formatCountdown(resendSecondsLeft)}.
+                  </p>
+                )}
+              </div>
             )}
             {passwordError && (
               <p role="alert" className="text-sm text-state-bad">
@@ -1552,7 +1599,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
       {/* The rail: who this account is at a glance, the club's side of it
           (membership) and how to keep it safe — always visible. */}
       <div className="grid min-w-0 content-start gap-5">
-        <RailCard title="Su cuenta" icon={<User size={ICON.sm} strokeWidth={1.5} />} tone={roleTone}>
+        <RailCard title="Su cuenta" icon={<User size={ICON.sm} strokeWidth={1.5} />} tone="neutral">
           <AccountSummary
             roleLabels={
               assignedRoles.length > 0
@@ -1597,6 +1644,21 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
 }
 
 /**
+ * The "no membership visible" fact is stated ONCE per page (VIS-14): when the
+ * dependants list already carries the sentence, every other field shows "—".
+ */
+function MembershipFallback({ stated }: { stated: boolean }): React.ReactElement {
+  return stated ? (
+    <span className="text-sm font-normal text-ink-3">
+      <span aria-hidden="true">—</span>
+      <span className="sr-only">Sin membresía visible</span>
+    </span>
+  ) : (
+    <span className="text-sm font-normal text-ink-2">{NO_MEMBERSHIP_FALLBACK}</span>
+  );
+}
+
+/**
  * One dependant row.
  *
  * The membership badge is rendered ONLY when the payload actually carried a
@@ -1620,12 +1682,19 @@ function DependantRow({ profile }: { profile: StudentProfileSummary }): React.Re
   const membership = describeMembership(profile.membership);
 
   return (
-    <DetailRow note={membership ? undefined : NO_MEMBERSHIP_FALLBACK}>
+    <DetailRow>
       <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-state-neutral-bg text-2xs tracking-flat font-bold text-state-neutral">
         {personInitials(profile.nombres, profile.apellidos)}
       </span>
       {fullName}
-      {membership && <Badge tone={membership.tone}>{membership.label}</Badge>}
+      {membership ? (
+        <Badge tone={membership.tone}>{membership.label}</Badge>
+      ) : (
+        <span className="text-sm font-normal text-ink-3">
+          <span aria-hidden="true">—</span>
+          <span className="sr-only">Sin membresía visible</span>
+        </span>
+      )}
     </DetailRow>
   );
 }

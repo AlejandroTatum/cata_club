@@ -9,13 +9,15 @@ from datetime import date
 from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.tiempo import hoy_club
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
-from app.dominio.enums import EstadoPago
+from app.dominio.enums import EstadoMembresia, EstadoPago
+from app.infraestructura.repositorios.membresia_repositorio import HistorialEstadoMembresiaRepositorio
 from app.servicios_negocio.dtos.membresia_pago_schemas import (
     MembresiaCreateDTO, MembresiaEstadisticasResponseDTO, MembresiaPropiaCreateDTO, MembresiaResponseDTO,
     PagoCreateDTO, PagoResponseDTO, PagoValidarDTO, PagoListItemDTO,
     ComprobantePagoCreateDTO, ComprobantePagoResponseDTO,
     TipoMembresiaCreateDTO, TipoMembresiaUpdateDTO, TipoMembresiaResponseDTO, TarifaPublicaDTO,
-    DeudaMembresiaResponseDTO, DeudaMembresiaBulkItemDTO, RegularizacionDeudaDTO, SuspensionReactivacionDTO,
+    DeudaMembresiaResponseDTO, DeudaMembresiaBulkItemDTO, RegularizacionDeudaDTO,
+    CotizacionRegularizacionResponseDTO, SuspensionReactivacionDTO,
     CorreccionPagoDTO, CorreccionPagoResponseDTO, CorreccionPagoResultadoDTO,
     CambioPlanMembresiaDTO, InscripcionRepresentadoPagoDTO,
 )
@@ -77,8 +79,14 @@ async def crear_tipo_membresia(datos: TipoMembresiaCreateDTO, db: Session = Depe
     "/tipos", response_model=List[TipoMembresiaResponseDTO],
     dependencies=[Depends(GestorAutenticacion.decodificar_token)],
 )
-async def listar_tipos_membresia(db: Session = Depends(obtener_sesion)):
-    return MembresiaServicio(db).listar_tipos_membresia()
+async def listar_tipos_membresia(
+    solo_activas: bool = Query(default=False),
+    db: Session = Depends(obtener_sesion),
+):
+    """Por defecto devuelve TODAS (incluidas las ocultas): el admin necesita
+    verlas para volver a mostrarlas. `solo_activas=true` es para quien arma
+    una lista de selección de inscripción."""
+    return MembresiaServicio(db).listar_tipos_membresia(solo_activas=solo_activas)
 
 
 # Issue #394: hasta acá el catálogo solo se podía escribir una vez. Cambiar el
@@ -99,6 +107,17 @@ async def actualizar_tipo_membresia(
     return MembresiaServicio(db).actualizar_tipo_membresia(tipo_id, datos)
 
 
+# Eliminar es solo para tarifas que nunca se usaron: 409 si alguna membresía
+# (o la auditoría de un cambio de plan) la referencia. Ocultarla es el PATCH
+# `activo=false`. Mismo candado de rol que el PATCH.
+@router.delete(
+    "/tipos/{tipo_id}", status_code=204,
+    dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
+)
+async def eliminar_tipo_membresia(tipo_id: int, db: Session = Depends(obtener_sesion)):
+    MembresiaServicio(db).eliminar_tipo_membresia(tipo_id)
+
+
 # Issue #394 (mitad pública, contrato de issue #331): la pantalla de
 # inscripción necesita mostrar el precio del plan ANTES de que la persona
 # tenga sesión -- misma clase que `GET /personas/instituciones`: catálogo
@@ -112,7 +131,7 @@ async def actualizar_tipo_membresia(
 @router.get("/tarifas", response_model=List[TarifaPublicaDTO])
 @limiter.limit("60/minute")
 async def listar_tarifas_publicas(request: Request, db: Session = Depends(obtener_sesion)):
-    tipos = MembresiaServicio(db).listar_tipos_membresia()
+    tipos = MembresiaServicio(db).listar_tipos_membresia(solo_activas=True)
     return [TarifaPublicaDTO(categoria=t.categoria, precio=t.precio) for t in tipos]
 
 
@@ -208,9 +227,14 @@ def _con_cubierto_hasta(db: Session, membresias: list) -> List[MembresiaResponse
     cobertura_por_id = PagoServicio(db).fecha_fin_maxima_combinada_bulk(
         [membresia.id for membresia in membresias]
     )
+    suspendidas = [m.id for m in membresias if m.estado == EstadoMembresia.SUSPENDIDA]
+    motivo_por_id = HistorialEstadoMembresiaRepositorio(db).motivo_ultima_suspension_bulk(suspendidas)
     return [
         MembresiaResponseDTO.model_validate(membresia).model_copy(
-            update={"cubierto_hasta": cobertura_por_id.get(membresia.id)}
+            update={
+                "cubierto_hasta": cobertura_por_id.get(membresia.id),
+                "motivo_suspension": motivo_por_id.get(membresia.id),
+            }
         )
         for membresia in membresias
     ]
@@ -451,6 +475,26 @@ def obtener_deuda_membresias_bulk(
 )
 def obtener_deuda_membresia(membresia_id: int, db: Session = Depends(obtener_sesion)):
     return PagoServicio(db).obtener_deuda(membresia_id)
+
+
+@router.get(
+    "/{membresia_id}/regularizar-deuda/cotizacion",
+    response_model=CotizacionRegularizacionResponseDTO,
+    dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
+)
+def cotizar_regularizacion_membresia(
+    membresia_id: int,
+    fecha_inicio: date,
+    fecha_fin: date,
+    db: Session = Depends(obtener_sesion),
+):
+    cotizacion = PagoServicio(db).cotizar_regularizacion(membresia_id, fecha_inicio, fecha_fin)
+    return {
+        "meses": cotizacion.meses,
+        "monto_base": cotizacion.monto_base,
+        "descuento_aplicado": cotizacion.descuento_aplicado,
+        "monto_esperado": cotizacion.monto_esperado,
+    }
 
 
 @router.post(

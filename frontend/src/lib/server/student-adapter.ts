@@ -70,6 +70,8 @@ export interface BackendTipoMembresiaCatalogo {
   categoria: string;
   precio: string;
   modalidad: string;
+  /** `false` = hidden tariff. Absent on older payloads, which count as visible. */
+  activo?: boolean;
 }
 
 export interface MembershipPlanView {
@@ -115,6 +117,8 @@ export interface BackendMembresiaPropia {
    * it to `null`.
    */
   cubiertoHasta?: string | null;
+  /** `MembresiaResponseDTO.motivo_suspension` (FAM-05): why the club suspended it; absent unless SUSPENDIDA. */
+  motivoSuspension?: string | null;
 }
 
 /** Enriched membership view for a single persona — built server-side. */
@@ -130,6 +134,8 @@ export interface MembershipView {
   esGratuidadFamiliar: boolean;
   /** Normalized to `null` when the backend omits it — see `BackendMembresiaPropia.cubiertoHasta`. */
   cubiertoHasta: string | null;
+  /** Normalized to `null` when the backend omits it — see `BackendMembresiaPropia.motivoSuspension`. */
+  motivoSuspension: string | null;
 }
 
 export function buildMembershipView(
@@ -147,11 +153,14 @@ export function buildMembershipView(
     fechaActivacion: mem.fechaActivacion ?? null,
     esGratuidadFamiliar: mem.esGratuidadFamiliar ?? false,
     cubiertoHasta: mem.cubiertoHasta ?? null,
+    motivoSuspension: mem.motivoSuspension ?? null,
   };
 }
 
+/** The plans a student can pick: hidden tariffs stay out, though they still
+ *  resolve a membership's name through `tiposById`. */
 export function buildMembershipPlans(tipos: BackendTipoMembresiaCatalogo[]): MembershipPlanView[] {
-  return tipos.map((tipo) => ({
+  return tipos.filter((tipo) => tipo.activo !== false).map((tipo) => ({
     id: String(tipo.id),
     nombre: tipo.categoria,
     precio: Number(tipo.precio),

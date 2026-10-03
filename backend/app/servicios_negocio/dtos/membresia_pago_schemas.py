@@ -2,7 +2,9 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
+from urllib.parse import urlparse
 
+from app.dominio.nombres_catalogo import normalizar_nombre
 from app.dominio.enums import (
     EstadoMembresia, TipoModalidad, EstadoPago, TipoPago, EfectoCoberturaCorreccion,
 )
@@ -11,10 +13,33 @@ from app.servicios_negocio.dtos.validadores import NombrePresentado
 
 
 # --- TipoMembresia ---
+# ADM-06 (QA3): tarifa entre 1.00 y 1000.00 con a lo sumo 2 decimales. Sin
+# tope, `1e30` rebasaba la columna NUMERIC y terminaba en un 500.
+PRECIO_MINIMO_TIPO_MEMBRESIA = Decimal("1.00")
+PRECIO_MAXIMO_TIPO_MEMBRESIA = Decimal("1000.00")
+
+
+def _categoria_normalizada_no_vacia(valor: str) -> str:
+    normalizada = normalizar_nombre(valor)
+    if not normalizada:
+        raise ValueError("El nombre de la tarifa no puede estar vacío.")
+    return normalizada
+
+
 class TipoMembresiaCreateDTO(BaseModel):
     categoria: str
-    precio: Decimal = Field(..., gt=0)
+    precio: Decimal = Field(
+        ...,
+        ge=PRECIO_MINIMO_TIPO_MEMBRESIA,
+        le=PRECIO_MAXIMO_TIPO_MEMBRESIA,
+        decimal_places=2,
+    )
     modalidad: TipoModalidad
+
+    @field_validator("categoria")
+    @classmethod
+    def _normalizar_categoria(cls, valor: str) -> str:
+        return _categoria_normalizada_no_vacia(valor)
 
 
 class TipoMembresiaUpdateDTO(BaseModel):
@@ -23,9 +48,9 @@ class TipoMembresiaUpdateDTO(BaseModel):
     POST -- una tarifa en cero o negativa no describe ningún plan comercial, y
     además rompería la cuenta de meses, que divide por este número.
 
-    No hay campo para retirar un tipo del catálogo: `TipoMembresia` no tiene
-    columna `activo` y agregarla es una migración aparte. #394 pide poder
-    EDITAR el precio; retirar un plan queda fuera de este alcance.
+    `activo=False` OCULTA la tarifa (baja suave, reversible con `True`): sale
+    del catálogo público y no admite membresías nuevas, pero las existentes
+    siguen operando. Borrarla es `DELETE /tipos/{id}`, solo si nunca se usó.
 
     Un `null` explícito en `categoria`/`precio`/`modalidad` se RECHAZA acá
     (hallazgo de review adversarial, issue #400). Esta clase copió la forma
@@ -41,10 +66,16 @@ class TipoMembresiaUpdateDTO(BaseModel):
     problema real. El rechazo debe pasar en esta capa -- antes de tocar la
     base -- con un 422 que sí lo nombra."""
     categoria: Optional[str] = Field(None, min_length=1, max_length=80)
-    precio: Optional[Decimal] = Field(None, gt=0)
+    precio: Optional[Decimal] = Field(
+        None,
+        ge=PRECIO_MINIMO_TIPO_MEMBRESIA,
+        le=PRECIO_MAXIMO_TIPO_MEMBRESIA,
+        decimal_places=2,
+    )
     modalidad: Optional[TipoModalidad] = None
+    activo: Optional[bool] = None
 
-    @field_validator("categoria", "precio", "modalidad", mode="before")
+    @field_validator("categoria", "precio", "modalidad", "activo", mode="before")
     @classmethod
     def _rechazar_valor_vacio_explicito(cls, valor, info):
         if valor is None:
@@ -54,9 +85,18 @@ class TipoMembresiaUpdateDTO(BaseModel):
             )
         return valor
 
+    @field_validator("categoria")
+    @classmethod
+    def _normalizar_categoria(cls, valor: Optional[str]) -> Optional[str]:
+        return None if valor is None else _categoria_normalizada_no_vacia(valor)
+
 
 class TipoMembresiaResponseDTO(ResponseBase, TipoMembresiaCreateDTO):
     id: int
+    activo: bool = True
+    # `True` si alguna membresía (o la auditoría de un cambio de plan) la
+    # referencia: entonces solo se puede ocultar, no eliminar.
+    en_uso: bool = False
 
 
 class TarifaPublicaDTO(ResponseBase, BaseModel):
@@ -137,6 +177,11 @@ class MembresiaResponseDTO(ResponseBase, BaseModel):
     # `ApplyBenefitForm`), que antes recalculaba una versión incompleta
     # mirando solo `Pago`.
     cubierto_hasta: date | None = None
+    # FAM-05: el motivo con que se registró la suspensión VIGENTE, para que la
+    # familia sepa por qué no puede operar. Solo viaja mientras el estado es
+    # SUSPENDIDA y solo lo pueblan los endpoints de lectura que pasan por
+    # `_con_cubierto_hasta`; `None` en cualquier otro caso.
+    motivo_suspension: str | None = None
 
 
 class MembresiaEstadisticasResponseDTO(ResponseBase, BaseModel):
@@ -204,6 +249,16 @@ class PagoCreateDTO(BaseModel):
 
 class PagoValidarDTO(BaseModel):
     estado_pago: EstadoPago
+
+    @field_validator("estado_pago")
+    @classmethod
+    def _solo_resoluciones(cls, valor: EstadoPago) -> EstadoPago:
+        # `PENDIENTE_VALIDACION` no es una resolución: el servicio lo trataba
+        # como rechazo.
+        if valor not in (EstadoPago.APROBADO, EstadoPago.RECHAZADO):
+            raise ValueError("El estado del pago debe ser aprobado o rechazado.")
+        return valor
+
     motivo_rechazo: Optional[str] = Field(None, max_length=255)
     # Issue #459: motivo de la excepción auditada para aprobar una
     # TRANSFERENCIA sin comprobante adjunto. Opcional a nivel de este DTO
@@ -334,8 +389,12 @@ class DeudaMembresiaBulkItemDTO(ResponseBase, BaseModel):
     monto_mensual: Decimal = Field(..., examples=["30.00"])
 
 
+# Tope generoso (120 meses x tarifa máxima de $1000): descarta `1e30` & co. con
+# 422 en vez de dejar que reviente la aritmética decimal (QA3 ADM-09).
+# `ge=0`: una beca del 100% cotiza $0 y ese es el único caso en que el
+# servicio acepta $0 (cualquier monto distinto de la cotización se rechaza).
 class RegularizacionDeudaDTO(BaseModel):
-    monto: Decimal = Field(..., gt=0)
+    monto: Decimal = Field(..., ge=0, le=Decimal("120000.00"), max_digits=9, decimal_places=2)
     fecha_inicio: date
     fecha_fin: date
     motivo: str = Field(..., min_length=1, max_length=255)
@@ -347,6 +406,14 @@ class RegularizacionDeudaDTO(BaseModel):
         if self.fecha_inicio >= self.fecha_fin:
             raise ValueError("La fecha de inicio debe ser anterior a la de fin.")
         return self
+
+
+class CotizacionRegularizacionResponseDTO(ResponseBase, BaseModel):
+    """Monto que `regularizar-deuda` exigirá para un período (QA3 ADM-09)."""
+    meses: int = Field(..., examples=[2])
+    monto_base: Decimal = Field(..., examples=["60.00"])
+    descuento_aplicado: Decimal = Field(..., examples=["30.00"])
+    monto_esperado: Decimal = Field(..., examples=["30.00"])
 
 
 # --- Suspensión y reactivación (issue #400, slice 5a) ------------------------
@@ -462,6 +529,16 @@ class CorreccionPagoResultadoDTO(ResponseBase, BaseModel):
 class ComprobantePagoCreateDTO(BaseModel):
     archivo_url: str
     formato_archivo: str
+
+    @field_validator("archivo_url")
+    @classmethod
+    def _url_web(cls, valor: str) -> str:
+        # El enlace se muestra como comprobante oficial: solo https,
+        # nunca `http:`, `javascript:` ni `data:`.
+        partes = urlparse(valor)
+        if partes.scheme != "https" or not partes.netloc:
+            raise ValueError("La URL del comprobante debe comenzar con https://.")
+        return valor
 
 
 class ComprobantePagoResponseDTO(ResponseBase, BaseModel):

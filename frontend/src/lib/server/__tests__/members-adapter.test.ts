@@ -136,11 +136,27 @@ describe("buildMemberAccounts", () => {
       estadoBackend: "ACTIVA",
       fechaInicio: "2026-07-01",
       fechaFin: "2026-07-31",
+      cubiertoHasta: null,
       monto: 25,
       esGratuidadFamiliar: false,
     });
     expect(student?.ultimoPago?.estado).toBe("aprobado");
     expect(student?.ultimoPago?.monto).toBe(50);
+  });
+
+  // QA3 ADM-14: "Vigencia" comes from the membership's real coverage, not from
+  // the last payment's dates (which may be pending or a retroactive regularization).
+  it("passes the backend's cubiertoHasta through as the real coverage end", () => {
+    const accounts = buildMemberAccounts(
+      [parent, child],
+      new Map([[3, pago]]),
+      new Map([[100, { ...membresia, cubiertoHasta: "2026-12-01" }]]),
+      new Map(),
+      new Map([[5, tipo]]),
+    );
+
+    const student = accounts.find((a) => a.id === "3")?.estudiantes[0];
+    expect(student?.membresia?.cubiertoHasta).toBe("2026-12-01");
   });
 
   // Issue #400 (slice 4c-a): the flag has to survive the pago/membresia/tipo
@@ -179,6 +195,7 @@ describe("buildMemberAccounts", () => {
       estadoBackend: "ACTIVA",
       fechaInicio: "",
       fechaFin: "",
+      cubiertoHasta: null,
       monto: 25,
       // `membresia` fixture above carries no `esGratuidadFamiliar` — this
       // proves the adapter defaults an absent backend flag to `false`

@@ -6,12 +6,13 @@ para menores.
 """
 import pytest
 from app.dominio.cedula import cedula_valida
+from tests.nombres_validos import nombre_unico
 from app.seguridad.gestor_auth import GestorAutenticacion
 
 
 def _crear_persona(client, cedula, fecha_nacimiento="2000-05-14", representante_id=None):
     payload = {
-        "nombres": "Test", "apellidos": cedula, "cedula": cedula,
+        "nombres": "Test", "apellidos": nombre_unico(cedula), "cedula": cedula,
         "fecha_nacimiento": fecha_nacimiento, "telefono": "0991234567",
     }
     if representante_id:
@@ -59,7 +60,7 @@ def test_obtener_roles_requiere_admin(client_sin_permisos):
     assert resp.status_code == 403
 
 
-def test_obtener_roles_refleja_estado_actual_sin_mutar(client):
+def test_obtener_roles_refleja_estado_actual_sin_mutar(client, admin_ajeno):
     persona = _crear_persona(client, cedula_valida(302))
     _registrar_credenciales(client, persona["cedula"], "u_roles@x.com")
 
@@ -173,6 +174,41 @@ def test_admin_no_puede_quitarse_su_propio_rol_administrador(client):
     assert "ADMINISTRADOR" in client.get(f"/api/v1/personas/{uno['id']}/roles").json()["roles"]
 
 
+def test_admin_no_puede_desactivar_su_propia_cuenta_aunque_haya_otro_admin(client):
+    """QA3 ADM-10: otro administrador debe hacerlo; el propio queda fuera."""
+    uno = _crear_administrador(client, cedula_valida(314), "admin_i@x.com")
+    _crear_administrador(client, cedula_valida(315), "admin_j@x.com")
+
+    _autenticar_como(uno["id"])
+    resp = client.patch(f"/api/v1/personas/{uno['id']}/cuenta/estado", json={"activo": False})
+
+    assert resp.status_code == 400
+    assert "su propia cuenta" in resp.json()["detail"]
+    assert client.get(f"/api/v1/personas/{uno['id']}/roles").json()["activo"] is True
+
+
+def test_admin_no_puede_darse_de_baja_a_si_mismo(client):
+    uno = _crear_administrador(client, cedula_valida(316), "admin_k@x.com")
+    _crear_administrador(client, cedula_valida(317), "admin_l@x.com")
+
+    _autenticar_como(uno["id"])
+    resp = client.patch(f"/api/v1/personas/{uno['id']}/estado", json={"activo": False})
+
+    assert resp.status_code == 400
+    assert "su propia cuenta" in resp.json()["detail"]
+
+
+def test_otro_admin_si_puede_desactivar_la_cuenta_de_un_admin(client):
+    uno = _crear_administrador(client, cedula_valida(318), "admin_m@x.com")
+    otro = _crear_administrador(client, cedula_valida(319), "admin_n@x.com")
+
+    _autenticar_como(otro["id"])
+    resp = client.patch(f"/api/v1/personas/{uno['id']}/cuenta/estado", json={"activo": False})
+
+    assert resp.status_code == 200
+    assert resp.json()["activo"] is False
+
+
 def test_no_se_puede_quitar_el_ultimo_rol_administrador_del_sistema(client):
     solo = _crear_administrador(client, cedula_valida(306), "admin_c@x.com")
 
@@ -229,7 +265,7 @@ def test_quitar_un_rol_no_administrador_no_activa_la_barrera(client):
 
 
 # --- Estado de cuenta (E01-RF013) --------------------------------------------
-def test_cuenta_desactivada_no_puede_loguearse(client):
+def test_cuenta_desactivada_no_puede_loguearse(client, admin_ajeno):
     persona = _crear_persona(client, cedula_valida(313))
     _registrar_credenciales(client, persona["cedula"], "u4@x.com")
 
@@ -240,7 +276,9 @@ def test_cuenta_desactivada_no_puede_loguearse(client):
     resp = client.post(
         "/api/v1/auth/login", data={"username": "u4@x.com", "password": "unaClaveSegura1"}
     )
-    assert resp.status_code == 401
+    # REG-10: contraseña correcta + cuenta inactiva -> 403 con el mensaje que
+    # manda a escribir al club (con otra contraseña seguiría siendo 401).
+    assert resp.status_code == 403
 
 
 def test_cambiar_estado_cuenta_requiere_admin(client_sin_permisos):

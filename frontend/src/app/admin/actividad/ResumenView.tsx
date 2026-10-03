@@ -199,6 +199,13 @@ export default function ResumenView({ data, now }: { data: ResumenData; now: str
                 );
               })}
             </ul>
+            {data.queuedByQuota > 0 ? (
+              <p data-testid="queued-by-quota" className="m-0 border-t border-line px-[18px] py-3.5 text-xs text-ink-2">
+                {data.queuedByQuota === 1
+                  ? "1 correo espera el reinicio del límite diario y se enviará mañana."
+                  : `${data.queuedByQuota} correos esperan el reinicio del límite diario y se enviarán mañana.`}
+              </p>
+            ) : null}
           </DashboardSection>
 
           <InfoPanel title="Qué muestra esta pantalla">

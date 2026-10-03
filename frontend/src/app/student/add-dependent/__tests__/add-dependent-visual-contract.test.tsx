@@ -289,3 +289,35 @@ describe("the way back sits above the page title", () => {
     expect(container.querySelector('[class*="max-w-[760px]"]')).toBeNull();
   });
 });
+
+/**
+ * VIS-17 — the blocker sentence ("Para continuar, revise: Nombres, …") painted
+ * red over an empty form, before the guardian had typed anything. It now waits
+ * until a field it names has been touched.
+ */
+describe("the blocker reason waits for the guardian", () => {
+  it("shows no red 'Para continuar' line over an untouched, empty form", () => {
+    render(<AddDependentPage />);
+
+    expect(screen.queryByText(/^Para continuar, revise:/)).not.toBeInTheDocument();
+  });
+
+  it("shows it once a field the reason names has been touched", () => {
+    render(<AddDependentPage />);
+
+    fireEvent.blur(screen.getByLabelText(/^Nombres/));
+
+    expect(screen.getByText(/^Para continuar, revise:/)).toBeInTheDocument();
+  });
+});
+
+/** VIS-16 — the selects wear the design system's chevron instead of the platform widget. */
+describe("the selects are styled like the other controls", () => {
+  it("draws the health step's blood-type select without the native chevron", () => {
+    render(<AddDependentPage />);
+    fillChildStep();
+    fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
+
+    expect(screen.getByLabelText(/^Tipo de sangre/).className).toMatch(/\bappearance-none\b/);
+  });
+});

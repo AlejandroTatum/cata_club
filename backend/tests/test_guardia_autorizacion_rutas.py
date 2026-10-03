@@ -201,6 +201,7 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("PATCH", "/ranking/notificaciones/{notificacion_id}/leer"), # (b) - propio via `persona_id` del token
     ("POST", "/auth/me/foto"),                                   # (b) - propio via `sub`
     ("POST", "/auth/sesiones/invalidar"),                        # (b) - propio via `sub`
+    ("POST", "/auth/contrasenia/cambiar"),                       # (b) - propio via `sub`, exige la clave actual
     ("POST", "/membresias/{membresia_id}/aplicar-beneficio"),     # (b) - dueño/representante validado en el servicio
     ("POST", "/membresias/pagos"),                                # (b) - dueño/admin validado en el servicio
     ("POST", "/membresias/pagos/{pago_id}/voucher"),             # (b) - dueño/admin validado en el servicio
@@ -276,6 +277,7 @@ RUTAS_ROLES_REQUERIDOS = {
     # listado incluye inactivos (vista de administración), por eso ni la
     # lectura es de "cualquier autenticado".
     ("GET", "/descuentos/"): frozenset({"ADMINISTRADOR"}),
+    ("DELETE", "/descuentos/{descuento_id}"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/descuentos/{descuento_id}"): frozenset({"ADMINISTRADOR"}),
     # Issue #360: el club no asigna entrenadores a horarios, así que el
     # acceso se acota por DATO (siete campos de emergencia, no la ficha
@@ -325,6 +327,7 @@ RUTAS_ROLES_REQUERIDOS = {
     # `corregir` (auditoría de registros que pueden ser de menores).
     ("GET", "/asistencias/{asistencia_id}/correcciones"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/asistencias/"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
+    ("POST", "/asistencias/lote"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/asistencias/asignar-alumno"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/asistencias/horarios"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/auth/registro"): frozenset({"ADMINISTRADOR"}),
@@ -339,6 +342,7 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/membresias/propia"): frozenset({"REPRESENTANTE", "ALUMNO"}),
     ("POST", "/membresias/representado/pago"): frozenset({"REPRESENTANTE"}),
     ("POST", "/membresias/{membresia_id}/regularizar-deuda"): frozenset({"ADMINISTRADOR"}),
+    ("GET", "/membresias/{membresia_id}/regularizar-deuda/cotizacion"): frozenset({"ADMINISTRADOR"}),
     # Issue #400 (slice 5b): corregir un campo financiero congelado de un
     # pago ya aprobado es tan sensible como crear el pago mismo -- admin-only,
     # mismo criterio que regularizar-deuda/suspender/reactivar.
@@ -363,6 +367,7 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/membresias/tipos"): frozenset({"ADMINISTRADOR"}),
     # Issue #394: editar una tarifa es escribir sobre el número con el que el
     # club cobra, así que lleva el mismo rol que crearla.
+    ("DELETE", "/membresias/tipos/{tipo_id}"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/membresias/tipos/{tipo_id}"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/sponsors/"): frozenset({"ADMINISTRADOR"}),

@@ -180,3 +180,16 @@ def test_un_fallo_al_avisar_no_rompe_el_envio_omitido(
 
     assert smtp_capturado.enviados == [CORREO]
     assert sesion_inyectada.query(ContadorCorreoDiario).one().enviados == 2
+
+
+def test_el_aviso_dice_que_los_correos_salen_solos_al_dia_siguiente(
+    monkeypatch, sesion_inyectada, smtp_capturado,
+):
+    _admin(sesion_inyectada, 5)
+    monkeypatch.setattr(notificaciones_mod.settings, "limite_correos_diario", 1)
+
+    _enviar()
+    _enviar()
+
+    (aviso,) = _avisos(sesion_inyectada)
+    assert "se enviarán automáticamente al día siguiente" in aviso.mensaje

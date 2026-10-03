@@ -93,15 +93,15 @@ describe("EnrollPage — tarifas públicas antes del primer campo", () => {
     // The step-1 enrollment-type CARD, matched by its unique description —
     // NOT the dev-only demo quick-fill button of the same short name
     // ("Jugador"), which is a different control entirely.
-    const jugadorCard = screen.getByRole("button", { name: /Me inscribo yo al club/i });
+    const jugadorCard = screen.getByRole("radio", { name: /Me inscribo yo al club/i });
 
     // eslint-disable-next-line no-bitwise -- DOM position bitmask is the standard API for this.
     // They sit UNDER the choice grid now (same columns), but nothing has been
     // chosen yet: the price is on screen before the visitor commits.
     expect(jugadorCard.compareDocumentPosition(tariffNode) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(jugadorCard).toHaveAttribute("aria-pressed", "true");
+    expect(jugadorCard).toHaveAttribute("aria-checked", "true");
     expect(
-      screen.getByRole("button", { name: /Gestiono la inscripción de un hijo/i }),
+      screen.getByRole("radio", { name: /Gestiono la inscripción de un hijo/i }),
     ).toBeInTheDocument();
   });
 

@@ -422,6 +422,14 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
     return <InstitutionalHeader minimal />;
   }
 
+  // VIS-05: `/ayuda` is an app-shell route (`lib/shell-routes.ts`) only for
+  // someone who has a session; the page itself draws the shell in that case.
+  // Without one — including while the session is still hydrating — it is a
+  // public page and gets the public bar, like the legal documents.
+  if (pathname === "/ayuda" && !session) {
+    return <InstitutionalHeader minimal />;
+  }
+
   // Which routes own their chrome lives in `lib/shell-routes.ts` and is
   // PREFIX-based. It used to be an exact-match Set right here, so chrome
   // flipped mid-flow: `/student` had the sidebar while `/student/add-dependent`,
@@ -442,7 +450,7 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
         <nav className="mx-auto flex max-w-8xl items-center justify-between px-4 py-3 sm:px-8 lg:px-12">
           <div className="flex items-center gap-3 text-lg font-semibold tracking-tight text-white">
             <div className="h-8 w-8 animate-pulse rounded-lg bg-white/10" />
-            <span className="hidden sm:inline">Cata Club</span>
+            <span>Cata Club</span>
           </div>
         </nav>
       </header>
@@ -480,7 +488,7 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
               priority
             />
           </div>
-          <span className="hidden sm:inline">Cata Club</span>
+          <span>Cata Club</span>
         </Link>
 
         {/* Desktop nav */}

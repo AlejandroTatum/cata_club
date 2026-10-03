@@ -222,3 +222,75 @@ def test_el_sello_de_estado_conserva_su_color_propio(
 
     assert len(sellos) == 1
     assert sellos[0].style.textColor == colors.HexColor(color_esperado)
+
+
+# --- ADM-05 (QA3): el texto de usuario se escapa antes de ir a un Paragraph --
+# `Paragraph` interpreta un mini-XML: un nombre como `<b>Ana` (etiqueta sin
+# cerrar) hacía fallar el parseo y la descarga del reporte terminaba en 500.
+_NOMBRE_HOSTIL = "<b>Ana & <i>Pérez</u>"
+
+
+def test_reporte_pdf_con_marcado_en_los_datos_no_falla():
+    pdf = generador_pdf.generar_reporte_pdf(
+        titulo="Reporte <b>de & prueba",
+        columnas=["Nombre <b>", "Estado & más"],
+        filas=[[_NOMBRE_HOSTIL, "ok"]],
+        generado_por="<admin & co",
+    )
+    assert pdf.startswith(b"%PDF")
+
+
+def test_comprobante_pdf_con_marcado_en_los_datos_no_falla():
+    datos = {
+        **_DATOS_COMPROBANTE,
+        "persona_nombre": _NOMBRE_HOSTIL,
+        "membresia_categoria": "<b>Infantil & Juvenil",
+        "estado_pago": "<raro & estado",
+    }
+    assert generar_comprobante_pago_pdf(**datos).startswith(b"%PDF")
+
+
+# --- QA3 FAM-07: textos del comprobante -----------------------------------
+
+def _textos_del_comprobante(capturado: dict) -> list[str]:
+    parrafos = [
+        e.getPlainText() for e in capturado["elementos"] if isinstance(e, Paragraph)
+    ]
+    celdas = [str(c) for fila in capturado["tabla"]._cellvalues for c in fila]
+    return parrafos + celdas
+
+
+def test_comprobante_sin_telefono_dice_no_registrado(monkeypatch):
+    capturado = _comprobante_construido(monkeypatch, persona_telefono=None)
+
+    textos = _textos_del_comprobante(capturado)
+
+    assert "Teléfono: No registrado" in textos
+    assert not any("None" in t for t in textos)
+
+
+def test_comprobante_con_telefono_lo_imprime(monkeypatch):
+    textos = _textos_del_comprobante(_comprobante_construido(monkeypatch))
+
+    assert "Teléfono: 0987654321" in textos
+
+
+def test_comprobante_imprime_el_monto_con_formato_del_club(monkeypatch):
+    capturado = _comprobante_construido(monkeypatch, monto=Decimal("40"))
+
+    celdas = [list(fila) for fila in capturado["tabla"]._cellvalues]
+
+    assert ["Monto pagado", "$40,00"] in celdas
+    assert not any("USD" in str(c) for fila in celdas for c in fila)
+
+
+def test_comprobante_convierte_la_aprobacion_a_hora_de_ecuador(monkeypatch):
+    from datetime import timezone
+
+    capturado = _comprobante_construido(
+        monkeypatch, fecha_aprobacion=datetime(2026, 8, 18, 1, 5, tzinfo=timezone.utc),
+    )
+
+    textos = _textos_del_comprobante(capturado)
+
+    assert "Fecha de aprobación: 17/08/2026 20:05 (hora de Ecuador)" in textos

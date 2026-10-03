@@ -93,7 +93,7 @@ export default function TipoSelectorForm({
     setSucceeded(false);
     if (tipos.length === 0) {
       try {
-        setTipos(await fetchTiposMembresia());
+        setTipos(await fetchTiposMembresia({ soloActivas: true }));
       } catch {
         setError("No se pudieron cargar los tipos de membresía.");
       }

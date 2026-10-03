@@ -88,4 +88,14 @@ describe("the global 404", () => {
     const title = screen.getByRole("heading", { name: /no encontramos esta página/i, level: 1 });
     expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
+
+  // VIS-06: the card sits in a region sized to the viewport MINUS the bar above
+  // it, not a full viewport of its own — `min-h-screen` under a sticky header
+  // always overflowed, leaving a small card lost in a tall grey panel.
+  it("does not stretch to a full viewport under the header (VIS-06)", () => {
+    render(<NotFound />);
+
+    const main = screen.getByRole("main");
+    expect(main.className.split(/\s+/)).not.toContain("min-h-screen");
+  });
 });

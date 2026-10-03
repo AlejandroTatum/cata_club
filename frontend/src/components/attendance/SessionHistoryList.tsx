@@ -17,6 +17,7 @@ import { ChevronDown, ClipboardList } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { formatDate } from "@/lib/format-utils";
 import {
+  Badge,
   Button,
   Pagination,
   ResponsiveListTable,
@@ -117,6 +118,12 @@ export default function SessionHistoryList({
 
   const renderComposition = (session: SessionSummary): React.ReactElement => (
     <div className="flex w-full min-w-0 flex-col gap-2 sm:min-w-[240px]">
+      {(session.reviewCount ?? 0) > 0 && (
+        // ENT-07: records accepted for a not-operative student or before their enrolment.
+        <Badge tone="warn" className="self-start">
+          {session.reviewCount} por revisar
+        </Badge>
+      )}
       <SessionCompositionBar counts={session.counts} total={session.total} />
       <SessionCompositionCounts
         counts={session.counts}

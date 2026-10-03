@@ -117,13 +117,13 @@ test("members disclose visible results and essential membership information at 3
   ).toHaveText("Activa");
 });
 
-test("members show an incomplete-coverage notice when 200 personas collapse into one account", async ({ page }) => {
+test("members show no incomplete-coverage notice: the aggregate is complete (ADM-03)", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockMembersRuntime(page, [ACCOUNT], true);
 
   await page.goto("/members");
 
   await expect(page.getByRole("status", { name: "Resultados mostrados" })).toHaveText("1 resultado mostrado");
-  await expect(page.getByText(/La fuente devuelve hasta 200 registros/)).toContainText("puede estar incompleto");
+  await expect(page.getByText(/puede estar incompleto/i)).toHaveCount(0);
   await expect(page.getByRole("navigation", { name: /paginación/i })).toHaveCount(0);
 });

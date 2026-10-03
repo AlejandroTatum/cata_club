@@ -70,6 +70,19 @@ export function repetitionsFor(sponsors: number): number {
   return sponsors > 0 ? Math.ceil(TILES_PER_COPY / sponsors) : 1;
 }
 
+/** One logo tile. If the image cannot load, the sponsor's name takes its place, centered. */
+function SponsorLogo({ sponsor }: { sponsor: SponsorItem }): React.ReactElement {
+  const [failed, setFailed] = useState(false);
+  return (
+    <span className="landing-sponsor">
+      {failed
+        ? <span className="landing-sponsor-name">{sponsor.name}</span>
+        // eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset (same pattern as AppShell's avatar / /profile's IdentityPanel)
+        : <img src={sponsor.logoSrc} alt={sponsor.name} width={312} height={120} onError={(): void => setFailed(true)} />}
+    </span>
+  );
+}
+
 type SponsorsState =
   | { kind: "loading" }
   | { kind: "ready"; sponsors: SponsorItem[] }
@@ -128,10 +141,7 @@ export default function Sponsors(): React.ReactElement {
             key={`${sponsor.id}-${duplicate ? "duplicate" : "primary"}-${pass}`}
             aria-hidden={pass > 0 || undefined}
           >
-            <span className="landing-sponsor">
-              {/* eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset (same pattern as AppShell's avatar / /profile's IdentityPanel) */}
-              <img src={sponsor.logoSrc} alt={sponsor.name} width={312} height={120} />
-            </span>
+            <SponsorLogo sponsor={sponsor} />
           </span>
         ))
       ).flat()

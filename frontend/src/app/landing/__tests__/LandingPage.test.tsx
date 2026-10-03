@@ -245,7 +245,7 @@ describe("LandingPage", (): void => {
       it("renders client-pending values from the centralized config", async (): Promise<void> => {
     render(<LandingPage />);
 
-    await waitFor((): void => { expect(screen.getByRole("tablist", { name: "Categorías" })).toBeInTheDocument(); });
+    await waitFor((): void => { expect(screen.getByRole("list", { name: "Categorías" })).toBeInTheDocument(); });
     expect(within(contactHoursRow()).getByText(deriveContactHours(PUBLISHED))).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Cata Club Loja" })).toHaveAttribute("href", landingConfig.contact.facebook);
     expect(screen.getByRole("link", { name: "@cataclub_tenis_de_mesa" })).toHaveAttribute("href", landingConfig.contact.instagram);
@@ -306,16 +306,14 @@ describe("LandingPage", (): void => {
       render(<LandingPage />);
 
       const section = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section") as HTMLElement;
-      await waitFor((): void => { expect(within(section).getByRole("tablist", { name: "Categorías" })).toBeInTheDocument(); });
-      const panel = screen.getByRole("tabpanel");
+      await waitFor((): void => { expect(within(section).getByRole("list", { name: "Categorías" })).toBeInTheDocument(); });
+      const cardOf = (name: string): HTMLElement => within(section).getByRole("heading", { level: 3, name }).closest("li") as HTMLElement;
 
-      fireEvent.click(within(section).getByRole("tab", { name: /formativo/i }));
-      expect(within(panel).getByText("5 a 10 años")).toBeInTheDocument();
+      expect(within(cardOf("Formativo")).getByText("5 a 10 años")).toBeInTheDocument();
 
       // `ages: null` is a legitimate state: the fact disappears, and nothing
       // is invented to fill it.
-      fireEvent.click(within(section).getByRole("tab", { name: /juego libre/i }));
-      expect(panel.querySelector(".landing-schedule-audience")).not.toBeInTheDocument();
+      expect(cardOf("Juego Libre").querySelector(".landing-schedule-ages")).not.toBeInTheDocument();
     });
 
     it("says the club has published nothing yet, in both views, when the catalog is empty", async (): Promise<void> => {
@@ -333,7 +331,7 @@ describe("LandingPage", (): void => {
       // told what happened instead of reading a range nobody published.
       expect(within(contactHoursRow()).getByRole("status")).toHaveTextContent(/Aún no hay horarios|No se pudieron/);
       expect(contactHoursRow()).toHaveTextContent("Horario");
-      expect(within(section).queryByRole("tablist")).not.toBeInTheDocument();
+      expect(within(section).queryByRole("list", { name: "Categorías" })).not.toBeInTheDocument();
     });
 
     it("says the hours could not be loaded, in both views, when the BFF degrades to 503", async (): Promise<void> => {
@@ -374,7 +372,7 @@ describe("LandingPage", (): void => {
       // Nothing survived mapping, so nothing is stated: no range, no leftover
       // category name from a list that no longer exists.
       expect(contactHoursRow()).not.toHaveTextContent(/\d{1,2}:\d{2}/);
-      expect(screen.queryByRole("tablist", { name: "Categorías" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("list", { name: "Categorías" })).not.toBeInTheDocument();
     });
   });
 
@@ -431,56 +429,31 @@ describe("LandingPage", (): void => {
     expect(within(sponsors).queryByRole("img")).not.toBeInTheDocument();
   });
 
-  it("renders every category as a tab in the schedule tablist", async (): Promise<void> => {
+  it("renders one card per published category, plus the help card", async (): Promise<void> => {
     render(<LandingPage />);
 
-    const scheduleSection = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section");
-    expect(scheduleSection).not.toBeNull();
-    await waitFor((): void => { expect(within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" })).toBeInTheDocument(); });
-    const tablist = within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" });
-    const tabs = within(tablist).getAllByRole("tab");
-    expect(tabs).toHaveLength(PUBLISHED.length);
+    const scheduleSection = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section") as HTMLElement;
+    await waitFor((): void => { expect(within(scheduleSection).getByRole("list", { name: "Categorías" })).toBeInTheDocument(); });
+    const cards = within(within(scheduleSection).getByRole("list", { name: "Categorías" })).getAllByRole("listitem")
+      .filter((item): boolean => item.classList.contains("landing-schedule-tile"));
+    expect(cards).toHaveLength(PUBLISHED.length + 1);
 
-    PUBLISHED.forEach((schedule, index): void => {
-      expect(tabs[index]).toHaveTextContent(schedule.category);
-      // Only the FIRST slot's hours, compacted to "HH:MM–HH:MM" — the tab is
-      // a quick reference, not a restatement of every published block.
-      expect(tabs[index]).toHaveTextContent(schedule.slots[0].hours.replace(/\s/g, ""));
+    PUBLISHED.forEach((schedule): void => {
+      const card = within(scheduleSection).getByRole("heading", { level: 3, name: schedule.category }).closest("li") as HTMLElement;
+      // Every published slot is on the card, hours straight from the payload.
+      schedule.slots.forEach((slot): void => { expect(card).toHaveTextContent(slot.hours); });
     });
   });
 
-  /**
-   * Regression guard for the schedule migration to multiple slots per
-   * category (issue #988): the card shows the FIRST slot's schedule in the
-   * large "Horario" fact and one secondary "También …" line per extra
-   * slot — Adultos (weekday morning + evening) and Competitivo (weekday +
-   * Saturday) both publish two.
-   */
-  it("shows the first slot's schedule and a secondary line per extra slot", async (): Promise<void> => {
-    render(<LandingPage />);
-
-    const scheduleSection = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section");
-    await waitFor((): void => { expect(within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" })).toBeInTheDocument(); });
-    const tablist = within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" });
-    const panel = screen.getByRole("tabpanel");
-
-    fireEvent.click(within(tablist).getByRole("tab", { name: /adultos/i }));
-    expect(panel.querySelector(".landing-schedule-time")?.textContent).toContain("08:00–09:15");
-    const adultosSecond = panel.querySelectorAll(".landing-schedule-second");
-    expect(adultosSecond).toHaveLength(1);
-    expect(adultosSecond[0]).toHaveTextContent("También 20:00–21:15 los lunes, martes, miércoles, jueves y viernes.");
-
-    fireEvent.click(within(tablist).getByRole("tab", { name: /competitivo/i }));
-    expect(panel.querySelector(".landing-schedule-time")?.textContent).toContain("18:00–20:00");
-    const competitivoSecond = panel.querySelectorAll(".landing-schedule-second");
-    expect(competitivoSecond).toHaveLength(1);
-    expect(competitivoSecond[0]).toHaveTextContent("También 18:00–20:00 los sábado.");
-  });
-
   it("orders the main content Hero → Ticker → Nosotros → Valores → Stats → Galería → Horarios → CTA → Visítenos", async (): Promise<void> => {
+    // The gallery only has a place in the order once it has photos (VIS-03).
+    publishGallery([
+      { id: 1, titulo: "En juego", descripcion: "Una jugada frente al público de la sala.", imagenUrl: "https://res.cloudinary.com/club/en-juego.jpg" },
+    ]);
     const { container } = render(<LandingPage />);
     const main = container.querySelector("main");
-    await waitFor((): void => { expect(container.querySelector(".landing-schedule-layout")).toBeInTheDocument(); });
+    await waitFor((): void => { expect(container.querySelector(".landing-schedule-grid")).toBeInTheDocument(); });
+    await waitFor((): void => { expect(container.querySelector("[data-carousel]")).toBeInTheDocument(); });
     expect(main).not.toBeNull();
     const sections = Array.from(main?.children ?? []);
     expect(sections[0]?.getAttribute("id")).toBe("inicio");
@@ -496,105 +469,7 @@ describe("LandingPage", (): void => {
       "motto",
       "contacto",
     ]);
-    expect(sections[6]?.querySelector(".landing-schedule-layout")).not.toBeNull();
-  });
-
-  /**
-   * The day balls are data-driven (issue #988): which of `L M X J V S`
-   * lights up comes from the FIRST slot's days, read straight off the
-   * fetched payload — no hardcoded per-category day set survives, and no
-   * leftover legend or lane from the retired timeline does either. Sunday
-   * never lights a ball; a slot that runs on it can only say so in text.
-   */
-  it("lights the day balls from the first slot's real days, never a hardcoded set", async (): Promise<void> => {
-    render(<LandingPage />);
-    const scheduleSection = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section");
-    await waitFor((): void => { expect(within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" })).toBeInTheDocument(); });
-
-    // Mapped the same way the page maps the fetched payload.
-    const schedules = mapPublicSchedules(publicSchedulePayload);
-    fireEvent.click(within(scheduleSection as HTMLElement).getByRole("tab", { name: /competitivo/i }));
-    const competitivo = schedules.find((schedule): boolean => schedule.category === "Competitivo");
-
-    const group = scheduleSection?.querySelector(".landing-schedule-days") as HTMLElement;
-    expect(group).toHaveAttribute("aria-label", competitivo?.slots[0].days);
-    const lit = Array.from(group.querySelectorAll(".landing-schedule-day--on")).map((ball): string => ball.textContent ?? "");
-    expect(lit).toEqual(["L", "M", "X", "J", "V"]);
-
-    // No leftover legend or decorative element from the retired timeline.
-    expect(scheduleSection?.querySelector(".landing-day-legend")).toBeNull();
-    expect(scheduleSection?.querySelector("[data-schedule-ball]")).toBeNull();
-    expect(scheduleSection).not.toHaveTextContent(/Dos bloques por día/);
-  });
-
-  describe("schedule selector — master-detail", (): void => {
-    const getSchedule = async (): Promise<{ tablist: HTMLElement; tabs: HTMLElement[]; panel: HTMLElement }> => {
-      const section = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section") as HTMLElement;
-      await waitFor((): void => { expect(within(section).getByRole("tablist", { name: "Categorías" })).toBeInTheDocument(); });
-      const tablist = within(section).getByRole("tablist", { name: "Categorías" });
-      const tabs = within(tablist).getAllByRole("tab");
-      const panel = screen.getByRole("tabpanel");
-      return { tablist, tabs, panel };
-    };
-
-    it("selects a category on click and points the panel at it", async (): Promise<void> => {
-      render(<LandingPage />);
-      const { tablist, tabs, panel } = await getSchedule();
-
-      fireEvent.click(within(tablist).getByRole("tab", { name: /juvenil/i }));
-
-      expect(tabs[2]).toHaveAttribute("aria-selected", "true");
-      expect(within(panel).getByRole("heading", { level: 3 })).toHaveTextContent("Juvenil");
-      expect(panel.querySelector(".landing-schedule-time")?.textContent).toContain("17:00–18:00");
-    });
-
-    it("moves selection and focus with ArrowDown and ArrowUp", async (): Promise<void> => {
-      render(<LandingPage />);
-      const { tablist, tabs } = await getSchedule();
-
-      fireEvent.keyDown(tablist, { key: "ArrowDown" });
-      expect(tabs[1]).toHaveAttribute("aria-selected", "true");
-      expect(tabs[1]).toHaveFocus();
-
-      fireEvent.keyDown(tablist, { key: "ArrowUp" });
-      expect(tabs[0]).toHaveAttribute("aria-selected", "true");
-      expect(tabs[0]).toHaveFocus();
-    });
-
-    it("wires each tab to the single panel and labels it with the selected tab", async (): Promise<void> => {
-      render(<LandingPage />);
-      const { tabs, panel } = await getSchedule();
-
-      expect(panel).toHaveAttribute("id", "schedule-panel");
-      tabs.forEach((tab, index): void => {
-        expect(tab).toHaveAttribute("id", `schedule-tab-${index}`);
-        expect(tab).toHaveAttribute("aria-controls", "schedule-panel");
-      });
-      expect(panel).toHaveAttribute("aria-labelledby", "schedule-tab-0");
-
-      fireEvent.click(tabs[2]);
-      expect(panel).toHaveAttribute("aria-labelledby", "schedule-tab-2");
-    });
-
-    it("keeps only the selected tab in the tab order via roving tabIndex", async (): Promise<void> => {
-      render(<LandingPage />);
-      const { tabs } = await getSchedule();
-
-      expect(tabs[0]).toHaveAttribute("tabindex", "0");
-      tabs.slice(1).forEach((tab): void => {
-        expect(tab).toHaveAttribute("tabindex", "-1");
-      });
-
-      fireEvent.click(tabs[3]);
-      expect(tabs[3]).toHaveAttribute("tabindex", "0");
-      expect(tabs[0]).toHaveAttribute("tabindex", "-1");
-    });
-
-    it("declares the schedule tablist as vertical", async (): Promise<void> => {
-      render(<LandingPage />);
-      const { tablist } = await getSchedule();
-      expect(tablist).toHaveAttribute("aria-orientation", "vertical");
-    });
+    expect(sections[6]?.querySelector(".landing-schedule-grid")).not.toBeNull();
   });
 
   it("points the hero's primary action at the live enrollment wizard", (): void => {
@@ -950,12 +825,27 @@ describe("LandingPage", (): void => {
    * photos from /galeria. The default fetch stub answers with an empty list,
    * which is the section's real initial state.
    */
-  it("says the gallery is empty until the club publishes photos", async (): Promise<void> => {
+  // VIS-03: an empty gallery is not a section worth showing, nor a nav entry
+  // worth offering — both disappear until the club publishes a photo.
+  it("hides the gallery section and its nav entries while the club has published nothing", async (): Promise<void> => {
     render(<LandingPage />);
 
-    const status = await within(gallerySection()).findByRole("status");
-    expect(status).toHaveTextContent("Aún no hay fotos en la galería.");
-    expect(within(gallerySection()).queryByRole("img")).not.toBeInTheDocument();
+    await waitFor((): void => { expect(document.querySelector("#galeria")).toBeNull(); });
+    expect(screen.queryByRole("heading", { name: "Galería" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Aún no hay fotos en la galería.")).not.toBeInTheDocument();
+    // Neither the navbar nor the footer points at a section that is not there.
+    expect(document.querySelector("a[href='#galeria']")).toBeNull();
+  });
+
+  it("keeps the gallery's nav entries once there are photos to show", async (): Promise<void> => {
+    publishGallery([
+      { id: 1, titulo: "En juego", descripcion: "Una jugada frente al público de la sala.", imagenUrl: "https://res.cloudinary.com/club/en-juego.jpg" },
+    ]);
+
+    render(<LandingPage />);
+
+    await within(gallerySection()).findAllByRole("img");
+    expect(document.querySelectorAll("a[href='#galeria']").length).toBe(2);
   });
 
   it("renders one accessible photo per published entry, caption in the tree", async (): Promise<void> => {
@@ -1644,7 +1534,7 @@ describe("LandingPage", (): void => {
           expect(consoleError).toHaveBeenCalled();
         });
         expect(screen.getAllByRole("link", { name: /inscr/i }).length).toBeGreaterThan(0);
-        expect(screen.getByRole("heading", { name: "Galería" })).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "Misión y Visión" })).toBeInTheDocument();
       } finally {
         consoleError.mockRestore();
         vi.doUnmock("@/app/landing/LandingMotion");

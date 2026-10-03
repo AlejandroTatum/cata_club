@@ -11,6 +11,7 @@ const ACCOUNT: MemberAccount = {
   apellidos: "García",
   telefono: "0999999999",
   accountState: "active",
+  backendRoles: ["REPRESENTANTE"],
   estudiantes: [],
 };
 
@@ -26,5 +27,16 @@ describe.each([
     expect(root).toHaveTextContent("AG");
     expect(root).toHaveTextContent("Representante");
     expect(root).toHaveTextContent("Activa");
+  });
+});
+
+describe("dialog header role caption (ADM-20)", () => {
+  it('shows "Sin rol asignado" for a person with no role and nobody represented', () => {
+    render(
+      <MedicalRecordDialog account={{ ...ACCOUNT, backendRoles: undefined }} onClose={() => {}} />,
+    );
+    const root = screen.getByRole("dialog");
+    expect(root).toHaveTextContent("Sin rol asignado");
+    expect(root).not.toHaveTextContent("Representante");
   });
 });

@@ -370,14 +370,22 @@ function EnrollAfterLogout(): React.ReactElement | null {
 
 describe("EnrollPage — a prior logout in the same tab must not block the next confirmation (#1041)", () => {
   beforeEach(async () => {
+    // REG-11: a signed-in visitor gets a notice, not the wizard, so the
+    // session stays anonymous until the enrolment itself has gone through.
+    let enrolled = false;
     vi.mocked(global.fetch).mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url === "/api/auth/logout") return jsonResponse({ ok: true });
-      if (url === "/api/auth/session") return jsonResponse(NEW_STUDENT_SESSION);
+      if (url === "/api/auth/session") {
+        return enrolled ? jsonResponse(NEW_STUDENT_SESSION) : jsonResponse({ authenticated: false });
+      }
       throw new Error(`unexpected request: ${url}`);
     });
 
-    vi.mocked(enrollStudent).mockResolvedValueOnce({ enrolled: true });
+    vi.mocked(enrollStudent).mockImplementationOnce(async () => {
+      enrolled = true;
+      return { enrolled: true };
+    });
     render(
       <AuthProvider>
         <EnrollAfterLogout />

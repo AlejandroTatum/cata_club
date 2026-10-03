@@ -138,6 +138,14 @@ describe("buildMembershipPlans", () => {
   it("returns an empty array for an empty catalog", () => {
     expect(buildMembershipPlans([])).toEqual([]);
   });
+
+  it("offers only visible tariffs: a hidden one is not a plan to enroll in", () => {
+    const tipos: BackendTipoMembresiaCatalogo[] = [
+      { id: 1, categoria: "Mensual", precio: "85.00", modalidad: "MENSUAL", activo: true },
+      { id: 2, categoria: "ADFA", precio: "22.00", modalidad: "MENSUAL", activo: false },
+    ];
+    expect(buildMembershipPlans(tipos).map((p) => p.nombre)).toEqual(["Mensual"]);
+  });
 });
 
 // Issue #400 (slice 4c-a): plumbing-only — `esGratuidadFamiliar` must survive

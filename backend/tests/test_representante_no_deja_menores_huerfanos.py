@@ -83,7 +83,7 @@ def _dar_de_baja(client, persona_id: int):
 
 # --- PATCH /personas/{id}/cuenta/estado (RolServicio.cambiar_estado_cuenta) --
 
-def test_desactivar_cuenta_con_representado_menor_activo_se_rechaza(client, db_session):
+def test_desactivar_cuenta_con_representado_menor_activo_se_rechaza(client, db_session, admin_ajeno):
     representante = _persona(db_session, "1710034065")
     _usuario(db_session, representante)
     _persona(
@@ -98,7 +98,7 @@ def test_desactivar_cuenta_con_representado_menor_activo_se_rechaza(client, db_s
     assert "vincular" in mensaje
 
 
-def test_desactivar_cuenta_sin_representados_sigue_funcionando(client, db_session):
+def test_desactivar_cuenta_sin_representados_sigue_funcionando(client, db_session, admin_ajeno):
     representante = _persona(db_session, "1710034065")
     _usuario(db_session, representante)
 
@@ -108,7 +108,7 @@ def test_desactivar_cuenta_sin_representados_sigue_funcionando(client, db_sessio
     assert respuesta.json()["activo"] is False
 
 
-def test_desactivar_cuenta_con_representado_mayor_de_edad_no_se_rechaza(client, db_session):
+def test_desactivar_cuenta_con_representado_mayor_de_edad_no_se_rechaza(client, db_session, admin_ajeno):
     """Control: el invariante es sobre MENORES. Un representado que ya
     cumplió la mayoría de edad puede seguir sin representante alcanzable
     (puede independizarse él mismo)."""
@@ -126,7 +126,7 @@ def test_desactivar_cuenta_con_representado_mayor_de_edad_no_se_rechaza(client, 
     assert respuesta.status_code == 200
 
 
-def test_desactivar_cuenta_con_representado_menor_dado_de_baja_no_bloquea(client, db_session):
+def test_desactivar_cuenta_con_representado_menor_dado_de_baja_no_bloquea(client, db_session, admin_ajeno):
     """`PersonaRepositorio.listar_representados` ya filtra por
     `activo=True`: un representado que dejó el club no es alguien a quien
     haya que seguir reasignando."""
@@ -144,7 +144,7 @@ def test_desactivar_cuenta_con_representado_menor_dado_de_baja_no_bloquea(client
     assert respuesta.status_code == 200
 
 
-def test_tras_reasignar_al_representado_menor_la_desactivacion_procede(client, db_session):
+def test_tras_reasignar_al_representado_menor_la_desactivacion_procede(client, db_session, request):
     representante = _persona(db_session, "1710034065")
     _usuario(db_session, representante)
     nuevo_representante = _persona(db_session, "1710034081", nombres="Diego")
@@ -159,6 +159,8 @@ def test_tras_reasignar_al_representado_menor_la_desactivacion_procede(client, d
     )
     assert reasignacion.status_code == 200
 
+    # El vínculo lo hace el admin por defecto; desactivar, uno ajeno (ADM-10).
+    request.getfixturevalue("admin_ajeno")
     respuesta = _desactivar_cuenta(client, representante.id)
 
     assert respuesta.status_code == 200
@@ -181,7 +183,7 @@ def test_activar_una_cuenta_ya_activa_no_pasa_por_el_candado(client, db_session)
 
 # --- PATCH /personas/{id}/estado (PersonaServicio.cambiar_estado) -----------
 
-def test_dar_de_baja_con_representado_menor_activo_se_rechaza(client, db_session):
+def test_dar_de_baja_con_representado_menor_activo_se_rechaza(client, db_session, admin_ajeno):
     representante = _persona(db_session, "1710034065")
     _usuario(db_session, representante)
     _persona(
@@ -196,7 +198,7 @@ def test_dar_de_baja_con_representado_menor_activo_se_rechaza(client, db_session
     assert "vincular" in mensaje
 
 
-def test_dar_de_baja_sin_representados_sigue_funcionando(client, db_session):
+def test_dar_de_baja_sin_representados_sigue_funcionando(client, db_session, admin_ajeno):
     representante = _persona(db_session, "1710034065")
     _usuario(db_session, representante)
 

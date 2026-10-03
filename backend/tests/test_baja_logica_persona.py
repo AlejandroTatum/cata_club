@@ -29,6 +29,7 @@ from app.dominio.modelos import (
 )
 from app.infraestructura.db import obtener_sesion
 from app.seguridad.gestor_auth import GestorAutenticacion
+from app.servicios_negocio.auth_servicio import MENSAJE_CUENTA_INACTIVA
 from main import app
 
 
@@ -159,7 +160,7 @@ def test_persona_nace_activa(client, db_session):
     assert respuesta.json()["activo"] is True
 
 
-def test_desactivar_persona_tambien_desactiva_su_usuario(client, db_session):
+def test_desactivar_persona_tambien_desactiva_su_usuario(client, db_session, admin_ajeno):
     persona = _crear_persona(db_session)
     usuario = _crear_usuario(db_session, persona)
 
@@ -181,7 +182,7 @@ def test_desactivar_persona_sin_usuario_no_revienta(client, db_session):
     assert respuesta.json()["activo"] is False
 
 
-def test_persona_desactivada_no_puede_iniciar_sesion(client, db_session):
+def test_persona_desactivada_no_puede_iniciar_sesion(client, db_session, admin_ajeno):
     persona = _crear_persona(db_session)
     usuario = _crear_usuario(db_session, persona, contrasenia="Secreta123")
     _desactivar(client, persona.id)
@@ -191,7 +192,59 @@ def test_persona_desactivada_no_puede_iniciar_sesion(client, db_session):
         data={"username": usuario.correo, "password": "Secreta123"},
     )
 
+    assert respuesta.status_code == 403
+    assert "access_token" not in respuesta.text
+
+
+def test_persona_desactivada_con_la_contrasena_correcta_recibe_el_mensaje_de_cuenta_inactiva(client, db_session, admin_ajeno):
+    """REG-10: quien conoce su contraseña y está dado de baja ya no recibe el
+    "Correo o contraseña incorrectos" que lo mandaba en círculo: se le dice que
+    su cuenta está inactiva y que escriba al club. Es seguro decirlo porque
+    solo lo ve quien acertó la contraseña."""
+    persona = _crear_persona(db_session)
+    usuario = _crear_usuario(db_session, persona, contrasenia="Secreta123")
+    _desactivar(client, persona.id)
+
+    respuesta = client.post(
+        "/api/v1/auth/login",
+        data={"username": usuario.correo, "password": "Secreta123"},
+    )
+
+    assert respuesta.status_code == 403
+    cuerpo = respuesta.json()
+    assert cuerpo["message"] == MENSAJE_CUENTA_INACTIVA
+    assert cuerpo["mensaje_seguro"] is True
+
+
+def test_cuenta_suspendida_con_la_contrasena_correcta_recibe_el_mismo_mensaje(client, db_session):
+    persona = _crear_persona(db_session)
+    usuario = _crear_usuario(db_session, persona, contrasenia="Secreta123")
+    usuario.activo = False
+    db_session.commit()
+
+    respuesta = client.post(
+        "/api/v1/auth/login",
+        data={"username": usuario.correo, "password": "Secreta123"},
+    )
+
+    assert respuesta.status_code == 403
+    assert respuesta.json()["message"] == MENSAJE_CUENTA_INACTIVA
+
+
+def test_persona_desactivada_con_contrasena_incorrecta_no_delata_el_estado(client, db_session):
+    """El mensaje de cuenta inactiva no puede ser un oráculo: con una
+    contraseña equivocada la respuesta es la de siempre."""
+    persona = _crear_persona(db_session)
+    usuario = _crear_usuario(db_session, persona, contrasenia="Secreta123")
+    _desactivar(client, persona.id)
+
+    respuesta = client.post(
+        "/api/v1/auth/login",
+        data={"username": usuario.correo, "password": "Equivocada1"},
+    )
+
     assert respuesta.status_code == 401
+    assert respuesta.json()["message"] == "Correo o contraseña incorrectos"
 
 
 def test_reactivar_persona_sube_la_bandera(client, db_session):
@@ -204,7 +257,7 @@ def test_reactivar_persona_sube_la_bandera(client, db_session):
     assert respuesta.json()["activo"] is True
 
 
-def test_reactivar_persona_no_reactiva_la_cuenta(client, db_session):
+def test_reactivar_persona_no_reactiva_la_cuenta(client, db_session, admin_ajeno):
     """Decisión explícita: el estado de la CUENTA es una preocupación
     separada del estado de MEMBRESÍA. Reactivar a alguien en el club no le
     devuelve solo el acceso al sistema -- eso se hace, si corresponde, con

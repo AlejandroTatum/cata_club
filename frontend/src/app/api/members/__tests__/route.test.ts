@@ -93,7 +93,7 @@ describe("GET /api/members", () => {
     expect(response.status).toBe(200);
     expect(body.accounts).toHaveLength(1);
     expect(body.accounts[0]).toMatchObject({ id: "3", role: "representante", estudiantes: [{ activo: false }] });
-    expect(body.personasCapped).toBe(false);
+    expect(body.personasCapped).toBeUndefined();
   });
 
   // Issue #1132: closes gap #1 (members-adapter.ts's module doc) — `role`
@@ -117,7 +117,7 @@ describe("GET /api/members", () => {
     expect(body.accounts[0]).toMatchObject({ role: "estudiante", backendRoles: ["ALUMNO"] });
   });
 
-  it("preserves the upstream cap when 200 personas expand into one row each", async () => {
+  it("keeps one row per persona when exactly 200 personas expand", async () => {
     // Issue #388: `buildMemberAccounts` no longer collapses a root and its
     // represented personas into one grouped account — every persona gets its
     // own row now. `personasCapped` has to keep reflecting the raw upstream
@@ -145,9 +145,68 @@ describe("GET /api/members", () => {
     // root persona (id 1) it points at via `representanteId`.
     const represented = body.accounts.find((account: { id: string }) => account.id === "2");
     expect(represented.representadoPor).toBe(`${persona.nombres} ${persona.apellidos}`);
-    // The cap flag still derives from the raw upstream `total` (200 >=
-    // PERSONAS_PAGE_LIMIT), independent of how many account rows come out.
-    expect(body.personasCapped).toBe(true);
+    // The list is complete, so there is no "capped" flag to report any more.
+    expect(body.personasCapped).toBeUndefined();
+  });
+
+  it("pages /personas/ until every persona is in hand (ADM-03)", async () => {
+    const personas = Array.from({ length: 258 }, (_, index) => ({
+      ...persona,
+      id: index + 1,
+      representanteId: null,
+    }));
+    vi.mocked(global.fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/personas/roles/bulk")) return Promise.resolve(jsonResponse([]));
+      if (url.includes("/personas/")) {
+        const skip = Number(new URL(url).searchParams.get("skip") ?? 0);
+        return Promise.resolve(
+          jsonResponse({ items: personas.slice(skip, skip + 200), total: 258, skip, limit: 200 }),
+        );
+      }
+      if (url.includes("/membresias/tipos")) return Promise.resolve(jsonResponse([tipo]));
+      if (url.includes("/fichas-medicas/existe")) {
+        return Promise.resolve(jsonResponse({ personaIdsConFicha: [] }));
+      }
+      return Promise.resolve(jsonResponse({ items: [], total: 0, skip: 0, limit: 200 }));
+    });
+
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.accounts).toHaveLength(258);
+    const urls = vi.mocked(global.fetch).mock.calls.map((call) => String(call[0]));
+    expect(urls).toContain("http://localhost:8000/api/v1/personas/?skip=0&limit=200");
+    expect(urls).toContain("http://localhost:8000/api/v1/personas/?skip=200&limit=200");
+    // The bulk lookups cap at 200 ids per request, so 258 personas take two each.
+    expect(urls.filter((url) => url.includes("/fichas-medicas/existe"))).toHaveLength(2);
+    expect(urls.filter((url) => url.includes("/personas/roles/bulk"))).toHaveLength(2);
+  });
+
+  it("fails with the backend status instead of serving a partial list when a later persona page fails", async () => {
+    vi.mocked(global.fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/personas/")) {
+        const skip = Number(new URL(url).searchParams.get("skip") ?? 0);
+        return Promise.resolve(
+          skip === 0
+            ? jsonResponse({
+                items: Array.from({ length: 200 }, (_, index) => ({ ...persona, id: index + 1 })),
+                total: 258,
+                skip: 0,
+                limit: 200,
+              })
+            : jsonResponse({ detail: "boom" }, 500),
+        );
+      }
+      if (url.includes("/membresias/tipos")) return Promise.resolve(jsonResponse([tipo]));
+      return Promise.resolve(jsonResponse({ items: [], total: 0, skip: 0, limit: 200 }));
+    });
+
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
+
+    expect(response.status).toBe(500);
   });
 
   it("propagates the backend's status and message when /personas/ fails", async () => {

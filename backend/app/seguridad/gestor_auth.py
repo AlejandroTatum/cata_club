@@ -379,6 +379,8 @@ class GestorAutenticacion:
         # rechaza a las verificadas), así que sin esta excepción el gate la
         # bloqueaba SIEMPRE: la única puerta para corregir un correo mal
         # tipeado quedaba cerrada para quien la necesita.
+        # Carve-out de cambio de contraseña (FAM-17): autoservicio propio vía
+        # `sub`, sin ids de path ni módulos del club; verifica la clave actual.
         ruta = request.url.path.rstrip("/")
         es_superficie_limitada = (
             ruta.endswith("/auth/me")
@@ -386,6 +388,7 @@ class GestorAutenticacion:
             or ruta.endswith("/auth/me/sesiones")
             or ruta.endswith("/auth/sesiones/invalidar")
             or ruta.endswith("/auth/correo")
+            or ruta.endswith("/auth/contrasenia/cambiar")
             or ruta.startswith("/api/v1/personas")
         )
         if not es_superficie_limitada and not GestorAutenticacion.puede_acceder_modulos(db, usuario):

@@ -115,7 +115,9 @@ import {
   buildApprovalChecklist,
   classifyPaymentMethod,
   composeRejectionReason,
-  REJECTION_REASONS,
+  rejectionPayerNotice,
+  rejectionReasonsFor,
+  uploadedAtLabel,
   REJECTION_NOTE_MAX_LENGTH,
   requiresExceptionReason,
   EXCEPTION_REASON_MAX_LENGTH,
@@ -1096,6 +1098,20 @@ export default function PaymentsPage(): React.ReactElement {
     }
 
     if (real && real.validationStatus !== "pendiente") {
+      // QA3 ADM-15: a 400 here is the backend saying the payment is no longer
+      // pending ("este pago ya está ..."): another admin resolved it first.
+      // That is not a connection problem, so say so and refresh the list.
+      if ((err as { status?: unknown } | null)?.status === 400) {
+        applyDecision(real);
+        void loadLightTotals();
+        void loadPage();
+        void loadPendingAll();
+        const resolvedAs = real.validationStatus === "validado" ? "aprobado" : "rechazado";
+        showWarning(`${confirmation.label}: otro administrador ya resolvió este pago.`, {
+          description: `${request.studentName}: el pago ya figura como ${resolvedAs}. Se actualizó la lista con el estado real.`,
+        });
+        return;
+      }
       // The write landed anyway — a ghost write on a dropped connection, or
       // another tab/admin got there first with the same outcome. Either way
       // the server's own record is now the truth, so sync to it and say so
@@ -1661,7 +1677,7 @@ export default function PaymentsPage(): React.ReactElement {
                 <DetailCell label="Método">
                   <DataBox>{request.paymentMethod}</DataBox>
                 </DetailCell>
-                <DetailCell label="Subido el">
+                <DetailCell label={uploadedAtLabel(paymentKind)}>
                   <DataBox>{formatDateTime(request.uploadedAt)}</DataBox>
                 </DetailCell>
                 <DetailCell label="Membresía">
@@ -1832,15 +1848,14 @@ export default function PaymentsPage(): React.ReactElement {
                     {/* Rejection is destructive for the payer — it stops their
                         enrolment — so the warning names them (prototype 11). */}
                     <p className="rounded-ctl border border-line bg-canvas px-3 py-2.5 text-xs text-ink-2">
-                      {payer} va a recibir este motivo tal cual y va a tener que subir un comprobante
-                      nuevo. {rejectionCoverageNote(request)}
+                      {rejectionPayerNotice(paymentKind, payer)} {rejectionCoverageNote(request)}
                     </p>
 
                     <fieldset className="flex flex-col gap-2">
                       <legend className="mb-1 text-2xs font-bold uppercase text-ink-3">
                         Motivo <span className="text-state-bad">*</span>
                       </legend>
-                      {REJECTION_REASONS.map((reason) => (
+                      {rejectionReasonsFor(paymentKind).map((reason) => (
                         <label
                           key={reason.key}
                           className={`flex cursor-pointer gap-3 rounded-ctl border px-3.5 py-3 ${

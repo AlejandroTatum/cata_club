@@ -155,6 +155,19 @@ describe("ActividadPage — Resumen", () => {
     expect(within(card).getAllByRole("listitem")).toHaveLength(3);
   });
 
+  it("does not mention the daily email limit when nothing is waiting for it", async () => {
+    await renderResumen();
+    expect(screen.queryByTestId("queued-by-quota")).toBeNull();
+  });
+
+  it("tells the admin how many emails wait for the daily limit", async () => {
+    mockResumen.mockResolvedValue({ ...resumenFixture("7d"), queuedByQuota: 3 });
+    await renderResumen();
+    expect(screen.getByTestId("queued-by-quota")).toHaveTextContent(
+      "3 correos esperan el reinicio del límite diario y se enviarán mañana.",
+    );
+  });
+
   it("says how fresh the figures are instead of calling them a demo", async () => {
     await renderResumen();
     expect(within(screen.getByTestId("system-status")).getByText("Actualizado ahora")).toBeInTheDocument();

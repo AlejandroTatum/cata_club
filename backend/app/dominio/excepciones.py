@@ -68,6 +68,16 @@ class OperacionInvalida(ErrorDominio):
     pass
 
 
+class MembresiaPendienteDePago(OperacionInvalida):
+    """La persona ya tiene una membresía INACTIVA con un pago pendiente
+    (-> HTTP 400). Lleva el id de esa membresía para que la UI la enlace;
+    el manejador global lo agrega al cuerpo como `membresia_id`."""
+
+    def __init__(self, mensaje: str, membresia_id: int):
+        super().__init__(mensaje)
+        self.membresia_id = membresia_id
+
+
 class CredencialesInvalidas(ErrorDominio):
     """Login fallido (-> HTTP 401)."""
     pass
@@ -82,6 +92,13 @@ class ServicioNoDisponible(ErrorDominio):
     """Una dependencia necesaria para completar la operación no respondió,
     ej. el broker de tareas al encolar un envío de correo (-> HTTP 503)."""
     pass
+
+
+class CupoCorreoDiarioAgotado(ServicioNoDisponible):
+    """El tope diario de correos se agotó. Solo se levanta cuando quien envía
+    lo pide (`ServicioNotificaciones(levantar_si_cupo_agotado=True)`): una cola
+    de salida necesita saber que NO se envió para dejar la fila pendiente y
+    reintentarla al día siguiente, en vez de darla por entregada."""
 
 
 class DestinatarioRechazadoPermanentemente(ServicioNoDisponible):
@@ -109,6 +126,20 @@ class DestinatarioRechazadoPermanentemente(ServicioNoDisponible):
     `detalle_tecnico` lleva el código y el texto del proveedor ya redactados
     (`notificaciones_servicio._redactar_detalle_sensible`), que es lo que se
     persiste como auditoría."""
+    pass
+
+
+class NombreDuplicado(ErrorDominio):
+    """El nombre de un elemento de catálogo ya lo tiene otro (-> HTTP 409,
+    QA3 ADM-11). Ver `app.dominio.nombres_catalogo` para qué cuenta como el
+    mismo nombre."""
+    pass
+
+
+class RecursoEnUso(ErrorDominio):
+    """Se intentó borrar un elemento de catálogo que el club ya usó (-> HTTP
+    409). Es un conflicto con el estado actual de los datos, no un dato
+    inválido: el camino es ocultarlo, no borrarlo."""
     pass
 
 

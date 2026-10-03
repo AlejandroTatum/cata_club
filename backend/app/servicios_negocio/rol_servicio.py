@@ -124,6 +124,19 @@ class RolServicio:
             detalle_tecnico=f"solicitante persona_id={persona_id_solicitante} es el titular",
         )
 
+    def asegurar_que_no_se_desactiva_a_si_mismo(
+        self, persona_id: int, persona_id_solicitante: int | None
+    ) -> None:
+        """QA3 ADM-10: nadie desactiva su propia cuenta (ni la da de baja);
+        lo hace otro administrador. Mismo criterio que quitarse el rol."""
+        if persona_id_solicitante is None or persona_id != persona_id_solicitante:
+            return
+        raise OperacionInvalida(
+            "No puede desactivar su propia cuenta: perdería el acceso de "
+            "inmediato. Pídale a otro administrador que lo haga.",
+            detalle_tecnico=f"solicitante persona_id={persona_id_solicitante} es el titular",
+        )
+
     def quitar_rol(
         self,
         persona_id: int,
@@ -206,9 +219,12 @@ class RolServicio:
         return True
 
     # --- E01-RF013: activar/desactivar cuenta sin borrar datos -------------
-    def cambiar_estado_cuenta(self, persona_id: int, activo: bool) -> Usuario:
+    def cambiar_estado_cuenta(
+        self, persona_id: int, activo: bool, persona_id_solicitante: int | None = None,
+    ) -> Usuario:
         usuario = self._obtener_usuario_de_persona(persona_id)
         if not activo:
+            self.asegurar_que_no_se_desactiva_a_si_mismo(persona_id, persona_id_solicitante)
             self._asegurar_que_queda_otro_administrador(usuario, "desactivar esta cuenta")
             # Issue #1139: desactivar esta cuenta no puede dejar a un menor
             # representado sin nadie que pueda acceder a su ficha.

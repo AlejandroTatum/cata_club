@@ -46,11 +46,10 @@ function Fact(props: { label: string; value: string; dark?: boolean }): ReactEle
         {props.label}
       </dt>
       <dd
-        title={props.value || undefined}
         className={cn(
           "text-right text-sm",
           props.value
-            ? "min-w-0 truncate font-semibold tabular-nums"
+            ? "min-w-0 break-words font-semibold tabular-nums"
             : props.dark
               ? "text-white/75"
               : "text-ink-3-strong",

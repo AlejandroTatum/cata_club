@@ -63,6 +63,7 @@ export type BackendProxyResult =
 
 const STATUS_BY_ERROR: Record<AuthErrorCode, number> = {
   invalid_credentials: 401,
+  account_inactive: 403,
   // See the note in src/app/api/auth/login/route.ts — a misconfigured server
   // is a 500, so nothing downstream retries a permanently broken request.
   config_error: 500,
@@ -153,12 +154,15 @@ export async function passthroughBackendError(response: Response, fallback: stri
   let message = fallback;
   let mensajeSeguro = false;
   let validationLoc: string[] | undefined;
+  let membresiaId: number | undefined;
   try {
     const body: unknown = await response.json();
     if (typeof body === "object" && body !== null) {
       const b = body as Record<string, unknown>;
       message = (typeof b.message === "string" && b.message) || (typeof b.detail === "string" && b.detail) || fallback;
       mensajeSeguro = b.mensaje_seguro === true;
+      // QA3 ADM-08: the id of the existing membership, so the UI can link to it.
+      if (typeof b.membresia_id === "number") membresiaId = b.membresia_id;
       if (response.status === 422 && Array.isArray(b.detail)) {
         const first = b.detail[0];
         if (typeof first === "object" && first !== null && Array.isArray((first as Record<string, unknown>).loc)) {
@@ -175,6 +179,7 @@ export async function passthroughBackendError(response: Response, fallback: stri
     message,
     mensaje_seguro: mensajeSeguro,
     ...(validationLoc ? { validation_loc: validationLoc } : {}),
+    ...(membresiaId !== undefined ? { membresia_id: membresiaId } : {}),
   }, { status: response.status, headers: response.headers.get("X-Request-ID") ? { "X-Request-ID": response.headers.get("X-Request-ID")! } : {} });
 }
 

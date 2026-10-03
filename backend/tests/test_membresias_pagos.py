@@ -6,6 +6,7 @@ from typing import get_args
 import pytest
 
 from app.dominio.cedula import cedula_valida
+from tests.nombres_validos import nombre_unico
 from app.dominio.enums import EstadoMembresia, EstadoPago
 from app.dominio.modelos import AsignacionDescuento, CoberturaBonificada, Descuento, Membresia, Pago, Persona
 from app.presentacion.routers import membresias_pagos_router as membresias_pagos_router_mod
@@ -13,6 +14,7 @@ from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.dtos.membresia_pago_schemas import MembresiaResponseDTO
 from app.servicios_negocio.membresia_pago_servicio import PagoServicio
 from tests.fabricas_pagos import (
+    nombre_tarifa_unico,
     crear_membresia_api, crear_membresia_orm, crear_pago_orm, crear_persona_api,
     crear_persona_orm, crear_tipo_membresia_api, crear_tipo_membresia_orm,
     registrar_pago_api,
@@ -33,7 +35,7 @@ def _crear_tipo_membresia(client, modalidad="MENSUAL"):
     return client.post(
         "/api/v1/membresias/tipos",
         json={
-            "categoria": "Adultos",
+            "categoria": nombre_tarifa_unico(),
             "precio": "35.00", "modalidad": modalidad,
         },
     ).json()
@@ -1230,7 +1232,7 @@ def _crear_alumno_con_representante(client, cedula, representante_id):
     return client.post(
         "/api/v1/personas/",
         json={
-            "nombres": "Alumno", "apellidos": f"Familia{cedula}", "cedula": cedula,
+            "nombres": "Alumno", "apellidos": nombre_unico(cedula, "Familia"), "cedula": cedula,
             "fecha_nacimiento": "2010-05-14", "telefono": "0991234567",
             "representante_id": representante_id,
         },
@@ -1758,3 +1760,22 @@ def test_presencial_guardia_primera_inscripcion_bajo_mismo_lock(db_session, monk
     # lectura sin lock participó de ella.
     assert llamadas["con_lock"] >= 1
     assert llamadas["sin_lock"] == 0
+
+
+# --- FAM-05: la familia ve por qué está suspendida la membresía -------------
+def test_membresia_suspendida_expone_el_motivo_de_la_ultima_suspension(client, db_session):
+    persona, membresia, _ = _persona_con_cobertura_combinada(db_session, 925)
+    client.post(f"/api/v1/membresias/{membresia.id}/suspender", json={"motivo": "Lesión de rodilla"})
+
+    mias = client.get(f"/api/v1/membresias/mias?persona_id={persona.id}")
+    assert mias.status_code == 200
+    assert mias.json()[0]["motivoSuspension"] == "Lesión de rodilla"
+
+
+def test_membresia_activa_no_expone_motivo_de_suspension(client, db_session):
+    persona, membresia, _ = _persona_con_cobertura_combinada(db_session, 926)
+    client.post(f"/api/v1/membresias/{membresia.id}/suspender", json={"motivo": "Lesión de rodilla"})
+    client.post(f"/api/v1/membresias/{membresia.id}/reactivar", json={"motivo": "Recuperado"})
+
+    mias = client.get(f"/api/v1/membresias/mias?persona_id={persona.id}")
+    assert mias.json()[0]["motivoSuspension"] is None

@@ -10,7 +10,8 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.dominio.excepciones import EntidadDuplicada, EntidadNoEncontrada, OperacionInvalida
+from app.dominio.excepciones import EntidadNoEncontrada, NombreDuplicado, OperacionInvalida, RecursoEnUso
+from app.dominio.nombres_catalogo import existe_nombre, normalizar_nombre
 from app.dominio.modelos import Descuento
 from app.infraestructura.repositorios.descuento_repositorio import DescuentoRepositorio
 from app.servicios_negocio.dtos.descuento_schemas import DescuentoCreateDTO, DescuentoUpdateDTO
@@ -20,29 +21,62 @@ MENSAJE_DESCUENTO_AMBIGUO = (
 )
 
 
+class DescuentoEnUso(RecursoEnUso):
+    """Se intentó eliminar un descuento que ya se usó (-> 409)."""
+
+
 class DescuentoServicio:
     def __init__(self, db: Session):
         self.db = db
         self.repo = DescuentoRepositorio(db)
 
+    def _exigir_nombre_libre(self, nombre: str, excluir_id: Optional[int] = None) -> None:
+        """QA3 ADM-11: sin duplicados por mayúsculas ni espacios (las tildes
+        distinguen). El catálogo es chico, así que se compara en Python."""
+        otros = [d.nombre for d in self.repo.listar() if d.id != excluir_id]
+        if existe_nombre(nombre, otros):
+            raise NombreDuplicado(f"Ya existe un descuento con el nombre '{nombre}'.")
+
     def crear(self, datos: DescuentoCreateDTO) -> Descuento:
-        if self.repo.obtener_por_nombre(datos.nombre):
-            raise EntidadDuplicada(f"Ya existe un descuento con el nombre '{datos.nombre}'")
-        resultado = self.repo.crear(Descuento(**datos.model_dump()))
+        nombre = normalizar_nombre(datos.nombre)
+        self._exigir_nombre_libre(nombre)
+        resultado = self.repo.crear(Descuento(**{**datos.model_dump(), "nombre": nombre}))
         self.db.commit()
-        return resultado
+        return self._marcar_en_uso([resultado])[0]
+
+    def _marcar_en_uso(self, descuentos: list[Descuento]) -> list[Descuento]:
+        """Anota `en_uso` (atributo transitorio, no columna) para el DTO."""
+        usados = self.repo.ids_en_uso([d.id for d in descuentos])
+        for descuento in descuentos:
+            descuento.en_uso = descuento.id in usados
+        return descuentos
 
     def listar(self, skip: int = 0, limit: Optional[int] = None) -> list[Descuento]:
-        return self.repo.listar(skip=skip, limit=limit)
+        return self._marcar_en_uso(self.repo.listar(skip=skip, limit=limit))
+
+    def eliminar(self, descuento_id: int) -> None:
+        """Borrado duro, solo de un descuento que nunca se usó. Si se usó, el
+        camino es ocultarlo (`activo=False`)."""
+        descuento = self._obtener_sin_marcar(descuento_id)
+        if self.repo.ids_en_uso([descuento.id]):
+            raise DescuentoEnUso(
+                f"No se puede eliminar el descuento '{descuento.nombre}' porque ya se "
+                "aplicó o se asignó. Puede ocultarlo para que deje de ofrecerse."
+            )
+        self.repo.eliminar(descuento)
+        self.db.commit()
 
     def contar(self) -> int:
         return self.repo.contar()
 
-    def obtener(self, descuento_id: int) -> Descuento:
+    def _obtener_sin_marcar(self, descuento_id: int) -> Descuento:
         descuento = self.repo.obtener_por_id(descuento_id)
         if not descuento:
             raise EntidadNoEncontrada(f"Descuento con id {descuento_id} no encontrado")
         return descuento
+
+    def obtener(self, descuento_id: int) -> Descuento:
+        return self._marcar_en_uso([self._obtener_sin_marcar(descuento_id)])[0]
 
     def actualizar(self, descuento_id: int, datos: DescuentoUpdateDTO) -> Descuento:
         """Actualización parcial del catálogo (incluida la baja/alta suave
@@ -52,13 +86,12 @@ class DescuentoServicio:
         La exclusividad porcentaje/monto se valida sobre el estado RESULTANTE
         antes de mutar la entidad, para no dejar una fila sucia en la sesión
         si el cambio es inválido."""
-        descuento = self.obtener(descuento_id)
+        descuento = self._obtener_sin_marcar(descuento_id)
         cambios = datos.model_dump(exclude_unset=True)
 
-        nombre_nuevo = cambios.get("nombre")
-        if nombre_nuevo and nombre_nuevo != descuento.nombre:
-            if self.repo.obtener_por_nombre(nombre_nuevo):
-                raise EntidadDuplicada(f"Ya existe un descuento con el nombre '{nombre_nuevo}'")
+        if cambios.get("nombre"):
+            cambios["nombre"] = normalizar_nombre(cambios["nombre"])
+            self._exigir_nombre_libre(cambios["nombre"], excluir_id=descuento.id)
 
         porcentaje_final = cambios.get("porcentaje", descuento.porcentaje)
         monto_final = cambios.get("monto", descuento.monto)
@@ -69,4 +102,5 @@ class DescuentoServicio:
             setattr(descuento, campo, valor)
         resultado = self.repo.guardar_cambios(descuento)
         self.db.commit()
+        self._marcar_en_uso([resultado])
         return resultado

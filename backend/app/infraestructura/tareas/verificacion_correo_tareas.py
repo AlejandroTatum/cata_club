@@ -31,7 +31,7 @@ def _enviar_enlace(usuario: Usuario) -> None:
     ya está cargado acá, así que el correo no tiene por qué abrir con un
     "Hola," genérico cuando el nombre está a un atributo de distancia."""
     token = GestorAutenticacion.crear_token_verificacion_correo(usuario.correo)
-    ServicioNotificaciones().enviar_verificacion_correo(usuario.correo, token, usuario.persona.nombres)
+    ServicioNotificaciones(levantar_si_cupo_agotado=True).enviar_verificacion_correo(usuario.correo, token, usuario.persona.nombres)
 
 
 @celery_app.task(

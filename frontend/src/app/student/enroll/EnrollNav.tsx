@@ -1,5 +1,5 @@
 /**
- * The wizard's one navigation row, at the top of the step card:
+ * The wizard's one navigation row, at the foot of the step content (REG-21):
  * `Atrás | Stepper | Siguiente`.
  *
  * On desktop it is a single row. Below `md` the stepper takes its own row and
@@ -30,7 +30,7 @@ export default function EnrollNav(props: EnrollNavProps): ReactElement {
     <div
       data-testid="enroll-nav"
       data-enroll-nav
-      className="mb-page flex flex-wrap items-center justify-between gap-x-page gap-y-section md:flex-nowrap"
+      className="mt-page flex flex-wrap items-center justify-between gap-x-page gap-y-section md:flex-nowrap"
     >
       <div className="min-w-24">
         {!props.isFirst && (

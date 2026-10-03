@@ -10,9 +10,10 @@ Reglas del servicio:
 from __future__ import annotations
 
 import io
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from decimal import Decimal
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 from fastapi import Response
 from reportlab.lib import colors
@@ -25,7 +26,8 @@ from reportlab.platypus import (
     HRFlowable,
 )
 
-from app.soporte_transversal.tiempo import ahora_club
+from app.soporte_transversal.formato import formatear_monto_usd
+from app.soporte_transversal.tiempo import ZONA_HORARIA_CLUB, ahora_club
 
 _LOGO_PATH = Path(__file__).parent / "assets" / "cata-club-logo.jpeg"
 _ROJO_INSTITUCIONAL = "#D92128"
@@ -68,7 +70,7 @@ def generar_comprobante_pago_pdf(
     pago_id: int,
     persona_nombre: str,
     persona_cedula: str,
-    persona_telefono: str,
+    persona_telefono: str | None,
     membresia_id: int,
     membresia_categoria: str,
     monto: Decimal,
@@ -100,6 +102,12 @@ def generar_comprobante_pago_pdf(
     El buffer se cierra internamente para liberar conexiones de ReportLab.
     """
     buffer = io.BytesIO()
+    # La fecha impresa es una hora que una familia lee en papel: se muestra en
+    # la zona del club, no en la UTC con que se guarda. Un valor sin zona se
+    # toma como UTC, que es el contrato de almacenamiento.
+    if fecha_aprobacion.tzinfo is None:
+        fecha_aprobacion = fecha_aprobacion.replace(tzinfo=timezone.utc)
+    fecha_aprobacion = fecha_aprobacion.astimezone(ZONA_HORARIA_CLUB)
 
     doc = SimpleDocTemplate(
         buffer,
@@ -138,19 +146,20 @@ def generar_comprobante_pago_pdf(
 
         Paragraph(f"<b>Nº de comprobante:</b> P-{fecha_aprobacion.year}-{pago_id:06d}", cuerpo),
         Paragraph(
-            f"<b>Fecha de aprobación:</b> {fecha_aprobacion.strftime('%d/%m/%Y %H:%M')}",
+            f"<b>Fecha de aprobación:</b> "
+            f"{fecha_aprobacion.strftime('%d/%m/%Y %H:%M')} (hora de Ecuador)",
             cuerpo,
         ),
         Spacer(1, 10),
 
         Paragraph("<b>Datos del alumno</b>", estilos["Heading3"]),
-        Paragraph(f"Nombre: {persona_nombre}", cuerpo),
-        Paragraph(f"Cédula: {persona_cedula}", cuerpo),
-        Paragraph(f"Teléfono: {persona_telefono}", cuerpo),
+        Paragraph(f"Nombre: {escape(persona_nombre)}", cuerpo),
+        Paragraph(f"Cédula: {escape(persona_cedula)}", cuerpo),
+        Paragraph(f"Teléfono: {escape(persona_telefono or 'No registrado')}", cuerpo),
         Spacer(1, 10),
 
         Paragraph("<b>Detalle de la membresía</b>", estilos["Heading3"]),
-        Paragraph(f"Categoría: {membresia_categoria}", cuerpo),
+        Paragraph(f"Categoría: {escape(membresia_categoria)}", cuerpo),
         Paragraph(f"Membresía Nº: {membresia_id}", cuerpo),
         Spacer(1, 10),
 
@@ -159,8 +168,8 @@ def generar_comprobante_pago_pdf(
 
     tabla_datos: list[list[str]] = [
         ["Concepto", "Valor"],
-        ["Monto pagado", f"USD {monto:.2f}"],
-        ["Monto aplicado", f"USD {monto_aplicado:.2f}"],
+        ["Monto pagado", formatear_monto_usd(monto)],
+        ["Monto aplicado", formatear_monto_usd(monto_aplicado)],
         ["Tipo de pago", tipo_pago],
         ["Estado", estado_pago],
         ["Vigencia desde", fecha_inicio.strftime("%d/%m/%Y")],
@@ -182,7 +191,7 @@ def generar_comprobante_pago_pdf(
         )
         elementos.append(Paragraph("PAGO RECHAZADO", sello_rechazo))
     else:
-        elementos.append(Paragraph(f"Estado: {estado_pago}", cuerpo))
+        elementos.append(Paragraph(f"Estado: {escape(estado_pago)}", cuerpo))
 
     elementos.append(Spacer(1, 24))
     elementos.append(HRFlowable(width="50%", thickness=0.5, color=colors.grey))
@@ -304,10 +313,10 @@ def generar_reporte_pdf(
     )
 
     elementos: list = [
-        Paragraph(titulo, titulo_estilo),
+        Paragraph(escape(titulo), titulo_estilo),
         Paragraph(
             f"Generado el {sello_de_tiempo(FORMATO_SELLO_REPORTE)}"
-            + (f" por {generado_por}" if generado_por else ""),
+            + (f" por {escape(generado_por)}" if generado_por else ""),
             subtitulo_estilo,
         ),
         Spacer(1, 6),
@@ -429,8 +438,8 @@ def _tabla_de_reporte(
     )
 
     anchos = _anchos_de_columna_reporte([columnas] + filas, ancho_disponible)
-    contenido = [[Paragraph(str(c), encabezado_estilo) for c in columnas]]
-    contenido += [[Paragraph(str(c), celda_estilo) for c in fila] for fila in filas]
+    contenido = [[Paragraph(escape(str(c)), encabezado_estilo) for c in columnas]]
+    contenido += [[Paragraph(escape(str(c)), celda_estilo) for c in fila] for fila in filas]
 
     tabla = Table(contenido, colWidths=anchos, hAlign="LEFT", repeatRows=1)
     tabla.setStyle(_estilo_tabla_reporte())

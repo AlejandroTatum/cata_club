@@ -4,9 +4,8 @@ import { Badge, Button, PAGE_RAIL } from "@/components/ui";
 import { formatDay } from "@/app/attendance/attendance-utils";
 import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
 import { SessionCompositionCounts } from "@/app/trainer/SessionComposition";
-import { formatDate } from "@/lib/format-utils";
 import type { EstadoAsistencia } from "@/types/domain";
-import type { SessionStudent } from "./attendance-utils";
+import { formatSessionDateLabel, type SessionStudent } from "./attendance-utils";
 import ReadOnlyReasonNotice from "./ReadOnlyReasonNotice";
 import SessionDonut from "./SessionDonut";
 import StudentReviewList, { StatusTiles } from "./StudentReviewList";
@@ -106,7 +105,7 @@ export default function ConfirmationStep({
             {selectedSchedule.categoriaLabel && (
               <p className="text-sm text-ink-2">{selectedSchedule.categoriaLabel}</p>
             )}
-            {sessionDate && <p className="text-xs text-ink-3">{formatDate(sessionDate)}</p>}
+            {sessionDate && <p className="text-xs font-semibold text-ink-2">{formatSessionDateLabel(sessionDate)}</p>}
           </div>
 
           <div className="flex items-center gap-4 border-t border-line pt-4">

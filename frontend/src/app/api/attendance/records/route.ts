@@ -4,7 +4,7 @@
  *   endpoint is now paginated but this route's own contract — one full array
  *   for the filtered range — is not (see `fetchAllReportes`'s doc comment).
  * POST /api/attendance/records — registers real attendance (CU / E02),
- *   proxying `POST /asistencias/` once per student in the roster.
+ *   proxying ONE `POST /asistencias/lote` for the whole roster.
  *
  * BFF Route Handlers: role enforcement (ADMINISTRADOR/ENTRENADOR for both
  * read and write) is the backend's job via `GestorPermisos` — these handlers
@@ -18,10 +18,10 @@
  * panel's "última lista".
  *
  * POST replaces the old frontend-only prototype in `/trainer/attendance`
- * (previously "no data is persisted") — it issues one real
- * `POST /asistencias/` per student, tolerating partial failure (e.g. a
- * stale roster entry for a persona removed mid-session) instead of failing
- * the whole batch.
+ * (previously "no data is persisted") — it issues a single batch call; the
+ * backend tolerates partial failure per student (e.g. a stale roster entry
+ * for a persona removed mid-session, or a student another trainer already
+ * recorded) instead of failing the whole batch.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -192,85 +192,82 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const fecha = parsed.fechaEntrenamiento ?? todayIsoDate();
 
-  const outcomes = await Promise.all(
-    parsed.students.map(async (student) => {
-      const result = await backendFetchAuthed(request, "/asistencias/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fecha_entrenamiento: fecha,
-          estado: ESTADO_ASISTENCIA_FRONTEND_TO_BACKEND[student.estado],
-          persona_id: student.personaId,
-          horario_id: parsed.horarioId,
-        }),
-      });
-
-      if (!result.ok) {
-        return {
-          student,
-          ok: false as const,
-          status: result.status,
-          message: "No se pudo contactar al servidor.",
-          registradoPorNombre: null,
-          refreshedAccessToken: undefined,
-        };
-      }
-      if (!result.response.ok) {
-        let message = "No se pudo registrar la asistencia.";
-        try {
-          const errorBody: unknown = await result.response.json();
-          if (typeof errorBody === "object" && errorBody !== null) {
-            const b = errorBody as Record<string, unknown>;
-            message = (typeof b.message === "string" && b.message) || (typeof b.detail === "string" && b.detail) || message;
-          }
-        } catch {
-          // ignore parse errors — use fallback
-        }
-        return {
-          student,
-          ok: false as const,
-          status: result.response.status,
-          message,
-          registradoPorNombre: null,
-          refreshedAccessToken: result.refreshedAccessToken,
-        };
-      }
-      // The backend `POST /asistencias/` returns the created Asistencia, now
-      // including `registradoPorNombre` (issue #263). Capturing it here lets the
-      // receipt show the PERSISTED taker instead of a browser-side name (the
-      // fake traceability the issue reports). Best-effort: if the body can't be
-      // parsed, the receipt falls back to "No registrado".
-      let registradoPorNombre: string | null = null;
-      try {
-        const created = (await result.response.json()) as { registradoPorNombre?: string | null };
-        registradoPorNombre = created.registradoPorNombre ?? null;
-      } catch {
-        // ignore parse errors — the author name is not required
-      }
-      return { student, ok: true as const, status: 201, message: undefined, registradoPorNombre, refreshedAccessToken: result.refreshedAccessToken };
+  // ONE backend call for the whole roster (ENT-01): the old per-student
+  // fan-out committed once per student and exhausted the DB pool above ~30
+  // students, saving the roll only partially.
+  const result = await backendFetchAuthed(request, "/asistencias/lote", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      horario_id: parsed.horarioId,
+      fecha,
+      items: parsed.students.map((student) => ({
+        persona_id: student.personaId,
+        estado: ESTADO_ASISTENCIA_FRONTEND_TO_BACKEND[student.estado],
+      })),
     }),
-  );
+  });
 
-  const createdCount = outcomes.filter((o) => o.ok).length;
-  const failedOutcomes = outcomes.filter((o) => !o.ok);
-  const failed = failedOutcomes.map((o) => ({
-    personaId: o.student.personaId,
-    message: o.message ?? "No se pudo registrar la asistencia.",
+  // The whole batch was rejected (unreachable backend, 4xx on horario/fecha/
+  // duplicates, 403, ...): mirror the REAL backend status instead of guessing
+  // (issue #309 — a 403 permissions rule was coming out as 502) and report
+  // every student as failed with the backend's message.
+  if (!result.ok || !result.response.ok) {
+    const status = result.ok ? result.response.status : result.status;
+    const message = result.ok
+      ? await readBackendMessage(result.response, "No se pudo registrar la asistencia.")
+      : "No se pudo contactar al servidor.";
+    const failed = parsed.students.map((student) => ({ personaId: student.personaId, message }));
+    const response = NextResponse.json({ createdCount: 0, failed, registradoPorNombre: null }, { status });
+    if (result.ok && result.refreshedAccessToken) {
+      setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+    }
+    return response;
+  }
+
+  let outcome: BackendBatchOutcome = { creados: 0, fallidos: [], registradoPorNombre: null };
+  try {
+    outcome = (await result.response.json()) as BackendBatchOutcome;
+  } catch {
+    // ignore parse errors — the batch was accepted, so the roll IS saved
+  }
+  const failed = (outcome.fallidos ?? []).map((f) => ({
+    personaId: f.personaId,
+    message: f.motivo || "No se pudo registrar la asistencia.",
+    registradoPorNombre: f.registradoPorNombre ?? null,
+    alreadyRegistered: f.yaRegistrada === true,
   }));
-  const registradoPorNombre = outcomes.find((o) => o.ok && o.registradoPorNombre != null)?.registradoPorNombre ?? null;
+  const createdCount = outcome.creados ?? 0;
 
-  // When every student failed, mirror the real status of the first backend
-  // failure instead of guessing "502 Bad Gateway" (issue #309 — a 403
-  // permissions rule was coming out as 502, sending the trainer into a
-  // retry loop that can never succeed). A partial success still answers 201:
-  // the batch tolerates per-student failure by design (see doc comment
-  // above), so the top-level status stays "created" either way.
-  const status = createdCount > 0 ? 201 : failedOutcomes[0].status;
-
-  const response = NextResponse.json({ createdCount, failed, registradoPorNombre }, { status });
-  const refreshedAccessToken = outcomes.find((o) => o.refreshedAccessToken)?.refreshedAccessToken;
-  if (refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: refreshedAccessToken });
+  // An ACCEPTED batch always answers 201, even when nobody was saved: per-student
+  // failure is tolerated by design, and a student another trainer already
+  // recorded (ENT-04) is information the client needs in the body, not an error
+  // to throw away.
+  const response = NextResponse.json(
+    { createdCount, failed, registradoPorNombre: outcome.registradoPorNombre ?? null },
+    { status: 201 },
+  );
+  if (result.refreshedAccessToken) {
+    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
   }
   return response;
+}
+
+interface BackendBatchOutcome {
+  creados: number;
+  fallidos: { personaId: number; motivo: string; registradoPorNombre?: string | null; yaRegistrada?: boolean }[];
+  registradoPorNombre?: string | null;
+}
+
+async function readBackendMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const errorBody: unknown = await response.json();
+    if (typeof errorBody === "object" && errorBody !== null) {
+      const b = errorBody as Record<string, unknown>;
+      return (typeof b.message === "string" && b.message) || (typeof b.detail === "string" && b.detail) || fallback;
+    }
+  } catch {
+    // ignore parse errors — use fallback
+  }
+  return fallback;
 }

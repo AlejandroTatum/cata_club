@@ -2,17 +2,21 @@
 
 /**
  * Tarifas — admin management of the club's membership price catalog (issue
- * #394/#400, plus "Nueva tarifa" from #507). Editing a price has no
- * soft-delete equivalent here: `TipoMembresia` has no soft-delete column and
- * the backend resolves its price fresh at each `crearMembresia`/
- * `registrar_pago` rather than freezing it on the catalog row, so a price
- * change only ever reaches FUTURE payments — the reason the confirmation
- * states that explicitly. Creating a tariff carries no such caveat, so it
- * skips the confirmation dialog entirely (see `handleCreateSubmit`).
+ * #394/#400, plus "Nueva tarifa" from #507). The backend resolves a price
+ * fresh at each `crearMembresia`/`registrar_pago` rather than freezing it on
+ * the catalog row, so a price change only ever reaches FUTURE payments — the
+ * reason the confirmation states that explicitly. Creating a tariff carries
+ * no such caveat, so it skips the confirmation dialog entirely (see
+ * `handleCreateSubmit`).
+ *
+ * A tariff is retired in two ways. "Ocultar" is always available and
+ * reversible: the tariff leaves the web and enrollment, while whoever already
+ * has it keeps paying the same. "Eliminar" is offered only while `enUso` is
+ * false (no membresía ever used it) and cannot be undone.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Pencil, Plus, Tag } from "lucide-react";
+import { Eye, EyeOff, Loader2, Pencil, Plus, Tag, Trash2 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -31,13 +35,15 @@ import {
 } from "@/components/ui";
 import { cn } from "@/components/ui/cn";
 import { useToast } from "@/contexts/ToastContext";
-import { fetchTiposMembresia, actualizarTipoMembresia, crearTipoMembresia } from "@/services/api";
+import {
+  fetchTiposMembresia,
+  actualizarTipoMembresia,
+  crearTipoMembresia,
+  eliminarTipoMembresia,
+} from "@/services/api";
 import type { ActualizarTipoMembresiaInput, TipoMembresiaCatalogo } from "@/services/api";
 import { toUserMessage } from "@/lib/error-message";
 import TarifaUsage from "./TarifaUsage";
-
-/** Both columns reach the bottom of the screen (page header and padding above, ~24px margin below). */
-const FILL_SCREEN = "lg:min-h-[calc(100dvh-10rem)] lg:grid-rows-[auto_1fr]";
 
 const MODALIDAD_LABEL: Record<TipoMembresiaCatalogo["modalidad"], string> = {
   MENSUAL: "Mensual",
@@ -102,6 +108,11 @@ interface PendingConfirm {
   precioNuevo: string | null;
 }
 
+/** The text-only "Eliminar" at the right edge of a card's actions: red text
+ *  without a box until hovered, so it reads as the one irreversible action. */
+const ELIMINAR_CLASS =
+  "ml-auto inline-flex h-ctl-sm items-center justify-center gap-2 whitespace-nowrap rounded-ctl border border-transparent px-3 text-xs font-semibold text-state-bad transition-colors hover:bg-state-bad-bg disabled:cursor-not-allowed disabled:opacity-45";
+
 const EMPTY_NEW_TARIFA = {
   categoria: "",
   precioInput: "",
@@ -131,6 +142,13 @@ export default function TarifasPage(): React.ReactElement {
   const [categoriaError, setCategoriaError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+  const [pendingHide, setPendingHide] = useState<TipoMembresiaCatalogo | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<TipoMembresiaCatalogo | null>(null);
+  /** The tariff with a hide/show/delete request in flight. */
+  const [busyId, setBusyId] = useState<number | null>(null);
+  /** Why the last hide/show/delete failed (e.g. the 409 "ya se usó"), kept on
+   *  screen above the cards until the next action. */
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [revealTick, setRevealTick] = useState(0);
@@ -309,6 +327,65 @@ export default function TarifasPage(): React.ReactElement {
     return parts.join(" ");
   }
 
+  // --- Ocultar / Mostrar / Eliminar -------------------------------------------
+
+  async function setActivo(tarifa: TipoMembresiaCatalogo, activo: boolean): Promise<void> {
+    setBusyId(tarifa.id);
+    setActionError(null);
+    try {
+      const actualizada = await actualizarTipoMembresia(tarifa.id, { activo });
+      setTarifas((prev) => prev.map((t) => (t.id === actualizada.id ? actualizada : t)));
+      showSuccess(
+        activo
+          ? `Tarifa «${tarifa.categoria}» visible de nuevo.`
+          : `Tarifa «${tarifa.categoria}» oculta. Los alumnos que ya la tienen siguen pagando igual.`,
+      );
+    } catch (err) {
+      const message = toUserMessage(err, "No se pudo actualizar la tarifa.");
+      setActionError(message);
+      showError(message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  /** "Ocultar" asks first, naming what changes; "Mostrar" only turns it back on. */
+  function requestToggleActivo(tarifa: TipoMembresiaCatalogo): void {
+    if (tarifa.activo) {
+      setPendingHide(tarifa);
+      return;
+    }
+    void setActivo(tarifa, true);
+  }
+
+  async function confirmHide(): Promise<void> {
+    const tarifa = pendingHide;
+    setPendingHide(null);
+    if (!tarifa) return;
+    await setActivo(tarifa, false);
+  }
+
+  /** A 409 (it was used after the page loaded) arrives with the server's own
+   *  Spanish message, which `toUserMessage` lets through. */
+  async function confirmDelete(): Promise<void> {
+    const tarifa = pendingDelete;
+    setPendingDelete(null);
+    if (!tarifa) return;
+    setBusyId(tarifa.id);
+    setActionError(null);
+    try {
+      await eliminarTipoMembresia(tarifa.id);
+      setTarifas((prev) => prev.filter((t) => t.id !== tarifa.id));
+      showSuccess(`Tarifa «${tarifa.categoria}» eliminada.`);
+    } catch (err) {
+      const message = toUserMessage(err, "No se pudo eliminar la tarifa.");
+      setActionError(message);
+      showError(message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   // --- Nueva tarifa (issue #507) --------------------------------------------
   // Same "open a rail form, validate on submit, reload on success" shape as
   // `discounts/page.tsx`'s create flow — no confirmation dialog here (unlike
@@ -423,11 +500,35 @@ export default function TarifasPage(): React.ReactElement {
     const isEditing = editingId === tarifa.id;
     const isSaving = saving && pendingConfirm?.id === tarifa.id;
     if (!isEditing) {
+      const isBusy = busyId === tarifa.id;
       return (
-        <Button size="sm" onClick={() => startEdit(tarifa)}>
-          <Pencil size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-          Editar
-        </Button>
+        <>
+          <Button size="sm" onClick={() => startEdit(tarifa)}>
+            <Pencil size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+            Editar
+          </Button>
+          <Button size="sm" onClick={() => requestToggleActivo(tarifa)} disabled={isBusy}>
+            {isBusy ? (
+              <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
+            ) : tarifa.activo ? (
+              <EyeOff size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+            ) : (
+              <Eye size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+            )}
+            {tarifa.activo ? "Ocultar" : "Mostrar"}
+          </Button>
+          {!tarifa.enUso && (
+            <button
+              type="button"
+              className={ELIMINAR_CLASS}
+              onClick={() => setPendingDelete(tarifa)}
+              disabled={isBusy}
+            >
+              <Trash2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+              Eliminar
+            </button>
+          )}
+        </>
       );
     }
     return (
@@ -448,22 +549,32 @@ export default function TarifasPage(): React.ReactElement {
   /** Compact catalog summary: count and price range, from what is loaded. */
   function renderSummary(): React.ReactElement | null {
     if (tarifas.length === 0) return null;
-    const prices = tarifas.map((t) => Number.parseFloat(t.precio)).filter(Number.isFinite);
+    const visibles = tarifas.filter((t) => t.activo);
+    const ocultas = tarifas.length - visibles.length;
+    const prices = visibles.map((t) => Number.parseFloat(t.precio)).filter(Number.isFinite);
     const min = Math.min(...prices);
     const max = Math.max(...prices);
-    const range = min === max ? `$ ${min.toFixed(2)}` : `$ ${min.toFixed(2)} – $ ${max.toFixed(2)}`;
+    const range =
+      prices.length === 0
+        ? "—"
+        : min === max
+          ? `$ ${min.toFixed(2)}`
+          : `$ ${min.toFixed(2)} – $ ${max.toFixed(2)}`;
     return (
       <InfoPanel title="Resumen del catálogo">
         <dl className="grid grid-cols-2 gap-section">
           <div>
             <dt className="text-2xs font-bold uppercase text-ink-3">Tarifas</dt>
-            <dd className="text-2xl font-extrabold tabular-nums text-ink">{tarifas.length}</dd>
+            <dd className="text-2xl font-extrabold tabular-nums text-ink">{visibles.length}</dd>
           </div>
           <div>
             <dt className="text-2xs font-bold uppercase text-ink-3">Rango de precios</dt>
             <dd className="text-sm font-bold tabular-nums text-ink">{range}</dd>
           </div>
         </dl>
+        {ocultas > 0 && (
+          <p>{ocultas === 1 ? "1 oculta" : `${ocultas} ocultas`}: no aparece en la web ni en inscripciones.</p>
+        )}
       </InfoPanel>
     );
   }
@@ -476,6 +587,12 @@ export default function TarifasPage(): React.ReactElement {
         <p>
           <strong className="text-ink">Al editar un precio</strong>, el cambio aplica solo a los
           pagos futuros; las membresías y los pagos ya registrados no se modifican.
+        </p>
+        <p>
+          <strong className="text-ink">Ocultar</strong> la saca de la web y de las inscripciones;
+          quienes ya la tienen siguen pagando igual.{" "}
+          <strong className="text-ink">Eliminar</strong> solo aparece mientras nadie la usó y no se
+          puede deshacer.
         </p>
         <p>Para sumar una categoría o modalidad, use «Nueva tarifa».</p>
       </InfoPanel>
@@ -576,14 +693,14 @@ export default function TarifasPage(): React.ReactElement {
         }
       >
         {loadError && <ErrorState message={loadError} onRetry={() => void loadCatalog()} />}
+        {actionError && (
+          <p role="alert" className="alert-error">
+            {actionError}
+          </p>
+        )}
 
         <div data-testid="tarifas-split" className={PAGE_RAIL}>
-          <div
-            className={cn(
-              "grid min-w-0 content-start gap-page",
-              !loading && tarifas.length > 0 && FILL_SCREEN,
-            )}
-          >
+          <div className="grid min-w-0 content-start gap-page">
             {loading ? (
               <section className="card flex min-w-0 flex-col overflow-hidden">
                 <LoadingState label="Cargando tarifas…" />
@@ -612,12 +729,15 @@ export default function TarifasPage(): React.ReactElement {
               >
                 {tarifas.map((tarifa) => {
                   const isEditing = editingId === tarifa.id;
+                  const oculta = !tarifa.activo;
                   return (
                     <li
                       key={tarifa.id}
+                      data-oculta={oculta ? "true" : undefined}
                       className={cn(
                         "card flex min-w-0 flex-col gap-section p-[18px]",
                         !isEditing && "lg:min-h-56",
+                        oculta && "bg-sunken",
                       )}
                     >
                       {isEditing ? (
@@ -634,15 +754,29 @@ export default function TarifasPage(): React.ReactElement {
                       ) : (
                         <>
                           <div className="flex flex-wrap items-start justify-between gap-2">
-                            <h3 className="min-w-0 flex-1 basis-full sm:basis-56 break-words font-display text-lg uppercase leading-tight tracking-flat text-ink">
+                            <h3
+                              className={cn(
+                                "min-w-0 flex-1 basis-full sm:basis-56 break-words font-display text-lg uppercase leading-tight tracking-flat",
+                                oculta ? "text-ink-3" : "text-ink",
+                              )}
+                            >
                               {tarifa.categoria}
                             </h3>
-                            <Badge>{MODALIDAD_LABEL[tarifa.modalidad]}</Badge>
+                            <Badge>{oculta ? "Oculta" : MODALIDAD_LABEL[tarifa.modalidad]}</Badge>
                           </div>
                           <div className="grid gap-1">
-                            <p className="text-4xl font-extrabold tabular-nums text-ink">{`$ ${tarifa.precio}`}</p>
+                            <p
+                              className={cn(
+                                "text-4xl font-extrabold tabular-nums",
+                                oculta ? "text-ink-3" : "text-ink",
+                              )}
+                            >{`$ ${tarifa.precio}`}</p>
                             <p className="text-xs text-ink-3">
-                              Se usa en inscripción, pagos y cambio de plan.
+                              {oculta
+                                ? "No aparece en la web ni en inscripciones. Los alumnos que ya la tienen siguen pagando igual."
+                                : tarifa.enUso
+                                  ? "Se usa en inscripción, pagos y cambio de plan."
+                                  : "Todavía no se usó."}
                             </p>
                           </div>
                         </>
@@ -655,7 +789,7 @@ export default function TarifasPage(): React.ReactElement {
                   <button
                     type="button"
                     onClick={openCreateForm}
-                    className="flex min-h-24 w-full flex-col items-center justify-center gap-2 rounded-card lg:min-h-56 border border-dashed border-line-2 text-sm font-bold text-ink-2 transition-colors hover:border-cata-red hover:text-cata-red"
+                    className="flex min-h-24 w-full flex-col items-center justify-center gap-2 rounded-card border border-dashed border-line-2 text-sm font-bold text-ink-2 transition-colors hover:border-cata-red hover:text-cata-red"
                   >
                     <Plus size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />
                     Agregar tarifa
@@ -681,6 +815,26 @@ export default function TarifasPage(): React.ReactElement {
           confirmLabel={confirmDialogLabel(pendingConfirm)}
           onConfirm={() => void confirmSave()}
           onCancel={cancelConfirm}
+        />
+
+        <ConfirmDialog
+          open={pendingHide !== null}
+          variant="danger"
+          title={pendingHide ? `¿Ocultar «${pendingHide.categoria}»?` : ""}
+          message="Deja de aparecer en la web y en inscripciones nuevas. Los alumnos que ya la tienen siguen pagando igual. Puede volver a mostrarla cuando quiera."
+          confirmLabel="Ocultar"
+          onConfirm={() => void confirmHide()}
+          onCancel={() => setPendingHide(null)}
+        />
+
+        <ConfirmDialog
+          open={pendingDelete !== null}
+          variant="danger"
+          title={pendingDelete ? `¿Eliminar «${pendingDelete.categoria}»?` : ""}
+          message="Esta tarifa nunca se usó, así que se borra definitivamente. Esta acción no se puede deshacer."
+          confirmLabel="Eliminar"
+          onConfirm={() => void confirmDelete()}
+          onCancel={() => setPendingDelete(null)}
         />
       </AppShell>
     </ProtectedRoute>

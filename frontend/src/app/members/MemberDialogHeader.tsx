@@ -5,7 +5,7 @@ import { X } from "lucide-react";
 import { Badge, DataBox } from "@/components/ui";
 import { getUserInitials } from "@/lib/auth-utils";
 import { ICON } from "@/lib/icon-size";
-import { getAccountStateBadge, getPayerTypeLabel, type MemberAccount } from "./members-utils";
+import { getAccountStateBadge, getAccountRoleLabel, type MemberAccount } from "./members-utils";
 
 interface MemberDialogHeaderProps {
   account: MemberAccount;
@@ -55,7 +55,7 @@ export default function MemberDialogHeader({
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             {cedula ? <DataBox>{cedula}</DataBox> : null}
             <DataBox>{account.telefono}</DataBox>
-            <span className="text-xs text-ink-3">{getPayerTypeLabel(account.role)}</span>
+            <span className="text-xs text-ink-3">{getAccountRoleLabel(account)}</span>
           </div>
         </div>
       </div>

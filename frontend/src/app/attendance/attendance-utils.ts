@@ -87,6 +87,10 @@ export interface AttendanceRecord {
    *  the same ante-la-duda-no-se-muestra default this codebase already
    *  applies elsewhere rather than showing an action that might 400. */
   correctable?: boolean;
+  /** ENT-07: the record was accepted for a student who was not operative (suspended
+   *  or deactivated) or for a date before their enrolment, so an admin should look at
+   *  it. Persisted by the backend (`asistencia.requiere_revision`); absent = no flag. */
+  requiereRevision?: boolean;
 }
 
 /** Aggregate counts for today's attendance overview.

@@ -712,6 +712,12 @@ class TipoMembresia(Base):
     categoria: Mapped[str] = mapped_column(String(80))
     precio: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     modalidad: Mapped[TipoModalidad] = mapped_column(SAEnum(TipoModalidad))
+    # Baja SUAVE: una tarifa que deja de ofrecerse se OCULTA. Sale del catálogo
+    # público y no admite altas nuevas, pero las membresías que ya la usan
+    # siguen cobrando y renovando. Borrarla solo es posible si nunca se usó.
+    activo: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true"), nullable=False,
+    )
 
     membresias: Mapped[List["Membresia"]] = relationship(back_populates="tipo_membresia")
 
@@ -1681,6 +1687,13 @@ class Asistencia(Base):
     estado: Mapped[EstadoAsistencia] = mapped_column(SAEnum(EstadoAsistencia))
     justificativo: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     estado_justificativo: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    # ENT-07: la fila se aceptó aunque el alumno no estaba operativo (baja o
+    # membresía suspendida) o la fecha es anterior a su inscripción. Es una
+    # marca para el admin, no un bloqueo -- la decisión de producto fue permitir
+    # el registro con aviso.
+    requiere_revision: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
 
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
     # `foreign_keys` explícito: ver `Persona.asistencias` -- misma ambigüedad

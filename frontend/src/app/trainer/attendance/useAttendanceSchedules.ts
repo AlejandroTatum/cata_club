@@ -14,9 +14,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { selectVisibleSchedules } from "@/app/attendance/attendance-utils";
 import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
 import { clubIsoDate, todayDiaSemana, weekWindowStartIso } from "@/lib/club-date";
-import { fetchAttendanceRecords, fetchTrainingSchedules } from "@/services/api";
+import { fetchAttendanceRecords, fetchRosterDeTodosLosHorarios, fetchTrainingSchedules } from "@/services/api";
 import type { DiaSemana } from "@/types/domain";
-import { countRecordsByHorario } from "./attendance-utils";
+import { closedHorariosFromWeek, countRecordsByHorario } from "./attendance-utils";
 
 export interface AttendanceSchedules {
   schedules: TrainingSchedule[];
@@ -32,6 +32,12 @@ export interface AttendanceSchedules {
   setShowAllDays: (updater: (prev: boolean) => boolean) => void;
   /** Per-horario attendance-record count for the trailing club week. */
   weekRecordCounts: Map<number, number>;
+  /**
+   * Horarios whose list is COMPLETE this week — every roster student has a
+   * record (ENT-03). A horario with only some students recorded is in
+   * `weekRecordCounts` but not here, so it stays open for the missing ones.
+   */
+  closedHorarios: Set<number>;
   /**
    * Re-runs the same trailing-week fetch the mount effect below performs.
    * Issue #1237: `weekRecordCounts` only ever refreshed when `schedules`
@@ -56,6 +62,7 @@ export function useAttendanceSchedules(): AttendanceSchedules {
   const [expandedDays, setExpandedDays] = useState<Set<DiaSemana>>(new Set());
   const [showAllDays, setShowAllDays] = useState(false);
   const [weekRecordCounts, setWeekRecordCounts] = useState<Map<number, number>>(new Map());
+  const [closedHorarios, setClosedHorarios] = useState<Set<number>>(new Set());
 
   const loadOptions = useCallback(async (): Promise<void> => {
     try {
@@ -102,6 +109,14 @@ export function useAttendanceSchedules(): AttendanceSchedules {
         fechaFin: clubIsoDate(),
       });
       setWeekRecordCounts(countRecordsByHorario(records));
+      // Without the roster there is no way to know a list is complete: leave
+      // every horario open rather than close one on a guess — opening is
+      // harmless (the roster itself says what is already filed).
+      const roster = await fetchRosterDeTodosLosHorarios().catch((err: unknown) => {
+        console.error("[trainer/attendance] fetchRosterDeTodosLosHorarios failed", err);
+        return null;
+      });
+      setClosedHorarios(roster ? closedHorariosFromWeek(records, roster) : new Set());
     } catch (err) {
       console.error("[trainer/attendance] fetchAttendanceRecords week-counts failed", err);
     }
@@ -125,8 +140,7 @@ export function useAttendanceSchedules(): AttendanceSchedules {
   }, []);
 
   const selectedSchedule = schedules.find((s) => s.id === selectedScheduleId) ?? null;
-  const selectedListTaken =
-    selectedSchedule !== null && (weekRecordCounts.get(selectedSchedule.id) ?? 0) > 0;
+  const selectedListTaken = selectedSchedule !== null && closedHorarios.has(selectedSchedule.id);
 
   return {
     schedules,
@@ -140,6 +154,7 @@ export function useAttendanceSchedules(): AttendanceSchedules {
     showAllDays,
     setShowAllDays,
     weekRecordCounts,
+    closedHorarios,
     loadWeekRecordCounts,
     selectedScheduleId,
     setSelectedScheduleId,

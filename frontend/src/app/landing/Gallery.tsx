@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   DEFAULT_SLIDE_ASPECT,
   GALLERY_BROWSE_HOLD_MS,
+  GALLERY_EMPTY_EVENT,
   GALLERY_HOLD_EVENT,
   GALLERY_READY_EVENT,
   GALLERY_SEEK_EVENT,
@@ -86,8 +87,9 @@ function measureRatios(entries: GalleryEntry[]): Promise<Map<number, number>> {
  * pixel of motion.
  *
  * Empty is the gallery's real initial state — the club publishes entries
- * from `/galeria` — so the section says so honestly instead of shipping
- * placeholder photographs.
+ * from `/galeria`. VIS-03: the section then renders nothing at all and tells
+ * the page (`GALLERY_EMPTY_EVENT`) to drop its nav entries, instead of
+ * showing a header over an apology or shipping placeholder photographs.
  */
 export default function Gallery(): React.ReactElement {
   const [state, setState] = useState<GalleryState>({ kind: "loading" });
@@ -135,6 +137,10 @@ export default function Gallery(): React.ReactElement {
       });
     return (): void => { cancelled = true; };
   }, []);
+
+  useEffect((): void => {
+    if (state.kind === "empty") document.dispatchEvent(new CustomEvent(GALLERY_EMPTY_EVENT));
+  }, [state.kind]);
 
   // Fired after the ready commit, so the track already holds its full run.
   // A runtime mounted later still finds it via the `data-ready` attribute.
@@ -253,6 +259,8 @@ export default function Gallery(): React.ReactElement {
   } else {
     accessibleStatus = "Cargando la galería…";
   }
+
+  if (state.kind === "empty") return <></>;
 
   return (
     <section className="landing-section landing-gallery" id="galeria" data-motion-section data-testid="motion-section">

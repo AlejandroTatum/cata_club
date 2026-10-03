@@ -207,6 +207,11 @@ class RestablecerContraseniaDTO(BaseModel):
     nueva_contrasenia: ContraseniaValidada
 
 
+class CambiarContraseniaDTO(BaseModel):
+    contrasenia_actual: str
+    nueva_contrasenia: ContraseniaValidada
+
+
 # --- E01: invalidación de sesión (epoch compartido, ver gestor_auth.py) -----
 class InvalidarSesionesResponseDTO(ResponseBase, BaseModel):
     """Mismo shape que `LoginResponseDTO` (no se reutiliza directamente por

@@ -113,8 +113,8 @@ for (const [viewportName, viewport] of Object.entries({ desktop: DESKTOP, mobile
     test("the selected choice card resolves its border to cata-red", async ({ page }) => {
       await goToEnroll(page);
 
-      const selected = page.getByRole("button", { name: /^Jugador Me inscribo yo al club/ });
-      await expect(selected).toHaveAttribute("aria-pressed", "true");
+      const selected = page.getByRole("radio", { name: /^Jugador Me inscribo yo al club/ });
+      await expect(selected).toHaveAttribute("aria-checked", "true");
 
       const borderColor = await selected.evaluate((el) => getComputedStyle(el).borderColor);
       // `cata-red` — #D92128.

@@ -1,22 +1,12 @@
 /**
- * Issue #988, on a real mobile engine.
+ * Horarios fichas on a real mobile engine.
  *
- * jsdom (`ScheduleSelector.test.tsx`, `LandingPage.test.tsx`) performs no real
- * layout: it can assert a class is written but never that the chip strip
- * actually scrolls, that the body stays inside its own viewport, or that a
- * ball sits fully inside the card's rounded corner. Only a layout engine
- * answers those, so this is the `mobile-chromium` project's reason to carry
- * this feature at all — the same reasoning `members-dialog-zoom.mobile.spec.ts`
- * gives for issue #767.
+ * jsdom performs no layout, so it can never prove the page stays inside a
+ * 390px viewport. Only a layout engine answers that, which is this
+ * `mobile-chromium` spec's reason to exist.
  *
- * `mobile-chromium` runs `devices["Pixel 7"]` (412×839, `isMobile: true`,
- * `hasTouch: true`), so no viewport override is needed here — a narrower
- * desktop window would not exercise the `(max-width: 768px)` chip layout
- * with a real coarse pointer.
- *
- * Six categories, one with a long name, so the chip strip genuinely
- * overflows its own track — a two-chip fixture would pass by having nothing
- * to scroll.
+ * Six categories, one with a long name, so a card that overflowed its
+ * column would show up as horizontal page scroll.
  */
 import { expect, test, type Route } from "@playwright/test";
 
@@ -35,63 +25,53 @@ const SCHEDULE_PAYLOAD = [
   { category: "Juego Libre", ages: null, blocks: [{ days: ["SABADO"], startTime: "15:00", endTime: "18:00" }] },
 ];
 
-test.describe("Schedule card on a real mobile engine", () => {
-  test("scrolls the chip strip horizontally without overflowing the body, keeps the day balls inside the card, and the CTA stays tappable", async ({ page }) => {
+test.describe("Schedule cards on a real mobile engine", () => {
+  test("renders one card per category with age headline, time, days and WhatsApp link, and never scrolls horizontally at 390px", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.route("**/api/schedules", (route: Route) =>
       route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SCHEDULE_PAYLOAD) }),
     );
 
     await page.goto("/");
 
-    const list = page.locator(".landing-schedule-list");
-    await expect(list).toBeVisible();
-    const card = page.locator(".landing-schedule-card");
-    await expect(card).toBeVisible();
+    const layout = page.locator(".landing-schedule-layout");
+    await expect(layout).toBeVisible();
 
-    // The body never gains horizontal scroll: whatever overflows lives
-    // inside the chip strip's own scroll container, never the page.
-    const bodyOverflow = await page.evaluate(() => {
-      const root = document.documentElement;
-      return { scrollWidth: root.scrollWidth, clientWidth: root.clientWidth };
-    });
-    expect(bodyOverflow.scrollWidth).toBeLessThanOrEqual(bodyOverflow.clientWidth);
+    // One card per category, plus the help card.
+    const tiles = layout.locator(".landing-schedule-tile");
+    await expect(tiles).toHaveCount(SCHEDULE_PAYLOAD.length + 1);
+    await expect(layout.locator(".landing-schedule-tile:not(.landing-schedule-help)")).toHaveCount(SCHEDULE_PAYLOAD.length);
 
-    // Six categories, one with a long name, genuinely overflow the strip's
-    // own track — this is the scroll the assertion above must NOT be seeing.
-    const stripOverflow = await list.evaluate((el) => el.scrollWidth - el.clientWidth);
-    expect(stripOverflow).toBeGreaterThan(0);
+    const infantil = tiles.filter({ has: page.getByRole("heading", { level: 3, name: "Infantil" }) });
+    await expect(infantil.locator(".landing-schedule-ages")).toContainText("8 a 12 años");
+    await expect(infantil.locator(".landing-schedule-time")).toContainText("16:00");
+    await expect(infantil.locator(".landing-schedule-days")).not.toBeEmpty();
 
-    // Every day ball sits fully inside the card's own box — none of the six
-    // is cut by the card's `overflow: hidden` decorative circle.
-    const cardBox = await card.boundingBox();
-    expect(cardBox).not.toBeNull();
-    const balls = page.locator(".landing-schedule-day");
-    await expect(balls).toHaveCount(6);
-    const ballCount = await balls.count();
-    for (let index = 0; index < ballCount; index += 1) {
-      const ballBox = await balls.nth(index).boundingBox();
-      expect(ballBox, `ball ${index}`).not.toBeNull();
-      expect(ballBox!.x, `ball ${index} left edge`).toBeGreaterThanOrEqual(cardBox!.x);
-      expect(ballBox!.x + ballBox!.width, `ball ${index} right edge`).toBeLessThanOrEqual(cardBox!.x + cardBox!.width + 0.5);
-    }
-
-    // The CTA meets the platform's minimum touch target and is a real click
-    // target: visible, stable, unobstructed, and receiving pointer events —
-    // `click({ trial: true })` proves that without actually navigating away.
-    const cta = page.getByRole("link", { name: /consultar cupo por whatsapp/i });
-    await expect(cta).toBeVisible();
+    const cta = page.getByRole("link", { name: "Consultar cupo en Infantil por WhatsApp" });
+    await cta.scrollIntoViewIfNeeded();
+    await expect(cta).toHaveAttribute("href", /wa\.me|whatsapp/i);
     const ctaBox = await cta.boundingBox();
     expect(ctaBox).not.toBeNull();
     expect(ctaBox!.height).toBeGreaterThanOrEqual(44);
     await cta.click({ trial: true });
 
-    // Switching category keeps the chip strip scrollable and the card intact.
-    await page.getByRole("tab", { name: /competitivo de alto rendimiento/i }).click();
-    await expect(card.getByRole("heading", { level: 3 })).toHaveText("Competitivo de alto rendimiento");
-    const afterSwitchOverflow = await page.evaluate(() => {
+    // The help card is always the last one and links to WhatsApp too.
+    const help = layout.locator(".landing-schedule-help");
+    await expect(help.getByRole("heading", { level: 3, name: "¿No sabe cuál elegir?" })).toBeVisible();
+    await expect(help.getByRole("link", { name: /abrir whatsapp/i })).toHaveAttribute("href", /wa\.me|whatsapp/i);
+
+    // No horizontal scroll on the page, and every card sits inside the viewport.
+    const overflow = await page.evaluate(() => {
       const root = document.documentElement;
       return root.scrollWidth - root.clientWidth;
     });
-    expect(afterSwitchOverflow).toBeLessThanOrEqual(0);
+    expect(overflow).toBeLessThanOrEqual(0);
+    const count = await tiles.count();
+    for (let index = 0; index < count; index += 1) {
+      const box = await tiles.nth(index).boundingBox();
+      expect(box, `tile ${index}`).not.toBeNull();
+      expect(box!.x, `tile ${index} left`).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width, `tile ${index} right`).toBeLessThanOrEqual(390.5);
+    }
   });
 });

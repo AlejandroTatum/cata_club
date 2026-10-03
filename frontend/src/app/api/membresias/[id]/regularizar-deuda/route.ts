@@ -27,10 +27,14 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
     return NextResponse.json({ message: "El cuerpo de la solicitud no es válido." }, { status: 400 });
   }
 
+  // The UI speaks camelCase; `RegularizacionDeudaDTO` expects snake_case dates.
+  const { fechaInicio, fechaFin, ...rest } = (body ?? {}) as Record<string, unknown>;
+  const backendBody = { ...rest, fecha_inicio: fechaInicio, fecha_fin: fechaFin };
+
   const result = await backendFetchAuthed(request, `/membresias/${membresiaId}/regularizar-deuda`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify(backendBody),
   });
 
   if (!result.ok) {

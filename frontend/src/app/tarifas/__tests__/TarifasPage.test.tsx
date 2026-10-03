@@ -59,6 +59,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 const mockFetchTiposMembresia = vi.fn();
 const mockActualizarTipoMembresia = vi.fn();
 const mockCrearTipoMembresia = vi.fn();
+const mockEliminarTipoMembresia = vi.fn();
 const mockFetchNotificaciones = vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 });
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
 
@@ -75,6 +76,7 @@ vi.mock("@/services/api", () => {
     fetchTiposMembresia: () => mockFetchTiposMembresia(),
     actualizarTipoMembresia: (id: number, data: unknown) => mockActualizarTipoMembresia(id, data),
     crearTipoMembresia: (data: unknown) => mockCrearTipoMembresia(data),
+    eliminarTipoMembresia: (id: number) => mockEliminarTipoMembresia(id),
     fetchNotificaciones: () => mockFetchNotificaciones(),
     marcarNotificacionLeida: (id: number) => mockMarcarNotificacionLeida(id),
     ApiClientError: MockApiClientError,
@@ -86,6 +88,8 @@ const JUNIOR: TipoMembresiaCatalogo = {
   categoria: "Junior",
   precio: "45.00",
   modalidad: "MENSUAL",
+  activo: true,
+  enUso: true,
 };
 
 const SENIOR: TipoMembresiaCatalogo = {
@@ -93,6 +97,28 @@ const SENIOR: TipoMembresiaCatalogo = {
   categoria: "Senior",
   precio: "60.00",
   modalidad: "MENSUAL",
+  activo: true,
+  enUso: true,
+};
+
+/** Never used and visible: the only kind that may be deleted. */
+const PRUEBA: TipoMembresiaCatalogo = {
+  id: 3,
+  categoria: "Prueba",
+  precio: "10.00",
+  modalidad: "MENSUAL",
+  activo: true,
+  enUso: false,
+};
+
+/** Hidden from the web and from enrollment, but students still pay it. */
+const ADFA: TipoMembresiaCatalogo = {
+  id: 4,
+  categoria: "ADFA",
+  precio: "22.00",
+  modalidad: "MENSUAL",
+  activo: false,
+  enUso: true,
 };
 
 function renderPage(): void {
@@ -114,6 +140,7 @@ beforeEach(() => {
   mockFetchTiposMembresia.mockReset().mockResolvedValue([JUNIOR, SENIOR]);
   mockActualizarTipoMembresia.mockReset();
   mockCrearTipoMembresia.mockReset();
+  mockEliminarTipoMembresia.mockReset();
 });
 
 describe("TarifasPage — listado", () => {
@@ -736,5 +763,186 @@ describe("TarifasPage — mobile form reveal", () => {
 
     const first = within(screen.getByTestId("tarifas-rail")).getAllByRole("textbox")[0];
     expect(first).toHaveFocus();
+  });
+});
+
+describe("TarifasPage — ocultar y mostrar", () => {
+  it("asks for confirmation before hiding, explaining what changes, without mutating yet", async () => {
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^ocultar$/i }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/¿ocultar «junior»\?/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/siguen pagando igual/i)).toBeInTheDocument();
+    expect(mockActualizarTipoMembresia).not.toHaveBeenCalled();
+  });
+
+  it("hides a tariff via PATCH activo:false only after confirming, and shows it hidden", async () => {
+    mockActualizarTipoMembresia.mockResolvedValueOnce({ ...JUNIOR, activo: false });
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^ocultar$/i }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /^ocultar$/i }));
+
+    await waitFor(() => {
+      expect(mockActualizarTipoMembresia).toHaveBeenCalledWith(1, { activo: false });
+    });
+    const hiddenRow = await findTarifaRow("Junior");
+    await waitFor(() => expect(within(hiddenRow).getByText("Oculta")).toBeInTheDocument());
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("leaves the tariff untouched when the hide confirmation is canceled", async () => {
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^ocultar$/i }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /cancelar/i }));
+
+    expect(mockActualizarTipoMembresia).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("shows a hidden tariff again with one click and no dialog", async () => {
+    mockFetchTiposMembresia.mockResolvedValue([JUNIOR, ADFA]);
+    mockActualizarTipoMembresia.mockResolvedValueOnce({ ...ADFA, activo: true });
+    renderPage();
+
+    const adfaRow = await findTarifaRow("ADFA");
+    fireEvent.click(within(adfaRow).getByRole("button", { name: /^mostrar$/i }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockActualizarTipoMembresia).toHaveBeenCalledWith(4, { activo: true });
+    });
+    const shownRow = await findTarifaRow("ADFA");
+    await waitFor(() => expect(within(shownRow).queryByText("Oculta")).not.toBeInTheDocument());
+  });
+
+  it("dresses a hidden card as hidden: pill, sunken background and the explanatory note", async () => {
+    mockFetchTiposMembresia.mockResolvedValue([JUNIOR, ADFA]);
+    renderPage();
+
+    const adfaRow = await findTarifaRow("ADFA");
+    expect(within(adfaRow).getByText("Oculta")).toBeInTheDocument();
+    expect(within(adfaRow).queryByText("Mensual")).not.toBeInTheDocument();
+    expect(
+      within(adfaRow).getByText(
+        /no aparece en la web ni en inscripciones\. los alumnos que ya la tienen siguen pagando igual\./i,
+      ),
+    ).toBeInTheDocument();
+    expect(adfaRow).toHaveAttribute("data-oculta", "true");
+    expect(adfaRow.className).toContain("bg-sunken");
+
+    const juniorRow = await findTarifaRow("Junior");
+    expect(within(juniorRow).getByText("Mensual")).toBeInTheDocument();
+    expect(juniorRow).not.toHaveAttribute("data-oculta");
+  });
+});
+
+describe("TarifasPage — eliminar", () => {
+  it("offers Eliminar only on tariffs that were never used", async () => {
+    mockFetchTiposMembresia.mockResolvedValue([JUNIOR, PRUEBA]);
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    const pruebaRow = await findTarifaRow("Prueba");
+    expect(within(juniorRow).queryByRole("button", { name: /eliminar/i })).not.toBeInTheDocument();
+    expect(within(pruebaRow).getByRole("button", { name: /eliminar/i })).toBeInTheDocument();
+  });
+
+  it("orders the actions Editar, Ocultar/Mostrar, Eliminar", async () => {
+    mockFetchTiposMembresia.mockResolvedValue([PRUEBA]);
+    renderPage();
+
+    const row = await findTarifaRow("Prueba");
+    const labels = within(row).getAllByRole("button").map((b) => b.textContent?.trim());
+    expect(labels).toEqual(["Editar", "Ocultar", "Eliminar"]);
+  });
+
+  it("confirms with an irreversible warning, then DELETEs and removes the card", async () => {
+    mockFetchTiposMembresia.mockResolvedValue([JUNIOR, PRUEBA]);
+    mockEliminarTipoMembresia.mockResolvedValueOnce(undefined);
+    renderPage();
+
+    const pruebaRow = await findTarifaRow("Prueba");
+    fireEvent.click(within(pruebaRow).getByRole("button", { name: /eliminar/i }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/¿eliminar «prueba»\?/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/no se puede deshacer/i)).toBeInTheDocument();
+    expect(mockEliminarTipoMembresia).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^eliminar$/i }));
+
+    await waitFor(() => expect(mockEliminarTipoMembresia).toHaveBeenCalledWith(3));
+    await waitFor(() => expect(screen.queryByText("Prueba")).not.toBeInTheDocument());
+    expect(screen.getAllByText("Junior").length).toBeGreaterThan(0);
+  });
+
+  it("shows the server's 409 message and keeps the card when the tariff turns out to be in use", async () => {
+    mockFetchTiposMembresia.mockResolvedValue([JUNIOR, PRUEBA]);
+    const { ApiClientError } = await import("@/services/api");
+    mockEliminarTipoMembresia.mockRejectedValueOnce(
+      new ApiClientError("No se puede eliminar la tarifa 'Prueba' porque ya se usó en membresías.", 409),
+    );
+    renderPage();
+
+    const pruebaRow = await findTarifaRow("Prueba");
+    fireEvent.click(within(pruebaRow).getByRole("button", { name: /eliminar/i }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /^eliminar$/i }));
+
+    expect((await screen.findAllByText(/porque ya se usó en membresías/i)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Prueba").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+describe("TarifasPage — resumen del catálogo", () => {
+  it("counts and prices only the visible tariffs, and says how many are hidden", async () => {
+    mockFetchTiposMembresia.mockResolvedValue([JUNIOR, SENIOR, ADFA]);
+    renderPage();
+    await findTarifaRow("Junior");
+
+    const rail = screen.getByTestId("tarifas-rail");
+    const summary = within(rail).getByRole("heading", { name: /resumen del catálogo/i }).parentElement as HTMLElement;
+    expect(within(summary).getByText("2")).toBeInTheDocument();
+    expect(within(summary).getByText("$ 45.00 – $ 60.00")).toBeInTheDocument();
+    expect(within(summary).getByText(/1 oculta/i)).toBeInTheDocument();
+  });
+
+  it("does not mention hidden tariffs when there are none", async () => {
+    renderPage();
+    await findTarifaRow("Junior");
+
+    expect(within(screen.getByTestId("tarifas-rail")).queryByText(/\d+ ocultas?/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("TarifasPage — tarjetas sin estirar", () => {
+  it("keeps the usage cards at their natural height: no flex-1 on the list, no leftover-height grid on the column", async () => {
+    mockFetchTiposMembresia.mockResolvedValue([JUNIOR, SENIOR]);
+    renderPage();
+    await findTarifaRow("Junior");
+
+    const usage = screen.getByTestId("tarifas-usage");
+    const list = usage.querySelector("ul") as HTMLElement;
+    expect(list.className).not.toContain("flex-1");
+
+    const column = usage.parentElement as HTMLElement;
+    expect(column.className).not.toContain("grid-rows-[auto_1fr]");
+    expect(column.className).not.toContain("min-h-[calc");
+    expect(usage.className).not.toContain("flex-1");
+  });
+
+  it("does not reserve a tall dead block for the 'Agregar tarifa' placeholder", async () => {
+    renderPage();
+    await findTarifaRow("Junior");
+
+    const placeholder = screen.getByRole("button", { name: /agregar tarifa/i });
+    expect(placeholder.className).not.toMatch(/min-h-56/);
   });
 });

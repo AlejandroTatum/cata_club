@@ -44,11 +44,13 @@ export interface AlumnoDelClub {
    */
   horariosCompactos: string | null;
   /**
-   * The start time of the alumno's first training window (`"15:00"`). The
-   * roster carries no categoría, and the club's groups train at fixed hours,
-   * so the start time is the group key the filter pills use.
+   * The alumno's categoría código (`"JUVENIL"`): the key the filter chips use.
+   * Not the start time — two categorías can train at the same hour and one
+   * categoría can train at different hours on different days.
    */
   grupo: string | null;
+  /** The categoría's display name (`"Juvenil"`); falls back to the código. */
+  grupoEtiqueta: string | null;
 }
 
 /**
@@ -134,7 +136,9 @@ export function agruparAlumnosDelPadron(filas: AlumnoHorario[]): AlumnoDelClub[]
       edad: filasDeLaPersona[0].edad,
       horarios: resumirHorarios(filasDeLaPersona),
       horariosCompactos: compactarHorarios(filasDeLaPersona),
-      grupo: buildWeeklyTrainingSchedule(filasDeLaPersona)[0]?.horaInicio ?? null,
+      grupo: filasDeLaPersona[0].horarioCategoria ?? null,
+      grupoEtiqueta:
+        filasDeLaPersona[0].horarioCategoriaLabel ?? filasDeLaPersona[0].horarioCategoria ?? null,
     }))
     .sort((a, b) => a.nombreCompleto.localeCompare(b.nombreCompleto, "es"));
 }

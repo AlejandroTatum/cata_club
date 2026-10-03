@@ -1,9 +1,11 @@
-from typing import Optional, List
+from typing import Optional, List, Set
 from datetime import date, datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.dominio.modelos import Membresia, TipoMembresia, Pago, HistorialEstadoMembresia
+from app.dominio.modelos import (
+    Membresia, TipoMembresia, Pago, HistorialEstadoMembresia, HistorialCambioPlanMembresia,
+)
 from app.dominio.enums import EstadoMembresia, EstadoPago
 from app.soporte_transversal.bloqueo_fila import obtener_con_bloqueo_y_timeout
 
@@ -15,8 +17,31 @@ class TipoMembresiaRepositorio:
     def obtener_por_id(self, tipo_id: int) -> Optional[TipoMembresia]:
         return self.db.get(TipoMembresia, tipo_id)
 
-    def listar(self) -> List[TipoMembresia]:
-        return self.db.query(TipoMembresia).all()
+    def listar(self, solo_activas: bool = False) -> List[TipoMembresia]:
+        consulta = self.db.query(TipoMembresia)
+        if solo_activas:
+            consulta = consulta.filter(TipoMembresia.activo.is_(True))
+        return consulta.order_by(TipoMembresia.id).all()
+
+    def ids_en_uso(self, ids: List[int]) -> Set[int]:
+        """Cuáles de `ids` tienen alguna referencia por FK (membresías o
+        auditoría de cambio de plan). Una sola consulta para todo el lote."""
+        if not ids:
+            return set()
+        usados: Set[int] = set()
+        for columna in (
+            Membresia.tipo_membresia_id,
+            HistorialCambioPlanMembresia.tipo_membresia_id_anterior,
+            HistorialCambioPlanMembresia.tipo_membresia_id_nuevo,
+        ):
+            usados.update(
+                self.db.execute(select(columna).where(columna.in_(ids)).distinct()).scalars()
+            )
+        return usados
+
+    def eliminar(self, tipo: TipoMembresia) -> None:
+        self.db.delete(tipo)
+        self.db.flush()
 
     def crear(self, tipo: TipoMembresia) -> TipoMembresia:
         self.db.add(tipo)
@@ -389,6 +414,23 @@ class HistorialEstadoMembresiaRepositorio:
             .group_by(HistorialEstadoMembresia.membresia_id)
         )
         return dict(self.db.execute(stmt).all())
+
+    def motivo_ultima_suspension_bulk(self, membresia_ids: list[int]) -> dict[int, str]:
+        """`motivo` de la transición MÁS RECIENTE hacia SUSPENDIDA de cada
+        membresía (FAM-05), en UNA consulta. Solo tiene sentido para las que
+        siguen suspendidas: el caller filtra por estado."""
+        if not membresia_ids:
+            return {}
+        stmt = (
+            select(HistorialEstadoMembresia.membresia_id, HistorialEstadoMembresia.motivo)
+            .where(
+                HistorialEstadoMembresia.membresia_id.in_(membresia_ids),
+                HistorialEstadoMembresia.estado_nuevo == EstadoMembresia.SUSPENDIDA,
+            )
+            .order_by(HistorialEstadoMembresia.id.asc())
+        )
+        # Orden ascendente + dict: la última fila escrita de cada membresía gana.
+        return {mid: motivo for mid, motivo in self.db.execute(stmt).all() if motivo}
 
     def ultima_transicion(self, membresia_id: int) -> Optional[HistorialEstadoMembresia]:
         """La fila de `HistorialEstadoMembresia` escrita MÁS RECIENTEMENTE
