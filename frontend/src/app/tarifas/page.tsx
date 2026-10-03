@@ -10,7 +10,7 @@
  * `handleCreateSubmit`).
  *
  * A tariff is retired in two ways. "Ocultar" is always available and
- * reversible: the tariff leaves the web and enrollment, while whoever already
+ * reversible: the tariff leaves the site and enrollment, while whoever already
  * has it keeps paying the same. "Eliminar" is offered only while `enUso` is
  * false (no membresía ever used it) and cannot be undone.
  */
@@ -118,6 +118,17 @@ const EMPTY_NEW_TARIFA = {
   precioInput: "",
   modalidad: "MENSUAL" as TipoMembresiaCatalogo["modalidad"],
 };
+
+/** A field caption with its required mark inline. The label is a flex column,
+ *  so a bare sibling mark would drop to its own line (ADMB-28): both live in
+ *  one caption element instead. */
+function RequiredCaption({ children }: { children: string }): React.ReactElement {
+  return (
+    <span data-field-caption>
+      {children} <span aria-hidden="true" className="text-state-bad">*</span>
+    </span>
+  );
+}
 
 /** Brings a just-opened form into view and focuses its first field. On mobile
  *  the rail sits below the list, so without this the open button looks dead. */
@@ -413,7 +424,7 @@ export default function TarifasPage(): React.ReactElement {
   async function handleCreateSubmit(): Promise<void> {
     const categoria = newTarifa.categoria.trim();
     if (!categoria) {
-      setCreateError("La categoría es obligatoria.");
+      setCreateError("Escriba el nombre de la tarifa.");
       return;
     }
     const precio = normalizePrecio(newTarifa.precioInput);
@@ -507,7 +518,12 @@ export default function TarifasPage(): React.ReactElement {
             <Pencil size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Editar
           </Button>
-          <Button size="sm" onClick={() => requestToggleActivo(tarifa)} disabled={isBusy}>
+          <Button
+            size="sm"
+            onClick={() => requestToggleActivo(tarifa)}
+            disabled={isBusy}
+            aria-label={`${tarifa.activo ? "Ocultar" : "Mostrar"} la tarifa ${tarifa.categoria}`}
+          >
             {isBusy ? (
               <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
             ) : tarifa.activo ? (
@@ -523,6 +539,7 @@ export default function TarifasPage(): React.ReactElement {
               className={ELIMINAR_CLASS}
               onClick={() => setPendingDelete(tarifa)}
               disabled={isBusy}
+              aria-label={`Eliminar la tarifa ${tarifa.categoria}`}
             >
               <Trash2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
               Eliminar
@@ -573,7 +590,7 @@ export default function TarifasPage(): React.ReactElement {
           </div>
         </dl>
         {ocultas > 0 && (
-          <p>{ocultas === 1 ? "1 oculta" : `${ocultas} ocultas`}: no aparece en la web ni en inscripciones.</p>
+          <p>{ocultas === 1 ? "1 oculta" : `${ocultas} ocultas`}: no aparece en el sitio ni en inscripciones.</p>
         )}
       </InfoPanel>
     );
@@ -589,7 +606,7 @@ export default function TarifasPage(): React.ReactElement {
           pagos futuros; las membresías y los pagos ya registrados no se modifican.
         </p>
         <p>
-          <strong className="text-ink">Ocultar</strong> la saca de la web y de las inscripciones;
+          <strong className="text-ink">Ocultar</strong> la saca del sitio y de las inscripciones;
           quienes ya la tienen siguen pagando igual.{" "}
           <strong className="text-ink">Eliminar</strong> solo aparece mientras nadie la usó y no se
           puede deshacer.
@@ -607,7 +624,7 @@ export default function TarifasPage(): React.ReactElement {
         </h2>
         <div className="flex flex-col gap-section">
           <label className={FIELD_LABEL}>
-            Categoría <span aria-hidden="true" className="text-state-bad">*</span>
+            <RequiredCaption>Nombre de la tarifa</RequiredCaption>
             <input
               type="text"
               required
@@ -623,7 +640,7 @@ export default function TarifasPage(): React.ReactElement {
             />
           </label>
           <label className={FIELD_LABEL}>
-            Precio <span aria-hidden="true" className="text-state-bad">*</span>
+            <RequiredCaption>Precio</RequiredCaption>
             <MoneyInput
               required
               value={newTarifa.precioInput}
@@ -640,7 +657,7 @@ export default function TarifasPage(): React.ReactElement {
             )}
           </label>
           <label className={FIELD_LABEL}>
-            Modalidad <span aria-hidden="true" className="text-state-bad">*</span>
+            <RequiredCaption>Modalidad</RequiredCaption>
             <select
               value={newTarifa.modalidad}
               required
@@ -762,7 +779,10 @@ export default function TarifasPage(): React.ReactElement {
                             >
                               {tarifa.categoria}
                             </h3>
-                            <Badge>{oculta ? "Oculta" : MODALIDAD_LABEL[tarifa.modalidad]}</Badge>
+                            <div className="flex flex-wrap gap-1">
+                              <Badge tone={oculta ? "neutral" : "ok"}>{oculta ? "Oculta" : "Visible"}</Badge>
+                              <Badge>{MODALIDAD_LABEL[tarifa.modalidad]}</Badge>
+                            </div>
                           </div>
                           <div className="grid gap-1">
                             <p
@@ -773,7 +793,7 @@ export default function TarifasPage(): React.ReactElement {
                             >{`$ ${tarifa.precio}`}</p>
                             <p className="text-xs text-ink-3">
                               {oculta
-                                ? "No aparece en la web ni en inscripciones. Los alumnos que ya la tienen siguen pagando igual."
+                                ? "No aparece en el sitio ni en inscripciones. Los alumnos que ya la tienen siguen pagando igual."
                                 : tarifa.enUso
                                   ? "Se usa en inscripción, pagos y cambio de plan."
                                   : "Todavía no se usó."}
@@ -821,7 +841,7 @@ export default function TarifasPage(): React.ReactElement {
           open={pendingHide !== null}
           variant="danger"
           title={pendingHide ? `¿Ocultar «${pendingHide.categoria}»?` : ""}
-          message="Deja de aparecer en la web y en inscripciones nuevas. Los alumnos que ya la tienen siguen pagando igual. Puede volver a mostrarla cuando quiera."
+          message="Deja de aparecer en el sitio y en inscripciones nuevas. Los alumnos que ya la tienen siguen pagando igual. Puede volver a mostrarla cuando quiera."
           confirmLabel="Ocultar"
           onConfirm={() => void confirmHide()}
           onCancel={() => setPendingHide(null)}

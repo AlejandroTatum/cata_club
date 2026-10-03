@@ -613,10 +613,10 @@ describe("TarifasPage — crear tarifa", () => {
     await screen.findByTestId("tarifas-cards");
 
     fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
-    expect(screen.getByLabelText(/categoría/i)).toBeRequired();
+    expect(screen.getByLabelText(/nombre de la tarifa/i)).toBeRequired();
     expect(screen.getByLabelText(/^precio/i)).toBeRequired();
     expect(screen.getByLabelText(/modalidad/i)).toBeRequired();
-    fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "Mensual Infantil" } });
+    fireEvent.change(screen.getByLabelText(/nombre de la tarifa/i), { target: { value: "Mensual Infantil" } });
     fireEvent.change(screen.getByLabelText(/^precio/i), { target: { value: "25.00" } });
     fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
 
@@ -639,7 +639,7 @@ describe("TarifasPage — crear tarifa", () => {
     await screen.findByTestId("tarifas-cards");
 
     fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
-    fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "Clases sueltas" } });
+    fireEvent.change(screen.getByLabelText(/nombre de la tarifa/i), { target: { value: "Clases sueltas" } });
     fireEvent.change(screen.getByLabelText(/modalidad/i), { target: { value: "PERSONALIZADA" } });
     fireEvent.change(screen.getByLabelText(/^precio/i), { target: { value: "10.00" } });
     fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
@@ -653,7 +653,7 @@ describe("TarifasPage — crear tarifa", () => {
     });
   });
 
-  it("rejects an empty categoria without calling the API", async () => {
+  it("rejects an empty name without calling the API", async () => {
     renderPage();
     await screen.findByTestId("tarifas-cards");
 
@@ -662,7 +662,7 @@ describe("TarifasPage — crear tarifa", () => {
     fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
 
     expect(mockCrearTipoMembresia).not.toHaveBeenCalled();
-    expect(await screen.findByText(/categoría es obligatoria/i)).toBeInTheDocument();
+    expect(await screen.findByText(/escriba el nombre de la tarifa/i)).toBeInTheDocument();
   });
 
   it("rejects an invalid price without calling the API", async () => {
@@ -670,7 +670,7 @@ describe("TarifasPage — crear tarifa", () => {
     await screen.findByTestId("tarifas-cards");
 
     fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
-    fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "Mensual Infantil" } });
+    fireEvent.change(screen.getByLabelText(/nombre de la tarifa/i), { target: { value: "Mensual Infantil" } });
     fireEvent.change(screen.getByLabelText(/^precio/i), { target: { value: "0" } });
     fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
 
@@ -687,13 +687,13 @@ describe("TarifasPage — crear tarifa", () => {
     await screen.findByTestId("tarifas-cards");
 
     fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
-    fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "Mensual Infantil" } });
+    fireEvent.change(screen.getByLabelText(/nombre de la tarifa/i), { target: { value: "Mensual Infantil" } });
     fireEvent.change(screen.getByLabelText(/^precio/i), { target: { value: "25.00" } });
     fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
 
     expect(await screen.findByText("Ya existe una tarifa con esa categoría")).toBeInTheDocument();
     // The form stays open so the admin can correct the input.
-    expect(screen.getByLabelText(/categoría/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/nombre de la tarifa/i)).toBeInTheDocument();
   });
 
   it("lets the admin cancel without creating anything", async () => {
@@ -701,7 +701,7 @@ describe("TarifasPage — crear tarifa", () => {
     await screen.findByTestId("tarifas-cards");
 
     fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
-    fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "Mensual Infantil" } });
+    fireEvent.change(screen.getByLabelText(/nombre de la tarifa/i), { target: { value: "Mensual Infantil" } });
     fireEvent.click(screen.getByRole("button", { name: /^cancelar$/i }));
 
     expect(screen.queryByLabelText(/categoría/i)).not.toBeInTheDocument();
@@ -714,7 +714,7 @@ describe("TarifasPage — crear tarifa", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
 
-    expect(screen.getByLabelText(/categoría/i)).toHaveFocus();
+    expect(screen.getByLabelText(/nombre de la tarifa/i)).toHaveFocus();
   });
 });
 
@@ -737,7 +737,7 @@ describe("TarifasPage — panel lateral", () => {
     await findTarifaRow("Junior");
 
     fireEvent.click(screen.getByRole("button", { name: /agregar tarifa/i }));
-    expect(within(screen.getByTestId("tarifas-rail")).getByLabelText(/categoría/i)).toBeInTheDocument();
+    expect(within(screen.getByTestId("tarifas-rail")).getByLabelText(/nombre de la tarifa/i)).toBeInTheDocument();
   });
 
   it("shows the creation form above the guidance, which never disappears", async () => {
@@ -746,7 +746,7 @@ describe("TarifasPage — panel lateral", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
     const rail = screen.getByTestId("tarifas-rail");
-    expect(within(rail).getByLabelText(/categoría/i)).toBeInTheDocument();
+    expect(within(rail).getByLabelText(/nombre de la tarifa/i)).toBeInTheDocument();
     expect(within(rail).getByText(/cómo se aplican/i)).toBeInTheDocument();
 
     fireEvent.click(within(rail).getByRole("button", { name: /cancelar/i }));
@@ -771,7 +771,7 @@ describe("TarifasPage — ocultar y mostrar", () => {
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
-    fireEvent.click(within(juniorRow).getByRole("button", { name: /^ocultar$/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^ocultar la tarifa/i }));
 
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText(/¿ocultar «junior»\?/i)).toBeInTheDocument();
@@ -784,7 +784,7 @@ describe("TarifasPage — ocultar y mostrar", () => {
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
-    fireEvent.click(within(juniorRow).getByRole("button", { name: /^ocultar$/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^ocultar la tarifa/i }));
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /^ocultar$/i }));
 
     await waitFor(() => {
@@ -799,7 +799,7 @@ describe("TarifasPage — ocultar y mostrar", () => {
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
-    fireEvent.click(within(juniorRow).getByRole("button", { name: /^ocultar$/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^ocultar la tarifa/i }));
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /cancelar/i }));
 
     expect(mockActualizarTipoMembresia).not.toHaveBeenCalled();
@@ -812,7 +812,7 @@ describe("TarifasPage — ocultar y mostrar", () => {
     renderPage();
 
     const adfaRow = await findTarifaRow("ADFA");
-    fireEvent.click(within(adfaRow).getByRole("button", { name: /^mostrar$/i }));
+    fireEvent.click(within(adfaRow).getByRole("button", { name: /^mostrar la tarifa/i }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await waitFor(() => {
@@ -828,10 +828,11 @@ describe("TarifasPage — ocultar y mostrar", () => {
 
     const adfaRow = await findTarifaRow("ADFA");
     expect(within(adfaRow).getByText("Oculta")).toBeInTheDocument();
-    expect(within(adfaRow).queryByText("Mensual")).not.toBeInTheDocument();
+    // ADMB-21: visibility is its own badge; the modality stays visible beside it.
+    expect(within(adfaRow).getByText("Mensual")).toBeInTheDocument();
     expect(
       within(adfaRow).getByText(
-        /no aparece en la web ni en inscripciones\. los alumnos que ya la tienen siguen pagando igual\./i,
+        /no aparece en el sitio ni en inscripciones\. los alumnos que ya la tienen siguen pagando igual\./i,
       ),
     ).toBeInTheDocument();
     expect(adfaRow).toHaveAttribute("data-oculta", "true");
@@ -839,7 +840,34 @@ describe("TarifasPage — ocultar y mostrar", () => {
 
     const juniorRow = await findTarifaRow("Junior");
     expect(within(juniorRow).getByText("Mensual")).toBeInTheDocument();
+    expect(within(juniorRow).getByText("Visible")).toBeInTheDocument();
     expect(juniorRow).not.toHaveAttribute("data-oculta");
+  });
+});
+
+describe("TarifasPage — accessible names and form labels (ADMB-26, ADMB-28)", () => {
+  it("names each Ocultar/Mostrar/Eliminar button after its tarifa", async () => {
+    mockFetchTiposMembresia.mockResolvedValue([JUNIOR, PRUEBA, ADFA]);
+    renderPage();
+    await screen.findByTestId("tarifas-cards");
+
+    expect(screen.getByRole("button", { name: "Ocultar la tarifa Junior" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ocultar la tarifa Prueba" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mostrar la tarifa ADFA" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar la tarifa Prueba" })).toBeInTheDocument();
+  });
+
+  it("keeps the required mark on the same line as its label text", async () => {
+    renderPage();
+    await screen.findByTestId("tarifas-cards");
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
+
+    for (const name of [/^nombre de la tarifa/i, /^precio/i, /^modalidad/i]) {
+      const label = screen.getByLabelText(name).closest("label") as HTMLElement;
+      const caption = label.querySelector("[data-field-caption]");
+      expect(caption, `${name} needs one caption element holding text and mark`).not.toBeNull();
+      expect(caption?.querySelector("[aria-hidden='true']")?.textContent).toBe("*");
+    }
   });
 });
 
