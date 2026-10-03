@@ -118,7 +118,8 @@ describe("ActividadPage — Resumen", () => {
     await screen.findByTestId("activity-kpis");
     expect(mockResumen).toHaveBeenCalledTimes(1);
     expect(mockResumen).toHaveBeenCalledWith("7d");
-    expect(mockAvanzadas).not.toHaveBeenCalled();
+    // Only the one-off health probe for «Estado del sistema» (ADMB-01), never the full view.
+    expect(mockAvanzadas.mock.calls).toEqual([["1h"]]);
     expect(screen.getByRole("button", { name: "Resumen" })).toHaveAttribute("aria-pressed", "true");
     for (const label of ["Personas que ingresaron", "Asistencias registradas", "Pagos registrados", "Inscripciones nuevas"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
@@ -153,6 +154,14 @@ describe("ActividadPage — Resumen", () => {
     expect(within(card).getByText(/Hay correos o avisos/)).toBeInTheDocument();
     expect(within(card).getByText(/técnico/)).toBeInTheDocument();
     expect(within(card).getAllByRole("listitem")).toHaveLength(3);
+  });
+
+  it("switches the system status to «Atención» when the advanced metrics cannot be read (ADMB-01)", async () => {
+    mockAvanzadas.mockRejectedValue(new Error("boom"));
+    await renderResumen();
+    const card = screen.getByTestId("system-status");
+    await waitFor(() => expect(within(card).getByText(/No se pudieron leer las métricas/)).toBeInTheDocument());
+    expect(within(card).getAllByText("Atención").length).toBeGreaterThan(0);
   });
 
   it("does not mention the daily email limit when nothing is waiting for it", async () => {
@@ -436,7 +445,8 @@ describe("ActividadPage — Métricas avanzadas polling", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(POLL_MS * 2);
     });
-    expect(mockAvanzadas).toHaveBeenCalledTimes(1);
+    // 1 from the advanced view + 1 health probe from the summary; no polling after leaving.
+    expect(mockAvanzadas).toHaveBeenCalledTimes(2);
   });
 });
 

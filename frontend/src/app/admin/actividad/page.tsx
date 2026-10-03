@@ -17,7 +17,7 @@
 
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -71,9 +71,22 @@ const asInstant = (millis: number): string => new Date(millis).toISOString();
 
 function ResumenPane({ range }: { range: ResumenRange }): React.ReactElement {
   const { state, retry } = useActividad(fetchActividadResumen, range);
+  // «Estado del sistema» must not say everything is fine while the advanced
+  // metrics are unreadable (ADMB-01): probe them once, never block on it.
+  const [metricsUnavailable, setMetricsUnavailable] = useState(false);
+  useEffect(() => {
+    let live = true;
+    Promise.resolve(fetchActividadAvanzadas("1h")).then(
+      () => live && setMetricsUnavailable(false),
+      () => live && setMetricsUnavailable(true),
+    );
+    return (): void => {
+      live = false;
+    };
+  }, []);
   if (state.status === "loading") return <LoadingState label="Cargando actividad…" />;
   if (state.status === "error") return <FailedBlock title="Resumen" error={state.error} onRetry={retry} />;
-  return <ResumenView data={state.data} now={asInstant(state.loadedAt)} />;
+  return <ResumenView data={state.data} now={asInstant(state.loadedAt)} metricsUnavailable={metricsUnavailable} />;
 }
 
 function AvanzadasPane({ range }: { range: AvanzadasRange }): React.ReactElement {
