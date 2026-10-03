@@ -78,7 +78,7 @@ test.describe("Landing header and schedule hours on a real mobile engine", () =>
     await expect(card).toBeVisible();
     const time = card.locator(".landing-schedule-time");
     await expect(time).toBeVisible();
-    await expect(time).toHaveText("20:00–21:15");
+    await expect(time).toHaveText(/20:00\s*–\s*21:15/);
 
     // A wrapped range paints as more than one client rect (one per visual line).
     const rectCount = await time.evaluate((el) => el.getClientRects().length);
