@@ -60,8 +60,10 @@ vi.mock("next/image", () => ({
 const mockFetchAttendanceRecords = vi.fn();
 const mockFetchTrainingSchedules = vi.fn();
 const mockSearchStudents = vi.fn();
+const mockFetchRoster = vi.fn();
 
 vi.mock("@/services/api", () => ({
+  fetchRosterDeTodosLosHorarios: () => mockFetchRoster(),
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
   searchStudents: (...args: unknown[]) => mockSearchStudents(...args),
@@ -129,6 +131,7 @@ describe("TrainerAttendanceHistoryPage", () => {
     mockFetchAttendanceRecords.mockReset().mockResolvedValue(RECORDS);
     mockFetchTrainingSchedules.mockReset().mockResolvedValue(SCHEDULES);
     mockSearchStudents.mockReset().mockResolvedValue([]);
+    mockFetchRoster.mockReset().mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -147,6 +150,19 @@ describe("TrainerAttendanceHistoryPage", () => {
     expect(screen.queryByText("Sofia Vera")).not.toBeInTheDocument();
   });
 
+  it("lists a partly-filled list as «N de M registrados» using the roster (ENT-13)", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([
+      record("present", "Sofia Vera", "2026-08-10", "Lunes 15:00 — 16:00", 7, "Carlos Mendoza"),
+      record("absent", "Luis Lopez", "2026-08-10", "Lunes 15:00 — 16:00", 7, "Carlos Mendoza"),
+    ]);
+    mockFetchRoster.mockResolvedValue(
+      [1, 2, 3, 4, 5].map((personaId) => ({ personaId, horarioId: 7 })),
+    );
+    render(<TrainerAttendanceHistoryPage />);
+
+    expect(await screen.findByText("2 de 5 registrados")).toBeInTheDocument();
+  });
+
   it("pluralises 'sesión' as 'sesiones', not 'sesións' (ASI-6)", async () => {
     // 11 distinct sessions (one record each, all different dates) force a
     // second page at PAGE_SIZE=10, which is what renders the range readout.
@@ -162,7 +178,7 @@ describe("TrainerAttendanceHistoryPage", () => {
     expect(screen.queryByText(/sesións/)).not.toBeInTheDocument();
   });
 
-  it("shows who took each list (issue #263) — a persisted taker, and 'No registrado' for legacy rows", async () => {
+  it("shows who took each list (issue #263) — a persisted taker, and a dash for legacy rows (ENT-19)", async () => {
     render(<TrainerAttendanceHistoryPage />);
 
     const rows = await screen.findAllByRole("row");
@@ -172,9 +188,10 @@ describe("TrainerAttendanceHistoryPage", () => {
     expect(within(rows[0]).getAllByRole("columnheader")).toHaveLength(3);
 
     // The Monday session carries a persisted taker; the Friday session is
-    // legacy (no author) and renders the explicit "No registrado" placeholder.
+    // legacy (no author) and renders a dash, never "No registrado".
     expect(within(rows[1]).getByText("Carlos Mendoza")).toBeInTheDocument();
-    expect(within(rows[2]).getByText("No registrado")).toBeInTheDocument();
+    expect(within(rows[2]).getByText("—")).toBeInTheDocument();
+    expect(screen.queryByText("No registrado")).not.toBeInTheDocument();
   });
 
   /*
