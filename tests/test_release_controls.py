@@ -160,6 +160,20 @@ def test_preflight_rejects_a_checkout_head_different_from_image_tag(tmp_path):
     assert "IMAGE_TAG" in result.stderr
 
 
+def test_preflight_production_env_check_is_opt_in_and_fail_closed(tmp_path):
+    env = _smtp_preflight_env(tmp_path)
+
+    default = run_script("scripts/ops/preflight-production.sh", env=env)
+    assert default.returncode == 0, default.stderr
+
+    strict = run_script(
+        "scripts/ops/preflight-production.sh",
+        env={**env, "PREFLIGHT_REQUIRE_PRODUCTION_ENV": "1"},
+    )
+    assert strict.returncode != 0
+    assert "check-prod-env.sh" in strict.stderr
+
+
 def test_preflight_smtp_starttls_succeeds_without_authentication(tmp_path):
     result = run_script(
         "scripts/ops/preflight-production.sh",

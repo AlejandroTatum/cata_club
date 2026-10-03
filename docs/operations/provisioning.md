@@ -23,6 +23,16 @@ export MIGRATION_COMPATIBILITY=none  # o backward-compatible
 ./scripts/deploy/deploy.sh
 ```
 
+Antes del primer deploy productivo (reconversión de staging a producción),
+valida el `.env` del host con `scripts/ops/check-prod-env.sh` (falla cerrado y
+solo imprime nombres de variable): `DOMINIO_INDEXABLE == DOMINIO`, sin
+`staging.` en `DOMINIO`/`CORS_ORIGENES`/`FRONTEND_URL`, sin `staging` en las
+carpetas de Cloudinary y `JWT_SECRET_KEY`/`POSTGRES_PASSWORD` reales. Con
+`--previous-env <.env-viejo>` comprueba por hash que ambos secretos fueron
+rotados. El preflight lo ejecuta con `PREFLIGHT_REQUIRE_PRODUCTION_ENV=1`
+(y `PREVIOUS_ENV_FILE=<ruta>` opcional); es opt-in porque staging usa el mismo
+preflight.
+
 `preflight-production.sh` solo lee la configuración: exige `.env`, comprueba que
 `git rev-parse HEAD` sea exactamente `IMAGE_TAG`, valida el render de Compose,
 deriva la imagen del servicio `backend` y comprueba que Docker esté disponible y
