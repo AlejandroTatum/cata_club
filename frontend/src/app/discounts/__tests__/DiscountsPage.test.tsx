@@ -151,7 +151,7 @@ describe("DiscountsPage — listado", () => {
 
     expect(within(becaRow).getByText("Activo")).toBeInTheDocument();
     expect(within(becaRow).getByText("100 %")).toBeInTheDocument();
-    expect(within(convenioRow).getByText("Oculta")).toBeInTheDocument();
+    expect(within(convenioRow).getByText("Oculto")).toBeInTheDocument();
     expect(convenioRow).toHaveAttribute("data-inactivo", "true");
     expect(becaRow).not.toHaveAttribute("data-inactivo", "true");
   });

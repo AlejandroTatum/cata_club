@@ -559,7 +559,7 @@ export default function DiscountsPage(): React.ReactElement {
             {descuento.nombre}
           </h3>
           <Badge tone={descuento.activo ? "ok" : "neutral"}>
-            {descuento.activo ? "Activo" : "Oculta"}
+            {descuento.activo ? "Activo" : "Oculto"}
           </Badge>
         </div>
         <div className="grid gap-1">
