@@ -63,7 +63,22 @@ describe("agruparAlumnosDelPadron", () => {
       horariosCompactos: "Lun, Mié, Vie 18:00",
       grupo: "JUVENIL",
       grupoEtiqueta: "Juvenil",
+      categorias: [{ codigo: "JUVENIL", etiqueta: "Juvenil" }],
     });
+  });
+
+  it("lista cada categoría en la que el alumno tiene horario, sin repetir (ENT-08)", () => {
+    const juvenil = fila(1, "Ana", 10, "LUNES", "15:00:00", "16:00:00");
+    const adultos = {
+      ...fila(1, "Ana", 10, "LUNES", "20:00:00", "21:00:00"),
+      horarioCategoria: "ADULTOS",
+      horarioCategoriaLabel: "Adultos",
+    };
+    const [ana] = agruparAlumnosDelPadron([juvenil, adultos, { ...juvenil, id: 99 }]);
+    expect(ana.categorias).toEqual([
+      { codigo: "ADULTOS", etiqueta: "Adultos" },
+      { codigo: "JUVENIL", etiqueta: "Juvenil" },
+    ]);
   });
 
   it("junta cinco días corridos en un rango y deja sueltos los salteados", () => {

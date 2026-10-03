@@ -30,9 +30,14 @@ const MAX_ROWS = 5;
 interface SessionsWithoutListProps {
   /** Newest first, already the full month — this component only slices it. */
   missing: MissingSession[];
+  /**
+   * Whether enrolment is known. Without it a partial list looks complete, so
+   * the empty state may not claim that every session has one.
+   */
+  coverageKnown: boolean;
 }
 
-export default function SessionsWithoutList({ missing }: SessionsWithoutListProps): React.ReactElement {
+export default function SessionsWithoutList({ missing, coverageKnown }: SessionsWithoutListProps): React.ReactElement {
   const visible = missing.slice(0, MAX_ROWS);
 
   return (
@@ -51,15 +56,24 @@ export default function SessionsWithoutList({ missing }: SessionsWithoutListProp
         </div>
       ) : (
         <p data-testid="compact-empty" className="m-0 text-sm text-ink-2">
-          <span className="font-semibold text-ink">Todas las sesiones del mes tienen lista.</span>{" "}
-          No quedan sesiones programadas sin una lista registrada.
+          {coverageKnown ? (
+            <>
+              <span className="font-semibold text-ink">Todas las sesiones del mes tienen lista.</span>{" "}
+              No quedan sesiones programadas sin una lista completa.
+            </>
+          ) : (
+            <>
+              <span className="font-semibold text-ink">Ninguna sesión del mes está sin lista.</span>{" "}
+              No se pudo comprobar si las listas están completas.
+            </>
+          )}
         </p>
       )}
 
       <div className="flex flex-col gap-1.5 border-t border-line pt-3">
         <p className="m-0 text-sm text-ink-2">
           <b className="font-semibold text-ink">{missing.length}</b>{" "}
-          {missing.length === 1 ? "sesión sin lista" : "sesiones sin lista"} este mes ·{" "}
+          {missing.length === 1 ? "sesión sin lista" : "sesiones sin lista"} o incompletas este mes ·{" "}
           <Link href="/trainer/attendance/history" className="font-semibold text-ink underline">
             {missing.length > MAX_ROWS ? "Ver todas" : "Ver historial"}
           </Link>
@@ -79,6 +93,7 @@ export default function SessionsWithoutList({ missing }: SessionsWithoutListProp
 
 function MissingSessionRow({ session }: { session: MissingSession }): React.ReactElement {
   const href = `/trainer/attendance${buildWizardQuery(session.schedule.id, session.fecha, "mark-attendance")}`;
+  const incomplete = session.registrados !== undefined && session.inscritos !== undefined;
 
   return (
     <div className="flex min-h-drow items-center justify-between gap-3 border-b border-line py-2 last:border-b-0">
@@ -87,9 +102,14 @@ function MissingSessionRow({ session }: { session: MissingSession }): React.Reac
         <span className="text-xs tabular-nums text-ink-2">
           {session.schedule.horaInicio} — {session.schedule.horaFin}
         </span>
+        {incomplete && (
+          <span className="text-xs font-semibold text-state-warn">
+            {session.registrados} de {session.inscritos} registrados
+          </span>
+        )}
       </div>
       <Link href={href} className={buttonClasses("secondary", "sm")}>
-        Pasar lista
+        {incomplete ? "Completar lista" : "Pasar lista"}
       </Link>
     </div>
   );

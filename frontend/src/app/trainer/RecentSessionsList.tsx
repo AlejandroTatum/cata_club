@@ -68,7 +68,7 @@ export default function RecentSessionsList({ sessions, status = "ready", onRetry
       ) : (
         <CompactEmpty
           title="Todavía no hay listas registradas"
-          description="En cuanto alguien pase lista en el club, la sesión aparece acá con su desglose."
+          description="En cuanto alguien pase lista en el club, la sesión aparece aquí con su desglose."
         />
       )}
     </section>

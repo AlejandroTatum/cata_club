@@ -246,3 +246,45 @@ describe("findMissingSessions", () => {
     expect(missing.map((m) => m.fecha)).toEqual(["2026-07-20", "2026-07-17", "2026-07-13"]);
   });
 });
+
+describe("lista incompleta (ENT-13)", () => {
+  const base = {
+    schedules: SCHEDULES,
+    desde: "2026-07-20",
+    hasta: "2026-07-20",
+    hoy: "2026-08-15",
+  };
+
+  it("cuenta como pendiente una sesión con menos registros que inscritos", () => {
+    const faltantes = findMissingSessions({
+      ...base,
+      sessions: [{ fecha: "2026-07-20", horarioId: 7, registrados: 5 }],
+      inscritosPorHorario: { 7: 62 },
+    });
+
+    expect(faltantes).toHaveLength(1);
+    expect(faltantes[0]).toMatchObject({ fecha: "2026-07-20", registrados: 5, inscritos: 62 });
+  });
+
+  it("suma los registros de una misma sesión y la da por completa al llegar a los inscritos", () => {
+    const completa = findMissingSessions({
+      ...base,
+      sessions: [
+        { fecha: "2026-07-20", horarioId: 7, registrados: 1 },
+        { fecha: "2026-07-20", horarioId: 7, registrados: 1 },
+      ],
+      inscritosPorHorario: { 7: 2 },
+    });
+
+    expect(completa).toEqual([]);
+  });
+
+  it("sin inscritos conocidos no inventa pendientes", () => {
+    const faltantes = findMissingSessions({
+      ...base,
+      sessions: [{ fecha: "2026-07-20", horarioId: 7, registrados: 5 }],
+    });
+
+    expect(faltantes).toEqual([]);
+  });
+});

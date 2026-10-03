@@ -98,7 +98,7 @@ export default function IndependizarSection({
       <p className="text-xs text-ink-3">
         Trámite presencial: confirme la identidad de {personaNombreCompleto} en el mostrador y
         establezca sus credenciales. Deja de depender de su representante y podrá iniciar sesión
-        con lo que registre acá.
+        con lo que registre aquí.
       </p>
       <label className="block text-sm font-semibold text-ink-2">
         Correo

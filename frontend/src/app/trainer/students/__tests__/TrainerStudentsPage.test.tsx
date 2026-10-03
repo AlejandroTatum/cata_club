@@ -748,4 +748,36 @@ describe("maestro–detalle en escritorio", () => {
     fireEvent.click(screen.getByRole("button", { name: "Todos, 3" }));
     expect(screen.getByTestId("student-row-7")).toBeInTheDocument();
   });
+  it("cuenta a un alumno en cada categoría donde tiene horario, y el chip coincide con la lista (ENT-08)", async () => {
+    const juvenil: [string, string] = ["JUVENIL", "Juvenil"];
+    const adultos: [string, string] = ["ADULTOS", "Adultos"];
+    mockFetchRoster.mockResolvedValue([
+      fila(1, "Ana Mora", 14, "LUNES", "15:00:00", juvenil),
+      fila(1, "Ana Mora", 14, "LUNES", "20:00:00", adultos),
+      fila(2, "Beto Vera", 40, "LUNES", "20:00:00", adultos),
+    ]);
+    render(<TrainerStudentsPage />);
+
+    await screen.findByTestId("student-row-1");
+    expect(screen.getByRole("button", { name: "Categoría Adultos, 2" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Categoría Juvenil, 1" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Categoría Adultos, 2" }));
+    expect(screen.getByTestId("student-row-1")).toBeInTheDocument();
+    expect(screen.getByTestId("student-row-2")).toBeInTheDocument();
+  });
+
+  it("vuelve al inicio de la lista al cambiar de página (ENT-09)", async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    mockFetchRoster.mockResolvedValue(
+      Array.from({ length: 12 }, (_, i) => fila(100 + i, `Alumno ${String(i).padStart(2, "0")}`, 10, "LUNES")),
+    );
+    render(<TrainerStudentsPage />);
+
+    await screen.findByTestId("student-row-100");
+    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+
+    expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: "start" }));
+  });
 });
