@@ -62,6 +62,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 const mockFetchDescuentos = vi.fn();
 const mockCrearDescuento = vi.fn();
 const mockActualizarDescuento = vi.fn();
+const mockEliminarDescuento = vi.fn();
 const mockFetchNotificaciones = vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 });
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
 
@@ -78,6 +79,7 @@ vi.mock("@/services/api", () => {
     fetchDescuentos: () => mockFetchDescuentos(),
     crearDescuento: (data: unknown) => mockCrearDescuento(data),
     actualizarDescuento: (id: number, data: unknown) => mockActualizarDescuento(id, data),
+    eliminarDescuento: (id: number) => mockEliminarDescuento(id),
     fetchNotificaciones: () => mockFetchNotificaciones(),
     marcarNotificacionLeida: (id: number) => mockMarcarNotificacionLeida(id),
     ApiClientError: MockApiClientError,
@@ -90,6 +92,17 @@ const BECA: DescuentoCatalogo = {
   porcentaje: "100",
   monto: null,
   activo: true,
+  enUso: true,
+};
+
+/** Never applied or assigned: the only kind that may be deleted. */
+const PROMO: DescuentoCatalogo = {
+  id: 3,
+  nombre: "Promo por error",
+  porcentaje: "5",
+  monto: null,
+  activo: true,
+  enUso: false,
 };
 
 const CONVENIO: DescuentoCatalogo = {
@@ -98,6 +111,7 @@ const CONVENIO: DescuentoCatalogo = {
   porcentaje: null,
   monto: "10.00",
   activo: false,
+  enUso: true,
 };
 
 function renderPage(): void {
@@ -125,6 +139,7 @@ beforeEach(() => {
   mockFetchDescuentos.mockReset().mockResolvedValue([BECA, CONVENIO]);
   mockCrearDescuento.mockReset();
   mockActualizarDescuento.mockReset();
+  mockEliminarDescuento.mockReset();
 });
 
 describe("DiscountsPage — listado", () => {
@@ -136,7 +151,7 @@ describe("DiscountsPage — listado", () => {
 
     expect(within(becaRow).getByText("Activo")).toBeInTheDocument();
     expect(within(becaRow).getByText("100 %")).toBeInTheDocument();
-    expect(within(convenioRow).getByText("Inactivo")).toBeInTheDocument();
+    expect(within(convenioRow).getByText("Oculta")).toBeInTheDocument();
     expect(convenioRow).toHaveAttribute("data-inactivo", "true");
     expect(becaRow).not.toHaveAttribute("data-inactivo", "true");
   });
@@ -430,11 +445,11 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
   // bug the audit found as if it were correct behavior. "Desactivar" now
   // opens a confirmation naming the discount before anything mutates;
   // "Reactivar" is unaffected (reversible, stays one click) — see below.
-  it("opens a confirmation naming the discount on 'Desactivar' click, without mutating yet", async () => {
+  it("opens a confirmation naming the discount on 'Ocultar' click, without mutating yet", async () => {
     renderPage();
 
     const becaRow = await findDescuentoRow("Beca municipal");
-    fireEvent.click(within(becaRow).getByRole("button", { name: /desactivar/i }));
+    fireEvent.click(within(becaRow).getByRole("button", { name: /^ocultar$/i }));
 
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText(/beca municipal/i)).toBeInTheDocument();
@@ -447,10 +462,10 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
     renderPage();
 
     const becaRow = await findDescuentoRow("Beca municipal");
-    fireEvent.click(within(becaRow).getByRole("button", { name: /desactivar/i }));
+    fireEvent.click(within(becaRow).getByRole("button", { name: /^ocultar$/i }));
 
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText(/reactivar/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/volver a mostrarlo/i)).toBeInTheDocument();
   });
 
   it("deactivates an active discount via PATCH activo:false only after confirming", async () => {
@@ -458,9 +473,9 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
     renderPage();
 
     const becaRow = await findDescuentoRow("Beca municipal");
-    fireEvent.click(within(becaRow).getByRole("button", { name: /desactivar/i }));
+    fireEvent.click(within(becaRow).getByRole("button", { name: /^ocultar$/i }));
     const dialog = screen.getByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /^desactivar$/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /^ocultar$/i }));
 
     await waitFor(() => {
       expect(mockActualizarDescuento).toHaveBeenCalledWith(1, { activo: false });
@@ -471,7 +486,7 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
     renderPage();
 
     const becaRow = await findDescuentoRow("Beca municipal");
-    fireEvent.click(within(becaRow).getByRole("button", { name: /desactivar/i }));
+    fireEvent.click(within(becaRow).getByRole("button", { name: /^ocultar$/i }));
     fireEvent.click(screen.getByRole("button", { name: /^cancelar$/i }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -483,7 +498,7 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
     renderPage();
 
     const convenioRow = await findDescuentoRow("Convenio empresa");
-    fireEvent.click(within(convenioRow).getByRole("button", { name: /reactivar/i }));
+    fireEvent.click(within(convenioRow).getByRole("button", { name: /^mostrar$/i }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await waitFor(() => {
@@ -508,7 +523,7 @@ describe("DiscountsPage — la segunda columna", () => {
     const rail = screen.getByTestId("discounts-rail");
     expect(within(rail).getByRole("heading", { name: /resumen del catálogo/i })).toBeInTheDocument();
     expect(within(rail).getByText("Activos")).toBeInTheDocument();
-    expect(within(rail).getByText("Inactivos")).toBeInTheDocument();
+    expect(within(rail).getByText("Ocultos")).toBeInTheDocument();
   });
 
   it("shows the create form above the summary when there is one to show", async () => {
@@ -622,7 +637,7 @@ describe("DiscountsPage — el catálogo vacío conserva el riel de indicaciones
     // Types live in their own rail card on an empty catalog, not repeated in the guidance.
     expect(within(rail).getByTestId("discounts-types")).toBeInTheDocument();
     expect(within(rail).queryByText(/porcentaje:/i)).not.toBeInTheDocument();
-    expect(within(rail).getByText(/inactivo:/i)).toBeInTheDocument();
+    expect(within(rail).getByText(/oculto:/i)).toBeInTheDocument();
   });
 
   it("keeps the indications card while the form is open", async () => {
@@ -681,11 +696,11 @@ describe("DiscountsPage — el formulario habla el idioma del sistema", () => {
 // Responsive reflow — issue #339 (blocks release)
 //
 // The catalog is a card grid at every width (one column on phones), so there
-// is no table to overflow sideways; Editar/Desactivar live inside each card.
+// is no table to overflow sideways; Editar/Ocultar live inside each card.
 // ---------------------------------------------------------------------------
 
 describe("DiscountsPage — responsive cards (issue #339)", () => {
-  it("carries Editar and Desactivar/Reactivar inside every card", async () => {
+  it("carries Editar and Ocultar/Mostrar inside every card", async () => {
     renderPage();
 
     const cards = await screen.findByTestId("discounts-cards");
@@ -693,10 +708,10 @@ describe("DiscountsPage — responsive cards (issue #339)", () => {
 
     const becaCard = within(cards).getByText("Beca municipal").closest("li") as HTMLElement;
     expect(within(becaCard).getByRole("button", { name: /^editar/i })).toBeInTheDocument();
-    expect(within(becaCard).getByRole("button", { name: /desactivar/i })).toBeInTheDocument();
+    expect(within(becaCard).getByRole("button", { name: /^ocultar$/i })).toBeInTheDocument();
 
     const convenioCard = within(cards).getByText("Convenio empresa").closest("li") as HTMLElement;
-    expect(within(convenioCard).getByRole("button", { name: /reactivar/i })).toBeInTheDocument();
+    expect(within(convenioCard).getByRole("button", { name: /^mostrar$/i })).toBeInTheDocument();
   });
 });
 
@@ -708,5 +723,96 @@ describe("DiscountsPage — mobile form reveal", () => {
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
 
     expect(await screen.findByPlaceholderText("Beca municipal")).toHaveFocus();
+  });
+});
+
+describe("DiscountsPage — ocultar, mostrar y eliminar", () => {
+  it("dresses a hidden card like a hidden tariff: sunken background, no opacity fade", async () => {
+    renderPage();
+
+    const convenioRow = await findDescuentoRow("Convenio empresa");
+    expect(convenioRow.className).toContain("bg-sunken");
+    expect(convenioRow.className).not.toContain("opacity-60");
+    expect(
+      within(convenioRow).getByText(/no aparece.*las aplicaciones existentes se conservan/i),
+    ).toBeInTheDocument();
+  });
+
+  it("offers Eliminar only on discounts that were never used, after Ocultar", async () => {
+    mockFetchDescuentos.mockResolvedValue([BECA, PROMO]);
+    renderPage();
+
+    const becaRow = await findDescuentoRow("Beca municipal");
+    const promoRow = await findDescuentoRow("Promo por error");
+    expect(within(becaRow).queryByRole("button", { name: /eliminar/i })).not.toBeInTheDocument();
+    expect(
+      within(promoRow).getAllByRole("button").map((b) => b.textContent?.trim()),
+    ).toEqual(["Editar", "Ocultar", "Eliminar"]);
+  });
+
+  it("confirms with an irreversible warning, then DELETEs and removes the card", async () => {
+    mockFetchDescuentos.mockResolvedValue([BECA, PROMO]);
+    mockEliminarDescuento.mockResolvedValueOnce(undefined);
+    renderPage();
+
+    const promoRow = await findDescuentoRow("Promo por error");
+    fireEvent.click(within(promoRow).getByRole("button", { name: /eliminar/i }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/¿eliminar «promo por error»\?/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/no se puede deshacer/i)).toBeInTheDocument();
+    expect(mockEliminarDescuento).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^eliminar$/i }));
+
+    await waitFor(() => expect(mockEliminarDescuento).toHaveBeenCalledWith(3));
+    await waitFor(() => expect(screen.queryByText("Promo por error")).not.toBeInTheDocument());
+  });
+
+  it("shows the server's 409 message when the discount turns out to be in use", async () => {
+    mockFetchDescuentos.mockResolvedValue([BECA, PROMO]);
+    const { ApiClientError } = await import("@/services/api");
+    mockEliminarDescuento.mockRejectedValueOnce(
+      new ApiClientError("No se puede eliminar el descuento 'Promo por error' porque ya se aplicó.", 409),
+    );
+    renderPage();
+
+    const promoRow = await findDescuentoRow("Promo por error");
+    fireEvent.click(within(promoRow).getByRole("button", { name: /eliminar/i }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /^eliminar$/i }));
+
+    expect((await screen.findAllByText(/porque ya se aplicó/i)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Promo por error").length).toBeGreaterThan(0);
+  });
+});
+
+describe("DiscountsPage — tarjetas sin estirar", () => {
+  it("lets a short catalog and its explainer keep their natural height", async () => {
+    renderPage();
+    await screen.findByTestId("discounts-cards");
+
+    const types = screen.getByTestId("discounts-types");
+    expect(types.querySelector("ul")?.className).not.toContain("flex-1");
+    const column = types.parentElement as HTMLElement;
+    expect(column.className).not.toContain("grid-rows-");
+    expect(column.className).not.toContain("min-h-[calc");
+  });
+
+  it("lets the empty-catalog ghost cards keep their natural height", async () => {
+    mockFetchDescuentos.mockResolvedValue([]);
+    renderPage();
+    await screen.findByText(/sin descuentos en el catálogo/i);
+
+    const ghost = screen.getAllByText("Ejemplo")[0].closest("ul") as HTMLElement;
+    const column = ghost.parentElement as HTMLElement;
+    expect(column.className).not.toContain("grid-rows-");
+    expect(column.className).not.toContain("min-h-[calc");
+  });
+
+  it("does not reserve a tall dead block for the 'Agregar descuento' placeholder", async () => {
+    renderPage();
+    await screen.findByTestId("discounts-cards");
+
+    expect(screen.getByRole("button", { name: /agregar descuento/i }).className).not.toMatch(/min-h-56/);
   });
 });

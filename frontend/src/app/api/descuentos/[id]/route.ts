@@ -2,7 +2,7 @@
  * BFF proxy — PATCH /api/descuentos/[id] (issue #12)
  *
  * Partial update of a catalog discount: rename, change value/modality, and
- * the SOFT toggle (`activo`) that replaces deletion. Proxies FastAPI's
+ * the SOFT toggle (`activo`) that hides a discount. Proxies FastAPI's
  * `PATCH /descuentos/{id}` (`DescuentoUpdateDTO`, applied with
  * `exclude_unset`), so only the keys present in the incoming body are
  * forwarded — an explicit `null` in `porcentaje`/`monto` is meaningful (it
@@ -12,7 +12,7 @@
  * value at registration time (see backend test_descuentos.py).
  */
 import { NextRequest, NextResponse } from "next/server";
-import { patchCatalogResource } from "@/lib/server/bff-helpers";
+import { deleteCatalogResource, patchCatalogResource } from "@/lib/server/bff-helpers";
 
 const UPDATABLE_FIELDS = ["nombre", "porcentaje", "monto", "activo"] as const;
 
@@ -24,5 +24,16 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     updatableFields: UPDATABLE_FIELDS,
     invalidIdMessage: "Identificador de descuento inválido.",
     failureMessage: "No se pudo actualizar el descuento.",
+  });
+}
+
+/** Hard delete, only for a discount nobody ever received: the backend answers 409 otherwise. */
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+  const params = await props.params;
+  return deleteCatalogResource(request, {
+    id: params.id,
+    buildPath: (id) => `/descuentos/${id}`,
+    invalidIdMessage: "Identificador de descuento inválido.",
+    failureMessage: "No se pudo eliminar el descuento.",
   });
 }

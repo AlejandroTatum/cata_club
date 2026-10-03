@@ -5,17 +5,18 @@
  *
  * The catalog is the club's (modelo firmado §4): only an ADMINISTRADOR sees
  * this screen, and applying a discount to a payment happens at registration
- * time in /members — never here. There is deliberately NO delete: the soft
- * `activo` toggle is the only removal, because applied discounts reference
- * the catalog by FK and their values are frozen at application time, so
- * editing or deactivating here never rewrites payment history.
+ * time in /members — never here. A discount is retired in two ways: "Ocultar"
+ * (the soft `activo` toggle, always available) and "Eliminar", offered only
+ * while `enUso` is false. Applied discounts reference the catalog by FK and
+ * their values are frozen at application time, so editing or hiding here
+ * never rewrites payment history — and a used one can never be deleted.
  *
- * The list shows active AND inactive entries (the backend's admin listado
- * does too): the inactive rows are the road to reactivation.
+ * The list shows visible AND hidden entries (the backend's admin listado
+ * does too): the hidden rows are the road to showing them again.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Pencil, Percent, Plus, Power } from "lucide-react";
+import { Eye, EyeOff, Loader2, Pencil, Percent, Plus, Trash2 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -33,7 +34,7 @@ import {
   SearchInput,
 } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
-import { fetchDescuentos, crearDescuento, actualizarDescuento } from "@/services/api";
+import { fetchDescuentos, crearDescuento, actualizarDescuento, eliminarDescuento } from "@/services/api";
 import type { DescuentoCatalogo } from "@/services/api";
 import { cn } from "@/components/ui/cn";
 import { descuentoValorDisplay, filterDescuentos } from "./discounts-utils";
@@ -86,8 +87,10 @@ const FIELD_CONTROL =
 /** The caption above a field — the system's micro-label, at the field step. */
 const FIELD_LABEL = "flex flex-col gap-field text-2xs font-bold uppercase text-ink-3";
 
-/** Empty catalog: both columns reach the bottom of the screen (page header and padding above, ~24px margin below). */
-const FILL_SCREEN = "lg:min-h-[calc(100dvh-10rem)] lg:grid-rows-[auto_auto_1fr]";
+/** The text-only "Eliminar" at the right edge of a card's actions: red text
+ *  without a box until hovered, so it reads as the one irreversible action. */
+const ELIMINAR_CLASS =
+  "ml-auto inline-flex h-ctl-sm items-center justify-center gap-2 whitespace-nowrap rounded-ctl border border-transparent px-3 text-xs font-semibold text-state-bad transition-colors hover:bg-state-bad-bg disabled:cursor-not-allowed disabled:opacity-45";
 
 /** Ghost example cards under the empty state: show what a catalog card looks
  *  like without pretending any discount exists. Purely decorative. */
@@ -151,11 +154,16 @@ export default function DiscountsPage(): React.ReactElement {
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<number | null>(null);
-  // Issue #314 (K6 hallazgo #14): "Desactivar" fired PATCH on the first click,
-  // no dialog, no naming of which discount was going dark. Only deactivating
-  // gets the gate — reactivating just turns something back on and stays a
-  // reversible one-click action, same as before.
+  // Issue #314 (K6 hallazgo #14): hiding fired PATCH on the first click,
+  // no dialog, no naming of which discount was going dark. Only hiding gets
+  // the gate — showing just turns something back on and stays a reversible
+  // one-click action, same as before.
   const [pendingDeactivation, setPendingDeactivation] = useState<DescuentoCatalogo | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<DescuentoCatalogo | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  /** Why the last hide/show/delete failed (e.g. the 409 "ya se aplicó"), kept
+   *  on screen above the cards until the next action. */
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const loadCatalog = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -257,22 +265,25 @@ export default function DiscountsPage(): React.ReactElement {
 
   async function handleToggleActivo(descuento: DescuentoCatalogo): Promise<void> {
     setTogglingId(descuento.id);
+    setActionError(null);
     try {
       await actualizarDescuento(descuento.id, { activo: !descuento.activo });
       showSuccess(
         descuento.activo
-          ? "Descuento desactivado. Los pagos históricos no cambian."
-          : "Descuento reactivado.",
+          ? "Descuento oculto. Los pagos históricos no cambian."
+          : "Descuento visible de nuevo.",
       );
       await loadCatalog();
     } catch (err) {
-      showError(toUserMessage(err, "No se pudo actualizar el descuento."));
+      const message = toUserMessage(err, "No se pudo actualizar el descuento.");
+      setActionError(message);
+      showError(message);
     } finally {
       setTogglingId(null);
     }
   }
 
-  /** "Desactivar" click: ask before mutating, naming the discount. "Reactivar"
+  /** "Ocultar" click: ask before mutating, naming the discount. "Mostrar"
    *  skips this entirely and mutates immediately — see `pendingDeactivation`. */
   function requestToggleActivo(descuento: DescuentoCatalogo): void {
     if (descuento.activo) {
@@ -287,6 +298,27 @@ export default function DiscountsPage(): React.ReactElement {
     setPendingDeactivation(null);
     if (!descuento) return;
     await handleToggleActivo(descuento);
+  }
+
+  /** A 409 (it was applied after the page loaded) arrives with the server's own
+   *  Spanish message, which `toUserMessage` lets through. */
+  async function confirmPendingDelete(): Promise<void> {
+    const descuento = pendingDelete;
+    setPendingDelete(null);
+    if (!descuento) return;
+    setDeletingId(descuento.id);
+    setActionError(null);
+    try {
+      await eliminarDescuento(descuento.id);
+      setDescuentos((prev) => prev.filter((d) => d.id !== descuento.id));
+      showSuccess(`Descuento «${descuento.nombre}» eliminado.`);
+    } catch (err) {
+      const message = toUserMessage(err, "No se pudo eliminar el descuento.");
+      setActionError(message);
+      showError(message);
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   /**
@@ -307,9 +339,10 @@ export default function DiscountsPage(): React.ReactElement {
    *  the types explainer continues it and the column fills the screen. */
   const shortCatalog = !loading && !loadError && descuentos.length > 0 && descuentos.length < 4;
 
-  /** The two actions a discount card carries (the card's footer). */
+  /** The actions a discount card carries (the card's footer): Editar, then
+   *  Ocultar/Mostrar, then — only while nobody received it — Eliminar. */
   function renderRowActions(descuento: DescuentoCatalogo): React.ReactElement {
-    const isToggling = togglingId === descuento.id;
+    const isToggling = togglingId === descuento.id || deletingId === descuento.id;
     return (
       <>
         <Button size="sm" onClick={() => openEditForm(descuento)}>
@@ -319,11 +352,24 @@ export default function DiscountsPage(): React.ReactElement {
         <Button size="sm" onClick={() => requestToggleActivo(descuento)} disabled={isToggling}>
           {isToggling ? (
             <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
+          ) : descuento.activo ? (
+            <EyeOff size={ICON.sm} strokeWidth={2} aria-hidden="true" />
           ) : (
-            <Power size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+            <Eye size={ICON.sm} strokeWidth={2} aria-hidden="true" />
           )}
-          {descuento.activo ? "Desactivar" : "Reactivar"}
+          {descuento.activo ? "Ocultar" : "Mostrar"}
         </Button>
+        {!descuento.enUso && (
+          <button
+            type="button"
+            className={ELIMINAR_CLASS}
+            onClick={() => setPendingDelete(descuento)}
+            disabled={isToggling}
+          >
+            <Trash2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+            Eliminar
+          </button>
+        )}
       </>
     );
   }
@@ -332,7 +378,7 @@ export default function DiscountsPage(): React.ReactElement {
   function renderSummary(): React.ReactElement | null {
     if (descuentos.length === 0) return null;
     const activos = descuentos.filter((d) => d.activo).length;
-    const inactivos = descuentos.length - activos;
+    const ocultos = descuentos.length - activos;
     return (
       <InfoPanel title="Resumen del catálogo">
         <dl className="grid grid-cols-2 gap-section">
@@ -341,8 +387,8 @@ export default function DiscountsPage(): React.ReactElement {
             <dd className="text-2xl font-extrabold tabular-nums text-ink">{activos}</dd>
           </div>
           <div>
-            <dt className="text-2xs font-bold uppercase text-ink-3">Inactivos</dt>
-            <dd className="text-2xl font-extrabold tabular-nums text-ink">{inactivos}</dd>
+            <dt className="text-2xs font-bold uppercase text-ink-3">Ocultos</dt>
+            <dd className="text-2xl font-extrabold tabular-nums text-ink">{ocultos}</dd>
           </div>
         </dl>
       </InfoPanel>
@@ -364,8 +410,12 @@ export default function DiscountsPage(): React.ReactElement {
         )}
         <p>
           <strong className="text-ink">Activo:</strong> disponible para pagos nuevos.{" "}
-          <strong className="text-ink">Inactivo:</strong> deja de aplicarse a pagos nuevos,
-          sigue en la lista para reactivarlo y los pagos ya registrados no cambian.
+          <strong className="text-ink">Oculto:</strong> deja de aplicarse a pagos nuevos,
+          sigue en la lista para volver a mostrarlo y los pagos ya registrados no cambian.
+        </p>
+        <p>
+          <strong className="text-ink">Eliminar</strong> solo aparece mientras nadie lo recibió y
+          no se puede deshacer.
         </p>
       </InfoPanel>
     );
@@ -496,22 +546,39 @@ export default function DiscountsPage(): React.ReactElement {
         data-inactivo={descuento.activo ? undefined : "true"}
         className={cn(
           "card flex min-w-0 flex-col gap-section p-[18px] lg:min-h-56",
-          !descuento.activo && "opacity-60",
+          !descuento.activo && "bg-sunken",
         )}
       >
         <div className="flex items-start justify-between gap-2">
-          <h3 className="min-w-0 flex-1 basis-40 break-words font-display text-lg uppercase leading-tight tracking-flat text-ink">
+          <h3
+            className={cn(
+              "min-w-0 flex-1 basis-40 break-words font-display text-lg uppercase leading-tight tracking-flat",
+              descuento.activo ? "text-ink" : "text-ink-3",
+            )}
+          >
             {descuento.nombre}
           </h3>
           <Badge tone={descuento.activo ? "ok" : "neutral"}>
-            {descuento.activo ? "Activo" : "Inactivo"}
+            {descuento.activo ? "Activo" : "Oculta"}
           </Badge>
         </div>
         <div className="grid gap-1">
-          <p className="text-4xl font-extrabold tabular-nums text-ink">
+          <p
+            className={cn(
+              "text-4xl font-extrabold tabular-nums",
+              descuento.activo ? "text-ink" : "text-ink-3",
+            )}
+          >
             {descuentoValorDisplay(descuento)}
           </p>
           <Badge className="w-fit">{descuento.porcentaje !== null ? "Porcentaje" : "Monto fijo"}</Badge>
+          {!descuento.activo ? (
+            <p className="text-xs text-ink-3">
+              No aparece al asignar beneficios. Las aplicaciones existentes se conservan.
+            </p>
+          ) : !descuento.enUso ? (
+            <p className="text-xs text-ink-3">Todavía no se usó.</p>
+          ) : null}
         </div>
         <div className="mt-auto flex gap-2">{renderRowActions(descuento)}</div>
       </li>
@@ -532,6 +599,11 @@ export default function DiscountsPage(): React.ReactElement {
       >
         {loadError && (
           <ErrorState message={loadError} onRetry={() => void loadCatalog()} />
+        )}
+        {actionError && (
+          <p role="alert" className="alert-error">
+            {actionError}
+          </p>
         )}
 
         {/*
@@ -556,7 +628,7 @@ export default function DiscountsPage(): React.ReactElement {
           data-testid="discounts-split"
           className={PAGE_RAIL}
         >
-          <div className={cn("grid min-w-0 content-start gap-page", (emptyCatalog || shortCatalog) && FILL_SCREEN)}>
+          <div className="grid min-w-0 content-start gap-page">
             {/* Search — issue A3, framed like `/members` and `/payments`. */}
             <FilterPanel
               label="Filtros de descuentos"
@@ -615,7 +687,7 @@ export default function DiscountsPage(): React.ReactElement {
                   <button
                     type="button"
                     onClick={openCreateForm}
-                    className="flex min-h-24 w-full flex-col items-center justify-center gap-2 rounded-card lg:min-h-56 border border-dashed border-line-2 text-sm font-bold text-ink-2 transition-colors hover:border-cata-red hover:text-cata-red"
+                    className="flex min-h-24 w-full flex-col items-center justify-center gap-2 rounded-card border border-dashed border-line-2 text-sm font-bold text-ink-2 transition-colors hover:border-cata-red hover:text-cata-red"
                   >
                     <Plus size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />
                     Agregar descuento
@@ -637,15 +709,21 @@ export default function DiscountsPage(): React.ReactElement {
         <ConfirmDialog
           open={pendingDeactivation !== null}
           variant="danger"
-          title="Desactivar descuento"
-          message={
-            pendingDeactivation
-              ? `Va a desactivar el descuento «${pendingDeactivation.nombre}». Deja de poder aplicarse a pagos nuevos a partir de ahora, pero sigue en la lista para poder reactivarlo; los pagos ya registrados con este descuento no cambian.`
-              : ""
-          }
-          confirmLabel="Desactivar"
+          title={pendingDeactivation ? `¿Ocultar «${pendingDeactivation.nombre}»?` : ""}
+          message="Deja de poder asignarse a nadie nuevo, pero sigue en la lista para poder volver a mostrarlo. Las aplicaciones existentes y los pagos ya registrados no cambian."
+          confirmLabel="Ocultar"
           onConfirm={() => void confirmPendingDeactivation()}
           onCancel={() => setPendingDeactivation(null)}
+        />
+
+        <ConfirmDialog
+          open={pendingDelete !== null}
+          variant="danger"
+          title={pendingDelete ? `¿Eliminar «${pendingDelete.nombre}»?` : ""}
+          message="Este descuento nunca se usó, así que se borra definitivamente. Esta acción no se puede deshacer."
+          confirmLabel="Eliminar"
+          onConfirm={() => void confirmPendingDelete()}
+          onCancel={() => setPendingDelete(null)}
         />
       </AppShell>
     </ProtectedRoute>

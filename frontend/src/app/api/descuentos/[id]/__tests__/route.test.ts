@@ -2,7 +2,7 @@
 
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PATCH } from "../route";
+import { DELETE, PATCH } from "../route";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/server/auth";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -127,5 +127,66 @@ describe("PATCH /api/descuentos/[id]", () => {
       { params: Promise.resolve({ id: "999" }) },
     );
     expect(response.status).toBe(404);
+  });
+});
+
+describe("DELETE /api/descuentos/[id]", () => {
+  const deleteRequest = (cookie = ""): NextRequest =>
+    new NextRequest("http://localhost/api/descuentos/1", {
+      method: "DELETE",
+      headers: cookie ? { cookie } : {},
+    });
+  const token = (): string => {
+    const seg = (o: unknown): string => Buffer.from(JSON.stringify(o)).toString("base64url");
+    return `${ACCESS_TOKEN_COOKIE}=${seg({ alg: "none" })}.${seg({ sub: "1", exp: Math.floor(Date.now() / 1000) + 3600 })}.sig`;
+  };
+
+  beforeEach(() => {
+    vi.spyOn(global, "fetch");
+    process.env.BACKEND_API_URL = "http://localhost:8000/api/v1";
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.BACKEND_API_URL;
+  });
+
+  it("returns 401 without an access-token cookie", async () => {
+    const response = await DELETE(deleteRequest(), { params: Promise.resolve({ id: "1" }) });
+
+    expect(response.status).toBe(401);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for a non-numeric id", async () => {
+    const response = await DELETE(deleteRequest(token()), { params: Promise.resolve({ id: "abc" }) });
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("proxies DELETE /descuentos/{id} and answers 204", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(new Response(null, { status: 204 }));
+
+    const response = await DELETE(deleteRequest(token()), { params: Promise.resolve({ id: "1" }) });
+
+    expect(response.status).toBe(204);
+    const [url, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(String(url)).toContain("/descuentos/1");
+    expect((init as RequestInit).method).toBe("DELETE");
+  });
+
+  it("relays the backend's 409 message", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      new Response(JSON.stringify({ detail: "No se puede eliminar el descuento 'X' porque ya se aplicó." }), {
+        status: 409,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const response = await DELETE(deleteRequest(token()), { params: Promise.resolve({ id: "1" }) });
+
+    expect(response.status).toBe(409);
+    expect((await response.json()).message).toContain("ya se aplicó");
   });
 });
