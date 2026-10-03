@@ -211,6 +211,15 @@ describe("ActividadPage — Resumen", () => {
     expect(screen.getByRole("complementary", { name: "Qué muestra esta pantalla" })).toHaveTextContent(/Métricas avanzadas/);
   });
 
+  it("words the payments caption and the side panel without receipts or jargon (ADMB-32)", async () => {
+    await renderResumen();
+    expect(screen.getByText(/^Registrados en /)).toBeInTheDocument();
+    expect(screen.queryByText(/Comprobantes recibidos/)).toBeNull();
+    const panel = screen.getByRole("complementary", { name: "Qué muestra esta pantalla" });
+    expect(panel).toHaveTextContent(/Cambie el período/);
+    expect(panel).not.toHaveTextContent(/del servidor/);
+  });
+
   it("turns a 403 into a notice that names the permission and offers a retry", async () => {
     mockResumen.mockRejectedValueOnce(Object.assign(new Error("forbidden"), { status: 403 }));
     render(<ActividadPage />);
@@ -267,6 +276,13 @@ describe("ActividadPage — Métricas avanzadas", () => {
     expect(screen.getAllByTestId("sparkline").length).toBeGreaterThanOrEqual(5);
     const service = within(screen.getByTestId("service-metrics"));
     for (const p of ["p50", "p95", "p99"]) expect(service.getAllByText(p).length).toBeGreaterThan(0);
+  });
+
+  it("names the error rates in plain Spanish, without 5xx or 4xx (TXT-12)", async () => {
+    await renderAvanzadas();
+    expect(screen.queryByText(/[45]xx/)).toBeNull();
+    expect(screen.getByText("Errores del servidor")).toBeInTheDocument();
+    expect(screen.getByText("Solicitudes rechazadas")).toBeInTheDocument();
   });
 
   it("lists the slowest endpoints by route template, flags the slow one, and accepts any HTTP verb", async () => {

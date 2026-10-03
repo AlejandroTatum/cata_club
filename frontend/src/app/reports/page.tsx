@@ -102,6 +102,7 @@ import {
   buildScheduleSlots,
   daysForSlot,
   resolveHorarioIds,
+  splitMembershipPeriod,
   type ReportRangePreset,
 } from "@/app/reports/reports-utils";
 import {
@@ -179,8 +180,8 @@ const PRESETS: PresetDef[] = [
 
 /** Sticky head for the bounded preview tables — the scroll region is the table's own. */
 const STICKY_TH = "sticky top-0 z-10";
-/** Bound for the preview listing; taller results scroll inside the card. */
-const PREVIEW_SCROLL = "max-h-96 overflow-y-auto";
+/** The preview lists one page (10 rows) at a time, so no max height: a bound used to cut the last row in half (ADMB-29). */
+const PREVIEW_SCROLL = "overflow-y-auto";
 
 /** Numbered heading of the three-step flow (type, range, download). */
 function StepHeading({ step, title }: { step: number; title: string }): React.ReactElement {
@@ -230,10 +231,11 @@ const ASISTENCIA_XLSX_COLUMNS: XlsxColumn[] = [
 const PAGOS_XLSX_COLUMNS: XlsxColumn[] = [
   { header: "Estudiante", key: "estudiante", type: "text" },
   { header: "Responsable de pago", key: "responsable", type: "text" },
-  { header: "Período", key: "periodo", type: "text" },
+  { header: "Desde", key: "desde", type: "date" },
+  { header: "Hasta", key: "hasta", type: "date" },
   { header: "Monto", key: "monto", type: "currency" },
   { header: "Método", key: "metodo", type: "text" },
-  { header: "Subido", key: "subido", type: "date" },
+  { header: "Fecha de registro", key: "fechaRegistro", type: "date" },
   { header: "Estado", key: "estado", type: "text" },
 ];
 
@@ -320,7 +322,10 @@ function ReportsContent(): React.ReactElement {
    */
   const rangeInverted = fechaInicio !== "" && fechaFin !== "" && fechaInicio > fechaFin;
   const periodoRangeIncomplete = preset === "periodo" && (fechaInicio === "" || fechaFin === "");
-  const canQuery = !rangeInverted && !periodoRangeIncomplete;
+  // ADMB-31 (pagos): an empty "Personalizado" range is not "everything" — the user has
+  // not chosen a range yet, so nothing is previewed or downloadable.
+  const customRangeEmpty = preset === "pagos" && rangePreset === "custom" && fechaInicio === "" && fechaFin === "";
+  const canQuery = !rangeInverted && !periodoRangeIncomplete && !customRangeEmpty;
 
   // Horarios feed the asistencia filter's dropdown (once, on mount).
   useEffect(() => {
@@ -516,10 +521,10 @@ function ReportsContent(): React.ReactElement {
           pagosResults.map((pago) => ({
             estudiante: pago.studentName,
             responsable: pago.responsablePagoName ?? "",
-            periodo: pago.membershipPeriod,
+            ...splitMembershipPeriod(pago.membershipPeriod),
             monto: pago.expectedAmount,
             metodo: pago.paymentMethod,
-            subido: pago.uploadedAt,
+            fechaRegistro: pago.uploadedAt,
             estado: VALIDATION_STATUS_LABELS[pago.validationStatus],
           })),
         );
@@ -544,7 +549,7 @@ function ReportsContent(): React.ReactElement {
     summaryParts.push(`${resultCount} ${pluralize(activePreset.noun, resultCount)}`);
     if (resultCount > 0) summaryParts.push(`${totalPages} ${totalPages === 1 ? "página" : "páginas"}`);
   }
-  const summary = summaryParts.join(" · ");
+  const summary = customRangeEmpty ? "Elija Desde y Hasta para continuar" : summaryParts.join(" · ");
   const downloadHint =
     canQuery && !loading && resultCount > 0
       ? "Listo: descargue con «Generar PDF» o «Exportar a Excel», arriba."
@@ -804,7 +809,9 @@ function ReportsContent(): React.ReactElement {
             icon={<FileText size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
             title="Elija un rango de fechas"
             description={
-              preset === "periodo"
+              customRangeEmpty
+                ? "Elija Desde y Hasta (dd/mm/aaaa) para ver la vista previa y habilitar la descarga."
+                : preset === "periodo"
                 ? "El reporte de período necesita una fecha de inicio y una de fin (dd/mm/aaaa) para generarse."
                 : "Corrija el rango de fechas para ver la vista previa."
             }
@@ -1019,6 +1026,17 @@ function AsistenciaPreview({
   );
 }
 
+/** "Desde" and "Hasta" cells of a payment row; falls back to the raw text when the period is not two ISO days. */
+function PagoPeriodCells({ period }: { period: string }): React.ReactElement {
+  const { desde, hasta } = splitMembershipPeriod(period);
+  return (
+    <>
+      <TableCell className="tabular-nums">{desde ? formatDate(desde) : period || "-"}</TableCell>
+      <TableCell className="tabular-nums">{hasta ? formatDate(hasta) : "-"}</TableCell>
+    </>
+  );
+}
+
 function PagosPreview({
   results,
   total,
@@ -1047,10 +1065,11 @@ function PagosPreview({
           <tr>
             <TableHeaderCell className={STICKY_TH}>Estudiante</TableHeaderCell>
             <TableHeaderCell className={STICKY_TH}>Responsable de pago</TableHeaderCell>
-            <TableHeaderCell className={STICKY_TH}>Período</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Desde</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Hasta</TableHeaderCell>
             <TableHeaderCell className={STICKY_TH}>Monto</TableHeaderCell>
             <TableHeaderCell className={STICKY_TH}>Método</TableHeaderCell>
-            <TableHeaderCell className={STICKY_TH}>Subido</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Fecha de registro</TableHeaderCell>
             <TableHeaderCell className={STICKY_TH}>Estado</TableHeaderCell>
           </tr>
         </TableHead>
@@ -1059,7 +1078,7 @@ function PagosPreview({
             <TableRow key={pago.id}>
               <TableNameCell name={pago.studentName} />
               <TableCell>{pago.responsablePagoName ?? "-"}</TableCell>
-              <TableCell>{pago.membershipPeriod}</TableCell>
+              <PagoPeriodCells period={pago.membershipPeriod} />
               <TableCell className="tabular-nums">{formatCurrency(pago.expectedAmount)}</TableCell>
               <TableCell>{pago.paymentMethod}</TableCell>
               <TableCell className="tabular-nums">{formatDateTime(pago.uploadedAt)}</TableCell>

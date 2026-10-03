@@ -143,9 +143,60 @@ export interface PlannedSlide {
   clone: boolean;
 }
 
-/** Slide width at the section's fixed height, from the photo's native ratio. */
+/** Narrowest slide ratio (width / height) the strip draws — portrait 2:3. */
+export const MIN_SLIDE_ASPECT = 2 / 3;
+/** Widest slide ratio the strip draws — 2:1, a little past 16:9. */
+export const MAX_SLIDE_ASPECT = 2;
+
+/**
+ * Keeps one extreme upload (ADMB-02: 8000x160 or 100x2000) from deforming the
+ * strip. The slide frame uses the clamped ratio and the photo is cropped to
+ * it with `object-fit: cover`, so a panorama or a tall column still fits a
+ * normal slide. Unusable ratios fall back to the shared landscape ratio.
+ */
+export function clampSlideAspect(aspect: number): number {
+  if (!Number.isFinite(aspect) || aspect <= 0) return DEFAULT_SLIDE_ASPECT;
+  return Math.min(MAX_SLIDE_ASPECT, Math.max(MIN_SLIDE_ASPECT, aspect));
+}
+
+/** Slide width at the section's fixed height, from the photo's (clamped) native ratio. */
 export function slideWidthPx(aspect: number, mobile: boolean): number {
-  return Math.round((mobile ? SLIDE_HEIGHT_MOBILE : SLIDE_HEIGHT_DESKTOP) * aspect);
+  return Math.round((mobile ? SLIDE_HEIGHT_MOBILE : SLIDE_HEIGHT_DESKTOP) * clampSlideAspect(aspect));
+}
+
+/** Widths requested from Cloudinary for the gallery's srcset (PERF-04). */
+export const GALLERY_IMAGE_WIDTHS = [480, 800, 1200, 1600] as const;
+
+const CLOUDINARY_UPLOAD = "/image/upload/";
+
+function isCloudinaryOriginal(src: string): boolean {
+  if (!/^https?:\/\/res\.cloudinary\.com\//.test(src)) return false;
+  const at = src.indexOf(CLOUDINARY_UPLOAD);
+  if (at < 0) return false;
+  // The first segment after `upload/` is a version (`v123`) or the public id
+  // when untransformed; anything else (`w_300`, `f_auto,q_auto`) is already a
+  // transformation, which must not be stacked.
+  const first = src.slice(at + CLOUDINARY_UPLOAD.length).split("/")[0];
+  return /^v\d+$/.test(first) || !/[_,]/.test(first);
+}
+
+/** A Cloudinary-sized variant of a gallery photo; any other URL is returned untouched. */
+export function galleryImageSrc(src: string, width: number): string {
+  if (!isCloudinaryOriginal(src)) return src;
+  return src.replace(CLOUDINARY_UPLOAD, `${CLOUDINARY_UPLOAD}f_auto,q_auto,w_${width}/`);
+}
+
+/** srcset of sized Cloudinary variants, or undefined when the URL is not an untransformed Cloudinary upload. */
+export function galleryImageSrcSet(src: string): string | undefined {
+  if (!isCloudinaryOriginal(src)) return undefined;
+  return GALLERY_IMAGE_WIDTHS.map((width): string => `${galleryImageSrc(src, width)} ${width}w`).join(", ");
+}
+
+/** Rendered slide width at its widest ratio, per breakpoint — what the browser needs to pick a candidate. */
+export function galleryImageSizes(): string {
+  const mobile = Math.round(SLIDE_HEIGHT_MOBILE * MAX_SLIDE_ASPECT);
+  const desktop = Math.round(SLIDE_HEIGHT_DESKTOP * MAX_SLIDE_ASPECT);
+  return `(max-width: ${SLIDE_HEIGHT_BREAKPOINT}px) ${mobile}px, ${desktop}px`;
 }
 
 /** How much track one pass over `count` slides travels — the loop's own math. */

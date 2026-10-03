@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import {
   DEFAULT_SLIDE_ASPECT,
+  clampSlideAspect,
+  galleryImageSizes,
+  galleryImageSrc,
+  galleryImageSrcSet,
   GALLERY_BROWSE_HOLD_MS,
   GALLERY_EMPTY_EVENT,
   GALLERY_HOLD_EVENT,
@@ -57,7 +61,7 @@ function measureRatios(entries: GalleryEntry[]): Promise<Map<number, number>> {
         finish(img.naturalWidth > 0 && img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : DEFAULT_SLIDE_ASPECT);
       };
       img.onerror = (): void => finish(DEFAULT_SLIDE_ASPECT);
-      img.src = entry.imageSrc;
+      img.src = galleryImageSrc(entry.imageSrc, 800);
     });
   return Promise.all(entries.map(measure)).then((pairs): Map<number, number> => new Map(pairs));
 }
@@ -312,12 +316,20 @@ export default function Gallery(): React.ReactElement {
               >
                 <figure
                   className={openIndex === index ? "landing-slide is-open" : "landing-slide"}
-                  style={{ aspectRatio: `${(state.aspects.get(entry.id) ?? DEFAULT_SLIDE_ASPECT).toFixed(4)}` }}
+                  style={{ aspectRatio: `${clampSlideAspect(state.aspects.get(entry.id) ?? DEFAULT_SLIDE_ASPECT).toFixed(4)}` }}
                   tabIndex={clone ? undefined : 0}
                   onClick={(): void => toggleOpen(index)}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset (same pattern as the landing's sponsor logos) */}
-                  <img src={entry.imageSrc} alt={entry.description} loading="lazy" draggable={false} />
+                  <img
+                    src={galleryImageSrc(entry.imageSrc, 800)}
+                    srcSet={galleryImageSrcSet(entry.imageSrc)}
+                    sizes={galleryImageSrcSet(entry.imageSrc) ? galleryImageSizes() : undefined}
+                    alt={entry.description}
+                    loading="lazy"
+                    draggable={false}
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  />
                   <figcaption className="landing-slide-caption">
                     <span className="landing-slide-title">{entry.title}</span>
                     <span className="landing-slide-description">{entry.description}</span>
