@@ -59,9 +59,8 @@ describe("root layout icon declaration", () => {
 });
 
 describe("root layout social metadata", () => {
-  it("shares the 1200x630 logo card and defaults to noindex", () => {
+  it("shares the 1200x630 logo card", () => {
     const metadata = generateMetadata();
-    expect(metadata.robots).toEqual({ index: false, follow: false });
     expect(metadata.openGraph?.locale).toBe("es_EC");
     expect(JSON.stringify(metadata.openGraph?.images)).toContain("/brand/og-cata-club-1200x630.png");
     expect((metadata.twitter as { card: string }).card).toBe("summary_large_image");

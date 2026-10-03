@@ -10,7 +10,7 @@
  * and `null` means fail closed: no canonical URL, no indexing.
  */
 
-import type { Metadata } from "next";
+import type { Metadata, MetadataRoute } from "next";
 
 export type SeoEnv = Record<string, string | undefined>;
 
@@ -57,17 +57,77 @@ export function socialMetadata(): Pick<Metadata, "openGraph" | "twitter"> {
 }
 
 /**
- * Per-page opt-in to indexing. The root layout defaults every route to
- * `noindex`, so only the pages that call this can ever be indexed, and only
- * when a canonical URL exists.
+ * Canonical + social card for a public page. Static on purpose: the origin
+ * comes from `metadataBase`, which the root layout resolves per request.
  */
-export function publicPageMetadata(path: string, env: SeoEnv = process.env): Metadata {
-  if (!resolveSiteUrl(env)) return {};
+export function publicPageMetadata(path: string): Metadata {
   const social = socialMetadata();
   return {
-    robots: { index: true, follow: true },
     alternates: { canonical: path },
     openGraph: { ...social.openGraph, url: path },
     twitter: social.twitter,
   };
+}
+
+/**
+ * Pages anyone may find through a search engine. Every top-level route in
+ * `src/app` is either listed here or in `PRIVATE_PATH_PREFIXES`;
+ * `seo-routes.test.ts` fails when a new route is in neither.
+ */
+export const PUBLIC_PATHS = ["/", "/privacidad", "/terminos", "/permiso-imagen-fetm"] as const;
+
+/** Everything behind a session, an admin gate or an auth flow. */
+export const PRIVATE_PATH_PREFIXES = [
+  "/admin",
+  "/api",
+  "/attendance",
+  "/ayuda",
+  "/dashboard",
+  "/discounts",
+  "/forgot-password",
+  "/galeria",
+  "/groups",
+  "/login",
+  "/members",
+  "/payments",
+  "/profile",
+  "/reports",
+  "/reset-password",
+  "/sponsors",
+  "/student",
+  "/tarifas",
+  "/trainer",
+  "/unauthorized",
+  "/verificar-correo",
+] as const;
+
+export function buildRobots(env: SeoEnv = process.env): MetadataRoute.Robots {
+  const siteUrl = resolveSiteUrl(env);
+  if (!siteUrl) return { rules: { userAgent: "*", disallow: "/" } };
+  return {
+    rules: { userAgent: "*", allow: "/", disallow: [...PRIVATE_PATH_PREFIXES] },
+    sitemap: `${siteUrl}/sitemap.xml`,
+  };
+}
+
+/** Empty when there is no canonical origin: nothing to advertise. */
+export function buildSitemap(env: SeoEnv = process.env): MetadataRoute.Sitemap {
+  const siteUrl = resolveSiteUrl(env);
+  if (!siteUrl) return [];
+  return PUBLIC_PATHS.map((path) => ({ url: path === "/" ? siteUrl : `${siteUrl}${path}` }));
+}
+
+/** Crawler infrastructure: must stay indexable-neutral and never be `noindex`. */
+const CRAWLER_PATHS: readonly string[] = ["/robots.txt", "/sitemap.xml", "/manifest.webmanifest"];
+
+/**
+ * `X-Robots-Tag` value for a document request, or `null` to leave the page
+ * indexable. Everything that is not an explicit public page is `noindex`, and
+ * with no canonical URL configured so is the whole site (fail closed). This
+ * is enforced in middleware, so no private route can forget to opt out.
+ */
+export function robotsTagFor(pathname: string, env: SeoEnv = process.env): string | null {
+  if (CRAWLER_PATHS.includes(pathname)) return null;
+  if (!resolveSiteUrl(env)) return "noindex, nofollow";
+  return (PUBLIC_PATHS as readonly string[]).includes(pathname) ? null : "noindex, nofollow";
 }

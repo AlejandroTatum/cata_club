@@ -23,8 +23,8 @@ interface RootLayoutProps {
 }
 
 /**
- * Resolved per request (see `lib/seo.ts`). Every route is `noindex` by
- * default; only the public pages opt in through `publicPageMetadata`.
+ * Resolved per request (see `lib/seo.ts`). Indexing itself is decided by the
+ * `X-Robots-Tag` header that `middleware.ts` sets on every non-public route.
  *
  * One icon declaration, all of them square crest files: Google Search needs a
  * square favicon whose side is a multiple of 48px at a stable, crawlable URL,
@@ -39,7 +39,6 @@ export function generateMetadata(): Metadata {
       template: `%s | ${APP_NAME}`,
     },
     description: SITE_DESCRIPTION,
-    robots: { index: false, follow: false },
     icons: {
       icon: [
         { url: "/favicon.ico", sizes: "16x16 32x32 48x48" },

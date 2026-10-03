@@ -28,6 +28,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/auth-cookies";
+import { robotsTagFor } from "@/lib/seo";
 import {
   isProtectedPath,
   hasPendingActivation,
@@ -63,6 +64,8 @@ export function middleware(request: NextRequest): NextResponse {
   }
 
   response.headers.set("Content-Security-Policy", csp);
+  const robotsTag = robotsTagFor(pathname);
+  if (robotsTag) response.headers.set("X-Robots-Tag", robotsTag);
   return response;
 }
 

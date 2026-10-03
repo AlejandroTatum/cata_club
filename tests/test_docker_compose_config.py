@@ -1716,3 +1716,21 @@ def test_el_render_de_produccion_pasa_el_alias_www_a_caddy(alias):
         esperado = alias
     entorno_caddy = config["services"]["caddy"]["environment"]
     assert entorno_caddy.get("DOMINIO_ALIAS_WWW") == esperado
+
+
+def test_el_frontend_recibe_el_mismo_dominio_indexable_que_caddy():
+    """robots.txt, sitemap y canonical se arman en el frontend en cada
+    petición a partir de `DOMINIO_INDEXABLE` (`frontend/src/lib/seo.ts`). Tiene
+    que ser el MISMO valor que ve Caddy: dos fuentes podrían divergir y dejar
+    el header `noindex` y el sitemap diciendo lo contrario (o al revés)."""
+    config = _renderizar(
+        "docker-compose.yml",
+        "docker-compose.prod.yml",
+        entorno={"DOMINIO_INDEXABLE": "cataclub.com"},
+    )
+    servicios = config["services"]
+    assert servicios["frontend"]["environment"]["DOMINIO_INDEXABLE"] == "cataclub.com"
+    assert (
+        servicios["frontend"]["environment"]["DOMINIO_INDEXABLE"]
+        == servicios["caddy"]["environment"]["DOMINIO_INDEXABLE"]
+    )
