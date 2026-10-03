@@ -48,6 +48,8 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
 
+from sqlalchemy import func
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.infraestructura.db import SessionLocal
@@ -96,6 +98,7 @@ from app.dominio.enums import (
     EfectoCoberturaCorreccion,
 )
 from app.seguridad.gestor_auth import GestorAutenticacion
+from app.servicios_negocio.membresia_pago_servicio import _sumar_meses
 from app.dominio.cedula import cedula_valida
 from app.soporte_transversal.configuracion import settings
 from app.servicios_negocio.consentimiento_legal_servicio import (
@@ -755,8 +758,12 @@ def _sembrar_cobertura_bonificada(db, asignaciones: list[AsignacionDescuento]) -
     """Cobertura otorgada por un beneficio 100% personal (issue #400, slice
     4d) -- NUNCA crea un `Pago`. Solo una por membresía (idempotencia por
     `membresia_id`), lo que además respeta por construcción el
-    `ExcludeConstraint` anti-solape: con un único período por membresía no
-    hay con qué solaparse."""
+    `ExcludeConstraint` anti-solape entre coberturas bonificadas.
+
+    ADMA-32: sigue las reglas de `aplicar_beneficio_bonificado`: arranca donde
+    termina la última cobertura de la membresía (pago aprobado o cobertura
+    bonificada; hoy si no hay ninguna) y dura exactamente un mes calendario.
+    Nunca pisa un período pagado ni regala días de más."""
     creadas = 0
     hoy = date.today()
     for asignacion in asignaciones:
@@ -784,6 +791,12 @@ def _sembrar_cobertura_bonificada(db, asignaciones: list[AsignacionDescuento]) -
         else:
             valor = descuento.monto
             porcentaje = None
+        fin_ultimo_pago = (
+            db.query(func.max(Pago.fecha_fin))
+            .filter(Pago.membresia_id == membresia.id, Pago.estado_pago == EstadoPago.APROBADO)
+            .scalar()
+        )
+        fecha_inicio = fin_ultimo_pago or hoy
         persona = db.query(Persona).filter(Persona.id == asignacion.persona_id).first()
         # Autoservicio del propio pagador o su representante -- NUNCA un
         # administrador actuando "por" ellos (docstring del modelo).
@@ -796,8 +809,8 @@ def _sembrar_cobertura_bonificada(db, asignaciones: list[AsignacionDescuento]) -
             meses_comprados=1,
             descuento_valor_aplicado=valor,
             descuento_porcentaje_aplicado=porcentaje,
-            fecha_inicio=hoy.replace(day=1),
-            fecha_fin=hoy + timedelta(days=27),
+            fecha_inicio=fecha_inicio,
+            fecha_fin=_sumar_meses(fecha_inicio, 1),
             otorgada_por_persona_id=otorgante_id,
         ))
         creadas += 1
@@ -1480,8 +1493,10 @@ def main() -> None:
         asignaciones_descuento = _sembrar_asignaciones_descuento(
             db, estudiantes, descuentos_seed, admin_persona,
         )
-        coberturas_creadas = _sembrar_cobertura_bonificada(db, asignaciones_descuento)
+        # La corrección mueve `fecha_fin` del pago: va ANTES de la cobertura
+        # bonificada, que se ancla al fin real de la última cobertura.
         correcciones_pago_creadas = _sembrar_correccion_pago(db, admin_persona)
+        coberturas_creadas = _sembrar_cobertura_bonificada(db, asignaciones_descuento)
         consentimientos_creados, consentimientos_registrados = _sembrar_consentimientos_legales(
             db, pares_representante_hijo, autogestionados,
         )
