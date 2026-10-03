@@ -290,13 +290,21 @@ class MembresiaServicio:
         tipo = self.repo_tipo.obtener_por_id(tipo_id)
         if not tipo:
             raise EntidadNoEncontrada(f"Tipo de membresía con id {tipo_id} no encontrado")
+        mensaje_en_uso = (
+            f"No se puede eliminar la tarifa '{tipo.categoria}' porque ya se usó "
+            "en membresías. Puede ocultarla para que deje de ofrecerse."
+        )
         if self.repo_tipo.ids_en_uso([tipo.id]):
-            raise TarifaEnUso(
-                f"No se puede eliminar la tarifa '{tipo.categoria}' porque ya se usó "
-                "en membresías. Puede ocultarla para que deje de ofrecerse."
-            )
-        self.repo_tipo.eliminar(tipo)
-        self.db.commit()
+            raise TarifaEnUso(mensaje_en_uso)
+        try:
+            self.repo_tipo.eliminar(tipo)
+            self.db.commit()
+        except IntegrityError as error:
+            # Carrera: una membresía/cambio de plan se confirmó entre el
+            # pre-chequeo y el DELETE; la FK protege la historia, acá solo se
+            # traduce al mismo 409 de la vía rápida.
+            self.db.rollback()
+            raise TarifaEnUso(mensaje_en_uso) from error
 
     def actualizar_tipo_membresia(
         self, tipo_id: int, datos: TipoMembresiaUpdateDTO,
