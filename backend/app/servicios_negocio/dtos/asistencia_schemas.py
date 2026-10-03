@@ -147,6 +147,50 @@ class AsistenciaCreateDTO(BaseModel):
     horario_id: int
 
 
+# Tope por request del lote: el club más grande anda en ~120 alumnos por
+# horario; el límite evita que un cuerpo desmedido arme una consulta IN sin
+# techo, no es una regla de negocio.
+MAXIMO_ITEMS_LOTE_ASISTENCIA = 500
+
+
+class AsistenciaLoteItemDTO(BaseModel):
+    persona_id: int
+    estado: EstadoAsistencia
+    justificativo: Optional[str] = Field(default=None, max_length=255)
+    estado_justificativo: Optional[bool] = None
+
+
+class AsistenciaLoteCreateDTO(BaseModel):
+    """Toma de lista completa de UNA sesión (horario + fecha) en una sola
+    llamada (ENT-01): horario, fecha y día se validan una vez para todo el
+    lote en vez de una vez por alumno."""
+    horario_id: int
+    fecha: date
+    items: list[AsistenciaLoteItemDTO] = Field(
+        min_length=1, max_length=MAXIMO_ITEMS_LOTE_ASISTENCIA,
+    )
+
+
+class AsistenciaLoteFallidoDTO(ResponseBase, BaseModel):
+    persona_id: int
+    motivo: str
+    # ENT-04: si el alumno ya tenía fila en la sesión, quién la registró
+    # (None si es una fila histórica sin autor, o si el fallo es otro).
+    registrado_por_nombre: Optional[str] = None
+    # ENT-04: el alumno ya tenía fila en la sesión (gana el primer registro).
+    # El cliente lo usa para refrescar la lista y completar solo a quienes
+    # faltan, en vez de tratarlo como un error que reintentar.
+    ya_registrada: bool = False
+
+
+class AsistenciaLoteResponseDTO(ResponseBase, BaseModel):
+    """Resultado parcial por alumno: los que se pudieron crear se crearon,
+    los demás vuelven en `fallidos` con su motivo."""
+    creados: int
+    fallidos: list[AsistenciaLoteFallidoDTO]
+    registrado_por_nombre: Optional[str] = None
+
+
 class AsistenciaResponseDTO(ResponseBase, BaseModel):
     id: int
     fecha_entrenamiento: date
@@ -168,6 +212,9 @@ class AsistenciaResponseDTO(ResponseBase, BaseModel):
     # el frontend nunca muestre un nombre sacado del navegador.
     registrado_por_id: Optional[int] = None
     registrado_por_nombre: Optional[str] = None
+    # ENT-07: se aceptó con el alumno no operativo o antes de su inscripción;
+    # el admin lo ve marcado en su vista de asistencia.
+    requiere_revision: bool = False
 
     # Issue #663: computado, no persistido -- mismo criterio que
     # `AsistenciaServicio.corregir_asistencia` (`antiguedad_dias >
@@ -270,6 +317,10 @@ class AlumnoHorarioDetalleDTO(ResponseBase, BaseModel):
     horario_hora_inicio: time
     horario_hora_fin: time
     fecha_asignacion: datetime
+    # ENT-15: la categoría del horario (código y nombre) para agrupar el
+    # padrón por categoría. El nombre solo se resuelve en el roster completo.
+    horario_categoria: str
+    horario_categoria_label: Optional[str] = None
 
 
 class SolapeHorarioDTO(ResponseBase, BaseModel):

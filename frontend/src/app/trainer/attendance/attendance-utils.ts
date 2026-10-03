@@ -12,7 +12,7 @@
 import type { EstadoAsistencia } from "@/types/domain";
 import type { AlumnoHorario, AttendanceStudentMark } from "@/services/api";
 import type { AttendanceRecord } from "@/app/attendance/attendance-utils";
-import { calendarIsoDate, clubToday } from "@/lib/club-date";
+import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -89,6 +89,12 @@ export interface SessionStudent {
   justificativo?: string | null;
   /** Whether `justificativo` was accepted, when one exists. */
   estadoJustificativo?: boolean | null;
+  /**
+   * The club day ("YYYY-MM-DD") the student was enrolled in this horario
+   * (`AlumnoHorario.fechaAsignacion`). A session dated before it is still
+   * accepted — with a notice (ENT-07) — so the row can say so.
+   */
+  assignedOn?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -238,6 +244,55 @@ export function resolveFailedStudentNames(
   return failed.map((f) => nameById.get(String(f.personaId)) ?? `Alumno #${f.personaId}`);
 }
 
+const WEEKDAY_SHORT_ES = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+
+/**
+ * "Sesión del vie 25/09" for a session date ("YYYY-MM-DD") — the receipt and
+ * the confirmation say WHICH day the list is filed for (ENT-11), because a
+ * list for a past session looks identical to today's otherwise. Components are
+ * read straight off the string (a calendar date, not an instant): routing it
+ * through a zone would shift it a day for anyone far from Ecuador.
+ */
+export function formatSessionDateLabel(fecha: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fecha);
+  if (!match) return `Sesión del ${fecha}`;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const weekday = WEEKDAY_SHORT_ES[new Date(year, month - 1, day).getDay()];
+  return `Sesión del ${weekday} ${match[3]}/${match[2]}`;
+}
+
+/** The action label of the "marcar restantes presentes" toast (ENT-12 dismisses it by this label). */
+export const UNDO_TOAST_ACTION_LABEL = "Deshacer";
+
+/**
+ * The message for a failed save, by WHAT failed (ENT-06): one text for every
+ * failure told the trainer nothing about whether to retry, wait or call
+ * someone. Duck-typed on `status` rather than `instanceof ApiClientError` so
+ * it holds for any error the BFF layer surfaces.
+ *
+ *   - 401/403: nothing to retry — the session cannot file lists.
+ *   - other 4xx: the request itself was refused; the data on screen is stale.
+ *   - 5xx: the server broke; the marks are safe here, try again in a while.
+ *   - no status at all (offline, timeout): the request never got an answer, so
+ *     the save may or may not have landed — and the roster is reloaded to find out.
+ */
+export function describeAttendanceSaveError(error: unknown): string {
+  const status =
+    typeof error === "object" && error !== null && "status" in error
+      ? Number((error as { status: unknown }).status)
+      : NaN;
+  if (status === 401 || status === 403) {
+    return "Su sesión no tiene permiso para registrar esta lista. Vuelva a iniciar sesión e intente nuevamente.";
+  }
+  if (status >= 400 && status < 500) {
+    return "La lista no se pudo registrar porque ya no coincide con lo que hay en el sistema. Actualice la página y revise los datos.";
+  }
+  if (status >= 500) {
+    return "El servidor tuvo un problema al guardar la lista. Sus marcas siguen aquí; intente de nuevo en unos minutos.";
+  }
+  return "No hay conexión con el servidor. Sus marcas siguen guardadas en este equipo; revise su conexión e intente de nuevo.";
+}
+
 /**
  * Count how many students have a given attendance state.
  *
@@ -266,6 +321,35 @@ export function countUnmarked(students: SessionStudent[]): number {
 /** Did a human set this row's state, or is it still the default? */
 export function isReviewed(student: SessionStudent): boolean {
   return student.reviewed === true;
+}
+
+/**
+ * Does this student already have a row for the session? First registration
+ * wins (ENT-04), so a filed row is never re-sent and never edited from the
+ * wizard — only an admin's correction can change it.
+ */
+export function isFiled(student: SessionStudent): boolean {
+  return student.asistenciaId != null;
+}
+
+/** ENT-07: is the session dated BEFORE the day this student was enrolled? */
+export function isBeforeEnrollment(student: SessionStudent, sessionDate: string | null): boolean {
+  return !!student.assignedOn && !!sessionDate && sessionDate < student.assignedOn;
+}
+
+/**
+ * A list is "tomada" (closed) only when EVERY roster student has a row
+ * (ENT-03). One filed row used to be enough, so a partially-saved list — or
+ * one another trainer left half done — read as finished and pre-filled the
+ * rest as "Presente".
+ */
+export function isSessionClosed(roster: SessionStudent[]): boolean {
+  return roster.every(isFiled) && roster.length > 0;
+}
+
+/** Some roster students have a row and some do not: editable only for the latter. */
+export function isSessionPartial(roster: SessionStudent[]): boolean {
+  return roster.some(isFiled) && !roster.every(isFiled);
 }
 
 /**
@@ -300,11 +384,16 @@ export function markRemainingPresent(students: SessionStudent[]): SessionStudent
 /**
  * Project the roster onto the backend payload shape, dropping any student
  * still on the `UNMARKED` sentinel (the backend only accepts the four real
- * `EstadoAsistencia` values and would reject the batch otherwise).
+ * `EstadoAsistencia` values and would reject the batch otherwise) and any
+ * student who already has a row — re-sending them could only be refused, and
+ * would report them as failures (ENT-04).
  */
 export function toAttendanceMarks(students: SessionStudent[]): AttendanceStudentMark[] {
   return students
-    .filter((s): s is SessionStudent & { attendance: EstadoAsistencia } => s.attendance !== UNMARKED)
+    .filter(
+      (s): s is SessionStudent & { attendance: EstadoAsistencia } =>
+        s.attendance !== UNMARKED && !isFiled(s),
+    )
     .map((s) => ({ personaId: Number(s.id), estado: s.attendance }));
 }
 
@@ -402,12 +491,17 @@ export function buildRosterFromAlumnoHorarios(
   existingRecords: AttendanceRecord[] = [],
 ): SessionStudent[] {
   const recordByPersonaId = new Map(existingRecords.map((r) => [r.personaId, r]));
+  // ENT-03: once ANY roster student has a row, the session is no longer a
+  // fresh one — whoever is still missing must be decided, never pre-filled as
+  // "Presente" (a default only makes sense when nobody has been recorded).
+  const sessionStarted = items.some((item) => recordByPersonaId.has(item.personaId));
+  const missingDefault: WizardAttendance = sessionStarted ? UNMARKED : DEFAULT_ATTENDANCE;
   return items.map((item) => {
     const record = recordByPersonaId.get(item.personaId);
     return {
       id: String(item.personaId),
       name: item.personaNombreCompleto,
-      attendance: (record?.estado ?? DEFAULT_ATTENDANCE) as WizardAttendance,
+      attendance: (record?.estado ?? missingDefault) as WizardAttendance,
       reviewed: record !== undefined,
       // `record.id` is the real Asistencia row id (`String(asistencia.id)`,
       // see `buildAttendanceRecord`) — NOT `item.personaId`, which is what
@@ -416,8 +510,16 @@ export function buildRosterFromAlumnoHorarios(
       asistenciaId: record ? Number(record.id) : null,
       justificativo: record?.justificativo ?? null,
       estadoJustificativo: record?.estadoJustificativo ?? null,
+      assignedOn: enrollmentClubDay(item.fechaAsignacion),
     };
   });
+}
+
+/** The CLUB day of an enrolment timestamp, or `null` when it cannot be read. */
+function enrollmentClubDay(fechaAsignacion: string | undefined): string | null {
+  if (!fechaAsignacion) return null;
+  const instant = new Date(fechaAsignacion);
+  return Number.isNaN(instant.getTime()) ? null : clubIsoDate(instant);
 }
 
 /**
@@ -436,6 +538,34 @@ export function countRecordsByHorario(records: AttendanceRecord[]): Map<number, 
     counts.set(record.horarioId, (counts.get(record.horarioId) ?? 0) + 1);
   }
   return counts;
+}
+
+/**
+ * Which horarios have a COMPLETE list this week (ENT-03): every student in the
+ * horario's roster has a record. A horario with only some students recorded is
+ * NOT here — it stays open so the missing ones can be completed. A horario with
+ * records but nobody left on its roster (everyone unassigned since) counts as
+ * closed, as it always did.
+ *
+ * `records` is the trailing-week fetch (see `countRecordsByHorario`) and
+ * `roster` the all-horarios roster (`fetchRosterDeTodosLosHorarios`).
+ */
+export function closedHorariosFromWeek(
+  records: AttendanceRecord[],
+  roster: AlumnoHorario[],
+): Set<number> {
+  const recordedByHorario = new Map<number, Set<number>>();
+  for (const record of records) {
+    const recorded = recordedByHorario.get(record.horarioId) ?? new Set<number>();
+    recorded.add(record.personaId);
+    recordedByHorario.set(record.horarioId, recorded);
+  }
+  const closed = new Set<number>();
+  for (const [horarioId, recorded] of recordedByHorario) {
+    const students = roster.filter((r) => r.horarioId === horarioId);
+    if (students.every((r) => recorded.has(r.personaId))) closed.add(horarioId);
+  }
+  return closed;
 }
 
 // ---------------------------------------------------------------------------
@@ -465,6 +595,24 @@ export function isWithinCorrectionWindow(fecha: string, today: Date = clubToday(
   const cutoff = new Date(today);
   cutoff.setDate(cutoff.getDate() - CORRECTION_WINDOW_DIAS);
   return fecha >= calendarIsoDate(cutoff);
+}
+
+/**
+ * How far back (days, club time) the backend accepts a new attendance list
+ * (ENT-02, `VENTANA_REGISTRO_ASISTENCIA_DIAS`). Same number as the correction
+ * window on purpose: what can be filed can still be corrected.
+ */
+export const REGISTRATION_WINDOW_DIAS = CORRECTION_WINDOW_DIAS;
+
+/**
+ * Whether `fecha` ("YYYY-MM-DD") can still be filed: today or up to
+ * `REGISTRATION_WINDOW_DIAS` back, never in the future. The backend is the
+ * real gate; this only avoids offering a save it is going to refuse.
+ */
+export function isWithinRegistrationWindow(fecha: string, today: Date = clubToday()): boolean {
+  const cutoff = new Date(today);
+  cutoff.setDate(cutoff.getDate() - REGISTRATION_WINDOW_DIAS);
+  return fecha >= calendarIsoDate(cutoff) && fecha <= calendarIsoDate(today);
 }
 
 // ---------------------------------------------------------------------------
@@ -565,7 +713,9 @@ export function applyAttendanceDraft(
   if (!draft) return students;
   return students.map((student) => {
     const drafted = draft[student.id];
-    return drafted ? { ...student, attendance: drafted, reviewed: true } : student;
+    // A student who already has a row keeps the SERVER's value: another
+    // trainer may have filed them since the draft was written (ENT-04).
+    return drafted && !isFiled(student) ? { ...student, attendance: drafted, reviewed: true } : student;
   });
 }
 
@@ -671,7 +821,7 @@ const STEP_QUERY_KEY = "paso";
  * see on screen. Compared component-wise because `Date` rolls overflow
  * forward silently (Feb 31 becomes Mar 3) instead of rejecting it.
  */
-function parseIsoDateParam(raw: string | null): string | null {
+function parseIsoDateParam(raw: string | null, today: Date): string | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw ?? "");
   if (!match) return null;
   const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
@@ -679,7 +829,11 @@ function parseIsoDateParam(raw: string | null): string | null {
   if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
     return null;
   }
-  return raw;
+  // ENT-02: a FUTURE date is dropped to the wizard's default (today) — the API
+  // refuses it, and there is nothing to look at there. An old date is NOT
+  // dropped: the history page deep-links to sessions of any age so they can be
+  // read, and the backend still refuses to file past `REGISTRATION_WINDOW_DIAS`.
+  return (raw as string) <= calendarIsoDate(today) ? raw : null;
 }
 
 /** Query value per step — the picker is the bare URL, with no `paso` at all. */
@@ -702,7 +856,7 @@ export interface WizardLocation {
 }
 
 /** Read the wizard's position out of a query string (`window.location.search`). */
-export function parseWizardQuery(search: string): WizardLocation {
+export function parseWizardQuery(search: string, today: Date = clubToday()): WizardLocation {
   const params = new URLSearchParams(search);
   const rawHorarioId = Number(params.get(HORARIO_QUERY_KEY));
   const horarioId =
@@ -711,7 +865,7 @@ export function parseWizardQuery(search: string): WizardLocation {
   // A date belongs to a session, and without a horario there is no session for
   // it to date — it falls back to the picker along with everything else.
   if (horarioId === null) return { horarioId: null, fecha: null, step: "select-session" };
-  return { horarioId, fecha: parseIsoDateParam(params.get(FECHA_QUERY_KEY)), step };
+  return { horarioId, fecha: parseIsoDateParam(params.get(FECHA_QUERY_KEY), today), step };
 }
 
 /** The query string for a position, `""` at the start of the flow. */

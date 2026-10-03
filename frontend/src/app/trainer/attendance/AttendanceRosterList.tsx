@@ -6,6 +6,8 @@ interface AttendanceRosterListProps {
   /** The FULL roster — `studentIndex` is resolved against this, not the filtered view. */
   students: SessionStudent[];
   filteredStudents: SessionStudent[];
+  /** The session's day, for the "before enrolment" notice on each row (ENT-07). */
+  sessionDate?: string | null;
   onCycleAttendance: (studentIndex: number) => void;
   onDirectAttendanceSet: (studentIndex: number, state: EstadoAsistencia) => void;
   onRadioKeyDown: (
@@ -24,6 +26,7 @@ interface AttendanceRosterListProps {
 export default function AttendanceRosterList({
   students,
   filteredStudents,
+  sessionDate = null,
   onCycleAttendance,
   onDirectAttendanceSet,
   onRadioKeyDown,
@@ -38,6 +41,7 @@ export default function AttendanceRosterList({
           key={student.id}
           student={student}
           studentIndex={students.findIndex((s) => s.id === student.id)}
+          sessionDate={sessionDate}
           onCycleAttendance={onCycleAttendance}
           onDirectAttendanceSet={onDirectAttendanceSet}
           onRadioKeyDown={onRadioKeyDown}

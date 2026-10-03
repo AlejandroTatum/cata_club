@@ -10,7 +10,8 @@ from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.tiempo import hoy_club
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
 from app.servicios_negocio.dtos.asistencia_schemas import (
-    AsistenciaCreateDTO, AsistenciaCorreccionDTO, AsistenciaCorreccionEntryDTO,
+    AsistenciaCreateDTO, AsistenciaLoteCreateDTO, AsistenciaLoteResponseDTO,
+    AsistenciaCorreccionDTO, AsistenciaCorreccionEntryDTO,
     AsistenciaCorreccionResponseDTO,
     AsistenciaResponseDTO, CategoriaCreateDTO, CategoriaPublicacionDTO, CategoriaResponseDTO,
     CategoriaUpdateDTO, HorarioCreateDTO, HorarioUpdateDTO, HorarioResponseDTO,
@@ -175,6 +176,21 @@ async def registrar_asistencia(
 ):
     return AsistenciaServicio(db).registrar_asistencia(
         datos, token_payload.get("roles", []), token_payload.get("persona_id")
+    )
+
+
+# Toma de lista completa en una sola llamada (ENT-01): un commit y una
+# validación de horario/fecha/día por lote, en vez de una transacción por
+# alumno. Declarado ANTES de las rutas `/{asistencia_id}/...` para que
+# `lote` no se interprete como un id.
+@router.post("/lote", response_model=AsistenciaLoteResponseDTO, status_code=status.HTTP_201_CREATED)
+async def registrar_asistencia_lote(
+    datos: AsistenciaLoteCreateDTO,
+    token_payload: dict = Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"])),
+    db: Session = Depends(obtener_sesion),
+):
+    return AsistenciaServicio(db).registrar_asistencia_lote(
+        datos, token_payload.get("persona_id")
     )
 
 

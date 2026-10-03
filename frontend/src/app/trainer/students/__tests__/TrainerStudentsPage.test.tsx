@@ -100,6 +100,7 @@ function fila(
   edad: number,
   dia: string,
   horaInicio = "18:00:00",
+  categoria: [string, string] = [`CAT_${horaInicio.slice(0, 2)}`, `Cat ${horaInicio.slice(0, 2)}`],
 ): AlumnoHorario {
   return {
     id: filaId++,
@@ -111,6 +112,8 @@ function fila(
     horarioHoraInicio: horaInicio,
     horarioHoraFin: "19:00:00",
     fechaAsignacion: "2026-01-15T00:00:00",
+    horarioCategoria: categoria[0],
+    horarioCategoriaLabel: categoria[1],
   };
 }
 
@@ -419,7 +422,7 @@ describe("la nómina es la tabla compartida del producto (issue #1156)", () => {
     // Ficha médica y Horario se fusionaron en una única columna de acciones
     // sr-only (issue #1291): el layout automático ya no reparte el ancho
     // sobrante entre tres columnas.
-    expect(encabezados).toEqual(["Estudiante", "Grupo y horario", "Acciones"]);
+    expect(encabezados).toEqual(["Estudiante", "Categoría y horario", "Acciones"]);
   });
 
   it("los dos botones de un renglón viven en la misma celda de acciones (issue #1291)", async () => {
@@ -596,11 +599,11 @@ describe("maestro–detalle en escritorio", () => {
     render(<TrainerStudentsPage />);
 
     const resumen = await screen.findByTestId("students-by-group");
-    fireEvent.click(within(resumen).getByRole("button", { name: "Filtrar el grupo de las 17:00, 1" }));
+    fireEvent.click(within(resumen).getByRole("button", { name: "Filtrar la categoría Cat 17, 1" }));
 
     expect(screen.queryByTestId("student-row-7")).not.toBeInTheDocument();
     expect(screen.getByTestId("student-row-3")).toBeInTheDocument();
-    expect(within(resumen).getByRole("button", { name: /17:00/ })).toHaveAttribute("aria-pressed", "true");
+    expect(within(resumen).getByRole("button", { name: /Cat 17/ })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("al tocar Ficha médica llena el panel lateral, sin abrir el diálogo", async () => {
@@ -685,11 +688,11 @@ describe("maestro–detalle en escritorio", () => {
     const tabla = await screen.findByTestId("students-desktop-table");
     expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual([
       "Estudiante",
-      "Grupo y horario",
+      "Categoría y horario",
       "Acciones",
     ]);
     const fila = within(tabla).getByTestId("student-row-3");
-    expect(within(fila).getByText("Grupo 17:00")).toBeInTheDocument();
+    expect(within(fila).getByText("Categoría Cat 17")).toBeInTheDocument();
   });
 
   it("la guía menciona el botón Ficha médica", async () => {
@@ -711,14 +714,33 @@ describe("maestro–detalle en escritorio", () => {
     expect(screen.queryByTestId("ficha-panel")).not.toBeInTheDocument();
   });
 
-  it("cuenta los alumnos y filtra por grupo con las horas de inicio del padrón", async () => {
+  it("agrupa por categoría aunque sus alumnos entrenen a distinta hora", async () => {
+    const juvenil: [string, string] = ["JUVENIL", "Juvenil"];
+    mockFetchRoster.mockResolvedValue([
+      fila(1, "Ana Mora", 14, "LUNES", "17:00:00", juvenil),
+      fila(2, "Beto Vera", 15, "SABADO", "09:00:00", juvenil),
+      fila(3, "Cata Paz", 9, "LUNES", "17:00:00", ["INFANTIL", "Infantil"]),
+    ]);
+    render(<TrainerStudentsPage />);
+
+    await screen.findByTestId("student-row-1");
+    expect(screen.getByRole("button", { name: "Categoría Juvenil, 2" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Categoría Infantil, 1" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Categoría Juvenil, 2" }));
+    expect(screen.getByTestId("student-row-1")).toBeInTheDocument();
+    expect(screen.getByTestId("student-row-2")).toBeInTheDocument();
+    expect(screen.queryByTestId("student-row-3")).not.toBeInTheDocument();
+  });
+
+  it("cuenta los alumnos y filtra por categoría del padrón", async () => {
     render(<TrainerStudentsPage />);
 
     await screen.findByTestId("student-row-7");
     expect(document.querySelector("p[aria-live=polite]")).toHaveTextContent("3 alumnos");
 
-    // Melany trains at 18:00, Diego at 17:00, Sofía at 09:00.
-    fireEvent.click(screen.getByRole("button", { name: "Grupo de las 17:00, 1" }));
+    // Melany is in Cat 18, Diego in Cat 17, Sofía in Cat 09.
+    fireEvent.click(screen.getByRole("button", { name: "Categoría Cat 17, 1" }));
     expect(screen.queryByTestId("student-row-7")).not.toBeInTheDocument();
     expect(screen.getByTestId("student-row-3")).toBeInTheDocument();
     expect(document.querySelector("p[aria-live=polite]")).toHaveTextContent("1 alumno de 3");

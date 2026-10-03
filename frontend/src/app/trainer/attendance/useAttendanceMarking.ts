@@ -18,10 +18,12 @@ import {
   countUnmarked,
   countUnreviewed,
   hasUnsavedAttendanceEdits,
+  isFiled,
   isReviewed,
   markRemainingPresent,
   saveAttendanceDraft,
   tapWizardAttendance,
+  UNDO_TOAST_ACTION_LABEL,
   arrowAttendanceState,
   type SessionStudent,
 } from "./attendance-utils";
@@ -117,6 +119,9 @@ export function useAttendanceMarking({
 
   const handleDirectAttendanceSet = useCallback(
     (studentIndex: number, state: EstadoAsistencia): void => {
+      // First registration wins (ENT-04): a student who already has a row is
+      // not editable from the wizard.
+      if (students[studentIndex] && isFiled(students[studentIndex])) return;
       commitStudents(
         students.map((s, i) => (i === studentIndex ? { ...s, attendance: state, reviewed: true } : s)),
         `marcar a ${students[studentIndex]?.name ?? "un alumno"}`,
@@ -151,6 +156,7 @@ export function useAttendanceMarking({
 
   const handleCycleAttendance = useCallback(
     (studentIndex: number): void => {
+      if (students[studentIndex] && isFiled(students[studentIndex])) return;
       commitStudents(
         students.map((s, i) =>
           i === studentIndex ? { ...s, attendance: tapWizardAttendance(s), reviewed: true } : s,
@@ -172,7 +178,7 @@ export function useAttendanceMarking({
       {
         description: "Quedaban sin revisar. Puede deshacerlo desde aquí.",
         action: {
-          label: "Deshacer",
+          label: UNDO_TOAST_ACTION_LABEL,
           onAction: () => {
             setUndoStack((stack) => stack.slice(0, depthBefore));
             setStudents(previous);

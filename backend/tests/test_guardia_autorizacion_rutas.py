@@ -324,6 +324,7 @@ RUTAS_ROLES_REQUERIDOS = {
     # `corregir` (auditoría de registros que pueden ser de menores).
     ("GET", "/asistencias/{asistencia_id}/correcciones"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/asistencias/"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
+    ("POST", "/asistencias/lote"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/asistencias/asignar-alumno"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/asistencias/horarios"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/auth/registro"): frozenset({"ADMINISTRADOR"}),

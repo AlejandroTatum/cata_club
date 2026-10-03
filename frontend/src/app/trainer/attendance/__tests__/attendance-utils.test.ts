@@ -39,6 +39,12 @@ import {
   markRosterClosed,
   hasUnsavedAttendanceEdits,
   isWithinCorrectionWindow,
+  isWithinRegistrationWindow,
+  isSessionClosed,
+  describeAttendanceSaveError,
+  formatSessionDateLabel,
+  isSessionPartial,
+  closedHorariosFromWeek,
   type SessionStudent,
 } from "../attendance-utils";
 import type { AlumnoHorario } from "@/services/api";
@@ -252,10 +258,12 @@ describe("buildRosterFromAlumnoHorarios", () => {
       {
         id: "3", name: "Sofia Alumna", attendance: "present", reviewed: false,
         asistenciaId: null, justificativo: null, estadoJustificativo: null,
+        assignedOn: "2025-12-31",
       },
       {
         id: "7", name: "Mateo Rodríguez", attendance: "present", reviewed: false,
         asistenciaId: null, justificativo: null, estadoJustificativo: null,
+        assignedOn: "2025-12-31",
       },
     ]);
     expect(roster.every((s) => s.attendance === DEFAULT_ATTENDANCE)).toBe(true);
@@ -297,15 +305,18 @@ describe("buildRosterFromAlumnoHorarios", () => {
     ];
     const roster = buildRosterFromAlumnoHorarios(alumnoHorarios, existingRecords);
     // A saved record IS a decision somebody made for this session, so that row
-    // comes back reviewed; the student with no record does not.
+    // comes back reviewed; the student with no record does not — and, because the
+    // session is already started, is NOT pre-filled as "Presente" (ENT-03).
     expect(roster).toEqual([
       {
         id: "3", name: "Sofia Alumna", attendance: "present", reviewed: true,
         asistenciaId: 501, justificativo: "Certificado médico", estadoJustificativo: true,
+        assignedOn: "2025-12-31",
       },
       {
-        id: "7", name: "Mateo Rodríguez", attendance: "present", reviewed: false,
+        id: "7", name: "Mateo Rodríguez", attendance: "unmarked", reviewed: false,
         asistenciaId: null, justificativo: null, estadoJustificativo: null,
+        assignedOn: "2025-12-31",
       },
     ]);
   });
@@ -388,7 +399,7 @@ describe("buildRosterFromAlumnoHorarios", () => {
       // Sofia already had a record — same reference, nothing rebuilt.
       expect(closed.find((s) => s.id === "3")).toBe(roster.find((s) => s.id === "3"));
       // Mateo had none — now reviewed, everything else unchanged.
-      expect(closed.find((s) => s.id === "7")).toMatchObject({ reviewed: true, attendance: "present" });
+      expect(closed.find((s) => s.id === "7")).toMatchObject({ reviewed: true });
     });
 
     it("returns an empty roster for an empty array", () => {
@@ -944,7 +955,119 @@ describe("listAttendanceDrafts", () => {
   });
 });
 
+// ENT-11
+describe("formatSessionDateLabel", () => {
+  it("names the weekday and the day/month of the session", () => {
+    expect(formatSessionDateLabel("2026-09-25")).toBe("Sesión del vie 25/09");
+    expect(formatSessionDateLabel("2026-07-05")).toBe("Sesión del dom 05/07");
+  });
+
+  it("does not shift the day for a calendar date", () => {
+    expect(formatSessionDateLabel("2026-01-01")).toBe("Sesión del jue 01/01");
+  });
+});
+
+// ENT-06: one message per KIND of failure, not one for everything.
+describe("describeAttendanceSaveError", () => {
+  const withStatus = (status: number) => Object.assign(new Error("x"), { status });
+
+  it("tells the four failure classes apart", () => {
+    const messages = [
+      describeAttendanceSaveError(withStatus(403)),
+      describeAttendanceSaveError(withStatus(404)),
+      describeAttendanceSaveError(withStatus(503)),
+      describeAttendanceSaveError(new TypeError("Failed to fetch")),
+    ];
+    expect(new Set(messages).size).toBe(4);
+  });
+
+  it("says permission for 401/403, stale data for other 4xx, server for 5xx and connection for no status", () => {
+    expect(describeAttendanceSaveError(withStatus(401))).toMatch(/permiso/);
+    expect(describeAttendanceSaveError(withStatus(422))).toMatch(/Actualice la página/);
+    expect(describeAttendanceSaveError(withStatus(500))).toMatch(/servidor tuvo un problema/);
+    expect(describeAttendanceSaveError(new Error("timeout"))).toMatch(/No hay conexión/);
+    expect(describeAttendanceSaveError("???")).toMatch(/No hay conexión/);
+  });
+});
+
+// ENT-03 / ENT-04: "tomada" means EVERY roster student has a row.
+describe("partial sessions", () => {
+  const roster = (filed: boolean[]): SessionStudent[] =>
+    filed.map((isFiledRow, i) => ({
+      id: String(i + 1),
+      name: `Alumno ${i + 1}`,
+      attendance: "present",
+      reviewed: isFiledRow,
+      asistenciaId: isFiledRow ? 500 + i : null,
+    }));
+
+  it("is closed only when every student has a row", () => {
+    expect(isSessionClosed(roster([true, true]))).toBe(true);
+    expect(isSessionClosed(roster([true, false]))).toBe(false);
+    expect(isSessionClosed(roster([false, false]))).toBe(false);
+    expect(isSessionClosed([])).toBe(false);
+  });
+
+  it("is partial when some, but not all, students have a row", () => {
+    expect(isSessionPartial(roster([true, false]))).toBe(true);
+    expect(isSessionPartial(roster([true, true]))).toBe(false);
+    expect(isSessionPartial(roster([false, false]))).toBe(false);
+  });
+
+  it("keeps the default 'Presente' only for a session nobody has recorded yet", () => {
+    const items = [
+      { id: 1, personaId: 3, personaNombreCompleto: "Sofia", horarioId: 1 },
+      { id: 2, personaId: 7, personaNombreCompleto: "Mateo", horarioId: 1 },
+    ] as AlumnoHorario[];
+    const fresh = buildRosterFromAlumnoHorarios(items, []);
+    expect(fresh.map((s) => s.attendance)).toEqual(["present", "present"]);
+  });
+
+  it("never lets a stale draft overwrite a student who already has a row", () => {
+    const students = roster([true, false]);
+    const merged = applyAttendanceDraft(students, { "1": "absent", "2": "late" });
+    expect(merged[0].attendance).toBe("present"); // filed: the server's value wins
+    expect(merged[1]).toMatchObject({ attendance: "late", reviewed: true });
+  });
+
+  it("never sends a student who already has a row", () => {
+    const students = roster([true, false]);
+    expect(toAttendanceMarks(students)).toEqual([{ personaId: 2, estado: "present" }]);
+  });
+
+  it("lists as closed only the horarios whose whole roster has a record", () => {
+    const record = (horarioId: number, personaId: number) =>
+      ({ id: `${horarioId}-${personaId}`, horarioId, personaId }) as AttendanceRecord;
+    const rosterAll = [
+      { horarioId: 1, personaId: 10 },
+      { horarioId: 1, personaId: 11 },
+      { horarioId: 2, personaId: 20 },
+    ] as AlumnoHorario[];
+
+    const closed = closedHorariosFromWeek([record(1, 10), record(2, 20)], rosterAll);
+
+    expect([...closed]).toEqual([2]); // horario 1 is missing persona 11
+  });
+});
+
 describe("parseWizardQuery / buildWizardQuery", () => {
+  const TODAY = new Date(2026, 6, 21); // 2026-07-21 local
+
+  it("clamps a future fecha to the default (today) but keeps old ones, which the history deep-links to read", () => {
+    const parse = (fecha: string) => parseWizardQuery(`?horario=12&fecha=${fecha}&paso=lista`, TODAY).fecha;
+    expect(parse("2026-07-22")).toBeNull(); // tomorrow
+    expect(parse("2031-01-01")).toBeNull();
+    expect(parse("2026-07-21")).toBe("2026-07-21"); // today
+    expect(parse("2026-05-01")).toBe("2026-05-01"); // past the window: still readable
+  });
+
+  it("isWithinRegistrationWindow accepts today and 30 days back, nothing else", () => {
+    expect(isWithinRegistrationWindow("2026-07-21", TODAY)).toBe(true);
+    expect(isWithinRegistrationWindow("2026-06-21", TODAY)).toBe(true);
+    expect(isWithinRegistrationWindow("2026-06-20", TODAY)).toBe(false);
+    expect(isWithinRegistrationWindow("2026-07-22", TODAY)).toBe(false);
+  });
+
   it("round-trips each step", () => {
     for (const step of WIZARD_STEP_ORDER) {
       const query = buildWizardQuery(step === "select-session" ? null : 12, null, step);
@@ -969,7 +1092,7 @@ describe("parseWizardQuery / buildWizardQuery", () => {
     expect(buildWizardQuery(12, "2026-07-20", "mark-attendance")).toBe(
       "?horario=12&fecha=2026-07-20&paso=lista",
     );
-    expect(parseWizardQuery("?horario=12&fecha=2026-07-20&paso=lista")).toEqual({
+    expect(parseWizardQuery("?horario=12&fecha=2026-07-20&paso=lista", TODAY)).toEqual({
       horarioId: 12,
       fecha: "2026-07-20",
       step: "mark-attendance",
@@ -980,7 +1103,7 @@ describe("parseWizardQuery / buildWizardQuery", () => {
     // The date decides which session gets FILED, so a typo must fall back to
     // today rather than address a day that does not exist.
     for (const junk of ["ayer", "2026-13-01", "2026-02-31", "20-07-2026", "2026-7-2"]) {
-      expect(parseWizardQuery(`?horario=12&fecha=${junk}&paso=lista`).fecha).toBeNull();
+      expect(parseWizardQuery(`?horario=12&fecha=${junk}&paso=lista`, TODAY).fecha).toBeNull();
     }
   });
 

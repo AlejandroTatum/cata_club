@@ -24,6 +24,7 @@ interface SchedulePickerStepProps {
   selectedScheduleId: number | null;
   onSelectSchedule: (id: number) => void;
   weekRecordCounts: Map<number, number>;
+  closedHorarios: Set<number>;
   selectedListTaken: boolean;
   rosterError: string | null;
   /** The stacked commit bar ("Continuar"), hosted in the aside. */
@@ -43,6 +44,7 @@ export default function SchedulePickerStep({
   selectedScheduleId,
   onSelectSchedule,
   weekRecordCounts,
+  closedHorarios,
   selectedListTaken,
   rosterError,
   commitBar,
@@ -112,6 +114,7 @@ export default function SchedulePickerStep({
                 selectedScheduleId={selectedScheduleId}
                 onSelectSchedule={onSelectSchedule}
                 weekRecordCounts={weekRecordCounts}
+                closedHorarios={closedHorarios}
               />
             )
           )}
@@ -144,7 +147,7 @@ export default function SchedulePickerStep({
         <WeekOverview
           dayGroups={dayGroups}
           today={today}
-          weekRecordCounts={weekRecordCounts}
+          closedHorarios={closedHorarios}
           onSelectDay={setPickedDay}
         />
       </div>
@@ -153,6 +156,7 @@ export default function SchedulePickerStep({
           schedule={selectedSchedule}
           today={today}
           recordedCount={selectedSchedule ? (weekRecordCounts.get(selectedSchedule.id) ?? 0) : 0}
+          listClosed={selectedListTaken}
           preview={preview}
           commitBar={commitBar}
         />

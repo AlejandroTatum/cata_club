@@ -12,11 +12,14 @@ from app.dominio.modelos import (
 )
 from app.dominio.enums import DiaSemana, EstadoAsistencia, EstadoMembresia, EstadoPago
 from app.dominio.etiquetas import dia_en_castellano
-from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida, PermisosInsuficientes
+from app.dominio.excepciones import (
+    ConflictoConcurrencia, EntidadNoEncontrada, OperacionInvalida, PermisosInsuficientes,
+)
 from app.dominio.nombre_propio import nombre_completo
 from app.dominio.reglas_negocio import (
     HORA_MAXIMA_ENTRENAMIENTO, HORA_MINIMA_ENTRENAMIENTO,
     LIMITE_CORRECCION_ASISTENCIA_DIAS, MAXIMO_DIAS_POR_CATEGORIA,
+    VENTANA_REGISTRO_ASISTENCIA_DIAS,
 )
 from app.infraestructura.repositorios.categoria_repositorio import CategoriaRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
@@ -26,14 +29,15 @@ from app.infraestructura.repositorios.asistencia_repositorio import (
     SesionAsistenciaRepositorio,
 )
 from app.servicios_negocio.dtos.asistencia_schemas import (
-    AsistenciaCreateDTO, AsistenciaCorreccionDTO, CategoriaCreateDTO, CategoriaResponseDTO,
+    AsistenciaCreateDTO, AsistenciaCorreccionDTO, AsistenciaLoteCreateDTO,
+    AsistenciaLoteFallidoDTO, AsistenciaLoteResponseDTO, CategoriaCreateDTO, CategoriaResponseDTO,
     CategoriaUpdateDTO, HorarioCreateDTO, HorarioResponseDTO, HorarioUpdateDTO,
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,
     PublicScheduleBlockDTO, PublicScheduleCategoryDTO,
     SolapeHorarioDTO, UltimaListaDTO,
 )
 from app.servicios_negocio.persona_servicio import _calcular_edad
-from app.soporte_transversal.tiempo import hoy_club
+from app.soporte_transversal.tiempo import ZONA_HORARIA_CLUB, hoy_club
 
 _CODIGO_MAX_LEN = 20
 
@@ -410,6 +414,10 @@ class AsistenciaServicio:
                 ),
             )
 
+        # ADM-13: quitar un día borra su horario; con alumnos asignados se
+        # rechaza la edición entera, igual que `eliminar_horario`.
+        self._validar_sin_alumnos_asignados(horarios_a_borrar)
+
         # Decisión #3: backfillear a los alumnos ya inscriptos en la
         # categoria dentro de cada día nuevo -- se calcula ANTES de crear
         # los horarios nuevos (para no incluirse a sí mismos).
@@ -529,28 +537,174 @@ class AsistenciaServicio:
         self.db.commit()
         return self._a_horario_dto(resultado, categoria.label)
 
+    def _validar_sin_alumnos_asignados(self, horarios: list[HorarioEntrenamiento]) -> None:
+        """ADM-13: borrar un horario desasignaba en silencio a sus alumnos.
+        Ahora se rechaza (-> 409) y hay que reasignarlos primero."""
+        asignados = sum(self.repo_alumno_horario.contar_asignaciones_por_horario(h.id) for h in horarios)
+        if asignados:
+            raise ConflictoConcurrencia(
+                f"Tiene {asignados} alumnos asignados; reasígnelos primero.",
+                detalle_tecnico=f"horario_ids={[h.id for h in horarios]} asignados={asignados}",
+            )
+
     def eliminar_horario(self, horario_id: int) -> None:
-        """Todo o nada (issue #831): antes, `eliminar_por_horario` comiteaba
-        de verdad y `repo_horario.eliminar` (vía `eliminar_o_error_de_
-        dominio`) comiteaba/revertía por separado -- si el horario tenía
-        historial, las filas de `alumno_horario` ya habían quedado borradas
-        aunque el `horario_entrenamiento` sobreviviera. Ahora ambos pasos
-        solo flushean; un solo `commit()` al final los confirma juntos, y si
-        `repo_horario.eliminar` falla, su propio `rollback()` (ver
-        `eliminacion_segura.py`) descarta también el borrado de
-        `alumno_horario` de más arriba."""
+        """Un horario con alumnos asignados no se borra (ADM-13, 409), ni uno
+        con historial de asistencias (`repo_horario.eliminar`, nunca se
+        limpia). Un único `commit()` confirma el borrado (issue #831)."""
         horario = self.repo_horario.obtener_por_id(horario_id)
         if not horario:
             raise EntidadNoEncontrada(f"Horario con id {horario_id} no encontrado")
-        # Dropping this one día from the categoria's schedule unassigns
-        # students from exactly this row -- narrow by design, unlike
-        # `desasignar_alumno_de_horario`'s categoria-wide fan-out, which
-        # answers a different question (unenroll a student from the whole
-        # categoria). A horario with attendance history still blocks deletion
-        # (`repo_horario.eliminar` below) -- that data is never auto-cleaned.
-        self.repo_alumno_horario.eliminar_por_horario(horario_id)
+        self._validar_sin_alumnos_asignados([horario])
         self.repo_horario.eliminar(horario)
         self.db.commit()
+
+    @staticmethod
+    def _validar_fecha_de_sesion(fecha, horario: HorarioEntrenamiento) -> None:
+        """Issue #308: `fecha` debe caer en el `dia_semana` real del horario.
+        Invariante de dominio, no una validación de forma -- sin esto el
+        cliente podía (y lo hizo) mandar la fecha de HOY para un horario de
+        otro día, y el historial quedaba con filas donde fecha y día de
+        semana se contradicen.
+
+        ENT-02: además, la fecha debe estar entre hoy (día del club) y
+        `VENTANA_REGISTRO_ASISTENCIA_DIAS` días atrás; una fecha futura se
+        rechaza con su propio mensaje."""
+        hoy = hoy_club()
+        if fecha > hoy:
+            raise OperacionInvalida(
+                "No se puede registrar asistencia con una fecha futura.",
+                detalle_tecnico=f"fecha_entrenamiento={fecha.isoformat()} hoy_club={hoy.isoformat()}",
+            )
+        if (hoy - fecha).days > VENTANA_REGISTRO_ASISTENCIA_DIAS:
+            raise OperacionInvalida(
+                "Solo se puede registrar asistencia de hoy y de los últimos "
+                f"{VENTANA_REGISTRO_ASISTENCIA_DIAS} días.",
+                detalle_tecnico=(
+                    f"fecha_entrenamiento={fecha.isoformat()} hoy_club={hoy.isoformat()} "
+                    f"ventana={VENTANA_REGISTRO_ASISTENCIA_DIAS}"
+                ),
+            )
+        dia_de_la_fecha = _WEEKDAY_A_DIA_SEMANA[fecha.weekday()]
+        if dia_de_la_fecha != horario.dia_semana:
+            raise OperacionInvalida(
+                f"La fecha {fecha.isoformat()} es "
+                f"{dia_en_castellano(dia_de_la_fecha)}, pero el horario es de "
+                f"{dia_en_castellano(horario.dia_semana)}.",
+                detalle_tecnico=(
+                    f"fecha_entrenamiento={fecha.isoformat()} "
+                    f"({dia_de_la_fecha.value}) horario_id={horario.id} "
+                    f"horario.dia_semana={horario.dia_semana.value}"
+                ),
+            )
+
+    def registrar_asistencia_lote(
+        self, datos: AsistenciaLoteCreateDTO, persona_id_solicitante: int
+    ) -> AsistenciaLoteResponseDTO:
+        """Toma de lista completa en UNA transacción (ENT-01). Horario, fecha
+        y día se validan una vez; personas, pertenencias y filas previas se
+        resuelven con una consulta IN cada una; la sesión se cierra una vez.
+
+        Es parcial por alumno (decisión de producto): quien no se puede
+        registrar -- no existe, no está en el horario, o ya tiene fila
+        (gana el primero, ENT-04) -- vuelve en `fallidos` con su motivo y no
+        frena al resto. Un `persona_id` repetido en `items` es ambiguo
+        (ENT-10: ganaba un valor al azar), así que rechaza TODO el lote."""
+        ids = [item.persona_id for item in datos.items]
+        if len(set(ids)) != len(ids):
+            raise OperacionInvalida(
+                "La lista tiene un alumno repetido. Revise e intente de nuevo.",
+                detalle_tecnico=f"persona_id repetido en items: horario_id={datos.horario_id}",
+            )
+        horario = self.repo_horario.obtener_por_id(datos.horario_id)
+        if not horario:
+            raise EntidadNoEncontrada(f"Horario con id {datos.horario_id} no encontrado")
+        self._validar_fecha_de_sesion(datos.fecha, horario)
+
+        personas = self.repo_persona.listar_por_ids(ids)
+        asignados = self.repo_alumno_horario.listar_por_personas_y_horario(ids, datos.horario_id)
+        existentes = self.repo.listar_existentes_de_sesion(datos.horario_id, datos.fecha, ids)
+
+        no_operativos = self.repo_alumno_horario.ids_no_operativos(ids)
+        fallidos: list[AsistenciaLoteFallidoDTO] = []
+        creados = 0
+        sesion_cerrada = False
+        for item in datos.items:
+            persona = personas.get(item.persona_id)
+            if persona is None:
+                fallidos.append(AsistenciaLoteFallidoDTO(
+                    persona_id=item.persona_id, motivo="La persona no existe.",
+                ))
+                continue
+            nombre = nombre_completo(persona.nombres, persona.apellidos)
+            if item.persona_id not in asignados:
+                fallidos.append(AsistenciaLoteFallidoDTO(
+                    persona_id=item.persona_id,
+                    motivo=f"{nombre} no está en la lista de alumnos de ese horario.",
+                ))
+                continue
+            previa = existentes.get(item.persona_id)
+            if previa is not None:
+                fallidos.append(self._fallido_por_ya_registrada(item.persona_id, nombre, previa))
+                continue
+            try:
+                with self.db.begin_nested():
+                    self.repo.crear(Asistencia(
+                        fecha_entrenamiento=datos.fecha, horario_id=datos.horario_id,
+                        registrado_por_id=persona_id_solicitante,
+                        requiere_revision=self._requiere_revision(
+                            item.persona_id, datos.fecha, asignados[item.persona_id], no_operativos,
+                        ),
+                        **item.model_dump(),
+                    ))
+            except IntegrityError:
+                # Carrera con otra toma de la misma sesión: el UNIQUE de la
+                # base decide, y el perdedor lo ve como cualquier otra fila ya
+                # registrada. El SAVEPOINT deja intacto al resto del lote.
+                ganadora = self.repo.listar_existentes_de_sesion(
+                    datos.horario_id, datos.fecha, [item.persona_id]
+                ).get(item.persona_id)
+                fallidos.append(self._fallido_por_ya_registrada(item.persona_id, nombre, ganadora))
+                continue
+            creados += 1
+            if not sesion_cerrada:
+                self.repo_sesion.obtener_o_crear_cerrada(
+                    datos.horario_id, datos.fecha, persona_id_solicitante,
+                )
+                sesion_cerrada = True
+        self.db.commit()
+
+        autor = self.repo_persona.obtener_por_id(persona_id_solicitante)
+        return AsistenciaLoteResponseDTO(
+            creados=creados,
+            fallidos=fallidos,
+            registrado_por_nombre=(
+                nombre_completo(autor.nombres, autor.apellidos) if autor and creados else None
+            ),
+        )
+
+    @staticmethod
+    def _requiere_revision(
+        persona_id: int, fecha, asignacion: AlumnoHorario, no_operativos: set[int]
+    ) -> bool:
+        """ENT-07: ¿se acepta pero con aviso? Sí si el alumno no está operativo
+        (baja o membresía suspendida) o si la sesión es anterior al día de su
+        inscripción (día del club, no del reloj UTC de `fecha_asignacion`)."""
+        return persona_id in no_operativos or fecha < asignacion.fecha_asignacion.astimezone(ZONA_HORARIA_CLUB).date()
+
+    @staticmethod
+    def _fallido_por_ya_registrada(
+        persona_id: int, nombre: str, previa: Optional[Asistencia]
+    ) -> AsistenciaLoteFallidoDTO:
+        quien = previa.registrado_por_nombre if previa is not None else None
+        return AsistenciaLoteFallidoDTO(
+            persona_id=persona_id,
+            motivo=(
+                f"La asistencia de {nombre} ya fue registrada"
+                + (f" por {quien}." if quien else ".")
+            ),
+            registrado_por_nombre=quien,
+            ya_registrada=True,
+        )
 
     def registrar_asistencia(
         self, datos: AsistenciaCreateDTO, roles_solicitante: list[str], persona_id_solicitante: int
@@ -593,25 +747,10 @@ class AsistenciaServicio:
         if not horario:
             raise EntidadNoEncontrada(f"Horario con id {datos.horario_id} no encontrado")
 
-        # Issue #308: `fecha_entrenamiento` debe caer en el `dia_semana` real
-        # del horario. Invariante de dominio, no una validación de forma --
-        # sin esto el cliente podía (y lo hizo) mandar la fecha de HOY para
-        # un horario de otro día, y el historial quedaba con filas donde
-        # fecha y día de semana se contradicen. Se valida ACÁ, antes de la
-        # pertenencia del alumno, porque es una propiedad del par
-        # (fecha, horario) en sí, no de quién se está anotando.
-        dia_de_la_fecha = _WEEKDAY_A_DIA_SEMANA[datos.fecha_entrenamiento.weekday()]
-        if dia_de_la_fecha != horario.dia_semana:
-            raise OperacionInvalida(
-                f"La fecha {datos.fecha_entrenamiento.isoformat()} es "
-                f"{dia_en_castellano(dia_de_la_fecha)}, pero el horario es de "
-                f"{dia_en_castellano(horario.dia_semana)}.",
-                detalle_tecnico=(
-                    f"fecha_entrenamiento={datos.fecha_entrenamiento.isoformat()} "
-                    f"({dia_de_la_fecha.value}) horario_id={horario.id} "
-                    f"horario.dia_semana={horario.dia_semana.value}"
-                ),
-            )
+        # Issue #308: la fecha debe caer en el `dia_semana` del horario. Se
+        # valida ACÁ, antes de la pertenencia del alumno, porque es una
+        # propiedad del par (fecha, horario), no de quién se está anotando.
+        self._validar_fecha_de_sesion(datos.fecha_entrenamiento, horario)
 
         # LIFE-1: antes de esta línea el upsert de más abajo era ciego a si
         # el alumno está realmente inscrito en el horario -- se podía
@@ -621,9 +760,10 @@ class AsistenciaServicio:
         # creación: si desasignaron al alumno después de que ya existía la
         # fila, reeditarla no debe convertirse en un bypass de la regla que
         # sí aplica el alta.
-        if not self.repo_alumno_horario.obtener_por_persona_y_horario(
+        asignacion = self.repo_alumno_horario.obtener_por_persona_y_horario(
             datos.persona_id, datos.horario_id
-        ):
+        )
+        if not asignacion:
             raise OperacionInvalida(
                 f"{nombre_completo(persona.nombres, persona.apellidos)} no está en la lista de "
                 "alumnos de ese horario.",
@@ -667,7 +807,13 @@ class AsistenciaServicio:
         )
         try:
             resultado = self.repo.crear(
-                Asistencia(**datos.model_dump(), registrado_por_id=persona_id_solicitante)
+                Asistencia(
+                    **datos.model_dump(), registrado_por_id=persona_id_solicitante,
+                    requiere_revision=self._requiere_revision(
+                        datos.persona_id, datos.fecha_entrenamiento, asignacion,
+                        self.repo_alumno_horario.ids_no_operativos([datos.persona_id]),
+                    ),
+                )
             )
             self.db.commit()
             return resultado
@@ -723,9 +869,30 @@ class AsistenciaServicio:
                 "Solo un administrador puede corregir una asistencia ya registrada.",
             )
 
+        # ENT-09: el motivo es lo que hace auditable la corrección, así que uno
+        # en blanco (solo espacios) no cuenta. Se guarda recortado.
+        motivo = datos.motivo.strip()
+        if not motivo:
+            raise OperacionInvalida(
+                "Indique el motivo de la corrección.",
+                detalle_tecnico=f"motivo en blanco: asistencia_id={asistencia_id}",
+            )
+
         asistencia = self.repo.obtener_por_id(asistencia_id)
         if not asistencia:
             raise EntidadNoEncontrada(f"Asistencia con id {asistencia_id} no encontrada")
+
+        # ENT-09: una "corrección" que deja los tres campos como están no
+        # corrige nada y solo ensucia la traza de auditoría.
+        if (
+            datos.estado == asistencia.estado
+            and datos.justificativo == asistencia.justificativo
+            and datos.estado_justificativo == asistencia.estado_justificativo
+        ):
+            raise OperacionInvalida(
+                "La corrección no cambia nada: el estado y el justificativo son los mismos.",
+                detalle_tecnico=f"correccion sin cambios: asistencia_id={asistencia_id}",
+            )
 
         antiguedad_dias = (hoy_club() - asistencia.fecha_entrenamiento).days
         if antiguedad_dias > LIMITE_CORRECCION_ASISTENCIA_DIAS:
@@ -738,7 +905,7 @@ class AsistenciaServicio:
         correccion = AsistenciaCorreccion(
             asistencia_id=asistencia.id,
             corregido_por_id=persona_id_solicitante,
-            motivo=datos.motivo,
+            motivo=motivo,
             estado_anterior=asistencia.estado,
             justificativo_anterior=asistencia.justificativo,
             estado_justificativo_anterior=asistencia.estado_justificativo,
@@ -1044,7 +1211,9 @@ class AsistenciaServicio:
         self.db.commit()
 
     @staticmethod
-    def _a_detalle_dto(a: AlumnoHorario) -> AlumnoHorarioDetalleDTO:
+    def _a_detalle_dto(
+        a: AlumnoHorario, categoria_label: Optional[str] = None
+    ) -> AlumnoHorarioDetalleDTO:
         """Proyección compartida AlumnoHorario -> DTO de detalle (la usan el
         alta, el roster del horario y los horarios del alumno)."""
         return AlumnoHorarioDetalleDTO(
@@ -1057,6 +1226,8 @@ class AsistenciaServicio:
             horario_hora_inicio=a.horario.hora_inicio,
             horario_hora_fin=a.horario.hora_fin,
             fecha_asignacion=a.fecha_asignacion,
+            horario_categoria=a.horario.categoria,
+            horario_categoria_label=categoria_label,
         )
 
     def listar_alumnos_por_horario(
@@ -1080,7 +1251,8 @@ class AsistenciaServicio:
         respuestas (una por horario); esto consolida esas 26 consultas en
         una sola sin cambiar cuántas filas cruzan la red."""
         asignaciones = self.repo_alumno_horario.listar_activos_de_todos_los_horarios()
-        return [self._a_detalle_dto(a) for a in asignaciones]
+        labels = {c.codigo: c.label for c in self.repo_categoria.listar()}
+        return [self._a_detalle_dto(a, labels.get(a.horario.categoria)) for a in asignaciones]
 
     def listar_horarios_por_alumno(self, persona_id: int) -> list[AlumnoHorarioDetalleDTO]:
         """Lista todos los horarios asignados a un alumno específico."""

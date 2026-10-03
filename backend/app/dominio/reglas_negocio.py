@@ -28,6 +28,13 @@ from datetime import date, time
 # el campo.
 LIMITE_CORRECCION_ASISTENCIA_DIAS = 30
 
+# ENT-02: una lista solo se toma para hoy o hasta este número de días atrás
+# (día del club). Antes cualquier fecha pasaba: una futura, o una de hace
+# años que quedaba cerrada y, pasados `LIMITE_CORRECCION_ASISTENCIA_DIAS`,
+# ni siquiera el admin podía corregir. Se alinea con el tope de corrección
+# a propósito: lo que se puede registrar se puede corregir.
+VENTANA_REGISTRO_ASISTENCIA_DIAS = LIMITE_CORRECCION_ASISTENCIA_DIAS
+
 # Issue #861: la franja de una categoría solo estaba obligada a no venir
 # invertida (inicio anterior al fin), así que un entrenamiento de 02:00 a
 # 04:00 se guardaba sin protestar y salía publicado en la grilla del club.

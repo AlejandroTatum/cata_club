@@ -15,12 +15,15 @@ from decimal import Decimal
 import pytest
 
 from app.dominio.enums import DiaSemana, EstadoAsistencia, EstadoMembresia, TipoModalidad
-from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
+from app.dominio.excepciones import ConflictoConcurrencia, EntidadNoEncontrada, OperacionInvalida
 from app.dominio.modelos import CategoriaHorario, CategoriaHorarioDia, Membresia, TipoMembresia
 from app.servicios_negocio.dtos.asistencia_schemas import (
     AlumnoHorarioCreateDTO, CategoriaCreateDTO, CategoriaUpdateDTO, HorarioCreateDTO,
 )
 from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
+
+# Fechas fijas de 2026: ver `sin_ventana_de_registro` en conftest.py (ENT-02).
+pytestmark = pytest.mark.usefixtures("sin_ventana_de_registro")
 
 
 def _crear_persona_api(client, cedula="1710034065", nombres="Ana"):
@@ -249,6 +252,31 @@ def test_actualizar_categoria_quitar_dia_con_asistencias_bloquea_la_edicion_ente
     # Nada se tocó: ni el nombre, ni los días, ni las horas.
     fila = db_session.get(CategoriaHorario, categoria.codigo)
     assert fila.label == "Preinfantil"
+    assert len(servicio.listar_horarios(categoria.codigo)) == 2
+
+
+def test_actualizar_categoria_quitar_dia_con_alumnos_asignados_bloquea_con_conflicto(db_session, client):
+    """ADM-13: quitar un día borra su horario, así que con alumnos asignados
+    se rechaza (409) y la edición entera queda sin aplicar."""
+    servicio = AsistenciaServicio(db_session)
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES, DiaSemana.MIERCOLES],
+    ))
+    alumno = _crear_persona_api(client)
+    _habilitar_como_jugador(db_session, alumno["id"])
+    horario_lunes = next(h for h in servicio.listar_horarios(categoria.codigo) if h.dia_semana == DiaSemana.LUNES)
+    servicio.asignar_alumno_a_horario(
+        AlumnoHorarioCreateDTO(persona_id=alumno["id"], horario_id=horario_lunes.id)
+    )
+
+    with pytest.raises(ConflictoConcurrencia) as exc_info:
+        servicio.actualizar_categoria(categoria.codigo, CategoriaUpdateDTO(
+            nombre="Otro nombre", dias=[DiaSemana.MIERCOLES],
+        ))
+    assert "Tiene 1 alumnos asignados; reasígnelos primero." in str(exc_info.value)
+
+    assert db_session.get(CategoriaHorario, categoria.codigo).label == "Preinfantil"
     assert len(servicio.listar_horarios(categoria.codigo)) == 2
 
 
