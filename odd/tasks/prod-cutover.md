@@ -1,7 +1,7 @@
 # Prod cutover: reconvert the staging droplet into production
 
 Decision (2026-10-02): single VPS. The existing staging droplet
-(104.248.115.57, /opt/cata-club) becomes production. Persistent staging is
+(see cata_club-docs operations/deployment.md) becomes production. Persistent staging is
 retired; QA runs locally (`make qa-up`) or on on-demand droplets.
 
 Branch: `feat/prod-cutover` (worktree `cata_club-worktrees/prod-cutover`).
