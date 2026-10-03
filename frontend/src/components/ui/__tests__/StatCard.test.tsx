@@ -378,3 +378,12 @@ describe("StatCard — icon and tone", () => {
     expect(screen.queryByTestId("statcard-icon")).toBeNull();
   });
 });
+
+describe("StatCard — label and hint contrast (FAM-14)", () => {
+  it("draws label, unit and hint in ink-3-strong, not the lighter ink-3", () => {
+    render(<StatCard label="Miembros" value={17} unit="de 44" hint="responsables" />);
+    expect(screen.getByText("Miembros")).toHaveClass("text-ink-3-strong");
+    expect(screen.getByText("de 44")).toHaveClass("text-ink-3-strong");
+    expect(screen.getByText("responsables")).toHaveClass("text-ink-3-strong");
+  });
+});

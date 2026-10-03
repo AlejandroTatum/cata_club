@@ -239,17 +239,17 @@ describe("Stepper — compact phone rendering (#1321)", () => {
 // `target-size.ts` documenta para el checkbox de `EnrollPage` — un cuadrado
 // `h-6 w-6` (24px), no `min-h` solo.
 describe("Stepper — compact dot touch target (#1332 R4-001)", () => {
-  it("gives a completed dot a 24px square hit area around its 8px visual dot", () => {
+  it("gives a completed dot a 40px square hit area around its 8px visual dot (REG-19)", () => {
     const onStepClick = vi.fn();
     render(<Stepper steps={STEPS} current={3} label="Pasos" onStepClick={onStepClick} />);
 
     const dot = screen.getByRole("button", { name: "Volver a Estudiante" });
-    expect(dot.className).toMatch(/\bh-6\b/);
-    expect(dot.className).toMatch(/\bw-6\b/);
+    expect(dot.className).toMatch(/\bh-10\b/);
+    expect(dot.className).toMatch(/\bw-10\b/);
     expect(dot.className).not.toMatch(/\bh-2\b/);
     expect(dot.className).not.toMatch(/\bw-2\b/);
 
-    // The 8px visual dot moves inside the 24px hit box, not lost.
+    // The 8px visual dot moves inside the 40px hit box, not lost.
     const visualDot = dot.querySelector("span");
     expect(visualDot).toHaveClass("h-2");
     expect(visualDot).toHaveClass("w-2");
@@ -262,7 +262,7 @@ describe("Stepper — compact dot touch target (#1332 R4-001)", () => {
     const dots = screen.getByTestId("stepper-compact").querySelectorAll("span[data-state]");
     expect(dots.length).toBeGreaterThan(0);
     for (const dot of Array.from(dots)) {
-      expect(dot.className).not.toMatch(/\bh-6\b/);
+      expect(dot.className).not.toMatch(/\bh-10\b/);
     }
   });
 });
