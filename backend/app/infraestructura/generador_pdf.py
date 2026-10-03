@@ -436,8 +436,10 @@ def _anchos_de_columna_reporte(
     # puede pasarse por una millonésima de punto: invisible en el papel y
     # suficiente para que la tabla vuelva a medir más que el frame. El
     # excedente se lo come la columna más ancha, que es la que menos lo nota.
+    # Un reparto que cierra EXACTO también cuenta: ReportLab suma los anchos
+    # en otro orden y puede medir una unidad de punto flotante de más.
     exceso = sum(anchos) - ancho_disponible
-    if exceso > 0:
+    if exceso > -1e-9:
         mas_ancha = max(range(len(anchos)), key=anchos.__getitem__)
         anchos[mas_ancha] -= exceso + 1e-9
     return anchos

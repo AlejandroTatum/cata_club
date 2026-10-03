@@ -336,6 +336,39 @@ def test_reporte_personas_pdf_incluye_lo_registrado_al_final_del_dia_del_club(
     assert any(cedula in fila for fila in filas_generadas)
 
 
+def _persona_de_reporte(**cambios):
+    from types import SimpleNamespace
+
+    datos = dict(
+        nombres="Ana", apellidos="Mora", cedula="1710034065", telefono="0987654321",
+        fecha_nacimiento=date(2010, 6, 15),
+        fecha_registro=datetime(2026, 3, 1, 15, 0, tzinfo=timezone.utc),
+    )
+    datos.update(cambios)
+    return SimpleNamespace(**datos)
+
+
+def test_pdf_de_personas_trae_la_columna_edad_que_promete_la_tarjeta(monkeypatch):
+    """QA4 ADMB-08: la tarjeta promete «cédula, edad y teléfono» y el PDF no
+    traía la edad. La edad se calcula con el día del club."""
+    import app.presentacion.routers.personas_router as router_mod
+
+    monkeypatch.setattr(router_mod, "hoy_club", lambda *a, **k: date(2026, 6, 14))
+    assert "Edad" in _COLUMNAS_PERSONAS_PDF
+    fila = router_mod._personas_a_filas([_persona_de_reporte()])[0]
+    assert len(fila) == len(_COLUMNAS_PERSONAS_PDF)
+    assert fila[_COLUMNAS_PERSONAS_PDF.index("Edad")] == "15"  # cumple el 15/06
+
+
+def test_pdf_de_personas_nunca_imprime_none_en_el_telefono():
+    """QA4 ADMB-05: una persona sin teléfono salía como «None» en el PDF."""
+    from app.presentacion.routers.personas_router import _personas_a_filas
+
+    fila = _personas_a_filas([_persona_de_reporte(telefono=None)])[0]
+    assert fila[_COLUMNAS_PERSONAS_PDF.index("Teléfono")] == ""
+    assert "None" not in fila
+
+
 # --- Phase 1: generar_reporte_pdf (unit) ------------------------------------
 
 def test_generar_reporte_pdf_produce_bytes_pdf_validos():
@@ -965,7 +998,7 @@ _REPORTES_PEOR_CASO = [
         _COLUMNAS_PERSONAS_PDF,
         [[
             "MARIA FERNANDA ALEJANDRA", "CHILIQUINGA TAMAYO DE LA TORRE",
-            "1710034065", "0987654321", "17/08/2026",
+            "1710034065", "15", "0987654321", "17/08/2026",
         ]],
     ),
     (
