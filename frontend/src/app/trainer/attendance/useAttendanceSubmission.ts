@@ -96,9 +96,15 @@ export function useAttendanceSubmission({
    */
   const rosterStale = useRef(false);
 
+  // ENT-05: when the reload after a lost answer finds the list closed, the save
+  // DID land — "No hay conexión" would contradict "ya fue registrada", so the
+  // error is not surfaced at all. Derived (not cleared) so the order of the two
+  // state updates cannot flash it.
+  const visibleSubmitError = readOnly ? null : submitError;
+
   useEffect(() => {
-    if (submitError) showError(submitError);
-  }, [submitError, showError]);
+    if (visibleSubmitError) showError(visibleSubmitError);
+  }, [visibleSubmitError, showError]);
 
   useEffect(() => {
     if (confirmed) confirmationHeadingRef.current?.focus();
@@ -194,7 +200,7 @@ export function useAttendanceSubmission({
 
   return {
     submitting,
-    submitError,
+    submitError: visibleSubmitError,
     confirmed,
     result,
     confirmedAt,

@@ -82,7 +82,7 @@ export default function AttendanceRosterRow({
             ? `${student.name}: ${stateLabel}. Cambiar estado`
             : `${student.name}: ${stateLabel}, sin revisar. Confirmar o cambiar estado`
         }
-        className="flex h-12 w-full min-w-0 shrink-0 items-center gap-[11px] px-[13px] text-left transition-colors hover:bg-canvas sm:w-auto sm:flex-1"
+        className="flex min-h-12 w-full min-w-0 shrink-0 items-center gap-[11px] px-[13px] py-1.5 text-left transition-colors hover:bg-canvas sm:w-auto sm:flex-1"
       >
         <span
           aria-hidden="true"
@@ -90,18 +90,24 @@ export default function AttendanceRosterRow({
         >
           {getUserInitials(student.name)}
         </span>
-        <span id={nameId} className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
-          {student.name}
-        </span>
-        {isBeforeEnrollment(student, sessionDate) && (
-          // ENT-07: allowed, but flagged for the admin's review once saved.
-          <span
-            className="flex-none"
-            title="Esta fecha es anterior a su inscripción. Se registrará y quedará marcada para revisión."
-          >
-            <Badge tone="warn">Anterior a su inscripción</Badge>
+        {/* ENT-01: the notice sits UNDER the name, in the same column. As a
+            sibling chip it squeezed the name to width 0 at 390px. The name takes
+            the full width and wraps instead of truncating. */}
+        <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+          <span id={nameId} className="break-words text-sm font-semibold text-ink">
+            {student.name}
           </span>
-        )}
+          {isBeforeEnrollment(student, sessionDate) && (
+            // ENT-07: allowed, but flagged for the admin's review once saved.
+            // The detail is visible text: a `title` never shows on a phone.
+            <>
+              <Badge tone="warn">Anterior a su inscripción</Badge>
+              <span className="text-2xs font-normal text-ink-3">
+                Se registrará y quedará marcada para revisión.
+              </span>
+            </>
+          )}
+        </span>
         {reviewed && !isUnmarked ? (
           <Badge tone={getAttendanceBadgeTone(student.attendance)} className="flex-none">
             {stateLabel}

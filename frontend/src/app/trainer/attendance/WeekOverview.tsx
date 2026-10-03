@@ -41,19 +41,19 @@ export default function WeekOverview({
                 type="button"
                 onClick={() => onSelectDay(group.day)}
                 aria-label={`Ver ${group.label.toLowerCase()}: ${total} ${total === 1 ? "horario" : "horarios"}, ${taken} con lista`}
-                className="flex min-h-drow w-full flex-1 items-center justify-between gap-3 py-2 text-left text-sm hover:bg-ink/5"
+                className="flex min-h-[44px] w-full flex-1 items-center justify-between gap-3 py-2 text-left text-sm hover:bg-ink/5"
               >
                 <span className="flex min-w-0 flex-col gap-0.5">
                   <span className="font-semibold text-ink">
                     {group.label}
                     {group.day === today && <span className="ml-2 text-xs font-bold text-ink-3">Hoy</span>}
                   </span>
-                  <span className="truncate text-xs text-ink-3">
+                  <span className="text-xs text-ink-3">
                     {group.schedules.map((s) => s.horaInicio).join(" · ")}
                   </span>
                 </span>
-                <span className="text-xs text-ink-2">
-                  {total} {total === 1 ? "horario" : "horarios"} ·{" "}
+                <span className="flex flex-none flex-col items-end gap-0.5 text-xs text-ink-2">
+                  <span>{`${total} ${total === 1 ? "horario" : "horarios"}`}</span>
                   <span className={pending === 0 ? "font-bold text-state-ok" : "font-bold text-ink"}>
                     {pending === 0 ? "todas con lista" : `${pending} por tomar`}
                   </span>

@@ -285,6 +285,10 @@ export function describeAttendanceSaveError(error: unknown): string {
     return "Su sesión no tiene permiso para registrar esta lista. Vuelva a iniciar sesión e intente nuevamente.";
   }
   if (status >= 400 && status < 500) {
+    // ENT-02: the backend's own reason ("solo se puede registrar … los últimos
+    // 30 días") beats the generic text, but only when it marked it safe to show.
+    const { message, safe } = error as { message?: unknown; safe?: unknown };
+    if (safe === true && typeof message === "string" && message.trim()) return message;
     return "La lista no se pudo registrar porque ya no coincide con lo que hay en el sistema. Actualice la página y revise los datos.";
   }
   if (status >= 500) {

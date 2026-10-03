@@ -15,7 +15,7 @@ export default function ReadOnlyReasonNotice(): React.ReactElement {
     >
       <p className="font-semibold">Esta lista ya fue registrada.</p>
       <p>
-        Quedó cerrada de forma permanente — no se puede editar desde acá. Ante un error, consulte
+        Quedó cerrada de forma permanente — no se puede editar desde aquí. Ante un error, consulte
         con administración.
       </p>
     </div>

@@ -20,13 +20,15 @@ export default function AttendanceTotalsSummary({
   unreviewedCount,
 }: AttendanceTotalsSummaryProps): React.ReactElement {
   return (
-    <span className="flex min-w-[250px] flex-1 flex-wrap gap-x-3 gap-y-field text-xs text-ink-3 lg:order-1 lg:min-w-0 lg:flex-none lg:flex-col lg:gap-y-1.5 lg:text-sm">
+    // ENT-14: below `lg` the strip is ONE short row — it takes the bar's full width
+    // (first row) and shows only the states somebody is in; the zeros come back at `lg`.
+    <span className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-0.5 text-xs text-ink-3 max-lg:order-first max-lg:basis-full lg:order-1 lg:flex-none lg:flex-col lg:gap-y-1.5 lg:text-sm">
       {TOTAL_ORDER.map((state) => {
         const count = countByState(students, state);
         return (
           <span
             key={state}
-            className={`inline-flex items-center gap-2 whitespace-nowrap ${count === 0 ? "lg:text-ink-3/60" : "lg:font-semibold lg:text-ink"}`}
+            className={`items-center gap-2 whitespace-nowrap ${count === 0 ? "max-lg:hidden lg:inline-flex lg:text-ink-3/60" : "inline-flex lg:font-semibold lg:text-ink"}`}
           >
             <span
               aria-hidden="true"

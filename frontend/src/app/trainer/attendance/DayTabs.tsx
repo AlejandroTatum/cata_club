@@ -32,7 +32,7 @@ export default function DayTabs({
             aria-label={`${DIA_SEMANA_LABELS[day]}${day === today ? " (hoy)" : ""}`}
             title={DIA_SEMANA_LABELS[day]}
             onClick={() => onSelect(day)}
-            className={`relative inline-flex h-9 min-w-[3.25rem] items-center justify-center gap-1.5 rounded-ctl border px-3 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+            className={`relative inline-flex min-h-[44px] min-w-[3.25rem] items-center justify-center gap-1.5 rounded-ctl border px-3 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
               selected
                 ? "border-coal bg-coal text-white"
                 : "border-line-2 bg-paper text-ink-2 hover:border-ink-3"

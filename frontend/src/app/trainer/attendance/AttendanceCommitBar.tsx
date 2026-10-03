@@ -58,7 +58,7 @@ export default function AttendanceCommitBar({
       // work here because its parent is the short aside card, so there is no
       // scroll range to stick within. A forty-row roster never costs a scroll. From `lg` it is the tail of the aside
       // card (no chrome of its own) — stacked, so the actions sit under the summary they commit.
-      className="fixed inset-x-0 bottom-[62px] z-20 flex flex-wrap items-center gap-3 border-t border-line bg-paper/95 px-4 py-3 shadow-soft backdrop-blur lg:static lg:rounded-none lg:border-t-0 lg:flex-col lg:items-stretch lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none"
+      className="fixed inset-x-0 bottom-[62px] z-20 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line bg-paper/95 px-4 py-2 shadow-soft backdrop-blur lg:static lg:rounded-none lg:border-t-0 lg:flex-col lg:items-stretch lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none"
     >
       {!isFirst && (
         <Button
@@ -66,7 +66,7 @@ export default function AttendanceCommitBar({
           variant="tertiary"
           onClick={onBack}
           disabled={submitting}
-          className="lg:order-3 lg:justify-center"
+          className="min-h-[44px] lg:order-3 lg:justify-center"
         >
           <ChevronLeft size={ICON.sm} strokeWidth={2} aria-hidden="true" />
           Atrás
@@ -82,7 +82,7 @@ export default function AttendanceCommitBar({
           variant="tertiary"
           onClick={onUndo}
           disabled={lastUndoable === null || submitting}
-          className="lg:order-3 lg:justify-center"
+          className="min-h-[44px] lg:order-3 lg:justify-center"
           aria-label={
             lastUndoable ? `Deshacer: ${lastUndoable.label}` : "Deshacer — no hay nada que deshacer"
           }
@@ -95,7 +95,7 @@ export default function AttendanceCommitBar({
       {/* The first step has nothing to summarise yet, so the bar's left side
           says what the button will do instead of standing empty. */}
       {step === "select-session" && (
-        <p className="min-w-[200px] flex-1 text-sm text-ink-3 lg:order-1 lg:min-w-0">
+        <p className="min-w-[200px] flex-1 text-xs text-ink-3 lg:order-1 lg:min-w-0 lg:text-sm">
           {selectedScheduleId === null
             ? "Elija un horario de la lista para ver a sus alumnos y marcar la asistencia de cada uno."
             : "Horario elegido: siga para ver a sus alumnos y marcar la asistencia de cada uno."}
