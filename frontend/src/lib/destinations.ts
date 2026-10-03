@@ -53,6 +53,11 @@ export interface Destination {
    * contracted; nothing downstream joins an article to anything.
    */
   preposition: "a" | "al";
+  /**
+   * The label as it reads after «Volver a», when that differs from the rail's
+   * (a verb phrase like «Iniciar sesión» has no capital in mid-sentence).
+   */
+  backName?: string;
 }
 
 /**
@@ -70,7 +75,7 @@ export const DESTINATIONS: Record<string, Destination> = {
    * every other multi-word row in the product ("Mi día", "Pasar lista", "Ficha
    * médica") capitalises only the first word. It is a verb phrase, not a title.
    */
-  "/login": { label: "Iniciar sesión", preposition: "a" },
+  "/login": { label: "Iniciar sesión", preposition: "a", backName: "iniciar sesión" },
 
   // --- Admin ---------------------------------------------------------------
   "/dashboard": { label: "Panel de Control", preposition: "al" },
@@ -175,5 +180,6 @@ export function backLabel(href: string): string {
   // Only reachable in production, and only for an href nobody registered — see
   // the note above. The bare verb is the degraded state, not a supported one.
   if (!label) return "Volver";
-  return `Volver ${DESTINATIONS[href].preposition} ${label}`;
+  const { preposition, backName } = DESTINATIONS[href];
+  return `Volver ${preposition} ${backName ?? label}`;
 }

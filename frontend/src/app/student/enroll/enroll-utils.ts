@@ -13,6 +13,7 @@ import {
 } from "@/types/enrollment";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import { toUserMessage } from "@/lib/error-message";
+import { formatCurrency } from "@/lib/format-utils";
 import {
   cedulaRule,
   phoneRule,
@@ -411,13 +412,13 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
       d.enrollmentType === ENROLLMENT_TYPES.SELF &&
       isMinorAge(calculatePersonAge(d.fechaNacimiento))
     ) {
-      return "Por la fecha indicada, el alumno es menor de edad y no puede inscribirse por su cuenta. Vuelva al primer paso y elija «Inscribo a un hijo / dependiente», o pida a su representante que complete la inscripción.";
+      return "El alumno es menor de edad y necesita un representante. Vuelva al primer paso y elija «Representante».";
     }
     if (
       d.enrollmentType === ENROLLMENT_TYPES.CHILD &&
       !isMinorAge(calculatePersonAge(d.fechaNacimiento))
     ) {
-      return "Por la fecha indicada, el alumno ya es mayor de edad y gestiona su propia cuenta. Vuelva al primer paso y elija «Me inscribo yo».";
+      return "El alumno ya es mayor de edad y gestiona su propia cuenta. Vuelva al primer paso y elija «Jugador».";
     }
     return null;
   },
@@ -426,7 +427,7 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
   // phone field on the app now shares — the visitor types the local digits
   // after the fixed +593, and this rule validates the local (mobile-or-
   // landline) form those digits canonicalize to.
-  telefono: (d) => phoneFieldRule(d.telefono, "El teléfono"),
+  telefono: (d) => phoneFieldRule(d.telefono, "El teléfono", { guided: true }),
   correo: (d) =>
     d.correo.trim().length === 0
       ? "Escriba su correo electrónico: lo usará para iniciar sesión."
@@ -482,7 +483,7 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
   // local `0XXXXXXXX` form before comparing (issue #1296: both fields now
   // hold the same digits-only shape, so the comparison needs both restored).
   telefonoEmergencia: (d) =>
-    phoneFieldRule(d.telefonoEmergencia, "El teléfono de emergencia") ??
+    phoneFieldRule(d.telefonoEmergencia, "El teléfono de emergencia", { guided: true }) ??
     emergencyPhoneDiffersRule(toStoredPhone(d.telefonoEmergencia), toStoredPhone(d.telefono)),
 };
 
@@ -599,8 +600,25 @@ function validateRepresentative(data: EnrollFormData): string[] {
   return collect(REPRESENTATIVE_FIELDS, data);
 }
 
+/**
+ * Mirrors the format the server accepts (REG-04): no empty or doubled dots in
+ * the local part or the domain, and a TLD of two or more letters — so
+ * `a@b..com` and `a@b.c` fail at the step instead of at the final submit.
+ */
+const EMAIL_PATTERN = /^[^\s@.]+(?:\.[^\s@.]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
+
 function isEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+  return EMAIL_PATTERN.test(value.trim());
+}
+
+/** FAM-08: a plan option reads «Mensual Adultos — $40,00 al mes», never with its internal code. */
+export function planOptionLabel(nombre: string, precio: number | string | null | undefined): string {
+  return `${nombre} — ${formatCurrency(precio)} al mes`;
+}
+
+/** FAM-08: an institution option is its name only; the school-type code is internal. */
+export function institutionOptionLabel(nombre: string): string {
+  return nombre;
 }
 
 /**

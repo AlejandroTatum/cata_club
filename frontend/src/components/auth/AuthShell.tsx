@@ -288,7 +288,7 @@ export default function AuthShell({
               la vida”
             </p>
             <p className={`hidden text-base split:block ${ON_COAL_SUPPORT}`}>
-              Cada entrenamiento es una oportunidad para superarte.
+              Cada entrenamiento es una oportunidad para superarse.
             </p>
           </div>
 
