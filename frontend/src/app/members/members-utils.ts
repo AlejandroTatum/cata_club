@@ -121,6 +121,8 @@ export interface MemberStudentSummary {
      * backend-only). Same optionality/omission rule as `mesesAdeudados`.
      */
     montoAdeudado?: number;
+    /** End of the last approved coverage (ISO date), or null if never covered. ADMA-24. */
+    deudaDesde?: string | null;
   } | null;
   ultimoPago: {
     estado: PaymentStatus;
@@ -302,7 +304,7 @@ export const MEMBERSHIP_TYPE_LABELS: Record<TipoMembresia, string> = {
 import type { BadgeTone } from "@/components/ui/Badge";
 
 export { formatCurrency, formatDate } from "@/lib/format-utils";
-import { formatDate, formatDateRange } from "@/lib/format-utils";
+import { formatCurrency, formatDate, formatDateRange } from "@/lib/format-utils";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -615,6 +617,27 @@ export function accountDisplayRoles(account: MemberAccount): BackendTipoRol[] {
   const roles = account.backendRoles ?? [];
   if (countActiveStudents(account) === 0 || roles.includes("ALUMNO")) return roles;
   return [...roles, "ALUMNO"];
+}
+
+/**
+ * ADMA-24: one line for the «Membresía vencida» list — how much the account
+ * owes and since when — from numbers the server already computed. Null when
+ * no student has a debt on record.
+ */
+export function getDebtSummary(account: MemberAccount): string | null {
+  const owing = account.estudiantes
+    .map((s) => s.membresia)
+    .filter((m): m is NonNullable<typeof m> => !!m && (m.mesesAdeudados ?? 0) > 0);
+  if (owing.length === 0) return null;
+  const meses = owing.reduce((sum, m) => sum + (m.mesesAdeudados ?? 0), 0);
+  const monto = owing.reduce((sum, m) => sum + (m.montoAdeudado ?? 0), 0);
+  const desde = owing
+    .map((m) => m.deudaDesde)
+    .filter((d): d is string => !!d)
+    .sort()[0];
+  const parts = [`Debe ${formatCurrency(monto)}`, `${meses} ${meses === 1 ? "mes" : "meses"}`];
+  if (desde) parts.push(`desde ${formatDate(desde)}`);
+  return parts.join(" · ");
 }
 
 /**

@@ -16,6 +16,7 @@ import {
   accountDisplayRoles,
   filterAccounts,
   getAccountStatusBadge,
+  getDebtSummary,
   getAccountStateBadge,
   getMembershipStatusBadge,
   isRepresentativePersonaRow,
@@ -1309,5 +1310,35 @@ describe("MemberAccount.representadoPor", () => {
   it("is undefined for a self-managed root", () => {
     const carlos = MOCK_MEMBER_ACCOUNTS.find((a) => a.id === "rp-001")!;
     expect(carlos.representadoPor).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getDebtSummary (ADMA-24: «Quién debe» shows how much and since when)
+// ---------------------------------------------------------------------------
+
+describe("getDebtSummary", () => {
+  function accountWith(membresia: Record<string, unknown> | null): MemberAccount {
+    const base = MOCK_MEMBER_ACCOUNTS[0];
+    return {
+      ...base,
+      estudiantes: [{ ...base.estudiantes[0], membresia: membresia as never }],
+    };
+  }
+
+  it("shows the amount, the months and since when", () => {
+    const account = accountWith({ id: 1, estado: "vencida", monto: 40, mesesAdeudados: 2, montoAdeudado: 80, deudaDesde: "2026-05-31" });
+    expect(getDebtSummary(account)).toBe(`Debe ${formatCurrency(80)} · 2 meses · desde ${formatDate("2026-05-31")}`);
+  });
+
+  it("uses the singular for one month and omits «desde» when there is no date", () => {
+    const account = accountWith({ id: 1, estado: "vencida", monto: 40, mesesAdeudados: 1, montoAdeudado: 40, deudaDesde: null });
+    expect(getDebtSummary(account)).toBe(`Debe ${formatCurrency(40)} · 1 mes`);
+  });
+
+  it("is null without debt data or with zero months", () => {
+    expect(getDebtSummary(accountWith({ id: 1, estado: "vencida", monto: 40 }))).toBeNull();
+    expect(getDebtSummary(accountWith({ id: 1, estado: "vencida", monto: 40, mesesAdeudados: 0, montoAdeudado: 0 }))).toBeNull();
+    expect(getDebtSummary(accountWith(null))).toBeNull();
   });
 });

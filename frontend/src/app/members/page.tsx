@@ -79,6 +79,7 @@ import {
   getAccountStatusBadge,
   getAccountStateBadge,
   getMembershipStatusBadge,
+  getDebtSummary,
   isRepresentativePersonaRow,
   paginateAccounts,
   getTotalPages,
@@ -475,6 +476,7 @@ function AccountRowActions({
 function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemProps): React.ReactElement {
   const statusBadge = getAccountStatusBadge(account);
   const accountBadge = getAccountStateBadge(account);
+  const debtSummary = getDebtSummary(account);
   const fullName = `${account.nombres} ${account.apellidos}`;
   // Issue #1199/#1211: the representative/payer's own row (badge
   // "Representante", "—" in "Representado por") has no student to show a
@@ -503,6 +505,8 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
       <TableCell className="hidden lg:table-cell">{account.representadoPor ?? "—"}</TableCell>
       <TableCell type="badge">
         <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
+        {/* ADMA-24: how much is owed and since when, without opening the ficha. */}
+        {debtSummary ? <p className="mt-1 text-2xs text-ink-3">{debtSummary}</p> : null}
       </TableCell>
       {/* Issue #869: `Cuenta` — `Usuario.activo`, never derived from the
           `Membresía` badge to its left. */}
@@ -528,6 +532,7 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
 function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItemProps): React.ReactElement {
   const statusBadge = getAccountStatusBadge(account);
   const accountBadge = getAccountStateBadge(account);
+  const debtSummary = getDebtSummary(account);
   // Issue #1199: same rule as `AccountRow` above.
   const showStudentActions = !isRepresentativePersonaRow(account);
 
@@ -553,6 +558,7 @@ function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItem
       status={
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
+          {debtSummary ? <span className="text-2xs text-ink-3">{debtSummary}</span> : null}
           {/* Issue #869: `Cuenta`, the mobile row equivalent of the desktop
               table's own column — never derived from the badge above. */}
           <Badge tone={accountBadge.tone}>{accountBadge.label}</Badge>

@@ -573,6 +573,7 @@ describe("GET /api/members", () => {
       const student = body.accounts[0].estudiantes[0];
       expect(student.membresia.mesesAdeudados).toBe(3);
       expect(student.membresia.montoAdeudado).toBe(90);
+      expect(student.membresia.deudaDesde).toBe("2026-05-31");
     });
 
     /*
