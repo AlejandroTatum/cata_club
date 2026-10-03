@@ -13,6 +13,7 @@
 
 "use client";
 
+import LinkifiedText from "@/components/LinkifiedText";
 import { useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Loader2 } from "lucide-react";
@@ -166,7 +167,7 @@ export default function TipoSelectorForm({
             </option>
           ))}
       </select>
-      {error && <p className="text-xs text-state-bad">{error}</p>}
+      {error && <p className="text-xs text-state-bad"><LinkifiedText text={error} /></p>}
       <div className="flex flex-wrap gap-1.5">
         <button
           type="button"

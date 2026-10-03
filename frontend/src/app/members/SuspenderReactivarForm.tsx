@@ -12,6 +12,7 @@
 
 "use client";
 
+import LinkifiedText from "@/components/LinkifiedText";
 import { useState } from "react";
 import { CheckCircle2, Loader2, PauseCircle, PlayCircle } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -124,7 +125,7 @@ export default function SuspenderReactivarForm({
             required
           />
 
-          {error && <p className="mt-2 text-2xs text-cata-red">{error}</p>}
+          {error && <p className="mt-2 text-2xs text-cata-red"><LinkifiedText text={error} /></p>}
 
           <div className="mt-3 flex items-center gap-2">
             <button

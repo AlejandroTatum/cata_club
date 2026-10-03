@@ -14,6 +14,7 @@
 
 "use client";
 
+import LinkifiedText from "@/components/LinkifiedText";
 import { useCallback, useEffect, useState } from "react";
 import { Gift, Loader2, Plus } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -208,7 +209,7 @@ export default function BeneficioSection({ personaId, tarifaMensual }: Beneficio
                   descuento de menor valor.
                 </p>
               )}
-              {assignError && <p className="text-xs text-state-bad">{assignError}</p>}
+              {assignError && <p className="text-xs text-state-bad"><LinkifiedText text={assignError} /></p>}
               <div className="flex gap-1.5">
                 <button
                   type="button"

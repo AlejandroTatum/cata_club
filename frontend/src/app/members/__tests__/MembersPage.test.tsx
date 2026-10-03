@@ -895,6 +895,27 @@ describe("MembersPage — Editar member modal", () => {
     expect(adminCheckbox).toBeChecked();
   });
 
+  it("FAM-21: a WhatsApp address inside a role error renders as a link, not plain text", async () => {
+    mockObtenerRolesDePersona.mockResolvedValue({ roles: ["ADMINISTRADOR"], activo: true });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const dialog = await openModalAndWaitForRoles(row);
+
+    const { ApiClientError } = await import("@/services/api");
+    mockQuitarRol.mockRejectedValueOnce(
+      new ApiClientError("No se pudo actualizar el rol. Escriba al club: https://wa.me/593999999999.", 400),
+    );
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /admin/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
+
+    const alert = await within(dialog).findByRole("alert");
+    expect(within(alert).getByRole("link")).toHaveAttribute("href", "https://wa.me/593999999999");
+  });
+
   it("ADMA-08: deactivating the account asks for confirmation first, and cancelling changes nothing", async () => {
     render(
       <ToastProvider>

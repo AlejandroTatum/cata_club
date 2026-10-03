@@ -27,6 +27,7 @@
 
 "use client";
 
+import LinkifiedText from "@/components/LinkifiedText";
 import { useEffect, useId, useRef, useState } from "react";
 import { CheckCircle2, Loader2, Plus, Upload } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -628,7 +629,7 @@ export default function RegisterPaymentForm({
           tabIndex={-1}
           className="text-xs text-state-bad focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ball focus-visible:shadow-focus-band"
         >
-          {error}
+          <LinkifiedText text={error} />
         </p>
       )}
 

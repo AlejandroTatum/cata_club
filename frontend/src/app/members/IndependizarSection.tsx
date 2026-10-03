@@ -17,6 +17,7 @@
 
 "use client";
 
+import LinkifiedText from "@/components/LinkifiedText";
 import { useState } from "react";
 import { Loader2, UserMinus } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -143,7 +144,7 @@ export default function IndependizarSection({
       </label>
       {error && (
         <p className="text-xs text-state-bad" role="alert">
-          {error}
+          <LinkifiedText text={error} />
         </p>
       )}
       <div className="flex flex-wrap gap-1.5">

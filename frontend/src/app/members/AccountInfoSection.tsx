@@ -16,6 +16,7 @@
 
 "use client";
 
+import LinkifiedText from "@/components/LinkifiedText";
 import { useEffect, useState } from "react";
 import { CheckCircle2, Loader2, Mail, Save } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -171,7 +172,7 @@ export default function AccountInfoSection({ account, onDirtyChange }: AccountIn
       </div>
       {error && (
         <p className="mt-2 text-xs text-state-bad" role="alert">
-          {error}
+          <LinkifiedText text={error} />
         </p>
       )}
     </>

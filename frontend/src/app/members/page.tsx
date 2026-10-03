@@ -14,6 +14,7 @@
 
 "use client";
 
+import LinkifiedText from "@/components/LinkifiedText";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import Link from "next/link";
@@ -759,7 +760,7 @@ function MemberEditDialog({
                 </div>
                 {stateError && (
                   <p className="mt-2 text-xs text-state-bad" role="alert">
-                    {stateError}
+                    <LinkifiedText text={stateError} />
                   </p>
                 )}
               </ModalSection>
@@ -855,7 +856,7 @@ function MemberEditDialog({
                   </div>
                   {roleError && (
                     <p className="mt-2 text-xs text-state-bad" role="alert">
-                      {roleError}
+                      <LinkifiedText text={roleError} />
                     </p>
                   )}
                 </>
