@@ -9,6 +9,7 @@ import { cambiarCorreoNoVerificado, reenviarVerificacionCorreo } from "@/service
 import { getDefaultRoute } from "@/lib/auth-utils";
 import { isActivationComplete, type ActivationSession } from "@/lib/activation-reasons";
 import { toUserMessage } from "@/lib/error-message";
+import { isDuplicateIdentityError, MENSAJE_CORREO_DE_OTRA_CUENTA } from "@/lib/duplicate-identity";
 import AuthShell, {
   AUTH_INPUT_CLASSES,
   AUTH_LABEL_CLASSES,
@@ -157,8 +158,10 @@ function ActivationPageContent(): React.ReactElement {
     setResendError(null);
     setStillUnverified(false);
     try {
-      const result = await reenviarVerificacionCorreo(activation.user.email);
-      setResendMessage(result.mensaje);
+      // The backend's `mensaje` is the anonymous-form sentence ("Si el correo
+      // está registrado…"); this person is signed in, so say it plainly (REG-12).
+      await reenviarVerificacionCorreo(activation.user.email);
+      setResendMessage("Le enviamos un enlace nuevo a su correo. Puede tardar unos minutos.");
     } catch (error: unknown) {
       setResendError(toUserMessage(error, "No se pudo reenviar el correo. Intente nuevamente."));
     } finally {
@@ -182,7 +185,8 @@ function ActivationPageContent(): React.ReactElement {
       setEmailCorrectionOpen(false);
       setNewEmail("");
     } catch (error: unknown) {
-      setEmailCorrectionError(toUserMessage(error, "No se pudo corregir el correo. Intente nuevamente."));
+      const message = toUserMessage(error, "No se pudo corregir el correo. Intente nuevamente.");
+      setEmailCorrectionError(isDuplicateIdentityError(message) ? MENSAJE_CORREO_DE_OTRA_CUENTA : message);
     } finally {
       setEmailCorrectionSubmitting(false);
     }
