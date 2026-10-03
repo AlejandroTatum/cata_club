@@ -438,6 +438,15 @@ describe("getAccountRoleLabel", () => {
   it('keeps "Estudiante" for a student', () => {
     expect(getAccountRoleLabel({ ...base, role: "estudiante" })).toBe("Estudiante");
   });
+
+  it('ADMA-06: names an admin «Administrador» and a trainer «Entrenador», not «Representante»', () => {
+    expect(getAccountRoleLabel({ ...base, backendRoles: ["ADMINISTRADOR"] })).toBe("Administrador");
+    expect(getAccountRoleLabel({ ...base, backendRoles: ["ENTRENADOR"] })).toBe("Entrenador");
+  });
+
+  it("ADMA-06: reads the roles passed in over the ones the list carried", () => {
+    expect(getAccountRoleLabel({ ...base, backendRoles: ["ADMINISTRADOR"] }, ["ENTRENADOR"])).toBe("Entrenador");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1013,6 +1022,23 @@ describe("filterAccounts", () => {
     // row with `representadoPor: "Ana López"`.
     const result = filterAccounts(MOCK_MEMBER_ACCOUNTS, "Ana López");
     expect(result.map((a) => a.id).sort()).toEqual(["rp-002", "stu-004"].sort());
+  });
+
+  it("ADMA-02: matches words in any order and skipping middle names", () => {
+    const base = MOCK_MEMBER_ACCOUNTS[0];
+    const account = { ...base, id: "t-1", nombres: "Alexander", apellidos: "Alcivar Vera", representadoPor: undefined, estudiantes: [] };
+    expect(filterAccounts([account], "Alexander Vera")).toHaveLength(1);
+    expect(filterAccounts([account], "vera alex")).toHaveLength(1);
+    expect(filterAccounts([account], "alexander zzz")).toHaveLength(0);
+  });
+
+  it("ADMA-01: matches by cédula, complete or partial", () => {
+    const base = MOCK_MEMBER_ACCOUNTS[0];
+    const student = { ...base.estudiantes[0], cedula: "1700010091" };
+    const account = { ...base, id: "t-2", nombres: "Laura", apellidos: "Vera", representadoPor: undefined, email: undefined, estudiantes: [student] };
+    expect(filterAccounts([account], "1700010091")).toHaveLength(1);
+    expect(filterAccounts([account], "00100")).toHaveLength(1);
+    expect(filterAccounts([account], "1799999999")).toHaveLength(0);
   });
 
   it("returns empty array when no match is found", () => {

@@ -2988,3 +2988,126 @@ describe("StudentPage — second-pass organisation", () => {
     expect(within(pulse).getByText(/Aparece cuando el entrenador tome lista/)).toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// QA4 (issue #1534)
+// ---------------------------------------------------------------------------
+
+describe("StudentPage — QA4 family portal findings", () => {
+  const membership = (overrides: Record<string, unknown> = {}) => ({
+    id: 3,
+    estado: "ACTIVA",
+    personaId: 9,
+    montoAplicado: "25.00",
+    categoria: "Mensual Infantil",
+    modalidad: "MENSUAL",
+    fechaActivacion: "2026-07-01",
+    fechaFin: null,
+    cubiertoHasta: "2099-12-31",
+    ...overrides,
+  });
+
+  function asGuardian(): void {
+    mockAuthSession = {
+      user: { id: "9", name: "Laura Vera", email: "laura@cataclub.com", role: "representante", representanteId: null },
+      roles: ["REPRESENTANTE"],
+      loggedInAt: "2026-07-01T12:00:00Z",
+    };
+  }
+
+  // FAM-02
+  it("tells a guardian the child's membership is suspended instead of «Al día»", async () => {
+    asGuardian();
+    mockFetchStudentPortal.mockResolvedValue({
+      self: null,
+      representados: [
+        { ...PORTAL.self!, personaId: "41", nombres: "Sofia", apellidos: "Vera", membership: membership({ estado: "SUSPENDIDA", personaId: 41, cubiertoHasta: "2099-11-02" }) },
+        { ...PORTAL.self!, personaId: "42", nombres: "Martín", apellidos: "Vera", membership: membership({ personaId: 42 }) },
+      ],
+      membershipPlans: [],
+    });
+
+    render(<StudentPage />);
+
+    const cuota = await screen.findByTestId("student-cuota-card");
+    expect(within(cuota).getByText("La membresía de Sofia está suspendida.")).toBeInTheDocument();
+    expect(within(cuota).getByText("Suspendida")).toBeInTheDocument();
+    expect(within(cuota).queryByText("Al día")).not.toBeInTheDocument();
+    expect(within(cuota).queryByText("Registrar un pago")).not.toBeInTheDocument();
+    const strip = screen.getByRole("group", { name: "Estudiante" });
+    expect(within(strip).getByText("Suspendida")).toBeInTheDocument();
+  });
+
+  // FAM-11
+  it("shows a rejected payment's reason on the Cuota card with a way to register a new one", async () => {
+    mockFetchStudentPortal.mockResolvedValue({
+      ...PORTAL,
+      self: { ...PORTAL.self!, membership: membership({ cubiertoHasta: "2020-01-01" }) },
+    });
+    mockFetchPagosDePersona.mockResolvedValue([PAGO_RECHAZADO]);
+
+    render(<StudentPage />);
+
+    const cuota = await screen.findByTestId("student-cuota-card");
+    expect(await within(cuota).findByText(/fue rechazado: Comprobante ilegible\. Registre uno nuevo\./)).toBeInTheDocument();
+    expect(within(cuota).getByRole("link", { name: /registrar un pago/i })).toBeInTheDocument();
+  });
+
+  // FAM-01
+  it("treats a representative with an INACTIVA own membership as having one: no join CTA, listed as a profile", async () => {
+    asGuardian();
+    mockFetchStudentPortal.mockResolvedValue({
+      self: { ...PORTAL.self!, nombres: "Laura", apellidos: "Vera", membership: membership({ estado: "INACTIVA", cubiertoHasta: null }) },
+      representados: [{ ...PORTAL.self!, personaId: "42", nombres: "Martín", apellidos: "Vera" }],
+      membershipPlans: [],
+    });
+
+    render(<StudentPage />);
+
+    const strip = await screen.findByRole("group", { name: "Estudiante" });
+    expect(within(strip).getByText("Laura Vera")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /unirme como jugador/i })).not.toBeInTheDocument();
+  });
+
+  it("opens the active portal for a lone representative whose own membership is still INACTIVA", async () => {
+    asGuardian();
+    mockFetchStudentPortal.mockResolvedValue({
+      self: { ...PORTAL.self!, membership: membership({ estado: "INACTIVA", cubiertoHasta: null }) },
+      representados: [],
+      membershipPlans: [],
+    });
+
+    render(<StudentPage />);
+
+    expect(await screen.findByTestId("student-carnet")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /unirme como jugador/i })).not.toBeInTheDocument();
+  });
+
+  // FAM-23
+  it("names siblings who share a first name by both given names", async () => {
+    asGuardian();
+    mockFetchStudentPortal.mockResolvedValue({
+      self: null,
+      representados: [
+        { ...PORTAL.self!, personaId: "41", nombres: "María José", apellidos: "Vera" },
+        { ...PORTAL.self!, personaId: "42", nombres: "María Fernanda", apellidos: "Vera" },
+      ],
+      membershipPlans: [],
+    });
+
+    render(<StudentPage />);
+
+    expect(await screen.findByText("Ver las asistencias de María José")).toBeInTheDocument();
+    expect(screen.getByText(/María José todavía no tiene una membresía/)).toBeInTheDocument();
+  });
+
+  // FAM-21
+  it("renders the WhatsApp address in a failed load as a link", async () => {
+    mockFetchStudentPortal.mockRejectedValue(Object.assign(new Error("boom"), { status: 500 }));
+
+    render(<StudentPage />);
+
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByRole("link")).toHaveAttribute("href", expect.stringContaining("wa.me"));
+  });
+});

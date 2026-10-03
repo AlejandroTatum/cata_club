@@ -151,7 +151,7 @@ class PersonaRepositorio:
         return (
             self.db.query(Persona)
             .filter(Persona.fecha_registro >= fecha_inicio, Persona.fecha_registro <= fecha_fin)
-            .order_by(Persona.fecha_registro.asc())
+            .order_by(Persona.fecha_registro.asc(), Persona.apellidos.asc(), Persona.nombres.asc())
             .all()
         )
 

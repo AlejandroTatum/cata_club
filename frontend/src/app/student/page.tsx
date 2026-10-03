@@ -21,7 +21,6 @@ import type {
 import { formatCurrency, formatDate } from "@/lib/format-utils";
 import {
   EmptyState,
-  ErrorState,
   InfoPanel,
   LoadingState,
   PAGE_RAIL,
@@ -44,6 +43,7 @@ import FamilyStrip from "./FamilyStrip";
 import CuotaCard from "./CuotaCard";
 import WeekPlan from "./WeekPlan";
 import JoinAsPlayerAction from "./JoinAsPlayerAction";
+import StudentErrorState from "./StudentErrorState";
 import {
   derivePortalMode,
   isRepresentative,
@@ -52,6 +52,8 @@ import {
   describeAssignedWindows,
   describePaymentSituation,
   findNextTrainingSessions,
+  describeRejectedPago,
+  displayNameFor,
   firstNameOf,
   summarizeRecentAttendance,
   contarEntrenamientosSemanales,
@@ -854,7 +856,7 @@ function TrainingPanel({
 
       {horariosState.status === "error" && (
         <div className="border-t border-line px-5 py-4">
-          <p className="text-sm leading-relaxed text-ink-3">
+          <p className="text-sm leading-relaxed text-ink-3-strong">
             No se pudo consultar el horario en este momento. Vuelva a cargar la página o consulte
             en administración del club.
           </p>
@@ -972,7 +974,7 @@ function PendingEnrollmentView({
         <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Bienvenido a Cata Club</h2>
         {/* Capped at a readable measure inside a full-width card, rather than
             capping the card: a 110-character line is not a paragraph. */}
-        <p className="mt-2 max-w-[68ch] text-sm leading-relaxed text-ink-3">
+        <p className="mt-2 max-w-[68ch] text-sm leading-relaxed text-ink-3-strong">
           Su cuenta está creada pero todavía no tiene una matrícula activa. Complete su inscripción para
           empezar a entrenar.
         </p>
@@ -1028,6 +1030,8 @@ function ActivePortalView({
   const representative = isRepresentative(data.representados.length);
   const selfIsMinor = isMinor(data.self?.fechaNacimiento);
   const selectedPersonaId = selectedProfile?.personaId ?? "";
+  // FAM-23: the first name alone is ambiguous between «María José» and «María Fernanda».
+  const selectedName = selectedProfile ? displayNameFor(selectedProfile, managedProfiles) : "";
 
   // Payments are fetched here rather than inside `PagosSection` because
   // `paymentSituation` below also needs `pendingPagos`, the count of
@@ -1174,7 +1178,7 @@ function ActivePortalView({
    */
   const paymentSituation = selectedProfile
     ? describePaymentSituation({
-        studentName: firstNameOf(selectedProfile.nombres),
+        studentName: selectedName,
         viewingOwnProfile,
         blockedAsMinor: paymentsAreReadOnly,
         representanteName: selectedProfile.representante
@@ -1186,8 +1190,19 @@ function ActivePortalView({
         coverageEnd,
         pendingCount: pendingPagos,
         esGratuidadFamiliar: selectedProfile.membership?.esGratuidadFamiliar ?? false,
+        suspended: selectedProfile.membership?.estado === "SUSPENDIDA",
+        motivoSuspension: selectedProfile.membership?.motivoSuspension ?? null,
       })
     : null;
+
+  // FAM-11: a rejected payment used to be visible only in Pagos and the bell.
+  const rejectedNotice =
+    pagosState.status === "ready" &&
+    paymentSituation !== null &&
+    paymentSituation.kind !== "minor-blocked" &&
+    paymentSituation.kind !== "suspended"
+      ? describeRejectedPago(pagosState.pagos)
+      : null;
 
   return (
     // Full content width, like `/dashboard`, `/members` and `/payments` — the
@@ -1376,7 +1391,7 @@ function ActivePortalView({
                   <User size={ICON.base} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-2xs font-bold uppercase text-ink-3">
+                  <span className="block text-2xs font-bold uppercase text-ink-3-strong">
                     Su representante
                   </span>
                   <span className="block text-sm font-semibold text-ink">
@@ -1455,6 +1470,7 @@ function ActivePortalView({
               situation={paymentSituation}
               coverageEnd={coverageEnd}
               monthlyPrice={selectedProfile.membership?.montoAplicado ?? null}
+              notice={rejectedNotice}
               viewPagosHref={withSelectedStudent("/student/payments", selectedPersonaId)}
               action={
                 paymentSituation.canRegister
@@ -1477,7 +1493,7 @@ function ActivePortalView({
               profile={selectedProfile}
               horariosState={horariosState}
               viewingOwnProfile={viewingOwnProfile}
-              studentName={firstNameOf(selectedProfile.nombres)}
+              studentName={selectedName}
             />
 
             {/* A minor manages nothing on their own account — no dependents, no
@@ -1515,7 +1531,7 @@ function ActivePortalView({
                   <Stethoscope size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
                   {viewingOwnProfile
                     ? "Ficha médica"
-                    : `Ficha médica de ${firstNameOf(selectedProfile.nombres)}`}
+                    : `Ficha médica de ${selectedName}`}
                   <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
                 </Link>
               </div>
@@ -1539,7 +1555,11 @@ function StudentPortalContent(): React.ReactElement {
   const hasAlumnoRole = session?.roles.includes("ALUMNO") ?? false;
 
   const [state, setState] = useState<LoadState>({ status: "loading" });
-  const hasOwnActiveMembership = state.status === "ready" && state.data.self?.membership?.estado === "ACTIVA";
+  // FAM-01: ANY own membership counts, INACTIVA included. A representative who
+  // just joined has one waiting on its first payment: it must appear as a
+  // profile they can pay for, and "Unirme como jugador" must not be offered
+  // again (it created a duplicate membership).
+  const hasOwnMembership = state.status === "ready" && state.data.self?.membership != null;
   /**
    * Issue #1132: "es jugador" (the domain's single predicate — an ACTIVA
    * Membresia, `app/dominio/jugador.py::es_jugador`) is the union of both
@@ -1550,7 +1570,7 @@ function StudentPortalContent(): React.ReactElement {
    * would otherwise read as "not a player" forever despite having exactly
    * the membership this feature is about.
    */
-  const isPlayer = hasAlumnoRole || hasOwnActiveMembership;
+  const isPlayer = hasAlumnoRole || hasOwnMembership;
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
@@ -1602,7 +1622,7 @@ function StudentPortalContent(): React.ReactElement {
         </div>
       )}
       {state.status === "error" && (
-        <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />
+        <StudentErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />
       )}
       {state.status === "ready" &&
         (portalMode === "pending" ? (

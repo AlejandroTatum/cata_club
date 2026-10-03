@@ -129,6 +129,17 @@ function GhostCards(): React.ReactElement {
   );
 }
 
+/** A field caption with its required mark inline. The label is a flex column,
+ *  so a bare sibling mark would drop to its own line (ADMB-28): both live in
+ *  one caption element instead. */
+function RequiredCaption({ children }: { children: string }): React.ReactElement {
+  return (
+    <span data-field-caption>
+      {children} <span aria-hidden="true" className="text-state-bad">*</span>
+    </span>
+  );
+}
+
 /** Brings a just-opened form into view and focuses its first field. On mobile
  *  the rail sits below the list, so without this the open button looks dead. */
 function revealForm(container: HTMLElement | null): void {
@@ -160,6 +171,8 @@ export default function DiscountsPage(): React.ReactElement {
   // one-click action, same as before.
   const [pendingDeactivation, setPendingDeactivation] = useState<DescuentoCatalogo | null>(null);
   const [pendingDelete, setPendingDelete] = useState<DescuentoCatalogo | null>(null);
+  /** A 100 % value waiting for the admin's confirmation before it is saved. */
+  const [pendingFull, setPendingFull] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   /** Why the last hide/show/delete failed (e.g. the 409 "ya se aplicó"), kept
    *  on screen above the cards until the next action. */
@@ -206,7 +219,7 @@ export default function DiscountsPage(): React.ReactElement {
     setFormError(null);
   }
 
-  async function handleSubmit(): Promise<void> {
+  async function handleSubmit(confirmedFull = false): Promise<void> {
     if (!form) return;
     const nombre = form.nombre.trim();
     if (!nombre) {
@@ -234,6 +247,13 @@ export default function DiscountsPage(): React.ReactElement {
     // is the same ceiling `/tarifas`'s precio field enforces.
     if (form.modalidad === "MONTO" && valor > AMOUNT_MAX_VALUE) {
       setFormError(`El monto no puede superar $${AMOUNT_MAX_VALUE}.`);
+      return;
+    }
+
+    // ADMB-10: a 100 % discount zeroes every payment it touches, so it is
+    // never one keystroke away — ask once, then save.
+    if (form.modalidad === "PORCENTAJE" && valor === 100 && !confirmedFull) {
+      setPendingFull(true);
       return;
     }
 
@@ -270,7 +290,7 @@ export default function DiscountsPage(): React.ReactElement {
       await actualizarDescuento(descuento.id, { activo: !descuento.activo });
       showSuccess(
         descuento.activo
-          ? "Descuento oculto. Los pagos históricos no cambian."
+          ? "Descuento oculto. Los descuentos ya aplicados se mantienen."
           : "Descuento visible de nuevo.",
       );
       await loadCatalog();
@@ -349,7 +369,12 @@ export default function DiscountsPage(): React.ReactElement {
           <Pencil size={ICON.sm} strokeWidth={2} aria-hidden="true" />
           Editar
         </Button>
-        <Button size="sm" onClick={() => requestToggleActivo(descuento)} disabled={isToggling}>
+        <Button
+          size="sm"
+          onClick={() => requestToggleActivo(descuento)}
+          disabled={isToggling}
+          aria-label={`${descuento.activo ? "Ocultar" : "Mostrar"} el descuento ${descuento.nombre}`}
+        >
           {isToggling ? (
             <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
           ) : descuento.activo ? (
@@ -365,6 +390,7 @@ export default function DiscountsPage(): React.ReactElement {
             className={ELIMINAR_CLASS}
             onClick={() => setPendingDelete(descuento)}
             disabled={isToggling}
+            aria-label={`Eliminar el descuento ${descuento.nombre}`}
           >
             <Trash2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Eliminar
@@ -427,7 +453,7 @@ export default function DiscountsPage(): React.ReactElement {
     return (
       <div className="flex flex-col gap-section">
         <label className={FIELD_LABEL}>
-          Nombre <span aria-hidden="true" className="text-state-bad">*</span>
+          <RequiredCaption>Nombre</RequiredCaption>
           {/* No `maxLength` here on purpose (issue #314, K6 hallazgo #34):
               the DOM attribute used to clip a paste to 100 chars with zero
               feedback, and the toast on submit still said "correctamente"
@@ -458,7 +484,7 @@ export default function DiscountsPage(): React.ReactElement {
           </span>
         </label>
         <label className={FIELD_LABEL}>
-          Tipo <span aria-hidden="true" className="text-state-bad">*</span>
+          <RequiredCaption>Tipo</RequiredCaption>
           <select
             value={current.modalidad}
             required
@@ -470,7 +496,7 @@ export default function DiscountsPage(): React.ReactElement {
           </select>
         </label>
         <label className={FIELD_LABEL}>
-          Valor <span aria-hidden="true" className="text-state-bad">*</span>
+          <RequiredCaption>Valor</RequiredCaption>
           <MoneyInput
             type="number"
             symbol={current.modalidad === "PORCENTAJE" ? "%" : "$"}
@@ -574,7 +600,7 @@ export default function DiscountsPage(): React.ReactElement {
           <Badge className="w-fit">{descuento.porcentaje !== null ? "Porcentaje" : "Monto fijo"}</Badge>
           {!descuento.activo ? (
             <p className="text-xs text-ink-3">
-              No aparece al asignar beneficios. Las aplicaciones existentes se conservan.
+              No aparece al asignar beneficios. Los descuentos ya aplicados se mantienen.
             </p>
           ) : !descuento.enUso ? (
             <p className="text-xs text-ink-3">Todavía no se usó.</p>
@@ -710,10 +736,23 @@ export default function DiscountsPage(): React.ReactElement {
           open={pendingDeactivation !== null}
           variant="danger"
           title={pendingDeactivation ? `¿Ocultar «${pendingDeactivation.nombre}»?` : ""}
-          message="Deja de poder asignarse a nadie nuevo, pero sigue en la lista para poder volver a mostrarlo. Las aplicaciones existentes y los pagos ya registrados no cambian."
+          message="Deja de poder asignarse a nadie nuevo, pero sigue en la lista para poder volver a mostrarlo. Los descuentos ya aplicados y los pagos ya registrados no cambian."
           confirmLabel="Ocultar"
           onConfirm={() => void confirmPendingDeactivation()}
           onCancel={() => setPendingDeactivation(null)}
+        />
+
+        <ConfirmDialog
+          open={pendingFull}
+          variant="danger"
+          title="¿Guardar un descuento del 100 %?"
+          message={`«${form?.nombre.trim() ?? ""}» dejará en $0,00 cada pago al que se aplique. Confirme solo si es una beca completa.`}
+          confirmLabel="Guardar al 100 %"
+          onConfirm={() => {
+            setPendingFull(false);
+            void handleSubmit(true);
+          }}
+          onCancel={() => setPendingFull(false)}
         />
 
         <ConfirmDialog

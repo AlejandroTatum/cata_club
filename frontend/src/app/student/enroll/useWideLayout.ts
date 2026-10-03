@@ -29,3 +29,15 @@ function getSnapshot(): boolean {
 export default function useWideLayout(): boolean {
   return useSyncExternalStore(subscribe, getSnapshot, () => false);
 }
+
+const subscribeNever = (): (() => void) => () => undefined;
+
+/**
+ * False in the server HTML and in the hydration pass, true from the same
+ * render that first reads `matchMedia` (REG-17). The wizard stays `invisible`
+ * until then, so the narrow layout it paints first is never seen jumping to
+ * the wide one.
+ */
+export function useHydrated(): boolean {
+  return useSyncExternalStore(subscribeNever, () => true, () => false);
+}

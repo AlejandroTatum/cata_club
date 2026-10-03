@@ -14,13 +14,14 @@ import { CreditCard, Loader2, Minus, Paperclip, Plus, Upload, X } from "lucide-r
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
 import { ProofPreview } from "./ProofPreview";
+import LinkifiedText from "@/components/LinkifiedText";
 
 /** `_sistema.css` `.fld` — the one input shape, 40px like every other control. */
 export const FIELD_CLASSES =
   "h-ctl w-full rounded-ctl border border-line-2 bg-paper px-3.5 text-sm text-ink " +
   "placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-45";
 
-const FIELD_LABEL_CLASSES = "text-2xs font-bold uppercase text-ink-3";
+const FIELD_LABEL_CLASSES = "text-2xs font-bold uppercase text-ink-3-strong";
 
 /** Parse an ISO date at local noon — the same anchoring `format-utils` uses, for the same reason. */
 export function fromIsoDate(iso: string): Date {
@@ -53,7 +54,7 @@ export function BeneficioNote({ beneficio }: { beneficio: BeneficioAsignado | nu
   return (
     <p className="flex flex-wrap items-center gap-2 text-sm text-ink-2">
       Su beneficio: <DataBox>{etiqueta}</DataBox>
-      <span className="text-ink-3">{descuento.nombre}</span>
+      <span className="text-ink-3-strong">{descuento.nombre}</span>
     </p>
   );
 }
@@ -396,6 +397,8 @@ function RenewPaymentForm({
   const [tipoPago, setTipoPago] = useState<"EFECTIVO" | "TRANSFERENCIA">("TRANSFERENCIA");
   const [fechaInicio, setFechaInicio] = useState<string>("");
   const [voucherFile, setVoucherFile] = useState<File | null>(null);
+  /** FAM-20: why the last picked file was refused. Kept until a valid file is picked. */
+  const [voucherRejection, setVoucherRejection] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { showSuccess, showWarning } = useToast();
 
@@ -416,6 +419,7 @@ function RenewPaymentForm({
 
   const seedForm = useCallback((): void => {
     setVoucherFile(null);
+    setVoucherRejection(null);
     setMonths(MESES_MINIMO);
     // Both sides must be CALENDAR dates before they are compared: mixing an
     // instant with a noon-anchored date made the comparison depend on the
@@ -431,6 +435,8 @@ function RenewPaymentForm({
   function findProblem(): string | null {
     if (!fechaInicio || !fechaFin) return "No se pudo calcular el período que cubre este pago.";
     if (tipoPago === "TRANSFERENCIA" && !voucherFile) {
+      // FAM-20: a refused file is not «no file»; say why it was refused.
+      if (voucherRejection) return voucherRejection;
       return "Adjunte el comprobante de la transferencia para que el club pueda validarla.";
     }
     return null;
@@ -446,6 +452,7 @@ function RenewPaymentForm({
   function handleCancel(): void {
     action.handleCancel();
     setVoucherFile(null);
+    setVoucherRejection(null);
   }
 
   /**
@@ -462,12 +469,14 @@ function RenewPaymentForm({
       const error = voucherFileError(file);
       if (error) {
         setVoucherFile(null);
+        setVoucherRejection(error);
         action.setError(error);
         if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
     }
     setVoucherFile(file);
+    setVoucherRejection(null);
     action.setError(null);
   }
 
@@ -577,7 +586,7 @@ function RenewPaymentForm({
           <Plus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           {studentName ? `Registrar un pago de ${studentName}` : "Registrar un pago"}
         </Button>
-        <p className="min-w-0 text-sm text-ink-3">
+        <p className="min-w-0 text-sm text-ink-3-strong">
           Elija los meses y la forma de pago; el club valida cada pago y lo verá «En revisión» en
           el historial.
         </p>
@@ -673,6 +682,11 @@ function RenewPaymentForm({
             </button>
           )}
           <span className="text-xs text-ink-3-strong">PDF, JPG o PNG — máximo 5 MB.</span>
+          {voucherRejection && !voucherFile && (
+            <span data-testid="voucher-rejection" className="text-xs font-semibold text-state-bad">
+              {voucherRejection}
+            </span>
+          )}
         </div>
       )}
 
@@ -686,7 +700,7 @@ function RenewPaymentForm({
        */}
       {action.error && (
         <p role="alert" className="text-sm font-semibold text-state-bad">
-          {action.error}
+          <LinkifiedText text={action.error} />
         </p>
       )}
 
@@ -870,7 +884,7 @@ function ApplyBenefitForm({
 
       {action.error && (
         <p role="alert" className="text-sm font-semibold text-state-bad">
-          {action.error}
+          <LinkifiedText text={action.error} />
         </p>
       )}
 

@@ -1,5 +1,6 @@
 "use client";
 
+import LinkifiedText from "@/components/LinkifiedText";
 import { useState, useEffect, type ReactNode } from "react";
 import { Loader2, Save, CheckCircle2, Stethoscope, Pencil, X } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -290,7 +291,7 @@ export default function MedicalRecordEditor({
   function validar(): { tipoSangre?: string; telefonoEmergencia?: string } {
     const errores: { tipoSangre?: string; telefonoEmergencia?: string } = {};
     if (!tipoSangre) errores.tipoSangre = "El tipo de sangre es obligatorio.";
-    const telefonoError = phoneFieldRule(telefonoEmergencia, "El teléfono de emergencia");
+    const telefonoError = phoneFieldRule(telefonoEmergencia, "El teléfono de emergencia", { guided: true });
     if (telefonoError) errores.telefonoEmergencia = telefonoError;
     return errores;
   }
@@ -631,7 +632,7 @@ export default function MedicalRecordEditor({
         <div className="mt-4 flex items-center gap-3">
           {saveError && (
             <p className="text-sm text-state-bad" role="alert">
-              {saveError}
+              <LinkifiedText text={saveError} />
             </p>
           )}
           {saveSuccess && (

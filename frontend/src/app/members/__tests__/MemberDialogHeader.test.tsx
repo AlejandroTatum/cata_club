@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import MedicalRecordDialog from "../MedicalRecordDialog";
 import PaymentsDialog from "../PaymentsDialog";
+import MemberDialogHeader from "../MemberDialogHeader";
 import type { MemberAccount } from "../members-utils";
 
 const ACCOUNT: MemberAccount = {
@@ -27,6 +28,39 @@ describe.each([
     expect(root).toHaveTextContent("AG");
     expect(root).toHaveTextContent("Representante");
     expect(root).toHaveTextContent("Activa");
+  });
+});
+
+describe("dialog header live state (ADMA-06)", () => {
+  it("shows the live account state and roles when they are passed in", () => {
+    render(
+      <MemberDialogHeader
+        account={{ ...ACCOUNT, backendRoles: ["ADMINISTRADOR"], accountState: "active" }}
+        titleId="t"
+        purpose="Editar cuenta"
+        closeButtonRef={{ current: null }}
+        onClose={() => {}}
+        liveAccountState="inactive"
+        liveRoles={["ENTRENADOR"]}
+      />,
+    );
+    expect(screen.getByText("Inactiva")).toBeInTheDocument();
+    expect(screen.queryByText("Activa")).not.toBeInTheDocument();
+    expect(screen.getByText("Entrenador")).toBeInTheDocument();
+  });
+
+  it("names an admin account «Administrador»", () => {
+    render(
+      <MemberDialogHeader
+        account={{ ...ACCOUNT, backendRoles: ["ADMINISTRADOR"] }}
+        titleId="t"
+        purpose="Editar cuenta"
+        closeButtonRef={{ current: null }}
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.getByText("Administrador")).toBeInTheDocument();
+    expect(screen.queryByText("Representante")).not.toBeInTheDocument();
   });
 });
 

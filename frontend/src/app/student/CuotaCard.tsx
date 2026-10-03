@@ -51,6 +51,8 @@ export interface CuotaCardProps {
   action: { href: string; label: string } | null;
   /** The plain "see the history" destination, always available. */
   viewPagosHref: string;
+  /** FAM-11: the sentence for a rejected payment the family still has to redo, or `null`. */
+  notice?: string | null;
 }
 
 /** Kinds whose `detail` only restates the "Cubierta hasta" date the figure row already shows. */
@@ -75,6 +77,7 @@ export default function CuotaCard({
   monthlyPrice,
   action,
   viewPagosHref,
+  notice = null,
 }: CuotaCardProps): React.ReactElement {
   const tone = paymentBandTone(situation);
   const badge = describeCuotaBadge(situation);
@@ -140,6 +143,14 @@ export default function CuotaCard({
           )}
         </div>
         {showDetail && <p className="text-xs leading-relaxed text-ink-3-strong">{situation.detail}</p>}
+        {notice && (
+          <p
+            data-testid="cuota-rejected-notice"
+            className="rounded-ctl bg-state-warn-bg px-3 py-2 text-sm font-semibold text-ink"
+          >
+            {notice}
+          </p>
+        )}
       </div>
     </section>
   );

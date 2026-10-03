@@ -32,12 +32,15 @@ import { ACTION_TRIGGER } from "./payment-action-styles";
 
 interface CambiarPlanFormProps {
   membresiaId: number;
+  /** Category of the plan already assigned: it is not offered again (ADMA-18). */
+  tipoActual?: string;
   /** Refetch the member list so the new plan (y su tarifa) aparece en el acto. */
   onChanged: () => void;
 }
 
 export default function CambiarPlanForm({
   membresiaId,
+  tipoActual,
   onChanged,
 }: CambiarPlanFormProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
@@ -50,6 +53,8 @@ export default function CambiarPlanForm({
       submitLabel="Cambiar"
       SubmitIcon={CheckCircle2}
       selectPlaceholder="Seleccionar plan nuevo…"
+      fieldLabel="Plan nuevo"
+      excludeCategoria={tipoActual}
       submitFailureMessage="Error al cambiar el plan de la membresía."
       onSubmitError={showError}
       onSubmit={async (nuevoTipoMembresiaId) => {

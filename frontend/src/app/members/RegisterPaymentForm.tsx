@@ -27,6 +27,7 @@
 
 "use client";
 
+import LinkifiedText from "@/components/LinkifiedText";
 import { useEffect, useId, useRef, useState } from "react";
 import { CheckCircle2, Loader2, Plus, Upload } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -287,18 +288,18 @@ export default function RegisterPaymentForm({
     setVoucherFile(null);
     setPagoPendienteId(null);
     setAprobadoEnPersona(true);
-    showSuccess("Inscripción registrada y aprobada. La membresía quedó activa.");
+    showSuccess("Pago registrado y aprobado. La membresía quedó activa.");
     // Issue #1199: refresh the caller's data instead of asking the admin to
     // reload manually — fired here (and not right after registration) so the
     // refetch already shows the FINAL state (#1402: approved + active).
     onPaymentRegistered?.();
   }
 
-  // The first payment of a membership that never activated is the person's
-  // inscription; every other state is a plain payment. Same condition that
-  // routes to the presencial flow below — wording only, no behavior.
+  // The first payment of a membership that never activated goes through the
+  // presencial flow below. ADMA-09: it is still a payment, so the wording is
+  // the same ("inscripción" means the public sign-up form elsewhere).
   const esInscripcion = membresia.estadoBackend === "INACTIVA";
-  const etiquetaRegistro = esInscripcion ? "Registrar inscripción" : "Registrar pago";
+  const etiquetaRegistro = "Registrar pago";
 
   async function handleSubmit(): Promise<void> {
     // Retry mode (#1402): the payment EXISTS and is pending only for its
@@ -312,7 +313,7 @@ export default function RegisterPaymentForm({
         // Still pending — the backend keeps the payment PENDIENTE_VALIDACION
         // on any upload/approval failure: actionable retry, same flow.
         setError(
-          "La inscripción sigue pendiente: no se pudo subir el comprobante o aprobarlo. "
+          "El pago sigue pendiente: no se pudo subir el comprobante o aprobarlo. "
           + "Verifique el archivo y presione \"Reintentar comprobante\".",
         );
         setErrorAnnounceKey((key) => key + 1);
@@ -397,7 +398,7 @@ export default function RegisterPaymentForm({
       // was already set right after `registrarPagoPresencial` resolved.
       if (pagoRegistradoId !== null) {
         const pendienteMsg =
-          "La inscripción quedó registrada y PENDIENTE: no se pudo completar el comprobante "
+          "El pago quedó registrado y PENDIENTE: no se pudo completar el comprobante "
           + "o su aprobación. Verifique el archivo y presione \"Reintentar comprobante\".";
         setError(pendienteMsg);
         setErrorAnnounceKey((key) => key + 1);
@@ -423,7 +424,7 @@ export default function RegisterPaymentForm({
       const fallback =
         status === 422
           ? MENSAJE_MESES_MAXIMO_EXCEDIDO
-          : `No se pudo registrar ${esInscripcion ? "la inscripción" : "el pago"}.`;
+          : "No se pudo registrar el pago.";
       const msg = toUserMessage(err, fallback);
       setError(msg);
       showError(msg);
@@ -454,7 +455,7 @@ export default function RegisterPaymentForm({
         {/* #1402: the in-person flow only completes on approval — cash
             approved in the same request, transfer after voucher + admin-only
             finalize — while a renewal keeps the plain original outcome. */}
-        {aprobadoEnPersona ? "Inscripción registrada y aprobada." : "Pago registrado."}
+        {aprobadoEnPersona ? "Pago registrado y aprobado." : "Pago registrado."}
       </p>
     );
   }
@@ -628,7 +629,7 @@ export default function RegisterPaymentForm({
           tabIndex={-1}
           className="text-xs text-state-bad focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ball focus-visible:shadow-focus-band"
         >
-          {error}
+          <LinkifiedText text={error} />
         </p>
       )}
 

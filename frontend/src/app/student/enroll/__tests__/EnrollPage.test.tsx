@@ -937,7 +937,7 @@ describe("EnrollPage — the error box on the summary step (REG-22)", () => {
     render(<EnrollPage />);
     const alert = await submitAndFail(Object.assign(new Error("boom"), { status: 500 }));
 
-    const link = within(alert).getByRole("link", { name: /wa\.me/ });
+    const link = within(alert).getByRole("link", { name: /wa\.me|WhatsApp/i });
     expect(link).toHaveAttribute("href", expect.stringMatching(/^https:\/\/wa\.me\//));
     expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
   });
@@ -1430,6 +1430,12 @@ describe("EnrollPage — el borrador sobrevive a un reload (#317 / #62)", () => 
     // record — the same "recuperamos" pattern the attendance wizard already
     // uses for its own (server-bound) draft.
     expect(screen.getByText(/no se ha[n]? enviado/i)).toBeInTheDocument();
+    // REG-15: the passwords are never restored, so the notice says so.
+    expect(screen.getByText(/vuelva a escribir su contraseña/i)).toBeInTheDocument();
+    // REG-14: the legal-responsibility sentence is at the foot of the form
+    // only below `lg`; from `lg` the aside carries it.
+    const legal = screen.getAllByText("Al inscribir a un dependiente, confirma ser su responsable legal.");
+    expect(legal.filter((el) => !el.closest("aside")).every((el) => el.classList.contains("lg:hidden"))).toBe(true);
 
     // Step 3 (representative) renders no student field, so the data that
     // matters here — what was typed on step 2 — is checked by walking back.
@@ -1689,5 +1695,33 @@ describe("EnrollPage — step 2 takes only the 9 digits after +593 (#1028 review
         alumno: expect.objectContaining({ telefono: "0991234567" }),
       }),
     );
+  });
+});
+
+// REG-17 / FAM-25: the page used to paint the narrow wizard (or the wizard
+// of a visitor whose session was still loading) and then jump — to the wide
+// split once `matchMedia` was read, or to the «Ya tiene una sesión iniciada»
+// notice. Nothing is visible until both are known, so nothing can shift.
+describe("EnrollPage — no layout shift while the layout and session settle (REG-17, FAM-25)", () => {
+  beforeEach(() => {
+    mockIsAuthenticated = false;
+    mockAuthRole = null;
+    mockAuthLoading = false;
+  });
+
+  it("renders a placeholder, not a blank page or the form, while the session is loading", () => {
+    mockAuthLoading = true;
+    render(<EnrollPage />);
+
+    expect(screen.getByTestId("enroll-skeleton")).toBeInTheDocument();
+    expect(screen.getByRole("main")).not.toHaveClass("invisible");
+    expect(screen.queryByTestId("enroll-wizard-card")).not.toBeInTheDocument();
+  });
+
+  it("renders the form and no placeholder once the session is known", () => {
+    render(<EnrollPage />);
+
+    expect(screen.queryByTestId("enroll-skeleton")).not.toBeInTheDocument();
+    expect(screen.getByTestId("enroll-wizard-card")).toBeInTheDocument();
   });
 });
