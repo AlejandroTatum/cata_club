@@ -48,9 +48,9 @@ class TipoMembresiaUpdateDTO(BaseModel):
     POST -- una tarifa en cero o negativa no describe ningún plan comercial, y
     además rompería la cuenta de meses, que divide por este número.
 
-    No hay campo para retirar un tipo del catálogo: `TipoMembresia` no tiene
-    columna `activo` y agregarla es una migración aparte. #394 pide poder
-    EDITAR el precio; retirar un plan queda fuera de este alcance.
+    `activo=False` OCULTA la tarifa (baja suave, reversible con `True`): sale
+    del catálogo público y no admite membresías nuevas, pero las existentes
+    siguen operando. Borrarla es `DELETE /tipos/{id}`, solo si nunca se usó.
 
     Un `null` explícito en `categoria`/`precio`/`modalidad` se RECHAZA acá
     (hallazgo de review adversarial, issue #400). Esta clase copió la forma
@@ -73,8 +73,9 @@ class TipoMembresiaUpdateDTO(BaseModel):
         decimal_places=2,
     )
     modalidad: Optional[TipoModalidad] = None
+    activo: Optional[bool] = None
 
-    @field_validator("categoria", "precio", "modalidad", mode="before")
+    @field_validator("categoria", "precio", "modalidad", "activo", mode="before")
     @classmethod
     def _rechazar_valor_vacio_explicito(cls, valor, info):
         if valor is None:
@@ -92,6 +93,10 @@ class TipoMembresiaUpdateDTO(BaseModel):
 
 class TipoMembresiaResponseDTO(ResponseBase, TipoMembresiaCreateDTO):
     id: int
+    activo: bool = True
+    # `True` si alguna membresía (o la auditoría de un cambio de plan) la
+    # referencia: entonces solo se puede ocultar, no eliminar.
+    en_uso: bool = False
 
 
 class TarifaPublicaDTO(ResponseBase, BaseModel):

@@ -20,8 +20,7 @@ const TYPES = [
 
 /** Explainer of what each type of discount does, with a worked example.
  *  `rail` stacks the types in the side column (empty catalog); `main` sits
- *  under a short catalog, side by side, and grows with the column so the page
- *  reaches the viewport bottom with content instead of dead canvas. */
+ *  under a short catalog, side by side, at its natural height. */
 export default function DiscountTypes({
   placement = "rail",
 }: {
@@ -39,7 +38,7 @@ export default function DiscountTypes({
       >
         Tipos de descuento
       </h2>
-      <ul className={placement === "main" ? "grid flex-1 gap-page sm:grid-cols-2" : "grid gap-section"}>
+      <ul className={placement === "main" ? "grid gap-page sm:grid-cols-2" : "grid gap-section"}>
         {TYPES.map(({ key, icon: Icon, title, what, example }) => (
           <li
             key={key}

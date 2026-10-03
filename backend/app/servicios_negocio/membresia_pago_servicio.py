@@ -19,7 +19,7 @@ from app.dominio.enums import (
 from app.dominio.etiquetas import estado_de_pago_en_castellano
 from app.dominio.nombres_catalogo import existe_nombre, normalizar_nombre
 from app.dominio.excepciones import (
-    EntidadNoEncontrada, MembresiaPendienteDePago, NombreDuplicado, OperacionInvalida, PermisosInsuficientes, ServicioNoDisponible,
+    EntidadNoEncontrada, MembresiaPendienteDePago, NombreDuplicado, OperacionInvalida, PermisosInsuficientes, RecursoEnUso, ServicioNoDisponible,
 )
 from app.dominio.nombre_propio import nombre_completo
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
@@ -240,6 +240,10 @@ class _CotizacionRegularizacion:
         return self.descuento.valor_aplicado if self.descuento is not None else Decimal("0.00")
 
 
+class TarifaEnUso(RecursoEnUso):
+    """Se intentó eliminar una tarifa que ya se usó (-> 409)."""
+
+
 class MembresiaServicio:
     def __init__(self, db: Session):
         self.db = db
@@ -265,10 +269,34 @@ class MembresiaServicio:
         # de arriba; antes lo refrescaba el propio repositorio (issue #831).
         if inspeccionar_orm(resultado).expired:
             self.db.refresh(resultado)
+        self._marcar_en_uso([resultado])
         return resultado
 
-    def listar_tipos_membresia(self) -> list[TipoMembresia]:
-        return self.repo_tipo.listar()
+    def _marcar_en_uso(self, tipos: list[TipoMembresia]) -> list[TipoMembresia]:
+        """Anota `en_uso` (atributo transitorio, no columna) para el DTO. Una
+        sola consulta para todo el lote, sin N+1."""
+        usados = self.repo_tipo.ids_en_uso([t.id for t in tipos])
+        for tipo in tipos:
+            tipo.en_uso = tipo.id in usados
+        return tipos
+
+    def listar_tipos_membresia(self, solo_activas: bool = False) -> list[TipoMembresia]:
+        return self._marcar_en_uso(self.repo_tipo.listar(solo_activas=solo_activas))
+
+    def eliminar_tipo_membresia(self, tipo_id: int) -> None:
+        """Borrado duro, solo de una tarifa que nunca se usó (ni en una
+        membresía ni en la auditoría de un cambio de plan). Si se usó, el
+        camino es ocultarla (`activo=False`)."""
+        tipo = self.repo_tipo.obtener_por_id(tipo_id)
+        if not tipo:
+            raise EntidadNoEncontrada(f"Tipo de membresía con id {tipo_id} no encontrado")
+        if self.repo_tipo.ids_en_uso([tipo.id]):
+            raise TarifaEnUso(
+                f"No se puede eliminar la tarifa '{tipo.categoria}' porque ya se usó "
+                "en membresías. Puede ocultarla para que deje de ofrecerse."
+            )
+        self.repo_tipo.eliminar(tipo)
+        self.db.commit()
 
     def actualizar_tipo_membresia(
         self, tipo_id: int, datos: TipoMembresiaUpdateDTO,
@@ -299,6 +327,7 @@ class MembresiaServicio:
         self.db.commit()
         if inspeccionar_orm(resultado).expired:
             self.db.refresh(resultado)
+        self._marcar_en_uso([resultado])
         return resultado
 
     def crear_membresia(self, datos: MembresiaCreateDTO) -> Membresia:
@@ -314,6 +343,11 @@ class MembresiaServicio:
         tipo = self.repo_tipo.obtener_por_id(datos.tipo_membresia_id)
         if not tipo:
             raise EntidadNoEncontrada(f"Tipo de membresía con id {datos.tipo_membresia_id} no encontrado")
+        if not tipo.activo:
+            raise OperacionInvalida(
+                f"La tarifa '{tipo.categoria}' está oculta y no admite nuevas "
+                "membresías. Muéstrela de nuevo o elija otra tarifa."
+            )
         existentes = self.repo.listar_por_persona(datos.persona_id)
         # Issue #400 (slice 5a): SUSPENDIDA cuenta como operativa, igual que
         # ACTIVA -- ver el docstring del índice `uq_membresia_activa_por_
@@ -421,6 +455,11 @@ class MembresiaServicio:
 
         if membresia.tipo_membresia_id == datos.nuevo_tipo_membresia_id:
             raise OperacionInvalida(MENSAJE_CAMBIO_PLAN_MISMO_TIPO)
+        if not tipo_nuevo.activo:
+            raise OperacionInvalida(
+                f"La tarifa '{tipo_nuevo.categoria}' está oculta y no admite nuevas "
+                "membresías. Muéstrela de nuevo o elija otra tarifa."
+            )
 
         tipo_anterior_id = membresia.tipo_membresia_id
         membresia.tipo_membresia_id = tipo_nuevo.id

@@ -45,6 +45,7 @@ from tests.fabricas_pagos import (
     crear_tipo_membresia_orm,
     escenario_membresia_sin_pago_api,
     registrar_pago_api,
+    retirar_beneficio_api,
 )
 
 RUTA_DESCUENTOS = "/api/v1/descuentos/"
@@ -528,3 +529,51 @@ def test_pago_con_descuento_id_pero_sin_valor_congelado_viola_el_check(db_sessio
     # `descuento_valor_aplicado` se deja NULL a propósito: viola el CHECK.
     with pytest.raises(IntegrityError):
         db_session.flush()
+
+
+# --- Eliminar descuentos solo si nunca se usaron -----------------------------
+# Decisión del dueño: ocultar (`activo`) siempre; borrar solo si ningún pago ni
+# beneficio asignado lo referencia. Se rechaza con 409 y el listado informa
+# `enUso` para que la pantalla sepa si ofrecer "Eliminar".
+def test_eliminar_descuento_sin_uso_da_204(client):
+    descuento = crear_descuento_api(client, "Sin uso", porcentaje="10").json()
+    assert descuento["enUso"] is False
+
+    respuesta = client.delete(f"{RUTA_DESCUENTOS}{descuento['id']}")
+
+    assert respuesta.status_code == 204
+    assert client.get(f"{RUTA_DESCUENTOS}{descuento['id']}").status_code == 404
+
+
+def test_eliminar_descuento_inexistente_da_404(client):
+    assert client.delete(f"{RUTA_DESCUENTOS}999999").status_code == 404
+
+
+def test_eliminar_descuento_asignado_da_409_y_el_listado_lo_marca_en_uso(client):
+    persona, _ = escenario_membresia_sin_pago_api(client)
+    descuento = crear_descuento_api(client, "Asignado", porcentaje="50").json()
+    asignado = asignar_beneficio_api(client, persona["id"], descuento["id"])
+    assert asignado.status_code == 201, asignado.text
+
+    respuesta = client.delete(f"{RUTA_DESCUENTOS}{descuento['id']}")
+
+    assert respuesta.status_code == 409
+    assert "ocultarlo" in respuesta.json()["detail"]
+    listado = client.get(RUTA_DESCUENTOS).json()["items"]
+    assert next(d for d in listado if d["id"] == descuento["id"])["enUso"] is True
+    assert client.get(f"{RUTA_DESCUENTOS}{descuento['id']}").json()["enUso"] is True
+
+
+def test_eliminar_descuento_ya_aplicado_a_un_pago_da_409(client, db_session):
+    """Aunque el beneficio ya se haya retirado, el pago conserva `descuento_id`."""
+    persona, membresia = escenario_membresia_sin_pago_api(client)
+    descuento = crear_descuento_api(client, "Aplicado", porcentaje="50").json()
+    asignar_beneficio_api(client, persona["id"], descuento["id"])
+    assert registrar_pago_api(client, persona["id"], membresia["id"]).status_code == 201
+    retirar_beneficio_api(client, persona["id"])
+
+    assert client.delete(f"{RUTA_DESCUENTOS}{descuento['id']}").status_code == 409
+
+
+def test_eliminar_descuento_sin_rol_administrador_da_403(client_sin_permisos):
+    assert client_sin_permisos.delete(f"{RUTA_DESCUENTOS}1").status_code == 403

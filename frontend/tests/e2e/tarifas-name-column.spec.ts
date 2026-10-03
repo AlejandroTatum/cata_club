@@ -34,8 +34,8 @@ const MOCK_ACCESS_TOKEN = "mock-header.mock-payload.mock-signature";
 const LONG_NAME = "Mensual Competitivo Avanzado Categoria Sub-18 Federados";
 
 const TARIFAS = [
-  { id: 3, categoria: LONG_NAME, precio: "33.00", modalidad: "MENSUAL" },
-  { id: 1, categoria: "Mensual Infantil", precio: "25.00", modalidad: "MENSUAL" },
+  { id: 3, categoria: LONG_NAME, precio: "33.00", modalidad: "MENSUAL", activo: true, enUso: true },
+  { id: 1, categoria: "Mensual Infantil", precio: "25.00", modalidad: "MENSUAL", activo: true, enUso: true },
 ];
 
 /**

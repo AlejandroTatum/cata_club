@@ -2171,11 +2171,24 @@ export interface TipoMembresiaCatalogo {
   categoria: string;
   precio: string;
   modalidad: "PERSONALIZADA" | "MENSUAL";
+  /** `false` = hidden: off the web and off enrollment, still valid for who already has it. */
+  activo: boolean;
+  /** `true` once any membresía used it — the backend refuses to delete it then. */
+  enUso: boolean;
 }
 
-/** List all available membership plan types — `GET /api/membresias/tipos`. */
-export async function fetchTiposMembresia(): Promise<TipoMembresiaCatalogo[]> {
-  return request<TipoMembresiaCatalogo[]>(apiEndpoint("/membresias/tipos"));
+/**
+ * List the membership plan types — `GET /api/membresias/tipos`.
+ *
+ * The admin catalog screen wants every tariff (hidden ones included, to show
+ * them again). Anything that lets someone PICK a tariff passes
+ * `soloActivas: true` so a hidden one cannot be chosen.
+ */
+export async function fetchTiposMembresia(
+  options: { soloActivas?: boolean } = {},
+): Promise<TipoMembresiaCatalogo[]> {
+  const query = options.soloActivas ? "?solo_activas=true" : "";
+  return request<TipoMembresiaCatalogo[]>(apiEndpoint(`/membresias/tipos${query}`));
 }
 
 /** Fields an admin may change on a catalog tariff. All optional: the backend
@@ -2184,6 +2197,8 @@ export interface ActualizarTipoMembresiaInput {
   categoria?: string;
   precio?: string;
   modalidad?: "PERSONALIZADA" | "MENSUAL";
+  /** `false` hides the tariff, `true` shows it again. */
+  activo?: boolean;
 }
 
 /**
@@ -2194,8 +2209,8 @@ export interface ActualizarTipoMembresiaInput {
  * routing it through a JS number would introduce binary-float rounding into
  * the one value the club charges with.
  *
- * There is no delete: `TipoMembresia` has no soft-delete column, so retiring
- * a plan is not available (out of scope for #394 as written).
+ * `activo` hides/shows the tariff; removing one for good is
+ * `eliminarTipoMembresia`.
  */
 export async function actualizarTipoMembresia(
   id: number,
@@ -2205,6 +2220,14 @@ export async function actualizarTipoMembresia(
     method: "PATCH",
     body: JSON.stringify(data),
   });
+}
+
+/**
+ * Admin-only: delete a tariff nobody ever used — `DELETE /api/membresias/tipos/:id`.
+ * A tariff that was used answers 409 with a Spanish message meant for the admin.
+ */
+export async function eliminarTipoMembresia(id: number): Promise<void> {
+  await request<void>(apiEndpoint(`/membresias/tipos/${id}`), { method: "DELETE" });
 }
 
 /** Fields to create a new catalog tariff. All three required — unlike the
@@ -2281,7 +2304,10 @@ export interface DescuentoCatalogo {
   nombre: string;
   porcentaje: string | null;
   monto: string | null;
+  /** `false` = hidden: it can no longer be assigned, applied ones are kept. */
   activo: boolean;
+  /** `true` once it was applied or assigned — the backend refuses to delete it then. */
+  enUso: boolean;
 }
 
 /** Payload for creating a catalog discount — exactly one of porcentaje/monto. */
@@ -2335,8 +2361,7 @@ export async function crearDescuento(data: CrearDescuentoInput): Promise<Descuen
 }
 
 /** Admin-only: partial update / soft toggle — `PATCH /api/descuentos/:id`.
- *  There is no DELETE: deactivating is the only "removal" (history keeps
- *  referencing the discount by FK; applied values stay frozen). */
+ *  `activo` hides/shows it (applied values stay frozen either way). */
 export async function actualizarDescuento(
   id: number,
   data: ActualizarDescuentoInput,
@@ -2345,6 +2370,12 @@ export async function actualizarDescuento(
     method: "PATCH",
     body: JSON.stringify(data),
   });
+}
+
+/** Admin-only: delete a discount nobody ever received — `DELETE /api/descuentos/:id`.
+ *  One that was applied or assigned answers 409 with a Spanish message. */
+export async function eliminarDescuento(id: number): Promise<void> {
+  await request<void>(apiEndpoint(`/descuentos/${id}`), { method: "DELETE" });
 }
 
 // ---------------------------------------------------------------------------

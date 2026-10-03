@@ -67,3 +67,6 @@ class DescuentoResponseDTO(ResponseBase, BaseModel):
     porcentaje: Optional[Decimal] = None
     monto: Optional[Decimal] = None
     activo: bool
+    # `True` si algún pago o beneficio asignado lo referencia: entonces solo
+    # se puede desactivar, no eliminar.
+    en_uso: bool = False

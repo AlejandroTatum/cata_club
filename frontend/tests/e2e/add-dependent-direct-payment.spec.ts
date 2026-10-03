@@ -14,7 +14,7 @@ test("a representative adds a minor and registers the first pending payment", as
     const respond = (data: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(data) });
     if (path === "/api/auth/session") return respond(SESSION);
     if (path === "/api/personas/instituciones") return respond([]);
-    if (path === "/api/membresias/tipos") return respond([{ id: 3, categoria: "Infantil", precio: "30.00", modalidad: "MENSUAL" }]);
+    if (path === "/api/membresias/tipos") return respond([{ id: 3, categoria: "Infantil", precio: "30.00", modalidad: "MENSUAL", activo: true, enUso: false }]);
     if (path === "/api/personas/me/representados") return respond({
       representado: { id: 42, nombres: "Mateo", apellidos: "Vera", cedula: "1798765432", fechaNacimiento: "2014-05-12" },
     }, 201);

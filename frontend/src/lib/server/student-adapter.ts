@@ -70,6 +70,8 @@ export interface BackendTipoMembresiaCatalogo {
   categoria: string;
   precio: string;
   modalidad: string;
+  /** `false` = hidden tariff. Absent on older payloads, which count as visible. */
+  activo?: boolean;
 }
 
 export interface MembershipPlanView {
@@ -155,8 +157,10 @@ export function buildMembershipView(
   };
 }
 
+/** The plans a student can pick: hidden tariffs stay out, though they still
+ *  resolve a membership's name through `tiposById`. */
 export function buildMembershipPlans(tipos: BackendTipoMembresiaCatalogo[]): MembershipPlanView[] {
-  return tipos.map((tipo) => ({
+  return tipos.filter((tipo) => tipo.activo !== false).map((tipo) => ({
     id: String(tipo.id),
     nombre: tipo.categoria,
     precio: Number(tipo.precio),
