@@ -269,3 +269,14 @@ export function resolveHorarioIds(
 // `downloadCsv`) was replaced by the `.xlsx` export in `xlsx-export.ts`
 // (issue #864) — typed date/number/currency cells and correct Spanish
 // accents without a byte-order mark, which CSV could not offer.
+
+/**
+ * Splits a payment's `membershipPeriod` ("2026-07-01 – 2026-07-31") into its
+ * two ISO days, so the screen and the Excel file show "Desde" and "Hasta" as
+ * real, sortable dates (ADMB-06). Anything that is not two ISO days yields
+ * empty ends rather than a guess.
+ */
+export function splitMembershipPeriod(period: string): { desde: string; hasta: string } {
+  const match = /^(\d{4}-\d{2}-\d{2})\s*[–-]\s*(\d{4}-\d{2}-\d{2})$/.exec(period.trim());
+  return match ? { desde: match[1], hasta: match[2] } : { desde: "", hasta: "" };
+}

@@ -24,6 +24,7 @@ import {
   buildScheduleSlots,
   daysForSlot,
   resolveHorarioIds,
+  splitMembershipPeriod,
 } from "../reports-utils";
 
 function buildPersonas(count: number): PersonaReporte[] {
@@ -273,5 +274,20 @@ describe("resolveHorarioIds", () => {
 
   it("ignores a day that does not belong to the slot", () => {
     expect(resolveHorarioIds(HORARIOS, formativo.key, "3")).toEqual([2, 1]);
+  });
+});
+
+describe("splitMembershipPeriod (ADMB-06: Desde / Hasta as two dates)", () => {
+  it("splits a backend period into its two ISO days", () => {
+    expect(splitMembershipPeriod("2026-07-01 – 2026-07-31")).toEqual({ desde: "2026-07-01", hasta: "2026-07-31" });
+  });
+
+  it("accepts a plain hyphen separator", () => {
+    expect(splitMembershipPeriod("2026-07-01 - 2026-07-31")).toEqual({ desde: "2026-07-01", hasta: "2026-07-31" });
+  });
+
+  it("leaves both ends empty when the period is not two ISO days", () => {
+    expect(splitMembershipPeriod("")).toEqual({ desde: "", hasta: "" });
+    expect(splitMembershipPeriod("julio 2026")).toEqual({ desde: "", hasta: "" });
   });
 });

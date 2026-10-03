@@ -273,6 +273,23 @@ describe("ReportsPage — preview area", () => {
     expect(mockFetchNuevosPorPeriodo).not.toHaveBeenCalled();
   });
 
+  it("asks for both dates and keeps downloads off on an empty custom range, for pagos too (ADMB-31)", async () => {
+    mockFetchPagosReporte.mockResolvedValue([PAGO]);
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+
+    choosePreset(/reporte de pagos/i);
+    chooseRangePreset("Personalizado");
+    mockFetchPagosReporte.mockClear();
+
+    expect(screen.getAllByText(/Elija Desde y Hasta para continuar/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Rango sin definir/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Listo: descargue/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Generar PDF/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Exportar a Excel/ })).toBeDisabled();
+    expect(mockFetchPagosReporte).not.toHaveBeenCalled();
+  });
+
   it("defaults to 'Este mes' and previews it immediately, with no manual entry", async () => {
     mockFetchNuevosPorPeriodo.mockResolvedValue([PERSONA]);
     render(<ReportsPage />);
@@ -844,10 +861,11 @@ describe("ReportsPage — Exportar a Excel", () => {
     expect(columns.map((c) => c.header)).toEqual([
       "Estudiante",
       "Responsable de pago",
-      "Período",
+      "Desde",
+      "Hasta",
       "Monto",
       "Método",
-      "Subido",
+      "Fecha de registro",
       "Estado",
     ]);
     await waitFor(() =>
@@ -962,12 +980,13 @@ describe("ReportsPage — three-step flow, grouped exports and rail", () => {
     expect(screen.queryByText(/ver ayuda/i)).not.toBeInTheDocument();
   });
 
-  it("bounds the preview and keeps its header sticky", async () => {
+  it("never clips a row of the preview page and keeps its header sticky", async () => {
     mockFetchNuevosPorPeriodo.mockResolvedValue([PERSONA]);
     render(<ReportsPage />);
 
     const region = await screen.findByRole("region", { name: /tabla desplazable/i });
-    expect(region.className).toContain("max-h-96");
+    // ADMB-29: a fixed max height cut the last visible row in half.
+    expect(region.className).not.toMatch(/max-h-/);
     expect(screen.getByRole("columnheader", { name: "Nombre" }).className).toContain("sticky");
   });
 });
