@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
+from urllib.parse import urlparse
 
 from app.dominio.enums import (
     EstadoMembresia, TipoModalidad, EstadoPago, TipoPago, EfectoCoberturaCorreccion,
@@ -11,9 +12,20 @@ from app.servicios_negocio.dtos.validadores import NombrePresentado
 
 
 # --- TipoMembresia ---
+# ADM-06 (QA3): tarifa entre 1.00 y 1000.00 con a lo sumo 2 decimales. Sin
+# tope, `1e30` rebasaba la columna NUMERIC y terminaba en un 500.
+PRECIO_MINIMO_TIPO_MEMBRESIA = Decimal("1.00")
+PRECIO_MAXIMO_TIPO_MEMBRESIA = Decimal("1000.00")
+
+
 class TipoMembresiaCreateDTO(BaseModel):
     categoria: str
-    precio: Decimal = Field(..., gt=0)
+    precio: Decimal = Field(
+        ...,
+        ge=PRECIO_MINIMO_TIPO_MEMBRESIA,
+        le=PRECIO_MAXIMO_TIPO_MEMBRESIA,
+        decimal_places=2,
+    )
     modalidad: TipoModalidad
 
 
@@ -41,7 +53,12 @@ class TipoMembresiaUpdateDTO(BaseModel):
     problema real. El rechazo debe pasar en esta capa -- antes de tocar la
     base -- con un 422 que sí lo nombra."""
     categoria: Optional[str] = Field(None, min_length=1, max_length=80)
-    precio: Optional[Decimal] = Field(None, gt=0)
+    precio: Optional[Decimal] = Field(
+        None,
+        ge=PRECIO_MINIMO_TIPO_MEMBRESIA,
+        le=PRECIO_MAXIMO_TIPO_MEMBRESIA,
+        decimal_places=2,
+    )
     modalidad: Optional[TipoModalidad] = None
 
     @field_validator("categoria", "precio", "modalidad", mode="before")
@@ -204,6 +221,16 @@ class PagoCreateDTO(BaseModel):
 
 class PagoValidarDTO(BaseModel):
     estado_pago: EstadoPago
+
+    @field_validator("estado_pago")
+    @classmethod
+    def _solo_resoluciones(cls, valor: EstadoPago) -> EstadoPago:
+        # `PENDIENTE_VALIDACION` no es una resolución: el servicio lo trataba
+        # como rechazo.
+        if valor not in (EstadoPago.APROBADO, EstadoPago.RECHAZADO):
+            raise ValueError("El estado del pago debe ser aprobado o rechazado.")
+        return valor
+
     motivo_rechazo: Optional[str] = Field(None, max_length=255)
     # Issue #459: motivo de la excepción auditada para aprobar una
     # TRANSFERENCIA sin comprobante adjunto. Opcional a nivel de este DTO
@@ -462,6 +489,16 @@ class CorreccionPagoResultadoDTO(ResponseBase, BaseModel):
 class ComprobantePagoCreateDTO(BaseModel):
     archivo_url: str
     formato_archivo: str
+
+    @field_validator("archivo_url")
+    @classmethod
+    def _url_web(cls, valor: str) -> str:
+        # El enlace se muestra como comprobante oficial: solo https,
+        # nunca `http:`, `javascript:` ni `data:`.
+        partes = urlparse(valor)
+        if partes.scheme != "https" or not partes.netloc:
+            raise ValueError("La URL del comprobante debe comenzar con https://.")
+        return valor
 
 
 class ComprobantePagoResponseDTO(ResponseBase, BaseModel):

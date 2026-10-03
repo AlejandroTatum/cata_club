@@ -24,6 +24,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.dominio.cedula import cedula_valida
+from tests.nombres_validos import nombre_unico
 from app.dominio.modelos import RecuperacionOutbox
 from app.infraestructura.asuntos_correo import ASUNTO_RECUPERACION
 from app.infraestructura.repositorios.recuperacion_outbox_repositorio import (
@@ -113,7 +114,7 @@ def smtp_configurado(monkeypatch):
 
 def _crear_persona(client, cedula):
     payload = {
-        "nombres": "Test", "apellidos": cedula, "cedula": cedula,
+        "nombres": "Test", "apellidos": nombre_unico(cedula), "cedula": cedula,
         "fecha_nacimiento": "2000-05-14", "telefono": "0991234567",
     }
     return client.post("/api/v1/personas/", json=payload).json()

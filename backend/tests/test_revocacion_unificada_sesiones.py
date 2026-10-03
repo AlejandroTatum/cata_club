@@ -37,7 +37,9 @@ def usuario_real(db_session):
     db_session.add(persona)
     db_session.flush()
     db_session.add(Usuario(
-        correo="ana@cataclub.test", contrasenia="hash", persona_id=persona.id,
+        correo="ana@cataclub.test",
+        contrasenia=GestorAutenticacion.obtener_hash_contrasenia("claveOriginal1"),
+        persona_id=persona.id,
         roles=[Rol(tipo_rol=TipoRol.ALUMNO, descripcion="Alumno")],
     ))
     db_session.commit()

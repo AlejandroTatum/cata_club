@@ -6,6 +6,7 @@ from typing import get_args
 import pytest
 
 from app.dominio.cedula import cedula_valida
+from tests.nombres_validos import nombre_unico
 from app.dominio.enums import EstadoMembresia, EstadoPago
 from app.dominio.modelos import AsignacionDescuento, CoberturaBonificada, Descuento, Membresia, Pago, Persona
 from app.presentacion.routers import membresias_pagos_router as membresias_pagos_router_mod
@@ -1230,7 +1231,7 @@ def _crear_alumno_con_representante(client, cedula, representante_id):
     return client.post(
         "/api/v1/personas/",
         json={
-            "nombres": "Alumno", "apellidos": f"Familia{cedula}", "cedula": cedula,
+            "nombres": "Alumno", "apellidos": nombre_unico(cedula, "Familia"), "cedula": cedula,
             "fecha_nacimiento": "2010-05-14", "telefono": "0991234567",
             "representante_id": representante_id,
         },

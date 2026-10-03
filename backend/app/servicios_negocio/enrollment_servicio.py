@@ -29,7 +29,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import (
-    AntecedentesClub, Enfermedades, FichaMedica, Persona, Usuario,
+    AntecedentesClub, Enfermedades, FichaMedica, Institucion, Persona, Usuario,
     VerificacionCorreoOutbox,
 )
 from app.servicios_negocio.consentimiento_legal_servicio import (
@@ -213,6 +213,12 @@ class EnrollmentServicio:
         # duplicada dejaba al representante huérfano en la base.
         if self.repo_persona.obtener_por_cedula(datos.alumno.cedula):
             raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
+
+        # Una institución inexistente violaría la FK al insertar y el
+        # `IntegrityError` se confundiría con un duplicado de identidad.
+        institucion_id = datos.alumno.institucion_id
+        if institucion_id is not None and self.db.get(Institucion, institucion_id) is None:
+            raise OperacionInvalida("La institución seleccionada no es válida.")
 
         # Validar regla de menores
         if EDAD_MINIMA_ALUMNO <= edad < EDAD_MAYORIA_EDAD and not hay_representante:

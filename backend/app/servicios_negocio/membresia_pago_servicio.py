@@ -595,6 +595,16 @@ class PagoServicio:
         self._notificar_pago_registrado(pago)
         return pago
 
+    @staticmethod
+    def _rechazar_regularizacion_como_pago(datos: PagoCreateDTO) -> None:
+        """REGULARIZACION solo nace en `regularizar_deuda` (monto calculado
+        del período y el descuento vigente); ningún rol la crea por acá."""
+        if datos.tipo_pago == TipoPago.REGULARIZACION:
+            raise OperacionInvalida(
+                "La regularización no se registra como pago: use la "
+                "acción \"Regularizar deuda\" de la membresía."
+            )
+
     def _registrar_pago_sin_commit(
         self,
         datos: PagoCreateDTO,
@@ -630,6 +640,8 @@ class PagoServicio:
                 "Solo la propia persona, su representante, o un administrador "
                 "pueden registrar este pago"
             )
+
+        self._rechazar_regularizacion_como_pago(datos)
 
         # EFECTIVO no tiene guarda propia (issue #565): el administrador
         # autorizado puede registrarlo desde Members a nombre de un tercero, y
@@ -2811,6 +2823,10 @@ class PagoServicio:
 
     def adjuntar_comprobante(self, pago_id: int, datos: ComprobantePagoCreateDTO) -> ComprobantePago:
         pago = self.obtener_pago(pago_id)
+        if pago.estado_pago != EstadoPago.APROBADO:
+            raise OperacionInvalida(
+                "Solo se puede adjuntar el comprobante a un pago aprobado."
+            )
         if pago.comprobante:
             raise OperacionInvalida("Este pago ya tiene un comprobante adjunto")
         comprobante = ComprobantePago(**datos.model_dump(), pago_id=pago_id)

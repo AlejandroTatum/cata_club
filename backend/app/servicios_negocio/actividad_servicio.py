@@ -17,6 +17,7 @@ Fuentes de cada cifra:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import zip_longest
 from datetime import date, datetime, time, timedelta
 from typing import Optional
 
@@ -244,7 +245,13 @@ class ActividadServicio:
         for (fila,) in self.db.execute(
             select(MetricaInstantanea.latencia_buckets).where(MetricaInstantanea.latencia_buckets.isnot(None), *condiciones)
         ):
-            total = list(fila) if not total else [a + b for a, b in zip(total, fila)]
+            # `isnot(None)` solo descarta el NULL de SQL: un JSON `null` (u otro
+            # valor que no sea un arreglo de enteros) llega acá y se ignora.
+            if not isinstance(fila, list) or not all(
+                isinstance(n, int) and not isinstance(n, bool) for n in fila
+            ):
+                continue
+            total = list(fila) if not total else [a + b for a, b in zip_longest(total, fila, fillvalue=0)]
         return total
 
     # =================== Avanzadas ========================================================

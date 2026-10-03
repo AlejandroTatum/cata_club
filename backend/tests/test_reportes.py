@@ -12,6 +12,7 @@ from reportlab.lib import colors
 from reportlab.platypus import Paragraph
 
 from app.dominio.cedula import cedula_valida
+from tests.nombres_validos import nombre_unico
 from app.dominio.modelos import Pago, Persona
 from app.infraestructura import generador_pdf
 from app.infraestructura.generador_pdf import generar_reporte_pdf
@@ -24,7 +25,7 @@ def _crear_persona(client, cedula):
     return client.post(
         "/api/v1/personas/",
         json={
-            "nombres": "Test", "apellidos": cedula, "cedula": cedula,
+            "nombres": "Test", "apellidos": nombre_unico(cedula), "cedula": cedula,
             "fecha_nacimiento": "2000-05-14", "telefono": "0991234567",
         },
     ).json()

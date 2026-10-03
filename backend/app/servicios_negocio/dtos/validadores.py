@@ -13,6 +13,7 @@ validador -- no `Field(pattern=...)` -- para poder distinguir en castellano
 "no tiene el largo correcto" de "ese número no es válido": son dos errores
 y se corrigen distinto.
 """
+import unicodedata
 from datetime import date
 from typing import Annotated, Optional
 
@@ -140,18 +141,46 @@ def _validar_tope_nombre_propio(valor: str, etiqueta: str) -> None:
         raise ValueError(f"{etiqueta} no puede tener más de {_NOMBRE_PROPIO_MAX_CARACTERES} caracteres.")
 
 
+# REG-01 (QA3): PostgreSQL no admite U+0000 en columnas de texto; llegaba
+# hasta el INSERT y se convertía en 500. Se rechaza antes, como 422.
+def _rechazar_nul(valor: str, etiqueta: str) -> None:
+    if "\x00" in valor:
+        raise ValueError(f"{etiqueta} contiene caracteres no permitidos.")
+
+
+# ADM-05 (QA3): lista blanca de caracteres de un nombre o apellido de persona
+# -- letras Unicode (tildes, ñ), espacio, apóstrofo, guion y punto--. Evita
+# que dígitos, marcado (`<b>`, `&`) o emoji lleguen a la base y de ahí a PDF,
+# correos y pantallas. Solo la usan `NombreValidado`/`ApellidoValidado`
+# (nombres de persona); categorías, descuentos y tipos de membresía tienen
+# sus propios DTOs y pueden llevar dígitos.
+def _validar_caracteres_de_nombre(valor: str, etiqueta: str) -> None:
+    if not all(
+        unicodedata.category(c)[0] in ("L", "M") or c in " '-."
+        for c in valor
+    ):
+        raise ValueError(
+            f"{etiqueta} solo puede contener letras, espacios, apóstrofos, "
+            "guiones y puntos."
+        )
+
+
 def _validar_nombre(valor: str) -> str:
+    _rechazar_nul(valor, "El nombre")
     if not valor.strip():
         raise ValueError("El nombre es obligatorio.")
     normalizado = normalizar_nombre_propio(valor)
+    _validar_caracteres_de_nombre(normalizado, "El nombre")
     _validar_tope_nombre_propio(normalizado, "El nombre")
     return normalizado
 
 
 def _validar_apellido(valor: str) -> str:
+    _rechazar_nul(valor, "El apellido")
     if not valor.strip():
         raise ValueError("El apellido es obligatorio.")
     normalizado = normalizar_nombre_propio(valor)
+    _validar_caracteres_de_nombre(normalizado, "El apellido")
     _validar_tope_nombre_propio(normalizado, "El apellido")
     return normalizado
 
@@ -171,8 +200,32 @@ def _validar_apellido(valor: str) -> str:
 # el índice único funcional de `modelos.py:248`, no este validador).
 # Corre DESPUÉS de que `EmailStr` valida el formato: recibe un correo ya
 # sintácticamente válido y solo lo normaliza.
+# REG-02 (QA3): `Usuario.correo` es `String(100)`; un correo más largo pasaba
+# `EmailStr` y reventaba en el INSERT con un 500.
+_CORREO_MAX_CARACTERES = 100
+
+
 def _normalizar_correo(valor: str) -> str:
-    return valor.strip().lower()
+    normalizado = valor.strip().lower()
+    if len(normalizado) > _CORREO_MAX_CARACTERES:
+        raise ValueError(
+            f"El correo no puede tener más de {_CORREO_MAX_CARACTERES} caracteres."
+        )
+    return normalizado
+
+
+# REG-03 (QA3): cada enfermedad es UNA fila de `Enfermedades.nombre_enfermedad`
+# (`String(150)`), así que el tope es por elemento. Sin él, un texto largo
+# reventaba el INSERT con un 500.
+_ENFERMEDAD_MAX_CARACTERES = 150
+
+
+def _validar_enfermedad(valor: str) -> str:
+    if len(valor) > _ENFERMEDAD_MAX_CARACTERES:
+        raise ValueError(
+            f"Cada enfermedad no puede tener más de {_ENFERMEDAD_MAX_CARACTERES} caracteres."
+        )
+    return valor
 
 
 def _validar_contacto_emergencia(valor: str) -> str:
@@ -254,6 +307,7 @@ TipoSangreValidado = Annotated[TipoSangre, AfterValidator(_validar_tipo_sangre)]
 NombreValidado = Annotated[str, AfterValidator(_validar_nombre)]
 ApellidoValidado = Annotated[str, AfterValidator(_validar_apellido)]
 ContactoEmergenciaValidado = Annotated[str, AfterValidator(_validar_contacto_emergencia)]
+EnfermedadValidada = Annotated[str, AfterValidator(_validar_enfermedad)]
 CorreoValidado = Annotated[EmailStr, AfterValidator(_normalizar_correo)]
 ContraseniaValidada = Annotated[str, AfterValidator(_validar_contrasenia)]
 
