@@ -23,6 +23,15 @@ describe("FileDropZone", () => {
     expect(input).toHaveClass("sr-only");
   });
 
+  it("defaults to «o arrástrela aquí» and lets the caller agree the gender with its noun (ADMB-23)", () => {
+    const { unmount } = render(<FileDropZone id="a" label="Foto" hint="h" file={null} onFile={vi.fn()} accept="image/png" />);
+    expect(screen.getByText("o arrástrela aquí")).toBeInTheDocument();
+    unmount();
+    render(<FileDropZone id="b" label="Logo" hint="h" file={null} onFile={vi.fn()} accept="image/png" dropHint="o arrástrelo aquí" />);
+    expect(screen.getByText("o arrástrelo aquí")).toBeInTheDocument();
+    expect(screen.queryByText("o arrástrela aquí")).not.toBeInTheDocument();
+  });
+
   it("offers a Spanish button that opens the picker, and the hint", () => {
     setup();
     const click = vi.spyOn(screen.getByLabelText("Foto (JPG o PNG)"), "click");

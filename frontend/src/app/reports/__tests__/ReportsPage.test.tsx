@@ -209,6 +209,15 @@ describe("ReportsPage — preset cards (18-reportes.html)", () => {
     expect(screen.queryByText(/etiquetas/i)).not.toBeInTheDocument();
   });
 
+  it("paints the preset descriptions in the AA-contrast ink, not the shared ink-3 (ADMB-27)", async () => {
+    render(<ReportsPage />);
+    const radios = await screen.findAllByRole("radio");
+    for (const radio of radios) {
+      const description = radio.querySelector("span.text-xs");
+      expect(description).toHaveClass("text-ink-3-strong");
+    }
+  });
+
   it("marks the selected preset with the coal + ball-dot treatment, never red", async () => {
     render(<ReportsPage />);
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());

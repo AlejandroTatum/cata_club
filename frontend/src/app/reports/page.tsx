@@ -624,14 +624,14 @@ function ReportsContent(): React.ReactElement {
                   aria-hidden="true"
                   className={cn(
                     "grid h-9 w-9 flex-none place-items-center rounded-card",
-                    selected ? "bg-coal text-white" : "bg-sunken text-ink-3",
+                    selected ? "bg-coal text-white" : "bg-sunken text-ink-3-strong",
                   )}
                 >
                   <Icon size={ICON.base} strokeWidth={1.5} />
                 </span>
                 <span className="flex min-w-0 flex-col gap-0.5 pr-5">
                   <b className="text-sm text-ink">{item.title}</b>
-                  <span className="text-xs text-ink-3">{item.description}</span>
+                  <span className="text-xs text-ink-3-strong">{item.description}</span>
                 </span>
                 {selected ? (
                   <span

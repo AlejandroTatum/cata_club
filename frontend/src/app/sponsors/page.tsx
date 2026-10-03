@@ -109,6 +109,7 @@ export default function SponsorsPage(): React.ReactElement {
             hint="JPG o PNG · máx. 5 MB"
             accept="image/jpeg,image/png"
             chooseLabel="Elegir logo"
+            dropHint="o arrástrelo aquí"
             file={archivo}
             onFile={aceptarArchivo}
           />
