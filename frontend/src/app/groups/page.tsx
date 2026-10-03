@@ -180,13 +180,44 @@ function pendingDeletionsMessage(
   return `Se eliminará la categoría completa (todos sus días: ${dias}). Esta acción no se puede deshacer.`;
 }
 
-function pendingDeletionsConfirmLabel(
-  pending: { alumnos: AlumnoHorario[] }[] | null,
-  scope: "days" | "group",
-): string {
-  const conAlumnos = pending !== null && countUniqueAlumnos(pending) > 0;
-  if (scope === "group") return conAlumnos ? "Eliminar de todos modos" : "Eliminar categoría";
-  return "Guardar de todos modos";
+/** Info-only dialog: the server refuses this action while students are
+ *  enrolled (409), so there is nothing to confirm — only to close (ADMB-04). */
+function BlockedDialog({
+  title,
+  message,
+  onClose,
+}: {
+  title: string;
+  message: string;
+  onClose: () => void;
+}): React.ReactElement {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    closeRef.current?.focus();
+    function onKeyDown(event: KeyboardEvent): void {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-cata-black/40 px-4" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="blocked-dialog-title"
+        aria-describedby="blocked-dialog-message"
+        onClick={(event) => event.stopPropagation()}
+        className="card w-full max-w-sm p-6"
+      >
+        <h2 id="blocked-dialog-title" className="text-base font-semibold text-cata-red">{title}</h2>
+        <p id="blocked-dialog-message" className="mt-2 text-sm text-cata-text/65">{message}</p>
+        <div className="mt-6 flex justify-end">
+          <Button ref={closeRef} onClick={onClose}>Entendido</Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function extractErrorMessage(err: unknown, fallback: string): string {
@@ -2080,18 +2111,27 @@ export default function GroupsPage(): React.ReactElement {
         {renderRail()}
         </div>
 
+        {pendingDeletions !== null && pendingDeletions.length > 0 && (
+          countUniqueAlumnos(pendingDeletions) > 0 ? (
+            <BlockedDialog
+              title="Categoría con alumnos inscritos"
+              message={pendingDeletionsMessage(pendingDeletions, pendingDeletionScope)}
+              onClose={handleCancelPendingDeletions}
+            />
+          ) : null
+        )}
         <ConfirmDialog
-          open={pendingDeletions !== null && pendingDeletions.length > 0}
-          variant="danger"
-          title={
-            pendingDeletions && countUniqueAlumnos(pendingDeletions) > 0
-              ? "Categoría con alumnos inscritos"
-              : "Eliminar categoría completa"
+          open={
+            pendingDeletions !== null &&
+            pendingDeletions.length > 0 &&
+            countUniqueAlumnos(pendingDeletions) === 0
           }
+          variant="danger"
+          title="Eliminar categoría completa"
           message={
             pendingDeletions ? pendingDeletionsMessage(pendingDeletions, pendingDeletionScope) : ""
           }
-          confirmLabel={pendingDeletionsConfirmLabel(pendingDeletions, pendingDeletionScope)}
+          confirmLabel="Eliminar categoría"
           onConfirm={() => void handleConfirmPendingDeletions()}
           onCancel={handleCancelPendingDeletions}
         />

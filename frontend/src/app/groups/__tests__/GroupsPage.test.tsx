@@ -1024,14 +1024,17 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
     expect(within(dialog).getByText(/pase primero a esos alumnos a otra categoría/i)).toBeInTheDocument();
     expect(within(dialog).queryByText(/desasignad/i)).not.toBeInTheDocument();
     expect(mockActualizarCategoria).not.toHaveBeenCalled();
+    // The server would answer 409, so no destructive confirm is offered.
+    expect(within(dialog).queryByRole("button", { name: /de todos modos/i })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /confirmar/i })).not.toBeInTheDocument();
 
-    fireEvent.click(within(dialog).getByRole("button", { name: /cancelar/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Entendido" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(mockActualizarCategoria).not.toHaveBeenCalled();
     expect(mockDesasignarAlumnoDeHorario).not.toHaveBeenCalled();
   });
 
-  it("confirming the pending removal saves atomically via actualizarCategoria (not desasignarAlumnoDeHorario, which would unenroll Ana from every OTHER día of the categoría too)", async () => {
+  it("closing the blocked dialog (Entendido) saves nothing and keeps the form open", async () => {
     mockFetchAlumnosPorHorario.mockResolvedValue([
       { id: 1, personaId: 10, personaNombreCompleto: "Ana Pérez", horarioId: 303, horarioDia: "MIERCOLES", horarioHoraInicio: "18:00", horarioHoraFin: "20:00", fechaAsignacion: "2026-01-01" },
     ]);
@@ -1041,15 +1044,11 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /guardar de todos modos/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Entendido" }));
 
-    await waitFor(() => {
-      expect(mockActualizarCategoria).toHaveBeenCalledWith(
-        "COMPETITIVO",
-        expect.objectContaining({ dias: ["LUNES"] }),
-      );
-    });
-    expect(mockDesasignarAlumnoDeHorario).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(mockActualizarCategoria).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: "Editar categoría" })).toBeInTheDocument();
   });
 
   it("stays open and shows the server's message instead of closing/resyncing when the save fails (fully atomic: nothing was written)", async () => {
@@ -1063,7 +1062,7 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
     expect(mockFetchHorarios).toHaveBeenCalledTimes(1); // only the initial load — no resync on failure.
   });
 
-  it("clears a stale duplicate-label banner once submitCategoria's direct call (from the pending-deletions confirmation) fails on a different error (issue #1343)", async () => {
+  it("clears a stale duplicate-label banner once submitCategoria's direct call fails on a different error (issue #1343)", async () => {
     // First attempt fails on a duplicate-label 400 and leaves the banner up,
     // with its "Editar «Formativo»" action.
     mockActualizarCategoria
@@ -1071,24 +1070,16 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
       // Second attempt fails too, but on a DIFFERENT error — the stale
       // banner from the first attempt must not linger next to it.
       .mockRejectedValueOnce(new ApiClientError("La categoría ya tiene ese nombre.", 400));
-    mockFetchAlumnosPorHorario.mockResolvedValue([
-      { id: 1, personaId: 10, personaNombreCompleto: "Ana Pérez", horarioId: 303, horarioDia: "MIERCOLES", horarioHoraInicio: "18:00", horarioHoraFin: "20:00", fechaAsignacion: "2026-01-01" },
-    ]);
     await openEditAndSubmit();
 
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
     await screen.findByRole("button", { name: "Editar «Formativo»" });
 
-    // Unticking Miércoles, which has an enrolled student, routes the next
-    // submit through the pending-deletions confirmation dialog instead of
-    // `handleSubmit`'s direct call at the bottom — confirming it calls
-    // `submitCategoria()` directly from `handleConfirmPendingDeletions`,
-    // the path issue #1343 flagged as uncovered.
+    // A second submit that fails on a DIFFERENT error must clear the banner.
+    // (With students enrolled the dialog is now informational only — ADMB-04 —
+    // so this runs through the direct save path.)
     fireEvent.click(screen.getByRole("button", { name: "Miércoles" }));
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
-
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /guardar de todos modos/i }));
 
     expect(await screen.findByText("La categoría ya tiene ese nombre.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Editar «Formativo»" })).not.toBeInTheDocument();
@@ -1864,25 +1855,38 @@ describe("GroupsPage — deleting removes la categoría entera atomically (docs/
     ).toBeInTheDocument();
     expect(within(dialog).getByText(/pase primero a esos alumnos a otra categoría/i)).toBeInTheDocument();
     expect(within(dialog).queryByText(/desasignad/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /de todos modos/i })).not.toBeInTheDocument();
     expect(mockEliminarCategoria).not.toHaveBeenCalled();
   });
 
-  it("confirming deletes the categoría with ONE eliminarCategoria call (not desasignarAlumnoDeHorario)", async () => {
-    mockFetchAlumnosPorHorario.mockImplementation((horarioId: number) => {
-      if (horarioId === 701) {
-        return Promise.resolve([
-          { id: 1, personaId: 10, personaNombreCompleto: "Ana Pérez", horarioId: 701, horarioDia: "LUNES", horarioHoraInicio: "18:00", horarioHoraFin: "20:00", fechaAsignacion: "2026-01-01" },
-        ]);
-      }
-      return Promise.resolve([]);
-    });
-
+  it("with students enrolled, the delete dialog only offers to close and never calls the API (ADMB-04)", async () => {
+    mockFetchAlumnosPorHorario.mockImplementation((horarioId: number) =>
+      Promise.resolve(
+        horarioId === 701
+          ? [{ id: 1, personaId: 10, personaNombreCompleto: "Ana Pérez", horarioId: 701, horarioDia: "LUNES", horarioHoraInicio: "18:00", horarioHoraFin: "20:00", fechaAsignacion: "2026-01-01" }]
+          : [],
+      ),
+    );
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
     await openDeleteFromEditPanel();
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /eliminar de todos modos/i }));
+    expect(within(dialog).queryByRole("button", { name: /eliminar|confirmar|de todos modos/i })).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Entendido" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(mockEliminarCategoria).not.toHaveBeenCalled();
+  });
+
+  it("with no students, confirming deletes the categoría with ONE eliminarCategoria call", async () => {
+    mockFetchAlumnosPorHorario.mockResolvedValue([]);
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    await openDeleteFromEditPanel();
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Eliminar categoría" }));
 
     await waitFor(() => {
       expect(mockEliminarCategoria).toHaveBeenCalledWith("COMPETITIVO");
