@@ -100,7 +100,7 @@ export default function PaymentHistorySection({
         <div className="overflow-hidden rounded-ctl border border-line">
           <div
             aria-hidden="true"
-            className="hidden grid-cols-[1fr_1.4fr_auto] gap-3 bg-sunken px-3 py-2 text-2xs font-semibold text-ink-3 sm:grid"
+            className="hidden grid-cols-[1fr_1.4fr_auto] gap-3 bg-sunken px-3 py-2 text-2xs font-semibold text-ink-3-strong sm:grid"
           >
             <span>Monto</span>
             <span>Cobertura</span>

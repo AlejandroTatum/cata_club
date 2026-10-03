@@ -16,7 +16,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle2, Loader2, Mail, Save } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { buttonClasses } from "@/components/ui";
@@ -28,9 +28,11 @@ import type { MemberAccount } from "./members-utils";
 
 interface AccountInfoSectionProps {
   account: MemberAccount;
+  /** ADMA-12: tells the section header whether a field differs from what is saved. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
-export default function AccountInfoSection({ account }: AccountInfoSectionProps): React.ReactElement {
+export default function AccountInfoSection({ account, onDirtyChange }: AccountInfoSectionProps): React.ReactElement {
   const personaId = Number(account.id);
   const [nombres, setNombres] = useState(account.nombres);
   const [apellidos, setApellidos] = useState(account.apellidos);
@@ -46,6 +48,18 @@ export default function AccountInfoSection({ account }: AccountInfoSectionProps)
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // What is on the server right now: the account as opened, then what was last saved.
+  const [baseline, setBaseline] = useState({
+    nombres: account.nombres,
+    apellidos: account.apellidos,
+    telefono: toPhoneFieldDigits(account.telefono ?? null),
+  });
+  const dirty =
+    nombres !== baseline.nombres || apellidos !== baseline.apellidos || telefono !== baseline.telefono;
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
 
   async function handleSave(): Promise<void> {
     // Issue #1207's phoneless represented minor stays representable from
@@ -67,6 +81,7 @@ export default function AccountInfoSection({ account }: AccountInfoSectionProps)
         telefono: toStoredPhone(telefono),
       });
       setSaved(true);
+      setBaseline({ nombres, apellidos, telefono });
     } catch (err: unknown) {
       setError(toUserMessage(err, "No se pudieron guardar los cambios."));
     } finally {

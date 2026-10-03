@@ -438,6 +438,15 @@ describe("getAccountRoleLabel", () => {
   it('keeps "Estudiante" for a student', () => {
     expect(getAccountRoleLabel({ ...base, role: "estudiante" })).toBe("Estudiante");
   });
+
+  it('ADMA-06: names an admin «Administrador» and a trainer «Entrenador», not «Representante»', () => {
+    expect(getAccountRoleLabel({ ...base, backendRoles: ["ADMINISTRADOR"] })).toBe("Administrador");
+    expect(getAccountRoleLabel({ ...base, backendRoles: ["ENTRENADOR"] })).toBe("Entrenador");
+  });
+
+  it("ADMA-06: reads the roles passed in over the ones the list carried", () => {
+    expect(getAccountRoleLabel({ ...base, backendRoles: ["ADMINISTRADOR"] }, ["ENTRENADOR"])).toBe("Entrenador");
+  });
 });
 
 // ---------------------------------------------------------------------------

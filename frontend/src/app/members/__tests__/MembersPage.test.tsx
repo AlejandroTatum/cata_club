@@ -373,7 +373,7 @@ describe("MembersPage — Editar member modal", () => {
     expect(left.parentElement).toHaveClass("lg:grid-cols-2");
     expect(within(right).getByRole("heading", { name: "Roles" })).toBeInTheDocument();
     // Each group still declares how it persists.
-    expect(within(left).getByText("Requiere guardar")).toBeInTheDocument();
+    expect(within(left).getByText("Sin cambios")).toBeInTheDocument();
     expect(within(right).getAllByText("Se guarda al instante")).toHaveLength(2);
     // Nombres and apellidos share one row from `sm`.
     const nombres = within(dialog).getByLabelText("Nombres");
@@ -895,6 +895,99 @@ describe("MembersPage — Editar member modal", () => {
     expect(adminCheckbox).toBeChecked();
   });
 
+  it("ADMA-08: deactivating the account asks for confirmation first, and cancelling changes nothing", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    const dialog = await openModalAndWaitForRoles(row);
+    fireEvent.click(within(dialog).getByRole("button", { name: /^activa$/i }));
+
+    expect(screen.getByText(/¿Desactivar la cuenta de María González\?/)).toBeInTheDocument();
+    expect(screen.getByText(/No podrá iniciar sesión hasta que la active de nuevo/)).toBeInTheDocument();
+    expect(mockCambiarEstadoCuenta).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /^cancelar$/i }));
+    expect(mockCambiarEstadoCuenta).not.toHaveBeenCalled();
+  });
+
+  it("ADMA-06: the header badge follows the account state once it is deactivated", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [{ ...ACCOUNT, accountState: "active" }] });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    const dialog = await openModalAndWaitForRoles(row);
+    const header = dialog.querySelector(".bg-sunken") as HTMLElement;
+    expect(within(header).getByText("Activa")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^activa$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^desactivar$/i }));
+
+    await waitFor(() => expect(within(header).getByText("Inactiva")).toBeInTheDocument());
+    expect(within(header).queryByText("Activa")).not.toBeInTheDocument();
+  });
+
+  it("ADMA-12: the identity section reads «Sin cambios» until a field is edited", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    const dialog = await openModalAndWaitForRoles(row);
+    const datos = within(dialog).getByRole("heading", { name: "Datos de la cuenta" }).parentElement as HTMLElement;
+    expect(within(datos).getByText("Sin cambios")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Requiere guardar")).not.toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByLabelText("Nombres"), { target: { value: "María José" } });
+    expect(within(datos).getByText("Cambios sin guardar")).toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByLabelText("Nombres"), { target: { value: "María" } });
+    expect(within(datos).getByText("Sin cambios")).toBeInTheDocument();
+  });
+
+  it("ADMA-03/22: the «Representado por» column gives way below lg and the box wraps on a phone", async () => {
+    mockFetchMembers.mockResolvedValue({
+      accounts: [{ ...ACCOUNT, representadoPor: "Santiago Delgado Rivadeneira", representadoPorId: 9 }],
+    });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    const table = row.closest("table") as HTMLElement;
+    expect(within(table).getByRole("columnheader", { name: "Representado por" })).toHaveClass("hidden", "lg:table-cell");
+    expect(within(row).getAllByText(/Representado por Santiago Delgado Rivadeneira/).length).toBeGreaterThan(0);
+
+    const card = await findAccountCard();
+    const box = within(card).getByText(/Representado por Santiago Delgado Rivadeneira/);
+    expect(box).toHaveClass("whitespace-normal", "max-w-full");
+  });
+
+  it("ADMA-33: the student panel says «En el club», not a second «Estado»", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    const dialog = await openModalAndWaitForRoles(row);
+    const panel = within(dialog).getByRole("heading", { name: "Estudiantes a cargo" }).closest("section") as HTMLElement;
+    expect(within(panel).getByText("En el club")).toBeInTheDocument();
+    expect(within(panel).queryByText("Estado")).not.toBeInTheDocument();
+  });
+
   it("toggling the account activo/inactivo state inside the modal calls cambiarEstadoCuenta", async () => {
     render(
       <ToastProvider>
@@ -905,6 +998,7 @@ describe("MembersPage — Editar member modal", () => {
 
     const dialog = await openModalAndWaitForRoles(row);
     fireEvent.click(within(dialog).getByRole("button", { name: /^activa$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^desactivar$/i }));
 
     await waitFor(() => {
       expect(mockCambiarEstadoCuenta).toHaveBeenCalledWith(1, false);
@@ -2196,12 +2290,12 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
     for (const title of ["Datos de la cuenta", "Estado de la cuenta", "Roles", "Estudiantes a cargo"]) {
       const heading = within(dialog).getByRole("heading", { name: title });
       const header = heading.parentElement as HTMLElement;
-      expect(within(header).getByText(/se guarda al instante|requiere guardar/i)).toBeInTheDocument();
+      expect(within(header).getByText(/se guarda al instante|sin cambios|cambios sin guardar/i)).toBeInTheDocument();
     }
 
     const datos = within(dialog).getByRole("heading", { name: "Datos de la cuenta" })
       .parentElement as HTMLElement;
-    expect(within(datos).getByText("Requiere guardar")).toBeInTheDocument();
+    expect(within(datos).getByText("Sin cambios")).toBeInTheDocument();
 
     const roles = within(dialog).getByRole("heading", { name: "Roles" }).parentElement as HTMLElement;
     expect(within(roles).getByText("Se guarda al instante")).toBeInTheDocument();

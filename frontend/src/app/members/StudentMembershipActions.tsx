@@ -40,25 +40,25 @@ function MembershipSummary({ student }: { student: MemberStudentSummary }): Reac
       className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-ctl border border-line bg-sunken px-4 py-3 text-xs"
     >
       <div>
-        <dt className="text-ink-3">Estado</dt>
+        <dt className="text-ink-3-strong">Estado</dt>
         <dd className="mt-1">
           <Badge tone={tone}>{label}</Badge>
         </dd>
       </div>
       <div>
-        <dt className="text-ink-3">Plan</dt>
+        <dt className="text-ink-3-strong">Plan</dt>
         <dd className="mt-1">
           <DataBox>{membresia.tipo}</DataBox>
         </dd>
       </div>
       <div>
-        <dt className="text-ink-3">Tarifa mensual</dt>
+        <dt className="text-ink-3-strong">Tarifa mensual</dt>
         <dd className="mt-1">
           <DataBox>{membresia.esGratuidadFamiliar ? "Gratuidad familiar" : formatCurrency(membresia.monto)}</DataBox>
         </dd>
       </div>
       <div>
-        <dt className="text-ink-3">Vigencia</dt>
+        <dt className="text-ink-3-strong">Vigencia</dt>
         <dd className="mt-1">{period ? <DataBox>{period}</DataBox> : <span className="text-ink-3">—</span>}</dd>
       </div>
     </dl>

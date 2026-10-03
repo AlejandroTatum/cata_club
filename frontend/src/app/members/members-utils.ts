@@ -452,8 +452,15 @@ export function getPayerTypeLabel(role: PayerType): string {
  * a person with no role at all used to read "Representante". With no real
  * backend role and nobody they represent, say so instead of guessing.
  */
-export function getAccountRoleLabel(account: MemberAccount): string {
-  const hasRole = (account.backendRoles?.length ?? 0) > 0;
+export function getAccountRoleLabel(
+  account: MemberAccount,
+  roles: BackendTipoRol[] | undefined = account.backendRoles,
+): string {
+  // ADMA-06: an account holds one role, and an admin or trainer must not read
+  // as «Representante» just because `account.role` defaults to it.
+  if (roles?.includes("ADMINISTRADOR")) return "Administrador";
+  if (roles?.includes("ENTRENADOR")) return "Entrenador";
+  const hasRole = (roles?.length ?? 0) > 0;
   const representsSomeone = (account.dependientes?.length ?? 0) > 0;
   if (account.role === "representante" && !hasRole && !representsSomeone) {
     return "Sin rol asignado";

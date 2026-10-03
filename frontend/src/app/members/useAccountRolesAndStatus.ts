@@ -44,6 +44,8 @@ export interface AccountRolesAndStatus {
   stateLoading: boolean;
   roleError: string | null;
   stateError: string | null;
+  /** True once a role or the account state was changed from this dialog (ADMA-06). */
+  changed: boolean;
   toggleRole: (role: BackendTipoRol) => Promise<void>;
   toggleEstado: () => Promise<void>;
 }
@@ -58,6 +60,7 @@ export function useAccountRolesAndStatus(personaId: number): AccountRolesAndStat
   const [stateLoading, setStateLoading] = useState(false);
   const [roleError, setRoleError] = useState<string | null>(null);
   const [stateError, setStateError] = useState<string | null>(null);
+  const [changed, setChanged] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -106,10 +109,12 @@ export function useAccountRolesAndStatus(personaId: number): AccountRolesAndStat
         if (hasRole) {
           await quitarRol(personaId, role);
           setRoles((prev) => prev.filter((r) => r !== role));
+          setChanged(true);
           showSuccess(`Rol ${ROLE_LABELS[role]} quitado correctamente.`);
         } else {
           await asignarRol(personaId, role);
           setRoles((prev) => [...prev, role]);
+          setChanged(true);
           showSuccess(`Rol ${ROLE_LABELS[role]} asignado correctamente.`);
         }
       } catch (error: unknown) {
@@ -125,14 +130,15 @@ export function useAccountRolesAndStatus(personaId: number): AccountRolesAndStat
         } else if (message.toLowerCase().includes("no tiene el rol")) {
           setRoles((prev) => prev.filter((r) => r !== role));
         } else {
+          // ADMA-07: shown once, in the Roles panel. A toast on top of the
+          // panel said the same sentence twice and stacked on repeated clicks.
           setRoleError(message);
-          showError(message);
         }
       } finally {
         setRoleLoading(null);
       }
     },
-    [personaId, roles, showError, showSuccess],
+    [personaId, roles, showSuccess],
   );
 
   const toggleEstado = useCallback(async (): Promise<void> => {
@@ -143,6 +149,7 @@ export function useAccountRolesAndStatus(personaId: number): AccountRolesAndStat
     try {
       await cambiarEstadoCuenta(personaId, next);
       setActivo(next);
+      setChanged(true);
       showSuccess(next ? "Cuenta activada correctamente." : "Cuenta desactivada correctamente.");
     } catch (error: unknown) {
       const message = toUserMessage(error, "No se pudo cambiar el estado.");
@@ -162,6 +169,7 @@ export function useAccountRolesAndStatus(personaId: number): AccountRolesAndStat
     stateLoading,
     roleError,
     stateError,
+    changed,
     toggleRole,
     toggleEstado,
   };
