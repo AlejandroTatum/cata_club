@@ -114,7 +114,8 @@ import EnrollFrame from "./EnrollFrame";
 import EnrollNav from "./EnrollNav";
 import EnrollSignedInNotice from "./EnrollSignedInNotice";
 import EnrollSteps from "./EnrollSteps";
-import useWideLayout from "./useWideLayout";
+import EnrollSkeleton from "./EnrollSkeleton";
+import useWideLayout, { useHydrated } from "./useWideLayout";
 import EnrollSummary from "./EnrollSummary";
 
 // ---------------------------------------------------------------------------
@@ -329,6 +330,13 @@ function EnrollWizard(): React.ReactElement {
   const currentIndex = effectiveSteps.indexOf(step);
   const isFirst = currentIndex === 0;
   const wide = useWideLayout();
+  const hydrated = useHydrated();
+  // Only the FIRST resolution gets the placeholder: later session refreshes
+  // (the one confirming an enrolment flips `isLoading` again) must not swap
+  // the wizard for a skeleton.
+  const [settled, setSettled] = useState(false);
+  const ready = hydrated && !isLoading;
+  if (ready && !settled) setSettled(true);
   const isLast = currentIndex === effectiveSteps.length - 1;
 
   /**
@@ -1133,7 +1141,8 @@ function EnrollWizard(): React.ReactElement {
             card. The warning card stays reserved for an actual out-of-range
             date, which the birth-date field's own validator already reports
             inline (see fechaNacimientoRepresentante in enroll-utils.ts). */}
-        <p className="mt-field text-xs text-ink-3">
+        {/* REG-14: from `lg` the same sentence lives in the aside. */}
+        <p className="mt-field text-xs text-ink-3 lg:hidden">
           Al inscribir a un dependiente, confirma ser su responsable legal.
         </p>
       </div>
@@ -1230,7 +1239,7 @@ function EnrollWizard(): React.ReactElement {
             onTelefonoBlur={() => markTouched("telefonoEmergencia")}
           />
         ) : (
-          <div className="rounded-ctl border border-line-2 bg-canvas p-page text-xs text-ink-2">
+          <div className="rounded-ctl border border-line-2 bg-canvas p-page text-xs text-ink-2 lg:hidden">
             En caso de emergencia, el club lo contactará a usted con el
             nombre y teléfono de representante que ya indicó.
           </div>
@@ -1287,7 +1296,7 @@ function EnrollWizard(): React.ReactElement {
         {/* Label above the datum: the review is two columns now, and a fixed
             label column would leave the value half a card to wrap in. */}
         <div className="min-w-0 flex-1">
-          <p className="text-2xs font-bold uppercase text-ink-3">{label}</p>
+          <p className="text-2xs font-bold uppercase text-ink-3-strong">{label}</p>
           <p className="break-words text-sm font-semibold text-ink">{value}</p>
         </div>
         {/* The flag is a STATUS, so it is the badge the system already has —
@@ -1296,7 +1305,7 @@ function EnrollWizard(): React.ReactElement {
         <Button
           variant="secondary"
           size="sm"
-          className="flex-none"
+          className="min-h-10 min-w-10 flex-none"
           aria-label={`Editar ${label}`}
           onClick={() => goToStep(correctStep)}
         >
@@ -1513,264 +1522,276 @@ function EnrollWizard(): React.ReactElement {
     );
   }
 
+  // REG-17 / FAM-25: until the layout and the session are known, a placeholder
+  // with the final box, so the page is never blank and nothing shifts. It sits
+  // inside the same single landmark as the wizard.
+  const showSkeleton = !ready && !settled;
+
   return (
     // The public enrolment wizard reaches the user through no shell, so the
-    // landmark is declared here — around BOTH branches, so the confirmation
-    // screen is as much "principal" as the form it replaces. It used to borrow
-    // the root layout's, which is the wrapper that stopped being one.
+    // landmark is declared here — around ALL branches (skeleton, form and the
+    // confirmation screen). It used to borrow the root layout's, which is the
+    // wrapper that stopped being one.
     <main>
-      {/* REG-11: a signed-in user must not get the new-account wizard. The
-          confirmation screen is exempt: the auto-login that enrolling performs
-          makes the visitor "signed in" at exactly that moment. */}
-      {isAuthenticated && !confirmed && !submitting ? (
-        <EnrollSignedInNotice
-          backHref={backHrefForRole(session?.user.role)}
-          loggingOut={loggingOut}
-          onLogout={() => {
-            setLoggingOut(true);
-            void logout().finally(() => setLoggingOut(false));
-          }}
-        />
-      ) : confirmed ? (
-        <EnrollConfirmation
-          studentName={`${formData.nombres} ${formData.apellidos}`}
-          isSelf={formData.enrollmentType === "self"}
-          sessionConfirmed={sessionConfirmed}
-          sessionNotice={
-            sessionOutcome !== null && sessionOutcome !== "authenticated"
-              ? unconfirmedSessionNotice(sessionOutcome)
-              : null
-          }
-          accountAreaLink={accountAreaLink}
-          onReset={handleReset}
-        />
+      {showSkeleton ? (
+        <EnrollSkeleton />
       ) : (
+        <>
+        {/* REG-11: a signed-in user must not get the new-account wizard. The
+            confirmation screen is exempt: the auto-login that enrolling performs
+            makes the visitor "signed in" at exactly that moment. */}
+        {isAuthenticated && !confirmed && !submitting ? (
+          <EnrollSignedInNotice
+            backHref={backHrefForRole(session?.user.role)}
+            loggingOut={loggingOut}
+            onLogout={() => {
+              setLoggingOut(true);
+              void logout().finally(() => setLoggingOut(false));
+            }}
+          />
+        ) : confirmed ? (
+          <EnrollConfirmation
+            studentName={`${formData.nombres} ${formData.apellidos}`}
+            isSelf={formData.enrollmentType === "self"}
+            sessionConfirmed={sessionConfirmed}
+            sessionNotice={
+              sessionOutcome !== null && sessionOutcome !== "authenticated"
+                ? unconfirmedSessionNotice(sessionOutcome)
+                : null
+            }
+            accountAreaLink={accountAreaLink}
+            onReset={handleReset}
+          />
+        ) : (
 
-        /* A full-height split (see `EnrollFrame`): the brand panel carries the
-           way out, the title, the vertical steps and the live summary; the form
-           gets the rest. The review step lays its own summary out in two
-           columns, so the panel drops the mirror there. Still no `AppShell`
-           here, so the rhythm lock never looked at this screen; the doctrine
-           (`gap-page` on the column, distances owned by the container) applies
-           all the same.
+          /* A full-height split (see `EnrollFrame`): the brand panel carries the
+             way out, the title, the vertical steps and the live summary; the form
+             gets the rest. The review step lays its own summary out in two
+             columns, so the panel drops the mirror there. Still no `AppShell`
+             here, so the rhythm lock never looked at this screen; the doctrine
+             (`gap-page` on the column, distances owned by the container) applies
+             all the same.
 
-           One back-navigation rule: a sub-page carries a `BackLink` at the TOP,
-           where back navigation lives everywhere else in the product. The
-           destination is conditional because this wizard is public (see
-           PUBLIC_EXCEPTIONS in src/lib/middleware-utils.ts): most visitors
-           arrive from the landing with no account, and sending them to
-           `/student` would bounce them straight to /login. While the session
-           hydrates nobody knows who is asking, so no destination is offered —
-           the placeholder reserves the control's height so the row never jumps.
-           `backHrefForRole` is the same resolver /ayuda uses.
+             One back-navigation rule: a sub-page carries a `BackLink` at the TOP,
+             where back navigation lives everywhere else in the product. The
+             destination is conditional because this wizard is public (see
+             PUBLIC_EXCEPTIONS in src/lib/middleware-utils.ts): most visitors
+             arrive from the landing with no account, and sending them to
+             `/student` would bounce them straight to /login. While the session
+             hydrates nobody knows who is asking, so no destination is offered —
+             the placeholder reserves the control's height so the row never jumps.
+             `backHrefForRole` is the same resolver /ayuda uses.
 
-           The count in the subtitle is read from `effectiveSteps`, not written
-           out. #317 / hallazgo #31: on step 1 itself the count is not yet a
-           COMMITTED fact — the visitor can still swap Jugador/Representante on
-           the very card in front of them — so step 1 states both possibilities
-           and the resolved count is deferred to the step that depends on it. */
-        <EnrollFrame
-          back={
-            isLoading ? (
-              <span className="h-ctl-sm" aria-hidden="true" />
-            ) : (
-              <BackLink href={backHrefForRole(session?.user.role)} tone="coal" />
-            )
-          }
-          eyebrow={isFirst ? "Paso 1" : `Paso ${currentIndex + 1} de ${effectiveSteps.length}`}
-          title="Inscripción de estudiante"
-          subtitle={
-            isFirst
-              ? "4 o 5 pasos y queda dentro del club, según quién se inscriba."
-              : `${effectiveSteps.length} pasos y queda dentro del club.` +
-                (formData.enrollmentType === "self"
-                  ? " Se inscribe usted como jugador."
-                  : " Usted actúa como representante.")
-          }
-          steps={
-            wide && (
-              <EnrollSteps
-                label="Pasos de la inscripción"
-                steps={effectiveSteps.map((s) => STEP_SHORT_LABELS[s])}
-                current={currentIndex + 1}
-                onStepClick={handleStepperJump}
-              />
-            )
-          }
-          summary={wide && renderSummaryRail(true)}
-        >
-          {/* One form around the navigation row and both columns, so the
-              top-bar "Siguiente" is the form's submit control and Enter inside
-              a field advances. `noValidate`: the messages are ours, printed
-              under each field, not the browser's one-at-a-time bubble. */}
-          {/* Narrow layouts only: the summary sits ABOVE the card. From `lg` the
-              same block lives in the brand panel instead. */}
-          {!wide && !isLast && renderSummaryRail(false)}
-
-          <form
-            ref={formRef}
-            noValidate
-            onSubmit={handleConfirm}
-            data-testid="enroll-wizard-card"
-            data-enroll-card
-            className="card flex w-full flex-1 flex-col p-page lg:flex-none lg:p-10"
+             The count in the subtitle is read from `effectiveSteps`, not written
+             out. #317 / hallazgo #31: on step 1 itself the count is not yet a
+             COMMITTED fact — the visitor can still swap Jugador/Representante on
+             the very card in front of them — so step 1 states both possibilities
+             and the resolved count is deferred to the step that depends on it. */
+          <EnrollFrame
+            back={
+              isLoading ? (
+                <span className="h-ctl-sm" aria-hidden="true" />
+              ) : (
+                <BackLink href={backHrefForRole(session?.user.role)} tone="coal" />
+              )
+            }
+            eyebrow={isFirst ? "Paso 1" : `Paso ${currentIndex + 1} de ${effectiveSteps.length}`}
+            title="Inscripción de estudiante"
+            subtitle={
+              isFirst
+                ? "4 o 5 pasos y queda dentro del club, según quién se inscriba."
+                : `${effectiveSteps.length} pasos y queda dentro del club.` +
+                  (formData.enrollmentType === "self"
+                    ? " Se inscribe usted como jugador."
+                    : " Usted actúa como representante.")
+            }
+            steps={
+              wide && (
+                <EnrollSteps
+                  label="Pasos de la inscripción"
+                  steps={effectiveSteps.map((s) => STEP_SHORT_LABELS[s])}
+                  current={currentIndex + 1}
+                  onStepClick={handleStepperJump}
+                />
+              )
+            }
+            summary={wide && renderSummaryRail(true)}
           >
-            <div data-enroll-body className="grid gap-8 lg:grid-cols-5">
-            <div data-enroll-form className="flex min-w-0 flex-col lg:col-span-3 lg:self-start">
-            {/* Issue #317 / hallazgo #62: recuperado de `sessionStorage`, no del
-                servidor — nada de esto se envió todavía. El rótulo lo dice para
-                que un dato restaurado nunca se confunda con uno ya guardado, la
-                misma distinción que #310 (K3) cerró del lado de asistencias. */}
-            {restoredFromDraft && (
-              <p className="mb-page rounded-ctl border border-line bg-canvas px-3.5 py-2.5 text-xs text-ink-2">
-                Recuperamos los datos que ya había completado. Todavía no se han
-                enviado — revíselos antes de continuar.
-              </p>
-            )}
+            {/* One form around the navigation row and both columns, so the
+                top-bar "Siguiente" is the form's submit control and Enter inside
+                a field advances. `noValidate`: the messages are ours, printed
+                under each field, not the browser's one-at-a-time bubble. */}
+            {/* Narrow layouts only: the summary sits ABOVE the card. From `lg` the
+                same block lives in the brand panel instead. */}
+            {!wide && !isLast && renderSummaryRail(false)}
 
-            {/* Demo helper — quick-fill for testing convenience. The "(solo
-                desarrollo)" label used to be the ONLY thing stopping this from
-                reaching real visitors; `isDemoQuickFillEnabled` is the actual
-                guard. See its doc comment for why it reads NODE_ENV. It is one
-                compact row: it never reaches a visitor, so it should not cost
-                them (or a developer's screenshot) a card of height. */}
-            {demoQuickFillEnabled && (
-              <div className="mb-page flex flex-wrap items-center gap-x-4 gap-y-field rounded-card border border-dashed border-line-2 bg-sunken px-page py-2">
-                <AlertTriangle size={ICON.sm} strokeWidth={1.5} className="text-state-warn" aria-hidden="true" />
-                {/* `ink-3-strong`, not translucent ink: the old `/45` and `/40`
-                    pairs measured 2.61:1 and 2.31:1 on `sunken`. */}
-                <p
-                  className="text-2xs font-semibold uppercase tracking-wider text-ink-3-strong"
-                  title="Llena los campos automáticamente pero no salta la validación — los pasos deben completarse uno por uno."
-                >
-                  Rellenar datos de prueba (solo desarrollo)
+            <form
+              ref={formRef}
+              noValidate
+              onSubmit={handleConfirm}
+              data-testid="enroll-wizard-card"
+              data-enroll-card
+              className="card flex w-full flex-1 flex-col p-page lg:flex-none lg:p-10"
+            >
+              <div data-enroll-body className="grid gap-8 lg:grid-cols-5">
+              <div data-enroll-form className="flex min-w-0 flex-col lg:col-span-3 lg:self-start">
+              {/* Issue #317 / hallazgo #62: recuperado de `sessionStorage`, no del
+                  servidor — nada de esto se envió todavía. El rótulo lo dice para
+                  que un dato restaurado nunca se confunda con uno ya guardado, la
+                  misma distinción que #310 (K3) cerró del lado de asistencias. */}
+              {restoredFromDraft && (
+                <p className="mb-page rounded-ctl border border-line bg-canvas px-3.5 py-2.5 text-xs text-ink-2">
+                  Recuperamos los datos que ya había completado. Todavía no se han
+                  enviado — revíselos antes de continuar. Por seguridad, vuelva a
+                  escribir su contraseña.
                 </p>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="secondary" size="sm" onClick={() => fillDemoData("self")}>
-                    Jugador
-                  </Button>
-                  <Button variant="secondary" size="sm" onClick={() => fillDemoData("child")}>
-                    Representante
-                  </Button>
-                </div>
-              </div>
-            )}
+              )}
 
-
-                {/* The card title was `text-sm font-bold` — 13.5px of Barlow,
-                    the DENSE step, smaller than the labels inside it. It takes
-                    the `title` step now: Graduate, 20px, uppercase, flat
-                    tracking, no weight class — the face has a single 400 cut. */}
-                <h2
-                  ref={stepHeadingRef}
-                  tabIndex={-1}
-                  className="mb-page font-display text-lg uppercase tracking-flat text-ink"
-                >
-                  {STEP_LABELS[step]}
-                </h2>
-
-                {step === "type" && renderTypeStep()}
-                {step === "personal" && renderPersonalStep()}
-                {step === "representative" && renderRepresentativeStep()}
-                {step === "health" && renderHealthStep()}
-                {step === "summary" && renderSummary()}
-
-                {/* Screen readers hear how many fields the last "Siguiente"
-                    flagged; sighted visitors see the messages themselves, so
-                    there is no red paragraph listing them a second time. */}
-                {attemptedStep === step && invalidCount > 0 && (
-                  <p role="status" className="sr-only">
-                    {invalidCount === 1
-                      ? "Hay 1 campo por corregir en este paso."
-                      : `Hay ${invalidCount} campos por corregir en este paso.`}
+              {/* Demo helper — quick-fill for testing convenience. The "(solo
+                  desarrollo)" label used to be the ONLY thing stopping this from
+                  reaching real visitors; `isDemoQuickFillEnabled` is the actual
+                  guard. See its doc comment for why it reads NODE_ENV. It is one
+                  compact row: it never reaches a visitor, so it should not cost
+                  them (or a developer's screenshot) a card of height. */}
+              {demoQuickFillEnabled && (
+                <div className="mb-page flex flex-wrap items-center gap-x-4 gap-y-field rounded-card border border-dashed border-line-2 bg-sunken px-page py-2">
+                  <AlertTriangle size={ICON.sm} strokeWidth={1.5} className="text-state-warn" aria-hidden="true" />
+                  {/* `ink-3-strong`, not translucent ink: the old `/45` and `/40`
+                      pairs measured 2.61:1 and 2.31:1 on `sunken`. */}
+                  <p
+                    className="text-2xs font-semibold uppercase tracking-wider text-ink-3-strong"
+                    title="Llena los campos automáticamente pero no salta la validación — los pasos deben completarse uno por uno."
+                  >
+                    Rellenar datos de prueba (solo desarrollo)
                   </p>
-                )}
-
-                {formErrors.length > 0 && (
-                  <div className="alert-error mt-section items-start" role="alert">
-                    <AlertTriangle size={ICON.sm} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
-                    <div className="space-y-2">
-                      {/* REG-22: one error is a sentence; only several are a list. */}
-                      {formErrors.length === 1 ? (
-                        <p>
-                          <LinkifiedText text={formErrors[0]} />
-                        </p>
-                      ) : (
-                        <ul className="list-inside list-disc space-y-1">
-                          {formErrors.map((err, i) => (
-                            <li key={i}>
-                              <LinkifiedText text={err} />
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      {formErrors.some(isDuplicateIdentityError) && (
-                        <DuplicateIdentityHelp audience="self-service" />
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {isLast && (
-                  <div className="mt-page flex flex-col items-end gap-section">
-                    <Button
-                      type="submit"
-                      variant="primary"
-                      disabled={submitting}
-                      className="disabled:cursor-not-allowed"
-                    >
-                      {submitting ? (
-                        "Inscribiendo…"
-                      ) : (
-                        <>
-                          <CheckCircle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                          Confirmar inscripción
-                        </>
-                      )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="secondary" size="sm" onClick={() => fillDemoData("self")}>
+                      Jugador
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={() => fillDemoData("child")}>
+                      Representante
                     </Button>
                   </div>
-                )}
+                </div>
+              )}
 
-            {/* REG-21: after the step content, where the hand arrives once the fields
-                are done. #1321: `goToStep` already jumps to an arbitrary step from the
-                review's "Editar" buttons without losing anything —
-                `formData` lives in this component, not per step — so a
-                completed pill needs no extra guard to reuse it. */}
-            <EnrollNav
-              isFirst={isFirst}
-              isLast={isLast}
-              submitting={submitting}
-              onBack={handleBack}
-              stepper={
-                wide ? null : (
-                  <Stepper
-                    label="Pasos de la inscripción"
-                    current={currentIndex + 1}
-                    steps={effectiveSteps.map((s) => STEP_SHORT_LABELS[s])}
-                    onStepClick={handleStepperJump}
-                    showCount={!isFirst}
-                  />
-                )
-              }
-            />
-            </div>
 
-            <EnrollAside
-              step={step}
-              isChild={formData.enrollmentType === ENROLLMENT_TYPES.CHILD}
-              tariffs={step === "type" ? renderTariffs() : null}
-              onOpenDocument={setLegalReviewDoc}
-            />
-            </div>
-          </form>
-        </EnrollFrame>
+                  {/* The card title was `text-sm font-bold` — 13.5px of Barlow,
+                      the DENSE step, smaller than the labels inside it. It takes
+                      the `title` step now: Graduate, 20px, uppercase, flat
+                      tracking, no weight class — the face has a single 400 cut. */}
+                  <h2
+                    ref={stepHeadingRef}
+                    tabIndex={-1}
+                    className="mb-page font-display text-lg uppercase tracking-flat text-ink"
+                  >
+                    {STEP_LABELS[step]}
+                  </h2>
+
+                  {step === "type" && renderTypeStep()}
+                  {step === "personal" && renderPersonalStep()}
+                  {step === "representative" && renderRepresentativeStep()}
+                  {step === "health" && renderHealthStep()}
+                  {step === "summary" && renderSummary()}
+
+                  {/* Screen readers hear how many fields the last "Siguiente"
+                      flagged; sighted visitors see the messages themselves, so
+                      there is no red paragraph listing them a second time. */}
+                  {attemptedStep === step && invalidCount > 0 && (
+                    <p role="status" className="sr-only">
+                      {invalidCount === 1
+                        ? "Hay 1 campo por corregir en este paso."
+                        : `Hay ${invalidCount} campos por corregir en este paso.`}
+                    </p>
+                  )}
+
+                  {formErrors.length > 0 && (
+                    <div className="alert-error mt-section items-start" role="alert">
+                      <AlertTriangle size={ICON.sm} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
+                      <div className="space-y-2">
+                        {/* REG-22: one error is a sentence; only several are a list. */}
+                        {formErrors.length === 1 ? (
+                          <p>
+                            <LinkifiedText text={formErrors[0]} />
+                          </p>
+                        ) : (
+                          <ul className="list-inside list-disc space-y-1">
+                            {formErrors.map((err, i) => (
+                              <li key={i}>
+                                <LinkifiedText text={err} />
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {formErrors.some(isDuplicateIdentityError) && (
+                          <DuplicateIdentityHelp audience="self-service" />
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {isLast && (
+                    <div className="mt-page flex flex-col items-end gap-section">
+                      <Button
+                        type="submit"
+                        variant="primary"
+                        disabled={submitting}
+                        className="disabled:cursor-not-allowed"
+                      >
+                        {submitting ? (
+                          "Inscribiendo…"
+                        ) : (
+                          <>
+                            <CheckCircle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                            Confirmar inscripción
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+
+              {/* REG-21: after the step content, where the hand arrives once the fields
+                  are done. #1321: `goToStep` already jumps to an arbitrary step from the
+                  review's "Editar" buttons without losing anything —
+                  `formData` lives in this component, not per step — so a
+                  completed pill needs no extra guard to reuse it. */}
+              <EnrollNav
+                isFirst={isFirst}
+                isLast={isLast}
+                submitting={submitting}
+                onBack={handleBack}
+                stepper={
+                  wide ? null : (
+                    <Stepper
+                      label="Pasos de la inscripción"
+                      current={currentIndex + 1}
+                      steps={effectiveSteps.map((s) => STEP_SHORT_LABELS[s])}
+                      onStepClick={handleStepperJump}
+                      showCount={!isFirst}
+                    />
+                  )
+                }
+              />
+              </div>
+
+              <EnrollAside
+                step={step}
+                isChild={formData.enrollmentType === ENROLLMENT_TYPES.CHILD}
+                tariffs={step === "type" ? renderTariffs() : null}
+                onOpenDocument={setLegalReviewDoc}
+              />
+              </div>
+            </form>
+          </EnrollFrame>
+        )}
+
+        {/* #1368 — one shared review for all three grouped documents. Opening
+            one overlays the summary step and nothing behind it is reachable;
+            closing lands the visitor exactly where the decision is made, with
+            every entered field and the consent state untouched. */}
+        <LegalReviewDialog documentId={legalReviewDoc} onClose={() => setLegalReviewDoc(null)} />
+        </>
       )}
-
-      {/* #1368 — one shared review for all three grouped documents. Opening
-          one overlays the summary step and nothing behind it is reachable;
-          closing lands the visitor exactly where the decision is made, with
-          every entered field and the consent state untouched. */}
-      <LegalReviewDialog documentId={legalReviewDoc} onClose={() => setLegalReviewDoc(null)} />
     </main>
   );
 }

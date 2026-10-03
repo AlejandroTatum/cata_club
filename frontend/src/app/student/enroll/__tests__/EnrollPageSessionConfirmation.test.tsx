@@ -153,6 +153,9 @@ function mockNetwork(
   vi.mocked(global.fetch).mockImplementation(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url === "/api/auth/session") {
+      // The jar starts empty: the mount hydration must find an anonymous
+      // visitor, or the page shows «Ya tiene una sesión iniciada».
+      if (vi.mocked(enrollStudent).mock.calls.length === 0) return jsonResponse({ authenticated: false });
       if (sessionAfterEnrollment === "outage") return jsonResponse({ detail: "no disponible" }, 503);
       return sessionAfterEnrollment === "kept"
         ? jsonResponse(sessionOnKept)
@@ -175,6 +178,9 @@ async function completeEnrollment(): Promise<void> {
     </AuthProvider>,
   );
 
+  // The real AuthProvider starts loading: the page shows its placeholder
+  // (REG-17 / FAM-25) until the session resolves.
+  await screen.findByRole("button", { name: /^Siguiente/ });
   await completeSelfEnrollmentWizard();
 }
 
@@ -186,6 +192,7 @@ beforeEach(() => {
   // then hang on an `undefined` return.
   vi.mocked(fetchTarifas).mockResolvedValue([{ categoria: "Categoria Test", precio: "1.00" }]);
   vi.spyOn(global, "fetch");
+  vi.mocked(enrollStudent).mockClear();
 });
 
 afterEach(() => {

@@ -126,11 +126,11 @@ export default function EnrollSummary({
             {name ? getUserInitials(name) : "?"}
           </span>
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <p
                 title={name || undefined}
                 className={cn(
-                  "truncate text-sm",
+                  "min-w-0 break-words text-sm",
                   name ? "font-semibold" : "",
                   name ? (dark ? "text-white" : "text-ink") : dark ? "text-white/75" : "text-ink-3-strong",
                 )}
