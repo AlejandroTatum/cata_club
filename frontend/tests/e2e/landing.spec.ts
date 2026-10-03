@@ -81,6 +81,18 @@ test.describe("Landing page", () => {
         ]),
       })
     );
+    // Sponsors.tsx swaps a failed logo for the sponsor's name, so the fake
+    // Cloudinary URLs must resolve to a real image for the <img> to stay.
+    await page.route("https://res.cloudinary.com/**", (route): Promise<void> =>
+      route.fulfill({
+        status: 200,
+        contentType: "image/png",
+        body: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
+          "base64"
+        ),
+      })
+    );
     await page.goto("/");
     // Two copies, each repeating the two records five times: with two sponsors
     // that is what it takes for one copy to outrun a 4K viewport on real logos
