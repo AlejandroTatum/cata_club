@@ -254,6 +254,25 @@ def test_endpoint_me_representados_via_http(client_sin_token, db_session):
     assert respuesta_me.json()["roles"] == ["REPRESENTANTE"]
 
 
+def test_endpoint_me_representados_no_espera_a_la_activacion_de_la_cuenta(client_sin_token, db_session):
+    """REG-12: con el correo verificado basta -- aunque la cuenta siga sin
+    activar (sin alta presencial), el representante agrega su dependiente."""
+    representante = _cuenta(db_session, seed=925, tipo_rol=TipoRol.REPRESENTANTE, correo_verificado=True)
+    assert GestorAutenticacion.decision_activacion(db_session, representante) is False
+    datos = _datos_dependiente(926)
+
+    respuesta = client_sin_token.post(
+        "/api/v1/personas/me/representados",
+        json={
+            "nombres": datos.nombres, "apellidos": datos.apellidos,
+            "cedula": datos.cedula, "fecha_nacimiento": str(datos.fecha_nacimiento),
+        },
+        headers={"Authorization": f"Bearer {_token(representante)}"},
+    )
+
+    assert respuesta.status_code == 201, respuesta.text
+
+
 def test_endpoint_me_representados_rechaza_a_un_entrenador(client_sin_token, db_session):
     entrenador = _cuenta(db_session, seed=917, tipo_rol=TipoRol.ENTRENADOR)
     datos = _datos_dependiente(918)

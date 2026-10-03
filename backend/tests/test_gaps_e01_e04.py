@@ -276,7 +276,9 @@ def test_cuenta_desactivada_no_puede_loguearse(client, admin_ajeno):
     resp = client.post(
         "/api/v1/auth/login", data={"username": "u4@x.com", "password": "unaClaveSegura1"}
     )
-    assert resp.status_code == 401
+    # REG-10: contraseña correcta + cuenta inactiva -> 403 con el mensaje que
+    # manda a escribir al club (con otra contraseña seguiría siendo 401).
+    assert resp.status_code == 403
 
 
 def test_cambiar_estado_cuenta_requiere_admin(client_sin_permisos):

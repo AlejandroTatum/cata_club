@@ -80,7 +80,12 @@ export const PROTECTED_PATH_PREFIXES = [
  * session. `/student/enroll` is the public enrollment flow — it lives under
  * `/student` but intentionally has no `ProtectedRoute` wrapper.
  */
-const PUBLIC_EXCEPTIONS = ["/student/enroll"] as const;
+// `/student/add-dependent` (REG-12): a representative with a verified email may
+// add dependents before the club activates the account. The edge would send
+// that account to the activation screen, so the route is let through here; it
+// is still guarded by `ProtectedRoute` and by the backend, which is the
+// authority on who may create a dependent.
+const PUBLIC_EXCEPTIONS = ["/student/enroll", "/student/add-dependent"] as const;
 
 function pathMatches(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);

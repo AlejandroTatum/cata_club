@@ -553,7 +553,7 @@ test.describe("Landing page", () => {
         route.fulfill({ status: 200, contentType: "image/png", body: PHOTO_PNG }));
     };
 
-    test("says the gallery is empty until the club publishes photos", async ({ page }) => {
+    test("hides the gallery section until the club publishes photos", async ({ page }) => {
       // The empty catalog is the production truth for a fresh club, so the
       // payload is answered here: the e2e harness (lane and CI alike) starts
       // no backend and sets no BACKEND_API_URL, and an unanswerable BFF makes
@@ -566,10 +566,8 @@ test.describe("Landing page", () => {
         route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
 
       await page.goto("/");
-      const gallery = page.locator("#galeria");
-      await expect(gallery.getByRole("heading", { name: "Galería" })).toBeVisible();
-      await expect(gallery.getByRole("status")).toHaveText(/Aún no hay fotos en la galería\./);
-      await expect(gallery.locator("img")).toHaveCount(0);
+      // VIS-03: an empty catalog renders no section at all, not an apology.
+      await expect(page.locator("#galeria")).toHaveCount(0);
     });
 
     test("runs the restored loop over a one-photo catalog with silent clones", async ({ page }) => {

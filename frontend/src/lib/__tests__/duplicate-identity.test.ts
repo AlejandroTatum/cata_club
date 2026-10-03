@@ -7,6 +7,7 @@ describe("isDuplicateIdentityError", () => {
     // the backend side too — see backend/tests/test_mensajes_identidad_duplicada.py.
     MENSAJE_IDENTIDAD_DUPLICADA,
     "Alguno de los datos ingresados, cédula o correo, ya pertenece a una cuenta registrada.",
+    "Alguno de los datos ingresados, cédula o correo, ya pertenece a una cuenta registrada. Si ya fue socio del club, comuníquese con nosotros para reactivar su cuenta.",
     "alguno de los datos ingresados, cedula o correo, ya pertenece a una cuenta registrada",
   ])("detects %s as an already-registered identity", (message) => {
     expect(isDuplicateIdentityError(message)).toBe(true);

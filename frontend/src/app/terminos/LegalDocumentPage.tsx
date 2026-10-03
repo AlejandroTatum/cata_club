@@ -100,7 +100,7 @@ export default function LegalDocumentPage({ title, blocks, aside, summary, path,
   const hasToc = sections.length > 1;
 
   const header = (
-    <div>
+    <div className={hasToc ? "order-1 max-lg:card max-lg:p-6" : undefined}>
       {/* The landing's eyebrow: a red rule fill, a `cata-red-dark` label (AA as text). */}
       <p className="mb-4 flex items-center gap-3 text-xs font-extrabold uppercase tracking-caps-wide text-cata-red-dark">
         <span aria-hidden="true" className="h-0.5 w-8 flex-none bg-cata-red" />
@@ -128,7 +128,7 @@ export default function LegalDocumentPage({ title, blocks, aside, summary, path,
    * dialog's and has no ids to give.
    */
   const article = (
-    <article className={cn("space-y-6 leading-prose text-cata-text", hasToc ? "mt-8" : "mt-6 text-lg sm:text-xl xl:text-2xl 2xl:text-5xl")}>
+    <article className={cn("space-y-6 leading-prose text-cata-text", hasToc ? "order-3 mt-8 max-lg:card max-lg:mt-0 max-lg:p-6" : "mt-6 text-lg sm:text-xl xl:text-2xl 2xl:text-5xl")}>
       {blocks.map((block, index) =>
         block.kind === "heading" ? (
           <h2
@@ -182,8 +182,8 @@ export default function LegalDocumentPage({ title, blocks, aside, summary, path,
    * way through the document (contents, other documents, contact), the right
    * rail what it says (summary, version) and a photograph. Both are sticky and
    * about the same height, so neither reads as a strip left empty beside the
-   * text. Below `xl` the rails dissolve (`contents`): on a phone the summary
-   * reads before the document and the reference cards after it.
+   * text. Below `xl` the rails dissolve (`contents`): on a phone the title comes first, then
+   * the summary, then the article and the reference cards (VIS-07).
    */
   const longDocument = (
     <>
@@ -194,13 +194,14 @@ export default function LegalDocumentPage({ title, blocks, aside, summary, path,
         <LegalRelated path={path} className="order-4 lg:max-xl:col-start-2" />
         <LegalQuestions className="order-5 lg:max-xl:col-start-2" />
       </div>
-      <div className="card order-2 min-w-0 p-6 sm:p-10 lg:col-start-1 lg:row-span-5 lg:row-start-1 xl:col-start-2 xl:row-span-1">
+      {/* Below `lg` this wrapper dissolves so the title card, the summary and the article each take their own `order-*` slot (VIS-07). */}
+      <div className="min-w-0 max-lg:contents lg:card lg:col-start-1 lg:row-span-5 lg:row-start-1 lg:p-10 xl:col-start-2 xl:row-span-1">
         {header}
         {article}
       </div>
       <div className={cn(STICKY_RAIL, "xl:col-start-3 xl:row-start-1")}>
         {summary !== undefined && (
-          <section aria-labelledby="legal-resumen" className="card order-1 grid gap-3 p-5 lg:max-xl:col-start-2">
+          <section aria-labelledby="legal-resumen" className="card order-2 grid gap-3 p-5 lg:max-xl:col-start-2">
             <h2 id="legal-resumen" className={SIDE_TITLE}>
               En resumen
             </h2>

@@ -61,6 +61,13 @@ describe("PasswordGuidance — the advisory checklist", () => {
     expect(labels).toEqual(buildPasswordCompositionSignals("").map((signal) => signal.label));
   });
 
+  // GAP-11: the enforcing checklist already states the 8-character minimum; a
+  // second, different minimum here (10) read as a contradiction.
+  it("states no length minimum of its own", () => {
+    render(<PasswordGuidance password="" />);
+    expect(screen.queryByText(/caracteres/i, { selector: "li" })).not.toBeInTheDocument();
+  });
+
   it("shows every recommendation pending before anything is typed", () => {
     render(<PasswordGuidance password="" />);
     for (const item of checklist().querySelectorAll("li")) {
@@ -73,7 +80,6 @@ describe("PasswordGuidance — the advisory checklist", () => {
     const input = screen.getByLabelText("Password");
 
     fireEvent.change(input, { target: { value: "nubesverd" } });
-    expect(advisoryItem("Al menos 10 caracteres")).toHaveAttribute("data-met", "false");
     expect(advisoryItem("Mayúsculas y minúsculas")).toHaveAttribute("data-met", "false");
     expect(advisoryItem("Al menos un número")).toHaveAttribute("data-met", "false");
     expect(advisoryItem("Al menos un símbolo (por ejemplo, ! o #)")).toHaveAttribute(
@@ -82,7 +88,6 @@ describe("PasswordGuidance — the advisory checklist", () => {
     );
 
     fireEvent.change(input, { target: { value: "Nubes-Verdes-2024" } });
-    expect(advisoryItem("Al menos 10 caracteres")).toHaveAttribute("data-met", "true");
     expect(advisoryItem("Mayúsculas y minúsculas")).toHaveAttribute("data-met", "true");
     expect(advisoryItem("Al menos un número")).toHaveAttribute("data-met", "true");
     expect(advisoryItem("Al menos un símbolo (por ejemplo, ! o #)")).toHaveAttribute(

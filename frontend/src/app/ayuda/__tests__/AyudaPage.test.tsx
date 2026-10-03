@@ -53,7 +53,7 @@ vi.mock("@/components/shell/AppShell", () => ({
     children: React.ReactNode;
     title: string;
   }) => (
-    <div>
+    <div data-testid="app-shell">
       {back}
       <h1>{title}</h1>
       {children}
@@ -73,6 +73,29 @@ vi.mock("next/link", () => ({
     </a>
   ),
 }));
+
+// VIS-05: the management shell (dark sidebar, panel title) is for people who
+// are signed in. `/ayuda` is public, so a visitor gets a plain page instead.
+describe("AyudaPage — the shell follows the session (VIS-05)", () => {
+  it("renders no management shell for a visitor without a session", () => {
+    render(<AyudaPage />);
+
+    expect(screen.queryByTestId("app-shell")).not.toBeInTheDocument();
+    expect(screen.getByRole("main")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Preguntas frecuentes" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /volver al inicio/i })).toHaveAttribute("href", "/");
+    // The content is the same: the page is not a cut-down version.
+    expect(screen.getByRole("heading", { name: FAQ_SECTIONS[0].title })).toBeInTheDocument();
+  });
+
+  it("keeps the management shell for a signed-in user", () => {
+    mockRole = "admin";
+
+    render(<AyudaPage />);
+
+    expect(screen.getByTestId("app-shell")).toBeInTheDocument();
+  });
+});
 
 describe("AyudaPage", () => {
   it("renders exactly one 'Volver al Inicio' link, not one at each end (DSH-3)", () => {

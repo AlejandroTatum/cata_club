@@ -58,6 +58,12 @@ export type AuthErrorKind =
    * retrying cannot help until the club leaves the account one role.
    */
   | "role_conflict"
+  /**
+   * The credentials were right but the account is deactivated —
+   * /api/auth/login answered 403 with `error: "account_inactive"` (REG-10).
+   * Retrying changes nothing; the club has to reactivate it.
+   */
+  | "account_inactive"
   | "timeout"
   | "backend_unavailable"
   | "config_error"
@@ -222,6 +228,9 @@ export async function login(email: string, password: string): Promise<LoginResul
   // back on its own, and this is neither.
   if (response.status === 409 && hasErrorCode(json) && json.error === "role_conflict") {
     return { ok: false, error: "role_conflict" };
+  }
+  if (response.status === 403 && hasErrorCode(json) && json.error === "account_inactive") {
+    return { ok: false, error: "account_inactive" };
   }
   // A misconfigured BFF (missing BACKEND_API_URL and friends) is a permanent
   // fault, not a blip. It must never be folded into the retry-flavoured

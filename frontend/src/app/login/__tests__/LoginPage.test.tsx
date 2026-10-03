@@ -11,7 +11,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import LoginPage from "@/app/login/page";
 
 // ---------------------------------------------------------------------------
@@ -52,11 +52,13 @@ vi.mock("@/components/auth/AuthShell", async () => {
 
 const mockShowError = vi.fn();
 const mockShowSuccess = vi.fn();
+const mockShowInfo = vi.fn();
 vi.mock("@/contexts/ToastContext", () => ({
   useToast: () => ({
     showToast: vi.fn(),
     showError: mockShowError,
     showSuccess: mockShowSuccess,
+    showInfo: mockShowInfo,
   }),
 }));
 
@@ -108,6 +110,7 @@ describe("LoginPage", () => {
     mockUseAuth.mockReset();
     mockShowError.mockReset();
     mockShowSuccess.mockReset();
+    mockShowInfo.mockReset();
     resetTestHistory("/login");
   });
 
@@ -266,7 +269,9 @@ describe("LoginPage", () => {
   });
 
   describe("failed submission", () => {
-    it("shows the mapped error via toast.showError instead of an inline alert", async () => {
+    // FAM-15: the inline message under the form is the ONLY announcement of a
+    // failed login — a toast on top of it said the same thing twice.
+    it("shows the credentials error inline only, with no toast", async () => {
       const mockLogin = vi.fn().mockResolvedValue({ ok: false, error: "invalid_credentials" });
       mockUseAuth.mockReturnValue({
         ...createUnauthenticatedAuth(false),
@@ -276,19 +281,12 @@ describe("LoginPage", () => {
       render(<LoginPage />);
       submitLoginForm();
 
-      await waitFor(() => {
-        expect(mockShowError).toHaveBeenCalledWith("Credenciales incorrectas", {
-          description: "Revise su correo y su contraseña, e intente nuevamente.",
-          // #312 / hallazgo #30: este es el único aviso de la pantalla que
-          // dice POR QUÉ falló el login, así que se queda arriba el piso
-          // más largo (20s) en vez del tope ordinario de 4.5-10s.
-          duration: 20000,
-        });
-      });
+      expect(await screen.findByTestId("credentials-error")).toHaveTextContent(/no coinciden/i);
+      expect(mockShowError).not.toHaveBeenCalled();
       expect(document.querySelector(".alert-error")).not.toBeInTheDocument();
     });
 
-    it("names the problem in the message and the recovery in the supporting line", async () => {
+    it("names the problem and the recovery inline for a server failure, with no toast", async () => {
       const mockLogin = vi.fn().mockResolvedValue({ ok: false, error: "backend_unavailable" });
       mockUseAuth.mockReturnValue({
         ...createUnauthenticatedAuth(false),
@@ -298,11 +296,11 @@ describe("LoginPage", () => {
       render(<LoginPage />);
       submitLoginForm();
 
-      await waitFor(() => {
-        expect(mockShowError).toHaveBeenCalledWith("No se pudo conectar con el servidor", {
-          description: "El servicio no está disponible. Intente nuevamente en unos minutos.",
-        });
-      });
+      const failure = await screen.findByTestId("login-failure");
+      expect(failure).toHaveAttribute("role", "alert");
+      expect(failure).toHaveTextContent("No se pudo conectar con el servidor");
+      expect(failure).toHaveTextContent("El servicio no está disponible. Intente nuevamente en unos minutos.");
+      expect(mockShowError).not.toHaveBeenCalled();
     });
 
     it("names the remedy as the club assigning a single role, not letting the account keep one (issue #865)", async () => {
@@ -315,13 +313,44 @@ describe("LoginPage", () => {
       render(<LoginPage />);
       submitLoginForm();
 
-      await waitFor(() => {
-        expect(mockShowError).toHaveBeenCalledWith("Su cuenta tiene más de un rol activo", {
-          description:
-            "No podemos saber con cuál entrar. Comuníquese con el club para que le asignen uno solo.",
-          duration: 20000,
-        });
-      });
+      const failure = await screen.findByTestId("login-failure");
+      expect(failure).toHaveTextContent("Su cuenta tiene más de un rol activo");
+      expect(failure).toHaveTextContent(
+        "No podemos saber con cuál entrar. Comuníquese con el club para que le asignen uno solo.",
+      );
+      expect(mockShowError).not.toHaveBeenCalled();
+    });
+
+    // REG-10: a deactivated account is told so, and told who to write to.
+    it("tells a deactivated account to contact the club, with the club's WhatsApp link", async () => {
+      const mockLogin = vi.fn().mockResolvedValue({ ok: false, error: "account_inactive" });
+      mockUseAuth.mockReturnValue({ ...createUnauthenticatedAuth(false), login: mockLogin });
+
+      render(<LoginPage />);
+      submitLoginForm();
+
+      const failure = await screen.findByTestId("login-failure");
+      expect(failure).toHaveTextContent("Su cuenta está inactiva.");
+      expect(failure).toHaveTextContent("Comuníquese con el club para reactivarla.");
+      expect(within(failure).getByRole("link", { name: /whatsapp/i })).toHaveAttribute(
+        "href",
+        expect.stringMatching(/^https:\/\/wa\.me\//),
+      );
+      // Nothing they typed was wrong: no field is marked.
+      expect(screen.getByLabelText(/^Correo electrónico/)).toHaveAttribute("aria-invalid", "false");
+    });
+
+    it("retires the inline failure as soon as the person edits a field", async () => {
+      const mockLogin = vi.fn().mockResolvedValue({ ok: false, error: "timeout" });
+      mockUseAuth.mockReturnValue({ ...createUnauthenticatedAuth(false), login: mockLogin });
+
+      render(<LoginPage />);
+      submitLoginForm();
+      await screen.findByTestId("login-failure");
+
+      fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "otra-clave" } });
+
+      expect(screen.queryByTestId("login-failure")).not.toBeInTheDocument();
     });
   });
 
@@ -429,10 +458,12 @@ describe("LoginPage", () => {
       expect(mockReplace).toHaveBeenCalledWith("/login/activacion");
       // Issue #1044: a session that lands on the gate must never be told
       // it's headed to its panel — the regression this closes.
-      expect(mockShowSuccess).toHaveBeenCalledWith(expect.any(String), {
+      // REG-20: and "faltan pasos" is not a success, so it is an info toast.
+      expect(mockShowSuccess).not.toHaveBeenCalled();
+      expect(mockShowInfo).toHaveBeenCalledWith(expect.any(String), {
         description: expectedWelcomeDescriptionFor("/login/activacion"),
       });
-      const [, { description }] = mockShowSuccess.mock.calls[0];
+      const [, { description }] = mockShowInfo.mock.calls[0];
       expect(description).not.toContain("Le llevamos a su panel");
       vi.useRealTimers();
     });
@@ -488,7 +519,7 @@ describe("LoginPage — the failed credentials leave a mark on the form", () => 
     render(<LoginPage />);
     submitLoginForm();
 
-    await waitFor(() => expect(mockShowError).toHaveBeenCalled());
+    await screen.findByTestId("login-failure");
     expect(screen.getByLabelText(/^Correo electrónico/)).toHaveAttribute("aria-invalid", "false");
     expect(screen.queryByTestId("credentials-error")).not.toBeInTheDocument();
   });

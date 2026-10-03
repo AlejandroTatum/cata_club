@@ -34,6 +34,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
+import { isActivationComplete, type ActivationSession } from "@/lib/activation-reasons";
 import {
   crearRepresentadoPropio, fetchInstituciones, fetchTiposMembresia,
   inscribirRepresentadoConPago, subirVoucherPago,
@@ -115,6 +116,17 @@ function AddDependentContent(): React.ReactElement {
   // in `src/services/auth.ts`), not the derived `UserRole` this page is
   // gated on.
   const isRepresentative = session?.roles.includes("REPRESENTANTE") ?? false;
+
+  // REG-12: a representative may add dependents as soon as their email is
+  // verified; the middleware lets this route through while activation is
+  // pending (`PUBLIC_EXCEPTIONS`), so the verified-email check lives here.
+  const emailUnverified = (session as ActivationSession | null)?.correoVerificado === false;
+  useEffect(() => {
+    if (emailUnverified) router.replace("/login/activacion");
+  }, [emailUnverified, router]);
+  // Paying right away goes through the membership endpoints, which stay
+  // closed to an account whose activation is still pending.
+  const canPayNow = session ? isActivationComplete(session) : false;
 
   /**
    * A URL may address any step the guardian could have walked to on their own,
@@ -648,7 +660,7 @@ function AddDependentContent(): React.ReactElement {
           <label htmlFor="dependent-pay-choice">¿Cuándo desea pagar?</label>
           <Select id="dependent-pay-choice" wrapperClassName="mt-2" value={payNow ? "now" : "later"} onChange={(e) => setPayNow(e.target.value === "now")}>
             <option value="later">Agregar dependiente y pagar más tarde</option>
-            <option value="now">Agregar dependiente y registrar el pago ahora</option>
+            {canPayNow && <option value="now">Agregar dependiente y registrar el pago ahora</option>}
           </Select>
         </div>
 
@@ -705,6 +717,10 @@ function AddDependentContent(): React.ReactElement {
   }
 
   // ---- Render ----
+
+  // REG-12: nothing here waits for the club to activate the account — only
+  // for the email to be verified, which the backend also enforces on save.
+  if (emailUnverified) return <></>;
 
   return (
     // This wizard is reached from a button on `/student`, so it keeps

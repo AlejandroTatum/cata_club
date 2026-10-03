@@ -261,7 +261,7 @@ export async function enrollDependentViaWizard(
   await page.getByRole("heading", { name: /tipo de inscripción/i }).waitFor({ timeout: 20_000 });
 
   // Paso "Tipo de inscripción": Representante, no el Jugador por defecto.
-  await page.getByRole("button", { name: /^Representante/ }).click();
+  await page.getByRole("radio", { name: /^Representante/ }).click();
   await page.getByRole("button", { name: /siguiente/i }).click();
   await page.locator(`#${FIELD_ID.nombres}`).waitFor({ state: "attached", timeout: 20_000 });
 

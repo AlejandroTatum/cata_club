@@ -94,7 +94,7 @@ import { landingConfig, toWhatsAppLink } from "@/app/landing/landing-config";
  * do next. Built from the published contact number, never a literal digit
  * string, so it can never drift from the one the landing page itself shows.
  */
-const WHATSAPP_CONTACTO = toWhatsAppLink(landingConfig.contact.whatsapp[0]);
+export const WHATSAPP_CONTACTO = toWhatsAppLink(landingConfig.contact.whatsapp[0]);
 
 /**
  * The longest a `detail` may be and still be a sentence somebody wrote for a
@@ -174,6 +174,41 @@ export function isUserFacingText(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed || trimmed.length > MAX_DETAIL_LENGTH) return false;
   return !IMPLEMENTATION_VOCABULARY.some((pattern) => pattern.test(trimmed));
+}
+
+/**
+ * Pydantic's own validation sentences, in the order they are tried, and what
+ * the product says instead (REG-08). They are English by construction and
+ * never pass `isUserFacingText`, so before this table a field that FastAPI
+ * refused with `String should have at most 32 characters` reached the user as
+ * the caller's generic fallback — or, from a client that bypassed the form,
+ * as the English itself. Only the shapes pydantic is known to emit for the
+ * constraints this product declares are translated; anything else English
+ * still falls through to the fallback.
+ */
+const PYDANTIC_MESSAGES: readonly (readonly [RegExp, (match: RegExpMatchArray) => string])[] = [
+  [/^Field required$/i, () => "Falta completar un dato obligatorio."],
+  [
+    /^String should have at most (\d+) characters?$/i,
+    (m) => `El texto no puede superar los ${m[1]} caracteres.`,
+  ],
+  [
+    /^String should have at least (\d+) (characters?)$/i,
+    (m) => `El texto debe tener al menos ${m[1]} ${m[1] === "1" ? "carácter" : "caracteres"}.`,
+  ],
+  // Numeric bounds ("less than or equal to 12") are deliberately NOT here: a
+  // bare "El valor no puede ser mayor que 12" names no field, and the caller's
+  // fallback — which knows the operation, e.g. the 12-month payment limit —
+  // says strictly more.
+  [/^Input should be (?!(?:less|greater) than)/i, () => "El valor ingresado no es válido."],
+];
+
+function translatePydanticMessage(detail: string): string | null {
+  for (const [pattern, spanish] of PYDANTIC_MESSAGES) {
+    const match = detail.match(pattern);
+    if (match) return spanish(match);
+  }
+  return null;
 }
 
 /**
@@ -397,7 +432,11 @@ export function toUserMessage(error: unknown, fallback: string): string {
     // `isUserFacingText` would also catch real backend copy that happens to
     // read the same way, so the check is an identity check against the one
     // known non-server string instead.
-    if (detail !== GENERIC_FAILURE && isUserFacingText(detail)) return detail;
+    if (detail !== GENERIC_FAILURE) {
+      const translated = translatePydanticMessage(detail);
+      if (translated) return translated;
+      if (isUserFacingText(detail)) return detail;
+    }
   }
 
   return fallback;

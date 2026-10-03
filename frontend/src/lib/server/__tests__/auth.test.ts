@@ -428,6 +428,21 @@ describe("backendLogin", () => {
     );
   });
 
+  // REG-10: the backend answers 403 only AFTER the password checked out, for
+  // an account the club deactivated. It is not "bad credentials".
+  it("reports account_inactive on a 403, not invalid_credentials", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      jsonResponse({ message: "Su cuenta está inactiva. Comuníquese con el club para reactivarla." }, 403),
+    );
+
+    const result = await backendLogin("ex@cataclub.com", "Secreta123");
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "account_inactive", message: expect.stringContaining("inactiva") },
+    });
+  });
+
   it("returns ok:true with the parsed tokens on success", async () => {
     vi.mocked(global.fetch).mockResolvedValue(
       jsonResponse({ access_token: "a", refresh_token: "r", token_type: "bearer" }),

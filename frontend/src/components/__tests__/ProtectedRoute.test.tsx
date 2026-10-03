@@ -200,7 +200,10 @@ describe("ProtectedRoute", () => {
     expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
   });
 
-  it("shows an informational toast naming the reason for the bounce on role rejection", () => {
+  // ENT-13: the redirect to the role home is the whole answer — a toast
+  // saying "no tiene permiso" for a page nobody asked to be denied reads as
+  // an accusation.
+  it("redirects silently on role rejection, with no toast", () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer"));
 
     renderProtected(
@@ -208,25 +211,8 @@ describe("ProtectedRoute", () => {
     );
 
     expect(mockReplace).toHaveBeenCalledWith("/trainer");
-    expect(screen.getByText(ROLE_REJECTION_TOAST)).toBeInTheDocument();
-  });
-
-  // Issue #484: `/payments` and `/trainer` stacked two identical toasts on a
-  // blocked access attempt while `/groups` and `/trainer/students` only ever
-  // showed one. Root cause was route-specific, not role-specific — those two
-  // pages carried their own leftover "name the reason" effect (issue #319
-  // hallazgo #68) that fired the exact same message `ProtectedRoute` already
-  // shows on its own, once #421 centralized it here. `ProtectedRoute` itself
-  // was never the double-fire: this asserts the container renders exactly one
-  // toast node per blocked attempt, however many pages route through here.
-  it("renders exactly one toast node per blocked access attempt", () => {
-    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer"));
-
-    renderProtected(
-      <ProtectedRoute allowedRoles={["admin"]}>{CONTENT}</ProtectedRoute>,
-    );
-
-    expect(screen.getAllByText(ROLE_REJECTION_TOAST)).toHaveLength(1);
+    expect(screen.queryByText(ROLE_REJECTION_TOAST)).not.toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("redirects estudiante to /student when page requires admin", () => {

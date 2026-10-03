@@ -22,6 +22,7 @@ en un solo request transaccional. Endpoint público (sin auth), rate-limited.
   4. Emitir tokens JWT para auto-login del representante (o del alumno adulto).
 """
 import hashlib
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -105,11 +106,23 @@ class ConflictoIdempotencia(ErrorDominio):
         self.retry_after = retry_after
 
 
-def _huella_de_cedula(cedula: str) -> str:
-    """Hash estable (sha256) de la cédula del alumno: identifica el intento sin
-    guardar el número — misma disciplina de no-oráculo que
-    `dominio/mensajes.py` (las respuestas públicas nunca confirman identidades)."""
-    return hashlib.sha256(cedula.encode("utf-8")).hexdigest()
+def _huella_del_payload(datos: EnrollmentCreateDTO) -> str:
+    """Hash estable (sha256) del PAYLOAD completo ya validado: identifica el
+    intento sin guardar nada en claro -- misma disciplina de no-oráculo que
+    `dominio/mensajes.py` (las respuestas públicas nunca confirman
+    identidades).
+
+    REG-06: antes la huella era solo la cédula del alumno, así que un replay
+    con la misma clave y la misma cédula pero OTRO correo o contraseña
+    respondía 201 con los tokens de la cuenta original. Ahora cualquier
+    diferencia en el cuerpo cambia la huella y la clave reutilizada responde
+    409. Se serializa el DTO ya validado (no el JSON crudo), así el orden de
+    las llaves o los espacios del cliente no cambian la huella de un replay
+    legítimo."""
+    canonico = json.dumps(
+        datos.model_dump(mode="json"), sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    )
+    return hashlib.sha256(canonico.encode("utf-8")).hexdigest()
 
 
 def _ahora_utc() -> datetime:
@@ -148,10 +161,9 @@ class EnrollmentServicio:
         # === Idempotencia: clave del intento y su historia ====================
         # La clave la acuña el cliente (header `Idempotency-Key`); si no llega,
         # el backend acuña una propia para que el endpoint público siga siendo
-        # robusto. La huella es un hash de la cédula del alumno (identidad
-        # estable del intento sin guardar el número).
+        # robusto. La huella es un hash del payload completo (REG-06).
         clave = idempotency_key or uuid.uuid4().hex
-        huella = _huella_de_cedula(datos.alumno.cedula)
+        huella = _huella_del_payload(datos)
         registro_previo = self.repo_idempotencia.obtener_por_clave(clave)
         if registro_previo is not None:
             # REPLAY / conflicto / expirada: solo devuelve algo cuando el intento
@@ -440,8 +452,8 @@ class EnrollmentServicio:
             raise ConflictoIdempotencia(
                 MENSAJE_IDEMPOTENCIA_REUTILIZADA,
                 detalle_tecnico=(
-                    f"Clave de idempotencia {clave} reutilizada con la cédula de "
-                    "otro alumno (la huella no coincide)."
+                    f"Clave de idempotencia {clave} reutilizada con otro payload "
+                    "(la huella no coincide)."
                 ),
             )
 

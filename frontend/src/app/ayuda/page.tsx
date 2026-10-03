@@ -19,6 +19,7 @@ import { Dumbbell, Rocket, ShieldCheck, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import AppShell from "@/components/shell/AppShell";
+import PublicShell from "@/components/shell/PublicShell";
 import {
   Accordion,
   BackLink,
@@ -196,12 +197,12 @@ export default function AyudaPage(): React.ReactElement {
       .filter((section) => section.entries.length > 0);
   }, [query, category]);
 
-  return (
-    <AppShell
-      title="Preguntas frecuentes"
-      subtitle="Cómo funciona la app del club, sección por sección."
-      back={<BackLink href={backHrefForRole(session?.user.role)} />}
-    >
+  const title = "Preguntas frecuentes";
+  const subtitle = "Cómo funciona la app del club, sección por sección.";
+  const back = <BackLink href={backHrefForRole(session?.user.role)} />;
+
+  const content = (
+    <>
       <div data-testid="faq-split" className={PAGE_RAIL}>
       <div className="grid min-w-0 content-start gap-page">
       <FilterPanel
@@ -322,6 +323,23 @@ export default function AyudaPage(): React.ReactElement {
       </div>
       </div>
       {report.dialog}
+    </>
+  );
+
+  // VIS-05: the management shell (sidebar, panel title) is for people with a
+  // session. `/ayuda` is also public, so a visitor gets a plain page under the
+  // public bar `Header` draws for them.
+  if (!session) {
+    return (
+      <PublicShell title={title} subtitle={subtitle} back={back}>
+        {content}
+      </PublicShell>
+    );
+  }
+
+  return (
+    <AppShell title={title} subtitle={subtitle} back={back}>
+      {content}
     </AppShell>
   );
 }

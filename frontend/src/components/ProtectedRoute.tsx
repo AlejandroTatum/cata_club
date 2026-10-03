@@ -17,7 +17,6 @@
 import { useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/contexts/ToastContext";
 import { canAccess, getDefaultRoute } from "@/lib/auth-utils";
 import { withRedirectReason } from "@/lib/redirect-reason";
 import type { UserRole } from "@/types/domain";
@@ -39,13 +38,11 @@ export default function ProtectedRoute({
 }: ProtectedRouteProps) {
   const { isAuthenticated, session, isLoading, hydrationOutage, retryHydration, sessionExpired } = useAuth();
   const router = useRouter();
-  const { showInfo } = useToast();
   // #319/#334: `allowedRoles` is typically an inline array literal at the
   // call site (e.g. `allowedRoles={["trainer", "admin"]}`), a new reference
   // on every parent render. Depending on that reference (instead of its
-  // content) refires this effect every render; combined with the toast call
-  // below triggering a ToastProvider re-render, that reignited the effect
-  // and produced an infinite synchronous loop (#334). `canAccess` below
+  // content) refires this effect every render, which once produced an
+  // infinite synchronous loop (#334). `canAccess` below
   // still receives the real `allowedRoles` array unchanged.
   const allowedRolesKey = allowedRoles.join(",");
 
@@ -68,13 +65,12 @@ export default function ProtectedRoute({
     }
 
     if (session && !canAccess(session.user.role, allowedRoles)) {
-      // #319: name the reason instead of leaving a mute redirect — mirrors
-      // the toast every landing page currently duplicates for the same case.
-      showInfo("No tiene permiso para acceder a esa sección.");
+      // ENT-13: silent on purpose — landing on the role home is the answer;
+      // a "no tiene permiso" toast would accuse someone who followed a link.
       router.replace(getDefaultRoute(session.user.role));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- allowedRolesKey is the stable, content-derived substitute for allowedRoles (see comment above).
-  }, [isLoading, hydrationOutage, isAuthenticated, sessionExpired, session, allowedRolesKey, redirectTo, router, showInfo]);
+  }, [isLoading, hydrationOutage, isAuthenticated, sessionExpired, session, allowedRolesKey, redirectTo, router]);
 
   // --- Loading state ---
   if (isLoading) {

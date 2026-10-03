@@ -1115,8 +1115,52 @@ describe("ProfilePage — change password", () => {
       expect(mockSolicitarRecuperacion).toHaveBeenCalledWith("ana.admin@cataclub.com");
     });
     expect(
-      await screen.findByText("Si el correo está registrado, recibirá un enlace de recuperación."),
+      await screen.findByText(
+        "Le enviamos un enlace a ana.admin@cataclub.com para cambiar su contraseña. Es válido por 30 minutos.",
+      ),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Si el correo está registrado, recibirá un enlace de recuperación."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers «Reenviar enlace» only after the 2-minute cooldown (GAP-06)", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
+    mockSolicitarRecuperacion.mockResolvedValue({ mensaje: "ok" });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      render(
+        <ToastProvider>
+          <ProfilePage />
+        </ToastProvider>,
+      );
+      await waitForStaffProfile();
+
+      fireEvent.click(screen.getByRole("button", { name: /restablecer por correo/i }));
+      const resend = await screen.findByRole("button", { name: "Reenviar enlace" });
+      expect(resend).toBeDisabled();
+      expect(screen.getByText(/podrá reenviarlo en 2:00/i)).toBeInTheDocument();
+
+      // One act() per second: each tick schedules the next one after React commits.
+      const elapse = async (seconds: number) => {
+        for (let i = 0; i < seconds; i += 1) {
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(1_000);
+          });
+        }
+      };
+      await elapse(119);
+      expect(resend).toBeDisabled();
+      await elapse(1);
+      expect(resend).toBeEnabled();
+
+      fireEvent.click(resend);
+      await waitFor(() => expect(mockSolicitarRecuperacion).toHaveBeenCalledTimes(2));
+      expect(await screen.findByRole("button", { name: "Reenviar enlace" })).toBeDisabled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("surfaces an error message when the recovery-email request fails (triangulation)", async () => {

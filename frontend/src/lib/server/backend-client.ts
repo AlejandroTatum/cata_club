@@ -63,6 +63,7 @@ export type BackendProxyResult =
 
 const STATUS_BY_ERROR: Record<AuthErrorCode, number> = {
   invalid_credentials: 401,
+  account_inactive: 403,
   // See the note in src/app/api/auth/login/route.ts — a misconfigured server
   // is a 500, so nothing downstream retries a permanently broken request.
   config_error: 500,

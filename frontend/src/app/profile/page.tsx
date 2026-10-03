@@ -208,6 +208,15 @@ import {
 import { ICON } from "@/lib/icon-size";
 import { formatDate } from "@/lib/format-utils";
 import { toUserMessage } from "@/lib/error-message";
+
+/** Lifetime of the password-recovery link (backend `crear_token_recuperacion`, 30 min). */
+const RESET_LINK_VALID_MINUTES = 30;
+/** Wait before the recovery link can be requested again. */
+const RESET_RESEND_COOLDOWN_SECONDS = 120;
+
+function formatCountdown(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
 import { toPhoneFieldDigits, toStoredPhone } from "@/lib/identity-validation";
 import { revisarFoto, subirFotoDeArchivo } from "@/lib/photo-upload";
 import { PhoneField } from "@/components/wizard-fields";
@@ -898,6 +907,15 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   const [requestingPassword, setRequestingPassword] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  // GAP-06: the link lasts 30 minutes (`crear_token_recuperacion`), and a new one
+  // can be asked for only after `RESET_RESEND_COOLDOWN_SECONDS`.
+  const [resendSecondsLeft, setResendSecondsLeft] = useState(0);
+
+  useEffect(() => {
+    if (resendSecondsLeft <= 0) return;
+    const timer = setTimeout(() => setResendSecondsLeft((n) => n - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendSecondsLeft]);
 
   // ---- "Cerrar otras sesiones" (E01, slice B4) ---------------------------
   const [confirmingInvalidation, setConfirmingInvalidation] = useState(false);
@@ -1018,11 +1036,12 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     setPasswordError(null);
     setPasswordMessage(null);
     try {
-      const result = await solicitarRecuperacion(
-        props.kind === "staff" ? props.accountEmail : correoDisplay,
-      );
-      setPasswordMessage(result.mensaje);
-      showSuccess(result.mensaje);
+      const destino = props.kind === "staff" ? props.accountEmail : correoDisplay;
+      await solicitarRecuperacion(destino);
+      const message = `Le enviamos un enlace a ${destino} para cambiar su contraseña. Es válido por ${RESET_LINK_VALID_MINUTES} minutos.`;
+      setPasswordMessage(message);
+      setResendSecondsLeft(RESET_RESEND_COOLDOWN_SECONDS);
+      showSuccess(message);
     } catch (error: unknown) {
       const message = toErrorMessage(error, "No se pudo enviar el correo de recuperación.");
       setPasswordError(message);
@@ -1483,7 +1502,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
                   title={requestingPassword ? "Enviando…" : "Restablecer por correo"}
                   description="Le enviamos un enlace para restablecer su contraseña"
                   onClick={() => void handleChangePassword()}
-                  disabled={requestingPassword}
+                  disabled={requestingPassword || resendSecondsLeft > 0}
                 />
                 <ActionTile
                   icon={<LogOut size={ICON.sm} strokeWidth={1.5} />}
@@ -1528,9 +1547,24 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             />
 
             {passwordMessage && (
-              <p role="status" className="text-sm text-state-ok">
-                {passwordMessage}
-              </p>
+              <div className="grid gap-2">
+                <p role="status" className="text-sm text-state-ok">
+                  {passwordMessage}
+                </p>
+                <button
+                  type="button"
+                  className="justify-self-start text-sm font-semibold underline underline-offset-2 disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60"
+                  onClick={() => void handleChangePassword()}
+                  disabled={requestingPassword || resendSecondsLeft > 0}
+                >
+                  Reenviar enlace
+                </button>
+                {resendSecondsLeft > 0 && (
+                  <p className="text-xs text-ink-3-strong">
+                    Podrá reenviarlo en {formatCountdown(resendSecondsLeft)}.
+                  </p>
+                )}
+              </div>
             )}
             {passwordError && (
               <p role="alert" className="text-sm text-state-bad">

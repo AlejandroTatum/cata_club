@@ -82,7 +82,6 @@ export interface EnrollFormData {
    */
   contactoEmergencia: string;
   telefonoEmergencia: string;
-  observaciones: string;
 }
 
 /** Step order used by the wizard. */
@@ -153,7 +152,6 @@ export const initialFormData: EnrollFormData = {
   alergias: "",
   contactoEmergencia: "",
   telefonoEmergencia: "",
-  observaciones: "",
 };
 
 // ---------------------------------------------------------------------------
@@ -303,7 +301,6 @@ export function buildEnrollmentRequest(data: EnrollFormData, aceptaConsentimient
           telefonoEmergencia: toStoredPhone(data.telefonoEmergencia),
         }
       : {}),
-    ...(data.observaciones.trim() ? { observaciones: data.observaciones.trim() } : {}),
   };
   if (data.enrollmentType === ENROLLMENT_TYPES.SELF) {
     return { alumno, fichaMedica, aceptaConsentimientos, credencialesAlumno: { correo: data.correo.trim(), contrasenia: data.contrasenia } };
@@ -376,7 +373,6 @@ export const ENROLL_FIELD_TOKEN: Record<EnrollField, string> = {
   alergias: "alergias",
   contactoEmergencia: "contacto-emergencia",
   telefonoEmergencia: "telefono-emergencia",
-  observaciones: "observaciones",
 };
 
 /** The id prefix every field on this wizard shares. */

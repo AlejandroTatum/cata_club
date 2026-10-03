@@ -161,6 +161,14 @@ describe("login", () => {
     expect(result).toEqual({ ok: false, error: "invalid_credentials" });
   });
 
+  it("returns account_inactive on a 403 from the BFF (REG-10)", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(errorResponse(403, { error: "account_inactive", message: "inactiva" }));
+
+    const result = await login("ex@cataclub.com", "Secreta123");
+
+    expect(result).toEqual({ ok: false, error: "account_inactive" });
+  });
+
   it("returns session_validation_failed on 401 when the BFF reports error: unauthorized (backendMe rejected the fresh token)", async () => {
     vi.mocked(global.fetch).mockResolvedValue(
       errorResponse(401, { error: "unauthorized", message: "token rejected" }),

@@ -217,8 +217,7 @@ export default function EnrollAside(props: EnrollAsideProps): ReactElement {
             estudiante.
           </Item>
           <Item title="Campos opcionales">
-            Condiciones de salud, alergias y observaciones adicionales son
-            opcionales.
+            Condiciones de salud y alergias son opcionales.
           </Item>
           <PrivacyLink onOpen={() => props.onOpenDocument("privacidad")} />
         </>

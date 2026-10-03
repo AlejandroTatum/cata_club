@@ -478,9 +478,14 @@ describe("LandingPage", (): void => {
   });
 
   it("orders the main content Hero → Ticker → Nosotros → Valores → Stats → Galería → Horarios → CTA → Visítenos", async (): Promise<void> => {
+    // The gallery only has a place in the order once it has photos (VIS-03).
+    publishGallery([
+      { id: 1, titulo: "En juego", descripcion: "Una jugada frente al público de la sala.", imagenUrl: "https://res.cloudinary.com/club/en-juego.jpg" },
+    ]);
     const { container } = render(<LandingPage />);
     const main = container.querySelector("main");
     await waitFor((): void => { expect(container.querySelector(".landing-schedule-layout")).toBeInTheDocument(); });
+    await waitFor((): void => { expect(container.querySelector("[data-carousel]")).toBeInTheDocument(); });
     expect(main).not.toBeNull();
     const sections = Array.from(main?.children ?? []);
     expect(sections[0]?.getAttribute("id")).toBe("inicio");
@@ -950,12 +955,27 @@ describe("LandingPage", (): void => {
    * photos from /galeria. The default fetch stub answers with an empty list,
    * which is the section's real initial state.
    */
-  it("says the gallery is empty until the club publishes photos", async (): Promise<void> => {
+  // VIS-03: an empty gallery is not a section worth showing, nor a nav entry
+  // worth offering — both disappear until the club publishes a photo.
+  it("hides the gallery section and its nav entries while the club has published nothing", async (): Promise<void> => {
     render(<LandingPage />);
 
-    const status = await within(gallerySection()).findByRole("status");
-    expect(status).toHaveTextContent("Aún no hay fotos en la galería.");
-    expect(within(gallerySection()).queryByRole("img")).not.toBeInTheDocument();
+    await waitFor((): void => { expect(document.querySelector("#galeria")).toBeNull(); });
+    expect(screen.queryByRole("heading", { name: "Galería" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Aún no hay fotos en la galería.")).not.toBeInTheDocument();
+    // Neither the navbar nor the footer points at a section that is not there.
+    expect(document.querySelector("a[href='#galeria']")).toBeNull();
+  });
+
+  it("keeps the gallery's nav entries once there are photos to show", async (): Promise<void> => {
+    publishGallery([
+      { id: 1, titulo: "En juego", descripcion: "Una jugada frente al público de la sala.", imagenUrl: "https://res.cloudinary.com/club/en-juego.jpg" },
+    ]);
+
+    render(<LandingPage />);
+
+    await within(gallerySection()).findAllByRole("img");
+    expect(document.querySelectorAll("a[href='#galeria']").length).toBe(2);
   });
 
   it("renders one accessible photo per published entry, caption in the tree", async (): Promise<void> => {
@@ -1644,7 +1664,7 @@ describe("LandingPage", (): void => {
           expect(consoleError).toHaveBeenCalled();
         });
         expect(screen.getAllByRole("link", { name: /inscr/i }).length).toBeGreaterThan(0);
-        expect(screen.getByRole("heading", { name: "Galería" })).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "Misión y Visión" })).toBeInTheDocument();
       } finally {
         consoleError.mockRestore();
         vi.doUnmock("@/app/landing/LandingMotion");
