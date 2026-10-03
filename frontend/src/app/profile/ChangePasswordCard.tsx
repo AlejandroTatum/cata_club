@@ -16,8 +16,9 @@
  */
 
 import { type FormEvent, useId, useState } from "react";
-import { KeyRound } from "lucide-react";
+import { Eye, EyeOff, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui";
+import PasswordStrengthMeter from "@/components/ui/PasswordStrengthMeter";
 import { ICON } from "@/lib/icon-size";
 import { passwordRule } from "@/lib/identity-validation";
 import { toUserMessage } from "@/lib/error-message";
@@ -49,6 +50,7 @@ function PasswordField({
   autoComplete,
   disabled,
   onChange,
+  describedBy,
 }: {
   id: string;
   label: string;
@@ -57,24 +59,43 @@ function PasswordField({
   autoComplete: string;
   disabled: boolean;
   onChange: (value: string) => void;
+  /** Extra description id (the strength meter's line), read after the error. */
+  describedBy?: string;
 }): React.ReactElement {
   const errorId = `${id}-error`;
+  const [visible, setVisible] = useState(false);
+  const described = [error ? errorId : null, describedBy].filter(Boolean).join(" ") || undefined;
   return (
     <div className="grid gap-1.5">
       <label htmlFor={id} className="text-sm font-semibold text-ink">
         {label}
       </label>
-      <input
-        id={id}
-        type="password"
-        value={value}
-        autoComplete={autoComplete}
-        disabled={disabled}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
-        onChange={(event) => onChange(event.target.value)}
-        className={`input-field ${error ? "border-state-bad" : ""}`}
-      />
+      <div className="relative">
+        <input
+          id={id}
+          type={visible ? "text" : "password"}
+          value={value}
+          autoComplete={autoComplete}
+          disabled={disabled}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={described}
+          onChange={(event) => onChange(event.target.value)}
+          className={`input-field pr-10 ${error ? "border-state-bad" : ""}`}
+        />
+        <button
+          type="button"
+          onClick={() => setVisible((v) => !v)}
+          aria-pressed={visible}
+          aria-label={`${visible ? "Ocultar" : "Mostrar"} ${label.toLowerCase()}`}
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-3-strong transition-colors hover:text-ink"
+        >
+          {visible ? (
+            <EyeOff size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+          ) : (
+            <Eye size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+          )}
+        </button>
+      </div>
       {error && (
         <p id={errorId} role="alert" className="text-xs font-semibold text-state-bad">
           {error}
@@ -85,7 +106,7 @@ function PasswordField({
 }
 
 export default function ChangePasswordCard(): React.ReactElement {
-  const { showSuccess, showError } = useToast();
+  const { showSuccess } = useToast();
   const baseId = useId();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -97,6 +118,12 @@ export default function ChangePasswordCard(): React.ReactElement {
 
   const errors = attempted ? validate(current, next, repeat) : {};
   const visibleCurrent = errors.current ?? serverError ?? undefined;
+
+  /** Editing any field closes the previous attempt's notices (FAM-24). */
+  function clearNotices(): void {
+    setServerError(null);
+    setMessage(null);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -116,8 +143,9 @@ export default function ChangePasswordCard(): React.ReactElement {
       showSuccess(result.mensaje);
     } catch (error: unknown) {
       const text = toUserMessage(error, "No se pudo cambiar la contraseña.");
+      // Shown inline under the field only: a second copy as a toast outlived
+      // the next attempt and contradicted the field's new message (FAM-24).
       setServerError(text);
-      showError(text);
     } finally {
       setSubmitting(false);
     }
@@ -127,7 +155,7 @@ export default function ChangePasswordCard(): React.ReactElement {
     <section data-testid="profile-change-password" className="card overflow-hidden">
       <SectionHead
         title="Cambiar contraseña"
-        subtitle="Cierra sus otras sesiones"
+        subtitle="Al cambiarla, se cerrarán sus otras sesiones."
         icon={<KeyRound size={ICON.sm} strokeWidth={1.5} />}
         tone="ball"
       />
@@ -141,7 +169,7 @@ export default function ChangePasswordCard(): React.ReactElement {
           disabled={submitting}
           onChange={(value) => {
             setCurrent(value);
-            setServerError(null);
+            clearNotices();
           }}
         />
         <PasswordField
@@ -151,8 +179,13 @@ export default function ChangePasswordCard(): React.ReactElement {
           error={errors.next}
           autoComplete="new-password"
           disabled={submitting}
-          onChange={setNext}
+          onChange={(value) => {
+            setNext(value);
+            clearNotices();
+          }}
+          describedBy={`${baseId}-meter`}
         />
+        <PasswordStrengthMeter id={`${baseId}-meter`} value={next} className="-mt-2 mb-0" />
         <PasswordField
           id={`${baseId}-repeat`}
           label="Repetir nueva contraseña"
@@ -160,7 +193,10 @@ export default function ChangePasswordCard(): React.ReactElement {
           error={errors.repeat}
           autoComplete="new-password"
           disabled={submitting}
-          onChange={setRepeat}
+          onChange={(value) => {
+            setRepeat(value);
+            clearNotices();
+          }}
         />
         <Button type="submit" variant="secondary" disabled={submitting}>
           {submitting ? "Guardando…" : "Actualizar contraseña"}

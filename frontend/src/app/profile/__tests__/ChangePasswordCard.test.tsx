@@ -45,7 +45,7 @@ describe("ChangePasswordCard", () => {
     submit();
 
     await waitFor(() => expect(mockCambiar).toHaveBeenCalledWith("claveActual123", "claveNueva456"));
-    expect(await screen.findByRole("status")).toHaveTextContent("Contraseña actualizada.");
+    expect(await screen.findByText("Contraseña actualizada.")).toBeInTheDocument();
     expect(screen.getByLabelText(/^contraseña actual/i)).toHaveValue("");
   });
 
@@ -90,5 +90,37 @@ describe("ChangePasswordCard", () => {
 
     expect(await screen.findByText("La contraseña actual es incorrecta.")).toBeInTheDocument();
     expect(screen.getByLabelText(/^contraseña actual/i)).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("closes the previous attempt's notice when any field is edited (FAM-24)", async () => {
+    mockCambiar.mockRejectedValueOnce(Object.assign(new Error("La contraseña actual es incorrecta."), { status: 400 }));
+    render(<ChangePasswordCard />);
+    fillAll();
+    submit();
+    expect(await screen.findByText("La contraseña actual es incorrecta.")).toBeInTheDocument();
+    expect(mockShowError).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText(/^repetir nueva contraseña/i), { target: { value: "otra" } });
+
+    expect(screen.queryByText("La contraseña actual es incorrecta.")).not.toBeInTheDocument();
+  });
+
+  it("offers a show/hide toggle and a strength reading on the new password (REG-23)", () => {
+    render(<ChangePasswordCard />);
+    const next = screen.getByLabelText(/^nueva contraseña/i);
+    expect(next).toHaveAttribute("type", "password");
+
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar nueva contraseña" }));
+    expect(next).toHaveAttribute("type", "text");
+    expect(screen.getByRole("button", { name: "Ocultar nueva contraseña" })).toBeInTheDocument();
+
+    fireEvent.change(next, { target: { value: "abc" } });
+    expect(screen.getByText(/3 de 8 caracteres/)).toBeInTheDocument();
+  });
+
+  it("says in usted that the other sessions get closed", () => {
+    render(<ChangePasswordCard />);
+    expect(screen.getByText("Al cambiarla, se cerrarán sus otras sesiones.")).toBeInTheDocument();
+    expect(screen.queryByText("Cierra sus otras sesiones")).not.toBeInTheDocument();
   });
 });
