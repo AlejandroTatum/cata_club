@@ -167,6 +167,14 @@ describe("the dependent's first payment (FAM-09, FAM-08)", () => {
     await screen.findByLabelText("Plan de membresía");
   }
 
+  it("shows the club's «Cómo pagar» transfer data on the payment step (FAM-04)", async () => {
+    await openPaymentStep();
+
+    const block = screen.getByTestId("how-to-pay");
+    expect(block).toHaveTextContent("Lucía Catalina Cedillo Flor");
+    expect(block).toHaveTextContent("2901580636");
+  });
+
   it("labels the plan with a Spanish price and no dot decimal", async () => {
     await openPaymentStep();
 

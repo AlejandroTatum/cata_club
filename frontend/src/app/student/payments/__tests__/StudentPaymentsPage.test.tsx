@@ -305,6 +305,15 @@ describe("StudentPaymentsPage — whose payment this is", () => {
     render(<StudentPaymentsPage />);
   }
 
+  it("shows the club's «Cómo pagar» transfer data (FAM-04)", async () => {
+    renderAsGuardian();
+
+    const block = await screen.findByTestId("how-to-pay");
+    expect(within(block).getByText("2901580636")).toBeInTheDocument();
+    expect(within(block).getByText("Banco de Loja")).toBeInTheDocument();
+    expect(within(block).getByRole("button", { name: "Copiar número" })).toBeInTheDocument();
+  });
+
   it("names the dependent on the membership card even with no switcher on screen", async () => {
     renderAsGuardian();
 

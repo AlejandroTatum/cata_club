@@ -97,6 +97,16 @@ describe("AyudaPage — the shell follows the session (VIS-05)", () => {
   });
 });
 
+describe("AyudaPage — «Cómo pagar» (FAM-04)", () => {
+  it("shows the club's transfer data", () => {
+    render(<AyudaPage />);
+
+    const block = screen.getByTestId("how-to-pay");
+    expect(block).toHaveTextContent("Banco de Loja");
+    expect(block).toHaveTextContent("2901580636");
+  });
+});
+
 describe("AyudaPage", () => {
   it("renders exactly one 'Volver al Inicio' link, not one at each end (DSH-3)", () => {
     render(<AyudaPage />);

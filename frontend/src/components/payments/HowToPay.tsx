@@ -1,0 +1,80 @@
+"use client";
+
+/**
+ * «Cómo pagar» — the club's transfer data, where a family registers a payment
+ * (#1535, FAM-04). The values come from `club-payment-info.ts`; with no usable
+ * config the block renders nothing, and each optional field (QR, cash place and
+ * hours) renders only when configured.
+ */
+
+import { useState } from "react";
+import { Copy } from "lucide-react";
+import { buttonClasses, cn } from "@/components/ui";
+import { ICON } from "@/lib/icon-size";
+import { getClubPaymentInfo } from "@/lib/club-payment-info";
+
+type CopyState = "idle" | "copied" | "failed";
+
+function Row({ label, children }: { label: string; children: React.ReactNode }): React.ReactElement {
+  return (
+    <div className="min-w-0">
+      <dt className="text-2xs font-bold uppercase text-ink-3-strong">{label}</dt>
+      <dd className="mt-0.5 break-words text-sm font-bold text-ink">{children}</dd>
+    </div>
+  );
+}
+
+export default function HowToPay({ className }: { className?: string }): React.ReactElement | null {
+  const info = getClubPaymentInfo();
+  const [copyState, setCopyState] = useState<CopyState>("idle");
+  if (!info) return null;
+
+  async function copyNumber(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(info!.accountNumber);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+  }
+
+  return (
+    <section data-testid="how-to-pay" aria-labelledby="how-to-pay-title" className={cn("card flex flex-col gap-3 p-[18px]", className)}>
+      <h2 id="how-to-pay-title" className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
+        Cómo pagar
+      </h2>
+      <p className="text-sm text-ink-2">
+        Haga la transferencia a esta cuenta y después registre el pago con el comprobante.
+      </p>
+      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Row label="Titular">{info.holder}</Row>
+        {info.holderId && <Row label="Identificación">C.I.: {info.holderId}</Row>}
+        <Row label="Banco">{info.bank}</Row>
+        {info.accountType && <Row label="Tipo de cuenta">{info.accountType}</Row>}
+        <Row label="Número de cuenta">
+          <span className="tabular-nums">{info.accountNumber}</span>
+        </Row>
+        {info.cashPlace && <Row label="Efectivo: lugar">{info.cashPlace}</Row>}
+        {info.cashHours && <Row label="Efectivo: horario">{info.cashHours}</Row>}
+      </dl>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => void copyNumber()}
+          className={buttonClasses("secondary", "md", "min-h-[44px] min-w-[44px]")}
+        >
+          <Copy size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+          Copiar número
+        </button>
+        <span role="status" className="text-sm text-ink-2">
+          {copyState === "copied" && "Número de cuenta copiado"}
+          {copyState === "failed" && "No se pudo copiar. Selecciónelo y cópielo a mano."}
+        </span>
+      </div>
+      {info.qrImageSrc && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={info.qrImageSrc} alt="Código QR para transferir al club" className="h-40 w-40 rounded-ctl border border-line" />
+      )}
+    </section>
+  );
+}
