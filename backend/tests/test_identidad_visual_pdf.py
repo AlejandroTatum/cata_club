@@ -222,3 +222,29 @@ def test_el_sello_de_estado_conserva_su_color_propio(
 
     assert len(sellos) == 1
     assert sellos[0].style.textColor == colors.HexColor(color_esperado)
+
+
+# --- ADM-05 (QA3): el texto de usuario se escapa antes de ir a un Paragraph --
+# `Paragraph` interpreta un mini-XML: un nombre como `<b>Ana` (etiqueta sin
+# cerrar) hacía fallar el parseo y la descarga del reporte terminaba en 500.
+_NOMBRE_HOSTIL = "<b>Ana & <i>Pérez</u>"
+
+
+def test_reporte_pdf_con_marcado_en_los_datos_no_falla():
+    pdf = generador_pdf.generar_reporte_pdf(
+        titulo="Reporte <b>de & prueba",
+        columnas=["Nombre <b>", "Estado & más"],
+        filas=[[_NOMBRE_HOSTIL, "ok"]],
+        generado_por="<admin & co",
+    )
+    assert pdf.startswith(b"%PDF")
+
+
+def test_comprobante_pdf_con_marcado_en_los_datos_no_falla():
+    datos = {
+        **_DATOS_COMPROBANTE,
+        "persona_nombre": _NOMBRE_HOSTIL,
+        "membresia_categoria": "<b>Infantil & Juvenil",
+        "estado_pago": "<raro & estado",
+    }
+    assert generar_comprobante_pago_pdf(**datos).startswith(b"%PDF")

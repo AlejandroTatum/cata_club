@@ -507,6 +507,23 @@ def test_alumno_cedula_duplicada_rechazada(db_session):
         EnrollmentServicio(db_session).enroll(datos)
 
 
+def test_inscripcion_con_institucion_inexistente_responde_error_claro(db_session):
+    """REG-07: una institución que no existe no es un duplicado de identidad."""
+    alumno = _alumno_dto(cedula=cedula_valida(253), fecha_nacimiento=date(2000, 1, 1))
+    alumno.institucion_id = 999999
+    datos = _enrollment_dto(
+        alumno=alumno,
+        credenciales_alumno=EnrollmentCredencialesDTO(
+            correo="institucion@example.com", contrasenia="password8",
+        ),
+    )
+
+    with pytest.raises(OperacionInvalida, match="La institución seleccionada no es válida."):
+        EnrollmentServicio(db_session).enroll(datos)
+
+    assert db_session.query(Persona).count() == 0
+
+
 def test_representante_cedula_duplicada_rechazada(db_session):
     """Si la cédula del representante ya existe, se rechaza."""
     persona = Persona(

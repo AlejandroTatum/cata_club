@@ -830,6 +830,9 @@ class AuthServicio:
         if not usuario.activo or not usuario.persona.activo:
             raise CredencialesInvalidas("El enlace de recuperación es inválido o expiró")
 
+        if GestorAutenticacion.verificar_contrasenia(nueva_contrasenia, usuario.contrasenia):
+            raise OperacionInvalida("La nueva contraseña debe ser distinta de la actual.")
+
         usuario.contrasenia = GestorAutenticacion.obtener_hash_contrasenia(nueva_contrasenia)
         usuario.version_contrasenia += 1
         # Criterio unificado (issue #4): restablecer la contraseña RETIRA el

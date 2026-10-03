@@ -33,3 +33,19 @@ def test_correo_validado_ya_canonico_no_cambia():
 def test_correo_validado_rechaza_formato_invalido():
     with pytest.raises(ValidationError):
         _DTOCorreo(correo="no-es-un-correo")
+
+
+def test_correo_validado_rechaza_mas_de_100_caracteres():
+    # REG-02 (QA3): `Usuario.correo` es String(100); un correo más largo
+    # llegaba al INSERT y terminaba en 500.
+    largo = "a" * 90 + "@ejemplo.com"
+    assert len(largo) > 100
+    with pytest.raises(ValidationError) as exc_info:
+        _DTOCorreo(correo=largo)
+    assert any("100 caracteres" in e["msg"] for e in exc_info.value.errors())
+
+
+def test_correo_validado_acepta_exactamente_100_caracteres():
+    exacto = "a" * (100 - len("@ejemplo.com")) + "@ejemplo.com"
+    assert len(exacto) == 100
+    assert _DTOCorreo(correo=exacto).correo == exacto

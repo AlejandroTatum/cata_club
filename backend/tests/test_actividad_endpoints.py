@@ -9,6 +9,7 @@ correos, ids de usuario, IPs, hosts ni versiones.
 from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
+from sqlalchemy.dialects.postgresql import JSONB
 
 from app.dominio.enums import Categoria, DiaSemana, EstadoAsistencia, EstadoMembresia, EstadoPago, TipoRol
 from app.dominio.modelos import Asistencia, HorarioEntrenamiento, MetricaInstantanea
@@ -331,6 +332,23 @@ def _sembrar_avanzadas(db):
         host_contenedores=[{"nombre": "backend", "usado_mb": 262, "limite_mb": 320}],
     ))
     db.flush()
+
+
+@pytest.mark.parametrize("malo", [JSONB.NULL, {"x": 1}, 7, [1, "a"]])
+def test_avanzadas_ignora_buckets_json_nulos_o_que_no_son_arreglo(client, db_session, malo):
+    """ADM-04: un JSON `null` pasa `isnot(None)` y rompía la suma con un 500."""
+    _instantanea(db_session, hace_min=2, intervalo_s=60, peticiones=10, latencia_buckets=malo)
+    _instantanea(db_session, hace_min=1, intervalo_s=60, peticiones=10, latencia_buckets=[10] * 12)
+
+    for ruta in (RUTA_AVANZADAS + "?rango=1h", RUTA_RESUMEN + "?rango=7d"):
+        assert client.get(ruta).status_code == 200
+
+
+def test_avanzadas_tolera_buckets_de_distinta_longitud(client, db_session):
+    _instantanea(db_session, hace_min=2, intervalo_s=60, peticiones=10, latencia_buckets=[10] * 12)
+    _instantanea(db_session, hace_min=1, intervalo_s=60, peticiones=10, latencia_buckets=[10] * 8)
+
+    assert client.get(RUTA_AVANZADAS + "?rango=1h").status_code == 200
 
 
 @pytest.mark.parametrize("rango", ["1h", "24h", "7d"])

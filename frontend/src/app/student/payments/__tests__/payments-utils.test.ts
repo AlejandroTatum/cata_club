@@ -256,6 +256,14 @@ describe("voucherFileSizeError", () => {
 });
 
 describe("voucherFileError", () => {
+  it("rejects an empty (0-byte) file with a clear message", () => {
+    expect(voucherFileError(fileOfSize(0))).toBe("El comprobante está vacío.");
+  });
+
+  it("accepts a file of a single byte", () => {
+    expect(voucherFileError(fileOfSize(1))).toBeNull();
+  });
+
   it("reports the #482 type error first, without also checking size", () => {
     const file = new File(["contenido"], "notas.txt", { type: "text/plain" });
     expect(voucherFileError(file)).toBe("El comprobante debe ser un archivo PDF, JPG o PNG.");

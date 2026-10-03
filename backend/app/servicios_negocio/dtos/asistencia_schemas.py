@@ -141,7 +141,7 @@ class CategoriaPublicacionDTO(BaseModel):
 class AsistenciaCreateDTO(BaseModel):
     fecha_entrenamiento: date
     estado: EstadoAsistencia
-    justificativo: Optional[str] = None
+    justificativo: Optional[str] = Field(default=None, max_length=255)
     estado_justificativo: Optional[bool] = None
     persona_id: int
     horario_id: int
@@ -191,7 +191,7 @@ class AsistenciaCorreccionDTO(BaseModel):
     obligatorio: una corrección sin motivo es exactamente lo que este
     operativo existe para impedir."""
     estado: EstadoAsistencia
-    justificativo: Optional[str] = None
+    justificativo: Optional[str] = Field(default=None, max_length=255)
     estado_justificativo: Optional[bool] = None
     motivo: str = Field(min_length=1, max_length=500)
 

@@ -118,6 +118,9 @@ def validar_contrasenia(contrasenia: str) -> None:
     está en la lista negra. No normaliza ni devuelve nada -- el llamador
     conserva el valor tal como llegó (la contraseña que se hashea es la que
     el usuario escribió, no una recortada a los bordes)."""
+    if "\x00" in contrasenia:
+        # REG-01 (QA3): PostgreSQL no admite U+0000 y bcrypt corta en él.
+        raise ValueError("La contraseña contiene caracteres no permitidos.")
     normalizada = contrasenia.strip()
     if len(normalizada) < LONGITUD_MINIMA_CONTRASENIA:
         raise ValueError(

@@ -1,4 +1,5 @@
 from app.dominio.cedula import cedula_valida
+from tests.nombres_validos import nombre_unico
 from app.dominio.modelos import AsistenciaCorreccion, Persona
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import _calcular_edad
@@ -498,7 +499,7 @@ def _registrar_lista(client, persona_id, horario_id, fecha, estado):
 def test_listar_ultimas_listas_cuenta_los_cuatro_estados(client):
     horario = _crear_horario_api(client)
     estudiantes = [
-        _crear_persona_api(client, cedula_valida(8100 + i), f"Alumno{i}") for i in range(4)
+        _crear_persona_api(client, cedula_valida(8100 + i), nombre_unico(i, "Alumno")) for i in range(4)
     ]
     for persona, estado in zip(estudiantes, ["PRESENTE", "ATRASADO", "JUSTIFICADO", "AUSENTE"]):
         _registrar_lista(client, persona["id"], horario["id"], "2026-08-03", estado)
@@ -640,7 +641,7 @@ def test_admin_no_puede_reabrir_sesion_cerrada_sin_importar_antiguedad(client, m
         fecha = str(_HOY_CORRECCION - timedelta(days=antiguedad_dias))
         dia = _dia_semana_de(fecha)
         categoria = "COMPETITIVO" if dia == "SABADO" else "JUVENIL"
-        alumno = _crear_persona_api(client, cedula_valida(170 + indice), f"Alumno{indice}")
+        alumno = _crear_persona_api(client, cedula_valida(170 + indice), nombre_unico(indice, "Alumno"))
         horario = _crear_horario_api(client, dia=dia, categoria=categoria)
         client.post(
             "/api/v1/asistencias/asignar-alumno",
@@ -1220,7 +1221,7 @@ def test_listar_ultimas_listas_enfermo_y_competencia_son_justificados(client):
     injustificada."""
     horario = _crear_horario_api(client)
     estudiantes = [
-        _crear_persona_api(client, cedula_valida(8210 + i), f"Alumno{i}") for i in range(5)
+        _crear_persona_api(client, cedula_valida(8210 + i), nombre_unico(i, "Alumno")) for i in range(5)
     ]
     for persona, estado in zip(
         estudiantes, ["PRESENTE", "JUSTIFICADO", "ENFERMO", "COMPETENCIA", "AUSENTE"],

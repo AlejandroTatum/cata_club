@@ -6,12 +6,13 @@ para menores.
 """
 import pytest
 from app.dominio.cedula import cedula_valida
+from tests.nombres_validos import nombre_unico
 from app.seguridad.gestor_auth import GestorAutenticacion
 
 
 def _crear_persona(client, cedula, fecha_nacimiento="2000-05-14", representante_id=None):
     payload = {
-        "nombres": "Test", "apellidos": cedula, "cedula": cedula,
+        "nombres": "Test", "apellidos": nombre_unico(cedula), "cedula": cedula,
         "fecha_nacimiento": fecha_nacimiento, "telefono": "0991234567",
     }
     if representante_id:
