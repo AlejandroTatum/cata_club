@@ -937,7 +937,7 @@ describe("EnrollPage — the error box on the summary step (REG-22)", () => {
     render(<EnrollPage />);
     const alert = await submitAndFail(Object.assign(new Error("boom"), { status: 500 }));
 
-    const link = within(alert).getByRole("link", { name: /wa\.me/ });
+    const link = within(alert).getByRole("link", { name: /wa\.me|WhatsApp/i });
     expect(link).toHaveAttribute("href", expect.stringMatching(/^https:\/\/wa\.me\//));
     expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
   });
