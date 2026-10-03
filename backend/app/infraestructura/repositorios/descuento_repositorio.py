@@ -1,9 +1,9 @@
-from typing import List, Optional
+from typing import List, Optional, Set
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.dominio.modelos import AsignacionDescuento, Descuento
+from app.dominio.modelos import AsignacionDescuento, Descuento, Pago
 
 
 class DescuentoRepositorio:
@@ -43,6 +43,23 @@ class DescuentoRepositorio:
     def guardar_cambios(self, descuento: Descuento) -> Descuento:
         self.db.flush()
         return descuento
+
+    def ids_en_uso(self, ids: List[int]) -> Set[int]:
+        """Cuáles de `ids` tienen alguna referencia por FK: un pago que lo
+        aplicó o una asignación de beneficio (vigente o retirada). Una sola
+        consulta por tabla para todo el lote, sin N+1."""
+        if not ids:
+            return set()
+        usados: Set[int] = set()
+        for columna in (Pago.descuento_id, AsignacionDescuento.descuento_id):
+            usados.update(
+                self.db.execute(select(columna).where(columna.in_(ids)).distinct()).scalars()
+            )
+        return usados
+
+    def eliminar(self, descuento: Descuento) -> None:
+        self.db.delete(descuento)
+        self.db.flush()
 
 
 class AsignacionDescuentoRepositorio:

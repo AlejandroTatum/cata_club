@@ -30,6 +30,7 @@ from tests.fabricas_pagos import (
     crear_persona_api,
     crear_tipo_membresia_api,
     crear_tipo_membresia_orm,
+    registrar_pago_api,
 )
 
 RUTA_TIPOS = "/api/v1/membresias/tipos"
@@ -220,3 +221,167 @@ def test_get_tarifas_refleja_los_tipos_creados(db_session, client_sin_token):
         if i["categoria"] == tipo.categoria and Decimal(i["precio"]) == tipo.precio
     ]
     assert len(coincidencias) == 1
+
+
+# --- Ocultar y eliminar tarifas (retirar del catálogo sin romper historia) ---
+# Decisión del dueño: OCULTAR (`activo`) siempre está disponible; ELIMINAR solo
+# si la tarifa nunca se usó. Una tarifa oculta sale del catálogo público y no
+# admite altas nuevas, pero las membresías que ya la usan siguen operando.
+def _ocultar(client, tipo_id: int):
+    return client.patch(f"{RUTA_TIPOS}/{tipo_id}", json={"activo": False})
+
+
+def test_una_tarifa_nueva_es_activa_y_sin_uso(client):
+    tipo = crear_tipo_membresia_api(client)
+
+    assert tipo["activo"] is True
+    assert tipo["enUso"] is False
+
+
+def test_admin_oculta_y_reactiva_una_tarifa(client):
+    tipo = crear_tipo_membresia_api(client)
+
+    oculta = _ocultar(client, tipo["id"])
+    assert oculta.status_code == 200, oculta.text
+    assert oculta.json()["activo"] is False
+
+    visible = client.patch(f"{RUTA_TIPOS}/{tipo['id']}", json={"activo": True})
+    assert visible.json()["activo"] is True
+
+
+def test_activo_null_explicito_es_rechazado(client):
+    tipo = crear_tipo_membresia_api(client)
+
+    respuesta = client.patch(f"{RUTA_TIPOS}/{tipo['id']}", json={"activo": None})
+
+    assert respuesta.status_code == 422
+
+
+def test_el_listado_admin_incluye_las_tarifas_ocultas(client):
+    tipo = crear_tipo_membresia_api(client)
+    _ocultar(client, tipo["id"])
+
+    items = client.get(RUTA_TIPOS).json()
+
+    assert {"id": tipo["id"], "activo": False} in [
+        {"id": t["id"], "activo": t["activo"]} for t in items
+    ]
+
+
+def test_el_listado_admin_puede_pedir_solo_activas(client):
+    visible = crear_tipo_membresia_api(client)
+    oculta = crear_tipo_membresia_api(client)
+    _ocultar(client, oculta["id"])
+
+    ids = [t["id"] for t in client.get(RUTA_TIPOS, params={"solo_activas": "true"}).json()]
+
+    assert visible["id"] in ids
+    assert oculta["id"] not in ids
+
+
+def test_get_tarifas_publico_excluye_las_ocultas(client):
+    visible = crear_tipo_membresia_api(client)
+    oculta = crear_tipo_membresia_api(client)
+    _ocultar(client, oculta["id"])
+
+    categorias = [t["categoria"] for t in client.get(RUTA_TARIFAS).json()]
+
+    assert visible["categoria"] in categorias
+    assert oculta["categoria"] not in categorias
+
+
+def test_no_se_crea_membresia_con_tarifa_oculta(client):
+    persona = crear_persona_api(client)
+    tipo = crear_tipo_membresia_api(client)
+    _ocultar(client, tipo["id"])
+
+    respuesta = client.post(
+        "/api/v1/membresias/",
+        json={"persona_id": persona["id"], "tipo_membresia_id": tipo["id"]},
+    )
+
+    assert respuesta.status_code == 400
+    assert "oculta" in respuesta.json()["detail"].lower()
+
+
+def test_no_se_cambia_el_plan_a_una_tarifa_oculta(client):
+    persona = crear_persona_api(client)
+    vigente = crear_tipo_membresia_api(client)
+    oculta = crear_tipo_membresia_api(client)
+    membresia = crear_membresia_api(client, persona["id"], vigente["id"])
+    _ocultar(client, oculta["id"])
+
+    respuesta = client.post(
+        f"/api/v1/membresias/{membresia['id']}/cambiar-plan",
+        json={"nuevo_tipo_membresia_id": oculta["id"]},
+    )
+
+    assert respuesta.status_code == 400
+
+
+def test_la_membresia_existente_sigue_cobrando_con_su_tarifa_oculta(client):
+    """Ocultar no rompe el historial: pagos y aprobación siguen funcionando."""
+    persona = crear_persona_api(client)
+    tipo = crear_tipo_membresia_api(client)
+    membresia = crear_membresia_api(client, persona["id"], tipo["id"])
+    _ocultar(client, tipo["id"])
+
+    pago = registrar_pago_api(client, persona["id"], membresia["id"])
+    assert pago.status_code == 201, pago.text
+
+    validado = client.patch(
+        f"/api/v1/membresias/pagos/{pago.json()['id']}/validar",
+        json={
+            "estado_pago": "APROBADO",
+            "motivo_excepcion_sin_comprobante": "Verificado directamente en la cuenta del club.",
+        },
+    )
+    assert validado.status_code == 200, validado.text
+    estado = client.get(f"/api/v1/membresias/{membresia['id']}").json()["estado"]
+    assert estado == "ACTIVA"
+
+
+def test_eliminar_tarifa_sin_uso_da_204(client):
+    tipo = crear_tipo_membresia_api(client)
+
+    respuesta = client.delete(f"{RUTA_TIPOS}/{tipo['id']}")
+
+    assert respuesta.status_code == 204
+    assert tipo["id"] not in [t["id"] for t in client.get(RUTA_TIPOS).json()]
+
+
+def test_eliminar_tarifa_inexistente_da_404(client):
+    assert client.delete(f"{RUTA_TIPOS}/999999").status_code == 404
+
+
+def test_eliminar_tarifa_con_membresia_da_409_y_la_marca_en_uso(client):
+    persona = crear_persona_api(client)
+    tipo = crear_tipo_membresia_api(client)
+    crear_membresia_api(client, persona["id"], tipo["id"])
+
+    respuesta = client.delete(f"{RUTA_TIPOS}/{tipo['id']}")
+
+    assert respuesta.status_code == 409
+    assert "ocultarla" in respuesta.json()["detail"]
+    en_listado = next(t for t in client.get(RUTA_TIPOS).json() if t["id"] == tipo["id"])
+    assert en_listado["enUso"] is True
+
+
+def test_eliminar_tarifa_usada_solo_en_historial_de_cambio_de_plan_da_409(client, db_session):
+    """Una tarifa a la que ya nadie pertenece pero que figura en la auditoría
+    de un cambio de plan tampoco se puede borrar (FK de historial)."""
+    persona = crear_persona_api(client)
+    anterior = crear_tipo_membresia_api(client)
+    nueva = crear_tipo_membresia_api(client)
+    membresia = crear_membresia_api(client, persona["id"], anterior["id"])
+    cambio = client.post(
+        f"/api/v1/membresias/{membresia['id']}/cambiar-plan",
+        json={"nuevo_tipo_membresia_id": nueva["id"]},
+    )
+    assert cambio.status_code == 200, cambio.text
+    # Membresía sin referencias directas a `anterior`; solo queda el historial.
+    assert client.delete(f"{RUTA_TIPOS}/{anterior['id']}").status_code == 409
+
+
+def test_eliminar_tarifa_sin_rol_administrador_da_403(client_sin_permisos):
+    assert client_sin_permisos.delete(f"{RUTA_TIPOS}/1").status_code == 403

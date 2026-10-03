@@ -166,7 +166,7 @@ function AddDependentContent(): React.ReactElement {
 
   useEffect(() => {
     fetchInstituciones().then(setInstituciones).catch(() => {});
-    fetchTiposMembresia().then(setPlans).catch(() => {});
+    fetchTiposMembresia({ soloActivas: true }).then(setPlans).catch(() => {});
   }, []);
 
   // ---- Helpers ----

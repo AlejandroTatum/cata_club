@@ -275,6 +275,7 @@ RUTAS_ROLES_REQUERIDOS = {
     # listado incluye inactivos (vista de administración), por eso ni la
     # lectura es de "cualquier autenticado".
     ("GET", "/descuentos/"): frozenset({"ADMINISTRADOR"}),
+    ("DELETE", "/descuentos/{descuento_id}"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/descuentos/{descuento_id}"): frozenset({"ADMINISTRADOR"}),
     # Issue #360: el club no asigna entrenadores a horarios, así que el
     # acceso se acota por DATO (siete campos de emergencia, no la ficha
@@ -364,6 +365,7 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/membresias/tipos"): frozenset({"ADMINISTRADOR"}),
     # Issue #394: editar una tarifa es escribir sobre el número con el que el
     # club cobra, así que lleva el mismo rol que crearla.
+    ("DELETE", "/membresias/tipos/{tipo_id}"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/membresias/tipos/{tipo_id}"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/sponsors/"): frozenset({"ADMINISTRADOR"}),

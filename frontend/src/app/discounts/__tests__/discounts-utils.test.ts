@@ -21,6 +21,7 @@ function makeDescuento(overrides: Partial<DescuentoCatalogo> = {}): DescuentoCat
     porcentaje: "100",
     monto: null,
     activo: true,
+    enUso: false,
     ...overrides,
   };
 }

@@ -28,8 +28,8 @@ vi.mock("@/services/api", async () => {
 });
 
 const TIPOS = [
-  { id: 3, categoria: "Adultos", precio: "35.00", modalidad: "MENSUAL" as const },
-  { id: 4, categoria: "Infantil", precio: "25.00", modalidad: "MENSUAL" as const },
+  { id: 3, categoria: "Adultos", precio: "35.00", modalidad: "MENSUAL" as const, activo: true, enUso: false },
+  { id: 4, categoria: "Infantil", precio: "25.00", modalidad: "MENSUAL" as const, activo: true, enUso: false },
 ];
 
 function renderAction() {

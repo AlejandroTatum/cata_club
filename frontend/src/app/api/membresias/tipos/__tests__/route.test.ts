@@ -9,7 +9,7 @@
  */
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { POST } from "../route";
+import { GET, POST } from "../route";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/server/auth";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -135,5 +135,43 @@ describe("POST /api/membresias/tipos", () => {
     );
 
     expect(response.status).toBe(403);
+  });
+});
+
+describe("GET /api/membresias/tipos", () => {
+  const token = (): string => {
+    const seg = (o: unknown): string => Buffer.from(JSON.stringify(o)).toString("base64url");
+    return `${ACCESS_TOKEN_COOKIE}=${seg({ alg: "none" })}.${seg({ sub: "1", exp: Math.floor(Date.now() / 1000) + 3600 })}.sig`;
+  };
+
+  beforeEach(() => {
+    vi.spyOn(global, "fetch");
+    process.env.BACKEND_API_URL = "http://localhost:8000/api/v1";
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.BACKEND_API_URL;
+  });
+
+  it("forwards solo_activas=true so hidden tariffs never reach a selector", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(jsonResponse([]));
+
+    const response = await GET(
+      new NextRequest("http://localhost/api/membresias/tipos?solo_activas=true", {
+        headers: { cookie: token() },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(String(vi.mocked(global.fetch).mock.calls[0][0])).toContain("/membresias/tipos?solo_activas=true");
+  });
+
+  it("asks for the whole catalog when the admin screen sends no filter", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(jsonResponse([]));
+
+    await GET(new NextRequest("http://localhost/api/membresias/tipos", { headers: { cookie: token() } }));
+
+    expect(String(vi.mocked(global.fetch).mock.calls[0][0])).not.toContain("solo_activas");
   });
 });

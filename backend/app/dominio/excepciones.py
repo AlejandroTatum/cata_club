@@ -136,6 +136,13 @@ class NombreDuplicado(ErrorDominio):
     pass
 
 
+class RecursoEnUso(ErrorDominio):
+    """Se intentó borrar un elemento de catálogo que el club ya usó (-> HTTP
+    409). Es un conflicto con el estado actual de los datos, no un dato
+    inválido: el camino es ocultarlo, no borrarlo."""
+    pass
+
+
 class ConflictoConcurrencia(ErrorDominio):
     """Dos operaciones concurrentes compitieron por la misma fila y el
     `lock_timeout` de Postgres venció esperando su turno (-> HTTP 409, issue

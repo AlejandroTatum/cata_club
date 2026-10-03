@@ -2,7 +2,8 @@
  * GET/POST /api/membresias/tipos — membership type catalog.
  *
  * GET: list the catalog. Proxies FastAPI's GET /membresias/tipos (any
- *      authenticated user).
+ *      authenticated user). `?solo_activas=true` is forwarded to leave out
+ *      hidden tariffs.
  * POST: create a catalog tariff (issue #507). Proxies FastAPI's
  *       POST /membresias/tipos (`TipoMembresiaCreateDTO` — admin-only,
  *       `GestorPermisos(["ADMINISTRADOR"])` on the backend; a non-admin gets
@@ -28,7 +29,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const result = await backendFetchAuthed(request, "/membresias/tipos");
+  // Selectors send `solo_activas=true` so a hidden tariff cannot be picked;
+  // the admin catalog sends nothing and gets every tariff.
+  const soloActivas = request.nextUrl.searchParams.get("solo_activas") === "true";
+  const result = await backendFetchAuthed(
+    request,
+    soloActivas ? "/membresias/tipos?solo_activas=true" : "/membresias/tipos",
+  );
 
   if (!result.ok) {
     return NextResponse.json(
