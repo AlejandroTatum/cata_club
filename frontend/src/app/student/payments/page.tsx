@@ -53,7 +53,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 import { fetchStudentPortal, fetchPagosDePersona, fetchCoberturasDePersona, fetchBeneficio, subirVoucherPago, registrarPago } from "@/services/api";
 import type { StudentPortalSummary, PagoPersona, MembershipSummary, BeneficioAsignado, CoberturaBonificada } from "@/services/api";
-import { BackLink, Badge, Button, EmptyState, ErrorState, FilterPanel, FilterPill, InfoPanel, LoadingState, PAGE_RAIL, StatCard, buttonClasses, cn } from "@/components/ui";
+import { BackLink, Badge, Button, EmptyState, FilterPanel, FilterPill, InfoPanel, LoadingState, PAGE_RAIL, StatCard, buttonClasses, cn } from "@/components/ui";
 
 import { describePaymentSituation, firstNameOf, isMinor } from "../student-utils";
 import ManagedStudentPicker, { useManagedProfiles, withSelectedStudent } from "../ManagedStudentPicker";
@@ -66,7 +66,9 @@ import { toUserMessage } from "@/lib/error-message";
 import { MembershipCard } from "./MembershipAside";
 import { BeneficioNote, PaymentOrBenefitForm } from "./PaymentForms";
 import { VoucherUploadPreview } from "./VoucherUploadPreview";
-import { GhostPagoRows, PagoRow, CoberturaRow } from "./PagoHistoryRows";
+import { PagoRow, CoberturaRow } from "./PagoHistoryRows";
+import StudentErrorState from "../StudentErrorState";
+import { WHATSAPP_CONTACTO } from "@/lib/error-message";
 
 // ---------------------------------------------------------------------------
 // Load state
@@ -105,8 +107,6 @@ function isPagoStatusFilter(value: string): value is PagoStatusFilter {
 
 /** Shared empty list, so "not loaded yet" is a stable reference for the memos below. */
 const NO_PAGOS: PagoPersona[] = [];
-/** Below this many rows the history is topped up with ghost rows. */
-const GHOST_BELOW = 6;
 
 // ---------------------------------------------------------------------------
 // Main content
@@ -341,6 +341,8 @@ function PaymentsContent({
     coverageEnd,
     pendingCount: pagos.filter((pago) => pago.estadoPago === "PENDIENTE_VALIDACION").length,
     esGratuidadFamiliar: selectedProfile?.membership?.esGratuidadFamiliar ?? false,
+    suspended: selectedProfile?.membership?.estado === "SUSPENDIDA",
+    motivoSuspension: selectedProfile?.membership?.motivoSuspension ?? null,
   });
 
   /**
@@ -355,6 +357,14 @@ function PaymentsContent({
   const isGratuitous = selectedProfile?.membership?.esGratuidadFamiliar ?? false;
 
   /**
+   * FAM-03: the backend refuses a payment on a suspended membership
+   * («reactívela antes de registrar un pago»), an instruction only the club can
+   * follow. The form is replaced by a statement of that, so the family does not
+   * fill in every step to learn it at «Confirmar».
+   */
+  const isSuspended = selectedProfile?.membership?.estado === "SUSPENDIDA";
+
+  /**
    * Whether the form above is actually reachable for this reader — the only
    * condition under which the empty history may offer "Registrar un pago" as
    * its way out (D11). It restates the four gates `RenewPaymentForm` already
@@ -364,7 +374,11 @@ function PaymentsContent({
    * second one until the club rules on it.
    */
   const canRegisterHere =
-    !blockedAsMinor && selectedProfile?.membership != null && !isGratuitous && !hasPendingPago;
+    !blockedAsMinor &&
+    selectedProfile?.membership != null &&
+    !isGratuitous &&
+    !isSuspended &&
+    !hasPendingPago;
 
   /**
    * Issue #461: the same door D11's empty-state action already opens,
@@ -517,6 +531,20 @@ function PaymentsContent({
                 resolves that from the payload. */}
             {situation.detail}
           </p>
+        ) : isSuspended ? (
+          <div className="flex flex-col items-start gap-2">
+            <p className="text-sm text-ink-2">
+              {situation.headline} Escriba al club para reactivarla.
+            </p>
+            <a
+              href={WHATSAPP_CONTACTO}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonClasses("secondary", "sm")}
+            >
+              Escribir por WhatsApp
+            </a>
+          </div>
         ) : isGratuitous ? (
           // Issue #400 (slice 4c-b): `situation.detail` already carries the
           // gratuity explanation (`describePaymentSituation`'s "gratuitous"
@@ -538,7 +566,7 @@ function PaymentsContent({
           />
         ) : (
           <p className="text-sm text-ink-2">
-            El club crea la membresía al registrar el primer pago. Acérquese a administración para
+            El club crea la membresía al registrar el primer pago. Acérquese al club para
             activarla y después podrá renovarla desde aquí.
           </p>
         )}
@@ -568,7 +596,7 @@ function PaymentsContent({
             label="En revisión"
             value={<StatValue>{counts.PENDIENTE_VALIDACION}</StatValue>}
             hint="esperando al club"
-            className={counts.PENDIENTE_VALIDACION === 0 ? "opacity-60" : undefined}
+            
           />
           <StatCard
             label="Último pago"
@@ -612,7 +640,7 @@ function PaymentsContent({
         </div>
       )}
       {pagosState.status === "error" && (
-        <ErrorState message={pagosState.message} onRetry={() => setReloadToken((n) => n + 1)} />
+        <StudentErrorState message={pagosState.message} onRetry={() => setReloadToken((n) => n + 1)} />
       )}
       {pagosState.status === "ready" && (
         // One card: title, count and the status pills on top, rows below. It
@@ -625,7 +653,7 @@ function PaymentsContent({
               Historial de pagos
             </h2>
             {filteredPagos.length > 0 && (
-              <span className="text-xs font-semibold tabular-nums text-ink-3">
+              <span className="text-xs font-semibold tabular-nums text-ink-3-strong">
                 {filteredPagos.length}
               </span>
             )}
@@ -692,7 +720,6 @@ function PaymentsContent({
                   ) : undefined
                 }
               />
-              <GhostPagoRows />
             </>
           ) : (
             <>
@@ -716,7 +743,6 @@ function PaymentsContent({
                   ),
                 )}
               </ul>
-              {filteredPagos.length < GHOST_BELOW && <GhostPagoRows count={GHOST_BELOW} fill />}
             </>
           )}
         </section>
@@ -806,7 +832,7 @@ function PaymentsPageContent(): React.ReactElement {
         </div>
       )}
       {state.status === "error" && (
-        <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />
+        <StudentErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />
       )}
       {state.status === "ready" && (
         <PaymentsContent

@@ -117,4 +117,19 @@ describe("JoinAsPlayerAction", () => {
     expect(await screen.findByText(/Ya existe una membresía activa o suspendida/)).toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
   });
+  // FAM-01: the backend refuses a second membership with a 409 and a domain
+  // message. It is shown as written, and nothing offers to create another one.
+  it("shows the backend's 409 duplicate-membership message and does not navigate", async () => {
+    const message = "Esta persona ya tiene una membresía inactiva. Pídale al club que la reactive o la renueve.";
+    vi.mocked(api.crearMembresiaPropia).mockRejectedValue(Object.assign(new Error(message), { status: 409 }));
+
+    renderAction();
+    fireEvent.click(screen.getByRole("button", { name: "Unirme como jugador" }));
+    await screen.findByText(/Adultos/);
+    fireEvent.change(screen.getByLabelText(/Tipo de membresía/), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Inscribirme" }));
+
+    expect((await screen.findAllByText(message)).length).toBeGreaterThan(0);
+    expect(push).not.toHaveBeenCalled();
+  });
 });
