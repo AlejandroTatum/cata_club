@@ -411,3 +411,52 @@ describe("DashboardPage — defers admin API calls until the role resolves", () 
     expect(mockFetchPaymentValidations).toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// QA4 — PERF-03, PERF-06, ADMA-14, TXT-12
+// ---------------------------------------------------------------------------
+
+describe("DashboardPage — QA4 fixes", () => {
+  it("asks for the attendance of the charted window only, once (PERF-03)", async () => {
+    render(<DashboardPage />);
+    await screen.findByText("Miembros");
+
+    await waitFor(() => expect(mockFetchAttendanceRecords).toHaveBeenCalledTimes(1));
+    expect(mockFetchAttendanceRecords).toHaveBeenCalledWith({
+      fechaInicio: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    });
+  });
+
+  it("shows a dash, not 0 %, while the attendance is still loading (PERF-06)", async () => {
+    mockFetchAttendanceRecords.mockReturnValue(new Promise(() => {}));
+    render(<DashboardPage />);
+
+    const tile = (await screen.findByText("Asistencia · 4 semanas")).closest("[data-testid=kpi-tile]") as HTMLElement;
+    expect(within(tile).getByText("—")).toBeInTheDocument();
+    expect(within(tile).queryByText("0")).not.toBeInTheDocument();
+    expect(within(tile).queryByText(/0 de 0 presentes/)).not.toBeInTheDocument();
+  });
+
+  it("reserves the height of the activity block while it loads (PERF-06)", async () => {
+    mockFetchAttendanceRecords.mockReturnValue(new Promise(() => {}));
+    render(<DashboardPage />);
+
+    const feed = await screen.findByTestId("activity-feed");
+    expect(within(feed).getByTestId("section-skeleton")).toBeInTheDocument();
+  });
+
+  it("describes the card for members without a plan as what it counts (ADMA-14)", async () => {
+    render(<DashboardPage />);
+
+    expect(await screen.findByText("Alumnos sin membresía activa")).toBeInTheDocument();
+    expect(screen.getByText("Asígneles un plan o regularice su deuda.")).toBeInTheDocument();
+    expect(screen.queryByText("Miembros sin datos")).not.toBeInTheDocument();
+  });
+
+  it("does not call anyone «staff» (TXT-12)", async () => {
+    render(<DashboardPage />);
+
+    expect(await screen.findByText("40 alumnos · 4 representantes y personal")).toBeInTheDocument();
+    expect(screen.queryByText(/staff/i)).not.toBeInTheDocument();
+  });
+});

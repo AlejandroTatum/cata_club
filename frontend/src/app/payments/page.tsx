@@ -73,6 +73,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import PagoCorreccionSection from "@/app/payments/PagoCorreccionSection";
 import { useModalFocusTrap } from "@/lib/focus-trap";
 import { backHrefForRole } from "@/lib/auth-utils";
+import { refreshPendingPaymentsCount } from "@/lib/usePendingPayments";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   ShieldCheck,
@@ -327,7 +328,7 @@ function MethodTag({ method }: { method: string }): React.ReactElement {
 /** The one label style the detail card uses, in both of its shapes. */
 function DetailLabel({ children }: { children: React.ReactNode }): React.ReactElement {
   return (
-    <span className="text-2xs font-bold uppercase text-ink-3">{children}</span>
+    <span className="text-2xs font-bold uppercase text-ink-3-strong">{children}</span>
   );
 }
 
@@ -403,7 +404,7 @@ function ProofViewer({
             name, so the badge renders only when a proof does; a transfer
             with a voucher, or cash with a receipt, keeps it unchanged. */}
         {request.proofPreviewUrl && (
-          <span className="shrink-0 text-2xs tracking-flat text-ink-3">
+          <span className="shrink-0 text-2xs tracking-flat text-ink-3-strong">
             {request.proofFileType === "pdf" ? "PDF" : "Imagen"}
           </span>
         )}
@@ -509,11 +510,18 @@ function CashConfirmationPanel({
   request: PaymentValidationRequest;
   payer: string;
 }): React.ReactElement {
+  // A resolved payment has no steps left to take (ADMA-15): say what happened.
+  const resolved = request.validationStatus !== "pendiente";
+  const validated = request.validationStatus === "validado";
+  const resolvedWhen = request.validatedAt ? ` el ${formatDate(request.validatedAt)}` : "";
+  const resolvedBy = request.validatedBy ? ` por ${request.validatedBy}` : "";
   return (
     <div className="card flex flex-col overflow-hidden lg:sticky lg:top-6 lg:h-full">
       <div className="flex items-center gap-3 border-b border-line bg-state-ok-bg px-4 py-3 text-state-ok">
         <Banknote size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
-        <h2 className="text-sm font-bold">Confirmación de efectivo</h2>
+        <h2 className="text-sm font-bold">
+          {!resolved ? "Confirmación de efectivo" : validated ? "Pago en efectivo" : "Pago en efectivo rechazado"}
+        </h2>
       </div>
       <div className="grid gap-1.5 px-[18px] py-6">
         <DetailLabel>Monto a recibir</DetailLabel>
@@ -526,14 +534,24 @@ function CashConfirmationPanel({
         <DetailCell label="Entrega el dinero">{payer}</DetailCell>
         <DetailCell label="Para la membresía de">{request.studentName}</DetailCell>
       </dl>
-      <ol className="grid gap-2 px-[18px] py-4 text-sm text-ink-2">
-        <li>1. Reciba el dinero en mano, sin comprobante bancario.</li>
-        <li>2. Verifique que el monto entregado sea el indicado arriba.</li>
-        <li>3. Marque la recepción en la lista de la izquierda y apruebe el pago.</li>
-      </ol>
-      <p className="mt-auto border-t border-line px-[18px] py-4 text-xs text-ink-3">
-        Si el monto entregado no coincide, rechace el pago e indique el motivo al responsable.
-      </p>
+      {resolved ? (
+        <p className="px-[18px] py-4 text-sm text-ink-2">
+          {validated
+            ? `Efectivo recibido${resolvedWhen}${resolvedBy}.`
+            : `Pago rechazado${resolvedWhen}${resolvedBy}: no se recibió el efectivo.`}
+        </p>
+      ) : (
+        <>
+          <ol className="grid gap-2 px-[18px] py-4 text-sm text-ink-2">
+            <li>1. Reciba el dinero en mano, sin comprobante bancario.</li>
+            <li>2. Verifique que el monto entregado sea el indicado arriba.</li>
+            <li>3. Marque la recepción en la lista de la izquierda y apruebe el pago.</li>
+          </ol>
+          <p className="mt-auto border-t border-line px-[18px] py-4 text-xs text-ink-3-strong">
+            Si el monto entregado no coincide, rechace el pago e indique el motivo al responsable.
+          </p>
+        </>
+      )}
     </div>
   );
 }
@@ -673,8 +691,7 @@ export default function PaymentsPage(): React.ReactElement {
    * how many rows a given call actually fetched. One `limit=1` call per
    * pill reads that count without pulling any real rows.
    */
-  const [lightTotals, setLightTotals] = useState<{ all: number; validado: number; rechazado: number }>({
-    all: 0,
+  const [lightTotals, setLightTotals] = useState<{ validado: number; rechazado: number }>({
     validado: 0,
     rechazado: 0,
   });
@@ -702,9 +719,19 @@ export default function PaymentsPage(): React.ReactElement {
     try {
       setPageLoading(true);
       setPageError(null);
+      const skip = (page - 1) * PAYMENTS_PAGE_SIZE;
+      if (activeFilter === "pendiente") {
+        // The pending page is a slice of the drained queue `loadPendingAll`
+        // already needs; `fetchAllPaymentValidations` shares that one
+        // request while it is in flight (PERF-07).
+        const all = await fetchAllPaymentValidations("PENDIENTE_VALIDACION");
+        setPageItems(all.slice(skip, skip + PAYMENTS_PAGE_SIZE));
+        setPageTotal(all.length);
+        return;
+      }
       const estadoPago = activeFilter === "all" ? undefined : BACKEND_ESTADO_BY_FILTER[activeFilter];
       const result = await fetchPaymentValidationsPage({
-        skip: (page - 1) * PAYMENTS_PAGE_SIZE,
+        skip,
         limit: PAYMENTS_PAGE_SIZE,
         estadoPago,
       });
@@ -725,7 +752,7 @@ export default function PaymentsPage(): React.ReactElement {
       setPendingAll(await fetchAllPaymentValidations("PENDIENTE_VALIDACION"));
     } catch (err) {
       console.error("[payments] fetchAllPaymentValidations(pendiente) failed", err);
-      setPendingAllError("Error al cargar la cola de pendientes");
+      setPendingAllError("Error al cargar la lista de pendientes");
     } finally {
       setPendingAllLoading(false);
     }
@@ -733,12 +760,11 @@ export default function PaymentsPage(): React.ReactElement {
 
   const loadLightTotals = useCallback(async (): Promise<void> => {
     try {
-      const [all, validado, rechazado] = await Promise.all([
-        fetchPaymentValidationsPage({ skip: 0, limit: 1 }),
+      const [validado, rechazado] = await Promise.all([
         fetchPaymentValidationsPage({ skip: 0, limit: 1, estadoPago: "APROBADO" }),
         fetchPaymentValidationsPage({ skip: 0, limit: 1, estadoPago: "RECHAZADO" }),
       ]);
-      setLightTotals({ all: all.total, validado: validado.total, rechazado: rechazado.total });
+      setLightTotals({ validado: validado.total, rechazado: rechazado.total });
       setLightTotalsError(false);
     } catch (err) {
       console.error("[payments] loadLightTotals failed", err);
@@ -791,7 +817,7 @@ export default function PaymentsPage(): React.ReactElement {
       setSearchDrained(await fetchAllPaymentValidations(estadoPago));
     } catch (err) {
       console.error("[payments] search drain failed", err);
-      setSearchDrainError("Error al buscar en la cola completa");
+      setSearchDrainError("Error al buscar en la lista completa");
     } finally {
       setSearchDrainLoading(false);
     }
@@ -869,7 +895,12 @@ export default function PaymentsPage(): React.ReactElement {
   // queue; the other three share one flag since one call
   // (`loadLightTotals`) fetches all three totals together.
   const filterCounts: Record<FilterKey, number | null> = {
-    all: lightTotalsError ? null : lightTotals.all,
+    // «Todos» is the sum of the three states: the pending count is the drained
+    // queue's own length, so no separate grand-total request is needed.
+    all:
+      lightTotalsError || pendingAllError
+        ? null
+        : pendingAll.length + lightTotals.validado + lightTotals.rechazado,
     pendiente: pendingAllError ? null : pendingAll.length,
     validado: lightTotalsError ? null : lightTotals.validado,
     rechazado: lightTotalsError ? null : lightTotals.rechazado,
@@ -1060,6 +1091,7 @@ export default function PaymentsPage(): React.ReactElement {
       // until reconciled" posture `pageTotal` already documents above, now
       // settled for real.
       void loadLightTotals();
+      refreshPendingPaymentsCount();
       // The decision itself (`saved.validationStatus`) is final and real
       // even when this is true — only the in-app notification failed. This
       // is a SEPARATE, honest follow-up: the admin needs to know the notice
@@ -1106,6 +1138,7 @@ export default function PaymentsPage(): React.ReactElement {
         void loadLightTotals();
         void loadPage();
         void loadPendingAll();
+        refreshPendingPaymentsCount();
         const resolvedAs = real.validationStatus === "validado" ? "aprobado" : "rechazado";
         showWarning(`${confirmation.label}: otro administrador ya resolvió este pago.`, {
           description: `${request.studentName}: el pago ya figura como ${resolvedAs}. Se actualizó la lista con el estado real.`,
@@ -1129,7 +1162,7 @@ export default function PaymentsPage(): React.ReactElement {
     // both cases this is a real, retriable failure, never a silent "maybe".
     showError(toUserMessage(err, confirmation.failure), {
       description: real
-        ? `${request.studentName} sigue en la cola de pendientes.`
+        ? `${request.studentName} sigue en la lista de pendientes.`
         : `${request.studentName}: no se pudo confirmar el estado real. Actualice la página antes de reintentar.`,
       action: {
         label: "Reintentar",
@@ -1336,10 +1369,10 @@ export default function PaymentsPage(): React.ReactElement {
             }
             description={
               normalizedQuery
-                ? "Revise el nombre o limpie la búsqueda para ver toda la cola."
+                ? "Revise el nombre o limpie la búsqueda para ver toda la lista."
                 : activeFilter === "all"
                   ? "Cuando un estudiante suba un comprobante, aparecerá aquí para su revisión."
-                  : "La cola está al día."
+                  : "La lista está al día."
             }
             action={
               activeFilter === "all" && !normalizedQuery ? (
@@ -1422,7 +1455,7 @@ export default function PaymentsPage(): React.ReactElement {
                     <p id={mobileNameId} className="truncate text-sm font-semibold text-ink">
                       {fields.studentName}
                     </p>
-                    <p className="truncate text-2xs tracking-flat text-ink-3">{fields.payer}</p>
+                    <p className="truncate text-2xs tracking-flat text-ink-3-strong">{fields.payer}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-field text-xs text-ink-2">
                     <span>{fields.period}</span>
@@ -1462,7 +1495,7 @@ export default function PaymentsPage(): React.ReactElement {
             {Array.from({ length: ghostRowCount }, (_, index) => (
               <div
                 key={index}
-                className={`flex min-h-14 items-center justify-center rounded-ctl border border-dashed border-line-2 text-xs text-ink-3${index === ghostRowCount - 1 ? " flex-1" : ""}`}
+                className={`flex min-h-14 items-center justify-center rounded-ctl border border-dashed border-line-2 text-xs text-ink-3-strong${index === ghostRowCount - 1 ? " flex-1" : ""}`}
               >
                 {index === 0 ? "Aquí aparecerán las próximas solicitudes" : ""}
               </div>
@@ -1472,12 +1505,12 @@ export default function PaymentsPage(): React.ReactElement {
           </div>
 
           <div className="grid min-w-0 content-start gap-page">
-            <InfoPanel title="Cola de revisión">
+            <InfoPanel title="Pagos por revisar">
               <p>
                 {pendingAllError
-                  ? "No se pudo leer la cola de pendientes."
+                  ? "No se pudo leer la lista de pendientes."
                   : pending.length === 0
-                    ? "La cola está al día: no hay pagos por validar."
+                    ? "La lista está al día: no hay pagos por validar."
                     : `${pending.length} ${pending.length === 1 ? "pago espera" : "pagos esperan"} su revisión: ${pendingTransferCount} por transferencia y ${pendingCashCount} en efectivo.`}
               </p>
               <Button
@@ -1532,7 +1565,7 @@ export default function PaymentsPage(): React.ReactElement {
                   <dd>El responsable debe subir un comprobante nuevo.</dd>
                 </div>
               </dl>
-              <p className="border-t border-line pt-3 text-xs text-ink-3">
+              <p className="border-t border-line pt-3 text-xs text-ink-3-strong">
                 Al aprobar o rechazar, la pantalla pasa sola al siguiente pago pendiente.
               </p>
             </InfoPanel>
@@ -1575,7 +1608,7 @@ export default function PaymentsPage(): React.ReactElement {
             <MethodIcon size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-2xs font-bold uppercase text-ink-3">
+            <p className="text-2xs font-bold uppercase text-ink-3-strong">
               {paymentKind === "efectivo"
                 ? "Pago en efectivo"
                 : paymentKind === "transferencia"
@@ -1708,7 +1741,7 @@ export default function PaymentsPage(): React.ReactElement {
                 </div>
 
                 <div className="flex flex-col gap-4 px-[18px] py-4">
-                  <h3 id="antes-de-aprobar" className="text-2xs font-bold uppercase text-ink-3">
+                  <h3 id="antes-de-aprobar" className="text-2xs font-bold uppercase text-ink-3-strong">
                     Antes de aprobar
                   </h3>
                   {/* `checklist.note` no se dibuja: las preguntas ya dicen qué
@@ -1755,7 +1788,7 @@ export default function PaymentsPage(): React.ReactElement {
                         POR QUÉ se aprueba sin la evidencia habitual. */}
                     {needsExceptionReason && (
                       <label className="flex flex-col gap-1.5">
-                        <span className="flex items-baseline justify-between text-2xs font-bold uppercase text-ink-3">
+                        <span className="flex items-baseline justify-between text-2xs font-bold uppercase text-ink-3-strong">
                           <span>
                             Motivo de la excepción (transferencia sin comprobante){" "}
                             <span className="text-state-bad">*</span>
@@ -1812,7 +1845,7 @@ export default function PaymentsPage(): React.ReactElement {
                       </Button>
                       </div>
                     {!checklistComplete && (
-                      <p className="min-w-0 text-xs text-ink-3 lg:flex-1">
+                      <p className="min-w-0 text-xs text-ink-3-strong lg:flex-1">
                         {remainingChecks > 0 && needsExceptionReason
                           ? `Faltan ${remainingChecks} puntos de la lista y el motivo de la excepción para poder aprobar.`
                           : remainingChecks > 0
@@ -1852,7 +1885,7 @@ export default function PaymentsPage(): React.ReactElement {
                     </p>
 
                     <fieldset className="flex flex-col gap-2">
-                      <legend className="mb-1 text-2xs font-bold uppercase text-ink-3">
+                      <legend className="mb-1 text-2xs font-bold uppercase text-ink-3-strong">
                         Motivo <span className="text-state-bad">*</span>
                       </legend>
                       {rejectionReasonsFor(paymentKind).map((reason) => (
@@ -1877,7 +1910,7 @@ export default function PaymentsPage(): React.ReactElement {
                               {reason.label}
                             </span>
                             {reason.description && (
-                              <span className="mt-0.5 block text-xs text-ink-3">
+                              <span className="mt-0.5 block text-xs text-ink-3-strong">
                                 {reason.description}
                               </span>
                             )}
@@ -1887,7 +1920,7 @@ export default function PaymentsPage(): React.ReactElement {
                     </fieldset>
 
                     <label className="flex flex-col gap-1.5">
-                      <span className="flex items-baseline justify-between text-2xs font-bold uppercase text-ink-3">
+                      <span className="flex items-baseline justify-between text-2xs font-bold uppercase text-ink-3-strong">
                         <span>Nota para el responsable (opcional)</span>
                         <span
                           className={`font-normal normal-case tabular-nums ${
@@ -1902,7 +1935,11 @@ export default function PaymentsPage(): React.ReactElement {
                         value={rejectionNote}
                         onChange={(e) => setRejectionNote(e.target.value.slice(0, REJECTION_NOTE_MAX_LENGTH))}
                         maxLength={REJECTION_NOTE_MAX_LENGTH}
-                        placeholder="Ej.: El comprobante dice $20,00 y la mensualidad es de $25,00."
+                        placeholder={
+                          paymentKind === "efectivo"
+                            ? "Ej.: Entregó $20,00 y la mensualidad es de $25,00."
+                            : "Ej.: El comprobante dice $20,00 y la mensualidad es de $25,00."
+                        }
                         className="resize-y rounded-ctl border border-line-2 bg-paper px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-3 focus:border-ink-3"
                         disabled={actionLoading !== null}
                       />
@@ -1945,7 +1982,7 @@ export default function PaymentsPage(): React.ReactElement {
             )}
 
             {!isPending && (request.validatedBy || request.validatedAt) && (
-              <p className="text-xs text-ink-3">
+              <p className="text-xs text-ink-3-strong">
                 {request.validationStatus === "validado" ? "Validado" : "Rechazado"}
                 {request.validatedBy ? ` por ${request.validatedBy}` : ""}
                 {request.validatedAt ? ` el ${formatDate(request.validatedAt)}` : ""}.

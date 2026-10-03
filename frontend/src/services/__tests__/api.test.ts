@@ -21,6 +21,8 @@ import {
   fetchReportesError,
   enrollStudent,
   fetchPaymentValidations,
+  fetchAllPaymentValidations,
+  fetchDashboardStats,
   updatePaymentValidation,
   fetchNotificaciones,
   marcarNotificacionLeida,
@@ -1515,5 +1517,51 @@ describe("fetchMembresiaDeuda / regularizarDeuda — deuda (issue #284)", () => 
         motivo: "Pisa cobertura",
       }),
     ).rejects.toThrow(/cubierto por un pago aprobado/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PERF-07 — identical requests in flight share one round trip
+// ---------------------------------------------------------------------------
+
+describe("in-flight request sharing (PERF-07)", () => {
+  it("fetchDashboardStats issues one request for two simultaneous callers", async () => {
+    vi.mocked(global.fetch).mockImplementation(async () => okResponse({ pendingPayments: 3 }));
+
+    const [a, b] = await Promise.all([fetchDashboardStats(), fetchDashboardStats()]);
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(a).toEqual(b);
+  });
+
+  it("fetchDashboardStats asks again once the first request has settled", async () => {
+    vi.mocked(global.fetch).mockImplementation(async () => okResponse({ pendingPayments: 3 }));
+
+    await fetchDashboardStats();
+    await fetchDashboardStats();
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("fetchAllPaymentValidations drains once for simultaneous callers of the same filter", async () => {
+    vi.mocked(global.fetch).mockImplementation(async () => okResponse({ items: [], total: 0 }));
+
+    await Promise.all([
+      fetchAllPaymentValidations("PENDIENTE_VALIDACION"),
+      fetchAllPaymentValidations("PENDIENTE_VALIDACION"),
+    ]);
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("fetchAllPaymentValidations keeps different filters apart", async () => {
+    vi.mocked(global.fetch).mockImplementation(async () => okResponse({ items: [], total: 0 }));
+
+    await Promise.all([
+      fetchAllPaymentValidations("PENDIENTE_VALIDACION"),
+      fetchAllPaymentValidations("APROBADO"),
+    ]);
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 });

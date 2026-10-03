@@ -17,6 +17,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, cleanup, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import PaymentsPage from "@/app/payments/page";
+import { PENDING_PAYMENTS_REFRESH_EVENT } from "@/lib/usePendingPayments";
 import type { PaymentValidationRequest } from "@/services/api";
 import { ToastProvider } from "@/contexts/ToastContext";
 import ToastContainer from "@/components/ToastContainer";
@@ -101,6 +102,9 @@ function filterByEstado(
   return estadoPago ? all.filter((r) => r.validationStatus === BACKEND_TO_VALIDATION_STATUS[estadoPago]) : all;
 }
 
+/** Every `fetchPaymentValidationsPage` call, so a test can count the round trips (PERF-07). */
+const pageCallLog: { skip: number; limit: number; estadoPago?: string }[] = [];
+
 async function fetchPaymentValidationsPageMock(params: {
   skip: number;
   limit: number;
@@ -125,8 +129,10 @@ async function fetchAllPaymentValidationsMock(estadoPago?: string): Promise<Paym
 
 vi.mock("@/services/api", () => ({
   fetchPaymentValidations: () => mockFetchPaymentValidations(),
-  fetchPaymentValidationsPage: (params: { skip: number; limit: number; estadoPago?: string }) =>
-    fetchPaymentValidationsPageMock(params),
+  fetchPaymentValidationsPage: (params: { skip: number; limit: number; estadoPago?: string }) => {
+    pageCallLog.push(params);
+    return fetchPaymentValidationsPageMock(params);
+  },
   fetchAllPaymentValidations: (estadoPago?: string) => fetchAllPaymentValidationsMock(estadoPago),
   updatePaymentValidation: (id: string, dto: unknown) =>
     mockUpdatePaymentValidation(id, dto),
@@ -1763,7 +1769,7 @@ describe("PaymentsPage — a decision only becomes real once the server confirms
     // No control is left to attach the failure to, so it has to travel to them.
     expect(await screen.findByText("No se pudo aprobar el pago.")).toBeInTheDocument();
     expect(
-      screen.getByText("Juan Pérez sigue en la cola de pendientes."),
+      screen.getByText("Juan Pérez sigue en la lista de pendientes."),
     ).toBeInTheDocument();
     // The queue never moved: it was never told this succeeded.
     expect(screen.getByRole("button", { name: /rechazar pago/i })).toBeInTheDocument();
@@ -1800,6 +1806,22 @@ describe("PaymentsPage — a decision only becomes real once the server confirms
     await waitFor(() => expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(2));
     expect(mockUpdatePaymentValidation).toHaveBeenNthCalledWith(2, "req-1", { action: "approved" });
     expect(await screen.findByText(/Pago aprobado/)).toBeInTheDocument();
+  });
+
+  it("asks the sidebar badge to refresh when another admin resolved the payment (ADMA-28)", async () => {
+    const onRefresh = vi.fn();
+    window.addEventListener(PENDING_PAYMENTS_REFRESH_EVENT, onRefresh);
+    try {
+      mockUpdatePaymentValidation.mockRejectedValue(
+        Object.assign(new Error("este pago ya está aprobado."), { status: 400 }),
+      );
+      mockFetchPaymentValidationById.mockResolvedValue({ ...PENDING_REQUEST, validationStatus: "validado" });
+      await approveJuan();
+
+      await waitFor(() => expect(onRefresh).toHaveBeenCalled());
+    } finally {
+      window.removeEventListener(PENDING_PAYMENTS_REFRESH_EVENT, onRefresh);
+    }
   });
 
   // Reproduced live (issue #454/#456, tercer disparador: caída de red durante
@@ -2152,5 +2174,66 @@ describe("PaymentsPage — cash vs transfer review (admin v4)", () => {
     expect(approve).toBeDisabled();
     expect(approve.parentElement!.parentElement).toHaveTextContent(/faltan \d+ puntos de la lista/i);
     expect(screen.getByRole("button", { name: /rechazar pago/i })).toBeEnabled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// QA4 — PERF-07, ADMA-15, ADMA-31
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — QA4 fixes", () => {
+  beforeEach(() => {
+    pageCallLog.length = 0;
+  });
+
+  it("does not repeat the pending list or the grand total on load (PERF-07)", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, RESOLVED_REQUEST, REJECTED_REQUEST]);
+    renderPage();
+    await screen.findByTestId("payments-table");
+
+    // The pending page comes from the drained queue, and «Todas» is the sum of
+    // the three states: only the two light counters hit the paginated endpoint.
+    await waitFor(() => expect(pageCallLog.length).toBe(2));
+    expect(pageCallLog.map((call) => call.estadoPago).sort()).toEqual(["APROBADO", "RECHAZADO"]);
+    const pills = screen.getByRole("group", { name: /filtrar/i });
+    expect(within(pills).getByRole("button", { name: /todos/i })).toHaveTextContent("3");
+  });
+
+  it("shows who received a validated cash payment instead of the receiving steps (ADMA-15)", async () => {
+    const validatedCash: PaymentValidationRequest = {
+      ...CASH_REQUEST,
+      id: "req-cash-ok",
+      validationStatus: "validado",
+      validatedBy: "Admin Dev",
+      validatedAt: "2026-07-05T10:00:00.000Z",
+    };
+    mockFetchPaymentValidations.mockResolvedValue([validatedCash]);
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /validados/i }));
+    await openRequest("Sofía Vera");
+
+    expect(await screen.findByText(/Efectivo recibido el .* por Admin Dev/)).toBeInTheDocument();
+    expect(screen.queryByText(/Reciba el dinero en mano/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Confirmación de efectivo")).not.toBeInTheDocument();
+  });
+
+  it("keeps the receiving steps for a pending cash payment (ADMA-15)", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([CASH_REQUEST]);
+    renderPage();
+    await openRequest("Sofía Vera");
+
+    expect(await screen.findByText(/Reciba el dinero en mano/)).toBeInTheDocument();
+  });
+
+  it("gives a cash example in the rejection note, with no receipt (ADMA-31)", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([CASH_REQUEST]);
+    renderPage();
+    await openRequest("Sofía Vera");
+    fireEvent.click(await screen.findByRole("button", { name: /rechazar pago/i }));
+
+    expect(screen.getByLabelText(/nota para el responsable/i)).toHaveAttribute(
+      "placeholder",
+      "Ej.: Entregó $20,00 y la mensualidad es de $25,00.",
+    );
   });
 });

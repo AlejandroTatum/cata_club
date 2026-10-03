@@ -11,6 +11,7 @@ import {
   ATTENDANCE_STATUS_CHART_COLORS,
   countPaymentsWaitingOverAWeek,
   buildFourWeekAttendance,
+  attendanceWindowStartIso,
   buildActivityFeed,
   getActivityMarker,
   type ActivityKind,
@@ -505,5 +506,17 @@ describe("buildTodayClasses", () => {
   it("ignores records from other days", () => {
     const [only] = buildTodayClasses([schedule(1, "18:00", "19:00")], [record(1, "2026-09-28")], QUEUE_NOW);
     expect(only.status).toBe("pending");
+  });
+});
+
+describe("attendanceWindowStartIso (PERF-03)", () => {
+  it("starts on the first day of the oldest weekly window the charts draw", () => {
+    // 6 windows of 7 days ending today: the oldest starts 41 days back.
+    expect(attendanceWindowStartIso(6, new Date("2026-10-03T15:00:00Z"))).toBe("2026-08-23");
+  });
+
+  it("matches the first bar of buildFourWeekAttendance", () => {
+    const today = new Date("2026-10-03T15:00:00Z");
+    expect(attendanceWindowStartIso(4, today)).toBe(buildFourWeekAttendance([], today, 4).bars[0].startIso);
   });
 });
