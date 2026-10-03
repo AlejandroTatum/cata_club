@@ -15,6 +15,8 @@ Branch: `feat/prod-cutover` (worktree `cata_club-worktrees/prod-cutover`).
 - [ ] PC-3 Single staging-to-production cutover runbook; refresh stale
       staging/prod docs.
 - [x] PC-4 Canonical host (`cataclub.com`) + `www` redirect in Caddyfile + tests.
+- [x] PC-5 Google-ready SEO: square crest favicons, manifest, OG card,
+      runtime robots/sitemap/noindex, SportsClub JSON-LD + tests.
 
 ## Evidence
 
@@ -26,3 +28,6 @@ Branch: `feat/prod-cutover` (worktree `cata_club-worktrees/prod-cutover`).
   test_prod_env_check.py + test_release_controls.py).
 - PC-4: 86664ad4 (`DOMINIO_ALIAS_WWW`, default `www.localhost` = no ACME;
   validator requires `www.$DOMINIO`; 246 passed in the three root test files).
+- PC-5: a2652482 (icons, manifest, OG), 5ac9932f (robots, sitemap,
+  X-Robots-Tag, `DOMINIO_INDEXABLE` to the frontend), 523e5dc6 (JSON-LD);
+  runtime var `DOMINIO_INDEXABLE`; vitest, lint and `next build` green.
