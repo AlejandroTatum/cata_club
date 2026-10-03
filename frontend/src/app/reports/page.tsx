@@ -141,6 +141,7 @@ import {
 } from "@/lib/status-badges";
 import type { LucideIcon } from "lucide-react";
 import type { PersonaBusqueda, PersonaReporte } from "@/types/domain";
+import LinkifiedText from "@/components/LinkifiedText";
 import { toUserMessage } from "@/lib/error-message";
 
 type ReportPreset = "periodo" | "asistencia" | "pagos";
@@ -786,7 +787,9 @@ function ReportsContent(): React.ReactElement {
       {error && (
         <div className="alert-error" role="alert">
           <AlertCircle size={ICON.sm} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
-          <span>{error}</span>
+          <span>
+            <LinkifiedText text={error} />
+          </span>
         </div>
       )}
 
