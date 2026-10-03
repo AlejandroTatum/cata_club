@@ -1117,21 +1117,23 @@ def test_el_caddyfile_expone_del_backend_solo_la_sonda_de_readiness():
     contenido = (RAIZ / "Caddyfile").read_text()
 
     upstreams = re.findall(r"reverse_proxy\s+backend:\d+", contenido)
-    assert upstreams == ["reverse_proxy backend:8000"], (
-        "el Caddyfile debe declarar exactamente UN upstream hacia el backend "
-        f"(y en el puerto 8000); encontrados: {upstreams!r}"
+    assert upstreams == ["reverse_proxy backend:8000"] * 2, (
+        "el Caddyfile debe declarar exactamente DOS upstreams hacia el backend "
+        "(readiness y latido de workers, ambos en el puerto 8000); "
+        f"encontrados: {upstreams!r}"
     )
 
-    ruta = _RUTA_DEL_BACKEND_EN_CADDY.search(contenido)
-    assert ruta is not None, (
-        "el upstream del backend no cuelga de un bloque `handle <matcher>`: sin "
-        "matcher exclusivo no hay forma de acotar qué llega al backend"
-    )
-    assert ruta.group("matcher") == "/health/ready", (
-        "el backend solo puede recibir el path EXACTO /health/ready; el matcher "
-        f"declarado es {ruta.group('matcher')!r} (un comodín o un prefijo "
+    rutas = list(_RUTA_DEL_BACKEND_EN_CADDY.finditer(contenido))
+    assert [r.group("matcher") for r in rutas] == [
+        "/health/ready",
+        "/health/workers",
+    ], (
+        "el backend solo puede recibir los paths EXACTOS /health/ready y "
+        "/health/workers; matchers declarados: "
+        f"{[r.group('matcher') for r in rutas]!r} (un comodín o un prefijo "
         "expondría /docs y /diagnostico/circuitos)"
     )
+    ruta = rutas[-1]
 
     catch_all = contenido.find("reverse_proxy frontend:3000")
     assert catch_all != -1, "el Caddyfile ya no enruta al frontend"
@@ -1140,6 +1142,17 @@ def test_el_caddyfile_expone_del_backend_solo_la_sonda_de_readiness():
         "detrás, el catch-all se la come y el monitor externo recibe un 404 de "
         "Next.js que se parece a un sitio sano"
     )
+
+
+def test_ningun_healthcheck_ni_autoheal_depende_del_latido_de_workers():
+    """`/health/workers` es solo para el monitor externo. Si un healthcheck de
+    Docker (o lo que autoheal reinicia) lo consultara, un cuelgue de Celery
+    reiniciaría el backend."""
+    for archivo in RAIZ.glob("docker-compose*.yml"):
+        assert "health/workers" not in archivo.read_text(), (
+            f"{archivo.name} referencia /health/workers: el latido de Celery no "
+            "puede gobernar healthchecks ni autoheal"
+        )
 
 
 # Todos los matchers de `handle` del archivo, en orden. Se usa para contar
@@ -1171,9 +1184,9 @@ def test_el_caddyfile_declara_una_sola_sonda_de_readiness_y_ninguna_bajo_api():
         for m in _MATCHERS_HANDLE.finditer(contenido)
         if "health" in m.group("matcher")
     ]
-    assert de_readiness == ["/health/ready"], (
-        "el backend tiene que asomar por UNA sola sonda de readiness; matchers "
-        f"de health encontrados: {de_readiness!r}"
+    assert de_readiness == ["/health/ready", "/health/workers"], (
+        "el backend tiene que asomar por UNA sola sonda de readiness y UNA de "
+        f"latido de workers; matchers de health encontrados: {de_readiness!r}"
     )
 
 
@@ -1669,4 +1682,68 @@ def test_celery_worker_concurrencia_es_uno():
     assert match.group(1) == "1", (
         f"'celery-worker' declara --concurrency={match.group(1)}, se esperaba 1 "
         f"para un droplet de 2GB"
+    )
+
+
+# Default reservado del alias `www`: mismo valor en el Caddyfile y en el
+# overlay de producción. `www.localhost` es local para Caddy, que no pide
+# certificado ACME para él (a diferencia de `*.invalid`).
+_ALIAS_WWW_POR_DEFECTO = "www.localhost"
+
+
+def test_el_caddyfile_redirige_el_alias_www_al_dominio_canonico():
+    """El alias `www` responde con redirección PERMANENTE al dominio canónico
+    conservando path y query (`{uri}`), con un bloque de sitio propio y el
+    default local del alias para que un host sin la variable no pida un
+    certificado ACME para un nombre sin DNS."""
+    contenido = (RAIZ / "Caddyfile").read_text()
+    assert f"{{$DOMINIO_ALIAS_WWW:{_ALIAS_WWW_POR_DEFECTO}}} {{" in contenido, (
+        "el Caddyfile no declara un bloque de sitio "
+        f"`{{$DOMINIO_ALIAS_WWW:{_ALIAS_WWW_POR_DEFECTO}}}`"
+    )
+    assert "redir https://{$DOMINIO}{uri} permanent" in contenido, (
+        "el alias `www` no redirige de forma permanente a "
+        "`https://{$DOMINIO}{uri}` (path y query tienen que conservarse)"
+    )
+
+
+@pytest.mark.parametrize("alias", [None, "www.cataclub.com"])
+def test_el_render_de_produccion_pasa_el_alias_www_a_caddy(alias):
+    """La variable llega al contenedor, y sin ella cae al default local (el
+    render NO debe fallar: staging no la define)."""
+    if alias is None:
+        resultado = _ejecutar_config(
+            "docker-compose.yml",
+            "docker-compose.prod.yml",
+            omitir=("DOMINIO_ALIAS_WWW",),
+        )
+        assert resultado.returncode == 0, resultado.stderr
+        config = json.loads(resultado.stdout)
+        esperado = _ALIAS_WWW_POR_DEFECTO
+    else:
+        config = _renderizar(
+            "docker-compose.yml",
+            "docker-compose.prod.yml",
+            entorno={"DOMINIO_ALIAS_WWW": alias},
+        )
+        esperado = alias
+    entorno_caddy = config["services"]["caddy"]["environment"]
+    assert entorno_caddy.get("DOMINIO_ALIAS_WWW") == esperado
+
+
+def test_el_frontend_recibe_el_mismo_dominio_indexable_que_caddy():
+    """robots.txt, sitemap y canonical se arman en el frontend en cada
+    petición a partir de `DOMINIO_INDEXABLE` (`frontend/src/lib/seo.ts`). Tiene
+    que ser el MISMO valor que ve Caddy: dos fuentes podrían divergir y dejar
+    el header `noindex` y el sitemap diciendo lo contrario (o al revés)."""
+    config = _renderizar(
+        "docker-compose.yml",
+        "docker-compose.prod.yml",
+        entorno={"DOMINIO_INDEXABLE": "cataclub.com"},
+    )
+    servicios = config["services"]
+    assert servicios["frontend"]["environment"]["DOMINIO_INDEXABLE"] == "cataclub.com"
+    assert (
+        servicios["frontend"]["environment"]["DOMINIO_INDEXABLE"]
+        == servicios["caddy"]["environment"]["DOMINIO_INDEXABLE"]
     )

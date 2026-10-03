@@ -160,6 +160,44 @@ def test_preflight_rejects_a_checkout_head_different_from_image_tag(tmp_path):
     assert "IMAGE_TAG" in result.stderr
 
 
+def _append_env(env, text):
+    path = Path(env["STACK_DIR"]) / ".env"
+    path.write_text(path.read_text() + text)
+
+
+def test_preflight_production_env_check_runs_automatically_on_the_indexable_host(tmp_path):
+    env = _smtp_preflight_env(tmp_path)
+
+    # Staging-like .env (no DOMINIO_INDEXABLE): the check stays out of the way.
+    default = run_script("scripts/ops/preflight-production.sh", env=env)
+    assert default.returncode == 0, default.stderr
+
+    # The indexable host is production: the check runs without any flag and
+    # fails closed on this incomplete .env.
+    _append_env(env, "DOMINIO=app.cataclub.com\nDOMINIO_INDEXABLE=app.cataclub.com\n")
+    auto = run_script("scripts/ops/preflight-production.sh", env=env)
+    assert auto.returncode != 0
+    assert "check-prod-env.sh" in auto.stderr
+
+    # Explicit override: =0 skips it (=1 forcing it is covered below).
+    skipped = run_script(
+        "scripts/ops/preflight-production.sh",
+        env={**env, "PREFLIGHT_REQUIRE_PRODUCTION_ENV": "0"},
+    )
+    assert skipped.returncode == 0, skipped.stderr
+
+
+def test_preflight_production_env_check_can_be_forced(tmp_path):
+    env = _smtp_preflight_env(tmp_path)
+
+    strict = run_script(
+        "scripts/ops/preflight-production.sh",
+        env={**env, "PREFLIGHT_REQUIRE_PRODUCTION_ENV": "1"},
+    )
+    assert strict.returncode != 0
+    assert "check-prod-env.sh" in strict.stderr
+
+
 def test_preflight_smtp_starttls_succeeds_without_authentication(tmp_path):
     result = run_script(
         "scripts/ops/preflight-production.sh",

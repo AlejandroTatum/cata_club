@@ -27,6 +27,19 @@ ENV_IMAGE_TAG="$(sed -n 's/^IMAGE_TAG=//p' "$STACK_DIR/.env" | head -1)"
   || die "${STACK_DIR}/.env IMAGE_TAG=${ENV_IMAGE_TAG:-vacío} no coincide con IMAGE_TAG=${IMAGE_TAG}"
 CHECKOUT_HEAD="$(git -C "$STACK_DIR" rev-parse --verify HEAD 2>/dev/null)" || die "no se pudo leer Git HEAD del checkout en ${STACK_DIR}"
 [ "$CHECKOUT_HEAD" = "$IMAGE_TAG" ] || die "Git HEAD=${CHECKOUT_HEAD} no coincide con IMAGE_TAG=${IMAGE_TAG}"
+# The production .env check runs automatically on the indexable host (DOMINIO
+# == DOMINIO_INDEXABLE; staging differs and legitimately mentions staging).
+# PREFLIGHT_REQUIRE_PRODUCTION_ENV overrides: 1 forces it, 0 skips it.
+REQUIRE_PRODUCTION_ENV="${PREFLIGHT_REQUIRE_PRODUCTION_ENV:-}"
+if [ -z "$REQUIRE_PRODUCTION_ENV" ] \
+  && "$SCRIPT_DIR/check-prod-env.sh" --env-file "$STACK_DIR/.env" --detect-production; then
+  REQUIRE_PRODUCTION_ENV=1
+fi
+if [ "$REQUIRE_PRODUCTION_ENV" = "1" ]; then
+  "$SCRIPT_DIR/check-prod-env.sh" --env-file "$STACK_DIR/.env" \
+    ${PREVIOUS_ENV_FILE:+--previous-env "$PREVIOUS_ENV_FILE"} \
+    || die "el .env de producción no pasó check-prod-env.sh"
+fi
 stack_value() {
       local key="$1"
       if [ "${!key+x}" = x ]; then printf '%s' "${!key}"; else sed -n "s/^${key}=//p" "$STACK_DIR/.env" | tail -1; fi
