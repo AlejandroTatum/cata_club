@@ -20,6 +20,9 @@ from app.presentacion.routers.asistencias_router import _COLUMNAS_ASISTENCIA_PDF
 from app.presentacion.routers.membresias_pagos_router import _COLUMNAS_PAGOS_PDF
 from app.presentacion.routers.personas_router import _COLUMNAS_PERSONAS_PDF
 
+# Fechas fijas de 2026: ver `sin_ventana_de_registro` en conftest.py (ENT-02).
+pytestmark = pytest.mark.usefixtures("sin_ventana_de_registro")
+
 
 def _crear_persona(client, cedula):
     return client.post(

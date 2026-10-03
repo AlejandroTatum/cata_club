@@ -107,6 +107,7 @@ afterEach(() => {
 const mockFetchTrainingSchedules = vi.fn().mockResolvedValue([]);
 const mockFetchAlumnosPorHorario = vi.fn().mockResolvedValue([]);
 const mockFetchAttendanceRecords = vi.fn().mockResolvedValue([]);
+const mockFetchRosterDeTodosLosHorarios = vi.fn().mockResolvedValue([]);
 const mockRegisterAttendance = vi.fn();
 const mockCorrectAttendance = vi.fn();
 const mockFetchAttendanceCorrections = vi.fn().mockResolvedValue([]);
@@ -115,6 +116,7 @@ vi.mock("@/services/api", () => ({
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
   fetchAlumnosPorHorario: (horarioId: number) => mockFetchAlumnosPorHorario(horarioId),
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
+  fetchRosterDeTodosLosHorarios: () => mockFetchRosterDeTodosLosHorarios(),
   registerAttendance: (request: unknown) => mockRegisterAttendance(request),
   correctAttendance: (asistenciaId: number, data: unknown) => mockCorrectAttendance(asistenciaId, data),
   fetchAttendanceCorrections: (asistenciaId: number) => mockFetchAttendanceCorrections(asistenciaId),
@@ -1490,12 +1492,10 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     expect(screen.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
   });
 
-  // Issue #485: the horario's roster can grow AFTER a session closes (a
-  // student enrolled later). That student has no record for the closed
-  // session's date, so the raw per-row mapping in `buildRosterFromAlumnoHorarios`
-  // left them `reviewed: false` — a phantom "sin revisar" on an already-closed,
-  // read-only list that no pending alumno ever backed.
-  it("no cuenta como sin revisar a un alumno inscripto después de que la lista se cerró (issue #485)", async () => {
+  // ENT-03 (supersedes the #485 decision): a student enrolled AFTER the other
+  // students were recorded has no row, so the list is NOT closed — it is partial,
+  // editable only for that student, who is NOT pre-filled as "Presente".
+  it("trata como parcial —no cerrada— una lista a la que le falta un alumno (ENT-03)", async () => {
     mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
     mockFetchAlumnosPorHorario.mockResolvedValue([
       ...buildAlumnoHorarios(3),
@@ -1515,11 +1515,48 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     window.history.replaceState(null, "", "/trainer/attendance?horario=12&paso=lista");
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
-    await screen.findByText("Student 01");
     await screen.findByText("Student 04");
 
-    expect(screen.getByText("Esta lista ya fue registrada.")).toBeInTheDocument();
-    expect(screen.queryByText(/sin revisar/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Esta lista ya fue registrada.")).not.toBeInTheDocument();
+    expect(screen.getByText("Esta lista está incompleta.")).toBeInTheDocument();
+    // Only the missing student is editable, and starts WITHOUT a prefilled "Presente".
+    const groups = screen.getAllByRole("radiogroup");
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toHaveAccessibleName(/Student 04/);
+    expect(within(groups[0]).queryAllByRole("radio", { checked: true })).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
+  });
+
+  it("al completar una lista parcial envía solo al alumno que falta (ENT-03/ENT-04)", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    mockFetchAlumnosPorHorario.mockResolvedValue([
+      ...buildAlumnoHorarios(3),
+      {
+        id: 4,
+        personaId: 400,
+        personaNombreCompleto: "Student 04",
+        horarioId: 12,
+        horarioDia: "mar",
+        horarioHoraInicio: "18:00",
+        horarioHoraFin: "19:00",
+        fechaAsignacion: "2026-08-01",
+      },
+    ]);
+    mockFetchAttendanceRecords.mockResolvedValue(existingRecordsForAllStudents());
+    mockRegisterAttendance.mockResolvedValue({ createdCount: 1, failed: [] });
+    window.history.replaceState(null, "", "/trainer/attendance?horario=12&paso=lista");
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await screen.findByText("Student 04");
+    const group = screen.getByRole("radiogroup");
+    fireEvent.click(within(group).getByRole("radio", { name: "Tardanza" }));
+    fireEvent.click(screen.getByRole("button", { name: "Revisar y confirmar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar asistencia" }));
+
+    await waitFor(() => expect(mockRegisterAttendance).toHaveBeenCalled());
+    expect(mockRegisterAttendance).toHaveBeenCalledWith(
+      expect.objectContaining({ students: [{ personaId: 400, estado: "late" }] }),
+    );
   });
 
   it("marca en el paso 1 el horario que ya tiene lista tomada hoy (issue #310 / #22)", async () => {
@@ -1532,12 +1569,12 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     expect(await within(scheduleButton).findByText(/Lista tomada hoy · 3 registros/)).toBeInTheDocument();
   });
 
-  it("descarta el borrador cuando el guardado es rechazado por completo, no solo cuando fue parcial (issue #310)", async () => {
+  // ENT-05: the draft used to be cleared in the `catch`, so a lost response or a
+  // dropped connection cost the trainer every mark — and, worse, the save may
+  // have LANDED on the server. The draft now survives the failure, and the roster
+  // is reloaded so the retry starts from what the server really has.
+  it("conserva el borrador y recarga la lista cuando el guardado falla (ENT-05)", async () => {
     mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
-    // No hay registros previos, así que el gate de modo lectura no bloquea el
-    // envío — este test cubre el rechazo TOTAL en sí (defensa en profundidad
-    // ante, por ejemplo, un administrador que corrige entre la carga y el
-    // envío), no el gate del hallazgo #3.
     mockFetchAttendanceRecords.mockResolvedValue([]);
     mockRegisterAttendance.mockReset().mockRejectedValue(
       new Error("No se pudo completar la operación."),
@@ -1550,11 +1587,100 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     expect(window.sessionStorage.getItem("cata_attendance_draft:12:2026-07-21")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
+    const loadsBeforeFailure = mockFetchAlumnosPorHorario.mock.calls.length;
 
     await waitFor(() => expect(mockRegisterAttendance).toHaveBeenCalled());
-    await waitFor(() => {
-      expect(window.sessionStorage.getItem("cata_attendance_draft:12:2026-07-21")).toBeNull();
-    });
+    // The roster is fetched again right after the failure…
+    await waitFor(() => expect(mockFetchAlumnosPorHorario.mock.calls.length).toBeGreaterThan(loadsBeforeFailure));
+    // …the draft is still there, and the trainer can retry from the same step.
+    expect(window.sessionStorage.getItem("cata_attendance_draft:12:2026-07-21")).not.toBeNull();
+    expect(await screen.findByRole("button", { name: /Confirmar asistencia/ })).toBeEnabled();
+  });
+
+  it("reintenta recargar la lista antes de volver a enviar si la recarga también falló (ENT-05)", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    mockFetchAttendanceRecords.mockResolvedValue([]);
+    mockRegisterAttendance.mockReset().mockRejectedValue(new Error("Failed to fetch"));
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
+    // The network is down for the save AND for the reload that follows it.
+    mockFetchAlumnosPorHorario.mockRejectedValueOnce(new Error("Failed to fetch"));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
+    await waitFor(() => expect(mockRegisterAttendance).toHaveBeenCalledTimes(1));
+    const loadsAfterFailure = mockFetchAlumnosPorHorario.mock.calls.length;
+
+    // Retry: the stale roster is reloaded FIRST, so the second press files nothing.
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
+    await waitFor(() => expect(mockFetchAlumnosPorHorario.mock.calls.length).toBeGreaterThan(loadsAfterFailure));
+    expect(mockRegisterAttendance).toHaveBeenCalledTimes(1);
+  });
+
+  // ENT-11: the confirmation and the receipt say WHICH day the list is filed for.
+  it("muestra la fecha de la sesión en la confirmación y en el recibo (ENT-11)", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    mockFetchAttendanceRecords.mockResolvedValue([]);
+    mockRegisterAttendance.mockReset().mockResolvedValue({ createdCount: 3, failed: [] });
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
+    // 2026-07-21 is a Tuesday (the pinned club clock of this file).
+    expect(await screen.findByText("Sesión del mar 21/07")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
+
+    expect(await screen.findByText("Asistencia registrada")).toBeInTheDocument();
+    expect(screen.getByText("Sesión del mar 21/07")).toBeInTheDocument();
+  });
+
+  // ENT-12: the "Deshacer" offer of "Marcar restantes presentes" must not outlive
+  // the roll call — it used to hang over a receipt that was already closed.
+  it("descarta el aviso «Deshacer» al confirmar la asistencia (ENT-12)", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    mockFetchAttendanceRecords.mockResolvedValue([]);
+    mockRegisterAttendance.mockReset().mockResolvedValue({ createdCount: 3, failed: [] });
+
+    render(
+      <ToastProvider>
+        <TrainerAttendancePage />
+        <ToastContainer />
+      </ToastProvider>,
+    );
+    await openRoster();
+    await screen.findByText("Student 01");
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    expect(await screen.findByText("3 alumnos marcados presentes")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
+
+    expect(await screen.findByText("Asistencia registrada")).toBeInTheDocument();
+    expect(screen.queryByText("3 alumnos marcados presentes")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Deshacer" })).not.toBeInTheDocument();
+  });
+
+  // ENT-06: the message follows the KIND of failure.
+  it.each([
+    [403, /no tiene permiso/i],
+    [409, /Actualice la página/],
+    [503, /servidor tuvo un problema/],
+  ])("muestra un mensaje distinto para un error %i del guardado (ENT-06)", async (status, expected) => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    mockFetchAttendanceRecords.mockResolvedValue([]);
+    mockRegisterAttendance.mockReset().mockRejectedValue(Object.assign(new Error("x"), { status }));
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
+
+    expect(await screen.findByText(expected, { selector: ".alert-error" })).toBeInTheDocument();
   });
 
   /**
@@ -1593,7 +1719,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     // would match either node — this test is about the TOAST specifically,
     // the one that is allowed to disappear on its own clock.
     const networkCutToast = await screen.findByText(
-      "No se pudo registrar la asistencia. Intente nuevamente.",
+      "No hay conexión con el servidor. Sus marcas siguen guardadas en este equipo; revise su conexión e intente de nuevo.",
       { selector: ".toast-error p" },
     );
     expect(networkCutToast).toBeInTheDocument();
@@ -1606,7 +1732,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
       vi.advanceTimersByTime(15_000);
     });
     expect(
-      screen.queryByText("No se pudo registrar la asistencia. Intente nuevamente.", {
+      screen.queryByText("No hay conexión con el servidor. Sus marcas siguen guardadas en este equipo; revise su conexión e intente de nuevo.", {
         selector: ".toast-error p",
       }),
     ).not.toBeInTheDocument();
@@ -1624,7 +1750,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
     const timeoutToast = await screen.findByText(
-      "No se pudo registrar la asistencia. Intente nuevamente.",
+      "No hay conexión con el servidor. Sus marcas siguen guardadas en este equipo; revise su conexión e intente de nuevo.",
       { selector: ".toast-error p" },
     );
     expect(timeoutToast).toBeInTheDocument();
@@ -1661,7 +1787,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
 
     // The persistent, inline copy — distinct from the toast's own `<p>`, and
     // the one this test is actually about.
-    await screen.findByText("No se pudo registrar la asistencia. Intente nuevamente.", {
+    await screen.findByText("No hay conexión con el servidor. Sus marcas siguen guardadas en este equipo; revise su conexión e intente de nuevo.", {
       selector: ".alert-error",
     });
 
@@ -1672,7 +1798,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     });
 
     expect(
-      screen.getByText("No se pudo registrar la asistencia. Intente nuevamente.", {
+      screen.getByText("No hay conexión con el servidor. Sus marcas siguen guardadas en este equipo; revise su conexión e intente de nuevo.", {
         selector: ".alert-error",
       }),
     ).toBeInTheDocument();

@@ -118,6 +118,7 @@ describe("buildAttendanceRecord", () => {
       justificativo: null,
       estadoJustificativo: null,
       correctable: true,
+      requiereRevision: false,
     });
   });
 
@@ -215,5 +216,25 @@ describe("buildRecentSession", () => {
     const built = buildRecentSession(lista);
     expect(built).not.toHaveProperty("entrenadorId");
     expect(built).not.toHaveProperty("registradoPor");
+  });
+});
+
+describe("buildAttendanceRecord — requiereRevision (ENT-07)", () => {
+  const base: BackendAsistencia = {
+    id: 1,
+    fechaEntrenamiento: "2026-09-28",
+    fechaRegistro: "2026-09-28T20:00:00Z",
+    estado: "PRESENTE",
+    personaId: 3,
+    personaNombreCompleto: "Ana Torres",
+    horarioId: 1,
+  };
+
+  it("carries the review flag the backend persisted", () => {
+    expect(buildAttendanceRecord({ ...base, requiereRevision: true }, undefined).requiereRevision).toBe(true);
+  });
+
+  it("defaults to false when an older backend omits it", () => {
+    expect(buildAttendanceRecord(base, undefined).requiereRevision).toBe(false);
   });
 });

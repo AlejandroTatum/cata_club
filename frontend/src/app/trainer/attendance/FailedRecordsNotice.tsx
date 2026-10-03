@@ -1,6 +1,6 @@
 import { AlertTriangle } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { resolveFailedStudentNames, type SessionStudent } from "./attendance-utils";
+import type { SessionStudent } from "./attendance-utils";
 import type { RegisterAttendanceResult } from "@/services/api";
 
 interface FailedRecordsNoticeProps {
@@ -11,27 +11,63 @@ interface FailedRecordsNoticeProps {
 /**
  * NAME the students (issue #213 decision 3) — this used to say "N registro(s)
  * no se pudieron guardar" and ask the trainer to retry for names it refused
- * to identify.
+ * to identify. An id with no matching row falls back to the id itself rather
+ * than disappearing, because a partially-named failure is still more
+ * actionable than a count.
+ *
+ * ENT-04: a student who ALREADY had a record (first registration wins) is not
+ * a failure to retry — it is said apart, with who recorded them, so the trainer
+ * knows the roster will refresh and only the missing students are left.
  */
 export default function FailedRecordsNotice({
   failed,
   students,
 }: FailedRecordsNoticeProps): React.ReactElement {
+  const nameById = new Map(students.map((s) => [s.id, s.name]));
+  const nameOf = (personaId: number): string => nameById.get(String(personaId)) ?? `Alumno #${personaId}`;
+  const alreadyRegistered = failed.filter((f) => f.alreadyRegistered);
+  const unsaved = failed.filter((f) => !f.alreadyRegistered);
+
   return (
     <div role="alert" className="rounded-ctl border border-state-warn/25 bg-state-warn-bg p-3.5 text-xs text-state-warn">
-      <p className="flex items-center gap-1.5 font-bold">
-        <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-        {failed.length === 1
-          ? "No se pudo guardar 1 registro"
-          : `No se pudieron guardar ${failed.length} registros`}
-      </p>
-      <ul className="mt-1.5 list-inside list-disc font-semibold">
-        {resolveFailedStudentNames(failed, students).map((name) => (
-          <li key={name}>{name}</li>
-        ))}
-      </ul>
+      {unsaved.length > 0 && (
+        <>
+          <p className="flex items-center gap-1.5 font-bold">
+            <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+            {unsaved.length === 1
+              ? "No se pudo guardar 1 registro"
+              : `No se pudieron guardar ${unsaved.length} registros`}
+          </p>
+          <ul className="mt-1.5 list-inside list-disc font-semibold">
+            {unsaved.map((f) => (
+              <li key={f.personaId}>{nameOf(f.personaId)}</li>
+            ))}
+          </ul>
+        </>
+      )}
+      {alreadyRegistered.length > 0 && (
+        <>
+          <p className={`flex items-center gap-1.5 font-bold ${unsaved.length > 0 ? "mt-3" : ""}`}>
+            <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+            {alreadyRegistered.length === 1
+              ? "1 alumno ya estaba registrado"
+              : `${alreadyRegistered.length} alumnos ya estaban registrados`}
+          </p>
+          <ul className="mt-1.5 list-inside list-disc font-semibold">
+            {alreadyRegistered.map((f) => (
+              <li key={f.personaId}>
+                {nameOf(f.personaId)}
+                {f.registradoPorNombre ? ` — registrado por ${f.registradoPorNombre}` : ""}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-state-warn/80">
+            Otra persona tomó la lista al mismo tiempo; se conserva el primer registro de cada alumno.
+          </p>
+        </>
+      )}
       <p className="mt-1.5 text-state-warn/80">
-        Vuelva a tomar lista de este horario para reintentar con estos alumnos — el resto ya
+        Actualice la lista de este horario y complete solo a los alumnos que faltan — el resto ya
         quedó guardado.
       </p>
     </div>

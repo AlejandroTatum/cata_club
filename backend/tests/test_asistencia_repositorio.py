@@ -9,6 +9,8 @@ from datetime import date, time
 
 from sqlalchemy import func, select
 
+import pytest
+
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import Categoria, DiaSemana, EstadoAsistencia, EstadoMembresia, TipoModalidad
 from app.dominio.excepciones import OperacionInvalida
@@ -21,6 +23,9 @@ from app.infraestructura.repositorios.asistencia_repositorio import (
 )
 from app.servicios_negocio.dtos.asistencia_schemas import AsistenciaCreateDTO
 from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
+
+# Fechas fijas de 2026: ver `sin_ventana_de_registro` en conftest.py (ENT-02).
+pytestmark = pytest.mark.usefixtures("sin_ventana_de_registro")
 
 
 def _crear_persona(db_session, cedula: str, nombres: str, apellidos: str) -> Persona:

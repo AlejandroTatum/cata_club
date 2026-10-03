@@ -39,6 +39,7 @@ describe("ScheduleDayGroup", () => {
         selectedScheduleId={null}
         onSelectSchedule={vi.fn()}
         weekRecordCounts={new Map()}
+        closedHorarios={new Set()}
       />,
     );
 
@@ -54,6 +55,7 @@ describe("ScheduleDayGroup", () => {
         selectedScheduleId={null}
         onSelectSchedule={vi.fn()}
         weekRecordCounts={new Map()}
+        closedHorarios={new Set()}
       />,
     );
 
@@ -71,10 +73,38 @@ describe("ScheduleDayGroup", () => {
         selectedScheduleId={null}
         onSelectSchedule={vi.fn()}
         weekRecordCounts={new Map()}
+        closedHorarios={new Set()}
       />,
     );
 
     expect(screen.getByText("Competitivo")).toBeInTheDocument();
     expect(screen.getByText("Adultos")).toBeInTheDocument();
+  });
+
+  // ENT-03: only a COMPLETE list locks the tile; a half-saved one stays open
+  // so the missing students can still be recorded.
+  it("locks the tile only when the list is complete, and calls a partial one incomplete", () => {
+    const onSelect = vi.fn();
+    render(
+      <ScheduleDayGroup
+        group={buildGroup([
+          buildSchedule({ id: 1, categoriaLabel: "Completa" }),
+          buildSchedule({ id: 2, categoriaLabel: "Parcial" }),
+        ])}
+        today="mar"
+        selectedScheduleId={null}
+        onSelectSchedule={onSelect}
+        weekRecordCounts={new Map([[1, 3], [2, 2]])}
+        closedHorarios={new Set([1])}
+      />,
+    );
+
+    const [completa, parcial] = screen.getAllByRole("button");
+    expect(completa).toBeDisabled();
+    expect(completa).toHaveTextContent("Lista tomada hoy · 3 registros");
+    expect(parcial).toBeEnabled();
+    expect(parcial).toHaveTextContent("Lista incompleta · 2 registros");
+    parcial.click();
+    expect(onSelect).toHaveBeenCalledWith(2);
   });
 });

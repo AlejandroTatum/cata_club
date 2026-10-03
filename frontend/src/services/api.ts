@@ -724,10 +724,20 @@ export interface RegisterAttendanceRequest {
   students: AttendanceStudentMark[];
 }
 
-/** Result of a `registerAttendance` batch — tolerates partial failure (one POST per student). */
+/** One student the batch could not save. */
+export interface RegisterAttendanceFailure {
+  personaId: number;
+  message: string;
+  /** ENT-04: the student already had a record for this session — first one wins. */
+  alreadyRegistered?: boolean;
+  /** Who filed that earlier record, when the backend knows (historic rows have no author). */
+  registradoPorNombre?: string | null;
+}
+
+/** Result of a `registerAttendance` batch — tolerates partial failure per student. */
 export interface RegisterAttendanceResult {
   createdCount: number;
-  failed: { personaId: number; message: string }[];
+  failed: RegisterAttendanceFailure[];
   /** Who took the list (issue #263), persisted by the backend — surfaced on the receipt. */
   registradoPorNombre?: string | null;
 }
@@ -820,7 +830,7 @@ export async function fetchRecentAttendanceSessions(limit = 5): Promise<RecentAt
   return request<RecentAttendanceSession[]>(apiEndpoint(`/attendance/recent-sessions?limit=${limit}`));
 }
 
-/** Persist attendance for a session (one real `POST /asistencias` per student, partial-failure-tolerant). */
+/** Persist attendance for a session (ONE `POST /asistencias/lote`, partial-failure-tolerant per student). */
 export async function registerAttendance(data: RegisterAttendanceRequest): Promise<RegisterAttendanceResult> {
   return request<RegisterAttendanceResult>(apiEndpoint("/attendance/records"), {
     method: "POST",
@@ -2922,6 +2932,9 @@ export interface AlumnoHorario {
   horarioHoraInicio: string;
   horarioHoraFin: string;
   fechaAsignacion: string;
+  /** Categoría del horario (código y nombre); el nombre solo viaja en el padrón completo. */
+  horarioCategoria?: string;
+  horarioCategoriaLabel?: string | null;
 }
 
 export interface AsignarAlumnoHorarioDTO {

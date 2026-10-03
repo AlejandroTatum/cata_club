@@ -5,6 +5,11 @@ from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from datetime import date, timedelta
 
+import pytest
+
+# Fechas fijas de 2026: ver `sin_ventana_de_registro` en conftest.py (ENT-02).
+pytestmark = pytest.mark.usefixtures("sin_ventana_de_registro")
+
 _DIA_SEMANA_DE_WEEKDAY = [
     "LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO", "DOMINGO",
 ]
@@ -419,6 +424,25 @@ def test_roster_de_todos_los_horarios_junta_varios_horarios_en_una_consulta(clie
     assert por_horario[horario_b["id"]] == [alumno_b["id"]]
 
 
+def test_roster_de_todos_los_horarios_trae_la_categoria_de_cada_fila(client):
+    """ENT-15: el padrón trae la categoría (código y nombre) de cada horario,
+    para que "Alumnos del club" filtre por categoría y no por hora."""
+    alumno = _crear_persona_api(client, cedula_valida(144), "Cata")
+    horario = _crear_horario_api(client, "LUNES", "FORMATIVO")
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+
+    fila = next(
+        f for f in client.get("/api/v1/asistencias/horarios/alumnos").json()
+        if f["personaId"] == alumno["id"]
+    )
+
+    assert fila["horarioCategoria"] == "FORMATIVO"
+    assert fila["horarioCategoriaLabel"]
+
+
 def test_roster_de_todos_los_horarios_excluye_a_los_dados_de_baja(client, db_session):
     """Mismo filtro de baja lógica que `listar_por_horario`: alguien que ya
     no está en el club no puede figurar en ningún roster."""
@@ -826,6 +850,65 @@ def test_admin_corrige_asistencia_dentro_de_la_ventana(client, monkeypatch):
     assert cuerpo["corregidoPorId"] == 1
     assert cuerpo["corregidoPorNombre"]
     assert cuerpo["corregidoEn"]
+
+
+# --- ENT-09: una corrección tiene que corregir algo, y decir por qué ---------
+def _preparar_para_validar_correccion(client, monkeypatch):
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    fecha = str(_HOY_CORRECCION - timedelta(days=5))
+    payload = _preparar_asistencia_para_corregir(client, fecha)
+    return _id_de_la_asistencia(client, payload["persona_id"])
+
+
+def test_correccion_con_motivo_en_blanco_se_rechaza_con_400(client, monkeypatch):
+    asistencia_id = _preparar_para_validar_correccion(client, monkeypatch)
+
+    resp = client.patch(
+        f"/api/v1/asistencias/{asistencia_id}/corregir",
+        json={"estado": "AUSENTE", "motivo": "   "},
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert client.get(f"/api/v1/asistencias/{asistencia_id}/correcciones").json() == []
+
+
+def test_correccion_sin_ningun_cambio_se_rechaza_con_400(client, monkeypatch):
+    asistencia_id = _preparar_para_validar_correccion(client, monkeypatch)
+
+    # La toma quedó PRESENTE, sin justificativo: repetir ese mismo valor no corrige nada.
+    resp = client.patch(
+        f"/api/v1/asistencias/{asistencia_id}/corregir",
+        json={"estado": "PRESENTE", "motivo": "Lo confirmo igual."},
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert client.get(f"/api/v1/asistencias/{asistencia_id}/correcciones").json() == []
+
+
+def test_correccion_que_solo_cambia_el_justificativo_se_acepta(client, monkeypatch):
+    asistencia_id = _preparar_para_validar_correccion(client, monkeypatch)
+
+    resp = client.patch(
+        f"/api/v1/asistencias/{asistencia_id}/corregir",
+        json={
+            "estado": "PRESENTE", "justificativo": "Llegó con certificado.",
+            "estado_justificativo": True, "motivo": "Se olvidó el certificado.",
+        },
+    )
+
+    assert resp.status_code == 200, resp.text
+
+
+def test_correccion_acepta_un_motivo_con_espacios_alrededor_y_lo_guarda_recortado(client, monkeypatch):
+    asistencia_id = _preparar_para_validar_correccion(client, monkeypatch)
+
+    resp = client.patch(
+        f"/api/v1/asistencias/{asistencia_id}/corregir",
+        json={"estado": "AUSENTE", "motivo": "  No vino.  "},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["motivo"] == "No vino."
 
 
 def test_entrenador_no_puede_corregir_asistencia(client_entrenador, client, monkeypatch):

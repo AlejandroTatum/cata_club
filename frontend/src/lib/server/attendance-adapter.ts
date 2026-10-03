@@ -62,6 +62,9 @@ export interface BackendAsistencia {
    *  reason it is on `AttendanceRecord`: older fixtures/other consumers of
    *  this shared backend shape may not set it. */
   correctable?: boolean;
+  /** ENT-07: accepted for a not-operative student, or for a date before their
+   *  enrolment — flagged for the admin's review. Optional: an older backend omits it. */
+  requiereRevision?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -166,6 +169,7 @@ export function buildAttendanceRecord(
     justificativo: asistencia.justificativo ?? null,
     estadoJustificativo: asistencia.estadoJustificativo ?? null,
     correctable: asistencia.correctable ?? false,
+    requiereRevision: asistencia.requiereRevision ?? false,
   };
 }
 

@@ -4,13 +4,13 @@ import type { DiaSemana } from "@/types/domain";
 interface WeekOverviewProps {
   dayGroups: ScheduleDayGroup[];
   today: DiaSemana;
-  weekRecordCounts: Map<number, number>;
+  closedHorarios: Set<number>;
   onSelectDay: (day: DiaSemana) => void;
 }
 
-/** How many of a day's sessions already have a list this week. */
-function listsTaken(schedules: TrainingSchedule[], counts: Map<number, number>): number {
-  return schedules.filter((s) => (counts.get(s.id) ?? 0) > 0).length;
+/** How many of a day's sessions already have a COMPLETE list this week. */
+function listsTaken(schedules: TrainingSchedule[], closed: Set<number>): number {
+  return schedules.filter((s) => closed.has(s.id)).length;
 }
 
 /**
@@ -22,7 +22,7 @@ function listsTaken(schedules: TrainingSchedule[], counts: Map<number, number>):
 export default function WeekOverview({
   dayGroups,
   today,
-  weekRecordCounts,
+  closedHorarios,
   onSelectDay,
 }: WeekOverviewProps): React.ReactElement | null {
   if (dayGroups.length === 0) return null;
@@ -32,7 +32,7 @@ export default function WeekOverview({
       <h3 className="text-2xs font-bold uppercase tracking-wide text-ink-3">Esta semana</h3>
       <ul className="m-0 flex flex-1 list-none flex-col p-0">
         {dayGroups.map((group) => {
-          const taken = listsTaken(group.schedules, weekRecordCounts);
+          const taken = listsTaken(group.schedules, closedHorarios);
           const total = group.schedules.length;
           const pending = total - taken;
           return (

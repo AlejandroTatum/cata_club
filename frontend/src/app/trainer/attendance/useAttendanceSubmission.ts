@@ -8,12 +8,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { useToast } from "@/contexts/ToastContext";
+import { useToast, useToastState } from "@/contexts/ToastContext";
 import {
   buildAttendanceReceipt,
   clearAttendanceDraft,
   countUnmarked,
+  describeAttendanceSaveError,
   toAttendanceMarks,
+  UNDO_TOAST_ACTION_LABEL,
   type SessionStudent,
   type WizardStep,
 } from "./attendance-utils";
@@ -74,12 +76,25 @@ export function useAttendanceSubmission({
   openRoster,
 }: UseAttendanceSubmissionArgs): AttendanceSubmission {
   const { showError } = useToast();
+  // ENT-12: the "Deshacer" offer of "marcar restantes presentes" must not outlive
+  // the roll call. `showSuccess` hands back no id, so the live toasts are read
+  // through a ref (a closure would see the list as of the last render).
+  const { toasts, removeToast } = useToastState();
+  const toastsRef = useRef(toasts);
+  toastsRef.current = toasts;
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [result, setResult] = useState<RegisterAttendanceResult | null>(null);
   const [confirmedAt, setConfirmedAt] = useState<Date | null>(null);
   const confirmationHeadingRef = useRef<HTMLHeadingElement>(null);
+  /**
+   * ENT-05: set when a save failed and the roster could NOT be reloaded right
+   * after. The save may have landed even though its answer was lost, so the
+   * roster on screen is not trustworthy until it is reloaded — the next press
+   * of "Confirmar" does that first instead of re-sending blind.
+   */
+  const rosterStale = useRef(false);
 
   useEffect(() => {
     if (submitError) showError(submitError);
@@ -99,8 +114,27 @@ export function useAttendanceSubmission({
       // `toAttendanceMarks` strips it, and this refuses the batch rather
       // than filing a short roster.
       if (countUnmarked(students) > 0) return;
+      for (const toast of toastsRef.current) {
+        if (toast.action?.label === UNDO_TOAST_ACTION_LABEL) removeToast(toast.id);
+      }
       setSubmitting(true);
       setSubmitError(null);
+      // Reload on the SAME step: the marks come back through the draft, and any
+      // student the server already has a row for comes back filed.
+      const reloadRoster = (): Promise<boolean> =>
+        openRoster(selectedScheduleId, requestedDate, "confirm", (h, d, t) =>
+          writeWizardUrl(h, d, t, "replace"),
+        );
+      if (rosterStale.current) {
+        const reloaded = await reloadRoster();
+        setSubmitting(false);
+        if (reloaded) {
+          rosterStale.current = false;
+        } else {
+          setSubmitError("No se pudo actualizar la lista. Revise su conexión e intente nuevamente.");
+        }
+        return;
+      }
       try {
         const registration = await registerAttendance({
           horarioId: selectedScheduleId,
@@ -114,13 +148,16 @@ export function useAttendanceSubmission({
         writeWizardUrl(null, null, "select-session", "replace");
       } catch (err) {
         console.error("[trainer/attendance] registerAttendance failed", err);
-        if (draftKey) clearAttendanceDraft(draftKey);
-        setSubmitError("No se pudo registrar la asistencia. Intente nuevamente.");
+        // ENT-05: the draft is KEPT. It used to be cleared here, which turned a
+        // dropped connection into the loss of every mark — and the save might
+        // have landed anyway. Reloading shows what the server actually has.
+        rosterStale.current = !(await reloadRoster());
+        setSubmitError(describeAttendanceSaveError(err));
       } finally {
         setSubmitting(false);
       }
     },
-    [draftKey, readOnly, selectedScheduleId, sessionDate, step, students, writeWizardUrl],
+    [draftKey, openRoster, readOnly, removeToast, requestedDate, selectedScheduleId, sessionDate, step, students, writeWizardUrl],
   );
 
   const handleRetryFailed = useCallback(async (): Promise<void> => {

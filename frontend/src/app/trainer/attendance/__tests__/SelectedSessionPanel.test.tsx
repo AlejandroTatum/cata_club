@@ -11,6 +11,7 @@ describe("SelectedSessionPanel", () => {
         schedule={null}
         today="mar"
         recordedCount={0}
+        listClosed={false}
         preview={{ names: [], loading: false }}
         commitBar={<button type="button">Continuar</button>}
       />,
@@ -26,6 +27,7 @@ describe("SelectedSessionPanel", () => {
         schedule={schedule}
         today="mar"
         recordedCount={0}
+        listClosed={false}
         preview={{ names, loading: false }}
         commitBar={null}
       />,
@@ -35,5 +37,20 @@ describe("SelectedSessionPanel", () => {
     expect(screen.getByText("Sin lista tomada hoy")).toBeInTheDocument();
     expect(screen.getByText("10 alumnos en la lista")).toBeInTheDocument();
     expect(screen.getByText("+2 más")).toBeInTheDocument();
+  });
+
+  it("calls a partially recorded list incomplete, not taken (ENT-03)", () => {
+    render(
+      <SelectedSessionPanel
+        schedule={schedule}
+        today="mar"
+        recordedCount={2}
+        listClosed={false}
+        preview={{ names: ["Ana"], loading: false }}
+        commitBar={null}
+      />,
+    );
+    expect(screen.getByText("Lista incompleta · 2 registros")).toBeInTheDocument();
+    expect(screen.queryByText(/Lista tomada/)).not.toBeInTheDocument();
   });
 });

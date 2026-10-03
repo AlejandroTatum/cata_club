@@ -1,6 +1,6 @@
 from datetime import date
 from typing import Optional, List
-from sqlalchemy import exists, func, select
+from sqlalchemy import and_, exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -142,6 +142,25 @@ class AsistenciaRepositorio:
             Asistencia.fecha_entrenamiento == fecha_entrenamiento,
         )
         return self.db.execute(stmt).scalars().first()
+
+    def listar_existentes_de_sesion(
+        self, horario_id: int, fecha_entrenamiento: date, persona_ids: List[int]
+    ) -> dict[int, Asistencia]:
+        """Filas ya registradas en la sesión para estas personas, en UNA
+        consulta IN (lote de asistencia, ENT-01); `registrado_por` va
+        eager-loaded para informar quién ganó (ENT-04)."""
+        if not persona_ids:
+            return {}
+        stmt = (
+            select(Asistencia)
+            .options(joinedload(Asistencia.registrado_por))
+            .where(
+                Asistencia.horario_id == horario_id,
+                Asistencia.fecha_entrenamiento == fecha_entrenamiento,
+                Asistencia.persona_id.in_(persona_ids),
+            )
+        )
+        return {a.persona_id: a for a in self.db.execute(stmt).scalars().all()}
 
     def listar_por_persona(
         self, persona_id: int, skip: int = 0, limit: Optional[int] = None
@@ -363,29 +382,18 @@ class AlumnoHorarioRepositorio:
             self.db.delete(alumno_horario)
         self.db.flush()
 
-    def eliminar_por_horario(self, horario_id: int) -> None:
-        """Removes every AlumnoHorario row pinned to this ONE horario_id --
-        used when the row itself is about to be deleted (e.g. an admin drops
-        one día from a categoria's schedule). Deliberadamente narrower than
-        `eliminar_muchos`/the categoria-wide fan-out in
-        `AsistenciaServicio.desasignar_alumno_de_horario`: unenrolling a
-        student because their whole categoria was chosen is a different
-        question from cleaning up the one row that is being deleted.
-
-        Solo `flush()` (issue #831): forma parte de la transacción atómica
-        de `AsistenciaServicio.eliminar_horario`, que comitea (o revierte)
-        junto con `HorarioRepositorio.eliminar` -- antes cada uno comiteaba
-        por separado, y una fila de `alumno_horario` podía quedar borrada
-        aunque el `horario_entrenamiento` sobreviviera por tener historial."""
-        stmt = select(AlumnoHorario).where(AlumnoHorario.horario_id == horario_id)
-        filas = list(self.db.execute(stmt).scalars().all())
-        for fila in filas:
-            self.db.delete(fila)
-        self.db.flush()
+    def contar_asignaciones_por_horario(self, horario_id: int) -> int:
+        """Alumnos asignados a este ONE horario (ADM-13): un horario con
+        asignaciones no se borra, así que el servicio cuenta antes de
+        intentarlo."""
+        stmt = select(func.count()).select_from(AlumnoHorario).where(
+            AlumnoHorario.horario_id == horario_id
+        )
+        return self.db.execute(stmt).scalar_one()
 
     def listar_por_horario_sin_filtro(self, horario_id: int) -> List[AlumnoHorario]:
         """Todas las filas de un horario, sin filtrar por alumno activo ni
-        paginar -- el mismo conjunto que recorre `eliminar_por_horario`,
+        paginar -- el mismo conjunto que cuenta `contar_asignaciones_por_horario`,
         pero SIN comprometer la transacción acá: usado por
         `AsistenciaServicio.actualizar_categoria`/`eliminar_categoria`,
         que arma un lote de deletes y los aplica en un único `commit()`
@@ -409,6 +417,30 @@ class AlumnoHorarioRepositorio:
             .distinct()
         )
         return set(self.db.execute(stmt).scalars().all())
+
+    def ids_no_operativos(self, persona_ids: List[int]) -> set[int]:
+        """De estas personas, las que NO cumplen el criterio de roster
+        (`_condiciones_persona_operativa`: baja o membresía suspendida) --
+        una sola definición de "operativo" para listar y para marcar (ENT-07)."""
+        if not persona_ids:
+            return set()
+        stmt = select(Persona.id).where(
+            Persona.id.in_(persona_ids), ~and_(*_condiciones_persona_operativa())
+        )
+        return set(self.db.execute(stmt).scalars().all())
+
+    def listar_por_personas_y_horario(
+        self, persona_ids: List[int], horario_id: int
+    ) -> dict[int, AlumnoHorario]:
+        """Pertenencia de varias personas al horario en UNA consulta IN
+        (lote de asistencia, ENT-01)."""
+        if not persona_ids:
+            return {}
+        stmt = select(AlumnoHorario).where(
+            AlumnoHorario.horario_id == horario_id,
+            AlumnoHorario.persona_id.in_(persona_ids),
+        )
+        return {a.persona_id: a for a in self.db.execute(stmt).scalars().all()}
 
     def obtener_por_persona_y_horario(
         self, persona_id: int, horario_id: int

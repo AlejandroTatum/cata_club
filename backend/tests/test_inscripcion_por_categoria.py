@@ -185,7 +185,10 @@ def test_asignar_alumno_no_se_desborda_a_otra_categoria(client, db_session):
 # Dropping one día from a categoria's schedule (admin editing `/groups`) must
 # unassign students from exactly that row, never from the whole categoria --
 # the opposite mistake from the one this file guards above.
-def test_eliminar_horario_no_requiere_desasignar_antes_y_no_afecta_otro_dia_de_la_categoria(client, db_session):
+# --- ADM-13: un horario con alumnos asignados no se borra ------------------
+# Antes el DELETE desasignaba en silencio a todos los alumnos del día; ahora
+# se rechaza con 409 y hay que reasignarlos primero.
+def test_eliminar_horario_con_alumnos_asignados_responde_409_y_no_toca_nada(client, db_session):
     alumno = _crear_persona_api(client, "1710034073", "Ana")
     _habilitar_como_jugador(db_session, alumno["id"])
     lunes = _crear_horario(client, "JUVENIL", "LUNES")
@@ -194,13 +197,17 @@ def test_eliminar_horario_no_requiere_desasignar_antes_y_no_afecta_otro_dia_de_l
         "/api/v1/asistencias/asignar-alumno",
         json={"persona_id": alumno["id"], "horario_id": lunes["id"]},
     )
+
+    resp = client.delete(f"/api/v1/asistencias/horarios/{lunes['id']}")
+
+    assert resp.status_code == 409
+    assert "Tiene 1 alumnos asignados; reasígnelos primero." in resp.text
     assert _horarios_del_alumno(client, alumno["id"]) == {lunes["id"], martes["id"]}
 
-    # No explicit unassign call first -- deleting the row alone must succeed
-    # even though the student is still enrolled in it.
+
+def test_eliminar_horario_sin_alumnos_asignados_sigue_funcionando(client):
+    lunes = _crear_horario(client, "JUVENIL", "LUNES")
+
     resp = client.delete(f"/api/v1/asistencias/horarios/{lunes['id']}")
 
     assert resp.status_code == 204
-    # Removed from the deleted día, but MARTES (the rest of the categoria)
-    # keeps the student -- this is the bug the fix closes.
-    assert _horarios_del_alumno(client, alumno["id"]) == {martes["id"]}
