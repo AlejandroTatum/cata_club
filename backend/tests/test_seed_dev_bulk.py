@@ -2,6 +2,7 @@ import importlib.util
 import re
 from pathlib import Path
 
+import pytest
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -79,6 +80,90 @@ def _motor_en_memoria(*modulos):
     return TestingSessionLocal
 
 
+def _conteos_catalogos(SessionLocal):
+    with SessionLocal() as verificacion:
+        return {
+            "institucion": verificacion.execute(select(func.count()).select_from(Institucion)).scalar_one(),
+            "sponsor": verificacion.execute(select(func.count()).select_from(Sponsor)).scalar_one(),
+            "descuento": verificacion.execute(select(func.count()).select_from(Descuento)).scalar_one(),
+            "enfermedades": verificacion.execute(select(func.count()).select_from(Enfermedades)).scalar_one(),
+        }
+
+
+def _conteos_eventos(SessionLocal):
+    with SessionLocal() as verificacion:
+        return {
+            "asignacion_descuento": verificacion.execute(select(func.count()).select_from(AsignacionDescuento)).scalar_one(),
+            "cobertura_bonificada": verificacion.execute(select(func.count()).select_from(CoberturaBonificada)).scalar_one(),
+            "historial_estado_membresia": verificacion.execute(select(func.count()).select_from(HistorialEstadoMembresia)).scalar_one(),
+            "historial_cambio_plan_membresia": verificacion.execute(select(func.count()).select_from(HistorialCambioPlanMembresia)).scalar_one(),
+            "correccion_pago": verificacion.execute(select(func.count()).select_from(CorreccionPago)).scalar_one(),
+            "consentimiento_legal": verificacion.execute(select(func.count()).select_from(ConsentimientoLegal)).scalar_one(),
+            "revocacion_consentimiento_legal": verificacion.execute(select(func.count()).select_from(RevocacionConsentimientoLegal)).scalar_one(),
+            "vinculacion_representante": verificacion.execute(select(func.count()).select_from(VinculacionRepresentante)).scalar_one(),
+            "sesion_asistencia": verificacion.execute(select(func.count()).select_from(SesionAsistencia)).scalar_one(),
+            "asistencia_correccion": verificacion.execute(select(func.count()).select_from(AsistenciaCorreccion)).scalar_one(),
+            "consulta_ficha_emergencia": verificacion.execute(select(func.count()).select_from(ConsultaFichaEmergencia)).scalar_one(),
+            "notificacion": verificacion.execute(select(func.count()).select_from(Notificacion)).scalar_one(),
+            "inscripcion_idempotencia": verificacion.execute(select(func.count()).select_from(InscripcionIdempotencia)).scalar_one(),
+            "verificacion_correo_outbox": verificacion.execute(select(func.count()).select_from(VerificacionCorreoOutbox)).scalar_one(),
+            "enrollment_notificacion_outbox": verificacion.execute(select(func.count()).select_from(EnrollmentNotificacionOutbox)).scalar_one(),
+        }
+
+
+def _identidades_del_pool(SessionLocal):
+    with SessionLocal() as verificacion:
+        return _identidades_para_pool_de_vus(verificacion)
+
+
+@pytest.fixture(scope="module")
+def bulk_sembrado():
+    """Fábrica de sesiones sobre una BD en memoria sembrada UNA vez (base + bulk).
+
+    Compartida por los tests de invariantes de solo lectura: ninguno escribe,
+    hace commit ni vuelve a llamar `main()` sobre este motor. Los tests que
+    necesitan una segunda corrida usan `bulk_sembrado_dos_veces`."""
+    modulo_base = _load_base_seed_module()
+    modulo_bulk = _load_seed_module()
+    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
+
+    modulo_base.main()
+    modulo_bulk.main()
+
+    yield SessionLocal
+    SessionLocal.kw["bind"].dispose()
+
+
+@pytest.fixture(scope="module")
+def bulk_sembrado_dos_veces():
+    """Siembra base + bulk, captura el estado de la primera corrida, vuelve a
+    correr el bulk y captura el de la segunda.
+
+    Devuelve `{nombre: (primera, segunda)}` para que los tests de
+    idempotencia solo comparen. Motor propio, independiente de `bulk_sembrado`."""
+    modulo_base = _load_base_seed_module()
+    modulo_bulk = _load_seed_module()
+    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
+
+    modulo_base.main()
+    modulo_bulk.main()
+    primera = {
+        "pool": _identidades_del_pool(SessionLocal),
+        "catalogos": _conteos_catalogos(SessionLocal),
+        "eventos": _conteos_eventos(SessionLocal),
+    }
+
+    modulo_bulk.main()
+    segunda = {
+        "pool": _identidades_del_pool(SessionLocal),
+        "catalogos": _conteos_catalogos(SessionLocal),
+        "eventos": _conteos_eventos(SessionLocal),
+    }
+
+    yield {k: (primera[k], segunda[k]) for k in primera}
+    SessionLocal.kw["bind"].dispose()
+
+
 def test_voucher_fixture_url_uses_reachable_default(monkeypatch):
     monkeypatch.delenv("SEED_VOUCHER_BASE_URL", raising=False)
 
@@ -97,7 +182,7 @@ def test_voucher_fixture_url_falls_back_when_configuration_is_blank(monkeypatch)
     assert _load_seed_module().voucher_fixture_url() == "https://placehold.co/600x400.png?text=Cata+Club+Voucher"
 
 
-def test_main_inscribe_a_cada_alumno_en_el_horario_donde_le_registra_asistencia():
+def test_main_inscribe_a_cada_alumno_en_el_horario_donde_le_registra_asistencia(bulk_sembrado):
     """Toda `Asistencia` debe tener su `AlumnoHorario` que la respalde.
 
     El seed creaba asistencia sobre los primeros 3 horarios del entrenador sin
@@ -107,14 +192,7 @@ def test_main_inscribe_a_cada_alumno_en_el_horario_donde_le_registra_asistencia(
     y devolvía un roster que no contenía a ninguno de los alumnos que sí
     aparecían en `GET /asistencias/reportes`.
     """
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+    with bulk_sembrado() as verificacion:
         asistencias = list(verificacion.execute(select(Asistencia)).scalars().all())
         inscripciones = {
             (a.persona_id, a.horario_id)
@@ -134,7 +212,7 @@ def test_main_inscribe_a_cada_alumno_en_el_horario_donde_le_registra_asistencia(
     )
 
 
-def test_main_no_inventa_justificativo_ni_estado_justificativo():
+def test_main_no_inventa_justificativo_ni_estado_justificativo(bulk_sembrado):
     """`justificativo` / `estado_justificativo` los escribe la app, nunca el seed.
 
     Decisión del 11 de agosto (docs/product/decisiones-de-negocio-2026-08-11.md,
@@ -145,14 +223,7 @@ def test_main_no_inventa_justificativo_ni_estado_justificativo():
     llenas de datos falsos del seed. Deben quedar en NULL siempre,
     independientemente del `estado` de la asistencia.
     """
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+    with bulk_sembrado() as verificacion:
         asistencias = list(verificacion.execute(select(Asistencia)).scalars().all())
 
     assert asistencias, "el seed no creó asistencias: el test pasaría en vacío"
@@ -191,18 +262,11 @@ def _identidades_para_pool_de_vus(sesion):
     return sorted(identidades)
 
 
-def test_el_pool_de_carga_tiene_al_menos_cien_identidades_unicas():
+def test_el_pool_de_carga_tiene_al_menos_cien_identidades_unicas(bulk_sembrado):
     """Decisión del owner (100-user-load-test): el seed masivo debe proveer
     >= 100 identidades ALUMNO auto-gestionadas usables para un pool 1:1 de
     100 VUs, con correos determinísticos y únicos."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+    with bulk_sembrado() as verificacion:
         identidades = _identidades_para_pool_de_vus(verificacion)
 
     assert len(identidades) >= 100, (
@@ -216,38 +280,20 @@ def test_el_pool_de_carga_tiene_al_menos_cien_identidades_unicas():
     assert fuera_de_patron == [], f"correos no determinísticos: {fuera_de_patron[:5]}"
 
 
-def test_el_pool_de_identidades_es_idempotente_entre_corridas():
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-    with SessionLocal() as verificacion:
-        primera = _identidades_para_pool_de_vus(verificacion)
-
-    modulo_bulk.main()
-    with SessionLocal() as verificacion:
-        segunda = _identidades_para_pool_de_vus(verificacion)
+def test_el_pool_de_identidades_es_idempotente_entre_corridas(bulk_sembrado_dos_veces):
+    primera, segunda = bulk_sembrado_dos_veces["pool"]
 
     assert segunda == primera, "la segunda corrida cambió el pool de identidades"
 
 
-def test_todas_las_cuentas_del_bulk_nacen_con_el_correo_verificado():
+def test_todas_las_cuentas_del_bulk_nacen_con_el_correo_verificado(bulk_sembrado):
     """Gemelo del test homónimo de `test_seed_dev_base.py` (issue #790).
 
     El bulk crea alumnos y representantes por lotes; sobre un volumen fresco
     los dejaba a todos sin verificar, y un representante sin verificar no
     puede vincular a nadie -- que es justo lo que el dataset grande existe
     para poder probar."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+    with bulk_sembrado() as verificacion:
         cuentas = list(verificacion.execute(select(Usuario)).scalars().all())
 
     assert cuentas, "el seed no creó ninguna cuenta"
@@ -258,15 +304,8 @@ def test_todas_las_cuentas_del_bulk_nacen_con_el_correo_verificado():
     )
 
 
-def test_main_cubre_los_cuatro_tipos_de_escuela():
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+def test_main_cubre_los_cuatro_tipos_de_escuela(bulk_sembrado):
+    with bulk_sembrado() as verificacion:
         instituciones = list(verificacion.execute(select(Institucion)).scalars().all())
 
     assert instituciones, "el seed no creó ninguna institución"
@@ -276,15 +315,8 @@ def test_main_cubre_los_cuatro_tipos_de_escuela():
     )
 
 
-def test_main_siembra_sponsors_con_logo_placeholder():
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+def test_main_siembra_sponsors_con_logo_placeholder(bulk_sembrado):
+    with bulk_sembrado() as verificacion:
         sponsors = list(verificacion.execute(select(Sponsor)).scalars().all())
 
     assert sponsors, "el seed no creó ningún sponsor"
@@ -294,15 +326,8 @@ def test_main_siembra_sponsors_con_logo_placeholder():
     assert all(s.logo_url for s in sponsors)
 
 
-def test_main_respeta_el_check_xor_de_descuento():
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+def test_main_respeta_el_check_xor_de_descuento(bulk_sembrado):
+    with bulk_sembrado() as verificacion:
         descuentos = list(verificacion.execute(select(Descuento)).scalars().all())
 
     assert descuentos, "el seed no creó ningún descuento"
@@ -314,17 +339,10 @@ def test_main_respeta_el_check_xor_de_descuento():
     )
 
 
-def test_main_las_enfermedades_cuelgan_de_fichas_existentes():
+def test_main_las_enfermedades_cuelgan_de_fichas_existentes(bulk_sembrado):
     """Ninguna `Enfermedades` huérfana: todas deben apuntar a una
     `FichaMedica` que el seed sembró, nunca crearse sueltas."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+    with bulk_sembrado() as verificacion:
         enfermedades = list(verificacion.execute(select(Enfermedades)).scalars().all())
         ids_ficha = {
             f.id for f in verificacion.execute(select(FichaMedica)).scalars().all()
@@ -335,17 +353,10 @@ def test_main_las_enfermedades_cuelgan_de_fichas_existentes():
     assert not huerfanas, f"{len(huerfanas)} enfermedades huérfanas"
 
 
-def test_main_backfill_deja_personas_con_institucion_y_sin_institucion():
+def test_main_backfill_deja_personas_con_institucion_y_sin_institucion(bulk_sembrado):
     """El caso "sin institución" tiene que seguir existiendo tras el
     backfill: no todas las personas quedan cubiertas a propósito."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+    with bulk_sembrado() as verificacion:
         personas = list(verificacion.execute(select(Persona)).scalars().all())
 
     con_institucion = [p for p in personas if p.institucion_id is not None]
@@ -355,31 +366,12 @@ def test_main_backfill_deja_personas_con_institucion_y_sin_institucion():
     assert sin_institucion, "ninguna persona quedó sin institución: falta la rama NULL"
 
 
-def test_main_no_duplica_catalogos_al_correr_dos_veces():
+def test_main_no_duplica_catalogos_al_correr_dos_veces(bulk_sembrado_dos_veces):
     """El test que más importa: una segunda corrida no debe duplicar ni una
     sola fila de los catálogos nuevos (institución, sponsor, descuento,
     enfermedades)."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    def _conteos():
-        with SessionLocal() as verificacion:
-            return {
-                "institucion": verificacion.execute(select(func.count()).select_from(Institucion)).scalar_one(),
-                "sponsor": verificacion.execute(select(func.count()).select_from(Sponsor)).scalar_one(),
-                "descuento": verificacion.execute(select(func.count()).select_from(Descuento)).scalar_one(),
-                "enfermedades": verificacion.execute(select(func.count()).select_from(Enfermedades)).scalar_one(),
-            }
-
-    conteos_primera_corrida = _conteos()
+    conteos_primera_corrida, conteos_segunda_corrida = bulk_sembrado_dos_veces["catalogos"]
     assert all(v > 0 for v in conteos_primera_corrida.values()), conteos_primera_corrida
-
-    modulo_bulk.main()
-    conteos_segunda_corrida = _conteos()
 
     assert conteos_segunda_corrida == conteos_primera_corrida, (
         f"corrida repetida duplicó filas: {conteos_primera_corrida} -> {conteos_segunda_corrida}"
@@ -389,7 +381,7 @@ def test_main_no_duplica_catalogos_al_correr_dos_veces():
 # ---------------------------------------------------------------------------
 # Eventos de dominio (issue de QA con 0 dev seed en 16 tablas nuevas).
 # ---------------------------------------------------------------------------
-def test_existe_al_menos_un_hijo_gestionado_sin_cuenta_propia():
+def test_existe_al_menos_un_hijo_gestionado_sin_cuenta_propia(bulk_sembrado):
     """El test que más importa de todo el PR: el "hijo gestionado" que el
     dominio contempla -- una `Persona` con `representante_id` pero SIN fila
     en `usuario` -- es exactamente lo que `EnrollmentServicio.enroll` deja
@@ -397,14 +389,7 @@ def test_existe_al_menos_un_hijo_gestionado_sin_cuenta_propia():
     (`enrollment_servicio.py:284-286`). Antes de este fix, tanto
     `seed_dev_base.py` como el bulk creaban `Usuario` SIEMPRE, así que ese
     caso de dominio no existía ni una vez sobre 86 personas/86 usuarios."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+    with bulk_sembrado() as verificacion:
         personas = list(verificacion.execute(select(Persona)).scalars().all())
         ids_con_usuario = {
             u.persona_id for u in verificacion.execute(select(Usuario)).scalars().all()
@@ -420,19 +405,12 @@ def test_existe_al_menos_un_hijo_gestionado_sin_cuenta_propia():
     )
 
 
-def test_toda_asistencia_cae_dentro_de_una_unica_sesion_asistencia():
+def test_toda_asistencia_cae_dentro_de_una_unica_sesion_asistencia(bulk_sembrado):
     """`SesionAsistencia` agrupa las `Asistencia` existentes por (horario_id,
     fecha_entrenamiento) -- issue #389, slice 1. Insertar una sesión por
     asistencia en vez de una por grupo rompería en cuanto el segundo alumno
     de la misma sesión intentara la suya (UNIQUE compuesto)."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+    with bulk_sembrado() as verificacion:
         asistencias = list(verificacion.execute(select(Asistencia)).scalars().all())
         sesiones = list(verificacion.execute(select(SesionAsistencia)).scalars().all())
 
@@ -453,19 +431,12 @@ def test_toda_asistencia_cae_dentro_de_una_unica_sesion_asistencia():
     )
 
 
-def test_historial_estado_membresia_nunca_repite_estado_ni_apunta_a_vencida():
+def test_historial_estado_membresia_nunca_repite_estado_ni_apunta_a_vencida(bulk_sembrado):
     """CHECK `ck_historial_estado_cambia` (estado_anterior <> estado_nuevo) y
     la regla de negocio de `vencimientos_tareas.py`: el vencimiento
     ACTIVA -> VENCIDA lo hace un UPDATE directo del batch que NO escribe
     historial, así que ninguna fila de este seed puede apuntar a VENCIDA."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+    with bulk_sembrado() as verificacion:
         historial = list(
             verificacion.execute(select(HistorialEstadoMembresia)).scalars().all()
         )
@@ -480,17 +451,10 @@ def test_historial_estado_membresia_nunca_repite_estado_ni_apunta_a_vencida():
     )
 
 
-def test_historial_cambio_plan_siempre_cambia_de_tipo_membresia():
+def test_historial_cambio_plan_siempre_cambia_de_tipo_membresia(bulk_sembrado):
     """CHECK `ck_historial_cambio_plan_cambia`: un "cambio de plan" que deja
     el mismo tipo no es un cambio, es ruido en la auditoría."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+    with bulk_sembrado() as verificacion:
         historial = list(
             verificacion.execute(select(HistorialCambioPlanMembresia)).scalars().all()
         )
@@ -503,19 +467,12 @@ def test_historial_cambio_plan_siempre_cambia_de_tipo_membresia():
     assert not sin_cambio, "historial de cambio de plan que no cambia de tipo"
 
 
-def test_a_lo_sumo_una_asignacion_descuento_vigente_por_persona():
+def test_a_lo_sumo_una_asignacion_descuento_vigente_por_persona(bulk_sembrado):
     """Espejo del índice único parcial `uq_asignacion_descuento_activa_por_
     persona` (solo Postgres lo hace cumplir; ver verificación aparte contra
     Postgres real). Cubre también la rama "retirada" del CHECK
     `ck_asignacion_retiro_completo`."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+    with bulk_sembrado() as verificacion:
         asignaciones = list(
             verificacion.execute(select(AsignacionDescuento)).scalars().all()
         )
@@ -532,18 +489,11 @@ def test_a_lo_sumo_una_asignacion_descuento_vigente_por_persona():
     )
 
 
-def test_cobertura_bonificada_no_se_solapa_para_la_misma_membresia():
+def test_cobertura_bonificada_no_se_solapa_para_la_misma_membresia(bulk_sembrado):
     """Espejo del `ExcludeConstraint` anti-solape (solo Postgres, `btree_gist`
     -- ver verificación aparte contra Postgres real). `CoberturaBonificada`
     nunca crea un `Pago`."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+    with bulk_sembrado() as verificacion:
         coberturas = list(
             verificacion.execute(select(CoberturaBonificada)).scalars().all()
         )
@@ -561,17 +511,10 @@ def test_cobertura_bonificada_no_se_solapa_para_la_misma_membresia():
     assert not solapadas, f"membresías con cobertura bonificada solapada: {solapadas}"
 
 
-def test_correccion_pago_siempre_cambia_algun_campo():
+def test_correccion_pago_siempre_cambia_algun_campo(bulk_sembrado):
     """CHECK `ck_correccion_pago_algun_campo_cambia`: una "corrección" que no
     cambia ningún valor es ruido en la auditoría."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+    with bulk_sembrado() as verificacion:
         correcciones = list(verificacion.execute(select(CorreccionPago)).scalars().all())
 
     assert correcciones, "el seed no creó ninguna corrección de pago"
@@ -582,18 +525,11 @@ def test_correccion_pago_siempre_cambia_algun_campo():
     assert not sin_cambio, "corrección de pago que no cambió ningún campo"
 
 
-def test_consentimientos_legales_cubren_con_y_sin_representado():
+def test_consentimientos_legales_cubren_con_y_sin_representado(bulk_sembrado):
     """Cubre las DOS formas del UNIQUE compuesto de `consentimiento_legal`:
     con `representado_persona_id` (aceptación en nombre de un hijo) y sin él
     (autoinscripción/alta directa)."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+    with bulk_sembrado() as verificacion:
         consentimientos = list(
             verificacion.execute(select(ConsentimientoLegal)).scalars().all()
         )
@@ -605,17 +541,10 @@ def test_consentimientos_legales_cubren_con_y_sin_representado():
     assert sin_representado, "falta la forma 'sin representado' del consentimiento"
 
 
-def test_revocacion_consentimiento_tiene_motivo_y_no_duplica_consentimiento():
+def test_revocacion_consentimiento_tiene_motivo_y_no_duplica_consentimiento(bulk_sembrado):
     """`RevocacionConsentimientoLegal.consentimiento_id` es UNIQUE y `motivo`
     NOT NULL."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+    with bulk_sembrado() as verificacion:
         revocaciones = list(
             verificacion.execute(select(RevocacionConsentimientoLegal)).scalars().all()
         )
@@ -628,17 +557,10 @@ def test_revocacion_consentimiento_tiene_motivo_y_no_duplica_consentimiento():
     )
 
 
-def test_vinculacion_representante_cubre_las_dos_ramas_del_anterior():
+def test_vinculacion_representante_cubre_las_dos_ramas_del_anterior(bulk_sembrado):
     """`representante_anterior_id` nullable: cubre con valor (cambio de
     representante) y NULL (el representado no tenía uno antes)."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+    with bulk_sembrado() as verificacion:
         vinculaciones = list(
             verificacion.execute(select(VinculacionRepresentante)).scalars().all()
         )
@@ -652,36 +574,22 @@ def test_vinculacion_representante_cubre_las_dos_ramas_del_anterior():
     )
 
 
-def test_enrollment_notificacion_outbox_no_usa_expires_at():
+def test_enrollment_notificacion_outbox_no_usa_expires_at(bulk_sembrado):
     """A diferencia de `RecuperacionOutbox`/`VerificacionCorreoOutbox`, esta
     cola NO tiene columna `expires_at`."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
     assert not hasattr(EnrollmentNotificacionOutbox, "expires_at")
 
-    with SessionLocal() as verificacion:
+    with bulk_sembrado() as verificacion:
         filas = list(
             verificacion.execute(select(EnrollmentNotificacionOutbox)).scalars().all()
         )
     assert filas, "el seed no creó ninguna fila de enrollment_notificacion_outbox"
 
 
-def test_verificacion_correo_outbox_siempre_lleva_expires_at():
+def test_verificacion_correo_outbox_siempre_lleva_expires_at(bulk_sembrado):
     """A diferencia de `EnrollmentNotificacionOutbox`, esta cola SÍ tiene
     `expires_at` NOT NULL."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+    with bulk_sembrado() as verificacion:
         filas = list(
             verificacion.execute(select(VerificacionCorreoOutbox)).scalars().all()
         )
@@ -690,17 +598,10 @@ def test_verificacion_correo_outbox_siempre_lleva_expires_at():
     assert all(f.expires_at is not None for f in filas)
 
 
-def test_asistencia_correccion_guarda_el_valor_anterior_y_muta_la_asistencia():
+def test_asistencia_correccion_guarda_el_valor_anterior_y_muta_la_asistencia(bulk_sembrado):
     """Append-only: la fila guarda el estado ANTERIOR y la `Asistencia`
     mutada queda con el estado NUEVO."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+    with bulk_sembrado() as verificacion:
         correcciones = list(
             verificacion.execute(select(AsistenciaCorreccion)).scalars().all()
         )
@@ -716,15 +617,8 @@ def test_asistencia_correccion_guarda_el_valor_anterior_y_muta_la_asistencia():
         )
 
 
-def test_consulta_ficha_emergencia_no_es_huerfana():
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+def test_consulta_ficha_emergencia_no_es_huerfana(bulk_sembrado):
+    with bulk_sembrado() as verificacion:
         consultas = list(
             verificacion.execute(select(ConsultaFichaEmergencia)).scalars().all()
         )
@@ -738,15 +632,8 @@ def test_consulta_ficha_emergencia_no_es_huerfana():
     assert not huerfanas, "consulta de ficha de emergencia con persona inexistente"
 
 
-def test_inscripcion_idempotencia_cubre_pendiente_y_completada():
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+def test_inscripcion_idempotencia_cubre_pendiente_y_completada(bulk_sembrado):
+    with bulk_sembrado() as verificacion:
         filas = list(
             verificacion.execute(select(InscripcionIdempotencia)).scalars().all()
         )
@@ -756,62 +643,25 @@ def test_inscripcion_idempotencia_cubre_pendiente_y_completada():
     assert "PENDIENTE" in estados or "COMPLETADA" in estados
 
 
-def test_notificacion_usa_siempre_el_constructor_del_modelo():
+def test_notificacion_usa_siempre_el_constructor_del_modelo(bulk_sembrado):
     """`Notificacion.mensaje` se recorta con `@validates`, que solo corre en
     asignación de atributo Python -- si el seed usara `bulk_insert`/Core en
     algún punto, un mensaje largo pasaría sin recortar."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
+    with bulk_sembrado() as verificacion:
         notificaciones = list(verificacion.execute(select(Notificacion)).scalars().all())
 
     assert notificaciones, "el seed no creó ninguna notificación"
     assert all(len(n.mensaje) <= Notificacion.MENSAJE_MAX for n in notificaciones)
 
 
-def test_eventos_de_dominio_no_duplican_al_correr_dos_veces():
+def test_eventos_de_dominio_no_duplican_al_correr_dos_veces(bulk_sembrado_dos_veces):
     """Segunda corrida idempotente sobre las 16 tablas de eventos de dominio
     nuevas. Corre contra un motor en memoria (SQLite): NO ejercita los
     índices únicos parciales ni el `ExcludeConstraint`, que solo existen en
     Postgres (ver docstring de `CoberturaBonificada`) -- esa verificación va
     aparte, corriendo el seed dos veces contra Postgres real."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    def _conteos():
-        with SessionLocal() as verificacion:
-            return {
-                "asignacion_descuento": verificacion.execute(select(func.count()).select_from(AsignacionDescuento)).scalar_one(),
-                "cobertura_bonificada": verificacion.execute(select(func.count()).select_from(CoberturaBonificada)).scalar_one(),
-                "historial_estado_membresia": verificacion.execute(select(func.count()).select_from(HistorialEstadoMembresia)).scalar_one(),
-                "historial_cambio_plan_membresia": verificacion.execute(select(func.count()).select_from(HistorialCambioPlanMembresia)).scalar_one(),
-                "correccion_pago": verificacion.execute(select(func.count()).select_from(CorreccionPago)).scalar_one(),
-                "consentimiento_legal": verificacion.execute(select(func.count()).select_from(ConsentimientoLegal)).scalar_one(),
-                "revocacion_consentimiento_legal": verificacion.execute(select(func.count()).select_from(RevocacionConsentimientoLegal)).scalar_one(),
-                "vinculacion_representante": verificacion.execute(select(func.count()).select_from(VinculacionRepresentante)).scalar_one(),
-                "sesion_asistencia": verificacion.execute(select(func.count()).select_from(SesionAsistencia)).scalar_one(),
-                "asistencia_correccion": verificacion.execute(select(func.count()).select_from(AsistenciaCorreccion)).scalar_one(),
-                "consulta_ficha_emergencia": verificacion.execute(select(func.count()).select_from(ConsultaFichaEmergencia)).scalar_one(),
-                "notificacion": verificacion.execute(select(func.count()).select_from(Notificacion)).scalar_one(),
-                "inscripcion_idempotencia": verificacion.execute(select(func.count()).select_from(InscripcionIdempotencia)).scalar_one(),
-                "verificacion_correo_outbox": verificacion.execute(select(func.count()).select_from(VerificacionCorreoOutbox)).scalar_one(),
-                "enrollment_notificacion_outbox": verificacion.execute(select(func.count()).select_from(EnrollmentNotificacionOutbox)).scalar_one(),
-            }
-
-    conteos_primera_corrida = _conteos()
+    conteos_primera_corrida, conteos_segunda_corrida = bulk_sembrado_dos_veces["eventos"]
     assert all(v > 0 for v in conteos_primera_corrida.values()), conteos_primera_corrida
-
-    modulo_bulk.main()
-    conteos_segunda_corrida = _conteos()
 
     assert conteos_segunda_corrida == conteos_primera_corrida, (
         f"corrida repetida duplicó filas: {conteos_primera_corrida} -> {conteos_segunda_corrida}"
