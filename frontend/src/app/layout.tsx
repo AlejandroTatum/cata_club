@@ -16,7 +16,12 @@ import "./globals.css";
 // pages are thin client-fetching shells, so the rendering cost is minimal.
 export const dynamic = "force-dynamic";
 
-const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Cata Club Admin";
+/**
+ * The brand in the tab title. Deliberately NOT `NEXT_PUBLIC_APP_NAME`: every
+ * deploy sets that to "Cata Club Admin", and the public legal pages inherit
+ * this template, so a visitor read "Admin" on a legal document (LAN-13).
+ */
+const SITE_NAME = "Cata Club";
 
 interface RootLayoutProps {
   children: React.ReactNode;
@@ -35,8 +40,8 @@ export function generateMetadata(): Metadata {
   return {
     ...(siteUrl ? { metadataBase: new URL(siteUrl) } : {}),
     title: {
-      default: APP_NAME,
-      template: `%s | ${APP_NAME}`,
+      default: SITE_NAME,
+      template: `%s — ${SITE_NAME}`,
     },
     description: SITE_DESCRIPTION,
     icons: {
@@ -75,7 +80,7 @@ export default function RootLayout({
    * `--font-landing-*` copies of these same three files.
    */
   return (
-    <html lang="es" className={fontVariables}>
+    <html lang="es-EC" className={fontVariables}>
       <body className="min-h-screen bg-cata-bg font-sans text-cata-text antialiased">
         <ToastProvider>
           <ToastContainer />

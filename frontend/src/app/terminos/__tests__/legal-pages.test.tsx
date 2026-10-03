@@ -158,6 +158,15 @@ describe("public legal documents", () => {
     for (const point of points) expect(html).toContain(point);
   });
 
+  it.each([
+    ["Términos", TermsPage],
+    ["Privacidad", PrivacyPage],
+  ] as const)("%s makes the scrollable contents rail keyboard-focusable (LAN-11)", (_name, Page) => {
+    const html = renderToStaticMarkup(<Page />);
+    const nav = /<nav [^>]*aria-label="En este documento"[^>]*>/.exec(html)?.[0] ?? "";
+    expect(nav).toContain('tabindex="0"');
+  });
+
   it("keeps the FETM permission rail and omits a one-entry contents list", () => {
     const html = renderToStaticMarkup(<FETMPage />);
     expect(html).toContain("Qué autoriza este permiso");

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { HERO_PHOTOS } from "./landing-hero-photos";
 
 /** Detail payload for the `landing:hero-slide-change` DOM event dispatched on
@@ -61,6 +62,34 @@ const IDLE_RELEASE_TIMEOUT_MS = 2000;
  */
 const AUTO_ADVANCE_INTERVAL_MS = 6000;
 
+/** Horizontal travel, in px, that turns a drag over the photo into a swipe. */
+const SWIPE_THRESHOLD_PX = 40;
+
+/**
+ * Dark translucent pill behind the counter and the pause control: the white
+ * digits sat straight on light photos and vanished on the group shot (LAN-10).
+ */
+const COUNTER_PILL_STYLE: React.CSSProperties = {
+  gap: 4,
+  padding: "0 4px 0 14px",
+  borderRadius: 22,
+  backgroundColor: "rgba(0, 0, 0, 0.6)",
+};
+
+/** 44 px target (WCAG 2.5.8) that inherits the pill's white. */
+const PAUSE_BUTTON_STYLE: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 44,
+  height: 44,
+  padding: 0,
+  border: 0,
+  background: "transparent",
+  color: "inherit",
+  cursor: "pointer",
+};
+
 /** Zero-pads a 1-based slide position for the `01 / 03` counter. */
 function padSlidePosition(position: number): string {
   return String(position).padStart(2, "0");
@@ -88,6 +117,8 @@ export default function HeroCarousel(): React.ReactElement {
   const [slideReach, setSlideReach] = useState(PRIORITY_SLIDE_REACH);
   const [hovering, setHovering] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const previousRef = useRef(0);
 
@@ -122,13 +153,22 @@ export default function HeroCarousel(): React.ReactElement {
 
   useEffect((): (() => void) | undefined => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
-    if (hovering || focused) return undefined;
+    if (paused || hovering || focused) return undefined;
 
     const id = window.setInterval((): void => {
       go(current + 1);
     }, AUTO_ADVANCE_INTERVAL_MS);
     return (): void => window.clearInterval(id);
-  }, [current, hovering, focused, go]);
+  }, [current, paused, hovering, focused, go]);
+
+  const endSwipe = (x: number, y: number): void => {
+    const start = swipeStartRef.current;
+    swipeStartRef.current = null;
+    if (start === null) return;
+    const dx = x - start.x;
+    if (Math.abs(dx) < SWIPE_THRESHOLD_PX || Math.abs(dx) <= Math.abs(y - start.y)) return;
+    go(dx < 0 ? current + 1 : current - 1);
+  };
 
   return (
     <div
@@ -148,13 +188,29 @@ export default function HeroCarousel(): React.ReactElement {
       </button>
       {/* `aria-hidden` on the digits: the sibling `sr-only` sentence is what
           assistive tech actually reads, so the digits are not read twice. */}
-      <div className="landing-hero-counter" aria-live="polite">
+      <div className="landing-hero-counter" style={COUNTER_PILL_STYLE} aria-live="polite">
         <span aria-hidden="true">
           {padSlidePosition(current + 1)} / {padSlidePosition(HERO_PHOTOS.length)}
         </span>
         <span className="sr-only">{`Foto ${current + 1} de ${HERO_PHOTOS.length}`}</span>
+        <button
+          type="button"
+          style={PAUSE_BUTTON_STYLE}
+          aria-label={paused ? "Reanudar rotación" : "Pausar rotación"}
+          onClick={(): void => setPaused((value): boolean => !value)}
+        >
+          {paused ? <Play size={ICON.sm} aria-hidden="true" /> : <Pause size={ICON.sm} aria-hidden="true" />}
+        </button>
       </div>
-      <div className="landing-hero-frame" data-media-reveal ref={frameRef}>
+      <div
+        className="landing-hero-frame"
+        data-media-reveal
+        ref={frameRef}
+        style={{ touchAction: "pan-y" }}
+        onPointerDown={(event): void => { swipeStartRef.current = { x: event.clientX, y: event.clientY }; }}
+        onPointerUp={(event): void => endSwipe(event.clientX, event.clientY)}
+        onPointerCancel={(): void => { swipeStartRef.current = null; }}
+      >
         <div className="landing-hero-screen">
           <span className="landing-hero-frameball" data-frame-ball aria-hidden="true" />
           {/* Only the released slides exist, and each one is already

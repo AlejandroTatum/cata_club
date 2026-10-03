@@ -97,7 +97,7 @@ function ActividadContent(): React.ReactElement {
   return (
     <>
       <FilterPanel
-        label="Vista y periodo"
+        label="Vista y período"
         layout="row"
         chips={
           <>
@@ -113,7 +113,7 @@ function ActividadContent(): React.ReactElement {
                 ))}
               </div>
             </FilterGroup>
-            <FilterGroup label="Periodo">
+            <FilterGroup label="Período">
               <div className="flex flex-wrap gap-2">
                 {view === "resumen"
                   ? RESUMEN_RANGES.map((option) => (

@@ -21,6 +21,9 @@ import "./landing-render-mocks";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import HeroCarousel from "@/app/landing/HeroCarousel";
+import { HERO_PHOTOS } from "@/app/landing/landing-hero-photos";
+
+const HERO_PHOTOS_COUNT = HERO_PHOTOS.length;
 
 const AUTO_ADVANCE_INTERVAL_MS = 6000;
 
@@ -149,5 +152,61 @@ describe("hero carousel auto-advance", (): void => {
     expect((): void => {
       act((): void => { vi.advanceTimersByTime(AUTO_ADVANCE_INTERVAL_MS * 3); });
     }).not.toThrow();
+  });
+});
+
+describe("hero carousel pause control (LAN-04)", (): void => {
+  it("stops the rotation on «Pausar rotación» and resumes it on «Reanudar rotación»", (): void => {
+    vi.useFakeTimers();
+    render(<HeroCarousel />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Pausar rotación" }));
+    act((): void => { vi.advanceTimersByTime(AUTO_ADVANCE_INTERVAL_MS * 3); });
+    expect(activeSlideIndex()).toBe(0);
+
+    // The pause must outlive focus and hover leaving the control.
+    fireEvent.blur(screen.getByRole("button", { name: "Reanudar rotación" }));
+    act((): void => { vi.advanceTimersByTime(AUTO_ADVANCE_INTERVAL_MS * 3); });
+    expect(activeSlideIndex()).toBe(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Reanudar rotación" }));
+    fireEvent.blur(screen.getByRole("button", { name: "Pausar rotación" }));
+    act((): void => { vi.advanceTimersByTime(AUTO_ADVANCE_INTERVAL_MS); });
+    expect(activeSlideIndex()).toBe(1);
+  });
+});
+
+describe("hero carousel swipe (LAN-05)", (): void => {
+  function swipe(startX: number, endX: number, endY = 0): void {
+    const frame = document.querySelector(".landing-hero-frame") as HTMLElement;
+    fireEvent.pointerDown(frame, { pointerId: 1, clientX: startX, clientY: 0 });
+    fireEvent.pointerUp(frame, { pointerId: 1, clientX: endX, clientY: endY });
+  }
+
+  it("goes to the next slide on a swipe left past the threshold", (): void => {
+    render(<HeroCarousel />);
+    swipe(200, 100);
+    expect(activeSlideIndex()).toBe(1);
+  });
+
+  it("goes to the previous slide on a swipe right", (): void => {
+    render(<HeroCarousel />);
+    swipe(100, 200);
+    expect(activeSlideIndex()).toBe(HERO_PHOTOS_COUNT - 1);
+  });
+
+  it("ignores a short drag and a mostly vertical one", (): void => {
+    render(<HeroCarousel />);
+    swipe(200, 170);
+    swipe(200, 120, 160);
+    expect(activeSlideIndex()).toBe(0);
+  });
+});
+
+describe("hero carousel counter contrast (LAN-10)", (): void => {
+  it("sits on a dark translucent pill", (): void => {
+    render(<HeroCarousel />);
+    const counter = document.querySelector(".landing-hero-counter") as HTMLElement;
+    expect(counter.style.backgroundColor).toMatch(/rgba\(0, 0, 0, 0\.[5-9]/);
   });
 });

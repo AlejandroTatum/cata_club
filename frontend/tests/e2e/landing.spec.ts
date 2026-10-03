@@ -933,7 +933,7 @@ test.describe("Landing page", () => {
       expect(geometry?.sheetBelow).toBe(true);
 
       const labels = await page.locator(".landing-contact dt").allTextContents();
-      expect(labels).toEqual(["Dirección", "Horario", "WhatsApp", "Redes"]);
+      expect(labels).toEqual(["Dirección", "Horario", "WhatsApp", "Llamadas", "Redes"]);
     });
 
     test("renders one schedule card per category with age headline, time, days and WhatsApp link", async ({ page }) => {
