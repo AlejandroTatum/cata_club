@@ -435,6 +435,24 @@ DC="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
   con `$DC up -d --force-recreate caddy frontend`), `/metrics` ≠ 404, o el sitemap
   muestra otro host.
 
+- [ ] **6.3 👤 Pasar a modo ensayo (noindex)** apenas pasen los post-checks. El
+  primer deploy corre indexable a propósito para que `check-prod-env.sh` valide
+  el `.env` completo; ahora se oculta el sitio a los buscadores mientras dura el
+  ensayo del [paso 8b](#8b-ensayo-silencioso-y-limpieza):
+
+  ```bash
+  sed -i 's/^DOMINIO_INDEXABLE=.*/DOMINIO_INDEXABLE=ensayo.invalid/' .env
+  $DC up -d --force-recreate caddy frontend
+  curl -sI https://cataclub.com/ | grep -i '^x-robots-tag'   # noindex, nofollow
+  curl -fsS https://cataclub.com/robots.txt                  # Disallow: /
+  ```
+
+  **Esperado:** `X-Robots-Tag: noindex, nofollow` y `robots.txt` con `Disallow: /`.
+  Con `DOMINIO_INDEXABLE` distinto de `DOMINIO` el preflight no repite
+  `check-prod-env.sh`; es lo esperado durante el ensayo. **No** envíes el
+  sitemap a Search Console todavía. **Detente si:** el apex sigue sin
+  `X-Robots-Tag`.
+
 ## 7. UptimeRobot
 
 - [ ] **7.1 👤 Borrar los monitores de staging** (los de `staging.cataclub.com` y su
@@ -496,7 +514,60 @@ DC="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
   categorías el club no puede cargar horarios ni asignar alumnos. **Esperado:**
   categorías visibles en `/groups`.
 
+## 8b. Ensayo silencioso y limpieza
+
+Producción ya corre en `cataclub.com`, oculta a los buscadores (paso 6.3) y sin
+anunciar. Se prueba todo con servicios reales y después se borra lo de prueba.
+
+- [ ] **8b.1 👤 Ensayo.** Recorre los flujos reales: registro, inscripción,
+  pagos, correos (Resend entrega **de verdad**), subida de fotos (Cloudinary,
+  carpetas de producción), panel de cada rol. Usa **solo correos y datos
+  propios**; ningún dato de socios reales. Anota los hallazgos; un arreglo de
+  código vuelve a pasar por PR, CI verde y redeploy con el SHA nuevo.
+  **Detente si:** un flujo crítico falla; no se lanza con hallazgos abiertos.
+
+- [ ] **8b.2 🤖 Borrar la base de prueba** y arrancar limpia (mismo patrón que
+  los pasos 2 y 6):
+
+  ```bash
+  cd /opt/cata-club
+  $DC down
+  docker volume ls --format '{{.Name}}' | grep -E 'db_data|redis_data'
+  docker volume rm <volumen_db_data> <volumen_redis_data>
+  export IMAGE_TAG="$(git rev-parse HEAD)"
+  export MIGRATION_COMPATIBILITY=none
+  ./scripts/ops/preflight-production.sh
+  ./scripts/deploy/deploy.sh
+  ```
+
+  Mueve fuera de `BACKUP_DIR` los dumps generados durante el ensayo (contienen
+  datos de prueba), igual que los dumps de staging del paso 2. **No** borres el
+  volumen de Caddy: conserva los certificados. **Esperado:** «Validaciones OK»
+  y una base sin usuarios.
+
+- [ ] **8b.3 👤 Borrar las fotos de prueba** en la consola de Cloudinary (carpetas
+  de producción configuradas en `CLOUDINARY_CARPETA_*`). La base nueva ya no
+  las referencia: si quedan, ocupan cuota para siempre.
+
+- [ ] **8b.4 👤 Repetir el [paso 8](#8-primer-administrador-y-categorías)**:
+  primer admin y categorías, ahora definitivos.
+
 ## 9. Google Search Console
+
+Los pasos 9.1 y 9.2 pueden hacerse antes del cutover (no publican nada). El
+resto es el **lanzamiento**:
+
+- [ ] **9.0 👤 Volver a indexable**:
+
+  ```bash
+  sed -i 's/^DOMINIO_INDEXABLE=.*/DOMINIO_INDEXABLE=cataclub.com/' .env
+  ./scripts/ops/check-prod-env.sh --env-file .env
+  $DC up -d --force-recreate caddy frontend
+  curl -sI https://cataclub.com/ | grep -i '^x-robots-tag' && echo MAL || echo "ok: sin noindex"
+  ```
+
+  **Esperado:** `check-prod-env OK` y `ok: sin noindex`. Recién entonces se
+  anuncia el sitio al club.
 
 - [ ] **9.1 👤 Propiedad de dominio**: Search Console → *Añadir propiedad* → *Dominio*
   → `cataclub.com`; copia el registro TXT.
