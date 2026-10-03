@@ -294,14 +294,14 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
             hasError ? "border-state-bad" : ""
           }`}
         />
-        {/* Same 24x24 recipe as `/login`'s toggle (WCAG 2.2 SC 2.5.8): the
+        {/* 40x40 target (REG-19; the `/login` toggle is 24x24, the WCAG 2.2 SC 2.5.8 floor): the
             icon rides its own step, the padded button around it is what
             clears the target size. */}
         {isPassword && (
           <button
             type="button"
             onClick={() => setShowPassword((prev) => !prev)}
-            className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center text-ink-3 transition-colors hover:text-ink"
+            className="absolute right-0 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center text-ink-3 transition-colors hover:text-ink"
             aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
           >
             {showPassword ? (
@@ -471,7 +471,7 @@ export function BirthDateField(opts: BirthDateFieldProps): ReactElement {
         {opts.label}
         <RequiredMarker required={opts.required} />
       </legend>
-      <div className="grid grid-cols-[4.5rem_1fr_5.5rem] gap-2">
+      <div className="grid grid-cols-[4.5rem_minmax(7.5rem,1fr)_5.5rem] gap-2">
         <div>
           <label htmlFor={partIds.day} className="mb-1 block text-2xs font-semibold text-ink-3">
             Día

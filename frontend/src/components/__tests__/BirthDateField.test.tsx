@@ -61,8 +61,8 @@ describe("BirthDateField — emits the ISO value only for a real calendar date",
     fireEvent.change(day, { target: { value: "31" } });
     fireEvent.change(month, { target: { value: "02" } });
     fireEvent.change(year, { target: { value: "1990" } });
-    const emitted = onChange.mock.calls.at(-1)?.[0] as string;
-    expect(studentBirthDateRule(emitted)).toContain("no existe");
+    expect(onChange).toHaveBeenLastCalledWith("1990-02-31");
+    expect(studentBirthDateRule("1990-02-31")).toContain("no existe");
   });
 
   it("emits an empty string while any part is still missing", () => {

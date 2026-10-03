@@ -114,7 +114,7 @@ import EnrollFrame from "./EnrollFrame";
 import EnrollNav from "./EnrollNav";
 import EnrollSignedInNotice from "./EnrollSignedInNotice";
 import EnrollSteps from "./EnrollSteps";
-import useWideLayout from "./useWideLayout";
+import useWideLayout, { useHydrated } from "./useWideLayout";
 import EnrollSummary from "./EnrollSummary";
 
 // ---------------------------------------------------------------------------
@@ -329,6 +329,7 @@ function EnrollWizard(): React.ReactElement {
   const currentIndex = effectiveSteps.indexOf(step);
   const isFirst = currentIndex === 0;
   const wide = useWideLayout();
+  const hydrated = useHydrated();
   const isLast = currentIndex === effectiveSteps.length - 1;
 
   /**
@@ -1133,7 +1134,8 @@ function EnrollWizard(): React.ReactElement {
             card. The warning card stays reserved for an actual out-of-range
             date, which the birth-date field's own validator already reports
             inline (see fechaNacimientoRepresentante in enroll-utils.ts). */}
-        <p className="mt-field text-xs text-ink-3">
+        {/* REG-14: from `lg` the same sentence lives in the aside. */}
+        <p className="mt-field text-xs text-ink-3 lg:hidden">
           Al inscribir a un dependiente, confirma ser su responsable legal.
         </p>
       </div>
@@ -1230,7 +1232,7 @@ function EnrollWizard(): React.ReactElement {
             onTelefonoBlur={() => markTouched("telefonoEmergencia")}
           />
         ) : (
-          <div className="rounded-ctl border border-line-2 bg-canvas p-page text-xs text-ink-2">
+          <div className="rounded-ctl border border-line-2 bg-canvas p-page text-xs text-ink-2 lg:hidden">
             En caso de emergencia, el club lo contactará a usted con el
             nombre y teléfono de representante que ya indicó.
           </div>
@@ -1287,7 +1289,7 @@ function EnrollWizard(): React.ReactElement {
         {/* Label above the datum: the review is two columns now, and a fixed
             label column would leave the value half a card to wrap in. */}
         <div className="min-w-0 flex-1">
-          <p className="text-2xs font-bold uppercase text-ink-3">{label}</p>
+          <p className="text-2xs font-bold uppercase text-ink-3-strong">{label}</p>
           <p className="break-words text-sm font-semibold text-ink">{value}</p>
         </div>
         {/* The flag is a STATUS, so it is the badge the system already has —
@@ -1296,7 +1298,7 @@ function EnrollWizard(): React.ReactElement {
         <Button
           variant="secondary"
           size="sm"
-          className="flex-none"
+          className="min-h-10 min-w-10 flex-none"
           aria-label={`Editar ${label}`}
           onClick={() => goToStep(correctStep)}
         >
@@ -1518,7 +1520,9 @@ function EnrollWizard(): React.ReactElement {
     // landmark is declared here — around BOTH branches, so the confirmation
     // screen is as much "principal" as the form it replaces. It used to borrow
     // the root layout's, which is the wrapper that stopped being one.
-    <main>
+    <main className={hydrated && !isLoading ? undefined : "invisible"}>
+      {/* REG-17 / FAM-25: invisible (still laid out, still no shift counted)
+          until the layout and the session are known. */}
       {/* REG-11: a signed-in user must not get the new-account wizard. The
           confirmation screen is exempt: the auto-login that enrolling performs
           makes the visitor "signed in" at exactly that moment. */}
@@ -1624,7 +1628,8 @@ function EnrollWizard(): React.ReactElement {
             {restoredFromDraft && (
               <p className="mb-page rounded-ctl border border-line bg-canvas px-3.5 py-2.5 text-xs text-ink-2">
                 Recuperamos los datos que ya había completado. Todavía no se han
-                enviado — revíselos antes de continuar.
+                enviado — revíselos antes de continuar. Por seguridad, vuelva a
+                escribir su contraseña.
               </p>
             )}
 
