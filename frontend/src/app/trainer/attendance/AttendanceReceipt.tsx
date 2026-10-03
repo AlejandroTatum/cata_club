@@ -56,13 +56,23 @@ export default function AttendanceReceipt({
   // have on the server.
   const failedIds = new Set(result?.failed.map((f) => String(f.personaId)));
   const savedStudents = students.filter((student) => !failedIds.has(student.id));
+  // ENT-03: when EVERY failure is "already registered" (another trainer filed
+  // first) nobody is missing — saying "Faltan N" / "0/N" would send the trainer
+  // to redo a list that is complete.
+  const allAlreadyRegistered =
+    hasFailedRecords && (result?.failed.every((f) => f.alreadyRegistered) ?? false);
+  const needsRetry = hasFailedRecords && !allAlreadyRegistered;
+  const registeredBy = result?.failed.find((f) => f.registradoPorNombre)?.registradoPorNombre ?? null;
 
   return (
     <div className={PAGE_RAIL}>
       <div data-dash-col className="flex flex-col gap-page">
         <div>
           <p className="text-2xs font-bold uppercase tracking-wide text-ink-3">
-            {hasFailedRecords ? "Asistencia registrada parcialmente" : "Asistencia registrada"}
+            {(() => {
+              if (allAlreadyRegistered) return "La lista ya estaba guardada";
+              return needsRetry ? "Asistencia registrada parcialmente" : "Asistencia registrada";
+            })()}
           </p>
           {/* `tabIndex={-1}`: reachable only by the focus effect, never a Tab
             stop of its own. It takes programmatic focus after the step
@@ -86,14 +96,24 @@ export default function AttendanceReceipt({
         <StatCard
           variant="hot"
           label={
-            hasFailedRecords
+            allAlreadyRegistered
+              ? "Ya estaba guardada en el historial del club"
+              : needsRetry
               ? `Falta${result && result.failed.length === 1 ? "" : "n"} ${result?.failed.length ?? 0} ${result?.failed.length === 1 ? "alumno" : "alumnos"} por guardar`
               : "Guardada en el historial del club"
           }
-          value={result?.createdCount ?? 0}
-          unit={`/${students.length} ${students.length === 1 ? "alumno" : "alumnos"}`}
+          value={allAlreadyRegistered ? students.length : (result?.createdCount ?? 0)}
+          unit={
+            allAlreadyRegistered
+              ? students.length === 1
+                ? "alumno"
+                : "alumnos"
+              : `/${students.length} ${students.length === 1 ? "alumno" : "alumnos"}`
+          }
           hint={
-            confirmedAt
+            allAlreadyRegistered
+              ? `${registeredBy ? `Registrada por ${registeredBy}. ` : ""}No se cambió nada.`
+              : confirmedAt
               ? `${formatDateTime(confirmedAt.toISOString())} · ${result?.registradoPorNombre ?? "No registrado"}`
               : undefined
           }
@@ -103,16 +123,18 @@ export default function AttendanceReceipt({
           <FailedRecordsNotice failed={result.failed} students={students} />
         )}
 
-        <SessionReceiptBreakdown
-          hasFailedRecords={hasFailedRecords}
-          receiptCounts={receiptCounts}
-          receiptTotal={receiptTotal}
-          students={savedStudents}
-        />
+        {!allAlreadyRegistered && (
+          <SessionReceiptBreakdown
+            hasFailedRecords={needsRetry}
+            receiptCounts={receiptCounts}
+            receiptTotal={receiptTotal}
+            students={savedStudents}
+          />
+        )}
 
         {/* Issue #241: the retry's own load failure must land here, next to
           the button that triggered it. */}
-        {rosterError && hasFailedRecords && (
+        {rosterError && needsRetry && (
           <div className="alert-error" role="alert">
             {rosterError}
           </div>
@@ -144,7 +166,7 @@ export default function AttendanceReceipt({
           {/* One way back, not two — see the page's own note on why the
             frame's `BackLink` is the one that stays. */}
           <div className="flex flex-col gap-2">
-            {hasFailedRecords ? (
+            {needsRetry ? (
               <>
                 {/* Decision 2: the primary action displaces to the retry — it is
                 the only action that actually corrects the state. */}

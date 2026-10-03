@@ -22,7 +22,8 @@ describe("FailedRecordsNotice", () => {
     expect(screen.getByText("1 alumno ya estaba registrado")).toBeInTheDocument();
     expect(screen.getByText(/Ana Torres — registrado por Luis Pérez/)).toBeInTheDocument();
     expect(screen.queryByText(/No se pudo guardar/)).not.toBeInTheDocument();
-    expect(screen.getByText(/complete solo a los alumnos que faltan/)).toBeInTheDocument();
+    // Nobody is actually missing, so no advice to "complete" the roster (ENT-03).
+    expect(screen.queryByText(/complete solo a los alumnos que faltan/)).not.toBeInTheDocument();
   });
 
   it("keeps real failures apart from already-recorded students", () => {
@@ -42,5 +43,20 @@ describe("FailedRecordsNotice", () => {
     expect(screen.getByText("Alumno #999")).toBeInTheDocument();
     // No author known (historic row): the name alone, no dangling "registrado por".
     expect(screen.getByText("Ana Torres")).toBeInTheDocument();
+  });
+
+  // ENT-03: everybody already filed — a summary, not 62 lines, and no "complete the missing ones".
+  it("summarises a long already-registered list and drops the 'missing students' advice", () => {
+    const many = Array.from({ length: 62 }, (_, i) => ({
+      personaId: 200 + i,
+      message: "ya",
+      alreadyRegistered: true,
+      registradoPorNombre: "Carlos Mendoza",
+    }));
+    render(<FailedRecordsNotice students={students} failed={many} />);
+
+    expect(screen.getByText("62 alumnos ya estaban registrados por Carlos Mendoza")).toBeInTheDocument();
+    expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+    expect(screen.queryByText(/complete solo a los alumnos que faltan/)).not.toBeInTheDocument();
   });
 });

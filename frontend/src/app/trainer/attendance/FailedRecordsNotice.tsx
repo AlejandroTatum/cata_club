@@ -8,6 +8,9 @@ interface FailedRecordsNoticeProps {
   students: SessionStudent[];
 }
 
+/** Past this many, already-registered students are summarised, not enumerated (ENT-03). */
+const MAX_LISTED_ALREADY_REGISTERED = 5;
+
 /**
  * NAME the students (issue #213 decision 3) — this used to say "N registro(s)
  * no se pudieron guardar" and ask the trainer to retry for names it refused
@@ -27,6 +30,9 @@ export default function FailedRecordsNotice({
   const nameOf = (personaId: number): string => nameById.get(String(personaId)) ?? `Alumno #${personaId}`;
   const alreadyRegistered = failed.filter((f) => f.alreadyRegistered);
   const unsaved = failed.filter((f) => !f.alreadyRegistered);
+  // ENT-03: a long list pushed the summary off screen — one line naming who filed it instead.
+  const summarised = alreadyRegistered.length > MAX_LISTED_ALREADY_REGISTERED;
+  const alreadyRegisteredBy = alreadyRegistered.find((f) => f.registradoPorNombre)?.registradoPorNombre ?? null;
 
   return (
     <div role="alert" className="rounded-ctl border border-state-warn/25 bg-state-warn-bg p-3.5 text-xs text-state-warn">
@@ -52,24 +58,29 @@ export default function FailedRecordsNotice({
             {alreadyRegistered.length === 1
               ? "1 alumno ya estaba registrado"
               : `${alreadyRegistered.length} alumnos ya estaban registrados`}
+            {summarised && alreadyRegisteredBy ? ` por ${alreadyRegisteredBy}` : ""}
           </p>
-          <ul className="mt-1.5 list-inside list-disc font-semibold">
-            {alreadyRegistered.map((f) => (
-              <li key={f.personaId}>
-                {nameOf(f.personaId)}
-                {f.registradoPorNombre ? ` — registrado por ${f.registradoPorNombre}` : ""}
-              </li>
-            ))}
-          </ul>
+          {summarised ? null : (
+            <ul className="mt-1.5 list-inside list-disc font-semibold">
+              {alreadyRegistered.map((f) => (
+                <li key={f.personaId}>
+                  {nameOf(f.personaId)}
+                  {f.registradoPorNombre ? ` — registrado por ${f.registradoPorNombre}` : ""}
+                </li>
+              ))}
+            </ul>
+          )}
           <p className="mt-1.5 text-state-warn/80">
             Otra persona tomó la lista al mismo tiempo; se conserva el primer registro de cada alumno.
           </p>
         </>
       )}
-      <p className="mt-1.5 text-state-warn/80">
-        Actualice la lista de este horario y complete solo a los alumnos que faltan — el resto ya
-        quedó guardado.
-      </p>
+      {unsaved.length > 0 && (
+        <p className="mt-1.5 text-state-warn/80">
+          Actualice la lista de este horario y complete solo a los alumnos que faltan — el resto ya
+          quedó guardado.
+        </p>
+      )}
     </div>
   );
 }

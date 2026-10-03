@@ -334,6 +334,30 @@ describe("POST /api/attendance/records", () => {
     expect(body.failed).toEqual([{ personaId: 3, message: "Horario no encontrado" }]);
   });
 
+  // ENT-02: the batch rejection's reason travels at the top level too, so the
+  // client can show it instead of a generic "actualice la página".
+  it("expone el motivo del rechazo (y si es seguro mostrarlo) a nivel raíz", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      jsonResponse(
+        { detail: "Solo se puede registrar asistencia de hoy y de los últimos 30 días.", mensaje_seguro: true },
+        400,
+      ),
+    );
+
+    const access = makeJwt(3600);
+    const response = await POST(
+      postRequest(
+        { horarioId: 1, fechaEntrenamiento: "2026-08-29", students: [{ personaId: 3, estado: "present" }] },
+        `${ACCESS_TOKEN_COOKIE}=${access}`,
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.message).toBe("Solo se puede registrar asistencia de hoy y de los últimos 30 días.");
+    expect(body.mensaje_seguro).toBe(true);
+  });
+
   // Candado exigido por el issue #309: `PermisosInsuficientes` ya se mapea a
   // 403 — la ruta BFF no debe degradarlo a 502.
   it("propaga un 403 del backend (regla de permisos) como 403, no como 502", async () => {

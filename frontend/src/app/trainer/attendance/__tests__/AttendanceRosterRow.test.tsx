@@ -147,3 +147,24 @@ describe("AttendanceRosterRow — enrolled after the session (ENT-07)", () => {
     expect(screen.queryByText("Anterior a su inscripción")).not.toBeInTheDocument();
   });
 });
+
+// ENT-01: at 390 px the notice chip squeezed the name to width 0. The name keeps
+// the full row width and the notice sits on its own line under it.
+describe("AttendanceRosterRow — the name survives the enrolment notice (ENT-01)", () => {
+  it("renders the name, never truncated to nothing, with the notice stacked under it", () => {
+    renderRow({
+      student: buildStudent({ name: "Anahi Alcivar Vera", assignedOn: "2026-10-02" }),
+      sessionDate: "2026-09-14",
+    });
+
+    const name = screen.getByText("Anahi Alcivar Vera");
+    expect(name).toBeVisible();
+    expect(name.className).not.toContain("truncate");
+    // Same column as the name — not a sibling chip fighting it for the row's width.
+    const column = name.parentElement as HTMLElement;
+    expect(within(column).getByText("Anterior a su inscripción")).toBeInTheDocument();
+    expect(column.className).toContain("flex-col");
+    // The detail is visible text, not a `title` a phone never shows.
+    expect(screen.getByText(/Se registrará y quedará marcada para revisión/)).toBeVisible();
+  });
+});

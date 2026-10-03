@@ -1158,3 +1158,21 @@ describe("isWithinCorrectionWindow", () => {
     expect(isWithinCorrectionWindow("2026-07-21", today)).toBe(true);
   });
 });
+
+// ENT-02: the backend's own reason for refusing the list is shown, not the generic one.
+describe("describeAttendanceSaveError — backend reason (ENT-02)", () => {
+  it("shows a 4xx message the backend marked safe", () => {
+    const err = Object.assign(new Error("Solo se puede registrar asistencia de hoy y de los últimos 30 días."), {
+      status: 400,
+      safe: true,
+    });
+    expect(describeAttendanceSaveError(err)).toBe(
+      "Solo se puede registrar asistencia de hoy y de los últimos 30 días.",
+    );
+  });
+
+  it("keeps the generic text for a 4xx without a safe message", () => {
+    const err = Object.assign(new Error("boom"), { status: 400, safe: false });
+    expect(describeAttendanceSaveError(err)).toMatch(/ya no coincide/);
+  });
+});
