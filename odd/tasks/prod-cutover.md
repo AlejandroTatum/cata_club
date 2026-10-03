@@ -10,7 +10,7 @@ Branch: `feat/prod-cutover` (worktree `cata_club-worktrees/prod-cutover`).
 
 - [x] PC-1 Pre-deploy `.env` validator script (fails closed on missing
       `DOMINIO_INDEXABLE`, placeholder secrets, staging leftovers) + tests.
-- [ ] PC-2 Worker liveness signal for external monitoring without coupling
+- [x] PC-2 Worker liveness signal for external monitoring without coupling
       the backend container healthcheck/autoheal to Celery + tests.
 - [ ] PC-3 Single staging-to-production cutover runbook; refresh stale
       staging/prod docs.
@@ -31,3 +31,12 @@ Branch: `feat/prod-cutover` (worktree `cata_club-worktrees/prod-cutover`).
 - PC-5: a2652482 (icons, manifest, OG), 5ac9932f (robots, sitemap,
   X-Robots-Tag, `DOMINIO_INDEXABLE` to the frontend), 523e5dc6 (JSON-LD);
   runtime var `DOMINIO_INDEXABLE`; vitest, lint and `next build` green.
+- PC-2: 32c6bd40 (`/health/workers` GET+HEAD, bare 200/503, beat task
+  `registrar_latido` every 60 s writes a Redis key with 180 s TTL; Caddy exact
+  route; no healthcheck/autoheal references it; UptimeRobot 5 min monitor in
+  docs/operations/monitoring.md). Follow-ups from the PC-1 review: 4a98e9da
+  (`export KEY=` + unparseable-line report by number, production env check
+  auto-runs when `DOMINIO == DOMINIO_INDEXABLE` with
+  `PREFLIGHT_REQUIRE_PRODUCTION_ENV=1|0` override, staging test isolated,
+  marker drift test against the backend list). Tests: 61 backend focused,
+  253 root passed.
