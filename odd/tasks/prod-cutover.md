@@ -12,7 +12,7 @@ Branch: `feat/prod-cutover` (worktree `cata_club-worktrees/prod-cutover`).
       `DOMINIO_INDEXABLE`, placeholder secrets, staging leftovers) + tests.
 - [x] PC-2 Worker liveness signal for external monitoring without coupling
       the backend container healthcheck/autoheal to Celery + tests.
-- [ ] PC-3 Single staging-to-production cutover runbook; refresh stale
+- [x] PC-3 Single staging-to-production cutover runbook; refresh stale
       staging/prod docs.
 - [x] PC-4 Canonical host (`cataclub.com`) + `www` redirect in Caddyfile + tests.
 - [x] PC-5 Google-ready SEO: square crest favicons, manifest, OG card,
@@ -40,3 +40,6 @@ Branch: `feat/prod-cutover` (worktree `cata_club-worktrees/prod-cutover`).
   `PREFLIGHT_REQUIRE_PRODUCTION_ENV=1|0` override, staging test isolated,
   marker drift test against the backend list). Tests: 61 backend focused,
   253 root passed.
+- PC-3: bc8d9aa3 (`docs/operations/production-cutover.md`; provisioning.md, staging-redeploy.md
+  and README refreshed; 89 root tests passed: staging runbook contract, CI paths,
+  prod env check).
