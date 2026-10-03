@@ -15,7 +15,7 @@ y se corrigen distinto.
 """
 import unicodedata
 from datetime import date
-from typing import Annotated, Optional
+from typing import Annotated, List, Optional
 
 from pydantic import AfterValidator, EmailStr
 
@@ -228,6 +228,19 @@ def _validar_enfermedad(valor: str) -> str:
     return valor
 
 
+def _sin_repetidos_ni_vacias(valores: List[str]) -> List[str]:
+    """Quita las entradas vacías y las repetidas (sin distinguir mayúsculas),
+    conservando el orden de la primera aparición (ADMA-30)."""
+    vistos: set[str] = set()
+    resultado: List[str] = []
+    for valor in valores:
+        limpio = valor.strip()
+        if limpio and limpio.casefold() not in vistos:
+            vistos.add(limpio.casefold())
+            resultado.append(limpio)
+    return resultado
+
+
 def _validar_contacto_emergencia(valor: str) -> str:
     if not valor.strip():
         return valor
@@ -308,6 +321,7 @@ NombreValidado = Annotated[str, AfterValidator(_validar_nombre)]
 ApellidoValidado = Annotated[str, AfterValidator(_validar_apellido)]
 ContactoEmergenciaValidado = Annotated[str, AfterValidator(_validar_contacto_emergencia)]
 EnfermedadValidada = Annotated[str, AfterValidator(_validar_enfermedad)]
+EnfermedadesValidadas = Annotated[List[EnfermedadValidada], AfterValidator(_sin_repetidos_ni_vacias)]
 CorreoValidado = Annotated[EmailStr, AfterValidator(_normalizar_correo)]
 ContraseniaValidada = Annotated[str, AfterValidator(_validar_contrasenia)]
 
