@@ -14,16 +14,24 @@
 #     fail-fast in backend/app/soporte_transversal/configuracion.py);
 #   - optional --previous-env: secrets differ from the old env (compared by
 #     hash only), proving they were rotated.
+# `--detect-production` validates nothing: it exits 0 when DOMINIO equals
+# DOMINIO_INDEXABLE (this host is the indexable one, i.e. production), 1
+# otherwise (staging points DOMINIO_INDEXABLE at the production host or leaves
+# it unset). Used by preflight-production.sh to run this check automatically.
+# Syntax is what Compose `env_file` accepts, without over-engineering: optional
+# `export`, optional blanks around `=`, `#` comments, bare `KEY` lines.
 set -euo pipefail
 
-usage() { echo "uso: check-prod-env.sh [--env-file <ruta>] [--previous-env <ruta>]" >&2; }
+usage() { echo "uso: check-prod-env.sh [--env-file <ruta>] [--previous-env <ruta>] [--detect-production]" >&2; }
 
 ENV_FILE=".env"
 PREVIOUS_ENV=""
+DETECT_ONLY=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --env-file) ENV_FILE="${2:-}"; shift 2 ;;
     --previous-env) PREVIOUS_ENV="${2:-}"; shift 2 ;;
+    --detect-production) DETECT_ONLY=1; shift ;;
     *) usage; exit 2 ;;
   esac
 done
@@ -38,10 +46,12 @@ problems=()
 fail() { problems+=("$*"); }
 
 # Last assignment wins (as in Compose); one pair of surrounding quotes is
-# stripped. Never evaluated by the shell.
+# stripped. Never evaluated by the shell. Accepts `KEY=v`, `export KEY=v` and
+# blanks around `=`.
 env_value() {
   local file="$1" key="$2" value
-  value="$(sed -n "s/^${key}=//p" "$file" | tail -1 | tr -d '\r')"
+  value="$(tr -d '\r' < "$file" \
+    | sed -n -E "s/^[[:space:]]*(export[[:space:]]+)?${key}[[:space:]]*=[[:space:]]*//p" | tail -1)"
   case "$value" in
     \"*\") value="${value#\"}"; value="${value%\"}" ;;
     \'*\') value="${value#\'}"; value="${value%\'}" ;;
@@ -49,6 +59,17 @@ env_value() {
   printf '%s' "$value"
 }
 val() { env_value "$ENV_FILE" "$1"; }
+
+# Reports lines that are neither blank, comment, `KEY=...` nor bare `KEY`, by
+# NUMBER only: the content may be a secret.
+lint_env_file() {
+  local file="$1" label="$2" n
+  while IFS= read -r n; do
+    [ -n "$n" ] && fail "$label: línea $n no es una asignación válida (KEY=valor)"
+  done < <(tr -d '\r' < "$file" \
+    | grep -n -v -E '^[[:space:]]*(#.*)?$|^[[:space:]]*(export[[:space:]]+)?[A-Za-z_][A-Za-z0-9_.-]*[[:space:]]*(=.*)?$' \
+    | cut -d: -f1 || true)
+}
 
 is_placeholder() { case "$1" in '<'*'>'*) return 0 ;; *) return 1 ;; esac; }
 
@@ -60,6 +81,14 @@ has_secret_marker() {
   done
   return 1
 }
+
+if [ "$DETECT_ONLY" = 1 ]; then
+  [ -n "$(val DOMINIO)" ] && [ "$(val DOMINIO)" = "$(val DOMINIO_INDEXABLE)" ]
+  exit $?
+fi
+
+lint_env_file "$ENV_FILE" "$ENV_FILE"
+[ -z "$PREVIOUS_ENV" ] || lint_env_file "$PREVIOUS_ENV" "--previous-env"
 
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 

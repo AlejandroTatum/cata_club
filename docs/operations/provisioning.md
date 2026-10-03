@@ -29,9 +29,13 @@ solo imprime nombres de variable): `DOMINIO_INDEXABLE == DOMINIO`, `DOMINIO_ALIA
 `staging.` en `DOMINIO`/`CORS_ORIGENES`/`FRONTEND_URL`, sin `staging` en las
 carpetas de Cloudinary y `JWT_SECRET_KEY`/`POSTGRES_PASSWORD` reales. Con
 `--previous-env <.env-viejo>` comprueba por hash que ambos secretos fueron
-rotados. El preflight lo ejecuta con `PREFLIGHT_REQUIRE_PRODUCTION_ENV=1`
-(y `PREVIOUS_ENV_FILE=<ruta>` opcional); es opt-in porque staging usa el mismo
-preflight.
+rotados. El preflight lo ejecuta solo cuando el host es el indexable
+(`DOMINIO == DOMINIO_INDEXABLE` en el `.env`), así que un olvido no lo salta;
+staging, que usa el mismo preflight, tiene un `DOMINIO_INDEXABLE` distinto y
+queda fuera. `PREFLIGHT_REQUIRE_PRODUCTION_ENV=1` lo fuerza y `=0` lo omite
+(`PREVIOUS_ENV_FILE=<ruta>` opcional). El validador acepta la sintaxis de
+`env_file` de Compose (`KEY=v`, `export KEY=v`, comentarios) y informa las
+líneas no parseables solo por número, nunca por contenido.
 
 `preflight-production.sh` solo lee la configuración: exige `.env`, comprueba que
 `git rev-parse HEAD` sea exactamente `IMAGE_TAG`, valida el render de Compose,

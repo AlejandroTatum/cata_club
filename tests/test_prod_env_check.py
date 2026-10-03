@@ -1,10 +1,12 @@
 """Contracts for the pre-deploy production `.env` validator (check-prod-env.sh).
 
 The validator fails closed and must never echo a secret value, only variable
-names. It is also wired into preflight-production.sh behind an explicit opt-in.
+names. It is also wired into preflight-production.sh: automatic when the host is the
+indexable one, with an explicit PREFLIGHT_REQUIRE_PRODUCTION_ENV override.
 """
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -69,15 +71,18 @@ def test_dominio_indexable_must_equal_dominio(tmp_path, value):
 
 
 def test_dominio_must_not_be_staging(tmp_path):
+    # Everything else stays consistent with the staging host, so the only
+    # thing that can trip is DOMINIO itself.
     result = check_env(
         tmp_path,
         DOMINIO="staging.cataclub.com",
         DOMINIO_INDEXABLE="staging.cataclub.com",
+        DOMINIO_ALIAS_WWW="www.staging.cataclub.com",
         CORS_ORIGENES="https://staging.cataclub.com",
         FRONTEND_URL="https://staging.cataclub.com",
     )
     assert result.returncode != 0
-    assert "DOMINIO" in result.stderr
+    assert "DOMINIO apunta a staging" in result.stderr
 
 
 def test_dominio_placeholder_is_rejected(tmp_path):
@@ -205,10 +210,56 @@ def test_unknown_argument_is_a_usage_error():
     assert run_check("--bogus").returncode == 2
 
 
-def test_preflight_runs_the_check_only_when_opted_in():
+def test_preflight_is_wired_to_the_check_and_its_override():
     preflight = (ROOT / "scripts/ops/preflight-production.sh").read_text()
     assert "check-prod-env.sh" in preflight
     assert "PREFLIGHT_REQUIRE_PRODUCTION_ENV" in preflight
+
+
+def test_secret_markers_cover_the_backend_placeholders(tmp_path):
+    """The validator and the backend fail-fast must reject the same markers."""
+    source = (
+        ROOT / "backend/app/soporte_transversal/configuracion.py"
+    ).read_text()
+    block = re.search(r"_PLACEHOLDERS_SECRETO = \((.*?)\)", source, re.S).group(1)
+    markers = re.findall(r'"([^"]+)"', block)
+    assert markers
+    for marker in markers:
+        result = check_env(tmp_path, JWT_SECRET_KEY="x" * 20 + marker)
+        assert result.returncode != 0, marker
+        assert "JWT_SECRET_KEY" in result.stderr, marker
+
+
+def test_export_prefixed_and_spaced_assignments_are_read(tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "# production\n\n"
+        + "".join(f"export {k}={v}\n" for k, v in VALID.items() if k != "DOMINIO")
+        + "  DOMINIO = app.cataclub.com\n"
+    )
+    result = run_check("--env-file", str(env_file))
+    assert result.returncode == 0, result.stderr
+
+
+def test_unparseable_lines_are_reported_by_number_without_their_content(tmp_path):
+    env_file = write_env(tmp_path / ".env", VALID)
+    with env_file.open("a") as handle:
+        handle.write("esto no es una asignacion SECRETO\n")
+    result = run_check("--env-file", str(env_file))
+    assert result.returncode != 0
+    assert f"línea {len(VALID) + 1}" in result.stderr
+    assert "SECRETO" not in result.stdout + result.stderr
+
+
+def test_detect_production_flag_is_true_only_when_dominio_equals_indexable(tmp_path):
+    prod = write_env(tmp_path / "prod.env", VALID)
+    staging = write_env(tmp_path / "staging.env", {**VALID, "DOMINIO_INDEXABLE": None})
+    assert run_check("--env-file", str(prod), "--detect-production").returncode == 0
+    other = write_env(
+        tmp_path / "other.env", {**VALID, "DOMINIO": "staging.cataclub.com"}
+    )
+    assert run_check("--env-file", str(staging), "--detect-production").returncode == 1
+    assert run_check("--env-file", str(other), "--detect-production").returncode == 1
 
 
 @pytest.mark.parametrize("value", [None, "", "www.otro.com", "<alias-www>"])
