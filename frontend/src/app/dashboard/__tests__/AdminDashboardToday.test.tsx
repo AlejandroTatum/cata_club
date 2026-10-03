@@ -221,7 +221,7 @@ describe("admin dashboard — the pulse tiles", () => {
   it("counts Miembros over the whole padrón and memberships over the alumnos", async () => {
     render(<DashboardPage />);
     const kpis = await screen.findByTestId("dashboard-kpis");
-    expect(within(kpis).getByRole("group", { name: /Miembros: 40 alumnos y 4 de staff/ })).toBeInTheDocument();
+    expect(within(kpis).getByRole("group", { name: /Miembros: 40 alumnos y 4 representantes y personal/ })).toBeInTheDocument();
     expect(within(kpis).getByRole("img", { name: /Membresías activas: 17 de 40/ })).toBeInTheDocument();
   });
 

@@ -184,6 +184,17 @@ export interface FourWeekAttendance {
 }
 
 /**
+ * First day (ISO) of the oldest of the trailing N 7-day windows ending today:
+ * what the dashboard passes as `fechaInicio`, so it downloads the weeks it
+ * draws and not the whole history (PERF-03).
+ */
+export function attendanceWindowStartIso(weeks: number, today: Date = new Date()): string {
+  const clubNow = clubToday(today);
+  const endOfToday = new Date(clubNow.getFullYear(), clubNow.getMonth(), clubNow.getDate()).getTime();
+  return calendarIsoDate(new Date(endOfToday - ((weeks - 1) * 7 + 6) * DAY_MS));
+}
+
+/**
  * Bucket attendance records into the trailing N 7-day windows ending today.
  *
  * Windows, not calendar weeks: the stat says "4 semanas", and a calendar-week
