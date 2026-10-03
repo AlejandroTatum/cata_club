@@ -3132,7 +3132,7 @@ class PagoServicio:
         # chequeo protege a cualquier otro llamador futuro de este método
         # que no pase por esa ruta.
         if len(contenido) > TAMANO_MAXIMO_VOUCHER_BYTES:
-            raise OperacionInvalida("El archivo excede el tamaño máximo de 5MB")
+            raise OperacionInvalida("El archivo pesa más de 5 MB. Elija uno más liviano.")
 
         # 6. Subida a Cloudinary, con la transacción ya SOLTADA (issue #813).
         #
