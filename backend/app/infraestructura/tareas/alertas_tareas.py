@@ -33,6 +33,7 @@ from app.dominio.enums import EstadoPago, EstadoMembresia, TipoNotificacion, Tip
 from app.dominio.nombre_propio import nombre_completo
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.membresia_pago_servicio import _meses_enteros_desde
+from app.soporte_transversal.formato import formatear_monto_usd
 from app.soporte_transversal.resiliencia import CIRCUITO_SMTP_COOLDOWN_SEGUNDOS
 from app.soporte_transversal.tiempo import ZONA_HORARIA_CLUB, hoy_club
 
@@ -506,7 +507,7 @@ def _formatear_resumen_mora(hoy: date, morosos: list[dict]) -> str:
     partes = []
     for moroso in morosos:
         nombre = acortar_nombre_para_notificacion(moroso["nombre"])
-        partes.append(f"{nombre} ({moroso['meses_adeudados']} meses, ${moroso['monto_mensual']})")
+        partes.append(f"{nombre} ({moroso['meses_adeudados']} meses, {moroso['monto_mensual']})")
     return (
         f"Mora del {hoy.strftime('%d/%m/%Y')}: {len(morosos)} miembros — "
         + ", ".join(partes)
@@ -689,7 +690,7 @@ def alertar_mora_diaria(self) -> dict:
                     "tipo": tipo.value,
                     "dias_mora": dias,
                     "meses_adeudados": _meses_enteros_desde(ultima_fecha_fin, hoy),
-                    "monto_mensual": f"{membresia.monto_aplicado:,.2f}",
+                    "monto_mensual": formatear_monto_usd(membresia.monto_aplicado),
                     "nombre": nombre_completo(persona.nombres, persona.apellidos),
                 })
         _persistir_lote(lote_familia)

@@ -279,7 +279,7 @@ def test_regularizacion_monto_distinto_al_esperado_da_400_con_el_monto(client, d
     resp = _regularizar_monto(client, membresia.id, "30.00")  # 2 meses => $60.00
 
     assert resp.status_code == 400
-    assert "60.00" in resp.json()["detail"]
+    assert "$60,00" in resp.json()["detail"]
 
 
 def test_regularizacion_periodo_largo_con_monto_bajo_da_400(client, db_session, monkeypatch):
@@ -290,7 +290,7 @@ def test_regularizacion_periodo_largo_con_monto_bajo_da_400(client, db_session, 
     resp = _regularizar_monto(client, membresia.id, "40.00", "2010-01-01", "2020-01-01")
 
     assert resp.status_code == 400
-    assert "3600.00" in resp.json()["detail"]
+    assert "$3.600,00" in resp.json()["detail"]
 
 
 def test_regularizacion_aplica_y_congela_el_beneficio_vigente(client, db_session, monkeypatch):
@@ -305,7 +305,7 @@ def test_regularizacion_aplica_y_congela_el_beneficio_vigente(client, db_session
 
     sin_descuento = _regularizar_monto(client, membresia.id, "60.00")
     assert sin_descuento.status_code == 400
-    assert "30.00" in sin_descuento.json()["detail"]
+    assert "$30,00" in sin_descuento.json()["detail"]
 
     resp = _regularizar_monto(client, membresia.id, "30.00")
     assert resp.status_code == 201, resp.text
@@ -351,7 +351,7 @@ def test_regularizacion_con_beca_total_rechaza_monto_distinto_de_cero(client, db
     resp = _regularizar_monto(client, membresia.id, "30.00")
 
     assert resp.status_code == 400
-    assert "0.00" in resp.json()["detail"]
+    assert "$0,00" in resp.json()["detail"]
 
 
 def test_regularizacion_sin_beca_rechaza_monto_cero_y_negativo(client, db_session, monkeypatch):
@@ -360,7 +360,7 @@ def test_regularizacion_sin_beca_rechaza_monto_cero_y_negativo(client, db_sessio
 
     cero = _regularizar_monto(client, membresia.id, "0.00")
     assert cero.status_code == 400
-    assert "60.00" in cero.json()["detail"]
+    assert "$60,00" in cero.json()["detail"]
     assert _regularizar_monto(client, membresia.id, "-1.00").status_code == 422
 
 

@@ -30,6 +30,7 @@ from app.infraestructura.repositorios.descuento_repositorio import (
 )
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
+from app.soporte_transversal.formato import formatear_monto_usd
 from app.servicios_negocio.dtos.beneficio_schemas import AsignacionDescuentoResponseDTO
 from app.servicios_negocio.dtos.descuento_schemas import DescuentoResponseDTO
 
@@ -99,8 +100,8 @@ class BeneficioServicio:
             valor = self._valor_potencial(descuento, membresia_operativa.monto_aplicado)
             if valor > membresia_operativa.monto_aplicado:
                 raise OperacionInvalida(
-                    f"El beneficio '{descuento.nombre}' (${valor}) supera la "
-                    f"tarifa mensual de la persona (${membresia_operativa.monto_aplicado}). "
+                    f"El beneficio '{descuento.nombre}' ({formatear_monto_usd(valor)}) supera la "
+                    f"tarifa mensual de la persona ({formatear_monto_usd(membresia_operativa.monto_aplicado)}). "
                     "Asigne un descuento de menor valor o edítelo antes de concederlo."
                 )
 
