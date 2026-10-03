@@ -10,7 +10,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.dominio.excepciones import EntidadNoEncontrada, NombreDuplicado, OperacionInvalida
+from app.dominio.excepciones import EntidadNoEncontrada, NombreDuplicado, OperacionInvalida, RecursoEnUso
 from app.dominio.nombres_catalogo import existe_nombre, normalizar_nombre
 from app.dominio.modelos import Descuento
 from app.infraestructura.repositorios.descuento_repositorio import DescuentoRepositorio
@@ -21,10 +21,8 @@ MENSAJE_DESCUENTO_AMBIGUO = (
 )
 
 
-class DescuentoEnUso(NombreDuplicado):
-    """Se intentó eliminar un descuento que ya se usó. Hereda el 409 de
-    `NombreDuplicado` (los manejadores de `main.py` resuelven por MRO): es un
-    conflicto con el estado actual del catálogo, no un dato inválido."""
+class DescuentoEnUso(RecursoEnUso):
+    """Se intentó eliminar un descuento que ya se usó (-> 409)."""
 
 
 class DescuentoServicio:
@@ -58,12 +56,12 @@ class DescuentoServicio:
 
     def eliminar(self, descuento_id: int) -> None:
         """Borrado duro, solo de un descuento que nunca se usó. Si se usó, el
-        camino es desactivarlo (`activo=False`)."""
+        camino es ocultarlo (`activo=False`)."""
         descuento = self._obtener_sin_marcar(descuento_id)
         if self.repo.ids_en_uso([descuento.id]):
             raise DescuentoEnUso(
                 f"No se puede eliminar el descuento '{descuento.nombre}' porque ya se "
-                "aplicó o se asignó. Puede desactivarlo para que deje de ofrecerse."
+                "aplicó o se asignó. Puede ocultarlo para que deje de ofrecerse."
             )
         self.repo.eliminar(descuento)
         self.db.commit()

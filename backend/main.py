@@ -42,7 +42,7 @@ from app.presentacion.routers import (
     actividad_router,
 )
 from app.dominio.excepciones import (
-    EntidadNoEncontrada, EntidadDuplicada, NombreDuplicado, OperacionInvalida,
+    EntidadNoEncontrada, EntidadDuplicada, NombreDuplicado, OperacionInvalida, RecursoEnUso,
     CredencialesInvalidas, PermisosInsuficientes, ServicioNoDisponible,
     ConflictoConcurrencia,
 )
@@ -175,6 +175,7 @@ _MAPA_EXCEPCIONES = {
     ServicioNoDisponible: status.HTTP_503_SERVICE_UNAVAILABLE,
     ConflictoConcurrencia: status.HTTP_409_CONFLICT,
     NombreDuplicado: status.HTTP_409_CONFLICT,
+    RecursoEnUso: status.HTTP_409_CONFLICT,
 }
 
 for _excepcion, _codigo in _MAPA_EXCEPCIONES.items():

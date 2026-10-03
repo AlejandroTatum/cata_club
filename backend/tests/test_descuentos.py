@@ -558,7 +558,7 @@ def test_eliminar_descuento_asignado_da_409_y_el_listado_lo_marca_en_uso(client)
     respuesta = client.delete(f"{RUTA_DESCUENTOS}{descuento['id']}")
 
     assert respuesta.status_code == 409
-    assert "desactivarlo" in respuesta.json()["detail"]
+    assert "ocultarlo" in respuesta.json()["detail"]
     listado = client.get(RUTA_DESCUENTOS).json()["items"]
     assert next(d for d in listado if d["id"] == descuento["id"])["enUso"] is True
     assert client.get(f"{RUTA_DESCUENTOS}{descuento['id']}").json()["enUso"] is True

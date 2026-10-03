@@ -19,7 +19,7 @@ from app.dominio.enums import (
 from app.dominio.etiquetas import estado_de_pago_en_castellano
 from app.dominio.nombres_catalogo import existe_nombre, normalizar_nombre
 from app.dominio.excepciones import (
-    EntidadNoEncontrada, MembresiaPendienteDePago, NombreDuplicado, OperacionInvalida, PermisosInsuficientes, ServicioNoDisponible,
+    EntidadNoEncontrada, MembresiaPendienteDePago, NombreDuplicado, OperacionInvalida, PermisosInsuficientes, RecursoEnUso, ServicioNoDisponible,
 )
 from app.dominio.nombre_propio import nombre_completo
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
@@ -240,10 +240,8 @@ class _CotizacionRegularizacion:
         return self.descuento.valor_aplicado if self.descuento is not None else Decimal("0.00")
 
 
-class TarifaEnUso(NombreDuplicado):
-    """Se intentó eliminar una tarifa que ya se usó. Hereda el 409 de
-    `NombreDuplicado` (los manejadores de `main.py` resuelven por MRO): es un
-    conflicto con el estado actual del catálogo, no un dato inválido."""
+class TarifaEnUso(RecursoEnUso):
+    """Se intentó eliminar una tarifa que ya se usó (-> 409)."""
 
 
 class MembresiaServicio:
