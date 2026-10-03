@@ -244,7 +244,7 @@ test.describe("Back navigation + toasts", () => {
     // (the exact copy `reportRealOutcomeAfterFailure` uses once the re-check
     // confirms the payment is still pending — see payments/page.tsx).
     await expect(
-      page.getByRole("alert").filter({ hasText: /sigue en la cola de pendientes/i }).first(),
+      page.getByRole("alert").filter({ hasText: /sigue en la lista de pendientes/i }).first(),
     ).toBeVisible();
 
     // The detail view carries its own way back to the queue, and a failed
