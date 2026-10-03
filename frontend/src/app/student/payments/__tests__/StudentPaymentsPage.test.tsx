@@ -827,8 +827,8 @@ describe("StudentPaymentsPage — the history", () => {
 
     expect(await screen.findByText("No hay pagos rechazados.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ver todos los pagos" })).toBeInTheDocument();
-    // The empty box keeps the list's shape with decorative ghost rows.
-    expect(screen.getByTestId("pago-ghost-rows")).toHaveAttribute("aria-hidden", "true");
+    // FAM-16: no decorative ghost rows — they read as a list that never finished loading.
+    expect(screen.queryByTestId("pago-ghost-rows")).not.toBeInTheDocument();
   });
 
   /**
@@ -1791,12 +1791,12 @@ describe("StudentPaymentsPage — the history claims the page's leftover height"
    * statement in the box, which is the empty case — and that is also the case
    * D11b says to design for first, because a socio nuevo has no payments.
    */
-  it("always claims the column's leftover height, topping a short list up with ghost rows", async () => {
+  it("always claims the column's leftover height, without topping a short list up with ghost rows (FAM-16)", async () => {
     render(<StudentPaymentsPage />);
 
     const history = await screen.findByLabelText("Historial de pagos");
     expect(history.className).toMatch(/\bflex-1\b/);
-    expect(within(history).getByTestId("pago-ghost-rows")).toBeInTheDocument();
+    expect(within(history).queryByTestId("pago-ghost-rows")).not.toBeInTheDocument();
   });
 
   it("claims the page's leftover height only when there is nothing to list", async () => {
@@ -1931,5 +1931,82 @@ describe("StudentPaymentsPage — the rail guide", () => {
     const panel = guide.parentElement as HTMLElement;
     expect(within(panel).getByText(/pendiente de validación/i)).toBeInTheDocument();
     expect(panel.closest("details")).toBeNull();
+  });
+});
+
+describe("StudentPaymentsPage — QA4 findings", () => {
+  const suspendedPortal = (): StudentPortalSummary => ({
+    self: { ...SELF, membership: { ...SELF.membership!, estado: "SUSPENDIDA", motivoSuspension: "Lesión" } },
+    representados: [],
+    membershipPlans: [],
+  });
+
+  // FAM-03
+  it("does not offer to register a payment on a suspended membership and says who can fix it", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue(suspendedPortal());
+
+    render(<StudentPaymentsPage />);
+
+    expect(await screen.findByText(/Su membresía está suspendida\. Escriba al club para reactivarla/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /registrar un pago/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /registrar un pago/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /whatsapp/i })).toHaveAttribute("href", expect.stringContaining("wa.me"));
+  });
+
+  // FAM-16
+  it("draws no ghost rows under a single payment", async () => {
+    render(<StudentPaymentsPage />);
+
+    await screen.findByTestId("student-payments-table");
+    expect(screen.queryByTestId("pago-ghost-rows")).not.toBeInTheDocument();
+  });
+
+  // FAM-14
+  it("does not dim the «En revisión» card when it is at zero", async () => {
+    render(<StudentPaymentsPage />);
+
+    const label = await screen.findByText("En revisión");
+    expect(label.closest(".opacity-60")).toBeNull();
+  });
+
+  // FAM-20
+  it("keeps saying why a rejected file was rejected when the form is submitted", async () => {
+    render(<StudentPaymentsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
+
+    const file = new File(["notas"], "notas.txt", { type: "text/plain" });
+    fireEvent.change(screen.getByTestId("renew-voucher-input"), { target: { files: [file] } });
+
+    expect(await screen.findByTestId("voucher-rejection")).toHaveTextContent("El comprobante debe ser un archivo PDF, JPG o PNG.");
+    fireEvent.click(screen.getByRole("button", { name: /^registrar pago$/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("El comprobante debe ser un archivo PDF, JPG o PNG.");
+    expect(screen.queryByText(/adjunte el comprobante/i)).not.toBeInTheDocument();
+  });
+
+  // REG-26
+  it("sends a profile with no membership to «el club», not to «administración»", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      self: { ...SELF, membership: null },
+      representados: [],
+      membershipPlans: [],
+    });
+
+    render(<StudentPaymentsPage />);
+
+    expect(await screen.findByText(/Acérquese al club para activarla/)).toBeInTheDocument();
+  });
+
+  // FAM-21
+  it("renders the WhatsApp address of a failed registration as a link", async () => {
+    mockRegistrarPago.mockRejectedValue(Object.assign(new Error("boom"), { status: 500 }));
+    render(<StudentPaymentsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
+    fireEvent.change(await screen.findByLabelText(/forma de pago/i), { target: { value: "EFECTIVO" } });
+    fireEvent.click(screen.getByRole("button", { name: /^registrar pago$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /confirmar y registrar/i }));
+
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByRole("link")).toHaveAttribute("href", expect.stringContaining("wa.me"));
   });
 });

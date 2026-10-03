@@ -94,7 +94,7 @@ export function MembershipCard({
           fact the reader came for. */}
       <div className="px-5 py-[18px]">
         <div className="mb-2 flex flex-wrap items-center gap-2.5">
-          <p className="text-2xs font-bold uppercase text-ink-3">
+          <p className="text-2xs font-bold uppercase text-ink-3-strong">
             {studentName ? `Membresía de ${studentName}` : "Su membresía"}
           </p>
           <Badge tone={state.tone}>{state.label}</Badge>
@@ -108,7 +108,7 @@ export function MembershipCard({
             "Todavía no hay ningún pago aprobado"
           )}
         </h2>
-        <p className="mt-1.5 text-sm text-ink-3">
+        <p className="mt-1.5 text-sm text-ink-3-strong">
           {coverageEnd
             ? state.tone === "bad"
               ? "Su cobertura terminó en esta fecha, según sus pagos aprobados."
