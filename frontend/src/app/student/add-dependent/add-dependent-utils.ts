@@ -277,6 +277,13 @@ export function validateAddDependentFields(
   return errors;
 }
 
+/** FAM-17: what pressing «Siguiente» on an incomplete step says is missing. */
+export const ADD_DEPENDENT_STEP_BLOCKED_MESSAGE: Record<AddDependentStep, string> = {
+  child: "Complete los nombres, apellidos, fecha de nacimiento y cédula para continuar.",
+  health: "Seleccione el tipo de sangre para continuar.",
+  summary: "",
+};
+
 /** Whether the step's "Siguiente" may be enabled. */
 export function isAddDependentStepComplete(
   step: AddDependentStep,

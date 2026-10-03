@@ -291,23 +291,24 @@ describe("the way back sits above the page title", () => {
 });
 
 /**
- * VIS-17 — the blocker sentence ("Para continuar, revise: Nombres, …") painted
- * red over an empty form, before the guardian had typed anything. It now waits
- * until a field it names has been touched.
+ * VIS-17 / FAM-17 — nothing is painted red over an empty form before the
+ * guardian acts. "Siguiente" is no longer disabled with a reason line: pressing
+ * it is what names the missing fields (see `add-dependent-qa4.test.tsx`).
  */
-describe("the blocker reason waits for the guardian", () => {
-  it("shows no red 'Para continuar' line over an untouched, empty form", () => {
+describe("nothing is painted red over an untouched form", () => {
+  it("shows no blocker line and no field error before the guardian acts", () => {
     render(<AddDependentPage />);
 
     expect(screen.queryByText(/^Para continuar, revise:/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("shows it once a field the reason names has been touched", () => {
+  it("marks a field the guardian leaves empty", () => {
     render(<AddDependentPage />);
 
     fireEvent.blur(screen.getByLabelText(/^Nombres/));
 
-    expect(screen.getByText(/^Para continuar, revise:/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Nombres/)).toHaveAttribute("aria-invalid", "true");
   });
 });
 
