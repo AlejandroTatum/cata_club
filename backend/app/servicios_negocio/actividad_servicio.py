@@ -324,12 +324,29 @@ class ActividadServicio:
             slowEndpoints=self._rutas_lentas(en_rango),
         )
 
+    @staticmethod
+    def _ruta_bien_formada(item) -> bool:
+        return (
+            isinstance(item, dict)
+            and isinstance(item.get("m"), str)
+            and isinstance(item.get("r"), str)
+            and isinstance(item.get("b"), list)
+            and bool(item["b"])
+            and all(isinstance(n, int) and not isinstance(n, bool) for n in item["b"])
+        )
+
     def _rutas_lentas(self, en_rango) -> list[EndpointLento]:
         acumulado: dict[tuple[str, str], list[int]] = {}
         for (rutas,) in self.db.execute(
             select(MetricaInstantanea.rutas).where(MetricaInstantanea.rutas.isnot(None), *en_rango)
         ):
+            # `isnot(None)` no descarta un JSON `null`: se ignora todo lo que no
+            # sea un arreglo de rutas bien formadas.
+            if not isinstance(rutas, list):
+                continue
             for item in rutas:
+                if not self._ruta_bien_formada(item):
+                    continue
                 clave = (item["m"], item["r"])
                 previo = acumulado.get(clave)
                 acumulado[clave] = list(item["b"]) if previo is None else [a + b for a, b in zip(previo, item["b"])]
