@@ -125,7 +125,7 @@ export default function TimePicker24({
         aria-describedby={describedBy}
         onClick={() => setOpen((prev) => !prev)}
         className={cn(
-          "h-ctl w-full rounded-ctl border bg-paper text-[15px] font-semibold tabular-nums outline-none",
+          "h-ctl w-full rounded-ctl border bg-paper text-base font-semibold tabular-nums outline-none",
           "hover:border-ink-3 focus:border-cata-red",
           invalid ? "border-state-bad" : open ? "border-cata-red" : "border-line-2",
           value ? "text-ink" : "font-normal text-ink-3",
@@ -137,7 +137,7 @@ export default function TimePicker24({
         <div
           role="dialog"
           aria-label={label}
-          className="absolute left-0 top-[46px] z-10 w-[300px] max-w-[calc(100vw-3rem)] rounded-xl border border-line bg-paper p-3.5 shadow-lg"
+          className="absolute left-0 top-[46px] z-10 w-[300px] max-w-[calc(100vw-3rem)] rounded-xl border border-line bg-paper p-3.5 shadow-elevated"
         >
           <p className="mb-1.5 text-2xs font-bold uppercase text-ink-3">Hora</p>
           <div role="group" aria-label="Hora" className="mb-3 grid grid-cols-6 gap-1">

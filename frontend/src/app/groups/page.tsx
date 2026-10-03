@@ -1196,7 +1196,7 @@ export default function GroupsPage(): React.ReactElement {
           picker and assistive tech read. `/login` (issue #51) carries the
           same attribute for the same reason.
         */}
-        <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-5 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6" noValidate>
+        <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-5 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-section" noValidate>
           <div className="flex flex-col gap-field">
             <label htmlFor="categoria-nombre" className={FIELD_LABEL}>
               Nombre
@@ -1228,7 +1228,7 @@ export default function GroupsPage(): React.ReactElement {
           */}
           <div className="flex flex-col gap-field">
             <label htmlFor="categoria-edades" className={FIELD_LABEL}>
-              Edades <span className="font-medium normal-case text-ink-3">· opcional</span>
+              Edades <span className="font-semibold normal-case text-ink-3">· opcional</span>
             </label>
             <input
               id="categoria-edades"
@@ -1249,7 +1249,7 @@ export default function GroupsPage(): React.ReactElement {
           */}
           <div role="group" aria-labelledby="categoria-horario-label" className="flex flex-col gap-field">
             <div id="categoria-horario-label" className={FIELD_LABEL}>
-              Horario <span className="font-medium normal-case text-ink-3">· 24 h</span>
+              Horario <span className="font-semibold normal-case text-ink-3">· 24 h</span>
             </div>
             <div className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2.5">
               <TimePicker24
@@ -1288,11 +1288,11 @@ export default function GroupsPage(): React.ReactElement {
               <span aria-live="polite" className="contents">
                 {formData.horaInicio && formData.horaFin && (
                   duracionLabel(formData.horaInicio, formData.horaFin) ? (
-                    <span className="flex h-ctl items-center whitespace-nowrap rounded-ctl bg-sunken px-3 text-[13px] font-semibold tabular-nums text-ink-2">
+                    <span className="flex h-ctl items-center whitespace-nowrap rounded-ctl bg-sunken px-3 text-sm font-semibold tabular-nums text-ink-2">
                       {duracionLabel(formData.horaInicio, formData.horaFin)}
                     </span>
                   ) : (
-                    <span className="flex h-ctl items-center whitespace-nowrap rounded-ctl bg-state-bad/10 px-3 text-[13px] font-semibold text-state-bad">
+                    <span className="flex h-ctl items-center whitespace-nowrap rounded-ctl bg-state-bad/10 px-3 text-sm font-semibold text-state-bad">
                       Fin antes del inicio
                     </span>
                   )
@@ -1343,7 +1343,7 @@ export default function GroupsPage(): React.ReactElement {
                     aria-pressed={activo}
                     aria-label={DIA_LABELS[dia]}
                     onClick={() => toggleDia(dia)}
-                    className={`flex-1 border-l border-line text-[13px] font-semibold first:border-l-0 ${
+                    className={`flex-1 border-l border-line text-sm font-semibold first:border-l-0 ${
                       activo ? "border-l-ink bg-ink text-paper" : "bg-paper text-ink-3 hover:bg-sunken"
                     }`}
                   >
