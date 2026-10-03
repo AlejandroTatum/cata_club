@@ -1372,7 +1372,7 @@ describe("MembersPage — Registrar pago inline form", () => {
    */
   it("renders no discount picker inside the payment form", async () => {
     const dialog = await openMemberDialog({
-      descuentos: [{ id: 1, nombre: "Media beca", porcentaje: "50", monto: null, activo: true }],
+      descuentos: [{ id: 1, nombre: "Media beca", porcentaje: "50", monto: null, activo: true, enUso: false }],
     });
     await openPaymentForm(dialog);
     await within(dialog).findByDisplayValue("85");

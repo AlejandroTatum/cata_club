@@ -195,10 +195,10 @@ const FULL = 40;
 const SHORT = 4;
 
 const DISCOUNTS = [
-  { id: 1, nombre: "Beca municipal", porcentaje: "100.00", monto: null, activo: true },
-  { id: 2, nombre: "Convenio empresa", porcentaje: null, monto: "5.00", activo: true },
-  { id: 3, nombre: "Hermanos", porcentaje: "15.00", monto: null, activo: true },
-  { id: 4, nombre: "Pago anual", porcentaje: "10.00", monto: null, activo: false },
+  { id: 1, nombre: "Beca municipal", porcentaje: "100.00", monto: null, activo: true, enUso: true },
+  { id: 2, nombre: "Convenio empresa", porcentaje: null, monto: "5.00", activo: true, enUso: true },
+  { id: 3, nombre: "Hermanos", porcentaje: "15.00", monto: null, activo: true, enUso: true },
+  { id: 4, nombre: "Pago anual", porcentaje: "10.00", monto: null, activo: false, enUso: true },
 ];
 
 const SCHEDULES = [

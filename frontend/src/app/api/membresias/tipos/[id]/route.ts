@@ -15,13 +15,14 @@
  * freezes its own values, so a new price reaches future payments only — the
  * backend tests (`test_tarifas_administracion.py`) are what hold that rule.
  *
- * There is no `activo` here and no DELETE: `TipoMembresia` has no soft-delete
- * column, so retiring a plan is out of scope for #394 as written.
+ * Retiring a tariff has two doors: PATCH `{activo}` hides/shows it (always
+ * allowed; existing membresías keep their price), and DELETE removes it for
+ * good, which the backend refuses with a 409 once any membresía used it.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { patchCatalogResource } from "@/lib/server/bff-helpers";
+import { deleteCatalogResource, patchCatalogResource } from "@/lib/server/bff-helpers";
 
-const UPDATABLE_FIELDS = ["categoria", "precio", "modalidad"] as const;
+const UPDATABLE_FIELDS = ["categoria", "precio", "modalidad", "activo"] as const;
 
 export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const params = await props.params;
@@ -31,5 +32,15 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     updatableFields: UPDATABLE_FIELDS,
     invalidIdMessage: "Identificador de tipo de membresía inválido.",
     failureMessage: "No se pudo actualizar la tarifa.",
+  });
+}
+
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+  const params = await props.params;
+  return deleteCatalogResource(request, {
+    id: params.id,
+    buildPath: (id) => `/membresias/tipos/${id}`,
+    invalidIdMessage: "Identificador de tipo de membresía inválido.",
+    failureMessage: "No se pudo eliminar la tarifa.",
   });
 }

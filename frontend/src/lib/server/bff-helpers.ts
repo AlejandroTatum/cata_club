@@ -496,6 +496,47 @@ export async function patchCatalogResource<Field extends string>(
   return response;
 }
 
+interface DeleteCatalogResourceOptions {
+  id: string;
+  /** Backend path for the resource, from its already-validated numeric id. */
+  buildPath: (id: string) => string;
+  invalidIdMessage: string;
+  /** Fallback backend-error text, and the message when the auth proxy itself fails. */
+  failureMessage: string;
+}
+
+/**
+ * Shared DELETE algorithm for admin catalog resources: validate a numeric id,
+ * DELETE the backend, relay a refusal verbatim — the 409 "ya se usó" message is
+ * written for the admin and is what the screen shows — and answer 204. The
+ * auth cookie is refreshed on the 204 itself, since there is no body to carry it.
+ */
+export async function deleteCatalogResource(
+  request: NextRequest,
+  options: DeleteCatalogResourceOptions,
+): Promise<NextResponse> {
+  const { id, buildPath, invalidIdMessage, failureMessage } = options;
+
+  if (!/^\d+$/.test(id)) {
+    return badRequestResponse(invalidIdMessage);
+  }
+
+  const result = await backendFetchAuthed(request, buildPath(id), { method: "DELETE" });
+
+  if (!result.ok) {
+    return NextResponse.json({ message: failureMessage }, { status: result.status });
+  }
+  if (!result.response.ok) {
+    return passthroughBackendError(result.response, failureMessage);
+  }
+
+  const response = new NextResponse(null, { status: 204 });
+  if (result.refreshedAccessToken) {
+    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+  }
+  return response;
+}
+
 interface PostCatalogResourceOptions<Field extends string> {
   /** Backend path to POST to (e.g. `/membresias/tipos`). */
   backendPath: string;
