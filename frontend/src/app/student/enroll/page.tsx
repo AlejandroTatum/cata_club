@@ -114,6 +114,7 @@ import EnrollFrame from "./EnrollFrame";
 import EnrollNav from "./EnrollNav";
 import EnrollSignedInNotice from "./EnrollSignedInNotice";
 import EnrollSteps from "./EnrollSteps";
+import EnrollSkeleton from "./EnrollSkeleton";
 import useWideLayout, { useHydrated } from "./useWideLayout";
 import EnrollSummary from "./EnrollSummary";
 
@@ -330,6 +331,12 @@ function EnrollWizard(): React.ReactElement {
   const isFirst = currentIndex === 0;
   const wide = useWideLayout();
   const hydrated = useHydrated();
+  // Only the FIRST resolution gets the placeholder: later session refreshes
+  // (the one confirming an enrolment flips `isLoading` again) must not swap
+  // the wizard for a skeleton.
+  const [settled, setSettled] = useState(false);
+  const ready = hydrated && !isLoading;
+  if (ready && !settled) setSettled(true);
   const isLast = currentIndex === effectiveSteps.length - 1;
 
   /**
@@ -1515,14 +1522,22 @@ function EnrollWizard(): React.ReactElement {
     );
   }
 
+  // REG-17 / FAM-25: until the layout and the session are known, a placeholder
+  // with the final box, so the page is never blank and nothing shifts.
+  if (!ready && !settled) {
+    return (
+      <main>
+        <EnrollSkeleton />
+      </main>
+    );
+  }
+
   return (
     // The public enrolment wizard reaches the user through no shell, so the
     // landmark is declared here — around BOTH branches, so the confirmation
     // screen is as much "principal" as the form it replaces. It used to borrow
     // the root layout's, which is the wrapper that stopped being one.
-    <main className={hydrated && !isLoading ? undefined : "invisible"}>
-      {/* REG-17 / FAM-25: invisible (still laid out, still no shift counted)
-          until the layout and the session are known. */}
+    <main>
       {/* REG-11: a signed-in user must not get the new-account wizard. The
           confirmation screen is exempt: the auto-login that enrolling performs
           makes the visitor "signed in" at exactly that moment. */}

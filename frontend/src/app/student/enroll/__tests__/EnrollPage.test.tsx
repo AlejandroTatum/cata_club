@@ -1709,16 +1709,19 @@ describe("EnrollPage — no layout shift while the layout and session settle (RE
     mockAuthLoading = false;
   });
 
-  it("keeps the page invisible while the session is still loading", () => {
+  it("renders a placeholder, not a blank page or the form, while the session is loading", () => {
     mockAuthLoading = true;
     render(<EnrollPage />);
 
-    expect(screen.getByRole("main")).toHaveClass("invisible");
+    expect(screen.getByTestId("enroll-skeleton")).toBeInTheDocument();
+    expect(screen.getByRole("main")).not.toHaveClass("invisible");
+    expect(screen.queryByTestId("enroll-wizard-card")).not.toBeInTheDocument();
   });
 
-  it("shows the page once the session is known", () => {
+  it("renders the form and no placeholder once the session is known", () => {
     render(<EnrollPage />);
 
-    expect(screen.getByRole("main")).not.toHaveClass("invisible");
+    expect(screen.queryByTestId("enroll-skeleton")).not.toBeInTheDocument();
+    expect(screen.getByTestId("enroll-wizard-card")).toBeInTheDocument();
   });
 });
