@@ -13,15 +13,23 @@ un handler `async` no toque la base).
 """
 from datetime import datetime, timezone
 
+import redis
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.infraestructura import latido_workers
 from app.infraestructura.db import obtener_sesion
 from app.servicios_negocio.actividad_servicio import ActividadServicio
 from app.servicios_negocio.dtos.actividad_schemas import (
     AvanzadasResponse, RangoAvanzadas, RangoResumen, ResumenResponse,
 )
 from app.servicios_negocio.gestor_permisos import GestorPermisos
+from app.soporte_transversal.configuracion import settings
+
+_TIMEOUT_REDIS_S = 2
+_redis_latido = redis.Redis.from_url(
+    settings.redis_url, socket_connect_timeout=_TIMEOUT_REDIS_S, socket_timeout=_TIMEOUT_REDIS_S,
+)
 
 router = APIRouter(
     prefix="/actividad",
@@ -36,11 +44,21 @@ def _ahora() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _cliente_latido():
+    return _redis_latido
+
+
+def _servicio(db: Session, ahora: datetime) -> ActividadServicio:
+    return ActividadServicio(db, latido_workers.edad_segundos(_cliente_latido(), ahora))
+
+
 @router.get("/resumen", response_model=ResumenResponse)
 def resumen(rango: RangoResumen = Query("7d"), db: Session = Depends(obtener_sesion)) -> ResumenResponse:
-    return ActividadServicio(db).resumen(rango, _ahora())
+    ahora = _ahora()
+    return _servicio(db, ahora).resumen(rango, ahora)
 
 
 @router.get("/avanzadas", response_model=AvanzadasResponse)
 def avanzadas(rango: RangoAvanzadas = Query("1h"), db: Session = Depends(obtener_sesion)) -> AvanzadasResponse:
-    return ActividadServicio(db).avanzadas(rango, _ahora())
+    ahora = _ahora()
+    return _servicio(db, ahora).avanzadas(rango, ahora)

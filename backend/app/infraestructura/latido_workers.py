@@ -26,3 +26,20 @@ def vivo(cliente_redis) -> bool:
         return cliente_redis.get(CLAVE) is not None
     except Exception:
         return False
+
+
+def edad_segundos(cliente_redis, ahora: datetime) -> float | None:
+    """Segundos desde el último latido, o `None` si falta, es ilegible o Redis
+    no responde (para el estado del sistema, "no sé" cuenta como degradado)."""
+    try:
+        crudo = cliente_redis.get(CLAVE)
+        if crudo is None:
+            return None
+        if isinstance(crudo, bytes):
+            crudo = crudo.decode()
+        marca = datetime.fromisoformat(crudo)
+    except Exception:
+        return None
+    if marca.tzinfo is None:
+        marca = marca.replace(tzinfo=timezone.utc)
+    return max(0.0, (ahora - marca).total_seconds())
