@@ -703,8 +703,13 @@ describe("MembersPage — Editar member modal", () => {
     const dialog = screen.getByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: /guardar nombre, apellido y teléfono/i }));
 
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
-      "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: https://wa.me/593994219619",
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos:",
+    );
+    expect(within(alert).getByRole("link", { name: /wa\.me|WhatsApp/i })).toHaveAttribute(
+      "href",
+      "https://wa.me/593994219619",
     );
   });
 
