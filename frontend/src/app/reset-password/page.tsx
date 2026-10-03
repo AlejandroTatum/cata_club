@@ -69,7 +69,10 @@ const EXPIRED_LINK_NOTE = (
 const LINK_LIFETIME_NOTE = "Los enlaces de recuperación duran 30 minutos.";
 
 /** What the card says when the URL carries no token at all. */
-const NO_TOKEN_MESSAGE = "El enlace de recuperación no contiene un token válido.";
+const NO_TOKEN_MESSAGE = "El enlace de recuperación no es válido.";
+
+/** What the card says when the backend refuses the token on submit. */
+const EXPIRED_LINK_MESSAGE = "El enlace ya se usó o venció.";
 
 /**
  * The dead-link state: no token in the URL, or one the backend refused
@@ -149,7 +152,9 @@ function ResetPasswordContent(): React.ReactElement {
       // GAP-07: a 400 here means the link itself was refused (the BFF maps the
       // backend's 400/401 to 400), which no retry fixes: say it in the card.
       if (err instanceof ApiClientError && err.status === 400) {
-        setRejectedLinkMessage(message);
+        // The server's wording is not shown: it arrives without a closing
+        // period and says «expiró» only (REG-10).
+        setRejectedLinkMessage(EXPIRED_LINK_MESSAGE);
       } else {
         toast.showError(message);
       }

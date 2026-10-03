@@ -617,7 +617,7 @@ describe("EnrollPage — error prevention on the student step", () => {
     fillBirthDate(enrollFieldId("fechaNacimiento"), "2015-06-15");
     fireEvent.blur(screen.getByLabelText(/^Año/));
 
-    expect(screen.getByText(/el alumno es menor de edad y no puede inscribirse por su cuenta/i)).toBeInTheDocument();
+    expect(screen.getByText(/el alumno es menor de edad y necesita un representante/i)).toBeInTheDocument();
     // Not disabled: pressing it re-flags the step instead of advancing.
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     expect(screen.getByLabelText(/^Nombres/)).toBeInTheDocument();

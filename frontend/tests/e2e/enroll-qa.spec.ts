@@ -502,7 +502,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     await fillAndBlur(page, F.telefono, "099123");
     await expect(field(page, F.telefono)).toHaveValue("99123");
     await expect(fieldError(page, F.telefono)).toHaveText(
-      "El teléfono debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
+      "El teléfono no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
     );
     await shot(page, "P11", "telefono-corto");
   });
@@ -530,7 +530,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
   test("P14 · un menor de edad no puede autoinscribirse", async ({ page }) => {
     await fillAndBlur(page, F.fechaNacimiento, isoYearsAgo(12));
     await expect(fieldError(page, F.fechaNacimiento)).toContainText(
-      "el alumno es menor de edad y no puede inscribirse por su cuenta.",
+      "El alumno es menor de edad y necesita un representante.",
     );
     await expectStepBlocked(page);
     await shot(page, "P14", "menor-autoinscripcion");
@@ -551,7 +551,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     const iso = `${almost.getFullYear()}-${String(almost.getMonth() + 1).padStart(2, "0")}-${String(almost.getDate()).padStart(2, "0")}`;
     await fillAndBlur(page, F.fechaNacimiento, iso);
     await expect(fieldError(page, F.fechaNacimiento)).toContainText(
-      "el alumno es menor de edad y no puede inscribirse por su cuenta.",
+      "El alumno es menor de edad y necesita un representante.",
     );
     await shot(page, "P16", "borde-17-anios-11-meses");
   });
@@ -816,7 +816,7 @@ test.describe("H · Salud y emergencia", () => {
   test("H04 · teléfono de emergencia de 5 dígitos", async ({ page }) => {
     await fillAndBlur(page, F.telefonoEmergencia, "12345");
     await expect(fieldError(page, F.telefonoEmergencia)).toHaveText(
-      "El teléfono de emergencia debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
+      "El teléfono de emergencia no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
     );
     await expectStepBlocked(page);
     await shot(page, "H04", "telefono-emergencia-corto");
@@ -1390,7 +1390,7 @@ test.describe("V · Laxitud frente a la norma ecuatoriana — CERRADA (issues #2
     await fillAndBlur(page, F.telefono, "099abc1234");
     await expect(field(page, F.telefono)).toHaveValue("991234");
     await expect(fieldError(page, F.telefono)).toHaveText(
-      "El teléfono debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
+      "El teléfono no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
     );
     await shot(page, "V01", "telefono-con-letras-limpiado");
   });
@@ -1402,7 +1402,7 @@ test.describe("V · Laxitud frente a la norma ecuatoriana — CERRADA (issues #2
     await fillAndBlur(page, F.telefono, "0991234");
     await expect(field(page, F.telefono)).toHaveValue("991234");
     await expect(fieldError(page, F.telefono)).toHaveText(
-      "El teléfono debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
+      "El teléfono no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
     );
     await shot(page, "V02", "telefono-de-7-digitos-rechazado");
   });
