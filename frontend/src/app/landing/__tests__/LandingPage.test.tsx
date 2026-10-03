@@ -830,11 +830,15 @@ describe("LandingPage", (): void => {
   it("hides the gallery section and its nav entries while the club has published nothing", async (): Promise<void> => {
     render(<LandingPage />);
 
-    await waitFor((): void => { expect(document.querySelector("#galeria")).toBeNull(); });
+    // The section unmounts before GALLERY_EMPTY_EVENT re-renders the navbar and
+    // footer, so wait on the final state: section and nav entries both gone.
+    await waitFor((): void => {
+      expect(document.querySelector("#galeria")).toBeNull();
+      // Neither the navbar nor the footer points at a section that is not there.
+      expect(document.querySelector("a[href='#galeria']")).toBeNull();
+    });
     expect(screen.queryByRole("heading", { name: "Galería" })).not.toBeInTheDocument();
     expect(screen.queryByText("Aún no hay fotos en la galería.")).not.toBeInTheDocument();
-    // Neither the navbar nor the footer points at a section that is not there.
-    expect(document.querySelector("a[href='#galeria']")).toBeNull();
   });
 
   it("keeps the gallery's nav entries once there are photos to show", async (): Promise<void> => {
