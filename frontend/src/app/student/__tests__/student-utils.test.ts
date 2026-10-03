@@ -22,6 +22,8 @@ import {
   COVERAGE_ENDING_SOON_DAYS,
   describeFamilyCoverage,
   describeCuotaBadge,
+  describeRejectedPago,
+  displayNameFor,
 } from "../student-utils";
 import type { PaymentSituationInput, StudentPortalMode } from "../student-utils";
 import type { PagoPersona, StudentSessionSummary } from "@/services/api";
@@ -533,7 +535,7 @@ describe("breakdownAttendance", () => {
         session("justified", "2026-07-17"),
         session("absent", "2026-07-16"),
       ]),
-    ).toEqual({ present: 2, late: 1, justified: 1, absent: 1, total: 5 });
+    ).toEqual({ present: 2, late: 1, justified: 1, absent: 1, sick: 0, competition: 0, total: 5 });
   });
 
   it("returns an all-zero breakdown for an empty history rather than null", () => {
@@ -544,6 +546,8 @@ describe("breakdownAttendance", () => {
       late: 0,
       justified: 0,
       absent: 0,
+      sick: 0,
+      competition: 0,
       total: 0,
     });
   });
@@ -552,7 +556,7 @@ describe("breakdownAttendance", () => {
     const unknown = { fecha: "2026-07-15", horario: "Lunes 15:00 — 16:00", estado: "cancelled" };
     expect(
       breakdownAttendance([session("present", "2026-07-20"), unknown as StudentSessionSummary]),
-    ).toEqual({ present: 1, late: 0, justified: 0, absent: 0, total: 2 });
+    ).toEqual({ present: 1, late: 0, justified: 0, absent: 0, sick: 0, competition: 0, total: 2 });
   });
 });
 
@@ -682,7 +686,7 @@ describe("describePaymentSituation", () => {
     expect(result.kind).toBe("no-membership");
     expect(result.canRegister).toBe(false);
     expect(result.priceNote).toBeNull();
-    expect(result.detail).toMatch(/administración/i);
+    expect(result.detail).toMatch(/acérquese al club/i);
   });
 
   it("sends a minor to the representative the backend actually has on record", () => {
@@ -1050,5 +1054,141 @@ describe("describeCuotaBadge", () => {
     expect(describeCuotaBadge(situation("no-membership"))).toEqual({ label: "Sin membresía", tone: "neutral" });
     expect(describeCuotaBadge(situation("gratuitous"))).toEqual({ label: "Sin costo", tone: "ok" });
     expect(describeCuotaBadge(situation("minor-blocked"))).toEqual({ label: "Lo gestiona el club", tone: "neutral" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// QA4 (issue #1534) — suspended membership, rejected payment, sibling names
+// ---------------------------------------------------------------------------
+
+describe("QA4 FAM-02 — a suspended membership is not «Al día»", () => {
+  it("states the suspension with the coverage date and how to reactivate", () => {
+    const result = describePaymentSituation(
+      situation({ viewingOwnProfile: false, studentName: "Sofia", suspended: true, coverageEnd: "2026-11-02" }),
+      TODAY,
+    );
+
+    expect(result.kind).toBe("suspended");
+    expect(result.headline).toBe("La membresía de Sofia está suspendida.");
+    expect(result.detail).toContain("Su cobertura sigue vigente hasta 02/11/2026.");
+    expect(result.detail).toContain("Escriba al club para reactivarla.");
+    expect(result.canRegister).toBe(false);
+  });
+
+  it("includes the reason the club recorded", () => {
+    const result = describePaymentSituation(
+      situation({ suspended: true, motivoSuspension: "Lesión prolongada" }),
+      TODAY,
+    );
+
+    expect(result.headline).toBe("Su membresía está suspendida.");
+    expect(result.detail).toContain("Motivo: Lesión prolongada.");
+  });
+
+  it("says the coverage lapsed when its date is already past", () => {
+    const result = describePaymentSituation(situation({ suspended: true, coverageEnd: "2026-07-01" }), TODAY);
+
+    expect(result.detail).toContain("Su cobertura venció el 01/07/2026.");
+  });
+
+  it("labels the badge and the family strip «Suspendida»", () => {
+    const result = describePaymentSituation(situation({ suspended: true }), TODAY);
+
+    expect(describeCuotaBadge(result)).toEqual({ label: "Suspendida", tone: "warn" });
+    expect(describeFamilyCoverage({ estado: "SUSPENDIDA", cubiertoHasta: "2026-11-02" }, TODAY)).toEqual({
+      label: "Suspendida",
+      tone: "warn",
+    });
+  });
+});
+
+describe("QA4 FAM-11 — the latest rejected payment is surfaced", () => {
+  const pago = (id: number, estadoPago: PagoPersona["estadoPago"], fechaRegistro: string, extra: Partial<PagoPersona> = {}) =>
+    ({
+      id,
+      monto: "25.00",
+      motivoRechazo: null,
+      estadoPago,
+      tipoPago: "TRANSFERENCIA",
+      fechaRegistro,
+      fechaValidacion: null,
+      fechaInicio: "2026-07-01",
+      fechaFin: "2026-07-31",
+      personaId: 9,
+      membresiaId: 3,
+      voucherUrl: null,
+      voucherFormato: null,
+      descuentoValorAplicado: null,
+      descuentoPorcentajeAplicado: null,
+      ...extra,
+    }) as PagoPersona;
+
+  it("words the notice with amount, date and reason", () => {
+    const notice = describeRejectedPago([
+      pago(1, "RECHAZADO", "2026-11-03T10:00:00", { motivoRechazo: "El comprobante no es legible" }),
+    ]);
+
+    expect(notice).toBe("Su pago de $25,00 del 03/11/2026 fue rechazado: El comprobante no es legible. Registre uno nuevo.");
+  });
+
+  it("omits the reason when the club did not record one", () => {
+    expect(describeRejectedPago([pago(1, "RECHAZADO", "2026-11-03T10:00:00")])).toBe(
+      "Su pago de $25,00 del 03/11/2026 fue rechazado. Registre uno nuevo.",
+    );
+  });
+
+  it("is silent once a later payment was registered", () => {
+    expect(
+      describeRejectedPago([
+        pago(1, "RECHAZADO", "2026-11-03T10:00:00"),
+        pago(2, "PENDIENTE_VALIDACION", "2026-11-04T10:00:00"),
+      ]),
+    ).toBeNull();
+    expect(describeRejectedPago([pago(1, "APROBADO", "2026-11-03T10:00:00")])).toBeNull();
+  });
+});
+
+describe("QA4 FAM-23 — siblings with the same first name stay distinguishable", () => {
+  const p = (personaId: string, nombres: string, apellidos: string) => ({ personaId, nombres, apellidos });
+
+  it("uses the first name when it is unique", () => {
+    expect(displayNameFor(p("1", "Sofía Alejandra", "Vera Mora"), [p("1", "Sofía Alejandra", "Vera Mora"), p("2", "Martín", "Vera Mora")])).toBe("Sofía");
+  });
+
+  it("uses both given names when the first one repeats", () => {
+    const list = [p("1", "María José", "Vera Mora"), p("2", "María Fernanda", "Vera Mora")];
+    expect(displayNameFor(list[0], list)).toBe("María José");
+    expect(displayNameFor(list[1], list)).toBe("María Fernanda");
+  });
+
+  it("falls back to the first surname when there is no second given name", () => {
+    const list = [p("1", "Ana", "Vera Mora"), p("2", "Ana", "Pérez")];
+    expect(displayNameFor(list[0], list)).toBe("Ana Vera");
+    expect(displayNameFor(list[1], list)).toBe("Ana Pérez");
+  });
+});
+
+describe("QA4 FAM-22 — the attendance breakdown covers every state", () => {
+  it("counts sick and competition sessions too", () => {
+    const sessions = ["present", "late", "absent", "sick", "justified"].map(
+      (estado) => ({ estado }) as StudentSessionSummary,
+    );
+    sessions.push({ estado: "competition" } as StudentSessionSummary);
+
+    const result = breakdownAttendance(sessions);
+
+    expect(result).toMatchObject({ present: 1, late: 1, absent: 1, justified: 1, sick: 1, competition: 1, total: 6 });
+  });
+});
+
+describe("QA4 REG-26 — «el club», not «administración»", () => {
+  it("sends a profile without membership to the club", () => {
+    const result = describePaymentSituation(
+      situation({ hasMembership: false, coverageEnd: null, monthlyPrice: null, planName: null }),
+      TODAY,
+    );
+
+    expect(result.detail).toContain("Acérquese al club para activarla");
+    expect(result.detail).not.toMatch(/administración/i);
   });
 });
