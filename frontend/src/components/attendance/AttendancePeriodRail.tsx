@@ -72,6 +72,8 @@ export interface AttendancePeriodRailProps {
   horarioId: number | null;
   /** A student filter is active: the schedule comparison no longer applies. */
   studentFiltered: boolean;
+  /** Enrolled students per horario id. With it, a list holding fewer records than that is listed as incomplete. */
+  inscritosPorHorario?: Record<number, number>;
   /** Extra paragraphs for the indications card (role-specific rules). */
   guideExtra?: ReactNode;
 }
@@ -83,11 +85,17 @@ export default function AttendancePeriodRail({
   fechaFin,
   horarioId,
   studentFiltered,
+  inscritosPorHorario,
   guideExtra,
 }: AttendancePeriodRailProps): React.ReactElement {
   const coverageInput = useMemo(
     () => ({
-      sessions: [...sessions],
+      sessions: sessions.map((s) => ({
+        fecha: s.fecha,
+        horarioId: s.horarioId,
+        registrados: s.total,
+      })),
+      inscritosPorHorario,
       schedules: [...schedules],
       desde: fechaInicio,
       hasta: fechaFin,
@@ -98,7 +106,7 @@ export default function AttendancePeriodRail({
       horaActual: clubTimeHHMM(),
       horarioId,
     }),
-    [sessions, schedules, fechaInicio, fechaFin, horarioId],
+    [sessions, schedules, fechaInicio, fechaFin, horarioId, inscritosPorHorario],
   );
   const coverage = useMemo(
     () => summarizePeriodCoverage(coverageInput),
@@ -162,7 +170,7 @@ export default function AttendancePeriodRail({
                 hint="diferencia estimada"
               />
             </div>
-            <p className="col-span-2 px-1 text-xs text-ink-3" role="note">
+            <p className="col-span-2 px-1 text-xs text-ink-3-strong" role="note">
               {AVISO_ESTIMACION}
             </p>
           </section>
@@ -217,13 +225,18 @@ export default function AttendancePeriodRail({
                       <span className="text-xs tabular-nums text-ink-2">
                         {m.schedule.horaInicio} — {m.schedule.horaFin}
                       </span>
+                      {m.registrados !== undefined && m.inscritos !== undefined && (
+                        <span className="ml-2 text-xs font-semibold text-state-warn">
+                          {m.registrados} de {m.inscritos} registrados
+                        </span>
+                      )}
                     </span>
                     <Link
                       href={`/trainer/attendance${buildWizardQuery(m.schedule.id, m.fecha, "mark-attendance")}`}
                       className={buttonClasses("secondary", "sm")}
-                      aria-label={`Pasar lista del ${formatMissingSessionDate(m.fecha)} ${m.schedule.horaInicio}`}
+                      aria-label={`${m.registrados !== undefined ? "Completar lista" : "Pasar lista"} del ${formatMissingSessionDate(m.fecha)} ${m.schedule.horaInicio}`}
                     >
-                      Pasar lista
+                      {m.registrados !== undefined ? "Completar lista" : "Pasar lista"}
                     </Link>
                   </li>
                 ))}

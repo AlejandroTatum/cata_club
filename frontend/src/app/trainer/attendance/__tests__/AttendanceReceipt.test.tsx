@@ -48,6 +48,12 @@ describe("AttendanceReceipt — another trainer filed first (ENT-03)", () => {
     expect(screen.queryByRole("button", { name: /Reintentar/ })).not.toBeInTheDocument();
   });
 
+  it("does not print «No registrado» as the author when nobody is recorded (ENT-19)", () => {
+    renderReceipt([]);
+
+    expect(screen.queryByText(/No registrado/)).not.toBeInTheDocument();
+  });
+
   it("keeps the partial receipt and the retry when somebody really failed", () => {
     renderReceipt([
       { personaId: 1, message: "ya", alreadyRegistered: true },

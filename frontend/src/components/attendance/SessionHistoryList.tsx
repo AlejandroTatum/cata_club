@@ -36,6 +36,9 @@ import {
 } from "@/app/trainer/SessionComposition";
 import type { SessionSummary } from "@/app/trainer/trainer-day-utils";
 
+/** A dash, not «No registrado»: that read as «the attendance was not recorded» (ENT-19). */
+const NO_AUTHOR = "—";
+
 /** One session's identity: the same pair the grouping keys on. */
 export function sessionKey(
   session: Pick<SessionSummary, "fecha" | "horarioId">,
@@ -244,7 +247,7 @@ export default function SessionHistoryList({
               </div>
               <p className="text-sm text-ink-2">
                 <span className="font-semibold text-ink">Registró: </span>
-                {session.registradoPorNombre ?? "No registrado"}
+                {session.registradoPorNombre ?? NO_AUTHOR}
               </p>
               {renderComposition(session)}
               {hasActions && (
@@ -268,7 +271,7 @@ export default function SessionHistoryList({
                     {session.registradoPorNombre}
                   </span>
                 ) : (
-                  "No registrado"
+                  NO_AUTHOR
                 )}
               </TableCell>
               <TableCell>{renderComposition(session)}</TableCell>
