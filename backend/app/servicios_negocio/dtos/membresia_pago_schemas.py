@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Optional
 from urllib.parse import urlparse
 
+from app.dominio.nombres_catalogo import normalizar_nombre
 from app.dominio.enums import (
     EstadoMembresia, TipoModalidad, EstadoPago, TipoPago, EfectoCoberturaCorreccion,
 )
@@ -18,6 +19,13 @@ PRECIO_MINIMO_TIPO_MEMBRESIA = Decimal("1.00")
 PRECIO_MAXIMO_TIPO_MEMBRESIA = Decimal("1000.00")
 
 
+def _categoria_normalizada_no_vacia(valor: str) -> str:
+    normalizada = normalizar_nombre(valor)
+    if not normalizada:
+        raise ValueError("El nombre de la tarifa no puede estar vacío.")
+    return normalizada
+
+
 class TipoMembresiaCreateDTO(BaseModel):
     categoria: str
     precio: Decimal = Field(
@@ -27,6 +35,11 @@ class TipoMembresiaCreateDTO(BaseModel):
         decimal_places=2,
     )
     modalidad: TipoModalidad
+
+    @field_validator("categoria")
+    @classmethod
+    def _normalizar_categoria(cls, valor: str) -> str:
+        return _categoria_normalizada_no_vacia(valor)
 
 
 class TipoMembresiaUpdateDTO(BaseModel):
@@ -70,6 +83,11 @@ class TipoMembresiaUpdateDTO(BaseModel):
                 "desea modificarlo, no lo incluya en la solicitud."
             )
         return valor
+
+    @field_validator("categoria")
+    @classmethod
+    def _normalizar_categoria(cls, valor: Optional[str]) -> Optional[str]:
+        return None if valor is None else _categoria_normalizada_no_vacia(valor)
 
 
 class TipoMembresiaResponseDTO(ResponseBase, TipoMembresiaCreateDTO):
@@ -366,8 +384,12 @@ class DeudaMembresiaBulkItemDTO(ResponseBase, BaseModel):
     monto_mensual: Decimal = Field(..., examples=["30.00"])
 
 
+# Tope generoso (120 meses x tarifa máxima de $1000): descarta `1e30` & co. con
+# 422 en vez de dejar que reviente la aritmética decimal (QA3 ADM-09).
+# `ge=0`: una beca del 100% cotiza $0 y ese es el único caso en que el
+# servicio acepta $0 (cualquier monto distinto de la cotización se rechaza).
 class RegularizacionDeudaDTO(BaseModel):
-    monto: Decimal = Field(..., gt=0)
+    monto: Decimal = Field(..., ge=0, le=Decimal("120000.00"), max_digits=9, decimal_places=2)
     fecha_inicio: date
     fecha_fin: date
     motivo: str = Field(..., min_length=1, max_length=255)
@@ -379,6 +401,14 @@ class RegularizacionDeudaDTO(BaseModel):
         if self.fecha_inicio >= self.fecha_fin:
             raise ValueError("La fecha de inicio debe ser anterior a la de fin.")
         return self
+
+
+class CotizacionRegularizacionResponseDTO(ResponseBase, BaseModel):
+    """Monto que `regularizar-deuda` exigirá para un período (QA3 ADM-09)."""
+    meses: int = Field(..., examples=[2])
+    monto_base: Decimal = Field(..., examples=["60.00"])
+    descuento_aplicado: Decimal = Field(..., examples=["30.00"])
+    monto_esperado: Decimal = Field(..., examples=["30.00"])
 
 
 # --- Suspensión y reactivación (issue #400, slice 5a) ------------------------

@@ -10,7 +10,8 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.dominio.excepciones import EntidadDuplicada, EntidadNoEncontrada, OperacionInvalida
+from app.dominio.excepciones import EntidadNoEncontrada, NombreDuplicado, OperacionInvalida
+from app.dominio.nombres_catalogo import existe_nombre, normalizar_nombre
 from app.dominio.modelos import Descuento
 from app.infraestructura.repositorios.descuento_repositorio import DescuentoRepositorio
 from app.servicios_negocio.dtos.descuento_schemas import DescuentoCreateDTO, DescuentoUpdateDTO
@@ -25,10 +26,17 @@ class DescuentoServicio:
         self.db = db
         self.repo = DescuentoRepositorio(db)
 
+    def _exigir_nombre_libre(self, nombre: str, excluir_id: Optional[int] = None) -> None:
+        """QA3 ADM-11: sin duplicados por mayúsculas ni espacios (las tildes
+        distinguen). El catálogo es chico, así que se compara en Python."""
+        otros = [d.nombre for d in self.repo.listar() if d.id != excluir_id]
+        if existe_nombre(nombre, otros):
+            raise NombreDuplicado(f"Ya existe un descuento con el nombre '{nombre}'.")
+
     def crear(self, datos: DescuentoCreateDTO) -> Descuento:
-        if self.repo.obtener_por_nombre(datos.nombre):
-            raise EntidadDuplicada(f"Ya existe un descuento con el nombre '{datos.nombre}'")
-        resultado = self.repo.crear(Descuento(**datos.model_dump()))
+        nombre = normalizar_nombre(datos.nombre)
+        self._exigir_nombre_libre(nombre)
+        resultado = self.repo.crear(Descuento(**{**datos.model_dump(), "nombre": nombre}))
         self.db.commit()
         return resultado
 
@@ -55,10 +63,9 @@ class DescuentoServicio:
         descuento = self.obtener(descuento_id)
         cambios = datos.model_dump(exclude_unset=True)
 
-        nombre_nuevo = cambios.get("nombre")
-        if nombre_nuevo and nombre_nuevo != descuento.nombre:
-            if self.repo.obtener_por_nombre(nombre_nuevo):
-                raise EntidadDuplicada(f"Ya existe un descuento con el nombre '{nombre_nuevo}'")
+        if cambios.get("nombre"):
+            cambios["nombre"] = normalizar_nombre(cambios["nombre"])
+            self._exigir_nombre_libre(cambios["nombre"], excluir_id=descuento.id)
 
         porcentaje_final = cambios.get("porcentaje", descuento.porcentaje)
         monto_final = cambios.get("monto", descuento.monto)

@@ -11,6 +11,7 @@ import {
   buildMemberStats,
   formatMembershipPeriod,
   getPayerTypeLabel,
+  getAccountRoleLabel,
   countActiveStudents,
   accountDisplayRoles,
   filterAccounts,
@@ -23,7 +24,6 @@ import {
   countAccountsMatchingFlag,
   paginateAccounts,
   getTotalPages,
-  MEMBERS_AGGREGATE_LIMIT,
   MEMBERS_PAGE_SIZE,
   MEMBERSHIP_TYPE_LABELS,
   type AccountState,
@@ -296,12 +296,6 @@ describe("buildMemberStats", () => {
   });
 });
 
-describe("MEMBERS_AGGREGATE_LIMIT", () => {
-  it("defines the shared upstream aggregate limit as 200", () => {
-    expect(MEMBERS_AGGREGATE_LIMIT).toBe(200);
-  });
-});
-
 // ---------------------------------------------------------------------------
 // formatCurrency
 // ---------------------------------------------------------------------------
@@ -414,6 +408,35 @@ describe("getPayerTypeLabel", () => {
 
   it('returns "Estudiante" for estudiante', () => {
     expect(getPayerTypeLabel("estudiante")).toBe("Estudiante");
+  });
+});
+
+describe("getAccountRoleLabel", () => {
+  const base: MemberAccount = {
+    id: "1",
+    role: "representante",
+    nombres: "Ana",
+    apellidos: "García",
+    telefono: "0999999999",
+    estudiantes: [],
+  };
+
+  it('returns "Sin rol asignado" when there is no real role and nobody represented', () => {
+    expect(getAccountRoleLabel(base)).toBe("Sin rol asignado");
+    expect(getAccountRoleLabel({ ...base, backendRoles: [] })).toBe("Sin rol asignado");
+  });
+
+  it('keeps "Representante" with a real role', () => {
+    expect(getAccountRoleLabel({ ...base, backendRoles: ["REPRESENTANTE"] })).toBe("Representante");
+  });
+
+  it('keeps "Representante" for someone who represents dependents even without a login', () => {
+    const dependiente = { id: "2", nombre: "Leo" } as unknown as MemberAccount["estudiantes"][number];
+    expect(getAccountRoleLabel({ ...base, dependientes: [dependiente] })).toBe("Representante");
+  });
+
+  it('keeps "Estudiante" for a student', () => {
+    expect(getAccountRoleLabel({ ...base, role: "estudiante" })).toBe("Estudiante");
   });
 });
 

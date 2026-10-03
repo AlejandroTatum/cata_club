@@ -17,6 +17,7 @@ Dos familias, según lo que la prueba quiera demostrar:
 - `*_api`: pasan por los endpoints reales con el `client` de conftest
   (camino de negocio completo, mismos payloads que usa el frontend).
 """
+import itertools
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
@@ -112,11 +113,21 @@ def crear_persona_api(client, cedula: str = "1710034065",
     ).json()
 
 
+_SUFIJO_TARIFA = itertools.count(1)
+
+
+def nombre_tarifa_unico(base: str = "Adultos") -> str:
+    """Nombre de tarifa distinto en cada llamada: el nombre es único en el
+    catálogo (QA3 ADM-11), y los helpers que crean una tarifa por test o por
+    persona ya no pueden repetirlo."""
+    return f"{base} {next(_SUFIJO_TARIFA)}"
+
+
 def crear_tipo_membresia_api(client) -> dict:
     return client.post(
         "/api/v1/membresias/tipos",
         json={
-            "categoria": "Adultos",
+            "categoria": nombre_tarifa_unico(),
             "precio": "35.00", "modalidad": "MENSUAL",
         },
     ).json()

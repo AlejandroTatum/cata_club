@@ -482,10 +482,11 @@ class TestElBarridoEncuentraAlgo:
 
     def test_el_alcance_se_derivo_del_mapa_real(self):
         # `OperacionInvalida` y `EntidadDuplicada` son 400; `ConflictoConcurrencia`
-        # es 409 (issue #451, lock_timeout de `obtener_por_id_con_bloqueo`); el
-        # resto no entra.
+        # es 409 (issue #451, lock_timeout de `obtener_por_id_con_bloqueo`);
+        # `NombreDuplicado` es 409 (QA3 ADM-11); el resto no entra.
         assert EXCEPCIONES_DE_ENTRADA == {
             "OperacionInvalida", "EntidadDuplicada", "ConflictoConcurrencia",
+            "NombreDuplicado",
         }
 
     def test_conoce_los_enums_del_dominio(self):

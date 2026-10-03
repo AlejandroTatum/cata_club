@@ -15,7 +15,9 @@ from decimal import Decimal
 import pytest
 
 from app.dominio.enums import DiaSemana, EstadoAsistencia, EstadoMembresia, TipoModalidad
-from app.dominio.excepciones import ConflictoConcurrencia, EntidadNoEncontrada, OperacionInvalida
+from app.dominio.excepciones import (
+    ConflictoConcurrencia, EntidadNoEncontrada, NombreDuplicado, OperacionInvalida,
+)
 from app.dominio.modelos import CategoriaHorario, CategoriaHorarioDia, Membresia, TipoMembresia
 from app.servicios_negocio.dtos.asistencia_schemas import (
     AlumnoHorarioCreateDTO, CategoriaCreateDTO, CategoriaUpdateDTO, HorarioCreateDTO,
@@ -103,7 +105,7 @@ def test_crear_categoria_rechaza_nombre_duplicado(db_session):
         nombre="Preinfantil", hora_inicio=time(9, 0), hora_fin=time(10, 0), dias=[DiaSemana.LUNES],
     ))
 
-    with pytest.raises(OperacionInvalida) as exc_info:
+    with pytest.raises(NombreDuplicado) as exc_info:
         servicio.crear_categoria(CategoriaCreateDTO(
             nombre="Preinfantil", hora_inicio=time(11, 0), hora_fin=time(12, 0),
             dias=[DiaSemana.MARTES],
@@ -180,7 +182,7 @@ def test_actualizar_categoria_rechaza_nombre_duplicado_de_otra_categoria(db_sess
         nombre="Infantil B", hora_inicio=time(11, 0), hora_fin=time(12, 0), dias=[DiaSemana.MARTES],
     ))
 
-    with pytest.raises(OperacionInvalida):
+    with pytest.raises(NombreDuplicado):
         servicio.actualizar_categoria(otra.codigo, CategoriaUpdateDTO(nombre="Preinfantil"))
 
 

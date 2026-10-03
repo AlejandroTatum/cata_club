@@ -261,6 +261,164 @@ def test_regularizacion_sin_rol_admin_da_403(client_sin_permisos, db_session, mo
     assert resp.status_code == 403
 
 
+# --- Monto esperado (QA3 ADM-09) ------------------------------------------------
+# El monto ya no es libre: precio mensual x meses del período, menos el
+# beneficio vigente de la persona (misma matemática que `registrar_pago`).
+
+def _regularizar_monto(client, membresia_id, monto, inicio="2026-04-01", fin="2026-05-31"):
+    return client.post(
+        f"/api/v1/membresias/{membresia_id}/regularizar-deuda",
+        json={"monto": monto, "fecha_inicio": inicio, "fecha_fin": fin, "motivo": "Cuaderno"},
+    )
+
+
+def test_regularizacion_monto_distinto_al_esperado_da_400_con_el_monto(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    _, membresia = _crear_persona_membresia(db_session)
+
+    resp = _regularizar_monto(client, membresia.id, "30.00")  # 2 meses => $60.00
+
+    assert resp.status_code == 400
+    assert "60.00" in resp.json()["detail"]
+
+
+def test_regularizacion_periodo_largo_con_monto_bajo_da_400(client, db_session, monkeypatch):
+    """Antes: $40 cubría 10 años (120 meses)."""
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    _, membresia = _crear_persona_membresia(db_session)
+
+    resp = _regularizar_monto(client, membresia.id, "40.00", "2010-01-01", "2020-01-01")
+
+    assert resp.status_code == 400
+    assert "3600.00" in resp.json()["detail"]
+
+
+def test_regularizacion_aplica_y_congela_el_beneficio_vigente(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    persona, membresia = _crear_persona_membresia(db_session)
+    descuento = client.post(
+        "/api/v1/descuentos/", json={"nombre": "Media beca", "porcentaje": "50", "activo": True},
+    ).json()
+    assert client.post(
+        f"/api/v1/personas/{persona.id}/beneficio", json={"descuento_id": descuento["id"]},
+    ).status_code == 201
+
+    sin_descuento = _regularizar_monto(client, membresia.id, "60.00")
+    assert sin_descuento.status_code == 400
+    assert "30.00" in sin_descuento.json()["detail"]
+
+    resp = _regularizar_monto(client, membresia.id, "30.00")
+    assert resp.status_code == 201, resp.text
+    fila = db_session.get(Pago, resp.json()["id"])
+    assert fila.monto == Decimal("30.00")
+    assert fila.descuento_id == descuento["id"]
+    assert fila.descuento_valor_aplicado == Decimal("30.00")
+    assert fila.descuento_porcentaje_aplicado == Decimal("50")
+    assert fila.descuento_autorizado_por_persona_id == 1
+
+
+def _asignar_beca_total(client, persona_id):
+    descuento = client.post(
+        "/api/v1/descuentos/", json={"nombre": "Beca total", "porcentaje": "100", "activo": True},
+    ).json()
+    assert client.post(
+        f"/api/v1/personas/{persona_id}/beneficio", json={"descuento_id": descuento["id"]},
+    ).status_code == 201
+    return descuento
+
+
+def test_regularizacion_con_beca_total_acepta_monto_cero_y_congela_el_descuento(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    persona, membresia = _crear_persona_membresia(db_session)
+    descuento = _asignar_beca_total(client, persona.id)
+
+    resp = _regularizar_monto(client, membresia.id, "0.00")
+
+    assert resp.status_code == 201, resp.text
+    fila = db_session.get(Pago, resp.json()["id"])
+    assert fila.monto == Decimal("0.00")
+    assert fila.tipo_pago == TipoPago.REGULARIZACION
+    assert fila.descuento_id == descuento["id"]
+    assert fila.descuento_valor_aplicado == Decimal("60.00")
+    assert fila.descuento_porcentaje_aplicado == Decimal("100")
+
+
+def test_regularizacion_con_beca_total_rechaza_monto_distinto_de_cero(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    persona, membresia = _crear_persona_membresia(db_session)
+    _asignar_beca_total(client, persona.id)
+
+    resp = _regularizar_monto(client, membresia.id, "30.00")
+
+    assert resp.status_code == 400
+    assert "0.00" in resp.json()["detail"]
+
+
+def test_regularizacion_sin_beca_rechaza_monto_cero_y_negativo(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    _, membresia = _crear_persona_membresia(db_session)
+
+    cero = _regularizar_monto(client, membresia.id, "0.00")
+    assert cero.status_code == 400
+    assert "60.00" in cero.json()["detail"]
+    assert _regularizar_monto(client, membresia.id, "-1.00").status_code == 422
+
+
+def test_cotizacion_con_beca_total_devuelve_monto_esperado_cero(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    persona, membresia = _crear_persona_membresia(db_session)
+    _asignar_beca_total(client, persona.id)
+
+    resp = client.get(
+        f"/api/v1/membresias/{membresia.id}/regularizar-deuda/cotizacion",
+        params={"fecha_inicio": "2026-04-01", "fecha_fin": "2026-05-31"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert Decimal(str(resp.json()["montoEsperado"])) == Decimal("0.00")
+    assert Decimal(str(resp.json()["descuentoAplicado"])) == Decimal("60.00")
+
+
+def test_regularizacion_monto_gigante_da_422_no_500(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    _, membresia = _crear_persona_membresia(db_session)
+
+    for monto in ("1e30", "1e400", "999999999.00", "30.001"):
+        resp = _regularizar_monto(client, membresia.id, monto)
+        assert resp.status_code == 422, (monto, resp.text)
+
+
+def test_cotizacion_regularizacion_devuelve_meses_base_descuento_y_esperado(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    persona, membresia = _crear_persona_membresia(db_session)
+    url = f"/api/v1/membresias/{membresia.id}/regularizar-deuda/cotizacion"
+
+    sin = client.get(url, params={"fecha_inicio": "2026-04-01", "fecha_fin": "2026-05-31"})
+    assert sin.status_code == 200, sin.text
+    assert sin.json()["meses"] == 2
+    assert Decimal(str(sin.json()["montoBase"])) == Decimal("60.00")
+    assert Decimal(str(sin.json()["descuentoAplicado"])) == Decimal("0.00")
+    assert Decimal(str(sin.json()["montoEsperado"])) == Decimal("60.00")
+
+    descuento = client.post(
+        "/api/v1/descuentos/", json={"nombre": "Media beca", "porcentaje": "50", "activo": True},
+    ).json()
+    client.post(f"/api/v1/personas/{persona.id}/beneficio", json={"descuento_id": descuento["id"]})
+    con = client.get(url, params={"fecha_inicio": "2026-04-01", "fecha_fin": "2026-05-31"})
+    assert Decimal(str(con.json()["descuentoAplicado"])) == Decimal("30.00")
+    assert Decimal(str(con.json()["montoEsperado"])) == Decimal("30.00")
+
+
+def test_cotizacion_regularizacion_sin_rol_admin_da_403(client_sin_permisos, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    _, membresia = _crear_persona_membresia(db_session)
+    resp = client_sin_permisos.get(
+        f"/api/v1/membresias/{membresia.id}/regularizar-deuda/cotizacion",
+        params={"fecha_inicio": "2026-04-01", "fecha_fin": "2026-05-31"},
+    )
+    assert resp.status_code == 403
+
+
 # --- El flujo normal NO cambia -------------------------------------------------
 
 def test_registrar_pago_sigue_anclando_en_hoy(client, db_session, monkeypatch):

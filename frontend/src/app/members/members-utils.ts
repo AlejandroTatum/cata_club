@@ -65,8 +65,17 @@ export interface MemberStudentSummary {
      */
     tipo: string;
     estado: EstadoMembresia;
+    /** Period of the LAST payment (pending, rejected or retroactive included).
+     *  NOT the membership's coverage — "Vigencia" reads `cubiertoHasta`. */
     fechaInicio: string;
     fechaFin: string;
+    /**
+     * Real coverage end of the membership (`Membresia.cubierto_hasta`: the
+     * latest end across approved payments and bonified coverage), `null` when
+     * nothing was ever covered (QA3 ADM-14). Optional so fixtures and an
+     * older backend that omits it read as "no coverage".
+     */
+    cubiertoHasta?: string | null;
     monto: number;
     /** Backend `Membresia.id` — surfaced here so the admin can register
      *  a new payment (renewal) against the right membership. */
@@ -218,9 +227,6 @@ export interface MemberStats {
   sinDatosEmergencia: number;
 }
 
-/** Maximum number of records returned by the upstream member aggregate. */
-export const MEMBERS_AGGREGATE_LIMIT = 200;
-
 // Mock data has moved to src/mocks/members.ts.
 // Import MOCK_MEMBER_ACCOUNTS from @/mocks/members.
 
@@ -296,7 +302,7 @@ export const MEMBERSHIP_TYPE_LABELS: Record<TipoMembresia, string> = {
 import type { BadgeTone } from "@/components/ui/Badge";
 
 export { formatCurrency, formatDate } from "@/lib/format-utils";
-import { formatDateRange } from "@/lib/format-utils";
+import { formatDate, formatDateRange } from "@/lib/format-utils";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -424,10 +430,35 @@ export function formatMembershipPeriod(
 }
 
 /**
+ * "Vigencia" of a membership: the end of its REAL coverage (QA3 ADM-14), e.g.
+ * "Hasta 01/12/2026". Empty when nothing was ever covered, so the caller
+ * renders a dash rather than an invented range.
+ */
+export function formatMembershipCoverage(cubiertoHasta: string | null | undefined): string {
+  if (!cubiertoHasta || !parseDateStringLocal(cubiertoHasta)) return "";
+  return `Hasta ${formatDate(cubiertoHasta)}`;
+}
+
+/**
  * Get the full display name for an account owner's role.
  */
 export function getPayerTypeLabel(role: PayerType): string {
   return PAYER_TYPE_LABELS[role];
+}
+
+/**
+ * Role caption for a person's dialog header (QA3 ADM-20). `account.role`
+ * defaults to "representante" for anyone the roles lookup did not resolve, so
+ * a person with no role at all used to read "Representante". With no real
+ * backend role and nobody they represent, say so instead of guessing.
+ */
+export function getAccountRoleLabel(account: MemberAccount): string {
+  const hasRole = (account.backendRoles?.length ?? 0) > 0;
+  const representsSomeone = (account.dependientes?.length ?? 0) > 0;
+  if (account.role === "representante" && !hasRole && !representsSomeone) {
+    return "Sin rol asignado";
+  }
+  return getPayerTypeLabel(account.role);
 }
 
 /**

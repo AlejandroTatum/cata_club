@@ -694,9 +694,14 @@ async def actualizar_persona(persona_id: int, cambios: PersonaUpdateDTO, db: Ses
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
 )
 async def cambiar_estado_persona(
-    persona_id: int, datos: EstadoPersonaDTO, db: Session = Depends(obtener_sesion)
+    persona_id: int,
+    datos: EstadoPersonaDTO,
+    db: Session = Depends(obtener_sesion),
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
 ):
-    return PersonaServicio(db).cambiar_estado(persona_id, datos.activo)
+    return PersonaServicio(db).cambiar_estado(
+        persona_id, datos.activo, persona_id_solicitante=token_payload.get("persona_id"),
+    )
 
 
 # --- AntecedentesClub (E01-RF008): existían los DTOs pero ningún endpoint ---
@@ -854,8 +859,17 @@ async def quitar_rol(
     "/{persona_id}/cuenta/estado", response_model=RolesResponseDTO,
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
 )
-async def cambiar_estado_cuenta(persona_id: int, datos: EstadoCuentaDTO, db: Session = Depends(obtener_sesion)):
-    usuario = RolServicio(db).cambiar_estado_cuenta(persona_id, datos.activo)
+async def cambiar_estado_cuenta(
+    persona_id: int,
+    datos: EstadoCuentaDTO,
+    db: Session = Depends(obtener_sesion),
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+):
+    """El solicitante se toma del token (como en `quitar_rol`): un administrador
+    no puede desactivar su propia cuenta (QA3 ADM-10)."""
+    usuario = RolServicio(db).cambiar_estado_cuenta(
+        persona_id, datos.activo, persona_id_solicitante=token_payload.get("persona_id"),
+    )
     return RolesResponseDTO(persona_id=persona_id, roles=[r.tipo_rol.value for r in usuario.roles], activo=usuario.activo)
 
 

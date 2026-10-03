@@ -159,7 +159,7 @@ def test_persona_nace_activa(client, db_session):
     assert respuesta.json()["activo"] is True
 
 
-def test_desactivar_persona_tambien_desactiva_su_usuario(client, db_session):
+def test_desactivar_persona_tambien_desactiva_su_usuario(client, db_session, admin_ajeno):
     persona = _crear_persona(db_session)
     usuario = _crear_usuario(db_session, persona)
 
@@ -181,7 +181,7 @@ def test_desactivar_persona_sin_usuario_no_revienta(client, db_session):
     assert respuesta.json()["activo"] is False
 
 
-def test_persona_desactivada_no_puede_iniciar_sesion(client, db_session):
+def test_persona_desactivada_no_puede_iniciar_sesion(client, db_session, admin_ajeno):
     persona = _crear_persona(db_session)
     usuario = _crear_usuario(db_session, persona, contrasenia="Secreta123")
     _desactivar(client, persona.id)
@@ -204,7 +204,7 @@ def test_reactivar_persona_sube_la_bandera(client, db_session):
     assert respuesta.json()["activo"] is True
 
 
-def test_reactivar_persona_no_reactiva_la_cuenta(client, db_session):
+def test_reactivar_persona_no_reactiva_la_cuenta(client, db_session, admin_ajeno):
     """Decisión explícita: el estado de la CUENTA es una preocupación
     separada del estado de MEMBRESÍA. Reactivar a alguien en el club no le
     devuelve solo el acceso al sistema -- eso se hace, si corresponde, con

@@ -16,7 +16,8 @@ from app.servicios_negocio.dtos.membresia_pago_schemas import (
     PagoCreateDTO, PagoResponseDTO, PagoValidarDTO, PagoListItemDTO,
     ComprobantePagoCreateDTO, ComprobantePagoResponseDTO,
     TipoMembresiaCreateDTO, TipoMembresiaUpdateDTO, TipoMembresiaResponseDTO, TarifaPublicaDTO,
-    DeudaMembresiaResponseDTO, DeudaMembresiaBulkItemDTO, RegularizacionDeudaDTO, SuspensionReactivacionDTO,
+    DeudaMembresiaResponseDTO, DeudaMembresiaBulkItemDTO, RegularizacionDeudaDTO,
+    CotizacionRegularizacionResponseDTO, SuspensionReactivacionDTO,
     CorreccionPagoDTO, CorreccionPagoResponseDTO, CorreccionPagoResultadoDTO,
     CambioPlanMembresiaDTO, InscripcionRepresentadoPagoDTO,
 )
@@ -457,6 +458,26 @@ def obtener_deuda_membresias_bulk(
 )
 def obtener_deuda_membresia(membresia_id: int, db: Session = Depends(obtener_sesion)):
     return PagoServicio(db).obtener_deuda(membresia_id)
+
+
+@router.get(
+    "/{membresia_id}/regularizar-deuda/cotizacion",
+    response_model=CotizacionRegularizacionResponseDTO,
+    dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
+)
+def cotizar_regularizacion_membresia(
+    membresia_id: int,
+    fecha_inicio: date,
+    fecha_fin: date,
+    db: Session = Depends(obtener_sesion),
+):
+    cotizacion = PagoServicio(db).cotizar_regularizacion(membresia_id, fecha_inicio, fecha_fin)
+    return {
+        "meses": cotizacion.meses,
+        "monto_base": cotizacion.monto_base,
+        "descuento_aplicado": cotizacion.descuento_aplicado,
+        "monto_esperado": cotizacion.monto_esperado,
+    }
 
 
 @router.post(

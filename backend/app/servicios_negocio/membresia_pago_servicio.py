@@ -17,8 +17,9 @@ from app.dominio.enums import (
     EstadoPago, EstadoMembresia, TipoNotificacion, TipoPago, TipoRol, EfectoCoberturaCorreccion,
 )
 from app.dominio.etiquetas import estado_de_pago_en_castellano
+from app.dominio.nombres_catalogo import existe_nombre, normalizar_nombre
 from app.dominio.excepciones import (
-    EntidadNoEncontrada, OperacionInvalida, PermisosInsuficientes, ServicioNoDisponible,
+    EntidadNoEncontrada, MembresiaPendienteDePago, NombreDuplicado, OperacionInvalida, PermisosInsuficientes, ServicioNoDisponible,
 )
 from app.dominio.nombre_propio import nombre_completo
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
@@ -65,6 +66,17 @@ def _sumar_meses(fecha: date, meses: int) -> date:
     mes = mes_total % 12 + 1
     ultimo_dia_mes_destino = calendar.monthrange(anio, mes)[1]
     return date(anio, mes, min(fecha.day, ultimo_dia_mes_destino))
+
+
+def _meses_del_periodo(inicio: date, fin: date) -> int:
+    """Meses del período `inicio..fin` (con `inicio < fin`): la menor cantidad
+    entera de meses `m >= 1` tal que `_sumar_meses(inicio, m) >= fin`. Tanto
+    `2026-04-01..2026-07-31` como `2026-04-01..2026-08-01` son 4 meses; un mes
+    parcial se cuenta entero (redondeo hacia arriba)."""
+    meses = (fin.year - inicio.year) * 12 + (fin.month - inicio.month)
+    if _sumar_meses(inicio, meses) < fin:
+        meses += 1
+    return meses
 
 
 def _meses_enteros_desde(fin: date, hoy: date) -> int:
@@ -124,6 +136,8 @@ MENSAJE_PAGO_PENDIENTE_DUPLICADO = (
     "Esta membresía ya tiene un pago pendiente de validación. "
     "Espere a que sea validado antes de registrar uno nuevo."
 )
+MENSAJE_MEMBRESIA_PENDIENTE_DE_PAGO = "Ya tiene una membresía pendiente de pago."
+
 MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA = (
     "La persona ya tiene una membresía activa o suspendida. "
     "Cancele, deje vencer, o reactive la actual antes de crear una nueva."
@@ -214,6 +228,18 @@ class _DescuentoCongelado:
     autorizado_por_persona_id: int
 
 
+@dataclass(frozen=True)
+class _CotizacionRegularizacion:
+    meses: int
+    monto_base: Decimal
+    descuento: _DescuentoCongelado | None
+    monto_esperado: Decimal
+
+    @property
+    def descuento_aplicado(self) -> Decimal:
+        return self.descuento.valor_aplicado if self.descuento is not None else Decimal("0.00")
+
+
 class MembresiaServicio:
     def __init__(self, db: Session):
         self.db = db
@@ -221,8 +247,19 @@ class MembresiaServicio:
         self.repo_tipo = TipoMembresiaRepositorio(db)
         self.repo_persona = PersonaRepositorio(db)
 
+    def _exigir_tarifa_libre(self, nombre: str, excluir_id: int | None = None) -> None:
+        """QA3 ADM-11: el nombre de una tarifa es único (sin distinguir
+        mayúsculas ni espacios; las tildes sí distinguen)."""
+        otros = [t.categoria for t in self.repo_tipo.listar() if t.id != excluir_id]
+        if existe_nombre(nombre, otros):
+            raise NombreDuplicado(f"Ya existe una tarifa con el nombre '{nombre}'.")
+
     def crear_tipo_membresia(self, datos: TipoMembresiaCreateDTO) -> TipoMembresia:
-        resultado = self.repo_tipo.crear(TipoMembresia(**datos.model_dump()))
+        categoria = normalizar_nombre(datos.categoria)
+        self._exigir_tarifa_libre(categoria)
+        resultado = self.repo_tipo.crear(
+            TipoMembresia(**{**datos.model_dump(), "categoria": categoria})
+        )
         self.db.commit()
         # `expire_on_commit` (default True) expira el objeto tras el commit
         # de arriba; antes lo refrescaba el propio repositorio (issue #831).
@@ -251,7 +288,11 @@ class MembresiaServicio:
         if not tipo:
             raise EntidadNoEncontrada(f"Tipo de membresía con id {tipo_id} no encontrado")
 
-        for campo, valor in datos.model_dump(exclude_unset=True).items():
+        cambios = datos.model_dump(exclude_unset=True)
+        if cambios.get("categoria"):
+            cambios["categoria"] = normalizar_nombre(cambios["categoria"])
+            self._exigir_tarifa_libre(cambios["categoria"], excluir_id=tipo.id)
+        for campo, valor in cambios.items():
             setattr(tipo, campo, valor)
 
         resultado = self.repo_tipo.guardar_cambios(tipo)
@@ -285,6 +326,14 @@ class MembresiaServicio:
             for m in existentes
         ):
             raise OperacionInvalida(MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA)
+        # QA3 ADM-08: una INACTIVA con pago pendiente ya es "la" membresía en
+        # trámite; crear otra deja pagos pendientes imposibles de aprobar.
+        for m in existentes:
+            if (
+                m.estado == EstadoMembresia.INACTIVA
+                and PagoRepositorio(self.db).existe_pendiente_para_membresia(m.id)
+            ):
+                raise MembresiaPendienteDePago(MENSAJE_MEMBRESIA_PENDIENTE_DE_PAGO, m.id)
         # Issue #1132: matricularse ya NO otorga (ni exige) ningún rol. "Ser
         # jugador" se deriva exclusivamente de la membresía ACTIVA (ver
         # `app.dominio.jugador.es_jugador`), nunca del rol -- un
@@ -1512,6 +1561,34 @@ class PagoServicio:
                 raise OperacionInvalida(MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA) from error
             raise
 
+    def _cotizar_regularizacion(
+        self, membresia: Membresia, fecha_inicio: date, fecha_fin: date,
+    ) -> "_CotizacionRegularizacion":
+        meses = _meses_del_periodo(fecha_inicio, fecha_fin)
+        monto_base = membresia.monto_aplicado * meses
+        descuento, monto_esperado = self._congelar_beneficio_activo(
+            membresia.persona_id, monto_base,
+        )
+        return _CotizacionRegularizacion(
+            meses=meses,
+            monto_base=monto_base,
+            descuento=descuento,
+            monto_esperado=monto_esperado,
+        )
+
+    def cotizar_regularizacion(
+        self, membresia_id: int, fecha_inicio: date, fecha_fin: date,
+    ) -> "_CotizacionRegularizacion":
+        """Vista previa (solo lectura) del monto que `regularizar_deuda`
+        exigirá para el período; el formulario del admin la usa para no
+        pedir un monto a mano (QA3 ADM-09)."""
+        membresia = self.repo_membresia.obtener_por_id(membresia_id)
+        if not membresia:
+            raise EntidadNoEncontrada(f"Membresía con id {membresia_id} no encontrada")
+        if fecha_inicio >= fecha_fin:
+            raise OperacionInvalida("La fecha de inicio debe ser anterior a la de fin.")
+        return self._cotizar_regularizacion(membresia, fecha_inicio, fecha_fin)
+
     def regularizar_deuda(self, membresia_id: int, datos: RegularizacionDeudaDTO, persona_id_admin: int) -> Pago:
         """Regulariza deuda de una membresía (issue #284), operación SOLO de admin.
 
@@ -1548,13 +1625,6 @@ class PagoServicio:
 
         self._exigir_membresia_financieramente_operativa(membresia)
 
-        precio = membresia.monto_aplicado
-        if precio > 0 and datos.monto % precio != 0:
-            raise OperacionInvalida(
-                f"El monto (${datos.monto}) debe ser múltiplo del precio mensual "
-                f"(${precio})."
-            )
-
         hoy = hoy_club()
         if datos.fecha_inicio > hoy:
             raise OperacionInvalida(
@@ -1574,6 +1644,25 @@ class PagoServicio:
                 "o por un beneficio bonificado ya otorgado."
             )
 
+        # QA3 ADM-09: el monto no es libre. Se deriva igual que en
+        # `registrar_pago` (precio mensual x meses, menos el beneficio vigente
+        # de la persona) y cualquier otro valor se rechaza con el esperado.
+        cotizacion = self._cotizar_regularizacion(
+            membresia, datos.fecha_inicio, datos.fecha_fin,
+        )
+        if datos.monto != cotizacion.monto_esperado:
+            unidad_meses = "mes" if cotizacion.meses == 1 else "meses"
+            detalle_beneficio = (
+                f", menos el beneficio de ${cotizacion.descuento_aplicado}"
+                if cotizacion.descuento is not None else ""
+            )
+            raise OperacionInvalida(
+                f"El monto (${datos.monto}) no coincide con el esperado para el "
+                f"período: ${cotizacion.monto_esperado} "
+                f"({cotizacion.meses} {unidad_meses} "
+                f"x ${membresia.monto_aplicado}{detalle_beneficio})."
+            )
+
         pago = Pago(
             monto=datos.monto,
             estado_pago=EstadoPago.APROBADO,
@@ -1586,6 +1675,11 @@ class PagoServicio:
             regularizada_por_persona_id=persona_id_admin,
             motivo_regularizacion=datos.motivo,
         )
+        if cotizacion.descuento is not None:
+            pago.descuento_id = cotizacion.descuento.descuento_id
+            pago.descuento_valor_aplicado = cotizacion.descuento.valor_aplicado
+            pago.descuento_porcentaje_aplicado = cotizacion.descuento.porcentaje_aplicado
+            pago.descuento_autorizado_por_persona_id = cotizacion.descuento.autorizado_por_persona_id
         resultado = self.repo.crear(pago)
         if datos.fecha_inicio <= hoy <= datos.fecha_fin:
             self._activar_membresia_con_red_de_seguridad(membresia)

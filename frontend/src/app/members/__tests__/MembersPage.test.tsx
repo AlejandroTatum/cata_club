@@ -148,6 +148,7 @@ const mockFetchMembresiaDeuda = vi.fn().mockResolvedValue({
   ultimaCoberturaFin: "2026-03-31",
   montoMensual: 85,
 });
+const mockFetchCotizacionRegularizacion = vi.fn();
 const mockRegularizarDeuda = vi.fn().mockResolvedValue({
   id: 99,
   estadoPago: "APROBADO",
@@ -196,6 +197,7 @@ vi.mock("@/services/api", () => {
     marcarNotificacionLeida: (id: number) => mockMarcarNotificacionLeida(id),
     fetchMembresiaDeuda: () => mockFetchMembresiaDeuda(),
     regularizarDeuda: (membresiaId: number, data: unknown) => mockRegularizarDeuda(membresiaId, data),
+    fetchCotizacionRegularizacion: () => mockFetchCotizacionRegularizacion(),
     suspenderMembresia: (membresiaId: number, data: unknown) => mockSuspenderMembresia(membresiaId, data),
     reactivarMembresia: (membresiaId: number, data: unknown) => mockReactivarMembresia(membresiaId, data),
     cambiarPlanMembresia: (membresiaId: number, nuevoTipoMembresiaId: number) =>
@@ -1431,6 +1433,12 @@ describe("MembersPage — Registrar pago inline form", () => {
       ultimaCoberturaFin: "2026-03-31",
       montoMensual: 85,
     });
+    mockFetchCotizacionRegularizacion.mockResolvedValue({
+      meses: 1,
+      montoBase: "85.00",
+      descuentoAplicado: "0.00",
+      montoEsperado: "85.00",
+    });
     const dialog = await openMemberDialog({
       membresia: {
         tipo: "Mensual (Tarde)",
@@ -1453,6 +1461,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     fireEvent.change(within(dialog).getByLabelText(/fecha inicio/i), { target: { value: "2026-04-01" } });
     fireEvent.change(within(dialog).getByLabelText(/fecha fin/i), { target: { value: "2026-04-30" } });
     fireEvent.change(within(dialog).getByLabelText(/^motivo/i), { target: { value: "Demora del club" } });
+    await within(dialog).findByText(/85,00/);
     fireEvent.click(within(dialog).getByRole("button", { name: /^regularizar$/i }));
 
     expect(mockRegularizarDeuda).toHaveBeenCalledWith(42, {
@@ -1547,6 +1556,25 @@ describe("MembersPage — Registrar pago inline form", () => {
 
     // El período aparece UNA sola vez — nunca la forma cruda "aaaa-mm-dd".
     expect(within(dialog).queryByText(/2026-08-01 — 2026-09-05/)).not.toBeInTheDocument();
+  });
+
+  // QA3 ADM-14: Vigencia es la cobertura real de la membresía (`cubiertoHasta`),
+  // no el período del último pago (que puede estar pendiente o ser retroactivo).
+  it("shows Vigencia as the real coverage end, not the last payment's period", async () => {
+    const dialog = await openMemberDialog({
+      membresia: {
+        tipo: "Mensual Infantil",
+        estado: "activa",
+        fechaInicio: "2026-08-01",
+        fechaFin: "2026-09-01",
+        cubiertoHasta: "2026-12-01",
+        monto: 25,
+        id: 42,
+      },
+    });
+
+    expect(within(dialog).getAllByText("Hasta 01/12/2026").length).toBeGreaterThan(0);
+    expect(within(dialog).queryByText(/01\/09\/2026/)).not.toBeInTheDocument();
   });
 
   // Issue #400 (slice 4c-b): E04-RF002 stopped zeroing `monto_aplicado`, so
@@ -2075,30 +2103,9 @@ describe("MembersPage — estado de deuda en Pagos (issue #538)", () => {
   });
 });
 
-describe("MembersPage — honest aggregate coverage", () => {
-  it("shows the incomplete-coverage notice when the upstream persona cap is reached after accounts collapse", async () => {
-    mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT], personasCapped: true });
-
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-
-    // Issue #313 (K5 hallazgo #67): "1 resultados mostrados" — concordancia
-    // de número rota. Con un solo resultado el contador debe leer singular.
-    expect(await screen.findByRole("status", { name: "Resultados mostrados" })).toHaveTextContent(
-      "1 resultado mostrado",
-    );
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "puede estar incompleto",
-    );
-    expect(screen.getByRole("alert")).toHaveTextContent("200 registros");
-    expect(screen.queryByRole("navigation", { name: /paginación/i })).not.toBeInTheDocument();
-  });
-
-  it("hides the incomplete-coverage notice below the cap without adding pagination controls", async () => {
-    mockFetchMembers.mockResolvedValue({ accounts: createAccounts(199), personasCapped: false });
+describe("MembersPage — complete aggregate (ADM-03)", () => {
+  it("shows every account past the old 200-record cap, with no incompleteness notice", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: createAccounts(258) });
 
     render(
       <ToastProvider>
@@ -2107,10 +2114,10 @@ describe("MembersPage — honest aggregate coverage", () => {
     );
 
     expect(await screen.findByRole("status", { name: "Resultados mostrados" })).toHaveTextContent(
-      "199 resultados mostrados",
+      "258 resultados mostrados",
     );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: /paginación/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/puede estar incompleto/i)).not.toBeInTheDocument();
   });
 });
 

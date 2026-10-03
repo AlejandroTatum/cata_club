@@ -8,7 +8,9 @@ aquí como camino primario de error (422 con mensaje claro); el CHECK
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from app.dominio.nombres_catalogo import normalizar_nombre
 
 from app.servicios_negocio.dtos.base import ResponseBase
 
@@ -17,11 +19,23 @@ _MENSAJE_EXCLUSIVIDAD = (
 )
 
 
+def _nombre_normalizado_no_vacio(valor: str) -> str:
+    normalizado = normalizar_nombre(valor)
+    if not normalizado:
+        raise ValueError("El nombre no puede estar vacío.")
+    return normalizado
+
+
 class DescuentoCreateDTO(BaseModel):
     nombre: str = Field(..., min_length=1, max_length=100)
     porcentaje: Optional[Decimal] = Field(None, gt=0, le=100)
     monto: Optional[Decimal] = Field(None, gt=0)
     activo: bool = True
+
+    @field_validator("nombre")
+    @classmethod
+    def _normalizar_nombre(cls, valor: str) -> str:
+        return _nombre_normalizado_no_vacio(valor)
 
     @model_validator(mode="after")
     def _porcentaje_o_monto(self) -> "DescuentoCreateDTO":
@@ -40,6 +54,11 @@ class DescuentoUpdateDTO(BaseModel):
     porcentaje: Optional[Decimal] = Field(None, gt=0, le=100)
     monto: Optional[Decimal] = Field(None, gt=0)
     activo: Optional[bool] = None
+
+    @field_validator("nombre")
+    @classmethod
+    def _normalizar_nombre(cls, valor: Optional[str]) -> Optional[str]:
+        return None if valor is None else _nombre_normalizado_no_vacio(valor)
 
 
 class DescuentoResponseDTO(ResponseBase, BaseModel):

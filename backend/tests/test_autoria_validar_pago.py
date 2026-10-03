@@ -15,6 +15,7 @@ un pago sin autor.
 """
 from app.dominio.cedula import cedula_valida
 from app.seguridad.gestor_auth import GestorAutenticacion
+from tests.fabricas_pagos import nombre_tarifa_unico
 
 
 # --- helpers locales (mismo esquema que test_notificaciones.py / test_membresias_pagos.py) ---
@@ -32,7 +33,7 @@ def _crear_persona(client, cedula):
 def _crear_tipo_membresia(client):
     return client.post(
         "/api/v1/membresias/tipos",
-        json={"categoria": "Adultos", "precio": "35.00", "modalidad": "MENSUAL"},
+        json={"categoria": nombre_tarifa_unico(), "precio": "35.00", "modalidad": "MENSUAL"},
     ).json()
 
 

@@ -1047,6 +1047,23 @@ describe("PaymentsPage — rejection", () => {
     ).toBeInTheDocument();
   });
 
+  it("offers cash-specific reasons and notice when rejecting an efectivo payment (ADM-16)", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([CASH_REQUEST]);
+    renderPage();
+    await openRequest("Sofía Vera");
+    expect(screen.getByText("Registrado el")).toBeInTheDocument();
+    expect(screen.queryByText("Subido el")).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /rechazar pago/i }));
+
+    expect(screen.getByText("El monto recibido no coincide")).toBeInTheDocument();
+    expect(screen.getByText("La fecha está fuera del período")).toBeInTheDocument();
+    expect(screen.queryByText("El comprobante no se lee")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/deberá comunicarse con el club para regularizar su pago/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/subir un comprobante nuevo/)).not.toBeInTheDocument();
+  });
+
   // Hallazgo en vivo, 2026-08-11: this field had no client-side limit, so a
   // long note only ever discovered the backend's cap by crashing a request
   // that had already committed the rejection. The field now caps input and
@@ -1805,6 +1822,31 @@ describe("PaymentsPage — a decision only becomes real once the server confirms
     expect(screen.getByText(/el cambio sí se guardó en el servidor/i)).toBeInTheDocument();
     // The queue reflects the real, now-confirmed state.
     expect(screen.queryByRole("button", { name: /aprobar pago/i })).not.toBeInTheDocument();
+  });
+
+  // QA3 ADM-15: another admin already resolved the payment, so the backend
+  // answers 400 "este pago ya está aprobado" — not a connection problem.
+  it("says another admin already resolved the payment on a 400, and refreshes the list", async () => {
+    mockUpdatePaymentValidation.mockRejectedValue(
+      Object.assign(new Error("este pago ya está aprobado."), { status: 400 }),
+    );
+    mockFetchPaymentValidationById.mockResolvedValue({
+      ...PENDING_REQUEST,
+      validationStatus: "validado",
+    });
+    await approveJuan();
+    const pageFetchesBefore = mockFetchPaymentValidations.mock.calls.length;
+
+    expect(
+      await screen.findByText(/otro administrador ya resolvió este pago/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Juan Pérez: el pago ya figura como aprobado\. Se actualizó la lista con el estado real\./),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/aunque la conexión falló/i)).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(mockFetchPaymentValidations.mock.calls.length).toBeGreaterThan(pageFetchesBefore),
+    );
   });
 
   it("tells the admin it could not confirm the real state, when the re-check also fails", async () => {

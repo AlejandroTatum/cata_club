@@ -146,7 +146,7 @@ def test_restablecer_con_token_expirado_falla(client):
     assert "inválido o expiró" in resp.json()["detail"]
 
 
-def test_restablecer_con_cuenta_desactivada_falla(client, db_session):
+def test_restablecer_con_cuenta_desactivada_falla(client, db_session, admin_ajeno):
     """Una cuenta suspendida por el Administrador no debe recuperar acceso
     vía restablecimiento de contraseña. Mismo error genérico que un token
     inválido: no se revela el estado de la cuenta."""

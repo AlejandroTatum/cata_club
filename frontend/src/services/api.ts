@@ -250,6 +250,8 @@ export class ApiClientError extends Error {
   public readonly validationLoc: string[] | undefined;
   /** Backend correlation ID, when exposed by the failed request. */
   public readonly requestId: string | undefined;
+  /** Existing membership the backend named in the failure (QA3 ADM-08), if any. */
+  public membresiaId: number | undefined;
 
   constructor(message: string, status: number, safe = false, code?: string, retryAfterSeconds?: number, validationLoc?: string[], requestId?: string) {
     super(message);
@@ -509,9 +511,11 @@ async function request<T>(
       let code: string | undefined;
       let errorBody: unknown;
       let validationLoc: string[] | undefined;
+      let membresiaId: number | undefined;
       try {
         errorBody = await response.json();
         if (isApiErrorBody(errorBody)) {
+          if (typeof errorBody.membresia_id === "number") membresiaId = errorBody.membresia_id;
           // A structured 422 detail is intentionally not rendered; only its safe location is retained.
           message = typeof errorBody.detail === "string" ? errorBody.detail : errorBody.message ?? message;
           safe = errorBody.mensaje_seguro === true;
@@ -522,7 +526,9 @@ async function request<T>(
         // ignore parse errors — use default message
       }
       const retryAfterSeconds = parseRetryAfterSeconds(response.headers.get("Retry-After"));
-      throw new ApiClientError(message, response.status, safe, code, retryAfterSeconds, validationLoc, response.headers.get("X-Request-ID") ?? undefined);
+      const apiError = new ApiClientError(message, response.status, safe, code, retryAfterSeconds, validationLoc, response.headers.get("X-Request-ID") ?? undefined);
+      apiError.membresiaId = membresiaId;
+      throw apiError;
     }
 
     // 204 No Content never carries a body — calling response.json() on it
@@ -1068,10 +1074,9 @@ export async function eliminarCategoria(codigo: string): Promise<void> {
 // Members & Groups API Methods (Fase 4)
 // ---------------------------------------------------------------------------
 
-/** Aggregated member response, including whether the upstream persona page reached its cap before accounts were grouped. */
+/** Aggregated member response: EVERY persona, drained page by page by the BFF. */
 export interface MembersResponse {
   accounts: MemberAccount[];
-  personasCapped: boolean;
   /**
    * `true` when at least one membership could not be resolved upstream, so
    * `estudiante.membresia` is `null` for reasons that are NOT "this student has
@@ -1220,7 +1225,7 @@ export async function fetchTarifas(): Promise<TarifaPublica[]> {
 
 function isApiErrorBody(
   value: unknown,
-): value is { message?: string; detail?: string | unknown[]; mensaje_seguro?: unknown; code?: unknown; validation_loc?: unknown } {
+): value is { message?: string; detail?: string | unknown[]; mensaje_seguro?: unknown; code?: unknown; validation_loc?: unknown; membresia_id?: unknown } {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const body = value as Record<string, unknown>;
   return (typeof body.message === "string" && body.message.length > 0) ||
@@ -2116,6 +2121,32 @@ export async function fetchMembresiaDeuda(membresiaId: number): Promise<DeudaMem
   return request<DeudaMembresia>(apiEndpoint(`/membresias/${membresiaId}/deuda`), {
     headers: mockHeaders,
   });
+}
+
+/** Amount a regularization must carry for a period — mirrors backend
+ *  `CotizacionRegularizacionResponseDTO` (QA3 ADM-09). Decimals arrive as
+ *  strings. */
+export interface CotizacionRegularizacion {
+  meses: number;
+  montoBase: string;
+  descuentoAplicado: string;
+  montoEsperado: string;
+}
+
+/** Quote a regularization — `GET /api/membresias/{id}/regularizar-deuda/cotizacion`
+ *  (admin only): monthly price x months of the period, minus the person's
+ *  active discount. The admin never types the amount. */
+export async function fetchCotizacionRegularizacion(
+  membresiaId: number,
+  fechaInicio: string,
+  fechaFin: string,
+): Promise<CotizacionRegularizacion> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  const query = new URLSearchParams({ fechaInicio, fechaFin });
+  return request<CotizacionRegularizacion>(
+    apiEndpoint(`/membresias/${membresiaId}/regularizar-deuda/cotizacion?${query.toString()}`),
+    { headers: mockHeaders },
+  );
 }
 
 /** Register an admin regularization — `POST /api/membresias/{id}/regularizar-deuda`.

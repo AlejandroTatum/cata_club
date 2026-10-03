@@ -4,6 +4,7 @@ from app.dominio.modelos import AsistenciaCorreccion, Persona
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from datetime import date, timedelta
+from tests.fabricas_pagos import nombre_tarifa_unico
 
 import pytest
 
@@ -48,7 +49,7 @@ def _crear_persona_api(client, cedula="1710034065", nombres="Ana"):
 def _habilitar_como_jugador(client, persona_id: int) -> None:
     tipo = client.post(
         "/api/v1/membresias/tipos",
-        json={"categoria": "Formativo", "precio": "25.00", "modalidad": "MENSUAL"},
+        json={"categoria": nombre_tarifa_unico("Formativo"), "precio": "25.00", "modalidad": "MENSUAL"},
     ).json()
     membresia = client.post(
         "/api/v1/membresias/",
