@@ -7,6 +7,10 @@ import {
   SLIDE_HEIGHT_BREAKPOINT,
   SLIDE_HEIGHT_DESKTOP,
   SLIDE_HEIGHT_MOBILE,
+  clampSlideAspect,
+  galleryImageSizes,
+  galleryImageSrc,
+  galleryImageSrcSet,
   mapGallery,
   mapGalleryEntry,
   planSlideRun,
@@ -100,6 +104,59 @@ describe("landing gallery slide geometry", (): void => {
     expect(slideWidthPx(1.5, false)).toBe(702); // 468 * 1.5
     expect(slideWidthPx(2 / 3, false)).toBe(312); // 468 * 2/3 — portrait stays narrow
     expect(slideWidthPx(1.5, true)).toBe(510); // 340 * 1.5
+  });
+
+  // ADMB-02: one extreme upload must never deform the strip.
+  it("clamps a panoramic 8000x160 photo so its slide stays a normal width", (): void => {
+    expect(clampSlideAspect(8000 / 160)).toBeLessThanOrEqual(2);
+    expect(slideWidthPx(8000 / 160, false)).toBeLessThanOrEqual(Math.round(SLIDE_HEIGHT_DESKTOP * 2));
+  });
+
+  it("clamps a tall 100x2000 photo so its slide is not a 23px column", (): void => {
+    expect(clampSlideAspect(100 / 2000)).toBeGreaterThanOrEqual(2 / 3);
+    expect(slideWidthPx(100 / 2000, false)).toBeGreaterThanOrEqual(Math.round(SLIDE_HEIGHT_DESKTOP * (2 / 3)));
+  });
+
+  it("leaves ordinary ratios alone and falls back for unusable ones", (): void => {
+    expect(clampSlideAspect(1.5)).toBe(1.5);
+    expect(clampSlideAspect(Number.NaN)).toBe(DEFAULT_SLIDE_ASPECT);
+    expect(clampSlideAspect(0)).toBe(DEFAULT_SLIDE_ASPECT);
+  });
+});
+
+// PERF-04: ask Cloudinary for sized variants instead of the original upload.
+describe("landing gallery image variants", (): void => {
+  const original = "https://res.cloudinary.com/club/image/upload/v123/galeria/foto.jpg";
+
+  it("injects width, format and quality transformations into a Cloudinary upload URL", (): void => {
+    expect(galleryImageSrc(original, 800)).toBe(
+      "https://res.cloudinary.com/club/image/upload/f_auto,q_auto,w_800/v123/galeria/foto.jpg",
+    );
+  });
+
+  it("builds a srcset with one candidate per width", (): void => {
+    const srcSet = galleryImageSrcSet(original);
+    expect(srcSet).toContain("w_480");
+    expect(srcSet).toContain("w_1600");
+    expect(srcSet).toMatch(/ 480w,/);
+    expect(srcSet?.endsWith(" 1600w")).toBe(true);
+  });
+
+  it("does not double-transform an already transformed Cloudinary URL", (): void => {
+    const transformed = "https://res.cloudinary.com/club/image/upload/w_300/v1/foto.jpg";
+    expect(galleryImageSrc(transformed, 800)).toBe(transformed);
+    expect(galleryImageSrcSet(transformed)).toBeUndefined();
+  });
+
+  it("keeps non-Cloudinary URLs untouched and gives them no srcset", (): void => {
+    const other = "https://example.com/fotos/a.jpg";
+    expect(galleryImageSrc(other, 800)).toBe(other);
+    expect(galleryImageSrcSet(other)).toBeUndefined();
+    expect(galleryImageSrc("/local/a.jpg", 800)).toBe("/local/a.jpg");
+  });
+
+  it("declares the slide's rendered size in sizes", (): void => {
+    expect(galleryImageSizes()).toMatch(/px/);
   });
 });
 
