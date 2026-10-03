@@ -38,7 +38,7 @@ export default function LegalToc({ items }: { items: readonly LegalTocItem[] }):
   }, [items]);
 
   return (
-    <nav aria-label="En este documento" className="card p-5">
+    <nav aria-label="En este documento" tabIndex={0} className="card p-5">
       <p className="mb-3 text-2xs font-extrabold uppercase tracking-caps text-ink-3-strong">En este documento</p>
       <ol className="grid gap-1 text-sm">
         {items.map((item) => (

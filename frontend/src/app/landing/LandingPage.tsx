@@ -23,7 +23,7 @@ import ScheduleSelector from "./ScheduleSelector";
 import Sponsors from "./Sponsors";
 import Ticker from "./Ticker";
 import { CLUB_PLUS_CODE, clubOpenStreetMapUrl } from "./club-location";
-import { buildLandingStats, deriveContactHours, landingConfig, toWhatsAppLink } from "./landing-config";
+import { buildLandingStats, deriveContactHours, landingConfig, toWhatsAppLink, toWhatsAppNumber } from "./landing-config";
 import { ARRIVAL_PHOTO_SIZES, FOOTER_PHOTO_SIZES, MISSION_VISION_PHOTO_SIZES } from "./landing-image-sizes";
 import { mapPublicSchedules, type LandingSchedule } from "./schedule-data";
 import { GALLERY_EMPTY_EVENT } from "./landing-gallery";
@@ -438,6 +438,15 @@ function Location(): React.ReactElement {
               <MessageCircle aria-hidden="true" /> Escríbanos por WhatsApp
             </a>
           </dd>
+        </div>
+        <div className="landing-contact-row">
+          <dt>Llamadas</dt>
+          <dd className="landing-contact-numbers">
+            {contact.whatsapp.map((number): React.ReactElement => (
+              <a key={number} href={`tel:+${toWhatsAppNumber(number)}`} aria-label={`Llamar al ${number}`}>{number}</a>
+            ))}
+          </dd>
+          <dd aria-hidden="true" />
         </div>
         <div className="landing-contact-row">
           <dt>Redes</dt>
