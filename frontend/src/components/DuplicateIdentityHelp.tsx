@@ -9,12 +9,11 @@
  * The useful next step depends on who hit the wall, so the destinations are
  * chosen by `audience`:
  *  - `self-service` (public enrollment): the person is very likely enrolling
- *    a second time — send them to sign in or recover their password. Issue
- *    #1318: the hint now also names the honest next step once signed in —
- *    "inscríbase como jugador o agregue un dependiente" — since a self-
- *    managed adult can now do both from their own account (`/student` +
- *    `POST /membresias/propia` / `POST /personas/me/representados`) instead
- *    of hitting this same wall a second time.
+ *    a second time — send them to sign in or recover their password. REG-12:
+ *    the hint names the one next step that account really has from the start —
+ *    adding a dependent (`POST /personas/me/representados`), which needs a
+ *    verified email and nothing else. It used to also offer "inscríbase como
+ *    jugador", an action a representative does not have.
  *  - `representative` (adding a dependent): the dependent already exists,
  *    possibly under another guardian. The self-service link-by-cédula INS-2
  *    once offered here (docs/product/decisiones-de-negocio-2026-08-11.md §1)
@@ -32,6 +31,8 @@
 
 import type { ReactElement } from "react";
 import Link from "next/link";
+import LinkifiedText from "@/components/LinkifiedText";
+import { WHATSAPP_CONTACTO } from "@/lib/error-message";
 
 export type DuplicateIdentityAudience = "self-service" | "representative" | "admin";
 
@@ -41,12 +42,15 @@ interface DuplicateIdentityHelpProps {
 
 interface Guidance {
   hint: string;
+  /** Line with the club WhatsApp, for people who may be returning former members. */
+  contact?: string;
   links: { href: string; label: string }[];
 }
 
 const GUIDANCE: Record<DuplicateIdentityAudience, Guidance> = {
   "self-service": {
-    hint: "Si ya tiene cuenta, no necesita volver a inscribirse: ingrese y, desde su cuenta, inscríbase como jugador o agregue un dependiente.",
+    hint: "Si ya tiene cuenta, no necesita volver a inscribirse: inicie sesión y, desde su cuenta, agregue un dependiente. Para eso solo necesita haber verificado su correo.",
+    contact: `Si ya fue socio del club, escríbanos por WhatsApp para reactivar su cuenta: ${WHATSAPP_CONTACTO}`,
     links: [
       { href: "/login", label: "Iniciar sesión" },
       { href: "/forgot-password", label: "Recuperar contraseña" },
@@ -63,10 +67,15 @@ const GUIDANCE: Record<DuplicateIdentityAudience, Guidance> = {
 };
 
 export function DuplicateIdentityHelp({ audience }: DuplicateIdentityHelpProps): ReactElement {
-  const { hint, links } = GUIDANCE[audience];
+  const { hint, contact, links } = GUIDANCE[audience];
   return (
     <div className="space-y-1.5">
       <p>{hint}</p>
+      {contact && (
+        <p>
+          <LinkifiedText text={contact} />
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
         {links.map((link) => (
           <Link key={link.href} href={link.href} className="font-semibold underline underline-offset-2">

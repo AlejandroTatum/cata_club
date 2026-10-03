@@ -43,6 +43,15 @@ describe("isProtectedPath", () => {
     expect(isProtectedPath("/student/enroll/step-2")).toBe(false);
   });
 
+  // REG-12: a verified representative whose activation is still pending may
+  // add dependents; the edge guard would redirect them to the activation
+  // screen, so this one route is let through (the page and the backend still
+  // check the session and the verified email).
+  it("lets add-dependent through the edge guard so a pending account can reach it", () => {
+    expect(isProtectedPath("/student/add-dependent")).toBe(false);
+    expect(isProtectedPath("/student/payments")).toBe(true);
+  });
+
   it("does not protect public/unauthenticated pages", () => {
     const publicPaths = ["/", "/login", "/forgot-password", "/profile", "/products"];
     for (const path of publicPaths) {

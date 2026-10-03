@@ -30,6 +30,7 @@ import AuthShell, {
   AUTH_LINK_CLASSES,
 } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui";
+import { WHATSAPP_CONTACTO } from "@/lib/error-message";
 
 /**
  * How long the form stays up, with its button in its "Iniciando sesión…"
@@ -89,6 +90,13 @@ const EMAIL_FORMAT_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  */
 function loginErrorFeedback(error: AuthErrorKind): { message: string; description: string } {
   switch (error) {
+    // REG-10. Mirrors `MENSAJE_CUENTA_INACTIVA` in the backend, split the way
+    // this card renders it. The way out is the club, not a retry.
+    case "account_inactive":
+      return {
+        message: "Su cuenta está inactiva.",
+        description: "Comuníquese con el club para reactivarla.",
+      };
     case "invalid_credentials":
       return {
         message: "Credenciales incorrectas",
@@ -163,13 +171,12 @@ function LoginPageContent(): React.ReactElement {
   const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({ email: "", password: "" });
   /**
-   * The rejected pair, held on the FORM after the toast has gone.
+   * The rejected pair, held on the FORM.
    *
-   * A wrong password used to change nothing on screen: the toast announced it
+   * A wrong password used to change nothing on screen: a toast announced it
    * and faded, and what was left was a form that looked like it had never been
-   * submitted. The toast is still the announcement — `LoginPage.test.tsx` holds
-   * it to that, and it is what carries the recovery sentence — but the field
-   * state is what is still true a few seconds later. `DESIGN.md`'s input
+   * submitted. FAM-15 removed the toast; the field state and the message under
+   * it are now the only announcement. `DESIGN.md`'s input
    * contract: *"Error: borde en el rojo de estado, con el mensaje debajo."*
    *
    * Separate from `fieldErrors` because it is a different KIND of wrong. Those
@@ -192,6 +199,12 @@ function LoginPageContent(): React.ReactElement {
    * a contraseña the server already accepted.
    */
   const [sessionNotPersisted, setSessionNotPersisted] = useState(false);
+  /**
+   * Any other failed login (a timeout, an unreachable backend, a role
+   * conflict…): nothing they typed was wrong, so no field is marked, but the
+   * message and the way out stay on the card instead of in a toast.
+   */
+  const [loginFailure, setLoginFailure] = useState<{ message: string; description: string; contactClub: boolean } | null>(null);
   const [welcome, setWelcome] = useState<{ route: string } | null>(null);
   /**
    * #312 / hallazgo #30: tras un 401 el foco se quedaba en `<body>` — el
@@ -243,6 +256,7 @@ function LoginPageContent(): React.ReactElement {
     setFieldErrors(nextFieldErrors);
     setCredentialsRejected(false);
     setSessionNotPersisted(false);
+    setLoginFailure(null);
     if (nextFieldErrors.email || nextFieldErrors.password) return;
     setSubmitting(true);
 
@@ -252,24 +266,14 @@ function LoginPageContent(): React.ReactElement {
       const { message, description } = loginErrorFeedback(result.error);
       const isCredentialsError = result.error === "invalid_credentials";
       const isCookieError = result.error === "session_not_persisted";
-      // Issue #762: the remedy is a conversation with the club, so the
-      // sentence has to still be there while the person reaches for a phone —
-      // the same reason `session_not_persisted` shares the floor below.
-      const isRoleConflict = result.error === "role_conflict";
-      toast.showError(message, {
-        description,
-        // The 4500-10000ms the ordinary toast clamps to reads fine for a
-        // one-line confirmation, but a 70-year-old reading "Revise su correo
-        // y su contraseña, e intente nuevamente." at a slower pace lost the
-        // toast mid-read (measured: gone by ~9s). This is the ONE toast in
-        // the product naming the reason a login failed, so it gets the same
-        // floor `TOAST_UNDO_DURATION_MS` gives an undo offer — long enough to
-        // notice, read, and act, not indefinite.
-        // `session_not_persisted` shares the floor: its remedy lives in a
-        // browser settings panel, so the person needs the sentence to still
-        // be there while they go looking for it.
-        duration: isCredentialsError || isCookieError || isRoleConflict ? 20000 : undefined,
-      });
+      // FAM-15: no toast — the failure is announced inline and only there.
+      // `invalid_credentials` and `session_not_persisted` have their own
+      // inline notices; every other kind lands in `loginFailure`.
+      setLoginFailure(
+        isCredentialsError || isCookieError
+          ? null
+          : { message, description, contactClub: result.error === "account_inactive" },
+      );
       // ONLY for `invalid_credentials`. The other kinds — a timeout, an
       // unreachable backend, a misconfigured server, a browser that dropped
       // the cookies — are not the person's typing, and painting their fields
@@ -288,7 +292,9 @@ function LoginPageContent(): React.ReactElement {
     // panel never said: where they are about to land.
     const route = routeForSession(result.session);
     const firstName = firstNameOf(result.session.user.name);
-    toast.showSuccess(firstName ? `Hola, ${firstName}` : "Sesión iniciada", {
+    // REG-20: pending activation steps are a heads-up, not a success.
+    const showWelcome = route === ACTIVATION_GATE_ROUTE ? toast.showInfo : toast.showSuccess;
+    showWelcome(firstName ? `Hola, ${firstName}` : "Sesión iniciada", {
       description: welcomeDescriptionFor(route),
     });
 
@@ -350,6 +356,23 @@ function LoginPageContent(): React.ReactElement {
           intente nuevamente.
         </p>
       )}
+      {loginFailure && (
+        <div
+          role="alert"
+          data-testid="login-failure"
+          className="rounded-ctl border border-state-bad bg-canvas px-3.5 py-2.5 text-sm text-ink-2"
+        >
+          <p className="font-semibold text-state-bad">{loginFailure.message}</p>
+          <p>{loginFailure.description}</p>
+          {loginFailure.contactClub && (
+            <p>
+              <a href={WHATSAPP_CONTACTO} target="_blank" rel="noopener noreferrer" className={AUTH_LINK_CLASSES}>
+                Escribir al club por WhatsApp
+              </a>
+            </p>
+          )}
+        </div>
+      )}
       <form className="flex flex-col gap-3.5" onSubmit={handleSubmit} noValidate>
         <div>
           <label htmlFor="email" className={AUTH_LABEL_CLASSES}>
@@ -372,6 +395,7 @@ function LoginPageContent(): React.ReactElement {
                 // An error that outlives what it describes teaches people to
                 // ignore errors. Editing either half retires the pair's mark.
                 setCredentialsRejected(false);
+                setLoginFailure(null);
               }}
               placeholder="correo@ejemplo.com"
               required
@@ -410,6 +434,7 @@ function LoginPageContent(): React.ReactElement {
               onChange={(e: React.ChangeEvent<HTMLInputElement>): void => {
                 setPassword(e.target.value);
                 setCredentialsRejected(false);
+                setLoginFailure(null);
               }}
               placeholder="Ingrese su contraseña"
               required

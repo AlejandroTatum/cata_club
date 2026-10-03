@@ -29,7 +29,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Lock, Eye, EyeOff, AlertCircle, Check, X, CheckCircle2 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { restablecerContrasenia } from "@/services/api";
+import { ApiClientError, restablecerContrasenia } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
 import AuthShell, {
   AUTH_INPUT_CLASSES,
@@ -68,6 +68,46 @@ const EXPIRED_LINK_NOTE = (
  */
 const LINK_LIFETIME_NOTE = "Los enlaces de recuperación duran 30 minutos.";
 
+/** What the card says when the URL carries no token at all. */
+const NO_TOKEN_MESSAGE = "El enlace de recuperación no contiene un token válido.";
+
+/**
+ * The dead-link state: no token in the URL, or one the backend refused
+ * (GAP-07). It is a card, not a toast — nothing about it is fixed by trying
+ * again, and it has to still be there while the person reads it.
+ */
+function InvalidLinkCard({ message }: { message: string }): React.ReactElement {
+  return (
+    <AuthShell
+      title="Enlace no válido"
+      note={LINK_LIFETIME_NOTE}
+      backHref="/login"
+      // #1209: this is a visitor resetting their own password, not staff
+      // signing in to manage the club — the shell's default eyebrow,
+      // "Panel de gestión", is wrong here.
+      eyebrow="Acceso al club"
+    >
+      <div className="flex flex-col items-start gap-3 text-left">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-bad-bg">
+          {/* `state-bad`, not the action red: this disc reports a state, and
+              the only thing on this card that may say "press me" is the exit
+              below it. */}
+          <AlertCircle size={ICON.lg} className="text-state-bad" strokeWidth={1.5} aria-hidden="true" />
+        </span>
+        <p role="alert" className="text-sm leading-relaxed text-ink-2">
+          {message} Solicite uno nuevo y vuelva a intentarlo.
+        </p>
+      </div>
+      {/* The product's one recipe for "a navigation that is this block's
+          action", not a nineteenth hand-written copy of it. The back arrow
+          went with the string: this control moves forward. */}
+      <Link href="/forgot-password" className={buttonClasses("primary", "md", "w-full")}>
+        Solicitar nuevo enlace
+      </Link>
+    </AuthShell>
+  );
+}
+
 function ResetPasswordContent(): React.ReactElement {
   const toast = useToast();
   const searchParams = useSearchParams();
@@ -78,6 +118,8 @@ function ResetPasswordContent(): React.ReactElement {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  /** Set when the backend refuses the token on submit (expired or already used). */
+  const [rejectedLinkMessage, setRejectedLinkMessage] = useState<string | null>(null);
 
   const rules = buildPasswordRules(password, confirmPassword);
   const allRulesMet = rules.every((rule) => rule.met);
@@ -88,37 +130,8 @@ function ResetPasswordContent(): React.ReactElement {
    */
   const mismatch = confirmPassword.length > 0 && password !== confirmPassword;
 
-  if (!token) {
-    return (
-      <AuthShell
-        title="Enlace no válido"
-        note={LINK_LIFETIME_NOTE}
-        backHref="/login"
-        // #1209: this is a visitor resetting their own password, not staff
-        // signing in to manage the club — the shell's default eyebrow,
-        // "Panel de gestión", is wrong here.
-        eyebrow="Acceso al club"
-      >
-        <div className="flex flex-col items-start gap-3 text-left">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-bad-bg">
-            {/* `state-bad`, not the action red: this disc reports a state, and
-                the only thing on this card that may say "press me" is the exit
-                below it. */}
-            <AlertCircle size={ICON.lg} className="text-state-bad" strokeWidth={1.5} aria-hidden="true" />
-          </span>
-          <p className="text-sm leading-relaxed text-ink-2">
-            El enlace de recuperación no contiene un token válido. Solicite uno nuevo y
-            vuelva a intentarlo.
-          </p>
-        </div>
-        {/* The product's one recipe for "a navigation that is this block's
-            action", not a nineteenth hand-written copy of it. The back arrow
-            went with the string: this control moves forward. */}
-        <Link href="/forgot-password" className={buttonClasses("primary", "md", "w-full")}>
-          Solicitar nuevo enlace
-        </Link>
-      </AuthShell>
-    );
+  if (!token || rejectedLinkMessage) {
+    return <InvalidLinkCard message={rejectedLinkMessage ?? NO_TOKEN_MESSAGE} />;
   }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
@@ -133,7 +146,13 @@ function ResetPasswordContent(): React.ReactElement {
       toast.showSuccess("Contraseña actualizada correctamente");
     } catch (err: unknown) {
       const message = toUserMessage(err, "Ocurrió un error inesperado.");
-      toast.showError(message);
+      // GAP-07: a 400 here means the link itself was refused (the BFF maps the
+      // backend's 400/401 to 400), which no retry fixes: say it in the card.
+      if (err instanceof ApiClientError && err.status === 400) {
+        setRejectedLinkMessage(message);
+      } else {
+        toast.showError(message);
+      }
     } finally {
       setSubmitting(false);
     }

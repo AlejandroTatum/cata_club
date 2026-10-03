@@ -32,6 +32,7 @@ import { formatCurrency } from "@/lib/format-utils";
 import { clearLegacyEnrollmentSession } from "@/lib/enrollment-session";
 import { furthestReachableIndex, useWizardHistory } from "@/lib/wizard-history";
 import { DuplicateIdentityHelp } from "@/components/DuplicateIdentityHelp";
+import LinkifiedText from "@/components/LinkifiedText";
 import LegalReviewDialog, { type LegalReviewDocumentId } from "@/components/legal/LegalReviewDialog";
 import {
   WizardInput,
@@ -43,7 +44,6 @@ import {
   formatAgeYears,
   example,
   CEDULA_HINT,
-  PHONE_HINT,
 } from "@/components/wizard-fields";
 import {
   Badge,
@@ -65,7 +65,6 @@ import {
   CheckCircle,
   AlertTriangle,
   Hash,
-  FileText,
   Mail,
   Calendar,
 } from "lucide-react";
@@ -113,6 +112,7 @@ import EnrollAside from "./EnrollAside";
 import EnrollConfirmation from "./EnrollConfirmation";
 import EnrollFrame from "./EnrollFrame";
 import EnrollNav from "./EnrollNav";
+import EnrollSignedInNotice from "./EnrollSignedInNotice";
 import EnrollSteps from "./EnrollSteps";
 import useWideLayout from "./useWideLayout";
 import EnrollSummary from "./EnrollSummary";
@@ -215,7 +215,8 @@ function accountAreaLinkFor(session: AuthSession): { href: string; label: string
 // ---------------------------------------------------------------------------
 
 function EnrollWizard(): React.ReactElement {
-  const { refreshSession, isAuthenticated, isLoading, session } = useAuth();
+  const { refreshSession, isAuthenticated, isLoading, session, logout } = useAuth();
+  const [loggingOut, setLoggingOut] = useState(false);
   const demoQuickFillEnabled = isDemoQuickFillEnabled();
   const [formData, setFormData] = useState<EnrollFormData>(initialFormData);
   const [submitting, setSubmitting] = useState(false);
@@ -760,6 +761,17 @@ function EnrollWizard(): React.ReactElement {
     );
   }
 
+  /** Arrow keys move a radio group's choice (and its focus), wrapping at the ends. */
+  function handleChoiceKeyDown(e: React.KeyboardEvent<HTMLButtonElement>, index: number): void {
+    const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+    if (step === 0) return;
+    e.preventDefault();
+    const next = (index + step + ENROLLMENT_CHOICES.length) % ENROLLMENT_CHOICES.length;
+    updateField("enrollmentType", ENROLLMENT_CHOICES[next].value);
+    const radios = e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]');
+    radios?.[next]?.focus();
+  }
+
   function renderTypeStep(): React.ReactElement {
     return (
       <div className="flex flex-col gap-section">
@@ -774,17 +786,26 @@ function EnrollWizard(): React.ReactElement {
             the enrollment wizard's own carve-out from "la regla del rojo
             único" (DESIGN.md) — every other selected state in the product
             still draws coal plus the yellow ball dot. The badge below is that
-            same non-colour marker: `aria-pressed`, the "Seleccionado" text and
+            same non-colour marker: `aria-checked`, the "Seleccionado" text and
             the ball dot are what make the state readable without colour, the
             border is only the accent on top of that. */}
-        <div data-enroll-choices className="grid items-stretch gap-section sm:grid-cols-2">
-          {ENROLLMENT_CHOICES.map((choice) => {
+        <div
+          data-enroll-choices
+          role="radiogroup"
+          aria-label="Tipo de inscripción"
+          className="grid items-stretch gap-section sm:grid-cols-2"
+        >
+          {ENROLLMENT_CHOICES.map((choice, index) => {
             const selected = formData.enrollmentType === choice.value;
             return (
               <button
                 key={choice.value}
                 type="button"
-                aria-pressed={selected}
+                role="radio"
+                aria-checked={selected}
+                // Roving tab stop: the group is ONE stop, on the selected card.
+                tabIndex={selected ? 0 : -1}
+                onKeyDown={(e) => handleChoiceKeyDown(e, index)}
                 onClick={() => updateField("enrollmentType", choice.value)}
                 className={`flex h-full flex-col gap-field rounded-card border p-page text-left transition-colors duration-150 ${
                   selected
@@ -1039,6 +1060,8 @@ function EnrollWizard(): React.ReactElement {
             value: formData.fechaNacimientoRepresentante,
             onChange: (v) => updateField("fechaNacimientoRepresentante", v),
             required: true,
+            // REG-16: the age note belongs under the field it is about.
+            hint: `El representante debe ser mayor de edad (${EDAD_MAYORIA_EDAD} a ${EDAD_MAXIMA_ALUMNO} años).`,
           })}
           {renderField("cedulaRepresentante", {
             label: "Cédula de identidad",
@@ -1052,17 +1075,23 @@ function EnrollWizard(): React.ReactElement {
             numericMode: "cedula",
             hint: CEDULA_HINT,
           })}
-          {renderField("telefonoRepresentante", {
-            label: "Teléfono",
-            value: formData.telefonoRepresentante,
-            onChange: (v) => updateField("telefonoRepresentante", v),
-            placeholder: example("0991234567"),
-            inputMode: "tel",
-            numericMode: "phone",
-            required: true,
-            hint: PHONE_HINT,
-            autoComplete: "tel",
-          })}
+          {/* REG-16: the same `PhoneField` as the student's phone. It speaks
+              LOCAL digits (no trunk 0); the form keeps the stored `0…` shape
+              this field has always carried, so the draft, the summary and
+              the payload are untouched. */}
+          <FieldSlot>
+            <PhoneField
+              idPrefix={ENROLL_ID_PREFIX}
+              field={ENROLL_FIELD_TOKEN.telefonoRepresentante}
+              label="Teléfono"
+              required
+              disabled={submitting}
+              value={formData.telefonoRepresentante.replace(/^0/, "")}
+              onChange={(v) => updateField("telefonoRepresentante", toStoredPhone(v))}
+              error={shownError("telefonoRepresentante")}
+              onBlur={() => markTouched("telefonoRepresentante")}
+            />
+          </FieldSlot>
           {renderField("correoRepresentante", {
             label: "Correo electrónico",
             value: formData.correoRepresentante,
@@ -1105,9 +1134,7 @@ function EnrollWizard(): React.ReactElement {
             date, which the birth-date field's own validator already reports
             inline (see fechaNacimientoRepresentante in enroll-utils.ts). */}
         <p className="mt-field text-xs text-ink-3">
-          El representante debe ser mayor de edad ({EDAD_MAYORIA_EDAD} a{" "}
-          {EDAD_MAXIMA_ALUMNO} años). Al inscribir a un dependiente, confirma
-          ser su responsable legal.
+          Al inscribir a un dependiente, confirma ser su responsable legal.
         </p>
       </div>
     );
@@ -1178,16 +1205,6 @@ function EnrollWizard(): React.ReactElement {
           onChange: (v) => updateField("alergias", v),
           placeholder: example("polvo, látex, picaduras de insectos"),
           icon: <AlertTriangle size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
-          rows: 2,
-        })}
-
-        {renderTextarea("observaciones", {
-          label: "Observaciones adicionales",
-          value: formData.observaciones,
-          onChange: (v) => updateField("observaciones", v),
-          placeholder:
-            "Cualquier otra información relevante que el club deba conocer",
-          icon: <FileText size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
           rows: 2,
         })}
         </EnrollFieldGrid>
@@ -1376,14 +1393,11 @@ function EnrollWizard(): React.ReactElement {
               )
             : summaryRow(
                 "Contacto de emergencia",
-                `${formData.contactoEmergencia} · ${formData.telefonoEmergencia}`.trim(),
+                `${formData.contactoEmergencia} · ${toStoredPhone(formData.telefonoEmergencia)}`.trim(),
                 "health",
               )}
           {summaryRow("Condiciones de salud", formData.condicionesSalud || "Ninguna reportada", "health")}
           {summaryRow("Alergias", formData.alergias || "Ninguna reportada", "health")}
-          {formData.observaciones
-            ? summaryRow("Observaciones", formData.observaciones, "health")
-            : null}
         </DataRowList>
         </div>
 
@@ -1505,7 +1519,19 @@ function EnrollWizard(): React.ReactElement {
     // screen is as much "principal" as the form it replaces. It used to borrow
     // the root layout's, which is the wrapper that stopped being one.
     <main>
-      {confirmed ? (
+      {/* REG-11: a signed-in user must not get the new-account wizard. The
+          confirmation screen is exempt: the auto-login that enrolling performs
+          makes the visitor "signed in" at exactly that moment. */}
+      {isAuthenticated && !confirmed && !submitting ? (
+        <EnrollSignedInNotice
+          backHref={backHrefForRole(session?.user.role)}
+          loggingOut={loggingOut}
+          onLogout={() => {
+            setLoggingOut(true);
+            void logout().finally(() => setLoggingOut(false));
+          }}
+        />
+      ) : confirmed ? (
         <EnrollConfirmation
           studentName={`${formData.nombres} ${formData.apellidos}`}
           isSelf={formData.enrollmentType === "self"}
@@ -1589,28 +1615,6 @@ function EnrollWizard(): React.ReactElement {
             data-enroll-card
             className="card flex w-full flex-1 flex-col p-page lg:flex-none lg:p-10"
           >
-            {/* #1321: `goToStep` already jumps to an arbitrary step from the
-                review's "Editar" buttons without losing anything —
-                `formData` lives in this component, not per step — so a
-                completed pill needs no extra guard to reuse it. */}
-            <EnrollNav
-              isFirst={isFirst}
-              isLast={isLast}
-              submitting={submitting}
-              onBack={handleBack}
-              stepper={
-                wide ? null : (
-                  <Stepper
-                    label="Pasos de la inscripción"
-                    current={currentIndex + 1}
-                    steps={effectiveSteps.map((s) => STEP_SHORT_LABELS[s])}
-                    onStepClick={handleStepperJump}
-                    showCount={!isFirst}
-                  />
-                )
-              }
-            />
-
             <div data-enroll-body className="grid gap-8 lg:grid-cols-5">
             <div data-enroll-form className="flex min-w-0 flex-col lg:col-span-3 lg:self-start">
             {/* Issue #317 / hallazgo #62: recuperado de `sessionStorage`, no del
@@ -1686,11 +1690,20 @@ function EnrollWizard(): React.ReactElement {
                   <div className="alert-error mt-section items-start" role="alert">
                     <AlertTriangle size={ICON.sm} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
                     <div className="space-y-2">
-                      <ul className="list-inside list-disc space-y-1">
-                        {formErrors.map((err, i) => (
-                          <li key={i}>{err}</li>
-                        ))}
-                      </ul>
+                      {/* REG-22: one error is a sentence; only several are a list. */}
+                      {formErrors.length === 1 ? (
+                        <p>
+                          <LinkifiedText text={formErrors[0]} />
+                        </p>
+                      ) : (
+                        <ul className="list-inside list-disc space-y-1">
+                          {formErrors.map((err, i) => (
+                            <li key={i}>
+                              <LinkifiedText text={err} />
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                       {formErrors.some(isDuplicateIdentityError) && (
                         <DuplicateIdentityHelp audience="self-service" />
                       )}
@@ -1717,6 +1730,29 @@ function EnrollWizard(): React.ReactElement {
                     </Button>
                   </div>
                 )}
+
+            {/* REG-21: after the step content, where the hand arrives once the fields
+                are done. #1321: `goToStep` already jumps to an arbitrary step from the
+                review's "Editar" buttons without losing anything —
+                `formData` lives in this component, not per step — so a
+                completed pill needs no extra guard to reuse it. */}
+            <EnrollNav
+              isFirst={isFirst}
+              isLast={isLast}
+              submitting={submitting}
+              onBack={handleBack}
+              stepper={
+                wide ? null : (
+                  <Stepper
+                    label="Pasos de la inscripción"
+                    current={currentIndex + 1}
+                    steps={effectiveSteps.map((s) => STEP_SHORT_LABELS[s])}
+                    onStepClick={handleStepperJump}
+                    showCount={!isFirst}
+                  />
+                )
+              }
+            />
             </div>
 
             <EnrollAside

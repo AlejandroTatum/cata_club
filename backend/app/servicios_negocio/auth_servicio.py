@@ -15,7 +15,7 @@ from app.dominio.modelos import (
 )
 from app.dominio.excepciones import (
     CredencialesInvalidas, EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida,
-    ServicioNoDisponible,
+    PermisosInsuficientes, ServicioNoDisponible,
 )
 from app.dominio.mensajes import (
     MENSAJE_IDENTIDAD_DUPLICADA, MENSAJE_REPRESENTADO_SIN_CREDENCIALES_PROPIAS,
@@ -96,6 +96,24 @@ _MAX_ENTRADAS_INTENTOS_LOGIN = 50_000
 _TTL_INTENTOS_LOGIN_SEGUNDOS = 15 * 60
 _UMBRAL_RETRASO_INTENTOS = 3
 _TECHO_RETRASO_SEGUNDOS = 60
+
+
+# REG-10: lo que lee quien intenta entrar con una cuenta dada de baja o
+# suspendida. Espejo verbatim del texto que el frontend muestra para
+# `account_inactive` (`frontend/src/app/login/page.tsx`).
+MENSAJE_CUENTA_INACTIVA = (
+    "Su cuenta está inactiva. Comuníquese con el club para reactivarla."
+)
+
+
+class CuentaInactiva(PermisosInsuficientes):
+    """Las credenciales son correctas pero la cuenta (o la persona) está
+    inactiva (-> HTTP 403, por herencia de `PermisosInsuficientes`).
+
+    Distinta de `CredencialesInvalidas` a propósito: solo se lanza DESPUÉS de
+    verificar la contraseña, así que decirlo no es un oráculo -- únicamente lo
+    lee quien ya conoce la contraseña de esa cuenta. Quien se equivoca de
+    contraseña sigue recibiendo el mismo 401 que una cuenta inexistente."""
 
 
 def _purgar_entradas_expiradas(ahora: float) -> None:
@@ -211,6 +229,11 @@ class AuthServicio:
         clave = correo.strip().lower()
         try:
             usuario = self._verificar_credenciales(correo, contrasenia)
+        except CuentaInactiva:
+            # La contraseña era correcta: no es un intento de adivinarla, así
+            # que no suma al freno progresivo, pero tampoco es un login exitoso.
+            contar_login(ok=False)
+            raise
         except CredencialesInvalidas:
             contar_login(ok=False)
             self._penalizar_intento_fallido(clave)
@@ -252,12 +275,13 @@ class AuthServicio:
         if not usuario or not GestorAutenticacion.verificar_contrasenia(contrasenia, usuario.contrasenia):
             raise CredencialesInvalidas("Correo o contraseña incorrectos")
         # E01-RF013: una cuenta suspendida por el Administrador no puede
-        # loguearse, aunque la contraseña sea correcta. Mismo tipo de
-        # excepción que credenciales inválidas: no se revela si la cuenta
-        # existe pero está inactiva vs. si la contraseña es incorrecta,
-        # para no filtrar información de cuentas ajenas.
+        # loguearse, aunque la contraseña sea correcta. REG-10: llegados acá la
+        # contraseña YA fue verificada, así que decir que la cuenta está
+        # inactiva no revela nada a un tercero -- solo lo lee quien la conoce --
+        # y le da una salida (escribir al club) en lugar de un "Correo o
+        # contraseña incorrectos" que lo mandaba en círculo.
         if not usuario.activo:
-            raise CredencialesInvalidas("Correo o contraseña incorrectos")
+            raise CuentaInactiva(MENSAJE_CUENTA_INACTIVA, seguro_mostrar=True)
         # Baja lógica de la PERSONA: quien ya no es miembro del club no entra,
         # aunque su cuenta figure como activa. No es redundante con el chequeo
         # de arriba: dar de baja a una persona desactiva su `Usuario`, pero
@@ -265,7 +289,7 @@ class AuthServicio:
         # operación independiente que no reincorpora a nadie al club. Sin esta
         # línea, ese camino le devolvería el acceso a un ex-miembro.
         if not usuario.persona.activo:
-            raise CredencialesInvalidas("Correo o contraseña incorrectos")
+            raise CuentaInactiva(MENSAJE_CUENTA_INACTIVA, seguro_mostrar=True)
         return usuario
 
     def _penalizar_intento_fallido(self, clave: str) -> None:

@@ -120,6 +120,17 @@ describe("POST /api/auth/login", () => {
     expect(JSON.stringify(json)).not.toMatch(/Incorrect username or password/);
   });
 
+  it("returns 403 with account_inactive when the backend says the account is deactivated (REG-10)", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ message: "Su cuenta está inactiva." }, 403));
+
+    const response = await POST(loginRequest({ email: "ex@cataclub.com", password: "Secreta123" }));
+    const json = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(json.error).toBe("account_inactive");
+    expect(response.headers.get("set-cookie")).toBeNull();
+  });
+
   it("returns 503 (not a raw error) when the backend is unreachable", async () => {
     vi.mocked(global.fetch).mockRejectedValueOnce(new TypeError("fetch failed"));
 

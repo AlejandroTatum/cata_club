@@ -97,7 +97,7 @@ async function reachSummaryAsRepresentative(page: Page): Promise<void> {
   });
 
   // Paso "Tipo de inscripción": Representante, no el Jugador por defecto.
-  await page.getByRole("button", { name: /^Representante/ }).click();
+  await page.getByRole("radio", { name: /^Representante/ }).click();
   await page.getByRole("button", { name: /siguiente/i }).click();
 
   // Paso "Datos del estudiante" — describe al DEPENDIENTE (sin teléfono:

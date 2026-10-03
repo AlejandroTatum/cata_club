@@ -49,6 +49,9 @@ const SHELLS: readonly string[] = [
   "components/shell/AppShell.tsx",
   // login / forgot-password / reset-password.
   "components/auth/AuthShell.tsx",
+  // The plain page a screen reachable without a session (`/ayuda`) draws for
+  // a visitor, instead of the management chrome (VIS-05).
+  "components/shell/PublicShell.tsx",
   // The public landing.
   "app/landing/LandingPage.tsx",
   // The three public legal documents (/terminos, /privacidad,

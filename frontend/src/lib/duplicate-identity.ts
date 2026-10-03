@@ -33,7 +33,7 @@
 
 /** Verbatim copy of `MENSAJE_IDENTIDAD_DUPLICADA` (backend `app/dominio/mensajes.py`). */
 export const MENSAJE_IDENTIDAD_DUPLICADA =
-  "Alguno de los datos ingresados, cédula o correo, ya pertenece a una cuenta registrada.";
+  "Alguno de los datos ingresados, cédula o correo, ya pertenece a una cuenta registrada. Si ya fue socio del club, comuníquese con nosotros para reactivar su cuenta.";
 
 const PATRONES_IDENTIDAD_DUPLICADA = [
   // Generic message — all supported public and representative flows.

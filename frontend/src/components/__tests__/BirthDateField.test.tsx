@@ -178,11 +178,11 @@ describe("BirthDateField — disabled and required propagate to the whole group"
     expect(year).toBeDisabled();
   });
 
-  it("marks the group aria-required when required", () => {
-    renderField({ required: true });
-    expect(screen.getByRole("group", { name: /^Fecha de nacimiento/ })).toHaveAttribute(
-      "aria-required",
-      "true",
-    );
+  // REG-13: `aria-required` is not valid on a <fieldset> (role "group"), so
+  // the requirement is carried by each of the three controls instead.
+  it("marks each part aria-required, and not the group, when required", () => {
+    const { day, month, year } = renderField({ required: true });
+    for (const part of [day, month, year]) expect(part).toHaveAttribute("aria-required", "true");
+    expect(screen.getByRole("group", { name: /^Fecha de nacimiento/ })).not.toHaveAttribute("aria-required");
   });
 });

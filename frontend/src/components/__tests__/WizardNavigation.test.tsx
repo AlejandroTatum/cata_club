@@ -53,15 +53,17 @@ describe("WizardNavigation — already-registered escape hatch", () => {
     );
   });
 
-  // Issue #1318: the self-service hint now also names the honest in-account
-  // next step (join as a player, or add a dependent) — a self-managed adult
-  // who already has an account no longer has to hit this same wall twice.
-  it("tells a self-enroller they can already join or add a dependent from their own account", () => {
+  // REG-12: the self-service hint names only what the account can really do
+  // from the start — add a dependent once the email is verified. "Inscríbase
+  // como jugador" was never available to someone who already has an account.
+  it("tells a self-enroller they can add a dependent from their own account once their email is verified", () => {
     renderNav({ formErrors: [DUPLICADA], duplicateIdentityAudience: "self-service" });
 
     const alert = screen.getByRole("alert");
-    expect(within(alert).getByText(/inscríbase como jugador o agregue un dependiente/i))
+    expect(within(alert).getByText(/inicie sesión y, desde su cuenta, agregue un dependiente/i))
       .toBeInTheDocument();
+    expect(within(alert).getByText(/verificado su correo/i)).toBeInTheDocument();
+    expect(within(alert).queryByText(/inscríbase como jugador/i)).not.toBeInTheDocument();
   });
 
   it("sends a guardian to their dependents instead of a login page", () => {

@@ -290,6 +290,8 @@ function isBackendRefreshResponse(value: unknown): value is BackendRefreshRespon
 
 export type AuthErrorCode =
   | "invalid_credentials"
+  // REG-10: the password was right but the account is deactivated.
+  | "account_inactive"
   | "config_error"
   | "backend_unavailable"
   | "timeout"
@@ -577,6 +579,12 @@ export async function backendLogin(
   const response = result.data;
   if (response.status === 401 || response.status === 400) {
     return { ok: false, error: { code: "invalid_credentials", message: "Credenciales inválidas." } };
+  }
+  // REG-10: the backend raises 403 here only AFTER verifying the password, for
+  // an account the club deactivated. It is not "bad credentials": the person
+  // needs to hear it is the club that has to act.
+  if (response.status === 403) {
+    return { ok: false, error: { code: "account_inactive", message: "Su cuenta está inactiva." } };
   }
   if (!response.ok) {
     return {

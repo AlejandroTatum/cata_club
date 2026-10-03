@@ -354,13 +354,11 @@ describe("ResetPasswordPage", () => {
       fireEvent.change(screen.getByLabelText(/^Nueva contraseña/), {
         target: { value: "nubesverd" },
       });
-      expect(advisoryItem("Al menos 10 caracteres")).toHaveAttribute("data-met", "false");
       expect(advisoryItem("Mayúsculas y minúsculas")).toHaveAttribute("data-met", "false");
 
       fireEvent.change(screen.getByLabelText(/^Nueva contraseña/), {
         target: { value: "Nubes-Verdes-2024" },
       });
-      expect(advisoryItem("Al menos 10 caracteres")).toHaveAttribute("data-met", "true");
       expect(advisoryItem("Mayúsculas y minúsculas")).toHaveAttribute("data-met", "true");
       expect(advisoryItem("Al menos un número")).toHaveAttribute("data-met", "true");
       expect(advisoryItem("Al menos un símbolo (por ejemplo, ! o #)")).toHaveAttribute(
@@ -419,12 +417,10 @@ describe("ResetPasswordPage", () => {
   });
 
   describe("failed submission", () => {
-    it("shows the server error via toast.showError instead of an inline alert", async () => {
-      // An expired or already-used reset token is refused by
-      // POST /auth/restablecer-contrasenia as a 400 — the status that means
-      // "about what you sent". The frontend cannot know the token expired,
-      // so the backend's sentence is the only thing that tells the user to
-      // ask for a new link, and it survives both gates to reach the toast.
+    // GAP-07: a token the backend refuses (expired, already used) is not
+    // something a retry fixes, so a toast that fades is the wrong place for
+    // it. The card says so and offers the exit to a new link.
+    it("replaces the form with a persistent invalid-link card when the backend refuses the token", async () => {
       mockRestablecerContrasenia.mockRejectedValue(
         new MockApiClientError("El token ha expirado.", 400),
       );
@@ -433,10 +429,15 @@ describe("ResetPasswordPage", () => {
       fillMatchingPasswords();
       submitResetForm();
 
-      await waitFor(() => {
-        expect(mockShowError).toHaveBeenCalledWith("El token ha expirado.");
-      });
-      expect(document.querySelector(".alert-error")).not.toBeInTheDocument();
+      const card = await screen.findByRole("alert");
+      expect(card).toHaveTextContent("El token ha expirado.");
+      expect(screen.getByText(/enlace no válido/i)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /solicitar nuevo enlace/i })).toHaveAttribute(
+        "href",
+        "/forgot-password",
+      );
+      expect(screen.queryByRole("button", { name: "Guardar contraseña" })).not.toBeInTheDocument();
+      expect(mockShowError).not.toHaveBeenCalled();
       expect(mockShowSuccess).not.toHaveBeenCalled();
     });
 

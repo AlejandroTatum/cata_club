@@ -736,21 +736,18 @@ const HAS_SYMBOL = /[^\p{L}\p{Nd}]/u;
 
 /**
  * The advisory checklist shown under every password-creation field: what
- * makes a password MORE resistant than the bare policy minimum. Four
- * recommendations — recommended length, case mix, a number, a symbol — each
- * ticking over live. Deliberately EXCLUDES the two hard rules (floor and
- * common list): those belong to the enforcing checklist, and repeating them
- * here as "recommendations" would blur the line between what blocks and
- * what merely advises (the reset screen's hard checklist already shows the
- * common-list rule live).
+ * makes a password MORE resistant than the bare policy minimum. Three
+ * recommendations — case mix, a number, a symbol — each ticking over live.
+ * Deliberately EXCLUDES the hard rules (floor and common list): those belong
+ * to the enforcing checklist, and repeating them here would blur the line
+ * between what blocks and what merely advises. GAP-11: that includes a length
+ * line — a second list quoting 10 beside the checklist's 8 read as a
+ * contradiction. The 10-character tier still feeds `scorePasswordStrength`,
+ * which only informs.
  */
 export function buildPasswordCompositionSignals(password: string): PasswordCompositionSignal[] {
   const candidate = password.trim();
   return [
-    {
-      label: `Al menos ${PASSWORD_ADVISORY_MIN_LENGTH} caracteres`,
-      met: candidate.length >= PASSWORD_ADVISORY_MIN_LENGTH,
-    },
     {
       label: "Mayúsculas y minúsculas",
       met: HAS_UPPERCASE.test(candidate) && HAS_LOWERCASE.test(candidate),
