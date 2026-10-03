@@ -456,7 +456,7 @@ function PaymentsContent({
       <EmptyState
         icon={<CreditCard size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
         title="No se encontraron estudiantes asociados a esta cuenta"
-        description="Inscríbase como jugador o agregue un hijo o dependiente para registrar pagos."
+        description="Inscríbete como jugador o agregue un hijo o dependiente para registrar pagos."
         // Issue #460 (Escenario 2): the description already promised "agregue
         // un hijo o dependiente", but the only action here used to be "Ir a mi
         // cuenta" — a dead end for a representative whose child is already

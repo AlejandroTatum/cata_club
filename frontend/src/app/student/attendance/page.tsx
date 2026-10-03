@@ -461,7 +461,7 @@ function AttendanceView({
         <EmptyState
           icon={<User size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
           title="No se encontraron estudiantes asociados a esta cuenta"
-          description="Inscríbase como jugador o agregue un hijo o dependiente para empezar a ver asistencias."
+          description="Inscríbete como jugador o agregue un hijo o dependiente para empezar a ver asistencias."
           action={
             <Link href="/student" className={buttonClasses("secondary", "sm")}>
               Ir a mi cuenta

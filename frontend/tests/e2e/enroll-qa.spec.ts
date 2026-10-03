@@ -1,6 +1,6 @@
 /**
  * QA exhaustivo del alta pública de cuenta — el flujo al que se llega desde
- * "Inscríbase" en /login (`/student/enroll`).
+ * "Inscríbete" en /login (`/student/enroll`).
  *
  * ## Qué prueba, y por qué así
  *
@@ -296,15 +296,15 @@ async function mockEnrollment(
 // ---------------------------------------------------------------------------
 
 /**
- * La entrada que pidió el encargo: se llega al alta CLICKEANDO "Inscríbase" en
+ * La entrada que pidió el encargo: se llega al alta CLICKEANDO "Inscríbete" en
  * el login, no navegando a la URL. Si ese enlace se rompe, el flujo entero es
  * inalcanzable para un visitante y ningún test de la página lo notaría.
  */
 async function enterFromLogin(page: Page): Promise<void> {
   await mockBaseRoutes(page);
   await page.goto("/login");
-  await expect(page.getByRole("link", { name: /inscríbase/i })).toBeVisible({ timeout: 20_000 });
-  await page.getByRole("link", { name: /inscríbase/i }).click();
+  await expect(page.getByRole("link", { name: /inscríbete/i })).toBeVisible({ timeout: 20_000 });
+  await page.getByRole("link", { name: /inscríbete/i }).click();
   await expect(page).toHaveURL(/\/student\/enroll/);
   await expect(page.getByRole("heading", { name: /tipo de inscripción/i })).toBeVisible({
     timeout: 20_000,
@@ -368,7 +368,7 @@ async function fillValidHealth(page: Page): Promise<void> {
 // ===========================================================================
 
 test.describe("T · Entrada desde el login y tipo de inscripción", () => {
-  test("T1 · el enlace Inscríbase del login abre el alta pública sin sesión", async ({ page }) => {
+  test("T1 · el enlace Inscríbete del login abre el alta pública sin sesión", async ({ page }) => {
     await enterFromLogin(page);
     await shot(page, "T1", "entrada-desde-login");
   });

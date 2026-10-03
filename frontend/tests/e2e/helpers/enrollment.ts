@@ -105,7 +105,7 @@ export function newPlayer(correo: string, contrasenia = "clave-segura-8"): NewPl
  */
 export async function enrollNewPlayerViaWizard(page: Page, player: NewPlayer): Promise<void> {
   await page.goto("/login");
-  await page.getByRole("link", { name: /inscríbase/i }).click();
+  await page.getByRole("link", { name: /inscríbete/i }).click();
   await page.getByRole("heading", { name: /tipo de inscripción/i }).waitFor({ timeout: 20_000 });
 
   // Paso "Tipo de inscripción": Jugador es la opción por defecto, alcanza con avanzar.
@@ -257,7 +257,7 @@ export async function enrollDependentViaWizard(
   dependent: NewDependent,
 ): Promise<void> {
   await page.goto("/login");
-  await page.getByRole("link", { name: /inscríbase/i }).click();
+  await page.getByRole("link", { name: /inscríbete/i }).click();
   await page.getByRole("heading", { name: /tipo de inscripción/i }).waitFor({ timeout: 20_000 });
 
   // Paso "Tipo de inscripción": Representante, no el Jugador por defecto.

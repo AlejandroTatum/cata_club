@@ -525,7 +525,7 @@ function LoginPageContent(): React.ReactElement {
       <p className="text-center text-xs text-ink-3">
         ¿No tiene una cuenta?{" "}
         <Link href="/student/enroll" className={AUTH_LINK_CLASSES}>
-          Inscríbase
+          Inscríbete
           <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         </Link>
       </p>

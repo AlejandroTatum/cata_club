@@ -193,8 +193,8 @@ describe("LoginPage", () => {
    * the recovery link at 141.5x18.8 (a bare 12.5px line of type).
    *
    * The fix is hit area only — the icon still rides its step and the type is still
-   * 12.5px/600. "Inscríbase" is deliberately left alone: it sits inside the
-   * sentence "¿No tiene una cuenta? Inscríbase" and is covered by the
+   * 12.5px/600. "Inscríbete" is deliberately left alone: it sits inside the
+   * sentence "¿No tiene una cuenta? Inscríbete" and is covered by the
    * criterion's own Inline exception.
    */
   describe("targets big enough to hit — SC 2.5.8", () => {
@@ -224,7 +224,7 @@ describe("LoginPage", () => {
 
       render(<LoginPage />);
 
-      const enrol = screen.getByRole("link", { name: /inscríbase/i });
+      const enrol = screen.getByRole("link", { name: /inscríbete/i });
       expect(enrol.className).not.toContain("min-h-[24px]");
     });
   });
@@ -603,7 +603,7 @@ describe("LoginPage — the links look like links", () => {
   });
 
   it("underlines both, in the readable shade of the brand red", () => {
-    for (const name of [/olvidó su contraseña/i, /inscríbase/i]) {
+    for (const name of [/olvidó su contraseña/i, /inscríbete/i]) {
       const link = screen.getByRole("link", { name });
       expect(link.className).toContain("underline");
       expect(link.className).toContain("text-cata-red-dark");
@@ -613,7 +613,7 @@ describe("LoginPage — the links look like links", () => {
   it("gives each one the arrow that says it leads off this screen", () => {
     // Both go somewhere else — /forgot-password and /student/enroll — which is
     // exactly the case the rule reserves the arrow for.
-    for (const name of [/olvidó su contraseña/i, /inscríbase/i]) {
+    for (const name of [/olvidó su contraseña/i, /inscríbete/i]) {
       const link = screen.getByRole("link", { name });
       expect(link.querySelector("svg[aria-hidden='true']")).not.toBeNull();
     }
