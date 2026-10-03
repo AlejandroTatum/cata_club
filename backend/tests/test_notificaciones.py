@@ -628,7 +628,7 @@ class TestNotificacionPago:
             )
         ).scalar_one_or_none()
         assert notif is not None
-        assert "$35.00" in notif.mensaje
+        assert "$35,00" in notif.mensaje
         assert notif.leida is False
 
     def test_pago_rechazado_crea_notificacion_con_motivo(self, client, db_session):

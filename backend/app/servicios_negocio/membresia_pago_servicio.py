@@ -38,6 +38,7 @@ from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
+from app.soporte_transversal.formato import formatear_monto_usd
 from app.soporte_transversal.firma_archivos import es_contenido_legible, es_firma_valida
 from app.soporte_transversal.tiempo import hoy_club
 from app.servicios_negocio.dtos.membresia_pago_schemas import (
@@ -623,7 +624,7 @@ class PagoServicio:
             if persona is not None and persona.representante_id:
                 self._crear_notificacion_pago(
                     pago, TipoNotificacion.PAGO_REGISTRADO,
-                    f"Su pago de ${pago.monto} fue registrado y está pendiente de validación.",
+                    f"Su pago de {formatear_monto_usd(pago.monto)} fue registrado y está pendiente de validación.",
                 )
         except Exception:
             self.db.rollback()
@@ -1113,7 +1114,7 @@ class PagoServicio:
         if valor > monto_base:
             raise OperacionInvalida(
                 "El beneficio asignado no puede superar el 100% del monto "
-                f"del pago (monto base ${monto_base}, descuento ${valor})"
+                f"del pago (monto base {formatear_monto_usd(monto_base)}, descuento {formatear_monto_usd(valor)})"
             )
         return (
             _DescuentoCongelado(
@@ -1700,14 +1701,14 @@ class PagoServicio:
         if datos.monto != cotizacion.monto_esperado:
             unidad_meses = "mes" if cotizacion.meses == 1 else "meses"
             detalle_beneficio = (
-                f", menos el beneficio de ${cotizacion.descuento_aplicado}"
+                f", menos el beneficio de {formatear_monto_usd(cotizacion.descuento_aplicado)}"
                 if cotizacion.descuento is not None else ""
             )
             raise OperacionInvalida(
-                f"El monto (${datos.monto}) no coincide con el esperado para el "
-                f"período: ${cotizacion.monto_esperado} "
+                f"El monto ({formatear_monto_usd(datos.monto)}) no coincide con el esperado para el "
+                f"período: {formatear_monto_usd(cotizacion.monto_esperado)} "
                 f"({cotizacion.meses} {unidad_meses} "
-                f"x ${membresia.monto_aplicado}{detalle_beneficio})."
+                f"x {formatear_monto_usd(membresia.monto_aplicado)}{detalle_beneficio})."
             )
 
         pago = Pago(
@@ -2566,7 +2567,7 @@ class PagoServicio:
             aviso_ok = self._crear_notificacion_pago(
                 pago=pago,
                 tipo=TipoNotificacion.PAGO_APROBADO,
-                mensaje=f"Su pago de ${pago.monto} fue aprobado. Su membresía está activa.",
+                mensaje=f"Su pago de {formatear_monto_usd(pago.monto)} fue aprobado. Su membresía está activa.",
             )
             self._enviar_correo_de_validacion_pago(pago, TipoNotificacion.PAGO_APROBADO)
             # Último paso, ya con la aprobación commiteada: si el broker está
@@ -3108,7 +3109,7 @@ class PagoServicio:
         # con cabecera válida la pasa. Se decodifica de verdad (FAM-03).
         if not es_contenido_legible(contenido, content_type):
             raise OperacionInvalida(
-                "El archivo está dañado o no se puede leer. Genere el comprobante de nuevo e intente otra vez"
+                "El archivo está dañado o no se puede leer. Genere el comprobante de nuevo e intente otra vez."
             )
 
         # 5. Tamaño máximo. Defensa en profundidad: el router ya acota la

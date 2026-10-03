@@ -237,8 +237,8 @@ def test_asignar_beneficio_de_monto_mayor_a_la_tarifa_operativa_es_rechazado(cli
     )
     assert resp.status_code == 400, resp.text
     detalle = resp.json()["detail"]
-    assert "80" in detalle
-    assert "50000" in detalle
+    assert "80,00" in detalle
+    assert "50.000,00" in detalle
 
 
 def test_asignar_beneficio_de_monto_igual_a_la_tarifa_operativa_es_permitido(client, db_session):

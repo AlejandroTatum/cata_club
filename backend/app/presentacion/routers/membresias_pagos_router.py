@@ -8,7 +8,13 @@ from datetime import date
 
 from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.tiempo import hoy_club
-from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
+from app.infraestructura.generador_pdf import (
+    ETIQUETAS_ESTADO_PAGO_REPORTE,
+    ETIQUETAS_TIPO_PAGO,
+    construir_respuesta_pdf,
+    generar_reporte_pdf,
+)
+from app.soporte_transversal.formato import formatear_monto_usd
 from app.dominio.enums import EstadoMembresia, EstadoPago
 from app.infraestructura.repositorios.membresia_repositorio import HistorialEstadoMembresiaRepositorio
 from app.servicios_negocio.dtos.membresia_pago_schemas import (
@@ -35,27 +41,60 @@ from app.soporte_transversal.rate_limit import limiter
 
 logger = logging.getLogger("cataclub.membresias_pagos")
 
+# Mismos nombres que la pantalla `/reports` y el Excel (QA4 ADMB-06): quien
+# compara el PDF con el Excel no debe creer que son datos distintos. El
+# responsable de pago no viaja en `PagoListItemDTO`, así que no se imprime.
 _COLUMNAS_PAGOS_PDF = [
-    "Estudiante", "Monto", "Tipo de Pago", "Vigencia Desde", "Vigencia Hasta",
-    "Estado", "Fecha de Registro",
+    "Estudiante", "Desde", "Hasta", "Monto", "Método", "Fecha de registro", "Estado",
 ]
 
 
 def _pagos_a_filas(pagos: List[PagoListItemDTO]) -> list[list[str]]:
     """Convierte una lista de `PagoListItemDTO` en filas de texto para el PDF
-    de reporte, en el mismo orden que `_COLUMNAS_PAGOS_PDF`."""
+    de reporte, en el mismo orden que `_COLUMNAS_PAGOS_PDF`. Estado y método
+    salen con su etiqueta humana, nunca con el código del enum."""
     return [
         [
             p.persona_nombre_completo,
-            f"USD {p.monto:.2f}",
-            p.tipo_pago.value,
             p.fecha_inicio.strftime("%d/%m/%Y"),
             p.fecha_fin.strftime("%d/%m/%Y"),
-            p.estado_pago.value,
+            formatear_monto_usd(p.monto),
+            ETIQUETAS_TIPO_PAGO.get(p.tipo_pago.value, p.tipo_pago.value),
             p.fecha_registro.strftime("%d/%m/%Y"),
+            ETIQUETAS_ESTADO_PAGO_REPORTE.get(p.estado_pago.value, p.estado_pago.value),
         ]
         for p in pagos
     ]
+
+
+def _resumen_de_pagos(
+    fecha_inicio: Optional[date],
+    fecha_fin: Optional[date],
+    estado_pago: Optional[EstadoPago],
+    total: int,
+) -> str:
+    """Línea de encabezado del PDF: rango, filtro de estado y total, para que
+    un PDF impreso o enviado por correo se pueda identificar y verificar."""
+    if fecha_inicio is not None and fecha_fin is not None:
+        rango = f"Del {fecha_inicio.strftime('%d/%m/%Y')} al {fecha_fin.strftime('%d/%m/%Y')}"
+    else:
+        rango = "Todas las fechas"
+    estado = (
+        ETIQUETAS_ESTADO_PAGO_REPORTE[estado_pago.value]
+        if estado_pago is not None else "Todos"
+    )
+    cantidad = f"{total} pago" if total == 1 else f"{total} pagos"
+    return f"{rango} · Estado: {estado} · {cantidad}"
+
+
+def _nombre_archivo_pagos(
+    fecha_inicio: Optional[date], fecha_fin: Optional[date], hoy: date,
+) -> str:
+    """Con rango elegido el nombre lo dice; sin rango queda el día del club."""
+    if fecha_inicio is not None and fecha_fin is not None:
+        return f"reporte-pagos_{fecha_inicio.isoformat()}_a_{fecha_fin.isoformat()}.pdf"
+    return f"reporte-pagos_{hoy.isoformat()}.pdf"
+
 
 router = APIRouter(prefix="/membresias", tags=["Membresías y Pagos"])
 
@@ -392,12 +431,14 @@ async def reporte_pagos_pdf(
         titulo="Reporte de Pagos",
         columnas=_COLUMNAS_PAGOS_PDF,
         filas=_pagos_a_filas(items),
+        resumen=_resumen_de_pagos(fecha_inicio, fecha_fin, estado_pago, len(items)),
     )
     # Día del CLUB: la fecha del nombre de archivo es la que un humano lee
     # para saber de cuándo es el reporte. Uno descargado a las 19:30 del lunes
     # no puede llamarse con la fecha del martes.
-    fecha_iso = hoy_club().isoformat()
-    return construir_respuesta_pdf(pdf_bytes, f"reporte-pagos_{fecha_iso}.pdf")
+    return construir_respuesta_pdf(
+        pdf_bytes, _nombre_archivo_pagos(fecha_inicio, fecha_fin, hoy_club()),
+    )
 
 
 # --- Membresia ---
