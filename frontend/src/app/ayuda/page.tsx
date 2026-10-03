@@ -146,7 +146,7 @@ const QUICK_LINKS_BY_ROLE: Partial<Record<UserRole, RoleShortcut[]>> = {
   ],
   trainer: [
     { title: "Mi día", description: "Sus próximas sesiones", href: "/trainer" },
-    { title: "Asistencias", description: "Registrar la asistencia", href: "/trainer/attendance" },
+    { title: "Pasar lista", description: "Registrar la asistencia", href: "/trainer/attendance" },
     { title: "Mi perfil", description: "Sus datos y su cuenta", href: "/profile" },
   ],
   estudiante: [

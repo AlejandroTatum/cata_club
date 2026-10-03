@@ -29,36 +29,36 @@ R: Ingrese con su correo y contraseña. Si olvidó la contraseña, solicite un e
 P: ¿Cuáles son los horarios?
 R: Consulte los horarios vigentes en la sección Horarios de la página principal.
 P: ¿Cuánto cuesta la mensualidad?
-R: Consulte el valor de su plan en Mi Cuenta. Para conocer los planes disponibles, escriba al club por WhatsApp.
+R: Consulte el valor de su plan en Mi cuenta. Para conocer los planes disponibles, escriba al club por WhatsApp.
 P: ¿Por qué mi pantalla no se parece a la de otra persona del club?
 R: Cada persona ve las funciones que corresponden a su rol: administrador, entrenador o familia.
 
 [Si es estudiante o representante]
 P: ¿Dónde veo si mi pago fue aprobado?
-R: En Mi Cuenta puede consultar el estado de sus pagos y de su membresía. Si un pago fue rechazado, verá el motivo y podrá enviar otro comprobante.
+R: En Mi cuenta puede consultar el estado de sus pagos y de su membresía. Si un pago fue rechazado, verá el motivo y podrá enviar otro comprobante.
 P: ¿Dónde veo la asistencia?
-R: En Mi Cuenta puede consultar las clases y asistencias registradas.
+R: En Mi cuenta puede consultar las clases y asistencias registradas.
 P: Necesito corregir la ficha médica. ¿Puedo hacerlo yo?
-R: Sí, si gestiona su propia cuenta o representa al estudiante. Abra Ficha médica en Mi Cuenta. La ficha de un menor con cuenta propia la corrige su representante o un administrador.
+R: Sí, si gestiona su propia cuenta o representa al estudiante. Abra Ficha médica en Mi cuenta. La ficha de un menor con cuenta propia la corrige su representante o un administrador.
 P: Represento a más de un hijo. ¿Cómo cambio entre ellos?
-R: Use el selector de estudiante en Mi Cuenta para elegir a quién desea consultar.
+R: Use el selector de estudiante en Mi cuenta para elegir a quién desea consultar.
 
 [Si es entrenador]
 P: ¿Cómo tomo asistencia?
-R: Abra Asistencia, elija el horario, pase lista y confirme.
+R: Abra Pasar lista, elija el día y el horario, marque a cada alumno y confirme.
 P: Me equivoqué al marcar. ¿Puedo deshacerlo?
-R: Sí. Use Deshacer en la barra inferior para revertir la última acción.
+R: Antes de confirmar puede usar Deshacer. Una vez registrada la lista, solo administración puede corregirla: escriba a administración con el día, el horario y el alumno.
 P: ¿Dónde veo lo que ya cargué?
-R: En Historial Asistencia puede consultar las listas registradas.
+R: En Pasar lista → Historial puede consultar las listas registradas.
 
 [Si es administrador]
 P: ¿Cómo valido un pago?
-R: Abra Membresías y Pagos, revise la solicitud y confirme su decisión.
-P: Tengo muchos pagos iguales. ¿Debo aprobarlos de a uno?
+R: Abra Pagos, revise la solicitud y confirme su decisión.
+P: Tengo muchos pagos iguales. ¿Debo aprobarlos uno por uno?
 R: Sí. Cada solicitud se revisa y aprueba por separado.
 P: Aprobé un pago por error. ¿Puedo revertirlo?
 R: Puede usar Deshacer durante los segundos posteriores a la aprobación. Después, el pago queda registrado.
 P: ¿Quién define los horarios?
-R: El administrador los configura en Horarios.
+R: El administrador los configura en Grupos y horarios.
 P: ¿Dónde genero los reportes del club?
 R: En Reportes puede generar los informes con los datos registrados.

@@ -93,7 +93,7 @@ describe("FAQ_SECTIONS", () => {
     // (PaymentsPage.test.tsx, "sumar a un lote" / "aprobación por lote"); this
     // is the FAQ-side half — the copy that kept teaching the removed flow.
     const entry = FAQ_SECTIONS.flatMap((s) => s.entries).find(
-      (e) => e.question === "Tengo muchos pagos iguales. ¿Debo aprobarlos de a uno?",
+      (e) => e.question === "Tengo muchos pagos iguales. ¿Debo aprobarlos uno por uno?",
     );
     expect(entry).toBeDefined();
     expect(entry!.answer).not.toMatch(/selecciona(r)? varios|lote|aprobarlos juntos/i);
@@ -118,5 +118,28 @@ describe("FAQ_SECTIONS", () => {
     for (const text of everything) {
       expect(text).not.toMatch(/\/(student|trainer|payments|groups|members|admin)\b/);
     }
+  });
+});
+
+describe("FAQ screen names (TXT-14, ENT-18)", () => {
+  const everything = FAQ_SECTIONS.flatMap((s) => s.entries.flatMap((e) => [e.question, e.answer])).join("\n");
+
+  it.each(["Membresías y Pagos", "Historial Asistencia", "Abra Asistencia", "Mi Cuenta", "de a uno", "en Horarios"])(
+    "never says «%s», which is not what the menu or the club says",
+    (phrase) => {
+      expect(everything).not.toContain(phrase);
+    },
+  );
+
+  it("names the real screens", () => {
+    expect(everything).toContain("Abra Pagos");
+    expect(everything).toContain("Pasar lista → Historial");
+    expect(everything).toContain("Abra Pasar lista");
+    expect(everything).toContain("Grupos y horarios");
+    expect(everything).toContain("uno por uno");
+  });
+
+  it("tells the trainer who corrects a saved list", () => {
+    expect(everything).toMatch(/solo administración puede corregirla/);
   });
 });

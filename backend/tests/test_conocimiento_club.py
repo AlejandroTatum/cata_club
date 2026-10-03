@@ -89,8 +89,8 @@ class TestArchivoCanonico:
         texto = conocimiento_club.texto_para_prompt(conocimiento)
         for hecho in (
             "Reportes",  # el administrador genera reportes
-            "Membresías y Pagos",
-            "Historial Asistencia",
+            "Pagos",  # el administrador valida pagos
+            "Pasar lista",  # el entrenador toma asistencia
             "recuperación",  # recuperación de contraseña por correo
             # ("entrenador disponible" salió con la copy aprobada en la
             # corrección C3 de #1374: la respuesta de horarios quedó corta.)

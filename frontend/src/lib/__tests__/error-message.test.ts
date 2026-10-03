@@ -312,7 +312,9 @@ describe("toUserMessage — anything that is not an API error", () => {
   it("names the cancellation instead of the DOM exception", () => {
     const aborted = Object.assign(new Error("The operation was aborted."), { name: "AbortError" });
 
-    expect(toUserMessage(aborted, FALLBACK)).toBe("La operación se canceló.");
+    expect(toUserMessage(aborted, FALLBACK)).toBe(
+      "La operación se canceló. Si todavía la necesita, vuelva a intentarlo.",
+    );
   });
 
   it("does not call a timeout a cancellation", () => {
@@ -329,7 +331,9 @@ describe("toUserMessage — anything that is not an API error", () => {
       "Esto está tardando más de lo normal y no pudimos terminarlo. " +
         `Escríbanos por WhatsApp y lo ayudamos: ${toWhatsAppLink(landingConfig.contact.whatsapp[0])}`,
     );
-    expect(toUserMessage(timedOut, FALLBACK)).not.toBe("La operación se canceló.");
+    expect(toUserMessage(timedOut, FALLBACK)).not.toBe(
+      "La operación se canceló. Si todavía la necesita, vuelva a intentarlo.",
+    );
   });
 
   it("falls back for a bare Error, which carries a developer's sentence", () => {

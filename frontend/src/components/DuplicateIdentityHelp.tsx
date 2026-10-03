@@ -31,7 +31,6 @@
 
 import type { ReactElement } from "react";
 import Link from "next/link";
-import LinkifiedText from "@/components/LinkifiedText";
 import { WHATSAPP_CONTACTO } from "@/lib/error-message";
 
 export type DuplicateIdentityAudience = "self-service" | "representative" | "admin";
@@ -42,15 +41,18 @@ interface DuplicateIdentityHelpProps {
 
 interface Guidance {
   hint: string;
-  /** Line with the club WhatsApp, for people who may be returning former members. */
-  contact?: string;
+  /** Sentence offering the club WhatsApp, for people who may be returning former members. */
+  contact?: { before: string; after: string };
   links: { href: string; label: string }[];
 }
 
 const GUIDANCE: Record<DuplicateIdentityAudience, Guidance> = {
   "self-service": {
     hint: "Si ya tiene cuenta, no necesita volver a inscribirse: inicie sesión y, desde su cuenta, agregue un dependiente. Para eso solo necesita haber verificado su correo.",
-    contact: `Si ya fue socio del club, escríbanos por WhatsApp para reactivar su cuenta: ${WHATSAPP_CONTACTO}`,
+    contact: {
+      before: "Si ya fue socio del club, escríbanos por ",
+      after: " para reactivar su cuenta.",
+    },
     links: [
       { href: "/login", label: "Iniciar sesión" },
       { href: "/forgot-password", label: "Recuperar contraseña" },
@@ -73,7 +75,16 @@ export function DuplicateIdentityHelp({ audience }: DuplicateIdentityHelpProps):
       <p>{hint}</p>
       {contact && (
         <p>
-          <LinkifiedText text={contact} />
+          {contact.before}
+          <a
+            href={WHATSAPP_CONTACTO}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold underline underline-offset-2"
+          >
+            WhatsApp
+          </a>
+          {contact.after}
         </p>
       )}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
