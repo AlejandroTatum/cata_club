@@ -180,13 +180,13 @@ describe("RegularizarDeudaForm — monto cotizado por el backend (ADM-09)", () =
   });
 });
 
-describe("RegularizarDeudaForm — uso para migrar socios del cuaderno (#1492)", () => {
+describe("RegularizarDeudaForm — ayuda en lenguaje del club (#1492, ADMA-13)", () => {
   it("explains that the form also loads existing payments and activates the membership when the period covers today", async () => {
     await open();
     expect(
       screen.getByText(
-        "También sirve para cargar el pago vigente de un socio desde el cuaderno del club al migrar. " +
-          "Si el período cubre hoy, la membresía queda activa.",
+        "Registre aquí los meses atrasados que el alumno ya pagó o debe regularizar. " +
+          "Si el período incluye hoy, la membresía queda activa.",
       ),
     ).toBeInTheDocument();
   });

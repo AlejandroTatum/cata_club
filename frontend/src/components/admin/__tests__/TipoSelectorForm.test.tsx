@@ -67,3 +67,46 @@ describe("TipoSelectorForm catalog", () => {
     await waitFor(() => expect(api.fetchTiposMembresia).toHaveBeenCalledWith({ soloActivas: true }));
   });
 });
+
+describe("TipoSelectorForm options (ADMA-18)", () => {
+  const CATALOGO = [
+    { id: 1, categoria: "Mensual Adultos", precio: "40.00", modalidad: "MENSUAL" as const, activo: true, enUso: true },
+    { id: 2, categoria: "Infantil", precio: "25.00", modalidad: "MENSUAL" as const, activo: true, enUso: true },
+  ];
+
+  async function openForm(extra: Partial<React.ComponentProps<typeof TipoSelectorForm>> = {}) {
+    vi.mocked(api.fetchTiposMembresia).mockResolvedValue(CATALOGO);
+    render(
+      <TipoSelectorForm
+        triggerLabel="Cambiar plan"
+        TriggerIcon={Repeat}
+        submitLabel="Confirmar"
+        SubmitIcon={Repeat}
+        selectPlaceholder="Seleccionar plan…"
+        submitFailureMessage="No se pudo cambiar el plan."
+        onSubmit={async () => {}}
+        {...extra}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Cambiar plan" }));
+    await screen.findByRole("option", { name: /Infantil/ });
+  }
+
+  it("labels options with the price per month and never the internal modalidad", async () => {
+    await openForm();
+    expect(screen.getByRole("option", { name: "Mensual Adultos — $40,00 al mes" })).toBeInTheDocument();
+    expect(screen.queryByText(/MENSUAL\)/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the default field label", async () => {
+    await openForm();
+    expect(screen.getByLabelText(/Tipo de membresía/)).toBeInTheDocument();
+  });
+
+  it("uses a custom field label and leaves out the current plan", async () => {
+    await openForm({ fieldLabel: "Plan nuevo", excludeCategoria: "Mensual Adultos" });
+    expect(screen.getByLabelText(/Plan nuevo/)).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Mensual Adultos/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Infantil/ })).toBeInTheDocument();
+  });
+});

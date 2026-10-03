@@ -373,7 +373,7 @@ describe("MembersPage — Editar member modal", () => {
     expect(left.parentElement).toHaveClass("lg:grid-cols-2");
     expect(within(right).getByRole("heading", { name: "Roles" })).toBeInTheDocument();
     // Each group still declares how it persists.
-    expect(within(left).getByText("Requiere guardar")).toBeInTheDocument();
+    expect(within(left).getByText("Sin cambios")).toBeInTheDocument();
     expect(within(right).getAllByText("Se guarda al instante")).toHaveLength(2);
     // Nombres and apellidos share one row from `sm`.
     const nombres = within(dialog).getByLabelText("Nombres");
@@ -703,8 +703,13 @@ describe("MembersPage — Editar member modal", () => {
     const dialog = screen.getByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: /guardar nombre, apellido y teléfono/i }));
 
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
-      "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: https://wa.me/593994219619",
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos:",
+    );
+    expect(within(alert).getByRole("link", { name: /wa\.me|WhatsApp/i })).toHaveAttribute(
+      "href",
+      "https://wa.me/593994219619",
     );
   });
 
@@ -895,6 +900,120 @@ describe("MembersPage — Editar member modal", () => {
     expect(adminCheckbox).toBeChecked();
   });
 
+  it("FAM-21: a WhatsApp address inside a role error renders as a link, not plain text", async () => {
+    mockObtenerRolesDePersona.mockResolvedValue({ roles: ["ADMINISTRADOR"], activo: true });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const dialog = await openModalAndWaitForRoles(row);
+
+    const { ApiClientError } = await import("@/services/api");
+    mockQuitarRol.mockRejectedValueOnce(
+      new ApiClientError("No se pudo actualizar el rol. Escriba al club: https://wa.me/593999999999.", 400),
+    );
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /admin/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
+
+    const alert = await within(dialog).findByRole("alert");
+    expect(within(alert).getByRole("link")).toHaveAttribute("href", "https://wa.me/593999999999");
+  });
+
+  it("ADMA-08: deactivating the account asks for confirmation first, and cancelling changes nothing", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    const dialog = await openModalAndWaitForRoles(row);
+    fireEvent.click(within(dialog).getByRole("button", { name: /^activa$/i }));
+
+    expect(screen.getByText(/¿Desactivar la cuenta de María González\?/)).toBeInTheDocument();
+    expect(screen.getByText(/No podrá iniciar sesión hasta que la active de nuevo/)).toBeInTheDocument();
+    expect(mockCambiarEstadoCuenta).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /^cancelar$/i }));
+    expect(mockCambiarEstadoCuenta).not.toHaveBeenCalled();
+  });
+
+  it("ADMA-06: the header badge follows the account state once it is deactivated", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [{ ...ACCOUNT, accountState: "active" }] });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    const dialog = await openModalAndWaitForRoles(row);
+    const header = dialog.querySelector(".bg-sunken") as HTMLElement;
+    expect(within(header).getByText("Activa")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^activa$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^desactivar$/i }));
+
+    await waitFor(() => expect(within(header).getByText("Inactiva")).toBeInTheDocument());
+    expect(within(header).queryByText("Activa")).not.toBeInTheDocument();
+  });
+
+  it("ADMA-12: the identity section reads «Sin cambios» until a field is edited", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    const dialog = await openModalAndWaitForRoles(row);
+    const datos = within(dialog).getByRole("heading", { name: "Datos de la cuenta" }).parentElement as HTMLElement;
+    expect(within(datos).getByText("Sin cambios")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Requiere guardar")).not.toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByLabelText("Nombres"), { target: { value: "María José" } });
+    expect(within(datos).getByText("Cambios sin guardar")).toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByLabelText("Nombres"), { target: { value: "María" } });
+    expect(within(datos).getByText("Sin cambios")).toBeInTheDocument();
+  });
+
+  it("ADMA-03/22: the «Representado por» column gives way below lg and the box wraps on a phone", async () => {
+    mockFetchMembers.mockResolvedValue({
+      accounts: [{ ...ACCOUNT, representadoPor: "Santiago Delgado Rivadeneira", representadoPorId: 9 }],
+    });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    const table = row.closest("table") as HTMLElement;
+    expect(within(table).getByRole("columnheader", { name: "Representado por" })).toHaveClass("hidden", "lg:table-cell");
+    expect(within(row).getAllByText(/Representado por Santiago Delgado Rivadeneira/).length).toBeGreaterThan(0);
+
+    const card = await findAccountCard();
+    const box = within(card).getByText(/Representado por Santiago Delgado Rivadeneira/);
+    expect(box).toHaveClass("whitespace-normal", "max-w-full");
+  });
+
+  it("ADMA-33: the student panel says «En el club», not a second «Estado»", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    const dialog = await openModalAndWaitForRoles(row);
+    const panel = within(dialog).getByRole("heading", { name: "Estudiantes a cargo" }).closest("section") as HTMLElement;
+    expect(within(panel).getByText("En el club")).toBeInTheDocument();
+    expect(within(panel).queryByText("Estado")).not.toBeInTheDocument();
+  });
+
   it("toggling the account activo/inactivo state inside the modal calls cambiarEstadoCuenta", async () => {
     render(
       <ToastProvider>
@@ -905,6 +1024,7 @@ describe("MembersPage — Editar member modal", () => {
 
     const dialog = await openModalAndWaitForRoles(row);
     fireEvent.click(within(dialog).getByRole("button", { name: /^activa$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^desactivar$/i }));
 
     await waitFor(() => {
       expect(mockCambiarEstadoCuenta).toHaveBeenCalledWith(1, false);
@@ -1212,7 +1332,7 @@ describe("MembersPage — Registrar pago inline form", () => {
    *  dialog — the step every test past the button-presence check takes right
    *  after `openMemberDialog`. */
   async function openPaymentForm(dialog: HTMLElement): Promise<void> {
-    fireEvent.click(await within(dialog).findByRole("button", { name: /registrar (pago|inscripción)/i }));
+    fireEvent.click(await within(dialog).findByRole("button", { name: /registrar pago/i }));
   }
 
   /** When: the admin attaches a voucher and submits. TRANSFERENCIA is the
@@ -1226,7 +1346,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     fireEvent.change(fileInput, {
       target: { files: [new File(["x"], "comprobante.pdf", { type: "application/pdf" })] },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: /registrar (pago|inscripción)/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /registrar pago/i }));
   }
 
   it("renders a 'Registrar pago' button inside the student card when the student has a membership", async () => {
@@ -1357,7 +1477,7 @@ describe("MembersPage — Registrar pago inline form", () => {
       expect(mockValidarPago).toHaveBeenCalledWith(99, { estadoPago: "APROBADO" });
     });
     await waitFor(() => {
-      expect(within(dialog).getByText(/inscripción registrada/i)).toBeInTheDocument();
+      expect(within(dialog).getByText(/pago registrado y aprobado/i)).toBeInTheDocument();
     });
   });
 
@@ -2196,12 +2316,12 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
     for (const title of ["Datos de la cuenta", "Estado de la cuenta", "Roles", "Estudiantes a cargo"]) {
       const heading = within(dialog).getByRole("heading", { name: title });
       const header = heading.parentElement as HTMLElement;
-      expect(within(header).getByText(/se guarda al instante|requiere guardar/i)).toBeInTheDocument();
+      expect(within(header).getByText(/se guarda al instante|sin cambios|cambios sin guardar/i)).toBeInTheDocument();
     }
 
     const datos = within(dialog).getByRole("heading", { name: "Datos de la cuenta" })
       .parentElement as HTMLElement;
-    expect(within(datos).getByText("Requiere guardar")).toBeInTheDocument();
+    expect(within(datos).getByText("Sin cambios")).toBeInTheDocument();
 
     const roles = within(dialog).getByRole("heading", { name: "Roles" }).parentElement as HTMLElement;
     expect(within(roles).getByText("Se guarda al instante")).toBeInTheDocument();

@@ -12,6 +12,7 @@
 
 "use client";
 
+import LinkifiedText from "@/components/LinkifiedText";
 import { useState } from "react";
 import { CheckCircle2, Loader2, PauseCircle, PlayCircle } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -21,19 +22,22 @@ import { toUserMessage } from "@/lib/error-message";
 import type { EstadoMembresia } from "@/types/domain";
 import CampoFormularioAdmin from "@/components/admin/CampoFormularioAdmin";
 import { MIN_TARGET_CLASS } from "@/lib/target-size";
-import { ACTION_TRIGGER, DESTRUCTIVE_ACTION_TRIGGER } from "./payment-action-styles";
+import { ACTION_TRIGGER, DESTRUCTIVE_ACTION_TRIGGER, PRIMARY_ACTION_TRIGGER } from "./payment-action-styles";
 
 interface SuspenderReactivarFormProps {
   membresiaId: number;
   estado: EstadoMembresia;
   /** Refetch the member list so the new estado (and its badge) appears in place. */
   onChanged: () => void;
+  /** Draw the trigger as the dialog's one red primary (ADMA-17: suspended membership). */
+  primary?: boolean;
 }
 
 export default function SuspenderReactivarForm({
   membresiaId,
   estado,
   onChanged,
+  primary = false,
 }: SuspenderReactivarFormProps): React.ReactElement | null {
   const { showSuccess, showError } = useToast();
   const [open, setOpen] = useState(false);
@@ -94,7 +98,9 @@ export default function SuspenderReactivarForm({
       <button
         type="button"
         onClick={open ? () => setOpen(false) : handleOpen}
-        className={accion === "suspender" ? DESTRUCTIVE_ACTION_TRIGGER : ACTION_TRIGGER}
+        className={
+          accion === "suspender" ? DESTRUCTIVE_ACTION_TRIGGER : primary ? PRIMARY_ACTION_TRIGGER : ACTION_TRIGGER
+        }
       >
         <Icon size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
         {triggerLabel}
@@ -119,7 +125,7 @@ export default function SuspenderReactivarForm({
             required
           />
 
-          {error && <p className="mt-2 text-2xs text-cata-red">{error}</p>}
+          {error && <p className="mt-2 text-2xs text-cata-red"><LinkifiedText text={error} /></p>}
 
           <div className="mt-3 flex items-center gap-2">
             <button

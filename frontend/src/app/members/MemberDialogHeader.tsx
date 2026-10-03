@@ -5,7 +5,15 @@ import { X } from "lucide-react";
 import { Badge, DataBox } from "@/components/ui";
 import { getUserInitials } from "@/lib/auth-utils";
 import { ICON } from "@/lib/icon-size";
-import { getAccountStateBadge, getAccountRoleLabel, type MemberAccount } from "./members-utils";
+import type { BackendTipoRol } from "@/types/domain";
+import {
+  ACCOUNT_STATE_LABELS,
+  ACCOUNT_STATE_TONE,
+  getAccountStateBadge,
+  getAccountRoleLabel,
+  type AccountState,
+  type MemberAccount,
+} from "./members-utils";
 
 interface MemberDialogHeaderProps {
   account: MemberAccount;
@@ -15,6 +23,9 @@ interface MemberDialogHeaderProps {
   purpose: string;
   closeButtonRef: RefObject<HTMLButtonElement>;
   onClose: () => void;
+  /** State and roles changed from inside the dialog, so the header does not lag behind them. */
+  liveAccountState?: AccountState;
+  liveRoles?: BackendTipoRol[];
 }
 
 /**
@@ -29,8 +40,12 @@ export default function MemberDialogHeader({
   purpose,
   closeButtonRef,
   onClose,
+  liveAccountState,
+  liveRoles,
 }: MemberDialogHeaderProps): React.ReactElement {
-  const badge = getAccountStateBadge(account);
+  const badge = liveAccountState
+    ? { label: ACCOUNT_STATE_LABELS[liveAccountState], tone: ACCOUNT_STATE_TONE[liveAccountState] }
+    : getAccountStateBadge(account);
   const cedula = account.estudiantes[0]?.cedula;
   const fullName = `${account.nombres} ${account.apellidos}`;
 
@@ -42,7 +57,7 @@ export default function MemberDialogHeader({
           {getUserInitials(fullName)}
         </div>
         <div className="min-w-0">
-          <p className="text-2xs font-semibold uppercase tracking-wide text-ink-3">{purpose}</p>
+          <p className="text-2xs font-semibold uppercase tracking-wide text-ink-3-strong">{purpose}</p>
           {/* `min-w-0` + `truncate` is load-bearing (issue #659): without it
               this flex item never shrinks below its un-wrapped text width and
               the header row overflows instead of ellipsizing. */}
@@ -55,7 +70,7 @@ export default function MemberDialogHeader({
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             {cedula ? <DataBox>{cedula}</DataBox> : null}
             <DataBox>{account.telefono}</DataBox>
-            <span className="text-xs text-ink-3">{getAccountRoleLabel(account)}</span>
+            <span className="text-xs text-ink-3">{getAccountRoleLabel(account, liveRoles ?? account.backendRoles)}</span>
           </div>
         </div>
       </div>
