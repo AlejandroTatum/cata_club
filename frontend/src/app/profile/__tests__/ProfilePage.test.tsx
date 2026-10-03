@@ -1207,8 +1207,13 @@ describe("ProfilePage — change password", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /restablecer por correo/i }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: https://wa.me/593994219619",
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: WhatsApp",
+    );
+    expect(within(alert).getByRole("link", { name: "WhatsApp" })).toHaveAttribute(
+      "href",
+      "https://wa.me/593994219619",
     );
   });
 });

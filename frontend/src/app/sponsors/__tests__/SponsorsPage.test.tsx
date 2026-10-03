@@ -27,6 +27,10 @@ describe("SponsorsPage", () => {
     expect(name).toHaveClass("line-clamp-2");
     expect(name).not.toHaveClass("truncate");
   });
+  it("invites to drag a «logo» with «arrástrelo», not «arrástrela» (ADMB-23)", async () => {
+    render(<SponsorsPage />);
+    expect(await screen.findByText("o arrástrelo aquí")).toBeInTheDocument();
+  });
   it("puts the upload form before the list and the guide below lg", async () => {
     render(<SponsorsPage />); await screen.findByText("Municipio");
     const form = screen.getByRole("heading", { name: "Agregar patrocinador" }).closest("form")!;

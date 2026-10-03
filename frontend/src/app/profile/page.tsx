@@ -207,6 +207,7 @@ import {
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { formatDate } from "@/lib/format-utils";
+import LinkifiedText from "@/components/LinkifiedText";
 import { toUserMessage } from "@/lib/error-message";
 
 /** Lifetime of the password-recovery link (backend `crear_token_recuperacion`, 30 min). */
@@ -681,7 +682,7 @@ function IdentityPanel({
 
       {fotoError && (
         <p role="alert" className="border-t border-white/10 bg-coal-2 px-6 py-3 text-xs text-white lg:px-8">
-          {fotoError}
+          <LinkifiedText text={fotoError} />
         </p>
       )}
     </section>
@@ -1346,7 +1347,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             )}
             {saveError && (
               <p role="alert" className="border-t border-line px-5 py-3 text-sm text-state-bad">
-                {saveError}
+                <LinkifiedText text={saveError} />
               </p>
             )}
           </CardSection>
@@ -1524,7 +1525,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             )}
             {sessionsError && (
               <p role="alert" className="text-sm text-state-bad">
-                {sessionsError}
+                <LinkifiedText text={sessionsError} />
               </p>
             )}
 
@@ -1561,7 +1562,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             )}
             {passwordError && (
               <p role="alert" className="text-sm text-state-bad">
-                {passwordError}
+                <LinkifiedText text={passwordError} />
               </p>
             )}
           </div>

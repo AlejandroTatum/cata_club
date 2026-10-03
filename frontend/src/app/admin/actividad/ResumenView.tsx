@@ -74,7 +74,16 @@ function trendSummary(title: string, bars: readonly BarDatum[]): string {
 }
 
 /** `now` is the instant the figures were fetched, so "hace N min" does not drift with the render. */
-export default function ResumenView({ data, now }: { data: ResumenData; now: string }): ReactElement {
+export default function ResumenView({
+  data,
+  now,
+  metricsUnavailable = false,
+}: {
+  data: ResumenData;
+  now: string;
+  /** The advanced metrics failed to load: the status card says so instead of «Todo bien». */
+  metricsUnavailable?: boolean;
+}): ReactElement {
   const { uniqueVisitors, span } = data;
   const people = trendData(data, visitorsOf, "personas");
   const attendances = trendData(data, (p) => p.attendances, "asistencias");
@@ -198,6 +207,19 @@ export default function ResumenView({ data, now }: { data: ResumenData; now: str
                   </li>
                 );
               })}
+              {metricsUnavailable ? (
+                <li className="flex items-start gap-3 px-[18px] py-3.5">
+                  <span aria-hidden="true" className={cn("mt-1.5 h-2 w-2 flex-none rounded-full", STATUS_DOT.warn)} />
+                  <div className="flex min-w-0 flex-1 flex-col gap-field">
+                    <p className="m-0 text-sm font-semibold text-ink">
+                      <span className="sr-only">{STATUS_WORD.warn}: </span>
+                      No se pudieron leer las métricas de la aplicación.
+                    </p>
+                    <p className="m-0 text-xs text-ink-2">Abra «Métricas avanzadas» para ver el detalle y reintentar.</p>
+                  </div>
+                  <Badge tone="warn">{STATUS_WORD.warn}</Badge>
+                </li>
+              ) : null}
             </ul>
             {data.queuedByQuota > 0 ? (
               <p data-testid="queued-by-quota" className="m-0 border-t border-line px-[18px] py-3.5 text-xs text-ink-2">

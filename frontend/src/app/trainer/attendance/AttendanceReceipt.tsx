@@ -114,7 +114,7 @@ export default function AttendanceReceipt({
             allAlreadyRegistered
               ? `${registeredBy ? `Registrada por ${registeredBy}. ` : ""}No se cambió nada.`
               : confirmedAt
-              ? `${formatDateTime(confirmedAt.toISOString())} · ${result?.registradoPorNombre ?? "No registrado"}`
+              ? [formatDateTime(confirmedAt.toISOString()), result?.registradoPorNombre].filter(Boolean).join(" · ")
               : undefined
           }
         />

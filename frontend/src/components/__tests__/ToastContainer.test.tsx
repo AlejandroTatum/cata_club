@@ -156,8 +156,47 @@ describe("ToastContainer — announcement and placement", () => {
 
     // `top-4 right-4 w-full max-w-sm` spanned a 360px phone edge to edge and
     // sat on top of the topbar's "Menú" button and notification bell.
-    expect(container).toHaveClass("bottom-4");
+    expect(container).toHaveClass("bottom-24");
     expect(container).not.toHaveClass("top-4");
+  });
+
+  it("sits above a fixed bottom action bar on a phone so it cannot cover «Confirmar» (ENT-04)", () => {
+    renderHarness();
+    fireEvent.click(screen.getByText("Trigger error"));
+
+    const container = screen.getByRole("alert").parentElement as HTMLElement;
+
+    // `bottom-4` landed on the commit bar's button (toast at 741px, button at
+    // 730–770px). `bottom-24` clears a 64px bar plus the safe-area inset.
+    expect(container).not.toHaveClass("bottom-4");
+  });
+
+  it("turns a wa.me address in the message into a «WhatsApp» link (FAM-21)", () => {
+    function Wa(): React.ReactElement {
+      const toast = useToast();
+      return (
+        <button
+          type="button"
+          onClick={() => toast.showError("Escríbanos: https://wa.me/593994219619")}
+        >
+          Trigger wa
+        </button>
+      );
+    }
+    render(
+      <ToastProvider>
+        <Wa />
+        <ToastContainer />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByText("Trigger wa"));
+
+    const toast = screen.getByRole("alert");
+    expect(within(toast).getByRole("link", { name: "WhatsApp" })).toHaveAttribute(
+      "href",
+      "https://wa.me/593994219619",
+    );
+    expect(toast.textContent).not.toContain("wa.me");
   });
 
   it("docks below the header on desktop so it cannot cover the search box or the bell", () => {
@@ -172,7 +211,7 @@ describe("ToastContainer — announcement and placement", () => {
     // of the two with 16px of daylight and keeps the mobile dock untouched.
     expect(container).not.toHaveClass("sm:top-4");
     expect(container).toHaveClass("sm:top-[72px]");
-    expect(container).toHaveClass("bottom-4");
+    expect(container).toHaveClass("bottom-24");
     expect(container).toHaveClass("sm:bottom-auto");
   });
 });

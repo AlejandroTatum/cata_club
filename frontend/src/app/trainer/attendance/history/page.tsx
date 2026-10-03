@@ -50,7 +50,13 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { fetchAttendanceRecords, fetchTrainingSchedules } from "@/services/api";
+import {
+  fetchAttendanceRecords,
+  fetchRosterDeTodosLosHorarios,
+  fetchTrainingSchedules,
+  type AlumnoHorario,
+} from "@/services/api";
+import { buildEnrolledCountsByHorario } from "@/app/trainer/trainer-day-utils";
 import AttendanceFilters, {
   useAttendanceFilters,
 } from "@/components/attendance/AttendanceFilters";
@@ -179,6 +185,28 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
       });
   }, []);
 
+  // Enrolled students per horario let the rail tell a partial list from a
+  // complete one (ENT-13). Best effort: without the roster the rail simply
+  // keeps counting any list as taken.
+  const [padron, setPadron] = useState<AlumnoHorario[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetchRosterDeTodosLosHorarios()
+      .then((all) => {
+        if (!cancelled) setPadron(all);
+      })
+      .catch((err: unknown) => {
+        console.error("[trainer/attendance/history] fetchRosterDeTodosLosHorarios failed", err);
+      });
+    return (): void => {
+      cancelled = true;
+    };
+  }, []);
+  const inscritosPorHorario = useMemo(
+    () => (padron ? buildEnrolledCountsByHorario(schedules, padron) : undefined),
+    [padron, schedules],
+  );
+
   const scopedRecords = useMemo(() => narrowToHorarios(records, query), [records, query]);
   const scopedSchedules = useMemo(() => narrowSchedules(schedules, query), [schedules, query]);
   const sessions = useMemo(() => groupRecordsBySession(scopedRecords), [scopedRecords]);
@@ -277,6 +305,7 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                 fechaFin={query.fechaFin ?? ""}
                 horarioId={query.horarioId ?? null}
                 studentFiltered={Boolean(filters.student)}
+                inscritosPorHorario={inscritosPorHorario}
               />
             )}
           </div>

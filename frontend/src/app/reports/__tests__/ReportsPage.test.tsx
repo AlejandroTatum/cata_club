@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import ReportsPage from "@/app/reports/page";
 import type { PersonaBusqueda, PersonaReporte } from "@/types/domain";
 import type { PaymentValidationRequest } from "@/services/api";
@@ -207,6 +207,15 @@ describe("ReportsPage — preset cards (18-reportes.html)", () => {
     expect(presets[2]).toHaveTextContent("Reporte de pagos");
     // There is no etiquetas/label generator in the backend — see the page docstring.
     expect(screen.queryByText(/etiquetas/i)).not.toBeInTheDocument();
+  });
+
+  it("paints the preset descriptions in the AA-contrast ink, not the shared ink-3 (ADMB-27)", async () => {
+    render(<ReportsPage />);
+    const radios = await screen.findAllByRole("radio");
+    for (const radio of radios) {
+      const description = radio.querySelector("span.text-xs");
+      expect(description).toHaveClass("text-ink-3-strong");
+    }
   });
 
   it("marks the selected preset with the coal + ball-dot treatment, never red", async () => {
@@ -497,9 +506,14 @@ describe("ReportsPage — preview area", () => {
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
 
     setRange("2026-01-01", "2026-12-31");
-    expect(
-      await screen.findByText("Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: https://wa.me/593994219619"),
-    ).toBeInTheDocument();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: WhatsApp",
+    );
+    expect(within(alert).getByRole("link", { name: "WhatsApp" })).toHaveAttribute(
+      "href",
+      "https://wa.me/593994219619",
+    );
   });
 });
 

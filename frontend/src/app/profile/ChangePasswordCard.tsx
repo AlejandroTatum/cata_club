@@ -21,6 +21,7 @@ import { Button } from "@/components/ui";
 import PasswordStrengthMeter from "@/components/ui/PasswordStrengthMeter";
 import { ICON } from "@/lib/icon-size";
 import { passwordRule } from "@/lib/identity-validation";
+import LinkifiedText from "@/components/LinkifiedText";
 import { toUserMessage } from "@/lib/error-message";
 import { cambiarContrasenia } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
@@ -98,7 +99,7 @@ function PasswordField({
       </div>
       {error && (
         <p id={errorId} role="alert" className="text-xs font-semibold text-state-bad">
-          {error}
+          <LinkifiedText text={error} />
         </p>
       )}
     </div>
