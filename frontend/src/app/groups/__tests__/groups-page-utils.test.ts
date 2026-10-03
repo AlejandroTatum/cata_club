@@ -7,6 +7,8 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  alumnosInscritosLabel,
+  mensajeCategoriaConAlumnos,
   countUniqueAlumnos,
   buildCategoriaCards,
   formatDiaSet,
@@ -505,5 +507,26 @@ describe("puedeEliminarCategoria", () => {
     if (!puedeEliminarCategoria(catalogoUnicamente)) {
       expect(catalogoUnicamente.rows).toHaveLength(0);
     }
+  });
+});
+
+describe("alumnosInscritosLabel (ADMB-22)", () => {
+  it("uses the singular for one and the plural otherwise, never «alumno(s)»", () => {
+    expect(alumnosInscritosLabel(1)).toBe("1 alumno inscrito");
+    expect(alumnosInscritosLabel(3)).toBe("3 alumnos inscritos");
+  });
+});
+
+describe("mensajeCategoriaConAlumnos (ADMB-04)", () => {
+  it("tells admin to reassign first when days are removed", () => {
+    expect(mensajeCategoriaConAlumnos({ accion: "quitar-dias", dias: "Domingo", alumnos: 1 })).toBe(
+      "No puede quitar Domingo mientras haya 1 alumno inscrito. Pase primero a esos alumnos a otra categoría.",
+    );
+  });
+
+  it("tells admin to reassign first when the categoría is deleted", () => {
+    expect(mensajeCategoriaConAlumnos({ accion: "eliminar", alumnos: 3 })).toBe(
+      "No puede eliminar la categoría mientras haya 3 alumnos inscritos. Pase primero a esos alumnos a otra categoría.",
+    );
   });
 });

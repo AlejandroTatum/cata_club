@@ -21,6 +21,7 @@
 
 import {
   Fragment,
+  useCallback,
   useEffect,
   useId,
   useMemo,
@@ -60,7 +61,6 @@ import { usePendingPaymentsCount } from "@/lib/usePendingPayments";
 import { NAV_ICON_MAP } from "@/components/Header";
 import AvatarPhoto from "@/components/AvatarPhoto";
 import NotificationBell from "@/components/NotificationBell";
-import { useReportProblem } from "@/components/report-problem/useReportProblem";
 import { PageHeader, useBodyScrollLock } from "@/components/ui";
 
 export interface AppShellProps {
@@ -353,6 +353,12 @@ export function getAreaLabel(roles: readonly UserRole[]): string | null {
 }
 
 /** `.nav-i` — 40px row, 10px radius, 13.5px label. */
+/** Sub-pixel rounding of scroll metrics: below this, "more below" is noise. */
+const NAV_OVERFLOW_SLACK_PX = 4;
+/** Fades the last rows out while the nav still continues under the footer. */
+const NAV_FADE_CLASSES =
+  "[mask-image:linear-gradient(to_bottom,black_calc(100%-32px),transparent)]";
+
 const NAV_ITEM_CLASSES =
   "relative flex h-ctl items-center gap-2.5 rounded-ctl px-3 text-sm font-semibold transition-colors";
 const NAV_ITEM_IDLE_CLASSES = "text-white/[0.62] hover:bg-white/[0.07] hover:text-white";
@@ -383,8 +389,16 @@ export default function AppShell({
   const { notificaciones, loadError, markRead, marcarTodasLeidas, marcandoTodas, errorMarcarTodas } =
     useNotificaciones(!!session);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const report = useReportProblem();
   const isDesktopViewport = useIsDesktopViewport();
+  // ADMB-15: whether the nav list still has rows below the fold, so it can
+  // draw a fade instead of silently clipping the last destinations.
+  const navRef = useRef<HTMLElement>(null);
+  const [navMoreBelow, setNavMoreBelow] = useState(false);
+  const updateNavOverflow = useCallback((): void => {
+    const nav = navRef.current;
+    if (!nav) return;
+    setNavMoreBelow(nav.scrollHeight - nav.clientHeight - nav.scrollTop > NAV_OVERFLOW_SLACK_PX);
+  }, []);
   // Desktop-only collapse state, independent from the mobile drawer
   // (`sidebarOpen` above). Initialized from localStorage so the preference
   // survives navigation/reload; scoped entirely via `lg:` classes so it has
@@ -474,7 +488,7 @@ export default function AppShell({
   const navLinks = useMemo<NavLinkDef[]>(
     () => [
       ...navGroups.flatMap((group) => group.links),
-      { href: "/ayuda", label: "Preguntas frecuentes" },
+      { href: "/ayuda", label: "Ayuda" },
       ...(session ? [{ href: "/profile", label: "Perfil" }] : []),
     ],
     [navGroups, session],
@@ -484,6 +498,14 @@ export default function AppShell({
     [navLinks, pathname],
   );
   const pendingPayments = usePendingPaymentsCount(role === "admin");
+
+  // Re-measure when the rail's content or width can change: first paint, the
+  // role's group set, the desktop collapse, the drawer, and window resizes.
+  useEffect((): (() => void) => {
+    updateNavOverflow();
+    window.addEventListener("resize", updateNavOverflow);
+    return (): void => window.removeEventListener("resize", updateNavOverflow);
+  }, [updateNavOverflow, navGroups, collapsed, sidebarOpen]);
 
   /**
    * The tab bar is the admin's phone navigation. Other roles keep the
@@ -764,7 +786,12 @@ export default function AppShell({
         </button>
 
         <nav
-          className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 py-3"
+          ref={navRef}
+          onScroll={updateNavOverflow}
+          data-more-below={navMoreBelow ? "true" : "false"}
+          className={`flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 py-3 ${
+            navMoreBelow ? NAV_FADE_CLASSES : ""
+          }`}
           aria-label="Navegación principal"
         >
           {navGroups.map((group): React.ReactElement => {
@@ -806,14 +833,12 @@ export default function AppShell({
 
         {/* `.side .foot-nav` — help, then account rows, then the user card. */}
         <div className="flex shrink-0 flex-col gap-2 border-t border-white/[0.08] p-2.5">
-          <button type="button" onClick={(): void => { const wasOpen = sidebarOpen; setSidebarOpen(false); report.open(wasOpen ? DRAWER_CLOSE_MS : 0); }} disabled={report.busy} className={`${NAV_ITEM_CLASSES} ${NAV_ITEM_IDLE_CLASSES}`}>
-            <CircleHelp size={ICON.base} aria-hidden="true" />
-            <span className={collapsed ? "lg:hidden" : ""}>Reportar un problema</span>
-          </button>
+          {/* ADMB-15: help is ONE row (it used to be two, which pushed the last
+              menu items under the footer). /ayuda hosts "Reportar un problema". */}
           <Link
             href="/ayuda"
-            title="Preguntas frecuentes"
-            aria-label="Preguntas frecuentes"
+            title="Ayuda"
+            aria-label="Ayuda"
             className={`${NAV_ITEM_CLASSES} ${NAV_ITEM_IDLE_CLASSES}`}
           >
             <CircleHelp
@@ -822,9 +847,7 @@ export default function AppShell({
               className="shrink-0"
               aria-hidden="true"
             />
-            <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>
-              Preguntas frecuentes
-            </span>
+            <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>Ayuda</span>
           </Link>
 
           {session && (
@@ -1197,7 +1220,6 @@ export default function AppShell({
           </div>
         </div>
       )}
-      {report.dialog}
     </div>
   );
 }

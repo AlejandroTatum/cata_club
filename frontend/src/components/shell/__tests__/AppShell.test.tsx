@@ -8,7 +8,7 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import AppShell, { MAIN_CONTENT_ID, resolveActiveHref } from "@/components/shell/AppShell";
 import { BackLink } from "@/components/ui";
@@ -531,15 +531,15 @@ describe("AppShell", (): void => {
    * "Buscar una sección…" found nothing, though both are one click away from
    * the very same sidebar.
    */
-  it("finds Preguntas frecuentes and Perfil, not just the sidebar rail", (): void => {
+  it("finds Ayuda and Perfil, not just the sidebar rail", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 
     fireEvent.click(screen.getByRole("button", { name: "Buscar secciones" }));
 
     fireEvent.change(screen.getByPlaceholderText("Ir a una sección…"), {
-      target: { value: "pregunta" },
+      target: { value: "ayuda" },
     });
-    expect(screen.getByRole("option", { name: "Preguntas frecuentes" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Ayuda" })).toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText("Ir a una sección…"), {
       target: { value: "perfil" },
@@ -551,15 +551,15 @@ describe("AppShell", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 
     fireEvent.click(screen.getByRole("button", { name: "Buscar secciones" }));
-    fireEvent.click(screen.getByRole("option", { name: "Preguntas frecuentes" }));
+    fireEvent.click(screen.getByRole("option", { name: "Ayuda" }));
 
     expect(mockPush).toHaveBeenCalledWith("/ayuda");
   });
 
-  it("uses the circle-question glyph on the sidebar footer's Preguntas frecuentes", (): void => {
+  it("uses the circle-question glyph on the sidebar footer's Ayuda", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 
-    const faq = screen.getByRole("link", { name: "Preguntas frecuentes" });
+    const faq = screen.getByRole("link", { name: "Ayuda" });
     expect(faq.querySelector(".lucide-circle-question-mark")).not.toBeNull();
     expect(faq.querySelector(".lucide-book-open")).toBeNull();
   });
@@ -1018,7 +1018,7 @@ describe("resolveActiveHref — real trainer navigation", (): void => {
 // is gone; the row must not have grown a replacement chat affordance.
 // ---------------------------------------------------------------------------
 
-describe("AppShell — Preguntas frecuentes", (): void => {
+describe("AppShell — Ayuda", (): void => {
   beforeEach((): void => {
     // The sidebar is `aria-hidden` while the mobile drawer is closed, and an
     // earlier block leaves `matchMedia` reporting mobile.
@@ -1031,12 +1031,22 @@ describe("AppShell — Preguntas frecuentes", (): void => {
   it("navigates to /ayuda, and mounts no assistant of its own", (): void => {
     render(<AppShell title="Panel de Control">{null}</AppShell>);
 
-    const help = screen.getByRole("link", { name: "Preguntas frecuentes" });
+    const help = screen.getByRole("link", { name: "Ayuda" });
     expect(help).toHaveAttribute("href", "/ayuda");
     // The launcher and the panel are gone for good; nothing may answer in
     // their place.
     expect(screen.queryByRole("button", { name: /abrir cata-bot/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: /cata-bot/i })).not.toBeInTheDocument();
+  });
+
+  // ADMB-15: the footer held four rows (two of them help) and hid the last
+  // menu items behind it. Help is ONE row now; /ayuda hosts the report button.
+  it("folds Reportar un problema and Preguntas frecuentes into the single Ayuda row", (): void => {
+    render(<AppShell title="Panel de Control">{null}</AppShell>);
+
+    expect(screen.getAllByRole("link", { name: "Ayuda" })).toHaveLength(1);
+    expect(screen.queryByRole("link", { name: "Preguntas frecuentes" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reportar un problema" })).not.toBeInTheDocument();
   });
 });
 
@@ -1064,10 +1074,10 @@ describe("AppShell — Perfil y Cerrar sesión, filas permanentes del pie", (): 
     vi.stubGlobal("localStorage", createMemoryStorage());
   });
 
-  it("shows Perfil and Cerrar sesión next to Preguntas frecuentes, on a plain render", (): void => {
+  it("shows Perfil and Cerrar sesión next to Ayuda, on a plain render", (): void => {
     render(<AppShell title="Panel de Control">{null}</AppShell>);
 
-    expect(screen.getByRole("link", { name: "Preguntas frecuentes" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ayuda" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Perfil" })).toHaveAttribute("href", "/profile");
     expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeInTheDocument();
   });
@@ -1076,7 +1086,7 @@ describe("AppShell — Perfil y Cerrar sesión, filas permanentes del pie", (): 
     render(<AppShell title="Panel de Control">{null}</AppShell>);
 
     const rows = [
-      screen.getByRole("link", { name: "Preguntas frecuentes" }),
+      screen.getByRole("link", { name: "Ayuda" }),
       screen.getByRole("link", { name: "Perfil" }),
       screen.getByRole("button", { name: "Cerrar sesión" }),
     ];
@@ -1092,10 +1102,10 @@ describe("AppShell — Perfil y Cerrar sesión, filas permanentes del pie", (): 
     }
   });
 
-  it("keeps the reading order: preguntas, perfil, cerrar sesión", (): void => {
+  it("keeps the reading order: ayuda, perfil, cerrar sesión", (): void => {
     render(<AppShell title="Panel de Control">{null}</AppShell>);
 
-    const faq = screen.getByRole("link", { name: "Preguntas frecuentes" });
+    const faq = screen.getByRole("link", { name: "Ayuda" });
     const perfil = screen.getByRole("link", { name: "Perfil" });
     const cerrarSesion = screen.getByRole("button", { name: "Cerrar sesión" });
 
@@ -1406,5 +1416,57 @@ describe("AppShell — the rail of a person with several roles", (): void => {
     // section the person happens to be standing in.
     expect(screen.getByRole("option", { name: "Asistencias" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Pasar lista" })).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ADMB-15: the menu continued below the fixed footer with no hint. The nav
+// now says when more rows are out of view, so it can draw a fade.
+// ---------------------------------------------------------------------------
+
+describe("AppShell — the menu hints that it continues (ADMB-15)", (): void => {
+  beforeEach((): void => {
+    stubViewport(true);
+    mockUseAuth.mockReset();
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
+    vi.stubGlobal("localStorage", createMemoryStorage());
+  });
+
+  function stubNavOverflow(scrollHeight: number, clientHeight: number): void {
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(scrollHeight);
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(clientHeight);
+  }
+
+  afterEach((): void => {
+    vi.restoreAllMocks();
+  });
+
+  it("flags rows below the fold while the list is scrolled to the top", (): void => {
+    stubNavOverflow(900, 400);
+    render(<AppShell title="Panel de Control">{null}</AppShell>);
+
+    const nav = screen.getByRole("navigation", { name: "Navegación principal" });
+    expect(nav).toHaveAttribute("data-more-below", "true");
+  });
+
+  it("clears the flag once the list is scrolled to its end", (): void => {
+    stubNavOverflow(900, 400);
+    render(<AppShell title="Panel de Control">{null}</AppShell>);
+
+    const nav = screen.getByRole("navigation", { name: "Navegación principal" });
+    vi.spyOn(nav, "scrollTop", "get").mockReturnValue(500);
+    fireEvent.scroll(nav);
+
+    expect(nav).toHaveAttribute("data-more-below", "false");
+  });
+
+  it("stays unflagged when everything fits", (): void => {
+    stubNavOverflow(300, 400);
+    render(<AppShell title="Panel de Control">{null}</AppShell>);
+
+    expect(screen.getByRole("navigation", { name: "Navegación principal" })).toHaveAttribute(
+      "data-more-below",
+      "false",
+    );
   });
 });
