@@ -98,7 +98,7 @@ import {
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import { Button, Badge, EmptyState, ErrorState, InfoPanel, LoadingState, PAGE_RAIL, Pagination, STAT_GRID, StatCard } from "@/components/ui";
+import { Button, Badge, EmptyState, ErrorState, InfoPanel, LoadingState, PAGE_RAIL, Pagination, STAT_GRID, StatCard, TimePicker24 } from "@/components/ui";
 import { DIA_SEMANA_LABELS, getTotalPages, paginateRecords } from "@/app/attendance/attendance-utils";
 import { useGroupRoster } from "./useGroupRoster";
 import {
@@ -386,25 +386,25 @@ const EMPTY_FORM: HorarioFormData = {
 const HORA_MINIMA_ENTRENAMIENTO = "06:00";
 const HORA_MAXIMA_ENTRENAMIENTO = "22:00";
 
-/** 24 h "17:00" -> "5:00 p. m." — the native time input renders 12 h or 24 h
- *  by browser locale, so the form states the unambiguous reading itself. */
-function formatHora12(hora: string): string | null {
-  const match = /^(\d{2}):(\d{2})$/.exec(hora);
-  if (!match) return null;
-  const h = Number(match[1]);
-  const m = match[2];
-  if (h > 23 || Number(m) > 59) return null;
-  return `${h % 12 === 0 ? 12 : h % 12}:${m} ${h < 12 ? "a. m." : "p. m."}`;
+/** The backend returns "HH:MM:SS"; the form and the picker hold "HH:MM". */
+function aHoraCorta(hora: string): string {
+  return hora.slice(0, 5);
 }
 
-function HoraAyuda({ id, value }: { id: string; value: string }): React.ReactElement {
-  const legible = formatHora12(value);
-  return (
-    <p id={id} className="text-2xs normal-case tracking-normal text-ink-3">
-      Formato 24 h (ej. 17:00 = 5:00 p. m.)
-      {legible && <span className="font-semibold text-ink-2"> · Elegido: {legible}</span>}
-    </p>
-  );
+/** Minutes since midnight of an "HH:MM" string. */
+function minutosDelDia(hora: string): number {
+  const [h, m] = hora.split(":");
+  return Number(h) * 60 + Number(m);
+}
+
+/** "1 h 15 min", "1 h", "45 min" — or null while the franja is not computable. */
+function duracionLabel(inicio: string, fin: string): string | null {
+  if (!inicio || !fin) return null;
+  const minutos = minutosDelDia(fin) - minutosDelDia(inicio);
+  if (minutos <= 0) return null;
+  const horas = Math.floor(minutos / 60);
+  const resto = minutos % 60;
+  return [horas > 0 ? `${horas} h` : "", resto > 0 ? `${resto} min` : ""].filter(Boolean).join(" ");
 }
 
 /** Field skin shared with the tarifas/discounts forms. */
@@ -533,6 +533,7 @@ export default function GroupsPage(): React.ReactElement {
   const [sinGrupoPage, setSinGrupoPage] = useState(1);
   const [formData, setFormData] = useState<HorarioFormData>(EMPTY_FORM);
   const [selectedDias, setSelectedDias] = useState<Set<string>>(new Set());
+  const [diasTopeMensaje, setDiasTopeMensaje] = useState<string | null>(null);
   const [formSubmitting, setFormSubmitting] = useState(false);
   /**
    * The shared banner. SERVER errors only since #861 — a 400 the client had no
@@ -782,6 +783,7 @@ export default function GroupsPage(): React.ReactElement {
    * which only appears when a categoría has more than one editable group. */
   function selectEditingGroup(group: HorarioGroup | null): void {
     setEditingGroup(group);
+    setDiasTopeMensaje(null);
     setFormError(null);
     setFieldErrors({});
     if (group === null) {
@@ -791,8 +793,8 @@ export default function GroupsPage(): React.ReactElement {
     }
     setFormData({
       nombre: categoriaLabel(group.categoria),
-      horaInicio: group.horaInicio,
-      horaFin: group.horaFin,
+      horaInicio: aHoraCorta(group.horaInicio),
+      horaFin: aHoraCorta(group.horaFin),
       edades: categoriaEdades(group.categoria),
     });
     setSelectedDias(new Set(group.rows.map((row) => row.diaSemana)));
@@ -831,8 +833,8 @@ export default function GroupsPage(): React.ReactElement {
     });
     setFormData({
       nombre: entry.label,
-      horaInicio: entry.horaInicio,
-      horaFin: entry.horaFin,
+      horaInicio: aHoraCorta(entry.horaInicio),
+      horaFin: aHoraCorta(entry.horaFin),
       edades: entry.edades ?? "",
     });
     setSelectedDias(new Set(entry.dias));
@@ -964,6 +966,7 @@ export default function GroupsPage(): React.ReactElement {
     setEditingGroup(null);
     setFormData(EMPTY_FORM);
     setSelectedDias(new Set());
+    setDiasTopeMensaje(null);
     setFormError(null);
     setFieldErrors({});
     setDuplicateCategoriaCodigo(null);
@@ -971,6 +974,13 @@ export default function GroupsPage(): React.ReactElement {
   }
 
   function toggleDia(dia: string): void {
+    setDiasTopeMensaje(null);
+    if (!selectedDias.has(dia) && selectedDias.size >= MAXIMO_DIAS_POR_CATEGORIA) {
+      setDiasTopeMensaje(
+        `Máximo ${MAXIMO_DIAS_POR_CATEGORIA} días por categoría. Quite uno para agregar ${(DIA_LABELS[dia] ?? dia).toLowerCase()}.`,
+      );
+      return;
+    }
     setSelectedDias((prev) => {
       const next = new Set(prev);
       if (next.has(dia)) next.delete(dia);
@@ -1186,8 +1196,8 @@ export default function GroupsPage(): React.ReactElement {
           picker and assistive tech read. `/login` (issue #51) carries the
           same attribute for the same reason.
         */}
-        <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" noValidate>
-          <div className="flex flex-col gap-field sm:col-span-2">
+        <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-5 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6" noValidate>
+          <div className="flex flex-col gap-field">
             <label htmlFor="categoria-nombre" className={FIELD_LABEL}>
               Nombre <span aria-hidden="true" className="text-state-bad">*</span>
             </label>
@@ -1212,14 +1222,13 @@ export default function GroupsPage(): React.ReactElement {
             Edades (#789) — orientation copy for the public board, never a
             rule: no age is validated against it, so the field is optional and
             a categoría without one saves exactly like any other. `maxLength`
-            matches the column (50). Marked with "(opcional)" rather than left
-            unmarked, the same minority-marking this product uses elsewhere:
-            on this form every other field is required, so the absence of an
+            matches the column (50). Marked "opcional" rather than left
+            unmarked: every other field here is required, so the absence of an
             asterisk is not by itself a statement.
           */}
-          <div className="flex flex-col gap-field sm:col-span-2">
+          <div className="flex flex-col gap-field">
             <label htmlFor="categoria-edades" className={FIELD_LABEL}>
-              Edades <span className="font-normal text-ink-3">(opcional)</span>
+              Edades <span className="font-medium normal-case text-ink-3">· opcional</span>
             </label>
             <input
               id="categoria-edades"
@@ -1232,129 +1241,137 @@ export default function GroupsPage(): React.ReactElement {
             />
           </div>
           {/*
-            `min`/`max` (#861) bound the picker's own spinner and tell
-            assistive tech the range, but they are NOT the check: a browser
-            does not refuse a typed out-of-range value without form-level
-            handling, and jsdom ignores them entirely. `validarCategoria` is
-            the one that decides, and the backend decides after it.
+            Horario: the two pickers state the franja in one format (24 h).
+            `TimePicker24` carries the window bounds, but they are NOT the
+            check: `validarCategoria` decides on submit, and the backend after
+            it. The chip is a live hint only. The inverted-franja message sits
+            under the row because it describes BOTH pickers.
           */}
-          <div className="flex flex-col gap-field">
-            <label htmlFor="categoria-hora-inicio" className={FIELD_LABEL}>
-              Hora de inicio <span aria-hidden="true" className="text-state-bad">*</span>
-            </label>
-            <input
-              id="categoria-hora-inicio"
-              type="time"
-              className={`${FIELD_CONTROL} ${fieldErrors.horaInicio || fieldErrors.franja ? "border-state-bad" : ""}`}
-              value={formData.horaInicio}
-              onChange={(e) => setFormData((prev) => ({ ...prev, horaInicio: e.target.value }))}
-              required
-              min={HORA_MINIMA_ENTRENAMIENTO}
-              max={HORA_MAXIMA_ENTRENAMIENTO}
-              aria-invalid={fieldErrors.horaInicio || fieldErrors.franja ? true : undefined}
-              aria-describedby={
-                fieldErrors.horaInicio
-                  ? HORA_INICIO_ERROR_ID
-                  : fieldErrors.franja
-                    ? FRANJA_ERROR_ID
-                    : "categoria-hora-inicio-ayuda"
-              }
-            />
-            <HoraAyuda id="categoria-hora-inicio-ayuda" value={formData.horaInicio} />
+          <div role="group" aria-labelledby="categoria-horario-label" className="flex flex-col gap-field">
+            <div id="categoria-horario-label" className={FIELD_LABEL}>
+              <span>
+                Horario <span className="font-medium normal-case text-ink-3">· 24 h</span>
+              </span>
+            </div>
+            <div className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2.5">
+              <TimePicker24
+                id="categoria-hora-inicio"
+                label="Hora de inicio"
+                value={formData.horaInicio}
+                min={HORA_MINIMA_ENTRENAMIENTO}
+                max={HORA_MAXIMA_ENTRENAMIENTO}
+                onChange={(horaInicio) => setFormData((prev) => ({ ...prev, horaInicio }))}
+                invalid={Boolean(fieldErrors.horaInicio || fieldErrors.franja)}
+                describedBy={
+                  fieldErrors.horaInicio
+                    ? HORA_INICIO_ERROR_ID
+                    : fieldErrors.franja
+                      ? FRANJA_ERROR_ID
+                      : undefined
+                }
+              />
+              <span aria-hidden="true" className="text-ink-3">–</span>
+              <TimePicker24
+                id="categoria-hora-fin"
+                label="Hora de fin"
+                value={formData.horaFin}
+                min={HORA_MINIMA_ENTRENAMIENTO}
+                max={HORA_MAXIMA_ENTRENAMIENTO}
+                onChange={(horaFin) => setFormData((prev) => ({ ...prev, horaFin }))}
+                invalid={Boolean(fieldErrors.horaFin || fieldErrors.franja)}
+                describedBy={
+                  fieldErrors.horaFin
+                    ? HORA_FIN_ERROR_ID
+                    : fieldErrors.franja
+                      ? FRANJA_ERROR_ID
+                      : undefined
+                }
+              />
+              <span aria-live="polite" className="contents">
+                {formData.horaInicio && formData.horaFin && (
+                  duracionLabel(formData.horaInicio, formData.horaFin) ? (
+                    <span className="flex h-ctl items-center whitespace-nowrap rounded-ctl bg-sunken px-3 text-[13px] font-semibold tabular-nums text-ink-2">
+                      {duracionLabel(formData.horaInicio, formData.horaFin)}
+                    </span>
+                  ) : (
+                    <span className="flex h-ctl items-center whitespace-nowrap rounded-ctl bg-state-bad/10 px-3 text-[13px] font-semibold text-state-bad">
+                      Fin antes del inicio
+                    </span>
+                  )
+                )}
+              </span>
+            </div>
             {fieldErrors.horaInicio && (
               <p id={HORA_INICIO_ERROR_ID} role="alert" className={FIELD_ERROR_CLASSES}>
                 {fieldErrors.horaInicio}
               </p>
             )}
-          </div>
-          <div className="flex flex-col gap-field">
-            <label htmlFor="categoria-hora-fin" className={FIELD_LABEL}>
-              Hora de fin <span aria-hidden="true" className="text-state-bad">*</span>
-            </label>
-            <input
-              id="categoria-hora-fin"
-              type="time"
-              className={`${FIELD_CONTROL} ${fieldErrors.horaFin || fieldErrors.franja ? "border-state-bad" : ""}`}
-              value={formData.horaFin}
-              onChange={(e) => setFormData((prev) => ({ ...prev, horaFin: e.target.value }))}
-              required
-              min={HORA_MINIMA_ENTRENAMIENTO}
-              max={HORA_MAXIMA_ENTRENAMIENTO}
-              aria-invalid={fieldErrors.horaFin || fieldErrors.franja ? true : undefined}
-              aria-describedby={
-                fieldErrors.horaFin
-                  ? HORA_FIN_ERROR_ID
-                  : fieldErrors.franja
-                    ? FRANJA_ERROR_ID
-                    : "categoria-hora-fin-ayuda"
-              }
-            />
-            <HoraAyuda id="categoria-hora-fin-ayuda" value={formData.horaFin} />
             {fieldErrors.horaFin && (
               <p id={HORA_FIN_ERROR_ID} role="alert" className={FIELD_ERROR_CLASSES}>
                 {fieldErrors.horaFin}
               </p>
             )}
+            {fieldErrors.franja && (
+              <p id={FRANJA_ERROR_ID} role="alert" className={FIELD_ERROR_CLASSES}>
+                {fieldErrors.franja}
+              </p>
+            )}
           </div>
           {/*
-            The inverted-franja message gets its own full-width row instead of
-            hanging under "Hora de fin": it describes BOTH inputs, and at
-            `lg` those are quarter-width columns where this sentence would
-            wrap to four lines under one of the two fields it accuses.
-          */}
-          {fieldErrors.franja && (
-            <p
-              id={FRANJA_ERROR_ID}
-              role="alert"
-              className={`sm:col-span-2 lg:col-span-4 ${FIELD_ERROR_CLASSES}`}
-            >
-              {fieldErrors.franja}
-            </p>
-          )}
-          {/*
             First fieldset-level error mark in this app (#861): the día cap is
-            about the SET of checkboxes, not any single one, so there is no
+            about the SET of toggles, not any single one, so there is no
             input to hang it on. It follows the same contract every per-field
             mark here does — `aria-invalid` + `aria-describedby` on the
             control, the message as a `role="alert"` paragraph — with the
-            `<fieldset>` (already `role="group"` via `aria-required`) standing
-            in for the input. If a second one ever appears, this is the shape
-            to copy.
+            `<fieldset>` standing in for the input. The 7th día is never
+            disabled: tapping it past the cap explains itself inline instead.
           */}
           <fieldset
-            className="sm:col-span-2 lg:col-span-4"
+            className="min-w-0"
             aria-required="true"
             aria-invalid={fieldErrors.dias ? true : undefined}
             aria-describedby={fieldErrors.dias ? DIAS_ERROR_ID : undefined}
           >
-            <legend className="mb-1 block text-xs font-semibold text-ink-2">
-              Días de la semana <span aria-hidden="true" className="text-state-bad">*</span>
+            <legend className={`${FIELD_LABEL} mb-field`}>
+              Días <span aria-hidden="true" className="text-state-bad">*</span>
             </legend>
-            <div className="flex flex-wrap gap-3">
-              {DIA_ORDER.map((dia) => (
-                <label key={dia} className="inline-flex items-center gap-1.5 text-xs text-ink">
-                  <input
-                    type="checkbox"
-                    checked={selectedDias.has(dia)}
-                    onChange={() => toggleDia(dia)}
-                  />
-                  {DIA_LABELS[dia]}
-                </label>
-              ))}
+            <div className="flex h-ctl overflow-hidden rounded-ctl border border-line-2">
+              {DIA_ORDER.map((dia) => {
+                const activo = selectedDias.has(dia);
+                return (
+                  <button
+                    key={dia}
+                    type="button"
+                    aria-pressed={activo}
+                    aria-label={DIA_LABELS[dia]}
+                    onClick={() => toggleDia(dia)}
+                    className={`flex-1 border-l border-line text-[13px] font-semibold first:border-l-0 ${
+                      activo ? "border-l-ink bg-ink text-paper" : "bg-paper text-ink-3 hover:bg-sunken"
+                    }`}
+                  >
+                    {(DIA_LABELS[dia] ?? dia).slice(0, 3)}
+                  </button>
+                );
+              })}
             </div>
+            {diasTopeMensaje && (
+              <p role="alert" className={FIELD_ERROR_CLASSES}>
+                {diasTopeMensaje}
+              </p>
+            )}
             {fieldErrors.dias && (
               <p id={DIAS_ERROR_ID} role="alert" className={FIELD_ERROR_CLASSES}>
                 {fieldErrors.dias}
               </p>
             )}
           </fieldset>
-          <div className="sm:col-span-2 lg:col-span-4 flex gap-2">
-            <Button type="submit" variant="primary" size="sm" disabled={formSubmitting}>
+          <div className="flex justify-end gap-2.5 sm:col-span-2 max-sm:[&>*]:flex-1">
+            <Button variant="tertiary" className="!bg-transparent" onClick={closeExpanded}>
+              Cancelar
+            </Button>
+            <Button type="submit" variant="primary" disabled={formSubmitting}>
               {formSubmitting && <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />}
               {editingGroup !== null ? "Guardar cambios" : "Crear categoría"}
-            </Button>
-            <Button size="sm" onClick={closeExpanded}>
-              Cancelar
             </Button>
           </div>
         </form>
