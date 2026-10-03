@@ -76,6 +76,14 @@
 		reverse_proxy backend:8000
 	}
 
+	# PC-2: latido de Celery (beat + worker + broker) para el SEGUNDO monitor
+	# externo. Mismas reglas que arriba: path EXACTO, antes del catch-all, y
+	# respuesta muda (200/503 sin cuerpo). Ningún healthcheck de Docker ni
+	# autoheal puede apuntar acá: un cuelgue de Celery reiniciaría el backend.
+	handle /health/workers {
+		reverse_proxy backend:8000
+	}
+
 	handle {
 		reverse_proxy frontend:3000 {
 			# Fija X-Forwarded-For al peer TCP real -- issue #235, mitad 2.
@@ -111,7 +119,7 @@
 	encode gzip
 
 	header {
-		# El backend solo asoma por `/health/ready` (bloque `handle` de más
+		# El backend solo asoma por `/health/ready` y `/health/workers` (bloques `handle` de más
 		# arriba); todo lo demás lo consume el frontend por la red interna de
 		# Docker. Este header endurece al único origen público del stack.
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"

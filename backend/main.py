@@ -17,6 +17,7 @@ from sqlalchemy.exc import TimeoutError as TimeoutDePool
 from sqlalchemy.pool import NullPool
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.infraestructura import latido_workers
 from app.infraestructura.db import TIMEOUT_POOL_SEGUNDOS
 from app.infraestructura.metricas import BUCKETS_LATENCIA_POR_RUTA, colector_outbox
 from app.servicios_negocio.gestor_permisos import GestorPermisos
@@ -591,6 +592,34 @@ async def salud_lista_head():
     sin contenido responde con `Content-Length: 0` y sin `Content-Type`."""
     codigo, _ = await _evaluar_readiness()
     return Response(status_code=codigo)
+
+
+# Latido de beat + worker + broker para el monitor externo (PC-2). Lee UNA
+# clave de Redis que `registrar_latido` (Celery) refresca cada minuto con TTL
+# corto: sin cuerpo y sin decir qué falló, como pide la sonda anónima. NO es
+# una sonda de orquestador -- ningún healthcheck de Docker ni autoheal puede
+# apuntar acá, o un cuelgue de Celery reiniciaría el backend. GET y HEAD (el
+# plan gratuito de UptimeRobot sondea con HEAD, ver /health/ready).
+async def _respuesta_workers() -> Response:
+    vivo = await asyncio.to_thread(latido_workers.vivo, _cliente_redis_sonda)
+    return Response(
+        status_code=(
+            status.HTTP_200_OK if vivo else status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+    )
+
+
+# Dos handlers y no `api_route(methods=[GET, HEAD])`: el guardia de rutas
+# (test_guardia_autorizacion_rutas) asume un método real por ruta, igual que
+# con /health/ready.
+@app.get("/health/workers", tags=["Salud"], include_in_schema=False)
+async def salud_workers():
+    return await _respuesta_workers()
+
+
+@app.head("/health/workers", tags=["Salud"], include_in_schema=False)
+async def salud_workers_head():
+    return await _respuesta_workers()
 
 
 # --- Diagnóstico de circuit breakers -------------------------------------

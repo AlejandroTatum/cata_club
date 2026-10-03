@@ -1117,21 +1117,23 @@ def test_el_caddyfile_expone_del_backend_solo_la_sonda_de_readiness():
     contenido = (RAIZ / "Caddyfile").read_text()
 
     upstreams = re.findall(r"reverse_proxy\s+backend:\d+", contenido)
-    assert upstreams == ["reverse_proxy backend:8000"], (
-        "el Caddyfile debe declarar exactamente UN upstream hacia el backend "
-        f"(y en el puerto 8000); encontrados: {upstreams!r}"
+    assert upstreams == ["reverse_proxy backend:8000"] * 2, (
+        "el Caddyfile debe declarar exactamente DOS upstreams hacia el backend "
+        "(readiness y latido de workers, ambos en el puerto 8000); "
+        f"encontrados: {upstreams!r}"
     )
 
-    ruta = _RUTA_DEL_BACKEND_EN_CADDY.search(contenido)
-    assert ruta is not None, (
-        "el upstream del backend no cuelga de un bloque `handle <matcher>`: sin "
-        "matcher exclusivo no hay forma de acotar qué llega al backend"
-    )
-    assert ruta.group("matcher") == "/health/ready", (
-        "el backend solo puede recibir el path EXACTO /health/ready; el matcher "
-        f"declarado es {ruta.group('matcher')!r} (un comodín o un prefijo "
+    rutas = list(_RUTA_DEL_BACKEND_EN_CADDY.finditer(contenido))
+    assert [r.group("matcher") for r in rutas] == [
+        "/health/ready",
+        "/health/workers",
+    ], (
+        "el backend solo puede recibir los paths EXACTOS /health/ready y "
+        "/health/workers; matchers declarados: "
+        f"{[r.group('matcher') for r in rutas]!r} (un comodín o un prefijo "
         "expondría /docs y /diagnostico/circuitos)"
     )
+    ruta = rutas[-1]
 
     catch_all = contenido.find("reverse_proxy frontend:3000")
     assert catch_all != -1, "el Caddyfile ya no enruta al frontend"
@@ -1140,6 +1142,17 @@ def test_el_caddyfile_expone_del_backend_solo_la_sonda_de_readiness():
         "detrás, el catch-all se la come y el monitor externo recibe un 404 de "
         "Next.js que se parece a un sitio sano"
     )
+
+
+def test_ningun_healthcheck_ni_autoheal_depende_del_latido_de_workers():
+    """`/health/workers` es solo para el monitor externo. Si un healthcheck de
+    Docker (o lo que autoheal reinicia) lo consultara, un cuelgue de Celery
+    reiniciaría el backend."""
+    for archivo in RAIZ.glob("docker-compose*.yml"):
+        assert "health/workers" not in archivo.read_text(), (
+            f"{archivo.name} referencia /health/workers: el latido de Celery no "
+            "puede gobernar healthchecks ni autoheal"
+        )
 
 
 # Todos los matchers de `handle` del archivo, en orden. Se usa para contar
@@ -1171,9 +1184,9 @@ def test_el_caddyfile_declara_una_sola_sonda_de_readiness_y_ninguna_bajo_api():
         for m in _MATCHERS_HANDLE.finditer(contenido)
         if "health" in m.group("matcher")
     ]
-    assert de_readiness == ["/health/ready"], (
-        "el backend tiene que asomar por UNA sola sonda de readiness; matchers "
-        f"de health encontrados: {de_readiness!r}"
+    assert de_readiness == ["/health/ready", "/health/workers"], (
+        "el backend tiene que asomar por UNA sola sonda de readiness y UNA de "
+        f"latido de workers; matchers de health encontrados: {de_readiness!r}"
     )
 
 

@@ -124,6 +124,8 @@ RUTAS_PUBLICAS = {
                                 # aparte porque FastAPI no deriva HEAD del GET.
                                 # Anonimo por identico motivo, y ademas mudo:
                                 # responde 200/503 sin cuerpo.
+    ("GET", "/health/workers"),  # PC-2: latido de beat+worker para el monitor
+    ("HEAD", "/health/workers"),  # externo; Redis GET barato, 200/503 mudo.
     ("GET", "/personas/instituciones"),
     ("GET", "/membresias/tarifas"),  # issue #394/#331: mitad pública del catálogo
                                       # de tarifas, misma clase que /personas/instituciones.
