@@ -112,6 +112,8 @@ export default function TimePicker24({
 
   return (
     <div ref={rootRef} className={cn("relative", className)}>
+      {/* The trigger stands in for the field, so it carries the field's error state. */}
+      {/* eslint-disable-next-line jsx-a11y/role-supports-aria-props */}
       <button
         ref={triggerRef}
         id={id}
