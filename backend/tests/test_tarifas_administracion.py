@@ -383,5 +383,28 @@ def test_eliminar_tarifa_usada_solo_en_historial_de_cambio_de_plan_da_409(client
     assert client.delete(f"{RUTA_TIPOS}/{anterior['id']}").status_code == 409
 
 
+def test_eliminar_tarifa_que_gana_la_carrera_contra_el_pre_chequeo_da_409(
+    client, db_session, monkeypatch,
+):
+    """Una membresía se confirma entre el pre-chequeo `ids_en_uso` y el DELETE:
+    la FK lo rechaza y el cliente igual recibe el 409 "en uso", no un error
+    genérico. La tarifa sigue existiendo."""
+    from app.infraestructura.repositorios.membresia_repositorio import (
+        TipoMembresiaRepositorio,
+    )
+
+    persona = crear_persona_api(client)
+    tipo = crear_tipo_membresia_api(client)
+    crear_membresia_api(client, persona["id"], tipo["id"])
+    monkeypatch.setattr(TipoMembresiaRepositorio, "ids_en_uso", lambda self, ids: set())
+
+    respuesta = client.delete(f"{RUTA_TIPOS}/{tipo['id']}")
+
+    assert respuesta.status_code == 409
+    assert "ocultarla" in respuesta.json()["detail"]
+    monkeypatch.undo()
+    assert tipo["id"] in [t["id"] for t in client.get(RUTA_TIPOS).json()]
+
+
 def test_eliminar_tarifa_sin_rol_administrador_da_403(client_sin_permisos):
     assert client_sin_permisos.delete(f"{RUTA_TIPOS}/1").status_code == 403

@@ -8,6 +8,7 @@ descuento ES un atributo del hecho de pagar, no una operación del catálogo.
 """
 from typing import Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.dominio.excepciones import EntidadNoEncontrada, NombreDuplicado, OperacionInvalida, RecursoEnUso
@@ -58,13 +59,21 @@ class DescuentoServicio:
         """Borrado duro, solo de un descuento que nunca se usó. Si se usó, el
         camino es ocultarlo (`activo=False`)."""
         descuento = self._obtener_sin_marcar(descuento_id)
+        mensaje_en_uso = (
+            f"No se puede eliminar el descuento '{descuento.nombre}' porque ya se "
+            "aplicó o se asignó. Puede ocultarlo para que deje de ofrecerse."
+        )
         if self.repo.ids_en_uso([descuento.id]):
-            raise DescuentoEnUso(
-                f"No se puede eliminar el descuento '{descuento.nombre}' porque ya se "
-                "aplicó o se asignó. Puede ocultarlo para que deje de ofrecerse."
-            )
-        self.repo.eliminar(descuento)
-        self.db.commit()
+            raise DescuentoEnUso(mensaje_en_uso)
+        try:
+            self.repo.eliminar(descuento)
+            self.db.commit()
+        except IntegrityError as error:
+            # Carrera: un pago o una asignación se confirmó entre el
+            # pre-chequeo y el DELETE; la FK protege la historia, acá solo se
+            # traduce al mismo 409 de la vía rápida.
+            self.db.rollback()
+            raise DescuentoEnUso(mensaje_en_uso) from error
 
     def contar(self) -> int:
         return self.repo.contar()

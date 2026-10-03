@@ -50,6 +50,8 @@ import {
   fetchCotizacionRegularizacion,
   fetchTarifas,
   crearTipoMembresia,
+  eliminarTipoMembresia,
+  eliminarDescuento,
 } from "../api";
 import type { PaymentValidationRequest, Horario, AlumnoHorario, DescuentoCatalogo } from "../api";
 import type { Notificacion, PerfilPropio } from "@/types/domain";
@@ -1021,6 +1023,52 @@ describe("crearTipoMembresia", () => {
     await expect(
       crearTipoMembresia({ categoria: "Mensual Adultos", precio: "0", modalidad: "MENSUAL" }),
     ).rejects.toThrow("El precio debe ser mayor a 0");
+  });
+});
+
+describe("eliminarTipoMembresia", () => {
+  it("DELETEs /api/membresias/tipos/:id", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(new Response(null, { status: 204 }));
+
+    await expect(eliminarTipoMembresia(3)).resolves.toBeUndefined();
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/membresias/tipos/3",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("surfaces the server message on a 409 (tariff already used)", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      errorResponse(409, { message: "No se puede eliminar la tarifa 'X' porque ya se usó" }),
+    );
+
+    await expect(eliminarTipoMembresia(3)).rejects.toThrow(
+      "No se puede eliminar la tarifa 'X' porque ya se usó",
+    );
+  });
+});
+
+describe("eliminarDescuento", () => {
+  it("DELETEs /api/descuentos/:id", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(new Response(null, { status: 204 }));
+
+    await expect(eliminarDescuento(7)).resolves.toBeUndefined();
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/descuentos/7",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("surfaces the server message on a 409 (discount already applied or assigned)", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      errorResponse(409, { message: "No se puede eliminar el descuento 'Y' porque ya se aplicó" }),
+    );
+
+    await expect(eliminarDescuento(7)).rejects.toThrow(
+      "No se puede eliminar el descuento 'Y' porque ya se aplicó",
+    );
   });
 });
 

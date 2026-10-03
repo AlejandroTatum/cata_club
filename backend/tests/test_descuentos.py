@@ -575,5 +575,45 @@ def test_eliminar_descuento_ya_aplicado_a_un_pago_da_409(client, db_session):
     assert client.delete(f"{RUTA_DESCUENTOS}{descuento['id']}").status_code == 409
 
 
+def test_eliminar_descuento_referenciado_solo_por_un_pago_da_409(client, db_session):
+    """Rama "pago": sin asignación alguna (se borra a mano), el `descuento_id`
+    del pago basta para impedir el borrado y la fila sobrevive."""
+    from app.dominio.modelos import AsignacionDescuento, Pago
+
+    persona, membresia = escenario_membresia_sin_pago_api(client)
+    descuento = crear_descuento_api(client, "Solo pago", porcentaje="50").json()
+    asignar_beneficio_api(client, persona["id"], descuento["id"])
+    pago = registrar_pago_api(client, persona["id"], membresia["id"])
+    assert pago.status_code == 201
+    db_session.query(AsignacionDescuento).delete()
+    db_session.flush()
+    assert db_session.query(Pago).filter(Pago.descuento_id == descuento["id"]).count() == 1
+
+    respuesta = client.delete(f"{RUTA_DESCUENTOS}{descuento['id']}")
+
+    assert respuesta.status_code == 409
+    assert client.get(f"{RUTA_DESCUENTOS}{descuento['id']}").status_code == 200
+
+
+def test_eliminar_descuento_que_gana_la_carrera_contra_el_pre_chequeo_da_409(
+    client, monkeypatch,
+):
+    """Una asignación se confirma entre el pre-chequeo y el DELETE: la FK lo
+    rechaza y el cliente recibe el 409 "en uso", no un error genérico."""
+    from app.infraestructura.repositorios.descuento_repositorio import DescuentoRepositorio
+
+    persona, _ = escenario_membresia_sin_pago_api(client)
+    descuento = crear_descuento_api(client, "Carrera", porcentaje="50").json()
+    assert asignar_beneficio_api(client, persona["id"], descuento["id"]).status_code == 201
+    monkeypatch.setattr(DescuentoRepositorio, "ids_en_uso", lambda self, ids: set())
+
+    respuesta = client.delete(f"{RUTA_DESCUENTOS}{descuento['id']}")
+
+    assert respuesta.status_code == 409
+    assert "ocultarlo" in respuesta.json()["detail"]
+    monkeypatch.undo()
+    assert client.get(f"{RUTA_DESCUENTOS}{descuento['id']}").status_code == 200
+
+
 def test_eliminar_descuento_sin_rol_administrador_da_403(client_sin_permisos):
     assert client_sin_permisos.delete(f"{RUTA_DESCUENTOS}1").status_code == 403
