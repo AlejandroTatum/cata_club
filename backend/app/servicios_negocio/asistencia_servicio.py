@@ -84,6 +84,12 @@ def _sluggificar_nombre(nombre: str) -> str:
     return slug[:_CODIGO_MAX_LEN] or "CATEGORIA"
 
 
+def _dia_en_plural(dia: DiaSemana) -> str:
+    """"jueves" -> "jueves", "sábado" -> "sábados" (para "el horario es de los …")."""
+    nombre = dia_en_castellano(dia)
+    return nombre if nombre.endswith("s") else f"{nombre}s"
+
+
 class AsistenciaServicio:
     def __init__(self, db: Session):
         self.db = db
@@ -559,19 +565,18 @@ class AsistenciaServicio:
             return
         n = len(personas)
         alumnos = "al alumno" if n == 1 else f"a los {n} alumnos"
+        detalle = f"horario_ids={[h.id for h in horarios]} alumnos={n}"
         if accion == "eliminar":
-            mensaje = (
+            raise ConflictoConcurrencia(
                 f"No puede eliminar la categoría {categoria_label} mientras tenga alumnos. "
-                f"Reasigne primero {alumnos} de {categoria_label} a otra categoría."
+                f"Reasigne primero {alumnos} de {categoria_label} a otra categoría.",
+                detalle_tecnico=detalle,
             )
-        else:
-            dias = ", ".join(dia_en_castellano(h.dia_semana) for h in horarios)
-            mensaje = (
-                f"No puede quitar el día {dias} de {categoria_label} mientras tenga alumnos. "
-                f"Reasigne primero {alumnos} de {categoria_label} a otra categoría."
-            )
+        dias = ", ".join(dia_en_castellano(h.dia_semana) for h in horarios)
         raise ConflictoConcurrencia(
-            mensaje, detalle_tecnico=f"horario_ids={[h.id for h in horarios]} alumnos={n}",
+            f"No puede quitar el día {dias} de {categoria_label} mientras tenga alumnos. "
+            f"Reasigne primero {alumnos} de {categoria_label} a otra categoría.",
+            detalle_tecnico=detalle,
         )
 
     def eliminar_horario(self, horario_id: int) -> None:
@@ -615,9 +620,9 @@ class AsistenciaServicio:
         dia_de_la_fecha = _WEEKDAY_A_DIA_SEMANA[fecha.weekday()]
         if dia_de_la_fecha != horario.dia_semana:
             raise OperacionInvalida(
-                f"La fecha {fecha.isoformat()} es "
-                f"{dia_en_castellano(dia_de_la_fecha)}, pero el horario es de "
-                f"{dia_en_castellano(horario.dia_semana)}.",
+                f"La fecha {fecha.strftime('%d/%m/%Y')} es "
+                f"{dia_en_castellano(dia_de_la_fecha)}, pero el horario es de los "
+                f"{_dia_en_plural(horario.dia_semana)}.",
                 detalle_tecnico=(
                     f"fecha_entrenamiento={fecha.isoformat()} "
                     f"({dia_de_la_fecha.value}) horario_id={horario.id} "
