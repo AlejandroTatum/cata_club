@@ -115,6 +115,8 @@ export interface BackendMembresiaPropia {
    * it to `null`.
    */
   cubiertoHasta?: string | null;
+  /** `MembresiaResponseDTO.motivo_suspension` (FAM-05): why the club suspended it; absent unless SUSPENDIDA. */
+  motivoSuspension?: string | null;
 }
 
 /** Enriched membership view for a single persona — built server-side. */
@@ -130,6 +132,8 @@ export interface MembershipView {
   esGratuidadFamiliar: boolean;
   /** Normalized to `null` when the backend omits it — see `BackendMembresiaPropia.cubiertoHasta`. */
   cubiertoHasta: string | null;
+  /** Normalized to `null` when the backend omits it — see `BackendMembresiaPropia.motivoSuspension`. */
+  motivoSuspension: string | null;
 }
 
 export function buildMembershipView(
@@ -147,6 +151,7 @@ export function buildMembershipView(
     fechaActivacion: mem.fechaActivacion ?? null,
     esGratuidadFamiliar: mem.esGratuidadFamiliar ?? false,
     cubiertoHasta: mem.cubiertoHasta ?? null,
+    motivoSuspension: mem.motivoSuspension ?? null,
   };
 }
 

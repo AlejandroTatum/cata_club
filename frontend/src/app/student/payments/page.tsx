@@ -497,7 +497,7 @@ function PaymentsContent({
         <aside
           data-dash-col
           aria-label="Membresía y registro de pagos"
-          className="flex min-w-0 flex-col gap-page max-lg:contents lg:col-start-2 lg:row-start-1 lg:self-start lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto"
+          className="flex min-w-0 flex-col gap-page max-lg:contents lg:col-start-2 lg:row-start-1 lg:self-start"
         >
       <MembershipCard
         membership={selectedProfile.membership}

@@ -15,6 +15,7 @@ import pytest
 
 from app.dominio.cedula import cedula_valida
 from app.seguridad.gestor_auth import GestorAutenticacion
+from tests.archivos_validos import jpeg_valido, pdf_valido
 
 
 # --- helpers comunes -------------------------------------------------------
@@ -88,7 +89,7 @@ def test_subir_voucher_jpg_a_pago_pendiente_devuelve_201(_mock_cloudinary, clien
 
     _autenticar_como_duenio(client, persona["id"])
 
-    contenido = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100  # JPEG-ish
+    contenido = jpeg_valido()
     resp = client.post(
         f"/api/v1/membresias/pagos/{pago['id']}/voucher",
         files={"archivo": ("voucher.jpg", contenido, "image/jpeg")},
@@ -144,7 +145,7 @@ def test_subir_voucher_pdf_a_pago_pendiente_devuelve_201(_mock_cloudinary, clien
 
     _autenticar_como_duenio(client, persona["id"])
 
-    contenido = b"%PDF-1.4\n" + b"\x00" * 100  # PDF-ish
+    contenido = pdf_valido()
     resp = client.post(
         f"/api/v1/membresias/pagos/{pago['id']}/voucher",
         files={"archivo": ("voucher.pdf", contenido, "application/pdf")},
@@ -237,7 +238,7 @@ def test_reemplazo_borra_el_voucher_previo_con_el_resource_type_de_su_forma(
         db_session.commit()
 
         _autenticar_como_duenio(client, persona["id"])
-        contenido = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100
+        contenido = jpeg_valido()
         with _parchear_destroy() as mock_destroy:
             resp = client.post(
                 f"/api/v1/membresias/pagos/{pago['id']}/voucher",
@@ -292,7 +293,7 @@ def test_reemplazo_borra_el_voucher_previo_con_formato_null_o_atipico(
     db_session.commit()
 
     _autenticar_como_duenio(client, persona["id"])
-    contenido = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100
+    contenido = jpeg_valido()
     with _parchear_destroy() as mock_destroy:
         resp = client.post(
             f"/api/v1/membresias/pagos/{pago['id']}/voucher",
@@ -335,7 +336,7 @@ def test_reemplazo_no_destruye_un_voucher_legado_por_url_publica(
     db_session.commit()
 
     _autenticar_como_duenio(client, persona["id"])
-    contenido = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100
+    contenido = jpeg_valido()
     with _parchear_destroy() as mock_destroy:
         resp = client.post(
             f"/api/v1/membresias/pagos/{pago['id']}/voucher",
@@ -363,7 +364,7 @@ def test_reemplazo_sin_voucher_previo_no_destruye_nada(
     pago = _crear_pago(client, persona["id"], membresia["id"])
 
     _autenticar_como_duenio(client, persona["id"])
-    contenido = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100
+    contenido = jpeg_valido()
     with _parchear_destroy() as mock_destroy:
         resp = client.post(
             f"/api/v1/membresias/pagos/{pago['id']}/voucher",
@@ -388,7 +389,7 @@ def test_subir_voucher_tras_fallo_de_cloudinary_permite_reintentar(client, db_se
     membresia = _crear_membresia(client, persona["id"], tipo["id"])
     pago = _crear_pago(client, persona["id"], membresia["id"])
     _autenticar_como_duenio(client, persona["id"])
-    contenido = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100
+    contenido = jpeg_valido()
 
     with patch(
         "app.infraestructura.cloudinary_cliente.subir_voucher_pago",
@@ -435,7 +436,7 @@ def test_subir_voucher_a_pago_no_pendiente_da_400(client):
         },
     )
 
-    contenido = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100
+    contenido = jpeg_valido()
     resp = client.post(
         f"/api/v1/membresias/pagos/{pago['id']}/voucher",
         files={"archivo": ("voucher.jpg", contenido, "image/jpeg")},
@@ -560,7 +561,7 @@ def test_subir_voucher_sin_ser_duenio_ni_admin_da_403(_mock_cloudinary, client_s
         "sub": "alumno@cataclub.test", "persona_id": 1, "roles": ["ALUMNO"],
     }
 
-    contenido = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100
+    contenido = jpeg_valido()
     resp = client_sin_permisos.post(
         f"/api/v1/membresias/pagos/{pago['id']}/voucher",
         files={"archivo": ("voucher.jpg", contenido, "image/jpeg")},
@@ -571,3 +572,23 @@ def test_subir_voucher_sin_ser_duenio_ni_admin_da_403(_mock_cloudinary, client_s
     # garantiza que un desconocido no pueda hacernos escribir en Cloudinary
     # -- un 403 devuelto DESPUÉS de subir el archivo seguiría siendo un 403.
     _mock_cloudinary.assert_not_called()
+
+
+# --- FAM-03: la firma no basta, el archivo debe poder abrirse ----------------
+@patch("app.infraestructura.cloudinary_cliente.subir_voucher_pago")
+def test_voucher_con_firma_valida_pero_cuerpo_corrupto_se_rechaza_sin_subir(mock_cloudinary, client):
+    persona = _crear_persona(client, cedula="1710034081")
+    tipo = _crear_tipo_membresia(client)
+    membresia = _crear_membresia(client, persona["id"], tipo["id"])
+    pago = _crear_pago(client, persona["id"], membresia["id"])
+    _autenticar_como_duenio(client, persona["id"])
+
+    corrupto = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100
+    resp = client.post(
+        f"/api/v1/membresias/pagos/{pago['id']}/voucher",
+        files={"archivo": ("voucher.jpg", corrupto, "image/jpeg")},
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert "dañado" in resp.json()["detail"]
+    mock_cloudinary.assert_not_called()

@@ -842,6 +842,35 @@ class AuthServicio:
         usuario.revocar_sesiones()
         self.db.commit()
 
+    def cambiar_contrasenia(
+        self, correo: str, contrasenia_actual: str, nueva_contrasenia: str,
+        user_agent: str | None = None,
+    ) -> dict:
+        """POST /auth/contrasenia/cambiar (FAM-17): cambio desde el perfil.
+
+        Exige la contraseña actual y rechaza una nueva igual a ella. Igual que
+        el restablecimiento, retira el acceso previo (bombea el epoch); como
+        quien cambia la clave sigue en su equipo, se le reemite un par nuevo
+        -- mismo mecanismo que `invalidar_otras_sesiones`. Las demás sesiones
+        mueren porque nacieron bajo el epoch anterior.
+        """
+        usuario = self.obtener_usuario_actual(correo)
+        if not GestorAutenticacion.verificar_contrasenia(contrasenia_actual, usuario.contrasenia):
+            raise OperacionInvalida("La contraseña actual es incorrecta.")
+        if GestorAutenticacion.verificar_contrasenia(nueva_contrasenia, usuario.contrasenia):
+            raise OperacionInvalida("La nueva contraseña debe ser distinta de la actual.")
+
+        usuario.contrasenia = GestorAutenticacion.obtener_hash_contrasenia(nueva_contrasenia)
+        usuario.version_contrasenia += 1
+        usuario.revocar_sesiones()
+        self.db.commit()
+        self.db.refresh(usuario)
+
+        sesion = self._registrar_sesion(usuario, user_agent)
+        tokens = self._emitir_par_tokens(usuario, sesion_id=sesion.id)
+        actividad.registrar_sin_fallar(self.db, usuario.id)
+        return tokens
+
     # --- Issue #790: verificación de la dirección de correo ------------------
     def solicitar_verificacion_correo(self, correo: str) -> dict:
         """Registra la solicitud localmente; el worker enviará el enlace.

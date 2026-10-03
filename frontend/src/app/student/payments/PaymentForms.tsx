@@ -86,7 +86,7 @@ function MonthCountField({
   disabled?: boolean;
 }): React.ReactElement {
   return (
-    <fieldset className="flex flex-col gap-1.5" aria-required="true">
+    <fieldset className="flex flex-col gap-1.5">
       <legend className={FIELD_LABEL_CLASSES}>
         Meses a pagar <span aria-hidden="true" className="text-state-bad">*</span>
       </legend>

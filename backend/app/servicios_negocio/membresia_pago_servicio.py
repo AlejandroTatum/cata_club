@@ -37,7 +37,7 @@ from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
-from app.soporte_transversal.firma_archivos import es_firma_valida
+from app.soporte_transversal.firma_archivos import es_contenido_legible, es_firma_valida
 from app.soporte_transversal.tiempo import hoy_club
 from app.servicios_negocio.dtos.membresia_pago_schemas import (
     TipoMembresiaCreateDTO, TipoMembresiaUpdateDTO, MembresiaCreateDTO, PagoCreateDTO, PagoValidarDTO,
@@ -2952,6 +2952,13 @@ class PagoServicio:
         if not es_firma_valida(contenido, content_type):
             raise OperacionInvalida(
                 "El contenido del archivo no coincide con el formato declarado"
+            )
+
+        # 4c. La firma solo mira la cabecera: un archivo corrupto o cortado
+        # con cabecera válida la pasa. Se decodifica de verdad (FAM-03).
+        if not es_contenido_legible(contenido, content_type):
+            raise OperacionInvalida(
+                "El archivo está dañado o no se puede leer. Genere el comprobante de nuevo e intente otra vez"
             )
 
         # 5. Tamaño máximo. Defensa en profundidad: el router ya acota la
