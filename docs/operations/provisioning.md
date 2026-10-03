@@ -484,14 +484,17 @@ default `0000000000`, que no es un teléfono válido (issue #828): un dato de
 identidad se pide, no se inventa. Si alguna no calza, el script se niega
 diciendo cuál corregir y no deja rastro en la base.
 
-## Límite conocido: staging
+## Staging persistente retirado
 
-Este repositorio no describe ningún entorno de *staging*. Los únicos
-despliegues que puede documentar son el de producción (`docker-compose.yml` +
-`docker-compose.prod.yml`, vía `preflight-production.sh` y `deploy.sh`) y el de
-QA local (`docker-compose.qa.yml`, vía `make qa-up`). Si existe un staging, su
-suministro de secretos no está versionado acá y hay que tratarlo con el mismo
-procedimiento de producción, confirmando a mano dónde vive su `.env`.
+Decisión del dueño (2026-10-02): hay **un solo VPS** y el droplet que servía
+staging se reconvierte en el lugar a producción (`cataclub.com`). Ya no existe
+un staging persistente: QA corre en local (`make qa-up`, `docker-compose.qa.yml`)
+o en droplets desechables creados desde un snapshot. La conversión se hace con
+[production-cutover.md](production-cutover.md), que reemplaza a
+[staging-redeploy.md](staging-redeploy.md) para este host. Un staging desechable
+usa su propio `.env` con `DOMINIO_INDEXABLE` distinto de `DOMINIO` (queda
+`noindex` y el preflight no exige el chequeo de producción) y no hereda secretos
+ni el bucket o heartbeat de producción.
 
 ## Límite de compatibilidad de migraciones
 
