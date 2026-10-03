@@ -292,7 +292,8 @@ class AlumnoHorarioResponseDTO(ResponseBase, BaseModel):
 
 class UltimaListaDTO(ResponseBase, BaseModel):
     """Una sesión (horario + fecha) con al menos una Asistencia registrada,
-    con sus cuatro conteos. Esta tarjeta sigue sin autor a propósito: es un
+    con sus conteos por estado (presentes, tardanzas, enfermos, competencias,
+    ausentes). Esta tarjeta sigue sin autor a propósito: es un
     resumen de conteos, no un detalle (ver decisiones-de-negocio-2026-08-11.md
     §8) -- `Asistencia` SÍ guarda quién tomó la lista desde #263
     (`registrado_por_id`), expuesto en el historial. Usada por el panel del
@@ -304,7 +305,8 @@ class UltimaListaDTO(ResponseBase, BaseModel):
     hora_fin: time
     presentes: int
     tardanzas: int
-    justificados: int
+    enfermos: int
+    competencias: int
     ausentes: int
     total: int
 

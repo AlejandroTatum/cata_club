@@ -1136,16 +1136,12 @@ class AsistenciaServicio:
             presentes = conteos.get(EstadoAsistencia.PRESENTE, 0)
             tardanzas = conteos.get(EstadoAsistencia.ATRASADO, 0)
             # Issue #1373: ENFERMO y COMPETENCIA son inasistencias
-            # autorizadas -- familia justificada/neutral, nunca ausencia
-            # injustificada. Estas tarjetas son resúmenes de conteos, no el
-            # detalle por alumno, así que viajan dentro de `justificados`;
-            # el desglose por estado exacto está en el listado y en la
-            # corrección, que sí distinguen los seis valores.
-            justificados = (
-                conteos.get(EstadoAsistencia.JUSTIFICADO, 0)
-                + conteos.get(EstadoAsistencia.ENFERMO, 0)
-                + conteos.get(EstadoAsistencia.COMPETENCIA, 0)
-            )
+            # autorizadas -- nunca ausencia injustificada. Antes (con
+            # JUSTIFICADO, QA4 ENT-23) viajaban plegadas en `justificados`;
+            # ahora cada una tiene su campo. Misma semántica: suman al
+            # total y no entran en `ausentes`.
+            enfermos = conteos.get(EstadoAsistencia.ENFERMO, 0)
+            competencias = conteos.get(EstadoAsistencia.COMPETENCIA, 0)
             ausentes = conteos.get(EstadoAsistencia.AUSENTE, 0)
             resultado.append(UltimaListaDTO(
                 horario_id=s["horario_id"],
@@ -1155,9 +1151,10 @@ class AsistenciaServicio:
                 hora_fin=s["hora_fin"],
                 presentes=presentes,
                 tardanzas=tardanzas,
-                justificados=justificados,
+                enfermos=enfermos,
+                competencias=competencias,
                 ausentes=ausentes,
-                total=presentes + tardanzas + justificados + ausentes,
+                total=presentes + tardanzas + enfermos + competencias + ausentes,
             ))
         return resultado
 

@@ -44,7 +44,6 @@ _ETIQUETAS_ESTADO_ASISTENCIA = {
     EstadoAsistencia.PRESENTE: "Presente",
     EstadoAsistencia.AUSENTE: "Ausente",
     EstadoAsistencia.ATRASADO: "Tardanza",
-    EstadoAsistencia.JUSTIFICADO: "Justificado",
     # Issue #1373: mismos labels que la UI usa para los dos estados nuevos,
     # para que el PDF y la tabla digan lo mismo de la misma fila.
     EstadoAsistencia.ENFERMO: "Enfermo",

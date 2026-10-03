@@ -574,7 +574,7 @@ def test_reporte_asistencia_pdf_imprime_las_etiquetas_de_la_ui_no_el_enum(
     """Issue #1240: el PDF armaba la columna Estado con `r.estado.value` --el
     miembro crudo del enum-- mientras la tabla de la misma pantalla, el
     export a Excel y el resto de la UI usan las etiquetas en español
-    (`Presente`, `Ausente`, `Tardanza`, `Justificado`). `ATRASADO` es una
+    (`Presente`, `Ausente`, `Tardanza`, `Enfermo`). `ATRASADO` es una
     palabra que la UI nunca usa. Se espían las filas que llegan a
     `generar_reporte_pdf` --igual que en el PDF de personas-- porque los
     bytes del PDF no son legibles como texto."""
@@ -595,7 +595,7 @@ def test_reporte_asistencia_pdf_imprime_las_etiquetas_de_la_ui_no_el_enum(
         ("2026-07-06", "PRESENTE"),
         ("2026-07-13", "AUSENTE"),
         ("2026-07-20", "ATRASADO"),
-        ("2026-07-27", "JUSTIFICADO"),
+        ("2026-07-27", "ENFERMO"),
     ):
         client.post(
             "/api/v1/asistencias/",
@@ -619,11 +619,11 @@ def test_reporte_asistencia_pdf_imprime_las_etiquetas_de_la_ui_no_el_enum(
     assert resp.status_code == 200
 
     columna_estado = [fila[-1] for fila in filas_generadas]
-    assert sorted(columna_estado) == ["Ausente", "Justificado", "Presente", "Tardanza"]
+    assert sorted(columna_estado) == ["Ausente", "Enfermo", "Presente", "Tardanza"]
     assert "ATRASADO" not in columna_estado
     assert "PRESENTE" not in columna_estado
     assert "AUSENTE" not in columna_estado
-    assert "JUSTIFICADO" not in columna_estado
+    assert "ENFERMO" not in columna_estado
 
 
 # --- Phase 5: regresión -- offload de `generar_reporte_pdf` fuera del ------
@@ -1004,7 +1004,7 @@ _REPORTES_PEOR_CASO = [
     (
         "asistencias",
         _COLUMNAS_ASISTENCIA_PDF,
-        [["17/08/2026", "MIERCOLES 18:00–19:30", _ESTUDIANTE_LARGO, "JUSTIFICADO"]],
+        [["17/08/2026", "MIERCOLES 18:00–19:30", _ESTUDIANTE_LARGO, "COMPETENCIA"]],
     ),
 ]
 

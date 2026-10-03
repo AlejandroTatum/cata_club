@@ -7,7 +7,7 @@ Fuentes de cada cifra:
     administrador no es ninguno de los tres roles de la gráfica y queda fuera.
   - Asistencias: filas de `asistencia` con estado PRESENTE o ATRASADO, por
     `fecha_registro` (el instante en que se anotó). `fecha_entrenamiento` es un
-    día, no sirve para las columnas de 2 h; AUSENTE/JUSTIFICADO/... no son una
+    día, no sirve para las columnas de 2 h; AUSENTE/ENFERMO/... no son una
     asistencia.
   - Pagos: filas de `pago` (cualquier estado: "comprobantes recibidos"), por
     `fecha_registro`.
