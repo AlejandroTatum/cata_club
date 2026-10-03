@@ -1543,9 +1543,9 @@ class CategoriaHorario(Base):
 
     `visible_en_landing` es la decisión editorial del club sobre si la
     categoría aparece en el catálogo público de la landing
-    (`GET /asistencias/horarios-publicos`). Default TRUE: lo de siempre no
-    cambia -- toda categoría existente (y toda categoría nueva) se publica
-    salvo que un admin la oculte. Es un filtro de PUBLICACIÓN, no de datos:
+    (`GET /asistencias/horarios-publicos`). QA4 ADMB-13: una categoría NUEVA
+    nace oculta (default FALSE del ORM y del alta) hasta que un admin la
+    publique; las filas existentes conservan su valor. Es un filtro de PUBLICACIÓN, no de datos:
     ocultar no toca horarios, inscriptos ni asistencias, y el ABM sigue
     viendo la fila completa (`listar_categorias` no filtra). El toggle del
     admin vive en `PATCH /categorias/{codigo}/publicacion` para que
@@ -1559,7 +1559,7 @@ class CategoriaHorario(Base):
     codigo: Mapped[str] = mapped_column(String(20), primary_key=True)
     label: Mapped[str] = mapped_column(String(50))
     edades: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    visible_en_landing: Mapped[bool] = mapped_column(Boolean, default=True)
+    visible_en_landing: Mapped[bool] = mapped_column(Boolean, default=False)
     hora_inicio: Mapped[time] = mapped_column(Time)
     hora_fin: Mapped[time] = mapped_column(Time)
 

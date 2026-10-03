@@ -77,6 +77,9 @@ class CategoriaResponseDTO(ResponseBase, BaseModel):
     hora_inicio: time
     hora_fin: time
     dias: list[DiaSemana]
+    # QA4 ADMB-14: avisos NO bloqueantes (hoy, cruce de horario con otra
+    # categoría). Solo los llenan el alta y la edición; vacío en el resto.
+    advertencias: list[str] = Field(default_factory=list)
 
 
 class CategoriaCreateDTO(BaseModel):
@@ -98,10 +101,10 @@ class CategoriaCreateDTO(BaseModel):
     una sola representación en la base."""
     nombre: str = Field(min_length=1, max_length=50)
     edades: Optional[str] = Field(default=None, max_length=50)
-    # TRUE ("se publica") es el default: una categoría nueva se publica
-    # salvo que el cuerpo pida lo contrario (ver
+    # QA4 ADMB-13: FALSE ("no se publica") es el default: una categoría
+    # nueva sale a la landing solo si el cuerpo lo pide (ver
     # `CategoriaHorario.visible_en_landing`).
-    visible: bool = True
+    visible: bool = False
     hora_inicio: time
     hora_fin: time
     dias: list[DiaSemana] = Field(min_length=1)

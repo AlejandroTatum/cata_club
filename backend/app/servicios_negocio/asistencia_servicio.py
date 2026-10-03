@@ -221,14 +221,36 @@ class AsistenciaServicio:
         resultado.sort(key=lambda categoria: categoria.category)
         return resultado
 
-    @staticmethod
-    def _a_categoria_dto(c: CategoriaHorario) -> CategoriaResponseDTO:
+    def _a_categoria_dto(
+        self, c: CategoriaHorario, advertencias: Optional[list[str]] = None,
+    ) -> CategoriaResponseDTO:
         return CategoriaResponseDTO(
             codigo=c.codigo, label=c.label, edades=c.edades,
             visible=c.visible_en_landing,
             hora_inicio=c.hora_inicio, hora_fin=c.hora_fin,
             dias=[d.dia_semana for d in c.dias_permitidos],
+            advertencias=advertencias or [],
         )
+
+    def _avisos_de_cruce(self, categoria: CategoriaHorario) -> list[str]:
+        """QA4 ADMB-14: avisos (no bloqueantes) de las otras categorías que
+        comparten día y se pisan en la franja. Terminar a la hora en que
+        otra empieza no es cruce."""
+        avisos: list[str] = []
+        dias = {d.dia_semana for d in categoria.dias_permitidos}
+        for otra in self.repo_categoria.listar():
+            if otra.codigo == categoria.codigo:
+                continue
+            if not (categoria.hora_inicio < otra.hora_fin and otra.hora_inicio < categoria.hora_fin):
+                continue
+            comunes = [d for d in DiaSemana if d in dias and d in {x.dia_semana for x in otra.dias_permitidos}]
+            for dia in comunes:
+                avisos.append(
+                    f"Este horario se cruza con {otra.label} ({dia_en_castellano(dia)} "
+                    f"{otra.hora_inicio:%H:%M}–{otra.hora_fin:%H:%M}). "
+                    "Puedes continuar si es intencional."
+                )
+        return avisos
 
     @staticmethod
     def _normalizar_edades(valor: Optional[str]) -> Optional[str]:
@@ -335,7 +357,7 @@ class AsistenciaServicio:
         ]
         categoria = self.repo_categoria.crear_con_horarios(categoria, horarios)
         self.db.commit()
-        return self._a_categoria_dto(categoria)
+        return self._a_categoria_dto(categoria, self._avisos_de_cruce(categoria))
 
     def actualizar_categoria(self, codigo: str, datos: CategoriaUpdateDTO) -> CategoriaResponseDTO:
         """Edición atómica de nombre/franja/días -- ver
@@ -490,7 +512,7 @@ class AsistenciaServicio:
             alumno_horario_a_borrar=alumno_horario_a_borrar,
         )
         self.db.commit()
-        return self._a_categoria_dto(categoria)
+        return self._a_categoria_dto(categoria, self._avisos_de_cruce(categoria))
 
     def eliminar_categoria(self, codigo: str) -> None:
         """Baja de la categoria entera -- solo si NINGUNO de sus horarios

@@ -829,9 +829,9 @@ def test_delete_categorias_borra(client):
 
 # --- Publicación en la landing (visible_en_landing) ----------------------
 
-def test_crear_categoria_se_publica_por_defecto(db_session):
-    """Lo de siempre no cambia: una categoría nueva se publica en la landing
-    salvo que alguien pida lo contrario."""
+def test_crear_categoria_nace_oculta_por_defecto(db_session):
+    """QA4 ADMB-13: una categoría nueva NO sale a la landing hasta que el
+    admin la hace visible de forma explícita."""
     servicio = AsistenciaServicio(db_session)
 
     categoria = servicio.crear_categoria(CategoriaCreateDTO(
@@ -839,8 +839,30 @@ def test_crear_categoria_se_publica_por_defecto(db_session):
         dias=[DiaSemana.LUNES],
     ))
 
+    assert categoria.visible is False
+    assert db_session.get(CategoriaHorario, categoria.codigo).visible_en_landing is False
+    assert servicio.listar_horarios_publicos() == []
+
+
+def test_crear_categoria_puede_nacer_visible_si_se_pide(db_session):
+    servicio = AsistenciaServicio(db_session)
+
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES], visible=True,
+    ))
+
     assert categoria.visible is True
     assert db_session.get(CategoriaHorario, categoria.codigo).visible_en_landing is True
+
+
+def test_crear_categoria_por_api_sin_visible_no_se_publica(client):
+    creada = client.post("/api/v1/asistencias/categorias", json={
+        "nombre": "Preinfantil", "hora_inicio": "15:00", "hora_fin": "16:00",
+        "dias": ["LUNES"],
+    })
+    assert creada.status_code == 201
+    assert creada.json()["visible"] is False
 
 
 def test_crear_categoria_puede_nacer_oculta(db_session):
@@ -946,3 +968,73 @@ def test_patch_publicacion_inexistente_da_404(client):
     )
 
     assert resp.status_code == 404
+
+
+# --- Aviso de cruce de horario (QA4 ADMB-14) ------------------------------
+
+def _crear(servicio, nombre, inicio, fin, dias):
+    return servicio.crear_categoria(CategoriaCreateDTO(
+        nombre=nombre, hora_inicio=inicio, hora_fin=fin, dias=dias,
+    ))
+
+
+def test_crear_categoria_sin_cruce_no_trae_advertencias(db_session):
+    servicio = AsistenciaServicio(db_session)
+    _crear(servicio, "Mayores", time(6, 0), time(8, 0), [DiaSemana.SABADO])
+
+    otra = _crear(servicio, "Libre", time(6, 0), time(8, 0), [DiaSemana.LUNES])
+    pegada = _crear(servicio, "Pegada", time(8, 0), time(9, 0), [DiaSemana.SABADO])
+
+    assert otra.advertencias == []
+    assert pegada.advertencias == []  # terminar y empezar a la misma hora no es cruce
+
+
+def test_crear_categoria_con_cruce_avisa_pero_la_crea(db_session):
+    servicio = AsistenciaServicio(db_session)
+    _crear(servicio, "Mayores", time(6, 0), time(8, 0), [DiaSemana.SABADO])
+
+    nueva = _crear(servicio, "Nueva", time(7, 0), time(9, 0), [DiaSemana.SABADO])
+
+    assert db_session.get(CategoriaHorario, nueva.codigo) is not None
+    assert nueva.advertencias == [
+        "Este horario se cruza con Mayores (sábado 06:00–08:00). "
+        "Puedes continuar si es intencional."
+    ]
+
+
+def test_cruce_exige_el_mismo_dia(db_session):
+    servicio = AsistenciaServicio(db_session)
+    _crear(servicio, "Mayores", time(6, 0), time(8, 0), [DiaSemana.SABADO])
+
+    nueva = _crear(servicio, "Nueva", time(6, 0), time(8, 0), [DiaSemana.SABADO, DiaSemana.LUNES])
+
+    assert len(nueva.advertencias) == 1
+
+
+def test_actualizar_categoria_con_cruce_avisa_y_excluye_a_si_misma(db_session):
+    servicio = AsistenciaServicio(db_session)
+    _crear(servicio, "Mayores", time(6, 0), time(8, 0), [DiaSemana.SABADO])
+    propia = _crear(servicio, "Nueva", time(10, 0), time(11, 0), [DiaSemana.SABADO])
+    assert propia.advertencias == []
+
+    renombrada = servicio.actualizar_categoria(propia.codigo, CategoriaUpdateDTO(nombre="Nueva 2"))
+    assert renombrada.advertencias == []
+
+    movida = servicio.actualizar_categoria(
+        propia.codigo, CategoriaUpdateDTO(hora_inicio=time(7, 0), hora_fin=time(9, 0)),
+    )
+    assert [a for a in movida.advertencias if "Mayores" in a]
+    assert len(movida.advertencias) == 1
+
+
+def test_cruce_por_api_devuelve_advertencias_con_201(client):
+    base = {"hora_inicio": "10:00", "hora_fin": "11:00", "dias": ["SABADO"]}
+    primera = client.post("/api/v1/asistencias/categorias", json={"nombre": "Uno", **base})
+    assert primera.status_code == 201
+    assert primera.json()["advertencias"] == []
+
+    segunda = client.post("/api/v1/asistencias/categorias", json={
+        "nombre": "Dos", "hora_inicio": "10:30", "hora_fin": "11:30", "dias": ["SABADO"],
+    })
+    assert segunda.status_code == 201
+    assert "Uno" in segunda.json()["advertencias"][0]
