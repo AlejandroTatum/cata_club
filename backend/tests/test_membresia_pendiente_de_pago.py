@@ -2,7 +2,7 @@
 QA3 ADM-08: crear una membresía para una persona que ya tiene una INACTIVA
 con un pago pendiente se rechaza, con el id de la existente para que la UI la
 enlace. QA4 ADMA-05/FAM-01: una INACTIVA a secas (sin pago pendiente) también
-bloquea la creación, con un mensaje que manda a reactivar o renovar la existente.
+bloquea la creación, con un mensaje que manda a registrar el pago en la existente.
 """
 from app.dominio.enums import EstadoMembresia, EstadoPago
 from tests.fabricas_pagos import (
@@ -14,8 +14,8 @@ from tests.fabricas_pagos import (
 
 MENSAJE = "Ya tiene una membresía pendiente de pago."
 MENSAJE_INACTIVA = (
-    "Esta persona ya tiene una membresía inactiva. Reactive o renueve la "
-    "membresía existente en lugar de crear otra."
+    "Esta persona ya tiene una membresía inactiva. Registre el pago en esa "
+    "membresía para activarla."
 )
 
 

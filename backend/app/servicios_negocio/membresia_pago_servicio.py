@@ -139,8 +139,8 @@ MENSAJE_PAGO_PENDIENTE_DUPLICADO = (
 )
 MENSAJE_MEMBRESIA_PENDIENTE_DE_PAGO = "Ya tiene una membresía pendiente de pago."
 MENSAJE_MEMBRESIA_INACTIVA_EXISTENTE = (
-    "Esta persona ya tiene una membresía inactiva. Reactive o renueve la "
-    "membresía existente en lugar de crear otra."
+    "Esta persona ya tiene una membresía inactiva. Registre el pago en esa "
+    "membresía para activarla."
 )
 
 MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA = (
@@ -382,7 +382,7 @@ class MembresiaServicio:
             ):
                 raise MembresiaPendienteDePago(MENSAJE_MEMBRESIA_PENDIENTE_DE_PAGO, m.id)
         # QA4 ADMA-05/FAM-01: una INACTIVA sin pago pendiente tampoco admite
-        # otra; la salida es reactivar o renovar la existente, no duplicarla.
+        # otra; la salida es registrar el pago en la existente, no duplicarla.
         inactiva = next(
             (m for m in existentes if m.estado == EstadoMembresia.INACTIVA), None
         )
