@@ -14,13 +14,15 @@ Branch: `feat/prod-cutover` (worktree `cata_club-worktrees/prod-cutover`).
       the backend container healthcheck/autoheal to Celery + tests.
 - [ ] PC-3 Single staging-to-production cutover runbook; refresh stale
       staging/prod docs.
-- [ ] PC-4 Canonical host + `www` redirect in Caddyfile + tests
-      (blocked: owner decides apex vs www).
+- [x] PC-4 Canonical host (`cataclub.com`) + `www` redirect in Caddyfile + tests.
 
 ## Evidence
 
 (commit ids recorded per task)
 
-- PC-1: 47b4cf97 (`scripts/ops/check-prod-env.sh`, opt-in wiring via
+- PC-1: 47b4cf97, 47097aec; native review review-63fcf25fa6385080
+  approved + acknowledged (`scripts/ops/check-prod-env.sh`, opt-in wiring via
   `PREFLIGHT_REQUIRE_PRODUCTION_ENV=1`; tests: 141 passed in
   test_prod_env_check.py + test_release_controls.py).
+- PC-4: 86664ad4 (`DOMINIO_ALIAS_WWW`, default `www.localhost` = no ACME;
+  validator requires `www.$DOMINIO`; 246 passed in the three root test files).
