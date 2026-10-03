@@ -84,6 +84,31 @@
 		reverse_proxy backend:8000
 	}
 
+	# ── Caché de archivos estáticos sin versionar de `frontend/public/` ───
+	#
+	# `/_next/static/*` NO se toca acá: Next ya lo emite con
+	# `Cache-Control: public, max-age=31536000, immutable` (nombres con hash)
+	# y pasa intacto por el catch-all de abajo. Lo que Next sirve de `public/`
+	# sale con `public, max-age=0` (revalida en cada visita), y esos nombres
+	# NO llevan hash, por eso solo 1 día: un archivo reemplazado se ve en <24 h.
+	#
+	# Matcher de paths explícito y cerrado a los directorios de `public/`:
+	# HTML, `/api/*`, `/_next/image` y todo lo autenticado quedan afuera. `handle` es excluyente y va antes
+	# del catch-all, así que no hay solapamiento.
+	@public_estaticos path /brand/* /fonts/* /landing/* /leaflet/* /favicon.ico
+	handle @public_estaticos {
+		reverse_proxy frontend:3000 {
+			# Misma fijación de X-Forwarded-For que el catch-all (ver el
+			# comentario largo allá): mantener las dos en sincronía.
+			header_up X-Forwarded-For {remote_host}
+
+			# Solo reescribe el valor EXACTO que Next emite para `public/`
+			# (`public, max-age=0`): cualquier otro Cache-Control del upstream
+			# (404 `no-store`, etc.) pasa intacto.
+			header_down Cache-Control "^public, max-age=0$" "public, max-age=86400"
+		}
+	}
+
 	handle {
 		reverse_proxy frontend:3000 {
 			# Fija X-Forwarded-For al peer TCP real -- issue #235, mitad 2.
