@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { publicPageMetadata, socialMetadata } from "@/lib/seo";
+import StructuredData from "@/components/landing/StructuredData";
 import LandingPage from "./landing/LandingPage";
 import "./landing/landing.css";
 
@@ -40,5 +41,5 @@ export const metadata: Metadata = {
 };
 
 export default function HomePage(): React.ReactElement {
-  return <div className={`${barlow.variable} ${graduate.variable} ${playfair.variable}`}><LandingPage /></div>;
+  return <div className={`${barlow.variable} ${graduate.variable} ${playfair.variable}`}><StructuredData /><LandingPage /></div>;
 }
