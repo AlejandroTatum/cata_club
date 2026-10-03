@@ -80,6 +80,9 @@ celery_app.conf.beat_schedule = {
     # PC-2: latido para el monitor externo (`/health/workers`). `expires`
     # descarta un latido que esperó en la cola más que el TTL: ejecutarlo tarde
     # escribiría "ahora" y taparía un worker atascado.
+    # PERF-10: se queda en 1 min. El TTL del latido es de 180 s (3 latidos) y
+    # el monitor externo lee esa clave; espaciarlo obligaría a subir el TTL y
+    # retrasaría la detección de un worker caído.
     "registrar-latido-workers-cada-minuto": {
         "task": "app.infraestructura.tareas.latido_tareas.registrar_latido",
         "schedule": crontab(minute="*/1"),
@@ -92,6 +95,9 @@ celery_app.conf.beat_schedule = {
     # Issue #1314: una instantánea por minuto (un scrape + un insert) y la
     # purga diaria de lo que ya no se dibuja. 03:20, entre la purga de
     # reportes (03:10) y nada más: no compite con la banda de 02:30-02:40.
+    # PERF-10: se queda en 1 min. Cada instantánea guarda deltas "del último
+    # minuto" (peticiones/min, MAX_HUECO_S=300 s) y las gráficas asumen esa
+    # resolución; espaciarla cambiaría el significado del dato.
     "capturar-metricas-cada-minuto": {
         "task": "app.infraestructura.tareas.metricas_tareas.capturar_metricas",
         "schedule": crontab(minute="*/1"),
@@ -100,6 +106,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.infraestructura.tareas.metricas_tareas.purgar_metricas_y_actividad",
         "schedule": _parsear_hora_crontab("03:20"),
     },
+    # PERF-10 / REG-20: el despacho de correo y notificaciones (outbox) se
+    # queda en 1 min; no hay encolado inmediato tras el commit, así que el
+    # barrido ES la latencia percibida. Lo mismo vale para recuperaciones y
+    # verificaciones de más abajo.
     "despachar-inscripcion-notificaciones-cada-minuto": {
         "task": "app.infraestructura.tareas.enrollment_notificacion_tareas.despachar_inscripcion_notificaciones",
         "schedule": crontab(minute="*/1"),
