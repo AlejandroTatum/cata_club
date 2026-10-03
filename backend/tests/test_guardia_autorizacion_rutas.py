@@ -226,7 +226,7 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/supresion-datos/{solicitud_id}/aprobar"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/supresion-datos/{solicitud_id}/ejecutar"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/supresion-datos/{solicitud_id}/rechazar"): frozenset({"ADMINISTRADOR"}),
-    ("DELETE", "/asistencias/desasignar-alumno"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
+    ("DELETE", "/asistencias/desasignar-alumno"): frozenset({"ADMINISTRADOR"}),
     # ABM de categorías (docs/archive/fixes/24-abm-categorias.md): alta/edición/baja
     # atómica de la categoria + sus días + sus horarios. Mismo tier que
     # PUT/DELETE de `/horarios` (ADMIN-only), no el más permisivo POST
@@ -328,7 +328,7 @@ RUTAS_ROLES_REQUERIDOS = {
     ("GET", "/asistencias/{asistencia_id}/correcciones"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/asistencias/"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/asistencias/lote"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
-    ("POST", "/asistencias/asignar-alumno"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
+    ("POST", "/asistencias/asignar-alumno"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/asistencias/horarios"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/auth/registro"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/fichas-medicas/"): frozenset({"ADMINISTRADOR"}),

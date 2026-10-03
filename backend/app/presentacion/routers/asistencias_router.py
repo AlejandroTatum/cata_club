@@ -385,6 +385,7 @@ async def listar_ultimas_listas(
 
 
 # --- Asignación directa Alumno ↔ Categoria (todos sus horarios) ------------
+# QA4 ENT-N1: solo ADMINISTRADOR asigna/desasigna; el ENTRENADOR recibe 403.
 # El club inscribe por mes completo, nunca por día suelto: `horario_id` en el
 # body solo ancla la categoria, y el servicio inscribe al alumno en TODOS los
 # horarios vigentes de esa categoria en una única transacción. Por eso la
@@ -393,7 +394,7 @@ async def listar_ultimas_listas(
     "/asignar-alumno",
     response_model=AsignacionAlumnoHorarioResponseDTO,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
 )
 async def asignar_alumno_a_horario(
     datos: AlumnoHorarioCreateDTO, db: Session = Depends(obtener_sesion)
@@ -404,7 +405,7 @@ async def asignar_alumno_a_horario(
 @router.delete(
     "/desasignar-alumno",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
 )
 async def desasignar_alumno_de_horario(
     persona_id: int = Query(...),
