@@ -48,6 +48,8 @@ export interface ResumenData {
   /** Distinct people over the whole range (not the sum of the periods). */
   uniqueVisitors: RoleCounts & { total: number };
   status: readonly { key: StatusKey; level: HealthLevel }[];
+  /** Emails waiting for the daily sending limit to reset (retried next day). */
+  queuedByQuota: number;
 }
 
 export interface Series {

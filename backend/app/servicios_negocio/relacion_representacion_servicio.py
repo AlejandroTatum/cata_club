@@ -509,8 +509,8 @@ class RelacionRepresentacionServicio:
                 tipo=TipoNotificacion.VINCULACION_REPRESENTANTE,
                 mensaje=(
                     "La administración del club finalizó el vínculo de "
-                    "representación de una persona que figuraba bajo tu cuenta. "
-                    "Tu sesión quedó cerrada por seguridad."
+                    "representación de una persona que figuraba bajo su cuenta. "
+                    "Su sesión quedó cerrada por seguridad."
                 ),
                 entidad_relacionada_id=evento_id,
             ))

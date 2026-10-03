@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 import jwt
-from sqlalchemy import case
+from sqlalchemy import case, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -141,6 +141,11 @@ def _registrar_intento_fallido(clave: str) -> int:
 # "¿desde dónde entré últimamente?", no "dame la bitácora completa". Es un
 # corte de LECTURA: la tabla conserva todo.
 LIMITE_SESIONES_LISTADAS = 10
+
+# GAP-01: tiempo mínimo entre dos correos del mismo tipo (recuperación o
+# verificación) para una misma cuenta. Protege el cupo diario del proveedor.
+ENFRIAMIENTO_REENVIO_CORREO = timedelta(minutes=2)
+MENSAJE_RECUPERACION_ENVIADA = "Si el correo está registrado, se envió un enlace de recuperación"
 
 
 @dataclass(frozen=True)
@@ -760,6 +765,25 @@ class AuthServicio:
         ]
 
     # --- E01-RF003: recuperación de contraseña -------------------------------
+    def _en_enfriamiento(self, modelo, usuario_id: int) -> bool:
+        """GAP-01: ¿esta cuenta ya recibió (o tiene recién encolado) un correo
+        de este tipo hace menos de `ENFRIAMIENTO_REENVIO_CORREO`?
+
+        Se mide contra la fila más reciente de CUALQUIER estado: el índice
+        parcial único solo cubre las activas, así que una fila ya `ENVIADO`
+        no frenaría nada por sí sola. Quien llama responde exactamente igual
+        que en el camino normal: el enfriamiento no puede delatar si la
+        cuenta existe."""
+        limite = datetime.now(timezone.utc) - ENFRIAMIENTO_REENVIO_CORREO
+        return self.db.query(
+            self.db.query(modelo)
+            .filter(
+                modelo.usuario_id == usuario_id,
+                or_(modelo.created_at >= limite, modelo.sent_at >= limite),
+            )
+            .exists()
+        ).scalar()
+
     def solicitar_recuperacion(self, correo: str) -> dict:
         """Registra la solicitud localmente; el worker enviará el enlace.
 
@@ -778,6 +802,8 @@ class AuthServicio:
                 .first()
             )
             if evento is None:
+                if self._en_enfriamiento(RecuperacionOutbox, usuario.id):
+                    return {"mensaje": MENSAJE_RECUPERACION_ENVIADA}
                 self.db.add(
                     RecuperacionOutbox(
                         usuario_id=usuario.id,
@@ -810,7 +836,7 @@ class AuthServicio:
                 raise ServicioNoDisponible(
                     "No se pudo procesar la solicitud. Intente nuevamente más tarde"
                 )
-        return {"mensaje": "Si el correo está registrado, se envió un enlace de recuperación"}
+        return {"mensaje": MENSAJE_RECUPERACION_ENVIADA}
 
     def restablecer_contrasenia(self, token: str, nueva_contrasenia: str) -> None:
         payload = GestorAutenticacion.decodificar_token_recuperacion(token)
@@ -893,6 +919,8 @@ class AuthServicio:
                 .first()
             )
             if evento is None:
+                if self._en_enfriamiento(VerificacionCorreoOutbox, usuario.id):
+                    return {"mensaje": MENSAJE_VERIFICACION_ENVIADA}
                 self.db.add(
                     VerificacionCorreoOutbox(
                         usuario_id=usuario.id,
