@@ -78,8 +78,8 @@ describe("EmergencyCardDialog", () => {
 
     render(<EmergencyCardDialog student={{ id: 5, name: "Iker Solís" }} onClose={vi.fn()} />);
 
-    await waitFor(() => expect(fetchFichaEmergencia).toHaveBeenCalled());
-    expect(screen.getByText("Marta Solís")).toBeInTheDocument();
+    // The call happens before the resolved ficha is rendered: wait for the data.
+    expect(await screen.findByText("Marta Solís")).toBeInTheDocument();
     expect(screen.getByText("0987654321")).toBeInTheDocument();
     // No error surface for the missing-ficha case — it is expected data, not a failure.
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
