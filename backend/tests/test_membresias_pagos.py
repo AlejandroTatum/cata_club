@@ -1759,3 +1759,22 @@ def test_presencial_guardia_primera_inscripcion_bajo_mismo_lock(db_session, monk
     # lectura sin lock participó de ella.
     assert llamadas["con_lock"] >= 1
     assert llamadas["sin_lock"] == 0
+
+
+# --- FAM-05: la familia ve por qué está suspendida la membresía -------------
+def test_membresia_suspendida_expone_el_motivo_de_la_ultima_suspension(client, db_session):
+    persona, membresia, _ = _persona_con_cobertura_combinada(db_session, 925)
+    client.post(f"/api/v1/membresias/{membresia.id}/suspender", json={"motivo": "Lesión de rodilla"})
+
+    mias = client.get(f"/api/v1/membresias/mias?persona_id={persona.id}")
+    assert mias.status_code == 200
+    assert mias.json()[0]["motivoSuspension"] == "Lesión de rodilla"
+
+
+def test_membresia_activa_no_expone_motivo_de_suspension(client, db_session):
+    persona, membresia, _ = _persona_con_cobertura_combinada(db_session, 926)
+    client.post(f"/api/v1/membresias/{membresia.id}/suspender", json={"motivo": "Lesión de rodilla"})
+    client.post(f"/api/v1/membresias/{membresia.id}/reactivar", json={"motivo": "Recuperado"})
+
+    mias = client.get(f"/api/v1/membresias/mias?persona_id={persona.id}")
+    assert mias.json()[0]["motivoSuspension"] is None

@@ -1302,6 +1302,8 @@ export interface MembershipSummary {
    * normalizes it to `null` server-side.
    */
   cubiertoHasta?: string | null;
+  /** Why the club suspended this membership (FAM-05); `null` unless it is SUSPENDIDA. */
+  motivoSuspension?: string | null;
 }
 
 /** A real `TipoMembresia` catalog entry (`GET /membresias/tipos`) — replaces the old hardcoded `membershipPlans` array. */
@@ -2721,6 +2723,25 @@ export async function actualizarMiPerfil(data: ActualizarPerfilPropioPayload): P
 export async function invalidarOtrasSesiones(): Promise<{ mensaje: string }> {
   return request<{ mensaje: string }>(apiEndpoint("/auth/sesiones/invalidar"), {
     method: "POST",
+  });
+}
+
+/**
+ * Change the signed-in user's password — POST /api/auth/contrasenia/cambiar
+ * (FAM-17). The backend verifies the current password, rejects a new one equal
+ * to it, revokes every other session and reissues this device's token pair as
+ * HttpOnly cookies; the body only carries a confirmation message.
+ */
+export async function cambiarContrasenia(
+  contraseniaActual: string,
+  nuevaContrasenia: string,
+): Promise<{ mensaje: string }> {
+  return request<{ mensaje: string }>(apiEndpoint("/auth/contrasenia/cambiar"), {
+    method: "POST",
+    body: JSON.stringify({
+      contrasenia_actual: contraseniaActual,
+      nueva_contrasenia: nuevaContrasenia,
+    }),
   });
 }
 

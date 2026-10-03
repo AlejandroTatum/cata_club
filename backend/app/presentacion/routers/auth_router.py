@@ -8,7 +8,7 @@ from app.infraestructura.db import obtener_sesion
 from app.servicios_negocio.gestor_permisos import GestorPermisos
 from app.servicios_negocio.dtos.auth_schemas import (
     RegistroUsuarioDTO, RefreshTokenDTO, UsuarioMeResponseDTO, LogoutResponseDTO,
-    SolicitarRecuperacionDTO, SolicitarRecuperacionResponseDTO, RestablecerContraseniaDTO,
+    SolicitarRecuperacionDTO, SolicitarRecuperacionResponseDTO, RestablecerContraseniaDTO, CambiarContraseniaDTO,
     SolicitarVerificacionCorreoDTO, SolicitarVerificacionCorreoResponseDTO,
     ConfirmarVerificacionCorreoDTO,
     CambiarCorreoNoVerificadoDTO, CambiarCorreoNoVerificadoResponseDTO,
@@ -259,6 +259,25 @@ async def logout(
     cierra además el lado servidor.
     """
     return AuthServicio(db).cerrar_sesion(token_payload["sub"])
+
+
+@router.post("/contrasenia/cambiar")
+@limiter.limit("10/minute")
+async def cambiar_contrasenia(
+    request: Request,
+    datos: CambiarContraseniaDTO,
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    db: Session = Depends(obtener_sesion),
+):
+    """FAM-17: cambio de contraseña del usuario autenticado. Verifica la
+    contraseña actual, revoca las otras sesiones y reemite un par de tokens
+    para que el caller siga autenticado (ver `AuthServicio.cambiar_contrasenia`).
+    Hashea con bcrypt, de ahí `run_in_threadpool`."""
+    return await run_in_threadpool(
+        AuthServicio(db).cambiar_contrasenia,
+        token_payload["sub"], datos.contrasenia_actual, datos.nueva_contrasenia,
+        request.headers.get("user-agent"),
+    )
 
 
 # --- E01-RF003: recuperación de contraseña -----------------------------------

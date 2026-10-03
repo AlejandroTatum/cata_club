@@ -116,6 +116,16 @@ export function MembershipCard({
             : "En cuanto el club apruebe un pago, aquí aparecerá hasta qué fecha queda cubierto."}
         </p>
 
+        {membership?.estado === "SUSPENDIDA" && (
+          <p
+            data-testid="suspension-reason"
+            className="mt-3 rounded-ctl bg-state-warn-bg px-3 py-2 text-sm text-ink"
+          >
+            <span className="font-bold">Motivo de la suspensión: </span>
+            {membership.motivoSuspension ?? "El club no registró un motivo. Consulte con administración."}
+          </p>
+        )}
+
         {facts.length > 0 && (
           <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-line pt-4">
             {facts.map((fact) => (

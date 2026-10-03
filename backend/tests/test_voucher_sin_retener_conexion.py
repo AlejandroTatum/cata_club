@@ -40,14 +40,15 @@ from app.infraestructura.db import SessionLocal, TIMEOUT_POOL_SEGUNDOS
 from app.infraestructura.db import engine as motor_aplicacion
 from app.servicios_negocio.membresia_pago_servicio import PagoServicio
 from tests.conftest import TEST_DATABASE_URL
+from tests.archivos_validos import jpeg_valido
 from tests.fabricas_pagos import (
     crear_membresia_orm, crear_pago_orm, crear_persona_orm, crear_tipo_membresia_orm,
 )
 
-# Firma binaria real de un JPEG: `es_firma_valida` rechaza cualquier relleno
+# JPEG real: la subida decodifica el archivo y rechaza cualquier relleno
 # antes de llegar a la subida, así que un contenido cualquiera nunca pondría
 # en vuelo la llamada que estos tests necesitan medir.
-JPEG_VALIDO = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100
+JPEG_VALIDO = jpeg_valido()
 
 # Techo de espera de los eventos de sincronización. Generoso para un runner
 # cargado, finito para que un cuelgue real falle en segundos en vez de trabar

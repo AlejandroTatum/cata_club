@@ -28,7 +28,7 @@ import {
   PHONE_LOCAL_HINT,
   toPhoneFieldDigits,
 } from "@/lib/identity-validation";
-import { Button } from "@/components/ui";
+import { Button, Select } from "@/components/ui";
 import { DuplicateIdentityHelp, type DuplicateIdentityAudience } from "@/components/DuplicateIdentityHelp";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import { NUMERIC_FIELD_LIMIT_MESSAGE, type NumericFieldMode } from "@/lib/numeric-input";
@@ -498,7 +498,7 @@ export function BirthDateField(opts: BirthDateFieldProps): ReactElement {
           <label htmlFor={partIds.month} className="mb-1 block text-2xs font-semibold text-ink-3">
             Mes
           </label>
-          <select
+          <Select
             id={partIds.month}
             ref={monthRef}
             autoComplete="bday-month"
@@ -513,7 +513,7 @@ export function BirthDateField(opts: BirthDateFieldProps): ReactElement {
                 {name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div>
           <label htmlFor={partIds.year} className="mb-1 block text-2xs font-semibold text-ink-3">

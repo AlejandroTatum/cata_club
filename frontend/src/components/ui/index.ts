@@ -69,6 +69,9 @@ export type { RowActionsMenuItem, RowActionsMenuProps } from "./RowActionsMenu";
 export { default as ResponsiveListTable } from "./ResponsiveListTable";
 export type { ResponsiveListTableProps } from "./ResponsiveListTable";
 
+export { default as Select } from "./Select";
+export type { SelectProps } from "./Select";
+
 export { default as ScrollableTable } from "./ScrollableTable";
 export type { ScrollableTableProps } from "./ScrollableTable";
 

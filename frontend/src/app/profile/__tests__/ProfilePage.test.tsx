@@ -478,9 +478,13 @@ describe("ProfilePage — student/representante summary view", () => {
     // 3 times: the 2 representado rows, PLUS "Información de su rol"'s own
     // "Membresía propia" fact (self === null is a definite "not enrolled as
     // a student", not the ambiguous case — see the module docstring).
-    expect(screen.getAllByText("No disponible — consulte con administración")).toHaveLength(3);
+    // VIS-14: the sentence is stated ONCE (under the dependants list); the
+    // other fields read "—".
+    expect(screen.getAllByText(/No disponible — consulte con administración/)).toHaveLength(1);
     const roleInfo = screen.getByTestId("profile-role-info");
     expect(within(roleInfo).getByText("Membresía propia")).toBeInTheDocument();
+    expect(within(roleInfo).queryByText("No disponible — consulte con administración")).not.toBeInTheDocument();
+    expect(within(roleInfo).getByText("Sin membresía visible")).toBeInTheDocument();
     expect(screen.queryByText("Vencida")).not.toBeInTheDocument();
     // A `self: null` account has no personal membership to report, so the
     // identity card claims nothing about one — it does not say "no disponible"
@@ -524,7 +528,7 @@ describe("ProfilePage — student/representante summary view", () => {
     // (no approved payments on file here); the fallback note appears once, on
     // Juan's row.
     expect(screen.getAllByText("Sin pagos aprobados").length).toBe(1);
-    expect(screen.getByText("No disponible — consulte con administración")).toBeInTheDocument();
+    expect(screen.getByText(/No disponible — consulte con administración/)).toBeInTheDocument();
   });
 
   it("includes a link to the full /student portal for detail", async () => {
@@ -685,9 +689,10 @@ describe("ProfilePage — issue #204 redesign: four role variants share one arch
     // definite fact, honestly stated, not the invented "2 dispositivos"
     // this same pass deliberately did NOT add elsewhere.
     expect(within(roleInfo).getByText("Membresía propia")).toBeInTheDocument();
-    expect(
-      within(roleInfo).getByText("No disponible — consulte con administración"),
-    ).toBeInTheDocument();
+    // VIS-14: the dependant's row already states the sentence once, so this
+    // fact reads "—" instead of repeating it.
+    expect(within(roleInfo).getByText("Sin membresía visible")).toBeInTheDocument();
+    expect(screen.getAllByText(/No disponible — consulte con administración/)).toHaveLength(1);
   });
 
   it("lists WHICH roles a multi-role representante holds, not just how many", async () => {
@@ -1104,7 +1109,7 @@ describe("ProfilePage — change password", () => {
     );
     await waitForStaffProfile();
 
-    fireEvent.click(screen.getByRole("button", { name: /cambiar contraseña/i }));
+    fireEvent.click(screen.getByRole("button", { name: /restablecer por correo/i }));
 
     await waitFor(() => {
       expect(mockSolicitarRecuperacion).toHaveBeenCalledWith("ana.admin@cataclub.com");
@@ -1132,7 +1137,7 @@ describe("ProfilePage — change password", () => {
     );
     await waitForStaffProfile();
 
-    fireEvent.click(screen.getByRole("button", { name: /cambiar contraseña/i }));
+    fireEvent.click(screen.getByRole("button", { name: /restablecer por correo/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: https://wa.me/593994219619",
@@ -1740,8 +1745,10 @@ describe("ProfilePage — the redesigned account layout", () => {
     await renderAdmin();
 
     const security = screen.getByTestId("profile-column-status");
-    const password = within(security).getByRole("button", { name: /^cambiar contraseña$/i });
-    expect(password).toHaveAccessibleDescription(/enlace de cambio a su correo/i);
+    const password = within(security).getByRole("button", { name: /^restablecer por correo$/i });
+    expect(password).toHaveAccessibleDescription(/enlace para restablecer su contraseña/i);
+    // FAM-17: the in-profile change form sits right below the tiles.
+    expect(screen.getByTestId("profile-change-password")).toBeInTheDocument();
     const logoutTile = within(security).getByRole("button", { name: /^cerrar sesión$/i });
     expect(logoutTile).toHaveAccessibleDescription(/cerrar sesión en este equipo/i);
     // POST /auth/sesiones/invalidar (slice B4) — the third tile.
@@ -1754,7 +1761,7 @@ describe("ProfilePage — the redesigned account layout", () => {
 
     const security = screen.getByTestId("profile-column-status");
     const tiles = [
-      within(security).getByRole("button", { name: /^cambiar contraseña$/i }),
+      within(security).getByRole("button", { name: /^restablecer por correo$/i }),
       within(security).getByRole("button", { name: /^cerrar sesión$/i }),
       within(security).getByRole("button", { name: /^cerrar otras sesiones$/i }),
     ];
@@ -2505,6 +2512,18 @@ describe("ProfilePage — usted register (issue #340)", () => {
     );
     await screen.findByTestId("profile-role-info");
   }
+
+  // VIS-15: one header tone for "Su cuenta" whatever the role — the same
+  // component used to change colour per role with no visible criterion.
+  it.each(["admin", "trainer", "estudiante", "representante"] as const)(
+    "gives the %s view the same neutral 'Su cuenta' header tone as every other role",
+    async (role) => {
+      await renderRole(role);
+
+      const header = screen.getByRole("complementary", { name: "Su cuenta" }).firstElementChild;
+      expect(header?.className).toMatch(/\bbg-sunken\b/);
+    },
+  );
 
   it.each(["admin", "trainer", "estudiante", "representante"] as const)(
     "keeps the %s view entirely in usted — no voseo/tuteo shape in the rendered screen",

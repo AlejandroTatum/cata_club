@@ -57,7 +57,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -190,6 +190,8 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
   const { session } = useAuth();
   const { showInfo } = useToast();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const role = session?.user.role;
   const personaId = session?.user.id ?? "";
 
@@ -234,6 +236,19 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
       router.replace("/student");
     }
   }, [selfIsMinor, router, showInfo]);
+
+  // FAM-13: only an estudiante lands here without `useManagedProfiles` (the
+  // representante view normalizes `?alumno=` itself). Their record is always
+  // their own, so a hand-edited `?alumno=` must not stay in the address bar
+  // pointing at someone else.
+  const ownId = role === "estudiante" && state.status === "ready" ? state.data.self?.personaId : undefined;
+  const alumnoParam = searchParams.get("alumno");
+  useEffect(() => {
+    if (!ownId || alumnoParam === null || alumnoParam === ownId || selfIsMinor) return;
+    const next = new URLSearchParams(searchParams.toString());
+    next.set("alumno", ownId);
+    router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+  }, [ownId, alumnoParam, selfIsMinor, searchParams, pathname, router]);
 
   if (selfIsMinor) return null;
 

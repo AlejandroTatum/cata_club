@@ -390,6 +390,23 @@ class HistorialEstadoMembresiaRepositorio:
         )
         return dict(self.db.execute(stmt).all())
 
+    def motivo_ultima_suspension_bulk(self, membresia_ids: list[int]) -> dict[int, str]:
+        """`motivo` de la transición MÁS RECIENTE hacia SUSPENDIDA de cada
+        membresía (FAM-05), en UNA consulta. Solo tiene sentido para las que
+        siguen suspendidas: el caller filtra por estado."""
+        if not membresia_ids:
+            return {}
+        stmt = (
+            select(HistorialEstadoMembresia.membresia_id, HistorialEstadoMembresia.motivo)
+            .where(
+                HistorialEstadoMembresia.membresia_id.in_(membresia_ids),
+                HistorialEstadoMembresia.estado_nuevo == EstadoMembresia.SUSPENDIDA,
+            )
+            .order_by(HistorialEstadoMembresia.id.asc())
+        )
+        # Orden ascendente + dict: la última fila escrita de cada membresía gana.
+        return {mid: motivo for mid, motivo in self.db.execute(stmt).all() if motivo}
+
     def ultima_transicion(self, membresia_id: int) -> Optional[HistorialEstadoMembresia]:
         """La fila de `HistorialEstadoMembresia` escrita MÁS RECIENTEMENTE
         para esta membresía (por orden real de inserción, `id DESC`), o

@@ -154,6 +154,11 @@ class MembresiaResponseDTO(ResponseBase, BaseModel):
     # `ApplyBenefitForm`), que antes recalculaba una versión incompleta
     # mirando solo `Pago`.
     cubierto_hasta: date | None = None
+    # FAM-05: el motivo con que se registró la suspensión VIGENTE, para que la
+    # familia sepa por qué no puede operar. Solo viaja mientras el estado es
+    # SUSPENDIDA y solo lo pueblan los endpoints de lectura que pasan por
+    # `_con_cubierto_hasta`; `None` en cualquier otro caso.
+    motivo_suspension: str | None = None
 
 
 class MembresiaEstadisticasResponseDTO(ResponseBase, BaseModel):
