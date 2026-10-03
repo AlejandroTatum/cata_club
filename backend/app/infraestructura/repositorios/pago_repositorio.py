@@ -102,7 +102,9 @@ class PagoRepositorio:
         `joinedload(Pago.persona)` evita el problema N+1: el servicio necesita
         el nombre de cada persona para armar PagoListItemDTO y sin esto
         dispararía una query aparte por cada fila."""
-        stmt = select(Pago).options(joinedload(Pago.persona))
+        stmt = select(Pago).options(
+            joinedload(Pago.persona).joinedload(Persona.representante)
+        )
         if estado_pago is not None:
             stmt = stmt.where(Pago.estado_pago == estado_pago)
         if operational_only:

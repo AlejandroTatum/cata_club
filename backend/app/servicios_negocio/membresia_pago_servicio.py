@@ -138,6 +138,10 @@ MENSAJE_PAGO_PENDIENTE_DUPLICADO = (
     "Espere a que sea validado antes de registrar uno nuevo."
 )
 MENSAJE_MEMBRESIA_PENDIENTE_DE_PAGO = "Ya tiene una membresía pendiente de pago."
+MENSAJE_MEMBRESIA_INACTIVA_EXISTENTE = (
+    "Esta persona ya tiene una membresía inactiva. Registre el pago en esa "
+    "membresía para activarla."
+)
 
 MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA = (
     "La persona ya tiene una membresía activa o suspendida. "
@@ -377,6 +381,13 @@ class MembresiaServicio:
                 and PagoRepositorio(self.db).existe_pendiente_para_membresia(m.id)
             ):
                 raise MembresiaPendienteDePago(MENSAJE_MEMBRESIA_PENDIENTE_DE_PAGO, m.id)
+        # QA4 ADMA-05/FAM-01: una INACTIVA sin pago pendiente tampoco admite
+        # otra; la salida es registrar el pago en la existente, no duplicarla.
+        inactiva = next(
+            (m for m in existentes if m.estado == EstadoMembresia.INACTIVA), None
+        )
+        if inactiva is not None:
+            raise MembresiaPendienteDePago(MENSAJE_MEMBRESIA_INACTIVA_EXISTENTE, inactiva.id)
         # Issue #1132: matricularse ya NO otorga (ni exige) ningún rol. "Ser
         # jugador" se deriva exclusivamente de la membresía ACTIVA (ver
         # `app.dominio.jugador.es_jugador`), nunca del rol -- un
@@ -2412,6 +2423,10 @@ class PagoServicio:
                 fecha_fin=p.fecha_fin,
                 persona_id=p.persona_id,
                 persona_nombre_completo=nombre_completo(p.persona.nombres, p.persona.apellidos),
+                responsable_pago_nombre_completo=(
+                    nombre_completo(p.persona.representante.nombres, p.persona.representante.apellidos)
+                    if p.persona.representante is not None else None
+                ),
                 membresia_id=p.membresia_id,
                 voucher_url=self._url_entrega_voucher(p),
                 voucher_formato=p.voucher_formato,
