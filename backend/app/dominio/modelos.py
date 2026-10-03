@@ -712,6 +712,12 @@ class TipoMembresia(Base):
     categoria: Mapped[str] = mapped_column(String(80))
     precio: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     modalidad: Mapped[TipoModalidad] = mapped_column(SAEnum(TipoModalidad))
+    # Baja SUAVE: una tarifa que deja de ofrecerse se OCULTA. Sale del catálogo
+    # público y no admite altas nuevas, pero las membresías que ya la usan
+    # siguen cobrando y renovando. Borrarla solo es posible si nunca se usó.
+    activo: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true"), nullable=False,
+    )
 
     membresias: Mapped[List["Membresia"]] = relationship(back_populates="tipo_membresia")
 

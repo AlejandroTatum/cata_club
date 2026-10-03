@@ -364,6 +364,7 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/membresias/tipos"): frozenset({"ADMINISTRADOR"}),
     # Issue #394: editar una tarifa es escribir sobre el número con el que el
     # club cobra, así que lleva el mismo rol que crearla.
+    ("DELETE", "/membresias/tipos/{tipo_id}"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/membresias/tipos/{tipo_id}"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/sponsors/"): frozenset({"ADMINISTRADOR"}),
