@@ -526,7 +526,7 @@ def test_subir_voucher_excede_tamano_maximo_da_400_antes_de_cloudinary(_mock_clo
         files={"archivo": ("voucher.jpg", contenido_grande, "image/jpeg")},
     )
     assert resp.status_code == 400
-    assert "tamaño" in resp.json()["detail"].lower()
+    assert "pesa más de 5 mb" in resp.json()["detail"].lower()
     _mock_cloudinary.assert_not_called()
 
 
