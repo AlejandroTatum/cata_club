@@ -12,6 +12,12 @@ Repository of record: `origin` → https://github.com/AlejandroTatum/cata_club. 
    - Create `feat/<feature>` from a fresh `main` and push it. Slice branches are cut from it and their PRs target it.
    - Each slice keeps the full methodology (focused tests, `make pre-pr`, review) and stays within the `chained-pr` review budget.
    - Merge a slice into the integration branch with `gh pr merge --squash` once its own PR checks are green. Do not enable auto-merge on slice PRs and do not wait for other slices or for `main`.
+   - Deliver slices in parallel by default. `feat/*` branches have no protection, so a slice never needs to be current with its siblings. Before opening slice PRs:
+     - Prepare every slice from the same integration-branch base.
+     - Prove that the slices compose: merge all of them locally into a throwaway integration checkout, run the `full` lane, and confirm with `git merge-tree` that each pair merges cleanly.
+     - Then open all slice PRs together and merge each one as soon as its own checks are green.
+   - Fall back to serial slices only when one slice needs another slice's code to build or test.
+   - The final PR to `main` is the safety net for interactions between slices that do not conflict textually. If it fails, fix it with one more slice on the integration branch; never reopen merged slices.
    - Keep the integration branch current by merging `main` into it (never rebase or force-push it).
    - When every slice has landed, open one PR from the integration branch to `main` and enable auto-merge with **squash**. That PR is the only one that waits on `main`.
    - `make feature-start`, `slice-start`, `slice-pr`, `slice-merge`, `feature-sync` and `feature-pr` implement this flow (`scripts/feature_flow.sh`).
