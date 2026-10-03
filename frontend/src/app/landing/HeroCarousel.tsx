@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
+import { ICON } from "@/lib/icon-size";
 import { HERO_PHOTOS } from "./landing-hero-photos";
 
 /** Detail payload for the `landing:hero-slide-change` DOM event dispatched on
@@ -198,7 +199,7 @@ export default function HeroCarousel(): React.ReactElement {
           aria-label={paused ? "Reanudar rotación" : "Pausar rotación"}
           onClick={(): void => setPaused((value): boolean => !value)}
         >
-          {paused ? <Play size={16} aria-hidden="true" /> : <Pause size={16} aria-hidden="true" />}
+          {paused ? <Play size={ICON.sm} aria-hidden="true" /> : <Pause size={ICON.sm} aria-hidden="true" />}
         </button>
       </div>
       <div
