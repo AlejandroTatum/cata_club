@@ -303,7 +303,7 @@ describe("LoginPage", () => {
 
       submitLoginForm();
       const notice = await screen.findByTestId("too-many-attempts");
-      expect(notice).toHaveTextContent("Demasiados intentos. Espera unos segundos y vuelve a intentarlo.");
+      expect(notice).toHaveTextContent("Demasiados intentos. Espere unos segundos y vuelva a intentarlo.");
       expect(notice).toHaveTextContent(/enlace para recuperarla/);
     });
 

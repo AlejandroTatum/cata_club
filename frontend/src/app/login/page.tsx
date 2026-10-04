@@ -508,12 +508,12 @@ function LoginPageContent(): React.ReactElement {
               El correo y la contraseña no coinciden. Verifique los dos e intente nuevamente.
             </p>
           )}
-          {/* REG-02. New copy is in «tú» (TXT-N1). The backend caps its delay
+          {/* REG-02. Copy is in «usted» until the wave-3 register sweep (usted-register lock, #340). The backend caps its delay
               at 8 s, under the 10 s the BFF waits, so this is what a slow
               answer after several misses means. */}
           {credentialsRejected && failedAttempts >= TOO_MANY_ATTEMPTS_THRESHOLD && (
             <p data-testid="too-many-attempts" role="status" className="mt-1.5 text-sm text-cata-text/80">
-              Demasiados intentos. Espera unos segundos y vuelve a intentarlo. Si no recuerdas tu contraseña, usa
+              Demasiados intentos. Espere unos segundos y vuelva a intentarlo. Si no recuerda su contraseña, use
               el enlace para recuperarla.
             </p>
           )}
