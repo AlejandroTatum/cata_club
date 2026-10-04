@@ -63,4 +63,14 @@ describe("AttendanceReceipt — another trainer filed first (ENT-03)", () => {
     expect(screen.getByText("Asistencia registrada parcialmente")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Reintentar/ })).toBeInTheDocument();
   });
+
+  it("shows no donut and lets the next-steps column size to its content", () => {
+    renderReceipt([]);
+
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    const aside = screen.getByRole("complementary", { name: "Siguientes pasos" });
+    expect(aside.className).not.toMatch(/self-stretch/);
+    expect(aside.className).toMatch(/self-start/);
+    expect(aside.firstElementChild?.className).not.toMatch(/flex-1/);
+  });
 });
