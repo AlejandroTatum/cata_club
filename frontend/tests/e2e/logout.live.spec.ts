@@ -75,5 +75,6 @@ test("un admin cierra sesión y el backend deja de reconocer la sesión", async 
   // misma navegación (con la cookie todavía viva) dejaría pasar el request y
   // el servidor la serviría igual, sin redirigir. ──
   await page.goto("/dashboard");
-  await expect(page).toHaveURL(/\/login$/, { timeout: 20_000 });
+  // REG-21: el middleware recuerda a dónde iba la visita (`?next=`) para volver tras el login.
+  await expect(page).toHaveURL(/\/login\?next=%2Fdashboard$/, { timeout: 20_000 });
 });

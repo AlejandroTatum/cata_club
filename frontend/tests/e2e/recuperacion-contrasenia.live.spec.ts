@@ -101,7 +101,8 @@ test("un jugador recupera tu contraseña por correo y entra con la nueva; la vie
     await page.getByLabel(/correo electrónico/i).fill(player.correo);
     await page.getByRole("textbox", { name: /contraseña/i }).fill(player.contrasenia);
     await page.getByRole("button", { name: /iniciar sesión/i }).click();
-    await expect(page.getByText("Credenciales incorrectas")).toBeVisible({ timeout: 15_000 });
+    // FAM-15: el rechazo se anuncia en línea (sin toast "Credenciales incorrectas").
+    await expect(page.getByTestId("credentials-error")).toBeVisible({ timeout: 15_000 });
     await expect(page).toHaveURL(/\/login$/);
 
     // ── Login exitoso con la contraseña nueva ──

@@ -82,7 +82,7 @@ test("un socio registra un pago en efectivo y el historial lo conserva tras reca
   await registerCashPayment(page);
 
   // ── Lo que ningún spec mockeado podía comprobar (1): el toast de éxito ──
-  await expect(page.getByText("Pago registrado y en revisión")).toBeVisible({
+  await expect(page.getByText("Pago registrado y por validar")).toBeVisible({
     timeout: 15_000,
   });
 

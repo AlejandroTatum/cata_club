@@ -72,7 +72,9 @@ import { enrollNewPlayerViaWizard, newPlayer } from "./helpers/enrollment";
 import { extractTokenFromLink, purgeMessagesTo, waitForMessageTo } from "./helpers/mailpit";
 import { dispatchPendingOutboxTask } from "./helpers/outbox-dispatch";
 
-const ASUNTO_VERIFICACION = "Cata Club | Verificación de correo";
+// QA4 REG-20: la bienvenida y la verificación son un solo correo, y el asunto lo dice
+// (`ASUNTO_VERIFICACION_CORREO` en el backend).
+const ASUNTO_VERIFICACION = "Cata Club | Bienvenida y verificación de correo";
 
 /** Correo nuevo por corrida: `persona.cedula` y el índice de correo son `unique` (ver `newPlayer`). */
 const player = newPlayer(`qa-activacion-${Date.now()}@cataclub.com`);

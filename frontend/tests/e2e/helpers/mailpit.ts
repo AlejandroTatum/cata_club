@@ -38,7 +38,13 @@ import type { APIRequestContext } from "@playwright/test";
  * helper no acepta una URL configurable — nunca debe poder apuntar a un
  * proveedor SMTP real ni a otro host.
  */
-const MAILPIT_BASE_URL = "http://localhost:8025";
+/**
+ * `E2E_MAILPIT_PORT` solo cambia el PUERTO de loopback: sirve para correr la
+ * suite contra un stack de QA aislado (otro proyecto de Compose con puertos
+ * propios) sin tocar el Mailpit de `make qa-up`.
+ */
+const MAILPIT_PORT = /^\d{2,5}$/.test(process.env.E2E_MAILPIT_PORT ?? "") ? process.env.E2E_MAILPIT_PORT : "8025";
+const MAILPIT_BASE_URL = `http://localhost:${MAILPIT_PORT}`;
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
