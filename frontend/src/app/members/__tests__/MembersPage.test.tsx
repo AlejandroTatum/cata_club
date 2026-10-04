@@ -1342,6 +1342,8 @@ describe("MembersPage — Registrar pago inline form", () => {
    *  voucher. The shared last step before every test asserts on what
    *  reached `registrarPago`. */
   function submitPaymentWithVoucher(dialog: HTMLElement): void {
+    // ADMA-10: no method comes preselected, so the admin picks one first.
+    fireEvent.click(within(dialog).getByRole("radio", { name: "Transferencia" }));
     const fileInput = dialog.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(fileInput, {
       target: { files: [new File(["x"], "comprobante.pdf", { type: "application/pdf" })] },
@@ -1397,8 +1399,9 @@ describe("MembersPage — Registrar pago inline form", () => {
     const dialog = await openMemberDialog();
     await openPaymentForm(dialog);
 
+    // ADMA-10: neither method is preselected.
     expect(within(dialog).getByRole("radio", { name: "Efectivo" })).not.toBeChecked();
-    expect(within(dialog).getByRole("radio", { name: "Transferencia" })).toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: "Transferencia" })).not.toBeChecked();
   });
 
   it("registers cash from the Members flow without a voucher", async () => {
@@ -2088,6 +2091,7 @@ describe("MembersPage — estado de deuda en Pagos (issue #538)", () => {
             id: 42,
             mesesAdeudados: 3,
             montoAdeudado: 90,
+            deudaDesde: "2026-05-31",
           },
         },
       ],
@@ -2105,16 +2109,17 @@ describe("MembersPage — estado de deuda en Pagos (issue #538)", () => {
       </ToastProvider>,
     );
 
+    // ADMA-24 deliberately reverses #538 (which kept the debt off the list):
+    // the row and the card now say how much is owed and since when.
     const row = await findAccountRow();
     const rowPayments = within(row).getByRole("button", { name: "Pagos de María González" });
-    expect(within(row).queryByText(/90/)).not.toBeInTheDocument();
-    expect(within(row).queryByText(/adeudado/i)).not.toBeInTheDocument();
+    expect(within(row).getByText(/Debe \$90,00 · 3 meses · desde 31\/05\/2026/)).toBeInTheDocument();
 
     const card = await findAccountCard();
     expect(within(card).getByRole("button", { name: "Pagos de María González" })).toBeInTheDocument();
-    expect(within(card).queryByText(/90/)).not.toBeInTheDocument();
+    expect(within(card).getByText(/Debe \$90,00 · 3 meses · desde 31\/05\/2026/)).toBeInTheDocument();
 
-    // The debt stays INSIDE the Payments dialog.
+    // And it stays inside the Payments dialog, as before.
     fireEvent.click(rowPayments);
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: /regularizar deuda/i }));
@@ -2155,7 +2160,8 @@ describe("MembersPage — estado de deuda en Pagos (issue #538)", () => {
 
     const row = await findAccountRow();
     const payments = within(row).getByRole("button", { name: "Pagos de María González" });
-    expect(within(row).queryByText(/1\s*mes/i)).not.toBeInTheDocument();
+    // ADMA-24 reverses #538: the list itself says «1 mes», singular.
+    expect(within(row).getByText(/Debe \$30,00 · 1 mes$/)).toBeInTheDocument();
 
     fireEvent.click(payments);
     const dialog = await screen.findByRole("dialog");

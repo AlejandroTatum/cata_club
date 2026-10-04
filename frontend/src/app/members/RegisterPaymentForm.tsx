@@ -65,6 +65,9 @@ interface RegisterPaymentFormProps {
   primary?: boolean;
 }
 
+/** ADMA-10: shown when the admin tries to save without picking cash or transfer. */
+const MENSAJE_METODO_REQUERIDO = "Elige cómo pagó: efectivo o transferencia.";
+
 export default function RegisterPaymentForm({
   personaId,
   membresia,
@@ -83,7 +86,9 @@ export default function RegisterPaymentForm({
   const [registered, setRegistered] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [voucherFile, setVoucherFile] = useState<File | null>(null);
-    const [tipoPago, setTipoPago] = useState<"EFECTIVO" | "TRANSFERENCIA">("TRANSFERENCIA");
+  // ADMA-10: no method preselected — the admin picks it according to how
+  // the person actually paid, so a wrong default can never be saved by habit.
+  const [tipoPago, setTipoPago] = useState<"EFECTIVO" | "TRANSFERENCIA" | "">("");
   // Issue #1402: the payment already registered backend-side that is still
   // missing its voucher (TRANSFERENCIA). Non-null switches the form into
   // retry mode: submit re-attempts upload + approval and NEVER re-registers.
@@ -167,6 +172,7 @@ export default function RegisterPaymentForm({
 
   function handleTipoPagoChange(value: "EFECTIVO" | "TRANSFERENCIA"): void {
       setTipoPago(value);
+      if (error === MENSAJE_METODO_REQUERIDO) setError(null);
       if (value === "EFECTIVO") {
         setVoucherFile(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
@@ -232,6 +238,7 @@ export default function RegisterPaymentForm({
    */
   function validate(montoNum: number): string | null {
     if (!montoNum || montoNum <= 0) return "El monto debe ser mayor a 0.";
+    if (!tipoPago) return MENSAJE_METODO_REQUERIDO;
     const meses = wholeMonthsFor(montoNum, monthlyPrice);
     if (meses === null) {
       return monthlyPrice > 0
@@ -325,8 +332,8 @@ export default function RegisterPaymentForm({
 
     const montoNum = Number(monto);
     const invalid = validate(montoNum);
-    if (invalid) {
-      setError(invalid);
+    if (invalid || !tipoPago) {
+      setError(invalid ?? MENSAJE_METODO_REQUERIDO);
       setErrorAnnounceKey((key) => key + 1);
       return;
     }
