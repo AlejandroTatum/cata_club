@@ -109,7 +109,7 @@ import {
   cambiarPublicacionCategoria,
   fetchMembers,
   fetchAlumnosPorHorario,
-  fetchRosterDeTodosLosHorarios,
+  fetchConteosPorHorario,
 } from "@/services/api";
 import type { Horario, AlumnoHorario } from "@/services/api";
 import {
@@ -138,6 +138,7 @@ import {
   type CategoriaCard,
   type CategoriaSinHorarios,
   type PersonasPorHorario,
+  personasPorHorarioFromConteos,
 } from "./groups-page-utils";
 import { toUserMessage } from "@/lib/error-message";
 import { joinWithY } from "@/lib/format-utils";
@@ -647,10 +648,12 @@ export default function GroupsPage(): React.ReactElement {
    * the identities.
    *
    * `GET /groups/horarios` itself returns no enrollment count, but
-   * `GET /groups/horarios/alumnos` (TRA-7) answers the roster of EVERY
-   * schedule in one call — replacing the 26-call fan-out (one
-   * `GET /groups/horarios/{id}/alumnos` per row) this used to need. The
-   * roster is fetched AFTER the schedules render so a slow/failed request
+   * `GET /groups/horarios/conteos?incluir_personas=true` (QA4 PERF-01)
+   * answers the enrolled person ids of EVERY schedule in one call — ids
+   * only, a few KB instead of the ~500 KB full roster (TRA-7) that used to
+   * be downloaded just for this. The full detail of a categoría loads on
+   * demand when its "Ver alumnos" panel opens. The ids are fetched AFTER the
+   * schedules render so a slow/failed request
    * never delays or blanks the grid itself; on failure no card gets a count
    * line at all — an undercount would be a lie, and this figure is the one
    * the club plans around.
@@ -751,18 +754,13 @@ export default function GroupsPage(): React.ReactElement {
     if (horarios.length === 0) return;
     let cancelled = false;
 
-    void fetchRosterDeTodosLosHorarios()
-      .then((roster) => {
+    void fetchConteosPorHorario({ incluirPersonas: true })
+      .then((conteos) => {
         if (cancelled) return;
         // Every known horario gets an entry (possibly empty) so a genuinely
         // empty class still counts as "0 inscriptos", not "unanswered" —
         // see PersonasPorHorario's own doc comment.
-        const rosters: Record<number, number[]> = {};
-        for (const horario of horarios) rosters[horario.id] = [];
-        for (const alumno of roster) {
-          (rosters[alumno.horarioId] ??= []).push(alumno.personaId);
-        }
-        setPersonasPorHorario(rosters);
+        setPersonasPorHorario(personasPorHorarioFromConteos(horarios, conteos));
       })
       .catch(() => {
         // Leave personasPorHorario untouched: every row stays absent, so

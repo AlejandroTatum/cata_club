@@ -1027,15 +1027,17 @@ describe("partial sessions", () => {
   it("lists as closed only the horarios whose whole roster has a record", () => {
     const record = (horarioId: number, personaId: number) =>
       ({ id: `${horarioId}-${personaId}`, horarioId, personaId }) as AttendanceRecord;
-    const rosterAll = [
-      { horarioId: 1, personaId: 10 },
-      { horarioId: 1, personaId: 11 },
-      { horarioId: 2, personaId: 20 },
-    ] as AlumnoHorario[];
+    const personasPorHorario = { 1: [10, 11], 2: [20] };
 
-    const closed = closedHorariosFromWeek([record(1, 10), record(2, 20)], rosterAll);
+    const closed = closedHorariosFromWeek([record(1, 10), record(2, 20)], personasPorHorario);
 
     expect([...closed]).toEqual([2]); // horario 1 is missing persona 11
+  });
+
+  it("treats a horario with records but nobody enrolled any more as closed", () => {
+    const record = { id: "3-10", horarioId: 3, personaId: 10 } as AttendanceRecord;
+
+    expect([...closedHorariosFromWeek([record], {})]).toEqual([3]);
   });
 });
 

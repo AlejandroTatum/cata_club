@@ -36,6 +36,7 @@ import {
   eliminarHorario,
   fetchCategoriasCatalogo,
   fetchAlumnosPorHorario,
+  fetchConteosPorHorario,
   asignarAlumnoAHorario,
   desasignarAlumnoDeHorario,
   fetchDescuentos,
@@ -1071,6 +1072,31 @@ describe("eliminarDescuento", () => {
     await expect(eliminarDescuento(7)).rejects.toThrow(
       "No se puede eliminar el descuento 'Y' porque ya se aplicó",
     );
+  });
+});
+
+describe("fetchConteosPorHorario", () => {
+  it("GETs the lightweight counts, not the full roster", async () => {
+    const conteos = [{ horarioId: 1, inscritos: 12 }];
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(conteos));
+
+    const result = await fetchConteosPorHorario();
+
+    expect(global.fetch).toHaveBeenCalledWith("/api/groups/horarios/conteos", expect.anything());
+    expect(result).toEqual(conteos);
+  });
+
+  it("asks for the enrolled person ids only on request", async () => {
+    const conteos = [{ horarioId: 1, inscritos: 2, personaIds: [3, 4] }];
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(conteos));
+
+    const result = await fetchConteosPorHorario({ incluirPersonas: true });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/groups/horarios/conteos?incluir_personas=true",
+      expect.anything(),
+    );
+    expect(result).toEqual(conteos);
   });
 });
 

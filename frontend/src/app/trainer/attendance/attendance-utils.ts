@@ -547,11 +547,12 @@ export function countRecordsByHorario(records: AttendanceRecord[]): Map<number, 
  * closed, as it always did.
  *
  * `records` is the trailing-week fetch (see `countRecordsByHorario`) and
- * `roster` the all-horarios roster (`fetchRosterDeTodosLosHorarios`).
+ * `personasPorHorario` the enrolled person ids per horario, from the
+ * lightweight counts (`fetchConteosPorHorario({ incluirPersonas: true })`).
  */
 export function closedHorariosFromWeek(
   records: AttendanceRecord[],
-  roster: AlumnoHorario[],
+  personasPorHorario: Record<number, readonly number[]>,
 ): Set<number> {
   const recordedByHorario = new Map<number, Set<number>>();
   for (const record of records) {
@@ -561,8 +562,8 @@ export function closedHorariosFromWeek(
   }
   const closed = new Set<number>();
   for (const [horarioId, recorded] of recordedByHorario) {
-    const students = roster.filter((r) => r.horarioId === horarioId);
-    if (students.every((r) => recorded.has(r.personaId))) closed.add(horarioId);
+    const students = personasPorHorario[horarioId] ?? [];
+    if (students.every((personaId) => recorded.has(personaId))) closed.add(horarioId);
   }
   return closed;
 }

@@ -62,7 +62,7 @@ vi.mock("@/services/api", () => ({
   fetchAttendanceRecords: () => mockRecords(),
   fetchPaymentValidations: () => mockPayments(),
   fetchTrainingSchedules: () => mockSchedules(),
-  fetchRosterDeTodosLosHorarios: () => Promise.resolve([]),
+  fetchConteosPorHorario: () => Promise.resolve([]),
 }));
 
 function stats(overrides: Partial<Record<string, number>> = {}): Record<string, number> {

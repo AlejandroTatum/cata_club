@@ -35,7 +35,7 @@ import type {
 } from "@/app/attendance/attendance-utils";
 import { buildWizardQuery } from "@/app/trainer/attendance/attendance-utils";
 import { formatDay } from "@/app/attendance/attendance-utils";
-import type { AlumnoHorario } from "@/services/api";
+import type { AlumnoHorario, ConteoHorario } from "@/services/api";
 import type { DiaSemana } from "@/types/domain";
 
 // ---------------------------------------------------------------------------
@@ -388,23 +388,22 @@ export function formatTimeUntilStart(minutes: number): string {
 
 /**
  * Enrolled-count-by-horario map for TODAY's schedules, built from the club's
- * one-call roster (`fetchRosterDeTodosLosHorarios`) instead of one
- * `fetchAlumnosPorHorario` per card — the same N+1-avoiding move `/groups`
- * already made (TRA-7), now paying for the hero session AND every session
- * still to come today in a single fetch.
+ * lightweight counts (`fetchConteosPorHorario`, QA4 PERF-01) instead of the
+ * ~500 KB roster the screens used to download just to count it.
  *
  * Every schedule in `todaySchedules` gets an entry, even 0 — a genuinely
  * empty class still counts as a known "0 estudiantes inscritos", not the
- * missing-data blank `formatEnrolledCount(null)` renders.
+ * missing-data blank `formatEnrolledCount(null)` renders (the endpoint
+ * omits horarios nobody is enrolled in).
  */
 export function buildEnrolledCountsByHorario(
   todaySchedules: TrainingSchedule[],
-  roster: AlumnoHorario[],
+  conteos: ConteoHorario[],
 ): Record<number, number> {
   const counts: Record<number, number> = {};
   for (const schedule of todaySchedules) counts[schedule.id] = 0;
-  for (const alumno of roster) {
-    if (alumno.horarioId in counts) counts[alumno.horarioId] += 1;
+  for (const conteo of conteos) {
+    if (conteo.horarioId in counts) counts[conteo.horarioId] = conteo.inscritos;
   }
   return counts;
 }

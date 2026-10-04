@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { selectVisibleSchedules } from "@/app/attendance/attendance-utils";
 import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
 import { clubIsoDate, todayDiaSemana, weekWindowStartIso } from "@/lib/club-date";
-import { fetchAttendanceRecords, fetchRosterDeTodosLosHorarios, fetchTrainingSchedules } from "@/services/api";
+import { fetchAttendanceRecords, fetchConteosPorHorario, fetchTrainingSchedules } from "@/services/api";
 import type { DiaSemana } from "@/types/domain";
 import { closedHorariosFromWeek, countRecordsByHorario } from "./attendance-utils";
 
@@ -109,14 +109,22 @@ export function useAttendanceSchedules(): AttendanceSchedules {
         fechaFin: clubIsoDate(),
       });
       setWeekRecordCounts(countRecordsByHorario(records));
-      // Without the roster there is no way to know a list is complete: leave
-      // every horario open rather than close one on a guess — opening is
-      // harmless (the roster itself says what is already filed).
-      const roster = await fetchRosterDeTodosLosHorarios().catch((err: unknown) => {
-        console.error("[trainer/attendance] fetchRosterDeTodosLosHorarios failed", err);
+      // Without the enrolled ids there is no way to know a list is complete:
+      // leave every horario open rather than close one on a guess — opening is
+      // harmless (the roster itself says what is already filed). Ids only, no
+      // names: the full roster is fetched per horario when one is opened.
+      const conteos = await fetchConteosPorHorario({ incluirPersonas: true }).catch((err: unknown) => {
+        console.error("[trainer/attendance] fetchConteosPorHorario failed", err);
         return null;
       });
-      setClosedHorarios(roster ? closedHorariosFromWeek(records, roster) : new Set());
+      setClosedHorarios(
+        conteos
+          ? closedHorariosFromWeek(
+              records,
+              Object.fromEntries(conteos.map((c) => [c.horarioId, c.personaIds ?? []])),
+            )
+          : new Set(),
+      );
     } catch (err) {
       console.error("[trainer/attendance] fetchAttendanceRecords week-counts failed", err);
     }

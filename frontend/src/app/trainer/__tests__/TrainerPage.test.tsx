@@ -57,12 +57,26 @@ vi.mock("next/image", () => ({
 const mockFetchTrainingSchedules = vi.fn();
 const mockFetchAttendanceRecords = vi.fn();
 const mockFetchRosterDeTodosLosHorarios = vi.fn();
+const mockFetchAlumnosPorHorario = vi.fn();
 const mockFetchRecentAttendanceSessions = vi.fn();
 
 vi.mock("@/services/api", () => ({
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
-  fetchRosterDeTodosLosHorarios: () => mockFetchRosterDeTodosLosHorarios(),
+  // QA4 PERF-01: counts for every horario, names only for the hero's horario.
+  // Fixtures keep the roster-row shape (`mockFetchRosterDeTodosLosHorarios` is
+  // the fixture source); the full-roster endpoint is deliberately not exported.
+  fetchConteosPorHorario: async () => {
+    const rows = (await mockFetchRosterDeTodosLosHorarios()) as { horarioId: number }[];
+    const byHorario = new Map<number, number>();
+    for (const row of rows) byHorario.set(row.horarioId, (byHorario.get(row.horarioId) ?? 0) + 1);
+    return [...byHorario].map(([horarioId, inscritos]) => ({ horarioId, inscritos }));
+  },
+  fetchAlumnosPorHorario: async (horarioId: number) => {
+    mockFetchAlumnosPorHorario(horarioId);
+    const rows = (await mockFetchRosterDeTodosLosHorarios()) as { horarioId: number }[];
+    return rows.filter((row) => row.horarioId === horarioId);
+  },
   fetchRecentAttendanceSessions: () => mockFetchRecentAttendanceSessions(),
   fetchNotificaciones: vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 }),
   marcarNotificacionLeida: vi.fn().mockResolvedValue(undefined),
@@ -226,6 +240,14 @@ describe("TrainerPage — Mi día", () => {
       "/trainer/attendance?horario=1&paso=lista",
     );
     expect(hero.getByRole("link", { name: "Elegir otro horario" })).toHaveAttribute("href", "/trainer/attendance");
+  });
+
+  it("fetches names for the hero's horario only, never the whole roster (QA4 PERF-01)", async () => {
+    mockFetchAlumnosPorHorario.mockReset();
+    render(<TrainerPage />);
+
+    await within(await screen.findByTestId("session-hero")).findByRole("list", { name: "Alumnos inscritos" });
+    expect(mockFetchAlumnosPorHorario.mock.calls).toEqual([[1]]);
   });
 
   it("'next': names the enrolled students by first name, with a +N for the rest", async () => {

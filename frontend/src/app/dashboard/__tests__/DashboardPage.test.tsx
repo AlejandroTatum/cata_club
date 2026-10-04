@@ -72,7 +72,7 @@ vi.mock("@/services/api", () => ({
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
   fetchPaymentValidations: () => mockFetchPaymentValidations(),
   fetchTrainingSchedules: () => Promise.resolve([]),
-  fetchRosterDeTodosLosHorarios: () => Promise.resolve([]),
+  fetchConteosPorHorario: () => Promise.resolve([]),
 }));
 
 // `totalPersonas` and `totalAlumnos` differ on purpose, and every assertion

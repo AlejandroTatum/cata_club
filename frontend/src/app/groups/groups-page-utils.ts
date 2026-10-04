@@ -7,7 +7,7 @@
 
 import { DIA_SEMANA_LABELS } from "@/app/attendance/attendance-utils";
 import type { HorarioGroup, HorarioGroupRow } from "@/lib/groups-utils";
-import type { AlumnoHorario, SolapeHorario } from "@/services/api";
+import type { AlumnoHorario, ConteoHorario, SolapeHorario } from "@/services/api";
 import type { CategoriaInfo } from "@/services/categorias";
 import type { DiaSemana } from "@/types/domain";
 
@@ -392,6 +392,24 @@ export function findCodigoPorLabel(
  * that never answered — not an empty roster.
  */
 export type PersonasPorHorario = Record<number, readonly number[]>;
+
+/**
+ * Builds `PersonasPorHorario` from the lightweight counts fetched with
+ * `incluirPersonas` (QA4 PERF-01: ids only, no names). Every known horario
+ * gets an entry, empty when nobody is enrolled — the endpoint omits those —
+ * so a genuinely empty class reads "0 inscritos", not "unanswered".
+ */
+export function personasPorHorarioFromConteos(
+  horarios: readonly { id: number }[],
+  conteos: readonly ConteoHorario[],
+): PersonasPorHorario {
+  const personas: Record<number, number[]> = {};
+  for (const horario of horarios) personas[horario.id] = [];
+  for (const conteo of conteos) {
+    if (conteo.horarioId in personas) personas[conteo.horarioId] = [...(conteo.personaIds ?? [])];
+  }
+  return personas;
+}
 
 /**
  * How many distinct students the categoría has, counting a student once no

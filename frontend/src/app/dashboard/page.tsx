@@ -73,7 +73,7 @@ import {
   fetchDashboardStats,
   fetchAttendanceRecords,
   fetchPaymentValidations,
-  fetchRosterDeTodosLosHorarios,
+  fetchConteosPorHorario,
   fetchTrainingSchedules,
   type DashboardStats,
   type PaymentValidationRequest,
@@ -243,8 +243,8 @@ export default function DashboardPage(): React.ReactElement {
   }, [schedules]);
 
   /**
-   * Enrolled students per class: a garnish for the tooltips, so a failed
-   * roster leaves the counts unknown (the tooltip simply omits them) instead
+   * Enrolled students per class: a garnish for the tooltips, so failed
+   * counts leave the counts unknown (the tooltip simply omits them) instead
    * of blocking the timeline.
    */
   useEffect((): (() => void) => {
@@ -253,10 +253,10 @@ export default function DashboardPage(): React.ReactElement {
       setEnrolled(null);
       return (): void => {};
     }
-    fetchRosterDeTodosLosHorarios()
-      .then((roster) => {
+    fetchConteosPorHorario()
+      .then((conteos) => {
         if (!cancelled)
-          setEnrolled(buildEnrolledCountsByHorario(todaySchedules, roster));
+          setEnrolled(buildEnrolledCountsByHorario(todaySchedules, conteos));
       })
       .catch(() => {
         if (!cancelled) setEnrolled(null);

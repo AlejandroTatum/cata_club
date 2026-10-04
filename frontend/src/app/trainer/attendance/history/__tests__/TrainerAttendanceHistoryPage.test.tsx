@@ -60,10 +60,17 @@ vi.mock("next/image", () => ({
 const mockFetchAttendanceRecords = vi.fn();
 const mockFetchTrainingSchedules = vi.fn();
 const mockSearchStudents = vi.fn();
-const mockFetchRoster = vi.fn();
+const mockFetchConteos = vi.fn();
 
 vi.mock("@/services/api", () => ({
-  fetchRosterDeTodosLosHorarios: () => mockFetchRoster(),
+  // QA4 PERF-01: the screen reads counts, never the ~500 KB roster. Fixtures
+  // keep the roster-row shape; this folds them into the counts the API returns.
+  fetchConteosPorHorario: async () => {
+    const rows = (await mockFetchConteos()) as { horarioId: number }[];
+    const byHorario = new Map<number, number>();
+    for (const row of rows) byHorario.set(row.horarioId, (byHorario.get(row.horarioId) ?? 0) + 1);
+    return [...byHorario].map(([horarioId, inscritos]) => ({ horarioId, inscritos }));
+  },
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
   searchStudents: (...args: unknown[]) => mockSearchStudents(...args),
@@ -131,7 +138,7 @@ describe("TrainerAttendanceHistoryPage", () => {
     mockFetchAttendanceRecords.mockReset().mockResolvedValue(RECORDS);
     mockFetchTrainingSchedules.mockReset().mockResolvedValue(SCHEDULES);
     mockSearchStudents.mockReset().mockResolvedValue([]);
-    mockFetchRoster.mockReset().mockResolvedValue([]);
+    mockFetchConteos.mockReset().mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -155,7 +162,7 @@ describe("TrainerAttendanceHistoryPage", () => {
       record("present", "Sofia Vera", "2026-08-10", "Lunes 15:00 — 16:00", 7, "Carlos Mendoza"),
       record("absent", "Luis Lopez", "2026-08-10", "Lunes 15:00 — 16:00", 7, "Carlos Mendoza"),
     ]);
-    mockFetchRoster.mockResolvedValue(
+    mockFetchConteos.mockResolvedValue(
       [1, 2, 3, 4, 5].map((personaId) => ({ personaId, horarioId: 7 })),
     );
     render(<TrainerAttendanceHistoryPage />);

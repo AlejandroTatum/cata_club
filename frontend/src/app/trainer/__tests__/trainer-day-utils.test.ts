@@ -4,7 +4,6 @@ import type {
   AttendanceRecord,
   TrainingSchedule,
 } from "@/app/attendance/attendance-utils";
-import type { AlumnoHorario } from "@/services/api";
 import {
   ABSENCE_ALERT_THRESHOLD,
   buildEnrolledCountsByHorario,
@@ -386,36 +385,25 @@ describe("buildSessionCardState", () => {
 });
 
 describe("buildEnrolledCountsByHorario", () => {
-  function alumno(horarioId: number): AlumnoHorario {
-    return {
-      id: Math.random(),
-      personaId: Math.random(),
-      personaNombreCompleto: "Alumno",
-      edad: 12,
-      horarioId,
-      horarioDia: "lun",
-      horarioHoraInicio: "15:00",
-      horarioHoraFin: "16:00",
-      fechaAsignacion: "2026-01-01",
-    };
-  }
-
-  it("counts the roster per today's horario, defaulting an empty class to 0", () => {
+  it("reads the counts per today's horario, defaulting an empty class to 0", () => {
     const today = [schedule(1, "15:00", "16:00"), schedule(2, "16:00", "17:00")];
-    const roster = [alumno(1), alumno(1), alumno(1)];
+    const conteos = [{ horarioId: 1, inscritos: 3 }];
 
-    expect(buildEnrolledCountsByHorario(today, roster)).toEqual({ 1: 3, 2: 0 });
+    expect(buildEnrolledCountsByHorario(today, conteos)).toEqual({ 1: 3, 2: 0 });
   });
 
-  it("ignores roster rows for a horario outside today", () => {
+  it("ignores counts for a horario outside today", () => {
     const today = [schedule(1, "15:00", "16:00")];
-    const roster = [alumno(1), alumno(99)];
+    const conteos = [
+      { horarioId: 1, inscritos: 1 },
+      { horarioId: 99, inscritos: 8 },
+    ];
 
-    expect(buildEnrolledCountsByHorario(today, roster)).toEqual({ 1: 1 });
+    expect(buildEnrolledCountsByHorario(today, conteos)).toEqual({ 1: 1 });
   });
 
   it("returns an empty map for a day with no schedules", () => {
-    expect(buildEnrolledCountsByHorario([], [alumno(1)])).toEqual({});
+    expect(buildEnrolledCountsByHorario([], [{ horarioId: 1, inscritos: 2 }])).toEqual({});
   });
 });
 

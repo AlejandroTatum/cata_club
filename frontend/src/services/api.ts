@@ -3152,6 +3152,30 @@ export async function fetchRosterDeTodosLosHorarios(): Promise<AlumnoHorario[]> 
   return request<AlumnoHorario[]>(apiEndpoint("/groups/horarios/alumnos"), { headers: mockHeaders });
 }
 
+/** Enrolled students of one horario, without the students themselves (QA4 PERF-01). */
+export interface ConteoHorario {
+  horarioId: number;
+  inscritos: number;
+  /** Only present when requested with `incluirPersonas`. */
+  personaIds?: number[];
+}
+
+/**
+ * Enrolled-student COUNT per horario (QA4 PERF-01). The screens that only
+ * draw "N inscritos" read this (~1 KB) instead of
+ * `fetchRosterDeTodosLosHorarios` (~500 KB, grows with every student).
+ * Horarios nobody is enrolled in are absent, so a missing id means 0.
+ * `incluirPersonas` adds the enrolled person ids — still no names — for the
+ * screens that count DISTINCT students across horarios.
+ */
+export async function fetchConteosPorHorario(
+  options: { incluirPersonas?: boolean } = {},
+): Promise<ConteoHorario[]> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  const query = options.incluirPersonas ? "?incluir_personas=true" : "";
+  return request<ConteoHorario[]>(apiEndpoint(`/groups/horarios/conteos${query}`), { headers: mockHeaders });
+}
+
 /** List all schedules assigned to a specific student. */
 export async function fetchHorariosPorAlumno(personaId: number): Promise<AlumnoHorario[]> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};

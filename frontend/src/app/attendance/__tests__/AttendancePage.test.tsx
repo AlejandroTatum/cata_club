@@ -95,7 +95,7 @@ function renderPage(): ReturnType<typeof render> {
 
 const mockFetchTrainingSchedules = vi.fn();
 const mockFetchAttendanceRecords = vi.fn();
-const mockFetchRoster = vi.fn();
+const mockFetchConteos = vi.fn();
 const mockSearchStudents = vi.fn().mockResolvedValue([]);
 const mockFetchNotificaciones = vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 });
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
@@ -104,7 +104,14 @@ const mockCorrectAttendance = vi.fn();
 vi.mock("@/services/api", () => ({
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
-  fetchRosterDeTodosLosHorarios: () => mockFetchRoster(),
+  // QA4 PERF-01: the screen reads counts, never the ~500 KB roster. Fixtures
+  // keep the roster-row shape; this folds them into the counts the API returns.
+  fetchConteosPorHorario: async () => {
+    const rows = (await mockFetchConteos()) as { horarioId: number }[];
+    const byHorario = new Map<number, number>();
+    for (const row of rows) byHorario.set(row.horarioId, (byHorario.get(row.horarioId) ?? 0) + 1);
+    return [...byHorario].map(([horarioId, inscritos]) => ({ horarioId, inscritos }));
+  },
   searchStudents: (query: string) => mockSearchStudents(query),
   fetchNotificaciones: () => mockFetchNotificaciones(),
   marcarNotificacionLeida: (id: number) => mockMarcarNotificacionLeida(id),
@@ -114,7 +121,7 @@ vi.mock("@/services/api", () => ({
 beforeEach(() => {
   mockFetchTrainingSchedules.mockReset().mockResolvedValue(SCHEDULES);
   mockFetchAttendanceRecords.mockReset().mockResolvedValue(buildRecords(5));
-  mockFetchRoster.mockReset().mockResolvedValue([]);
+  mockFetchConteos.mockReset().mockResolvedValue([]);
   mockCorrectAttendance.mockReset();
   mockProtectedRouteProps.mockReset();
 });
@@ -428,7 +435,7 @@ describe("AttendancePage — partial lists on the rail (ENT-13)", () => {
     mockFetchAttendanceRecords.mockResolvedValue(
       buildRecords(2).map((r) => ({ ...r, fecha: "2026-07-06" })),
     );
-    mockFetchRoster.mockResolvedValue(
+    mockFetchConteos.mockResolvedValue(
       [1, 2, 3, 4, 5].map((personaId) => ({ personaId, horarioId: 1 })),
     );
     renderPage();
@@ -440,10 +447,10 @@ describe("AttendancePage — partial lists on the rail (ENT-13)", () => {
     }
   });
 
-  it("keeps working when the roster fetch fails", async () => {
+  it("keeps working when the counts fetch fails", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     mockFetchAttendanceRecords.mockResolvedValue(buildRecords(2));
-    mockFetchRoster.mockRejectedValue(new Error("boom"));
+    mockFetchConteos.mockRejectedValue(new Error("boom"));
     renderPage();
 
     await screen.findAllByRole("row");

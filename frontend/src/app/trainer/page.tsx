@@ -39,9 +39,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   fetchTrainingSchedules,
   fetchAttendanceRecords,
-  fetchRosterDeTodosLosHorarios,
+  fetchConteosPorHorario,
+  fetchAlumnosPorHorario,
   fetchRecentAttendanceSessions,
   type AlumnoHorario,
+  type ConteoHorario,
   type RecentAttendanceSession,
 } from "@/services/api";
 import {
@@ -117,8 +119,10 @@ export default function TrainerPage(): React.ReactElement {
 
   const [schedules, setSchedules] = useState<TrainingSchedule[]>([]);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
-  /** The club-wide roster, one row per enrolment; `null` until it loads (or if it fails). */
-  const [padron, setPadron] = useState<AlumnoHorario[] | null>(null);
+  /** Enrolled students per horario (counts only); `null` until it loads (or if it fails). */
+  const [conteos, setConteos] = useState<ConteoHorario[] | null>(null);
+  /** Students of the hero session only, by name; `null` until it loads (or if it fails). */
+  const [heroAlumnos, setHeroAlumnos] = useState<AlumnoHorario[] | null>(null);
   const [recentSessions, setRecentSessions] = useState<RecentAttendanceSession[]>([]);
   const [recentStatus, setRecentStatus] = useState<"loading" | "ready" | "error">("loading");
   const [loading, setLoading] = useState(true);
@@ -199,36 +203,65 @@ export default function TrainerPage(): React.ReactElement {
   }));
 
   /**
-   * Who is enrolled: one club-wide roster call, not one per row. A garnish — a
-   * failure leaves the names unknown (the hero says so in a line, the timeline
-   * omits the counts, "Sesiones sin lista" cannot tell a partial list from a
-   * complete one) instead of blocking the day.
+   * How many are enrolled: the lightweight counts, not the ~500 KB club
+   * roster (QA4 PERF-01). A garnish — a failure leaves the counts unknown
+   * (the timeline omits them, "Sesiones sin lista" cannot tell a partial list
+   * from a complete one) instead of blocking the day.
    */
   useEffect((): (() => void) => {
     let cancelled = false;
     if (schedules.length === 0) {
-      setPadron(null);
+      setConteos(null);
       return (): void => {};
     }
-    fetchRosterDeTodosLosHorarios()
+    fetchConteosPorHorario()
       .then((all) => {
-        if (!cancelled) setPadron(all);
+        if (!cancelled) setConteos(all);
       })
       .catch((err: unknown) => {
-        console.error("[trainer] fetchRosterDeTodosLosHorarios failed", err);
-        if (!cancelled) setPadron(null);
+        console.error("[trainer] fetchConteosPorHorario failed", err);
+        if (!cancelled) setConteos(null);
       });
     return (): void => {
       cancelled = true;
     };
   }, [schedules]);
 
-  const roster = useMemo(() => (padron ? buildRosterNamesByHorario(todaySchedules, padron) : null), [padron, todaySchedules]);
-  const enrolledCounts = useMemo(() => {
-    if (!roster) return null;
-    return Object.fromEntries(Object.entries(roster).map(([id, names]) => [Number(id), names.length])) as Record<number, number>;
-  }, [roster]);
-  const enrolledBySchedule = useMemo(() => (padron ? buildEnrolledCountsByHorario(schedules, padron) : null), [padron, schedules]);
+  /**
+   * Who is enrolled, by name: only the hero session shows names, so only its
+   * roster is fetched (one horario, not the whole club). A failure leaves the
+   * names unknown and the hero says so in a line.
+   */
+  const heroScheduleId =
+    sessionCardState === null || sessionCardState.kind === "done" ? null : sessionCardState.schedule.id;
+  useEffect((): (() => void) => {
+    let cancelled = false;
+    setHeroAlumnos(null);
+    if (heroScheduleId === null) return (): void => {};
+    fetchAlumnosPorHorario(heroScheduleId)
+      .then((rows) => {
+        if (!cancelled) setHeroAlumnos(rows);
+      })
+      .catch((err: unknown) => {
+        console.error("[trainer] fetchAlumnosPorHorario failed", err);
+      });
+    return (): void => {
+      cancelled = true;
+    };
+  }, [heroScheduleId]);
+
+  const roster = useMemo(
+    () => (heroAlumnos ? buildRosterNamesByHorario(todaySchedules, heroAlumnos) : null),
+    [heroAlumnos, todaySchedules],
+  );
+  const enrolledCounts = useMemo(
+    () => (conteos ? buildEnrolledCountsByHorario(todaySchedules, conteos) : null),
+    [conteos, todaySchedules],
+  );
+  const enrolledBySchedule = useMemo(
+    () => (conteos ? buildEnrolledCountsByHorario(schedules, conteos) : null),
+    [conteos, schedules],
+  );
 
   /**
    * "Sesiones sin lista" — this month's weekly schedule minus the sessions
@@ -382,7 +415,7 @@ export default function TrainerPage(): React.ReactElement {
 
               <div data-testid="trainer-rail" className="flex min-w-0 flex-col gap-page max-lg:order-first">
                 <section className="card flex flex-col gap-4 p-[18px]">
-                  <SessionsWithoutList missing={missingSessions} coverageKnown={padron !== null} />
+                  <SessionsWithoutList missing={missingSessions} coverageKnown={conteos !== null} />
                 </section>
                 <InfoPanel title="Cómo funciona su día">
                   <p>El botón principal abre la lista de la próxima sesión; la línea de «Hoy» muestra el estado de cada una.</p>

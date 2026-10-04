@@ -45,8 +45,8 @@ import { ICON } from "@/lib/icon-size";
 import {
   fetchTrainingSchedules,
   fetchAttendanceRecords,
-  fetchRosterDeTodosLosHorarios,
-  type AlumnoHorario,
+  fetchConteosPorHorario,
+  type ConteoHorario,
 } from "@/services/api";
 import {
   BackLink,
@@ -66,7 +66,7 @@ export default function AttendancePage(): React.ReactElement {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [padron, setPadron] = useState<AlumnoHorario[] | null>(null);
+  const [conteos, setConteos] = useState<ConteoHorario[] | null>(null);
 
   const filters = useAttendanceFilters("this_month", schedules);
   const { query } = filters;
@@ -85,20 +85,20 @@ export default function AttendancePage(): React.ReactElement {
   // rail keeps its previous behaviour (ENT-13).
   useEffect(() => {
     let cancelled = false;
-    fetchRosterDeTodosLosHorarios()
+    fetchConteosPorHorario()
       .then((all) => {
-        if (!cancelled) setPadron(all);
+        if (!cancelled) setConteos(all);
       })
       .catch((err: unknown) => {
-        console.error("[attendance] fetchRosterDeTodosLosHorarios failed", err);
+        console.error("[attendance] fetchConteosPorHorario failed", err);
       });
     return (): void => {
       cancelled = true;
     };
   }, []);
   const inscritosPorHorario = useMemo(
-    () => (padron ? buildEnrolledCountsByHorario(schedules, padron) : undefined),
-    [padron, schedules],
+    () => (conteos ? buildEnrolledCountsByHorario(schedules, conteos) : undefined),
+    [conteos, schedules],
   );
 
   const loadRecords = useCallback(async (): Promise<void> => {

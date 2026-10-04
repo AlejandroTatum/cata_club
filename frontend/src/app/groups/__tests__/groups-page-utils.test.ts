@@ -13,6 +13,7 @@ import {
   buildCategoriaCards,
   formatDiaSet,
   countInscriptos,
+  personasPorHorarioFromConteos,
   buildDiaTrack,
   DIA_ORDER,
   formatMembresiaVencidaWarning,
@@ -528,5 +529,19 @@ describe("mensajeCategoriaConAlumnos (ADMB-04)", () => {
     expect(mensajeCategoriaConAlumnos({ accion: "eliminar", alumnos: 3 })).toBe(
       "No puede eliminar la categoría mientras haya 3 alumnos inscritos. Pase primero a esos alumnos a otra categoría.",
     );
+  });
+});
+
+describe("personasPorHorarioFromConteos", () => {
+  it("gives every known horario an entry, empty when nobody is enrolled", () => {
+    const conteos = [{ horarioId: 1, inscritos: 2, personaIds: [5, 6] }];
+
+    expect(personasPorHorarioFromConteos([{ id: 1 }, { id: 2 }], conteos)).toEqual({ 1: [5, 6], 2: [] });
+  });
+
+  it("ignores counts for horarios the screen does not know", () => {
+    const conteos = [{ horarioId: 9, inscritos: 1, personaIds: [5] }];
+
+    expect(personasPorHorarioFromConteos([{ id: 1 }], conteos)).toEqual({ 1: [] });
   });
 });
