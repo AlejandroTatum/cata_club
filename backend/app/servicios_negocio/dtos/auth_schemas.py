@@ -205,6 +205,9 @@ class CambiarCorreoNoVerificadoResponseDTO(ResponseBase, BaseModel):
 class RestablecerContraseniaDTO(BaseModel):
     token: str
     nueva_contrasenia: ContraseniaValidada
+    # Issue #1575: solo la invitación de un entrenador lo exige; para una
+    # recuperación común se ignora.
+    acepta_terminos: bool = False
 
 
 class CambiarContraseniaDTO(BaseModel):

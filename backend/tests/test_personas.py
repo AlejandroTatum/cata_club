@@ -271,8 +271,15 @@ def test_registrar_persona_adulta_sin_telefono_rechazada(client):
 def test_no_existe_ruta_de_listado_de_entrenadores():
     from app.presentacion.routers import personas_router
 
-    rutas = [r.path for r in personas_router.router.routes]
-    assert "/personas/entrenadores" not in rutas
+    # Issue #1575 agregó `POST /personas/entrenadores` (alta de un entrenador
+    # por el administrador); lo que no debe reaparecer es el LISTADO (GET).
+    metodos = {
+        metodo
+        for r in personas_router.router.routes
+        if r.path == "/personas/entrenadores"
+        for metodo in r.methods
+    }
+    assert metodos == {"POST"}
 
 
 # --- #1133/#1137: la reasignación de representación es ADMINISTRADOR-only ---

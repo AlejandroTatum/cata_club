@@ -71,6 +71,20 @@ class PersonaCreateDTO(BaseModel):
         return self
 
 
+# --- Entrenador creado por el administrador (issue #1575) -------------------
+class EntrenadorCreateDTO(BaseModel):
+    """Datos mínimos de `POST /personas/entrenadores`: sin ficha médica, plan,
+    mensualidad ni categoría. La fecha de nacimiento es obligatoria porque
+    `persona.fecha_nacimiento` es NOT NULL (decisión del dueño: se pide en el
+    formulario, sin migración). Mismas validaciones que el resto de la app."""
+    nombres: NombreValidado = Field(...)
+    apellidos: ApellidoValidado = Field(...)
+    cedula: CedulaValidada = Field(..., max_length=32)
+    fecha_nacimiento: date
+    correo: CorreoValidado = Field(..., max_length=100)
+    telefono: TelefonoValidado = Field(..., max_length=32)
+
+
 # --- Representado (portal autoservicio) -------------------------------------
 class RepresentadoCreateDTO(BaseModel):
     """Payload para que un representante o administrador agregue un
@@ -268,6 +282,9 @@ class PersonaListItemDTO(PersonaResponseDTO):
     # ninguna membresía. `None` = "sin cuenta" (no existe `Usuario` para esta
     # persona) -- nunca se infiere, siempre viene de `Persona.cuenta_activa`.
     cuenta_activa: Optional[bool] = Field(default=None, examples=[True])
+    # Issue #1575: entrenador creado por el administrador que todavía no fijó
+    # su contraseña. Derivado (ver `dominio/invitacion_entrenador.py`).
+    invitacion_pendiente: bool = Field(default=False, examples=[False])
 
 
 class PersonaBusquedaDTO(ResponseBase, BaseModel):

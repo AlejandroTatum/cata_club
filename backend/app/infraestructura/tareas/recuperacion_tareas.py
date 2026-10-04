@@ -6,6 +6,9 @@ queda solo lo propio de ESTA: a quién se le escribe y qué se le manda.
 """
 import logging
 
+from app.dominio.invitacion_entrenador import (
+    PROPOSITO_INVITACION_ENTRENADOR, invitacion_pendiente,
+)
 from app.dominio.modelos import RecuperacionOutbox, Usuario
 from app.infraestructura.db import SessionLocal
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
@@ -35,10 +38,23 @@ def _enviar_enlace(usuario: Usuario) -> None:
     """El token se acuña al ENVIAR y nunca se persiste. Lleva la versión
     actual de la contraseña, que es lo que lo invalida tras un
     restablecimiento exitoso (single-use)."""
+    notificaciones = ServicioNotificaciones(levantar_si_cupo_agotado=True)
+    if invitacion_pendiente(usuario):
+        # Issue #1575: el entrenador creado por el administrador recibe la
+        # invitación por esta misma cola; su token lleva el propósito que
+        # permite verificar el correo al fijar la contraseña.
+        token = GestorAutenticacion.crear_token_recuperacion(
+            usuario.correo, usuario.version_contrasenia,
+            proposito=PROPOSITO_INVITACION_ENTRENADOR,
+        )
+        notificaciones.enviar_invitacion_entrenador(
+            usuario.correo, token, usuario.persona.nombres,
+        )
+        return
     token = GestorAutenticacion.crear_token_recuperacion(
         usuario.correo, usuario.version_contrasenia
     )
-    ServicioNotificaciones(levantar_si_cupo_agotado=True).enviar_recuperacion_contrasenia(usuario.correo, token)
+    notificaciones.enviar_recuperacion_contrasenia(usuario.correo, token)
 
 
 @celery_app.task(
