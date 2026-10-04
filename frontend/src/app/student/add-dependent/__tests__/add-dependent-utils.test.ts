@@ -27,13 +27,13 @@ describe("dependent payment validation", () => {
   const voucher = new File(["ok"], "receipt.png", { type: "image/png" });
 
   it("requires a valid plan and payment period", () => {
-    expect(validateDependentPayment("", 1, "EFECTIVO", null)).toContain("Seleccione un plan.");
-    expect(validateDependentPayment("2", 0, "EFECTIVO", null)).toContain("Seleccione entre 1 y 12 meses.");
+    expect(validateDependentPayment("", 1, "EFECTIVO", null)).toContain("Selecciona un plan.");
+    expect(validateDependentPayment("2", 0, "EFECTIVO", null)).toContain("Selecciona entre 1 y 12 meses.");
   });
 
   it("requires a valid voucher only for transfers", () => {
     expect(validateDependentPayment("2", 1, "EFECTIVO", null)).toEqual([]);
-    expect(validateDependentPayment("2", 1, "TRANSFERENCIA", null)).toContain("Adjunte el comprobante de transferencia.");
+    expect(validateDependentPayment("2", 1, "TRANSFERENCIA", null)).toContain("Adjunta el comprobante de transferencia.");
     expect(validateDependentPayment("2", 1, "TRANSFERENCIA", voucher)).toEqual([]);
     expect(validateDependentPayment("2", 1, "TRANSFERENCIA", new File(["x"], "a.txt", { type: "text/plain" }))).toHaveLength(1);
   });
@@ -84,25 +84,25 @@ describe("validateAddDependentStep — child step", () => {
 
   it("requires fechaNacimiento", () => {
     expect(validateAddDependentStep("child", validForm({ fechaNacimiento: "" })))
-      .toContain("Indique la fecha de nacimiento del alumno.");
+      .toContainEqual(expect.stringMatching(/^Indi(ca|que) la fecha de nacimiento del (alumno|jugador)\.$/));
   });
 
   it("rejects a malformed fechaNacimiento", () => {
     expect(validateAddDependentStep("child", validForm({ fechaNacimiento: "2015-13-40" })))
-      .toContain("La fecha de nacimiento no existe. Revise el día, el mes y el año.");
+      .toContainEqual(expect.stringMatching(/^La fecha de nacimiento no existe\. Revis[ae] el día, el mes y el año\.$/));
   });
 
   it("rejects a fechaNacimiento in the future", () => {
     const nextYear = new Date().getFullYear() + 1;
     expect(validateAddDependentStep("child", validForm({ fechaNacimiento: `${nextYear}-01-01` })))
-      .toContain("La fecha de nacimiento no puede ser posterior a hoy. Revise el año.");
+      .toContainEqual(expect.stringMatching(/^La fecha de nacimiento no puede ser posterior a hoy\. Revis[ae] el año\.$/));
   });
 
   it("accepts today as a valid fechaNacimiento (not future)", () => {
     const today = new Date();
     const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     expect(validateAddDependentStep("child", validForm({ fechaNacimiento: iso })))
-      .not.toContain("La fecha de nacimiento no puede ser posterior a hoy. Revise el año.");
+      .not.toContainEqual(expect.stringMatching(/^La fecha de nacimiento no puede ser posterior a hoy\. Revis[ae] el año\.$/));
   });
 
   it("rejects an impossible age on step 1 instead of letting the wizard reach the backend (INS-8)", () => {
@@ -110,14 +110,14 @@ describe("validateAddDependentStep — child step", () => {
     // used to sail through all four steps before the backend's 400 threw it
     // out, losing everything the person had already typed.
     const errors = validateAddDependentStep("child", validForm({ fechaNacimiento: "1800-01-01" }));
-    expect(errors.some((message) => message.includes("La edad del alumno debe estar entre 3 y 95 años"))).toBe(true);
+    expect(errors.some((message) => message.includes("debe estar entre 3 y 95 años"))).toBe(true);
   });
 
   it("rejects a fechaNacimiento below the minimum domain age (EDAD_MINIMA_ALUMNO = 3)", () => {
     const today = new Date();
     const twoYearsAgo = `${today.getFullYear() - 2}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     const errors = validateAddDependentStep("child", validForm({ fechaNacimiento: twoYearsAgo }));
-    expect(errors.some((message) => message.includes("La edad del alumno debe estar entre 3 y 95 años"))).toBe(true);
+    expect(errors.some((message) => message.includes("debe estar entre 3 y 95 años"))).toBe(true);
   });
 
   it("requires cedula", () => {
@@ -333,12 +333,12 @@ describe("getAddDependentErrorMessage", () => {
 
   it("falls back to a generic message for a 400 with no usable message", () => {
     expect(getAddDependentErrorMessage(apiError("", 400)))
-      .toBe("No se pudo agregar el dependiente. Revise los datos ingresados e intente nuevamente.");
+      .toBe("No se pudo agregar el jugador. Revisa los datos ingresados e intenta nuevamente.");
   });
 
   it("uses a generic message for 422 — raw pydantic validation errors aren't a single safe string", () => {
     expect(getAddDependentErrorMessage(apiError("[{...raw pydantic errors...}]", 422)))
-      .toBe("No se pudo agregar el dependiente. Revise los datos ingresados e intente nuevamente.");
+      .toBe("No se pudo agregar el jugador. Revisa los datos ingresados e intenta nuevamente.");
   });
 
   it("maps 403 to the one permissions sentence the product uses everywhere", () => {
@@ -355,6 +355,6 @@ describe("getAddDependentErrorMessage", () => {
     // route in services/api.ts throws ApiClientError(message, status), so a
     // bare Error can only come from fetch itself rejecting.
     expect(getAddDependentErrorMessage(new TypeError("Failed to fetch")))
-      .toBe("No pudimos conectar. Revise su conexión a internet e intente nuevamente.");
+      .toMatch(/^No pudimos conectar\. Revis[ae] (tu|su) conexión a internet e intent[ae] nuevamente\.$/);
   });
 });

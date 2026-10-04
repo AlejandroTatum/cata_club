@@ -80,10 +80,10 @@ function PrivacyLink(props: { onOpen: () => void }): ReactElement {
 function AfterConfirming(props: { heading: string }): ReactElement {
   return (
     <>
-      <Item heading={props.heading} number={1} title="Verifique su correo">
-        Se solicita un correo de verificación a la dirección que usted indicó.
+      <Item heading={props.heading} number={1} title="Verifica tu correo">
+        Se solicita un correo de verificación a la dirección que indicaste.
       </Item>
-      <Item number={2} title="Acérquese al club o escríbanos">
+      <Item number={2} title="Acércate al club o escríbenos">
         Por WhatsApp o en persona, para registrar la inscripción y el primer
         pago.
       </Item>
@@ -141,35 +141,35 @@ export default function EnrollAside(props: EnrollAsideProps): ReactElement {
       {step === "personal" && (
         <>
           <Item heading="Por qué pedimos estos datos" title="Cédula">
-            Identifica al estudiante; son 10 dígitos, sin guiones.
+            Identifica al jugador; son 10 dígitos, sin guiones.
           </Item>
           <Item title="Fecha de nacimiento">
             {props.isChild
-              ? "Con ella calculamos la edad del estudiante: día, mes y año de cuatro dígitos."
-              : "Con ella calculamos su edad: un menor de edad requiere un representante."}
+              ? "Con ella calculamos la edad del jugador: día, mes y año de cuatro dígitos."
+              : "Con ella calculamos tu edad: un menor de edad requiere un representante."}
           </Item>
           {props.isChild ? (
-            <Item title="Su cuenta">
-              Los datos del estudiante se registran por separado de la cuenta de
+            <Item title="Tu cuenta">
+              Los datos del jugador se registran por separado de la cuenta de
               acceso del representante, que se pide en el paso siguiente.
             </Item>
           ) : (
             <>
               <Item title="Teléfono">
-                Es el número al que el club puede contactarlo.
+                Es el número al que el club puede contactarte.
               </Item>
               <Item title="Correo electrónico">
                 Es la dirección a la que se solicita el correo de verificación
                 de la cuenta.
               </Item>
-              <Item title="Su contraseña">
+              <Item title="Tu contraseña">
                 Use al menos 8 caracteres y evite las contraseñas más usadas.
                 Para que sea segura, alárguela o mezcle mayúsculas, números y
                 símbolos.
               </Item>
             </>
           )}
-          <Item title="Sus datos">
+          <Item title="Tus datos">
             Se manejan de forma segura conforme a la normativa de protección de
             datos.
           </Item>
@@ -179,22 +179,22 @@ export default function EnrollAside(props: EnrollAsideProps): ReactElement {
 
       {step === "representative" && (
         <>
-          <Item heading="Su papel como representante" title="Responsable legal">
-            Al inscribir a un dependiente, confirma ser su responsable legal.
+          <Item heading="Tu papel como representante" title="Responsable legal">
+            Al inscribir a un jugador, confirmas ser su responsable legal.
           </Item>
           <Item title="Responsable de pago">
-            Usted será el responsable de pago de este estudiante.
+            Serás el responsable de pago de este jugador.
           </Item>
           <Item title="Contacto del club">
-            En caso de emergencia, el club lo contactará a usted con el nombre y
-            teléfono de representante que ya indicó.
+            En caso de emergencia, el club te contactará con el nombre y
+            teléfono de representante que ya indicaste.
           </Item>
-          <Item title="Su cuenta">
-            Los datos del estudiante se registran por separado de su cuenta de
+          <Item title="Tu cuenta">
+            Los datos del jugador se registran por separado de tu cuenta de
             acceso.
           </Item>
           <Item title="Mayoría de edad">
-            El representante debe ser mayor de edad. Su correo recibe la
+            El representante debe ser mayor de edad. Tu correo recibe la
             verificación de la cuenta.
           </Item>
           <PrivacyLink onOpen={() => props.onOpenDocument("privacidad")} />
@@ -209,12 +209,12 @@ export default function EnrollAside(props: EnrollAsideProps): ReactElement {
           </Item>
           <Item title="Contacto de emergencia">
             {props.isChild
-              ? "En caso de emergencia, el club lo contactará a usted con el nombre y teléfono de representante que ya indicó."
-              : "Indique el nombre y el teléfono de la persona a la que el club debe llamar. El teléfono de emergencia debe ser diferente del teléfono del estudiante."}
+              ? "En caso de emergencia, el club te contactará con el nombre y teléfono de representante que ya indicaste."
+              : "Indica el nombre y el teléfono de la persona a la que el club debe llamar. El teléfono de emergencia debe ser diferente del teléfono del jugador."}
           </Item>
           <Item title="Para qué sirve">
             Es información que el club necesita conocer para la seguridad del
-            estudiante.
+            jugador.
           </Item>
           <Item title="Campos opcionales">
             Condiciones de salud y alergias son opcionales.
@@ -226,10 +226,10 @@ export default function EnrollAside(props: EnrollAsideProps): ReactElement {
       {step === "summary" && (
         <>
           <AfterConfirming heading="Qué pasa después" />
-          <Item heading="Antes de confirmar" title="Revise cada bloque">
-            Corrija cualquier bloque antes de confirmar con su botón Editar.
+          <Item heading="Antes de confirmar" title="Revisa cada bloque">
+            Corrige cualquier bloque antes de confirmar con tu botón Editar.
           </Item>
-          <Item title="Su consentimiento">
+          <Item title="Tu consentimiento">
             Para confirmar, acepte los Términos de uso, el Aviso de privacidad y
             el Permiso de imagen FETM.
           </Item>

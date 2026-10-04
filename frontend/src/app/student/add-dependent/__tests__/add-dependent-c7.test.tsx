@@ -91,7 +91,7 @@ async function addDependentPayingLater(): Promise<void> {
   render(<AddDependentPage />);
   goToSummary();
   fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(screen.getByRole("button", { name: /agregar dependiente/i }));
+  fireEvent.click(screen.getByRole("button", { name: /agregar jugador/i }));
   await screen.findByRole("heading", { name: "Dependiente agregado" });
 }
 
@@ -111,7 +111,7 @@ describe("the medical record is required, the emergency phone is the representat
     fillBirthDate(addDependentFieldId("fechaNacimiento"), "2014-05-12");
     next();
 
-    expect(screen.getByText(/el club llamará al teléfono de su cuenta/i)).toBeInTheDocument();
+    expect(screen.getByText(/el club llamará al teléfono de tu cuenta/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/teléfono de emergencia/i)).not.toBeInTheDocument();
   });
 });

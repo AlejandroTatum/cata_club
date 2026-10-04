@@ -9,7 +9,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: { absolute: "Agregar dependiente — Cata Club" },
+  title: { absolute: "Agregar jugador (menor de edad) — Cata Club" },
 };
 
 export default function AddDependentLayout({

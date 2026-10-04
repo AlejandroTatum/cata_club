@@ -35,7 +35,7 @@ interface FieldErrors {
 
 function validate(current: string, next: string, repeat: string): FieldErrors {
   const errors: FieldErrors = {};
-  if (!current) errors.current = "Ingrese su contraseña actual.";
+  if (!current) errors.current = "Ingresa tu contraseña actual.";
   const policy = passwordRule(next, "La nueva contraseña");
   if (policy) errors.next = policy;
   else if (next === current) errors.next = "La nueva contraseña debe ser distinta de la actual.";
@@ -156,7 +156,7 @@ export default function ChangePasswordCard(): React.ReactElement {
     <section data-testid="profile-change-password" className="card overflow-hidden">
       <SectionHead
         title="Cambiar contraseña"
-        subtitle="Al cambiarla, se cerrarán sus otras sesiones."
+        subtitle="Al cambiarla, se cerrarán tus otras sesiones."
         icon={<KeyRound size={ICON.sm} strokeWidth={1.5} />}
         tone="ball"
       />

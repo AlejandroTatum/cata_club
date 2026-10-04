@@ -94,7 +94,7 @@ async function submit(): Promise<void> {
   render(<AddDependentPage />);
   goToSummaryStep();
   fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(screen.getByRole("button", { name: /agregar dependiente/i }));
+  fireEvent.click(screen.getByRole("button", { name: /agregar jugador/i }));
 }
 
 describe("a rejected refreshSession does not turn a successful alta into a reported failure", () => {

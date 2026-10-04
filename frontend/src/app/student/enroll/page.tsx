@@ -136,19 +136,19 @@ const ENROLLMENT_CHOICES: {
     value: ENROLLMENT_TYPES.SELF,
     title: "Jugador",
     description:
-      "Me inscribo yo al club. Soy mayor de edad y gestiono mi propia cuenta como estudiante.",
-    asks: ["Sus datos personales y de acceso", "Salud y contacto de emergencia"],
+      "Me inscribo yo al club. Soy mayor de edad y gestiono mi propia cuenta como jugador.",
+    asks: ["Tus datos personales y de acceso", "Salud y contacto de emergencia"],
     steps: "4 pasos",
   },
   {
     value: ENROLLMENT_TYPES.CHILD,
     title: "Representante",
     description:
-      "Gestiono la inscripción de un hijo o dependiente. El estudiante es distinto de mi cuenta.",
+      "Gestiono la inscripción de un hijo o menor a tu cargo. El jugador es distinto de mi cuenta.",
     asks: [
-      "Los datos del estudiante",
-      "Sus propios datos y los de acceso a la cuenta",
-      "Salud del estudiante; su contacto de emergencia es usted",
+      "Los datos del jugador",
+      "Tus propios datos y los de acceso a la cuenta",
+      "Salud del jugador; tu contacto de emergencia eres tú",
     ],
     steps: "5 pasos",
   },
@@ -178,15 +178,15 @@ const ENROLLMENT_CHOICES: {
 function unconfirmedSessionNotice(kind: "unauthenticated" | "outage"): string {
   if (kind === "outage") {
     return (
-      "Su inscripción quedó registrada y su cuenta ya está creada, pero no pudimos confirmar el inicio " +
-      "de sesión porque el servicio no está disponible en este momento. No repita la inscripción: " +
-      "espere unos minutos e inicie sesión con su correo y su contraseña."
+      "Tu inscripción quedó registrada y tu cuenta ya está creada, pero no pudimos confirmar el inicio " +
+      "de sesión porque el servicio no está disponible en este momento. No repitas la inscripción: " +
+      "espera unos minutos e inicia sesión con tu correo y tu contraseña."
     );
   }
   return (
-    "Su inscripción quedó registrada y su cuenta ya está creada, pero este navegador no guardó la sesión. " +
-    "Suele ocurrir cuando las cookies están bloqueadas o la ventana es de navegación privada. No repita la " +
-    "inscripción: habilite las cookies para este sitio e inicie sesión con su correo y su contraseña."
+    "Tu inscripción quedó registrada y tu cuenta ya está creada, pero este navegador no guardó la sesión. " +
+    "Suele ocurrir cuando las cookies están bloqueadas o la ventana es de navegación privada. No repitas la " +
+    "inscripción: habilita las cookies para este sitio e inicia sesión con tu correo y tu contraseña."
   );
 }
 
@@ -522,7 +522,7 @@ function EnrollWizard(): React.ReactElement {
     try {
       const response = await enrollStudent(buildEnrollmentRequest(formData, summaryReviewed));
       if (!response.enrolled) {
-        throw new Error("No pudimos registrar la inscripción. Intente de nuevo.");
+        throw new Error("No pudimos registrar la inscripción. Intenta de nuevo.");
       }
       // The backend auto-logs the new user in (HttpOnly cookies set by
       // /api/enrollment); re-hydrate AuthContext now so "Ir a mi cuenta"
@@ -777,7 +777,7 @@ function EnrollWizard(): React.ReactElement {
     return (
       <div className="flex flex-col gap-section">
         <p className="text-sm text-ink-2">
-          Seleccione el tipo de inscripción que desea realizar:
+          Selecciona el tipo de inscripción que quieres realizar:
         </p>
 
         {/* `.choice` (_sistema.css:323-328). Even height via `items-stretch` +
@@ -817,7 +817,7 @@ function EnrollWizard(): React.ReactElement {
                 <b className="text-base font-bold text-ink">{choice.title}</b>
                 <p className="text-sm text-ink-2">{choice.description}</p>
                 <span className="mt-field block text-xs font-bold uppercase tracking-flat text-ink-3-strong">
-                  Le pediremos · {choice.steps}
+                  Te pediremos · {choice.steps}
                 </span>
                 <span className="block text-sm text-ink-2">
                   {choice.asks.map((ask) => (
@@ -850,22 +850,22 @@ function EnrollWizard(): React.ReactElement {
           <p className="text-sm font-bold text-ink">
             {formData.enrollmentType === "self"
               ? "Inscripción como jugador"
-              : "Inscripción de dependiente"}
+              : "Inscripción de jugador menor de edad"}
           </p>
           <p className="mt-field text-sm text-ink-3-strong">
             {formData.enrollmentType === "self"
-              ? "Usted será el estudiante titular de la cuenta. No se requieren datos de representante."
-              : "Usted será el responsable de pago de este estudiante. Los datos del estudiante se registran por separado de su cuenta."}
+              ? "Serás el jugador titular de la cuenta. No se requieren datos de representante."
+              : "Serás el responsable de pago de este jugador. Los datos del jugador se registran por separado de tu cuenta."}
           </p>
         </div>
 
         {/* Nothing the wizard asks for is a surprise: these are the data it
             will request, so the visitor can have them at hand. */}
         <div data-enroll-note>
-          <p className="text-sm font-bold text-ink">Tenga a mano</p>
+          <p className="text-sm font-bold text-ink">Ten a mano</p>
           <ul className="mt-field space-y-1 text-sm text-ink-2">
             <li>La cédula: son 10 dígitos, sin guiones.</li>
-            <li>Un correo electrónico al que tenga acceso, para verificar la cuenta.</li>
+            <li>Un correo electrónico al que tengas acceso, para verificar la cuenta.</li>
             <li>Un teléfono de contacto y el de una persona para emergencias.</li>
           </ul>
         </div>
@@ -883,7 +883,7 @@ function EnrollWizard(): React.ReactElement {
     if (!formData.fechaNacimiento) return { hint: generic };
     const age = calculatePersonAge(formData.fechaNacimiento);
     if (isNaN(age)) return { hint: generic };
-    if (!isPlausibleHumanAge(age)) return { hint: "Revise el año." };
+    if (!isPlausibleHumanAge(age)) return { hint: "Revisa el año." };
     if (age < 18) {
       return {
         hint:
@@ -904,8 +904,8 @@ function EnrollWizard(): React.ReactElement {
       <div className="flex flex-col">
         <p className="mb-page text-sm text-ink-2">
           {isSelf
-            ? "Ingrese sus datos personales y credenciales de acceso:"
-            : "Ingrese los datos personales del estudiante a inscribir:"}
+            ? "Ingresa tus datos personales y credenciales de acceso:"
+            : "Ingresa los datos personales del jugador a inscribir:"}
         </p>
 
         {/* Two columns from `md`, in reading order: name, birth date and
@@ -1035,7 +1035,7 @@ function EnrollWizard(): React.ReactElement {
       // `ENROLL_FIELD_TOKEN` breaks.
       <div className="flex flex-col">
         <p className="mb-page text-sm text-ink-2">
-          Complete los datos del representante legal y sus credenciales de acceso:
+          Completa los datos del representante legal y tus credenciales de acceso:
         </p>
         <EnrollFieldGrid>
           {renderField("nombreRepresentante", {
@@ -1136,7 +1136,7 @@ function EnrollWizard(): React.ReactElement {
             inline (see fechaNacimientoRepresentante in enroll-utils.ts). */}
         {/* REG-14: from `lg` the same sentence lives in the aside. */}
         <p className="mt-field text-xs text-ink-3 lg:hidden">
-          Al inscribir a un dependiente, confirma ser su responsable legal.
+          Al inscribir a un jugador, confirmas ser su responsable legal.
         </p>
       </div>
     );
@@ -1146,7 +1146,7 @@ function EnrollWizard(): React.ReactElement {
     return (
       <div className="flex flex-col">
         <p className="mb-page text-sm text-ink-2">
-          Información que el club necesita conocer para la seguridad del estudiante:
+          Información que el club necesita conocer para la seguridad del jugador:
         </p>
 
         <EnrollFieldGrid>
@@ -1166,7 +1166,7 @@ function EnrollWizard(): React.ReactElement {
             aria-describedby={shownError("tipoSangre") ? "enroll-tipo-sangre-message" : undefined}
             className={`input-field ${shownError("tipoSangre") ? "border-state-bad" : ""}`}
           >
-            <option value="">Seleccione una opción</option>
+            <option value="">Selecciona una opción</option>
             {/* The enum with its underscore swapped for a space produced "O
                 POSITIVO" here and again in the summary. `BLOOD_TYPE_LABELS` is
                 the only spelling a person reads now. */}
@@ -1233,8 +1233,8 @@ function EnrollWizard(): React.ReactElement {
           />
         ) : (
           <div className="rounded-ctl border border-line-2 bg-canvas p-page text-xs text-ink-2 lg:hidden">
-            En caso de emergencia, el club lo contactará a usted con el
-            nombre y teléfono de representante que ya indicó.
+            En caso de emergencia, el club te contactará con el
+            nombre y teléfono de representante que ya indicaste.
           </div>
         )}
 
@@ -1315,7 +1315,7 @@ function EnrollWizard(): React.ReactElement {
     return (
       <div className="flex flex-col gap-section">
         <p className="text-sm text-ink-2">
-          Esto es lo que vamos a crear. Corrija cualquier bloque antes de confirmar:
+          Esto es lo que vamos a crear. Corrige cualquier bloque antes de confirmar:
         </p>
 
         {/* One list of 56px rows, one datum per row — replaces four cramped
@@ -1336,11 +1336,11 @@ function EnrollWizard(): React.ReactElement {
         <DataRowList className="bg-sunken">
           {summaryRow(
             "Tipo",
-            isChild ? "Representante — inscribe a un dependiente" : "Jugador — titular de su propia cuenta",
+            isChild ? "Representante — inscribe a un jugador" : "Jugador — titular de tu propia cuenta",
             "type",
           )}
           {summaryRow(
-            "Estudiante",
+            "Jugador",
             `${formData.nombres} ${formData.apellidos}`.trim() + ageLabel,
             "personal",
           )}
@@ -1412,12 +1412,12 @@ function EnrollWizard(): React.ReactElement {
               SÍ es hecho en el momento en que este párrafo se lee: la
               solicitud de envío quedó registrada. La demora posible y la
               salida si no llega (#1245: reenviar desde la pantalla de
-              activación, donde también puede corregir el correo) van en la
+              activación, donde también puedes corregir el correo) van en la
               misma oración para que «no llegó» tenga adónde ir — y ninguna
               superficie promete ni anuncia un resultado de entrega que no
-              puede conocer. */}
-          Al confirmar creamos {isChild ? "su cuenta de representante y el perfil del estudiante" : "su cuenta de estudiante"} y registramos el envío de un correo para verificarla: puede tardar unos minutos en llegar. Si no llega, reenvíelo desde la pantalla de activación, donde también puede corregir el correo.
-          Luego, acérquese al club o escríbanos por WhatsApp para registrar la inscripción y el primer pago:{" "}
+              puedes conocer. */}
+          Al confirmar creamos {isChild ? "tu cuenta de representante y el perfil del jugador" : "tu cuenta de jugador"} y registramos el envío de un correo para verificarla: puede tardar unos minutos en llegar. Si no llega, reenvíalo desde la pantalla de activación, donde también puedes corregir el correo.
+          Luego, acércate al club o escríbenos por WhatsApp para registrar la inscripción y el primer pago:{" "}
           <b className="font-semibold text-ink">el club lo valida y ahí se activa la membresía</b>.
         </p>
 
@@ -1490,7 +1490,7 @@ function EnrollWizard(): React.ReactElement {
             className="-mt-2 flex items-start gap-1.5 text-sm font-semibold text-state-bad [text-wrap:pretty]"
           >
             <AlertTriangle size={ICON.sm} strokeWidth={2} className="mt-0.5 shrink-0" aria-hidden="true" />
-            Para confirmar la inscripción, marque la casilla de aceptación de los Términos de uso, el Aviso de
+            Para confirmar la inscripción, marca la casilla de aceptación de los Términos de uso, el Aviso de
             privacidad y el Permiso de imagen FETM.
           </p>
         )}
@@ -1589,14 +1589,14 @@ function EnrollWizard(): React.ReactElement {
               )
             }
             eyebrow={isFirst ? "Paso 1" : `Paso ${currentIndex + 1} de ${effectiveSteps.length}`}
-            title="Inscripción de estudiante"
+            title="Inscripción de jugador"
             subtitle={
               isFirst
                 ? "4 o 5 pasos y queda dentro del club, según quién se inscriba."
                 : `${effectiveSteps.length} pasos y queda dentro del club.` +
                   (formData.enrollmentType === "self"
-                    ? " Se inscribe usted como jugador."
-                    : " Usted actúa como representante.")
+                    ? " Te inscribes como jugador."
+                    : " Actúas como representante.")
             }
             steps={
               wide && (
@@ -1635,8 +1635,8 @@ function EnrollWizard(): React.ReactElement {
               {restoredFromDraft && (
                 <p className="mb-page rounded-ctl border border-line bg-canvas px-3.5 py-2.5 text-xs text-ink-2">
                   Recuperamos los datos que ya había completado. Todavía no se han
-                  enviado — revíselos antes de continuar. Por seguridad, vuelva a
-                  escribir su contraseña.
+                  enviado — revísalos antes de continuar. Por seguridad, vuelve a
+                  escribir tu contraseña.
                 </p>
               )}
 

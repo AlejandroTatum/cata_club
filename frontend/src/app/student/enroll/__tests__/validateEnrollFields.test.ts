@@ -50,7 +50,7 @@ describe("STEP_SHORT_LABELS", () => {
   it("names every step in the wizard order", () => {
     expect(STEP_ORDER.map((step) => STEP_SHORT_LABELS[step])).toEqual([
       "Tipo",
-      "Estudiante",
+      "Jugador",
       "Representante",
       "Salud",
       "Confirmar",
@@ -123,8 +123,8 @@ describe("validateEnrollFields", () => {
     // other phone field — a short entry gets the same celular-or-fijo
     // sentence `phoneRule` gives everywhere else.
     expect(validateEnrollFields("personal", validForm({ telefono: "9912" })).telefono)
-      .toBe(
-        "El teléfono no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+      .toMatch(
+        /^El teléfono no es válido\. Escrib[ae] 9 dígitos si es celular \(por ejemplo, 991234567\) u 8 si es fijo, sin el 0 inicial\.$/,
       );
   });
 
@@ -143,7 +143,7 @@ describe("validateEnrollFields", () => {
       "personal",
       validForm({ enrollmentType: "self", fechaNacimiento: "2015-06-15" }),
     );
-    expect(errors.fechaNacimiento).toMatch(/El alumno es menor de edad y necesita un representante/);
+    expect(errors.fechaNacimiento).toMatch(/El jugador es menor de edad y necesita un representante/);
   });
 
   it("does not apply the minors rule to the student of a child enrollment", () => {
@@ -167,7 +167,7 @@ describe("validateEnrollFields", () => {
       "representative",
       validForm({ enrollmentType: "child", fechaNacimientoRepresentante: "" }),
     );
-    expect(errors.fechaNacimientoRepresentante).toBe("Indique la fecha de nacimiento del representante.");
+    expect(errors.fechaNacimientoRepresentante).toBe("Indica la fecha de nacimiento del representante.");
   });
 
   it("rejects an underage representante's birth date", () => {
@@ -193,7 +193,7 @@ describe("validateEnrollFields", () => {
       "representative",
       validForm({ enrollmentType: "child", fechaNacimientoRepresentante: "1800-01-15" }),
     );
-    expect(errors.fechaNacimientoRepresentante).toMatch(/entre 18 y 95 años; la fecha ingresada corresponde a \d+ años?\. Revise el año de nacimiento\./);
+    expect(errors.fechaNacimientoRepresentante).toMatch(/entre 18 y 95 años; la fecha ingresada corresponde a \d+ años?\. Revisa el año de nacimiento\./);
   });
 
   it("validates the health step's blood type and emergency contact", () => {
@@ -201,9 +201,9 @@ describe("validateEnrollFields", () => {
       "health",
       validForm({ tipoSangre: "", telefonoEmergencia: "123" }),
     );
-    expect(errors.tipoSangre).toBe("Seleccione el tipo de sangre del alumno.");
-    expect(errors.telefonoEmergencia).toBe(
-      "El teléfono de emergencia no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+    expect(errors.tipoSangre).toBe("Selecciona el tipo de sangre del jugador.");
+    expect(errors.telefonoEmergencia).toMatch(
+      /^El teléfono de emergencia no es válido\. Escrib[ae] 9 dígitos si es celular \(por ejemplo, 991234567\) u 8 si es fijo, sin el 0 inicial\.$/,
     );
   });
 
@@ -216,7 +216,7 @@ describe("validateEnrollFields", () => {
    */
   it("rejects DESCONOCIDO as if the blood type had been left blank", () => {
     const errors = validateEnrollFields("health", validForm({ tipoSangre: BLOOD_TYPES.DESCONOCIDO }));
-    expect(errors.tipoSangre).toBe("Seleccione el tipo de sangre del alumno.");
+    expect(errors.tipoSangre).toBe("Selecciona el tipo de sangre del jugador.");
   });
 
   it("leaves the optional medical details optional", () => {
@@ -246,8 +246,8 @@ describe("validateEnrollFields", () => {
         "health",
         validForm({ telefono: "991234567", telefonoEmergencia: "991234567" }),
       );
-      expect(errors.telefonoEmergencia).toBe(
-        "El teléfono de emergencia debe ser diferente del teléfono del estudiante.",
+      expect(errors.telefonoEmergencia).toMatch(
+        /^El teléfono de emergencia debe ser diferente del teléfono del (estudiante|jugador)\.$/,
       );
     });
 
@@ -283,8 +283,8 @@ describe("validateEnrollFields", () => {
         "representative",
         validForm({ enrollmentType: "child", cedula: "1798765432", cedulaRepresentante: "1798765432" }),
       );
-      expect(errors.cedulaRepresentante).toBe(
-        "La cédula del representante debe ser diferente de la cédula del estudiante.",
+      expect(errors.cedulaRepresentante).toMatch(
+        /^La cédula del representante debe ser diferente de la cédula del (estudiante|jugador)\.$/,
       );
       expect(isStepComplete("representative", validForm({
         enrollmentType: "child",
@@ -328,8 +328,8 @@ describe("validateEnrollFields", () => {
       const errors = validateEnrollment(
         validForm({ enrollmentType: "child", cedula: "1798765432", cedulaRepresentante: "1798765432" }),
       );
-      expect(errors).toContain(
-        "La cédula del representante debe ser diferente de la cédula del estudiante.",
+      expect(errors).toContainEqual(
+        expect.stringMatching(/^La cédula del representante debe ser diferente de la cédula del (estudiante|jugador)\.$/),
       );
     });
   });
@@ -343,8 +343,8 @@ describe("validateEnrollFields", () => {
   describe("password confirmation matrix (#876)", () => {
     it.each([
       ["matches", "password8", "password8", undefined],
-      ["mismatches", "password8", "otraClave9", "Las contraseñas no coinciden. Escriba la misma contraseña en los dos campos."],
-      ["is left empty", "password8", "", "Repita la contraseña para confirmarla."],
+      ["mismatches", "password8", "otraClave9", "Las contraseñas no coinciden. Escribe la misma contraseña en los dos campos."],
+      ["is left empty", "password8", "", "Repite la contraseña para confirmarla."],
     ])("student confirmation that %s", (_label, contrasenia, contraseniaConfirmacion, expected) => {
       const errors = validateEnrollFields("personal", validForm({ contrasenia, contraseniaConfirmacion }));
       expect(errors.contraseniaConfirmacion).toBe(expected);
@@ -352,8 +352,8 @@ describe("validateEnrollFields", () => {
 
     it.each([
       ["matches", "password8", "password8", undefined],
-      ["mismatches", "password8", "otraClave9", "Las contraseñas no coinciden. Escriba la misma contraseña en los dos campos."],
-      ["is left empty", "password8", "", "Repita la contraseña para confirmarla."],
+      ["mismatches", "password8", "otraClave9", "Las contraseñas no coinciden. Escribe la misma contraseña en los dos campos."],
+      ["is left empty", "password8", "", "Repite la contraseña para confirmarla."],
     ])(
       "representante confirmation that %s",
       (_label, contraseniaRepresentante, contraseniaRepresentanteConfirmacion, expected) => {

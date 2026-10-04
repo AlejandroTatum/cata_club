@@ -69,8 +69,8 @@ describe("telefono — step 2 validates the local digits after +593 (#1296)", ()
       contrasenia: "password8",
       contraseniaConfirmacion: "password8",
     });
-    expect(errors.telefono).toBe(
-      "El teléfono no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+    expect(errors.telefono).toMatch(
+      /^El teléfono no es válido\. Escrib[ae] 9 dígitos si es celular \(por ejemplo, 991234567\) u 8 si es fijo, sin el 0 inicial\.$/,
     );
   });
 

@@ -43,7 +43,7 @@ export const ADD_DEPENDENT_STEP_ORDER: AddDependentStep[] = ["child", "health", 
  * fields make is the mark said twice.
  */
 export const ADD_DEPENDENT_STEP_LABELS: Record<AddDependentStep, string> = {
-  child: "Datos del dependiente",
+  child: "Datos del jugador",
   health: "Salud y emergencia",
   summary: "Resumen y confirmación",
 };
@@ -125,11 +125,11 @@ export function validateDependentPayment(
   planId: string, months: number, method: string, voucher: File | null,
 ): string[] {
   const errors: string[] = [];
-  if (!Number.isSafeInteger(Number(planId)) || Number(planId) < 1) errors.push("Seleccione un plan.");
-  if (!Number.isInteger(months) || months < 1 || months > 12) errors.push("Seleccione entre 1 y 12 meses.");
-  if (method !== "EFECTIVO" && method !== "TRANSFERENCIA") errors.push("Seleccione un medio de pago.");
+  if (!Number.isSafeInteger(Number(planId)) || Number(planId) < 1) errors.push("Selecciona un plan.");
+  if (!Number.isInteger(months) || months < 1 || months > 12) errors.push("Selecciona entre 1 y 12 meses.");
+  if (method !== "EFECTIVO" && method !== "TRANSFERENCIA") errors.push("Selecciona un medio de pago.");
   if (method === "TRANSFERENCIA") {
-    if (!voucher) errors.push("Adjunte el comprobante de transferencia.");
+    if (!voucher) errors.push("Adjunta el comprobante de transferencia.");
     else if (!["image/jpeg", "image/png", "application/pdf"].includes(voucher.type) || voucher.size > 5 * 1024 * 1024) {
       errors.push("El comprobante debe ser JPG, PNG o PDF y pesar hasta 5 MB.");
     }
@@ -279,8 +279,8 @@ export function validateAddDependentFields(
 
 /** FAM-17: what pressing «Siguiente» on an incomplete step says is missing. */
 export const ADD_DEPENDENT_STEP_BLOCKED_MESSAGE: Record<AddDependentStep, string> = {
-  child: "Complete los nombres, apellidos, fecha de nacimiento y cédula para continuar.",
-  health: "Seleccione el tipo de sangre para continuar.",
+  child: "Completa los nombres, apellidos, fecha de nacimiento y cédula para continuar.",
+  health: "Selecciona el tipo de sangre para continuar.",
   summary: "",
 };
 
@@ -306,9 +306,9 @@ export function describeAddDependentBlocker(errors: AddDependentFieldErrors): st
     .map((field) => FIELD_LABELS[field])
     .filter((label): label is string => Boolean(label));
   if (labels.length === 0) return null;
-  if (labels.length === 1) return `Para continuar, revise: ${labels[0]}.`;
+  if (labels.length === 1) return `Para continuar, revisa: ${labels[0]}.`;
   const last = labels[labels.length - 1];
-  return `Para continuar, revise: ${labels.slice(0, -1).join(", ")} y ${last}.`;
+  return `Para continuar, revisa: ${labels.slice(0, -1).join(", ")} y ${last}.`;
 }
 
 function collect(fields: AddDependentField[], data: AddDependentFormData): string[] {
@@ -339,7 +339,7 @@ function isTipoSangre(value: string): value is TipoSangre {
  * away and a 400 that leaks a column name is no longer shown.
  */
 export function getAddDependentErrorMessage(error: unknown): string {
-  return toUserMessage(error, "No se pudo agregar el dependiente. Revise los datos ingresados e intente nuevamente.");
+  return toUserMessage(error, "No se pudo agregar el jugador. Revisa los datos ingresados e intenta nuevamente.");
 }
 
 // `getLinkExistingErrorMessage` ("Vincular a mi cuenta", INS-2) was removed

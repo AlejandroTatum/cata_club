@@ -231,7 +231,7 @@ describe("the card title is in the club's face", () => {
   it("puts the step's title at the title step in Graduate", () => {
     render(<AddDependentPage />);
 
-    const heading = screen.getByRole("heading", { name: /datos del dependiente/i });
+    const heading = screen.getByRole("heading", { name: /datos del jugador/i });
     expect(heading.className).toMatch(/\bfont-display\b/);
     expect(heading.className).toMatch(/\btext-lg\b/);
     expect(heading.className).toMatch(/\btracking-flat\b/);
@@ -278,7 +278,7 @@ describe("the way back sits above the page title", () => {
     render(<AddDependentPage />);
 
     const back = screen.getByRole("link", { name: /volver a mi cuenta/i });
-    const title = screen.getByRole("heading", { name: "Agregar dependiente" });
+    const title = screen.getByRole("heading", { name: "Agregar jugador (menor de edad)" });
     expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
@@ -299,7 +299,7 @@ describe("nothing is painted red over an untouched form", () => {
   it("shows no blocker line and no field error before the guardian acts", () => {
     render(<AddDependentPage />);
 
-    expect(screen.queryByText(/^Para continuar, revise:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Para continuar, revisa:/)).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 

@@ -89,7 +89,7 @@ describe("EnrollPage ?type= (REG-25)", () => {
   it("«Soy jugador adulto» opens the student step with Jugador chosen (no Representante step)", () => {
     openWizardAt(ENROLL_ADULT_HREF);
 
-    expect(screen.getByRole("heading", { name: "Datos del estudiante" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Datos del jugador" })).toBeInTheDocument();
     expect(within(stepper()).queryByText("Representante")).not.toBeInTheDocument();
     expect(new URLSearchParams(window.location.search).get("paso")).toBe("2");
   });
@@ -97,7 +97,7 @@ describe("EnrollPage ?type= (REG-25)", () => {
   it("«Inscribo a mi hijo» opens the student step with Representante chosen (the extra step appears)", () => {
     openWizardAt(ENROLL_CHILD_HREF);
 
-    expect(screen.getByRole("heading", { name: "Datos del estudiante" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Datos del jugador" })).toBeInTheDocument();
     expect(within(stepper()).getByText("Representante")).toBeInTheDocument();
   });
 
@@ -107,7 +107,7 @@ describe("EnrollPage ?type= (REG-25)", () => {
   ])("accepts the alias ?type=%s", (alias, hasRepresentative) => {
     openWizardAt(`/student/enroll?type=${alias}`);
 
-    expect(screen.getByRole("heading", { name: "Datos del estudiante" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Datos del jugador" })).toBeInTheDocument();
     expect(Boolean(within(stepper()).queryByText("Representante"))).toBe(hasRepresentative);
   });
 
