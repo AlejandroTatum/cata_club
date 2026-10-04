@@ -71,8 +71,8 @@ const COUNTDOWN_KINDS = new Set<PaymentSituation["kind"]>(["expired", "ending-so
 
 /**
  * FAM-27: how much, until when and what comes next, in one sentence the family
- * can act on. «Vence en 12 días (03/11/2026). Pague $25,00 y suba el
- * comprobante; el club lo revisa y le avisamos aquí.»
+ * can act on. «Vence en 12 días (03/11/2026). Paga $25,00 y sube el
+ * comprobante; el club lo revisa y te avisamos aquí.»
  */
 function describeNextStep(daysLeft: number, coverageEnd: string, price: string): string {
   const date = formatDate(coverageEnd);
@@ -82,7 +82,7 @@ function describeNextStep(daysLeft: number, coverageEnd: string, price: string):
       : daysLeft === 0
         ? `Vence hoy (${date}).`
         : `Vence en ${daysLeft} ${daysLeft === 1 ? "día" : "días"} (${date}).`;
-  return `${when} Pague ${price} y suba el comprobante; el club lo revisa y le avisamos aquí.`;
+  return `${when} Paga ${price} y sube el comprobante; el club lo revisa y te avisamos aquí.`;
 }
 
 /** One figure: a small label over a large tabular number. */
@@ -124,7 +124,7 @@ export default function CuotaCard({
   return (
     <section
       data-testid="student-cuota-card"
-      aria-label="Su mensualidad"
+      aria-label="Tu mensualidad"
       className="card overflow-hidden"
     >
       <div className="flex items-center gap-3 border-b border-line px-5 py-3">

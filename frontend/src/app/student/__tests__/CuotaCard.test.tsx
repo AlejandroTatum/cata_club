@@ -78,7 +78,7 @@ describe("CuotaCard", () => {
   });
 
   it("reads Al día with an ok badge, and still offers the content-sized action", () => {
-    renderCard(situation({ kind: "covered", urgent: false, figure: { value: 40, unit: "días de cobertura" }, headline: "Está al día con el club" }), {
+    renderCard(situation({ kind: "covered", urgent: false, figure: { value: 40, unit: "días de cobertura" }, headline: "Estás al día con el club" }), {
       coverageEnd: "2026-11-30",
     });
     const card = screen.getByTestId("student-cuota-card");
@@ -122,11 +122,11 @@ describe("CuotaCard", () => {
 
     it("spells out the days left, the date, the amount and what happens after paying", () => {
       renderCard(
-        situation({ kind: "covered", urgent: false, figure: { value: 12, unit: "días de cobertura" }, headline: "Está al día con el club" }),
+        situation({ kind: "covered", urgent: false, figure: { value: 12, unit: "días de cobertura" }, headline: "Estás al día con el club" }),
         { coverageEnd: "2026-11-03", monthlyPrice: "25.00", today: TODAY },
       );
       expect(screen.getByTestId("cuota-next-step")).toHaveTextContent(
-        "Vence en 12 días (03/11/2026). Pague $25,00 y suba el comprobante; el club lo revisa y le avisamos aquí.",
+        "Vence en 12 días (03/11/2026). Paga $25,00 y sube el comprobante; el club lo revisa y te avisamos aquí.",
       );
     });
 
@@ -151,7 +151,7 @@ describe("CuotaCard", () => {
       renderCard(situation({}), { coverageEnd: "2026-10-19", monthlyPrice: "25.00", today: TODAY });
       expect(screen.getByRole("link", { name: /Registrar un pago/ }).className).toMatch(/bg-cata-red/);
       expect(screen.getByTestId("cuota-next-step")).toHaveTextContent(
-        "Venció hace 3 días (19/10/2026). Pague $25,00 y suba el comprobante",
+        "Venció hace 3 días (19/10/2026). Paga $25,00 y sube el comprobante",
       );
     });
 

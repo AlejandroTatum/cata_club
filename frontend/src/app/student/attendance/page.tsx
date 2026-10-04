@@ -385,7 +385,7 @@ function StudentAttendanceContent(): React.ReactElement {
         setState({
           status: "error",
           message:
-            toUserMessage(error, "No se pudo cargar su historial de asistencia."),
+            toUserMessage(error, "No se pudo cargar tu historial de asistencia."),
         });
       });
     return () => {
@@ -409,7 +409,7 @@ function StudentAttendanceContent(): React.ReactElement {
 
       {state.status === "loading" && (
         <div className="card">
-          <LoadingState label="Cargando su asistencia…" />
+          <LoadingState label="Cargando tu asistencia…" />
         </div>
       )}
       {state.status === "error" && (
@@ -462,8 +462,8 @@ function AttendanceView({
       {selectedProfile === null ? (
         <EmptyState
           icon={<User size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-          title="No se encontraron estudiantes asociados a esta cuenta"
-          description="Inscríbete como jugador o agregue un hijo o dependiente para empezar a ver asistencias."
+          title="No se encontraron jugadores asociados a esta cuenta"
+          description="Inscríbete como jugador o agrega un hijo o dependiente para empezar a ver asistencias."
           action={
             <Link href="/student" className={buttonClasses("secondary", "sm")}>
               Ir a mi cuenta

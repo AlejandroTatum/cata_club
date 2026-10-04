@@ -622,7 +622,7 @@ describe("describePaymentSituation", () => {
     const result = describePaymentSituation(situation({ coverageEnd: "2026-07-28" }), TODAY);
     expect(result.kind).toBe("ending-soon");
     expect(result.figure).toEqual({ value: 3, unit: "días de cobertura" });
-    expect(result.headline).toBe("Le quedan 3 días de cobertura");
+    expect(result.headline).toBe("Te quedan 3 días de cobertura");
     expect(result.urgent).toBe(true);
   });
 
@@ -632,7 +632,7 @@ describe("describePaymentSituation", () => {
     );
     const today = describePaymentSituation(situation({ coverageEnd: "2026-07-25" }), TODAY);
     expect(today.figure).toBeNull();
-    expect(today.headline).toBe("Su cobertura termina hoy");
+    expect(today.headline).toBe("Tu cobertura termina hoy");
     expect(today.urgent).toBe(true);
   });
 
@@ -640,7 +640,7 @@ describe("describePaymentSituation", () => {
     const result = describePaymentSituation(situation({ coverageEnd: "2026-07-20" }), TODAY);
     expect(result.kind).toBe("expired");
     expect(result.figure).toEqual({ value: 5, unit: "días vencida" });
-    expect(result.headline).toBe("Su cobertura venció");
+    expect(result.headline).toBe("Tu cobertura venció");
     expect(result.urgent).toBe(true);
     expect(result.canRegister).toBe(true);
   });
@@ -649,13 +649,13 @@ describe("describePaymentSituation", () => {
     const result = describePaymentSituation(situation({ coverageEnd: null }), TODAY);
     expect(result.kind).toBe("never-paid");
     expect(result.figure).toBeNull();
-    expect(result.headline).toBe("No tiene ningún pago aprobado");
+    expect(result.headline).toBe("No tienes ningún pago aprobado");
     expect(result.detail).toMatch(/no lleva un saldo pendiente/i);
     expect(result.urgent).toBe(true);
     expect(result.canRegister).toBe(true);
   });
 
-  it("names the dependent when the reader is the guardian, and keeps usted for their own profile", () => {
+  it("names the dependent when the reader is the guardian, and uses «tú» for their own profile", () => {
     const guardian = describePaymentSituation(
       situation({ studentName: "Sofía", viewingOwnProfile: false, coverageEnd: "2026-07-28" }),
       TODAY,
@@ -663,7 +663,7 @@ describe("describePaymentSituation", () => {
     expect(guardian.headline).toBe("A Sofía le quedan 3 días de cobertura");
 
     const own = describePaymentSituation(situation({ coverageEnd: "2026-07-28" }), TODAY);
-    expect(own.headline).toBe("Le quedan 3 días de cobertura");
+    expect(own.headline).toBe("Te quedan 3 días de cobertura");
   });
 
   it("hands a pending payment back to the club instead of asking for another one", () => {
@@ -672,7 +672,7 @@ describe("describePaymentSituation", () => {
       TODAY,
     );
     expect(result.kind).toBe("awaiting-validation");
-    expect(result.figure).toEqual({ value: 1, unit: "pago en revisión" });
+    expect(result.figure).toEqual({ value: 1, unit: "pago por validar" });
     expect(result.canRegister).toBe(false);
     expect(result.urgent).toBe(false);
   });
@@ -685,7 +685,7 @@ describe("describePaymentSituation", () => {
     expect(result.kind).toBe("no-membership");
     expect(result.canRegister).toBe(false);
     expect(result.priceNote).toBeNull();
-    expect(result.detail).toMatch(/acérquese al club/i);
+    expect(result.detail).toMatch(/acércate al club/i);
   });
 
   it("sends a minor to the representative the backend actually has on record", () => {
@@ -792,7 +792,7 @@ describe("describePaymentSituation", () => {
 // — the reading of the situation was never carnet-specific, only its host was.
 //
 // `compactPaymentLabel` used to live beside it and no longer exists. Its whole
-// job was abbreviating "Está al día con el club" to "Al día" so a pill on the
+// job was abbreviating "Estás al día con el club" to "Al día" so a pill on the
 // carnet could hold it; with the pill gone, the Cuota card has room for the
 // sentence and a second, shorter wording of one state is a second wording.
 // ---------------------------------------------------------------------------
@@ -1049,7 +1049,7 @@ describe("describeCuotaBadge", () => {
 
   it("gives every other state a short neutral or specific label", () => {
     expect(describeCuotaBadge(situation("never-paid"))).toEqual({ label: "Sin pagos", tone: "bad" });
-    expect(describeCuotaBadge(situation("awaiting-validation"))).toEqual({ label: "En revisión", tone: "neutral" });
+    expect(describeCuotaBadge(situation("awaiting-validation"))).toEqual({ label: "Por validar", tone: "neutral" });
     expect(describeCuotaBadge(situation("no-membership"))).toEqual({ label: "Sin membresía", tone: "neutral" });
     expect(describeCuotaBadge(situation("gratuitous"))).toEqual({ label: "Sin costo", tone: "ok" });
     expect(describeCuotaBadge(situation("minor-blocked"))).toEqual({ label: "Lo gestiona el club", tone: "neutral" });
@@ -1069,8 +1069,8 @@ describe("QA4 FAM-02 — a suspended membership is not «Al día»", () => {
 
     expect(result.kind).toBe("suspended");
     expect(result.headline).toBe("La membresía de Sofia está suspendida.");
-    expect(result.detail).toContain("Su cobertura sigue vigente hasta 02/11/2026.");
-    expect(result.detail).toContain("Escriba al club para reactivarla.");
+    expect(result.detail).toContain("Tu cobertura sigue vigente hasta 02/11/2026.");
+    expect(result.detail).toContain("Escribe al club para reactivarla.");
     expect(result.canRegister).toBe(false);
   });
 
@@ -1080,14 +1080,14 @@ describe("QA4 FAM-02 — a suspended membership is not «Al día»", () => {
       TODAY,
     );
 
-    expect(result.headline).toBe("Su membresía está suspendida.");
+    expect(result.headline).toBe("Tu membresía está suspendida.");
     expect(result.detail).toContain("Motivo: Lesión prolongada.");
   });
 
   it("says the coverage lapsed when its date is already past", () => {
     const result = describePaymentSituation(situation({ suspended: true, coverageEnd: "2026-07-01" }), TODAY);
 
-    expect(result.detail).toContain("Su cobertura venció el 01/07/2026.");
+    expect(result.detail).toContain("Tu cobertura venció el 01/07/2026.");
   });
 
   it("labels the badge and the family strip «Suspendida»", () => {
@@ -1127,12 +1127,12 @@ describe("QA4 FAM-11 — the latest rejected payment is surfaced", () => {
       pago(1, "RECHAZADO", "2026-11-03T10:00:00", { motivoRechazo: "El comprobante no es legible" }),
     ]);
 
-    expect(notice).toBe("Su pago de $25,00 del 03/11/2026 fue rechazado: El comprobante no es legible. Registre uno nuevo.");
+    expect(notice).toBe("Tu pago de $25,00 del 03/11/2026 fue rechazado: El comprobante no es legible. Registra uno nuevo.");
   });
 
   it("omits the reason when the club did not record one", () => {
     expect(describeRejectedPago([pago(1, "RECHAZADO", "2026-11-03T10:00:00")])).toBe(
-      "Su pago de $25,00 del 03/11/2026 fue rechazado. Registre uno nuevo.",
+      "Tu pago de $25,00 del 03/11/2026 fue rechazado. Registra uno nuevo.",
     );
   });
 
@@ -1187,7 +1187,7 @@ describe("QA4 REG-26 — «el club», not «administración»", () => {
       TODAY,
     );
 
-    expect(result.detail).toContain("Acérquese al club para activarla");
+    expect(result.detail).toContain("Acércate al club para activarla");
     expect(result.detail).not.toMatch(/administración/i);
   });
 });

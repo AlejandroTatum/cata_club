@@ -91,7 +91,7 @@ function MedicalRecordGuide(): React.ReactElement {
     <InfoPanel title="Cómo completar la ficha médica" as="div">
       <ol className="grid list-decimal gap-y-field pl-4">
         <li>El tipo de sangre y el teléfono de emergencia son obligatorios.</li>
-        <li>Al guardar se reemplaza la ficha completa: revise alergias y enfermedades antes.</li>
+        <li>Al guardar se reemplaza la ficha completa: revisa alergias y enfermedades antes.</li>
         <li>La tarjeta de emergencia se actualiza con cada cambio guardado.</li>
       </ol>
     </InfoPanel>
@@ -127,8 +127,8 @@ function RepresentanteMedicalRecordView({
     return (
       <EmptyState
         icon={<Stethoscope size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-        title="No se encontraron estudiantes asociados a esta cuenta"
-        description="Agregue un hijo o dependiente para ver y corregir su ficha médica."
+        title="No se encontraron jugadores asociados a esta cuenta"
+        description="Agrega un hijo o dependiente para ver y corregir su ficha médica."
         // `fill` because this is the page's ONLY block: without it the
         // statement sits at the top of a window whose remaining 600px stay
         // blank, which is the reproche this pass exists to close (D11b).
@@ -231,7 +231,7 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
       // typing the URL landed back on /student with no idea why, the exact
       // same 403 this avoids surfacing but with no explanation at all.
       showInfo(
-        "Su ficha médica la corrige su representante o un administrador del club.",
+        "Tu ficha médica la corrige tu representante o un administrador del club.",
       );
       router.replace("/student");
     }
@@ -254,8 +254,8 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
 
   const subtitle =
     role === "representante"
-      ? "Consulte y corrija los datos de salud de cada hijo o dependiente a su cargo."
-      : "Consulte y corrija sus propios datos de salud.";
+      ? "Consulta y corrige los datos de salud de cada hijo o dependiente a tu cargo."
+      : "Consulta y corrige tus propios datos de salud.";
 
   return (
     // Default measure, like every other screen: the page column never narrows
@@ -264,7 +264,7 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
     <AppShell title="Ficha médica" subtitle={subtitle} back={<BackLink href="/student" />}>
       {state.status === "loading" && (
         <div className="card">
-          <LoadingState label="Cargando su cuenta…" />
+          <LoadingState label="Cargando tu cuenta…" />
         </div>
       )}
       {state.status === "error" && (
@@ -285,7 +285,7 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
       )}
       {state.status === "ready" && role === "estudiante" && !state.data.self && (
         <ErrorState
-          message="No se pudo cargar su perfil. Intente de nuevo en unos minutos."
+          message="No se pudo cargar tu perfil. Intenta de nuevo en unos minutos."
           onRetry={() => setReloadToken((n) => n + 1)}
         />
       )}

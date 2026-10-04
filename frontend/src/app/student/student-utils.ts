@@ -685,9 +685,9 @@ export function describeRejectedPago(
   const latest = [...pagos].sort((a, b) => b.fechaRegistro.localeCompare(a.fechaRegistro))[0];
   if (!latest || latest.estadoPago !== "RECHAZADO") return null;
   const reason = latest.motivoRechazo?.trim();
-  return `Su pago de ${formatCurrency(latest.monto)} del ${formatDate(latest.fechaRegistro)} fue rechazado${
+  return `Tu pago de ${formatCurrency(latest.monto)} del ${formatDate(latest.fechaRegistro)} fue rechazado${
     reason ? `: ${reason}` : ""
-  }. Registre uno nuevo.`;
+  }. Registra uno nuevo.`;
 }
 
 /**
@@ -764,14 +764,9 @@ export interface PaymentSituation {
   urgent: boolean;
 }
 
-/** "A Sofía le quedan…" for a guardian, "Le quedan…" for the account holder. */
+/** "A Sofía le quedan…" for a guardian, "Te quedan…" for the account holder. */
 function possessivePrefix(input: PaymentSituationInput): string {
   return input.viewingOwnProfile ? "" : `A ${input.studentName} `;
-}
-
-/** "Sofía no tiene…" for a guardian, "No tiene…" for the account holder. */
-function subjectPrefix(input: PaymentSituationInput): string {
-  return input.viewingOwnProfile ? "" : `${input.studentName} `;
 }
 
 /** Upper-case the first letter, so the same clause can open a sentence or sit inside one. */
@@ -810,7 +805,7 @@ export function describePaymentSituation(
   if (!input.hasMembership && situation.kind !== "no-membership") {
     return {
       ...situation,
-      detail: `${situation.detail} El club no tiene una membresía activa a este nombre: acérquese a administración para reactivarla.`,
+      detail: `${situation.detail} El club no tiene una membresía activa a este nombre: acércate a administración para reactivarla.`,
       canRegister: false,
       urgent: false,
     };
@@ -833,7 +828,7 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
         daysLeft !== null && daysLeft > 0
           ? { value: daysLeft, unit: daysLeft === 1 ? "día de cobertura" : "días de cobertura" }
           : null,
-      headline: "Sus pagos los registra el club",
+      headline: "Tus pagos los registra el club",
       // The old copy said "Lo hace su representante desde la suya" to EVERY
       // minor, including the ones whose `representanteId` is null — it named a
       // person who does not exist and left the reader with nowhere to go.
@@ -847,8 +842,8 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
       // financial module), so this stays informational text, never a link —
       // but it now names BOTH real paths instead of only the in-person one.
       detail: input.representanteName
-        ? `Un estudiante menor de edad no registra pagos desde su propia cuenta: lo hace ${input.representanteName} desde la suya.`
-        : 'Un estudiante menor de edad no registra pagos desde su propia cuenta. Su cuenta no tiene un representante vinculado: pídale a la persona responsable que use "Agregar dependiente" en su cuenta para vincularse, o acérquese a administración del club para que lo vinculen.',
+        ? `Un jugador menor de edad no registra pagos desde su propia cuenta: lo hace ${input.representanteName} desde la suya.`
+        : 'Un jugador menor de edad no registra pagos desde su propia cuenta. Su cuenta no tiene un representante vinculado: pídele a la persona responsable que use "Agregar dependiente" en su cuenta para vincularse, o acércate a administración del club para que lo vinculen.',
       priceNote,
       canRegister: false,
       urgent: false,
@@ -862,9 +857,11 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
     return {
       kind: "no-membership",
       figure: null,
-      headline: sentence(`${subjectPrefix(input)}todavía no tiene una membresía`),
+      headline: input.viewingOwnProfile
+        ? "Todavía no tienes una membresía"
+        : `${input.studentName} todavía no tiene una membresía`,
       detail:
-        "El club crea la membresía al registrar el primer pago. Acérquese al club para activarla y después podrá renovarla desde aquí.",
+        "El club crea la membresía al registrar el primer pago. Acércate al club para activarla y después podrá renovarla desde aquí.",
       priceNote,
       canRegister: false,
       urgent: false,
@@ -877,17 +874,17 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
   if (input.suspended) {
     const coverage = coverageEnd
       ? (daysLeft ?? 0) < 0
-        ? ` Su cobertura venció el ${formatDate(coverageEnd)}.`
-        : ` Su cobertura sigue vigente hasta ${formatDate(coverageEnd)}.`
+        ? ` Tu cobertura venció el ${formatDate(coverageEnd)}.`
+        : ` Tu cobertura sigue vigente hasta ${formatDate(coverageEnd)}.`
       : "";
     const reason = input.motivoSuspension ? ` Motivo: ${input.motivoSuspension}.` : "";
     return {
       kind: "suspended",
       figure: null,
       headline: input.viewingOwnProfile
-        ? "Su membresía está suspendida."
+        ? "Tu membresía está suspendida."
         : `La membresía de ${input.studentName} está suspendida.`,
-      detail: `${coverage}${reason} Escriba al club para reactivarla.`.trim(),
+      detail: `${coverage}${reason} Escribe al club para reactivarla.`.trim(),
       priceNote,
       canRegister: false,
       urgent: false,
@@ -898,9 +895,9 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
     const one = input.pendingCount === 1;
     return {
       kind: "awaiting-validation",
-      figure: { value: input.pendingCount, unit: one ? "pago en revisión" : "pagos en revisión" },
+      figure: { value: input.pendingCount, unit: one ? "pago por validar" : "pagos por validar" },
       headline: one
-        ? `El club está validando ${input.viewingOwnProfile ? "su pago" : `el pago de ${input.studentName}`}`
+        ? `El club está validando ${input.viewingOwnProfile ? "tu pago" : `el pago de ${input.studentName}`}`
         : `El club está validando ${input.pendingCount} pagos${input.viewingOwnProfile ? "" : ` de ${input.studentName}`}`,
       detail: coverageEnd
         ? `Mientras tanto, ${coverageClause(coverageEnd, (daysLeft ?? 0) < 0)}.`
@@ -927,10 +924,10 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
       kind: "gratuitous",
       figure: null,
       headline: input.viewingOwnProfile
-        ? "Su membresía tiene gratuidad familiar"
+        ? "Tu membresía tiene gratuidad familiar"
         : `La membresía de ${input.studentName} tiene gratuidad familiar`,
       detail:
-        "El club le otorgó gratuidad familiar por ser el cuarto integrante de la familia inscrito: esta membresía no genera ningún cobro. Para extender su cobertura, acérquese a administración del club.",
+        "El club otorgó gratuidad familiar por ser el cuarto integrante de la familia inscrito: esta membresía no genera ningún cobro. Para extender la cobertura, acércate a administración del club.",
       priceNote: null,
       canRegister: false,
       urgent: false,
@@ -941,9 +938,11 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
     return {
       kind: "never-paid",
       figure: null,
-      headline: sentence(`${subjectPrefix(input)}no tiene ningún pago aprobado`),
+      headline: input.viewingOwnProfile
+        ? "No tienes ningún pago aprobado"
+        : `${input.studentName} no tiene ningún pago aprobado`,
       detail:
-        "El club no lleva un saldo pendiente: usted registra el pago del período que quiere cubrir y el club lo valida.",
+        "El club no lleva un saldo pendiente: tú registras el pago del período que quiere cubrir y el club lo valida.",
       priceNote,
       canRegister: true,
       urgent: true,
@@ -956,7 +955,7 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
       kind: "expired",
       figure: { value: overdue, unit: overdue === 1 ? "día vencida" : "días vencida" },
       headline: input.viewingOwnProfile
-        ? "Su cobertura venció"
+        ? "Tu cobertura venció"
         : `La cobertura de ${input.studentName} venció`,
       detail: sentence(`${coverageClause(coverageEnd, true)}.`),
       priceNote,
@@ -977,10 +976,10 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
       headline:
         daysLeft === 0
           ? input.viewingOwnProfile
-            ? "Su cobertura termina hoy"
+            ? "Tu cobertura termina hoy"
             : `La cobertura de ${input.studentName} termina hoy`
           : sentence(
-              `${possessivePrefix(input)}le ${
+              `${input.viewingOwnProfile ? "te" : `${possessivePrefix(input)}le`} ${
                 daysLeft === 1 ? "queda 1 día" : `quedan ${daysLeft} días`
               } de cobertura`,
             ),
@@ -995,7 +994,7 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
     kind: "covered",
     figure: { value: daysLeft, unit: "días de cobertura" },
     headline: input.viewingOwnProfile
-      ? "Está al día con el club"
+      ? "Estás al día con el club"
       : `${input.studentName} está al día con el club`,
     detail: sentence(`${coverageClause(coverageEnd, false)}.`),
     priceNote,
@@ -1051,7 +1050,7 @@ export function describeCuotaBadge(situation: PaymentSituation): { label: string
     case "covered":
       return { label: "Al día", tone: "ok" };
     case "awaiting-validation":
-      return { label: "En revisión", tone: "neutral" };
+      return { label: "Por validar", tone: "neutral" };
     case "no-membership":
       return { label: "Sin membresía", tone: "neutral" };
     case "suspended":
