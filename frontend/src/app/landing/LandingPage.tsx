@@ -226,7 +226,7 @@ function Hero(): React.ReactElement {
         <h1 className="landing-display" data-split>FORMANDO <span className="landing-hero-accent">CAMPEONES</span> PARA LA VIDA</h1>
         <p>Únase a nuestro club, donde la técnica y el carácter se forjan en cada punto.</p>
         <div className="landing-hero-actions">
-          <Link className="landing-button" href={ENROLL_HREF}>Inscríbase <ArrowRight aria-hidden="true" /></Link>
+          <Link className="landing-button" href={ENROLL_HREF}>Inscríbete <ArrowRight aria-hidden="true" /></Link>
           <a className="landing-button landing-button-outline" href="#horarios">Ver horarios</a>
         </div>
         <div className="landing-hero-note"><Stars /><span>Club deportivo formativo · Desde 2013</span></div>
@@ -353,7 +353,7 @@ function Motto(): React.ReactElement {
         <i />
       </span>
       <p className="landing-motto-lead" data-motto-copy>Cada entrenamiento es una oportunidad para superarse.</p>
-      <Link className="landing-button" data-motto-cta href={ENROLL_HREF}>Inscríbase ya <ArrowRight aria-hidden="true" /></Link>
+      <Link className="landing-button" data-motto-cta href={ENROLL_HREF}>Inscríbete ya <ArrowRight aria-hidden="true" /></Link>
       <Stars />
     </section>
   );
@@ -363,7 +363,7 @@ function Schedule(): React.ReactElement {
   const state = useContext(SchedulesContext);
   // Once the catalog is ready the header leads the category rail (the
   // selector draws it); until then it stands alone above the status line.
-  const header = <SectionHeader eyebrow="Entrenamientos" title="Elija una categoría" />;
+  const header = <SectionHeader eyebrow="Entrenamientos" title="Elige una categoría" />;
 
   return (
     <section className="landing-section landing-schedule" id="horarios" data-motion-section data-testid="motion-section">
@@ -449,7 +449,7 @@ function Location(): React.ReactElement {
           </dd>
           <dd>
             <a className="landing-contact-action" href={toWhatsAppLink(contact.whatsapp[0])} target="_blank" rel="noreferrer">
-              <MessageCircle aria-hidden="true" /> Escríbanos por WhatsApp
+              <MessageCircle aria-hidden="true" /> Escríbenos por WhatsApp
             </a>
           </dd>
         </div>

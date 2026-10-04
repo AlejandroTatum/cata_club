@@ -22,16 +22,16 @@ export const ENROLL_CHILD_HREF = `${ENROLL_HREF}?type=child`;
 
 const PRICES_STATUS: Record<Exclude<TarifasState["kind"], "ready">, string> = {
   loading: "Cargando valores…",
-  empty: "Los valores no están publicados todavía. Escríbanos por WhatsApp y se los indicamos.",
-  error: "No se pudieron cargar los valores. Escríbanos por WhatsApp y se los indicamos.",
+  empty: "Los valores no están publicados todavía. Escríbenos por WhatsApp y te los indicamos.",
+  error: "No se pudieron cargar los valores. Escríbenos por WhatsApp y te los indicamos.",
 };
 
-const STEPS = ["Elija la categoría", "Inscríbase en línea", "Pague y empiece"] as const;
+const STEPS = ["Elige la categoría", "Inscríbete en línea", "Paga y empieza"] as const;
 
 const FAQ: { question: string; answer: string }[] = [
   { question: "¿Cuánto cuesta?", answer: "Los valores vigentes de cada plan están en la sección Mensualidad, más arriba en esta página." },
-  { question: "¿Qué debo llevar?", answer: "Escríbanos por WhatsApp y le indicamos qué llevar según la categoría." },
-  { question: "¿Cómo es la primera clase?", answer: "Elija la categoría, inscríbase en línea y escríbanos por WhatsApp para consultar los cupos y coordinar su primer día." },
+  { question: "¿Qué debo llevar?", answer: "Escríbenos por WhatsApp y te indicamos qué llevar según la categoría." },
+  { question: "¿Cómo es la primera clase?", answer: "Elige la categoría, inscríbete en línea y escríbenos por WhatsApp para consultar los cupos y coordinar tu primer día." },
 ];
 
 function whatsAppHref(): string {
@@ -103,7 +103,7 @@ export function Faq(): React.ReactElement {
 export function MobileBar(): React.ReactElement {
   return (
     <div className="landing-mobile-bar">
-      <Link className="landing-button" href={ENROLL_HREF}>Inscríbase <ArrowRight aria-hidden="true" /></Link>
+      <Link className="landing-button" href={ENROLL_HREF}>Inscríbete <ArrowRight aria-hidden="true" /></Link>
       <a className="landing-mobile-bar-whatsapp" href={whatsAppHref()} target="_blank" rel="noreferrer" aria-label="Escribir por WhatsApp">
         <MessageCircle aria-hidden="true" />
       </a>

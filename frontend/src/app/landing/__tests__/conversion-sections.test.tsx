@@ -63,7 +63,7 @@ describe("steps and enrollment entry points (LAN-14)", () => {
   it("shows the three steps in order", () => {
     render(<LandingPage />);
     const steps = Array.from(document.querySelectorAll(".landing-steps-list li")).map((li) => li.textContent);
-    expect(steps).toEqual(["Elija la categoría", "Inscríbase en línea", "Pague y empiece"]);
+    expect(steps).toEqual(["Elige la categoría", "Inscríbete en línea", "Paga y empieza"]);
   });
 
   it("sends adults and parents to the matching enrollment type", () => {
@@ -81,7 +81,7 @@ describe("steps and enrollment entry points (LAN-14)", () => {
   it("adds a mobile bar with the enrollment link and a labeled WhatsApp link", () => {
     const { container } = render(<LandingPage />);
     const bar = container.querySelector(".landing-mobile-bar") as HTMLElement;
-    expect(within(bar).getByRole("link", { name: /Inscríbase/ })).toHaveAttribute("href", "/student/enroll");
+    expect(within(bar).getByRole("link", { name: /Inscríbete/ })).toHaveAttribute("href", "/student/enroll");
     expect(within(bar).getByRole("link", { name: "Escribir por WhatsApp" })).toHaveAttribute("href", toWhatsAppLink(landingConfig.contact.whatsapp[0]));
   });
 

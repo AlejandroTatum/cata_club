@@ -19,7 +19,7 @@ export const HERO_PHOTOS: HeroPhoto[] = [
   },
   {
     src: "/landing/hero-competition.jpg",
-    alt: "Dos estudiantes de Cata Club posando",
+    alt: "Dos jugadores de Cata Club posando",
     objectPosition: "50% 42%",
   },
   {

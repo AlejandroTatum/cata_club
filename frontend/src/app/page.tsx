@@ -29,7 +29,7 @@ const playfair = localFont({ src: "../../public/fonts/playfair-display-600.woff2
 export const metadata: Metadata = {
   title: { absolute: "Cata Club — Tenis de Mesa en Loja" },
   description:
-    "Club formativo de tenis de mesa en Loja, Ecuador. Entrenamientos para niños, jóvenes y adultos de lunes a sábado, junto al Coliseo Ciudad de Loja. Inscríbase o escríbanos por WhatsApp.",
+    "Club formativo de tenis de mesa en Loja, Ecuador. Entrenamientos para niños, jóvenes y adultos de lunes a sábado, junto al Coliseo Ciudad de Loja. Inscríbete o escríbenos por WhatsApp.",
   ...publicPageMetadata("/"),
   openGraph: {
     ...socialMetadata().openGraph,
