@@ -98,7 +98,7 @@ def _cuerpo_de_inscripcion(semilla: int = 950) -> dict:
         },
         # Issue #1138: camino representado -- sin contacto de emergencia
         # propio (se deriva del representante).
-        "ficha_medica": {"tipo_sangre": TipoSangre.O_POSITIVO.value, "enfermedades": []},
+        "ficha_medica": {"tipo_sangre": TipoSangre.O_POSITIVO.value, "alergias": "Ninguna", "enfermedades": ["Ninguno"]},
         "acepta_consentimientos": True,
     }
 

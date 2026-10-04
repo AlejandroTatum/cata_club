@@ -31,6 +31,11 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => searchParams,
 }));
 
+const mockShowInfo = vi.fn();
+vi.mock("@/contexts/ToastContext", () => ({
+  useToast: () => ({ showInfo: mockShowInfo }),
+}));
+
 vi.mock("next/link", () => ({
   __esModule: true,
   default: ({
@@ -361,9 +366,10 @@ describe("StudentAttendancePage — guardian with dependents", () => {
 
     expect(await screen.findByText("3 de 5 sesiones")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Estudiante"), { target: { value: "20" } });
+    fireEvent.click(screen.getByRole("button", { name: /Sofia Vera/ }));
 
     expect(await screen.findByText("22/07/2026")).toBeInTheDocument();
+    expect(mockShowInfo).toHaveBeenCalledWith("Ahora ves a Sofia");
     expect(screen.queryByText("3 de 5 sesiones")).not.toBeInTheDocument();
   });
 });
@@ -483,8 +489,9 @@ describe("StudentAttendancePage — the representative with her own membership (
 
     render(<StudentAttendancePage />);
 
-    const selector = await screen.findByLabelText("Estudiante");
-    expect(within(selector).getByRole("option", { name: "Marta Reyes" })).toBeInTheDocument();
-    expect(within(selector).getByRole("option", { name: "Sofía Vera" })).toBeInTheDocument();
+    const strip = await screen.findByRole("group", { name: "Jugador" });
+    expect(within(strip).getByRole("button", { name: /Marta Reyes/ })).toBeInTheDocument();
+    expect(within(strip).getByRole("button", { name: /Sofía Vera/ })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Estudiante")).not.toBeInTheDocument();
   });
 });

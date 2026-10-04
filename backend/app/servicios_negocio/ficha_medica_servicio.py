@@ -93,6 +93,9 @@ class FichaMedicaServicio:
                 al_crear=True,
                 telefono_derivado=persona.representante_id is not None,
             )
+            # Issue #1574: el upsert crea la ficha completa, y completa
+            # incluye alergias y enfermedades (o «Ninguno»).
+            self._exigir_declaracion_de_salud(datos)
             # Issue #860, mismo motivo que en `crear_ficha_medica`: el upsert
             # del PATCH tampoco recibe el teléfono personal en el payload.
             if telefonos_coinciden(persona.telefono, datos.telefono_emergencia):
@@ -148,6 +151,19 @@ class FichaMedicaServicio:
         resultado = self.repo.guardar_cambios(ficha)
         self.db.commit()
         return resultado
+
+    @staticmethod
+    def _exigir_declaracion_de_salud(datos: FichaMedicaUpdateDTO) -> None:
+        """Issue #1574: una ficha NUEVA declara sus alergias y enfermedades.
+
+        Un PATCH sobre una ficha existente sigue siendo parcial; solo el
+        upsert que CREA la fila las exige, porque nace completa o no nace.
+        """
+        if datos.alergias is None or datos.enfermedades is None:
+            raise OperacionInvalida(
+                "Para crear la ficha médica debe indicar las alergias y las "
+                'enfermedades (escribe "Ninguno" si no hay).'
+            )
 
     @staticmethod
     def _exigir_ficha_completa(

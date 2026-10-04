@@ -182,13 +182,13 @@ def test_endpoint_admin_de_roles_rechaza_el_segundo_rol(client, db_session):
 
 def _ficha_dto() -> EnrollmentFichaMedicaMenorDTO:
     # Issue #1138: camino representado -- sin contacto de emergencia propio.
-    return EnrollmentFichaMedicaMenorDTO(tipo_sangre="O_POSITIVO", enfermedades=[])
+    return EnrollmentFichaMedicaMenorDTO(tipo_sangre="O_POSITIVO", alergias="Ninguna", enfermedades=["Ninguno"])
 
 
 def _ficha_dto_adulto() -> EnrollmentFichaMedicaDTO:
     # Camino adulto: sigue exigiendo contacto de emergencia propio.
     return EnrollmentFichaMedicaDTO(
-        tipo_sangre="O_POSITIVO", enfermedades=[],
+        tipo_sangre="O_POSITIVO", alergias="Ninguna", enfermedades=["Ninguno"],
         contacto_emergencia="María Torres", telefono_emergencia="0991112233",
     )
 

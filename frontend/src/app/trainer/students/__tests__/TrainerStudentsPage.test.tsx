@@ -586,6 +586,17 @@ describe("maestro–detalle en escritorio", () => {
     expect(mockFetchFichaEmergencia).not.toHaveBeenCalled();
   });
 
+  it("el panel de la ficha no flota al desplazar la página (#1583)", async () => {
+    setDesktop(true);
+    render(<TrainerStudentsPage />);
+
+    const ghost = await screen.findByTestId("ficha-panel-ghost");
+    expect(ghost.className).not.toMatch(/sticky/);
+    fireEvent.click((await screen.findAllByRole("button", { name: /ficha/i }))[0]);
+    const panel = await screen.findByTestId("ficha-panel");
+    expect(panel.className).not.toMatch(/sticky/);
+  });
+
   it("la columna lateral trae siempre la guía «Cómo usar la nómina»", async () => {
     setDesktop(true);
     render(<TrainerStudentsPage />);

@@ -848,6 +848,9 @@ describe("LandingPage", (): void => {
       ["Valores", "#valores"],
       ["Galería", "#galeria"],
       ["Horarios", "#horarios"],
+      ["Mensualidad", "#mensualidad"],
+      ["Cómo empezar", "#como-empezar"],
+      ["Preguntas", "#preguntas"],
       ["Contacto", "#contacto"],
     ]);
   });
@@ -962,6 +965,15 @@ describe("LandingPage", (): void => {
     const hrefs = Array.from(services.querySelectorAll("a")).map((link): string | null => link.getAttribute("href"));
     expect(hrefs.length).toBeGreaterThan(0);
     expect(new Set(hrefs).size).toBe(hrefs.length);
+  });
+
+  it("links the footer to Mensualidad, Cómo empezar and Preguntas", (): void => {
+    render(<LandingPage />);
+
+    const footer = document.querySelector(".landing-footer") as HTMLElement;
+    for (const [name, href] of [["Mensualidad", "#mensualidad"], ["Cómo empezar", "#como-empezar"], ["Preguntas", "#preguntas"]]) {
+      expect(within(footer).getByRole("link", { name })).toHaveAttribute("href", href);
+    }
   });
 
   it("derives the footer copyright year instead of hardcoding it", (): void => {

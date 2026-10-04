@@ -37,6 +37,8 @@ function validForm(overrides: Partial<EnrollFormData> = {}): EnrollFormData {
     contraseniaRepresentante: "password8",
     contraseniaRepresentanteConfirmacion: "password8",
     tipoSangre: BLOOD_TYPES.O_POSITIVO,
+    condicionesSalud: "Ninguno",
+    alergias: "Ninguno",
     contactoEmergencia: "María Pérez",
     // Issue #860: has to differ from `telefono` above — see the same note in
     // validateEnrollStep.test.ts's `validForm`. Issue #1296: both are now the
@@ -219,12 +221,17 @@ describe("validateEnrollFields", () => {
     expect(errors.tipoSangre).toBe("Selecciona el tipo de sangre del jugador.");
   });
 
-  it("leaves the optional medical details optional", () => {
-    // Alergias and condicionesSalud are not health-step gates and never were;
-    // #643 must not quietly promote them while tightening the two that matter.
-    const errors = validateEnrollFields("health", validForm({ alergias: "", condicionesSalud: "" }));
+  // Issue #1574: alergias and condiciones de salud are required; «Ninguno» is the answer for "none".
+  it("requires alergias and condiciones de salud, naming «Ninguno» as the way out", () => {
+    const errors = validateEnrollFields("health", validForm({ alergias: " ", condicionesSalud: "" }));
     expect(errors.tipoSangre).toBeUndefined();
     expect(errors.telefonoEmergencia).toBeUndefined();
+    expect(errors.alergias).toBe('Escribe tus alergias o "Ninguno" si no tienes.');
+    expect(errors.condicionesSalud).toBe('Escribe tus enfermedades o "Ninguno" si no tienes.');
+  });
+
+  it("accepts «Ninguno» for both", () => {
+    const errors = validateEnrollFields("health", validForm({ alergias: "Ninguno", condicionesSalud: "Ninguno" }));
     expect(errors.alergias).toBeUndefined();
     expect(errors.condicionesSalud).toBeUndefined();
   });

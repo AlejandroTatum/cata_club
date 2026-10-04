@@ -15,7 +15,7 @@ _EXACTA = "x" * 150
 
 
 def _kwargs(dto_cls, enfermedades):
-    base = {"tipo_sangre": "O_POSITIVO", "enfermedades": enfermedades}
+    base = {"tipo_sangre": "O_POSITIVO", "alergias": "Ninguna", "enfermedades": enfermedades}
     if dto_cls is EnrollmentFichaMedicaDTO:
         base.update(contacto_emergencia="Ana Pérez", telefono_emergencia="0991234567")
     if dto_cls is FichaMedicaCreateDTO:

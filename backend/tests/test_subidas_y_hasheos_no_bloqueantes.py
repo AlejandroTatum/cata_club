@@ -252,7 +252,7 @@ def test_hasheo_lento_de_la_autoinscripcion_publica_no_bloquea_el_event_loop(
             },
             "ficha_medica": {
                 "tipo_sangre": "O_POSITIVO",
-                "enfermedades": [],
+                "alergias": "Ninguna", "enfermedades": ["Ninguno"],
                 "contacto_emergencia": "María Torres",
                 "telefono_emergencia": "0991112233",
             },
@@ -313,7 +313,7 @@ def test_crear_representado_devuelve_una_persona_que_no_vuelve_a_la_base(
         # Issue #1138: sin contacto de emergencia propio (se deriva del
         # representante).
         ficha_medica=EnrollmentFichaMedicaMenorDTO(
-            tipo_sangre="O_POSITIVO", enfermedades=["Asma"],
+            tipo_sangre="O_POSITIVO", alergias="Ninguna", enfermedades=["Asma"],
         ),
     )
 

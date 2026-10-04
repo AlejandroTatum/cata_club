@@ -381,6 +381,9 @@ RUTAS_ROLES_REQUERIDOS = {
     ("DELETE", "/membresias/tipos/{tipo_id}"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/membresias/tipos/{tipo_id}"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/"): frozenset({"ADMINISTRADOR"}),
+    # Issue #1575: alta de entrenadores y reenvío de su invitación.
+    ("POST", "/personas/entrenadores"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/personas/{persona_id}/entrenador/invitacion"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/sponsors/"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/galeria/"): frozenset({"ADMINISTRADOR"}),
         ("POST", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),

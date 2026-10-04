@@ -25,6 +25,7 @@ from sqlalchemy.dialects.postgresql import ExcludeConstraint, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 from app.dominio.cedula import es_cedula_valida
+from app.dominio.invitacion_entrenador import invitacion_pendiente as _es_invitacion_pendiente
 from app.dominio.nombre_propio import nombre_completo, normalizar_nombre_propio
 from app.dominio.telefono import es_telefono_valido
 from app.dominio.enums import (
@@ -679,6 +680,18 @@ class Persona(Base):
         if "usuario" in inspeccionar_orm(self).unloaded:
             return None
         return self.usuario.activo if self.usuario is not None else None
+
+    @property
+    def invitacion_pendiente(self) -> bool:
+        """Entrenador creado por el administrador que aún no fijó su
+        contraseña (issue #1575). Misma guardia que `cuenta_activa`: nunca
+        lazy-loadea; `PersonaRepositorio.listar` carga `usuario` y sus roles."""
+        unloaded = inspeccionar_orm(self).unloaded
+        if "usuario" in unloaded or self.usuario is None:
+            return False
+        if "roles" in inspeccionar_orm(self.usuario).unloaded:
+            return False
+        return _es_invitacion_pendiente(self.usuario)
 
 
 class AntecedentesClub(Base):
