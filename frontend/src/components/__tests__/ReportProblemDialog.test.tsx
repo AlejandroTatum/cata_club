@@ -29,6 +29,43 @@ describe("ReportProblemDialog", () => {
     expect(init?.headers).toEqual({ "X-Request-ID": "req-123" });
   });
 
+  describe("report sent state", () => {
+    async function sendReport(onClose = vi.fn()): Promise<ReturnType<typeof vi.fn>> {
+      vi.spyOn(global, "fetch").mockResolvedValue(new Response(JSON.stringify({ id: 2 }), { status: 201 }));
+      render(<ReportProblemDialog onClose={onClose} />);
+      fireEvent.change(screen.getByRole("textbox", { name: /Qué ocurrió/ }), { target: { value: "Falla" } });
+      fireEvent.click(send());
+      await screen.findByText("Reporte enviado");
+      return onClose;
+    }
+
+    it("shows a compact centred confirmation with a highlighted tracking code", async () => {
+      await sendReport();
+      expect(screen.getByRole("dialog", { name: "Reportar un problema" }).className).toContain("max-w-md");
+      expect(screen.getByText("El club ya lo recibió y lo va a revisar.")).toBeInTheDocument();
+      expect(screen.getByText("#2")).toBeInTheDocument();
+      expect(screen.getByText("Guarda este código si necesitas consultarlo")).toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveTextContent("Reporte enviado");
+    });
+
+    it("focuses Cerrar initially and closes on Escape", async () => {
+      const onClose = await sendReport();
+      const close = screen.getAllByRole("button", { name: "Cerrar" }).find((b) => b.textContent === "Cerrar");
+      expect(close).toHaveFocus();
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    it("omits the code block when the server returns no id", async () => {
+      vi.spyOn(global, "fetch").mockResolvedValue(new Response("{}", { status: 201 }));
+      render(<ReportProblemDialog onClose={vi.fn()} />);
+      fireEvent.change(screen.getByRole("textbox", { name: /Qué ocurrió/ }), { target: { value: "Falla" } });
+      fireEvent.click(send());
+      await screen.findByText("Reporte enviado");
+      expect(screen.queryByText(/Guarda este código/)).toBeNull();
+    });
+  });
+
   it("requires explicit consent for a selected screenshot", async () => {
     const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(new Response("{}", { status: 201 }));
     render(<ReportProblemDialog onClose={vi.fn()} />);
