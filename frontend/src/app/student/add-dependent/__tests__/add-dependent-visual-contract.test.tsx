@@ -140,7 +140,7 @@ describe("the field ids are declared, not slugged from the label", () => {
 });
 
 describe("one mark for one idea", () => {
-  it("marks the optional fields and marks the required blood type", () => {
+  it("marks every health field as required (#1574) and says «Ninguno» is the answer for none", () => {
     render(<AddDependentPage />);
     goToHealthStep();
 
@@ -148,11 +148,14 @@ describe("one mark for one idea", () => {
       `label[for="${addDependentFieldId("tipoSangre")}"]`,
     ) as HTMLElement;
     expect(bloodLabel.textContent).toContain("*");
-    // The two textareas beside it are genuinely optional and say the word.
-    const diseasesLabel = document.querySelector(
-      `label[for="${addDependentFieldId("enfermedades")}"]`,
-    ) as HTMLElement;
-    expect(diseasesLabel.textContent).toContain("(opcional)");
+    for (const field of ["enfermedades", "alergias"] as const) {
+      const label = document.querySelector(
+        `label[for="${addDependentFieldId(field)}"]`,
+      ) as HTMLElement;
+      expect(label.textContent).toContain("*");
+      expect(label.textContent).not.toContain("(opcional)");
+    }
+    expect(screen.getAllByText("Si no tiene, escribe Ninguno.")).toHaveLength(2);
   });
 
   /** Issue #1137, invariante (B): a represented dependent never has a

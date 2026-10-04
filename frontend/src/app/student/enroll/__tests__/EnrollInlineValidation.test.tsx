@@ -135,6 +135,35 @@ describe("EnrollPage — inline step validation", () => {
   });
 });
 
+describe("EnrollPage — health step requires alergias and condiciones (#1574)", () => {
+  function goToHealthStep(): void {
+    render(<EnrollPage />);
+    goToPersonalStep();
+    fillEnrollStudentStep();
+    fireEvent.submit(next().closest("form") as HTMLFormElement);
+  }
+
+  it("marks both fields required and tells the visitor to write «Ninguno» when there is none", () => {
+    goToHealthStep();
+
+    for (const label of [/^Condiciones de salud/i, /^Alergias/i]) {
+      expect(screen.getByLabelText(label)).toBeRequired();
+    }
+    expect(screen.getAllByText("Si no tiene, escribe Ninguno.")).toHaveLength(2);
+  });
+
+  it("names the missing field beside it once the visitor leaves it blank", () => {
+    goToHealthStep();
+
+    fireEvent.blur(screen.getByLabelText(/^Alergias/i));
+    fireEvent.blur(screen.getByLabelText(/^Condiciones de salud/i));
+
+    expect(screen.getByLabelText(/^Alergias/i)).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText('Escribe tus alergias o "Ninguno" si no tienes.')).toBeInTheDocument();
+    expect(screen.getByText('Escribe tus enfermedades o "Ninguno" si no tienes.')).toBeInTheDocument();
+  });
+});
+
 describe("EnrollPage — summary rail", () => {
   it("mirrors the typed name, the computed age and the minor hint", () => {
     render(<EnrollPage />);

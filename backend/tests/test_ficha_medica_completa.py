@@ -66,6 +66,7 @@ def _ficha_valida(db_session, persona: Persona) -> FichaMedica:
     return _ficha_legada(
         db_session, persona,
         tipo_sangre=TipoSangre.O_POSITIVO,
+        alergias="Ninguna",
         contacto_emergencia="Ana Torres",
         telefono_emergencia="0991112233",
     )
@@ -75,7 +76,7 @@ def _cuerpo_creacion(persona_id: int, **overrides) -> dict:
     cuerpo = {
         "tipo_sangre": "O_POSITIVO",
         "persona_id": persona_id,
-        "enfermedades": [],
+        "alergias": "Ninguna", "enfermedades": ["Ninguno"],
         "telefono_emergencia": "0991112233",
     }
     cuerpo.update(overrides)
@@ -191,13 +192,13 @@ def test_crear_ficha_acepta_celular_y_fijo(client, db_session, telefono):
 # Lo que sigue siendo opcional
 # ---------------------------------------------------------------------------
 
-def test_alergias_y_enfermedades_siguen_siendo_opcionales(client, db_session):
+def test_ninguno_se_guarda_como_declaracion_explicita(client, db_session):
     persona = _persona(db_session, 8)
 
     resp = client.post("/api/v1/fichas-medicas/", json=_cuerpo_creacion(persona.id))
 
     assert resp.status_code == 201
-    assert resp.json()["alergias"] is None
+    assert resp.json()["alergias"] == "Ninguna"
     assert resp.json()["enfermedades"] == []
 
 
@@ -354,7 +355,7 @@ def test_crear_ficha_acepta_cuando_la_persona_no_tiene_telefono_personal(client,
     assert resp.status_code == 201
 
 
-def test_patch_si_puede_borrar_alergias_y_el_nombre_del_contacto(client, db_session):
+def test_patch_si_puede_borrar_el_nombre_del_contacto(client, db_session):
     """FIC-5 intacto donde sigue valiendo: estos dos son opcionales, así que
     vaciarlos es una operación legítima y `null` la expresa."""
     persona = _persona(db_session, 14)
@@ -363,11 +364,11 @@ def test_patch_si_puede_borrar_alergias_y_el_nombre_del_contacto(client, db_sess
 
     resp = client.patch(
         f"/api/v1/fichas-medicas/persona/{persona.id}",
-        json={"alergias": None, "contacto_emergencia": None},
+        json={"contacto_emergencia": None},
     )
 
     assert resp.status_code == 200
-    assert resp.json()["alergias"] is None
+    assert resp.json()["alergias"] == "Polen"
     assert resp.json()["contactoEmergencia"] is None
 
 
@@ -492,7 +493,10 @@ def test_el_upsert_por_patch_crea_una_ficha_completa(client, db_session):
 
     resp = client.patch(
         f"/api/v1/fichas-medicas/persona/{persona.id}",
-        json={"tipo_sangre": "O_POSITIVO", "telefono_emergencia": "0991112233"},
+        json={
+            "tipo_sangre": "O_POSITIVO", "telefono_emergencia": "0991112233",
+            "alergias": "Ninguna", "enfermedades": ["Ninguno"],
+        },
     )
 
     assert resp.status_code == 201 or resp.status_code == 200
@@ -514,7 +518,7 @@ def test_el_upsert_por_patch_crea_una_ficha_completa(client, db_session):
 def _dto_ficha_enrollment(**overrides) -> dict:
     cuerpo = {
         "tipo_sangre": "O_POSITIVO",
-        "enfermedades": [],
+        "alergias": "Ninguna", "enfermedades": ["Ninguno"],
         "contacto_emergencia": "María Torres",
         "telefono_emergencia": "0991112233",
     }
@@ -574,17 +578,19 @@ def test_el_nombre_del_contacto_si_es_obligatorio_en_enrollment():
         EnrollmentFichaMedicaDTO(**cuerpo)
 
 
-def test_enrollment_deja_opcionales_alergias_y_enfermedades():
+def test_enrollment_exige_alergias_y_enfermedades():
+    from pydantic import ValidationError
     from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentFichaMedicaDTO
 
-    dto = EnrollmentFichaMedicaDTO(
-        tipo_sangre="O_POSITIVO",
-        contacto_emergencia="María Torres",
-        telefono_emergencia="0991112233",
-    )
+    with pytest.raises(ValidationError) as exc:
+        EnrollmentFichaMedicaDTO(
+            tipo_sangre="O_POSITIVO",
+            contacto_emergencia="María Torres",
+            telefono_emergencia="0991112233",
+        )
 
-    assert dto.alergias is None
-    assert dto.enfermedades == []
+    mensajes = " ".join(e["msg"] for e in exc.value.errors())
+    assert "alergias" in mensajes and "enfermedades" in mensajes
 
 
 def test_enrollment_acepta_una_ficha_completa():
@@ -607,7 +613,7 @@ def test_el_alta_de_un_representado_rechaza_desconocido(client, db_session):
         json={
             "nombres": "Hijo", "apellidos": "Torres", "cedula": cedula_valida(731),
             "fecha_nacimiento": "2015-03-02", "telefono": "0991234567",
-            "ficha_medica": {"tipo_sangre": "DESCONOCIDO", "enfermedades": []},
+            "ficha_medica": {"tipo_sangre": "DESCONOCIDO", "alergias": "Ninguna", "enfermedades": ["Ninguno"]},
         },
     )
 
@@ -624,7 +630,7 @@ def test_el_alta_de_un_representado_acepta_una_ficha_completa(client, db_session
         json={
             "nombres": "Hijo", "apellidos": "Torres", "cedula": cedula_valida(733),
             "fecha_nacimiento": "2015-03-02", "telefono": "0991234567",
-            "ficha_medica": {"tipo_sangre": "O_POSITIVO", "enfermedades": []},
+            "ficha_medica": {"tipo_sangre": "O_POSITIVO", "alergias": "Ninguna", "enfermedades": ["Ninguno"]},
         },
     )
 

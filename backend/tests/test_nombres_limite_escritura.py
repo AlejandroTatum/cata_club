@@ -29,7 +29,7 @@ def _instanciar(dto_cls, **overrides):
         return dto_cls(**kwargs, **_CREDENCIALES)
     if dto_cls is RepresentadoCreateDTO:
         # QA4 FAM-10: la ficha médica del dependiente es obligatoria.
-        return dto_cls(**kwargs, ficha_medica={"tipo_sangre": "O_POSITIVO"})
+        return dto_cls(**kwargs, ficha_medica={"tipo_sangre": "O_POSITIVO", "alergias": "Ninguna", "enfermedades": ["Ninguno"]})
     return dto_cls(**kwargs)
 
 
@@ -114,20 +114,21 @@ def test_dto_acepta_nombres_compuestos_reales_bajo_los_topes(dto_cls, campo, val
 
 def test_ficha_medica_create_dto_normaliza_contacto_emergencia():
     dto = FichaMedicaCreateDTO(
-        tipo_sangre="O_POSITIVO", persona_id=1,
+        tipo_sangre="O_POSITIVO", alergias="Ninguna", enfermedades=["Ninguno"], persona_id=1,
         contacto_emergencia="maría LÓPEZ", telefono_emergencia="0991234567",
     )
     assert dto.contacto_emergencia == "María López"
 
 
 def test_ficha_medica_create_dto_tolera_contacto_emergencia_ausente():
-    dto = FichaMedicaCreateDTO(tipo_sangre="O_POSITIVO", persona_id=1, telefono_emergencia="0991234567")
+    dto = FichaMedicaCreateDTO(tipo_sangre="O_POSITIVO", alergias="Ninguna", enfermedades=["Ninguno"], persona_id=1, telefono_emergencia="0991234567")
     assert dto.contacto_emergencia is None
 
 
 def test_enrollment_ficha_medica_dto_normaliza_contacto_emergencia():
     dto = EnrollmentFichaMedicaDTO(
         tipo_sangre="O_POSITIVO",
+        alergias="Ninguna", enfermedades=["Ninguno"],
         contacto_emergencia="maría LÓPEZ", telefono_emergencia="0991234567",
     )
     assert dto.contacto_emergencia == "María López"

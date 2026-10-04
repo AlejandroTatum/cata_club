@@ -206,7 +206,7 @@ def _inscribir(db_session, secuencia: int = 730):
         # Issue #730: obligatoria en el alta pública. Este archivo mide la
         # entrega de la notificación al admin, no la ficha.
         ficha_medica=EnrollmentFichaMedicaDTO(
-            tipo_sangre="O_POSITIVO", enfermedades=[],
+            tipo_sangre="O_POSITIVO", alergias="Ninguna", enfermedades=["Ninguno"],
             contacto_emergencia="María Torres", telefono_emergencia="0991112233",
         ),
         acepta_consentimientos=True,

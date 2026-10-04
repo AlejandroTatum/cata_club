@@ -12,6 +12,16 @@ import type { FichaMedicaEditable, TipoSangre } from "@/types/domain";
 import { toUserMessage, isNotFound } from "@/lib/error-message";
 import { phoneFieldRule, toPhoneFieldDigits, toStoredPhone } from "@/lib/identity-validation";
 import { PhoneField } from "@/components/wizard-fields";
+import {
+  ALERGIAS_REQUIRED,
+  ENFERMEDADES_REQUIRED,
+  NINGUNO_HELP,
+  describeAlergias,
+  describeEnfermedades,
+  enfermedadesInputValue,
+  hasEnfermedadesInput,
+  requiredFichaTextError,
+} from "@/lib/ficha-declaration";
 
 /**
  * The blood types this editor OFFERS (issue #643).
@@ -85,7 +95,12 @@ function camposDe(ficha: FichaMedicaEditable): {
     // person editing knows the real value, and this is the only place it can
     // be backfilled without inventing it.
     tipoSangre: ficha.tipoSangre === "DESCONOCIDO" ? "" : ficha.tipoSangre,
-    enfermedades: ficha.enfermedades.map((e) => e.nombreEnfermedad).join(", "),
+    // #1574: a declared «none» (empty list + filled alergias) comes back as
+    // «Ninguno», so re-saving it untouched is valid; a legacy row stays blank.
+    enfermedades: enfermedadesInputValue(
+      ficha.enfermedades.map((e) => e.nombreEnfermedad),
+      ficha.alergias,
+    ),
     alergias: ficha.alergias ?? "",
     contactoEmergencia: ficha.contactoEmergencia ?? "",
     // Issue #1296: the field now shows the local digits without the trunk 0 —
@@ -93,6 +108,14 @@ function camposDe(ficha: FichaMedicaEditable): {
     // carry an international/duplicated-prefix shape.
     telefonoEmergencia: toPhoneFieldDigits(ficha.telefonoEmergencia),
   };
+}
+
+/** Required-field rejections shown after a save attempt. */
+interface FichaFieldErrors {
+  tipoSangre?: string;
+  alergias?: string;
+  enfermedades?: string;
+  telefonoEmergencia?: string;
 }
 
 function FilaLectura({
@@ -203,7 +226,7 @@ export default function MedicalRecordEditor({
    * errors about someone else's omission. The complaint belongs to the moment
    * they try to save.
    */
-  const [fieldErrors, setFieldErrors] = useState<{ tipoSangre?: string; telefonoEmergencia?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<FichaFieldErrors>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -290,9 +313,13 @@ export default function MedicalRecordEditor({
    * A second copy written here would be a second definition of "valid
    * Ecuadorian phone", and the two would drift.
    */
-  function validar(): { tipoSangre?: string; telefonoEmergencia?: string } {
-    const errores: { tipoSangre?: string; telefonoEmergencia?: string } = {};
+  function validar(): FichaFieldErrors {
+    const errores: FichaFieldErrors = {};
     if (!tipoSangre) errores.tipoSangre = "El tipo de sangre es obligatorio.";
+    // #1574: «Ninguno» is the answer for "none"; blank is never one.
+    const alergiasError = requiredFichaTextError(alergias, ALERGIAS_REQUIRED);
+    if (alergiasError) errores.alergias = alergiasError;
+    if (!hasEnfermedadesInput(enfermedadesInput)) errores.enfermedades = ENFERMEDADES_REQUIRED;
     const telefonoError = phoneFieldRule(telefonoEmergencia, "El teléfono de emergencia", { guided: true });
     if (telefonoError) errores.telefonoEmergencia = telefonoError;
     return errores;
@@ -330,12 +357,10 @@ export default function MedicalRecordEditor({
         // it. `null` is the explicit "erase this" signal (see
         // FichaMedicaUpdatePayload's doc comment).
         //
-        // #643 narrows that by exactly one field. Alergias and the emergency
-        // contact NAME stay erasable; the emergency PHONE does not, because
-        // erasing it is erasing the only number the club would dial, and the
-        // record left behind is the invalid state this rule exists to forbid.
-        // It never reaches `null` here — the guard above returns first.
-        alergias: alergias.trim() || null,
+        // The emergency contact NAME stays erasable. Alergias (#1574) and the
+        // emergency PHONE (#643) do not: both are required, so the guard above
+        // returns before either could reach `null`.
+        alergias: alergias.trim(),
         contactoEmergencia: contactoEmergencia.trim() || null,
         telefonoEmergencia: toStoredPhone(telefonoEmergencia),
       });
@@ -384,7 +409,14 @@ export default function MedicalRecordEditor({
       : {
           tipoSangre: state.ficha.tipoSangre === "DESCONOCIDO" ? "" : etiquetaTipoSangre(state.ficha.tipoSangre),
           alergias: state.ficha.alergias ?? "",
-          enfermedades: state.ficha.enfermedades.map((e) => e.nombreEnfermedad).join(", "),
+          // Empty (not «Sin declarar») so the card counts it as missing; the
+          // card words that gap itself.
+          enfermedades: state.ficha.enfermedades.length > 0 || state.ficha.alergias?.trim()
+            ? describeEnfermedades(
+                state.ficha.enfermedades.map((e) => e.nombreEnfermedad),
+                state.ficha.alergias,
+              )
+            : "",
           contactoEmergencia: state.ficha.contactoEmergencia ?? "",
           telefonoEmergencia: state.ficha.telefonoEmergencia ?? "",
         };
@@ -434,32 +466,68 @@ export default function MedicalRecordEditor({
         )}
       </div>
       <div>
-        <label htmlFor={`alergias-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
-          Alergias
-        </label>
+        {/* Same asterisk-outside-the-label rule as «Tipo de sangre» above. */}
+        <div className="mb-1 flex items-center gap-1">
+          <label htmlFor={`alergias-${personaId}`} className="block text-xs font-semibold text-ink-2">
+            Alergias
+          </label>
+          <span className="text-xs font-semibold text-state-bad" aria-hidden="true">*</span>
+        </div>
         <input
           id={`alergias-${personaId}`}
           type="text"
           value={alergias}
           onChange={(e) => setAlergias(e.target.value)}
-          className="input-field w-full"
+          aria-required="true"
+          aria-invalid={fieldErrors.alergias ? true : undefined}
+          aria-describedby={`alergias-help-${personaId}`}
+          className={`input-field w-full ${fieldErrors.alergias ? "border-state-bad" : ""}`}
         />
+        {fieldErrors.alergias ? (
+          <p
+            id={`alergias-help-${personaId}`}
+            className="mt-1 text-xs font-semibold text-state-bad"
+            role="alert"
+          >
+            {fieldErrors.alergias}
+          </p>
+        ) : (
+          <p id={`alergias-help-${personaId}`} className="mt-1 text-2xs tracking-flat text-ink-3">
+            {NINGUNO_HELP}
+          </p>
+        )}
       </div>
       <div className="sm:col-span-2">
-        <label htmlFor={`enfermedades-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
-          Enfermedades (separadas por coma)
-        </label>
+        <div className="mb-1 flex items-center gap-1">
+          <label htmlFor={`enfermedades-${personaId}`} className="block text-xs font-semibold text-ink-2">
+            Enfermedades (separadas por coma)
+          </label>
+          <span className="text-xs font-semibold text-state-bad" aria-hidden="true">*</span>
+        </div>
         <input
           id={`enfermedades-${personaId}`}
           type="text"
           value={enfermedadesInput}
           onChange={(e) => setEnfermedadesInput(e.target.value)}
           placeholder="Ej: Asma, Diabetes"
-          className="input-field w-full"
+          aria-required="true"
+          aria-invalid={fieldErrors.enfermedades ? true : undefined}
+          aria-describedby={`enfermedades-help-${personaId}`}
+          className={`input-field w-full ${fieldErrors.enfermedades ? "border-state-bad" : ""}`}
         />
-        <p className="mt-1 text-2xs tracking-flat text-ink-3">
-          Al guardar se reemplaza la lista completa. Dejar vacío borra todas las enfermedades.
-        </p>
+        {fieldErrors.enfermedades ? (
+          <p
+            id={`enfermedades-help-${personaId}`}
+            className="mt-1 text-xs font-semibold text-state-bad"
+            role="alert"
+          >
+            {fieldErrors.enfermedades}
+          </p>
+        ) : (
+          <p id={`enfermedades-help-${personaId}`} className="mt-1 text-2xs tracking-flat text-ink-3">
+            {NINGUNO_HELP} Al guardar se reemplaza la lista completa.
+          </p>
+        )}
       </div>
     </>
   );
@@ -509,10 +577,13 @@ export default function MedicalRecordEditor({
   const saludRows = recordReadMode ? (
     <>
       <FilaLectura label="Tipo de sangre" value={etiquetaTipoSangre(state.ficha.tipoSangre)} />
-      <FilaLectura label="Alergias" value={state.ficha.alergias ?? ""} />
+      <FilaLectura label="Alergias" value={describeAlergias(state.ficha.alergias)} />
       <FilaLectura
         label="Enfermedades"
-        value={state.ficha.enfermedades.map((e) => e.nombreEnfermedad).join(", ")}
+        value={describeEnfermedades(
+          state.ficha.enfermedades.map((e) => e.nombreEnfermedad),
+          state.ficha.alergias,
+        )}
       />
     </>
   ) : null;

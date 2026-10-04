@@ -53,16 +53,33 @@ export interface RowActionsMenuProps {
    * overflow to read as a control passes one. The accessible name stays `label`.
    */
   triggerLabel?: string;
+  /** Icon of a bare trigger, in place of "⋯" (e.g. the pencil on a profile photo). */
+  triggerIcon?: ReactNode;
+  /** Replaces the trigger's button classes, for a trigger that is not a row control. */
+  triggerClassName?: string;
+  /**
+   * Which trigger edge the menu lines up with. `end` (the default) suits a
+   * trigger at a row's right edge; `start` suits one near the left edge, where
+   * a right-aligned menu would run off the screen.
+   */
+  align?: "start" | "end";
 }
 
 const MENU_GAP = 4;
 
-export default function RowActionsMenu({ label, items, triggerLabel }: RowActionsMenuProps): ReactElement {
+export default function RowActionsMenu({
+  label,
+  items,
+  triggerLabel,
+  triggerIcon,
+  triggerClassName,
+  align = "end",
+}: RowActionsMenuProps): ReactElement {
   const menuId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
+  const [position, setPosition] = useState<{ top: number; left?: number; right?: number } | null>(null);
   /** Which item takes focus when the menu opens: the first, or the last (ArrowUp). */
   const initialFocus = useRef<"first" | "last">("first");
 
@@ -82,12 +99,13 @@ export default function RowActionsMenu({ label, items, triggerLabel }: RowAction
     if (!triggerRef.current) return false;
     const rect = triggerRef.current.getBoundingClientRect();
     if (rect.bottom < 0 || rect.top > window.innerHeight) return false;
-    setPosition({
-      top: rect.bottom + MENU_GAP,
-      right: Math.max(window.innerWidth - rect.right, MENU_GAP),
-    });
+    setPosition(
+      align === "start"
+        ? { top: rect.bottom + MENU_GAP, left: Math.max(rect.left, MENU_GAP) }
+        : { top: rect.bottom + MENU_GAP, right: Math.max(window.innerWidth - rect.right, MENU_GAP) },
+    );
     return true;
-  }, []);
+  }, [align]);
 
   useLayoutEffect(() => {
     if (open) place();
@@ -186,7 +204,10 @@ export default function RowActionsMenu({ label, items, triggerLabel }: RowAction
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         title={label}
-        className={triggerLabel ? buttonClasses("tertiary", "sm", "w-full") : buttonClasses("tertiary", "sm", "w-8 !px-0")}
+        className={
+          triggerClassName ??
+          (triggerLabel ? buttonClasses("tertiary", "sm", "w-full") : buttonClasses("tertiary", "sm", "w-8 !px-0"))
+        }
         onClick={() => (open ? close(false) : openWith("first"))}
         onKeyDown={onTriggerKeyDown}
       >
@@ -196,7 +217,7 @@ export default function RowActionsMenu({ label, items, triggerLabel }: RowAction
             <ChevronDown size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           </>
         ) : (
-          <MoreHorizontal size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+          (triggerIcon ?? <MoreHorizontal size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />)
         )}
       </button>
       {open && position
@@ -207,7 +228,7 @@ export default function RowActionsMenu({ label, items, triggerLabel }: RowAction
               role="menu"
               aria-label={label}
               onKeyDown={onMenuKeyDown}
-              style={{ position: "fixed", top: position.top, right: position.right }}
+              style={{ position: "fixed", top: position.top, left: position.left, right: position.right }}
               className="card z-50 flex min-w-44 flex-col p-1"
             >
               {items.map((item) => (

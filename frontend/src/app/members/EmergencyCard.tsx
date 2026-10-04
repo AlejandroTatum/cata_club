@@ -112,7 +112,7 @@ export default function EmergencyCard({
           {quietLines.length > 0 ? (
             <dl>
               {quietLines.map(({ label }) => (
-                <Line key={label} label={label} value="" emptyText="Sin registrar" />
+                <Line key={label} label={label} value="" emptyText="Sin declarar" />
               ))}
             </dl>
           ) : null}

@@ -6,7 +6,7 @@
  *
  * Reuses `AttendanceCorrectionDialog` (issue #508's shared modal) rather
  * than a second hand-rolled form — this component owns the same business
- * logic `AttendanceCorrectionRow` owns (estado/motivo/submitting/error, the
+ * logic `AttendanceCorrectionRow` owns (estado/submitting/error, the
  * `correctAttendance` call, the in-place patch on success), scoped to one
  * table row instead of one roster list item.
  *
@@ -52,25 +52,17 @@ export default function AttendanceCorrectionAction({
 
   const [open, setOpen] = useState(false);
   const [estado, setEstado] = useState<EstadoAsistencia>(record.estado);
-  const [motivo, setMotivo] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function openDialog(): void {
     setEstado(record.estado);
-    setMotivo("");
     setError(null);
     setOpen(true);
   }
 
   async function handleSubmit(): Promise<void> {
     if (submitting) return;
-    const trimmed = motivo.trim();
-    if (trimmed.length === 0) {
-      setError("El motivo es obligatorio.");
-      return;
-    }
-
     setSubmitting(true);
     setError(null);
     try {
@@ -82,7 +74,6 @@ export default function AttendanceCorrectionAction({
         // would silently wipe a real justificativo instead of preserving it.
         justificativo: record.justificativo ?? null,
         estadoJustificativo: record.estadoJustificativo ?? null,
-        motivo: trimmed,
       });
       setOpen(false);
       onCorrected(record.id, {
@@ -122,8 +113,6 @@ export default function AttendanceCorrectionAction({
         studentName={record.estudiante}
         estado={estado}
         onEstadoChange={setEstado}
-        motivo={motivo}
-        onMotivoChange={setMotivo}
         submitting={submitting}
         error={error}
         onSubmit={() => void handleSubmit()}

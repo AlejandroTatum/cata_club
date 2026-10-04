@@ -95,11 +95,11 @@ def _alumno(
 # por defecto para que las altas lleguen al detector de duplicados en vez de
 # morir antes, en la validación del DTO.
 _FICHA = dict(
-    tipo_sangre="O_POSITIVO", enfermedades=[],
+    tipo_sangre="O_POSITIVO", alergias="Ninguna", enfermedades=["Ninguno"],
     contacto_emergencia="María Torres", telefono_emergencia="0991112233",
 )
 # Issue #1138: camino representado, sin contacto de emergencia propio.
-_FICHA_MENOR = dict(tipo_sangre="O_POSITIVO", enfermedades=[])
+_FICHA_MENOR = dict(tipo_sangre="O_POSITIVO", alergias="Ninguna", enfermedades=["Ninguno"])
 
 
 def _inscripcion(**kwargs) -> EnrollmentCreateDTO:
