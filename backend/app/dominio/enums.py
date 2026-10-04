@@ -107,6 +107,13 @@ class EstadoAsistencia(str, enum.Enum):
     COMPETENCIA = "COMPETENCIA"
 
 
+class EstadoSolicitudCorreccion(str, enum.Enum):
+    """QA4 ENT-25: ciclo de una solicitud de corrección de asistencia."""
+    PENDIENTE = "PENDIENTE"
+    APROBADA = "APROBADA"
+    RECHAZADA = "RECHAZADA"
+
+
 class TipoEscuela(str, enum.Enum):
     PARTICULAR = "PARTICULAR"
     FISCAL = "FISCAL"

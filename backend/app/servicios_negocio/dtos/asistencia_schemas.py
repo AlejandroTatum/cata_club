@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field, computed_field
 from datetime import date, time, datetime
 from typing import Optional
 
-from app.dominio.enums import EstadoAsistencia, DiaSemana
+from app.dominio.enums import DiaSemana, EstadoAsistencia, EstadoSolicitudCorreccion
 from app.dominio.reglas_negocio import LIMITE_CORRECCION_ASISTENCIA_DIAS
 from app.servicios_negocio.dtos.base import ResponseBase
 from app.servicios_negocio.dtos.validadores import NombrePresentado
@@ -275,6 +275,40 @@ class AsistenciaCorreccionEntryDTO(ResponseBase, BaseModel):
     estado_anterior: EstadoAsistencia
     justificativo_anterior: Optional[str] = None
     estado_justificativo_anterior: Optional[bool] = None
+
+
+# --- QA4 ENT-25: el entrenador pide una corrección de una lista cerrada ----
+class SolicitudCorreccionCreateDTO(BaseModel):
+    """Alumno y sesión salen de la `Asistencia` pedida, así que el entrenador
+    solo manda cuál, qué estado debería figurar y por qué."""
+    asistencia_id: int
+    estado_solicitado: EstadoAsistencia
+    motivo: str = Field(min_length=1, max_length=500)
+
+
+class SolicitudCorreccionRechazoDTO(BaseModel):
+    motivo: str = Field(min_length=1, max_length=500)
+
+
+class SolicitudCorreccionResponseDTO(ResponseBase, BaseModel):
+    id: int
+    asistencia_id: int
+    persona_id: int
+    persona_nombre: str
+    horario_id: int
+    fecha: date
+    horario_etiqueta: str
+    estado_actual: EstadoAsistencia
+    estado_solicitado: EstadoAsistencia
+    motivo: str
+    solicitado_por_id: int
+    solicitado_por_nombre: str
+    solicitado_en: datetime
+    estado: EstadoSolicitudCorreccion
+    resuelto_por_id: Optional[int] = None
+    resuelto_por_nombre: Optional[str] = None
+    resuelto_en: Optional[datetime] = None
+    motivo_resolucion: Optional[str] = None
 
 
 # --- Asignación directa Alumno ↔ Horario ------------------------------------

@@ -4,7 +4,7 @@ from starlette.concurrency import run_in_threadpool
 from typing import List, Optional
 from datetime import date
 
-from app.dominio.enums import EstadoAsistencia
+from app.dominio.enums import EstadoAsistencia, EstadoSolicitudCorreccion
 from app.dominio.nombre_propio import nombre_completo
 from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.tiempo import hoy_club
@@ -18,12 +18,14 @@ from app.servicios_negocio.dtos.asistencia_schemas import (
     PublicScheduleCategoryDTO,
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,
     ConteoHorarioDTO, UltimaListaDTO,
+    SolicitudCorreccionCreateDTO, SolicitudCorreccionRechazoDTO, SolicitudCorreccionResponseDTO,
 )
 from app.servicios_negocio.dtos.base import PaginatedResponse
 from app.presentacion.routers.reporte_helpers import exigir_tope_reporte
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
 from app.servicios_negocio.gestor_permisos import GestorPermisos
+from app.servicios_negocio.solicitud_correccion_servicio import SolicitudCorreccionServicio
 from app.servicios_negocio.politica_acceso import (
     ADMINISTRADOR_O_ENTRENADOR, PoliticaAccesoPersona,
 )
@@ -190,6 +192,73 @@ async def registrar_asistencia_lote(
 ):
     return AsistenciaServicio(db).registrar_asistencia_lote(
         datos, token_payload.get("persona_id")
+    )
+
+
+# QA4 ENT-25: el entrenador PIDE la corrección de una lista cerrada; solo el
+# administrador la resuelve (aprobar aplica `corregir_asistencia`). Declaradas
+# ANTES de las rutas `/{asistencia_id}/...` para que el segmento fijo no se
+# interprete como un id.
+@router.post(
+    "/solicitudes-correccion",
+    response_model=SolicitudCorreccionResponseDTO,
+    status_code=status.HTTP_201_CREATED,
+)
+async def crear_solicitud_correccion(
+    datos: SolicitudCorreccionCreateDTO,
+    token_payload: dict = Depends(GestorPermisos(["ENTRENADOR"])),
+    db: Session = Depends(obtener_sesion),
+):
+    return SolicitudCorreccionServicio(db).crear(
+        datos, token_payload.get("roles", []), token_payload.get("persona_id"),
+    )
+
+
+# El entrenador ve SOLO las suyas; el administrador, todas (el filtro por
+# dueño lo aplica el servicio según el rol del token).
+@router.get(
+    "/solicitudes-correccion",
+    response_model=List[SolicitudCorreccionResponseDTO],
+)
+async def listar_solicitudes_correccion(
+    estado: Optional[EstadoSolicitudCorreccion] = Query(default=None),
+    horario_id: Optional[int] = Query(default=None),
+    fecha: Optional[date] = Query(default=None),
+    token_payload: dict = Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"])),
+    db: Session = Depends(obtener_sesion),
+):
+    return SolicitudCorreccionServicio(db).listar(
+        token_payload.get("roles", []), token_payload.get("persona_id"),
+        estado=estado, horario_id=horario_id, fecha=fecha,
+    )
+
+
+@router.post(
+    "/solicitudes-correccion/{solicitud_id}/aprobar",
+    response_model=SolicitudCorreccionResponseDTO,
+)
+async def aprobar_solicitud_correccion(
+    solicitud_id: int,
+    token_payload: dict = Depends(GestorPermisos(["ADMINISTRADOR"])),
+    db: Session = Depends(obtener_sesion),
+):
+    return SolicitudCorreccionServicio(db).aprobar(
+        solicitud_id, token_payload.get("roles", []), token_payload.get("persona_id"),
+    )
+
+
+@router.post(
+    "/solicitudes-correccion/{solicitud_id}/rechazar",
+    response_model=SolicitudCorreccionResponseDTO,
+)
+async def rechazar_solicitud_correccion(
+    solicitud_id: int,
+    datos: SolicitudCorreccionRechazoDTO,
+    token_payload: dict = Depends(GestorPermisos(["ADMINISTRADOR"])),
+    db: Session = Depends(obtener_sesion),
+):
+    return SolicitudCorreccionServicio(db).rechazar(
+        solicitud_id, datos.motivo, token_payload.get("roles", []), token_payload.get("persona_id"),
     )
 
 

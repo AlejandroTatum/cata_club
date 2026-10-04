@@ -168,7 +168,7 @@ class SupresionDatosServicio:
 
         if solicitud.estado != ESTADO_APROBADA:
             raise OperacionInvalida(
-                "Solo una solicitud APROBADA puede ejecutarse."
+                "Solo una solicitud aprobada puede ejecutarse."
             )
 
         # D8: el plazo de gracia corre desde la fecha de solicitud.

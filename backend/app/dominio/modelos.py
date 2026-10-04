@@ -33,6 +33,7 @@ from app.dominio.enums import (
     TipoNotificacion,
     TipoManoDominante,
     EfectoCoberturaCorreccion,
+    EstadoSolicitudCorreccion,
 )
 
 _log = logging.getLogger("cataclub.dominio.modelos")
@@ -1862,10 +1863,74 @@ class AsistenciaCorreccion(Base):
         return nombre_completo(autor.nombres, autor.apellidos)
 
 
+class SolicitudCorreccionAsistencia(Base):
+    """QA4 ENT-25: el entrenador no puede corregir una lista cerrada (solo el
+    administrador, ver `AsistenciaCorreccion`), así que PIDE la corrección.
+    Una fila por pedido: qué asistencia (alumno + sesión salen de ella), qué
+    estado debería figurar y por qué. El administrador la resuelve: aprobar
+    aplica la corrección por el mecanismo auditado de siempre y rechazar exige
+    un motivo que el entrenador lee.
+
+    El índice único parcial deja UNA sola solicitud pendiente por asistencia
+    (el servicio chequea primero para dar un mensaje legible; el índice es la
+    red ante pedidos simultáneos). Sin `ondelete`, mismo criterio que
+    `AsistenciaCorreccion`: ni `Asistencia` ni `Persona` se borran."""
+
+    __tablename__ = "solicitud_correccion_asistencia"
+    __table_args__ = (
+        Index(
+            "uq_solicitud_correccion_pendiente_por_asistencia",
+            "asistencia_id", unique=True,
+            postgresql_where=text("estado = 'PENDIENTE'"),
+        ),
+        # Bandeja del admin: pendientes primero, más viejas antes.
+        Index("ix_solicitud_correccion_estado_solicitado_en", "estado", "solicitado_en"),
+        # Cobertura de la FK `asistencia_id` (el único parcial no cuenta,
+        # `test_indices_fk.py`) y consulta por sesión del entrenador.
+        Index("ix_solicitud_correccion_asistencia_id", "asistencia_id"),
+        Index("ix_solicitud_correccion_solicitado_por_id", "solicitado_por_id"),
+        Index("ix_solicitud_correccion_resuelto_por_id", "resuelto_por_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    asistencia_id: Mapped[int] = mapped_column(ForeignKey("asistencia.id"), nullable=False)
+    solicitado_por_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), nullable=False)
+    solicitado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_ahora_utc, nullable=False,
+    )
+    estado_solicitado: Mapped[EstadoAsistencia] = mapped_column(
+        SAEnum(EstadoAsistencia), nullable=False,
+    )
+    motivo: Mapped[str] = mapped_column(String(500), nullable=False)
+    estado: Mapped[EstadoSolicitudCorreccion] = mapped_column(
+        SAEnum(EstadoSolicitudCorreccion), default=EstadoSolicitudCorreccion.PENDIENTE,
+        nullable=False,
+    )
+    resuelto_por_id: Mapped[Optional[int]] = mapped_column(ForeignKey("persona.id"), nullable=True)
+    resuelto_en: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    motivo_resolucion: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
+    asistencia: Mapped["Asistencia"] = relationship()
+    solicitado_por: Mapped["Persona"] = relationship(foreign_keys=[solicitado_por_id])
+    resuelto_por: Mapped[Optional["Persona"]] = relationship(foreign_keys=[resuelto_por_id])
+
+    @property
+    def solicitado_por_nombre(self) -> str:
+        return nombre_completo(self.solicitado_por.nombres, self.solicitado_por.apellidos)
+
+    @property
+    def resuelto_por_nombre(self) -> Optional[str]:
+        if self.resuelto_por is None:
+            return None
+        return nombre_completo(self.resuelto_por.nombres, self.resuelto_por.apellidos)
+
+
 # ---------------------------------------------------------------------------
 # Asignación directa Alumno ↔ Horario (muchos a muchos)
 # Permite que dos alumnos en el mismo nivel asistan a horarios distintos.
 # ---------------------------------------------------------------------------
+
+
 class AlumnoHorario(Base):
     __tablename__ = "alumno_horario"
     # El par (persona_id, horario_id) es único: la fila NO lleva ningún dato

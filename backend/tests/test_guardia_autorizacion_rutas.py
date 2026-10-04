@@ -327,6 +327,11 @@ RUTAS_ROLES_REQUERIDOS = {
     # Issue #389, slice 4a: historial de correcciones -- mismo tier que
     # `corregir` (auditoría de registros que pueden ser de menores).
     ("GET", "/asistencias/{asistencia_id}/correcciones"): frozenset({"ADMINISTRADOR"}),
+    # QA4 ENT-25: el entrenador pide la corrección; solo el admin la resuelve.
+    ("POST", "/asistencias/solicitudes-correccion"): frozenset({"ENTRENADOR"}),
+    ("GET", "/asistencias/solicitudes-correccion"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
+    ("POST", "/asistencias/solicitudes-correccion/{solicitud_id}/aprobar"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/asistencias/solicitudes-correccion/{solicitud_id}/rechazar"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/asistencias/"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/asistencias/lote"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/asistencias/asignar-alumno"): frozenset({"ADMINISTRADOR"}),
