@@ -65,6 +65,13 @@ describe("GaleriaPage", () => {
     expect(form).toHaveClass("max-lg:order-1");
     expect(list).toHaveClass("max-lg:order-2");
     expect(guide).toHaveClass("max-lg:order-3");
+    // On lg the instructions card sits BELOW the upload form in the same column.
+    expect(form.compareDocumentPosition(guide) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+  it("explains what the reorder controls do", async () => {
+    render(<GaleriaPage />); await screen.findByText("En juego");
+    expect(screen.getByText(/cambian el orden en que se muestran las fotos en la landing/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mover antes En juego" })).toHaveAttribute("title", "Mover antes");
   });
   it("lists published photos with their accessible descriptions", async () => {
     render(<GaleriaPage />);
@@ -232,11 +239,11 @@ describe("GaleriaPage", () => {
   });
   it("moves a photo down and up and reloads the list", async () => {
     render(<GaleriaPage />); await screen.findByText("En juego");
-    expect(screen.getByRole("button", { name: "Subir En juego" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Bajar Podio" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Bajar En juego" }));
+    expect(screen.getByRole("button", { name: "Mover antes En juego" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Mover después Podio" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Mover después En juego" }));
     await waitFor(() => expect(moverEntradaGaleria).toHaveBeenCalledWith(1, "bajar"));
-    fireEvent.click(screen.getByRole("button", { name: "Subir Podio" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mover antes Podio" }));
     await waitFor(() => expect(moverEntradaGaleria).toHaveBeenCalledWith(2, "subir"));
     await waitFor(() => expect(fetchGaleria).toHaveBeenCalledTimes(3));
   });
