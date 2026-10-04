@@ -134,6 +134,7 @@ function AvatarWithPencil({
       {fotoUrl && (
         <PhotoViewerDialog
           open={viewing}
+          uploading={uploadingFoto}
           fotoUrl={fotoUrl}
           onClose={() => setViewing(false)}
           onChange={() => {

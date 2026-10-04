@@ -137,3 +137,16 @@ describe("IdentityCard — pencil on the avatar to view or change the photo", ()
     expect(within(hero).getByRole("button", { name: "Editar foto de perfil" })).toBeEnabled();
   });
 });
+
+describe("IdentityCard — no second upload from the viewer", () => {
+  it("disables the viewer's «Cambiar foto» while a photo is uploading", () => {
+    const { hero, pickSpy } = renderCard({ fotoUrl: FOTO, uploadingFoto: true });
+
+    fireEvent.click(within(hero).getByRole("button", { name: "Ver foto de perfil" }));
+    const change = within(screen.getByRole("dialog")).getByRole("button", { name: "Cambiar foto" });
+
+    expect(change).toBeDisabled();
+    fireEvent.click(change);
+    expect(pickSpy).not.toHaveBeenCalled();
+  });
+});

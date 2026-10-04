@@ -21,6 +21,8 @@ export interface PhotoViewerDialogProps {
   onClose: () => void;
   /** Starts a new upload; the dialog closes first. */
   onChange: () => void;
+  /** A photo is already uploading: «Cambiar foto» waits for it. */
+  uploading?: boolean;
 }
 
 export default function PhotoViewerDialog({
@@ -28,10 +30,16 @@ export default function PhotoViewerDialog({
   fotoUrl,
   onClose,
   onChange,
+  uploading = false,
 }: PhotoViewerDialogProps): React.ReactElement | null {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const changeButtonRef = useRef<HTMLButtonElement>(null);
   const triggerElementRef = useRef<HTMLElement | null>(null);
+  // Read through a ref so the focus effect below runs once per opening: a
+  // caller's inline `onClose` is a new function on every render, and re-running
+  // the effect would bounce focus to the trigger and back each time.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useBodyScrollLock(open);
 
@@ -44,13 +52,13 @@ export default function PhotoViewerDialog({
 
     function handleKeyDown(event: KeyboardEvent): void {
       if (event.key === "Escape") {
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== "Tab") return;
 
       const focusable = [closeButtonRef.current, changeButtonRef.current].filter(
-        (el): el is HTMLButtonElement => el !== null,
+        (el): el is HTMLButtonElement => el !== null && !el.disabled,
       );
       event.preventDefault();
       const currentIndex = focusable.indexOf(document.activeElement as HTMLButtonElement);
@@ -64,7 +72,7 @@ export default function PhotoViewerDialog({
       document.removeEventListener("keydown", handleKeyDown);
       triggerElementRef.current?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -102,6 +110,7 @@ export default function PhotoViewerDialog({
           ref={changeButtonRef}
           type="button"
           onClick={onChange}
+          disabled={uploading}
           className={buttonClasses("onCoal", "md", "self-center")}
         >
           <Camera size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
