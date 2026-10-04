@@ -147,64 +147,33 @@ async function reachSummaryAsRepresentative(page: Page): Promise<void> {
   await expect(page.getByRole("button", { name: /confirmar inscripción/i })).toBeEnabled();
 }
 
-test.describe("Revisión legal desde el asistente de inscripción (#1368)", () => {
-  test("revisar los tres documentos no navega ni pierde los datos cargados", async ({ page }) => {
+test.describe("Revisión legal desde el asistente de inscripción (#1368, #1615)", () => {
+  test("el único enlace legal abre /terminos en otra pestaña sin perder los datos cargados", async ({ page }) => {
     await reachSummaryAsRepresentative(page);
 
-    // Los datos del representante están en el resumen ANTES de revisar nada.
-    await expect(page.getByTestId("enroll-wizard-card").getByText(`${DEPENDENT.nombres} ${DEPENDENT.apellidos}`)).toBeVisible();
-    await expect(page.getByTestId("enroll-wizard-card").getByText(`${REPRESENTATIVE.nombres} ${REPRESENTATIVE.apellidos}`)).toBeVisible();
+    const card = page.getByTestId("enroll-wizard-card");
+    await expect(card.getByText(`${DEPENDENT.nombres} ${DEPENDENT.apellidos}`)).toBeVisible();
+    await expect(card.getByText(`${REPRESENTATIVE.nombres} ${REPRESENTATIVE.apellidos}`)).toBeVisible();
 
-    // --- Documento 1: abrir, contenido real, Escape devuelve al resumen.
-    await page.getByRole("button", { name: "Términos y condiciones (incluye privacidad)" }).click();
-    const terminos = page.getByRole("dialog", { name: "Términos, condiciones y acuerdo de responsabilidad de Cata Club" });
-    await expect(terminos).toBeVisible();
-    // El texto revisado es el documento público, no una copia: una oración
-    // transcrita de `src/app/terminos/content.ts`.
-    await expect(
-      terminos.getByText(
-        "Estos términos se rigen por las leyes de la República del Ecuador. Para consultas sobre ellos, escriba a cataclub.loja@proton.me.",
-      ),
-    ).toBeVisible();
-    // El cuerpo largo se desplaza dentro del panel (contenido > ventana).
-    const cuerpo = terminos.locator(".overflow-y-auto");
-    const scroll = await cuerpo.evaluate((el) => ({
-      alto: el.scrollHeight,
-      ventana: el.clientHeight,
-    }));
-    expect(scroll.alto).toBeGreaterThan(scroll.ventana);
-    // El documento canónico queda a un click, sin salir del asistente.
-    await expect(terminos.getByRole("link", { name: /ver documento completo/i })).toHaveAttribute(
-      "href",
-      "/terminos",
-    );
+    // Un documento, un enlace (#1615): la casilla dice exactamente esto y los
+    // disparadores de los tres diálogos ya no existen.
+    await expect(page.getByRole("checkbox", { name: "Acepto los Términos y condiciones" })).toBeChecked();
+    const enlaces = card.getByRole("link", { name: "Términos y condiciones" });
+    await expect(enlaces).toHaveCount(1);
+    await expect(enlaces).toHaveAttribute("href", "/terminos");
+    await expect(enlaces).toHaveAttribute("target", "_blank");
+    await expect(page.getByRole("button", { name: "Consentimiento de datos de salud" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Permiso de uso de imagen" })).toHaveCount(0);
 
-    await page.keyboard.press("Escape");
-    await expect(terminos).not.toBeVisible();
-    // El foco vuelve al disparador que abrió la revisión.
-    await expect(page.getByRole("button", { name: "Términos y condiciones (incluye privacidad)" })).toBeFocused();
+    // Seguir el enlace abre una pestaña nueva; el asistente queda intacto.
+    const [nueva] = await Promise.all([page.context().waitForEvent("page"), enlaces.click()]);
+    await nueva.close();
 
-    // --- Documento 2: cerrar con el botón Cerrar.
-    await page.getByRole("button", { name: "Consentimiento de datos de salud" }).click();
-    const salud = page.getByRole("dialog", { name: "Consentimiento para el tratamiento de datos de salud" });
-    await expect(salud).toBeVisible();
-    await salud.getByRole("button", { name: "Cerrar" }).click();
-    await expect(salud).not.toBeVisible();
-
-    // --- Documento 3: cerrar tocando el fondo fuera del panel.
-    await page.getByRole("button", { name: "Permiso de uso de imagen" }).click();
-    const permiso = page.getByRole("dialog", { name: "Permiso de uso de imagen" });
-    await expect(permiso).toBeVisible();
-    await page.getByTestId("legal-review-backdrop").click({ position: { x: 10, y: 10 } });
-    await expect(permiso).not.toBeVisible();
-
-    // La ronda completa terminó donde empezó: mismo paso, mismos datos,
-    // misma decisión de consentimiento, y la URL nunca salió del asistente.
     await expect(page).toHaveURL(/\/student\/enroll/);
     await expect(page.getByRole("heading", { name: /resumen y confirmación/i })).toBeVisible();
-    await expect(page.getByTestId("enroll-wizard-card").getByText(`${DEPENDENT.nombres} ${DEPENDENT.apellidos}`)).toBeVisible();
-    await expect(page.getByTestId("enroll-wizard-card").getByText(`${REPRESENTATIVE.nombres} ${REPRESENTATIVE.apellidos}`)).toBeVisible();
-    await expect(page.getByTestId("enroll-wizard-card").getByText(REPRESENTATIVE.correo)).toBeVisible();
+    await expect(card.getByText(`${DEPENDENT.nombres} ${DEPENDENT.apellidos}`)).toBeVisible();
+    await expect(card.getByText(`${REPRESENTATIVE.nombres} ${REPRESENTATIVE.apellidos}`)).toBeVisible();
+    await expect(card.getByText(REPRESENTATIVE.correo)).toBeVisible();
     await expect(page.getByRole("checkbox")).toBeChecked();
     await expect(page.getByRole("button", { name: /confirmar inscripción/i })).toBeEnabled();
   });
