@@ -1069,7 +1069,7 @@ describe("QA4 FAM-02 — a suspended membership is not «Al día»", () => {
 
     expect(result.kind).toBe("suspended");
     expect(result.headline).toBe("La membresía de Sofia está suspendida.");
-    expect(result.detail).toContain("Tu cobertura sigue vigente hasta 02/11/2026.");
+    expect(result.detail).toContain("La cobertura de Sofia sigue vigente hasta 02/11/2026.");
     expect(result.detail).toContain("Escribe al club para reactivarla.");
     expect(result.canRegister).toBe(false);
   });
@@ -1128,6 +1128,15 @@ describe("QA4 FAM-11 — the latest rejected payment is surfaced", () => {
     ]);
 
     expect(notice).toBe("Tu pago de $25,00 del 03/11/2026 fue rechazado: El comprobante no es legible. Registra uno nuevo.");
+  });
+
+  it("speaks about the jugador, not «tu pago», when a representative views a dependent", () => {
+    const notice = describeRejectedPago(
+      [pago(1, "RECHAZADO", "2026-11-03T10:00:00")],
+      { viewingOwnProfile: false, studentName: "Sofía" },
+    );
+
+    expect(notice).toBe("El pago de Sofía de $25,00 del 03/11/2026 fue rechazado. Registra uno nuevo.");
   });
 
   it("omits the reason when the club did not record one", () => {

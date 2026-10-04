@@ -2112,8 +2112,14 @@ describe("StudentPaymentsPage — QA4 findings", () => {
   it("does not dim the «Por validar» card when it is at zero", async () => {
     render(<StudentPaymentsPage />);
 
-    const label = await screen.findByText("Por validar");
-    expect(label.closest(".opacity-60")).toBeNull();
+    // «Por validar» also labels the filter pill and the info panel; only the
+    // stat tile (`min-h-stat`) is the card under test.
+    await screen.findByTestId("student-payments-table");
+    const cards = screen
+      .getAllByText("Por validar")
+      .filter((element) => element.closest(".min-h-stat") !== null);
+    expect(cards).toHaveLength(1);
+    expect(cards[0].closest(".opacity-60")).toBeNull();
   });
 
   // FAM-20

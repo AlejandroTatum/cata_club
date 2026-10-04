@@ -14,7 +14,8 @@
  * - `formatCurrency` / `formatDate` / `formatDateRange` from
  *   `src/lib/format-utils.ts` — this screen was the second currency grammar
  *   and the third date grammar in the product.
- * - Neutral Ecuadorian Spanish in «tú» (S6). Never voseo.
+ * - Neutral Ecuadorian Spanish in «tú» — the whole app addresses the reader as
+ *   «tú», never voseo.
  * - Selection is coal plus the yellow ball dot (`FilterPill`), never red. Red
  *   is the primary CTA and destructive intent only, so a red "Aprobados" chip
  *   read as an alarm about approved payments.

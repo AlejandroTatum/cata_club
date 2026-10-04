@@ -1208,7 +1208,10 @@ function ActivePortalView({
     paymentSituation !== null &&
     paymentSituation.kind !== "minor-blocked" &&
     paymentSituation.kind !== "suspended"
-      ? describeRejectedPago(pagosState.pagos)
+      ? describeRejectedPago(pagosState.pagos, {
+          viewingOwnProfile,
+          studentName: selectedName,
+        })
       : null;
 
   return (

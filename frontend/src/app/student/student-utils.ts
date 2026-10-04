@@ -681,11 +681,13 @@ import { formatCurrency, formatDate } from "@/lib/format-utils";
  */
 export function describeRejectedPago(
   pagos: Pick<PagoPersona, "estadoPago" | "fechaRegistro" | "monto" | "motivoRechazo">[],
+  subject: { viewingOwnProfile: boolean; studentName: string } = { viewingOwnProfile: true, studentName: "" },
 ): string | null {
   const latest = [...pagos].sort((a, b) => b.fechaRegistro.localeCompare(a.fechaRegistro))[0];
   if (!latest || latest.estadoPago !== "RECHAZADO") return null;
   const reason = latest.motivoRechazo?.trim();
-  return `Tu pago de ${formatCurrency(latest.monto)} del ${formatDate(latest.fechaRegistro)} fue rechazado${
+  const payment = subject.viewingOwnProfile ? "Tu pago" : `El pago de ${subject.studentName}`;
+  return `${payment} de ${formatCurrency(latest.monto)} del ${formatDate(latest.fechaRegistro)} fue rechazado${
     reason ? `: ${reason}` : ""
   }. Registra uno nuevo.`;
 }
@@ -762,11 +764,6 @@ export interface PaymentSituation {
   canRegister: boolean;
   /** True when the state asks the reader to act now — the only thing that earns the red CTA. */
   urgent: boolean;
-}
-
-/** "A Sofía le quedan…" for a guardian, "Te quedan…" for the account holder. */
-function possessivePrefix(input: PaymentSituationInput): string {
-  return input.viewingOwnProfile ? "" : `A ${input.studentName} `;
 }
 
 /** Upper-case the first letter, so the same clause can open a sentence or sit inside one. */
@@ -861,7 +858,7 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
         ? "Todavía no tienes una membresía"
         : `${input.studentName} todavía no tiene una membresía`,
       detail:
-        "El club crea la membresía al registrar el primer pago. Acércate al club para activarla y después podrá renovarla desde aquí.",
+        "El club crea la membresía al registrar el primer pago. Acércate al club para activarla y después podrás renovarla desde aquí.",
       priceNote,
       canRegister: false,
       urgent: false,
@@ -874,8 +871,8 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
   if (input.suspended) {
     const coverage = coverageEnd
       ? (daysLeft ?? 0) < 0
-        ? ` Tu cobertura venció el ${formatDate(coverageEnd)}.`
-        : ` Tu cobertura sigue vigente hasta ${formatDate(coverageEnd)}.`
+        ? ` ${input.viewingOwnProfile ? "Tu cobertura" : `La cobertura de ${input.studentName}`} venció el ${formatDate(coverageEnd)}.`
+        : ` ${input.viewingOwnProfile ? "Tu cobertura" : `La cobertura de ${input.studentName}`} sigue vigente hasta ${formatDate(coverageEnd)}.`
       : "";
     const reason = input.motivoSuspension ? ` Motivo: ${input.motivoSuspension}.` : "";
     return {
@@ -942,7 +939,7 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
         ? "No tienes ningún pago aprobado"
         : `${input.studentName} no tiene ningún pago aprobado`,
       detail:
-        "El club no lleva un saldo pendiente: tú registras el pago del período que quiere cubrir y el club lo valida.",
+        "El club no lleva un saldo pendiente: registras el pago del período que quieres cubrir y el club lo valida.",
       priceNote,
       canRegister: true,
       urgent: true,
@@ -979,7 +976,7 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
             ? "Tu cobertura termina hoy"
             : `La cobertura de ${input.studentName} termina hoy`
           : sentence(
-              `${input.viewingOwnProfile ? "te" : `${possessivePrefix(input)}le`} ${
+              `${input.viewingOwnProfile ? "te" : `a ${input.studentName} le`} ${
                 daysLeft === 1 ? "queda 1 día" : `quedan ${daysLeft} días`
               } de cobertura`,
             ),
