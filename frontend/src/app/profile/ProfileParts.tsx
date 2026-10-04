@@ -7,6 +7,7 @@
 
 import { useId } from "react";
 import { cn } from "@/components/ui";
+import type { UserRole } from "@/types/domain";
 
 export interface HeroStat {
   label: string;
@@ -186,4 +187,50 @@ export function ActionTile({
       </span>
     </button>
   );
+}
+
+/** The per-role block the right column opens with. */
+export type RoleBlockKind = "ticket" | "dependants" | "trainer-board" | "admin-board" | "account-board";
+
+/**
+ * Which per-role blocks a session draws, in order. A jugador's membership
+ * ticket needs a membership row to talk about; a representante who also holds
+ * a membership of their own gets both («A tu cargo» leads).
+ */
+export function roleBlocksFor(role: UserRole, hasMembership: boolean): RoleBlockKind[] {
+  switch (role) {
+    case "estudiante":
+      return hasMembership ? ["ticket"] : [];
+    case "representante":
+      return hasMembership ? ["dependants", "ticket"] : ["dependants"];
+    case "trainer":
+      return ["trainer-board"];
+    case "admin":
+      return ["admin-board"];
+    case "unsupported":
+      return ["account-board"];
+  }
+}
+
+/** Days left at or under which the ticket warns instead of reassuring. */
+export const TICKET_WARN_DAYS = 7;
+
+export type TicketToneKey = "ok" | "warn" | "bad";
+
+/**
+ * The ticket's tone: the worse of what the coverage dates say and what the
+ * membership's own status chip says, so the two never disagree on one screen.
+ */
+export function ticketTone(daysLeft: number | null, chipTone: "ok" | "warn" | "bad" | "neutral"): TicketToneKey {
+  if (chipTone === "bad" || (daysLeft !== null && daysLeft < 0)) return "bad";
+  if (chipTone === "warn" || (daysLeft !== null && daysLeft <= TICKET_WARN_DAYS)) return "warn";
+  return "ok";
+}
+
+/** The one-word standing printed over the strip. */
+export function ticketWord(tone: TicketToneKey, daysLeft: number | null, chipLabel: string): string {
+  if (daysLeft !== null && daysLeft < 0) return "Venció";
+  if (tone === "ok") return "Al día";
+  if (daysLeft !== null && daysLeft <= TICKET_WARN_DAYS && chipLabel === "Membresía activa") return "Vence pronto";
+  return chipLabel;
 }
