@@ -907,7 +907,6 @@ describe("PaymentsPage — the detail view keeps the admin's place in the queue"
     completeChecklist();
 
     fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
 
     // The queue lost one item, and the admin is now on the survivor.
     expect(await screen.findByText("Pendiente 1 de 1")).toBeInTheDocument();
@@ -923,7 +922,6 @@ describe("PaymentsPage — the detail view keeps the admin's place in the queue"
     await openPendingWithChecklistDone();
 
     fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
 
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: /aprobar pago/i })).not.toBeInTheDocument(),
@@ -996,8 +994,8 @@ describe("PaymentsPage — the checklist adapts to the payment method", () => {
   function checklistLabels(): string[] {
     const group = screen.getByRole("group", { name: /antes de aprobar/i });
     return within(group)
-      .getAllByRole("checkbox")
-      .map((box) => (box.closest("label")?.textContent ?? "").trim());
+      .getAllByRole("listitem")
+      .map((item) => (item.textContent ?? "").trim());
   }
 
   it("never asks a cash payment about a comprobante it does not have", async () => {
@@ -1020,16 +1018,9 @@ describe("PaymentsPage — the checklist adapts to the payment method", () => {
 
     const approve = await screen.findByRole("button", { name: /aprobar pago/i });
     expect(approve).toBeDisabled();
-    expect(screen.getByText(/faltan 2 puntos de la lista/i)).toBeInTheDocument();
+    expect(screen.getByText(/falta confirmar la revisión para poder aprobar/i)).toBeInTheDocument();
 
-    const [first, second] = within(
-      screen.getByRole("group", { name: /antes de aprobar/i }),
-    ).getAllByRole("checkbox");
-    fireEvent.click(first);
-    expect(screen.getByText(/falta confirmar 1 punto de la lista/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /aprobar pago/i })).toBeDisabled();
-
-    fireEvent.click(second);
+    completeChecklist();
     expect(screen.getByRole("button", { name: /aprobar pago/i })).toBeEnabled();
   });
 
@@ -1183,12 +1174,6 @@ describe("PaymentsPage — approvals and rejections read the membership status",
 
     completeChecklist();
     fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-    expect(
-      screen.getByText(
-        /¿Confirma que aprueba este pago\? La cobertura se extiende de inmediato y esta acción no se puede deshacer\./,
-      ),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
 
     expect(
       await screen.findByText(/Pago aprobado\. La cobertura de Mateo Salazar se extendió\./),
@@ -1208,12 +1193,6 @@ describe("PaymentsPage — approvals and rejections read the membership status",
     completeChecklist();
 
     fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-    expect(
-      screen.getByText(
-        /¿Confirma que aprueba este pago\? La membresía pasará a activa de inmediato y esta acción no se puede deshacer\./,
-      ),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
 
     expect(
       await screen.findByText(/Pago aprobado\. La membresía ahora está activa\./),
@@ -1225,71 +1204,86 @@ describe("PaymentsPage — approvals and rejections read the membership status",
 // Pre-existing contracts kept green
 // ---------------------------------------------------------------------------
 
-describe("PaymentsPage — approve confirmation gating", () => {
-  it("opens a confirmation dialog on 'Aprobar Pago' click without mutating yet", async () => {
+describe("PaymentsPage — fast review: one tick, one click (QA4 ADMA-23)", () => {
+  it("never approves on its own: reviewing the payment sends nothing until 'Aprobar pago' is clicked", async () => {
     await openPendingWithChecklistDone();
-
-    fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(mockUpdatePaymentValidation).not.toHaveBeenCalled();
-  });
-
-  it("mutates the payment status only after the confirm control is activated, sending only the approve action", async () => {
-    await openPendingWithChecklistDone();
-
-    fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
-
-    // Confirming sends the real request immediately (issue #456) — no hold
-    // to step over anymore.
-    await waitFor(() => {
-      expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1);
-    });
-    // Issue #400 supersedes issue #314 (K6 hallazgo #11). That hallazgo was
-    // about a lossy calendar-month recompute leaking into what got saved —
-    // this used to assert `endDate: "2026-08-01"` was wrong and
-    // `"2026-07-31"` was the fix. Now there is no date to get right or wrong:
-    // Administración cannot edit the coverage period at approval at all, so
-    // approving sends ONLY the action, never date fields.
-    expect(mockUpdatePaymentValidation).toHaveBeenCalledWith("req-1", {
-      action: "approved",
-    });
-  });
-
-  it("leaves the payment status unchanged when the confirmation is canceled", async () => {
-    await openPendingWithChecklistDone();
-
-    fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^cancelar$/i }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(mockUpdatePaymentValidation).not.toHaveBeenCalled();
   });
 
-  // Issue #313 (K5 hallazgo #12): en vivo, tres clics seguidos en "Confirmar"
-  // (el botón no se deshabilitaba tras el primero) mandaron DOS PUT reales
-  // para el mismo pago — 400 y 200 — dejaron tres toasts de éxito, y el 400
-  // disparó un toast de error que afirmaba "volvió a la cola de pendientes"
-  // cuando el pago seguía aprobado. Tres clics síncronos (mismo tick, sin
-  // esperar el re-render) reproducen la carrera real de un triple-click o un
-  // script más rápido que React.
-  it("un triple clic en Confirmar produce UNA sola decisión, nunca un segundo PUT ni un error falso", async () => {
+  it("approves a reviewed payment with the review tick plus one click, sending only the approve action", async () => {
     await openPendingWithChecklistDone();
 
     fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-    const confirmBtn = screen.getByRole("button", { name: /^confirmar$/i });
 
+    await waitFor(() => {
+      expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1);
+    });
+    // Issue #400: Administración cannot edit the coverage period at approval,
+    // so approving sends ONLY the action, never date fields.
+    expect(mockUpdatePaymentValidation).toHaveBeenCalledWith("req-1", {
+      action: "approved",
+    });
+  });
+
+  it("asks for a single review confirmation, not one box per check", async () => {
+    renderPage();
+    await openRequest("Juan Pérez");
+    await screen.findByRole("button", { name: /aprobar pago/i });
+
+    const group = screen.getByRole("group", { name: /antes de aprobar/i });
+    expect(within(group).getAllByRole("checkbox")).toHaveLength(1);
+    // The points stay on screen next to the voucher, as text to read.
+    expect(within(group).getAllByRole("listitem")).toHaveLength(3);
+  });
+
+  it("opens the next pending payment, with the approval locked again, after an approval", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, SECOND_PENDING]);
+    mockUpdatePaymentValidation.mockResolvedValue({
+      ...PENDING_REQUEST,
+      validationStatus: "validado",
+    });
+    renderPage();
+    await openRequest("Juan Pérez");
+    await screen.findByRole("button", { name: /aprobar pago/i });
+    completeChecklist();
+
+    fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
+
+    expect(await screen.findByText("Pendiente 1 de 1")).toBeInTheDocument();
+    expect(screen.getAllByText("Sofia Vera").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /aprobar pago/i })).toBeDisabled();
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+  });
+
+  it("requires a reason to reject, and sends nothing without one", async () => {
+    renderPage();
+    await openRequest("Juan Pérez");
+
+    fireEvent.click(await screen.findByRole("button", { name: /rechazar pago/i }));
+    const submit = screen.getByRole("button", { name: /rechazar y avisar/i });
+    expect(submit).toBeDisabled();
+    fireEvent.click(submit);
+    expect(mockUpdatePaymentValidation).not.toHaveBeenCalled();
+  });
+
+  // Issue #313 (K5 hallazgo #12): fast repeated clicks on the decision button
+  // sent two real PUTs for the same payment. Synchronous clicks (same tick,
+  // before any re-render) reproduce the real race.
+  it("un triple clic en Aprobar produce UNA sola decisión, nunca un segundo PUT ni un error falso", async () => {
+    await openPendingWithChecklistDone();
+
+    const approve = screen.getByRole("button", { name: /aprobar pago/i });
     act(() => {
-      confirmBtn.click();
-      confirmBtn.click();
-      confirmBtn.click();
+      approve.click();
+      approve.click();
+      approve.click();
     });
 
     await waitFor(() => {
       expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1);
     });
-    // Give any second, wrongly-fired request a chance to have landed too.
     await act(async () => {
       await Promise.resolve();
     });
@@ -1325,7 +1319,6 @@ describe("PaymentsPage — issue #456: no success before the real server respons
     await screen.findByRole("button", { name: /aprobar pago/i });
     completeChecklist();
     fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
 
     // The real request is in flight (mockUpdatePaymentValidation was called)
     // but has not resolved — nothing may claim success yet.
@@ -1341,30 +1334,6 @@ describe("PaymentsPage — issue #456: no success before the real server respons
     });
 
     expect(await screen.findByText(/Pago aprobado/)).toBeInTheDocument();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Issue #314 (K6 hallazgo #17) — the irreversibility warning has to be
-// announced BEFORE the click, not discoverable two clicks away in /ayuda.
-//
-// Issue #456 changed WHAT is irreversible: approving used to be held for a
-// few seconds so "Deshacer" could cancel it before it was ever sent — that
-// hold is gone (the confirm dialog is now the only cancel-before-send step),
-// so the warning had to be reworded from "you'll have a few seconds to undo
-// it" to "this cannot be undone once confirmed". The guarantee these two
-// tests hold — reachable without leaving the screen, repeated in the dialog
-// — is unchanged.
-// ---------------------------------------------------------------------------
-
-describe("PaymentsPage — approving announces that it cannot be undone, before it happens", () => {
-  it("repeats the irreversibility warning in the confirmation dialog itself", async () => {
-    await openPendingWithChecklistDone();
-
-    fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-
-    const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText(/no se puede deshacer/i)).toBeInTheDocument();
   });
 });
 
@@ -1788,7 +1757,6 @@ describe("PaymentsPage — a decision only becomes real once the server confirms
     await screen.findByRole("button", { name: /aprobar pago/i });
     completeChecklist();
     fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
   }
 
   it("sends the decision immediately on confirm — no artificial hold", async () => {
@@ -2224,7 +2192,7 @@ describe("PaymentsPage — cash vs transfer review (admin v4)", () => {
 
     const approve = await screen.findByRole("button", { name: /aprobar pago/i });
     expect(approve).toBeDisabled();
-    expect(approve.parentElement!.parentElement).toHaveTextContent(/faltan \d+ puntos de la lista/i);
+    expect(approve.parentElement!.parentElement).toHaveTextContent(/falta confirmar la revisión/i);
     expect(screen.getByRole("button", { name: /rechazar pago/i })).toBeEnabled();
   });
 });

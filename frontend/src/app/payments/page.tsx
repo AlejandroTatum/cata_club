@@ -60,6 +60,15 @@
  * else. The cost is explicit — N pending payments are N confirmations again,
  * which is the pain the batch was built for. If that cost bites, the answer is
  * a better batch, not this one back.
+ *
+ * ## Fast review (QA4 ADMA-23)
+ *
+ * The cost above was 5-6 clicks per payment (three checkboxes, "Aprobar pago",
+ * "Confirmar"). The decision is still made one payment at a time, with the
+ * voucher in view, but now takes two: ONE "Revisé el pago" tick covering the
+ * listed points, and "Aprobar pago", which sends at once (the tick is the
+ * deliberate step, so the extra confirm dialog is gone). A decision opens the
+ * next pending payment with the tick cleared. No bulk approval.
  */
 
 "use client";
@@ -69,7 +78,6 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import ConfirmDialog from "@/components/ConfirmDialog";
 import PagoCorreccionSection from "@/app/payments/PagoCorreccionSection";
 import { useModalFocusTrap } from "@/lib/focus-trap";
 import { backHrefForRole } from "@/lib/auth-utils";
@@ -235,15 +243,6 @@ function rejectionCoverageNote(request: PaymentValidationRequest): string {
   return request.currentMembershipStatus === "activa"
     ? `La cobertura de ${request.studentName} no se extiende hasta entonces.`
     : `La membresía de ${request.studentName} sigue sin activarse hasta entonces.`;
-}
-
-/** Same distinction as `rejectionCoverageNote`, for the approve confirmation dialog. */
-function approveConfirmMessage(request: PaymentValidationRequest | null): string {
-  const consequence =
-    request?.currentMembershipStatus === "activa"
-      ? "La cobertura se extiende de inmediato"
-      : "La membresía pasará a activa de inmediato";
-  return `¿Confirma que aprueba este pago? ${consequence} y esta acción no se puede deshacer.`;
 }
 
 /** Same distinction as `rejectionCoverageNote`, for the approval success toast. */
@@ -578,6 +577,9 @@ function CashConfirmationPanel({
 /** Phone stat tiles: label + figure only, so the first pending card clears the fold. */
 const STAT_COMPACT = "max-lg:min-h-0 max-lg:gap-1 max-lg:px-3 max-lg:py-2.5";
 
+const REVIEWED_KEY = "revisado";
+const REVIEWED_LABEL = "Revisé el pago y confirmo los puntos anteriores";
+
 const QUEUE_ACTION_ATTR = "data-payment-action";
 
 /**
@@ -636,19 +638,14 @@ export default function PaymentsPage(): React.ReactElement {
   const [rejectionReasonKey, setRejectionReasonKey] = useState("");
   const [rejectionNote, setRejectionNote] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
-  const [confirmApproveOpen, setConfirmApproveOpen] = useState(false);
   /**
-   * Re-entrancy guard for the approve confirmation dialog (issue #313, K5
-   * hallazgo #12). `setConfirmApproveOpen(false)` unmounts the dialog, but
-   * that unmount only lands on the NEXT render — a real fast triple-click
-   * (or a script clicking faster than React repaints) can fire `onConfirm`
-   * more than once against the SAME still-mounted button before that
-   * happens. Two `decide()` calls meant two real PUTs for the same payment:
-   * the first landed, the second came back 400 ("ya está aprobado") and
-   * that error handler reverted the row and told the admin it "volvió a la
-   * cola de pendientes" — a state that never happened. A ref (synchronous,
-   * unlike state) makes every click after the first a no-op regardless of
-   * render timing.
+   * Re-entrancy guard for "Aprobar pago" (issue #313, K5 hallazgo #12). A real
+   * fast triple-click can fire the handler more than once against the SAME
+   * still-mounted button before `actionLoading` re-renders it disabled. Two
+   * `decide()` calls meant two real PUTs for the same payment: the first
+   * landed, the second came back 400 ("ya está aprobado"). A ref (synchronous,
+   * unlike state) makes every click after the first a no-op; it is released
+   * when the decision settles.
    */
   const confirmApproveInFlightRef = useRef(false);
   const [previewUnavailable, setPreviewUnavailable] = useState(false);
@@ -952,7 +949,10 @@ export default function PaymentsPage(): React.ReactElement {
       }),
     [selectedRequest?.paymentMethod, selectedRequest?.expectedAmount, selectedRequest?.proofPreviewUrl],
   );
-  const remainingChecks = checklist.items.filter((item) => !checked[item.key]).length;
+  /** One deliberate act covers the whole checklist (QA4 ADMA-23): the admin
+   *  reads the points beside the voucher and confirms them with a single tick. */
+  const reviewed = Boolean(checked[REVIEWED_KEY]);
+  const remainingChecks = reviewed ? 0 : 1;
   /** Issue #459: a TRANSFERENCIA with nothing attached also needs a
    *  non-blank exception reason before "Aprobar pago" unlocks — the
    *  checklist's checkboxes alone were pure self-attestation, with no gate
@@ -1123,6 +1123,7 @@ export default function PaymentsPage(): React.ReactElement {
       console.error("[payments] decision failed", err);
       await reportRealOutcomeAfterFailure(request, loadingKey, dto, confirmation, err);
     } finally {
+      confirmApproveInFlightRef.current = false;
       setActionLoading(null);
     }
   }
@@ -1189,7 +1190,8 @@ export default function PaymentsPage(): React.ReactElement {
   }
 
   function handleApprove(): void {
-    if (!selectedRequest || !checklistComplete) return;
+    if (!selectedRequest || !checklistComplete || confirmApproveInFlightRef.current) return;
+    confirmApproveInFlightRef.current = true;
     const request = selectedRequest;
 
     // `exceptionReason` only travels when this approval actually needs it
@@ -1778,7 +1780,7 @@ export default function PaymentsPage(): React.ReactElement {
                 <div className="flex items-center justify-between gap-3 border-b border-line px-[18px] py-4">
                   <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Decisión</h2>
                   <Badge tone={checklistComplete ? "ok" : "warn"}>
-                    {checklist.items.length - remainingChecks} de {checklist.items.length}
+                    {reviewed ? "Revisado" : "Por revisar"}
                   </Badge>
                 </div>
 
@@ -1793,22 +1795,22 @@ export default function PaymentsPage(): React.ReactElement {
                     aria-labelledby="antes-de-aprobar"
                     className="-mt-2 flex flex-col"
                   >
-                    {checklist.items.map((item) => (
-                      <label
-                        key={item.key}
-                        className="flex cursor-pointer items-center gap-3 py-2 text-sm text-ink-2"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={Boolean(checked[item.key])}
-                          onChange={(e) =>
-                            setChecked((prev) => ({ ...prev, [item.key]: e.target.checked }))
-                          }
-                          className="h-[18px] w-[18px] flex-none accent-coal"
-                        />
-                        {item.label}
-                      </label>
-                    ))}
+                    <ul className="mb-2 flex list-disc flex-col gap-1 pl-5 text-sm text-ink-2">
+                      {checklist.items.map((item) => (
+                        <li key={item.key}>{item.label}</li>
+                      ))}
+                    </ul>
+                    <label className="flex cursor-pointer items-center gap-3 py-2 text-sm font-semibold text-ink">
+                      <input
+                        type="checkbox"
+                        checked={reviewed}
+                        onChange={(e) =>
+                          setChecked({ [REVIEWED_KEY]: e.target.checked })
+                        }
+                        className="h-[18px] w-[18px] flex-none accent-coal"
+                      />
+                      {REVIEWED_LABEL}
+                    </label>
                   </div>
                 {!showRejectForm ? (
                   <>
@@ -1871,10 +1873,7 @@ export default function PaymentsPage(): React.ReactElement {
                       <Button
                         variant="primary"
                         disabled={!checklistComplete || actionLoading !== null}
-                        onClick={() => {
-                          confirmApproveInFlightRef.current = false;
-                          setConfirmApproveOpen(true);
-                        }}
+                        onClick={handleApprove}
                       >
                         {actionLoading === "approve" ? "Procesando…" : "Aprobar pago"}
                       </Button>
@@ -1889,11 +1888,9 @@ export default function PaymentsPage(): React.ReactElement {
                     {!checklistComplete && (
                       <p className="min-w-0 text-xs text-ink-3-strong lg:flex-1">
                         {remainingChecks > 0 && needsExceptionReason
-                          ? `Faltan ${remainingChecks} puntos de la lista y el motivo de la excepción para poder aprobar.`
+                          ? "Falta confirmar la revisión y el motivo de la excepción para poder aprobar."
                           : remainingChecks > 0
-                          ? remainingChecks === 1
-                            ? "Falta confirmar 1 punto de la lista para poder aprobar."
-                            : `Faltan ${remainingChecks} puntos de la lista para poder aprobar.`
+                          ? "Falta confirmar la revisión para poder aprobar."
                           : "Falta indicar el motivo de la excepción para poder aprobar."}
                       </p>
                     )}
@@ -2097,23 +2094,6 @@ export default function PaymentsPage(): React.ReactElement {
         }
       >
         {selectedRequest ? renderDetail(selectedRequest) : renderQueue()}
-
-        <ConfirmDialog
-          open={confirmApproveOpen}
-          variant="state-ok"
-          title="Aprobar pago"
-          message={approveConfirmMessage(selectedRequest)}
-          onConfirm={() => {
-            if (confirmApproveInFlightRef.current) return;
-            confirmApproveInFlightRef.current = true;
-            setConfirmApproveOpen(false);
-            void handleApprove();
-          }}
-          onCancel={() => {
-            confirmApproveInFlightRef.current = false;
-            setConfirmApproveOpen(false);
-          }}
-        />
 
         {/* Fullscreen voucher viewer modal */}
         {voucherModalOpen && selectedRequest?.proofPreviewUrl &&
