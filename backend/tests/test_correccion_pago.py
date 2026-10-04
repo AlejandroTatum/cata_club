@@ -466,6 +466,92 @@ def test_corregir_monto_respeta_el_descuento_ya_congelado(db_session, admin_id):
     assert resultado_pago.monto_base == Decimal("40.00")
 
 
+# --- ADMA-16: el admin solo escribe el monto final ----------------------------
+
+def test_corregir_solo_el_monto_final_ajusta_base_y_tarifa(db_session, grafo, admin_id):
+    """QA4 ADMA-16 «a»: con un pago con snapshot, mandar SOLO `monto` ya no
+    exige que el admin haga cuentas -- el servidor deriva `monto_base` y
+    `tarifa_mensual_aplicada`."""
+    _, _, _, pago = grafo
+
+    resultado, correccion = PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(monto=Decimal("25.00"), motivo="Monto mal digitado"),
+        actor_persona_id=admin_id,
+    )
+
+    assert resultado.monto == Decimal("25.00")
+    assert resultado.monto_base == Decimal("25.00")
+    assert resultado.tarifa_mensual_aplicada == Decimal("25.00")
+    assert correccion.monto_base_anterior == Decimal("30.00")
+    assert correccion.monto_base_nuevo == Decimal("25.00")
+    assert correccion.efecto_cobertura == EfectoCoberturaCorreccion.SIN_CAMBIO
+
+
+def test_corregir_solo_el_monto_final_respeta_el_descuento_congelado(db_session, admin_id):
+    persona = crear_persona_orm(db_session, cedula_valida(916))
+    tipo = crear_tipo_membresia_orm(db_session, precio=TARIFA)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=TARIFA)
+    pago = _pago_aprobado(db_session, persona, membresia, descuento_valor_aplicado=Decimal("10.00"))
+
+    resultado, _ = PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(monto=Decimal("15.00"), motivo="Monto mal digitado"),
+        actor_persona_id=admin_id,
+    )
+
+    assert resultado.monto == Decimal("15.00")
+    assert resultado.monto_base == Decimal("25.00")  # 15 + 10 de descuento
+    assert resultado.tarifa_mensual_aplicada == Decimal("25.00")
+
+
+def test_corregir_solo_el_monto_final_en_varios_meses_divide_la_tarifa(db_session, admin_id):
+    persona = crear_persona_orm(db_session, cedula_valida(917))
+    tipo = crear_tipo_membresia_orm(db_session, precio=TARIFA)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=TARIFA)
+    pago = _pago_aprobado(db_session, persona, membresia, meses=2)  # base 60
+
+    resultado, _ = PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(monto=Decimal("50.00"), motivo="Monto mal digitado"),
+        actor_persona_id=admin_id,
+    )
+
+    assert resultado.monto_base == Decimal("50.00")
+    assert resultado.tarifa_mensual_aplicada == Decimal("25.00")
+    assert resultado.meses_comprados == 2
+
+
+def test_corregir_solo_el_monto_final_sin_division_exacta_conserva_la_tarifa(db_session, admin_id):
+    persona = crear_persona_orm(db_session, cedula_valida(918))
+    tipo = crear_tipo_membresia_orm(db_session, precio=TARIFA)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=TARIFA)
+    pago = _pago_aprobado(db_session, persona, membresia, meses=3)  # base 90
+
+    resultado, _ = PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(monto=Decimal("100.00"), motivo="Monto mal digitado"),
+        actor_persona_id=admin_id,
+    )
+
+    assert resultado.monto == Decimal("100.00")
+    assert resultado.monto_base == Decimal("100.00")
+    assert resultado.tarifa_mensual_aplicada == Decimal("30.00")  # 100/3 no es exacto
+
+
+def test_corregir_solo_el_monto_final_mantiene_la_formula_con_descuento(db_session, admin_id):
+    persona = crear_persona_orm(db_session, cedula_valida(919))
+    tipo = crear_tipo_membresia_orm(db_session, precio=TARIFA)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=TARIFA)
+    pago = _pago_aprobado(db_session, persona, membresia, descuento_valor_aplicado=Decimal("10.00"))
+    resultado, _ = PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(monto=Decimal("0.01"), motivo="Monto mínimo"),
+        actor_persona_id=admin_id,
+    )
+    assert resultado.monto_base - Decimal("10.00") == resultado.monto
+
+
 # --- Superposición con la cobertura de otro pago aprobado ---------------------
 
 def test_reducir_cobertura_que_rompe_continuidad_con_pago_posterior_es_rechazada(

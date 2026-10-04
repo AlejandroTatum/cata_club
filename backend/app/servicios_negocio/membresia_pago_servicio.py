@@ -1881,6 +1881,24 @@ class PagoServicio:
             for campo in self._CAMPOS_CORREGIBLES_PAGO
         }
 
+        # QA4 ADMA-16: si el admin solo manda el monto final, el servidor
+        # deriva `monto_base` (monto + descuento congelado) y, si la división
+        # es exacta en centavos, la tarifa mensual -- el admin no hace cuentas.
+        if (
+            datos.monto is not None
+            and datos.monto_base is None
+            and datos.tarifa_mensual_aplicada is None
+            and datos.meses_comprados is None
+            and anteriores["monto_base"] is not None
+        ):
+            monto_base_derivado = datos.monto + (pago.descuento_valor_aplicado or Decimal("0.00"))
+            nuevos["monto_base"] = monto_base_derivado
+            meses = nuevos["meses_comprados"]
+            if meses is not None and nuevos["tarifa_mensual_aplicada"] is not None:
+                tarifa_derivada = (monto_base_derivado / meses).quantize(Decimal("0.01"))
+                if tarifa_derivada * meses == monto_base_derivado:
+                    nuevos["tarifa_mensual_aplicada"] = tarifa_derivada
+
         if all(nuevos[campo] == anteriores[campo] for campo in self._CAMPOS_CORREGIBLES_PAGO):
             raise OperacionInvalida("La corrección no modifica ningún valor del pago.")
 
