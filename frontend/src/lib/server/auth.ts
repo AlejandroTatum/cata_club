@@ -591,7 +591,7 @@ export async function backendLogin(
         ok: false,
         error: {
           code: "login_cooldown",
-          message: "Demasiados intentos fallidos. Por seguridad, espere 15 minutos o restablezca su contraseña.",
+          message: "Demasiados intentos fallidos. Por seguridad, espera 15 minutos o restablece tu contraseña.",
         },
       };
     }
@@ -600,7 +600,7 @@ export async function backendLogin(
   // an account the club deactivated. It is not "bad credentials": the person
   // needs to hear it is the club that has to act.
   if (response.status === 403) {
-    return { ok: false, error: { code: "account_inactive", message: "Su cuenta está inactiva." } };
+    return { ok: false, error: { code: "account_inactive", message: "Tu cuenta está inactiva." } };
   }
   if (!response.ok) {
     return {

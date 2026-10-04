@@ -60,7 +60,7 @@ function RequestRow({ request, onResolved }: RowProps): React.ReactElement {
     if (busy) return;
     const trimmed = motivo.trim();
     if (trimmed.length === 0) {
-      setError("Indique por qué se rechaza.");
+      setError("Indica por qué se rechaza.");
       return;
     }
     setBusy(true);

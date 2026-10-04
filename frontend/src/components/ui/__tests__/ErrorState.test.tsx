@@ -44,7 +44,7 @@ describe("ErrorState", () => {
 
 describe("ErrorState — links in the message (FAM-21)", () => {
   it("renders an address inside the message as a clickable link", () => {
-    render(<ErrorState message="Escríbanos: https://wa.me/593999999999." />);
+    render(<ErrorState message="Escríbenos: https://wa.me/593999999999." />);
     const link = screen.getByRole("link", { name: /wa\.me|WhatsApp/i });
     expect(link).toHaveAttribute("href", "https://wa.me/593999999999");
   });

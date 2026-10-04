@@ -432,7 +432,7 @@ describe("backendLogin", () => {
   // an account the club deactivated. It is not "bad credentials".
   it("reports account_inactive on a 403, not invalid_credentials", async () => {
     vi.mocked(global.fetch).mockResolvedValue(
-      jsonResponse({ message: "Su cuenta está inactiva. Comuníquese con el club para reactivarla." }, 403),
+      jsonResponse({ message: "Tu cuenta está inactiva. Comunícate con el club para reactivarla." }, 403),
     );
 
     const result = await backendLogin("ex@cataclub.com", "Secreta123");

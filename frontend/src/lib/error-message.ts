@@ -241,9 +241,9 @@ const INPUT_STATUSES: readonly number[] = [400, 409, 422];
  * producer or the test goes red.
  */
 export const STATUS_MESSAGES: Readonly<Record<number, string>> = {
-  401: "Su sesión expiró. Vuelva a iniciar sesión.",
-  403: "No tiene permisos para realizar esta acción.",
-  429: "Demasiados intentos. Espere un momento e intente nuevamente.",
+  401: "Tu sesión expiró. Vuelve a iniciar sesión.",
+  403: "No tienes permisos para realizar esta acción.",
+  429: "Demasiados intentos. Espera un momento e intenta nuevamente.",
 };
 
 /**
@@ -290,17 +290,17 @@ const MARKED_SAFE_STATUSES: readonly number[] = [403];
  */
 const SERVER_FAILURE =
   `Tuvimos un problema de nuestro lado y no pudimos completar esto. ` +
-  `Escríbanos por WhatsApp y lo ayudamos: ${WHATSAPP_CONTACTO}`;
+  `Escríbenos por WhatsApp y te ayudamos: ${WHATSAPP_CONTACTO}`;
 
 /**
  * `fetch` rejected: no server ever answered, so there is no status at all.
  * Unlike `SERVER_FAILURE`, this one IS something the member can act on —
  * their own connection — so it keeps the advice instead of the club contact.
  */
-const NETWORK_FAILURE = "No pudimos conectar. Revise su conexión a internet e intente nuevamente.";
+const NETWORK_FAILURE = "No pudimos conectar. Revisa tu conexión a internet e intenta nuevamente.";
 
 /** The caller aborted — a navigation, an unmount, a superseded request. */
-const CANCELLED = "La operación se canceló. Si todavía la necesita, vuelva a intentarlo.";
+const CANCELLED = "La operación se canceló. Si todavía la necesitas, vuelve a intentarlo.";
 
 /**
  * The client gave up waiting: `DEFAULT_TIMEOUT_MS` elapsed with no answer.
@@ -312,7 +312,7 @@ const CANCELLED = "La operación se canceló. Si todavía la necesita, vuelva a 
  */
 const TIMED_OUT =
   `Esto está tardando más de lo normal y no pudimos terminarlo. ` +
-  `Escríbanos por WhatsApp y lo ayudamos: ${WHATSAPP_CONTACTO}`;
+  `Escríbenos por WhatsApp y te ayudamos: ${WHATSAPP_CONTACTO}`;
 
 /**
  * What an `ApiClientError` carries when the response body named no reason at
@@ -328,7 +328,7 @@ const TIMED_OUT =
  * varying between the two call sites.
  */
 export const GENERIC_FAILURE =
-  `No pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: ${WHATSAPP_CONTACTO}`;
+  `No pudimos completar esto. Escríbenos por WhatsApp y te ayudamos: ${WHATSAPP_CONTACTO}`;
 
 /**
  * Reads an error's `status` without importing `ApiClientError` from

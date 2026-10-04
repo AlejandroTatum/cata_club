@@ -207,7 +207,7 @@ export default function SessionHistoryList({
                     // ends inverted — because "complete las dos fechas" is wrong
                     // advice when both are already filled in.
                     "Ajuste el rango de fechas para ver las listas."
-                  : "Cambie el rango o los filtros, o pase lista para que aparezca aquí."}
+                  : "Cambia el rango o los filtros, o pasa lista para que aparezca aquí."}
               </p>
             </div>
             {/* The page header already carries the CTA on a phone; the empty

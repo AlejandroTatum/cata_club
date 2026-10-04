@@ -27,7 +27,7 @@ export const REDIRECT_REASON_MESSAGES: Readonly<Record<RedirectReason, string>> 
   // Issue #1045/#1057 — the verification succeeded in the backend at the
   // exact moment the person's own session ended, folded in from the toast
   // that used to carry this text.
-  "correo-verificado": "Su correo quedó verificado. Vuelva a iniciar sesión para continuar.",
+  "correo-verificado": "Tu correo quedó verificado. Vuelve a iniciar sesión para continuar.",
 };
 
 /** Appends the reason to `route` the same way every producer must. */

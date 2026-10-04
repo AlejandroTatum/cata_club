@@ -35,11 +35,11 @@ describe("AttentionStrip", () => {
         title="Requiere su atención"
         allClearMessage="Todo al día"
         items={[
-          { id: "a", count: 4, label: "pagos esperan su validación", note: "1 lleva más de una semana", href: "/payments", cta: "Revisar" },
+          { id: "a", count: 4, label: "pagos esperan tu validación", note: "1 lleva más de una semana", href: "/payments", cta: "Revisar" },
         ]}
       />,
     );
-    const row = screen.getByText("pagos esperan su validación").closest("li") as HTMLElement;
+    const row = screen.getByText("pagos esperan tu validación").closest("li") as HTMLElement;
     expect(within(row).getByText("4")).toBeInTheDocument();
     expect(within(row).getByText("1 lleva más de una semana")).toBeInTheDocument();
     expect(within(row).getByRole("link", { name: /revisar/i })).toHaveAttribute("href", "/payments");

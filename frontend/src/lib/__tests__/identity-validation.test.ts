@@ -692,18 +692,18 @@ describe("edad del alumno", () => {
 
   describe("studentBirthDateRule — issue #224's five reproduction cases", () => {
     it("requires a value", () => {
-      expect(studentBirthDateRule("", FROZEN_TODAY)).toBe("Indique la fecha de nacimiento del alumno.");
+      expect(studentBirthDateRule("", FROZEN_TODAY)).toBe("Indica la fecha de nacimiento del alumno.");
     });
 
     it("rejects an invalid calendar date", () => {
       expect(studentBirthDateRule("2024-02-30", FROZEN_TODAY)).toBe(
-        "La fecha de nacimiento no existe. Revise el día, el mes y el año.",
+        "La fecha de nacimiento no existe. Revisa el día, el mes y el año.",
       );
     });
 
     it("rejects a future date by naming it future, never as a bogus negative age", () => {
       const message = studentBirthDateRule("2030-01-01", FROZEN_TODAY);
-      expect(message).toBe("La fecha de nacimiento no puede ser posterior a hoy. Revise el año.");
+      expect(message).toBe("La fecha de nacimiento no puede ser posterior a hoy. Revisa el año.");
       expect(message).not.toContain("menor");
     });
 
@@ -713,19 +713,19 @@ describe("edad del alumno", () => {
 
     it("rejects a birth date 2 years ago, naming the computed age", () => {
       expect(studentBirthDateRule("2027-01-01", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 2 años. Revise el año de nacimiento.`,
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 2 años. Revisa el año de nacimiento.`,
       );
     });
 
     it("rejects a birth date 120 years ago, naming the computed age", () => {
       expect(studentBirthDateRule("1909-01-01", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 120 años. Revise el año de nacimiento.`,
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 120 años. Revisa el año de nacimiento.`,
       );
     });
 
     it("rejects an implausible historical date (1750), naming the computed age", () => {
       expect(studentBirthDateRule("1750-03-15", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 278 años. Revise el año de nacimiento.`,
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 278 años. Revisa el año de nacimiento.`,
       );
     });
 
@@ -739,13 +739,13 @@ describe("edad del alumno", () => {
 
     it("rejects one day past the maximum boundary (96 years old)", () => {
       expect(studentBirthDateRule("1933-01-01", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 96 años. Revise el año de nacimiento.`,
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 96 años. Revisa el año de nacimiento.`,
       );
     });
 
     it("rejects one day short of the minimum boundary (2 years old)", () => {
       expect(studentBirthDateRule("2026-01-02", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 2 años. Revise el año de nacimiento.`,
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 2 años. Revisa el año de nacimiento.`,
       );
     });
   });
@@ -818,13 +818,13 @@ describe("contraseña", () => {
 
     it("rejects a common password that meets the length floor", () => {
       expect(passwordRule("12345678", "La contraseña")).toBe(
-        "La contraseña es una de las más usadas y fácil de adivinar; elija otra.",
+        "La contraseña es una de las más usadas y fácil de adivinar; elige otra.",
       );
       expect(passwordRule("password", "La contraseña")).toBe(
-        "La contraseña es una de las más usadas y fácil de adivinar; elija otra.",
+        "La contraseña es una de las más usadas y fácil de adivinar; elige otra.",
       );
       expect(passwordRule("aaaaaaaa", "La contraseña")).toBe(
-        "La contraseña es una de las más usadas y fácil de adivinar; elija otra.",
+        "La contraseña es una de las más usadas y fácil de adivinar; elige otra.",
       );
     });
 
@@ -847,7 +847,7 @@ describe("contraseña", () => {
 
     it("still flags a common password that arrives padded", () => {
       expect(passwordRule("  password  ", "La contraseña")).toBe(
-        "La contraseña es una de las más usadas y fácil de adivinar; elija otra.",
+        "La contraseña es una de las más usadas y fácil de adivinar; elige otra.",
       );
     });
 
@@ -975,7 +975,7 @@ describe("contraseña", () => {
 describe("PHONE_LOCAL_HINT (#1028, unified across every site by #1296)", (): void => {
   it("teaches the local digits after the field's fixed +593, with the example, no leading 0", (): void => {
     expect(PHONE_LOCAL_HINT).toBe(
-      "Escriba los 9 dígitos de su celular o los 8 de su fijo, sin el 0 inicial: por ejemplo, 991234567.",
+      "Escribe los 9 dígitos de tu celular o los 8 de tu fijo, sin el 0 inicial: por ejemplo, 991234567.",
     );
     // The +593 teaching lives INSIDE the field (`EcuadorPhonePrefix`); the
     // hint would only repeat it.
@@ -1056,13 +1056,13 @@ describe("QA4 copy — REG-05, REG-07", (): void => {
   it("guided phone rule: wrong length speaks the same «sin el 0 inicial» as the hint", (): void => {
     const message = phoneFieldRule("99123456", "El teléfono", { guided: true });
     expect(message).toBe(
-      "El teléfono no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+      "El teléfono no es válido. Escribe 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
     );
     expect(message).not.toContain("09");
   });
 
   it("guided phone rule: letters-only input asks for numbers instead of «obligatorio»", (): void => {
-    expect(phoneFieldRule("abcdefghi", "El teléfono", { guided: true })).toBe("Escriba solo números.");
+    expect(phoneFieldRule("abcdefghi", "El teléfono", { guided: true })).toBe("Escribe solo números.");
     expect(phoneFieldRule("", "El teléfono", { guided: true })).toBe("El teléfono es obligatorio.");
   });
 
@@ -1073,7 +1073,7 @@ describe("QA4 copy — REG-05, REG-07", (): void => {
   it("long password error avoids «bytes»", (): void => {
     const message = passwordRule("a".repeat(PASSWORD_MAX_BYTES + 1), "La contraseña");
     expect(message).toBe(
-      "La contraseña es demasiado larga. Use menos de 70 caracteres (las tildes, la ñ y los emoji cuentan doble).",
+      "La contraseña es demasiado larga. Usa menos de 70 caracteres (las tildes, la ñ y los emoji cuentan doble).",
     );
   });
 });

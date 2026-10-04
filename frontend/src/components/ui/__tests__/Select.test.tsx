@@ -13,7 +13,7 @@ describe("Select", () => {
       <>
         <label htmlFor="s">Tipo de sangre</label>
         <Select id="s" required defaultValue="">
-          <option value="">Seleccione una opción</option>
+          <option value="">Selecciona una opción</option>
           <option value="O_POSITIVO">O+</option>
         </Select>
       </>,

@@ -793,7 +793,7 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
         <div className="rounded-ctl bg-sunken p-3 text-xs text-ink-3-strong">
           Edad calculada:{" "}
           <span className="font-semibold text-ink">
-            {agePlausible ? formatAgeYears(age) : ageValid ? "Revise el año." : "—"}
+            {agePlausible ? formatAgeYears(age) : ageValid ? "Revisa el año." : "—"}
           </span>
           {agePlausible && props.renderAgeWarning?.(age)}
         </div>

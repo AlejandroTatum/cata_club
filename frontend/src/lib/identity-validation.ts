@@ -171,7 +171,7 @@ export const PHONE_FORMAT_HINT =
  * them.
  */
 export const PHONE_LOCAL_HINT =
-  "Escriba los 9 dígitos de su celular o los 8 de su fijo, sin el 0 inicial: por ejemplo, 991234567.";
+  "Escribe los 9 dígitos de tu celular o los 8 de tu fijo, sin el 0 inicial: por ejemplo, 991234567.";
 
 export function phoneError(value: string): PhoneErrorReason | null {
   // Normalize BEFORE the separator strip below: an international mobile
@@ -254,10 +254,10 @@ export function phoneFieldRule(
     // REG-05: the field's own hint says «sin el 0 inicial», so the error must
     // not talk about the «09» the person was told not to type, and a value
     // with no digits at all is not «obligatorio» — something was typed.
-    if (digits.trim() && !/\d/.test(digits)) return "Escriba solo números.";
+    if (digits.trim() && !/\d/.test(digits)) return "Escribe solo números.";
     const stored = toStoredPhone(digits);
     if (stored && phoneError(stored) === "invalid-number") {
-      return `${subject} no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.`;
+      return `${subject} no es válido. Escribe 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.`;
     }
     return phoneRule(stored, subject);
   }
@@ -581,12 +581,12 @@ export function isFutureBirthDate(birthDate: string, today: Date = new Date()): 
  * the wrong thing.
  */
 export function studentBirthDateRule(value: string, today: Date = new Date()): string | null {
-  if (!value) return "Indique la fecha de nacimiento del alumno.";
-  if (!isValidCalendarDate(value)) return "La fecha de nacimiento no existe. Revise el día, el mes y el año.";
-  if (isFutureBirthDate(value, today)) return "La fecha de nacimiento no puede ser posterior a hoy. Revise el año.";
+  if (!value) return "Indica la fecha de nacimiento del alumno.";
+  if (!isValidCalendarDate(value)) return "La fecha de nacimiento no existe. Revisa el día, el mes y el año.";
+  if (isFutureBirthDate(value, today)) return "La fecha de nacimiento no puede ser posterior a hoy. Revisa el año.";
   const age = calculatePersonAge(value, today);
   if (age < EDAD_MINIMA_ALUMNO || age > EDAD_MAXIMA_ALUMNO) {
-    return `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a ${age} ${age === 1 ? "año" : "años"}. Revise el año de nacimiento.`;
+    return `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a ${age} ${age === 1 ? "año" : "años"}. Revisa el año de nacimiento.`;
   }
   return null;
 }
@@ -744,10 +744,10 @@ export function passwordRule(value: string, subject: string): string | null {
     return `${subject} debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`;
   }
   if (passwordByteLength(password) > PASSWORD_MAX_BYTES) {
-    return `${subject} es demasiado larga. Use menos de 70 caracteres (las tildes, la ñ y los emoji cuentan doble).`;
+    return `${subject} es demasiado larga. Usa menos de 70 caracteres (las tildes, la ñ y los emoji cuentan doble).`;
   }
   return isCommonPassword(password)
-    ? `${subject} es una de las más usadas y fácil de adivinar; elija otra.`
+    ? `${subject} es una de las más usadas y fácil de adivinar; elige otra.`
     : null;
 }
 

@@ -58,7 +58,7 @@ function describe(password: string, level: PasswordMeterLevel): string {
       return `Al menos ${PASSWORD_MIN_LENGTH} caracteres.`;
     case "short": {
       if (candidate.length >= PASSWORD_MIN_LENGTH) {
-        return "Es una de las contraseñas más usadas; elija otra.";
+        return "Es una de las contraseñas más usadas; elige otra.";
       }
       const missing = PASSWORD_MIN_LENGTH - candidate.length;
       return `${candidate.length} de ${PASSWORD_MIN_LENGTH} caracteres — ${

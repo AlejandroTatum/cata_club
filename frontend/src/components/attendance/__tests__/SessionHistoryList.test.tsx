@@ -81,7 +81,7 @@ describe("SessionHistoryList", () => {
     const { rerender } = render(
       <SessionHistoryList pageSize={10} sessions={[]} rangeInvalid={false} emptyAction={EMPTY_ACTION} />,
     );
-    expect(screen.getByText(/pase lista para que aparezca/i)).toBeInTheDocument();
+    expect(screen.getByText(/pasa lista para que aparezca/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Pasar lista" })).toBeInTheDocument();
 
     rerender(<SessionHistoryList pageSize={10} sessions={[]} rangeInvalid emptyAction={EMPTY_ACTION} />);

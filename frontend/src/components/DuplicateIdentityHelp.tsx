@@ -48,10 +48,10 @@ interface Guidance {
 
 const GUIDANCE: Record<DuplicateIdentityAudience, Guidance> = {
   "self-service": {
-    hint: "Si ya tiene cuenta, no necesita volver a inscribirse: inicie sesión y, desde su cuenta, agregue un dependiente. Para eso solo necesita haber verificado su correo.",
+    hint: "Si ya tienes cuenta, no necesitas volver a inscribirse: inicia sesión y, desde tu cuenta, agrega un jugador. Para eso solo necesitas haber verificado tu correo.",
     contact: {
-      before: "Si ya fue socio del club, escríbanos por ",
-      after: " para reactivar su cuenta.",
+      before: "Si ya fuiste socio del club, escríbenos por ",
+      after: " para reactivar tu cuenta.",
     },
     links: [
       { href: "/login", label: "Iniciar sesión" },
@@ -59,8 +59,8 @@ const GUIDANCE: Record<DuplicateIdentityAudience, Guidance> = {
     ],
   },
   representative: {
-    hint: "Esa persona ya está registrada en el club. Revise sus dependientes; si no aparece ahí, la vinculación se realiza únicamente en persona: acérquese a administración del club.",
-    links: [{ href: "/student", label: "Ver mis dependientes" }],
+    hint: "Esa persona ya está registrada en el club. Revisa tus jugadores; si no aparece ahí, la vinculación se realiza únicamente en persona: acércate a administración del club.",
+    links: [{ href: "/student", label: "Ver mis jugadores" }],
   },
   admin: {
     hint: "Esa persona ya está registrada. Búsquela en Miembros para asignarle roles o credenciales en vez de crearla de nuevo.",

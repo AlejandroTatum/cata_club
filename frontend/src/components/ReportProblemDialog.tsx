@@ -18,7 +18,7 @@ export interface ReportProblemDialogProps {
 }
 
 function captureError(file: File): string {
-  if (!CAPTURE_TYPES.includes(file.type)) return "Use una imagen PNG, JPEG o WebP.";
+  if (!CAPTURE_TYPES.includes(file.type)) return "Usa una imagen PNG, JPEG o WebP.";
   if (file.size > MAX_CAPTURE_BYTES) return "La captura supera los 2 MB.";
   return "";
 }
@@ -79,7 +79,7 @@ export default function ReportProblemDialog({ onClose, requestId, capture }: Rep
       setTrackingId(typeof body?.id === "number" ? body.id : null);
       setSent(true);
     } catch {
-      setError("No se pudo enviar el reporte. Inténtelo de nuevo.");
+      setError("No se pudo enviar el reporte. Inténtalo de nuevo.");
     } finally {
       setSending(false);
     }
@@ -94,7 +94,7 @@ export default function ReportProblemDialog({ onClose, requestId, capture }: Rep
         </header>
         {sent ? (
           <div className="flex flex-col items-start gap-3 p-6">
-            <p>Gracias. El club recibió su reporte.</p>
+            <p>Gracias. El club recibió tu reporte.</p>
             {trackingId !== null && <p>Código de seguimiento: <strong>#{trackingId}</strong></p>}
             <Button type="button" variant="primary" onClick={onClose}>Cerrar</Button>
           </div>
@@ -121,7 +121,7 @@ export default function ReportProblemDialog({ onClose, requestId, capture }: Rep
                 ) : (
                   <FileDropZone
                     id="report-capture" label="Captura opcional (PNG, JPEG o WebP, hasta 2 MB)"
-                    hint="Puede adjuntar una imagen de su equipo." accept="image/png,image/jpeg,image/webp"
+                    hint="Puedes adjuntar una imagen de tu equipo." accept="image/png,image/jpeg,image/webp"
                     file={screenshot} onFile={pickFile} chooseLabel="Elegir imagen"
                   />
                 )}
@@ -146,16 +146,16 @@ export default function ReportProblemDialog({ onClose, requestId, capture }: Rep
                 ) : (
                   <div className="flex items-center gap-2 rounded-card border border-dashed border-line-2 p-3 text-sm text-ink-2">
                     <Camera size={ICON.base} aria-hidden="true" />
-                    <span>{capture?.failed ? "No se pudo capturar la pantalla. Puede adjuntar una imagen manualmente." : "Sin captura adjunta."}</span>
+                    <span>{capture?.failed ? "No se pudo capturar la pantalla. Puedes adjuntar una imagen manualmente." : "Sin captura adjunta."}</span>
                   </div>
                 )}
-                <section aria-label="Así llegará su reporte" className="card flex flex-col gap-2 p-3 text-sm">
-                  <h3 className="font-semibold">Así llegará su reporte</h3>
+                <section aria-label="Así llegará tu reporte" className="card flex flex-col gap-2 p-3 text-sm">
+                  <h3 className="font-semibold">Así llegará tu reporte</h3>
                   <dl className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-3 gap-y-1.5">
                     <dt className="text-xs font-bold uppercase text-ink-2">Descripción</dt><dd data-testid="report-preview-description" className="whitespace-pre-wrap break-words">{description.trim() || "—"}</dd>
                     <dt className="text-xs font-bold uppercase text-ink-2">Ruta</dt><dd className="break-all font-mono text-xs">{route || "—"}</dd>
                     <dt className="text-xs font-bold uppercase text-ink-2">Navegador</dt><dd className="break-words text-xs">{browser || "—"}</dd>
-                    <dt className="text-xs font-bold uppercase text-ink-2">Captura</dt><dd>{attached ? "Con captura" : screenshot ? "Sin captura (falta su autorización)" : "Sin captura"}</dd>
+                    <dt className="text-xs font-bold uppercase text-ink-2">Captura</dt><dd>{attached ? "Con captura" : screenshot ? "Sin captura (falta tu autorización)" : "Sin captura"}</dd>
                   </dl>
                 </section>
               </div>

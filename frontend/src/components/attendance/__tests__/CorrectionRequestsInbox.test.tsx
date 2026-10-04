@@ -118,7 +118,7 @@ describe("CorrectionRequestsInbox (QA4 ENT-25)", () => {
     const row = (await screen.findByText("Alumno 1")).closest("li") as HTMLElement;
     fireEvent.click(within(row).getByRole("button", { name: "Rechazar" }));
     fireEvent.click(within(row).getByRole("button", { name: "Confirmar rechazo" }));
-    expect(await within(row).findByRole("alert")).toHaveTextContent("Indique por qué se rechaza.");
+    expect(await within(row).findByRole("alert")).toHaveTextContent("Indica por qué se rechaza.");
     expect(mockReject).not.toHaveBeenCalled();
 
     fireEvent.change(within(row).getByPlaceholderText("Motivo que verá el entrenador"), {
