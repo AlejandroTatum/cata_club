@@ -122,7 +122,7 @@ CASOS = [
     pytest.param(
         _invocar_adjuntar_voucher,
         "Solo el titular del pago, su representante, o un administrador "
-        "pueden adjuntar el voucher",
+        "pueden adjuntar el comprobante",
         id="adjuntar_voucher",
     ),
     pytest.param(
