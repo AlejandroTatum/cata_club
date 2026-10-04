@@ -59,6 +59,7 @@ const mockFetchAttendanceRecords = vi.fn();
 const mockFetchRosterDeTodosLosHorarios = vi.fn();
 const mockFetchAlumnosPorHorario = vi.fn();
 const mockFetchRecentAttendanceSessions = vi.fn();
+const mockFetchFichaEmergencia = vi.fn();
 
 vi.mock("@/services/api", () => ({
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
@@ -78,6 +79,7 @@ vi.mock("@/services/api", () => ({
     return rows.filter((row) => row.horarioId === horarioId);
   },
   fetchRecentAttendanceSessions: () => mockFetchRecentAttendanceSessions(),
+  fetchFichaEmergencia: (personaId: number) => mockFetchFichaEmergencia(personaId),
   fetchNotificaciones: vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 }),
   marcarNotificacionLeida: vi.fn().mockResolvedValue(undefined),
 }));
@@ -263,6 +265,30 @@ describe("TrainerPage — Mi día", () => {
     expect(within(chips).getAllByRole("listitem")).toHaveLength(9);
     expect(within(chips).getByText("Ana")).toBeInTheDocument();
     expect(within(chips).getByText("+2 más")).toBeInTheDocument();
+  });
+
+  it("'next': each enrolled student opens their emergency card from Mi día (QA4 ENT-27)", async () => {
+    mockFetchRosterDeTodosLosHorarios.mockResolvedValue([
+      { ...alumno(1), personaId: 41, personaNombreCompleto: "Ana Garcia" },
+      { ...alumno(1), personaId: 42, personaNombreCompleto: "Sofia Vera" },
+    ]);
+    mockFetchFichaEmergencia.mockResolvedValue({
+      personaId: 42,
+      tipoSangre: "O_POSITIVO",
+      alergias: "Penicilina",
+      contactoEmergencia: "Rosa Vera",
+      telefonoEmergencia: "0991234567",
+      representanteNombreCompleto: null,
+      representanteTelefono: null,
+    });
+    render(<TrainerPage />);
+
+    const hero = within(await screen.findByTestId("session-hero"));
+    fireEvent.click(await hero.findByRole("button", { name: "Ficha de emergencia de Sofia Vera" }));
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(mockFetchFichaEmergencia).toHaveBeenCalledWith(42);
+    expect(await screen.findByText("Penicilina")).toBeInTheDocument();
   });
 
   it("'next': summarises how the previous session of the same horario went", async () => {

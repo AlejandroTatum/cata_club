@@ -81,6 +81,7 @@ import CompactEmpty from "@/components/dashboard/CompactEmpty";
 import DashboardSection from "@/components/dashboard/DashboardSection";
 import { buildContextLine } from "@/components/dashboard/context-line";
 import NextSessionHero from "./NextSessionHero";
+import EmergencyCardDialog, { type EmergencyCardStudent } from "@/app/trainer/attendance/EmergencyCardDialog";
 import RecentSessionsList from "./RecentSessionsList";
 import SessionsWithoutList from "./SessionsWithoutList";
 import TodaySessionList from "./TodaySessionList";
@@ -123,6 +124,8 @@ export default function TrainerPage(): React.ReactElement {
   const [conteos, setConteos] = useState<ConteoHorario[] | null>(null);
   /** Students of the hero session only, by name; `null` until it loads (or if it fails). */
   const [heroAlumnos, setHeroAlumnos] = useState<AlumnoHorario[] | null>(null);
+  /** QA4 ENT-27: the student whose emergency card is open from the hero. */
+  const [emergencyStudent, setEmergencyStudent] = useState<EmergencyCardStudent | null>(null);
   const [recentSessions, setRecentSessions] = useState<RecentAttendanceSession[]>([]);
   const [recentStatus, setRecentStatus] = useState<"loading" | "ready" | "error">("loading");
   const [loading, setLoading] = useState(true);
@@ -254,6 +257,15 @@ export default function TrainerPage(): React.ReactElement {
     () => (heroAlumnos ? buildRosterNamesByHorario(todaySchedules, heroAlumnos) : null),
     [heroAlumnos, todaySchedules],
   );
+  const heroStudents = useMemo(
+    () =>
+      heroAlumnos && heroScheduleId !== null
+        ? heroAlumnos
+            .filter((a) => a.horarioId === heroScheduleId)
+            .map((a) => ({ id: a.personaId, name: a.personaNombreCompleto }))
+        : null,
+    [heroAlumnos, heroScheduleId],
+  );
   const enrolledCounts = useMemo(
     () => (conteos ? buildEnrolledCountsByHorario(todaySchedules, conteos) : null),
     [conteos, todaySchedules],
@@ -317,6 +329,8 @@ export default function TrainerPage(): React.ReactElement {
                 roster={roster}
                 lastSummary={heroSummary}
                 nextSessionLabel={nextSessionLabel}
+                students={heroStudents}
+                onOpenEmergency={setEmergencyStudent}
               />
             ) : (
               <section data-testid="rest-day" className="card flex flex-wrap items-center gap-x-4 gap-y-field px-[18px] py-4">
@@ -426,6 +440,7 @@ export default function TrainerPage(): React.ReactElement {
             </div>
           </>
         )}
+        <EmergencyCardDialog student={emergencyStudent} onClose={() => setEmergencyStudent(null)} />
       </AppShell>
     </ProtectedRoute>
   );
