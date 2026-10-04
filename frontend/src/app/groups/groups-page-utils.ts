@@ -255,13 +255,13 @@ export function formatMembresiaVencidaWarning(
   diasVencida: number | null,
 ): string {
   if (diasVencida === null) {
-    return `${nombreCompleto} tiene la cuota vencida.`;
+    return `${nombreCompleto} tiene la mensualidad vencida.`;
   }
   if (diasVencida <= 0) {
-    return `${nombreCompleto} tiene la cuota vencida desde hoy.`;
+    return `${nombreCompleto} tiene la mensualidad vencida desde hoy.`;
   }
   const unidad = diasVencida === 1 ? "día" : "días";
-  return `${nombreCompleto} tiene la cuota vencida hace ${diasVencida} ${unidad}.`;
+  return `${nombreCompleto} tiene la mensualidad vencida hace ${diasVencida} ${unidad}.`;
 }
 
 // ---------------------------------------------------------------------------

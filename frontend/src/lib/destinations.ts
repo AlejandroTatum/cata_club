@@ -87,11 +87,11 @@ export const DESTINATIONS: Record<string, Destination> = {
   // La galería de la landing es contenido del club igual que los
   // patrocinadores: se administra adentro y se publica afuera (issue #1372).
   "/galeria": { label: "Galería", preposition: "a" },
-  "/admin/reportes-error": { label: "Reportes de error", preposition: "a" },
+  "/admin/reportes-error": { label: "Errores reportados", preposition: "a" },
   "/admin/actividad": { label: "Actividad del club", preposition: "a" },
   "/tarifas": { label: "Tarifas", preposition: "a" },
   "/attendance": { label: "Asistencias", preposition: "a" },
-  "/reports": { label: "Reportes", preposition: "a" },
+  "/reports": { label: "Informes", preposition: "a" },
 
   // --- Entrenador ----------------------------------------------------------
   /**
@@ -113,7 +113,7 @@ export const DESTINATIONS: Record<string, Destination> = {
    * posesivo acá prometería un recorte que el backend no hace y que el padrón
    * no trae: la pantalla muestra el club entero porque eso es lo que hay.
    */
-  "/trainer/students": { label: "Alumnos del club", preposition: "a" },
+  "/trainer/students": { label: "Jugadores del club", preposition: "a" },
 
   // --- Alumno / representante ----------------------------------------------
   "/student": { label: "Mi cuenta", preposition: "a" },
