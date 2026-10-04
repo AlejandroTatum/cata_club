@@ -37,7 +37,7 @@ describe("robotsTagFor", () => {
   const live = { DOMINIO_INDEXABLE: "cataclub.com" };
 
   it("leaves public pages and crawler files indexable on the indexable host", () => {
-    for (const path of ["/", "/privacidad", "/terminos", "/permiso-imagen-fetm", "/robots.txt", "/sitemap.xml"]) {
+    for (const path of ["/", "/terminos", "/consentimiento-salud", "/permiso-imagen-fetm", "/robots.txt", "/sitemap.xml"]) {
       expect(robotsTagFor(path, live)).toBeNull();
     }
   });

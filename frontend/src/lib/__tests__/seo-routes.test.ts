@@ -38,8 +38,8 @@ describe("sitemap", () => {
   it("lists only the public pages on the canonical origin", () => {
     expect(buildSitemap(ENV).map((entry) => entry.url)).toEqual([
       "https://cataclub.com",
-      "https://cataclub.com/privacidad",
       "https://cataclub.com/terminos",
+      "https://cataclub.com/consentimiento-salud",
       "https://cataclub.com/permiso-imagen-fetm",
     ]);
   });

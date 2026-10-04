@@ -10,7 +10,7 @@ vi.mock("@/lib/fonts", () => ({ fontVariables: "" }));
 import { generateMetadata } from "@/app/layout";
 import { metadata as dashboardMetadata } from "@/app/dashboard/layout";
 import { metadata as termsMetadata } from "@/app/terminos/page";
-import { metadata as privacyMetadata } from "@/app/privacidad/page";
+import { metadata as healthMetadata } from "@/app/consentimiento-salud/page";
 import { metadata as fetmMetadata } from "@/app/permiso-imagen-fetm/page";
 
 describe("root title template", () => {
@@ -23,9 +23,9 @@ describe("root title template", () => {
   });
 
   it.each([
-    ["Términos de uso", termsMetadata],
-    ["Aviso de privacidad", privacyMetadata],
-    ["Permiso público de imagen FETM", fetmMetadata],
+    ["Términos, condiciones y acuerdo de responsabilidad", termsMetadata],
+    ["Consentimiento de datos de salud", healthMetadata],
+    ["Permiso de uso de imagen", fetmMetadata],
   ])("keeps %s as a plain page title for the template", (title, meta) => {
     expect(meta.title).toBe(title);
   });
