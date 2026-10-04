@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { HERO_PHOTOS } from "./landing-hero-photos";
+import { HERO_IMAGE_QUALITY, HERO_PHOTOS } from "./landing-hero-photos";
 
 /** Detail payload for the `landing:hero-slide-change` DOM event dispatched on
  * every slide switch; `LandingMotion` listens for it to animate additively. */
@@ -232,7 +232,7 @@ export default function HeroCarousel(): React.ReactElement {
               priority={index === 0}
               loading={index === 0 ? undefined : "eager"}
               fetchPriority={index === 0 ? undefined : "low"}
-              quality={90}
+              quality={HERO_IMAGE_QUALITY}
               /* The carousel spans from `.landing-hero-carousel`'s 44% desktop
                  inset to the viewport's right edge — roughly 56% of it,
                  rounded up to 60vw for the diagonal seam's safety margin —

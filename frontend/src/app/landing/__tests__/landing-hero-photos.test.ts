@@ -3,7 +3,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { HERO_PHOTOS } from "@/app/landing/landing-hero-photos";
+import { HERO_IMAGE_QUALITY, HERO_PHOTOS } from "@/app/landing/landing-hero-photos";
 
 /**
  * Lock — issue #729: the hero sources must stay compressed.
@@ -29,7 +29,8 @@ import { HERO_PHOTOS } from "@/app/landing/landing-hero-photos";
  * intent: the compression step is not optional for this slot.
  */
 const PUBLIC_DIR = join(process.cwd(), "public");
-const MAX_HERO_BYTES = 600 * 1024;
+// LAN-12: recompressed at quality 80 (progressive, 4:2:0); sources were 495-569 KB.
+const MAX_HERO_BYTES = 450 * 1024;
 
 /** Pinned from the sources as shipped. Recompression must not resize them. */
 const EXPECTED_DIMENSIONS: Record<string, { width: number; height: number }> = {
@@ -62,6 +63,10 @@ function readJpegSize(bytes: Buffer): { width: number; height: number } {
 }
 
 describe("landing hero photo sources", (): void => {
+  it("serves the optimized hero at quality 80 or lower (LAN-12)", (): void => {
+    expect(HERO_IMAGE_QUALITY).toBeLessThanOrEqual(80);
+  });
+
   it("lists exactly the three carousel photos", (): void => {
     expect(HERO_PHOTOS.map((photo): string => photo.src)).toEqual(Object.keys(EXPECTED_DIMENSIONS));
   });
@@ -91,13 +96,13 @@ describe("landing hero photo sources", (): void => {
     },
   );
 
-  it("keeps the whole hero set under 1.7MB on disk", (): void => {
+  it("keeps the whole hero set under 1.3MB on disk", (): void => {
     const total = HERO_PHOTOS.reduce(
       (sum, photo): number => sum + statSync(join(PUBLIC_DIR, photo.src)).size,
       0,
     );
 
     // 2,228,389 before; the ceiling would have been blown by any two of them.
-    expect(total).toBeLessThanOrEqual(1.7 * 1024 * 1024);
+    expect(total).toBeLessThanOrEqual(1.3 * 1024 * 1024);
   });
 });
