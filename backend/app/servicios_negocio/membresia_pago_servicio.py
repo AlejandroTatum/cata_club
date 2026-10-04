@@ -49,6 +49,7 @@ from app.servicios_negocio.dtos.membresia_pago_schemas import (
 )
 from app.servicios_negocio.dtos.cobertura_bonificada_schemas import (
     CoberturaBonificadaCreateDTO, CoberturaBonificadaResponseDTO,
+    CoberturaBonificadaListItemDTO,
 )
 from app.servicios_negocio.dtos.beneficio_schemas import AsignacionDescuentoResponseDTO
 from app.servicios_negocio.dtos.descuento_schemas import DescuentoResponseDTO
@@ -2406,6 +2407,69 @@ class PagoServicio:
         return self.repo_cobertura_bonificada.listar_por_persona(
             persona_id_objetivo
         )
+
+    def listar_coberturas(
+        self, skip: int = 0, limit: int = 50,
+    ) -> tuple[list[CoberturaBonificadaListItemDTO], int]:
+        """Revisión del admin (issue #1609): las coberturas 100% no son
+        `Pago`, así que no entran en `listar_pagos`; este listado de solo
+        lectura las muestra junto a la cola, con monto cero."""
+        coberturas = self.repo_cobertura_bonificada.listar(skip=skip, limit=limit)
+        total = self.repo_cobertura_bonificada.contar()
+        items = []
+        for c in coberturas:
+            persona = self.repo_persona.obtener_por_id(c.persona_id)
+            items.append(CoberturaBonificadaListItemDTO(
+                id=c.id,
+                persona_id=c.persona_id,
+                persona_nombre_completo=nombre_completo(persona.nombres, persona.apellidos),
+                membresia_id=c.membresia_id,
+                monto=Decimal("0.00"),
+                fecha_inicio=c.fecha_inicio,
+                fecha_fin=c.fecha_fin,
+                otorgada_en=c.otorgada_en,
+            ))
+        return items, total
+
+    def generar_comprobante_cobertura(
+        self,
+        cobertura_id: int,
+        persona_id_solicitante: int | None = None,
+        roles_solicitante: list[str] | None = None,
+    ) -> tuple[bytes, str]:
+        """Recibo PDF de una cobertura bonificada (issue #1609), generado al
+        pedirlo: sin Cloudinary, sin Celery, sin `ComprobantePago`. Misma
+        autorización que el historial (`PoliticaAccesoPersona`): titular, su
+        representante o administrador. Devuelve `(bytes, nombre_archivo)`."""
+        from app.infraestructura.generador_pdf import generar_comprobante_cobertura_pdf
+
+        roles_solicitante = roles_solicitante or []
+        cobertura = self.repo_cobertura_bonificada.obtener_por_id(cobertura_id)
+        if cobertura is None:
+            raise EntidadNoEncontrada(f"Cobertura bonificada con id {cobertura_id} no encontrada")
+        if not PoliticaAccesoPersona(self.db).puede_acceder(
+            persona_id_objetivo=cobertura.persona_id,
+            persona_id_solicitante=persona_id_solicitante,
+            roles_solicitante=roles_solicitante,
+        ):
+            raise PermisosInsuficientes(
+                "Solo la propia persona, su representante, o un administrador "
+                "pueden descargar este recibo"
+            )
+        persona = self.repo_persona.obtener_por_id(cobertura.persona_id)
+        membresia = self.repo_membresia.obtener_por_id(cobertura.membresia_id)
+        pdf = generar_comprobante_cobertura_pdf(
+            cobertura_id=cobertura.id,
+            persona_nombre=nombre_completo(persona.nombres, persona.apellidos),
+            persona_cedula=persona.cedula,
+            persona_telefono=persona.telefono,
+            membresia_categoria=membresia.tipo_membresia.categoria,
+            monto=Decimal("0.00"),
+            fecha_inicio=cobertura.fecha_inicio,
+            fecha_fin=cobertura.fecha_fin,
+            fecha_otorgamiento=cobertura.otorgada_en,
+        )
+        return pdf, f"recibo-cobertura-C-{cobertura.id:06d}.pdf"
 
     def listar_pagos(
         self,

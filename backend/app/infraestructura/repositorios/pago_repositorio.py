@@ -301,6 +301,25 @@ class CoberturaBonificadaRepositorio:
         )
         return list(self.db.execute(stmt).scalars().all())
 
+    def obtener_por_id(self, cobertura_id: int) -> Optional[CoberturaBonificada]:
+        return self.db.get(CoberturaBonificada, cobertura_id)
+
+    def listar(self, skip: int = 0, limit: int = 50) -> list[CoberturaBonificada]:
+        """Todas las coberturas bonificadas, la más reciente primero, para la
+        revisión del admin (issue #1609). Solo lectura."""
+        stmt = (
+            select(CoberturaBonificada)
+            .order_by(CoberturaBonificada.otorgada_en.desc(), CoberturaBonificada.id.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return list(self.db.execute(stmt).scalars().all())
+
+    def contar(self) -> int:
+        return self.db.execute(
+            select(func.count()).select_from(CoberturaBonificada)
+        ).scalar_one()
+
     def fecha_fin_maxima(self, membresia_id: int) -> Optional[date]:
         """`fecha_fin` más lejana entre las coberturas bonificadas ya
         otorgadas de una membresía, o `None` si nunca tuvo una. Mismo rol que

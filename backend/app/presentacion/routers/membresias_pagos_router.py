@@ -29,6 +29,7 @@ from app.servicios_negocio.dtos.membresia_pago_schemas import (
 )
 from app.servicios_negocio.dtos.cobertura_bonificada_schemas import (
     CoberturaBonificadaCreateDTO, CoberturaBonificadaResponseDTO,
+    CoberturaBonificadaListItemDTO,
 )
 from app.servicios_negocio.dtos.base import PaginatedResponse
 from app.seguridad.gestor_auth import GestorAutenticacion
@@ -899,6 +900,43 @@ async def listar_coberturas_de_persona(
         roles_solicitante=token_payload.get("roles", []),
     )
     return [servicio.cobertura_bonificada_a_response_dto(c) for c in coberturas]
+
+
+# Revisión del admin de las coberturas 100% (issue #1609): solo lectura.
+# Dos segmentos ("coberturas/todas"): un solo segmento colisionaría con
+# `/{membresia_id}`, declarada antes.
+@router.get(
+    "/coberturas/todas",
+    response_model=PaginatedResponse[CoberturaBonificadaListItemDTO],
+    dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
+)
+def listar_coberturas(
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(obtener_sesion),
+):
+    items, total = PagoServicio(db).listar_coberturas(skip=skip, limit=limit)
+    return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
+
+
+# Recibo PDF de una cobertura 100% (issue #1609), generado al pedirlo.
+# Autorización real (titular, representante o admin) dentro del servicio.
+@router.get(
+    "/coberturas/{cobertura_id}/comprobante",
+    dependencies=[Depends(GestorAutenticacion.decodificar_token)],
+)
+async def descargar_comprobante_cobertura(
+    cobertura_id: int,
+    db: Session = Depends(obtener_sesion),
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+):
+    pdf_bytes, nombre = await run_in_threadpool(
+        PagoServicio(db).generar_comprobante_cobertura,
+        cobertura_id,
+        token_payload.get("persona_id"),
+        token_payload.get("roles", []),
+    )
+    return construir_respuesta_pdf(pdf_bytes, nombre)
 
 
 # --- ComprobantePago (PDF oficial generado por Celery al aprobar) ---

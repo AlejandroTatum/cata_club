@@ -236,6 +236,110 @@ def generar_comprobante_pago_pdf(
     return pdf_bytes
 
 
+def generar_comprobante_cobertura_pdf(
+    *,
+    cobertura_id: int,
+    persona_nombre: str,
+    persona_cedula: str,
+    persona_telefono: str | None,
+    membresia_categoria: str,
+    monto: Decimal,
+    fecha_inicio: date,
+    fecha_fin: date,
+    fecha_otorgamiento: datetime,
+) -> bytes:
+    """Recibo de una cobertura bonificada 100% (issue #1609), con el mismo
+    formato visual que `generar_comprobante_pago_pdf`.
+
+    La cobertura nunca crea un `Pago` ni un `ComprobantePago`, así que este
+    recibo se genera al pedirlo y no se guarda: el número es `C-<año>-<id>`
+    (secuencia propia, no toca la de `P-<año>-<pago_id>`) y el monto es el
+    cobrado, cero."""
+    buffer = io.BytesIO()
+    if fecha_otorgamiento.tzinfo is None:
+        fecha_otorgamiento = fecha_otorgamiento.replace(tzinfo=timezone.utc)
+    fecha_otorgamiento = fecha_otorgamiento.astimezone(ZONA_HORARIA_CLUB)
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=18 * mm,
+        rightMargin=18 * mm,
+        topMargin=_MARGEN_SUPERIOR_CON_CABECERA,
+        bottomMargin=16 * mm,
+        title=f"Recibo de cobertura bonificada #{cobertura_id}",
+        author=_NOMBRE_CLUB,
+    )
+
+    estilos = getSampleStyleSheet()
+    titulo = ParagraphStyle(
+        "TituloCobertura", parent=estilos["Title"],
+        fontSize=18, textColor=colors.HexColor(_NEGRO_INSTITUCIONAL), spaceAfter=4,
+    )
+    subtitulo = ParagraphStyle(
+        "SubCobertura", parent=estilos["Normal"],
+        fontSize=10, textColor=colors.grey, spaceAfter=10,
+    )
+    cuerpo = ParagraphStyle("CuerpoCobertura", parent=estilos["Normal"], fontSize=10, leading=14)
+    sello = ParagraphStyle(
+        "SelloCobertura", parent=estilos["Normal"],
+        fontSize=14, textColor=colors.HexColor("#1B8F2E"),
+        alignment=1, spaceBefore=12, spaceAfter=12,
+    )
+
+    tabla_datos = [
+        ["Concepto", "Valor"],
+        ["Concepto del recibo", "Cobertura bonificada — 100%"],
+        ["Monto pagado", formatear_monto_usd(monto)],
+        ["Vigencia desde", fecha_inicio.strftime("%d/%m/%Y")],
+        ["Vigencia hasta", fecha_fin.strftime("%d/%m/%Y")],
+    ]
+    tabla = Table(tabla_datos, colWidths=[60 * mm, 90 * mm], hAlign="LEFT")
+    tabla.setStyle(_estilo_tabla())
+
+    elementos = [
+        Paragraph(_NOMBRE_CLUB, titulo),
+        Paragraph("Recibo digital de cobertura bonificada", subtitulo),
+        HRFlowable(width="100%", thickness=1, color=colors.HexColor(_ROJO_INSTITUCIONAL)),
+        Spacer(1, 8),
+        Paragraph(f"<b>Nº de recibo:</b> C-{fecha_otorgamiento.year}-{cobertura_id:06d}", cuerpo),
+        Paragraph(
+            f"<b>Fecha de otorgamiento:</b> "
+            f"{fecha_otorgamiento.strftime('%d/%m/%Y %H:%M')} (hora de Ecuador)",
+            cuerpo,
+        ),
+        Spacer(1, 10),
+        Paragraph("<b>Datos del jugador</b>", estilos["Heading3"]),
+        Paragraph(f"Nombre: {escape(persona_nombre)}", cuerpo),
+        Paragraph(f"Cédula: {escape(persona_cedula)}", cuerpo),
+        Paragraph(f"Teléfono: {escape(persona_telefono or 'No registrado')}", cuerpo),
+        Spacer(1, 10),
+        Paragraph("<b>Detalle de la membresía</b>", estilos["Heading3"]),
+        Paragraph(f"Categoría: {escape(membresia_categoria)}", cuerpo),
+        Spacer(1, 10),
+        Paragraph("<b>Detalle de la cobertura</b>", estilos["Heading3"]),
+        tabla,
+        Spacer(1, 18),
+        Paragraph("COBERTURA BONIFICADA - MEMBRESÍA ACTIVA", sello),
+        Spacer(1, 24),
+        HRFlowable(width="50%", thickness=0.5, color=colors.grey),
+        Paragraph(
+            f"Documento generado electrónicamente el "
+            f"{sello_de_tiempo(FORMATO_SELLO_COMPROBANTE)}."
+            f" Este recibo se genera electrónicamente y no requiere firma.",
+            ParagraphStyle("PieCobertura", parent=cuerpo, fontSize=8, textColor=colors.grey),
+        ),
+    ]
+    doc.build(
+        elementos,
+        onFirstPage=_dibujar_encabezado_pagina,
+        onLaterPages=_dibujar_encabezado_pagina,
+    )
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+    return pdf_bytes
+
+
 def _construir_estilo_tabla(
     *,
     tamano_fuente: int,
