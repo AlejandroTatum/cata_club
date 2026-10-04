@@ -189,7 +189,7 @@ function isFilterKey(value: string): value is FilterKey {
 }
 
 const VALIDATION_STATUS_LABELS: Record<ValidationStatus, string> = {
-  pendiente: "Pendiente de validar",
+  pendiente: "Por validar",
   validado: "Validado",
   rechazado: "Rechazado",
 };
@@ -554,9 +554,9 @@ function CashConfirmationPanel({
       ) : (
         <>
           <ol className="grid gap-2 px-[18px] py-4 text-sm text-ink-2">
-            <li>1. Reciba el dinero en mano, sin comprobante bancario.</li>
-            <li>2. Verifique que el monto entregado sea el indicado arriba.</li>
-            <li>3. Marque la recepción en la lista de la izquierda y apruebe el pago.</li>
+            <li>1. Recibe el dinero en mano, sin comprobante bancario.</li>
+            <li>2. Verifica que el monto entregado sea el indicado arriba.</li>
+            <li>3. Marca la recepción en la lista de la izquierda y aprueba el pago.</li>
           </ol>
           <p className="mt-auto border-t border-line px-[18px] py-4 text-xs text-ink-3-strong">
             Si el monto entregado no coincide, rechace el pago e indique el motivo al responsable.
@@ -1116,7 +1116,7 @@ export default function PaymentsPage(): React.ReactElement {
       // (hallazgo en vivo, 2026-08-11).
       if (saved.notificationDeliveryFailed) {
         showWarning(`${confirmation.label}: la decisión se guardó, pero el aviso no llegó.`, {
-          description: `${request.studentName} no recibió la notificación in-app. Si hace falta, avísele directamente.`,
+          description: `${request.studentName} no recibió la notificación in-app. Si hace falta, avísale directamente.`,
         });
       }
     } catch (err: unknown) {
@@ -1278,9 +1278,9 @@ export default function PaymentsPage(): React.ReactElement {
         <div className={STAT_GRID} data-testid="payments-stats">
           <StatCard
             className={STAT_COMPACT}
-            label="Pendientes por validar"
+            label="Por validar"
             value={pendingAllLoading || pendingAllError ? "—" : pendingAll.length}
-            hint={<span className="max-lg:hidden">esperan su revisión</span>}
+            hint={<span className="max-lg:hidden">esperan tu revisión</span>}
             variant="hot"
           />
           <StatCard
@@ -1316,8 +1316,8 @@ export default function PaymentsPage(): React.ReactElement {
           label="Filtros de pagos"
           search={
             <SearchInput
-              label="Buscar estudiante"
-              placeholder="Buscar estudiante"
+              label="Buscar jugador"
+              placeholder="Buscar jugador"
               value={query}
               onChange={setQuery}
             />
@@ -1398,7 +1398,7 @@ export default function PaymentsPage(): React.ReactElement {
             icon={<ShieldCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
             title={
               normalizedQuery
-                ? "Ningún estudiante coincide con la búsqueda"
+                ? "Ningún jugador coincide con la búsqueda"
                 : methodFilter !== "all"
                   ? `Ningún pago en ${methodFilter === "efectivo" ? "efectivo" : "transferencia"} en esta lista`
                   : activeFilter === "all"
@@ -1407,11 +1407,11 @@ export default function PaymentsPage(): React.ReactElement {
             }
             description={
               normalizedQuery
-                ? "Revise el nombre o limpie la búsqueda para ver toda la lista."
+                ? "Revisa el nombre o limpia la búsqueda para ver toda la lista."
                 : methodFilter !== "all"
-                  ? "Elija «Cualquier método» para ver toda la lista."
+                  ? "Elige «Cualquier método» para ver toda la lista."
                   : activeFilter === "all"
-                  ? "Cuando un estudiante suba un comprobante, aparecerá aquí para su revisión."
+                  ? "Cuando un jugador suba un comprobante, aparecerá aquí para tu revisión."
                   : "La lista está al día."
             }
             action={
@@ -1451,7 +1451,7 @@ export default function PaymentsPage(): React.ReactElement {
             items={visibleItems}
             getKey={(req) => req.id}
             columns={[
-              <TableHeaderCell key="estudiante" type="text">Estudiante</TableHeaderCell>,
+              <TableHeaderCell key="estudiante" type="text">Jugador</TableHeaderCell>,
               <TableHeaderCell key="periodo" type="text">Período</TableHeaderCell>,
               <TableHeaderCell key="monto" type="number">Monto</TableHeaderCell>,
               <TableHeaderCell key="metodo" type="text">Método</TableHeaderCell>,
@@ -1555,7 +1555,7 @@ export default function PaymentsPage(): React.ReactElement {
                   ? "No se pudo leer la lista de pendientes."
                   : pending.length === 0
                     ? "La lista está al día: no hay pagos por validar."
-                    : `${pending.length} ${pending.length === 1 ? "pago espera" : "pagos esperan"} su revisión: ${pendingTransferCount} por transferencia y ${pendingCashCount} en efectivo.`}
+                    : `${pending.length} ${pending.length === 1 ? "pago espera" : "pagos esperan"} tu revisión: ${pendingTransferCount} por transferencia y ${pendingCashCount} en efectivo.`}
               </p>
               <Button
                 variant="primary"
@@ -1574,7 +1574,7 @@ export default function PaymentsPage(): React.ReactElement {
                     <span className="sr-only">Transferencia</span>
                   </dt>
                   <dd>
-                    <span className="font-semibold text-ink">Transferencia:</span> compare el
+                    <span className="font-semibold text-ink">Transferencia:</span> compara el
                     comprobante con el monto y el período antes de aprobar.
                   </dd>
                 </div>
@@ -1584,7 +1584,7 @@ export default function PaymentsPage(): React.ReactElement {
                     <span className="sr-only">Efectivo</span>
                   </dt>
                   <dd>
-                    <span className="font-semibold text-ink">Efectivo:</span> confirme que recibió
+                    <span className="font-semibold text-ink">Efectivo:</span> confirma que recibiste
                     el dinero; no hay comprobante que revisar.
                   </dd>
                 </div>
@@ -1592,9 +1592,9 @@ export default function PaymentsPage(): React.ReactElement {
               <dl className="grid gap-2 border-t border-line pt-3">
                 <div className="flex items-center gap-2">
                   <dt>
-                    <Badge tone="warn">Pendiente de validar</Badge>
+                    <Badge tone="warn">Por validar</Badge>
                   </dt>
-                  <dd>Espera su decisión.</dd>
+                  <dd>Espera tu decisión.</dd>
                 </div>
                 <div className="flex items-center gap-2">
                   <dt>
@@ -1749,7 +1749,7 @@ export default function PaymentsPage(): React.ReactElement {
                     not a value: the same rule `DataRow` already draws
                     between a name and its boxed metadata. Método, Subido el
                     and Tipo are values, so they get the box. */}
-                <DetailCell label="Estudiante">{request.studentName}</DetailCell>
+                <DetailCell label="Jugador">{request.studentName}</DetailCell>
                 <DetailCell label="Responsable de pago">{payer}</DetailCell>
                 <DetailCell label="Método">
                   <DataBox>{request.paymentMethod}</DataBox>
@@ -2078,7 +2078,7 @@ export default function PaymentsPage(): React.ReactElement {
             second-level screen. */}
       <AppShell
         title="Pagos"
-        subtitle="Valide los pagos por transferencia y efectivo de los miembros."
+        subtitle="Valida los pagos por transferencia y efectivo de los miembros."
         back={
           selectedRequest ? (
             <BackLink

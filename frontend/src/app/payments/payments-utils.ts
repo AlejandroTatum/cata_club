@@ -310,8 +310,8 @@ export function buildApprovalChecklist({
     kind,
     note:
       kind === "transferencia"
-        ? "Transferencia sin comprobante adjunto: verifíquela en la cuenta del club antes de aprobar."
-        : `Pago registrado como “${paymentMethod}”, sin comprobante adjunto: verifíquelo antes de aprobar.`,
+        ? "Transferencia sin comprobante adjunto: verifícala en la cuenta del club antes de aprobar."
+        : `Pago registrado como “${paymentMethod}”, sin comprobante adjunto: verifícalo antes de aprobar.`,
     items: [
       {
         key: "acreditado",

@@ -350,7 +350,7 @@ describe("PaymentsPage — opens on the pending queue", () => {
     // synchronously, so this needs to wait for that round trip.
     fireEvent.click(screen.getByRole("button", { name: /^todos/i }));
     await waitFor(() => expect(within(queueTable()).getByText("Kevin Sabando")).toBeInTheDocument());
-    expect(within(queueTable()).getByText("Pendiente de validar")).toBeInTheDocument();
+    expect(within(queueTable()).getByText("Por validar")).toBeInTheDocument();
     expect(within(queueTable()).getByText("Validado")).toBeInTheDocument();
     expect(within(queueTable()).getByText("Estado")).toBeInTheDocument();
   });
@@ -450,7 +450,7 @@ describe("PaymentsPage — pagination reaches every request, past the old 200 ca
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: /^pendientes/i }));
 
-    fireEvent.change(await screen.findByLabelText(/buscar estudiante/i), { target: { value: "Zoe Especial" } });
+    fireEvent.change(await screen.findByLabelText(/buscar jugador/i), { target: { value: "Zoe Especial" } });
 
     expect(await within(queueTable()).findByText("Zoe Especial")).toBeInTheDocument();
   });
@@ -475,7 +475,7 @@ describe("PaymentsPage — pagination reaches every request, past the old 200 ca
     // (for the "pendiente" tab) reuses the same drained `pendingAll` the
     // navigator itself reads from.
     await screen.findByTestId("payments-table");
-    fireEvent.change(screen.getByLabelText(/buscar estudiante/i), { target: { value: "Último Pendiente" } });
+    fireEvent.change(screen.getByLabelText(/buscar jugador/i), { target: { value: "Último Pendiente" } });
     await openRequest("Último Pendiente");
 
     // The total is the real 205, not the old 200 cap, and there is nothing
@@ -509,11 +509,11 @@ describe("PaymentsPage — the status badge doesn't echo the active tab", () => 
     // that the filtered render has settled, so the absence check that
     // follows it means something instead of getting lucky on timing.
     await waitFor(() => expect(within(queueTable()).getAllByRole("row")).toHaveLength(2));
-    expect(within(queueTable()).getByText("Pendiente de validar")).toBeInTheDocument();
+    expect(within(queueTable()).getByText("Por validar")).toBeInTheDocument();
 
     const cards = screen.getByTestId("payments-cards");
     await waitFor(() => expect(within(cards).getAllByRole("listitem")).toHaveLength(1));
-    expect(within(cards).getByText("Pendiente de validar")).toBeInTheDocument();
+    expect(within(cards).getByText("Por validar")).toBeInTheDocument();
   });
 
   it("shows the per-row status badge once the tab stops fixing a single status", async () => {
@@ -524,12 +524,12 @@ describe("PaymentsPage — the status badge doesn't echo the active tab", () => 
     // Same async round trip as the previous describe block's note.
     fireEvent.click(screen.getByRole("button", { name: /^todos/i }));
 
-    await waitFor(() => expect(within(queueTable()).getByText("Pendiente de validar")).toBeInTheDocument());
+    await waitFor(() => expect(within(queueTable()).getByText("Por validar")).toBeInTheDocument());
     expect(within(queueTable()).getByText("Validado")).toBeInTheDocument();
     // The mobile cards render the same rows through their own branch
     // (`payments-cards`), which carries its own copy of this badge.
     const cards = screen.getByTestId("payments-cards");
-    expect(within(cards).getByText("Pendiente de validar")).toBeInTheDocument();
+    expect(within(cards).getByText("Por validar")).toBeInTheDocument();
     expect(within(cards).getByText("Validado")).toBeInTheDocument();
   });
 });
@@ -721,7 +721,7 @@ describe("PaymentsPage — comprobante oficial y correcciones", () => {
     for (const gone of [/tarifa mensual/i, /meses comprados/i, /monto base/i, /fecha inicio/i, /fecha fin/i]) {
       expect(screen.queryByLabelText(gone)).not.toBeInTheDocument();
     }
-    expect(screen.getByText(/escriba el monto correcto/i)).toBeInTheDocument();
+    expect(screen.getByText(/escribe el monto correcto/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^motivo/i)).toBeRequired();
     expect(screen.getByRole("button", { name: /registrar corrección/i })).toBeDisabled();
     fireEvent.change(screen.getByLabelText(/monto correcto/i), { target: { value: "45.00" } });
@@ -2122,7 +2122,7 @@ describe("PaymentsPage — queue stat strip and rail (admin v4)", () => {
     renderPage();
     await screen.findByTestId("payments-table");
 
-    expect(screen.getByText("Pendientes por validar")).toBeInTheDocument();
+    expect(screen.getAllByText("Por validar").length).toBeGreaterThan(0);
     // 50 + 25 across the two pending payments.
     expect(await screen.findByText("$75,00")).toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: "Cómo se revisa un pago" })).toBeInTheDocument();
@@ -2233,7 +2233,7 @@ describe("PaymentsPage — QA4 fixes", () => {
     await openRequest("Sofía Vera");
 
     expect(await screen.findByText(/Efectivo recibido el .* por Admin Dev/)).toBeInTheDocument();
-    expect(screen.queryByText(/Reciba el dinero en mano/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Recibe el dinero en mano/)).not.toBeInTheDocument();
     expect(screen.queryByText("Confirmación de efectivo")).not.toBeInTheDocument();
   });
 
@@ -2242,7 +2242,7 @@ describe("PaymentsPage — QA4 fixes", () => {
     renderPage();
     await openRequest("Sofía Vera");
 
-    expect(await screen.findByText(/Reciba el dinero en mano/)).toBeInTheDocument();
+    expect(await screen.findByText(/Recibe el dinero en mano/)).toBeInTheDocument();
   });
 
   it("gives a cash example in the rejection note, with no receipt (ADMA-31)", async () => {

@@ -183,7 +183,7 @@ export default function PagoCorreccionSection({
                   required
                 />
                 <p className="mt-1 text-2xs text-ink-3">
-                  Escriba el monto correcto; el sistema ajusta la tarifa y la base.
+                  Escribe el monto correcto; el sistema ajusta la tarifa y la base.
                 </p>
 
                 <CampoFormularioAdmin
