@@ -75,6 +75,7 @@ import {
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
+import { attendanceTone } from "@/lib/attendance-tone";
 import { subirFotoDeArchivo } from "@/lib/photo-upload";
 import { MIN_TARGET_CLASS } from "@/lib/target-size";
 
@@ -1324,7 +1325,11 @@ function ActivePortalView({
         <div data-testid="student-pulse" className={STAT_GRID}>
           <StatCard
             label="Cobertura"
-            tone={diasDeCobertura !== null && diasDeCobertura < 0 ? "warn" : "ok"}
+            {...(diasDeCobertura === null
+              ? { tone: "neutral" as const, status: "Sin pago" }
+              : diasDeCobertura < 0
+                ? { tone: "bad" as const, status: "Vencida" }
+                : { tone: "ok" as const, status: "Al día" })}
             icon={<ShieldCheck size={ICON.sm} strokeWidth={1.75} />}
             href={withSelectedStudent("/student/payments", selectedPersonaId)}
             value={diasDeCobertura === null ? "—" : Math.abs(diasDeCobertura)}
@@ -1333,13 +1338,13 @@ function ActivePortalView({
               diasDeCobertura === null
                 ? "sin pago aprobado todavía"
                 : diasDeCobertura < 0
-                  ? "vencida"
+                  ? "renueva tu pago"
                   : "de membresía paga"
             }
           />
           <StatCard
             label="Asistencia"
-            tone="info"
+            {...attendanceTone(asistencia === null ? null : asistencia.porcentaje)}
             icon={<CalendarCheck size={ICON.sm} strokeWidth={1.75} />}
             href={withSelectedStudent("/student/attendance", selectedPersonaId)}
             value={asistencia === null ? "—" : asistencia.porcentaje}
@@ -1364,7 +1369,9 @@ function ActivePortalView({
           />
           <StatCard
             label="Pagos por validar"
-            tone={pendingPagos > 0 ? "warn" : "neutral"}
+            {...(pendingPagos > 0
+              ? { tone: "warn" as const, status: "Por validar" }
+              : { tone: "neutral" as const, status: "Al día" })}
             icon={<Hourglass size={ICON.sm} strokeWidth={1.75} />}
             href={withSelectedStudent("/student/payments", selectedPersonaId)}
             value={pendingPagos}
