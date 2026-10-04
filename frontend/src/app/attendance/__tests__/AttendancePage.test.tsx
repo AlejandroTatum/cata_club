@@ -104,6 +104,7 @@ const mockCorrectAttendance = vi.fn();
 vi.mock("@/services/api", () => ({
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
+  fetchCorrectionRequests: (filters?: unknown) => mockFetchCorrectionRequests(filters),
   // QA4 PERF-01: the screen reads counts, never the ~500 KB roster. Fixtures
   // keep the roster-row shape; this folds them into the counts the API returns.
   fetchConteosPorHorario: async () => {
@@ -124,6 +125,27 @@ beforeEach(() => {
   mockFetchConteos.mockReset().mockResolvedValue([]);
   mockCorrectAttendance.mockReset();
   mockProtectedRouteProps.mockReset();
+});
+
+const mockFetchCorrectionRequests = vi.fn();
+
+describe("AttendancePage — trainers' correction requests (QA4 ENT-25)", () => {
+  it("mounts the admin inbox with the pending requests above the records", async () => {
+    mockFetchCorrectionRequests.mockReset().mockResolvedValue([
+      {
+        id: 1, asistenciaId: 901, personaId: 1, personaNombre: "Alumno Uno", horarioId: 12, fecha: "2026-07-21",
+        horarioEtiqueta: "Juvenil · martes 18:00", estadoActual: "present", estadoSolicitado: "absent",
+        motivo: "Debía figurar como ausente.", solicitadoPorId: 3, solicitadoPorNombre: "Coach Torres",
+        solicitadoEn: "2026-07-21T20:00:00Z", estado: "PENDIENTE", resueltoPorNombre: null, resueltoEn: null,
+        motivoResolucion: null,
+      },
+    ]);
+    renderPage();
+
+    expect(await screen.findByText("Solicitudes de corrección")).toBeInTheDocument();
+    expect(mockFetchCorrectionRequests).toHaveBeenCalledWith({ estado: "PENDIENTE" });
+    expect(screen.getByText("Alumno Uno")).toBeInTheDocument();
+  });
 });
 
 describe("AttendancePage — Horarios section removed, Tomar asistencia in the header", () => {

@@ -33,6 +33,7 @@ import {
   narrowToHorarios,
   toApiParams,
 } from "@/components/attendance/attendance-filters-utils";
+import CorrectionRequestsInbox from "@/components/attendance/CorrectionRequestsInbox";
 import AttendancePeriodRail from "@/components/attendance/AttendancePeriodRail";
 import SessionHistoryList, {
   sessionKey,
@@ -198,6 +199,11 @@ export default function AttendancePage(): React.ReactElement {
           layout="row"
           className="lg:grid-cols-[1fr_1.7fr_1fr]"
         />
+
+        {/* QA4 ENT-25: trainers' requests to correct a closed list; draws
+            nothing when there are none. Approving changes a record, so the
+            list below reloads. */}
+        <CorrectionRequestsInbox onResolved={() => void loadRecords()} />
 
         {loading && <LoadingState label="Cargando registros…" />}
 
