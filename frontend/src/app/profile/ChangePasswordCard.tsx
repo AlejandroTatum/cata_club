@@ -106,7 +106,12 @@ function PasswordField({
   );
 }
 
-export default function ChangePasswordCard(): React.ReactElement {
+export default function ChangePasswordCard({
+  embedded = false,
+}: {
+  /** Inside «Seguridad»: just the form, with no card or header of its own. */
+  embedded?: boolean;
+}): React.ReactElement {
   const { showSuccess } = useToast();
   const baseId = useId();
   const [current, setCurrent] = useState("");
@@ -153,14 +158,19 @@ export default function ChangePasswordCard(): React.ReactElement {
   }
 
   return (
-    <section data-testid="profile-change-password" className="card overflow-hidden">
-      <SectionHead
-        title="Cambiar contraseña"
-        subtitle="Al cambiarla, se cerrarán tus otras sesiones."
-        icon={<KeyRound size={ICON.sm} strokeWidth={1.5} />}
-        tone="ball"
-      />
-      <form noValidate onSubmit={(event) => void handleSubmit(event)} className="grid gap-4 p-4">
+    <section
+      data-testid="profile-change-password"
+      className={embedded ? "border-b border-line bg-sunken/40" : "card overflow-hidden"}
+    >
+      {!embedded && (
+        <SectionHead
+          title="Cambiar contraseña"
+          subtitle="Al cambiarla, se cerrarán tus otras sesiones."
+          icon={<KeyRound size={ICON.sm} strokeWidth={1.5} />}
+          tone="ball"
+        />
+      )}
+      <form noValidate onSubmit={(event) => void handleSubmit(event)} className="grid gap-4 p-4 sm:px-5">
         <PasswordField
           id={`${baseId}-current`}
           label="Contraseña actual"

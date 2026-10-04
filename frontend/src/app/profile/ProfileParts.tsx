@@ -1,33 +1,12 @@
 "use client";
 
 /**
- * Small presentational pieces of /profile: hero stats, the coverage meter and
- * the security action tiles. Pure UI — every value arrives as a prop.
+ * Small presentational pieces of /profile shared by its cards: the section
+ * header and the day count. Pure UI — every value arrives as a prop.
  */
 
-import { useId } from "react";
 import { cn } from "@/components/ui";
-
-export interface HeroStat {
-  label: string;
-  value: string;
-}
-
-export function HeroStats({ stats }: { stats: readonly HeroStat[] }): React.ReactElement {
-  return (
-    <dl
-      data-testid="profile-hero-stats"
-      className="grid grid-cols-1 gap-px border-t border-white/10 bg-white/10 sm:grid-cols-3"
-    >
-      {stats.map((stat) => (
-        <div key={stat.label} className="min-w-0 bg-coal-2 px-6 py-4 lg:px-8">
-          <dt className="text-2xs font-bold uppercase tracking-wide text-white/60">{stat.label}</dt>
-          <dd className="mt-1 break-words text-base font-bold tabular-nums text-ball">{stat.value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
+import type { UserRole } from "@/types/domain";
 
 /**
  * Accent palette for the section cards: a tinted icon tile and a matching wash
@@ -101,9 +80,6 @@ export function SectionHead({
   );
 }
 
-/** Days of coverage a full meter represents: one monthly payment. */
-const METER_DAYS = 30;
-
 /**
  * Whole days between today and the coverage end (negative once it lapsed).
  * Both sides are calendar dates anchored at local noon, so DST and the
@@ -115,75 +91,48 @@ export function daysUntil(isoEnd: string, today: Date): number {
   return Math.round((end.getTime() - start.getTime()) / 86_400_000);
 }
 
-export function CoverageMeter({ daysLeft }: { daysLeft: number }): React.ReactElement {
-  const expired = daysLeft < 0;
-  const pct = expired ? 0 : Math.min(100, Math.round((daysLeft / METER_DAYS) * 100));
-  const label = expired
-    ? `Venció hace ${-daysLeft} ${-daysLeft === 1 ? "día" : "días"}`
-    : daysLeft === 0
-      ? "Vence hoy"
-      : `Quedan ${daysLeft} ${daysLeft === 1 ? "día" : "días"}`;
-  const tone = expired ? "bg-state-bad" : daysLeft <= 7 ? "bg-state-warn" : "bg-state-ok";
-
-  return (
-    <div data-testid="profile-coverage" className="border-b border-line px-5 py-3">
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="text-2xs font-bold uppercase tracking-wide text-ink-3-strong">Cobertura</p>
-        <p className="text-sm font-bold tabular-nums text-ink">{label}</p>
-      </div>
-      <div
-        role="progressbar"
-        aria-label="Cobertura restante"
-        aria-valuemin={0}
-        aria-valuemax={METER_DAYS}
-        aria-valuenow={expired ? 0 : Math.min(daysLeft, METER_DAYS)}
-        aria-valuetext={label}
-        className="mt-2 h-1.5 overflow-hidden rounded-full bg-line"
-      >
-        <div className={cn("h-full rounded-full", tone)} style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  );
-}
+/** The per-role block the right column opens with. */
+export type RoleBlockKind = "ticket" | "dependants" | "trainer-board" | "admin-board" | "account-board";
 
 /**
- * One security action as a tile: icon, name and what it does. The button's
- * accessible name is the title alone; the description is its description.
+ * Which per-role blocks a session draws, in order. A jugador's membership
+ * ticket needs a membership row to talk about; a representante who also holds
+ * a membership of their own gets both («A tu cargo» leads).
  */
-export function ActionTile({
-  icon,
-  tone = "neutral",
-  title,
-  description,
-  onClick,
-  disabled,
-}: {
-  icon: React.ReactNode;
-  tone?: AccentTone;
-  title: string;
-  description: string;
-  onClick: () => void;
-  disabled?: boolean;
-}): React.ReactElement {
-  const id = useId();
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-labelledby={`${id}-t`}
-      aria-describedby={`${id}-d`}
-      className="flex h-full items-center gap-3 rounded-ctl border border-line-2 bg-paper p-3.5 text-left transition-colors hover:bg-sunken disabled:cursor-not-allowed disabled:opacity-60 sm:flex-col sm:items-start sm:gap-2 xl:flex-row xl:items-center xl:gap-3"
-    >
-      <IconTile icon={icon} tone={tone} />
-      <span className="grid min-w-0 gap-0.5">
-        <span id={`${id}-t`} className="text-sm font-bold text-ink">
-          {title}
-        </span>
-        <span id={`${id}-d`} className="text-xs leading-snug text-ink-3-strong">
-          {description}
-        </span>
-      </span>
-    </button>
-  );
+export function roleBlocksFor(role: UserRole, hasMembership: boolean): RoleBlockKind[] {
+  switch (role) {
+    case "estudiante":
+      return hasMembership ? ["ticket"] : [];
+    case "representante":
+      return hasMembership ? ["dependants", "ticket"] : ["dependants"];
+    case "trainer":
+      return ["trainer-board"];
+    case "admin":
+      return ["admin-board"];
+    case "unsupported":
+      return ["account-board"];
+  }
+}
+
+/** Days left at or under which the ticket warns instead of reassuring. */
+export const TICKET_WARN_DAYS = 7;
+
+export type TicketToneKey = "ok" | "warn" | "bad";
+
+/**
+ * The ticket's tone: the worse of what the coverage dates say and what the
+ * membership's own status chip says, so the two never disagree on one screen.
+ */
+export function ticketTone(daysLeft: number | null, chipTone: "ok" | "warn" | "bad" | "neutral"): TicketToneKey {
+  if (chipTone === "bad" || (daysLeft !== null && daysLeft < 0)) return "bad";
+  if (chipTone === "warn" || (daysLeft !== null && daysLeft <= TICKET_WARN_DAYS)) return "warn";
+  return "ok";
+}
+
+/** The one-word standing printed over the strip. */
+export function ticketWord(tone: TicketToneKey, daysLeft: number | null, chipLabel: string): string {
+  if (daysLeft !== null && daysLeft < 0) return "Venció";
+  if (tone === "ok") return "Al día";
+  if (daysLeft !== null && daysLeft <= TICKET_WARN_DAYS && chipLabel === "Membresía activa") return "Vence pronto";
+  return chipLabel;
 }

@@ -91,6 +91,7 @@ const SCREENS: Screen[] = [
   { role: "entrenador", name: "day", path: "/trainer" },
   { role: "entrenador", name: "attendance", path: "/trainer/attendance" },
   { role: "entrenador", name: "students", path: "/trainer/students" },
+  { role: "entrenador", name: "profile", path: "/profile" },
   { role: "admin", name: "dashboard", path: "/dashboard" },
   { role: "admin", name: "members", path: "/members" },
   { role: "admin", name: "payments", path: "/payments" },
@@ -102,6 +103,7 @@ const SCREENS: Screen[] = [
   { role: "admin", name: "reportes-error", path: "/admin/reportes-error" },
   { role: "admin", name: "galeria", path: "/galeria" },
   { role: "admin", name: "sponsors", path: "/sponsors" },
+  { role: "admin", name: "profile", path: "/profile" },
 ];
 
 const VIEWPORTS = [

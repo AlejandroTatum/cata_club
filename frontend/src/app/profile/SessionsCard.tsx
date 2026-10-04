@@ -58,9 +58,11 @@ function actualPrimero(filas: SesionPropia[]): SesionPropia[] {
 interface SessionsCardProps {
   /** Bump to reload from the first page (e.g. after closing the other sessions). */
   refreshKey?: number;
+  /** Inside «Seguridad»: just the list, with no card or header of its own. */
+  embedded?: boolean;
 }
 
-export default function SessionsCard({ refreshKey = 0 }: SessionsCardProps): React.ReactElement | null {
+export default function SessionsCard({ refreshKey = 0, embedded = false }: SessionsCardProps): React.ReactElement | null {
   const [sesiones, setSesiones] = useState<SesionPropia[]>([]);
   const [hayMas, setHayMas] = useState(false);
   const [cargandoMas, setCargandoMas] = useState(false);
@@ -135,13 +137,19 @@ export default function SessionsCard({ refreshKey = 0 }: SessionsCardProps): Rea
   return (
     <section
       data-testid="profile-sessions"
-      className="card flex flex-none flex-col overflow-hidden"
+      className={embedded ? "flex flex-col border-b border-line" : "card flex flex-none flex-col overflow-hidden"}
     >
-      <SectionHead
-        title="Tus sesiones"
-        icon={<Monitor size={ICON.sm} strokeWidth={1.5} />}
-        tone="info"
-      />
+      {embedded ? (
+        <h3 className="px-5 pt-3.5 text-2xs font-bold uppercase tracking-wide text-ink-3-strong">
+          Tus sesiones
+        </h3>
+      ) : (
+        <SectionHead
+          title="Tus sesiones"
+          icon={<Monitor size={ICON.sm} strokeWidth={1.5} />}
+          tone="info"
+        />
+      )}
 
       <ul className="m-0 flex list-none flex-col p-0">
         {sesiones.map((sesion) => (
