@@ -1,12 +1,18 @@
 import { heading, paragraph, type LegalBlock } from "./legal-content";
+import { healthChapter } from "./health-chapter";
+import { imageChapter } from "./image-chapter";
 
 /** The anchor of the privacy chapter: old `/privacidad` links resolve here. */
 export const PRIVACY_CHAPTER_ID = "privacidad";
+/** The anchors of the health-data and image chapters: the old pages redirect here. */
+export const HEALTH_CHAPTER_ID = "consentimiento-salud";
+export const IMAGE_CHAPTER_ID = "permiso-imagen";
 
 /**
- * Document 1, version 2.2 (the lawyer-approved 2.1 reworded so acceptance is mandatory; pending lawyer validation): terms, conditions and
- * liability agreement. The privacy notice is its chapter VIII, not a separate
- * document. Published verbatim.
+ * The single public document, version 2.2 (the lawyer-approved 2.1 reworded so acceptance is mandatory; pending lawyer validation): terms, conditions and
+ * liability agreement. The privacy notice (VIII), the health-data consent (X)
+ * and the image permission (XI) are chapters of it, not separate documents
+ * (#1615). Published verbatim.
  */
 export const legalBlocks: readonly LegalBlock[] = [
   paragraph("Al aceptar estos términos, usted se compromete a usar la plataforma conforme a ellos."),
@@ -125,6 +131,12 @@ export const legalBlocks: readonly LegalBlock[] = [
 
   heading("Capítulo IX. Ley aplicable y contacto"),
   paragraph("Estos términos se rigen por las leyes de la República del Ecuador. Para consultas sobre ellos, escriba a cataclub.loja@proton.me."),
+
+  heading("Capítulo X. Consentimiento para el tratamiento de datos de salud", HEALTH_CHAPTER_ID),
+  ...healthChapter,
+
+  heading("Capítulo XI. Permiso de uso de imagen", IMAGE_CHAPTER_ID),
+  ...imageChapter,
 ];
 
 /** Key points of the document above, for the side summary. Nothing here goes beyond the text. */

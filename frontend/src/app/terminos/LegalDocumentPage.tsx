@@ -39,7 +39,7 @@ interface LegalDocumentPageProps {
 }
 
 /**
- * The one surface behind `/terminos`, `/consentimiento-salud` and `/permiso-imagen-fetm`.
+ * The surface behind `/terminos`, the single public legal document.
  *
  * ## Mode: this is a Read surface
  *

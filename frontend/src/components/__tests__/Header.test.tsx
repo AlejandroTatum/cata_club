@@ -258,7 +258,7 @@ describe("Header", (): void => {
 
   // --- Public legal routes (issue #782) ---
   //
-  // `/terminos`, `/consentimiento-salud` and `/permiso-imagen-fetm` are the pages a user
+  // `/terminos` is the page a user
   // opens FROM INSIDE the product — accepting a consent, re-reading what they
   // signed — so the header there has to answer the session question the same
   // way the rest of the product does. The legal branch used to be taken before
@@ -266,7 +266,7 @@ describe("Header", (): void => {
   // a live session was told to "Iniciar sesión", and clicking it landed him on
   // a login screen he did not need.
 
-  const LEGAL_ROUTES = ["/terminos", "/consentimiento-salud", "/permiso-imagen-fetm"];
+  const LEGAL_ROUTES = ["/terminos"];
 
   it.each(LEGAL_ROUTES)("offers Iniciar sesión on %s to an anonymous visitor", (route): void => {
     mockPathname.mockReturnValue(route);
@@ -350,7 +350,7 @@ describe("Header", (): void => {
   });
 
   it("opens Perfil and Cerrar Sesión from the account menu on a legal route", (): void => {
-    mockPathname.mockReturnValue("/consentimiento-salud");
+    mockPathname.mockReturnValue("/terminos");
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
 
     render(<Header />);

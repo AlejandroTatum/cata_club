@@ -1,10 +1,12 @@
-import { heading, paragraph, type LegalBlock } from "../terminos/legal-content";
+import { heading, paragraph, type LegalBlock } from "./legal-content";
 
 /**
- * Document 2, version 2.2 (the lawyer-approved 2.1 reworded so acceptance is mandatory; pending lawyer validation): consent for the
- * processing of health data. Otherwise verbatim.
+ * Chapter X of the terms (document 2 until #1615), version 2.2: consent for
+ * the processing of health data. Moved verbatim from its former page; the
+ * lawyer-approved 2.1 reworded so acceptance is mandatory (pending lawyer
+ * validation).
  */
-export const legalBlocks: readonly LegalBlock[] = [
+export const healthChapter: readonly LegalBlock[] = [
   heading("Propósito y alcance"),
   paragraph("Este consentimiento es independiente de los Términos, condiciones y acuerdo de responsabilidad, pero su aceptación es obligatoria: se acepta junto con ellos y con el Permiso de uso de imagen, y sin él no se crea la cuenta. Con él usted autoriza expresamente que Cata Club trate datos de salud, que la ley considera datos sensibles. El club lo exige porque necesita la ficha médica para atender al jugador en una emergencia."),
   heading("Quién trata los datos"),
@@ -29,13 +31,4 @@ export const legalBlocks: readonly LegalBlock[] = [
   paragraph("También tiene los demás derechos descritos en ese capítulo (acceso, rectificación, eliminación, oposición y reclamo ante la Superintendencia de Protección de Datos Personales)."),
   heading("Cómo queda registrada su autorización"),
   paragraph("La plataforma guarda qué versión aceptó, la fecha y su cuenta; y, si la retira, la fecha y el motivo. No se acepta nunca de forma automática."),
-];
-
-/** Key points of the document above, for the side summary. Nothing here goes beyond the text. */
-export const summary: readonly string[] = [
-  "Su aceptación es obligatoria: se acepta junto con los Términos y el Permiso de uso de imagen, y sin él no se crea la cuenta.",
-  "Cubre la ficha médica: tipo de sangre, alergias, enfermedades y contacto de emergencia.",
-  "Se usa solo para proteger la salud y la seguridad del jugador; no se publica.",
-  "El entrenador solo la consulta en una emergencia, y cada consulta queda registrada.",
-  "Puede retirar la autorización en cualquier momento; el retiro vale hacia adelante.",
 ];

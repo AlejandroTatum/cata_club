@@ -37,14 +37,12 @@ import { useModalFocusTrap } from "@/lib/focus-trap";
 import { holdSmoothScroll } from "@/lib/smooth-scroll";
 import { blockAnchor, type LegalBlock } from "@/app/terminos/legal-content";
 import { legalBlocks as terminosBlocks, PRIVACY_CHAPTER_ID } from "@/app/terminos/content";
-import { legalBlocks as healthBlocks } from "@/app/consentimiento-salud/content";
-import { legalBlocks as fetmBlocks } from "@/app/permiso-imagen-fetm/content";
 
 /**
- * `privacidad` is not a fourth document: the privacy notice is chapter VIII of
- * the terms, so it opens the same text scrolled to that chapter.
+ * There is one document (#1615): the terms. `privacidad` opens the same text
+ * scrolled to chapter VIII, where the privacy notice lives.
  */
-export type LegalReviewDocumentId = "terminos" | "privacidad" | "consentimiento-salud" | "permiso-imagen-fetm";
+export type LegalReviewDocumentId = "terminos" | "privacidad";
 
 interface LegalReviewDocument {
   /** The title the public page publishes, reused as the dialog's name. */
@@ -56,30 +54,20 @@ interface LegalReviewDocument {
 }
 
 /**
- * The three documents the grouped consent covers. Titles are transcribed
- * from the three `page.tsx` files (which own them for metadata); the blocks
- * are THE public content modules, shared not duplicated.
+ * The document the single consent covers. The title is transcribed from
+ * `terminos/page.tsx` (which owns it for metadata); the blocks are THE public
+ * content module, shared not duplicated.
  */
 export const LEGAL_REVIEW_DOCUMENTS: Record<LegalReviewDocumentId, LegalReviewDocument> = {
   terminos: {
-    title: "Términos, condiciones y acuerdo de responsabilidad de Cata Club",
+    title: "Términos y condiciones de Cata Club",
     href: "/terminos",
     blocks: terminosBlocks,
   },
   privacidad: {
-    title: "Términos, condiciones y acuerdo de responsabilidad de Cata Club",
+    title: "Términos y condiciones de Cata Club",
     href: `/terminos#${PRIVACY_CHAPTER_ID}`,
     blocks: terminosBlocks,
-  },
-  "consentimiento-salud": {
-    title: "Consentimiento para el tratamiento de datos de salud",
-    href: "/consentimiento-salud",
-    blocks: healthBlocks,
-  },
-  "permiso-imagen-fetm": {
-    title: "Permiso de uso de imagen",
-    href: "/permiso-imagen-fetm",
-    blocks: fetmBlocks,
   },
 };
 

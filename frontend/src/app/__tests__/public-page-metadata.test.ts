@@ -6,11 +6,9 @@ vi.mock("../landing/landing.css", () => ({}));
 vi.mock("../terminos/LegalDocumentPage", () => ({ default: () => null }));
 
 import { metadata as landing } from "../page";
-import { metadata as salud } from "../consentimiento-salud/page";
 import { metadata as terminos } from "../terminos/page";
-import { metadata as permiso } from "../permiso-imagen-fetm/page";
 
-const PAGES = { "/": landing, "/consentimiento-salud": salud, "/terminos": terminos, "/permiso-imagen-fetm": permiso };
+const PAGES = { "/": landing, "/terminos": terminos };
 
 describe("public pages", () => {
   it.each(Object.entries(PAGES))("%s declares its canonical path", (path, metadata) => {

@@ -74,7 +74,7 @@ export function publicPageMetadata(path: string): Metadata {
  * `src/app` is either listed here or in `PRIVATE_PATH_PREFIXES`;
  * `seo-routes.test.ts` fails when a new route is in neither.
  */
-export const PUBLIC_PATHS = ["/", "/terminos", "/consentimiento-salud", "/permiso-imagen-fetm"] as const;
+export const PUBLIC_PATHS = ["/", "/terminos"] as const;
 
 /** Everything behind a session, an admin gate or an auth flow. */
 export const PRIVATE_PATH_PREFIXES = [

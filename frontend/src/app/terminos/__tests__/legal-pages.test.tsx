@@ -1,20 +1,14 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import TermsPage from "../page";
-import HealthPage from "../../consentimiento-salud/page";
-import FETMPage from "../../permiso-imagen-fetm/page";
 import LegalDocumentPage from "../LegalDocumentPage";
 import { heading, paragraph, sectionId, blockAnchor } from "../legal-content";
 import { legalBlocks as termsBlocks, summary as termsSummary } from "../content";
-import { legalBlocks as healthBlocks, summary as healthSummary } from "../../consentimiento-salud/content";
-import { legalBlocks as fetmBlocks, summary as fetmSummary } from "../../permiso-imagen-fetm/content";
+import { healthChapter } from "../health-chapter";
+import { imageChapter } from "../image-chapter";
 import nextConfig from "../../../../next.config";
 
-const pages = [
-  ["Términos", TermsPage, termsBlocks],
-  ["Salud", HealthPage, healthBlocks],
-  ["FETM", FETMPage, fetmBlocks],
-] as const;
+const pages = [["Términos", TermsPage, termsBlocks]] as const;
 
 /**
  * React escapes exactly these five characters in text content, so undoing them
@@ -109,7 +103,7 @@ describe("public legal documents", () => {
   });
 
   it("publishes the three authorised image uses as plain text, with no opt-out and no controls", () => {
-    const html = decode(renderToStaticMarkup(<FETMPage />));
+    const html = decode(renderToStaticMarkup(<TermsPage />));
     for (const use of ["1. Galería del club.", "2. Redes sociales del club.", "3. FETM."]) {
       expect(html).toContain(use);
     }
@@ -118,12 +112,52 @@ describe("public legal documents", () => {
     expect(html).not.toMatch(/<input|<select|type="checkbox"|type="radio"/);
   });
 
-  it("links the three documents together and no longer offers a separate privacy page", () => {
+  it("lists one public document («Términos y condiciones») and no other legal page (#1615)", () => {
     const html = renderToStaticMarkup(<TermsPage />);
-    expect(html).toContain('href="/terminos"');
-    expect(html).toContain('href="/consentimiento-salud"');
-    expect(html).toContain('href="/permiso-imagen-fetm"');
+    const nav = /<nav aria-label="Otros documentos públicos"[\s\S]*?<\/nav>/.exec(html)?.[0] ?? "";
+    expect(nav.match(/<a /g)).toHaveLength(1);
+    expect(decode(nav)).toContain("Términos y condiciones");
+    expect(nav).toContain('href="/terminos"');
+    expect(html).not.toContain('href="/consentimiento-salud"');
+    expect(html).not.toContain('href="/permiso-imagen-fetm"');
     expect(html).not.toContain('href="/privacidad"');
+  });
+
+  it("publishes health-data consent and image permission as chapters X and XI, anchored for the old routes (#1615)", () => {
+    const html = decode(renderToStaticMarkup(<TermsPage />));
+    expect(html).toMatch(/<h2[^>]*id="consentimiento-salud"[^>]*>Capítulo X\. Consentimiento para el tratamiento de datos de salud<\/h2>/);
+    expect(html).toMatch(/<h2[^>]*id="permiso-imagen"[^>]*>Capítulo XI\. Permiso de uso de imagen<\/h2>/);
+    expect(html).toContain('href="#consentimiento-salud"');
+    expect(html).toContain('href="#permiso-imagen"');
+  });
+
+  it("carries the former health and image documents verbatim, key sentences included (#1615)", () => {
+    const html = decode(renderToStaticMarkup(<TermsPage />));
+    for (const sentence of [
+      "Con él usted autoriza expresamente que Cata Club trate datos de salud, que la ley considera datos sensibles.",
+      "La ficha médica del jugador: tipo de sangre, alergias, enfermedades que debamos conocer, y el nombre y teléfono de una persona de contacto en caso de emergencia.",
+      "• No usamos imágenes de jugadores menores de 18 años en mensajes publicitarios.",
+      "3. FETM. Autorizar a la Federación Ecuatoriana de Tenis de Mesa la difusión de la imagen del jugador",
+    ]) {
+      expect(html).toContain(sentence);
+    }
+    const texts = termsBlocks.map((block) => block.text);
+    for (const [title, chapter] of [
+      ["Capítulo X. Consentimiento para el tratamiento de datos de salud", healthChapter],
+      ["Capítulo XI. Permiso de uso de imagen", imageChapter],
+    ] as const) {
+      const start = texts.indexOf(title) + 1;
+      expect(start).toBeGreaterThan(0);
+      expect(texts.slice(start, start + chapter.length)).toEqual(chapter.map((block) => block.text));
+    }
+  });
+
+  it.each([
+    ["/consentimiento-salud", "/terminos#consentimiento-salud"],
+    ["/permiso-imagen-fetm", "/terminos#permiso-imagen"],
+  ])("redirects the old %s route permanently to its chapter", async (source, destination) => {
+    const redirects = (await nextConfig.redirects?.()) ?? [];
+    expect(redirects).toContainEqual({ source, destination, permanent: true });
   });
 
   it("publishes the privacy notice as a chapter of the terms, anchored at #privacidad", () => {
@@ -205,16 +239,12 @@ describe("public legal documents", () => {
     expect(sectionId("Derechos, consultas y revocación", 0)).toBe("derechos-consultas-y-revocacion-1");
   });
 
-  it.each([
-    ["Términos", TermsPage, termsSummary],
-    ["Salud", HealthPage, healthSummary],
-    ["FETM", FETMPage, fetmSummary],
-  ] as const)("%s shows three to five summary points under En resumen", (_name, Page, points) => {
-    expect(points.length).toBeGreaterThanOrEqual(3);
-    expect(points.length).toBeLessThanOrEqual(5);
-    const html = decode(renderToStaticMarkup(<Page />));
+  it("shows three to five summary points under En resumen", () => {
+    expect(termsSummary.length).toBeGreaterThanOrEqual(3);
+    expect(termsSummary.length).toBeLessThanOrEqual(5);
+    const html = decode(renderToStaticMarkup(<TermsPage />));
     expect(html).toContain("En resumen");
-    for (const point of points) expect(html).toContain(point);
+    for (const point of termsSummary) expect(html).toContain(point);
   });
 
   it.each(pages)("%s makes the scrollable contents rail keyboard-focusable (LAN-11)", (_name, Page) => {

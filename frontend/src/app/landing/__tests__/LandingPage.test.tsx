@@ -1476,6 +1476,17 @@ describe("LandingPage", (): void => {
    * `[data-split]`, `[data-hero-parallax]`, `[data-media-reveal]`, and
    * `[data-rule]` carry no hidden-by-default rule).
    */
+  describe("legal links (#1615)", (): void => {
+    it("lists only «Términos y condiciones» in the footer", (): void => {
+      render(<LandingPage />);
+
+      const legal = screen.getByRole("navigation", { name: "Información legal" });
+      const links = within(legal).getAllByRole("link");
+      expect(links.map((link) => link.textContent)).toEqual(["Términos y condiciones"]);
+      expect(links[0]).toHaveAttribute("href", "/terminos");
+    });
+  });
+
   describe("progressive motion enhancement", (): void => {
     it("keeps the motion runtime out of the synchronous server render", (): void => {
       render(<LandingPage />);
