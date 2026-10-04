@@ -25,6 +25,7 @@
  * el código real, y quien lo decide es el dueño del producto, no este spec.
  */
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { ATTENDANCE_WINDOW_DAYS, clubIsoDate } from "./helpers/attendance-session";
 
 /** Sembrados por `backend/scripts/seed_dev_base.py`. */
 const TRAINER_EMAIL = "entrenador@cataclub.com";
@@ -49,8 +50,12 @@ test("un entrenador NO puede corregir una asistencia — sigue siendo exclusivo 
 
   // Cualquier fila real y correctable alcanza para probar el 403 — no hace
   // falta que la corrección se aplique, solo que el permiso la rechace antes.
+  // La ventana es relativa al «hoy» del club: el seed siembra las últimas
+  // sesiones respecto del día en que corre, así que un rango fijo caduca.
+  const desde = clubIsoDate(ATTENDANCE_WINDOW_DAYS);
+  const hasta = clubIsoDate();
   const records = (await request
-    .get("/api/attendance/records?fechaInicio=2026-09-03&fechaFin=2026-09-05&horarioId=" + HORARIO_B)
+    .get(`/api/attendance/records?fechaInicio=${desde}&fechaFin=${hasta}&horarioId=${HORARIO_B}`)
     .then((r) => r.json())) as Array<{ id: string }>;
   expect(records.length, "No hay ninguna Asistencia sembrada para probar el 403 de corrección").toBeGreaterThan(0);
 

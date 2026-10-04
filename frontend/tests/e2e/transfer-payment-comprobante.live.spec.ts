@@ -139,7 +139,7 @@ test("un socio registra un pago por transferencia con comprobante y queda pendie
   await registerTransferPaymentWithVoucher(page);
 
   // ── Lo que ningún spec mockeado podía comprobar (1): el toast de éxito ──
-  await expect(page.getByText("Pago registrado y en revisión")).toBeVisible({
+  await expect(page.getByText("Pago registrado y por validar")).toBeVisible({
     timeout: 15_000,
   });
 

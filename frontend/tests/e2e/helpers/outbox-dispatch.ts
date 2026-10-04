@@ -81,8 +81,14 @@ export type OutboxDispatchTask =
  * un correo que nunca fue a salir.
  */
 export async function dispatchPendingOutboxTask(task: OutboxDispatchTask): Promise<void> {
+  // `E2E_COMPOSE_PROJECT` apunta el `exec` a un stack de QA aislado (otro
+  // nombre de proyecto de Compose) en vez de al `cataclub-qa` de `make qa-up`.
+  const project = /^[a-z0-9][a-z0-9_-]*$/.test(process.env.E2E_COMPOSE_PROJECT ?? "")
+    ? ["-p", process.env.E2E_COMPOSE_PROJECT as string]
+    : [];
   const args = [
     "compose",
+    ...project,
     ...QA_COMPOSE_FILES.flatMap((file) => ["-f", file]),
     "exec",
     "-T",

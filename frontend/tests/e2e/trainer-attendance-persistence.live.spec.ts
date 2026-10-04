@@ -11,89 +11,51 @@
  * hueco: un entrenador marca asistencia de una sesión real, se recarga la
  * página, y lo marcado sigue ahí.
  *
- * ## Por qué esta fecha, y no "hoy"
+ * ## Por qué la sesión se descubre en cada corrida
  *
- * El seed NO crea horarios para todos los días: `FORMATIVO`/`INFANTIL`/
- * `ADULTOS` corren Lun-Vie y `COMPETITIVO` Lun-Sáb — nunca domingo. El día
- * real en que este spec puede correr no está garantizado (hoy mismo, al
- * escribirlo, es domingo), así que "hoy" no es una fecha válida para NINGÚN
- * horario. `beforeAll` verifica contra la API real — no lo asume — que
- * `HORARIO_ID` cae en `LUNES` y que `SESSION_DATE` es efectivamente un lunes.
+ * El backend solo registra asistencia entre «hoy» (día del club) y 30 días
+ * atrás, y solo en la fecha cuyo día de semana es el del horario. Una fecha
+ * fija (este spec usó `2025-01-06`) sale de esa ventana y el alta responde 400
+ * `ventana=30`. Y "hoy" tampoco sirve solo: el seed no crea horarios los
+ * domingos, y `registrar_asistencia` cierra la sesión (horario_id, fecha) de
+ * forma PERMANENTE en el primer alta exitoso, mientras que el bulk-seed ya
+ * cerró las últimas 4 ocurrencias de cada horario.
  *
- * `SESSION_DATE` es fija y deliberadamente vieja (un lunes de enero de 2025):
- * ni "hoy" ni "el lunes más próximo" sirven para una fecha REPETIBLE, porque
- * `registrar_asistencia` cierra la sesión (horario_id, fecha) de forma
- * PERMANENTE en el primer alta exitoso — no hay "volver a tomarla", ni para un
- * administrador. Una fecha relativa a "hoy" colisionaría con el bulk-seed, que
- * ya cerró los últimos cuatro lunes de este horario (10, 17, 24 y 31 de
- * agosto). 2025-01-06 queda fuera de ese rango y, verificado contra la API
- * antes de escribir este spec, no tiene ninguna `Asistencia` registrada.
+ * Por eso `findOpenAttendanceSession` (`helpers/attendance-session.ts`) recorre
+ * la ventana desde hoy hacia atrás y elige la sesión más reciente de un horario
+ * de Ana que NO tiene ninguna asistencia. Verifica contra la API real — no lo
+ * asume — que el día de semana y el roster son los correctos.
  *
  * ## Repetibilidad — incluida la corrida DOS VECES seguidas que pide la ronda de QA
  *
- * La primera vez que este spec corre en un stack, la sesión (horario 6,
- * 2025-01-06) está abierta: marca a Ana García como "Ausente", envía el lote
- * completo y confirma que sobrevive a un reload. Desde la SEGUNDA corrida en
- * adelante — incluida la segunda de la ronda de "corré la suite dos veces
- * seguidas" — esa sesión ya quedó cerrada por la corrida anterior (el mismo
- * cierre permanente de arriba). El spec detecta esto (`readOnly` ya viene en
- * `true` al abrir la sesión) y en vez de fallar, verifica DIRECTAMENTE que el
- * valor persistido es el que esta misma corrida anterior dejó — que es, en sí
- * mismo, la prueba de persistencia más fuerte posible: sobrevivió no solo a un
- * reload sino a un reinicio completo del proceso de Playwright.
+ * Cada corrida cierra una sesión distinta (la siguiente libre). Si ya no queda
+ * ninguna libre, el spec usa la más reciente donde una corrida anterior dejó a
+ * Ana como "Ausente" (`readOnly` ya viene en `true` al abrirla) y verifica
+ * DIRECTAMENTE que el valor persistido es el que esa corrida dejó — que es, en
+ * sí mismo, la prueba de persistencia más fuerte posible: sobrevivió no solo a
+ * un reload sino a un reinicio completo del proceso de Playwright.
  */
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { findOpenAttendanceSession } from "./helpers/attendance-session";
 
 /** Sembrados por `backend/scripts/seed_dev_base.py`. */
 const TRAINER_EMAIL = "entrenador@cataclub.com";
 const TRAINER_PASSWORD = "trainer12345";
 
-/** INFANTIL, LUNES 16:00–17:00 — ver el catálogo real en `GET /asistencias/horarios`. */
-const HORARIO_ID = 6;
-const SESSION_DATE = "2025-01-06";
 const STUDENT_NAME = "Ana Garcia";
 const MARKED_STATE = "Ausente";
 
-const DEEP_LINK = `/trainer/attendance?horario=${HORARIO_ID}&fecha=${SESSION_DATE}&paso=lista`;
-
 /**
- * Verificación real (no asumida) de que la sesión elegida es utilizable:
- * `SESSION_DATE` cae en un LUNES real, `HORARIO_ID` es efectivamente un
- * horario de los lunes, y el alumno que el spec va a marcar sigue asignado a
- * él. Si el seed cambiara mañana, este spec falla acá — con un mensaje que
- * dice exactamente qué dejó de ser cierto — en vez de perderse en un timeout
- * silencioso más abajo.
+ * Inicia sesión como entrenador y descubre la sesión (horario + fecha dentro de
+ * la ventana de 30 días) que este spec va a marcar. Si el seed cambiara y Ana
+ * dejara de estar en un horario, falla acá con un mensaje que lo dice.
  */
-async function verifySessionIsUsable(request: APIRequestContext): Promise<{ studentPersonaId: number }> {
-  const weekday = new Date(`${SESSION_DATE}T12:00:00Z`).getUTCDay();
-  expect(weekday, `${SESSION_DATE} debería ser un lunes (getUTCDay()===1), pero da ${weekday}`).toBe(1);
-
+async function resolveSession(request: APIRequestContext) {
   const login = await request.post("/api/auth/login", {
     data: { email: TRAINER_EMAIL, password: TRAINER_PASSWORD },
   });
   expect(login.ok(), `No se pudo iniciar sesión como entrenador: ${login.status()}`).toBe(true);
-
-  const schedules = (await request
-    .get("/api/attendance/schedules")
-    .then((r) => r.json())) as Array<{ id: number; diaSemana: string }>;
-  const horario = schedules.find((h) => h.id === HORARIO_ID);
-  expect(horario, `El horario ${HORARIO_ID} ya no existe en /api/attendance/schedules`).toBeDefined();
-  expect(
-    horario?.diaSemana,
-    `El horario ${HORARIO_ID} dejó de ser "lun" (ahora es "${horario?.diaSemana}") — ` +
-      "esta fecha ya no le corresponde y el spec necesita otro horario/fecha.",
-  ).toBe("lun");
-
-  const roster = (await request
-    .get(`/api/groups/horarios/${HORARIO_ID}/alumnos?limit=200`)
-    .then((r) => r.json())) as { items: Array<{ personaId: number; personaNombreCompleto: string }> };
-  const student = roster.items.find((i) => i.personaNombreCompleto === STUDENT_NAME);
-  expect(
-    student,
-    `${STUDENT_NAME} ya no está asignada al horario ${HORARIO_ID} — el spec necesita otra alumna real.`,
-  ).toBeDefined();
-
-  return { studentPersonaId: student!.personaId };
+  return findOpenAttendanceSession(request, STUDENT_NAME, "absent");
 }
 
 async function loginAsTrainer(page: Page): Promise<void> {
@@ -121,10 +83,11 @@ test("un entrenador marca asistencia de una sesión real y, tras reload, lo marc
   request,
 }) => {
   test.setTimeout(60_000);
-  const { studentPersonaId } = await verifySessionIsUsable(request);
+  const { horarioId, fecha, studentPersonaId } = await resolveSession(request);
+  const deepLink = `/trainer/attendance?horario=${horarioId}&fecha=${fecha}&paso=lista`;
 
   await loginAsTrainer(page);
-  await page.goto(DEEP_LINK);
+  await page.goto(deepLink);
 
   // Se espera a que el roster termine de cargar (aparece en las DOS ramas:
   // de solo lectura o marcable) ANTES de decidir la bifurcación — `isVisible()`
@@ -161,7 +124,7 @@ test("un entrenador marca asistencia de una sesión real y, tras reload, lo marc
   // sesión (el envío exitoso reemplaza la URL por el selector, así que no
   // hay nada que "recargar" ahí — reabrir el deep link es la forma correcta
   // de forzar un remount contra el servidor), y ENCIMA un reload literal. ──
-  await page.goto(DEEP_LINK);
+  await page.goto(deepLink);
   await expect(page.getByText("Esta lista ya fue registrada.")).toBeVisible({ timeout: 20_000 });
   expect(await readAnaBadge(page)).toBe(MARKED_STATE);
 
@@ -173,7 +136,7 @@ test("un entrenador marca asistencia de una sesión real y, tras reload, lo marc
   // base, leído directo por la API — no solo lo que React decidió pintar. ──
   const recorded = (await request
     .get(
-      `/api/attendance/records?fechaInicio=${SESSION_DATE}&fechaFin=${SESSION_DATE}&horarioId=${HORARIO_ID}&personaId=${studentPersonaId}`,
+      `/api/attendance/records?fechaInicio=${fecha}&fechaFin=${fecha}&horarioId=${horarioId}&personaId=${studentPersonaId}`,
     )
     .then((r) => r.json())) as Array<{ estado: string }>;
   expect(recorded).toHaveLength(1);
