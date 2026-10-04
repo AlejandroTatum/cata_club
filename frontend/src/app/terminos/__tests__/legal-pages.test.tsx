@@ -1,17 +1,18 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import TermsPage from "../page";
-import PrivacyPage from "../../privacidad/page";
+import HealthPage from "../../consentimiento-salud/page";
 import FETMPage from "../../permiso-imagen-fetm/page";
 import LegalDocumentPage from "../LegalDocumentPage";
-import { heading, paragraph, sectionId } from "../legal-content";
+import { heading, paragraph, sectionId, blockAnchor } from "../legal-content";
 import { legalBlocks as termsBlocks, summary as termsSummary } from "../content";
-import { legalBlocks as privacyBlocks, summary as privacySummary } from "../../privacidad/content";
-import { legalBlocks as fetmBlocks } from "../../permiso-imagen-fetm/content";
+import { legalBlocks as healthBlocks, summary as healthSummary } from "../../consentimiento-salud/content";
+import { legalBlocks as fetmBlocks, summary as fetmSummary } from "../../permiso-imagen-fetm/content";
+import nextConfig from "../../../../next.config";
 
 const pages = [
   ["Términos", TermsPage, termsBlocks],
-  ["Privacidad", PrivacyPage, privacyBlocks],
+  ["Salud", HealthPage, healthBlocks],
   ["FETM", FETMPage, fetmBlocks],
 ] as const;
 
@@ -51,29 +52,44 @@ function documentBlocks(html: string): { tag: string; text: string }[] {
 describe("public legal documents", () => {
   it.each(pages)("%s publishes version and effective date", (_name, Page) => {
     const html = renderToStaticMarkup(<Page />);
-    expect(html).toContain("1.0");
-    expect(html).toContain("27 de agosto de 2026");
+    expect(html).toContain("2.2");
+    expect(html).toContain("4 de octubre de 2026");
+    expect(html).not.toContain("27 de agosto de 2026");
     expect(html).toContain('id="contenido"');
   });
 
   it.each(pages)("%s contains no internal review markers", (_name, Page) => {
     const html = renderToStaticMarkup(<Page />).toLowerCase();
-    expect(html).not.toMatch(/borrador|pendiente|validación legal|lista de revisión/);
+    expect(html).not.toMatch(/\b(borrador|validación legal|lista de revisión|pendiente de (revisión|validación))\b/);
   });
 
-  it("publishes only the confirmed FETM sentence", () => {
-    const html = renderToStaticMarkup(<FETMPage />);
-    const sentence = "Autorizo a la Federación Ecuatoriana de Tenis de Mesa la difusión de mi imagen según las condiciones que se desglosan en el documento de Difusión de Imagen de Deportistas FETM.";
-    expect(html).toContain(sentence);
-    expect(html.match(/<article[^>]*>[\s\S]*?<p/g)).toHaveLength(1);
-    expect(html).not.toMatch(/propuesto|propone|generaría|revisión|checklist|TODO/i);
+  it("publishes the three authorised image uses as plain text, with no opt-out and no controls", () => {
+    const html = decode(renderToStaticMarkup(<FETMPage />));
+    for (const use of ["1. Galería del club.", "2. Redes sociales del club.", "3. FETM."]) {
+      expect(html).toContain(use);
+    }
+    expect(html).not.toContain("No autorizo ninguna");
+    expect(html).not.toContain("4. ");
+    expect(html).not.toMatch(/<input|<select|type="checkbox"|type="radio"/);
   });
 
-  it("links all public documents together", () => {
+  it("links the three documents together and no longer offers a separate privacy page", () => {
     const html = renderToStaticMarkup(<TermsPage />);
     expect(html).toContain('href="/terminos"');
-    expect(html).toContain('href="/privacidad"');
+    expect(html).toContain('href="/consentimiento-salud"');
     expect(html).toContain('href="/permiso-imagen-fetm"');
+    expect(html).not.toContain('href="/privacidad"');
+  });
+
+  it("publishes the privacy notice as a chapter of the terms, anchored at #privacidad", () => {
+    const html = decode(renderToStaticMarkup(<TermsPage />));
+    expect(html).toMatch(/<h2[^>]*id="privacidad"[^>]*>Capítulo VIII\. Protección de datos personales \(Aviso de privacidad\)<\/h2>/);
+    expect(html).toContain('href="#privacidad"');
+  });
+
+  it("redirects the old /privacidad route permanently to the privacy chapter", async () => {
+    const redirects = (await nextConfig.redirects?.()) ?? [];
+    expect(redirects).toContainEqual({ source: "/privacidad", destination: "/terminos#privacidad", permanent: true });
   });
 
   it.each(pages)("%s renders every declared heading as a heading", (_name, Page, blocks) => {
@@ -128,12 +144,9 @@ describe("public legal documents", () => {
     expect(html).not.toContain("max-w-measure");
   });
 
-  it.each([
-    ["Términos", TermsPage, termsBlocks],
-    ["Privacidad", PrivacyPage, privacyBlocks],
-  ] as const)("%s links every section from the contents list", (_name, Page, blocks) => {
+  it.each(pages)("%s links every section from the contents list", (_name, Page, blocks) => {
     const html = renderToStaticMarkup(<Page />);
-    const headings = blocks.flatMap((block, index) => (block.kind === "heading" ? [{ text: block.text, id: sectionId(block.text, index) }] : []));
+    const headings = blocks.flatMap((block, index) => (block.kind === "heading" ? [{ text: block.text, id: blockAnchor(block, index) }] : []));
     const nav = /<nav aria-label="En este documento"[\s\S]*?<\/nav>/.exec(html)?.[0] ?? "";
     for (const { text, id } of headings) {
       expect(html).toMatch(new RegExp(`<h2[^>]*id="${id}"`));
@@ -149,7 +162,8 @@ describe("public legal documents", () => {
 
   it.each([
     ["Términos", TermsPage, termsSummary],
-    ["Privacidad", PrivacyPage, privacySummary],
+    ["Salud", HealthPage, healthSummary],
+    ["FETM", FETMPage, fetmSummary],
   ] as const)("%s shows three to five summary points under En resumen", (_name, Page, points) => {
     expect(points.length).toBeGreaterThanOrEqual(3);
     expect(points.length).toBeLessThanOrEqual(5);
@@ -158,19 +172,10 @@ describe("public legal documents", () => {
     for (const point of points) expect(html).toContain(point);
   });
 
-  it.each([
-    ["Términos", TermsPage],
-    ["Privacidad", PrivacyPage],
-  ] as const)("%s makes the scrollable contents rail keyboard-focusable (LAN-11)", (_name, Page) => {
+  it.each(pages)("%s makes the scrollable contents rail keyboard-focusable (LAN-11)", (_name, Page) => {
     const html = renderToStaticMarkup(<Page />);
     const nav = /<nav [^>]*aria-label="En este documento"[^>]*>/.exec(html)?.[0] ?? "";
     expect(nav).toContain('tabindex="0"');
-  });
-
-  it("keeps the FETM permission rail and omits a one-entry contents list", () => {
-    const html = renderToStaticMarkup(<FETMPage />);
-    expect(html).toContain("Qué autoriza este permiso");
-    expect(html).not.toContain('aria-label="En este documento"');
   });
 
   it.each(pages)("%s has no link back to the landing inside the document", (_name, Page) => {
@@ -196,20 +201,10 @@ describe("public legal documents", () => {
     expect(html).toMatch(/landing%2F|\/landing\//);
   });
 
-  it.each([
-    ["Términos", TermsPage],
-    ["Privacidad", PrivacyPage],
-  ] as const)("%s pins two rails around the document", (_name, Page) => {
+  it.each(pages)("%s pins two rails around the document", (_name, Page) => {
     const html = renderToStaticMarkup(<Page />);
     expect(html.match(/xl:sticky/g)).toHaveLength(2);
     expect(html).toContain('aria-label="En este documento"');
-  });
-
-  it("composes FETM as a photo beside the statement and its content-height cards", () => {
-    const html = renderToStaticMarkup(<FETMPage />);
-    expect(html).toContain("lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]");
-    for (const card of ["Qué autoriza este permiso", "Preguntas sobre este permiso", "Otros documentos públicos", "¿Dudas?"]) expect(html).toContain(card);
-    expect(html).not.toContain("xl:sticky");
   });
 
   it("offers the club contact beside the document", () => {

@@ -162,7 +162,7 @@ describe("public navigation parity (issue #771)", (): void => {
     expect(hrefsOf(headerNavAnchors(header)).map(targetSectionOf)).toEqual(expectedSections);
   });
 
-  it.each(["/terminos", "/privacidad", "/permiso-imagen-fetm"])(
+  it.each(["/terminos", "/consentimiento-salud", "/permiso-imagen-fetm"])(
     "leaves the section links off the minimal bar on %s",
     (route): void => {
       mockPathname.mockReturnValue(route);

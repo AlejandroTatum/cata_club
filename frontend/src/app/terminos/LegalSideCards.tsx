@@ -8,9 +8,9 @@ export const CONTACT_EMAIL = "cataclub.loja@proton.me";
 export const SIDE_TITLE = "font-display text-lg uppercase leading-tight tracking-flat text-ink";
 
 const DOCUMENTS = [
-  { href: "/terminos", label: "Términos de uso" },
-  { href: "/privacidad", label: "Aviso de privacidad" },
-  { href: "/permiso-imagen-fetm", label: "Permiso público de imagen FETM" },
+  { href: "/terminos", label: "Términos y condiciones (incluye privacidad)" },
+  { href: "/consentimiento-salud", label: "Consentimiento de datos de salud" },
+  { href: "/permiso-imagen-fetm", label: "Permiso de uso de imagen" },
 ] as const;
 
 /** The three public documents, the current one marked. */
