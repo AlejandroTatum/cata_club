@@ -2523,17 +2523,17 @@ describe("ProfilePage — the type and colour rules the screen was breaking", ()
 });
 
 // ---------------------------------------------------------------------------
-// Register — issue #340. Perfil tuteaba/voseaba ("Revisá", "mantené", "tu
-// cuenta") while the other 20 audited screens use "usted" consistently. The
+// Register — issue #340, flipped by QA4 S6. Perfil voseaba ("Revisá",
+// "mantené") while the app speaks «tú» ("Revisa", "tu cuenta"). The
 // candado is a word-shape lock, not a fixed-string lock: the audit that found
 // this one also found the same origin could have left orphaned copy
 // elsewhere, and a lock on one literal sentence would miss a rewording that
 // keeps the same defect in different words. This one fails on the SHAPE
-// (voseo imperatives, "vos"/"tu"/"tus") wherever it appears in the rendered
-// screen, for any of the four role variants.
+// (voseo imperatives, "vos", "usted" forms) wherever it appears in the
+// rendered screen, for any of the four role variants.
 // ---------------------------------------------------------------------------
 
-describe("ProfilePage — usted register (issue #340)", () => {
+describe("ProfilePage — tú register (issue #340)", () => {
   async function renderRole(
     role: "admin" | "trainer" | "estudiante" | "representante",
   ): Promise<void> {
@@ -2594,7 +2594,7 @@ describe("ProfilePage — usted register (issue #340)", () => {
   );
 
   it.each(["admin", "trainer", "estudiante", "representante"] as const)(
-    "keeps the %s view entirely in usted — no voseo/tuteo shape in the rendered screen",
+    "keeps the %s view entirely in tú — no voseo/usted shape in the rendered screen",
     async (role) => {
       await renderRole(role);
 

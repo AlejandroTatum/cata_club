@@ -1,7 +1,8 @@
 /**
- * Shared "usted" register word lists — origin: issue #340. `/profile` was
- * tuteando/voseando ("Revisá", "mantené", "tu cuenta") while every other
- * screen the audit checked uses "usted" consistently.
+ * Shared register word lists — origin: issue #340, flipped by QA4 S6 / W3-6.
+ * The app speaks «tú» ("Inscríbete", "tu cuenta") everywhere, never voseo
+ * ("Revisá", "mantené") and never "usted" ("Inscríbase", "su cuenta" as a
+ * form of address). The lock bans voseo and "usted" shapes; tú forms pass.
  *
  * JS's `\b` treats accented letters as non-word characters, so `\brevisá\b`
  * silently fails to match "Revisá " — there is no word/non-word transition
@@ -9,18 +10,10 @@
  * explicit Latin-letter class (including accents) is the boundary that
  * actually works here.
  *
- * The same follow-up audit that widened the check from one screen to the
- * whole app also found this exact list undercounted two shapes that don't
- * share the voseo stress pattern: "te" (a pronoun that, like "tú"/"vos",
- * never belongs to "usted") and specific tú-only conjugations ("entras",
- * "estás", "inténtalo") that read like ordinary prose everywhere else but
- * are unambiguous once you know "usted" would take the impersonal/3rd-person
- * form instead ("entra", "está", "inténtelo").
- *
  * Both copy locks build their regex from these same lists — the per-role
  * render check in ProfilePage.test.tsx and the app-wide source sweep in
  * usted-register.test.ts — so there is exactly one place that decides what
- * counts as voseo/tuteo.
+ * counts as a register violation.
  */
 
 /** Common voseo imperatives (2nd person singular, stressed final vowel). */
@@ -57,30 +50,31 @@ export const VOSEO_IMPERATIVOS = [
   "vení", "venís",
 ];
 
-/**
- * Tú-specific forms that don't carry the voseo stress pattern above but are
- * still unambiguous tuteo markers: the trailing "-s" (tú indicative) or the
- * attached clitic (tú imperative) rule out an "usted"/impersonal 3rd-person
- * reading, which is why these are safe as literal words and not just
- * suffix rules — "entra"/"está"/"inténtelo" (no "-s", no clitic in the tú
- * shape) are the correct "usted" forms and must NOT be on this list.
- */
-export const TUTEO_CONJUGACIONES = ["entras", "estás", "inténtalo"];
-
-/**
- * Pronouns that belong to "tú"/"vos" and never to "usted" (which uses
- * "su"/"sus"/"lo"/"la"/"le" instead).
- */
-export const PRONOMBRES = ["vos", "tú", "tu", "tus", "te"];
-
-/**
- * TEMPORARY (QA4 W3-0): while the wave-3 register sweep runs in parallel, the
- * lock bans ONLY voseo (the imperatives above and the pronoun "vos"), so both
- * "usted" and "tú" forms pass. TUTEO_CONJUGACIONES and PRONOMBRES stay
- * exported but are not enforced. W3-6 flips this lock (and the backend email
- * lock) to enforce «tú»: ban "usted" forms and re-enable the tú word lists.
- */
+/** Voseo pronoun — "tú"/"tu"/"tus"/"te" are the app's register and are NOT banned. */
 export const VOSEO_PRONOMBRES = ["vos"];
+
+/**
+ * "Usted" address forms. "su"/"sus" are deliberately NOT listed: they are
+ * also the ordinary third-person possessive ("su equipo", "sus datos").
+ */
+export const USTED_PRONOMBRES = ["usted", "ustedes"];
+
+/**
+ * Usted imperatives (subjunctive-shaped) this product's copy gives
+ * instructions with — the tú counterpart is "Inscríbete", "Ingresa", ….
+ * Only forms whose tú shape differs; "cree" is excluded because it is
+ * also the ordinary indicative "cree que" ("believes").
+ */
+export const USTED_IMPERATIVOS = [
+  "inscríbase", "ingrese", "revise", "intente", "inténtelo", "elija",
+  "seleccione", "escriba", "complete", "verifique", "comuníquese", "corrija",
+  "adjunte", "registre", "espere", "consulte", "pruebe", "vuelva",
+  "pida", "contacte", "confirme", "acepte", "cambie", "use", "suba",
+  "descargue", "cargue", "envíe", "guarde", "actualice",
+  "cancele", "reduzca", "busque", "agregue", "recuerde",
+  "presione", "continúe", "regístrese",
+  "inicie", "elimine", "abra", "valide", "indique",
+];
 
 const LETTER = "a-záéíóúñA-ZÁÉÍÓÚÑ";
 
@@ -91,6 +85,11 @@ const LETTER = "a-záéíóúñA-ZÁÉÍÓÚÑ";
  * results when the same instance is reused across multiple input strings.
  */
 export function buildUstedRegisterRegex(): RegExp {
-  const words = [...VOSEO_IMPERATIVOS, ...VOSEO_PRONOMBRES];
+  const words = [
+    ...VOSEO_IMPERATIVOS,
+    ...VOSEO_PRONOMBRES,
+    ...USTED_PRONOMBRES,
+    ...USTED_IMPERATIVOS,
+  ];
   return new RegExp(`(?<![${LETTER}])(${words.join("|")})(?![${LETTER}])`, "giu");
 }
