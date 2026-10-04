@@ -16,7 +16,7 @@ const SECTION_IDS = SITE_NAV_SECTIONS.map((section): string => section.id);
  * Uses a native `IntersectionObserver` with the prototype's `rootMargin` so the
  * active link updates as a section's middle band crosses the viewport centre.
  * It does not depend on GSAP, Lenis, or scroll-event listeners, and it only
- * touches the six navbar anchors — nothing else.
+ * touches the navbar anchors — nothing else.
  *
  * SSR leaves the `Inicio` link active (the server-rendered markup already does),
  * and this effect only takes over after hydration.

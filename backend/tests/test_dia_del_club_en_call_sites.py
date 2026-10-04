@@ -148,7 +148,7 @@ def test_inicio_en_el_club_usa_el_dia_del_club(db_session, monkeypatch):
         # Issue #730: obligatoria en el alta pública. Este test mide que
         # `fecha_inicio_club` salga de `hoy_club()`, no la ficha.
         ficha_medica=EnrollmentFichaMedicaDTO(
-            tipo_sangre="O_POSITIVO", enfermedades=[],
+            tipo_sangre="O_POSITIVO", alergias="Ninguna", enfermedades=["Ninguno"],
             contacto_emergencia="María Torres", telefono_emergencia="0991112233",
         ),
         antecedentes=EnrollmentAntecedentesDTO(

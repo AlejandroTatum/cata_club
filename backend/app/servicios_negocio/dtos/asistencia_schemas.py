@@ -264,12 +264,13 @@ class AsistenciaCorreccionDTO(BaseModel):
     """Los tres campos mutables de `Asistencia` (`estado`, `justificativo`,
     `estado_justificativo`) se corrigen SIEMPRE juntos, como una unidad --
     igual que la toma original -- nunca campo por campo. `motivo` es
-    obligatorio: una corrección sin motivo es exactamente lo que este
-    operativo existe para impedir."""
+    opcional (issue #1578): el admin corrige con autoridad propia; sin
+    motivo se guarda vacío y la traza (autor, fecha, estado anterior) se
+    registra igual."""
     estado: EstadoAsistencia
     justificativo: Optional[str] = Field(default=None, max_length=255)
     estado_justificativo: Optional[bool] = None
-    motivo: str = Field(min_length=1, max_length=500)
+    motivo: str = Field(default="", max_length=500)
 
 
 class AsistenciaCorreccionResponseDTO(ResponseBase, BaseModel):

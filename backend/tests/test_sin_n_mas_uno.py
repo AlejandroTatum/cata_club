@@ -200,7 +200,11 @@ def test_persona_listar_incluye_el_estado_de_la_cuenta_sin_n_mas_uno(db_session,
     test de arriba prueba que dispara un SELECT extra por persona sin eager
     load. `PersonaRepositorio.listar` la trae con `joinedload`, así que
     tocarla (como hace el serializer del DTO al leer `cuenta_activa`) no debe
-    sumar ningún SELECT."""
+    sumar ningún SELECT.
+
+    Issue #1575: `invitacion_pendiente` además lee `usuario.roles`, que el
+    listado trae con UN `selectinload` para todas las filas: el total es 2
+    sentencias, constante, no una por persona."""
     con_cuenta = Persona(
         nombres="Ana", apellidos="Con Cuenta", cedula=cedula_valida(610),
         fecha_nacimiento=date(1990, 1, 1), telefono="0991234567",
@@ -220,12 +224,14 @@ def test_persona_listar_incluye_el_estado_de_la_cuenta_sin_n_mas_uno(db_session,
     with contar_selects() as sentencias:
         resultado = repo.listar(skip=0, limit=50)
         estados = [p.cuenta_activa for p in resultado]
+        invitaciones = [p.invitacion_pendiente for p in resultado]
 
     # `_ORDEN_NOMINA` ordena por apellidos: "Con Cuenta" antes que "Sin Cuenta".
     assert estados == [True, None]
+    assert invitaciones == [False, False]
     selects = _selects(sentencias)
-    assert len(selects) == 1, (
-        f"Se esperaba 1 sola sentencia SELECT (con JOIN a Usuario), se ejecutaron {len(selects)}: {selects}"
+    assert len(selects) == 2, (
+        f"Se esperaban 2 sentencias SELECT (JOIN a Usuario + roles en lote), se ejecutaron {len(selects)}: {selects}"
     )
 
 

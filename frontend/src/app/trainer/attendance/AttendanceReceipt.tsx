@@ -6,7 +6,6 @@ import { formatDateTime } from "@/lib/format-utils";
 import type { RegisterAttendanceResult } from "@/services/api";
 import type { EstadoAsistencia } from "@/types/domain";
 import { formatSessionDateLabel, type SessionStudent } from "./attendance-utils";
-import SessionDonut from "./SessionDonut";
 import FailedRecordsNotice from "./FailedRecordsNotice";
 import SessionReceiptBreakdown from "./SessionReceiptBreakdown";
 
@@ -51,7 +50,7 @@ export default function AttendanceReceipt({
   attendanceHistoryHref,
   rosterError,
 }: AttendanceReceiptProps): React.ReactElement {
-  // The names under the ring are who got SAVED — a student whose record
+  // The names in the breakdown are who got SAVED — a student whose record
   // failed is named by the notice above, not filed under a state they do not
   // have on the server.
   const failedIds = new Set(result?.failed.map((f) => String(f.personaId)));
@@ -65,143 +64,144 @@ export default function AttendanceReceipt({
   const registeredBy = result?.failed.find((f) => f.registradoPorNombre)?.registradoPorNombre ?? null;
 
   return (
-    <div className={PAGE_RAIL}>
-      <div data-dash-col className="flex flex-col gap-page">
-        <div>
-          <p className="text-2xs font-bold uppercase tracking-wide text-ink-3">
-            {(() => {
-              if (allAlreadyRegistered) return "La lista ya estaba guardada";
-              return needsRetry ? "Asistencia registrada parcialmente" : "Asistencia registrada";
-            })()}
-          </p>
-          {/* `tabIndex={-1}`: reachable only by the focus effect, never a Tab
-            stop of its own. It takes programmatic focus after the step
-            change (screen readers announce it), but draws no ring: a box
-            around a heading nobody can tab to only reads as a glitch. */}
-          <h2
-            ref={confirmationHeadingRef}
-            tabIndex={-1}
-            className="inline-block font-display text-lg uppercase leading-tight tracking-flat text-ink focus:outline-none"
-          >
-            {selectedSchedule
-              ? `${formatDay(selectedSchedule.diaSemana)} ${selectedSchedule.horaInicio} — ${selectedSchedule.horaFin}`
-              : "Horario seleccionado"}
-          </h2>
-          {sessionDate && (
-            <p className="mt-0.5 text-sm font-semibold text-ink-2">{formatSessionDateLabel(sessionDate)}</p>
-          )}
-        </div>
-
-        {/* The identity band: what quedó archivado, sobre cuántos, cuándo y quién. */}
-        <StatCard
-          variant="hot"
-          label={
-            allAlreadyRegistered
-              ? "Ya estaba guardada en el historial del club"
-              : needsRetry
-              ? `Falta${result && result.failed.length === 1 ? "" : "n"} ${result?.failed.length ?? 0} ${result?.failed.length === 1 ? "jugador" : "jugadores"} por guardar`
-              : "Guardada en el historial del club"
-          }
-          value={allAlreadyRegistered ? students.length : (result?.createdCount ?? 0)}
-          unit={
-            allAlreadyRegistered
-              ? students.length === 1
-                ? "jugador"
-                : "jugadores"
-              : `/${students.length} ${students.length === 1 ? "jugador" : "jugadores"}`
-          }
-          hint={
-            allAlreadyRegistered
-              ? `${registeredBy ? `Registrada por ${registeredBy}. ` : ""}No se cambió nada.`
-              : confirmedAt
-              ? [formatDateTime(confirmedAt.toISOString()), result?.registradoPorNombre].filter(Boolean).join(" · ")
-              : undefined
-          }
-        />
-
-        {result && result.failed.length > 0 && (
-          <FailedRecordsNotice failed={result.failed} students={students} />
-        )}
-
-        {!allAlreadyRegistered && (
-          <SessionReceiptBreakdown
-            hasFailedRecords={needsRetry}
-            receiptCounts={receiptCounts}
-            receiptTotal={receiptTotal}
-            students={savedStudents}
-          />
-        )}
-
-        {/* Issue #241: the retry's own load failure must land here, next to
-          the button that triggered it. */}
-        {rosterError && needsRetry && (
-          <div className="alert-error" role="alert">
-            {rosterError}
-          </div>
+    <div className="flex flex-col gap-page">
+      {/* The title sits above the grid so the dark card and the aside start on
+        the same row at ≥lg (#1617). */}
+      <div data-dash-col>
+        <p className="text-2xs font-bold uppercase tracking-wide text-ink-3">
+          {(() => {
+            if (allAlreadyRegistered) return "La lista ya estaba guardada";
+            return needsRetry ? "Asistencia registrada parcialmente" : "Asistencia registrada";
+          })()}
+        </p>
+        {/* `tabIndex={-1}`: reachable only by the focus effect, never a Tab
+          stop of its own. It takes programmatic focus after the step
+          change (screen readers announce it), but draws no ring: a box
+          around a heading nobody can tab to only reads as a glitch. */}
+        <h2
+          ref={confirmationHeadingRef}
+          tabIndex={-1}
+          className="inline-block font-display text-lg uppercase leading-tight tracking-flat text-ink focus:outline-none"
+        >
+          {selectedSchedule
+            ? `${formatDay(selectedSchedule.diaSemana)} ${selectedSchedule.horaInicio} — ${selectedSchedule.horaFin}`
+            : "Horario seleccionado"}
+        </h2>
+        {sessionDate && (
+          <p className="mt-0.5 text-sm font-semibold text-ink-2">{formatSessionDateLabel(sessionDate)}</p>
         )}
       </div>
 
-      <aside
-        data-dash-col
-        className="flex flex-col gap-page lg:self-stretch"
-        aria-label="Siguientes pasos"
-      >
-        <div className="card flex flex-1 flex-col gap-4 p-5">
-          {selectedSchedule && (
-            <div className="flex flex-col gap-0.5 border-b border-line pb-4">
-              <p className="text-2xs font-bold uppercase tracking-wide text-ink-3">Sesión</p>
-              <p className="text-sm font-bold text-ink">
-                {formatDay(selectedSchedule.diaSemana)} {selectedSchedule.horaInicio} —{" "}
-                {selectedSchedule.horaFin}
-              </p>
-              {selectedSchedule.categoriaLabel && (
-                <p className="text-xs text-ink-3">{selectedSchedule.categoriaLabel}</p>
-              )}
+      <div className={PAGE_RAIL}>
+        <div data-dash-col className="flex flex-col gap-page">
+          {/* The identity band: what quedó archivado, sobre cuántos, cuándo y quién. */}
+          <StatCard
+            variant="hot"
+            label={
+              allAlreadyRegistered
+                ? "Ya estaba guardada en el historial del club"
+                : needsRetry
+                ? `Falta${result && result.failed.length === 1 ? "" : "n"} ${result?.failed.length ?? 0} ${result?.failed.length === 1 ? "jugador" : "jugadores"} por guardar`
+                : "Guardada en el historial del club"
+            }
+            value={allAlreadyRegistered ? students.length : (result?.createdCount ?? 0)}
+            unit={
+              allAlreadyRegistered
+                ? students.length === 1
+                  ? "jugador"
+                  : "jugadores"
+                : `/${students.length} ${students.length === 1 ? "jugador" : "jugadores"}`
+            }
+            hint={
+              allAlreadyRegistered
+                ? `${registeredBy ? `Registrada por ${registeredBy}. ` : ""}No se cambió nada.`
+                : confirmedAt
+                ? [formatDateTime(confirmedAt.toISOString()), result?.registradoPorNombre].filter(Boolean).join(" · ")
+                : undefined
+            }
+          />
+
+          {result && result.failed.length > 0 && (
+            <FailedRecordsNotice failed={result.failed} students={students} />
+          )}
+
+          {!allAlreadyRegistered && (
+            <SessionReceiptBreakdown
+              hasFailedRecords={needsRetry}
+              receiptCounts={receiptCounts}
+              receiptTotal={receiptTotal}
+              students={savedStudents}
+            />
+          )}
+
+          {/* Issue #241: the retry's own load failure must land here, next to
+            the button that triggered it. */}
+          {rosterError && needsRetry && (
+            <div className="alert-error" role="alert">
+              {rosterError}
             </div>
           )}
-          <div className="flex flex-1 items-center justify-center border-b border-line pb-4">
-            <SessionDonut counts={receiptCounts} total={receiptTotal} />
-          </div>
-          <p className="text-xs font-bold uppercase tracking-wide text-ink-3">Qué sigue</p>
-          {/* One way back, not two — see the page's own note on why the
-            frame's `BackLink` is the one that stays. */}
-          <div className="flex flex-col gap-2">
-            {needsRetry ? (
-              <>
-                {/* Decision 2: the primary action displaces to the retry — it is
-                the only action that actually corrects the state. */}
-                <Button
-                  type="button"
-                  variant="primary"
-                  onClick={() => {
-                    if (!rosterLoading) onRetryFailed();
-                  }}
-                  aria-disabled={rosterLoading}
-                  aria-busy={rosterLoading}
-                  className={`w-full justify-center ${rosterLoading ? "cursor-not-allowed opacity-45" : ""}`}
-                >
-                  {retryButtonLabel}
-                </Button>
-                <Button type="button" variant="secondary" onClick={onReset} className="w-full justify-center">
-                  Registrar otra asistencia
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button type="button" variant="primary" onClick={onReset} className="w-full justify-center">
-                  Registrar otra asistencia
-                </Button>
-                <Link
-                  href={attendanceHistoryHref}
-                  className={buttonClasses("secondary", "md", "w-full justify-center")}
-                >
-                  Ver historial de asistencias
-                </Link>
-              </>
-            )}
-          </div>
         </div>
-      </aside>
+
+        <aside
+          data-dash-col
+          className="flex flex-col gap-page lg:self-start"
+          aria-label="Siguientes pasos"
+        >
+          <div className="card flex flex-col gap-4 p-5">
+            {selectedSchedule && (
+              <div className="flex flex-col gap-0.5 border-b border-line pb-4">
+                <p className="text-2xs font-bold uppercase tracking-wide text-ink-3">Sesión</p>
+                <p className="text-sm font-bold text-ink">
+                  {formatDay(selectedSchedule.diaSemana)} {selectedSchedule.horaInicio} —{" "}
+                  {selectedSchedule.horaFin}
+                </p>
+                {selectedSchedule.categoriaLabel && (
+                  <p className="text-xs text-ink-3">{selectedSchedule.categoriaLabel}</p>
+                )}
+              </div>
+            )}
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-3">Qué sigue</p>
+            {/* One way back, not two — see the page's own note on why the
+              frame's `BackLink` is the one that stays. */}
+            <div className="flex flex-col gap-2">
+              {needsRetry ? (
+                <>
+                  {/* Decision 2: the primary action displaces to the retry — it is
+                  the only action that actually corrects the state. */}
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={() => {
+                      if (!rosterLoading) onRetryFailed();
+                    }}
+                    aria-disabled={rosterLoading}
+                    aria-busy={rosterLoading}
+                    className={`w-full justify-center ${rosterLoading ? "cursor-not-allowed opacity-45" : ""}`}
+                  >
+                    {retryButtonLabel}
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={onReset} className="w-full justify-center">
+                    Registrar otra asistencia
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button type="button" variant="primary" onClick={onReset} className="w-full justify-center">
+                    Registrar otra asistencia
+                  </Button>
+                  <Link
+                    href={attendanceHistoryHref}
+                    className={buttonClasses("secondary", "md", "w-full justify-center")}
+                  >
+                    Ver historial de asistencias
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }

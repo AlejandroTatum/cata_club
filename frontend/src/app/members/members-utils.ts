@@ -217,7 +217,7 @@ export interface MemberAccount {
  * estudiantes[].activo` (`Persona.activo`, club membership) and of
  * `Membresía`. `"none"` is the persona has no `Usuario` at all.
  */
-export type AccountState = "active" | "inactive" | "none";
+export type AccountState = "active" | "inactive" | "none" | "invitation";
 
 /** Aggregate statistics for the members overview. */
 export interface MemberStats {
@@ -275,12 +275,15 @@ export const ACCOUNT_STATE_LABELS: Record<AccountState, string> = {
   active: "Activa",
   inactive: "Inactiva",
   none: "Sin cuenta",
+  // Issue #1575: a trainer the admin created who has not set a password yet.
+  invitation: "Invitación pendiente",
 };
 
 export const ACCOUNT_STATE_TONE: Record<AccountState, BadgeTone> = {
   active: "ok",
   inactive: "bad",
   none: "neutral",
+  invitation: "warn",
 };
 
 export const PAYMENT_STATUS_TONE: Record<PaymentStatus, BadgeTone> = {

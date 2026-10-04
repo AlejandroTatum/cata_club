@@ -289,6 +289,37 @@ def _sin_repetidos_ni_vacias(valores: List[str]) -> List[str]:
     return resultado
 
 
+# Issue #1574: alergias y enfermedades son obligatorias en toda ficha. Quien
+# no tiene, escribe «Ninguno» (cualquier mayúscula, acento o género). El
+# backend lo guarda como declaración explícita: alergias queda como
+# «Ninguna» y enfermedades como lista vacía -- nunca como una enfermedad
+# llamada «Ninguno» en el catálogo.
+NINGUNA_ALERGIA = "Ninguna"
+MENSAJE_ALERGIAS_OBLIGATORIAS = 'Escribe tus alergias o "Ninguno" si no tienes.'
+MENSAJE_ENFERMEDADES_OBLIGATORIAS = 'Escribe tus enfermedades o "Ninguno" si no tienes.'
+
+
+def _es_ninguno(valor: str) -> bool:
+    sin_acentos = "".join(
+        c for c in unicodedata.normalize("NFD", valor) if unicodedata.category(c) != "Mn"
+    )
+    return sin_acentos.strip().casefold() in ("ninguno", "ninguna")
+
+
+def _exigir_alergias(valor: Optional[str]) -> str:
+    limpio = (valor or "").strip()
+    if not limpio:
+        raise ValueError(MENSAJE_ALERGIAS_OBLIGATORIAS)
+    return NINGUNA_ALERGIA if _es_ninguno(limpio) else limpio
+
+
+def _exigir_enfermedades(valores: Optional[List[str]]) -> List[str]:
+    limpias = _sin_repetidos_ni_vacias(valores or [])
+    if not limpias:
+        raise ValueError(MENSAJE_ENFERMEDADES_OBLIGATORIAS)
+    return [v for v in limpias if not _es_ninguno(v)]
+
+
 def _validar_contacto_emergencia(valor: str) -> str:
     if not valor.strip():
         return valor
@@ -373,6 +404,12 @@ ApellidoEditable = Annotated[str, AfterValidator(_normalizar_apellido_editable)]
 ContactoEmergenciaValidado = Annotated[str, AfterValidator(_validar_contacto_emergencia)]
 EnfermedadValidada = Annotated[str, AfterValidator(_validar_enfermedad)]
 EnfermedadesValidadas = Annotated[List[EnfermedadValidada], AfterValidator(_sin_repetidos_ni_vacias)]
+# Issue #1574. Solo para ESCRIBIR una ficha: leer una ficha legada con estos
+# campos vacíos sigue siendo válido (los DTOs de respuesta no los usan).
+AlergiasObligatorias = Annotated[Optional[str], AfterValidator(_exigir_alergias)]
+EnfermedadesObligatorias = Annotated[
+    Optional[List[EnfermedadValidada]], AfterValidator(_exigir_enfermedades)
+]
 CorreoValidado = Annotated[EmailStr, AfterValidator(_normalizar_correo)]
 ContraseniaValidada = Annotated[str, AfterValidator(_validar_contrasenia)]
 

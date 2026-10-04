@@ -14,7 +14,7 @@ from app.servicios_negocio.dtos.persona_schemas import (
     PersonaBusquedaDTO, RepresentadoCreateDTO, RepresentadoPropioResponseDTO,
     VincularRepresentadoDTO, IndependizarDTO,
     IndependenciaResponseDTO, ReasignarRepresentacionDTO, ReasignacionResponseDTO,
-    EstadoPersonaDTO,
+    EstadoPersonaDTO, EntrenadorCreateDTO,
     AntecedentesClubCreateDTO, AntecedentesClubUpdateDTO, AntecedentesClubResponseDTO,
 )
 from app.servicios_negocio.dtos.base import PaginatedResponse
@@ -24,6 +24,7 @@ from app.presentacion.routers.reporte_helpers import (
 )
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import PersonaServicio
+from app.servicios_negocio.entrenador_servicio import EntrenadorServicio
 from app.servicios_negocio.relacion_representacion_servicio import RelacionRepresentacionServicio
 from app.servicios_negocio.auth_servicio import AuthServicio
 from app.servicios_negocio.dtos.beneficio_schemas import (
@@ -69,6 +70,26 @@ router = APIRouter(prefix="/personas", tags=["Personas"])
 )
 async def registrar_persona(persona_in: PersonaCreateDTO, db: Session = Depends(obtener_sesion)):
     return PersonaServicio(db).registrar_persona(persona_in)
+
+
+@router.post(
+    "/entrenadores", response_model=PersonaResponseDTO, status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def crear_entrenador(datos: EntrenadorCreateDTO, db: Session = Depends(obtener_sesion)):
+    """Issue #1575: alta directa de un entrenador con invitación por correo.
+    `run_in_threadpool`: hashea con bcrypt (mismo motivo que `registro`)."""
+    return await run_in_threadpool(EntrenadorServicio(db).crear, datos)
+
+
+@router.post(
+    "/{persona_id}/entrenador/invitacion", status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def reenviar_invitacion_entrenador(persona_id: int, db: Session = Depends(obtener_sesion)):
+    """Issue #1575: reenvía la invitación (sin enfriamiento) mientras el
+    entrenador no haya creado su contraseña."""
+    await run_in_threadpool(EntrenadorServicio(db).reenviar_invitacion, persona_id)
 
 
 # --- ADMINISTRADOR-only: PersonaResponseDTO expone cédula, teléfono y

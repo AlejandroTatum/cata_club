@@ -50,6 +50,9 @@ test.describe("public navigation (issue #771)", () => {
       "Valores",
       "Galería",
       "Horarios",
+      "Mensualidad",
+      "Cómo empezar",
+      "Preguntas",
       "Contacto",
     ]);
 

@@ -141,8 +141,6 @@ export interface SessionSummary {
   total: number;
   /** Who took the list (issue #263) — `null`/absent for legacy sessions. */
   registradoPorNombre?: string | null;
-  /** How many records of the session are flagged for review (ENT-07). Absent = none known. */
-  reviewCount?: number;
 }
 
 /** The time-of-day inside a horario label, used only for ordering. */
@@ -186,11 +184,9 @@ export function groupRecordsBySession(records: AttendanceRecord[]): SessionSumma
         // Every record of a session was filed in one batch, so the taker
         // (issue #263) is the same across them — capture it from the first.
         registradoPorNombre: record.registradoPorNombre ?? null,
-        reviewCount: 0,
       };
       bySession.set(key, session);
     }
-    if (record.requiereRevision) session.reviewCount = (session.reviewCount ?? 0) + 1;
     if (record.estado in session.counts) {
       session.counts[record.estado] += 1;
       session.total += 1;

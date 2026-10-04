@@ -401,7 +401,7 @@ describe("AttendancePage — per-record correction inside the session drill-down
       corregidoPorId: 1,
       corregidoPorNombre: "Admin Test",
       corregidoEn: "2026-08-26T12:00:00Z",
-      motivo: "Se cargó mal el estado.",
+      motivo: "",
       estadoAnterior: "present",
     });
     renderPage();
@@ -412,15 +412,14 @@ describe("AttendancePage — per-record correction inside the session drill-down
 
     expect(await screen.findByText("Corregir asistencia de Jugador 1")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: "Ausente" }));
-    fireEvent.change(screen.getByPlaceholderText("Por qué se corrige este registro"), {
-      target: { value: "Se cargó mal el estado." },
-    });
+    // Issue #1578: no motivo field for the admin; pick the state and save.
+    expect(screen.queryByPlaceholderText("Por qué se corrige este registro")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Guardar corrección" }));
 
     await waitFor(() => expect(mockCorrectAttendance).toHaveBeenCalledWith(1, expect.objectContaining({
       estado: "absent",
-      motivo: "Se cargó mal el estado.",
     })));
+    expect(mockCorrectAttendance.mock.calls[0][1]).not.toHaveProperty("motivo");
     expect(await screen.findByText("Corrección guardada.")).toBeInTheDocument();
     // Patched from the PATCH response directly — the log never re-fetched, and
     // the session's bar now counts the absence.

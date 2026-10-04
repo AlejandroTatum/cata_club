@@ -6,7 +6,7 @@
  * (which the backend now refuses a second time for an already-filed row).
  * ADMINISTRADOR-only in the backend — this route just relays whatever status
  * FastAPI returns (403 for a non-admin, 400 past the 30-day window, 404 for a
- * bad id, 422 for an empty `motivo`).
+ * bad id, 422 for an over-long `motivo`).
  *
  * Casing: `AsistenciaCorreccionDTO` is a plain request `BaseModel` with no
  * `alias_generator` (unlike the `ResponseBase`-backed response DTOs), so —
@@ -53,8 +53,10 @@ function parseBody(value: unknown): CorrectionRequestBody | { error: string } {
   if (typeof body.estado !== "string" || !VALID_ESTADOS.has(body.estado)) {
     return { error: `Estado de asistencia inválido: ${String(body.estado)}` };
   }
-  if (typeof body.motivo !== "string" || body.motivo.trim().length === 0) {
-    return { error: "El motivo de la corrección es obligatorio." };
+  // Issue #1578: the admin corrects without a motivo; the trainer's request
+  // goes through `/correction-requests`, which still requires it.
+  if (body.motivo !== undefined && body.motivo !== null && typeof body.motivo !== "string") {
+    return { error: "El motivo debe ser texto." };
   }
   if (body.justificativo !== undefined && body.justificativo !== null && typeof body.justificativo !== "string") {
     return { error: "justificativo debe ser texto." };
@@ -71,7 +73,7 @@ function parseBody(value: unknown): CorrectionRequestBody | { error: string } {
     estado: body.estado as EstadoAsistencia,
     justificativo: (body.justificativo as string | null | undefined) ?? null,
     estadoJustificativo: (body.estadoJustificativo as boolean | null | undefined) ?? null,
-    motivo: body.motivo,
+    motivo: ((body.motivo as string | null | undefined) ?? "").trim(),
   };
 }
 
