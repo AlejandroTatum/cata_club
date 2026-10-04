@@ -1321,7 +1321,7 @@ export default function PaymentsPage(): React.ReactElement {
             />
           }
           chips={
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-field">
             <div
               className="flex flex-wrap items-center gap-2"
               role="group"
@@ -1407,7 +1407,7 @@ export default function PaymentsPage(): React.ReactElement {
               normalizedQuery
                 ? "Revise el nombre o limpie la búsqueda para ver toda la lista."
                 : methodFilter !== "all"
-                  ? "Elige «Cualquier método» para ver toda la lista."
+                  ? "Elija «Cualquier método» para ver toda la lista."
                   : activeFilter === "all"
                   ? "Cuando un estudiante suba un comprobante, aparecerá aquí para su revisión."
                   : "La lista está al día."

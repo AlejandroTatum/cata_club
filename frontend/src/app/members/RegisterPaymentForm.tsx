@@ -66,7 +66,7 @@ interface RegisterPaymentFormProps {
 }
 
 /** ADMA-10: shown when the admin tries to save without picking cash or transfer. */
-const MENSAJE_METODO_REQUERIDO = "Elige cómo pagó: efectivo o transferencia.";
+const MENSAJE_METODO_REQUERIDO = "Elija cómo pagó: efectivo o transferencia.";
 
 export default function RegisterPaymentForm({
   personaId,

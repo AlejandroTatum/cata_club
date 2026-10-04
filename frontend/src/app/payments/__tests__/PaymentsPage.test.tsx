@@ -721,7 +721,7 @@ describe("PaymentsPage — comprobante oficial y correcciones", () => {
     for (const gone of [/tarifa mensual/i, /meses comprados/i, /monto base/i, /fecha inicio/i, /fecha fin/i]) {
       expect(screen.queryByLabelText(gone)).not.toBeInTheDocument();
     }
-    expect(screen.getByText(/escribe el monto correcto/i)).toBeInTheDocument();
+    expect(screen.getByText(/escriba el monto correcto/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^motivo/i)).toBeRequired();
     expect(screen.getByRole("button", { name: /registrar corrección/i })).toBeDisabled();
     fireEvent.change(screen.getByLabelText(/monto correcto/i), { target: { value: "45.00" } });
