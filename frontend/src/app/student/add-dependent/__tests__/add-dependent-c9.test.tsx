@@ -49,6 +49,7 @@ vi.mock("@/services/api", () => ({
   ]),
   inscribirRepresentadoConPago: vi.fn(),
   subirVoucherPago: vi.fn(),
+  fetchClubPaymentInfo: vi.fn().mockResolvedValue({ holder: "Titular Prueba", accountType: "Cuenta de Ahorros", accountNumber: "1234567890", bank: "Banco Prueba", holderId: "0102030405" }),
 }));
 
 installAddDependentHarness();
