@@ -97,7 +97,7 @@ test("el administrador crea un entrenador, que acepta los términos, crea su con
 
     // ── Entra con rol Entrenador ──
     await loginViaUi(page, correo, CONTRASENIA, /\/(dashboard|trainer|attendance)/);
-    await expect(page.getByText("Hola, Marta")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("heading", { name: "Hola, Marta" })).toBeVisible({ timeout: 20_000 });
   } finally {
     await purgeMessagesTo(request, correo);
   }
