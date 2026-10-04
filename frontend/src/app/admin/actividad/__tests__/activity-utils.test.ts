@@ -177,7 +177,7 @@ describe("healthCopy (ADMB-N1)", () => {
     expect(healthCopy({ state: "ok", degraded: false, heartbeatAgeSeconds: 5, components: [] })).toBeNull();
   });
 
-  it("names every degraded component, in usted", () => {
+  it("names every degraded component, in tú", () => {
     const copy = healthCopy({
       state: "degraded",
       degraded: true,
@@ -191,7 +191,7 @@ describe("healthCopy (ADMB-N1)", () => {
     expect(copy?.sentence).toBe(
       "Hay una falla en los procesos en segundo plano, el envío de correos y la cola de correos.",
     );
-    expect(copy?.action).toMatch(/Avise de inmediato/);
+    expect(copy?.action).toMatch(/Avisa de inmediato/);
   });
 
   it("explains a stuck outbox without blaming the workers", () => {

@@ -59,7 +59,7 @@ export default function ReportesErrorPage(): React.ReactElement {
   const visibles = useMemo(() => applyFilter(reports, filtro, ahora), [reports, filtro, ahora]);
   const vacia = !cargando && !errorLista && reports.length === 0;
 
-  return <ProtectedRoute allowedRoles={["admin"]}><AppShell title="Reportes de error" subtitle="Avisos enviados por usuarios del club">
+  return <ProtectedRoute allowedRoles={["admin"]}><AppShell title="Errores reportados" subtitle="Avisos enviados por usuarios del club">
     {cargando ? <LoadingState label="Cargando reportes…" />
       : errorLista ? <ErrorState message="No se pudo cargar la bandeja." onRetry={() => void load()} />
       : <div className={cn(PAGE_RAIL, FILL_SCREEN)}>

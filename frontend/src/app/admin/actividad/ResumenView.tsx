@@ -100,7 +100,7 @@ export default function ResumenView({
       label: "Personas que ingresaron",
       value: uniqueVisitors.total,
       bars: people,
-      caption: `${formatCount(uniqueVisitors.alumnos)} alumnos · ${formatCount(uniqueVisitors.entrenadores)} entrenadores · ${formatCount(uniqueVisitors.representantes)} representantes`,
+      caption: `${formatCount(uniqueVisitors.alumnos)} jugadores · ${formatCount(uniqueVisitors.entrenadores)} entrenadores · ${formatCount(uniqueVisitors.representantes)} representantes`,
     },
     {
       label: "Asistencias registradas",
@@ -160,7 +160,7 @@ export default function ResumenView({
                 <StackedBars
                   fill
                   series={[
-                    { key: "alumnos", label: "Alumnos", tone: "coal" },
+                    { key: "alumnos", label: "Jugadores", tone: "coal" },
                     { key: "entrenadores", label: "Entrenadores", tone: "neutral" },
                     { key: "representantes", label: "Representantes", tone: "muted" },
                   ]}
@@ -230,7 +230,7 @@ export default function ResumenView({
                       <span className="sr-only">{STATUS_WORD.warn}: </span>
                       No se pudieron leer las métricas de la aplicación.
                     </p>
-                    <p className="m-0 text-xs text-ink-2">Abra «Métricas avanzadas» para ver el detalle y reintentar.</p>
+                    <p className="m-0 text-xs text-ink-2">Abre «Métricas avanzadas» para ver el detalle y reintentar.</p>
                   </div>
                   <Badge tone="warn">{STATUS_WORD.warn}</Badge>
                 </li>
@@ -251,7 +251,7 @@ export default function ResumenView({
               registran y si todo funciona con normalidad.
             </p>
             <p>
-              Cambie el período con los botones de arriba. Para ver el detalle técnico, abra «Métricas
+              Cambia el período con los botones de arriba. Para ver el detalle técnico, abre «Métricas
               avanzadas».
             </p>
           </InfoPanel>

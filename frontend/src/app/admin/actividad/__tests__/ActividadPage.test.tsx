@@ -263,7 +263,7 @@ describe("ActividadPage — Resumen", () => {
     expect(screen.getByText(/^Registrados en /)).toBeInTheDocument();
     expect(screen.queryByText(/Comprobantes recibidos/)).toBeNull();
     const panel = screen.getByRole("complementary", { name: "Qué muestra esta pantalla" });
-    expect(panel).toHaveTextContent(/Cambie el período/);
+    expect(panel).toHaveTextContent(/Cambia el período/);
     expect(panel).not.toHaveTextContent(/del servidor/);
   });
 

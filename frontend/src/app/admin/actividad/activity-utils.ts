@@ -198,11 +198,11 @@ const STATUS_COPY: Record<StatusKey, Record<HealthLevel, { sentence: string; act
     ok: { sentence: "La aplicación responde con normalidad.", action: null },
     warn: {
       sentence: "La aplicación responde con lentitud.",
-      action: "Si las personas se quejan de demoras, avise al equipo técnico.",
+      action: "Si las personas se quejan de demoras, avisa al equipo técnico.",
     },
     bad: {
       sentence: "La aplicación no está respondiendo.",
-      action: "Avise de inmediato al equipo técnico.",
+      action: "Avisa de inmediato al equipo técnico.",
     },
     unknown: { sentence: "Sin datos todavía sobre la aplicación.", action: null },
   },
@@ -210,11 +210,11 @@ const STATUS_COPY: Record<StatusKey, Record<HealthLevel, { sentence: string; act
     ok: { sentence: "No hay errores que afecten al club.", action: null },
     warn: {
       sentence: "Hay algunos errores que pueden afectar a ciertas personas.",
-      action: "Revise «Reportes de error» y avise al equipo técnico si se repiten.",
+      action: "Revisa «Errores reportados» y avisa al equipo técnico si se repiten.",
     },
     bad: {
       sentence: "Hay errores frecuentes que afectan al club.",
-      action: "Avise de inmediato al equipo técnico.",
+      action: "Avisa de inmediato al equipo técnico.",
     },
     unknown: { sentence: "Sin datos todavía sobre los errores.", action: null },
   },
@@ -222,11 +222,11 @@ const STATUS_COPY: Record<StatusKey, Record<HealthLevel, { sentence: string; act
     ok: { sentence: "Los correos y avisos están al día.", action: null },
     warn: {
       sentence: "Hay correos o avisos esperando para salir.",
-      action: "Si siguen acumulándose, avise al equipo técnico.",
+      action: "Si siguen acumulándose, avisa al equipo técnico.",
     },
     bad: {
       sentence: "Los correos y avisos no están saliendo.",
-      action: "Avise de inmediato al equipo técnico.",
+      action: "Avisa de inmediato al equipo técnico.",
     },
     unknown: { sentence: "Sin datos todavía sobre los correos y avisos.", action: null },
   },
@@ -260,7 +260,7 @@ export function healthCopy(health: SystemHealth | null | undefined): { sentence:
   return {
     sentence: `Hay una falla en ${names}.`,
     action: silent
-      ? "Los avisos y correos pueden no estar saliendo. Avise de inmediato al equipo técnico."
-      : "Hay correos detenidos hace más de 30 minutos. Avise al equipo técnico.",
+      ? "Los avisos y correos pueden no estar saliendo. Avisa de inmediato al equipo técnico."
+      : "Hay correos detenidos hace más de 30 minutos. Avisa al equipo técnico.",
   };
 }
