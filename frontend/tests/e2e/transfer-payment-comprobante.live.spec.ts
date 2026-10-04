@@ -147,7 +147,7 @@ test("un socio registra un pago por transferencia con comprobante y queda pendie
   // La recarga es la parte que importa: sin ella, la fila visible podría
   // venir del estado local del componente y no de la base.
   await page.reload();
-  await expect(page.getByText("Pendiente de validación").first()).toBeVisible({
+  await expect(page.getByText("Por validar").first()).toBeVisible({
     timeout: 15_000,
   });
   await expect(page.getByText(/Transferencia/).first()).toBeVisible();

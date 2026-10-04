@@ -91,7 +91,7 @@ test("un socio registra un pago en efectivo y el historial lo conserva tras reca
   // del estado local del componente y no de la base. Un pago recién registrado
   // queda PENDIENTE_VALIDACION y su fila muestra el método en efectivo.
   await page.reload();
-  await expect(page.getByText("Pendiente de validación").first()).toBeVisible({
+  await expect(page.getByText("Por validar").first()).toBeVisible({
     timeout: 15_000,
   });
   await expect(page.getByText(/Efectivo/).first()).toBeVisible();
