@@ -1176,7 +1176,7 @@ describe("StudentPaymentsPage — the merged coverage rows (issue #1369)", () =>
     };
   }
 
-  it("renders a 100% activation as its own row, with the period and no amount", async () => {
+  it("renders a 100% activation as its own row, with the period and a $0,00 amount", async () => {
     mockFetchCoberturasDePersona.mockResolvedValue([makeCobertura()]);
 
     render(<StudentPaymentsPage />);
@@ -1186,9 +1186,8 @@ describe("StudentPaymentsPage — the merged coverage rows (issue #1369)", () =>
     expect(within(table).getByText(/Cobertura bonificada — 100%/)).toBeInTheDocument();
     expect(within(table).getByText(shownRange("2026-08-01", "2026-08-31"))).toBeInTheDocument();
     expect(within(table).getByText(/Otorgada el/)).toBeInTheDocument();
-    // A coverage never charged anything (#400): the amount cell is a dash,
-    // never a fabricated "$0,00".
-    expect(within(table).queryByText("$0,00")).not.toBeInTheDocument();
+    // Owner decision (QA round 2): the zero charge is shown, not a dash.
+    expect(within(table).getByText("$0,00")).toBeInTheDocument();
   });
 
   it("sorts a newer activation above an older payment, newest-first across kinds", async () => {
