@@ -130,6 +130,27 @@ class CategoriaUpdateDTO(BaseModel):
     hora_inicio: Optional[time] = None
     hora_fin: Optional[time] = None
     dias: Optional[list[DiaSemana]] = Field(default=None, min_length=1)
+    # QA4 ADMB-04: si un día a quitar tiene alumnos, `mover_alumnos_a` pasa a
+    # TODOS los alumnos de la categoría a ese destino en la misma
+    # transacción de la edición. Sin él, el día con alumnos sigue dando 409.
+    mover_alumnos_a: Optional[str] = Field(default=None, min_length=1, max_length=50)
+
+
+class MoverAlumnosDTO(BaseModel):
+    """Cuerpo de `POST /categorias/{codigo}/mover-y-eliminar`."""
+    categoria_destino: str = Field(min_length=1, max_length=50)
+
+
+class MoverAlumnosSeleccionDTO(MoverAlumnosDTO):
+    """Cuerpo de `POST /categorias/{codigo}/mover-alumnos`: pasar solo a
+    algunos alumnos (de a uno, ADMB-04) sin borrar la categoría."""
+    persona_ids: list[int] = Field(min_length=1, max_length=500)
+
+
+class MoverAlumnosResponseDTO(BaseModel):
+    movidos: int
+    categoria_destino: str
+    categoria_destino_label: str
 
 
 class CategoriaPublicacionDTO(BaseModel):

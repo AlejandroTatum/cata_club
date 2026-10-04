@@ -35,6 +35,7 @@ from app.servicios_negocio.dtos.asistencia_schemas import (
     AsistenciaLoteFallidoDTO, AsistenciaLoteResponseDTO, CategoriaCreateDTO, CategoriaResponseDTO,
     CategoriaUpdateDTO, HorarioCreateDTO, HorarioResponseDTO, HorarioUpdateDTO,
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, ConteoHorarioDTO, AsignacionAlumnoHorarioResponseDTO,
+    MoverAlumnosResponseDTO, MoverAlumnosSeleccionDTO,
     PublicScheduleBlockDTO, PublicScheduleCategoryDTO,
     SolapeHorarioDTO, UltimaListaDTO,
 )
@@ -451,6 +452,13 @@ class AsistenciaServicio:
                 ),
             )
 
+        # ADMB-04: con `mover_alumnos_a`, los alumnos de los días a quitar
+        # pasan a otra categoría dentro de esta misma transacción (la
+        # inscripción es por categoría entera, así que salen de todos sus
+        # días). Se hace después de los chequeos de historial y antes del
+        # de alumnos, que desde acá ya no encuentra a nadie.
+        self._mover_alumnos_de_dias_a_quitar(codigo, datos.mover_alumnos_a, horarios_a_borrar)
+
         # ADM-13: quitar un día borra su horario; con alumnos asignados se
         # rechaza la edición entera, igual que `eliminar_horario`.
         self._validar_sin_alumnos_asignados(horarios_a_borrar, categoria.label, "quitar")
@@ -524,17 +532,7 @@ class AsistenciaServicio:
             raise EntidadNoEncontrada(f"Categoría {codigo} no encontrada")
 
         horarios = self.repo_horario.listar(codigo)
-        bloqueados = [h for h in horarios if self.repo_horario.tiene_asistencias(h.id)]
-        if bloqueados:
-            dias_bloqueados = ", ".join(dia_en_castellano(h.dia_semana) for h in bloqueados)
-            raise OperacionInvalida(
-                f'No se puede eliminar la categoría "{categoria.label}": el día '
-                f"{dias_bloqueados} tiene asistencias registradas. El historial no se borra.",
-                detalle_tecnico=(
-                    f"categoria={codigo} horario_ids_bloqueados="
-                    f"{[h.id for h in bloqueados]}"
-                ),
-            )
+        self._exigir_sin_asistencias_para_eliminar(categoria, horarios)
 
         self._validar_sin_alumnos_asignados(horarios, categoria.label, "eliminar")
 
@@ -545,6 +543,132 @@ class AsistenciaServicio:
         ]
         self.repo_categoria.eliminar_con_horarios(categoria, horarios, alumno_horario_a_borrar)
         self.db.commit()
+
+    def _mover_alumnos(
+        self, origen: str, destino: str, persona_ids: Optional[set[int]] = None,
+    ) -> tuple[int, CategoriaHorario]:
+        """ADMB-04: pasa alumnos de la categoría `origen` a `destino` SIN
+        confirmar (el llamador comitea, así todo es una sola transacción).
+        La inscripción es por categoría entera: cada alumno sale de todos
+        los días del origen y entra en todos los del destino; si ya estaba en
+        algunos días del destino, solo se crean los que le faltan. Con
+        `persona_ids` se pasa solo a quienes SIGUEN en el origen (un
+        listado viejo no falla: quien ya no está se ignora). Devuelve
+        cuántos alumnos pasaron y la categoría destino."""
+        if destino == origen:
+            raise OperacionInvalida("Elige una categoría distinta de la que vas a dejar.")
+        categoria_destino = self.repo_categoria.obtener_por_codigo(destino)
+        if categoria_destino is None:
+            raise EntidadNoEncontrada(f"Categoría {destino} no encontrada")
+        horarios_destino = self.repo_horario.listar(destino)
+        if not horarios_destino:
+            raise OperacionInvalida(
+                f"La categoría {categoria_destino.label} no tiene días para recibir jugadores.",
+                detalle_tecnico=f"categoria_destino={destino} sin horarios",
+            )
+        horarios_origen = self.repo_horario.listar(origen)
+        filas_origen = [
+            a for h in horarios_origen
+            for a in self.repo_alumno_horario.listar_por_horario_sin_filtro(h.id)
+        ]
+        en_origen = {a.persona_id for a in filas_origen}
+        seleccion = en_origen if persona_ids is None else en_origen & persona_ids
+        if not seleccion:
+            return 0, categoria_destino
+        ya_en_destino = {
+            (a.persona_id, a.horario_id)
+            for h in horarios_destino
+            for a in self.repo_alumno_horario.listar_por_horario_sin_filtro(h.id)
+        }
+        self.repo_alumno_horario.eliminar_muchos(
+            [a for a in filas_origen if a.persona_id in seleccion]
+        )
+        self.repo_alumno_horario.crear_muchos([
+            AlumnoHorario(persona_id=persona_id, horario_id=h.id)
+            for persona_id in sorted(seleccion)
+            for h in horarios_destino
+            if (persona_id, h.id) not in ya_en_destino
+        ])
+        return len(seleccion), categoria_destino
+
+    def _horarios_con_historial(self, horarios: list[HorarioEntrenamiento]) -> list[HorarioEntrenamiento]:
+        return [h for h in horarios if self.repo_horario.tiene_asistencias(h.id)]
+
+    def _exigir_sin_asistencias_para_eliminar(
+        self, categoria: CategoriaHorario, horarios: list[HorarioEntrenamiento],
+    ) -> None:
+        bloqueados = self._horarios_con_historial(horarios)
+        if bloqueados:
+            dias_bloqueados = ", ".join(dia_en_castellano(h.dia_semana) for h in bloqueados)
+            raise OperacionInvalida(
+                f'No se puede eliminar la categoría "{categoria.label}": el día '
+                f"{dias_bloqueados} tiene asistencias registradas. El historial no se borra.",
+                detalle_tecnico=(
+                    f"categoria={categoria.codigo} horario_ids_bloqueados="
+                    f"{[h.id for h in bloqueados]}"
+                ),
+            )
+
+    def _mover_alumnos_de_dias_a_quitar(
+        self, codigo: str, destino: Optional[str], horarios_a_borrar: list[HorarioEntrenamiento],
+    ) -> None:
+        if not destino or not horarios_a_borrar:
+            return
+        roster = self.repo_alumno_horario.listar_personas_de_horarios(
+            [h.id for h in horarios_a_borrar]
+        )
+        if roster:
+            self._mover_alumnos(codigo, destino, roster)
+
+    def mover_alumnos(
+        self, codigo: str, datos: MoverAlumnosSeleccionDTO,
+    ) -> MoverAlumnosResponseDTO:
+        """ADMB-04 (de a uno): pasa a los alumnos elegidos, sin borrar."""
+        if self.repo_categoria.obtener_por_codigo(codigo) is None:
+            raise EntidadNoEncontrada(f"Categoría {codigo} no encontrada")
+        movidos, destino = self._mover_alumnos(
+            codigo, datos.categoria_destino, set(datos.persona_ids),
+        )
+        self.db.commit()
+        return MoverAlumnosResponseDTO(
+            movidos=movidos, categoria_destino=destino.codigo,
+            categoria_destino_label=destino.label,
+        )
+
+    def mover_y_eliminar_categoria(
+        self, codigo: str, categoria_destino: str,
+    ) -> MoverAlumnosResponseDTO:
+        """ADMB-04 (todos a una): pasa a TODOS los alumnos a una categoría y
+        elimina esta en la misma transacción -- o no cambia nada. El roster
+        se lee acá, no lo manda el cliente.
+
+        Con historial de asistencias la categoría no se puede borrar (el
+        historial cuelga de sus horarios y no se borra). En ese caso se
+        MUEVEN igual los alumnos y la respuesta trae `eliminada=False` con
+        el motivo: es lo más seguro porque el borrado ya se sabe imposible,
+        mover no pierde nada (el historial queda en los horarios viejos) y
+        el administrador no queda en un callejón sin salida; puede ocultarla
+        de la página pública."""
+        categoria = self.repo_categoria.obtener_por_codigo(codigo)
+        if categoria is None:
+            raise EntidadNoEncontrada(f"Categoría {codigo} no encontrada")
+        horarios = self.repo_horario.listar(codigo)
+        con_historial = bool(self._horarios_con_historial(horarios))
+        movidos, destino = self._mover_alumnos(codigo, categoria_destino)
+        if not con_historial:
+            self.repo_categoria.eliminar_con_horarios(categoria, horarios, [])
+        self.db.commit()
+        return MoverAlumnosResponseDTO(
+            movidos=movidos, categoria_destino=destino.codigo,
+            categoria_destino_label=destino.label,
+            eliminada=not con_historial,
+            motivo=(
+                None if not con_historial else
+                f"Los jugadores ya pasaron a {destino.label}, pero la categoría "
+                f"{categoria.label} no se puede eliminar: tiene asistencias "
+                "registradas y el historial no se borra."
+            ),
+        )
 
     def cambiar_publicacion(self, codigo: str, visible: bool) -> CategoriaResponseDTO:
         """La decisión editorial de publicar u ocultar la categoría en la
@@ -586,18 +710,18 @@ class AsistenciaServicio:
         if not personas:
             return
         n = len(personas)
-        alumnos = "al alumno" if n == 1 else f"a los {n} alumnos"
+        alumnos = "al jugador" if n == 1 else f"a los {n} jugadores"
         detalle = f"horario_ids={[h.id for h in horarios]} alumnos={n}"
         if accion == "eliminar":
             raise ConflictoConcurrencia(
-                f"No puede eliminar la categoría {categoria_label} mientras tenga alumnos. "
-                f"Reasigne primero {alumnos} de {categoria_label} a otra categoría.",
+                f"No puedes eliminar la categoría {categoria_label} mientras tenga jugadores. "
+                f"Reasigna primero {alumnos} de {categoria_label} a otra categoría.",
                 detalle_tecnico=detalle,
             )
         dias = ", ".join(dia_en_castellano(h.dia_semana) for h in horarios)
         raise ConflictoConcurrencia(
-            f"No puede quitar el día {dias} de {categoria_label} mientras tenga alumnos. "
-            f"Reasigne primero {alumnos} de {categoria_label} a otra categoría.",
+            f"No puedes quitar el día {dias} de {categoria_label} mientras tenga jugadores. "
+            f"Reasigna primero {alumnos} de {categoria_label} a otra categoría.",
             detalle_tecnico=detalle,
         )
 
@@ -667,7 +791,7 @@ class AsistenciaServicio:
         ids = [item.persona_id for item in datos.items]
         if len(set(ids)) != len(ids):
             raise OperacionInvalida(
-                "La lista tiene un alumno repetido. Revise e intente de nuevo.",
+                "La lista tiene un jugador repetido. Revisa e intenta de nuevo.",
                 detalle_tecnico=f"persona_id repetido en items: horario_id={datos.horario_id}",
             )
         horario = self.repo_horario.obtener_por_id(datos.horario_id)
@@ -694,7 +818,7 @@ class AsistenciaServicio:
             if item.persona_id not in asignados:
                 fallidos.append(AsistenciaLoteFallidoDTO(
                     persona_id=item.persona_id,
-                    motivo=f"{nombre} no está en la lista de alumnos de ese horario.",
+                    motivo=f"{nombre} no está en la lista de jugadores de ese horario.",
                 ))
                 continue
             previa = existentes.get(item.persona_id)
@@ -821,7 +945,7 @@ class AsistenciaServicio:
         if not asignacion:
             raise OperacionInvalida(
                 f"{nombre_completo(persona.nombres, persona.apellidos)} no está en la lista de "
-                "alumnos de ese horario.",
+                "jugadores de ese horario.",
                 detalle_tecnico=(
                     f"sin AlumnoHorario para persona_id={datos.persona_id} "
                     f"horario_id={datos.horario_id}"
@@ -929,7 +1053,7 @@ class AsistenciaServicio:
         motivo = datos.motivo.strip()
         if not motivo:
             raise OperacionInvalida(
-                "Indique el motivo de la corrección.",
+                "Indica el motivo de la corrección.",
                 detalle_tecnico=f"motivo en blanco: asistencia_id={asistencia_id}",
             )
 
@@ -1257,7 +1381,7 @@ class AsistenciaServicio:
         ]
         if not asignaciones:
             raise EntidadNoEncontrada(
-                f"No existe asignación del alumno {persona_id} a esa categoría"
+                f"No existe asignación del jugador {persona_id} a esa categoría"
             )
         self.repo_alumno_horario.eliminar_muchos(asignaciones)
         self.db.commit()

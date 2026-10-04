@@ -14,7 +14,8 @@ from app.servicios_negocio.dtos.asistencia_schemas import (
     AsistenciaCorreccionDTO, AsistenciaCorreccionEntryDTO,
     AsistenciaCorreccionResponseDTO,
     AsistenciaResponseDTO, CategoriaCreateDTO, CategoriaPublicacionDTO, CategoriaResponseDTO,
-    CategoriaUpdateDTO, HorarioCreateDTO, HorarioUpdateDTO, HorarioResponseDTO,
+    CategoriaUpdateDTO, HorarioCreateDTO,
+    MoverAlumnosDTO, MoverAlumnosResponseDTO, MoverAlumnosSeleccionDTO, HorarioUpdateDTO, HorarioResponseDTO,
     PublicScheduleCategoryDTO,
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,
     ConteoHorarioDTO, UltimaListaDTO,
@@ -122,6 +123,28 @@ async def actualizar_categoria(
 )
 async def eliminar_categoria(codigo: str, db: Session = Depends(obtener_sesion)):
     AsistenciaServicio(db).eliminar_categoria(codigo)
+
+
+# QA4 ADMB-04: una categoría con alumnos se elimina solo vacía. Dos caminos,
+# ADMIN-only: todos a UNA categoría + borrado en una transacción, o de a uno.
+@router.post(
+    "/categorias/{codigo}/mover-y-eliminar", response_model=MoverAlumnosResponseDTO,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def mover_y_eliminar_categoria(
+    codigo: str, datos: MoverAlumnosDTO, db: Session = Depends(obtener_sesion),
+):
+    return AsistenciaServicio(db).mover_y_eliminar_categoria(codigo, datos.categoria_destino)
+
+
+@router.post(
+    "/categorias/{codigo}/mover-alumnos", response_model=MoverAlumnosResponseDTO,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def mover_alumnos_de_categoria(
+    codigo: str, datos: MoverAlumnosSeleccionDTO, db: Session = Depends(obtener_sesion),
+):
+    return AsistenciaServicio(db).mover_alumnos(codigo, datos)
 
 
 # Publicación en la landing (`categoria_horario.visible_en_landing`):
