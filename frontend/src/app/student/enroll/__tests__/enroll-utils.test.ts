@@ -3,6 +3,7 @@ import {
   buildEnrollmentRequest,
   ENROLL_FIELD_TOKEN,
   ENROLLMENT_TYPES,
+  enrollmentTypeFromParam,
   fieldsForStep,
   initialFormData,
   institutionOptionLabel,
@@ -222,5 +223,20 @@ describe("QA4 FAM-08 — option labels without internal codes", () => {
 
   it("institution label is just the name", () => {
     expect(institutionOptionLabel("Colegio Municipal Sucre")).toBe("Colegio Municipal Sucre");
+  });
+});
+
+describe("enrollmentTypeFromParam — the landing's ?type= (REG-25)", (): void => {
+  it("maps the landing's own words and the older aliases", (): void => {
+    expect(enrollmentTypeFromParam("self")).toBe(ENROLLMENT_TYPES.SELF);
+    expect(enrollmentTypeFromParam("player")).toBe(ENROLLMENT_TYPES.SELF);
+    expect(enrollmentTypeFromParam("child")).toBe(ENROLLMENT_TYPES.CHILD);
+    expect(enrollmentTypeFromParam("representative")).toBe(ENROLLMENT_TYPES.CHILD);
+  });
+
+  it("answers null for anything else, prototype keys included", (): void => {
+    for (const raw of [null, "", "SELF", " self", "admin", "constructor", "__proto__", "toString"]) {
+      expect(enrollmentTypeFromParam(raw)).toBeNull();
+    }
   });
 });

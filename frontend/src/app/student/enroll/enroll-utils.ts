@@ -11,6 +11,7 @@ import {
   type EnrollmentRequest,
   type EnrollmentStudent,
 } from "@/types/enrollment";
+import { WIZARD_STEP_PARAM, stepParamValue } from "@/lib/wizard-history";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import { toUserMessage } from "@/lib/error-message";
 import { formatCurrency } from "@/lib/format-utils";
@@ -47,6 +48,51 @@ export const ENROLLMENT_TYPES = {
 } as const;
 
 export type EnrollmentType = (typeof ENROLLMENT_TYPES)[keyof typeof ENROLLMENT_TYPES];
+
+/**
+ * REG-25: the `?type=` the landing buttons link with. Both the product's own
+ * words (`self`, `child`) and the older aliases (`player`, `representative`)
+ * are accepted; anything else — including prototype keys such as
+ * `constructor` — is `null`, so an unknown value never picks a flow.
+ */
+const ENROLLMENT_TYPE_PARAMS: ReadonlyMap<string, EnrollmentType> = new Map([
+  ["self", ENROLLMENT_TYPES.SELF],
+  ["player", ENROLLMENT_TYPES.SELF],
+  ["child", ENROLLMENT_TYPES.CHILD],
+  ["representative", ENROLLMENT_TYPES.CHILD],
+]);
+
+export function enrollmentTypeFromParam(raw: string | null): EnrollmentType | null {
+  return (raw !== null && ENROLLMENT_TYPE_PARAMS.get(raw)) || null;
+}
+
+/**
+ * Reads the landing's `?type=` ONCE per mount (the ref keeps a StrictMode
+ * re-run from finding the URL already cleaned) and consumes it from the
+ * address bar:
+ * - `type` is removed, so a later reload cannot override a choice the visitor
+ *   changed on step 1;
+ * - a valid type with no `paso` yet lands on step 2, because the button
+ *   already answered step 1 (the «Tipo» step stays for whoever arrives without
+ *   choosing, or opens `?paso=1` on purpose).
+ * Uses `replaceState`, so Back leaves the wizard instead of walking into it.
+ */
+export function takePreselectedEnrollmentType(
+  cache: { current: EnrollmentType | null | undefined },
+): EnrollmentType | null {
+  if (cache.current !== undefined) return cache.current;
+  const url = new URL(window.location.href);
+  const type = enrollmentTypeFromParam(url.searchParams.get("type"));
+  if (url.searchParams.has("type")) {
+    url.searchParams.delete("type");
+    if (type && !url.searchParams.has(WIZARD_STEP_PARAM)) {
+      url.searchParams.set(WIZARD_STEP_PARAM, stepParamValue("personal", STEP_ORDER));
+    }
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+  cache.current = type;
+  return type;
+}
 
 /** Wizard step identifiers. */
 export type WizardStep = "type" | "personal" | "representative" | "health" | "summary";

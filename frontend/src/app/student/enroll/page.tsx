@@ -89,6 +89,7 @@ import {
   isDemoQuickFillEnabled,
   loadEnrollDraft,
   saveEnrollDraft,
+  takePreselectedEnrollmentType,
   shouldFocusStepHeadingOnJump,
   validateEnrollFields,
   validateEnrollStep,
@@ -279,7 +280,8 @@ function EnrollWizard(): React.ReactElement {
   const [tarifas, setTarifas] = useState<TarifaPublica[]>([]);
   const [tarifasLoading, setTarifasLoading] = useState(true);
   const [tarifasError, setTarifasError] = useState<string | null>(null);
-  const queryAppliedRef = useRef(false);
+  /** REG-25: the `?type=` read from the URL on the first mount (`undefined` until then). */
+  const preselectedTypeRef = useRef<EnrollmentType | null | undefined>(undefined);
   /**
    * Whether `formData` currently holds a draft recovered from `sessionStorage`
    * rather than what the visitor just typed this load — see `enroll-utils.ts`'s
@@ -409,20 +411,6 @@ function EnrollWizard(): React.ReactElement {
     setTouched((prev) => (prev.has(field) ? prev : new Set(prev).add(field)));
   }
 
-  // Support ?type=self/?type=player or ?type=child/?type=representative
-  // to preselect the enrollment flow from external CTAs.
-  useEffect(() => {
-    if (queryAppliedRef.current) return;
-    queryAppliedRef.current = true;
-    const params = new URLSearchParams(window.location.search);
-    const type = params.get("type");
-    if (type === "self" || type === "player") {
-      setFormData((prev) => ({ ...prev, enrollmentType: ENROLLMENT_TYPES.SELF }));
-    } else if (type === "child" || type === "representative") {
-      setFormData((prev) => ({ ...prev, enrollmentType: ENROLLMENT_TYPES.CHILD }));
-    }
-  }, []);
-
   useEffect(() => {
     clearLegacyEnrollmentSession();
   }, []);
@@ -433,9 +421,14 @@ function EnrollWizard(): React.ReactElement {
   // per reload".
   useEffect(() => {
     const draft = loadEnrollDraft();
+    // REG-25: a landing button already answered the «Tipo» step, so its choice
+    // wins over the type an earlier draft happened to hold.
+    const preselected = takePreselectedEnrollmentType(preselectedTypeRef);
     if (draft) {
-      setFormData(draft);
+      setFormData(preselected ? { ...draft, enrollmentType: preselected } : draft);
       setRestoredFromDraft(true);
+    } else if (preselected) {
+      setFormData((prev) => ({ ...prev, enrollmentType: preselected }));
     }
     setDraftHydrated(true);
   }, []);
