@@ -11,6 +11,9 @@ from sqlalchemy import case, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.dominio.invitacion_entrenador import (
+    PROPOSITO_INVITACION_ENTRENADOR, invitacion_pendiente,
+)
 from app.dominio.modelos import (
     Persona, RecuperacionOutbox, Sesion, Usuario, VerificacionCorreoOutbox,
 )
@@ -30,6 +33,9 @@ from app.infraestructura.repositorios.restricciones_identidad import identidad_e
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
 from app.servicios_negocio.dtos.auth_schemas import RegistroUsuarioDTO, ActualizarPerfilPropioDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
+from app.servicios_negocio.consentimiento_legal_servicio import (
+    ConsentimientoLegalServicio, TEXTOS_LEGALES_VIGENTES, VERSION_LEGAL_VIGENTE,
+)
 from app.soporte_transversal.configuracion import settings
 from app.soporte_transversal.dispositivo import describir_dispositivo
 from app.soporte_transversal.firma_archivos import es_firma_valida
@@ -227,6 +233,9 @@ LIMITE_SESIONES_LISTADAS = 10
 # GAP-01: tiempo mínimo entre dos correos del mismo tipo (recuperación o
 # verificación) para una misma cuenta. Protege el cupo diario del proveedor.
 ENFRIAMIENTO_REENVIO_CORREO = timedelta(minutes=2)
+MENSAJE_INVITACION_SIN_TERMINOS = (
+    "Para activar tu cuenta debes aceptar los términos de uso y el aviso de privacidad."
+)
 MENSAJE_RECUPERACION_ENVIADA = "Si el correo está registrado, se envió un enlace de recuperación"
 
 
@@ -888,6 +897,54 @@ class AuthServicio:
             .exists()
         ).scalar()
 
+    def _encolar_recuperacion(self, usuario, *, respetar_enfriamiento: bool) -> bool:
+        """Deja en el outbox (SIN commit) el envío del enlace de la cuenta.
+
+        Devuelve `False` cuando el enfriamiento lo frena y no se encoló nada.
+        `respetar_enfriamiento=False` es para el reenvío explícito de un
+        administrador (issue #1575): una acción de personal autenticada, no
+        un formulario público que haya que proteger del abuso."""
+        evento = (
+            self.db.query(RecuperacionOutbox)
+            .filter(
+                RecuperacionOutbox.usuario_id == usuario.id,
+                RecuperacionOutbox.status.in_(("PENDIENTE", "ENVIANDO")),
+            )
+            .first()
+        )
+        if evento is None:
+            if respetar_enfriamiento and self._en_enfriamiento(RecuperacionOutbox, usuario.id):
+                return False
+            self.db.add(
+                RecuperacionOutbox(
+                    usuario_id=usuario.id,
+                    expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+                )
+            )
+        elif evento.status == "PENDIENTE":
+            # El dedupe reusa la fila activa -- el índice parcial único
+            # `uq_recuperacion_outbox_usuario_activo` lo exige -- pero
+            # reusarla SIN adelantarla convertía "Enviar otro enlace" en un
+            # 200 que no hace nada: tras un fallo de envío el backoff empuja
+            # `next_attempt_at` hasta 16 minutos adelante y el despachador no
+            # vuelve a mirar la fila hasta entonces (issue #764).
+            #
+            # El backoff existe para no castigar al proveedor SMTP por un
+            # fallo NUESTRO; una petición explícita del usuario es
+            # información nueva y vale reintentar ya. `min` porque esto solo
+            # puede adelantar, nunca posponer, y no se tocan los `attempts`
+            # gastados: el tope de MAX_ATTEMPTS sigue acotando cuántas veces
+            # se intenta en total. Una fila `ENVIANDO` no se toca: está
+            # reclamada por un worker y su lease manda.
+            evento.next_attempt_at = min(
+                evento.next_attempt_at, datetime.now(timezone.utc)
+            )
+        if evento is None or evento.status == "PENDIENTE":
+            encolar_despacho_tras_commit(
+                self.db, "app.infraestructura.tareas.recuperacion_tareas.despachar_recuperaciones_pendientes"
+            )
+        return True
+
     def solicitar_recuperacion(self, correo: str) -> dict:
         """Registra la solicitud localmente; el worker enviará el enlace.
 
@@ -897,45 +954,8 @@ class AuthServicio:
         """
         usuario = self.repo.obtener_por_correo(correo)
         if usuario:
-            evento = (
-                self.db.query(RecuperacionOutbox)
-                .filter(
-                    RecuperacionOutbox.usuario_id == usuario.id,
-                    RecuperacionOutbox.status.in_(("PENDIENTE", "ENVIANDO")),
-                )
-                .first()
-            )
-            if evento is None:
-                if self._en_enfriamiento(RecuperacionOutbox, usuario.id):
-                    return {"mensaje": MENSAJE_RECUPERACION_ENVIADA}
-                self.db.add(
-                    RecuperacionOutbox(
-                        usuario_id=usuario.id,
-                        expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
-                    )
-                )
-            elif evento.status == "PENDIENTE":
-                # El dedupe reusa la fila activa -- el índice parcial único
-                # `uq_recuperacion_outbox_usuario_activo` lo exige -- pero
-                # reusarla SIN adelantarla convertía "Enviar otro enlace" en un
-                # 200 que no hace nada: tras un fallo de envío el backoff empuja
-                # `next_attempt_at` hasta 16 minutos adelante y el despachador no
-                # vuelve a mirar la fila hasta entonces (issue #764).
-                #
-                # El backoff existe para no castigar al proveedor SMTP por un
-                # fallo NUESTRO; una petición explícita del usuario es
-                # información nueva y vale reintentar ya. `min` porque esto solo
-                # puede adelantar, nunca posponer, y no se tocan los `attempts`
-                # gastados: el tope de MAX_ATTEMPTS sigue acotando cuántas veces
-                # se intenta en total. Una fila `ENVIANDO` no se toca: está
-                # reclamada por un worker y su lease manda.
-                evento.next_attempt_at = min(
-                    evento.next_attempt_at, datetime.now(timezone.utc)
-                )
-            if evento is None or evento.status == "PENDIENTE":
-                encolar_despacho_tras_commit(
-                    self.db, "app.infraestructura.tareas.recuperacion_tareas.despachar_recuperaciones_pendientes"
-                )
+            if not self._encolar_recuperacion(usuario, respetar_enfriamiento=True):
+                return {"mensaje": MENSAJE_RECUPERACION_ENVIADA}
             try:
                 self.db.commit()
             except Exception:
@@ -946,7 +966,15 @@ class AuthServicio:
                 )
         return {"mensaje": MENSAJE_RECUPERACION_ENVIADA}
 
-    def restablecer_contrasenia(self, token: str, nueva_contrasenia: str) -> None:
+    def restablecer_contrasenia(
+        self, token: str, nueva_contrasenia: str, acepta_terminos: bool = False,
+    ) -> None:
+        """Fija la contraseña con el enlace de recuperación.
+
+        Con el enlace de la INVITACIÓN de un entrenador (issue #1575) este es
+        además su primer ingreso: exige aceptar los términos vigentes, deja el
+        mismo registro `ConsentimientoLegal` que la inscripción pública y
+        marca el correo como verificado. Una recuperación común no cambia."""
         payload = GestorAutenticacion.decodificar_token_recuperacion(token)
         correo = payload["sub"]
         version_token = payload.get("ver")
@@ -964,11 +992,27 @@ class AuthServicio:
         if not usuario.activo or not usuario.persona.activo:
             raise CredencialesInvalidas("El enlace de recuperación es inválido o expiró")
 
+        es_invitacion = (
+            payload.get("prp") == PROPOSITO_INVITACION_ENTRENADOR
+            and invitacion_pendiente(usuario)
+        )
+        if es_invitacion and not acepta_terminos:
+            raise OperacionInvalida(MENSAJE_INVITACION_SIN_TERMINOS)
+
         if GestorAutenticacion.verificar_contrasenia(nueva_contrasenia, usuario.contrasenia):
             raise OperacionInvalida("La nueva contraseña debe ser distinta de la actual.")
 
         usuario.contrasenia = GestorAutenticacion.obtener_hash_contrasenia(nueva_contrasenia)
         usuario.version_contrasenia += 1
+        if es_invitacion:
+            usuario.correo_verificado = True
+            documentos = ("TERMINOS", "PRIVACIDAD")
+            ConsentimientoLegalServicio(self.db)._registrar_aceptacion_grupal_nucleo(
+                cuenta_id=usuario.id,
+                documentos=documentos,
+                version=VERSION_LEGAL_VIGENTE,
+                texto_por_documento=TEXTOS_LEGALES_VIGENTES,
+            )
         # Criterio unificado (issue #4): restablecer la contraseña RETIRA el
         # acceso previo. Quien restablece suele hacerlo porque sospecha que su
         # cuenta está comprometida: un access/refresh token robado no debe

@@ -163,7 +163,7 @@ class TestRepresentadoCreateDTO:
         datos = dict(
             nombres="Luis", apellidos="Gómez", cedula=CEDULA_VALIDA,
             fecha_nacimiento=FECHA_NACIMIENTO_MENOR, telefono=TELEFONO_VALIDO,
-            ficha_medica=dict(tipo_sangre="O_POSITIVO"),
+            ficha_medica=dict(tipo_sangre="O_POSITIVO", alergias="Ninguna", enfermedades=["Ninguno"]),
         )
         datos.update(overrides)
         return datos
@@ -198,7 +198,7 @@ class TestRepresentadoCreateDTO:
 
     def test_acepta_ficha_medica_sin_contacto_de_emergencia(self):
         RepresentadoCreateDTO(**self._base(
-            ficha_medica=dict(tipo_sangre="O_POSITIVO", alergias="Ninguna"),
+            ficha_medica=dict(tipo_sangre="O_POSITIVO", alergias="Ninguna", enfermedades=["Ninguno"]),
         ))
 
     def test_rechaza_contacto_emergencia_en_la_ficha(self):
@@ -210,7 +210,7 @@ class TestRepresentadoCreateDTO:
     def test_rechaza_telefono_emergencia_en_la_ficha(self):
         with pytest.raises(ValidationError, match="telefono_emergencia"):
             RepresentadoCreateDTO(**self._base(
-                ficha_medica=dict(tipo_sangre="O_POSITIVO", telefono_emergencia=TELEFONO_EMERGENCIA_VALIDO),
+                ficha_medica=dict(tipo_sangre="O_POSITIVO", alergias="Ninguna", enfermedades=["Ninguno"], telefono_emergencia=TELEFONO_EMERGENCIA_VALIDO),
             ))
 
 
@@ -244,6 +244,7 @@ class TestFichaMedicaDTOs:
     def test_create_acepta_telefono_emergencia_valido(self):
         FichaMedicaCreateDTO(
             tipo_sangre=TipoSangre.O_POSITIVO, persona_id=1,
+            alergias="Ninguna", enfermedades=["Ninguno"],
             telefono_emergencia=TELEFONO_VALIDO,
         )
 
@@ -294,6 +295,7 @@ class TestEnrollmentDTOs:
         with pytest.raises(ValidationError):
             EnrollmentFichaMedicaDTO(
                 tipo_sangre="O_POSITIVO",
+                alergias="Ninguna", enfermedades=["Ninguno"],
                 contacto_emergencia="Tía Rosa", telefono_emergencia=TELEFONO_INVALIDO,
             )
 
@@ -303,6 +305,7 @@ class TestEnrollmentDTOs:
         # que se eliminó en vez del teléfono que este test mira.
         EnrollmentFichaMedicaDTO(
             tipo_sangre="O_POSITIVO",
+            alergias="Ninguna", enfermedades=["Ninguno"],
             contacto_emergencia="Tía Rosa", telefono_emergencia=TELEFONO_VALIDO,
         )
 
@@ -322,7 +325,7 @@ class TestEnrollmentCreateDTO:
                 correo="luis@example.com", contrasenia="unaClave123",
             ),
             ficha_medica=EnrollmentFichaMedicaDTO(
-                tipo_sangre="O_POSITIVO", contacto_emergencia="Tía Rosa",
+                tipo_sangre="O_POSITIVO", alergias="Ninguna", enfermedades=["Ninguno"], contacto_emergencia="Tía Rosa",
                 telefono_emergencia=telefono_emergencia,
             ),
             acepta_consentimientos=True,

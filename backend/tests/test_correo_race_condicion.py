@@ -46,7 +46,7 @@ from app.servicios_negocio.enrollment_servicio import EnrollmentServicio
 from app.servicios_negocio.persona_servicio import PersonaServicio
 
 _FICHA = dict(
-    tipo_sangre="O_POSITIVO", enfermedades=[],
+    tipo_sangre="O_POSITIVO", alergias="Ninguna", enfermedades=["Ninguno"],
     contacto_emergencia="María Torres", telefono_emergencia="0991112233",
 )
 
@@ -160,7 +160,7 @@ def test_crear_representado_race_de_cedula_da_entidad_duplicada(db_session, monk
         return RepresentadoCreateDTO(
             nombres="Hija", apellidos="Legal", cedula=cedula_disputada,
             fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
-            ficha_medica={"tipo_sangre": "O_POSITIVO"},
+            ficha_medica={"tipo_sangre": "O_POSITIVO", "alergias": "Ninguna", "enfermedades": ["Ninguno"]},
         )
 
     ganadora = servicio.crear_representado(representante.id, _datos())
@@ -201,5 +201,5 @@ def test_integrity_error_ajeno_a_la_identidad_no_sale_como_duplicado(db_session)
             nombres="Hija", apellidos="Legal", cedula=cedula_valida(716),
             fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
             institucion_id=999_999_999,
-            ficha_medica={"tipo_sangre": "O_POSITIVO"},
+            ficha_medica={"tipo_sangre": "O_POSITIVO", "alergias": "Ninguna", "enfermedades": ["Ninguno"]},
         ))

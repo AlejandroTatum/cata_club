@@ -67,7 +67,8 @@ import { fetchStudentPortal } from "@/services/api";
 import type { StudentPortalSummary } from "@/services/api";
 import { BackLink, EmptyState, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
 import MedicalRecordEditor from "@/app/members/MedicalRecordEditor";
-import ManagedStudentPicker, { useManagedProfiles } from "../ManagedStudentPicker";
+import { useManagedProfiles } from "../ManagedStudentPicker";
+import FamilyStrip from "../FamilyStrip";
 import { firstNameOf, isMinor } from "../student-utils";
 import { ChevronDown, Stethoscope } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -158,8 +159,7 @@ function RepresentanteMedicalRecordView({
 
   return (
     <>
-      <ManagedStudentPicker
-        id="student-select-medical-record"
+      <FamilyStrip
         profiles={managedProfiles}
         value={selectedId}
         onChange={setSelectedId}

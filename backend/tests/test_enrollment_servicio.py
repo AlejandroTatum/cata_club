@@ -48,7 +48,7 @@ def _alumno_dto(cedula: str = cedula_valida(251), fecha_nacimiento: date = date(
 
 def _ficha_dto() -> EnrollmentFichaMedicaDTO:
     return EnrollmentFichaMedicaDTO(
-        tipo_sangre=TipoSangre.O_POSITIVO, enfermedades=[],
+        tipo_sangre=TipoSangre.O_POSITIVO, alergias="Ninguna", enfermedades=["Ninguno"],
         contacto_emergencia="María Torres", telefono_emergencia="0991112233",
     )
 
@@ -56,7 +56,7 @@ def _ficha_dto() -> EnrollmentFichaMedicaDTO:
 def _ficha_dto_menor() -> EnrollmentFichaMedicaMenorDTO:
     # Issue #1138: el camino representado (`representante` presente) ya no
     # admite contacto de emergencia propio -- se deriva del representante.
-    return EnrollmentFichaMedicaMenorDTO(tipo_sangre=TipoSangre.O_POSITIVO, enfermedades=[])
+    return EnrollmentFichaMedicaMenorDTO(tipo_sangre=TipoSangre.O_POSITIVO, alergias="Ninguna", enfermedades=["Ninguno"])
 
 
 def _enrollment_dto(**kwargs) -> EnrollmentCreateDTO:
@@ -339,7 +339,7 @@ def test_api_alumno_representado_no_puede_iniciar_sesion(client, db_session):
             },
             # Issue #1138: camino representado -- sin contacto de emergencia
             # propio, se deriva del representante.
-            "ficha_medica": {"tipo_sangre": "O_POSITIVO", "enfermedades": []},
+            "ficha_medica": {"tipo_sangre": "O_POSITIVO", "alergias": "Ninguna", "enfermedades": ["Ninguno"]},
             "acepta_consentimientos": True,
         },
     )
@@ -983,7 +983,7 @@ def test_api_child_enrollment_sin_telefono_del_alumno_aceptada(client, db_sessio
             },
             # Issue #1138: camino representado -- sin contacto de emergencia
             # propio, se deriva del representante.
-            "ficha_medica": {"tipo_sangre": "O_POSITIVO", "enfermedades": []},
+            "ficha_medica": {"tipo_sangre": "O_POSITIVO", "alergias": "Ninguna", "enfermedades": ["Ninguno"]},
             "acepta_consentimientos": True,
         },
     )
@@ -1008,7 +1008,7 @@ def test_api_self_enrollment_sin_telefono_rechazada(client):
                 "correo": "ana-sin-telefono@example.com", "contrasenia": "password8",
             },
             "ficha_medica": {
-                "tipo_sangre": "O_POSITIVO", "enfermedades": [],
+                "tipo_sangre": "O_POSITIVO", "alergias": "Ninguna", "enfermedades": ["Ninguno"],
                 "contacto_emergencia": "Pedro Lopez", "telefono_emergencia": "0991112233",
             },
             "acepta_consentimientos": True,
@@ -1038,7 +1038,7 @@ def test_api_representante_con_cedula_igual_al_alumno_devuelve_400_preciso(clien
             },
             # Camino representado (issue #1138): sin contacto de emergencia
             # propio, se deriva del representante.
-            "ficha_medica": {"tipo_sangre": "O_POSITIVO", "enfermedades": []},
+            "ficha_medica": {"tipo_sangre": "O_POSITIVO", "alergias": "Ninguna", "enfermedades": ["Ninguno"]},
             "acepta_consentimientos": True,
         },
     )

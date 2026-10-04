@@ -511,7 +511,7 @@ function Footer(): React.ReactElement {
             <a href={contact.instagram} target="_blank" rel="noreferrer"><Instagram aria-hidden="true" /><span>Instagram</span></a>
           </div>
         </div>
-        <nav aria-label="Servicios"><h2>Servicios</h2><a href="#horarios">Horarios y categorías</a><Link href={ENROLL_HREF}>Inscripciones</Link><a href="#contacto">Contacto</a></nav>
+        <nav aria-label="Servicios"><h2>Servicios</h2><a href="#horarios">Horarios y categorías</a><a href="#mensualidad">Mensualidad</a><a href="#como-empezar">Cómo empezar</a><a href="#preguntas">Preguntas</a><Link href={ENROLL_HREF}>Inscripciones</Link><a href="#contacto">Contacto</a></nav>
         <nav aria-label="Nosotros"><h2>Nosotros</h2><a href="#nosotros">Misión y Visión</a><a href="#valores">Valores</a>{showGallery ? <a href="#galeria">Galería</a> : null}<a href="#contacto">Ubicación</a></nav>
         <nav aria-label="Información legal"><h2>Información legal</h2><Link href="/terminos">Términos y condiciones</Link><Link href="/terminos#privacidad">Aviso de privacidad</Link><Link href="/consentimiento-salud">Consentimiento de datos de salud</Link><Link href="/permiso-imagen-fetm">Permiso de uso de imagen</Link></nav>
         <figure className="landing-footer-photo">

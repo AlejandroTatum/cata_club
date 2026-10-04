@@ -114,12 +114,14 @@ describe("bandeja de reportes", () => {
     expect(screen.getByText(/solo la administración del club las ve/)).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Filtrar reportes" })).not.toBeInTheDocument();
   });
-  it("continues the guide with a ghost detail while nothing is selected, so the rail reaches the bottom", async () => {
+  it("shows no filler block under the guide while nothing is selected", async () => {
     render(<ReportesErrorPage />);
     await screen.findByRole("button", { name: /Reporte #7/ });
-    expect(screen.getByTestId("ghost-detail")).toBeInTheDocument();
+    expect(screen.queryByTestId("ghost-detail")).not.toBeInTheDocument();
+    expect(screen.getByText("Cómo llegan los reportes")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Reporte #7/ }));
     await screen.findByRole("region", { name: "Detalle del reporte 7" });
     expect(screen.queryByTestId("ghost-detail")).not.toBeInTheDocument();
+    expect(screen.getByText("Cómo llegan los reportes")).toBeInTheDocument();
   });
 });

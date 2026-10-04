@@ -1536,7 +1536,9 @@ describe("StudentPaymentsPage — registering a payment", () => {
     await pickProof(new File(["x"], "comprobante.png", { type: "image/png" }));
 
     const preview = await screen.findByTestId("renew-proof-preview");
-    expect(within(preview).getByRole("img")).toHaveAttribute("src", "blob:mock-voucher-preview");
+    // The object URL is set in an effect, so the <img> lands one render after
+    // the preview wrapper; wait for it instead of racing a slow CI runner.
+    expect(await within(preview).findByRole("img")).toHaveAttribute("src", "blob:mock-voucher-preview");
     expect(within(preview).getByText("comprobante.png")).toBeInTheDocument();
     expect(within(preview).getByRole("button", { name: /cambiar archivo/i })).toBeInTheDocument();
   });
@@ -1890,9 +1892,10 @@ describe("StudentPaymentsPage — the representative pays her own membership (FA
 
     const card = await screen.findByTestId("membership-status");
     expect(within(card).getByText("$40,00")).toBeInTheDocument();
-    const selector = screen.getByLabelText("Estudiante");
-    expect(within(selector).getByRole("option", { name: "Marta Reyes" })).toBeInTheDocument();
-    expect(within(selector).getByRole("option", { name: "Sofía Vera" })).toBeInTheDocument();
+    const strip = screen.getByRole("group", { name: "Jugador" });
+    expect(within(strip).getByRole("button", { name: /Marta Reyes/ })).toBeInTheDocument();
+    expect(within(strip).getByRole("button", { name: /Sofía Vera/ })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Estudiante")).not.toBeInTheDocument();
     expect(mockFetchPagosDePersona).toHaveBeenCalledWith("9");
     expect(screen.queryByText(/a nombre de Sofía/)).not.toBeInTheDocument();
   });
@@ -1913,46 +1916,30 @@ describe("StudentPaymentsPage — the representative pays her own membership (FA
 });
 
 /**
- * D11b — the history is the block that grows with the family's real record, so
- * it is the one that claims the height `main` already reserved. Everything
- * else on this screen is a fixed summary.
- *
- * D11 — and its empty state gets the third part it was missing. The `action`
- * used to appear ONLY when a filter was on, which is backwards: a filtered
- * empty list is the recoverable case, and the case with no payments at all —
- * the socio nuevo D11b says to design for FIRST — was the one left with no way
- * out.
+ * Issue #1584: the history has its own height. It measures its payments (or
+ * its empty state), sits at the top of its column and does not follow the
+ * aside when the pay form opens and grows it.
  */
-describe("StudentPaymentsPage — the history claims the page's leftover height", () => {
-  /*
-   * Both directions, because the first draft of this pass got it wrong in a
-   * way only a browser showed.
-   *
-   * Stretching the history unconditionally read fine in jsdom and was measured
-   * as a defect at 1440x900: with one payment on file the card ran to the foot
-   * of the window and drew a 200px empty frame under a single row. That is the
-   * same emptiness the redesign is closing, moved inside a border — and a
-   * bordered empty box is MORE visible than the canvas it replaced, not less.
-   *
-   * Stretching earns its keep only where `EmptyState`'s `fill` can centre a
-   * statement in the box, which is the empty case — and that is also the case
-   * D11b says to design for first, because a socio nuevo has no payments.
-   */
-  it("always claims the column's leftover height, without topping a short list up with ghost rows (FAM-16)", async () => {
-    render(<StudentPaymentsPage />);
+describe("StudentPaymentsPage — the history has its own height", () => {
+  it("does not stretch to the aside nor carry a viewport-tied minimum height", async () => {
+    const { container } = render(<StudentPaymentsPage />);
 
     const history = await screen.findByLabelText("Historial de pagos");
-    expect(history.className).toMatch(/\bflex-1\b/);
+    expect(history.className).not.toMatch(/\bflex-1\b/);
+    expect(history.className).not.toMatch(/min-h-\[/);
+    expect(history.className).not.toMatch(/dvh|vh/);
+    expect(container.querySelector(".lg\\:items-stretch")).toBeNull();
     expect(within(history).queryByTestId("pago-ghost-rows")).not.toBeInTheDocument();
   });
 
-  it("claims the page's leftover height only when there is nothing to list", async () => {
+  it("keeps the empty state at its natural size instead of filling a stretched card", async () => {
     mockFetchPagosDePersona.mockResolvedValue([]);
 
     render(<StudentPaymentsPage />);
 
-    await screen.findByText("Todavía no hay pagos registrados.");
-    expect(screen.getByLabelText("Historial de pagos").className).toMatch(/\bflex-1\b/);
+    const title = await screen.findByText("Todavía no hay pagos registrados.");
+    expect(screen.getByLabelText("Historial de pagos").className).not.toMatch(/\bflex-1\b/);
+    expect(title.parentElement?.className).not.toMatch(/\bflex-1\b/);
   });
 
   it("gives a family with no payments at all somewhere to go", async () => {
@@ -1962,18 +1949,6 @@ describe("StudentPaymentsPage — the history claims the page's leftover height"
 
     expect(await screen.findByText("Todavía no hay pagos registrados.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Registrar un pago/i })).toBeInTheDocument();
-  });
-
-  it("fills the stretched card rather than floating its statement at the top", async () => {
-    mockFetchPagosDePersona.mockResolvedValue([]);
-
-    const { container } = render(<StudentPaymentsPage />);
-
-    const title = await screen.findByText("Todavía no hay pagos registrados.");
-    const emptyState = title.parentElement;
-    expect(emptyState?.className).toMatch(/\bflex-1\b/);
-    expect(emptyState?.className).toMatch(/justify-center/);
-    void container;
   });
 });
 

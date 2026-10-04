@@ -379,6 +379,8 @@ describe("EnrollPage — the summary on the representative path (#1197)", () => 
     fillRepresentativeStep();
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
+    fireEvent.change(screen.getByLabelText(/^Condiciones de salud/i), { target: { value: "Ninguno" } });
+    fireEvent.change(screen.getByLabelText(/^Alergias/i), { target: { value: "Ninguno" } });
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
     expect(await screen.findByText(/resumen y confirmaci[oó]n/i)).toBeInTheDocument();
@@ -871,6 +873,10 @@ describe("EnrollPage — el teléfono de emergencia no puede repetir el del juga
     goToHealthStep();
 
     fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
+
+    fireEvent.change(screen.getByLabelText(/^Condiciones de salud/i), { target: { value: "Ninguno" } });
+
+    fireEvent.change(screen.getByLabelText(/^Alergias/i), { target: { value: "Ninguno" } });
     fireEvent.change(screen.getByLabelText(/nombre del contacto/i), { target: { value: "Ana Martinez" } });
     const telefonoEmergencia = screen.getByLabelText(/teléfono de emergencia/i);
     fireEvent.change(telefonoEmergencia, { target: { value: valor } });
@@ -1605,6 +1611,8 @@ describe("EnrollPage — la confirmación no afirma la entrega del correo como h
     fireEvent.change(screen.getByLabelText(/^Confirmar contraseña/), { target: { value: "password8" } });
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
+    fireEvent.change(screen.getByLabelText(/^Condiciones de salud/i), { target: { value: "Ninguno" } });
+    fireEvent.change(screen.getByLabelText(/^Alergias/i), { target: { value: "Ninguno" } });
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
     expect(await screen.findByText(/resumen y confirmaci[oó]n/i)).toBeInTheDocument();

@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within, fireEvent } from "@testing-library/react";
 import AyudaPage from "@/app/ayuda/page";
 import { fetchClubPaymentInfo } from "@/services/api";
-import { FAQ_SECTIONS } from "@/app/ayuda/faq-content";
+import { FAQ_SECTIONS, faqSectionsFor } from "@/app/ayuda/faq-content";
 import { PAGE_RAIL } from "@/components/ui";
 import type { UserRole } from "@/types/domain";
 
@@ -89,7 +89,7 @@ describe("AyudaPage — the shell follows the session (VIS-05)", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Preguntas frecuentes" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /volver al inicio/i })).toHaveAttribute("href", "/");
     // The content is the same: the page is not a cut-down version.
-    expect(screen.getByRole("heading", { name: FAQ_SECTIONS[0].title })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Para empezar" })).toBeInTheDocument();
   });
 
   it("keeps the management shell for a signed-in user", () => {
@@ -163,13 +163,19 @@ describe("AyudaPage", () => {
  */
 describe("AyudaPage — the club's face on its card titles", () => {
   it("draws every audience section's title the same way", () => {
-    render(<AyudaPage />);
-
-    for (const section of FAQ_SECTIONS) {
-      const heading = screen.getByRole("heading", { name: section.title });
-      expect(heading.className).toMatch(/\bfont-display\b/);
-      expect(heading.className).toMatch(/\btext-lg\b/);
+    const seen = new Set<string>();
+    for (const role of [null, "estudiante", "trainer", "admin"] as const) {
+      mockRole = role;
+      const { unmount } = render(<AyudaPage />);
+      for (const section of faqSectionsFor(role ?? undefined)) {
+        const heading = screen.getByRole("heading", { name: section.title });
+        expect(heading.className).toMatch(/\bfont-display\b/);
+        expect(heading.className).toMatch(/\btext-lg\b/);
+        seen.add(section.title);
+      }
+      unmount();
     }
+    expect([...seen].sort()).toEqual(FAQ_SECTIONS.map((section) => section.title).sort());
   });
 
   /**
@@ -197,13 +203,24 @@ describe("AyudaPage — FAQ grid (#203)", () => {
     expect(grid).toHaveClass("xl:grid-cols-2");
   });
 
+  it("sizes each section card to its own content (#1618)", () => {
+    render(<AyudaPage />);
+    const grid = screen.getByTestId("faq-grid");
+
+    expect(grid).toHaveClass("items-start");
+    expect(grid.className).not.toMatch(/auto-rows-fr/);
+    expect(grid.className).not.toMatch(/min-h-/);
+  });
+
   it("keeps every section, and all of its questions, inside one grid cell", () => {
+    mockRole = "estudiante";
     render(<AyudaPage />);
     const grid = screen.getByTestId("faq-grid");
     const sections = Array.from(grid.querySelectorAll(":scope > section"));
+    const visible = faqSectionsFor("estudiante");
 
-    expect(sections).toHaveLength(FAQ_SECTIONS.length);
-    FAQ_SECTIONS.forEach((section, index) => {
+    expect(sections).toHaveLength(visible.length);
+    visible.forEach((section, index) => {
       const cell = within(sections[index] as HTMLElement);
       expect(cell.getByRole("heading", { name: section.title })).toBeInTheDocument();
       for (const entry of section.entries) {
@@ -416,7 +433,7 @@ describe("AyudaPage — search, categories and rail (admin v4)", () => {
     });
 
     expect(screen.getByRole("button", { name: entry.question })).toBeInTheDocument();
-    const total = FAQ_SECTIONS.reduce((n, section) => n + section.entries.length, 0);
+    const total = faqSectionsFor(undefined).reduce((n, section) => n + section.entries.length, 0);
     const shown = within(screen.getByTestId("faq-grid")).getAllByRole("button").length;
     expect(shown).toBeLessThan(total);
   });
@@ -433,8 +450,9 @@ describe("AyudaPage — search, categories and rail (admin v4)", () => {
   });
 
   it("filters to one category and returns to all of them", () => {
+    mockRole = "estudiante";
     render(<AyudaPage />);
-    const only = FAQ_SECTIONS[1];
+    const only = faqSectionsFor("estudiante")[1];
 
     fireEvent.click(screen.getByRole("button", { name: only.title, pressed: false }));
     const grid = screen.getByTestId("faq-grid");
@@ -443,7 +461,7 @@ describe("AyudaPage — search, categories and rail (admin v4)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Todas" }));
     expect(screen.getByTestId("faq-grid").querySelectorAll(":scope > section")).toHaveLength(
-      FAQ_SECTIONS.length,
+      faqSectionsFor("estudiante").length,
     );
   });
 
@@ -476,3 +494,90 @@ describe("AyudaPage — search, categories and rail (admin v4)", () => {
     expect(hrefs).toContain("/login");
   });
 });
+
+// ---------------------------------------------------------------------------
+// #1581 — each person sees only the questions of their own role
+// ---------------------------------------------------------------------------
+
+const PARA_EMPEZAR = "Para empezar";
+const FAMILIA = "Si eres jugador o representante";
+const ENTRENADOR = "Si eres entrenador";
+const ADMINISTRADOR = "Si eres administrador";
+const ALL_TITLES = [PARA_EMPEZAR, FAMILIA, ENTRENADOR, ADMINISTRADOR];
+
+function renderedSectionTitles(): string[] {
+  return within(screen.getByTestId("faq-grid"))
+    .queryAllByRole("heading", { level: 2 })
+    .map((heading) => heading.textContent ?? "");
+}
+
+function categoryChips(): string[] {
+  return within(screen.getByRole("group", { name: "Filtrar por categoría" }))
+    .getAllByRole("button")
+    .map((chip) => chip.textContent ?? "")
+    .filter((label) => label !== "Todas");
+}
+
+describe("AyudaPage — the FAQ is filtered by role (#1581)", () => {
+  it.each<[string, UserRole | null, string[]]>([
+    ["a visitor", null, [PARA_EMPEZAR]],
+    ["a player", "estudiante", [PARA_EMPEZAR, FAMILIA]],
+    ["a representante", "representante", [PARA_EMPEZAR, FAMILIA]],
+    ["a trainer", "trainer", [PARA_EMPEZAR, ENTRENADOR]],
+    ["an administrator", "admin", [PARA_EMPEZAR, ADMINISTRADOR]],
+    ["a role with no home", "unsupported", [PARA_EMPEZAR]],
+  ])("shows %s exactly their sections, in the chips too", (_who, role, expected) => {
+    mockRole = role;
+    render(<AyudaPage />);
+
+    expect(renderedSectionTitles()).toEqual(expected);
+    expect(categoryChips()).toEqual(expected);
+    for (const hidden of ALL_TITLES.filter((title) => !expected.includes(title))) {
+      expect(screen.queryByRole("heading", { name: hidden })).not.toBeInTheDocument();
+    }
+  });
+
+  it("keeps the administration questions away from everyone but administrators", () => {
+    const adminOnly = FAQ_SECTIONS.find((section) => section.title === ADMINISTRADOR)!.entries;
+    expect(adminOnly.length).toBeGreaterThan(0);
+
+    for (const role of [null, "estudiante", "representante", "trainer"] as const) {
+      mockRole = role;
+      const { unmount } = render(<AyudaPage />);
+      for (const entry of adminOnly) {
+        expect(screen.queryByRole("button", { name: entry.question })).not.toBeInTheDocument();
+      }
+      unmount();
+    }
+  });
+
+  it("searches only inside the sections the role can see", () => {
+    const adminQuestion = "¿Cómo valido un pago?";
+    fireSearch(adminQuestion);
+    expect(screen.queryByRole("button", { name: adminQuestion })).not.toBeInTheDocument();
+    expect(screen.getByText("Sin resultados")).toBeInTheDocument();
+  });
+
+  it("finds the same question for the role that owns it", () => {
+    mockRole = "admin";
+    fireSearch("¿Cómo valido un pago?");
+    expect(screen.getByRole("button", { name: "¿Cómo valido un pago?" })).toBeInTheDocument();
+  });
+
+  it("counts only the visible sections in the «Qué encontrarás aquí» panel", () => {
+    mockRole = "trainer";
+    render(<AyudaPage />);
+
+    const panel = within(screen.getByRole("heading", { name: "Qué encontrarás aquí" }).parentElement!);
+    expect(panel.getByText(ENTRENADOR)).toBeInTheDocument();
+    expect(panel.queryByText(ADMINISTRADOR)).not.toBeInTheDocument();
+    expect(panel.queryByText(FAMILIA)).not.toBeInTheDocument();
+  });
+});
+
+function fireSearch(value: string): void {
+  render(<AyudaPage />);
+  fireEvent.change(screen.getByRole("searchbox", { name: "Buscar una pregunta" }), {
+    target: { value },
+  });
+}
