@@ -242,7 +242,7 @@ export default function RegisterPaymentForm({
     const meses = wholeMonthsFor(montoNum, monthlyPrice);
     if (meses === null) {
       return monthlyPrice > 0
-        ? `El monto debe ser múltiplo de $${monthlyPrice}: registre uno o más meses completos.`
+        ? `El monto debe ser múltiplo de $${monthlyPrice}: registra uno o más meses completos.`
         : "No se pudo calcular a cuántos meses equivale este monto.";
     }
     // Issue #666: re-checked here (not just in `handleMontoChange`) as the

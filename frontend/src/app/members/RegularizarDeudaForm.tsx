@@ -259,7 +259,7 @@ export default function RegularizarDeudaForm({
 
           {deudaError && (
             <p className="mb-2 text-2xs text-ink-3">
-              No se pudo calcular la deuda; registre el período directamente.
+              No se pudo calcular la deuda; registra el período directamente.
             </p>
           )}
 

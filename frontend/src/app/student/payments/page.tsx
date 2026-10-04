@@ -728,9 +728,9 @@ function PaymentsContent({
                   filter !== "TODOS"
                     ? "Prueba con otro estado para ver el resto de tu historial."
                     : blockedAsMinor
-                      ? // "Cuando registre un pago" is an instruction this
+                      ? // An instruction to register a payment is one this
                         // reader cannot follow — the club registers it.
-                        "Cuando el club registre un pago tuyo aparecerá aquí, con el período que cubre."
+                        "Los pagos que el club anote a tu nombre aparecerán aquí, con el período que cubren."
                       : "Cuando registres un pago aparecerá aquí, junto con el resultado de su validación."
                 }
                 // D11's third part. The action used to appear ONLY when a filter

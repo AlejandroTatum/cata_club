@@ -51,7 +51,7 @@ export default function NotFoundCard(): React.ReactElement {
         </h1>
 
         <p className="m-0 text-sm leading-relaxed text-ink-3">
-          La dirección puede estar mal escrita o el enlace puede haber cambiado. Vuelva a un
+          La dirección puede estar mal escrita o el enlace puede haber cambiado. Vuelve a un
           lugar conocido del portal.
         </p>
       </div>

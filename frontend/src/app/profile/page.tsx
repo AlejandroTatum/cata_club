@@ -292,7 +292,7 @@ function describeMembership(
   };
 }
 
-const NO_MEMBERSHIP_FALLBACK = "No disponible — consulte con administración";
+const NO_MEMBERSHIP_FALLBACK = "No disponible — consulta con administración";
 
 /**
  * Per-role copy for the workspace lede and "Información de tu rol" —

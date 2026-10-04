@@ -47,7 +47,7 @@ export function EmptyInbox(): ReactElement {
           surface="inset"
           icon={<Inbox size={ICON.lg} />}
           title="Aún no hay reportes de error"
-          description="Cuando un usuario use «Reportar un problema», su aviso aparecerá aquí."
+          description="Los avisos enviados desde «Reportar un problema» aparecerán aquí."
         />
       </div>
     </div>

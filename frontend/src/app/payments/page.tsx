@@ -475,11 +475,11 @@ function ProofViewer({
                 an empty box. */}
             <ul className="grid gap-2 text-left text-xs text-ink-2">
               <li>
-                Si no puede verificar el depósito, rechace el pago para que el responsable suba un
+                Si no puedes verificar el depósito, rechaza el pago para que el responsable presente un
                 comprobante.
               </li>
               <li>
-                Si ya verificó el depósito en la cuenta del club, apruebe e indique el motivo de la
+                Si ya verificaste el depósito en la cuenta del club, aprueba e indica el motivo de la
                 excepción en el bloque de decisión.
               </li>
             </ul>
@@ -559,7 +559,7 @@ function CashConfirmationPanel({
             <li>3. Marca la recepción en la lista de la izquierda y aprueba el pago.</li>
           </ol>
           <p className="mt-auto border-t border-line px-[18px] py-4 text-xs text-ink-3-strong">
-            Si el monto entregado no coincide, rechace el pago e indique el motivo al responsable.
+            Si el monto entregado no coincide, rechaza el pago e indica el motivo al responsable.
           </p>
         </>
       )}
@@ -1181,7 +1181,7 @@ export default function PaymentsPage(): React.ReactElement {
     showError(toUserMessage(err, confirmation.failure), {
       description: real
         ? `${request.studentName} sigue en la lista de pendientes.`
-        : `${request.studentName}: no se pudo confirmar el estado real. Actualice la página antes de reintentar.`,
+        : `${request.studentName}: no se pudo confirmar el estado real. Actualiza la página antes de reintentar.`,
       action: {
         label: "Reintentar",
         onAction: () => void decide(request, loadingKey, dto, confirmation),
@@ -1411,7 +1411,7 @@ export default function PaymentsPage(): React.ReactElement {
                 : methodFilter !== "all"
                   ? "Elige «Cualquier método» para ver toda la lista."
                   : activeFilter === "all"
-                  ? "Cuando un jugador suba un comprobante, aparecerá aquí para tu revisión."
+                  ? "Cuando un jugador presente un comprobante, aparecerá aquí para tu revisión."
                   : "La lista está al día."
             }
             action={

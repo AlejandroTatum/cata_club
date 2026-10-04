@@ -705,7 +705,7 @@ describe("MembersPage — Editar member modal", () => {
 
     const alert = await within(dialog).findByRole("alert");
     expect(alert).toHaveTextContent(
-      "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos:",
+      "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbenos por WhatsApp y te ayudamos:",
     );
     expect(within(alert).getByRole("link", { name: /wa\.me|WhatsApp/i })).toHaveAttribute(
       "href",
@@ -1246,7 +1246,7 @@ describe("MembersPage — Editar member modal", () => {
     expect(alerts.length).toBeGreaterThan(0);
     for (const alert of alerts) {
       expect(alert).toHaveTextContent(
-        "No pudimos conectar. Revise su conexión a internet e intente nuevamente.",
+        "No pudimos conectar. Revisa tu conexión a internet e intenta nuevamente.",
       );
     }
     expect(within(dialog).getByRole("radio", { name: /admin/i })).toBeDisabled();
@@ -1304,7 +1304,7 @@ describe("MembersPage — Editar member modal", () => {
     fireEvent.click(screen.getByRole("button", { name: /^guardar rol$/i }));
     fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "No pudimos conectar. Revise su conexión a internet e intente nuevamente.",
+      "No pudimos conectar. Revisa tu conexión a internet e intenta nuevamente.",
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Cerrar ventana" }));
@@ -3555,7 +3555,7 @@ describe("MembersPage — Independizar (issue #1137)", () => {
     fillIndependizarForm(dialog);
     fireEvent.click(within(dialog).getByRole("button", { name: /confirmar independencia/i }));
 
-    expect(await within(dialog).findByText(/no tiene permisos para realizar esta acción/i)).toBeInTheDocument();
+    expect(await within(dialog).findByText(/no tienes permisos para realizar esta acción/i)).toBeInTheDocument();
   });
 });
 

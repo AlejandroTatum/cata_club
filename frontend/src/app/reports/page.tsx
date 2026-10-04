@@ -564,7 +564,7 @@ function ReportsContent(): React.ReactElement {
       : summaryParts.join(" · ");
   const downloadHint =
     canQuery && !loading && resultCount > 0
-      ? "Listo: descargue con «Generar PDF» o «Exportar a Excel», arriba."
+      ? "Listo: descarga con «Generar PDF» o «Exportar a Excel», arriba."
       : "La descarga se habilita cuando la vista previa tiene resultados.";
 
   return (

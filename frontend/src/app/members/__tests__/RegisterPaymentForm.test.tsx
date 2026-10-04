@@ -528,7 +528,7 @@ describe("RegisterPaymentForm — el monto no puede comprar más de 12 meses (#6
     });
 
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "El pago no puede cubrir más de 12 meses. Reduzca el monto ingresado.",
+      "El pago no puede cubrir más de 12 meses. Reduce el monto ingresado.",
     );
     expect(screen.queryByText(/meses de vigencia/)).not.toBeInTheDocument();
   });
@@ -588,7 +588,7 @@ describe("RegisterPaymentForm — el monto no puede comprar más de 12 meses (#6
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent(
-        "El pago no puede cubrir más de 12 meses. Reduzca el monto ingresado.",
+        "El pago no puede cubrir más de 12 meses. Reduce el monto ingresado.",
       );
     });
   });

@@ -3820,7 +3820,7 @@ describe("TrainerAttendancePage — pedir corrección a administración (QA4 ENT
     await openClosedList(filedRecords());
 
     expect(screen.getByText(/pide la corrección a administración desde el jugador/)).toBeInTheDocument();
-    expect(screen.queryByText(/consulte con administración/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/consulta con administración/)).not.toBeInTheDocument();
   });
 
   it("no ofrece pedir pasados los 30 días y dice por qué", async () => {

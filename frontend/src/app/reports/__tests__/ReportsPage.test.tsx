@@ -535,7 +535,7 @@ describe("ReportsPage — preview area", () => {
     setRange("2026-01-01", "2026-12-31");
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(
-      "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: WhatsApp",
+      "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbenos por WhatsApp y te ayudamos: WhatsApp",
     );
     expect(within(alert).getByRole("link", { name: "WhatsApp" })).toHaveAttribute(
       "href",

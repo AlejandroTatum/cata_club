@@ -53,6 +53,8 @@ function findOffenders(): string[] {
       .filter((literal) => {
         // The "use client"/"use server" directives are code, not copy.
         if (/^"use (client|server)"$/.test(literal.trim())) return false;
+        // A module specifier ("@/lib/use-numeric-field-masking") is code too.
+        if (/^"[@\w./-]+"$/.test(literal.trim())) return false;
         const regex = buildUstedRegisterRegex();
         return regex.test(literal);
       })

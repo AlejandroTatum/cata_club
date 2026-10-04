@@ -347,7 +347,7 @@ describe("getAddDependentErrorMessage", () => {
     // not this screen's: a per-screen variant of "no tiene permisos" was one of
     // the 28 independent decisions the single translator exists to end.
     expect(getAddDependentErrorMessage(apiError("", 403)))
-      .toBe("No tiene permisos para realizar esta acción.");
+      .toBe("No tienes permisos para realizar esta acción.");
   });
 
   it("reports the connection, not the raw failure, when fetch never reached the backend", () => {

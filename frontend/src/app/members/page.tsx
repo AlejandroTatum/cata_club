@@ -1215,7 +1215,7 @@ export default function MembersPage(): React.ReactElement {
           <div className="grid min-w-0 content-start gap-page">
         {/* Search + filter chips. They used to sit loose on the canvas as two
             unrelated rows; `FilterPanel` frames them and fixes their order.
-            Account creation is intentionally absent: new members use the
+            Account creation is intentionally absent: new members go through the
             public enrollment flow, while this screen remains focused on
             roles, account status, memberships, and payments. */}
         <FilterPanel
@@ -1365,7 +1365,7 @@ export default function MembersPage(): React.ReactElement {
             description={
               searchTerm || activeFlag !== "all"
                 ? "Ningún miembro coincide con la búsqueda y los filtros activos."
-                : "Cuando se registre la primera cuenta, aparecerá en este listado."
+                : "La primera cuenta registrada aparecerá en este listado."
             }
             action={
               searchTerm || activeFlag !== "all" ? (

@@ -164,7 +164,7 @@ describe("RegularizarDeudaForm — monto cotizado por el backend (ADM-09)", () =
     fireEvent.click(screen.getByRole("button", { name: /^Regularizar$/ }));
 
     expect(
-      await screen.findByText("El pago no puede cubrir más de 12 meses. Reduzca el monto ingresado."),
+      await screen.findByText("El pago no puede cubrir más de 12 meses. Reduce el monto ingresado."),
     ).toBeInTheDocument();
     expect(mockRegularizarDeuda).not.toHaveBeenCalled();
   });

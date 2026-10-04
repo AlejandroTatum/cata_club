@@ -66,7 +66,7 @@ import { landingConfig, toWhatsAppLink } from "@/app/landing/landing-config";
 /** The copy `TIMED_OUT` (module-private in `lib/error-message.ts`) answers with. */
 const TIMED_OUT_TEXT =
   "Esto está tardando más de lo normal y no pudimos terminarlo. " +
-  `Escríbanos por WhatsApp y lo ayudamos: ${toWhatsAppLink(landingConfig.contact.whatsapp[0])}`;
+  `Escríbenos por WhatsApp y te ayudamos: ${toWhatsAppLink(landingConfig.contact.whatsapp[0])}`;
 
 // ---------------------------------------------------------------------------
 // Helpers

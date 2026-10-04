@@ -437,7 +437,7 @@ export default function DiscountsPage(): React.ReactElement {
         <p>
           <strong className="text-ink">Activo:</strong> disponible para pagos nuevos.{" "}
           <strong className="text-ink">Oculto:</strong> ya no se puede asignar a nadie nuevo.
-          Quienes ya lo tienen lo conservan hasta que usted se lo quite, sigue en la lista
+          Quienes ya lo tienen lo conservan hasta que se lo quites, sigue en la lista
           para volver a mostrarlo y los pagos ya registrados no cambian.
         </p>
         <p>

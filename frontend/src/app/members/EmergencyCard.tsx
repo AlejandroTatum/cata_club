@@ -118,7 +118,7 @@ export default function EmergencyCard({
         <ul className="mt-2 flex flex-wrap gap-1.5">
           <li><DataBox>Entrenadores del club</DataBox></li>
           <li><DataBox>Administración</DataBox></li>
-          <li><DataBox>{ownerIsViewer ? "Usted" : "Usted, como representante"}</DataBox></li>
+          <li><DataBox>{ownerIsViewer ? "Tú" : "Tú, como representante"}</DataBox></li>
         </ul>
         <p className="mt-2 text-xs text-ink-3-strong">
           Se usan solo para actuar ante una emergencia durante las actividades del club.

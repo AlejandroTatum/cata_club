@@ -330,7 +330,7 @@ function GhostSessionRows(): React.ReactElement {
 function AttendanceGuide(): React.ReactElement {
   return (
     <InfoPanel title="Cómo se registra la asistencia" as="div" className="min-w-0">
-      <p>El entrenador toma lista en cada sesión. Si un registro no es correcto, pida la corrección al club.</p>
+      <p>El entrenador toma lista en cada sesión. Si un registro no es correcto, pide la corrección al club.</p>
       <ul className="flex flex-col gap-2">
         {ATTENDANCE_LEGEND.map(({ estado, meaning }) => (
           <li key={estado} className="flex items-center gap-2.5">

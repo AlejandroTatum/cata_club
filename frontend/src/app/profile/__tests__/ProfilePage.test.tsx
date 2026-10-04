@@ -435,7 +435,7 @@ describe("ProfilePage — student/representante summary view", () => {
     // is stated exactly once, never both as an absent badge AND text.
     const roleInfo = screen.getByTestId("profile-role-info");
     expect(within(roleInfo).getByText("Membresía")).toBeInTheDocument();
-    expect(within(roleInfo).getByText("No disponible — consulte con administración")).toBeInTheDocument();
+    expect(within(roleInfo).getByText("No disponible — consulta con administración")).toBeInTheDocument();
   });
 
   it("renders one row per representado for a representante session, always showing the honest 'no disponible' note for their membership (the backend never scopes /membresias/mias to a dependent, only to the caller) (triangulation)", async () => {
@@ -478,10 +478,10 @@ describe("ProfilePage — student/representante summary view", () => {
     // a student", not the ambiguous case — see the module docstring).
     // VIS-14: the sentence is stated ONCE (under the dependants list); the
     // other fields read "—".
-    expect(screen.getAllByText(/No disponible — consulte con administración/)).toHaveLength(1);
+    expect(screen.getAllByText(/No disponible — consulta con administración/)).toHaveLength(1);
     const roleInfo = screen.getByTestId("profile-role-info");
     expect(within(roleInfo).getByText("Membresía propia")).toBeInTheDocument();
-    expect(within(roleInfo).queryByText("No disponible — consulte con administración")).not.toBeInTheDocument();
+    expect(within(roleInfo).queryByText("No disponible — consulta con administración")).not.toBeInTheDocument();
     expect(within(roleInfo).getByText("Sin membresía visible")).toBeInTheDocument();
     expect(screen.queryByText("Vencida")).not.toBeInTheDocument();
     // A `self: null` account has no personal membership to report, so the
@@ -526,7 +526,7 @@ describe("ProfilePage — student/representante summary view", () => {
     // (no approved payments on file here); the fallback note appears once, on
     // Juan's row.
     expect(screen.getAllByText("Sin pagos aprobados").length).toBe(1);
-    expect(screen.getByText(/No disponible — consulte con administración/)).toBeInTheDocument();
+    expect(screen.getByText(/No disponible — consulta con administración/)).toBeInTheDocument();
   });
 
   it("includes a link to the full /student portal for detail", async () => {
@@ -689,7 +689,7 @@ describe("ProfilePage — issue #204 redesign: four role variants share one arch
     // VIS-14: the dependant's row already states the sentence once, so this
     // fact reads "—" instead of repeating it.
     expect(within(roleInfo).getByText("Sin membresía visible")).toBeInTheDocument();
-    expect(screen.getAllByText(/No disponible — consulte con administración/)).toHaveLength(1);
+    expect(screen.getAllByText(/No disponible — consulta con administración/)).toHaveLength(1);
   });
 
   it("lists WHICH roles a multi-role representante holds, not just how many", async () => {
@@ -1209,7 +1209,7 @@ describe("ProfilePage — change password", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(
-      /Tuvimos un problema de nuestro lado y no pudimos completar esto\. Escr[ií]b(enos|anos) por WhatsApp y lo ayudamos: WhatsApp/,
+      /Tuvimos un problema de nuestro lado y no pudimos completar esto\. Escr[ií]b(enos|anos) por WhatsApp y te ayudamos: WhatsApp/,
     );
     expect(within(alert).getByRole("link", { name: "WhatsApp" })).toHaveAttribute(
       "href",
