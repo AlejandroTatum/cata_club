@@ -57,7 +57,7 @@ import { MENSAJE_IDENTIDAD_DUPLICADA } from "../../src/lib/duplicate-identity";
  * the wizard restates it with the next move (`DUPLICATE_IDENTITY_COPY` in
  * `enroll-utils.ts`, not exported). Kept literal so a copy change shows up here.
  */
-const WIZARD_DUPLICATE_COPY = "Ya existe una cuenta registrada con la cédula o el correo que ingresó.";
+const WIZARD_DUPLICATE_COPY = "Ya existe una cuenta registrada con la cédula o el correo que ingresaste.";
 
 const SHOT_DIR = process.env.ENROLL_QA_SHOT_DIR ?? "test-results/enroll-qa";
 
@@ -888,9 +888,9 @@ test.describe("S · Resumen, envío y errores del servidor", () => {
     await goToSummary(page);
     const confirmar = page.getByRole("button", { name: /confirmar inscripción/i });
     await expect(confirmar).toBeEnabled();
-    await expect(page.getByText(/marque la casilla de aceptación/i)).toHaveCount(0);
+    await expect(page.getByText(/marca la casilla de aceptación/i)).toHaveCount(0);
     await confirmar.click();
-    await expect(page.getByText(/marque la casilla de aceptación/i)).toBeVisible();
+    await expect(page.getByText(/marca la casilla de aceptación/i)).toBeVisible();
     await shot(page, "S01", "resumen-sin-confirmar");
   });
 
