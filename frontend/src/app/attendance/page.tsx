@@ -230,6 +230,7 @@ export default function AttendancePage(): React.ReactElement {
               // enforced by this page's `ProtectedRoute`, so no second role check.
               renderDetail={(session) => (
                 <SessionRecordsPanel
+                  key={sessionKey(session)}
                   records={recordsBySession.get(sessionKey(session)) ?? []}
                   onCorrected={handleCorrected}
                 />
