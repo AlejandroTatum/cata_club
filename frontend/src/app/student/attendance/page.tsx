@@ -291,7 +291,7 @@ function SessionList({
 function AttendanceLegend(): React.ReactElement {
   return (
     <div data-testid="attendance-legend" className="flex flex-col gap-2 border-t border-line bg-sunken px-5 py-3">
-      <ul className="flex flex-wrap gap-x-4 gap-y-2">
+      <ul className="flex flex-wrap gap-x-4 gap-y-field">
         {ATTENDANCE_LEGEND.map(({ estado, meaning }) => (
           <li key={estado} className="flex items-center gap-2">
             <Badge tone={getAttendanceBadgeTone(estado)}>{getAttendanceLabel(estado)}</Badge>
