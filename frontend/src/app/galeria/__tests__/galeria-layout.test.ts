@@ -9,6 +9,6 @@ describe("admin route titles", () => {
   it("names each screen instead of inheriting the site default", () => {
     expect(galeria.title).toBe("Galería");
     expect(sponsors.title).toBe("Patrocinadores");
-    expect(reportesError.title).toBe("Reportes de error");
+    expect(reportesError.title).toBe("Errores reportados");
   });
 });

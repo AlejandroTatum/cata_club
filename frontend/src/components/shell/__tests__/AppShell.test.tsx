@@ -1241,7 +1241,7 @@ describe("AppShell — the rail of a person with several roles", (): void => {
       "Seguimiento",
     ]);
     expect(within(groups[0]).getByRole("link", { name: "Pasar lista" })).toBeInTheDocument();
-    expect(within(groups[1]).getByRole("link", { name: "Alumnos del club" })).toBeInTheDocument();
+    expect(within(groups[1]).getByRole("link", { name: "Jugadores del club" })).toBeInTheDocument();
   });
 
   it("keeps the 18 alumno+representante accounts on one Mi cuenta, split from Salud y familia", (): void => {
@@ -1387,7 +1387,7 @@ describe("AppShell — the rail of a person with several roles", (): void => {
     // And the rail is strictly bigger, or the tab bar would be leaving nothing
     // behind and this test would hold for a shell with no drawer at all.
     expect(railHrefs.length).toBeGreaterThan(tabHrefs.length);
-    expect(rail().getByRole("link", { name: "Reportes" })).toBeInTheDocument();
+    expect(rail().getByRole("link", { name: "Informes" })).toBeInTheDocument();
   });
 
   it("highlights the current row whichever group it belongs to", (): void => {

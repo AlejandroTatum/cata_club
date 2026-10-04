@@ -226,7 +226,7 @@ describe("getNavGroupsForRoles", () => {
           { href: "/payments", label: "Pagos" },
           { href: "/attendance", label: "Asistencias" },
           { href: "/groups", label: "Grupos y horarios" },
-          { href: "/reports", label: "Reportes" },
+          { href: "/reports", label: "Informes" },
         ],
       },
       {
@@ -241,7 +241,7 @@ describe("getNavGroupsForRoles", () => {
         links: [
           { href: "/galeria", label: "Galería" },
           { href: "/sponsors", label: "Patrocinadores" },
-          { href: "/admin/reportes-error", label: "Reportes de error" },
+          { href: "/admin/reportes-error", label: "Errores reportados" },
           { href: "/admin/actividad", label: "Actividad del club" },
         ],
       },
@@ -260,10 +260,10 @@ describe("getNavGroupsForRoles", () => {
   // it, or reordering "Historial" against "Pasar lista" all fail here — the
   // order is what `resolveActiveHref` and the sidebar render.
   //
-  // "Alumnos del club" va última: es consulta, no trabajo del día. Las tres
+  // "Jugadores del club" va última: es consulta, no trabajo del día. Las tres
   // primeras son la secuencia de una sesión (mirar el día, pasar lista, revisar
   // lo pasado) y meter el padrón en medio partiría esa secuencia.
-  it("gives trainer Mi día and Pasar lista under Hoy, Historial and Alumnos del club under Seguimiento", () => {
+  it("gives trainer Mi día and Pasar lista under Hoy, Historial and Jugadores del club under Seguimiento", () => {
     const groups = getNavGroupsForRoles(["trainer"]);
     expect(groups[1]).toEqual({
       heading: "Hoy",
@@ -276,7 +276,7 @@ describe("getNavGroupsForRoles", () => {
       heading: "Seguimiento",
       links: [
         { href: "/trainer/attendance/history", label: "Historial" },
-        { href: "/trainer/students", label: "Alumnos del club" },
+        { href: "/trainer/students", label: "Jugadores del club" },
       ],
     });
     expect(groups).toHaveLength(3);
