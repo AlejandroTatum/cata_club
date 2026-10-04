@@ -131,3 +131,49 @@ describe("KpiTile caption link", () => {
     expect(screen.getByRole("link", { name: /8 alumnos/ }).className).toContain("max-lg:min-h-[44px]");
   });
 });
+
+describe("KpiTile — tone is the meaning of the datum, said in a word", () => {
+  it("tints the tile and states the status word in the tone's ink", () => {
+    render(<KpiTile label="Miembros" value={176} caption="ver" tone="info" status="Registrados" />);
+
+    const tile = screen.getByTestId("kpi-tile");
+    expect(tile.dataset.tone).toBe("info");
+    expect(tile.className).toMatch(/border-t-cuenta-representante/);
+    expect(screen.getByTestId("kpi-status")).toHaveTextContent("Registrados");
+    expect(screen.getByTestId("kpi-status").className).toMatch(/text-cuenta-representante/);
+  });
+
+  it("keeps the figure in ink on a toned tile", () => {
+    render(<KpiTile label="Asistencia" value={69} caption="ver" tone="warn" status="Bajo la meta de 75%" />);
+
+    expect(screen.getByText("69").className).toMatch(/\btext-ink\b/);
+  });
+
+  it("stays a plain white tile with no status when no tone is given", () => {
+    render(<KpiTile label="Pagos" value={8} caption="Ver" />);
+
+    const tile = screen.getByTestId("kpi-tile");
+    expect(tile.dataset.tone).toBe("neutral");
+    expect(tile.className).not.toMatch(/border-t-\[3px\]/);
+    expect(screen.queryByTestId("kpi-status")).toBeNull();
+  });
+
+  it("is the one coal «needs action» tile in the hot variant, with its word and ball dot", () => {
+    render(<KpiTile label="Pagos por validar" value={37} caption="Revisar pagos" variant="hot" status="Por validar" visual={<span>picture</span>} />);
+
+    const tile = screen.getByTestId("kpi-tile");
+    expect(tile.dataset.tone).toBe("action");
+    expect(tile.className).toMatch(/bg-coal/);
+    expect(screen.getByText("37").className).toMatch(/text-white/);
+    expect(screen.getByTestId("kpi-status")).toHaveTextContent("Por validar");
+    expect(screen.getByTestId("kpi-ball-dot")).toBeInTheDocument();
+    // The picture is drawn for a light surface: on coal it keeps a paper inset.
+    expect(screen.getByText("picture").parentElement?.className).toMatch(/bg-paper/);
+  });
+
+  it("refuses at compile time a judged tone with no status word", () => {
+    // @ts-expect-error — «ok» without `status`
+    const bad = <KpiTile label="Miembros" value={1} caption="ver" tone="ok" />;
+    expect(bad).toBeTruthy();
+  });
+});

@@ -11,11 +11,11 @@
  * The screen reports exactly what `StudentProfileSummary.recentSessions`
  * carries and says so in as many words:
  *
- * - The ratio is "asistió a X de N sesiones registradas", never a percentage.
- *   A percentage over a handful of records reads as a rate — "43% de
- *   asistencia" — which is a claim about the student's habits that this data
- *   cannot support. The ratio carries its own denominator, so it stays true at
- *   N = 1 and at N = 13.
+ * - The rate is printed WITH its denominator ("60 %" over "3 de 5 sesiones"),
+ *   so it stays true at N = 1 and at N = 30. It is a rate over the recorded
+ *   window and says so; the owner approved showing it (EXTRA redesign), with a
+ *   75% goal under which the tile turns amber (`lib/attendance-tone`). The tone
+ *   is never alone: the tile always carries its status word.
  * - `late` counts as attended (the student came); sick/competition do not (an
  *   excused absence is still an absence). The breakdown below the
  *   ratio is what keeps that distinction visible instead of hidden in the
@@ -60,16 +60,17 @@ import {
   BackLink,
   Badge,
   EmptyState,
-  InfoPanel,
   LoadingState,
-  PAGE_RAIL,
+  STAT_GRID,
+  StatCard,
+  StatTrack,
   buttonClasses,
   cn,
 } from "@/components/ui";
+import { attendanceTone } from "@/lib/attendance-tone";
 import { breakdownAttendance, firstNameOf, hasOwnMembership, summarizeRecentAttendance } from "../student-utils";
-import type { AttendanceBreakdown } from "../student-utils";
 import ManagedStudentPicker, { useManagedProfiles } from "../ManagedStudentPicker";
-import { CalendarCheck, User } from "lucide-react";
+import { CalendarCheck, CheckCircle2, Clock, UserX, User } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import StudentErrorState from "../StudentErrorState";
 import { toUserMessage } from "@/lib/error-message";
@@ -97,27 +98,8 @@ type LoadState =
   | { status: "ready"; data: StudentPortalSummary };
 
 // ---------------------------------------------------------------------------
-// The recap — one counted sentence, then the four states behind it
+// The summary — four tiles with the traffic light
 // ---------------------------------------------------------------------------
-
-/** The six states, in the order a family reads them: best outcome first. */
-const BREAKDOWN_ROWS: { key: keyof Omit<AttendanceBreakdown, "total">; estado: string }[] = [
-  { key: "present", estado: "present" },
-  { key: "late", estado: "late" },
-  { key: "absent", estado: "absent" },
-  // FAM-22: left out, the tallies summed to less than the sessions listed.
-  { key: "sick", estado: "sick" },
-  { key: "competition", estado: "competition" },
-];
-
-/** The state dot, in that state's own badge colour — the number itself stays ink. */
-const DOT_CLASS: Record<string, string> = {
-  present: "bg-state-ok",
-  late: "bg-state-warn",
-  absent: "bg-state-bad",
-  sick: "bg-state-neutral",
-  competition: "bg-state-neutral",
-};
 
 /** What each state a session can carry means, for a reader with no rows yet. */
 const ATTENDANCE_LEGEND: { estado: EstadoAsistencia; meaning: string }[] = [
@@ -128,85 +110,93 @@ const ATTENDANCE_LEGEND: { estado: EstadoAsistencia; meaning: string }[] = [
   { estado: "competition", meaning: "Estuvo en una competencia" },
 ];
 
-function AttendanceRecap({
+/**
+ * Rate, present, late, absent — the colour of each tile is the meaning of its
+ * datum (green fine, amber to watch, red a problem) and each says it in a
+ * word. `sick` and `competition` are not tiles, but they are tallied right
+ * under them (FAM-22): the counters must add up to the sessions listed.
+ */
+function AttendanceSummary({
   profile,
   /** The dependent's given name, or `null` when the reader IS the student. */
   studentName,
 }: {
   profile: StudentProfileSummary;
   studentName: string | null;
-}): React.ReactElement {
+}): React.ReactElement | null {
   const recap = summarizeRecentAttendance(profile.recentSessions);
+  if (recap === null) return null;
   const breakdown = breakdownAttendance(profile.recentSessions);
+  const percent = Math.round((recap.attended / recap.total) * 100);
 
   return (
-    <section className="card overflow-hidden" aria-labelledby="attendance-recap-title">
-      <div className="px-5 py-[18px]">
-        {/* A guardian with one dependent never sees the switcher (it hides
-            below two profiles), so this kicker was the only place that could
-            name whose record this is — and it said "Su asistencia" to a reader
-            who does not train here. */}
-        <p className="mb-1 text-2xs font-bold uppercase text-ink-3-strong">
-          {studentName ? `Asistencia de ${studentName}` : "Su asistencia"}
-        </p>
-        <h2 id="attendance-recap-title" className="text-base font-bold tracking-tight text-ink">
-          {recap ? (
-            <>
-              Asistió a{" "}
-              <span className="tabular-nums">
-                {recap.attended} de {recap.total}
-              </span>{" "}
-              {recap.total === 1 ? "sesión registrada" : "sesiones registradas"}
-            </>
-          ) : (
-            "Todavía no hay sesiones registradas"
-          )}
-        </h2>
-        <p className="mt-1.5 text-sm text-ink-3-strong">
-          {recap
-            ? "Una tardanza cuenta como asistencia; una falta, no."
-            : studentName
-              ? `La asistencia de ${studentName} aparecerá aquí en cuanto el entrenador tome lista.`
-              : "Su asistencia aparecerá aquí en cuanto el entrenador tome lista."}
-        </p>
+    <section aria-label="Resumen de asistencia" data-testid="attendance-breakdown" className="flex flex-col gap-section">
+      {/* A guardian with one dependent never sees the switcher (it hides below
+          two profiles), so this kicker is the only place that names whose
+          record this is. */}
+      <p className="text-2xs font-bold uppercase text-ink-3-strong">
+        {studentName ? `Asistencia de ${studentName}` : "Tu asistencia"}
+      </p>
+      <div className={STAT_GRID}>
+        <StatCard
+          label="Asistencia"
+          {...attendanceTone(percent)}
+          icon={<CalendarCheck size={ICON.sm} strokeWidth={1.75} />}
+          value={percent}
+          unit="%"
+          hint={
+            <span className="flex flex-col gap-y-field">
+              <StatTrack value={recap.attended} total={recap.total} />
+              <span>{`${recap.attended} de ${recap.total} sesiones`}</span>
+            </span>
+          }
+        />
+        <div data-testid="breakdown-presente" className="contents">
+          <StatCard
+            label="Presentes"
+            {...(breakdown.present > 0
+              ? { tone: "ok" as const, status: "Estuvo en la sesión" }
+              : { tone: "neutral" as const, status: "Sin presentes" })}
+            icon={<CheckCircle2 size={ICON.sm} strokeWidth={1.75} />}
+            value={breakdown.present}
+            unit={`de ${breakdown.total}`}
+          />
+        </div>
+        <div data-testid="breakdown-tardanza" className="contents">
+          <StatCard
+            label="Tardanzas"
+            {...(breakdown.late > 0
+              ? { tone: "warn" as const, status: "Llegó tarde" }
+              : { tone: "neutral" as const, status: "Sin tardanzas" })}
+            icon={<Clock size={ICON.sm} strokeWidth={1.75} />}
+            value={breakdown.late}
+            hint="cuentan como asistencia"
+          />
+        </div>
+        <div data-testid="breakdown-ausente" className="contents">
+          <StatCard
+            label="Ausencias"
+            {...(breakdown.absent > 0
+              ? { tone: "bad" as const, status: "No asistió" }
+              : { tone: "ok" as const, status: "Sin ausencias" })}
+            icon={<UserX size={ICON.sm} strokeWidth={1.75} />}
+            value={breakdown.absent}
+            hint="no cuentan como asistencia"
+          />
+        </div>
       </div>
-
-      {/* The four states behind the ratio. `sunken` because this strip is an
-          inset area inside the card, not a second card.
-
-          A fixed 2×2, at every width: the card now lives in a 340px rail on
-          large screens, where a 4-up row gives "Competencia" 45px of content
-          box and breaks it across three lines. The hairlines are computed per
-          index rather than written as `divide-x` — a 2×2 needs a right border
-          on the even cells and a bottom border on the first row, and no single
-          utility says both. */}
-      <div
-        data-testid="attendance-breakdown"
-        className="grid grid-cols-2 border-t border-line bg-sunken"
-      >
-        {BREAKDOWN_ROWS.map(({ key, estado }, index) => (
-          <div
-            key={key}
-            data-testid={`breakdown-${getAttendanceLabel(estado).toLowerCase()}`}
-            className={cn(
-              "px-5 py-3.5",
-              Math.floor(index / 2) < Math.floor((BREAKDOWN_ROWS.length - 1) / 2) ? "border-b border-line" : null,
-              index % 2 === 0 ? "border-r border-line" : null,
-            )}
-          >
-            <p className="flex items-center gap-1.5 text-2xs font-bold uppercase text-ink-3-strong">
-              <span aria-hidden="true" className={cn("h-1.5 w-1.5 flex-none rounded-full", DOT_CLASS[estado])} />
-              {getAttendanceLabel(estado)}
-            </p>
-            {/* Ink, always. `_sistema.css` allows colour in badges and dots,
-                never in a figure — a green "4" beside a red "1" turns a tally
-                into a verdict. */}
-            <p className="mt-1 text-xl font-extrabold tabular-nums leading-none text-ink">
-              {breakdown[key]}
-            </p>
-          </div>
+      <p className="flex flex-wrap items-center gap-x-4 gap-y-field text-xs text-ink-3-strong">
+        {[
+          { key: "sick", label: "Enfermo", count: breakdown.sick },
+          { key: "competition", label: "Competencia", count: breakdown.competition },
+        ].map(({ key, label, count }) => (
+          <span key={key} data-testid={`breakdown-${label.toLowerCase()}`} className="inline-flex items-center gap-1.5">
+            <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-state-neutral" />
+            <span>{label}</span>
+            <span className="font-bold tabular-nums text-ink">{count}</span>
+          </span>
         ))}
-      </div>
+      </p>
     </section>
   );
 }
@@ -219,28 +209,23 @@ function SessionList({
   profile,
   /** The dependent's given name, or `null` when the reader IS the student. */
   studentName,
-  fill = false,
 }: {
   profile: StudentProfileSummary;
   studentName: string | null;
-  /** Stretch to the rail's height, closing the gap with ghost rows. */
-  fill?: boolean;
 }): React.ReactElement {
   const sessions = profile.recentSessions;
   const empty = sessions.length === 0;
 
   return (
-    // Empty: one guiding line, card height = content (ghost rows would read
-    // as "still loading"); the legend of states lives in the rail's guide.
     <section
       data-testid="sessions-card"
-      className={cn("card flex flex-col overflow-hidden", fill && !empty && "lg:flex-1")}
+      className="card flex flex-col overflow-hidden"
       aria-labelledby="sessions-title"
     >
       <div className="flex items-center gap-3 border-b border-line px-5 py-4">
-        {/* The record is the main column, and it names its subject: a guardian
-            reading two children's histories one click apart must never have to
-            infer which one is on screen from the dates. */}
+        {/* The record names its subject: a guardian reading two children's
+            histories one click apart must never have to infer which one is on
+            screen from the dates. */}
         <h2 id="sessions-title" className="flex-1 text-sm font-bold text-ink">
           {studentName ? `Sesiones registradas de ${studentName}` : "Sesiones registradas"}
         </h2>
@@ -252,25 +237,26 @@ function SessionList({
       </div>
 
       {empty ? (
-        <div data-testid="sessions-empty">
-          <div className="flex items-start gap-3 px-5 py-4">
+        // Dotted ground (the system's halftone gesture) instead of a bare
+        // block: the empty state takes its place on screen with meaning and
+        // does not read as "still loading".
+        <div data-testid="sessions-empty" className="p-4">
+          <div className="flex flex-col items-center gap-2 rounded-ctl bg-[radial-gradient(circle,rgb(19_19_22/0.09)_1px,transparent_1px)] bg-[length:8px_8px] px-5 py-8 text-center">
             <CalendarCheck
               size={ICON.lg}
               strokeWidth={1.5}
               aria-hidden="true"
-              className="mt-0.5 flex-none text-ink-3-strong"
+              className="flex-none text-ink-3-strong"
             />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold text-ink">
-                {studentName
-                  ? `Aún no hay asistencias registradas de ${studentName}`
-                  : "Aún no hay asistencias registradas"}
-              </p>
-              <p className="mt-0.5 text-sm text-ink-3-strong">
-                Cada vez que el entrenador tome lista, la sesión aparecerá aquí con el estado que
-                le haya asignado.
-              </p>
-            </div>
+            <p className="text-sm font-bold text-ink">
+              {studentName
+                ? `Aún no hay asistencias registradas de ${studentName}`
+                : "Aún no hay asistencias registradas"}
+            </p>
+            <p className="max-w-[44ch] text-sm text-ink-3-strong">
+              Cada vez que el entrenador tome lista, la sesión aparecerá aquí con el estado que
+              le haya asignado.
+            </p>
           </div>
         </div>
       ) : (
@@ -291,55 +277,32 @@ function SessionList({
           ))}
         </ul>
       )}
-      {fill && !empty && <GhostSessionRows />}
+
+      <AttendanceLegend />
     </section>
   );
 }
 
 /**
- * Placeholder rows under a short record: they show the shape a session row
- * takes (date, time slot, state chip) so a few sessions read as "more will
- * appear here". The block takes the height the rail leaves over and clips.
- * Decorative only — hidden from assistive tech.
+ * The states and how they get recorded, in one strip glued under the list —
+ * not a tall rail beside it. Always shown, with or without rows: a reader
+ * with no sessions yet still learns what each state will mean.
  */
-function GhostSessionRows(): React.ReactElement {
+function AttendanceLegend(): React.ReactElement {
   return (
-    <div className="relative hidden min-h-0 flex-1 lg:block">
-      <ul
-        aria-hidden="true"
-        data-testid="session-ghost-rows"
-        className="absolute inset-0 flex flex-col divide-y divide-line overflow-hidden border-t border-line"
-      >
-        {Array.from({ length: 8 }, (_, i) => (
-          <li
-            key={i}
-            className="flex min-h-drow flex-none items-center gap-4 px-5 py-2"
-            style={{ opacity: Math.max(0.1, 0.6 - i * 0.08) }}
-          >
-            <span className="h-2 w-[92px] flex-none rounded-full bg-line" />
-            <span className="h-2.5 w-40 max-w-full flex-1 rounded-full bg-line/70" />
-            <span className="h-5 w-20 flex-none rounded-full bg-line/50" />
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-/** What the rail's guide says: who records, what each state means. */
-function AttendanceGuide(): React.ReactElement {
-  return (
-    <InfoPanel title="Cómo se registra la asistencia" as="div" className="min-w-0">
-      <p>El entrenador toma lista en cada sesión. Si un registro no es correcto, pide la corrección al club.</p>
-      <ul className="flex flex-col gap-2">
+    <div data-testid="attendance-legend" className="flex flex-col gap-2 border-t border-line bg-sunken px-5 py-3">
+      <ul className="flex flex-wrap gap-x-4 gap-y-field">
         {ATTENDANCE_LEGEND.map(({ estado, meaning }) => (
-          <li key={estado} className="flex items-center gap-2.5">
+          <li key={estado} className="flex items-center gap-2">
             <Badge tone={getAttendanceBadgeTone(estado)}>{getAttendanceLabel(estado)}</Badge>
             <span className="text-xs text-ink-3-strong">{meaning}</span>
           </li>
         ))}
       </ul>
-    </InfoPanel>
+      <p className="text-xs text-ink-3-strong">
+        El entrenador toma lista en cada sesión. Si un registro no es correcto, pide la corrección al club.
+      </p>
+    </div>
   );
 }
 
@@ -470,35 +433,16 @@ function AttendanceView({
             </Link>
           }
         />
-      ) : selectedProfile.recentSessions.length === 0 ? (
-        /*
-         * The socio nuevo: the same two columns as a record with sessions, but
-         * the rail holds only the guide, which fills the width beside the
-         * record. The counted recap stays out — at zero it would repeat the
-         * record's sentence over four zeros. The record keeps its content
-         * height: ghost rows under "Aún no hay asistencias" read as loading.
-         */
-        <div className={cn(PAGE_RAIL, "lg:items-stretch")}>
-          <div className="flex min-w-0 flex-col gap-section">
-            <SessionList profile={selectedProfile} studentName={studentName} fill />
-            <PortalWindowNote />
-          </div>
-          <div className="flex min-w-0 flex-col gap-page lg:self-start">
-            <AttendanceGuide />
-          </div>
-        </div>
       ) : (
-        <div className={cn(PAGE_RAIL, "lg:items-stretch")}>
-          {/* `gap-section` — the declared step between the parts of one block,
-              not the 12px this wrote by hand. */}
+        // One column at the content's full width: summary tiles, the record
+        // with its legend glued below, then the scope note. No rail — the
+        // legend moved under the list and the counted tiles on top, so no
+        // column is left with dead air under it.
+        <div className="flex min-w-0 flex-col gap-page">
+          <AttendanceSummary profile={selectedProfile} studentName={studentName} />
           <div className="flex min-w-0 flex-col gap-section">
-            <SessionList profile={selectedProfile} studentName={studentName} fill />
+            <SessionList profile={selectedProfile} studentName={studentName} />
             <PortalWindowNote />
-          </div>
-
-          <div className="flex min-w-0 flex-col gap-page lg:self-start">
-            <AttendanceRecap profile={selectedProfile} studentName={studentName} />
-            <AttendanceGuide />
           </div>
         </div>
       )}

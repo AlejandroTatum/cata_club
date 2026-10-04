@@ -32,7 +32,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import Link from "next/link";
-import { CalendarOff } from "lucide-react";
+import { CalendarCheck, CalendarDays, CalendarOff, UserRoundX } from "lucide-react";
 import { Bars, Dots, Timeline, type ChartTone } from "@/components/charts";
 import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
@@ -51,8 +51,11 @@ import {
   LoadingState,
   InfoPanel,
   PAGE_RAIL,
+  STAT_GRID,
+  StatCard,
   buttonClasses,
 } from "@/components/ui";
+import { attendanceTone } from "@/lib/attendance-tone";
 import {
   ATTENDANCE_LABELS,
   formatDay,
@@ -195,6 +198,11 @@ export default function TrainerPage(): React.ReactElement {
     return records.filter((record) => record.fecha >= fechaInicio);
   }, [records]);
   const studentsToFollow = useMemo(() => findStudentsToFollow(monthRecords), [monthRecords]);
+  // The list above is capped for the block; the pulse tile counts everyone.
+  const studentsToFollowCount = useMemo(
+    () => findStudentsToFollow(monthRecords, Number.MAX_SAFE_INTEGER).length,
+    [monthRecords],
+  );
   const trend = useMemo(() => buildWeeklyAttendanceTrend(records, new Date(), TREND_WEEKS), [records]);
   const trendTotal = trend.reduce((sum, week) => sum + week.total, 0);
   const trendAttended = trend.reduce((sum, week) => sum + week.attended, 0);
@@ -324,6 +332,62 @@ export default function TrainerPage(): React.ReactElement {
 
         {!loading && !error && (
           <>
+            {/*
+              The pulse, in the idiom every role shares: each tile's colour is
+              the meaning of its figure and says it in a word. «Sin lista» is
+              the trainer's task, so it is the row's one coal tile while
+              something is pending. Every figure comes from data this screen
+              already loaded — no extra call.
+            */}
+            <div data-testid="trainer-pulse" className={STAT_GRID}>
+              <StatCard
+                label="Hoy"
+                tone="ball"
+                icon={<CalendarDays size={ICON.sm} strokeWidth={1.75} />}
+                value={todaySchedules.length}
+                unit={todaySchedules.length === 1 ? "sesión" : "sesiones"}
+                status={todaySchedules.length === 0 ? "Día libre" : `${listsTaken} con lista`}
+              />
+              {missingSessions.length > 0 ? (
+                <StatCard
+                  label="Sin lista"
+                  variant="hot"
+                  href="/trainer/attendance"
+                  value={missingSessions.length}
+                  status="Completar lista"
+                  hint="sesiones del mes"
+                />
+              ) : (
+                <StatCard
+                  label="Sin lista"
+                  tone="ok"
+                  icon={<CalendarCheck size={ICON.sm} strokeWidth={1.75} />}
+                  value={0}
+                  status="Todo al día"
+                  hint="sesiones del mes"
+                />
+              )}
+              <StatCard
+                label={`Asistencia · ${TREND_WEEKS} sem`}
+                {...attendanceTone(trendTotal > 0 ? trendPercent : null)}
+                icon={<CalendarCheck size={ICON.sm} strokeWidth={1.75} />}
+                href="/trainer/attendance/history"
+                value={trendTotal > 0 ? trendPercent : "—"}
+                unit={trendTotal > 0 ? "%" : undefined}
+                hint={trendTotal > 0 ? `${trendAttended} de ${trendTotal} registros` : "sin registros todavía"}
+              />
+              <StatCard
+                label="A seguir"
+                {...(studentsToFollowCount > 0
+                  ? { tone: "bad" as const, status: "2 ausencias o más" }
+                  : { tone: "ok" as const, status: "Sin alertas" })}
+                icon={<UserRoundX size={ICON.sm} strokeWidth={1.75} />}
+                value={studentsToFollowCount}
+                unit={studentsToFollowCount === 1 ? "jugador" : "jugadores"}
+                hint="este mes"
+              />
+            </div>
+
             {sessionCardState ? (
               <NextSessionHero
                 state={sessionCardState}

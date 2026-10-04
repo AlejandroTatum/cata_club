@@ -563,6 +563,62 @@ describe("TrainerPage — Mi día", () => {
   });
 });
 
+describe("TrainerPage — the pulse row (EXTRA colour rule)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(NOW);
+    mockUseAuth.mockReset().mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Mendoza"));
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue(TODAY_SCHEDULES);
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue(MONTH_RECORDS);
+    mockFetchRosterDeTodosLosHorarios.mockReset().mockResolvedValue(ROSTER);
+    mockFetchRecentAttendanceSessions.mockReset().mockResolvedValue(RECENT_SESSIONS);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("draws four tiles on top, each with a status word and at most one coal tile", async () => {
+    render(<TrainerPage />);
+
+    const pulse = within(await screen.findByTestId("trainer-pulse"));
+    const tiles = pulse.getAllByText(/^(Hoy|Sin lista|Asistencia · 6 sem|A seguir)$/).map((label) => label.parentElement as HTMLElement);
+    expect(tiles).toHaveLength(4);
+    for (const tile of tiles) expect(within(tile).getByTestId("statcard-status").textContent?.trim()).toBeTruthy();
+    expect(tiles.filter((tile) => tile.dataset.tone === "action").length).toBeLessThanOrEqual(1);
+  });
+
+  it("turns «A seguir» red with its word when someone has repeated absences", async () => {
+    render(<TrainerPage />);
+
+    const label = await within(await screen.findByTestId("trainer-pulse")).findByText("A seguir");
+    const tile = label.parentElement as HTMLElement;
+    expect(tile.dataset.tone).toBe("bad");
+    expect(within(tile).getByTestId("statcard-status")).toHaveTextContent("2 ausencias o más");
+  });
+
+  it("stays green and quiet when nobody needs follow-up", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([record("present", "Sofia Vera")]);
+    render(<TrainerPage />);
+
+    const label = await within(await screen.findByTestId("trainer-pulse")).findByText("A seguir");
+    const tile = label.parentElement as HTMLElement;
+    expect(tile.dataset.tone).toBe("ok");
+    expect(within(tile).getByTestId("statcard-status")).toHaveTextContent("Sin alertas");
+  });
+
+  it("makes «Sin lista» the coal action tile while sessions are pending, linking to the wizard", async () => {
+    render(<TrainerPage />);
+    await screen.findByTestId("trainer-lower");
+
+    const label = await within(await screen.findByTestId("trainer-pulse")).findByText("Sin lista");
+    const tile = label.parentElement as HTMLElement;
+    expect(tile.dataset.tone).toBe("action");
+    expect(tile.closest("a")).toHaveAttribute("href", "/trainer/attendance");
+    expect(within(tile).getByTestId("statcard-status")).toHaveTextContent("Completar lista");
+  });
+});
+
 describe("TrainerPage — defers attendance API calls until the role resolves", () => {
   beforeEach(() => {
     mockFetchTrainingSchedules.mockReset().mockResolvedValue(TODAY_SCHEDULES);

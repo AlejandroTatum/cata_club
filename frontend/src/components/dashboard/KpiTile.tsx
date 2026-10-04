@@ -15,9 +15,17 @@ import type { ReactElement, ReactNode } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { cn } from "@/components/ui";
+import { STAT_TONE, STATUS_INK, cn, type StatCardToneProps } from "@/components/ui";
 
-export interface KpiTileProps {
+/**
+ * The colour rule is the one `StatCard` states: the tone is the meaning of
+ * the datum (never the viewer's role), the figure stays ink, and a toned tile
+ * says its state in a word. `variant="hot"` is the single coal «needs action»
+ * tile of a row — its picture sits on a paper inset, drawn for a light surface.
+ */
+export type KpiTileProps = KpiTileBaseProps & StatCardToneProps & { variant?: "default" | "hot" };
+
+interface KpiTileBaseProps {
   /** Uppercase key, e.g. "Membresías activas". */
   label: string;
   value: ReactNode;
@@ -45,29 +53,67 @@ export default function KpiTile({
   href,
   captionClassName,
   className,
+  variant = "default",
+  tone = "neutral",
+  status,
 }: KpiTileProps): ReactElement {
+  const hot = variant === "hot";
+  const toned = !hot && tone !== "neutral";
+
   return (
     <div
       data-testid="kpi-tile"
-      className={cn("flex min-h-stat flex-col justify-between gap-3 rounded-card border border-line bg-paper px-[18px] py-4", className)}
+      data-tone={hot ? "action" : tone}
+      className={cn(
+        "flex min-h-stat flex-col justify-between gap-3 rounded-card border px-[18px] py-4",
+        hot ? "border-coal bg-coal" : toned ? cn("border-line border-t-[3px]", STAT_TONE[tone].accent) : "border-line bg-paper",
+        className,
+      )}
     >
-      <span className="text-2xs font-bold uppercase text-ink-3">{label}</span>
+      <span className={cn("text-2xs font-bold uppercase", hot ? "text-white/60" : "text-ink-3")}>{label}</span>
 
       <div className={cn("flex gap-3", visualPlacement === "side" ? "flex-wrap items-center justify-between" : "flex-col")}>
-        <span className="font-display text-2xl leading-none tabular-nums tracking-flat text-ink">
+        <span className={cn("font-display text-2xl leading-none tabular-nums tracking-flat", hot ? "text-white" : "text-ink")}>
           {value}
-          {unit ? <small className="ml-[3px] font-sans text-sm font-semibold text-ink-3">{unit}</small> : null}
+          {unit ? <small className={cn("ml-[3px] font-sans text-sm font-semibold", hot ? "text-white/60" : "text-ink-3")}>{unit}</small> : null}
         </span>
-        {visual ? <div className={cn(visualPlacement === "side" ? "w-28 flex-none" : "w-full")}>{visual}</div> : null}
+        {/* The picture is drawn for a light surface, so on the coal tile it
+            keeps its own paper inset instead of being redrawn. */}
+        {visual ? (
+          <div className={cn(visualPlacement === "side" ? "w-28 flex-none" : "w-full", hot && "rounded-ctl bg-paper p-2")}>
+            {visual}
+          </div>
+        ) : null}
       </div>
 
+      {status ? (
+        <span
+          data-testid="kpi-status"
+          className={cn("flex items-center gap-1.5 text-xs font-semibold", hot ? "text-white" : STATUS_INK[tone])}
+        >
+          <span
+            data-testid={hot ? "kpi-ball-dot" : undefined}
+            aria-hidden="true"
+            className={cn("h-1.5 w-1.5 flex-none rounded-full", hot ? "bg-ball" : "bg-current")}
+          />
+          {status}
+        </span>
+      ) : null}
+
       {href ? (
-        <Link href={href} className={cn("inline-flex items-center gap-1.5 text-xs font-semibold text-ink-2 underline-offset-2 hover:text-ink hover:underline", captionClassName)}>
+        <Link
+          href={href}
+          className={cn(
+            "inline-flex items-center gap-1.5 text-xs font-semibold underline-offset-2 hover:underline",
+            hot ? "text-white/80 hover:text-white" : "text-ink-2 hover:text-ink",
+            captionClassName,
+          )}
+        >
           {caption}
           <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         </Link>
       ) : (
-        <span className="text-xs text-ink-3">{caption}</span>
+        <span className={cn("text-xs", hot ? "text-white/60" : "text-ink-3")}>{caption}</span>
       )}
     </div>
   );

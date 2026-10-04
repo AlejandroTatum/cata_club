@@ -192,9 +192,37 @@ export type StatCardVariant = "default" | "hot";
  * pairs the account screens' `IconTile` uses, so the pulse row and `/profile`
  * share one accent vocabulary. The figure itself stays ink.
  */
-export type StatCardTone = "ball" | "ok" | "info" | "warn" | "trainer" | "neutral";
+export type StatCardTone = "ball" | "ok" | "info" | "warn" | "bad" | "trainer" | "neutral";
 
-const STAT_TONE: Record<StatCardTone, { icon: string; accent: string }> = {
+/**
+ * The colour rule (EXTRA redesign): a tile's tone is the MEANING of its datum
+ * — green on time, amber pending, red a problem, blue information or health,
+ * yellow the brand's highlight — never the role of whoever is reading. All
+ * four roles share one palette; what changes is which four figures they see.
+ *
+ * Colour never travels alone (WCAG 1.4.1), so every tone that passes a
+ * judgment (`ok`, `info`, `warn`, `bad`) must also say it in a word. The
+ * types enforce it: those tones do not compile without `status`. `ball`,
+ * `trainer` and `neutral` only highlight or stay quiet, so the word is
+ * optional there. Composition rules the type cannot see: at most four tiles
+ * per row and at most ONE `hot` (coal, "needs action") tile among them.
+ */
+export type StatCardToneProps =
+  | { tone?: "ball" | "trainer" | "neutral"; status?: string }
+  | { tone: "ok" | "info" | "warn" | "bad"; status: string };
+
+/** The status word's ink: each tone's own strong foreground, ≥4.5:1 on its tint. */
+export const STATUS_INK: Record<StatCardTone, string> = {
+  ball: "text-ball-ink",
+  ok: "text-state-ok",
+  info: "text-cuenta-representante",
+  warn: "text-state-warn",
+  bad: "text-state-bad",
+  trainer: "text-cuenta-entrenador",
+  neutral: "text-ink-3-strong",
+};
+
+export const STAT_TONE: Record<StatCardTone, { icon: string; accent: string }> = {
   ball: { icon: "bg-ball/25 text-ink", accent: "border-t-ball bg-ball/5" },
   ok: { icon: "bg-state-ok-bg text-state-ok", accent: "border-t-state-ok bg-state-ok-bg/30" },
   info: {
@@ -202,6 +230,7 @@ const STAT_TONE: Record<StatCardTone, { icon: string; accent: string }> = {
     accent: "border-t-cuenta-representante bg-cuenta-representante-bg/30",
   },
   warn: { icon: "bg-state-warn-bg text-state-warn", accent: "border-t-state-warn bg-state-warn-bg/30" },
+  bad: { icon: "bg-state-bad-bg text-state-bad", accent: "border-t-state-bad bg-state-bad-bg/30" },
   trainer: {
     icon: "bg-cuenta-entrenador-bg text-cuenta-entrenador",
     accent: "border-t-cuenta-entrenador bg-cuenta-entrenador-bg/30",
@@ -209,7 +238,9 @@ const STAT_TONE: Record<StatCardTone, { icon: string; accent: string }> = {
   neutral: { icon: "bg-state-neutral-bg text-state-neutral", accent: "border-t-ink-3 bg-sunken/50" },
 };
 
-export interface StatCardProps {
+export type StatCardProps = StatCardToneProps & StatCardBaseProps;
+
+interface StatCardBaseProps {
   /** Uppercase key, e.g. "Membresías activas". */
   label: string;
   /** The figure. Kept as a node so callers can pass a formatted string. */
@@ -225,8 +256,6 @@ export interface StatCardProps {
    * own accent (the ball dot).
    */
   icon?: ReactNode;
-  /** Tint of the icon tile. Defaults to `neutral`. Only read with `icon`. */
-  tone?: StatCardTone;
   /**
    * The module this figure comes from. When set the whole tile is one link, so
    * a number that raises a question is one click from the list that answers it.
@@ -244,6 +273,7 @@ export default function StatCard({
   variant = "default",
   icon,
   tone = "neutral",
+  status,
   href,
   className,
 }: StatCardProps): ReactElement {
@@ -252,6 +282,7 @@ export default function StatCard({
 
   const tile = (
     <div
+      data-tone={hot ? "action" : tone}
       className={cn(
         "relative min-h-stat rounded-card border px-[18px] py-4 flex flex-col justify-between",
         hot ? "bg-coal border-coal" : showIcon ? cn("border-line border-t-[3px]", STAT_TONE[tone].accent) : "bg-paper border-line",
@@ -318,21 +349,36 @@ export default function StatCard({
         ) : null}
       </span>
 
-      {hint ? (
-        <span
-          className={cn(
-            "text-xs",
-            hot ? "flex items-center gap-2 text-white/60" : "text-ink-3-strong",
-          )}
-        >
-          {hot ? (
+      {status || hint ? (
+        <span className="flex flex-col gap-1 text-xs">
+          {status ? (
             <span
-              data-testid="statcard-ball-dot"
-              aria-hidden="true"
-              className="h-1.5 w-1.5 flex-none rounded-full bg-ball"
-            />
+              data-testid="statcard-status"
+              className={cn(
+                "flex items-center gap-1.5 font-semibold",
+                hot ? "text-white" : STATUS_INK[tone],
+              )}
+            >
+              <span
+                data-testid={hot ? "statcard-ball-dot" : undefined}
+                aria-hidden="true"
+                className={cn("h-1.5 w-1.5 flex-none rounded-full", hot ? "bg-ball" : "bg-current")}
+              />
+              {status}
+            </span>
           ) : null}
-          {hint}
+          {hint ? (
+            <span className={cn("flex items-center gap-2", hot ? "text-white/60" : "text-ink-3-strong")}>
+              {hot && !status ? (
+                <span
+                  data-testid="statcard-ball-dot"
+                  aria-hidden="true"
+                  className="h-1.5 w-1.5 flex-none rounded-full bg-ball"
+                />
+              ) : null}
+              {hint}
+            </span>
+          ) : null}
         </span>
       ) : null}
     </div>

@@ -776,3 +776,42 @@ describe("MedicalRecordEditor — ficha guardada en reposo", () => {
     expect(screen.queryByRole("button", { name: "Cancelar" })).toBeNull();
   });
 });
+
+/**
+ * EXTRA redesign (FAM-31): in page mode the form is two cards next to the
+ * emergency card, so the space is filled by cards, not by stretched inputs.
+ */
+describe("MedicalRecordEditor page mode — two cards beside the emergency card", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetchFichaMedica.mockRejectedValue(Object.assign(new Error("nf"), { status: 404 }));
+  });
+
+  it("groups the five fields into a Salud card and a Contacto de emergencia card", async () => {
+    render(<MedicalRecordEditor personaId={7} withEmergencyCard />);
+
+    const salud = (await screen.findByRole("heading", { name: "Salud" })).closest("section") as HTMLElement;
+    const contacto = screen.getByRole("heading", { name: "Contacto de emergencia" }).closest("section") as HTMLElement;
+    expect(salud.contains(screen.getByLabelText("Alergias"))).toBe(true);
+    expect(salud.contains(screen.getByLabelText(/enfermedades/i))).toBe(true);
+    expect(contacto.contains(screen.getByLabelText("Contacto de emergencia"))).toBe(true);
+    expect(salud.className).toMatch(/border-t-cuenta-representante/);
+  });
+
+  it("splits the page 7/5 so the form and the emergency card are even columns", async () => {
+    render(<MedicalRecordEditor personaId={7} withEmergencyCard />);
+
+    const card = await screen.findByTestId("medical-record-card");
+    expect(card.parentElement?.parentElement?.className).toMatch(/7fr[^"]*5fr/);
+    expect(screen.getByTestId("emergency-card")).toBeInTheDocument();
+  });
+
+  it("draws the health glyph in blue, never the error red", async () => {
+    render(<MedicalRecordEditor personaId={7} withEmergencyCard studentName="Pedro" />);
+
+    const heading = await screen.findByRole("heading", { name: "Ficha médica de Pedro" });
+    const glyph = heading.parentElement?.parentElement?.querySelector("svg");
+    expect(glyph?.getAttribute("class")).toMatch(/text-cuenta-representante/);
+    expect(glyph?.getAttribute("class")).not.toMatch(/text-state-bad/);
+  });
+});
