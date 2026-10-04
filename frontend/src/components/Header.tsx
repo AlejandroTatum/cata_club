@@ -173,7 +173,7 @@ function useNavLinks(): NavLink[] {
  * six links went nowhere or somewhere else (issue #771).
  *
  * `siteSectionHref` and not the landing's bare fragment: this header is drawn
- * on `/terminos`, `/privacidad` and `/permiso-imagen-fetm`, and a bare
+ * on `/terminos`, `/consentimiento-salud` and `/permiso-imagen-fetm`, and a bare
  * `#horarios` there names a section of the LEGAL page, which has none — the
  * click would do nothing. `/#horarios` navigates to the landing and then to the
  * section.
@@ -417,7 +417,7 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
   // including the administrator who had just clicked through from inside the
   // product (issue #782). That answer now lives in the bar's own session slot,
   // where it can be given per visitor instead of per route.
-  const isPublicLegalRoute = ["/terminos", "/privacidad", "/permiso-imagen-fetm"].includes(pathname);
+  const isPublicLegalRoute = ["/terminos", "/consentimiento-salud", "/permiso-imagen-fetm"].includes(pathname);
   if (isPublicLegalRoute) {
     return <InstitutionalHeader minimal />;
   }

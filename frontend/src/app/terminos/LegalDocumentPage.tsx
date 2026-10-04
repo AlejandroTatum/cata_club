@@ -1,4 +1,4 @@
-import { sectionId, type LegalBlock } from "./legal-content";
+import { blockAnchor, LEGAL_EFFECTIVE_DATE, LEGAL_VERSION, type LegalBlock } from "./legal-content";
 import LegalToc from "./LegalToc";
 import LegalPhoto, { type LegalPhotoSource } from "./LegalPhoto";
 import { LegalQuestions, LegalRelated, SIDE_TITLE } from "./LegalSideCards";
@@ -39,7 +39,7 @@ interface LegalDocumentPageProps {
 }
 
 /**
- * The one surface behind `/terminos`, `/privacidad` and `/permiso-imagen-fetm`.
+ * The one surface behind `/terminos`, `/consentimiento-salud` and `/permiso-imagen-fetm`.
  *
  * ## Mode: this is a Read surface
  *
@@ -96,7 +96,7 @@ interface LegalDocumentPageProps {
  * that means where the content begins.
  */
 export default function LegalDocumentPage({ title, blocks, aside, summary, path, photo }: LegalDocumentPageProps): React.ReactElement {
-  const sections = blocks.flatMap((block, index) => (block.kind === "heading" ? [{ id: sectionId(block.text, index), label: block.text }] : []));
+  const sections = blocks.flatMap((block, index) => (block.kind === "heading" ? [{ id: blockAnchor(block, index), label: block.text }] : []));
   const hasToc = sections.length > 1;
 
   const header = (
@@ -111,11 +111,11 @@ export default function LegalDocumentPage({ title, blocks, aside, summary, path,
       <dl className="mt-3 flex flex-wrap gap-x-10 gap-y-1">
         <div className="flex items-baseline gap-2">
           <dt className="text-2xs font-extrabold uppercase tracking-caps text-ink-3-strong">Versión</dt>
-          <dd className="text-sm font-semibold text-cata-text">1.0</dd>
+          <dd className="text-sm font-semibold text-cata-text">{LEGAL_VERSION}</dd>
         </div>
         <div className="flex items-baseline gap-2">
           <dt className="text-2xs font-extrabold uppercase tracking-caps text-ink-3-strong">Vigente desde</dt>
-          <dd className="text-sm font-semibold text-cata-text">27 de agosto de 2026</dd>
+          <dd className="text-sm font-semibold text-cata-text">{LEGAL_EFFECTIVE_DATE}</dd>
         </div>
       </dl>
       <div aria-hidden="true" className="mt-3 h-px bg-cata-border" />
@@ -133,7 +133,7 @@ export default function LegalDocumentPage({ title, blocks, aside, summary, path,
         block.kind === "heading" ? (
           <h2
             key={`${index}-${block.text.slice(0, 24)}`}
-            id={sectionId(block.text, index)}
+            id={blockAnchor(block, index)}
             className="scroll-mt-24 pt-8 font-display text-lg uppercase leading-tight tracking-flat text-cata-text first:pt-0"
           >
             {block.text}
@@ -214,7 +214,7 @@ export default function LegalDocumentPage({ title, blocks, aside, summary, path,
         )}
         <section aria-label="Versión y vigencia" className="card order-3 p-5 text-sm text-ink-2 lg:max-xl:col-start-2">
           <p className="mb-1 text-2xs font-extrabold uppercase tracking-caps text-ink-3-strong">Versión y vigencia</p>
-          <p>Versión 1.0, vigente desde el 27 de agosto de 2026.</p>
+          <p>Versión {LEGAL_VERSION}, vigente desde el {LEGAL_EFFECTIVE_DATE}.</p>
         </section>
         {photo !== undefined && <LegalPhoto photo={photo} className="order-3 hidden aspect-[16/10] lg:max-xl:col-start-2 lg:block" sizes="(min-width: 1280px) 380px, 340px" />}
       </div>

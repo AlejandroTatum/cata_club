@@ -76,7 +76,7 @@ const SCREENS: Screen[] = [
   { role: "public", name: "enroll", path: "/student/enroll" },
   { role: "public", name: "ayuda", path: "/ayuda" },
   { role: "public", name: "terminos", path: "/terminos", legal: true },
-  { role: "public", name: "privacidad", path: "/privacidad", legal: true },
+  { role: "public", name: "consentimiento-salud", path: "/consentimiento-salud", legal: true },
   { role: "representante", name: "add-dependent", path: "/student/add-dependent" },
   { role: "representante", name: "portal", path: "/student" },
   { role: "representante", name: "payments", path: "/student/payments" },
@@ -136,7 +136,7 @@ const ALLOW_LIST: { key: RegExp; reason: string }[] = [
   // Minors from odd/qa4/mobile-audit/report.md. Each one is a secondary text
   // link or disclosure, not a primary action; delete the entry when it is fixed.
   { key: /^public-login\|(Inscríbete|Escríbenos por WhatsApp|¿Olvidaste tu contraseña\?)/, reason: "text links under the login form (report: minor)" },
-  { key: /^public-(terminos|privacidad)\|(cataclub\.loja@proton\.me|WhatsApp 09)/, reason: "contact links inside the legal text (report: minor)" },
+  { key: /^public-(terminos|consentimiento-salud)\|(cataclub\.loja@proton\.me|WhatsApp 09)/, reason: "contact links inside the legal text (report: minor)" },
   { key: /^(estudiante|representante)-portal\|(Imprimir carnet|Ver pagos|Ver mis asistencias|Ver las asistencias de)/, reason: "secondary card links on the portal (report: minor)" },
   { key: /^admin-dashboard\|(82% del total|Revisar pagos|0 de 0 registros)/, reason: "stat-tile footer links on the dashboard (report: minor)" },
   { key: /^admin-actividad\|(Jugadores|Entrenadores|Representantes|Ver como tabla)/, reason: "legend chips and a disclosure on Actividad (report: minor)" },

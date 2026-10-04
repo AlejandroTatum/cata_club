@@ -21,12 +21,25 @@
 
 /** One block of a legal document: a section heading, or a paragraph of prose. */
 export type LegalBlock =
-  | { readonly kind: "heading"; readonly text: string }
+  | { readonly kind: "heading"; readonly text: string; readonly id?: string }
   | { readonly kind: "paragraph"; readonly text: string };
 
-/** A section heading. Renders as an `<h2>` inside the document outline. */
-export function heading(text: string): LegalBlock {
-  return { kind: "heading", text };
+/**
+ * A section heading. Renders as an `<h2>` inside the document outline. An
+ * explicit `id` pins the anchor (the privacy chapter answers to `#privacidad`
+ * so old links and the footer can point at it); without one it is derived.
+ */
+export function heading(text: string, id?: string): LegalBlock {
+  return id === undefined ? { kind: "heading", text } : { kind: "heading", text, id };
+}
+
+/** The version and effective date every public legal document publishes. */
+export const LEGAL_VERSION = "2.2";
+export const LEGAL_EFFECTIVE_DATE = "4 de octubre de 2026";
+
+/** The anchor of a heading block: its pinned id, or the one derived from its text. */
+export function blockAnchor(block: Extract<LegalBlock, { kind: "heading" }>, index: number): string {
+  return block.id ?? sectionId(block.text, index);
 }
 
 /** A paragraph of legal prose. Renders as a `<p>`. */
