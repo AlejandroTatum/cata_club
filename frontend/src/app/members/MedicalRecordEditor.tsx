@@ -6,7 +6,7 @@ import { Loader2, Save, CheckCircle2, Stethoscope, Pencil, X } from "lucide-reac
 import { ICON } from "@/lib/icon-size";
 import { fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
-import { Badge, Button, DataBox, ErrorState, LoadingState, PAGE_RAIL, cn } from "@/components/ui";
+import { Badge, Button, ErrorState, LoadingState, PAGE_RAIL, cn } from "@/components/ui";
 import EmergencyCard, { type EmergencyCardValues } from "./EmergencyCard";
 import type { FichaMedicaEditable, TipoSangre } from "@/types/domain";
 import { toUserMessage, isNotFound } from "@/lib/error-message";
@@ -59,19 +59,6 @@ function etiquetaTipoSangre(tipo: TipoSangre): string {
 }
 
 /**
- * La fila etiqueta-valor del modo lectura.
- *
- * Es la misma forma que `/profile` ya usa para su propio reposo (su
- * `DetailRow`): etiqueta gris y angosta a la izquierda, valor a la derecha
- * dentro de un `DataBox`. No se importa de allá porque es local a esa página;
- * lo que se copia es la forma, no el componente, para que las dos únicas
- * pantallas lectura-edición del producto se lean igual.
- *
- * La raya (`—`) no es decorativa: un campo médico opcional que quedó vacío
- * tiene que decir "acá no hay nada" en vez de dejar un hueco que se confunde
- * con un dato que no cargó.
- */
-/**
  * La ficha guardada, traducida a los cinco valores que llevan los inputs.
  *
  * Vive fuera del componente porque es la ÚNICA traducción, y la usan dos
@@ -118,19 +105,28 @@ interface FichaFieldErrors {
   telefonoEmergencia?: string;
 }
 
-function FilaLectura({
+/**
+ * One field in read mode (#1619): the same label, grid cell and spacing as the
+ * control it stands in for, with the value in place of the box. A `<dt>`/`<dd>`
+ * pair so a screen reader announces label and value together, with no input to
+ * type in. No asterisk and no helper hint: those belong to editing.
+ *
+ * The dash is not decorative: an optional field left empty must say "nothing
+ * here" instead of leaving a gap that reads like data that failed to load.
+ */
+function CampoLectura({
   label,
   value,
+  wide = false,
 }: {
   label: string;
   value: string;
+  wide?: boolean;
 }): React.ReactElement {
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-field border-b border-line py-2 last:border-b-0">
-      <span className="w-[110px] flex-none text-xs text-ink-3 sm:w-[150px]">{label}</span>
-      <span className="flex min-w-[9rem] flex-1 flex-wrap items-center gap-x-2 gap-y-field text-sm font-semibold text-ink">
-        <DataBox>{value || "—"}</DataBox>
-      </span>
+    <div className={wide ? "sm:col-span-2" : undefined}>
+      <dt className="mb-1 text-xs font-semibold text-ink-2">{label}</dt>
+      <dd className="min-h-10 py-2 text-sm font-semibold text-ink">{value || "—"}</dd>
     </div>
   );
 }
@@ -570,15 +566,16 @@ export default function MedicalRecordEditor({
     </>
   );
 
-  // Read mode: label-value rows, not the controls' grid. A grid of boxes
-  // invites typing, a list of rows reads top to bottom — `/profile` resolved
-  // the same pair this way. No date: `FichaMedicaEditable` carries no
-  // timestamp, so an «updated on…» line would be invented.
-  const saludRows = recordReadMode ? (
+  // Read mode: the same grid cells as the fields above, values instead of
+  // controls (#1619), so toggling Editar/Guardar never moves a datum. No date:
+  // `FichaMedicaEditable` carries no timestamp, so an «updated on…» line would
+  // be invented.
+  const saludRead = recordReadMode ? (
     <>
-      <FilaLectura label="Tipo de sangre" value={etiquetaTipoSangre(state.ficha.tipoSangre)} />
-      <FilaLectura label="Alergias" value={describeAlergias(state.ficha.alergias)} />
-      <FilaLectura
+      <CampoLectura label="Tipo de sangre" value={etiquetaTipoSangre(state.ficha.tipoSangre)} />
+      <CampoLectura label="Alergias" value={describeAlergias(state.ficha.alergias)} />
+      <CampoLectura
+        wide
         label="Enfermedades"
         value={describeEnfermedades(
           state.ficha.enfermedades.map((e) => e.nombreEnfermedad),
@@ -588,10 +585,10 @@ export default function MedicalRecordEditor({
     </>
   ) : null;
 
-  const contactoRows = recordReadMode ? (
+  const contactoRead = recordReadMode ? (
     <>
-      <FilaLectura label="Contacto de emergencia" value={state.ficha.contactoEmergencia ?? ""} />
-      <FilaLectura label="Teléfono de emergencia" value={state.ficha.telefonoEmergencia ?? ""} />
+      <CampoLectura label="Contacto de emergencia" value={state.ficha.contactoEmergencia ?? ""} />
+      <CampoLectura label="Teléfono de emergencia" value={state.ficha.telefonoEmergencia ?? ""} />
     </>
   ) : null;
 
@@ -681,10 +678,10 @@ export default function MedicalRecordEditor({
         {headerBand}
         <div className="p-3 sm:p-4">
           {recordReadMode && (
-            <div data-testid="medical-record-rows" className="space-y-0">
-              <div>{saludRows}</div>
-              <div>{contactoRows}</div>
-            </div>
+            <dl data-testid="medical-record-rows" className="grid gap-3 sm:grid-cols-2">
+              {saludRead}
+              {contactoRead}
+            </dl>
           )}
           {editing && (
             <div>
@@ -714,12 +711,14 @@ export default function MedicalRecordEditor({
       {headerBand}
       {newNotice}
       <RecordSection title="Salud">
-        {recordReadMode ? <div data-testid="medical-record-rows">{saludRows}</div> : (
+        {recordReadMode ? (
+          <dl data-testid="medical-record-rows" className="grid gap-3 sm:grid-cols-2">{saludRead}</dl>
+        ) : (
           <div className="grid gap-3 sm:grid-cols-2">{saludFields}</div>
         )}
       </RecordSection>
       <RecordSection title="Contacto de emergencia">
-        {recordReadMode ? <div>{contactoRows}</div> : (
+        {recordReadMode ? <dl className="grid gap-3 sm:grid-cols-2">{contactoRead}</dl> : (
           <div className="grid gap-3 sm:grid-cols-2">{contactoFields}</div>
         )}
       </RecordSection>
