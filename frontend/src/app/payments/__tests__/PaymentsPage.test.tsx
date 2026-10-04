@@ -2122,7 +2122,7 @@ describe("PaymentsPage — queue stat strip and rail (admin v4)", () => {
     renderPage();
     await screen.findByTestId("payments-table");
 
-    expect(screen.getAllByText("Por validar").length).toBeGreaterThan(0);
+    expect(within(screen.getByTestId("payments-stats")).getByText("Por validar")).toBeInTheDocument();
     // 50 + 25 across the two pending payments.
     expect(await screen.findByText("$75,00")).toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: "Cómo se revisa un pago" })).toBeInTheDocument();

@@ -436,7 +436,7 @@ describe("getAccountRoleLabel", () => {
     expect(getAccountRoleLabel({ ...base, dependientes: [dependiente] })).toBe("Representante");
   });
 
-  it('labels as "Jugador" a a student', () => {
+  it('labels a student as "Jugador"', () => {
     expect(getAccountRoleLabel({ ...base, role: "estudiante" })).toBe("Jugador");
   });
 
