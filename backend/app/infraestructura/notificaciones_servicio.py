@@ -578,7 +578,7 @@ class ServicioNotificaciones:
             saludo=saludo,
             parrafos=(
                 "Te damos la bienvenida a Cata Club. Tu inscripción quedó registrada.",
-                "Para confirmar que esta dirección es suya, use el botón de abajo "
+                "Para confirmar que esta dirección es tuya, usa el botón de abajo "
                 "(el enlace es válido por 24 horas).",
                 "Después, acércate al club o escríbenos por WhatsApp para "
                 "registrar la inscripción y el primer pago: el club lo valida y "

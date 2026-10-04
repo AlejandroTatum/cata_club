@@ -190,7 +190,7 @@ MENSAJE_PAGO_PRESENCIAL_PROPIO = (
 MENSAJE_PAGO_PRESENCIAL_NO_PRIMERA_INSCRIPCION = (
     "La aprobación inmediata presencial solo aplica a la primera inscripción: "
     "una membresía inactiva sin ningún pago aprobado. Registra renovaciones "
-    "por el flujo regular y apruébelas desde la cola de validación."
+    "por el flujo regular y apruébalas desde la cola de validación."
 )
 
 # --- Issue #400 (slice 4d): cobertura bonificada -----------------------------
@@ -709,7 +709,7 @@ class PagoServicio:
         del período y el descuento vigente); ningún rol la crea por acá."""
         if datos.tipo_pago == TipoPago.REGULARIZACION:
             raise OperacionInvalida(
-                "La regularización no se registra como pago: use la "
+                "La regularización no se registra como pago: usa la "
                 "acción \"Regularizar deuda\" de la membresía."
             )
 

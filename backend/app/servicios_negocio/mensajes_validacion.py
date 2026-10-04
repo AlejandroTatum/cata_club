@@ -40,7 +40,7 @@ def _texto_corto(ctx: dict, campo: str) -> str:
     minimo = ctx.get("min_length", 1)
     if minimo <= 1:
         return "Este campo es obligatorio."
-    return f"Use al menos {_cantidad(minimo, 'carácter', 'caracteres')}."
+    return f"Usa al menos {_cantidad(minimo, 'carácter', 'caracteres')}."
 
 
 def _lista_corta(ctx: dict, campo: str) -> str:
@@ -70,15 +70,15 @@ _NUMERO_INVALIDO = "Ingresa un número válido."
 _TRADUCTORES = {
     "missing": lambda ctx, campo: "Este campo es obligatorio.",
     "string_too_short": _texto_corto,
-    "string_too_long": lambda ctx, campo: f"Use hasta {_cantidad(ctx.get('max_length'), 'carácter', 'caracteres')}.",
+    "string_too_long": lambda ctx, campo: f"Usa hasta {_cantidad(ctx.get('max_length'), 'carácter', 'caracteres')}.",
     "too_short": _lista_corta,
-    "too_long": lambda ctx, campo: f"Puede enviar hasta {_cantidad(ctx.get('max_length'), 'elemento', 'elementos')}.",
+    "too_long": lambda ctx, campo: f"Puedes enviar hasta {_cantidad(ctx.get('max_length'), 'elemento', 'elementos')}.",
     "greater_than_equal": _minimo,
     "greater_than": lambda ctx, campo: f"El valor debe ser mayor que {_numero(ctx.get('gt'))}.",
     "less_than_equal": _maximo,
     "less_than": lambda ctx, campo: f"El valor debe ser menor que {_numero(ctx.get('lt'))}.",
     "decimal_max_places": lambda ctx, campo: (
-        f"Use hasta {_cantidad(ctx.get('decimal_places', 2), 'decimal', 'decimales')} (por ejemplo 0,5)."
+        f"Usa hasta {_cantidad(ctx.get('decimal_places', 2), 'decimal', 'decimales')} (por ejemplo 0,5)."
     ),
     "decimal_max_digits": lambda ctx, campo: "El número es demasiado grande.",
     "decimal_whole_digits": lambda ctx, campo: "El número es demasiado grande.",

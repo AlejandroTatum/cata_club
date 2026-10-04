@@ -277,7 +277,7 @@ def test_actualizar_categoria_quitar_dia_con_alumnos_asignados_bloquea_con_confl
             nombre="Otro nombre", dias=[DiaSemana.MIERCOLES],
         ))
     assert str(exc_info.value) == (
-        "No puedes quitar el día lunes de Preinfantil mientras tenga alumnos. "
+        "No puedes quitar el día lunes de Preinfantil mientras tenga jugadores. "
         "Reasigna primero al jugador de Preinfantil a otra categoría."
     )
 
@@ -317,7 +317,7 @@ def test_eliminar_categoria_con_alumnos_bloquea_con_mensaje_accionable(db_sessio
         servicio.eliminar_categoria(categoria.codigo)
 
     assert str(exc_info.value) == (
-        "No puedes eliminar la categoría Preinfantil mientras tenga alumnos. "
+        "No puedes eliminar la categoría Preinfantil mientras tenga jugadores. "
         "Reasigna primero al jugador de Preinfantil a otra categoría."
     )
     assert db_session.get(CategoriaHorario, categoria.codigo) is not None
@@ -998,7 +998,7 @@ def test_crear_categoria_con_cruce_avisa_pero_la_crea(db_session):
     assert db_session.get(CategoriaHorario, nueva.codigo) is not None
     assert nueva.advertencias == [
         "Este horario se cruza con Mayores (sábado 06:00–08:00). "
-        "Puede continuar si es intencional."
+        "Puedes continuar si es intencional."
     ]
 
 

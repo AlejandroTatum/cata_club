@@ -135,7 +135,7 @@ function loginErrorFeedback(error: AuthErrorKind): { message: string; descriptio
         message: "Tu cuenta tiene más de un rol activo",
         description: "No podemos saber con cuál entrar. Comunícate con el club para que te asignen uno solo.",
       };
-    // REG-02. «usted» (usted-register lock, #340). Names the account's state, not the typing: even
+    // REG-02. «tú» (register lock, #340). Names the account's state, not the typing: even
     // the right password is refused until the cooldown ends or it is reset.
     case "login_cooldown":
       return {
