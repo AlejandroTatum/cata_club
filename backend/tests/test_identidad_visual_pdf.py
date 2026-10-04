@@ -192,7 +192,7 @@ def test_el_folio_del_comprobante_usa_el_anio_de_la_aprobacion(monkeypatch):
     folios = [
         elemento
         for elemento in capturado["elementos"]
-        if isinstance(elemento, Paragraph) and "Nº de comprobante" in elemento.text
+        if isinstance(elemento, Paragraph) and "Nº de recibo" in elemento.text
     ]
 
     assert len(folios) == 1
@@ -306,7 +306,7 @@ def test_comprobante_nombra_el_deporte_del_club_y_el_pie_sin_firma(monkeypatch):
     assert "Cata Club - Tenis de Mesa" in textos
     assert not any("Academia de Tenis" in t for t in textos)
     assert any(
-        "Este comprobante se genera electrónicamente y no requiere firma." in t
+        "Este recibo se genera electrónicamente y no requiere firma." in t
         for t in textos
     )
     assert not any("plena validez" in t for t in textos)

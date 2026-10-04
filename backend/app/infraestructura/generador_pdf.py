@@ -65,12 +65,12 @@ ETIQUETAS_TIPO_PAGO = {
     "REGULARIZACION": "Regularización",
 }
 ETIQUETAS_ESTADO_PAGO_REPORTE = {
-    "PENDIENTE_VALIDACION": "Pendiente",
+    "PENDIENTE_VALIDACION": "Por validar",
     "APROBADO": "Validado",
     "RECHAZADO": "Rechazado",
 }
 _ETIQUETAS_ESTADO_PAGO_COMPROBANTE = {
-    "PENDIENTE_VALIDACION": "Pendiente de validación",
+    "PENDIENTE_VALIDACION": "Por validar",
     "APROBADO": "Aprobado",
     "RECHAZADO": "Rechazado",
 }
@@ -110,7 +110,7 @@ def generar_comprobante_pago_pdf(
     El PDF incluye:
       - Cabecera institucional (logo + barra roja), la misma que el reporte
       - Encabezado del club (Cata Club - Tenis de Mesa)
-      - Datos del alumno (nombre, cédula, teléfono)
+      - Datos del jugador (nombre, cédula, teléfono)
       - Detalle del pago (monto, tipo, estado, fechas)
       - Sello de aprobación / datos de rechazo (si aplica)
       - Pie de página con timestamp de emisión
@@ -138,7 +138,7 @@ def generar_comprobante_pago_pdf(
         rightMargin=18 * mm,
         topMargin=_MARGEN_SUPERIOR_CON_CABECERA,
         bottomMargin=16 * mm,
-        title=f"Comprobante de Pago #{pago_id}",
+        title=f"Recibo de Pago #{pago_id}",
         author=_NOMBRE_CLUB,
     )
 
@@ -162,11 +162,11 @@ def generar_comprobante_pago_pdf(
 
     elementos = [
         Paragraph(_NOMBRE_CLUB, titulo),
-        Paragraph("Comprobante digital de pago de membresía", subtitulo),
+        Paragraph("Recibo digital de pago de membresía", subtitulo),
         HRFlowable(width="100%", thickness=1, color=colors.HexColor(_ROJO_INSTITUCIONAL)),
         Spacer(1, 8),
 
-        Paragraph(f"<b>Nº de comprobante:</b> P-{fecha_aprobacion.year}-{pago_id:06d}", cuerpo),
+        Paragraph(f"<b>Nº de recibo:</b> P-{fecha_aprobacion.year}-{pago_id:06d}", cuerpo),
         Paragraph(
             f"<b>Fecha de aprobación:</b> "
             f"{fecha_aprobacion.strftime('%d/%m/%Y %H:%M')} (hora de Ecuador)",
@@ -174,7 +174,7 @@ def generar_comprobante_pago_pdf(
         ),
         Spacer(1, 10),
 
-        Paragraph("<b>Datos del alumno</b>", estilos["Heading3"]),
+        Paragraph("<b>Datos del jugador</b>", estilos["Heading3"]),
         Paragraph(f"Nombre: {escape(persona_nombre)}", cuerpo),
         Paragraph(f"Cédula: {escape(persona_cedula)}", cuerpo),
         Paragraph(f"Teléfono: {escape(persona_telefono or 'No registrado')}", cuerpo),
@@ -222,7 +222,7 @@ def generar_comprobante_pago_pdf(
     elementos.append(Paragraph(
         f"Documento generado electrónicamente el "
         f"{sello_de_tiempo(FORMATO_SELLO_COMPROBANTE)}."
-        f" Este comprobante se genera electrónicamente y no requiere firma.",
+        f" Este recibo se genera electrónicamente y no requiere firma.",
         ParagraphStyle("Pie", parent=cuerpo, fontSize=8, textColor=colors.grey),
     ))
 

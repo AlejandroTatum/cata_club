@@ -35,7 +35,7 @@ def _pago(**cambios) -> PagoListItemDTO:
 
 def test_columnas_del_pdf_de_pagos_usan_los_nombres_de_la_pantalla():
     assert _COLUMNAS_PAGOS_PDF == [
-        "Estudiante", "Responsable de pago", "Desde", "Hasta", "Monto", "Método",
+        "Jugador", "Responsable de pago", "Desde", "Hasta", "Monto", "Método",
         "Fecha de registro", "Estado",
     ]
 
@@ -80,7 +80,7 @@ def test_listado_de_pagos_expone_el_representante_como_responsable(client, db_se
 @pytest.mark.parametrize(
     "estado, etiqueta",
     [
-        (EstadoPago.PENDIENTE_VALIDACION, "Pendiente"),
+        (EstadoPago.PENDIENTE_VALIDACION, "Por validar"),
         (EstadoPago.APROBADO, "Validado"),
         (EstadoPago.RECHAZADO, "Rechazado"),
     ],
@@ -110,7 +110,7 @@ def test_fila_de_pago_usa_el_dinero_del_club_y_fechas_dd_mm_aaaa():
 
     assert fila == [
         "Ana Pérez", "", "01/10/2026", "31/10/2026", "$1.240,00",
-        "Regularización", "03/10/2026", "Pendiente",
+        "Regularización", "03/10/2026", "Por validar",
     ]
 
 
@@ -297,7 +297,7 @@ def test_recibo_usa_el_pie_aprobado_por_el_club(monkeypatch):
     textos = _textos_del_recibo(monkeypatch)
 
     assert any(
-        "Este comprobante se genera electrónicamente y no requiere firma." in t
+        "Este recibo se genera electrónicamente y no requiere firma." in t
         for t in textos
     )
     assert not any("plena validez interna" in t for t in textos)
@@ -318,8 +318,8 @@ def test_mensaje_de_archivo_danado_separa_las_dos_frases():
 
     fuente = Path(membresia_pago_servicio.__file__).read_text(encoding="utf-8")
 
-    assert "intente otra vez." in fuente
-    assert 'intente otra vez"' not in fuente
+    assert "intenta otra vez." in fuente
+    assert 'intenta otra vez"' not in fuente
 
 
 # --- TXT-08: dinero «$40,00» en notificaciones y errores ----------------------

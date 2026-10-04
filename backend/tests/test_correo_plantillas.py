@@ -147,7 +147,7 @@ def _enviar_mora_dia_8() -> None:
 CASOS = [
     pytest.param(_enviar_recuperacion, "Cata Club | Recuperación de contraseña", 2, id="recuperacion"),
     pytest.param(_enviar_verificacion, "Cata Club | Bienvenida y verificación de correo", 2, id="verificacion"),
-    pytest.param(_enviar_vencimiento, "Cata Club | Su membresía vence pronto", 1, id="vencimiento"),
+    pytest.param(_enviar_vencimiento, "Cata Club | Tu membresía vence pronto", 1, id="vencimiento"),
     pytest.param(_enviar_mora_dia_1, "Cata Club | Aviso de mora", 1, id="mora_dia_1"),
     pytest.param(_enviar_mora_dia_8, "Cata Club | Último aviso de mora", 1, id="mora_dia_8"),
 ]
@@ -250,8 +250,8 @@ def test_verificacion_es_tambien_la_bienvenida_en_un_solo_correo(smtp_capturado)
     _enviar_verificacion_con_nombre()
     _, partes = _partes(smtp_capturado["mensaje"])
     texto = _decodificar(partes[0])
-    assert "Le damos la bienvenida a Cata Club" in texto
-    assert "Su inscripción quedó registrada" in texto
+    assert "Te damos la bienvenida a Cata Club" in texto
+    assert "Tu inscripción quedó registrada" in texto
     assert TOKEN_FICTICIO in texto
     assert "Verificar mi correo" in _html(smtp_capturado)
 
@@ -302,7 +302,7 @@ def test_aviso_de_mora_dia_1_indica_como_recuperar_beneficios(smtp_capturado):
     texto = _decodificar(partes[0])
     assert "Ir a mis pagos" in texto
     assert WHATSAPP_ESPERADO in texto
-    assert "recuperar sus beneficios" in texto
+    assert "recuperar tus beneficios" in texto
 
 
 def test_ultimo_aviso_de_mora_indica_que_es_automatico_y_como_recuperar(smtp_capturado):

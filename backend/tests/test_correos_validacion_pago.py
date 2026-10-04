@@ -352,7 +352,7 @@ def test_pago_rechazado_sin_motivo_no_inventa_uno(smtp_capturado):
 
     texto = _texto(smtp_capturado[0])
     assert texto.startswith("Pago rechazado\n\nHola,")
-    assert "no pudo aprobar su pago." in texto
+    assert "no pudo aprobar tu pago." in texto
     assert "None" not in texto
     assert "Motivo:" not in texto
 
@@ -414,7 +414,7 @@ def test_pago_aprobado_para_otro_destinatario_nombra_al_alumno(smtp_capturado):
     html = _html(smtp_capturado[0])
     assert texto.startswith("Pago aprobado\n\nHola Marta Torres,")
     # El alumno viaja como fila de detalle, no escondido en la prosa.
-    assert "Alumno: Nico <Torres>" in texto
+    assert "Jugador: Nico <Torres>" in texto
     assert f"Plan: {PLAN}" in texto
     assert "Nico &lt;Torres&gt;" in html
 
@@ -448,7 +448,7 @@ def test_validar_pago_aprobado_de_representado_avisa_al_representante(
     texto = _texto(smtp_capturado[0])
     assert texto.startswith("Pago aprobado\n\nHola Marta,")
     assert "Nico" in texto
-    assert "Alumno: Nico" in texto
+    assert "Jugador: Nico" in texto
     assert f"Vigente hasta: {FIN_TXT}" in texto
     # El aviso in-app sigue naciendo en el mismo punto, para el ALUMNO.
     aviso = (
@@ -568,7 +568,7 @@ def test_pago_aprobado_muestra_monto_y_boton_al_recibo(smtp_capturado):
     )
 
     texto = _texto(smtp_capturado[0])
-    assert "Alumno: Nico Torres" in texto
+    assert "Jugador: Nico Torres" in texto
     assert "Monto: $40,00" in texto
     assert "Ver recibo oficial: https://app.cataclub.test/student/payments" in texto
     assert _html(smtp_capturado[0]).count("Ver recibo oficial") == 1
@@ -583,4 +583,4 @@ def test_validar_pago_aprobado_pasa_monto_y_nombre_completo(db_session, smtp_cap
 
     texto = _texto(smtp_capturado[0])
     assert "Monto: $30,00" in texto
-    assert f"Alumno: {representado.nombres} {representado.apellidos}" in texto
+    assert f"Jugador: {representado.nombres} {representado.apellidos}" in texto

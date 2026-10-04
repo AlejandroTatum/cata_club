@@ -244,7 +244,7 @@ def entregar_fila(
             db.commit()
             logger.error(
                 "%s alcanzó el techo de %s entregas iniciadas: fila %s del "
-                "usuario %s, NO se manda de nuevo; revisá por qué el worker "
+                "usuario %s, NO se manda de nuevo; revisa por qué el worker "
                 "muere entregando esta fila",
                 etiqueta, entregas, evento_id, usuario_id,
             )

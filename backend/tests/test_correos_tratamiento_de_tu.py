@@ -1,12 +1,13 @@
 """
-Todo correo (y su asunto) trata al lector de "usted", jamás de voseo ni tuteo
-(QA3, GAP-03). El club está en Ecuador; los correos mezclaban "usted" con
-"copiá", "podés" y "tu cuenta".
+Todo correo (y su asunto) trata al lector de "tú", jamás de "usted" ni de voseo
+(QA4 S6, ola 3; antes de QA4 este candado exigía "usted" -- QA3, GAP-03). El
+club está en Ecuador y el dueño pidió «tutemos sin problema» en toda la app: los
+correos mezclaban "usted" con "copiá", "podés" y "tu cuenta".
 
 Es una guarda de USO, no una lista de mensajes: recorre los literales de texto
 de los módulos que arman correos y avisos para la persona, de modo que una
-plantilla nueva con voseo falla sin que nadie recuerde agregarla acá. Los
-docstrings y comentarios quedan fuera: hablan de código, no al lector.
+plantilla nueva con "usted" o con voseo falla sin que nadie recuerde agregarla
+acá. Los docstrings y comentarios quedan fuera: hablan de código, no al lector.
 """
 import ast
 import re
@@ -27,11 +28,8 @@ MODULOS = [
     "servicios_negocio/relacion_representacion_servicio.py",
 ]
 
-# TEMPORAL (QA4 W3-0): durante el barrido de registro de la ola 3 solo se veta
-# el voseo; «usted» y «tú» pasan. W3-6 cambia este candado (y el del frontend)
-# para exigir «tú».
-# Imperativos y presentes de voseo.
-VOSEO_Y_TUTEO = re.compile(
+# Voseo: imperativos y presentes rioplatenses.
+VOSEO = re.compile(
     r"\b(?:"
     r"vos|sos|tenés|podés|querés|sabés|debés|necesitás|"
     r"hacé|ingresá|revisá|copiá|usá|elegí|mirá|esperá|intentá|volvé|"
@@ -40,6 +38,23 @@ VOSEO_Y_TUTEO = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+
+# Trato de "usted": el pronombre y los imperativos/presentes que lo delatan.
+# «su» y «sus» NO se vetan: también es el posesivo de tercera persona («su
+# representante»), y ahí es correcto.
+USTED = re.compile(
+    r"\b(?:"
+    r"usted(?:es)?|"
+    r"intente|ingrese|revise|verifique|comuníquese|acérquese|escríbanos|elija|"
+    r"espere|reinicie|contacte|indique|regularice|registre|genere|consulte|"
+    r"confirme|copie|ignore|adjunte|haga|escriba|seleccione|recuerde|"
+    r"solicite|vuelva|puede ignorarlo|le damos|le informamos|le avisamos|"
+    r"le enviamos|recibirá|verá|podrá"
+    r")\b",
+    re.IGNORECASE,
+)
+
+TRATO_INCORRECTO = re.compile(f"{VOSEO.pattern}|{USTED.pattern}", re.IGNORECASE)
 
 
 def _literales(ruta: Path):
@@ -64,26 +79,30 @@ def _literales(ruta: Path):
 
 
 @pytest.mark.parametrize("modulo", MODULOS)
-def test_ningun_literal_de_correo_usa_voseo(modulo):
+def test_ningun_literal_de_correo_usa_usted_ni_voseo(modulo):
     ruta = RAIZ / modulo
     infracciones = [
         f"{modulo}:{linea}: «{m.group(0)}» en {texto[:60]!r}"
         for linea, texto in _literales(ruta)
-        for m in VOSEO_Y_TUTEO.finditer(texto)
+        for m in TRATO_INCORRECTO.finditer(texto)
     ]
-    assert not infracciones, "No use voseo:\n" + "\n".join(infracciones)
+    assert not infracciones, "Trate de tú, sin usted ni voseo:\n" + "\n".join(infracciones)
 
 
-def test_el_detector_reconoce_el_voseo_que_ya_se_filtro():
+def test_el_detector_reconoce_el_usted_y_el_voseo_que_ya_se_filtraron():
     for frase in (
         "copiá este enlace",
         "podés ignorarlo",
         "vos sos",
         "avisanos",
+        "copie este enlace",
+        "Si usted no se registró",
+        "Le damos la bienvenida",
+        "verá el motivo",
     ):
-        assert VOSEO_Y_TUTEO.search(frase), frase
+        assert TRATO_INCORRECTO.search(frase), frase
     for frase in (
-        "copie este enlace", "puede ignorarlo", "su cuenta", "podrá verla",
         "copia este enlace", "puedes ignorarlo", "tu cuenta", "te avisaremos",
+        "su representante", "Te damos la bienvenida", "verás el motivo",
     ):
-        assert not VOSEO_Y_TUTEO.search(frase), frase
+        assert not TRATO_INCORRECTO.search(frase), frase

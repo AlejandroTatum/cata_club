@@ -542,10 +542,10 @@ class ServicioNotificaciones:
             preheader="Enlace de un solo uso, válido por 30 minutos.",
             saludo="Hola,",
             parrafos=(
-                "Recibimos una solicitud para restablecer su contraseña en Cata Club.",
-                "Puede hacerlo con el botón de abajo. El enlace es válido por 30 "
+                "Recibimos una solicitud para restablecer tu contraseña en Cata Club.",
+                "Puedes hacerlo con el botón de abajo. El enlace es válido por 30 "
                 "minutos y de un solo uso.",
-                "Si no solicitó el cambio, ignore este correo.",
+                "Si no solicitaste el cambio, ignora este correo.",
             ),
             cta_etiqueta="Restablecer contraseña",
             cta_url=enlace,
@@ -574,16 +574,16 @@ class ServicioNotificaciones:
         saludo = f"Hola {nombre}," if nombre else "Hola,"
         texto, html = construir_correo(
             titulo="Bienvenida y verificación de correo",
-            preheader="Su inscripción quedó registrada. Confirme su dirección: el enlace es válido por 24 horas.",
+            preheader="Tu inscripción quedó registrada. Confirma tu dirección: el enlace es válido por 24 horas.",
             saludo=saludo,
             parrafos=(
-                "Le damos la bienvenida a Cata Club. Su inscripción quedó registrada.",
+                "Te damos la bienvenida a Cata Club. Tu inscripción quedó registrada.",
                 "Para confirmar que esta dirección es suya, use el botón de abajo "
                 "(el enlace es válido por 24 horas).",
-                "Después, acérquese al club o escríbanos por WhatsApp para "
+                "Después, acércate al club o escríbenos por WhatsApp para "
                 "registrar la inscripción y el primer pago: el club lo valida y "
                 "ahí se activa la membresía.",
-                "Si usted no se registró, ignore este correo.",
+                "Si no te registraste, ignora este correo.",
             ),
             cta_etiqueta="Verificar mi correo",
             cta_url=enlace,
@@ -632,18 +632,18 @@ class ServicioNotificaciones:
         # conserva tal cual.
         filas = [("Plan", plan)]
         if alumno:
-            filas.append(("Alumno", alumno))
+            filas.append(("Jugador", alumno))
         if monto is not None:
             filas.append(("Monto", formatear_monto_usd(monto)))
         filas.append(("Vigente hasta", vigencia_txt))
         parrafo_confirmacion = (
-            f"El club aprobó el pago de {alumno} y quedó registrado en su historial."
+            f"El club aprobó el pago de {alumno} y quedó registrado en tu historial."
             if alumno
-            else "El club aprobó su pago y quedó registrado en su historial."
+            else "El club aprobó tu pago y quedó registrado en tu historial."
         )
         texto, html = construir_correo(
             titulo="Pago aprobado",
-            preheader="El club aprobó su pago y su membresía queda vigente.",
+            preheader="El club aprobó tu pago y tu membresía queda vigente.",
             saludo=saludo,
             parrafos=(
                 parrafo_confirmacion,
@@ -696,7 +696,7 @@ class ServicioNotificaciones:
         saludo = f"Hola {nombre}," if nombre else "Hola,"
         motivo = (motivo_rechazo or "").strip()
         alumno = (nombre_alumno or "").strip()
-        sujeto = f"el pago de {alumno}" if alumno else "su pago"
+        sujeto = f"el pago de {alumno}" if alumno else "tu pago"
         enlace = f"{self._frontend_url}/student/payments"
         if alumno_id is not None:
             enlace += f"?alumno={alumno_id}"
@@ -726,11 +726,11 @@ class ServicioNotificaciones:
             parrafos=(
                 frase,
                 "Para volver a intentarlo, el procedimiento es el mismo de siempre:",
-                "1. Ingrese a \"Registrar un pago\" y elija cuántos meses va a pagar "
+                "1. Ingresa a \"Registrar un pago\" y elige cuántos meses vas a pagar "
                 "y la forma de pago.",
-                "2. Si paga por transferencia, adjunte el comprobante (PDF, JPG o PNG).",
-                "3. El pago queda en revisión en su historial hasta que el club lo apruebe.",
-                "Ante cualquier duda, escríbanos por WhatsApp.",
+                "2. Si pagas por transferencia, adjunta el comprobante (PDF, JPG o PNG).",
+                "3. El pago queda en revisión en tu historial hasta que el club lo apruebe.",
+                "Ante cualquier duda, escríbenos por WhatsApp.",
             ),
             filas=filas or None,
             chip=("Rechazado", "error"),
