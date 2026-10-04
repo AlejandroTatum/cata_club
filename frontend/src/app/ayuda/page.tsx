@@ -146,26 +146,26 @@ const QUICK_LINKS_BY_ROLE: Partial<Record<UserRole, RoleShortcut[]>> = {
     { title: "Asistencias", description: "Registros de entrenamiento", href: "/attendance" },
   ],
   trainer: [
-    { title: "Mi día", description: "Sus próximas sesiones", href: "/trainer" },
+    { title: "Mi día", description: "Tus próximas sesiones", href: "/trainer" },
     { title: "Pasar lista", description: "Registrar la asistencia", href: "/trainer/attendance" },
-    { title: "Mi perfil", description: "Sus datos y su cuenta", href: "/profile" },
+    { title: "Mi perfil", description: "Tus datos y tu cuenta", href: "/profile" },
   ],
   estudiante: [
-    { title: "Mi cuenta", description: "Su resumen y próximas sesiones", href: "/student" },
-    { title: "Mis pagos", description: "Sus cuotas y comprobantes", href: "/student/payments" },
-    { title: "Mi asistencia", description: "Su historial de entrenamientos", href: "/student/attendance" },
-    { title: "Mi perfil", description: "Sus datos y su cuenta", href: "/profile" },
+    { title: "Mi cuenta", description: "Tu resumen y próximas sesiones", href: "/student" },
+    { title: "Mis pagos", description: "Tus mensualidades y comprobantes", href: "/student/payments" },
+    { title: "Mi asistencia", description: "Tu historial de entrenamientos", href: "/student/attendance" },
+    { title: "Mi perfil", description: "Tus datos y tu cuenta", href: "/profile" },
   ],
   representante: [
-    { title: "Mi cuenta", description: "El resumen de su familia", href: "/student" },
-    { title: "Mis pagos", description: "Cuotas y comprobantes", href: "/student/payments" },
-    { title: "Agregar estudiante", description: "Sumar a otra persona a su cargo", href: "/student/add-dependent" },
-    { title: "Mi perfil", description: "Sus datos y su cuenta", href: "/profile" },
+    { title: "Mi cuenta", description: "El resumen de tu familia", href: "/student" },
+    { title: "Mis pagos", description: "Mensualidades y comprobantes", href: "/student/payments" },
+    { title: "Agregar jugador", description: "Sumar a otra persona a tu cargo", href: "/student/add-dependent" },
+    { title: "Mi perfil", description: "Tus datos y tu cuenta", href: "/profile" },
   ],
 };
 
 const PUBLIC_QUICK_LINKS: RoleShortcut[] = [
-  { title: "Iniciar sesión", description: "Ingresar a su cuenta", href: "/login" },
+  { title: "Iniciar sesión", description: "Ingresar a tu cuenta", href: "/login" },
   { title: "Horarios del club", description: "Días y horas de entrenamiento", href: "/#horarios" },
   { title: "Página principal", description: "Conocer el club", href: "/" },
 ];
@@ -233,7 +233,7 @@ export default function AyudaPage(): React.ReactElement {
       {visibleSections.length === 0 && (
         <EmptyState
           title="Sin resultados"
-          description="Pruebe con otra palabra o elija «Todas» las categorías."
+          description="Prueba con otra palabra o elige «Todas» las categorías."
         />
       )}
       {/*
@@ -296,18 +296,18 @@ export default function AyudaPage(): React.ReactElement {
 
       <div className="grid min-w-0 content-start gap-page">
         <InfoPanel title="Cómo usar esta página">
-          <p>Escriba una palabra en el buscador o elija una categoría para acotar las preguntas.</p>
-          <p>Toque una pregunta para ver su respuesta; se abre una a la vez por categoría.</p>
+          <p>Escribe una palabra en el buscador o elige una categoría para acotar las preguntas.</p>
+          <p>Toca una pregunta para ver su respuesta; se abre una a la vez por categoría.</p>
           <p>Los horarios y precios vigentes se consultan en la página principal del club.</p>
         </InfoPanel>
         <HowToPay />
-        <InfoPanel title="¿No encontró su respuesta?">
-          <p>Cuéntenos qué pasó y lo revisamos: se envía junto con una captura de esta pantalla.</p>
+        <InfoPanel title="¿No encontraste tu respuesta?">
+          <p>Cuéntanos qué pasó y lo revisamos: se envía junto con una captura de esta pantalla.</p>
           <Button variant="secondary" onClick={() => report.open()} disabled={report.busy}>
             Reportar un problema
           </Button>
         </InfoPanel>
-        <InfoPanel title="Qué encontrará aquí">
+        <InfoPanel title="Qué encontrarás aquí">
           <ul className="grid gap-2">
             {FAQ_SECTIONS.map((section) => (
               <li key={section.title} className="flex items-center justify-between gap-3">

@@ -402,7 +402,7 @@ describe("AyudaPage — search, categories and rail (admin v4)", () => {
     expect(within(split.children[0] as HTMLElement).getByTestId("faq-grid")).toBeInTheDocument();
     const rail = within(split.children[1] as HTMLElement);
     expect(rail.getByRole("heading", { name: "Cómo usar esta página" })).toBeVisible();
-    expect(rail.getByRole("heading", { name: "¿No encontró su respuesta?" })).toBeVisible();
+    expect(rail.getByRole("heading", { name: "¿No encontraste tu respuesta?" })).toBeVisible();
     expect(rail.getByRole("button", { name: "Reportar un problema" })).toBeInTheDocument();
   });
 
@@ -462,7 +462,7 @@ describe("AyudaPage — search, categories and rail (admin v4)", () => {
 
     mockRole = "representante";
     render(<AyudaPage />);
-    expect(screen.getByRole("link", { name: /Agregar estudiante/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /Agregar jugador/ })).toHaveAttribute(
       "href",
       "/student/add-dependent",
     );
