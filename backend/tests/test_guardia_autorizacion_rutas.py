@@ -226,7 +226,7 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/supresion-datos/{solicitud_id}/aprobar"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/supresion-datos/{solicitud_id}/ejecutar"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/supresion-datos/{solicitud_id}/rechazar"): frozenset({"ADMINISTRADOR"}),
-    ("DELETE", "/asistencias/desasignar-alumno"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
+    ("DELETE", "/asistencias/desasignar-alumno"): frozenset({"ADMINISTRADOR"}),
     # ABM de categorías (docs/archive/fixes/24-abm-categorias.md): alta/edición/baja
     # atómica de la categoria + sus días + sus horarios. Mismo tier que
     # PUT/DELETE de `/horarios` (ADMIN-only), no el más permisivo POST
@@ -235,6 +235,8 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/asistencias/categorias"): frozenset({"ADMINISTRADOR"}),
     ("PUT", "/asistencias/categorias/{codigo}"): frozenset({"ADMINISTRADOR"}),
     ("DELETE", "/asistencias/categorias/{codigo}"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/asistencias/categorias/{codigo}/mover-y-eliminar"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/asistencias/categorias/{codigo}/mover-alumnos"): frozenset({"ADMINISTRADOR"}),
     # Publicación en la landing (`visible_en_landing`): mismo tier que el
     # resto de la escritura sobre el catálogo -- es una decisión editorial
     # del club, no operar la clase del día.
@@ -253,7 +255,11 @@ RUTAS_ROLES_REQUERIDOS = {
     # mismo tier que su vecino de sponsors -- decidir qué muestra la landing
     # es una decisión del club, no de cualquier autenticado.
     ("DELETE", "/galeria/{entrada_id}"): frozenset({"ADMINISTRADOR"}),
+    ("GET", "/galeria/admin"): frozenset({"ADMINISTRADOR"}),
+    ("PUT", "/galeria/{entrada_id}"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/galeria/{entrada_id}/mover"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/asistencias/horarios/alumnos"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
+    ("GET", "/asistencias/horarios/conteos"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/horarios/{horario_id}/alumnos"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/reportes"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/reportes/pdf"): frozenset({"ADMINISTRADOR"}),
@@ -326,9 +332,14 @@ RUTAS_ROLES_REQUERIDOS = {
     # Issue #389, slice 4a: historial de correcciones -- mismo tier que
     # `corregir` (auditoría de registros que pueden ser de menores).
     ("GET", "/asistencias/{asistencia_id}/correcciones"): frozenset({"ADMINISTRADOR"}),
+    # QA4 ENT-25: el entrenador pide la corrección; solo el admin la resuelve.
+    ("POST", "/asistencias/solicitudes-correccion"): frozenset({"ENTRENADOR"}),
+    ("GET", "/asistencias/solicitudes-correccion"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
+    ("POST", "/asistencias/solicitudes-correccion/{solicitud_id}/aprobar"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/asistencias/solicitudes-correccion/{solicitud_id}/rechazar"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/asistencias/"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/asistencias/lote"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
-    ("POST", "/asistencias/asignar-alumno"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
+    ("POST", "/asistencias/asignar-alumno"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/asistencias/horarios"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/auth/registro"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/fichas-medicas/"): frozenset({"ADMINISTRADOR"}),

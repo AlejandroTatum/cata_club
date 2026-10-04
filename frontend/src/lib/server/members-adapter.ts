@@ -63,6 +63,8 @@ import type { BackendPagoListItem } from "@/lib/server/payments-adapter";
 export interface DeudaBulkItem {
   mesesAdeudados: number;
   montoMensual: number;
+  /** End of the last approved coverage — «since when» the member owes (ADMA-24). */
+  ultimaCoberturaFin?: string | null;
 }
 
 /** Fields of `PersonaResponseDTO` this feature needs. */
@@ -250,7 +252,10 @@ function buildMemberStudentSummary(
           // backend omitting it must resolve to "no gratuity" here.
           esGratuidadFamiliar: membresia.esGratuidadFamiliar ?? false,
           ...(deuda
-            ? { mesesAdeudados: deuda.mesesAdeudados, montoAdeudado: deuda.mesesAdeudados * deuda.montoMensual }
+            ? {
+              mesesAdeudados: deuda.mesesAdeudados, montoAdeudado: deuda.mesesAdeudados * deuda.montoMensual,
+              deudaDesde: deuda.ultimaCoberturaFin ?? null,
+            }
             : {}),
         }
       : null,

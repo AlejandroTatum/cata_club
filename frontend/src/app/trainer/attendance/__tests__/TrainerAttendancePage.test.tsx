@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import TrainerAttendancePage from "@/app/trainer/attendance/page";
 import { createAuthenticatedAuth } from "@/components/__tests__/test-utils";
 import { ToastProvider } from "@/contexts/ToastContext";
@@ -107,19 +107,23 @@ afterEach(() => {
 const mockFetchTrainingSchedules = vi.fn().mockResolvedValue([]);
 const mockFetchAlumnosPorHorario = vi.fn().mockResolvedValue([]);
 const mockFetchAttendanceRecords = vi.fn().mockResolvedValue([]);
-const mockFetchRosterDeTodosLosHorarios = vi.fn().mockResolvedValue([]);
+const mockFetchConteosPorHorario = vi.fn().mockResolvedValue([]);
 const mockRegisterAttendance = vi.fn();
 const mockCorrectAttendance = vi.fn();
 const mockFetchAttendanceCorrections = vi.fn().mockResolvedValue([]);
+const mockFetchCorrectionRequests = vi.fn().mockResolvedValue([]);
+const mockCreateCorrectionRequest = vi.fn();
 
 vi.mock("@/services/api", () => ({
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
   fetchAlumnosPorHorario: (horarioId: number) => mockFetchAlumnosPorHorario(horarioId),
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
-  fetchRosterDeTodosLosHorarios: () => mockFetchRosterDeTodosLosHorarios(),
+  fetchConteosPorHorario: (options?: unknown) => mockFetchConteosPorHorario(options),
   registerAttendance: (request: unknown) => mockRegisterAttendance(request),
   correctAttendance: (asistenciaId: number, data: unknown) => mockCorrectAttendance(asistenciaId, data),
   fetchAttendanceCorrections: (asistenciaId: number) => mockFetchAttendanceCorrections(asistenciaId),
+  fetchCorrectionRequests: (filters?: unknown) => mockFetchCorrectionRequests(filters),
+  createCorrectionRequest: (data: unknown) => mockCreateCorrectionRequest(data),
   fetchNotificaciones: vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 }),
   marcarNotificacionLeida: vi.fn().mockResolvedValue(undefined),
 }));
@@ -154,7 +158,7 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
 
-    expect(await screen.findByText("Seleccione el horario de entrenamiento:")).toBeInTheDocument();
+    expect(await screen.findByText("Selecciona el horario de entrenamiento:")).toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
@@ -164,7 +168,7 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/student"));
-    expect(screen.queryByText("Seleccione el horario de entrenamiento:")).not.toBeInTheDocument();
+    expect(screen.queryByText("Selecciona el horario de entrenamiento:")).not.toBeInTheDocument();
   });
 
   it("lets a trainer directly select each visibly labeled attendance state", async () => {
@@ -187,14 +191,15 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     // Issue #1373: the two authorized-absence states are first-class controls.
     expect(within(stateSelector).getByRole("radio", { name: "Enfermo" })).toBeVisible();
     expect(within(stateSelector).getByRole("radio", { name: "Competencia" })).toBeVisible();
-    const justified = within(stateSelector).getByRole("radio", { name: "Justificado" });
+    expect(within(stateSelector).queryByRole("radio", { name: "Justificado" })).toBeNull();
+    const sick = within(stateSelector).getByRole("radio", { name: "Enfermo" });
 
-    fireEvent.click(justified);
+    fireEvent.click(sick);
 
-    expect(justified).toHaveAttribute("aria-checked", "true");
+    expect(sick).toHaveAttribute("aria-checked", "true");
   });
 
-  it("submits the existing justified state mapping after direct selection", async () => {
+  it("submits the sick state mapping after direct selection", async () => {
     const trainerAuth = createAuthenticatedAuth("trainer", "Coach Torres");
     if (trainerAuth.session) trainerAuth.session.user.id = "17";
     mockUseAuth.mockReturnValue(trainerAuth);
@@ -210,14 +215,14 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     fireEvent.click(await screen.findByRole("button", { name: /18:00/i }));
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     const stateSelector = await screen.findByRole("radiogroup", { name: "Estado de asistencia de Ana López" });
-    fireEvent.click(within(stateSelector).getByRole("radio", { name: "Justificado" }));
+    fireEvent.click(within(stateSelector).getByRole("radio", { name: "Enfermo" }));
     fireEvent.click(screen.getByRole("button", { name: "Revisar y confirmar" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirmar asistencia" }));
 
     await waitFor(() => {
       expect(mockRegisterAttendance).toHaveBeenCalledWith(expect.objectContaining({
         horarioId: 12,
-        students: [{ personaId: 9, estado: "justified" }],
+        students: [{ personaId: 9, estado: "sick" }],
       }));
     });
   });
@@ -250,7 +255,7 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     expect(screen.queryByText(/Nivel \d/)).not.toBeInTheDocument();
   });
 
-  it("shows an explanatory empty state and blocks final submit when the horario has no assigned alumnos", async () => {
+  it("shows an explanatory empty state and blocks final submit when the horario has no assigned jugadores", async () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
     mockFetchTrainingSchedules.mockResolvedValue([
       { id: 12, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres" },
@@ -262,7 +267,7 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     fireEvent.click(await screen.findByRole("button", { name: /18:00/i }));
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
 
-    expect(await screen.findByText("Este horario no tiene alumnos asignados.")).toBeInTheDocument();
+    expect(await screen.findByText("Este horario no tiene jugadores asignados.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
   });
 
@@ -432,7 +437,7 @@ describe("TrainerAttendancePage — schedule accordion grouped by day (Slice A)"
   // the existing bulk action (K5's `markRemainingPresent`, unchanged by this
   // cluster) reviews the whole roster regardless of how many render on
   // screen — the fix is that all 15 are now ON screen to begin with.
-  it("marks 15 alumnos as reviewed-present in a single interaction, honestly", async () => {
+  it("marks 15 jugadores as reviewed-present in a single interaction, honestly", async () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
     mockFetchTrainingSchedules.mockResolvedValue([
       { id: 12, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres" },
@@ -465,7 +470,7 @@ describe("TrainerAttendancePage — schedule accordion grouped by day (Slice A)"
     expect(marker).toHaveTextContent("0/15");
 
     // Interaction 1 of ≤3: the bulk action.
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
 
     // `reviewedCount`, not the raw "presente" default: this must read the
     // truth of what the trainer actually confirmed, not what the roster
@@ -587,7 +592,7 @@ describe("TrainerAttendancePage — the present default never passes for a revie
       "aria-checked",
       "true",
     );
-    for (const label of ["Ausente", "Tardanza", "Justificado"]) {
+    for (const label of ["Ausente", "Tardanza", "Enfermo"]) {
       expect(within(group).getByRole("radio", { name: label })).toHaveAttribute("aria-checked", "false");
     }
     // …and the value being present must not read as a decision anybody made.
@@ -607,7 +612,7 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     await openRoster();
 
     await screen.findByText("Student 01");
-    fireEvent.change(screen.getByRole("textbox", { name: "Filtrar alumnos" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Filtrar jugadores" }), {
       target: { value: "Student 01" },
     });
     expect(screen.queryByText("Student 11")).not.toBeInTheDocument();
@@ -615,7 +620,7 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     // the filter hides is exactly the one about to be filed present sight
     // unseen.
     expect(screen.getByText("25 sin revisar")).toBeInTheDocument();
-    expect(screen.getByText("25 alumnos sin revisar")).toBeInTheDocument();
+    expect(screen.getByText("25 jugadores sin revisar")).toBeInTheDocument();
   });
 
   it("carries the unreviewed count into the confirmation summary when only some students were reviewed", async () => {
@@ -644,7 +649,7 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     expect(await screen.findByText("25 presentes")).toBeInTheDocument();
     expect(screen.getByText("15 sin revisar")).toBeInTheDocument();
     expect(
-      screen.getByText(/15 de 25 alumnos siguen en "Presente" porque nadie los revisó/),
+      screen.getByText(/15 de 25 jugadores siguen en "Presente" porque nadie los revisó/),
     ).toBeInTheDocument();
   });
 
@@ -660,7 +665,7 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     const next = screen.getByRole("button", { name: /Revisar y confirmar/ });
     expect(next).toBeEnabled();
     expect(next).not.toHaveAttribute("aria-describedby");
-    expect(screen.getByText("3 alumnos sin revisar")).toBeInTheDocument();
+    expect(screen.getByText("3 jugadores sin revisar")).toBeInTheDocument();
   });
 
   it("stops flagging a student the moment the trainer decides on them", async () => {
@@ -726,13 +731,13 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     await openRoster();
     await screen.findByText("Student 01");
 
-    fireEvent.change(screen.getByLabelText("Filtrar alumnos"), { target: { value: "zzz" } });
-    expect(await screen.findByText("No se encontraron alumnos con ese nombre.")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Filtrar jugadores"), { target: { value: "zzz" } });
+    expect(await screen.findByText("No se encontraron jugadores con ese nombre.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Borrar el filtro" }));
 
     expect(await screen.findByText("Student 01")).toBeInTheDocument();
-    expect(screen.getByLabelText("Filtrar alumnos")).toHaveValue("");
+    expect(screen.getByLabelText("Filtrar jugadores")).toHaveValue("");
   });
 
   it("marks every remaining student present across all pages via the bulk action", async () => {
@@ -742,18 +747,18 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     await openRoster();
     await screen.findByText("Student 01");
 
-    // Pre-mark one student justified — the bulk action must not overwrite an
+    // Pre-mark one student sick — the bulk action must not overwrite an
     // explicit decision the trainer already made.
     const first = screen.getByRole("radiogroup", { name: /Student 01/ });
-    fireEvent.click(within(first).getByRole("radio", { name: "Justificado" }));
+    fireEvent.click(within(first).getByRole("radio", { name: "Enfermo" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
 
     // The button is how a trainer says "I looked, the rest are here", so it
     // has to clear the flag as well as set the state.
     expect(screen.queryByText(/sin revisar/)).not.toBeInTheDocument();
     expect(screen.getByText("24 presentes")).toBeInTheDocument();
-    expect(within(first).getByRole("radio", { name: "Justificado" })).toHaveAttribute("aria-checked", "true");
+    expect(within(first).getByRole("radio", { name: "Enfermo" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("button", { name: /Revisar y confirmar/ })).toBeEnabled();
   });
 
@@ -768,7 +773,7 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     await openRoster();
     await screen.findByText("Student 01");
 
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
@@ -788,11 +793,11 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     await openRoster();
 
     const group = await screen.findByRole("radiogroup", { name: /Ana López/ });
-    expect(screen.getByRole("button", { name: "Marcar restantes presentes" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Marcar todos presentes" })).toBeInTheDocument();
 
     fireEvent.click(within(group).getByRole("radio", { name: "Presente" }));
 
-    expect(screen.queryByRole("button", { name: "Marcar restantes presentes" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Marcar todos presentes" })).not.toBeInTheDocument();
   });
 
   it("renders an unreviewed row with a neutral dashed outline that a reviewed row does not have", async () => {
@@ -850,7 +855,7 @@ describe("TrainerAttendancePage — attendance state selector affordances", () =
       labelledBy.map((id) => document.getElementById(id)?.textContent).join(" "),
     ).toContain("Ana López");
 
-    expect(within(group).getAllByRole("radio")).toHaveLength(6);
+    expect(within(group).getAllByRole("radio")).toHaveLength(5);
     expect(group.querySelector("fieldset")).toBeNull();
   });
 
@@ -942,18 +947,16 @@ describe("TrainerAttendancePage — teclado y rótulos del radiogroup de asisten
     await openRoster();
 
     const group = await screen.findByRole("radiogroup", { name: /Ana López/ });
-    fireEvent.click(within(group).getByRole("radio", { name: "Justificado" }));
-    const justificado = within(group).getByRole("radio", { name: "Justificado" });
-    justificado.focus();
+    fireEvent.click(within(group).getByRole("radio", { name: "Competencia" }));
+    const competencia = within(group).getByRole("radio", { name: "Competencia" });
+    competencia.focus();
 
-    fireEvent.keyDown(justificado, { key: "ArrowRight" });
+    fireEvent.keyDown(competencia, { key: "ArrowRight" });
 
-    // Issue #1373: Justificado is no longer last — the walk continues into
-    // the authorized-absence states (justified → sick → competition) before
-    // wrapping around to present.
-    const enfermo = within(group).getByRole("radio", { name: "Enfermo" });
-    expect(enfermo).toHaveAttribute("aria-checked", "true");
-    expect(document.activeElement).toBe(enfermo);
+    // Competencia is the last control in the row; ArrowRight wraps to the first.
+    const presente = within(group).getByRole("radio", { name: "Presente" });
+    expect(presente).toHaveAttribute("aria-checked", "true");
+    expect(document.activeElement).toBe(presente);
   });
 
   it("moves backward and wraps with ArrowLeft", async () => {
@@ -967,7 +970,7 @@ describe("TrainerAttendancePage — teclado y rótulos del radiogroup de asisten
     fireEvent.keyDown(presente, { key: "ArrowLeft" });
 
     // Issue #1373: wrapping left from the first state lands on the NEW last
-    // state (Competencia), not Justificado.
+    // state (Competencia).
     const competencia = within(group).getByRole("radio", { name: "Competencia" });
     expect(competencia).toHaveAttribute("aria-checked", "true");
     expect(document.activeElement).toBe(competencia);
@@ -1060,7 +1063,7 @@ describe("TrainerAttendancePage — the fiche is the target", () => {
     expect(row).toHaveAttribute("data-attendance", "present");
     expect(row).toHaveAttribute("data-reviewed", "true");
 
-    for (const expected of ["late", "justified", "sick", "competition", "absent", "present"]) {
+    for (const expected of ["late", "sick", "competition", "absent", "present"]) {
       fireEvent.click(fiche);
       expect(row).toHaveAttribute("data-attendance", expected);
     }
@@ -1106,8 +1109,8 @@ describe("TrainerAttendancePage — the fiche is the target", () => {
     expect(within(group).getAllByRole("radio", { checked: true })).toHaveLength(1);
 
     // …and the explicit control still wins when used directly.
-    fireEvent.click(within(group).getByRole("radio", { name: "Justificado" }));
-    expect(within(group).getByRole("radio", { name: "Justificado" })).toHaveAttribute(
+    fireEvent.click(within(group).getByRole("radio", { name: "Enfermo" }));
+    expect(within(group).getByRole("radio", { name: "Enfermo" })).toHaveAttribute(
       "aria-checked",
       "true",
     );
@@ -1130,7 +1133,7 @@ describe("TrainerAttendancePage — the fiche is the target", () => {
     // What the row still carries: the fiche that cycles the state, and the
     // radiogroup's six explicit controls.
     expect(within(row).getByRole("button", { name: /^Ana López:/ })).toBeInTheDocument();
-    expect(within(row).getAllByRole("radio")).toHaveLength(6);
+    expect(within(row).getAllByRole("radio")).toHaveLength(5);
   });
 
   it("names the tap target with the student, their current state, and whether it is anybody's answer", async () => {
@@ -1179,9 +1182,9 @@ describe("TrainerAttendancePage — live marker and sticky commit bar", () => {
     // It reads 0/12 from the first second — nobody has been reviewed yet.
     const marker = screen.getByText("0", { selector: "[aria-live]" });
     expect(marker).toHaveTextContent("0/12");
-    expect(screen.getByText("12 alumnos sin revisar")).toBeInTheDocument();
+    expect(screen.getByText("12 jugadores sin revisar")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
 
     expect(marker).toHaveTextContent("12/12");
     expect(screen.queryByText(/sin revisar/)).not.toBeInTheDocument();
@@ -1249,7 +1252,7 @@ describe("TrainerAttendancePage — live marker and sticky commit bar", () => {
 
     expect(screen.getByText("12 presentes")).toBeInTheDocument();
     expect(screen.getByText("12 sin revisar")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     expect(screen.getByText("12 presentes")).toBeInTheDocument();
     expect(screen.queryByText(/sin revisar/)).not.toBeInTheDocument();
   });
@@ -1358,7 +1361,7 @@ describe("TrainerAttendancePage — draft persistence", () => {
     const first = render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -1390,7 +1393,7 @@ describe("TrainerAttendancePage — draft persistence", () => {
     const first = render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     expect(window.sessionStorage.getItem("cata_attendance_draft:12:2026-07-21")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
@@ -1495,7 +1498,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
   // ENT-03 (supersedes the #485 decision): a student enrolled AFTER the other
   // students were recorded has no row, so the list is NOT closed — it is partial,
   // editable only for that student, who is NOT pre-filled as "Presente".
-  it("trata como parcial —no cerrada— una lista a la que le falta un alumno (ENT-03)", async () => {
+  it("trata como parcial —no cerrada— una lista a la que le falta un jugador (ENT-03)", async () => {
     mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
     mockFetchAlumnosPorHorario.mockResolvedValue([
       ...buildAlumnoHorarios(3),
@@ -1527,7 +1530,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     expect(screen.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
   });
 
-  it("al completar una lista parcial envía solo al alumno que falta (ENT-03/ENT-04)", async () => {
+  it("al completar una lista parcial envía solo al jugador que falta (ENT-03/ENT-04)", async () => {
     mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
     mockFetchAlumnosPorHorario.mockResolvedValue([
       ...buildAlumnoHorarios(3),
@@ -1583,7 +1586,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     expect(window.sessionStorage.getItem("cata_attendance_draft:12:2026-07-21")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
@@ -1625,7 +1628,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     // The network is down for the save AND for the reload that follows it.
     mockFetchAlumnosPorHorario.mockRejectedValueOnce(new Error("Failed to fetch"));
@@ -1648,7 +1651,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     // 2026-07-21 is a Tuesday (the pinned club clock of this file).
     expect(await screen.findByText("Sesión del mar 21/07")).toBeInTheDocument();
@@ -1658,7 +1661,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     expect(screen.getByText("Sesión del mar 21/07")).toBeInTheDocument();
   });
 
-  // ENT-12: the "Deshacer" offer of "Marcar restantes presentes" must not outlive
+  // ENT-12: the "Deshacer" offer of "Marcar todos presentes" must not outlive
   // the roll call — it used to hang over a receipt that was already closed.
   it("descarta el aviso «Deshacer» al confirmar la asistencia (ENT-12)", async () => {
     mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
@@ -1673,20 +1676,20 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     );
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
-    expect(await screen.findByText("3 alumnos marcados presentes")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
+    expect(await screen.findByText("3 jugadores marcados presentes")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
     expect(await screen.findByText("Asistencia registrada")).toBeInTheDocument();
-    expect(screen.queryByText("3 alumnos marcados presentes")).not.toBeInTheDocument();
+    expect(screen.queryByText("3 jugadores marcados presentes")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Deshacer" })).not.toBeInTheDocument();
   });
 
   // ENT-06: the message follows the KIND of failure.
   it.each([
     [403, /no tiene permiso/i],
-    [409, /Actualice la página/],
+    [409, /Actualiza la página/],
     [503, /servidor tuvo un problema/],
   ])("muestra un mensaje distinto para un error %i del guardado (ENT-06)", async (status, expected) => {
     mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
@@ -1696,7 +1699,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
@@ -1730,7 +1733,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     );
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
@@ -1739,7 +1742,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     // would match either node — this test is about the TOAST specifically,
     // the one that is allowed to disappear on its own clock.
     const networkCutToast = await screen.findByText(
-      "No hay conexión con el servidor. Sus marcas siguen guardadas en este equipo; revise su conexión e intente de nuevo.",
+      "No hay conexión con el servidor. Tus marcas siguen guardadas en este equipo; revisa tu conexión e intenta de nuevo.",
       { selector: ".toast-error p" },
     );
     expect(networkCutToast).toBeInTheDocument();
@@ -1752,7 +1755,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
       vi.advanceTimersByTime(15_000);
     });
     expect(
-      screen.queryByText("No hay conexión con el servidor. Sus marcas siguen guardadas en este equipo; revise su conexión e intente de nuevo.", {
+      screen.queryByText("No hay conexión con el servidor. Tus marcas siguen guardadas en este equipo; revisa tu conexión e intenta de nuevo.", {
         selector: ".toast-error p",
       }),
     ).not.toBeInTheDocument();
@@ -1770,7 +1773,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
     const timeoutToast = await screen.findByText(
-      "No hay conexión con el servidor. Sus marcas siguen guardadas en este equipo; revise su conexión e intente de nuevo.",
+      "No hay conexión con el servidor. Tus marcas siguen guardadas en este equipo; revisa tu conexión e intenta de nuevo.",
       { selector: ".toast-error p" },
     );
     expect(timeoutToast).toBeInTheDocument();
@@ -1801,13 +1804,13 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     );
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
     // The persistent, inline copy — distinct from the toast's own `<p>`, and
     // the one this test is actually about.
-    await screen.findByText("No hay conexión con el servidor. Sus marcas siguen guardadas en este equipo; revise su conexión e intente de nuevo.", {
+    await screen.findByText("No hay conexión con el servidor. Tus marcas siguen guardadas en este equipo; revisa tu conexión e intenta de nuevo.", {
       selector: ".alert-error",
     });
 
@@ -1818,7 +1821,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     });
 
     expect(
-      screen.getByText("No hay conexión con el servidor. Sus marcas siguen guardadas en este equipo; revise su conexión e intente de nuevo.", {
+      screen.getByText("No hay conexión con el servidor. Tus marcas siguen guardadas en este equipo; revisa tu conexión e intenta de nuevo.", {
         selector: ".alert-error",
       }),
     ).toBeInTheDocument();
@@ -2275,7 +2278,7 @@ describe("TrainerAttendancePage — refreshes the week-taken guard after a reset
   async function fileSession(): Promise<void> {
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -2306,7 +2309,7 @@ describe("TrainerAttendancePage — refreshes the week-taken guard after a reset
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Registrar otra asistencia" }));
-    await screen.findByText("Elija el horario");
+    await screen.findByText("Elige el horario");
 
     await waitFor(() =>
       expect(mockFetchAttendanceRecords.mock.calls.length).toBeGreaterThan(callsBeforeReset),
@@ -2337,7 +2340,7 @@ describe("TrainerAttendancePage — refreshes the week-taken guard after a reset
     const callsBeforeBack = mockFetchAttendanceRecords.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: /Atrás/ }));
 
-    expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
+    expect(await screen.findByText("Elige el horario")).toBeInTheDocument();
     const scheduleButton = await screen.findByRole("button", { name: /18:00/i });
     // No session was ever filed — the card stays exactly as it was on mount.
     expect(scheduleButton).toBeEnabled();
@@ -2366,7 +2369,7 @@ describe("TrainerAttendancePage — partial failures name the students", () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -2398,7 +2401,7 @@ describe("TrainerAttendancePage — partial failures name the students", () => {
   it("still names an id it cannot match rather than dropping it silently", async () => {
     await fileSessionWithFailures([{ personaId: 999, message: "conflict" }]);
 
-    expect(within(screen.getByRole("alert")).getByText("Alumno #999")).toBeInTheDocument();
+    expect(within(screen.getByRole("alert")).getByText("Jugador #999")).toBeInTheDocument();
   });
 
   it("shows no failure block at all when everything saved", async () => {
@@ -2426,7 +2429,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
   async function fileSession(): Promise<void> {
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -2440,20 +2443,20 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await fileSession();
 
-    const list = screen.getByRole("list", { name: "Asistencia por alumno" });
+    const list = screen.getByRole("list", { name: "Asistencia por jugador" });
     const rows = within(list).getAllByRole("listitem");
     expect(rows).toHaveLength(3);
     expect(within(rows[0]).getByText("Student 01")).toBeInTheDocument();
     expect(within(rows[0]).getByText("Presente")).toBeInTheDocument();
 
     const tiles = screen.getByRole("list", { name: "Conteo por estado" });
-    expect(within(tiles).getAllByRole("listitem")).toHaveLength(6);
+    expect(within(tiles).getAllByRole("listitem")).toHaveLength(5);
     expect(within(tiles).getByText("Ausente").closest("li")).toHaveTextContent("0");
   });
 
   // Decision 2: with failed records, the breakdown counts what was SAVED, not
-  // what the trainer marked. Student 02 is marked "Justificado" but fails to
-  // save, so the receipt must show 0 justificados, not 1.
+  // what the trainer marked. Student 02 is marked "Enfermo" but fails to
+  // save, so the receipt must show 0 enfermos, not 1.
   it("counts what was saved, not what was marked, when a record failed", async () => {
     mockRegisterAttendance.mockReset().mockResolvedValue({
       createdCount: 2,
@@ -2464,19 +2467,19 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     await screen.findByText("Student 01");
     fireEvent.click(
       within(screen.getByRole("radiogroup", { name: /Student 02/ })).getByRole("radio", {
-        name: "Justificado",
+        name: "Enfermo",
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
 
-    const list = screen.getByRole("list", { name: "Asistencia por alumno" });
+    const list = screen.getByRole("list", { name: "Asistencia por jugador" });
     expect(within(list).getAllByRole("listitem")).toHaveLength(2);
     expect(within(list).queryByText("Student 02")).not.toBeInTheDocument();
     const tiles = screen.getByRole("list", { name: "Conteo por estado" });
-    expect(within(tiles).getByText("Justificado").closest("li")).toHaveTextContent("0");
+    expect(within(tiles).getByText("Enfermo").closest("li")).toHaveTextContent("0");
     expect(within(tiles).getByText("Presente").closest("li")).toHaveTextContent("2");
   });
 
@@ -2498,7 +2501,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
 
     expect(
       screen.getByRole("img", {
-        name: "3 presentes, 0 tardanzas, 0 justificados, 0 enfermos, 0 competencias y 0 ausentes sobre 3 registros",
+        name: "3 presentes, 0 tardanzas, 0 enfermos, 0 competencias y 0 ausentes sobre 3 registros",
       }),
     ).toBeInTheDocument();
   });
@@ -2541,7 +2544,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Registrar otra asistencia" }));
 
-    expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
+    expect(await screen.findByText("Elige el horario")).toBeInTheDocument();
   });
 
   // Decision 2: the primary action displaces to the retry — it is the only
@@ -2555,7 +2558,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -2580,7 +2583,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -2608,7 +2611,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -2632,7 +2635,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -2673,7 +2676,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -2906,7 +2909,7 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
 
     // Step 2, not /trainer and not "Elija el horario".
     expect(screen.getByRole("button", { name: /Revisar y confirmar/ })).toBeInTheDocument();
-    expect(screen.queryByText("Elija el horario")).not.toBeInTheDocument();
+    expect(screen.queryByText("Elige el horario")).not.toBeInTheDocument();
     expect(window.location.search).toBe("?horario=12&paso=lista");
     expect(
       within(screen.getByRole("radiogroup", { name: /Student 01/ })).getByRole("radio", {
@@ -2926,7 +2929,7 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
     expect(screen.getByRole("button", { name: /Revisar y confirmar/ })).toBeInTheDocument();
 
     await pressBrowserBack();
-    expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
+    expect(await screen.findByText("Elige el horario")).toBeInTheDocument();
     expect(window.location.search).toBe("");
   });
 
@@ -2941,10 +2944,10 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
     expect(screen.getByRole("button", { name: /Revisar y confirmar/ })).toBeInTheDocument();
 
     await pressBrowserBack();
-    expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
+    expect(await screen.findByText("Elige el horario")).toBeInTheDocument();
   });
 
-  it("resumes the roll call on a reload instead of restarting at Elija el horario", async () => {
+  it("resumes the roll call on a reload instead of restarting at Elige el horario", async () => {
     const first = render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
@@ -3013,7 +3016,7 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
 
-    expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
+    expect(await screen.findByText("Elige el horario")).toBeInTheDocument();
     await waitFor(() => expect(window.location.search).toBe(""));
     expect(mockFetchAlumnosPorHorario).not.toHaveBeenCalled();
   });
@@ -3022,7 +3025,7 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -3062,7 +3065,7 @@ describe("TrainerAttendancePage — leaving asks first", () => {
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("¿Salir sin registrar la asistencia?")).toBeInTheDocument();
-    expect(within(dialog).getByText(/Marcó 1 de 3 alumnos/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Marcaste 1 de 3 jugadores/)).toBeInTheDocument();
     // Nothing has navigated yet.
     expect(mockPush).not.toHaveBeenCalled();
 
@@ -3227,9 +3230,9 @@ describe("TrainerAttendancePage — the picker offers an unfinished list back", 
 
     // Still the picker — a trainer who came to file a DIFFERENT session must
     // not land inside the old one.
-    expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
+    expect(await screen.findByText("Elige el horario")).toBeInTheDocument();
     expect(screen.getByText("Tiene una lista sin terminar")).toBeInTheDocument();
-    expect(screen.getByText(/1 alumno marcado/)).toBeInTheDocument();
+    expect(screen.getByText(/1 jugador marcado/)).toBeInTheDocument();
     expect(screen.getByText("Martes 18:00 — 19:00")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Retomar la lista/ }));
@@ -3272,7 +3275,7 @@ describe("TrainerAttendancePage — the picker offers an unfinished list back", 
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
 
-    expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
+    expect(await screen.findByText("Elige el horario")).toBeInTheDocument();
     expect(screen.queryByText(/lista sin terminar/)).not.toBeInTheDocument();
   });
 });
@@ -3367,7 +3370,7 @@ describe("TrainerAttendancePage — undo", () => {
     await openRoster();
     await screen.findByText("Student 01");
 
-    fireEvent.click(screen.getByRole("button", { name: /marcar restantes presentes/i }));
+    fireEvent.click(screen.getByRole("button", { name: /marcar todos presentes/i }));
     expect(screen.queryByText(/sin revisar/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^deshacer/i }));
@@ -3378,7 +3381,7 @@ describe("TrainerAttendancePage — undo", () => {
 
   it("offers the bulk undo in the toast too — it changes rows nobody deliberately reviewed", async () => {
     // 25 students, all rendered at once (#318/#58 removed the wizard's
-    // pagination). "Marcar restantes presentes" still rewrites every
+    // pagination). "Marcar todos presentes" still rewrites every
     // unreviewed row in one tap, including ones far below the fold the
     // trainer never scrolled to, so the confirmation of that action has to
     // carry its own way back.
@@ -3394,7 +3397,7 @@ describe("TrainerAttendancePage — undo", () => {
     await openRoster();
     await screen.findByText("Student 01");
 
-    fireEvent.click(screen.getByRole("button", { name: /marcar restantes presentes/i }));
+    fireEvent.click(screen.getByRole("button", { name: /marcar todos presentes/i }));
 
     const toast = await screen.findByRole("status");
     fireEvent.click(within(toast).getByRole("button", { name: "Deshacer" }));
@@ -3454,7 +3457,7 @@ describe("TrainerAttendancePage — a corrected session keeps its own date", () 
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
@@ -3505,7 +3508,7 @@ describe("TrainerAttendancePage — a corrected session keeps its own date", () 
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
 
-    expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
+    expect(await screen.findByText("Elige el horario")).toBeInTheDocument();
     expect(mockFetchAlumnosPorHorario).not.toHaveBeenCalled();
   });
 
@@ -3523,7 +3526,7 @@ describe("TrainerAttendancePage — a corrected session keeps its own date", () 
       horarioId: 12,
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
@@ -3605,7 +3608,7 @@ describe("TrainerAttendancePage — a schedule from a different day keeps ITS OW
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openWednesdayRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
@@ -3735,5 +3738,155 @@ describe("TrainerAttendancePage — el detalle de la sesión coincide con lo ya 
     // Los 15 inscriptos completos, ninguno perdido por pedir la fecha
     // equivocada -- el mismo número que reporta Admin para ese horario.
     expect(screen.getByText("Student 15")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// QA4 ENT-25 — a trainer cannot correct a closed list, so the row offers
+// «Pedir corrección»: a request to administration, with its outcome shown on
+// the same row.
+// ---------------------------------------------------------------------------
+
+describe("TrainerAttendancePage — pedir corrección a administración (QA4 ENT-25)", () => {
+  function filedRecords(fecha = "2026-07-21"): unknown[] {
+    return buildAlumnoHorarios(3).map((raw, i) => {
+      const s = raw as { personaId: number; personaNombreCompleto: string };
+      return {
+        id: String(9001 + i),
+        fecha,
+        horario: "Martes 18:00 — 19:00",
+        horarioId: 12,
+        personaId: s.personaId,
+        estudiante: s.personaNombreCompleto,
+        estado: "present",
+      };
+    });
+  }
+
+  function request(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      id: 5,
+      asistenciaId: 9001,
+      personaId: 100,
+      personaNombre: "Student 01",
+      horarioId: 12,
+      fecha: "2026-07-21",
+      horarioEtiqueta: "Juvenil · martes 18:00",
+      estadoActual: "present",
+      estadoSolicitado: "absent",
+      motivo: "Debía figurar como ausente.",
+      solicitadoPorId: 17,
+      solicitadoPorNombre: "Coach Torres",
+      solicitadoEn: "2026-07-21T20:00:00Z",
+      estado: "PENDIENTE",
+      resueltoPorNombre: null,
+      resueltoEn: null,
+      motivoResolucion: null,
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    mockReplace.mockReset();
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue([SCHEDULE]);
+    mockFetchAlumnosPorHorario.mockReset().mockResolvedValue(buildAlumnoHorarios(3));
+    mockFetchAttendanceRecords.mockReset();
+    mockFetchCorrectionRequests.mockReset().mockResolvedValue([]);
+    mockCreateCorrectionRequest.mockReset();
+  });
+
+  async function openClosedList(records: unknown[], fecha?: string): Promise<void> {
+    mockFetchAttendanceRecords.mockResolvedValue(records);
+    const fechaQuery = fecha ? `&fecha=${fecha}` : "";
+    window.history.replaceState(null, "", `/trainer/attendance?horario=12${fechaQuery}&paso=lista`);
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await screen.findByText("Student 01");
+  }
+
+  it("ofrece «Pedir corrección» al entrenador en cada fila registrada, y no al administrador", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    await openClosedList(filedRecords());
+    expect(screen.getAllByRole("button", { name: "Pedir corrección" })).toHaveLength(3);
+    cleanup();
+
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
+    await openClosedList(filedRecords());
+    expect(screen.queryByRole("button", { name: "Pedir corrección" })).not.toBeInTheDocument();
+    expect(mockFetchCorrectionRequests).toHaveBeenCalledTimes(1);
+  });
+
+  it("explica en la nota de lista cerrada cómo pedir la corrección, en «tú»", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    await openClosedList(filedRecords());
+
+    expect(screen.getByText(/pide la corrección a administración desde el jugador/)).toBeInTheDocument();
+    expect(screen.queryByText(/consulta con administración/)).not.toBeInTheDocument();
+  });
+
+  it("no ofrece pedir pasados los 30 días y dice por qué", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    await openClosedList(filedRecords("2026-05-01"), "2026-05-01");
+
+    expect(screen.queryByRole("button", { name: "Pedir corrección" })).not.toBeInTheDocument();
+    expect(screen.getAllByText("La ventana de corrección de 30 días ya cerró para esta sesión.")).toHaveLength(3);
+  });
+
+  it("pide la sesión de esta lista y manda jugador, estado y motivo", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    await openClosedList(filedRecords());
+    mockCreateCorrectionRequest.mockResolvedValue(request());
+
+    await waitFor(() =>
+      expect(mockFetchCorrectionRequests).toHaveBeenCalledWith({ horarioId: 12, fecha: "2026-07-21" }),
+    );
+
+    const row = screen.getByText("Student 01").closest("li") as HTMLElement;
+    fireEvent.click(within(row).getByRole("button", { name: "Pedir corrección" }));
+    const dialog = within(row).getByRole("dialog");
+    expect(within(dialog).getByRole("heading")).toHaveTextContent("Pedir corrección de Student 01");
+
+    // A blank reason is refused locally.
+    fireEvent.click(within(dialog).getByRole("button", { name: "Enviar solicitud" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("El motivo es obligatorio.");
+    expect(mockCreateCorrectionRequest).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("radio", { name: "Ausente" }));
+    fireEvent.change(within(dialog).getByPlaceholderText("Qué debía figurar y por qué"), {
+      target: { value: "Debía figurar como ausente." },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Enviar solicitud" }));
+
+    await waitFor(() =>
+      expect(mockCreateCorrectionRequest).toHaveBeenCalledWith({
+        asistenciaId: 9001,
+        estado: "absent",
+        motivo: "Debía figurar como ausente.",
+      }),
+    );
+    expect(within(row).queryByRole("dialog")).not.toBeInTheDocument();
+    expect(await within(row).findByText(/Corrección pedida: Ausente · pendiente de administración/)).toBeInTheDocument();
+    // One request pending per row: the door closes until it is answered.
+    expect(within(row).queryByRole("button", { name: "Pedir corrección" })).not.toBeInTheDocument();
+  });
+
+  it("muestra el resultado de las solicitudes: aprobada, y rechazada con el motivo de administración", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    mockFetchCorrectionRequests.mockResolvedValue([
+      request({ estado: "APROBADA", resueltoPorNombre: "Admin User" }),
+      request({
+        id: 6, asistenciaId: 9002, estado: "RECHAZADA", resueltoPorNombre: "Admin User",
+        motivoResolucion: "Vi el registro: estaba presente.",
+      }),
+    ]);
+    await openClosedList(filedRecords());
+
+    const aprobada = screen.getByText("Student 01").closest("li") as HTMLElement;
+    expect(await within(aprobada).findByText(/Corrección aprobada: Ausente/)).toBeInTheDocument();
+
+    const rechazada = screen.getByText("Student 02").closest("li") as HTMLElement;
+    expect(within(rechazada).getByText(/Corrección rechazada: Ausente/)).toBeInTheDocument();
+    expect(within(rechazada).getByText(/Vi el registro: estaba presente\./)).toBeInTheDocument();
+    // A rejected request does not block asking again.
+    expect(within(rechazada).getByRole("button", { name: "Pedir corrección" })).toBeInTheDocument();
   });
 });

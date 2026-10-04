@@ -14,7 +14,9 @@ interface RosterProgressHeaderProps {
 /**
  * The coal header: the live "revisados" marker (issue #313, K5 hallazgo
  * #23) — not raw "presentes", since the roster starts on that default — plus
- * the session it belongs to and the one-tap shortcut for the common case.
+ * the session it belongs to and the one-tap shortcut for the common case:
+ * «Marcar todos presentes» marks only the rows still without a mark (ENT-24)
+ * and never overwrites a mark already made.
  */
 export default function RosterProgressHeader({
   selectedSchedule,
@@ -41,7 +43,7 @@ export default function RosterProgressHeader({
         {unreviewedCount > 0 && (
           <span className="flex items-center gap-1.5 text-xs font-bold text-ball">
             <AlertTriangle size={ICON.sm} strokeWidth={2.5} aria-hidden="true" />
-            {unreviewedCount === 1 ? "1 alumno sin revisar" : `${unreviewedCount} alumnos sin revisar`}
+            {unreviewedCount === 1 ? "1 jugador sin revisar" : `${unreviewedCount} jugadores sin revisar`}
           </span>
         )}
       </span>
@@ -52,7 +54,7 @@ export default function RosterProgressHeader({
           className="inline-flex h-ctl items-center gap-2 rounded-ctl border border-white/25 px-4 text-sm font-semibold text-white transition-colors hover:bg-white/10"
         >
           <UserCheck size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-          Marcar restantes presentes
+          Marcar todos presentes
         </button>
       )}
     </div>

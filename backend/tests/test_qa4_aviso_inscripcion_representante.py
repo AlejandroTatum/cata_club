@@ -1,5 +1,5 @@
 """QA4 FAM-06: el aviso de «Nueva inscripción» que recibe la familia habla a la
-familia (sin cédula del menor, sin «Nuevo alumno inscrito»); el del club no
+familia (sin cédula del menor, sin «Nuevo jugador inscrito»); el del club no
 cambia."""
 from datetime import date
 
@@ -44,5 +44,5 @@ def test_el_aviso_del_club_conserva_nombre_y_cedula(db_session):
     admin, _, menor, mensajes = _inscripcion_de_menor(db_session)
 
     assert mensajes[admin.id] == (
-        f"Nuevo alumno inscrito: Mateo Andrés Mendoza Vera (cédula: {menor.cedula})."
+        f"Nuevo jugador inscrito: Mateo Andrés Mendoza Vera (cédula: {menor.cedula})."
     )

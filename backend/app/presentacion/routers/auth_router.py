@@ -2,6 +2,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.infraestructura.db import obtener_sesion
@@ -16,7 +17,7 @@ from app.servicios_negocio.dtos.auth_schemas import (
     SesionResponseDTO,
 )
 from app.seguridad.gestor_auth import GestorAutenticacion
-from app.servicios_negocio.auth_servicio import AuthServicio
+from app.servicios_negocio.auth_servicio import AuthServicio, LoginEnEnfriamiento
 from app.soporte_transversal.lectura_archivos import leer_con_limite
 from app.soporte_transversal.rate_limit import limiter
 
@@ -66,10 +67,25 @@ async def login(
     # bloquea a TODO otro cliente -- ni siquiera `GET /health` respondía
     # mientras un intento penalizado dormía (issue #311). Correrlo en el
     # threadpool de FastAPI libera el event loop durante esos segundos.
-    return await run_in_threadpool(
-        AuthServicio(db).login,
-        username, password, user_agent=request.headers.get("user-agent"),
-    )
+    try:
+        return await run_in_threadpool(
+            AuthServicio(db).login,
+            username, password, user_agent=request.headers.get("user-agent"),
+        )
+    except LoginEnEnfriamiento as enfriamiento:
+        # REG-02: 429 con el cuerpo `{detail, message}` de toda la API más un
+        # `codigo` propio, para que el BFF lo distinga del 429 genérico del
+        # rate limiter por IP (que no lleva `codigo`) y muestre este texto.
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={
+                "detail": str(enfriamiento),
+                "message": str(enfriamiento),
+                "mensaje_seguro": True,
+                "codigo": "login_enfriamiento",
+            },
+            headers={"Retry-After": str(enfriamiento.segundos_restantes)},
+        )
 
 
 @router.post(

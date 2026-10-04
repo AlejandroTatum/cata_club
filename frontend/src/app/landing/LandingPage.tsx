@@ -22,12 +22,15 @@ import NavScrollSpy from "./NavScrollSpy";
 import ScheduleSelector from "./ScheduleSelector";
 import Sponsors from "./Sponsors";
 import Ticker from "./Ticker";
-import { CLUB_PLUS_CODE, clubOpenStreetMapUrl } from "./club-location";
+import { CLUB_NEIGHBORHOOD, CLUB_PLUS_CODE, CLUB_STREET_ADDRESS, clubOpenStreetMapUrl } from "./club-location";
+import { ENROLL_HREF, Faq, MobileBar, Prices, Steps } from "./ConversionSections";
+import { PublicTarifas } from "./tarifas-context";
 import { buildLandingStats, deriveContactHours, landingConfig, toWhatsAppLink, toWhatsAppNumber } from "./landing-config";
 import { ARRIVAL_PHOTO_SIZES, FOOTER_PHOTO_SIZES, MISSION_VISION_PHOTO_SIZES } from "./landing-image-sizes";
 import { mapPublicSchedules, type LandingSchedule } from "./schedule-data";
 import { GALLERY_EMPTY_EVENT } from "./landing-gallery";
 import { SITE_NAV_SECTIONS, landingSectionHref } from "@/lib/site-navigation";
+import { buildOpeningHoursJsonLd, serializeJsonLd } from "@/lib/seo-structured-data";
 
 interface SectionHeaderProps {
   eyebrow: string;
@@ -38,16 +41,6 @@ interface ValueCardProps {
   title: string;
   children: React.ReactNode;
 }
-
-/**
- * Where every "inscríbase" affordance points.
- *
- * `/student/enroll` is the real public enrollment wizard: it POSTs to the
- * backend's public /enrollment, persists the student and auto-logs the user
- * in, and is listed in PUBLIC_EXCEPTIONS in src/lib/middleware-utils.ts.
- * The old `/register` demo placeholder stored nothing and has been removed.
- */
-const ENROLL_HREF = "/student/enroll";
 
 /**
  * The club crest, everywhere it appears on this page (navbar, Motto paddle)
@@ -134,6 +127,21 @@ function PublicSchedules({ children }: { children: React.ReactNode }): React.Rea
   return <SchedulesContext.Provider value={state}>{children}</SchedulesContext.Provider>;
 }
 
+/**
+ * The club's opening hours for search engines, from the very catalog the page
+ * renders (LAN-06) — client-side, because the schedules are fetched live and
+ * the page is prerendered without them. Shares the club's `@id` with the
+ * server-rendered script, so the two merge into one entity. Rendered only when
+ * the deployment is indexable (`siteUrl`, resolved on the server).
+ */
+function OpeningHoursJsonLd({ siteUrl }: { siteUrl: string | null }): React.ReactElement | null {
+  const state = useContext(SchedulesContext);
+  if (siteUrl === null || state.kind !== "ready") return null;
+  const data = buildOpeningHoursJsonLd(siteUrl, state.schedules);
+  if (data === null) return null;
+  return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(data) }} />;
+}
+
 function Stars(): React.ReactElement {
   return (
     <span className="landing-stars" aria-hidden="true">
@@ -216,9 +224,9 @@ function Hero(): React.ReactElement {
           it as slack — see `.landing-hero-copy`'s gap. */}
       <div className="landing-hero-copy">
         <h1 className="landing-display" data-split>FORMANDO <span className="landing-hero-accent">CAMPEONES</span> PARA LA VIDA</h1>
-        <p>Únase a nuestro club, donde la técnica y el carácter forjan en cada punto.</p>
+        <p>Únete a nuestro club, donde la técnica y el carácter se forjan en cada punto.</p>
         <div className="landing-hero-actions">
-          <Link className="landing-button" href={ENROLL_HREF}>Inscríbase <ArrowRight aria-hidden="true" /></Link>
+          <Link className="landing-button" href={ENROLL_HREF}>Inscríbete <ArrowRight aria-hidden="true" /></Link>
           <a className="landing-button landing-button-outline" href="#horarios">Ver horarios</a>
         </div>
         <div className="landing-hero-note"><Stars /><span>Club deportivo formativo · Desde 2013</span></div>
@@ -345,7 +353,7 @@ function Motto(): React.ReactElement {
         <i />
       </span>
       <p className="landing-motto-lead" data-motto-copy>Cada entrenamiento es una oportunidad para superarse.</p>
-      <Link className="landing-button" data-motto-cta href={ENROLL_HREF}>Inscríbase ya <ArrowRight aria-hidden="true" /></Link>
+      <Link className="landing-button" data-motto-cta href={ENROLL_HREF}>Inscríbete ya <ArrowRight aria-hidden="true" /></Link>
       <Stars />
     </section>
   );
@@ -355,7 +363,7 @@ function Schedule(): React.ReactElement {
   const state = useContext(SchedulesContext);
   // Once the catalog is ready the header leads the category rail (the
   // selector draws it); until then it stands alone above the status line.
-  const header = <SectionHeader eyebrow="Entrenamientos" title="Elija una categoría" />;
+  const header = <SectionHeader eyebrow="Entrenamientos" title="Elige una categoría" />;
 
   return (
     <section className="landing-section landing-schedule" id="horarios" data-motion-section data-testid="motion-section">
@@ -364,6 +372,12 @@ function Schedule(): React.ReactElement {
         : <>{header}<p className="landing-schedule-status" role="status">{SCHEDULE_STATUS[state.kind]}</p></>}
     </section>
   );
+}
+
+/** "Administración · 0994219619" when the club has labeled the number, the bare number otherwise. */
+function phoneText(number: string): string {
+  const label = landingConfig.contact.phoneLabels[number];
+  return label ? `${label} · ${number}` : number;
 }
 
 function Location(): React.ReactElement {
@@ -408,7 +422,7 @@ function Location(): React.ReactElement {
             gap, since the street here carries no number. */}
         <div className="landing-contact-row">
           <dt>Dirección</dt>
-          <dd>Av. Manuel Agustín Aguirre, Barrio Perpetuo Socorro, Loja, Ecuador — junto al Coliseo Ciudad de Loja ({CLUB_PLUS_CODE})</dd>
+          <dd>{CLUB_STREET_ADDRESS}, {CLUB_NEIGHBORHOOD}, Loja, Ecuador — junto al Coliseo Ciudad de Loja ({CLUB_PLUS_CODE})</dd>
           <dd>
             <a className="landing-contact-action" href={clubOpenStreetMapUrl()} target="_blank" rel="noreferrer">
               <Navigation aria-hidden="true" /> Cómo llegar
@@ -430,12 +444,12 @@ function Location(): React.ReactElement {
           <dt>WhatsApp</dt>
           <dd className="landing-contact-numbers">
             {contact.whatsapp.map((number): React.ReactElement => (
-              <a key={number} href={toWhatsAppLink(number)} target="_blank" rel="noreferrer">{number}</a>
+              <a key={number} href={toWhatsAppLink(number)} target="_blank" rel="noreferrer">{phoneText(number)}</a>
             ))}
           </dd>
           <dd>
             <a className="landing-contact-action" href={toWhatsAppLink(contact.whatsapp[0])} target="_blank" rel="noreferrer">
-              <MessageCircle aria-hidden="true" /> Escríbanos por WhatsApp
+              <MessageCircle aria-hidden="true" /> Escríbenos por WhatsApp
             </a>
           </dd>
         </div>
@@ -443,9 +457,14 @@ function Location(): React.ReactElement {
           <dt>Llamadas</dt>
           <dd className="landing-contact-numbers">
             {contact.whatsapp.map((number): React.ReactElement => (
-              <a key={number} href={`tel:+${toWhatsAppNumber(number)}`} aria-label={`Llamar al ${number}`}>{number}</a>
+              <a key={number} href={`tel:+${toWhatsAppNumber(number)}`} aria-label={`Llamar a ${phoneText(number)}`}>{phoneText(number)}</a>
             ))}
           </dd>
+          <dd aria-hidden="true" />
+        </div>
+        <div className="landing-contact-row">
+          <dt>Correo</dt>
+          <dd className="landing-contact-numbers"><a href={`mailto:${contact.email}`}>{contact.email}</a></dd>
           <dd aria-hidden="true" />
         </div>
         <div className="landing-contact-row">
@@ -485,7 +504,7 @@ function Footer(): React.ReactElement {
               exactly what it was before. */}
           <div><span><Image src="/brand/cata-club-logo-176.jpeg" alt="" width={58} height={58} unoptimized /></span><b className="landing-display"><small>TENIS DE MESA</small>Cata Club</b><Stars /></div>
           <p>Formando campeones de tenis de mesa en Loja desde 2013.</p>
-          <p className="landing-footer-place"><MapPin aria-hidden="true" /><span>Av. Manuel Agustín Aguirre, Loja, Ecuador</span></p>
+          <p className="landing-footer-place"><MapPin aria-hidden="true" /><span>{CLUB_STREET_ADDRESS}, Loja, Ecuador</span></p>
           <div className="landing-footer-social">
             <a href={toWhatsAppLink(contact.whatsapp[0])} target="_blank" rel="noreferrer"><Phone aria-hidden="true" /><span>WhatsApp</span></a>
             <a href={contact.facebook} target="_blank" rel="noreferrer"><Facebook aria-hidden="true" /><span>Facebook</span></a>
@@ -511,7 +530,7 @@ function Footer(): React.ReactElement {
   );
 }
 
-export default function LandingPage(): React.ReactElement {
+export default function LandingPage({ siteUrl = null }: { siteUrl?: string | null }): React.ReactElement {
   return (
     <div className="landing-page">
       <a className="landing-skip-link" href="#inicio">Saltar al contenido</a>
@@ -529,14 +548,18 @@ export default function LandingPage(): React.ReactElement {
           (#789); the provider fetches it once and renders no DOM of its own,
           so the landmark structure below is exactly what it was. */}
       <PublicSchedules>
+       <PublicTarifas>
+        <OpeningHoursJsonLd siteUrl={siteUrl} />
         <main>
-          <Hero /><Ticker /><MissionVision /><Values /><Stats /><Gallery /><Schedule /><Motto /><Location />
+          <Hero /><Ticker /><MissionVision /><Values /><Stats /><Gallery /><Schedule /><Prices /><Steps /><Faq /><Motto /><Location />
         </main>
+       </PublicTarifas>
       </PublicSchedules>
       {/* The sponsor strip sits between the page's main landmark and the footer:
           it is neither primary content nor site chrome. */}
       <Sponsors />
       <Footer />
+      <MobileBar />
     </div>
   );
 }

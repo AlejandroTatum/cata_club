@@ -407,7 +407,7 @@ describe("TarifasPage — editar nombre", () => {
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(mockActualizarTipoMembresia).not.toHaveBeenCalled();
-    expect(await within(juniorRow).findByText(/ingrese un nombre/i)).toBeInTheDocument();
+    expect(await within(juniorRow).findByText(/ingresa un nombre/i)).toBeInTheDocument();
   });
 
   it("rejects a name longer than 80 characters without reaching the API", async () => {
@@ -662,7 +662,7 @@ describe("TarifasPage — crear tarifa", () => {
     fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
 
     expect(mockCrearTipoMembresia).not.toHaveBeenCalled();
-    expect(await screen.findByText(/escriba el nombre de la tarifa/i)).toBeInTheDocument();
+    expect(await screen.findByText(/escribe el nombre de la tarifa/i)).toBeInTheDocument();
   });
 
   it("rejects an invalid price without calling the API", async () => {
@@ -832,7 +832,7 @@ describe("TarifasPage — ocultar y mostrar", () => {
     expect(within(adfaRow).getByText("Mensual")).toBeInTheDocument();
     expect(
       within(adfaRow).getByText(
-        /no aparece en el sitio ni en inscripciones\. los alumnos que ya la tienen siguen pagando igual\./i,
+        /no aparece en el sitio ni en inscripciones\. los jugadores que ya la tienen siguen pagando igual\./i,
       ),
     ).toBeInTheDocument();
     expect(adfaRow).toHaveAttribute("data-oculta", "true");

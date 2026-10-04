@@ -65,6 +65,9 @@ interface RegisterPaymentFormProps {
   primary?: boolean;
 }
 
+/** ADMA-10: shown when the admin tries to save without picking cash or transfer. */
+const MENSAJE_METODO_REQUERIDO = "Elige cómo pagó: efectivo o transferencia.";
+
 export default function RegisterPaymentForm({
   personaId,
   membresia,
@@ -83,7 +86,9 @@ export default function RegisterPaymentForm({
   const [registered, setRegistered] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [voucherFile, setVoucherFile] = useState<File | null>(null);
-    const [tipoPago, setTipoPago] = useState<"EFECTIVO" | "TRANSFERENCIA">("TRANSFERENCIA");
+  // ADMA-10: no method preselected — the admin picks it according to how
+  // the person actually paid, so a wrong default can never be saved by habit.
+  const [tipoPago, setTipoPago] = useState<"EFECTIVO" | "TRANSFERENCIA" | "">("");
   // Issue #1402: the payment already registered backend-side that is still
   // missing its voucher (TRANSFERENCIA). Non-null switches the form into
   // retry mode: submit re-attempts upload + approval and NEVER re-registers.
@@ -167,6 +172,7 @@ export default function RegisterPaymentForm({
 
   function handleTipoPagoChange(value: "EFECTIVO" | "TRANSFERENCIA"): void {
       setTipoPago(value);
+      if (error === MENSAJE_METODO_REQUERIDO) setError(null);
       if (value === "EFECTIVO") {
         setVoucherFile(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
@@ -232,10 +238,11 @@ export default function RegisterPaymentForm({
    */
   function validate(montoNum: number): string | null {
     if (!montoNum || montoNum <= 0) return "El monto debe ser mayor a 0.";
+    if (!tipoPago) return MENSAJE_METODO_REQUERIDO;
     const meses = wholeMonthsFor(montoNum, monthlyPrice);
     if (meses === null) {
       return monthlyPrice > 0
-        ? `El monto debe ser múltiplo de $${monthlyPrice}: registre uno o más meses completos.`
+        ? `El monto debe ser múltiplo de $${monthlyPrice}: registra uno o más meses completos.`
         : "No se pudo calcular a cuántos meses equivale este monto.";
     }
     // Issue #666: re-checked here (not just in `handleMontoChange`) as the
@@ -273,7 +280,7 @@ export default function RegisterPaymentForm({
    *  to approve a transfer without its voucher (issue #459 rule intact). */
   async function subirYFinalizar(pagoId: number): Promise<void> {
     if (!voucherFile) {
-      setError("Seleccione el comprobante de la transferencia para reintentar.");
+      setError("Selecciona el comprobante de la transferencia para reintentar.");
       setErrorAnnounceKey((key) => key + 1);
       return;
     }
@@ -314,7 +321,7 @@ export default function RegisterPaymentForm({
         // on any upload/approval failure: actionable retry, same flow.
         setError(
           "El pago sigue pendiente: no se pudo subir el comprobante o aprobarlo. "
-          + "Verifique el archivo y presione \"Reintentar comprobante\".",
+          + "Verifica el archivo y presiona \"Reintentar comprobante\".",
         );
         setErrorAnnounceKey((key) => key + 1);
       } finally {
@@ -325,8 +332,8 @@ export default function RegisterPaymentForm({
 
     const montoNum = Number(monto);
     const invalid = validate(montoNum);
-    if (invalid) {
-      setError(invalid);
+    if (invalid || !tipoPago) {
+      setError(invalid ?? MENSAJE_METODO_REQUERIDO);
       setErrorAnnounceKey((key) => key + 1);
       return;
     }
@@ -399,7 +406,7 @@ export default function RegisterPaymentForm({
       if (pagoRegistradoId !== null) {
         const pendienteMsg =
           "El pago quedó registrado y PENDIENTE: no se pudo completar el comprobante "
-          + "o su aprobación. Verifique el archivo y presione \"Reintentar comprobante\".";
+          + "o su aprobación. Verifica el archivo y presiona \"Reintentar comprobante\".";
         setError(pendienteMsg);
         setErrorAnnounceKey((key) => key + 1);
         showError(pendienteMsg);

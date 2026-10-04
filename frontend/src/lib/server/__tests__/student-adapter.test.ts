@@ -62,8 +62,8 @@ describe("buildRecentSessions", () => {
   });
 
   it("maps estado and resolves the horario label", () => {
-    const [session] = buildRecentSessions([asistencia({ estado: "JUSTIFICADO" })], horariosById);
-    expect(session.estado).toBe("justified");
+    const [session] = buildRecentSessions([asistencia({ estado: "ENFERMO" })], horariosById);
+    expect(session.estado).toBe("sick");
     expect(session.horario).toBe("Lunes 15:00 — 16:30");
   });
 

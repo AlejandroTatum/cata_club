@@ -77,7 +77,7 @@ export const AUTH_LABEL_CLASSES = "mb-1.5 block text-xs font-semibold text-ink";
  * "Unos 2 minutos" is measured off that queue, not a placeholder.
  */
 export const EMAIL_DELAY_SPAM_NOTICE =
-  "Puede tardar unos 2 minutos en llegar; si no lo ve, revise la carpeta de correo no deseado.";
+  "Puede tardar unos 2 minutos en llegar; si no lo ves, revisa la carpeta de correo no deseado.";
 
 /**
  * The ONE link skin the four auth screens share.
@@ -383,7 +383,7 @@ export default function AuthShell({
             rel="noopener noreferrer"
             className={AUTH_LINK_CLASSES}
           >
-            Escríbanos por WhatsApp
+            Escríbenos por WhatsApp
           </a>
         </p>
         </div>

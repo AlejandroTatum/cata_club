@@ -67,7 +67,7 @@ def _afirmar_generico(mensaje: str) -> None:
     assert "cédula" in mensaje.lower()
     assert "correo" in mensaje.lower()
     # REG-10: orienta a quien fue socio sin decir si la cuenta existe o está inactiva.
-    assert "Si ya fue socio del club, comuníquese con nosotros" in mensaje
+    assert "Si ya fuiste socio del club, comunícate con nosotros" in mensaje
     assert "inactiv" not in mensaje.lower()
 
 

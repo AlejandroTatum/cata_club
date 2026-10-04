@@ -57,7 +57,7 @@ function firstCorrectableRow(page: Page): Locator {
 }
 
 async function badgeTextOf(row: Locator): Promise<string> {
-  return row.getByText(/^(Presente|Ausente|Tardanza|Justificado)$/, { exact: true }).innerText();
+  return row.getByText(/^(Presente|Ausente|Tardanza|Enfermo|Competencia)$/, { exact: true }).innerText();
 }
 
 test("un administrador corrige una asistencia real y la corrección sobrevive a un reload (#389)", async ({

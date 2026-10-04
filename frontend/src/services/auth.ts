@@ -39,6 +39,8 @@ export interface AuthSession {
 
 export type AuthErrorKind =
   | "invalid_credentials"
+  // REG-02: the account is in its 15-minute cooldown after 10 failed logins.
+  | "login_cooldown"
   /**
    * The BFF itself could not validate the token it had just been issued —
    * /api/auth/login answered 401 with `error: "unauthorized"`. Server-side
@@ -228,6 +230,9 @@ export async function login(email: string, password: string): Promise<LoginResul
   // back on its own, and this is neither.
   if (response.status === 409 && hasErrorCode(json) && json.error === "role_conflict") {
     return { ok: false, error: "role_conflict" };
+  }
+  if (response.status === 429 && hasErrorCode(json) && json.error === "login_cooldown") {
+    return { ok: false, error: "login_cooldown" };
   }
   if (response.status === 403 && hasErrorCode(json) && json.error === "account_inactive") {
     return { ok: false, error: "account_inactive" };

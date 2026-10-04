@@ -188,7 +188,7 @@ describe("MedicalRecordEditor emergency phone (#643)", () => {
 
     expect(
       await screen.findByText(
-        "El teléfono de emergencia no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+        "El teléfono de emergencia no es válido. Escribe 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
       ),
     ).toBeInTheDocument();
     expect(mockActualizarFichaMedica).not.toHaveBeenCalled();
@@ -212,7 +212,7 @@ describe("MedicalRecordEditor emergency phone (#643)", () => {
 
     expect(
       await screen.findByText(
-        "El teléfono de emergencia no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+        "El teléfono de emergencia no es válido. Escribe 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
       ),
     ).toBeInTheDocument();
     expect(mockActualizarFichaMedica).not.toHaveBeenCalled();

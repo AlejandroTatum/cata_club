@@ -330,4 +330,4 @@ def test_403_de_la_compuerta_lleva_mensaje_seguro(client_sin_token, db_session):
     assert respuesta.status_code == 403
     cuerpo = respuesta.json()
     assert cuerpo["mensaje_seguro"] is True
-    assert cuerpo["message"] == "Su cuenta aún no está habilitada para acceder a este módulo."
+    assert cuerpo["message"] == "Tu cuenta aún no está habilitada para acceder a este módulo."

@@ -112,7 +112,7 @@ async function readAnaBadge(page: Page): Promise<string | null> {
     .getByRole("listitem")
     .filter({ hasText: STUDENT_NAME });
   if ((await row.count()) === 0) return null;
-  const badge = row.getByText(/^(Presente|Ausente|Tardanza|Justificado)$/, { exact: true });
+  const badge = row.getByText(/^(Presente|Ausente|Tardanza|Enfermo|Competencia)$/, { exact: true });
   return badge.innerText();
 }
 

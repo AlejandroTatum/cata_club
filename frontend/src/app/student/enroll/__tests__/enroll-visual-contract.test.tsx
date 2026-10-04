@@ -218,7 +218,7 @@ describe("the titles are in the club's face", () => {
   it("hands the page title to PageHeader instead of drawing an h1 in Barlow", () => {
     render(<EnrollPage />);
 
-    const heading = screen.getByRole("heading", { level: 1, name: /inscripción de estudiante/i });
+    const heading = screen.getByRole("heading", { level: 1, name: /inscripción de jugador/i });
     expect(heading.className).toContain("font-display");
     expect(heading.className).not.toMatch(/font-extrabold/);
   });
@@ -236,7 +236,7 @@ describe("the enrollment frame is a coal brand panel beside the form", () => {
     const panel = screen.getByTestId("enroll-brand-panel");
     expect(panel.className).toContain("bg-coal");
     expect(panel).toContainElement(
-      screen.getByRole("heading", { level: 1, name: /inscripción de estudiante/i }),
+      screen.getByRole("heading", { level: 1, name: /inscripción de jugador/i }),
     );
     // Narrow layouts keep the compact stepper in the navigation row.
     expect(screen.getByTestId("enroll-nav")).toContainElement(
@@ -266,7 +266,7 @@ describe("the stepper's three states are tellable apart without colour alone", (
     expect(current).toHaveAttribute("data-state", "current");
     expect(current.className).toContain("bg-coal");
 
-    const pending = within(stepperList()).getByText("Estudiante");
+    const pending = within(stepperList()).getByText("Jugador");
     expect(pending).toHaveAttribute("data-state", "upcoming");
     expect(pending.className).toContain("bg-sunken");
     expect(pending.className).not.toMatch(/\bbg-paper\b/);

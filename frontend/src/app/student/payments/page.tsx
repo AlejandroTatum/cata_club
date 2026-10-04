@@ -14,8 +14,8 @@
  * - `formatCurrency` / `formatDate` / `formatDateRange` from
  *   `src/lib/format-utils.ts` — this screen was the second currency grammar
  *   and the third date grammar in the product.
- * - Neutral Ecuadorian Spanish, usted. The student portal is not tuteo and it
- *   is certainly not voseo.
+ * - Neutral Ecuadorian Spanish in «tú» — the whole app addresses the reader as
+ *   «tú», never voseo.
  * - Selection is coal plus the yellow ball dot (`FilterPill`), never red. Red
  *   is the primary CTA and destructive intent only, so a red "Aprobados" chip
  *   read as an alarm about approved payments.
@@ -50,14 +50,15 @@ import { useSearchParams } from "next/navigation";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
+import { isActivationComplete, type ActivationSession } from "@/lib/activation-reasons";
 
 import { fetchStudentPortal, fetchPagosDePersona, fetchCoberturasDePersona, fetchBeneficio, subirVoucherPago, registrarPago } from "@/services/api";
 import type { StudentPortalSummary, PagoPersona, MembershipSummary, BeneficioAsignado, CoberturaBonificada } from "@/services/api";
 import { BackLink, Badge, Button, EmptyState, FilterPanel, FilterPill, InfoPanel, LoadingState, PAGE_RAIL, StatCard, buttonClasses, cn } from "@/components/ui";
 
-import { describePaymentSituation, firstNameOf, isMinor } from "../student-utils";
+import { describePaymentSituation, firstNameOf, hasOwnMembership, isMinor } from "../student-utils";
 import ManagedStudentPicker, { useManagedProfiles, withSelectedStudent } from "../ManagedStudentPicker";
-import { getEmptyStateMessage, countPagosByStatus, formatPagoMonto, PAGO_FILTER_LABELS, voucherFileError, type PagoStatusFilter } from "./payments-utils";
+import { getEmptyStateMessage, countPagosByStatus, formatPagoMonto, PAGO_FILTER_LABELS, prepareVoucher, type PagoStatusFilter } from "./payments-utils";
 import { formatDate } from "@/lib/format-utils";
 import { CreditCard } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -69,6 +70,7 @@ import { BeneficioNote, PaymentOrBenefitForm } from "./PaymentForms";
 import { VoucherUploadPreview } from "./VoucherUploadPreview";
 import { PagoRow, CoberturaRow } from "./PagoHistoryRows";
 import StudentErrorState from "../StudentErrorState";
+import { useLatestPick } from "@/lib/useLatestPick";
 import { WHATSAPP_CONTACTO } from "@/lib/error-message";
 
 // ---------------------------------------------------------------------------
@@ -128,9 +130,14 @@ function PaymentsContent({
   wantsRegisterForm: boolean;
   onRegistered: () => void;
 }): React.ReactElement {
+  const { session } = useAuth();
+  // FAM-01: ANY own membership (INACTIVA, waiting on its first payment,
+  // included) makes her a profile she can pay for. She keeps the single role
+  // REPRESENTANTE after "Unirme como jugador", so the role alone would leave
+  // her out of the selector and show only her children's forms.
   const { managedProfiles, selectedId, setSelectedId, selectedProfile } = useManagedProfiles(
     data,
-    hasAlumnoRole,
+    hasAlumnoRole || hasOwnMembership(data),
     accountPersonaId,
   );
 
@@ -162,6 +169,7 @@ function PaymentsContent({
   /** Issue #463 — the file staged by the OS picker, awaiting an explicit
    *  "Confirmar y subir" before `subirVoucherPago` ever runs. */
   const [previewFile, setPreviewFile] = useState<File | null>(null);
+  const latestPick = useLatestPick();
   /** Object URL for `previewFile`'s thumbnail — only set for an image, and
    *  always revoked, either when a new file replaces it or on unmount. */
   const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null);
@@ -357,6 +365,16 @@ function PaymentsContent({
    */
   const isGratuitous = selectedProfile?.membership?.esGratuidadFamiliar ?? false;
 
+  // FAM-12 «c»: a guardian whose account is activated may pay a minor
+  // dependent's first payment online (same gate as the add-dependent wizard:
+  // the membership endpoints stay closed to an account pending activation).
+  const canPayFirstOnline =
+    !viewingOwnProfile &&
+    !blockedAsMinor &&
+    selectedProfile?.membership == null &&
+    studentName !== null &&
+    (session ? isActivationComplete(session as ActivationSession) : false);
+
   /**
    * FAM-03: the backend refuses a payment on a suspended membership
    * («reactívela antes de registrar un pago»), an instruction only the club can
@@ -417,21 +435,25 @@ function PaymentsContent({
    * `VoucherUploadPreview` below; the request fires from
    * `handleConfirmUpload`, never from here.
    */
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>): void {
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
     const file = e.target.files?.[0];
     if (!file) return;
     // Issue #482: `accept` alone lets a reader pick a `.txt` via "All Files".
     // Issue #1226: the BFF's own 5 MB limit only rejects once the upload is
     // already in flight. Both are caught here before the preview/confirm
     // step below.
-    const error = voucherFileError(file);
-    if (error) {
-      setUploadError(error);
+    // FAM-26: a photo over 5 MB is shrunk before it is staged.
+    // Nothing older may be confirmed while the new pick is still being shrunk.
+    setPreviewFile(null);
+    const prepared = await latestPick.run(prepareVoucher(file));
+    if (!prepared) return;
+    if ("error" in prepared) {
+      setUploadError(prepared.error);
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
     setUploadError(null);
-    setPreviewFile(file);
+    setPreviewFile(prepared.file);
   }
 
   async function handleConfirmUpload(): Promise<void> {
@@ -456,6 +478,7 @@ function PaymentsContent({
   }
 
   function handleCancelUpload(): void {
+    latestPick.cancel();
     setPendingUploadPagoId(null);
     setPreviewFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -470,8 +493,8 @@ function PaymentsContent({
     return (
       <EmptyState
         icon={<CreditCard size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-        title="No se encontraron estudiantes asociados a esta cuenta"
-        description="Inscríbete como jugador o agregue un hijo o dependiente para registrar pagos."
+        title="No se encontraron jugadores asociados a esta cuenta"
+        description="Inscríbete como jugador o agrega un hijo o dependiente para registrar pagos."
         // Issue #460 (Escenario 2): the description already promised "agregue
         // un hijo o dependiente", but the only action here used to be "Ir a mi
         // cuenta" — a dead end for a representative whose child is already
@@ -535,7 +558,7 @@ function PaymentsContent({
         ) : isSuspended ? (
           <div className="flex flex-col items-start gap-2">
             <p className="text-sm text-ink-2">
-              {situation.headline} Escriba al club para reactivarla.
+              {situation.headline} Escribe al club para reactivarla.
             </p>
             <a
               href={WHATSAPP_CONTACTO}
@@ -565,10 +588,26 @@ function PaymentsContent({
             beneficioMonto={beneficioMonto}
             onRegistered={handleRegistered}
           />
+        ) : canPayFirstOnline ? (
+          // FAM-12 «c»: the FIRST payment of a dependent can be made online —
+          // it creates the membership and the club activates it when it
+          // approves the payment. After that the normal renewal form applies.
+          <div className="flex flex-col items-start gap-2">
+            <p className="text-sm text-ink-2">
+              {studentName} todavía no tiene una membresía. Con el primer pago se crea; el club
+              lo revisa y la activa. Después podrás renovarla desde aquí.
+            </p>
+            <Link
+              href={`/student/add-dependent?pagar=${selectedProfile.personaId}`}
+              className={buttonClasses("primary", "md")}
+            >
+              Registrar el primer pago de {studentName}
+            </Link>
+          </div>
         ) : (
           <p className="text-sm text-ink-2">
-            El club crea la membresía al registrar el primer pago. Acérquese al club para
-            activarla y después podrá renovarla desde aquí.
+            El club crea la membresía al registrar el primer pago. Acércate al club para
+            activarla y después podrás renovarla desde aquí.
           </p>
         )}
       </MembershipCard>
@@ -577,9 +616,9 @@ function PaymentsContent({
 
       <InfoPanel title="Cómo pagar y validar" as="div" className="max-lg:order-2">
         <ol className="flex list-decimal flex-col gap-2 pl-4">
-          <li>Registre el pago con el valor y el medio que usó (efectivo o transferencia).</li>
-          <li>Si fue transferencia, suba la foto o el PDF del recibo.</li>
-          <li>El club lo revisa: queda «Pendiente de validación» hasta que lo apruebe o rechace.</li>
+          <li>Registra el pago con el valor y el medio que usaste (efectivo o transferencia).</li>
+          <li>Si fue transferencia, sube la foto o el PDF del comprobante.</li>
+          <li>El club lo revisa: queda «Por validar» hasta que lo apruebe o rechace.</li>
           <li>Al aprobarse, la cobertura de la membresía se extiende.</li>
         </ol>
       </InfoPanel>
@@ -594,9 +633,9 @@ function PaymentsContent({
             value={<StatValue>{coverageEnd ? formatDate(coverageEnd) : "—"}</StatValue>}
             hint={coverageEnd ? "fin de la cobertura aprobada" : "sin pagos aprobados"}
           />
-          <StatCard label="Pagos aprobados" value={<StatValue>{counts.APROBADO}</StatValue>} hint="en su historial" />
+          <StatCard label="Pagos aprobados" value={<StatValue>{counts.APROBADO}</StatValue>} hint="en tu historial" />
           <StatCard
-            label="En revisión"
+            label="Por validar"
             value={<StatValue>{counts.PENDIENTE_VALIDACION}</StatValue>}
             hint="esperando al club"
             
@@ -615,7 +654,7 @@ function PaymentsContent({
         accept="image/jpeg,image/png,application/pdf"
         className="hidden"
         data-testid="pago-voucher-input"
-        onChange={handleFileChange}
+        onChange={(e) => void handleFileChange(e)}
       />
 
       {/* Issue #463: the confirm/cancel step between picking a file and
@@ -639,7 +678,7 @@ function PaymentsContent({
 
       {pagosState.status === "loading" && (
         <div className="card">
-          <LoadingState label="Cargando sus pagos…" />
+          <LoadingState label="Cargando tus pagos…" />
         </div>
       )}
       {pagosState.status === "error" && (
@@ -688,12 +727,12 @@ function PaymentsContent({
                 title={getEmptyStateMessage(filter)}
                 description={
                   filter !== "TODOS"
-                    ? "Pruebe con otro estado para ver el resto de su historial."
+                    ? "Prueba con otro estado para ver el resto de tu historial."
                     : blockedAsMinor
-                      ? // "Cuando registre un pago" is an instruction this
+                      ? // An instruction to register a payment is one this
                         // reader cannot follow — the club registers it.
-                        "Cuando el club registre un pago suyo aparecerá aquí, con el período que cubre."
-                      : "Cuando registre un pago aparecerá aquí, junto con el resultado de su validación."
+                        "Los pagos que el club anote a tu nombre aparecerán aquí, con el período que cubren."
+                      : "Cuando registres un pago aparecerá aquí, junto con el resultado de su validación."
                 }
                 // D11's third part. The action used to appear ONLY when a filter
                 // was on, which is backwards: a filtered empty list is the
@@ -797,6 +836,8 @@ function PaymentsPageContent(): React.ReactElement {
    * still lives in `PaymentsContent` (it depends on which profile is
    * selected); this is only the page's own promise to its reader.
    */
+  // FAM-01: a representative's own membership (even INACTIVA) is a payment she can register.
+  const ownMembership = state.status === "ready" && hasOwnMembership(state.data);
   const accountCannotRegister =
     state.status === "ready" &&
     state.data.representados.length === 0 &&
@@ -816,10 +857,10 @@ function PaymentsPageContent(): React.ReactElement {
       // screen then refused to let them follow.
       subtitle={
         accountCannotRegister
-          ? "Consulte su membresía, vea cómo se paga y siga el historial de sus pagos."
-          : hasAlumnoRole
-            ? "Registre un pago, siga su validación y consulte lo que ya pagó."
-            : "Registre el pago de un dependiente, siga su validación y consulte lo que ya pagó."
+          ? "Consulta tu membresía, mira cómo se paga y sigue el historial de tus pagos."
+          : hasAlumnoRole || ownMembership
+            ? "Registra un pago, sigue su validación y consulta lo que ya pagaste."
+            : "Registra el pago de un dependiente, sigue su validación y consulta lo que ya pagó."
       }
       // Issue #1396: through the shell's `back` slot, so the control precedes
       // the title in document order — `PageHeader` is drawn above `<main>`,
@@ -831,7 +872,7 @@ function PaymentsPageContent(): React.ReactElement {
 
       {state.status === "loading" && (
         <div className="card">
-          <LoadingState label="Cargando sus pagos…" />
+          <LoadingState label="Cargando tus pagos…" />
         </div>
       )}
       {state.status === "error" && (

@@ -120,7 +120,7 @@ describe("ChangePasswordCard", () => {
 
   it("says in usted that the other sessions get closed", () => {
     render(<ChangePasswordCard />);
-    expect(screen.getByText("Al cambiarla, se cerrarán sus otras sesiones.")).toBeInTheDocument();
-    expect(screen.queryByText("Cierra sus otras sesiones")).not.toBeInTheDocument();
+    expect(screen.getByText("Al cambiarla, se cerrarán tus otras sesiones.")).toBeInTheDocument();
+    expect(screen.queryByText("Cierra tus otras sesiones")).not.toBeInTheDocument();
   });
 });

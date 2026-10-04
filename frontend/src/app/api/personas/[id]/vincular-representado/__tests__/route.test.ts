@@ -45,7 +45,7 @@ const personaResponse = {
   representanteId: 5,
 };
 
-const MENSAJE_GENERICO = "No fue posible vincular esa cédula a su cuenta. Verifique el número e intente nuevamente.";
+const MENSAJE_GENERICO = "No fue posible vincular esa cédula a tu cuenta. Verifica el número e intenta nuevamente.";
 
 beforeEach(() => {
   vi.spyOn(global, "fetch");

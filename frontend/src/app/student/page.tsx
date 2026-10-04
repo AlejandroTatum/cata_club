@@ -59,6 +59,8 @@ import {
   contarEntrenamientosSemanales,
   daysUntil,
   type UpcomingTraining,
+  noScheduleWhatsAppHref,
+  hasOwnMembership,
 } from "./student-utils";
 import {
   CalendarDays,
@@ -460,7 +462,7 @@ function Carnet({
   }
   if (profile.membership?.fechaActivacion) {
     register.push({
-      label: "Socio desde",
+      label: "Jugador desde",
       value: formatDate(profile.membership.fechaActivacion),
       isFigure: true,
     });
@@ -496,7 +498,7 @@ function Carnet({
       className={cn("card overflow-hidden", className)}
     >
       <div className="flex items-center gap-3 border-b border-line px-5 py-3">
-        <h2 className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">Carnet de socio</h2>
+        <h2 className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">Carnet de jugador</h2>
         {/* A TEXT LINK, not a button — the same skin `CuotaCard` gives "Ver
             pagos" one panel down. Printing is a destination, not a second CTA
             competing with the page's own; it was a filled control only while
@@ -526,7 +528,7 @@ function Carnet({
           id="carnet-print-area"
           data-testid="student-carnet"
           role="group"
-          aria-label={`Carnet de socio de ${fullName}`}
+          aria-label={`Carnet de jugador de ${fullName}`}
           className={cn(
             "carnet-credential my-section w-full max-w-[284px] rounded-ctl bg-coal p-[var(--carnet-page)] text-white shadow-elevated",
             // THE CREDENTIAL IS SQUARE ON PURPOSE, AND THE FUNDA IS THE
@@ -570,7 +572,7 @@ function Carnet({
           )}
         >
           {/* 1 · THE HEADER — the club signs the object, and says what it is.
-              A row, on both media: the mark, the wordmark, and "Socio" pushed
+              A row, on both media: the mark, the wordmark, and "Jugador" pushed
               to the far edge. The 2px red rule is the row's own bottom border
               rather than a separate element — a stray flex child in a
               `justify-between` row is how the old banner grew a floating rule.
@@ -589,7 +591,7 @@ function Carnet({
                 lead it. */}
             <b className="font-display text-base uppercase leading-none tracking-flat">Cata Club</b>
             <span className="ml-auto text-2xs font-extrabold uppercase leading-none text-ball">
-              Socio
+              Jugador
             </span>
           </div>
 
@@ -819,8 +821,8 @@ function TrainingPanel({
   const scope = recap
     ? viewingOwnProfile
       ? recap.total === 1
-        ? "su última sesión registrada"
-        : `sus últimas ${recap.total} sesiones registradas`
+        ? "tu última sesión registrada"
+        : `tus últimas ${recap.total} sesiones registradas`
       : recap.total === 1
         ? `la última sesión registrada de ${studentName}`
         : `las últimas ${recap.total} sesiones registradas de ${studentName}`
@@ -843,21 +845,21 @@ function TrainingPanel({
         <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Esta semana</h2>
         <p className="text-xs text-ink-3-strong">
           {viewingOwnProfile
-            ? "El horario semanal que el club le asignó."
+            ? "El horario semanal que el club te asignó."
             : `El horario semanal que el club le asignó a ${studentName}.`}
         </p>
       </div>
 
       {horariosState.status === "loading" && (
         <div className="border-t border-line">
-          <LoadingState label="Consultando su horario…" />
+          <LoadingState label="Consultando tu horario…" />
         </div>
       )}
 
       {horariosState.status === "error" && (
         <div className="border-t border-line px-5 py-4">
           <p className="text-sm leading-relaxed text-ink-3-strong">
-            No se pudo consultar el horario en este momento. Vuelva a cargar la página o consulte
+            No se pudo consultar el horario en este momento. Vuelve a cargar la página o consulta
             en administración del club.
           </p>
         </div>
@@ -870,22 +872,27 @@ function TrainingPanel({
           </div>
         ) : (
           // One line with its way out (D11: what is missing, why, what to
-          // do). `/ayuda` is where the club answers "who assigns a schedule",
-          // labelled with the destination's registered name (D12b). A tall
-          // empty card here would only stretch the column beside the carnet.
+          // do). FAM-29: the text asks to write to administration, so the
+          // button is that message, sent to the club's WhatsApp. A tall empty
+          // card here would only stretch the column beside the carnet.
           <div className="flex flex-wrap items-center gap-x-4 gap-y-field border-t border-line px-5 py-4">
             <p className="min-w-0 flex-1 text-sm text-ink-2">
               <span className="font-semibold text-ink">
                 {viewingOwnProfile
-                  ? "Todavía no tiene un horario asignado"
+                  ? "Todavía no tienes un horario asignado"
                   : `${studentName} todavía no tiene un horario asignado`}
               </span>
-              . El club asigna los días y las horas; escriba a administración para que le asignen uno.
+              . El club asigna los días y las horas; escribe a administración para que te asignen uno.
             </p>
-            <Link href="/ayuda" className={buttonClasses("secondary", "sm")}>
-              Preguntas frecuentes
+            <a
+              href={noScheduleWhatsAppHref(studentName, viewingOwnProfile)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonClasses("secondary", "sm")}
+            >
+              Escribir al club por WhatsApp
               <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-            </Link>
+            </a>
           </div>
         ))}
 
@@ -902,7 +909,7 @@ function TrainingPanel({
             // borró una vez en el panel del entrenador.
             <>Sobre {scope}.</>
           ) : viewingOwnProfile ? (
-            "Su asistencia aparecerá aquí en cuanto el entrenador tome lista."
+            "Tu asistencia aparecerá aquí en cuanto el entrenador tome lista."
           ) : (
             `La asistencia de ${studentName} aparecerá aquí en cuanto el entrenador tome lista.`
           )}
@@ -927,7 +934,7 @@ function MembershipPlansGrid({ data }: { data: StudentPortalSummary }): React.Re
       <EmptyState
         icon={<ShieldCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
         title="No hay planes de membresía disponibles"
-        description="El catálogo de planes está vacío en este momento. Consulte con administración."
+        description="El catálogo de planes está vacío en este momento. Consulta con administración."
       />
     );
   }
@@ -975,7 +982,7 @@ function PendingEnrollmentView({
         {/* Capped at a readable measure inside a full-width card, rather than
             capping the card: a 110-character line is not a paragraph. */}
         <p className="mt-2 max-w-[68ch] text-sm leading-relaxed text-ink-3-strong">
-          Su cuenta está creada pero todavía no tiene una matrícula activa. Complete su inscripción para
+          Tu cuenta está creada pero todavía no tienes una matrícula activa. Completa tu inscripción para
           empezar a entrenar.
         </p>
       </section>
@@ -1201,7 +1208,10 @@ function ActivePortalView({
     paymentSituation !== null &&
     paymentSituation.kind !== "minor-blocked" &&
     paymentSituation.kind !== "suspended"
-      ? describeRejectedPago(pagosState.pagos)
+      ? describeRejectedPago(pagosState.pagos, {
+          viewingOwnProfile,
+          studentName: selectedName,
+        })
       : null;
 
   return (
@@ -1226,8 +1236,8 @@ function ActivePortalView({
       {selectedProfile === null || paymentSituation === null ? (
         <EmptyState
           icon={<User size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-          title="No se encontraron estudiantes asociados a esta cuenta"
-          description="Inscríbete como jugador o agregue un hijo o dependiente para empezar."
+          title="No se encontraron jugadores asociados a esta cuenta"
+          description="Inscríbete como jugador o agrega un hijo o dependiente para empezar."
         />
       ) : (
         // "El carnet manda" (docs/archive/fixes/12-mi-cuenta-carnet.md, Propuesta 2):
@@ -1353,7 +1363,7 @@ function ActivePortalView({
             hint={entrenamientosSemanales === null ? "horario no disponible" : "por semana"}
           />
           <StatCard
-            label="Pagos en revisión"
+            label="Pagos por validar"
             tone={pendingPagos > 0 ? "warn" : "neutral"}
             icon={<Hourglass size={ICON.sm} strokeWidth={1.75} />}
             href={withSelectedStudent("/student/payments", selectedPersonaId)}
@@ -1415,7 +1425,7 @@ function ActivePortalView({
                     )}
                     className="font-semibold text-ink underline decoration-line-2 underline-offset-4 hover:decoration-ink"
                   >
-                    {paymentSituation.canRegister ? "Pagar la cuota" : "Ver los pagos"}
+                    {paymentSituation.canRegister ? "Pagar la mensualidad" : "Ver los pagos"}
                   </Link>{" "}
                   y su validación.
                 </li>
@@ -1445,7 +1455,7 @@ function ActivePortalView({
                     >
                       Agregar un dependiente
                     </Link>{" "}
-                    a su cuenta.
+                    a tu cuenta.
                   </li>
                 )}
               </ul>
@@ -1465,7 +1475,10 @@ function ActivePortalView({
               under its fact grid, which is the same emptiness moved rather
               than closed. A carnet has a carnet's proportions; a panel of
               rows does not. */}
-          <div className="flex flex-col gap-5 lg:self-stretch">
+          {/* FAM-27: below `lg` the Mensualidad card leads the page, above the
+              carnet (`order-first`; the DOM keeps the carnet column first so
+              `lg` still reads carnet | rail). */}
+          <div className="flex flex-col gap-5 max-lg:order-first lg:self-stretch">
             <CuotaCard
               situation={paymentSituation}
               coverageEnd={coverageEnd}
@@ -1559,7 +1572,7 @@ function StudentPortalContent(): React.ReactElement {
   // just joined has one waiting on its first payment: it must appear as a
   // profile they can pay for, and "Unirme como jugador" must not be offered
   // again (it created a duplicate membership).
-  const hasOwnMembership = state.status === "ready" && state.data.self?.membership != null;
+  const ownMembership = state.status === "ready" && hasOwnMembership(state.data);
   /**
    * Issue #1132: "es jugador" (the domain's single predicate — an ACTIVA
    * Membresia, `app/dominio/jugador.py::es_jugador`) is the union of both
@@ -1570,7 +1583,7 @@ function StudentPortalContent(): React.ReactElement {
    * would otherwise read as "not a player" forever despite having exactly
    * the membership this feature is about.
    */
-  const isPlayer = hasAlumnoRole || hasOwnMembership;
+  const isPlayer = hasAlumnoRole || ownMembership;
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
@@ -1585,7 +1598,7 @@ function StudentPortalContent(): React.ReactElement {
         if (cancelled) return;
         setState({
           status: "error",
-          message: toUserMessage(error, "No se pudo cargar su cuenta."),
+          message: toUserMessage(error, "No se pudo cargar tu cuenta."),
         });
       });
     return () => {
@@ -1608,7 +1621,7 @@ function StudentPortalContent(): React.ReactElement {
   const roleLabel =
     state.status === "ready" && isRepresentative(state.data.representados.length)
       ? "Representante"
-      : "Estudiante";
+      : "Jugador";
   const subtitle =
     portalMode === "active" && greetingName
       ? buildContextLine(`Hola, ${greetingName} · ${roleLabel}`)
@@ -1618,7 +1631,7 @@ function StudentPortalContent(): React.ReactElement {
     <AppShell title="Mi cuenta" subtitle={subtitle}>
       {state.status === "loading" && (
         <div className="card">
-          <LoadingState label="Cargando su cuenta…" />
+          <LoadingState label="Cargando tu cuenta…" />
         </div>
       )}
       {state.status === "error" && (

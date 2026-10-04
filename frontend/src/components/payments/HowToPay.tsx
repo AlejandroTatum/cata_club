@@ -106,7 +106,7 @@ export default function HowToPay({ className }: { className?: string }): React.R
         Cómo pagar
       </h2>
       <p className="text-sm text-ink-2">
-        Haga la transferencia a esta cuenta y después registre el pago con el comprobante.
+        Haz la transferencia a esta cuenta y después registra el pago con el comprobante.
       </p>
       <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Row label="Titular">{info.holder}</Row>

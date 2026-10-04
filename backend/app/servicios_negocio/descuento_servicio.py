@@ -61,7 +61,7 @@ class DescuentoServicio:
         descuento = self._obtener_sin_marcar(descuento_id)
         mensaje_en_uso = (
             f"No se puede eliminar el descuento '{descuento.nombre}' porque ya se "
-            "aplicó o se asignó. Puede ocultarlo para que deje de ofrecerse."
+            "aplicó o se asignó. Puedes ocultarlo para que deje de ofrecerse."
         )
         if self.repo.ids_en_uso([descuento.id]):
             raise DescuentoEnUso(mensaje_en_uso)

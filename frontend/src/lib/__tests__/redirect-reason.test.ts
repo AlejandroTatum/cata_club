@@ -32,9 +32,9 @@ describe("redirectReasonFrom", () => {
 
 describe("REDIRECT_REASON_MESSAGES", () => {
   it("keeps the exact wording each mechanism already showed before the unification", () => {
-    expect(REDIRECT_REASON_MESSAGES["sesion-expirada"]).toBe("Su sesión expiró. Vuelva a iniciar sesión.");
+    expect(REDIRECT_REASON_MESSAGES["sesion-expirada"]).toBe("Tu sesión expiró. Vuelve a iniciar sesión.");
     expect(REDIRECT_REASON_MESSAGES["correo-verificado"]).toBe(
-      "Su correo quedó verificado. Vuelva a iniciar sesión para continuar.",
+      "Tu correo quedó verificado. Vuelve a iniciar sesión para continuar.",
     );
   });
 });

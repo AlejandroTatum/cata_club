@@ -67,7 +67,7 @@ for (const { rol, email, password, firstName, destino } of ROLES) {
     // corresponder al MISMO destino al que la corrida termina llegando, no a
     // uno fijo escrito antes de calcularlo. ──
     await expect(page.getByText(`Hola, ${firstName}`)).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByText("Su sesión quedó iniciada. Le llevamos a su panel.")).toBeVisible();
+    await expect(page.getByText("Tu sesión quedó iniciada. Te llevamos a tu panel.")).toBeVisible();
 
     await expect(page).toHaveURL(destino, { timeout: 20_000 });
   });
@@ -86,7 +86,7 @@ test("credenciales inválidas no entran y muestran el error real del backend", a
   // datos fue el que falló.
   await expect(page.getByText("Credenciales incorrectas")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("credentials-error")).toHaveText(
-    "El correo y la contraseña no coinciden. Verifique los dos e intente nuevamente.",
+    "El correo y la contraseña no coinciden. Verifica los dos e intenta nuevamente.",
   );
 
   // Sin sesión: la URL nunca se mueve del formulario.

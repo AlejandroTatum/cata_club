@@ -114,7 +114,7 @@ describe("LegalReviewDialog — apertura y nombres accesibles", () => {
   });
 });
 
-describe("LegalReviewDialog — cierre y foco", () => {
+describe("LegalReviewDialog — cierra y foco", () => {
   it("closes with Escape, with the Cerrar button and with a backdrop click", () => {
     const onClose = vi.fn();
     render(<LegalReviewDialog documentId="terminos" onClose={onClose} />);

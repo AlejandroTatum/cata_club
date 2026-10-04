@@ -56,7 +56,7 @@ export default function JoinAsPlayerAction({
       submitFailureMessage="No se pudo crear la membresía."
       onSubmit={async (tipoMembresiaId) => {
         await crearMembresiaPropia(tipoMembresiaId);
-        showSuccess("Membresía creada. Registre su primer pago para activarla.");
+        showSuccess("Membresía creada. Registra tu primer pago para activarla.");
         router.push(withSelectedStudent("/student/payments?registrar=1", accountPersonaId));
       }}
       onSubmitError={showError}

@@ -60,7 +60,7 @@ export default function PaymentsAction({ count, senders, oldest, overAWeek, href
         <div className="flex flex-col">
           <b className="text-sm font-bold text-ink">{count === 1 ? "Comprobante por revisar" : "Comprobantes por revisar"}</b>
           <span className="text-xs text-ink-2">
-            {oldest ? `El más antiguo: ${oldest}` : "Esperan su validación"}
+            {oldest ? `El más antiguo: ${oldest}` : "Esperan tu validación"}
             {overAWeek > 0 ? ` · ${overAWeek} ${overAWeek === 1 ? "lleva" : "llevan"} más de una semana esperando` : ""}
           </span>
         </div>

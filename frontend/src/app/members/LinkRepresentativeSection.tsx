@@ -75,14 +75,14 @@ export default function LinkRepresentativeSection({
       <p className="text-xs text-ink-3">
         {currentRepresentativeName
           ? `Representante actual: ${currentRepresentativeName}. Buscar y vincular otro lo reemplaza.`
-          : "Este alumno no tiene un representante vinculado."}
+          : "Este jugador no tiene un representante vinculado."}
       </p>
       {!studentCedula ? (
         // Defensive only — every persona this admin can reach carries a
         // cédula (backend column is NOT NULL); see `BackendPersonaFull`'s own
         // doc comment for why the type still treats it as optional.
         <p className="text-xs text-state-bad" role="alert">
-          No se pudo determinar la cédula de este alumno; no es posible vincular un representante desde aquí.
+          No se pudo determinar la cédula de este jugador; no es posible vincular un representante desde aquí.
         </p>
       ) : (
         <>

@@ -4,7 +4,7 @@ import { toUserMessage } from "@/lib/error-message";
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 export const IMAGE_SERVICE_UNAVAILABLE =
-  "El servicio de imágenes no está disponible en este momento. Intente de nuevo más tarde.";
+  "El servicio de imágenes no está disponible en este momento. Intenta de nuevo más tarde.";
 
 /** Client-side gate for an image upload: a specific message, or null when the
  * file is acceptable. `noun` is the subject of the sentence ("La foto"). */
@@ -12,7 +12,7 @@ export function imageFileError(file: File, noun: string): string | null {
   if (file.type !== "image/jpeg" && file.type !== "image/png")
     return `${noun} debe ser un archivo JPG o PNG.`;
   if (file.size > MAX_IMAGE_BYTES)
-    return `${noun} supera el límite de 5 MB. Elija una imagen más liviana.`;
+    return `${noun} supera el límite de 5 MB. Elige una imagen más liviana.`;
   return null;
 }
 
@@ -35,11 +35,11 @@ export function uploadErrorMessage(error: unknown, generic: string): string {
   if (status === null) return toUserMessage(error, generic);
   if (status >= 500) return IMAGE_SERVICE_UNAVAILABLE;
   if (status === 400 || status === 422)
-    return toUserMessage(error, "Revise el archivo e intente de nuevo.");
+    return toUserMessage(error, "Revisa el archivo e intenta de nuevo.");
   if (status === 413)
-    return "La imagen supera el tamaño permitido. Elija una imagen más liviana.";
+    return "La imagen supera el tamaño permitido. Elige una imagen más liviana.";
   if (status === 415)
-    return "Formato de imagen no admitido. Use un archivo JPG o PNG.";
+    return "Formato de imagen no admitido. Usa un archivo JPG o PNG.";
   if (status === 401 || status === 403) return toUserMessage(error, generic);
   return generic;
 }

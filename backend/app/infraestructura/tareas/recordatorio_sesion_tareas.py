@@ -337,7 +337,7 @@ def recordar_sesion_de_manana() -> dict:
 
     if sin_cuenta_alcanzable:
         logger.warning(
-            "Recordatorios de sesión del %s omitidos: %d alumno(s) sin cuenta "
+            "Recordatorios de sesión del %s omitidos: %d jugador(s) sin cuenta "
             "propia ni representante con cuenta (%s)",
             sesion.isoformat(), len(sin_cuenta_alcanzable),
             sin_cuenta_alcanzable,

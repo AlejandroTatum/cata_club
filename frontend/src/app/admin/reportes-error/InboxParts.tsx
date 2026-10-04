@@ -47,7 +47,7 @@ export function EmptyInbox(): ReactElement {
           surface="inset"
           icon={<Inbox size={ICON.lg} />}
           title="Aún no hay reportes de error"
-          description="Cuando un usuario use «Reportar un problema», su aviso aparecerá aquí."
+          description="Los avisos enviados desde «Reportar un problema» aparecerán aquí."
         />
       </div>
     </div>
@@ -57,7 +57,7 @@ export function EmptyInbox(): ReactElement {
 /** Shown in the rail until a report is selected. */
 export function SelectPrompt({ total }: { total: number }): ReactElement {
   return <InfoPanel as="div" title="Detalle del reporte">
-    <p>Seleccione un reporte de la lista para ver su detalle.</p>
+    <p>Selecciona un reporte de la lista para ver su detalle.</p>
     <p>
       Cada aviso trae lo que escribió la persona, la ruta afectada y el dispositivo; si
       adjuntó una captura, se abre desde aquí.

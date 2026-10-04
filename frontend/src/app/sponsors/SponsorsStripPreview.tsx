@@ -34,7 +34,7 @@ export default function SponsorsStripPreview({
         </h2>
         <p className="text-xs text-ink-2">
           {sponsors.length === 0
-            ? "Cuando suba el primer logo, aparecerá aquí tal como lo verá el público."
+            ? "Cuando subas el primer logo, aparecerá aquí tal como lo verá el público."
             : "La franja de patrocinadores de la landing: los mismos logos, en este mismo orden."}
         </p>
       </div>

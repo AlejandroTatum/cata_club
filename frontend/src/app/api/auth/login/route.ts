@@ -15,6 +15,8 @@ function isLoginBody(value: unknown): value is LoginBody {
 const ERROR_STATUS: Record<AuthErrorCode, number> = {
   invalid_credentials: 401,
   account_inactive: 403,
+  // REG-02: 15-minute cooldown after 10 failed logins.
+  login_cooldown: 429,
   // 500, not 503: the server is misconfigured, not overloaded. A 503 invites
   // the client (and any proxy in front of it) to retry a request that can
   // never succeed until a human fixes the deployment.
@@ -87,8 +89,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       {
         error: "role_conflict",
         message:
-          "Su cuenta tiene más de un rol activo y no podemos saber con cuál entrar. " +
-          "Comuníquese con el club para que le asignen uno solo.",
+          "Tu cuenta tiene más de un rol activo y no podemos saber con cuál entrar. " +
+          "Comunícate con el club para que te asignen uno solo.",
       },
       { status: 409 },
     );

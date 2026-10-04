@@ -106,7 +106,7 @@ describe("landing stats mobile cards (#1399)", (): void => {
       "Loja",
     ]);
     expect(stats.map((stat): string => stat.querySelector("span")?.textContent ?? "")).toEqual([
-      "Desde el 10 de octubre",
+      "Desde el 10 de octubre de 2013",
       "Años formando deportistas",
       "Junto al Coliseo Ciudad de Loja",
     ]);

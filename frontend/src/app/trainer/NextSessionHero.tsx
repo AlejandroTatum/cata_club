@@ -24,6 +24,7 @@ import Link from "next/link";
 import { ClipboardList } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { Badge, buttonClasses } from "@/components/ui";
+import type { EmergencyCardStudent } from "@/app/trainer/attendance/EmergencyCardDialog";
 import { formatDate } from "@/lib/format-utils";
 import {
   buildHeroProgress,
@@ -46,6 +47,10 @@ interface NextSessionHeroProps {
   lastSummary?: LastSessionSummary | null;
   /** "miércoles 15:00" — the next session when today is over and one is known. */
   nextSessionLabel?: string | null;
+  /** The hero session's students, in the same order as the roster names (QA4
+   *  ENT-27): each chip opens that student's emergency card. */
+  students?: readonly EmergencyCardStudent[] | null;
+  onOpenEmergency?: (student: EmergencyCardStudent) => void;
 }
 
 const firstName = (name: string): string => name.trim().split(/\s+/)[0] ?? name;
@@ -55,6 +60,8 @@ export default function NextSessionHero({
   roster,
   lastSummary = null,
   nextSessionLabel,
+  students = null,
+  onOpenEmergency,
 }: NextSessionHeroProps): React.ReactElement | null {
   if (!state) return null;
 
@@ -102,23 +109,46 @@ export default function NextSessionHero({
             <>
               <span className="text-xs font-semibold text-ink-2">{formatEnrolledCount(names.length)}</span>
               {shown.length > 0 && (
-                <ul aria-label="Alumnos inscritos" className="m-0 grid list-none grid-cols-2 gap-1.5 p-0 sm:grid-cols-4">
-                  {shown.map((name) => (
-                    <li key={name} title={name} className="flex min-w-0 items-center gap-1.5 rounded-full bg-sunken py-0.5 pl-0.5 pr-2.5 text-xs font-semibold text-ink">
-                      <span
-                        aria-hidden="true"
-                        className="flex h-6 w-6 items-center justify-center rounded-full bg-paper text-2xs font-bold text-ink-2"
-                      >
-                        {initialsOf(name)}
-                      </span>
-                      <span className="sr-only">{name}</span>
-                      <span aria-hidden="true" className="truncate">{firstName(name)}</span>
-                    </li>
-                  ))}
+                <ul aria-label="Jugadores inscritos" className="m-0 grid list-none grid-cols-2 gap-1.5 p-0 sm:grid-cols-4">
+                  {shown.map((name, index) => {
+                    const student = students?.[index];
+                    const chip = (
+                      <>
+                        <span
+                          aria-hidden="true"
+                          className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-paper text-2xs font-bold text-ink-2"
+                        >
+                          {initialsOf(name)}
+                        </span>
+                        <span className="sr-only">{name}</span>
+                        <span aria-hidden="true" className="truncate">{firstName(name)}</span>
+                      </>
+                    );
+                    const chipClasses = "flex min-w-0 items-center gap-1.5 rounded-full bg-sunken py-0.5 pl-0.5 pr-2.5 text-xs font-semibold text-ink";
+                    return (
+                      <li key={name} title={name} className="min-w-0">
+                        {student && onOpenEmergency ? (
+                          <button
+                            type="button"
+                            aria-label={`Ficha de emergencia de ${name}`}
+                            onClick={() => onOpenEmergency(student)}
+                            className={`${chipClasses} w-full text-left hover:bg-line focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink`}
+                          >
+                            {chip}
+                          </button>
+                        ) : (
+                          <span className={chipClasses}>{chip}</span>
+                        )}
+                      </li>
+                    );
+                  })}
                   {extra > 0 && (
                     <li className="flex items-center justify-center rounded-full bg-coal px-2.5 py-1 text-xs font-bold text-white">+{extra} más</li>
                   )}
                 </ul>
+              )}
+              {shown.length > 0 && onOpenEmergency && (
+                <span className="text-xs text-ink-3">Toca un nombre para ver su ficha de emergencia.</span>
               )}
             </>
           ) : (

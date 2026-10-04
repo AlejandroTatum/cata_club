@@ -9,13 +9,13 @@ validador) pasan sin tocar, solo sin el prefijo «Value error, ».
 import re
 from decimal import Decimal, InvalidOperation
 
-MENSAJE_GENERICO = "Uno de los datos enviados no es válido. Revise la información e intente nuevamente."
+MENSAJE_GENERICO = "Uno de los datos enviados no es válido. Revisa la información e intenta nuevamente."
 
 _PREFIJO_VALUE_ERROR = "Value error, "
 
 # Nombre del campo -> cómo se le dice a la persona en el mensaje.
 _CAMPOS_EN_DINERO = {"precio", "monto", "tarifa_mensual_aplicada"}
-_AL_MENOS_UNO = {"dias": "Elija al menos un día.", "items": "Debe enviar al menos un alumno."}
+_AL_MENOS_UNO = {"dias": "Elige al menos un día.", "items": "Debes enviar al menos un jugador."}
 
 
 def _numero(valor) -> str:
@@ -40,14 +40,14 @@ def _texto_corto(ctx: dict, campo: str) -> str:
     minimo = ctx.get("min_length", 1)
     if minimo <= 1:
         return "Este campo es obligatorio."
-    return f"Use al menos {_cantidad(minimo, 'carácter', 'caracteres')}."
+    return f"Usa al menos {_cantidad(minimo, 'carácter', 'caracteres')}."
 
 
 def _lista_corta(ctx: dict, campo: str) -> str:
     minimo = ctx.get("min_length", 1)
     if minimo == 1 and campo in _AL_MENOS_UNO:
         return _AL_MENOS_UNO[campo]
-    return f"Debe indicar al menos {_cantidad(minimo, 'elemento', 'elementos')}."
+    return f"Debes indicar al menos {_cantidad(minimo, 'elemento', 'elementos')}."
 
 
 def _minimo(ctx: dict, campo: str) -> str:
@@ -64,28 +64,28 @@ def _maximo(ctx: dict, campo: str) -> str:
     return f"El valor no puede ser mayor que {limite}."
 
 
-_NUMERO_INVALIDO = "Ingrese un número válido."
+_NUMERO_INVALIDO = "Ingresa un número válido."
 
 # Tipo de error de Pydantic -> función (ctx, campo) -> mensaje.
 _TRADUCTORES = {
     "missing": lambda ctx, campo: "Este campo es obligatorio.",
     "string_too_short": _texto_corto,
-    "string_too_long": lambda ctx, campo: f"Use hasta {_cantidad(ctx.get('max_length'), 'carácter', 'caracteres')}.",
+    "string_too_long": lambda ctx, campo: f"Usa hasta {_cantidad(ctx.get('max_length'), 'carácter', 'caracteres')}.",
     "too_short": _lista_corta,
-    "too_long": lambda ctx, campo: f"Puede enviar hasta {_cantidad(ctx.get('max_length'), 'elemento', 'elementos')}.",
+    "too_long": lambda ctx, campo: f"Puedes enviar hasta {_cantidad(ctx.get('max_length'), 'elemento', 'elementos')}.",
     "greater_than_equal": _minimo,
     "greater_than": lambda ctx, campo: f"El valor debe ser mayor que {_numero(ctx.get('gt'))}.",
     "less_than_equal": _maximo,
     "less_than": lambda ctx, campo: f"El valor debe ser menor que {_numero(ctx.get('lt'))}.",
     "decimal_max_places": lambda ctx, campo: (
-        f"Use hasta {_cantidad(ctx.get('decimal_places', 2), 'decimal', 'decimales')} (por ejemplo 0,5)."
+        f"Usa hasta {_cantidad(ctx.get('decimal_places', 2), 'decimal', 'decimales')} (por ejemplo 0,5)."
     ),
     "decimal_max_digits": lambda ctx, campo: "El número es demasiado grande.",
     "decimal_whole_digits": lambda ctx, campo: "El número es demasiado grande.",
-    "enum": lambda ctx, campo: "Elija una opción válida de la lista.",
-    "literal_error": lambda ctx, campo: "Elija una opción válida de la lista.",
-    "bool_parsing": lambda ctx, campo: "Elija Sí o No.",
-    "bool_type": lambda ctx, campo: "Elija Sí o No.",
+    "enum": lambda ctx, campo: "Elige una opción válida de la lista.",
+    "literal_error": lambda ctx, campo: "Elige una opción válida de la lista.",
+    "bool_parsing": lambda ctx, campo: "Elige Sí o No.",
+    "bool_type": lambda ctx, campo: "Elige Sí o No.",
     "json_invalid": lambda ctx, campo: "Los datos enviados no tienen un formato válido.",
 }
 for _tipo in ("int_parsing", "int_from_float", "int_type", "float_parsing", "float_type", "decimal_parsing", "decimal_type"):
@@ -105,9 +105,9 @@ def traducir_error_validacion(error: dict) -> str:
     if tipo in ("value_error", "assertion_error"):
         return _mensaje_propio(error)
     if tipo.startswith(("date", "datetime")):
-        return "Ingrese una fecha válida."
+        return "Ingresa una fecha válida."
     if tipo.startswith("time"):
-        return "Ingrese una hora válida."
+        return "Ingresa una hora válida."
     traductor = _TRADUCTORES.get(tipo)
     if traductor is None:
         return MENSAJE_GENERICO
@@ -124,4 +124,4 @@ def mensaje_con_tamano_en_mb(mensaje: str) -> str:
     if coincidencia is None:
         return mensaje
     megas = int(coincidencia.group(1)) / (1024 * 1024)
-    return f"El archivo pesa más de {_numero(round(megas, 1)).removesuffix(',0')} MB. Elija uno más liviano."
+    return f"El archivo pesa más de {_numero(round(megas, 1)).removesuffix(',0')} MB. Elige uno más liviano."

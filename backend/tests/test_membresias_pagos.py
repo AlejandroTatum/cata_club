@@ -1706,7 +1706,7 @@ def test_presencial_con_pendiente_concurrente_degrada_sin_duplicar(client, db_se
 
     resp = _presencial(client, persona["id"], membresia["id"])
     assert resp.status_code == 400, resp.text
-    assert "pendiente de validación" in resp.json()["detail"]
+    assert "por validar" in resp.json()["detail"]
 
     pagos = db_session.query(Pago).all()
     assert len(pagos) == 1

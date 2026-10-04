@@ -8,6 +8,7 @@
 import type { PagoPersona } from "@/services/api";
 import type { BadgeTone } from "@/components/ui/Badge";
 import { formatCurrency } from "@/lib/format-utils";
+import { shrinkImage } from "@/lib/shrink-image";
 
 // ---------------------------------------------------------------------------
 // Filters
@@ -70,7 +71,7 @@ export function describePagoEstado(
 ): { label: string; tone: BadgeTone } {
   if (estado === "APROBADO") return { label: "Aprobado", tone: "ok" };
   if (estado === "RECHAZADO") return { label: "Rechazado", tone: "bad" };
-  return { label: "Pendiente de validación", tone: "warn" };
+  return { label: "Por validar", tone: "warn" };
 }
 
 /**
@@ -213,7 +214,7 @@ export const MAX_MESES_COBERTURA = 12;
  * adjusted from the issue's own "36" to the real, owner-confirmed cap).
  */
 export const MENSAJE_MESES_MAXIMO_EXCEDIDO =
-  `El pago no puede cubrir más de ${MAX_MESES_COBERTURA} meses. Reduzca el monto ingresado.`;
+  `El pago no puede cubrir más de ${MAX_MESES_COBERTURA} meses. Reduce el monto ingresado.`;
 
 /**
  * Whether an amount would buy more than `MAX_MESES_COBERTURA` months at a
@@ -377,6 +378,27 @@ export function voucherFileError(file: File): string | null {
   return voucherFileTypeError(file) ?? voucherFileSizeError(file);
 }
 
+/**
+ * FAM-26: what a voucher input does with a picked file. A photo over 5 MB is
+ * shrunk in the browser first (phone cameras go past the limit easily); a PDF
+ * is never touched, and when shrinking fails the person gets the same 5 MB
+ * message as before.
+ */
+export async function prepareVoucher(file: File): Promise<{ file: File } | { error: string }> {
+  const typeError = voucherFileTypeError(file);
+  if (typeError) return { error: typeError };
+  let candidate = file;
+  if (file.type.startsWith("image/") && file.size > MAX_VOUCHER_BYTES) {
+    try {
+      candidate = await shrinkImage(file, MAX_VOUCHER_BYTES);
+    } catch {
+      candidate = file;
+    }
+  }
+  const error = voucherFileSizeError(candidate);
+  return error ? { error } : { file: candidate };
+}
+
 // ---------------------------------------------------------------------------
 // El descuento que el club ya aplicó
 // ---------------------------------------------------------------------------
@@ -462,6 +484,6 @@ export function getEmptyStateMessage(filter: PagoStatusFilter): string {
     case "RECHAZADO":
       return "No hay pagos rechazados.";
     case "PENDIENTE_VALIDACION":
-      return "No hay pagos pendientes de validación.";
+      return "No hay pagos por validar.";
   }
 }

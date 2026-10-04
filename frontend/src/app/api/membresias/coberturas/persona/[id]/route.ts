@@ -20,12 +20,12 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
   const result = await backendFetchAuthed(request, `/membresias/coberturas/persona/${encodeURIComponent(params.id)}`);
   if (!result.ok) {
     return NextResponse.json(
-      { message: "No se pudo cargar su historial de coberturas." },
+      { message: "No se pudo cargar tu historial de coberturas." },
       { status: result.status },
     );
   }
   if (!result.response.ok) {
-    return passthroughBackendError(result.response, "No se pudo cargar su historial de coberturas.");
+    return passthroughBackendError(result.response, "No se pudo cargar tu historial de coberturas.");
   }
 
   const body = await result.response.json();

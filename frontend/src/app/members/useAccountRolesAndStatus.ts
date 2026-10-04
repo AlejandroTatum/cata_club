@@ -24,12 +24,12 @@ import { useToast } from "@/contexts/ToastContext";
 import { toUserMessage } from "@/lib/error-message";
 import type { BackendTipoRol } from "@/types/domain";
 
-/** Shared by the toast copy and the role checkboxes' labels. */
+/** Shared by the toast copy and the role options' labels. */
 export const ROLE_LABELS: Record<BackendTipoRol, string> = {
   ADMINISTRADOR: "Admin",
   ENTRENADOR: "Entrenador",
   REPRESENTANTE: "Representante",
-  ALUMNO: "Alumno",
+  ALUMNO: "Jugador",
 };
 
 export interface AccountRolesAndStatus {
@@ -39,14 +39,15 @@ export interface AccountRolesAndStatus {
   ready: boolean;
   /** The initial load specifically, so callers can say "Cargando…" rather than just disabling. */
   loading: boolean;
-  /** The role whose toggle is currently in flight, if any. */
+  /** The role being switched to, while the change is in flight. */
   roleLoading: BackendTipoRol | null;
   stateLoading: boolean;
   roleError: string | null;
   stateError: string | null;
   /** True once a role or the account state was changed from this dialog (ADMA-06). */
   changed: boolean;
-  toggleRole: (role: BackendTipoRol) => Promise<void>;
+  /** An account has exactly ONE role: picking one replaces whatever it had. */
+  selectRole: (role: BackendTipoRol) => Promise<void>;
   toggleEstado: () => Promise<void>;
 }
 
@@ -99,41 +100,60 @@ export function useAccountRolesAndStatus(personaId: number): AccountRolesAndStat
     };
   }, [personaId]);
 
-  const toggleRole = useCallback(
+  const selectRole = useCallback(
     async (role: BackendTipoRol): Promise<void> => {
+      // `roles` only holds more than one entry for a legacy account that
+      // predates the one-role rule; picking any role leaves it with just that.
+      if (roles.length === 1 && roles[0] === role) return;
+      const previous = roles.filter((r) => r !== role);
       setRoleLoading(role);
       setRoleError(null);
-      const hasRole = roles.includes(role);
+      let remaining = roles;
 
       try {
-        if (hasRole) {
-          await quitarRol(personaId, role);
-          setRoles((prev) => prev.filter((r) => r !== role));
-          setChanged(true);
-          showSuccess(`Rol ${ROLE_LABELS[role]} quitado correctamente.`);
-        } else {
-          await asignarRol(personaId, role);
-          setRoles((prev) => [...prev, role]);
-          setChanged(true);
-          showSuccess(`Rol ${ROLE_LABELS[role]} asignado correctamente.`);
+        // The backend refuses a second role (rol_unico.py), so the old one
+        // goes first. Each removal is reconciled on its own: "no tiene el rol"
+        // means it is already gone, which is what was asked for.
+        for (const old of previous) {
+          try {
+            await quitarRol(personaId, old);
+          } catch (error: unknown) {
+            if (!toUserMessage(error, "").toLowerCase().includes("no tiene el rol")) throw error;
+          }
+          remaining = remaining.filter((r) => r !== old);
+          setRoles(remaining);
         }
+        if (!remaining.includes(role)) {
+          try {
+            await asignarRol(personaId, role);
+          } catch (error: unknown) {
+            // See the reconcile note below: the backend already has this role.
+            if (!toUserMessage(error, "").toLowerCase().includes("ya tiene el rol")) throw error;
+          }
+        }
+        setRoles([role]);
+        setChanged(true);
+        showSuccess(`Rol ${ROLE_LABELS[role]} asignado correctamente.`);
       } catch (error: unknown) {
-        const message = toUserMessage(error, "No se pudo actualizar el rol.");
-        // If the backend says the role is already present/absent, reconcile
-        // local state. This reads the TRANSLATED message, so it only
-        // reconciles while the backend's sentence survives the vocabulary
-        // gate — it does today (plain Spanish on a 4xx), but a reworded detail
-        // carrying an underscore would silently stop reconciling. The durable
-        // fix is a status or an error code the frontend can branch on.
-        if (message.toLowerCase().includes("ya tiene el rol")) {
-          setRoles((prev) => (prev.includes(role) ? prev : [...prev, role]));
-        } else if (message.toLowerCase().includes("no tiene el rol")) {
-          setRoles((prev) => prev.filter((r) => r !== role));
-        } else {
-          // ADMA-07: shown once, in the Roles panel. A toast on top of the
-          // panel said the same sentence twice and stacked on repeated clicks.
-          setRoleError(message);
+        // The reconcile above reads the TRANSLATED message, so it only works
+        // while the backend's sentence survives the vocabulary gate — it does
+        // today (plain Spanish on a 4xx), but a reworded detail carrying an
+        // underscore would silently stop reconciling. The durable fix is a
+        // status or an error code the frontend can branch on.
+        // ADMA-07: shown once, in the Roles panel. A toast on top of the
+        // panel said the same sentence twice and stacked on repeated clicks.
+        setRoleError(toUserMessage(error, "No se pudo actualizar el rol."));
+        // The old role was already removed but the new one was refused: put
+        // it back so the account is not left roleless by a half-done switch.
+        if (roles.length > 0 && remaining.length === 0) {
+          try {
+            await asignarRol(personaId, roles[0]);
+            remaining = [roles[0]];
+          } catch {
+            // Rollback failed too: the panel shows the truth (no role).
+          }
         }
+        setRoles(remaining);
       } finally {
         setRoleLoading(null);
       }
@@ -170,7 +190,7 @@ export function useAccountRolesAndStatus(personaId: number): AccountRolesAndStat
     roleError,
     stateError,
     changed,
-    toggleRole,
+    selectRole,
     toggleEstado,
   };
 }

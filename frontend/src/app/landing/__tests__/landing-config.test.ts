@@ -107,7 +107,7 @@ describe("buildLandingStats", (): void => {
       expect(stat.label).not.toMatch(/fundad/i);
     });
     expect(stats.find((stat): boolean => stat.value === String(FOUNDING_DATE.year))?.label).toBe(
-      "Desde el 10 de octubre",
+      "Desde el 10 de octubre de 2013",
     );
   });
 
@@ -178,6 +178,13 @@ describe("landingConfig", (): void => {
    */
   it("carries the contact channels and nothing about schedules", (): void => {
     expect(Object.keys(landingConfig)).toEqual(["contact"]);
-    expect(Object.keys(landingConfig.contact)).toEqual(["whatsapp", "facebook", "instagram"]);
+    expect(Object.keys(landingConfig.contact)).toEqual(["whatsapp", "phoneLabels", "email", "facebook", "instagram"]);
+  });
+
+  it("labels both landing numbers as Administración (QA4 LAN-15)", (): void => {
+    expect(landingConfig.contact.phoneLabels).toEqual({
+      "0994219619": "Administración",
+      "0990288152": "Administración",
+    });
   });
 });

@@ -29,8 +29,8 @@ export default function AttendanceLeaveDialog({
       title={isDiscardDraft ? "¿Descartar la lista sin terminar?" : "¿Salir sin registrar la asistencia?"}
       message={
         isDiscardDraft && pendingConfirmation?.kind === "discard-draft"
-          ? `Se perderán las ${pendingConfirmation.markCount} marcas de ${pendingConfirmation.label}. Los alumnos volverán a quedar sin revisar.`
-          : `Marcó ${reviewedCount} de ${totalStudents} ${totalStudents === 1 ? "alumno" : "alumnos"} y todavía no registró la asistencia. Guardamos el borrador en esta pestaña para que pueda retomarlo, pero si la cierra se pierde.`
+          ? `Se perderán las ${pendingConfirmation.markCount} marcas de ${pendingConfirmation.label}. Los jugadores volverán a quedar sin revisar.`
+          : `Marcaste ${reviewedCount} de ${totalStudents} ${totalStudents === 1 ? "jugador" : "jugadores"} y todavía no registraste la asistencia. Guardamos el borrador en esta pestaña para que puedas retomarlo, pero si la cierra se pierde.`
       }
       confirmLabel={isDiscardDraft ? "Descartar" : "Salir sin registrar"}
       cancelLabel={isDiscardDraft ? "Conservar" : "Seguir con la lista"}

@@ -60,7 +60,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const nextResponse = NextResponse.json(
-      { mensaje: "Se cerraron sus otras sesiones. Este dispositivo sigue conectado." },
+      { mensaje: "Se cerraron tus otras sesiones. Este dispositivo sigue conectado." },
       { status: 200 },
     );
     setAuthCookies(nextResponse, { accessToken: data.access_token, refreshToken: data.refresh_token });

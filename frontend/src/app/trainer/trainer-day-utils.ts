@@ -19,6 +19,7 @@
  */
 
 import type { EstadoAsistencia } from "@/types/domain";
+import { attendanceRatePercent, attendedCount, countsAsAttended } from "@/lib/attendance-rule";
 import {
   buildDateRange,
   calendarIsoDate,
@@ -35,7 +36,7 @@ import type {
 } from "@/app/attendance/attendance-utils";
 import { buildWizardQuery } from "@/app/trainer/attendance/attendance-utils";
 import { formatDay } from "@/app/attendance/attendance-utils";
-import type { AlumnoHorario } from "@/services/api";
+import type { AlumnoHorario, ConteoHorario } from "@/services/api";
 import type { DiaSemana } from "@/types/domain";
 
 // ---------------------------------------------------------------------------
@@ -121,7 +122,7 @@ export function minutesUntilStart(schedule: TrainingSchedule, now: Date = new Da
  */
 export function formatEnrolledCount(count: number | null): string | null {
   if (count === null) return null;
-  return count === 1 ? "1 estudiante inscrito" : `${count} estudiantes inscritos`;
+  return count === 1 ? "1 jugador inscrito" : `${count} jugadores inscritos`;
 }
 
 // ---------------------------------------------------------------------------
@@ -153,7 +154,7 @@ function horarioStartMinutes(horario: string): number {
 function emptyCounts(): Record<EstadoAsistencia, number> {
   // Issue #1373: the two authorized-absence states start at zero like the
   // rest — every state is always a key, even before any record arrives.
-  return { present: 0, absent: 0, late: 0, justified: 0, sick: 0, competition: 0 };
+  return { present: 0, absent: 0, late: 0, sick: 0, competition: 0 };
 }
 
 /**
@@ -226,7 +227,7 @@ export interface AbsenceAlert {
  * reaches the alert threshold. Ties break alphabetically so the panel does not
  * reshuffle between refreshes for no reason.
  *
- * Only `absent` counts — a justified absence is precisely the case the club
+ * Only `absent` counts — a sick or competition absence is precisely the case the club
  * has already been told about.
  */
 export function findAbsenceAlert(records: AttendanceRecord[]): AbsenceAlert | null {
@@ -253,7 +254,7 @@ export function findAbsenceAlert(records: AttendanceRecord[]): AbsenceAlert | nu
 /**
  * Every student at or above the alert threshold, most absences first, ties
  * alphabetical, capped for a dashboard block. Same counting rule as
- * `findAbsenceAlert` (only `absent`; a justified absence is already known) —
+ * `findAbsenceAlert` (only `absent`; a sick or competition absence is already known) —
  * this is its list form, for "Alumnos a seguir".
  */
 export function findStudentsToFollow(records: AttendanceRecord[], limit = 5): AbsenceAlert[] {
@@ -388,23 +389,22 @@ export function formatTimeUntilStart(minutes: number): string {
 
 /**
  * Enrolled-count-by-horario map for TODAY's schedules, built from the club's
- * one-call roster (`fetchRosterDeTodosLosHorarios`) instead of one
- * `fetchAlumnosPorHorario` per card — the same N+1-avoiding move `/groups`
- * already made (TRA-7), now paying for the hero session AND every session
- * still to come today in a single fetch.
+ * lightweight counts (`fetchConteosPorHorario`, QA4 PERF-01) instead of the
+ * ~500 KB roster the screens used to download just to count it.
  *
  * Every schedule in `todaySchedules` gets an entry, even 0 — a genuinely
  * empty class still counts as a known "0 estudiantes inscritos", not the
- * missing-data blank `formatEnrolledCount(null)` renders.
+ * missing-data blank `formatEnrolledCount(null)` renders (the endpoint
+ * omits horarios nobody is enrolled in).
  */
 export function buildEnrolledCountsByHorario(
   todaySchedules: TrainingSchedule[],
-  roster: AlumnoHorario[],
+  conteos: ConteoHorario[],
 ): Record<number, number> {
   const counts: Record<number, number> = {};
   for (const schedule of todaySchedules) counts[schedule.id] = 0;
-  for (const alumno of roster) {
-    if (alumno.horarioId in counts) counts[alumno.horarioId] += 1;
+  for (const conteo of conteos) {
+    if (conteo.horarioId in counts) counts[conteo.horarioId] = conteo.inscritos;
   }
   return counts;
 }
@@ -550,9 +550,9 @@ export function buildDayRail(
 // ---------------------------------------------------------------------------
 
 /** Reading order for the six attendance states — best news first, as on every other screen.
- *  Issue #1373 slots the two authorized-absence states between justified and absent:
+ *  Issue #1373 slots the two authorized-absence states between late and absent:
  *  a known reason is never a worse verdict than an unexcused one. */
-export const STATE_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "sick", "competition", "absent"];
+export const STATE_ORDER: EstadoAsistencia[] = ["present", "late", "sick", "competition", "absent"];
 
 export interface SessionBarSegment {
   estado: EstadoAsistencia;
@@ -577,7 +577,6 @@ export function buildSessionBarSegments(
 const BAR_STATE_NOUNS: Record<EstadoAsistencia, [singular: string, plural: string]> = {
   present: ["presente", "presentes"],
   late: ["tardanza", "tardanzas"],
-  justified: ["justificado", "justificados"],
   // Issue #1373: inasistencias autorizadas — mismos nombres que usa el resto
   // de la app (getAttendanceLabel), en singular y plural para el aria-label.
   sick: ["enfermo", "enfermos"],
@@ -590,7 +589,7 @@ function pluralizedCount(count: number, [singular, plural]: [string, string]): s
 }
 
 /**
- * "9 presentes", "1 tardanza", "0 justificados" — the ONE way this product
+ * "9 presentes", "1 tardanza", "0 enfermos" — the ONE way this product
  * counts a state out loud.
  *
  * The nouns above were private and spent only on the bar's accessible name,
@@ -664,22 +663,16 @@ export interface MonthAttendanceRate {
  * llegó tarde entrenó igual, y un tile llamado "Asistencia del mes" que solo
  * contaba `totalPresent` subdeclaraba la asistencia real en 16 puntos frente
  * a la propia tabla "Distribución de asistencias" de la misma pantalla (60%
- * vs 73% sobre el mismo mes). Justificado y ausente siguen fuera: ninguno de
- * los dos es "entrenó".
+ * vs 73% sobre el mismo mes). Enfermo, competencia y ausente siguen fuera: ninguno de
+ * los tres es "entrenó".
  *
  * A month with no records is 0%, not NaN: this runs on the first day of every
  * month, before anyone has taken a list.
  */
 export function buildMonthAttendanceRate(stats: AttendanceDayStats): MonthAttendanceRate {
-  const total = stats.totalStudents;
-  if (total <= 0) return { percent: 0, present: 0, total: 0 };
-
-  const present = stats.totalPresent + stats.totalLate;
-  return {
-    percent: Math.round((present / total) * 100),
-    present,
-    total,
-  };
+  const total = Math.max(stats.totalStudents, 0);
+  const present = total > 0 ? stats.totalPresent + stats.totalLate : 0;
+  return { percent: attendanceRatePercent(present, total), present, total };
 }
 
 // ---------------------------------------------------------------------------
@@ -759,12 +752,12 @@ export function buildWeeklyAttendanceTrend(
   weeks = 6,
 ): WeeklyTrendPoint[] {
   return buildWeeklyStatusBreakdown(records, now, weeks).map((week) => {
-    const attended = week.counts.present + week.counts.late;
+    const attended = attendedCount(week.counts);
     return {
       startIso: week.startIso,
       total: week.total,
       attended,
-      ratePercent: week.total > 0 ? Math.round((attended / week.total) * 100) : 0,
+      ratePercent: attendanceRatePercent(attended, week.total),
     };
   });
 }
@@ -839,7 +832,7 @@ export function buildLastSessionSummary(
   const list = byDate.get(latest) ?? [];
   return {
     fecha: latest,
-    attended: list.filter((record) => record.estado === "present" || record.estado === "late").length,
+    attended: list.filter((record) => countsAsAttended(record.estado)).length,
     total: list.length,
   };
 }

@@ -29,7 +29,7 @@ class SponsorServicio:
         # `leer_con_limite` antes de llegar acá, pero este chequeo protege a
         # cualquier llamador directo del servicio que no pase por esa ruta.
         if len(contenido) > self.TAMANO_MAXIMO_LOGO_BYTES:
-            raise OperacionInvalida("El logo pesa más de 5 MB. Elija uno más liviano.")
+            raise OperacionInvalida("El logo pesa más de 5 MB. Elige uno más liviano.")
         if content_type not in ("image/jpeg", "image/png"):
             raise OperacionInvalida("El logo debe ser una imagen JPG o PNG.")
         # La firma binaria real debe coincidir con el tipo declarado: el
@@ -38,7 +38,7 @@ class SponsorServicio:
         # `PersonaServicio.actualizar_foto` y la subida de voucher).
         if not es_firma_valida(contenido, content_type):
             raise OperacionInvalida(
-                "Ese archivo no es una imagen válida. Elija una foto JPG o PNG."
+                "Ese archivo no es una imagen válida. Elige una foto JPG o PNG."
             )
 
         # ADMB-33: dos logos con el mismo nombre salían repetidos en la franja

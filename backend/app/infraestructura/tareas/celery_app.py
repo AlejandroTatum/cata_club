@@ -80,6 +80,9 @@ celery_app.conf.beat_schedule = {
     # PC-2: latido para el monitor externo (`/health/workers`). `expires`
     # descarta un latido que esperó en la cola más que el TTL: ejecutarlo tarde
     # escribiría "ahora" y taparía un worker atascado.
+    # PERF-10: se queda en 1 min. El TTL del latido es de 180 s (3 latidos) y
+    # el monitor externo lee esa clave; espaciarlo obligaría a subir el TTL y
+    # retrasaría la detección de un worker caído.
     "registrar-latido-workers-cada-minuto": {
         "task": "app.infraestructura.tareas.latido_tareas.registrar_latido",
         "schedule": crontab(minute="*/1"),
@@ -92,6 +95,9 @@ celery_app.conf.beat_schedule = {
     # Issue #1314: una instantánea por minuto (un scrape + un insert) y la
     # purga diaria de lo que ya no se dibuja. 03:20, entre la purga de
     # reportes (03:10) y nada más: no compite con la banda de 02:30-02:40.
+    # PERF-10: se queda en 1 min. Cada instantánea guarda deltas "del último
+    # minuto" (peticiones/min, MAX_HUECO_S=300 s) y las gráficas asumen esa
+    # resolución; espaciarla cambiaría el significado del dato.
     "capturar-metricas-cada-minuto": {
         "task": "app.infraestructura.tareas.metricas_tareas.capturar_metricas",
         "schedule": crontab(minute="*/1"),
@@ -100,9 +106,16 @@ celery_app.conf.beat_schedule = {
         "task": "app.infraestructura.tareas.metricas_tareas.purgar_metricas_y_actividad",
         "schedule": _parsear_hora_crontab("03:20"),
     },
-    "despachar-inscripcion-notificaciones-cada-minuto": {
+    # PERF-10 / REG-20: los tres barridos del outbox (inscripciones,
+    # recuperaciones y verificaciones) son RESPALDO cada 5 min: el despacho
+    # sale al instante, tras el commit de la fila
+    # (`outbox_despacho.encolar_despacho_tras_commit`), y el barrido solo
+    # recoge lo que ese publicar perdió (broker caído, worker reiniciado) y
+    # los reintentos con backoff. Pasar de 1440 a 288 corridas por día no
+    # cambia la latencia percibida del correo.
+    "despachar-inscripcion-notificaciones-cada-5-minutos": {
         "task": "app.infraestructura.tareas.enrollment_notificacion_tareas.despachar_inscripcion_notificaciones",
-        "schedule": crontab(minute="*/1"),
+        "schedule": crontab(minute="*/5"),
     },
     "limpiar-inscripcion-notificaciones-diaria": {
         "task": "app.infraestructura.tareas.enrollment_notificacion_tareas.limpiar_inscripcion_notificaciones",
@@ -128,18 +141,19 @@ celery_app.conf.beat_schedule = {
     },
     "despachar-recuperaciones-pendientes": {
         "task": "app.infraestructura.tareas.recuperacion_tareas.despachar_recuperaciones_pendientes",
-        "schedule": crontab(minute="*/1"),
+        "schedule": crontab(minute="*/5"),
     },
     "limpiar-recuperaciones-expiradas": {
         "task": "app.infraestructura.tareas.recuperacion_tareas.limpiar_recuperaciones_expiradas",
         "schedule": crontab(minute=5),
     },
     # Issue #790. Mismo ritmo que la recuperación: quien acaba de inscribirse
-    # en el club está mirando la pantalla, y un enlace que tarda más de un
-    # minuto en salir se vive como que no llegó.
+    # en el club está mirando la pantalla y un enlace que tarda en salir se
+    # vive como que no llegó -- por eso el despacho sale al commit y este
+    # barrido de 5 min es solo el respaldo.
     "despachar-verificaciones-pendientes": {
         "task": "app.infraestructura.tareas.verificacion_correo_tareas.despachar_verificaciones_pendientes",
-        "schedule": crontab(minute="*/1"),
+        "schedule": crontab(minute="*/5"),
     },
     "limpiar-verificaciones-expiradas": {
         "task": "app.infraestructura.tareas.verificacion_correo_tareas.limpiar_verificaciones_expiradas",

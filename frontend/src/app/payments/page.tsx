@@ -60,6 +60,15 @@
  * else. The cost is explicit — N pending payments are N confirmations again,
  * which is the pain the batch was built for. If that cost bites, the answer is
  * a better batch, not this one back.
+ *
+ * ## Fast review (QA4 ADMA-23)
+ *
+ * The cost above was 5-6 clicks per payment (three checkboxes, "Aprobar pago",
+ * "Confirmar"). The decision is still made one payment at a time, with the
+ * voucher in view, but now takes two: ONE "Revisé el pago" tick covering the
+ * listed points, and "Aprobar pago", which sends at once (the tick is the
+ * deliberate step, so the extra confirm dialog is gone). A decision opens the
+ * next pending payment with the tick cleared. No bulk approval.
  */
 
 "use client";
@@ -69,7 +78,6 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import ConfirmDialog from "@/components/ConfirmDialog";
 import PagoCorreccionSection from "@/app/payments/PagoCorreccionSection";
 import { useModalFocusTrap } from "@/lib/focus-trap";
 import { backHrefForRole } from "@/lib/auth-utils";
@@ -119,6 +127,9 @@ import {
   rejectionPayerNotice,
   rejectionReasonsFor,
   uploadedAtLabel,
+  waitingAgeLabel,
+  matchesMethodFilter,
+  type MethodFilterKey,
   REJECTION_NOTE_MAX_LENGTH,
   requiresExceptionReason,
   EXCEPTION_REASON_MAX_LENGTH,
@@ -178,10 +189,16 @@ function isFilterKey(value: string): value is FilterKey {
 }
 
 const VALIDATION_STATUS_LABELS: Record<ValidationStatus, string> = {
-  pendiente: "Pendiente de validar",
+  pendiente: "Por validar",
   validado: "Validado",
   rechazado: "Rechazado",
 };
+
+const METHOD_FILTERS: { key: MethodFilterKey; label: string }[] = [
+  { key: "all", label: "Cualquier método" },
+  { key: "efectivo", label: "Efectivo" },
+  { key: "transferencia", label: "Transferencia" },
+];
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "pendiente", label: "Pendientes" },
@@ -228,15 +245,6 @@ function rejectionCoverageNote(request: PaymentValidationRequest): string {
     : `La membresía de ${request.studentName} sigue sin activarse hasta entonces.`;
 }
 
-/** Same distinction as `rejectionCoverageNote`, for the approve confirmation dialog. */
-function approveConfirmMessage(request: PaymentValidationRequest | null): string {
-  const consequence =
-    request?.currentMembershipStatus === "activa"
-      ? "La cobertura se extiende de inmediato"
-      : "La membresía pasará a activa de inmediato";
-  return `¿Confirma que aprueba este pago? ${consequence} y esta acción no se puede deshacer.`;
-}
-
 /** Same distinction as `rejectionCoverageNote`, for the approval success toast. */
 function approvalSuccessMessage(request: PaymentValidationRequest): string {
   return request.currentMembershipStatus === "activa"
@@ -273,6 +281,8 @@ interface RowFields {
   period: string;
   amount: string;
   method: string;
+  /** ADMA-25: «Hace 3 días». */
+  waiting: string;
 }
 
 /**
@@ -293,6 +303,7 @@ function buildRowFields(req: PaymentValidationRequest): RowFields {
     period: humanizePaymentPeriod(req.membershipPeriod),
     amount: formatCurrency(req.expectedAmount),
     method: req.paymentMethod,
+    waiting: waitingAgeLabel(req.uploadedAt),
   };
 }
 
@@ -464,11 +475,11 @@ function ProofViewer({
                 an empty box. */}
             <ul className="grid gap-2 text-left text-xs text-ink-2">
               <li>
-                Si no puede verificar el depósito, rechace el pago para que el responsable suba un
+                Si no puedes verificar el depósito, rechaza el pago para que el responsable presente un
                 comprobante.
               </li>
               <li>
-                Si ya verificó el depósito en la cuenta del club, apruebe e indique el motivo de la
+                Si ya verificaste el depósito en la cuenta del club, aprueba e indica el motivo de la
                 excepción en el bloque de decisión.
               </li>
             </ul>
@@ -543,12 +554,12 @@ function CashConfirmationPanel({
       ) : (
         <>
           <ol className="grid gap-2 px-[18px] py-4 text-sm text-ink-2">
-            <li>1. Reciba el dinero en mano, sin comprobante bancario.</li>
-            <li>2. Verifique que el monto entregado sea el indicado arriba.</li>
-            <li>3. Marque la recepción en la lista de la izquierda y apruebe el pago.</li>
+            <li>1. Recibe el dinero en mano, sin comprobante bancario.</li>
+            <li>2. Verifica que el monto entregado sea el indicado arriba.</li>
+            <li>3. Marca la recepción en la lista de la izquierda y aprueba el pago.</li>
           </ol>
           <p className="mt-auto border-t border-line px-[18px] py-4 text-xs text-ink-3-strong">
-            Si el monto entregado no coincide, rechace el pago e indique el motivo al responsable.
+            Si el monto entregado no coincide, rechaza el pago e indica el motivo al responsable.
           </p>
         </>
       )}
@@ -565,6 +576,9 @@ function CashConfirmationPanel({
 /** Marks a queue row's action button so focus can find it again on the way back. */
 /** Phone stat tiles: label + figure only, so the first pending card clears the fold. */
 const STAT_COMPACT = "max-lg:min-h-0 max-lg:gap-1 max-lg:px-3 max-lg:py-2.5";
+
+const REVIEWED_KEY = "revisado";
+const REVIEWED_LABEL = "Revisé el pago y confirmo los puntos anteriores";
 
 const QUEUE_ACTION_ATTR = "data-payment-action";
 
@@ -611,6 +625,8 @@ export default function PaymentsPage(): React.ReactElement {
     isFilterKey,
   );
   const [query, setQuery] = useState("");
+  /** ADMA-25: narrows the queue to cash or transfer, client-side over the drained set. */
+  const [methodFilter, setMethodFilter] = useState<MethodFilterKey>("all");
   /** Selection is by id, never by object: the object is replaced on every
    *  approve/reject, and holding the old one is how a detail view goes stale. */
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -622,19 +638,14 @@ export default function PaymentsPage(): React.ReactElement {
   const [rejectionReasonKey, setRejectionReasonKey] = useState("");
   const [rejectionNote, setRejectionNote] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
-  const [confirmApproveOpen, setConfirmApproveOpen] = useState(false);
   /**
-   * Re-entrancy guard for the approve confirmation dialog (issue #313, K5
-   * hallazgo #12). `setConfirmApproveOpen(false)` unmounts the dialog, but
-   * that unmount only lands on the NEXT render — a real fast triple-click
-   * (or a script clicking faster than React repaints) can fire `onConfirm`
-   * more than once against the SAME still-mounted button before that
-   * happens. Two `decide()` calls meant two real PUTs for the same payment:
-   * the first landed, the second came back 400 ("ya está aprobado") and
-   * that error handler reverted the row and told the admin it "volvió a la
-   * cola de pendientes" — a state that never happened. A ref (synchronous,
-   * unlike state) makes every click after the first a no-op regardless of
-   * render timing.
+   * Re-entrancy guard for "Aprobar pago" (issue #313, K5 hallazgo #12). A real
+   * fast triple-click can fire the handler more than once against the SAME
+   * still-mounted button before `actionLoading` re-renders it disabled. Two
+   * `decide()` calls meant two real PUTs for the same payment: the first
+   * landed, the second came back 400 ("ya está aprobado"). A ref (synchronous,
+   * unlike state) makes every click after the first a no-op; it is released
+   * when the decision settles.
    */
   const confirmApproveInFlightRef = useRef(false);
   const [previewUnavailable, setPreviewUnavailable] = useState(false);
@@ -790,7 +801,7 @@ export default function PaymentsPage(): React.ReactElement {
   }, [isAdmin, loadPage]);
 
   const normalizedQuery = query.trim().toLowerCase();
-  const isSearching = normalizedQuery.length > 0;
+  const isSearching = normalizedQuery.length > 0 || methodFilter !== "all";
 
   /**
    * The full set the search box searches over for the CURRENTLY ACTIVE
@@ -831,8 +842,11 @@ export default function PaymentsPage(): React.ReactElement {
   }, [isAdmin, isSearching, loadSearchDrain, searchDrainRetryToken]);
 
   const searchMatches = useMemo(
-    () => searchSource.filter((r) => r.studentName.toLowerCase().includes(normalizedQuery)),
-    [searchSource, normalizedQuery],
+    () =>
+      searchSource.filter(
+        (r) => r.studentName.toLowerCase().includes(normalizedQuery) && matchesMethodFilter(r.paymentMethod, methodFilter),
+      ),
+    [searchSource, normalizedQuery, methodFilter],
   );
 
   // Not searching: the table IS the server page, paginated EXPLICITLY
@@ -879,7 +893,7 @@ export default function PaymentsPage(): React.ReactElement {
   // paginator never gets stuck on a stale/out-of-range page.
   useEffect(() => {
     setPage(1);
-  }, [activeFilter, normalizedQuery]);
+  }, [activeFilter, normalizedQuery, methodFilter]);
 
   const totalPages = useMemo(() => getTotalPages(visibleTotal), [visibleTotal]);
 
@@ -935,7 +949,10 @@ export default function PaymentsPage(): React.ReactElement {
       }),
     [selectedRequest?.paymentMethod, selectedRequest?.expectedAmount, selectedRequest?.proofPreviewUrl],
   );
-  const remainingChecks = checklist.items.filter((item) => !checked[item.key]).length;
+  /** One deliberate act covers the whole checklist (QA4 ADMA-23): the admin
+   *  reads the points beside the voucher and confirms them with a single tick. */
+  const reviewed = Boolean(checked[REVIEWED_KEY]);
+  const remainingChecks = reviewed ? 0 : 1;
   /** Issue #459: a TRANSFERENCIA with nothing attached also needs a
    *  non-blank exception reason before "Aprobar pago" unlocks — the
    *  checklist's checkboxes alone were pure self-attestation, with no gate
@@ -1099,13 +1116,14 @@ export default function PaymentsPage(): React.ReactElement {
       // (hallazgo en vivo, 2026-08-11).
       if (saved.notificationDeliveryFailed) {
         showWarning(`${confirmation.label}: la decisión se guardó, pero el aviso no llegó.`, {
-          description: `${request.studentName} no recibió la notificación in-app. Si hace falta, avísele directamente.`,
+          description: `${request.studentName} no recibió la notificación in-app. Si hace falta, avísale directamente.`,
         });
       }
     } catch (err: unknown) {
       console.error("[payments] decision failed", err);
       await reportRealOutcomeAfterFailure(request, loadingKey, dto, confirmation, err);
     } finally {
+      confirmApproveInFlightRef.current = false;
       setActionLoading(null);
     }
   }
@@ -1163,7 +1181,7 @@ export default function PaymentsPage(): React.ReactElement {
     showError(toUserMessage(err, confirmation.failure), {
       description: real
         ? `${request.studentName} sigue en la lista de pendientes.`
-        : `${request.studentName}: no se pudo confirmar el estado real. Actualice la página antes de reintentar.`,
+        : `${request.studentName}: no se pudo confirmar el estado real. Actualiza la página antes de reintentar.`,
       action: {
         label: "Reintentar",
         onAction: () => void decide(request, loadingKey, dto, confirmation),
@@ -1172,7 +1190,8 @@ export default function PaymentsPage(): React.ReactElement {
   }
 
   function handleApprove(): void {
-    if (!selectedRequest || !checklistComplete) return;
+    if (!selectedRequest || !checklistComplete || confirmApproveInFlightRef.current) return;
+    confirmApproveInFlightRef.current = true;
     const request = selectedRequest;
 
     // `exceptionReason` only travels when this approval actually needs it
@@ -1259,9 +1278,9 @@ export default function PaymentsPage(): React.ReactElement {
         <div className={STAT_GRID} data-testid="payments-stats">
           <StatCard
             className={STAT_COMPACT}
-            label="Pendientes por validar"
+            label="Por validar"
             value={pendingAllLoading || pendingAllError ? "—" : pendingAll.length}
-            hint={<span className="max-lg:hidden">esperan su revisión</span>}
+            hint={<span className="max-lg:hidden">esperan tu revisión</span>}
             variant="hot"
           />
           <StatCard
@@ -1297,13 +1316,14 @@ export default function PaymentsPage(): React.ReactElement {
           label="Filtros de pagos"
           search={
             <SearchInput
-              label="Buscar estudiante"
-              placeholder="Buscar estudiante"
+              label="Buscar jugador"
+              placeholder="Buscar jugador"
               value={query}
               onChange={setQuery}
             />
           }
           chips={
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-field">
             <div
               className="flex flex-wrap items-center gap-2"
               role="group"
@@ -1318,6 +1338,22 @@ export default function PaymentsPage(): React.ReactElement {
                   onClick={() => setActiveFilter(f.key)}
                 />
               ))}
+            </div>
+              {/* ADMA-25: a second, separate group — method is not a status. */}
+              <div
+                className="flex flex-wrap items-center gap-2"
+                role="group"
+                aria-label="Filtrar pagos por método"
+              >
+                {METHOD_FILTERS.map((f) => (
+                  <FilterPill
+                    key={f.key}
+                    label={f.label}
+                    active={methodFilter === f.key}
+                    onClick={() => setMethodFilter(f.key)}
+                  />
+                ))}
+              </div>
             </div>
           }
           // D11c, and the panel's fourth slot, which this screen left empty
@@ -1362,20 +1398,24 @@ export default function PaymentsPage(): React.ReactElement {
             icon={<ShieldCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
             title={
               normalizedQuery
-                ? "Ningún estudiante coincide con la búsqueda"
-                : activeFilter === "all"
+                ? "Ningún jugador coincide con la búsqueda"
+                : methodFilter !== "all"
+                  ? `Ningún pago en ${methodFilter === "efectivo" ? "efectivo" : "transferencia"} en esta lista`
+                  : activeFilter === "all"
                   ? "Aún no hay solicitudes de validación de pago"
                   : `No hay solicitudes ${EMPTY_FILTER_NOUN[activeFilter]}`
             }
             description={
               normalizedQuery
-                ? "Revise el nombre o limpie la búsqueda para ver toda la lista."
-                : activeFilter === "all"
-                  ? "Cuando un estudiante suba un comprobante, aparecerá aquí para su revisión."
+                ? "Revisa el nombre o limpia la búsqueda para ver toda la lista."
+                : methodFilter !== "all"
+                  ? "Elige «Cualquier método» para ver toda la lista."
+                  : activeFilter === "all"
+                  ? "Cuando un jugador presente un comprobante, aparecerá aquí para tu revisión."
                   : "La lista está al día."
             }
             action={
-              activeFilter === "all" && !normalizedQuery ? (
+              activeFilter === "all" && !normalizedQuery && methodFilter === "all" ? (
                 // The one branch that shipped WITHOUT a way out — "an empty
                 // state without a next action is a dead end", in the shared
                 // component's own words. It is the club with no requests at
@@ -1392,6 +1432,7 @@ export default function PaymentsPage(): React.ReactElement {
                   onClick={() => {
                     setActiveFilter("all");
                     setQuery("");
+                    setMethodFilter("all");
                   }}
                 >
                   Ver todas
@@ -1410,10 +1451,11 @@ export default function PaymentsPage(): React.ReactElement {
             items={visibleItems}
             getKey={(req) => req.id}
             columns={[
-              <TableHeaderCell key="estudiante" type="text">Estudiante</TableHeaderCell>,
+              <TableHeaderCell key="estudiante" type="text">Jugador</TableHeaderCell>,
               <TableHeaderCell key="periodo" type="text">Período</TableHeaderCell>,
               <TableHeaderCell key="monto" type="number">Monto</TableHeaderCell>,
               <TableHeaderCell key="metodo" type="text">Método</TableHeaderCell>,
+              <TableHeaderCell key="subido" type="text">Subido</TableHeaderCell>,
                   <TableHeaderCell key="estado" type="text">Estado</TableHeaderCell>,
               <TableHeaderCell key="accion" type="action">
                 <span className="sr-only">Acción</span>
@@ -1433,6 +1475,7 @@ export default function PaymentsPage(): React.ReactElement {
                   <TableCell type="text">
                     <MethodTag method={fields.method} />
                   </TableCell>
+                  <TableCell type="text">{fields.waiting}</TableCell>
                       <TableCell type="text">
                         <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
                           {VALIDATION_STATUS_LABELS[req.validationStatus]}
@@ -1460,6 +1503,7 @@ export default function PaymentsPage(): React.ReactElement {
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-field text-xs text-ink-2">
                     <span>{fields.period}</span>
                     <MethodTag method={fields.method} />
+                    {fields.waiting ? <span>{fields.waiting}</span> : null}
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1511,7 +1555,7 @@ export default function PaymentsPage(): React.ReactElement {
                   ? "No se pudo leer la lista de pendientes."
                   : pending.length === 0
                     ? "La lista está al día: no hay pagos por validar."
-                    : `${pending.length} ${pending.length === 1 ? "pago espera" : "pagos esperan"} su revisión: ${pendingTransferCount} por transferencia y ${pendingCashCount} en efectivo.`}
+                    : `${pending.length} ${pending.length === 1 ? "pago espera" : "pagos esperan"} tu revisión: ${pendingTransferCount} por transferencia y ${pendingCashCount} en efectivo.`}
               </p>
               <Button
                 variant="primary"
@@ -1530,7 +1574,7 @@ export default function PaymentsPage(): React.ReactElement {
                     <span className="sr-only">Transferencia</span>
                   </dt>
                   <dd>
-                    <span className="font-semibold text-ink">Transferencia:</span> compare el
+                    <span className="font-semibold text-ink">Transferencia:</span> compara el
                     comprobante con el monto y el período antes de aprobar.
                   </dd>
                 </div>
@@ -1540,7 +1584,7 @@ export default function PaymentsPage(): React.ReactElement {
                     <span className="sr-only">Efectivo</span>
                   </dt>
                   <dd>
-                    <span className="font-semibold text-ink">Efectivo:</span> confirme que recibió
+                    <span className="font-semibold text-ink">Efectivo:</span> confirma que recibiste
                     el dinero; no hay comprobante que revisar.
                   </dd>
                 </div>
@@ -1548,9 +1592,9 @@ export default function PaymentsPage(): React.ReactElement {
               <dl className="grid gap-2 border-t border-line pt-3">
                 <div className="flex items-center gap-2">
                   <dt>
-                    <Badge tone="warn">Pendiente de validar</Badge>
+                    <Badge tone="warn">Por validar</Badge>
                   </dt>
-                  <dd>Espera su decisión.</dd>
+                  <dd>Espera tu decisión.</dd>
                 </div>
                 <div className="flex items-center gap-2">
                   <dt>
@@ -1705,7 +1749,7 @@ export default function PaymentsPage(): React.ReactElement {
                     not a value: the same rule `DataRow` already draws
                     between a name and its boxed metadata. Método, Subido el
                     and Tipo are values, so they get the box. */}
-                <DetailCell label="Estudiante">{request.studentName}</DetailCell>
+                <DetailCell label="Jugador">{request.studentName}</DetailCell>
                 <DetailCell label="Responsable de pago">{payer}</DetailCell>
                 <DetailCell label="Método">
                   <DataBox>{request.paymentMethod}</DataBox>
@@ -1736,7 +1780,7 @@ export default function PaymentsPage(): React.ReactElement {
                 <div className="flex items-center justify-between gap-3 border-b border-line px-[18px] py-4">
                   <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Decisión</h2>
                   <Badge tone={checklistComplete ? "ok" : "warn"}>
-                    {checklist.items.length - remainingChecks} de {checklist.items.length}
+                    {reviewed ? "Revisado" : "Por revisar"}
                   </Badge>
                 </div>
 
@@ -1751,22 +1795,22 @@ export default function PaymentsPage(): React.ReactElement {
                     aria-labelledby="antes-de-aprobar"
                     className="-mt-2 flex flex-col"
                   >
-                    {checklist.items.map((item) => (
-                      <label
-                        key={item.key}
-                        className="flex cursor-pointer items-center gap-3 py-2 text-sm text-ink-2"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={Boolean(checked[item.key])}
-                          onChange={(e) =>
-                            setChecked((prev) => ({ ...prev, [item.key]: e.target.checked }))
-                          }
-                          className="h-[18px] w-[18px] flex-none accent-coal"
-                        />
-                        {item.label}
-                      </label>
-                    ))}
+                    <ul className="mb-2 flex list-disc flex-col gap-1 pl-5 text-sm text-ink-2">
+                      {checklist.items.map((item) => (
+                        <li key={item.key}>{item.label}</li>
+                      ))}
+                    </ul>
+                    <label className="flex cursor-pointer items-center gap-3 py-2 text-sm font-semibold text-ink">
+                      <input
+                        type="checkbox"
+                        checked={reviewed}
+                        onChange={(e) =>
+                          setChecked({ [REVIEWED_KEY]: e.target.checked })
+                        }
+                        className="h-[18px] w-[18px] flex-none accent-coal"
+                      />
+                      {REVIEWED_LABEL}
+                    </label>
                   </div>
                 {!showRejectForm ? (
                   <>
@@ -1829,10 +1873,7 @@ export default function PaymentsPage(): React.ReactElement {
                       <Button
                         variant="primary"
                         disabled={!checklistComplete || actionLoading !== null}
-                        onClick={() => {
-                          confirmApproveInFlightRef.current = false;
-                          setConfirmApproveOpen(true);
-                        }}
+                        onClick={handleApprove}
                       >
                         {actionLoading === "approve" ? "Procesando…" : "Aprobar pago"}
                       </Button>
@@ -1847,11 +1888,9 @@ export default function PaymentsPage(): React.ReactElement {
                     {!checklistComplete && (
                       <p className="min-w-0 text-xs text-ink-3-strong lg:flex-1">
                         {remainingChecks > 0 && needsExceptionReason
-                          ? `Faltan ${remainingChecks} puntos de la lista y el motivo de la excepción para poder aprobar.`
+                          ? "Falta confirmar la revisión y el motivo de la excepción para poder aprobar."
                           : remainingChecks > 0
-                          ? remainingChecks === 1
-                            ? "Falta confirmar 1 punto de la lista para poder aprobar."
-                            : `Faltan ${remainingChecks} puntos de la lista para poder aprobar.`
+                          ? "Falta confirmar la revisión para poder aprobar."
                           : "Falta indicar el motivo de la excepción para poder aprobar."}
                       </p>
                     )}
@@ -2039,7 +2078,7 @@ export default function PaymentsPage(): React.ReactElement {
             second-level screen. */}
       <AppShell
         title="Pagos"
-        subtitle="Valide los pagos por transferencia y efectivo de los miembros."
+        subtitle="Valida los pagos por transferencia y efectivo de los miembros."
         back={
           selectedRequest ? (
             <BackLink
@@ -2055,23 +2094,6 @@ export default function PaymentsPage(): React.ReactElement {
         }
       >
         {selectedRequest ? renderDetail(selectedRequest) : renderQueue()}
-
-        <ConfirmDialog
-          open={confirmApproveOpen}
-          variant="state-ok"
-          title="Aprobar pago"
-          message={approveConfirmMessage(selectedRequest)}
-          onConfirm={() => {
-            if (confirmApproveInFlightRef.current) return;
-            confirmApproveInFlightRef.current = true;
-            setConfirmApproveOpen(false);
-            void handleApprove();
-          }}
-          onCancel={() => {
-            confirmApproveInFlightRef.current = false;
-            setConfirmApproveOpen(false);
-          }}
-        />
 
         {/* Fullscreen voucher viewer modal */}
         {voucherModalOpen && selectedRequest?.proofPreviewUrl &&

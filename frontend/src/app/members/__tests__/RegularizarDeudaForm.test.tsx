@@ -164,7 +164,7 @@ describe("RegularizarDeudaForm — monto cotizado por el backend (ADM-09)", () =
     fireEvent.click(screen.getByRole("button", { name: /^Regularizar$/ }));
 
     expect(
-      await screen.findByText("El pago no puede cubrir más de 12 meses. Reduzca el monto ingresado."),
+      await screen.findByText("El pago no puede cubrir más de 12 meses. Reduce el monto ingresado."),
     ).toBeInTheDocument();
     expect(mockRegularizarDeuda).not.toHaveBeenCalled();
   });
@@ -185,7 +185,7 @@ describe("RegularizarDeudaForm — ayuda en lenguaje del club (#1492, ADMA-13)",
     await open();
     expect(
       screen.getByText(
-        "Registre aquí los meses atrasados que el alumno ya pagó o debe regularizar. " +
+        "Registra aquí los meses atrasados que el jugador ya pagó o debe regularizar. " +
           "Si el período incluye hoy, la membresía queda activa.",
       ),
     ).toBeInTheDocument();

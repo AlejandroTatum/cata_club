@@ -6,14 +6,15 @@
  * reported a failure for something that had not failed.
  *
  * Locks the split: the dependent gets created, the success toast fires, and
- * the visitor still lands on `/student` even when `refreshSession` rejects —
- * with no submit error shown for it.
+ * the visitor still sees the confirmation of the added dependent (REG-03: no
+ * automatic redirect) even when `refreshSession` rejects — with no submit
+ * error shown for it.
  *
  * @vitest-environment jsdom
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import AddDependentPage from "@/app/student/add-dependent/page";
 import { crearRepresentadoPropio } from "@/services/api";
 import { useTestSearchParams } from "@/lib/__tests__/next-navigation-double";
@@ -93,11 +94,11 @@ async function submit(): Promise<void> {
   render(<AddDependentPage />);
   goToSummaryStep();
   fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(screen.getByRole("button", { name: /agregar dependiente/i }));
+  fireEvent.click(screen.getByRole("button", { name: /agregar jugador/i }));
 }
 
 describe("a rejected refreshSession does not turn a successful alta into a reported failure", () => {
-  it("keeps the success toast and still navigates to /student when refreshSession rejects", async () => {
+  it("keeps the success toast and still shows the added dependent when refreshSession rejects", async () => {
     vi.mocked(crearRepresentadoPropio).mockResolvedValue({
       representado: {
         id: 42, nombres: "Mateo", apellidos: "Zambrano", cedula: "1798765432",
@@ -108,7 +109,7 @@ describe("a rejected refreshSession does not turn a successful alta into a repor
 
     await submit();
 
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/student"));
+    expect(await screen.findByTestId("dependent-added")).toBeInTheDocument();
     expect(showSuccessMock).toHaveBeenCalledWith("Dependiente agregado correctamente.");
   });
 
@@ -123,7 +124,7 @@ describe("a rejected refreshSession does not turn a successful alta into a repor
 
     await submit();
 
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/student"));
+    expect(await screen.findByTestId("dependent-added")).toBeInTheDocument();
     // `role="alert"` alone only proves something with that role is absent —
     // it says nothing unless it is tied to the actual create-error copy and
     // to the toast double the create path would have used.

@@ -191,9 +191,9 @@ describe("middleware CSP", () => {
     expect(first).not.toEqual(second);
   });
 
-  it("keeps the auth redirect to /login and still attaches the CSP to it", () => {
+  it("keeps the auth redirect to /login (remembering the path) and still attaches the CSP to it", () => {
     const response = middleware(makeRequest("/dashboard"));
-    expect(response.headers.get("location")).toBe("https://cata.test/login");
+    expect(response.headers.get("location")).toBe("https://cata.test/login?next=%2Fdashboard");
     expect(response.headers.get("Content-Security-Policy")).toContain("strict-dynamic");
   });
 

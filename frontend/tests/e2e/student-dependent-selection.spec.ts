@@ -126,12 +126,12 @@ test("the dependent selection survives Mi cuenta → Pagos → Asistencias", asy
   // Step 2 of the issue's reproduction: switch to the SECOND child.
   // The dashboard drives it with the family strip (one button per child);
   // Pagos and Asistencias below still use the select.
-  const strip = page.getByRole("group", { name: "Estudiante" });
+  const strip = page.getByRole("group", { name: "Jugador", exact: true });
   await expect(strip).toBeVisible();
   await strip.getByRole("button", { name: /Martín Vera/ }).click();
   await expect(page.getByTestId("student-carnet")).toHaveAttribute(
     "aria-label",
-    "Carnet de socio de Martín Vera",
+    "Carnet de jugador de Martín Vera",
   );
 
   // Step 3: "Pagos" from the sidebar — a bare `/student/payments` link that
@@ -162,6 +162,6 @@ test("the dependent selection survives Mi cuenta → Pagos → Asistencias", asy
   await sidebarLink(page, "Mi cuenta").click();
   await expect(page.getByTestId("student-carnet")).toHaveAttribute(
     "aria-label",
-    "Carnet de socio de Martín Vera",
+    "Carnet de jugador de Martín Vera",
   );
 });

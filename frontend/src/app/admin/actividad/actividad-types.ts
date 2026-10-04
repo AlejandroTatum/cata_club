@@ -40,6 +40,22 @@ export interface ResumenPeriod {
 
 export type StatusKey = "app" | "errors" | "notifications";
 
+/** Parts of the system the worker heartbeat can report as degraded (backend `ComponenteDegradado`). */
+export type HealthComponentKey = "workers" | "email" | "outbox";
+export type HealthReason = "heartbeat_missing" | "heartbeat_stale" | "outbox_stale";
+
+/**
+ * The heartbeat cross-check of both endpoints (backend `SaludSistema`, ADMB-N1).
+ * Optional on purpose: an older backend, or a heartbeat that could not be read,
+ * sends no `health` and the screen must carry on without it.
+ */
+export interface SystemHealth {
+  state: "ok" | "degraded";
+  degraded: boolean;
+  heartbeatAgeSeconds: number | null;
+  components: readonly { key: HealthComponentKey; reason: HealthReason }[];
+}
+
 export interface ResumenData {
   range: ResumenRange;
   generatedAt: string;
@@ -50,6 +66,7 @@ export interface ResumenData {
   status: readonly { key: StatusKey; level: HealthLevel }[];
   /** Emails waiting for the daily sending limit to reset (retried next day). */
   queuedByQuota: number;
+  health?: SystemHealth | null;
 }
 
 export interface Series {
@@ -130,4 +147,5 @@ export interface AvanzadasData {
   host: HostMetrics | null;
   runtime: RuntimeMetrics | null;
   users: UsersMetrics | null;
+  health?: SystemHealth | null;
 }

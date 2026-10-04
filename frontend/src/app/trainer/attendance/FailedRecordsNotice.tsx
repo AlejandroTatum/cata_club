@@ -27,7 +27,7 @@ export default function FailedRecordsNotice({
   students,
 }: FailedRecordsNoticeProps): React.ReactElement {
   const nameById = new Map(students.map((s) => [s.id, s.name]));
-  const nameOf = (personaId: number): string => nameById.get(String(personaId)) ?? `Alumno #${personaId}`;
+  const nameOf = (personaId: number): string => nameById.get(String(personaId)) ?? `Jugador #${personaId}`;
   const alreadyRegistered = failed.filter((f) => f.alreadyRegistered);
   const unsaved = failed.filter((f) => !f.alreadyRegistered);
   // ENT-03: a long list pushed the summary off screen — one line naming who filed it instead.
@@ -56,8 +56,8 @@ export default function FailedRecordsNotice({
           <p className={`flex items-center gap-1.5 font-bold ${unsaved.length > 0 ? "mt-3" : ""}`}>
             <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             {alreadyRegistered.length === 1
-              ? "1 alumno ya estaba registrado"
-              : `${alreadyRegistered.length} alumnos ya estaban registrados`}
+              ? "1 jugador ya estaba registrado"
+              : `${alreadyRegistered.length} jugadores ya estaban registrados`}
             {summarised && alreadyRegisteredBy ? ` por ${alreadyRegisteredBy}` : ""}
           </p>
           {summarised ? null : (
@@ -77,7 +77,7 @@ export default function FailedRecordsNotice({
       )}
       {unsaved.length > 0 && (
         <p className="mt-1.5 text-state-warn/80">
-          Actualice la lista de este horario y complete solo a los alumnos que faltan — el resto ya
+          Actualiza la lista de este horario y completa solo a los jugadores que faltan — el resto ya
           quedó guardado.
         </p>
       )}

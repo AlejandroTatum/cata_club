@@ -26,13 +26,13 @@ interface StudentSearchProps {
 export default function StudentSearch({
   onSelect,
   onClear,
-  placeholder = "Buscar alumno por nombre…",
+  placeholder = "Buscar jugador por nombre…",
   disabled = false,
   role,
   excludeIds = [],
   showExcluded = false,
   id,
-  ariaLabel = "Buscar alumno",
+  ariaLabel = "Buscar jugador",
 }: StudentSearchProps): React.ReactElement {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PersonaBusqueda[]>([]);
@@ -180,11 +180,11 @@ export default function StudentSearch({
       {isOpen && (
         <div id="student-search-listbox" role="listbox" className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-cata-border bg-white shadow-elevated">
           {loading ? (
-            <p role="status" aria-label="Buscando alumnos" className="px-4 py-3 text-sm text-ink-2">Buscando alumnos…</p>
+            <p role="status" aria-label="Buscando jugadores" className="px-4 py-3 text-sm text-ink-2">Buscando jugadores…</p>
           ) : error ? (
-            <p role="alert" aria-label="No se pudo buscar alumnos" className="px-4 py-3 text-sm text-state-bad">No se pudo buscar alumnos.</p>
+            <p role="alert" aria-label="No se pudo buscar jugadores" className="px-4 py-3 text-sm text-state-bad">No se pudo buscar jugadores.</p>
           ) : visibleResults.length === 0 ? (
-            <p role="status" aria-label="No se encontraron alumnos" className="px-4 py-3 text-sm text-ink-2">No se encontraron alumnos.</p>
+            <p role="status" aria-label="No se encontraron jugadores" className="px-4 py-3 text-sm text-ink-2">No se encontraron jugadores.</p>
           ) : (
             visibleResults.map((alumno) => {
               const excluded = isExcluded(alumno);

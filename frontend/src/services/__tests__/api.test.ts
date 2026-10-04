@@ -36,6 +36,7 @@ import {
   eliminarHorario,
   fetchCategoriasCatalogo,
   fetchAlumnosPorHorario,
+  fetchConteosPorHorario,
   asignarAlumnoAHorario,
   desasignarAlumnoDeHorario,
   fetchDescuentos,
@@ -54,6 +55,8 @@ import {
   crearTipoMembresia,
   eliminarTipoMembresia,
   eliminarDescuento,
+  moverYEliminarCategoria,
+  moverAlumnosDeCategoria,
 } from "../api";
 import type { PaymentValidationRequest, Horario, AlumnoHorario, DescuentoCatalogo } from "../api";
 import type { Notificacion, PerfilPropio } from "@/types/domain";
@@ -63,7 +66,7 @@ import { landingConfig, toWhatsAppLink } from "@/app/landing/landing-config";
 /** The copy `TIMED_OUT` (module-private in `lib/error-message.ts`) answers with. */
 const TIMED_OUT_TEXT =
   "Esto está tardando más de lo normal y no pudimos terminarlo. " +
-  `Escríbanos por WhatsApp y lo ayudamos: ${toWhatsAppLink(landingConfig.contact.whatsapp[0])}`;
+  `Escríbenos por WhatsApp y te ayudamos: ${toWhatsAppLink(landingConfig.contact.whatsapp[0])}`;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -954,6 +957,40 @@ describe("eliminarHorario", () => {
   });
 });
 
+describe("moverYEliminarCategoria (ADMB-04)", () => {
+  it("POSTs /api/groups/categorias/:codigo/mover-y-eliminar with the target", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      okResponse({ movidos: 3, categoriaDestino: "INFANTIL", categoriaDestinoLabel: "Infantil", eliminada: true, motivo: null }),
+    );
+
+    const result = await moverYEliminarCategoria("FORMATIVO", "INFANTIL");
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/groups/categorias/FORMATIVO/mover-y-eliminar",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ categoria_destino: "INFANTIL" }) }),
+    );
+    expect(result.movidos).toBe(3);
+  });
+});
+
+describe("moverAlumnosDeCategoria (ADMB-04)", () => {
+  it("POSTs /api/groups/categorias/:codigo/mover-alumnos with the target and the chosen players", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      okResponse({ movidos: 1, categoriaDestino: "INFANTIL", categoriaDestinoLabel: "Infantil", eliminada: true, motivo: null }),
+    );
+
+    await moverAlumnosDeCategoria("FORMATIVO", "INFANTIL", [10]);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/groups/categorias/FORMATIVO/mover-alumnos",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ categoria_destino: "INFANTIL", persona_ids: [10] }),
+      }),
+    );
+  });
+});
+
 // `fetchEntrenadores` tests removed with the trainer–schedule relation
 // (issue #13): the endpoint and the client function no longer exist.
 
@@ -1071,6 +1108,31 @@ describe("eliminarDescuento", () => {
     await expect(eliminarDescuento(7)).rejects.toThrow(
       "No se puede eliminar el descuento 'Y' porque ya se aplicó",
     );
+  });
+});
+
+describe("fetchConteosPorHorario", () => {
+  it("GETs the lightweight counts, not the full roster", async () => {
+    const conteos = [{ horarioId: 1, inscritos: 12 }];
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(conteos));
+
+    const result = await fetchConteosPorHorario();
+
+    expect(global.fetch).toHaveBeenCalledWith("/api/groups/horarios/conteos", expect.anything());
+    expect(result).toEqual(conteos);
+  });
+
+  it("asks for the enrolled person ids only on request", async () => {
+    const conteos = [{ horarioId: 1, inscritos: 2, personaIds: [3, 4] }];
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(conteos));
+
+    const result = await fetchConteosPorHorario({ incluirPersonas: true });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/groups/horarios/conteos?incluir_personas=true",
+      expect.anything(),
+    );
+    expect(result).toEqual(conteos);
   });
 });
 

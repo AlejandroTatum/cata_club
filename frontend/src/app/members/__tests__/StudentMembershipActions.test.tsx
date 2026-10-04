@@ -96,7 +96,7 @@ describe("StudentMembershipActions — ADMA-17 suspended membership", () => {
 
     const registrar = screen.getByRole("button", { name: "Registrar pago" });
     expect(registrar).toBeDisabled();
-    expect(screen.getByText("Reactive la membresía para registrar pagos.")).toBeInTheDocument();
+    expect(screen.getByText("Reactiva la membresía para registrar pagos.")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Reactivar membresía" })).toHaveLength(1);
   });
 
@@ -104,7 +104,7 @@ describe("StudentMembershipActions — ADMA-17 suspended membership", () => {
     renderActions(student("activa", "ACTIVA"));
 
     expect(screen.getByRole("button", { name: "Registrar pago" })).toBeEnabled();
-    expect(screen.queryByText("Reactive la membresía para registrar pagos.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Reactiva la membresía para registrar pagos.")).not.toBeInTheDocument();
   });
 });
 

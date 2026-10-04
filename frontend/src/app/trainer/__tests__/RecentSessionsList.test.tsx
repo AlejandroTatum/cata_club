@@ -30,14 +30,14 @@ const SESSIONS: RecentAttendanceSession[] = [
     horarioId: 1,
     fecha: "2026-07-20",
     horario: "Lunes 15:00 — 16:00",
-    counts: { present: 9, late: 1, justified: 1, absent: 1, sick: 0, competition: 0 },
+    counts: { present: 9, late: 1, absent: 1, sick: 1, competition: 0 },
     total: 12,
   },
   {
     horarioId: 2,
     fecha: "2026-07-19",
     horario: "Domingo 09:00 — 10:00",
-    counts: { present: 8, late: 1, justified: 0, absent: 1, sick: 0, competition: 0 },
+    counts: { present: 8, late: 1, absent: 1, sick: 0, competition: 0 },
     total: 10,
   },
 ];
@@ -51,11 +51,11 @@ describe("RecentSessionsList", () => {
     expect(screen.getAllByText("12").length).toBeGreaterThan(0);
   });
 
-  it("gives the proportional bar an aria-label enunciating all four counts and the total", () => {
+  it("gives the proportional bar an aria-label enunciating all the counts and the total", () => {
     render(<RecentSessionsList sessions={SESSIONS} />);
 
     const bar = screen.getByRole("img", {
-      name: "9 presentes, 1 tardanza, 1 justificado, 0 enfermos, 0 competencias y 1 ausente sobre 12 registros",
+      name: "9 presentes, 1 tardanza, 1 enfermo, 0 competencias y 1 ausente sobre 12 registros",
     });
     expect(bar).toBeInTheDocument();
   });
@@ -72,14 +72,14 @@ describe("RecentSessionsList", () => {
   it("counts each state with a noun that agrees, not a count against a singular label", () => {
     render(<RecentSessionsList sessions={SESSIONS} />);
 
-    // The breakdown beside the bar used to read "9 Presente" / "0 Justificado"
+    // The breakdown beside the bar used to read "9 Presente" / "0 Enfermo"
     // — a count welded to the NAME of the state. `formatStateCount` is the one
     // place this product counts a state out loud, and the history table reads
     // from it too.
     expect(screen.getByText("9 presentes")).toBeInTheDocument();
     expect(screen.getByText("8 presentes")).toBeInTheDocument();
     expect(screen.getAllByText("1 tardanza")).toHaveLength(2);
-    expect(screen.getByText("0 justificados")).toBeInTheDocument();
+    expect(screen.getByText("0 enfermos")).toBeInTheDocument();
   });
 
   it("links to the history view, once, from its own header", () => {
@@ -101,12 +101,12 @@ describe("RecentSessionsList", () => {
 
     expect(
       screen.getByRole("img", {
-        name: "9 presentes, 1 tardanza, 1 justificado, 0 enfermos, 0 competencias y 1 ausente sobre 12 registros",
+        name: "9 presentes, 1 tardanza, 1 enfermo, 0 competencias y 1 ausente sobre 12 registros",
       }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("img", {
-        name: "8 presentes, 1 tardanza, 0 justificados, 0 enfermos, 0 competencias y 1 ausente sobre 10 registros",
+        name: "8 presentes, 1 tardanza, 0 enfermos, 0 competencias y 1 ausente sobre 10 registros",
       }),
     ).toBeInTheDocument();
     expect(screen.getAllByRole("img")).toHaveLength(2);

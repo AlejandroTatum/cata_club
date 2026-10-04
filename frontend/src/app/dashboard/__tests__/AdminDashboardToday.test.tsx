@@ -62,7 +62,7 @@ vi.mock("@/services/api", () => ({
   fetchAttendanceRecords: () => mockRecords(),
   fetchPaymentValidations: () => mockPayments(),
   fetchTrainingSchedules: () => mockSchedules(),
-  fetchRosterDeTodosLosHorarios: () => Promise.resolve([]),
+  fetchConteosPorHorario: () => Promise.resolve([]),
 }));
 
 function stats(overrides: Partial<Record<string, number>> = {}): Record<string, number> {
@@ -158,6 +158,32 @@ describe("admin dashboard — hoy en el club", () => {
     expect(screen.getByTestId("timeline-summary")).toHaveTextContent("1 de 3 listas tomadas");
   });
 
+  it("puts payments, sessions without a list and members without a plan first on a phone (ADMA-27)", async () => {
+    mockSchedules.mockResolvedValue([todaySchedule(1, "00:00", "00:01")]);
+    mockPayments.mockResolvedValue([payment("a", 1)]);
+    render(<DashboardPage />);
+    const urgent = await screen.findByTestId("urgent-first");
+    await waitFor(() => expect(within(urgent).getByText("Asistencias sin lista")).toBeInTheDocument());
+    const hrefs = within(urgent).getAllByRole("link").map((a) => a.getAttribute("href"));
+    expect(hrefs).toEqual(["/payments", "/attendance", "/members"]);
+    expect(urgent).toHaveClass("lg:hidden");
+    expect(urgent.compareDocumentPosition(screen.getByTestId("today-hero")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("leaves the phone-only block out, and keeps the calm line, when nothing is urgent", async () => {
+    mockStats.mockResolvedValue(stats({ pendingPayments: 0, personasSinMembresia: 0 }));
+    render(<DashboardPage />);
+    await screen.findByTestId("today-hero");
+    expect(screen.queryByTestId("urgent-first")).not.toBeInTheDocument();
+    expect(screen.getByTestId("attention-chips")).not.toHaveClass("max-lg:hidden");
+  });
+
+  it("does not repeat the urgent items in the day card on a phone", async () => {
+    render(<DashboardPage />);
+    await screen.findByTestId("urgent-first");
+    expect(screen.getByTestId("attention-chips")).toHaveClass("max-lg:hidden");
+  });
+
   it("says there are no classes today in one line", async () => {
     render(<DashboardPage />);
     const hero = await screen.findByTestId("today-hero");
@@ -221,7 +247,7 @@ describe("admin dashboard — the pulse tiles", () => {
   it("counts Miembros over the whole padrón and memberships over the alumnos", async () => {
     render(<DashboardPage />);
     const kpis = await screen.findByTestId("dashboard-kpis");
-    expect(within(kpis).getByRole("group", { name: /Miembros: 40 alumnos y 4 representantes y personal/ })).toBeInTheDocument();
+    expect(within(kpis).getByRole("group", { name: /Miembros: 40 jugadores y 4 representantes y personal/ })).toBeInTheDocument();
     expect(within(kpis).getByRole("img", { name: /Membresías activas: 17 de 40/ })).toBeInTheDocument();
   });
 

@@ -121,6 +121,8 @@ export interface MemberStudentSummary {
      * backend-only). Same optionality/omission rule as `mesesAdeudados`.
      */
     montoAdeudado?: number;
+    /** End of the last approved coverage (ISO date), or null if never covered. ADMA-24. */
+    deudaDesde?: string | null;
   } | null;
   ultimoPago: {
     estado: PaymentStatus;
@@ -289,7 +291,7 @@ export const PAYMENT_STATUS_TONE: Record<PaymentStatus, BadgeTone> = {
 
 export const PAYER_TYPE_LABELS: Record<PayerType, string> = {
   representante: "Representante",
-  estudiante: "Estudiante",
+  estudiante: "Jugador",
 };
 
 export const MEMBERSHIP_TYPE_LABELS: Record<TipoMembresia, string> = {
@@ -302,7 +304,7 @@ export const MEMBERSHIP_TYPE_LABELS: Record<TipoMembresia, string> = {
 import type { BadgeTone } from "@/components/ui/Badge";
 
 export { formatCurrency, formatDate } from "@/lib/format-utils";
-import { formatDate, formatDateRange } from "@/lib/format-utils";
+import { formatCurrency, formatDate, formatDateRange } from "@/lib/format-utils";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -618,6 +620,27 @@ export function accountDisplayRoles(account: MemberAccount): BackendTipoRol[] {
 }
 
 /**
+ * ADMA-24: one line for the «Membresía vencida» list — how much the account
+ * owes and since when — from numbers the server already computed. Null when
+ * no student has a debt on record.
+ */
+export function getDebtSummary(account: MemberAccount): string | null {
+  const owing = account.estudiantes
+    .map((s) => s.membresia)
+    .filter((m): m is NonNullable<typeof m> => !!m && (m.mesesAdeudados ?? 0) > 0);
+  if (owing.length === 0) return null;
+  const meses = owing.reduce((sum, m) => sum + (m.mesesAdeudados ?? 0), 0);
+  const monto = owing.reduce((sum, m) => sum + (m.montoAdeudado ?? 0), 0);
+  const desde = owing
+    .map((m) => m.deudaDesde)
+    .filter((d): d is string => !!d)
+    .sort()[0];
+  const parts = [`Debe ${formatCurrency(monto)}`, `${meses} ${meses === 1 ? "mes" : "meses"}`];
+  if (desde) parts.push(`desde ${formatDate(desde)}`);
+  return parts.join(" · ");
+}
+
+/**
  * Get the account status badge label and variant for the members table.
  *
  * Returns a label plus the `Badge` tone that carries it:
@@ -643,7 +666,7 @@ export function getAccountStatusBadge(account: MemberAccount): {
       (a) => a.ultimoPago?.estado === "pendiente_validacion",
     )
   ) {
-    return { label: "Pago pendiente de validación", tone: "warn" };
+    return { label: "Pago por validar", tone: "warn" };
   }
   // Issue #1199: `MEMBERSHIP_STATUS_BY_ESTADO` folds a just-created backend
   // INACTIVA membership into the same `"vencida"` bucket as a real VENCIDA
@@ -678,7 +701,7 @@ export function getAccountStatusBadge(account: MemberAccount): {
  * `MEMBERSHIP_STATUS_LABELS[estado]` lookup, which is the SAME "Vencida" an
  * actually lapsed membership gets (`MEMBERSHIP_STATUS_BY_ESTADO` folds both
  * into `"vencida"`). This reads `estadoBackend`, the one field that still
- * carries the raw enum, to tell them apart: "Pago pendiente" while a payment
+ * carries the raw enum, to tell them apart: "Por validar" while a payment
  * is queued for review, "Sin activar" once nothing is — never "Vencida".
  */
 export function getMembershipStatusBadge(

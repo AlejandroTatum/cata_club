@@ -39,21 +39,21 @@ export interface EnrollConfirmationProps {
 function nextSteps(sessionConfirmed: boolean): NextStep[] {
   return [
     {
-      title: "Su cuenta",
+      title: "Tu cuenta",
       body: sessionConfirmed
-        ? "Su cuenta ya está creada y la sesión, iniciada."
-        : "Su cuenta ya está creada. Inicie sesión con su correo y su contraseña.",
+        ? "Tu cuenta ya está creada y la sesión, iniciada."
+        : "Tu cuenta ya está creada. Inicia sesión con tu correo y tu contraseña.",
     },
     {
-      title: "Su correo",
-      body: "Verifique su correo: registramos el envío de un enlace de confirmación; puede tardar unos minutos en llegar. Si no llega, reenvíelo desde la pantalla de activación, donde también puede corregir el correo.",
+      title: "Tu correo",
+      body: "Verifica tu correo: registramos el envío de un enlace de confirmación; puede tardar unos minutos en llegar. Si no llega, reenvíalo desde la pantalla de activación, donde también puedes corregir el correo.",
     },
     {
       title: "El club",
-      body: "Acérquese al club o escríbanos por WhatsApp para registrar la inscripción y el primer pago.",
+      body: "Acércate al club o escríbenos por WhatsApp para registrar la inscripción y el primer pago.",
     },
     {
-      title: "Su membresía",
+      title: "Tu membresía",
       body: "El club lo valida y ahí se activa la membresía.",
     },
   ];
@@ -74,7 +74,7 @@ export default function EnrollConfirmation(props: EnrollConfirmationProps): Reac
         <figure className="relative aspect-[16/9] w-full flex-none lg:absolute lg:inset-0 lg:-z-10 lg:aspect-auto">
           <Image
             src="/landing/hero-training.jpg"
-            alt="Estudiantes de Cata Club entrenando en las mesas del club"
+            alt="Jugadores de Cata Club entrenando en las mesas del club"
             fill
             priority
             sizes="(min-width: 1152px) 1152px, 100vw"
@@ -94,7 +94,7 @@ export default function EnrollConfirmation(props: EnrollConfirmationProps): Reac
               Inscripción completada
             </h1>
             <p className="text-2xs font-bold uppercase text-ball">
-              ¡Le damos la bienvenida a Cata Club!
+              ¡Te damos la bienvenida a Cata Club!
             </p>
             <h2 className="font-display text-3xl uppercase tracking-flat text-white [text-wrap:balance] lg:text-5xl">
               {props.studentName}
@@ -105,13 +105,13 @@ export default function EnrollConfirmation(props: EnrollConfirmationProps): Reac
               nothing about membership, payment or session. The one Playfair
               phrase on the screen. */}
           <p className="max-w-[28ch] font-serif text-voice text-white [text-wrap:balance]">
-            Su camino en el tenis de mesa comienza aquí.
+            Tu camino en el tenis de mesa comienza aquí.
           </p>
 
           <p className="max-w-[48ch] text-sm text-[#B9B9C1]">
             {props.isSelf
-              ? "Ha sido registrado como estudiante de Cata Club. Usted es el titular de la cuenta y el estudiante."
-              : "Ha sido registrado como estudiante de Cata Club. Usted es el representante y responsable de pago de este estudiante."}
+              ? "Has sido registrado como jugador de Cata Club. Eres el titular de la cuenta y el jugador."
+              : "Has sido registrado como jugador de Cata Club. Eres el representante y responsable de pago de este jugador."}
           </p>
 
           {/* The session that never was (issue #717): on the card, not in a

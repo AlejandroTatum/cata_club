@@ -107,7 +107,7 @@ describe("EnrollPage — split frame from lg", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
     const steps = screen.getByRole("list", { name: /pasos de la inscripción/i });
-    expect(within(steps).getByText("Estudiante").closest("li")).toHaveAttribute(
+    expect(within(steps).getByText("Jugador").closest("li")).toHaveAttribute(
       "aria-current",
       "step",
     );

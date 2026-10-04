@@ -933,7 +933,7 @@ test.describe("Landing page", () => {
       expect(geometry?.sheetBelow).toBe(true);
 
       const labels = await page.locator(".landing-contact dt").allTextContents();
-      expect(labels).toEqual(["Dirección", "Horario", "WhatsApp", "Llamadas", "Redes"]);
+      expect(labels).toEqual(["Dirección", "Horario", "WhatsApp", "Llamadas", "Correo", "Redes"]);
     });
 
     test("renders one schedule card per category with age headline, time, days and WhatsApp link", async ({ page }) => {
@@ -956,7 +956,7 @@ test.describe("Landing page", () => {
         await expect(card.locator(".landing-schedule-ages")).not.toBeEmpty();
         await expect(card.locator(".landing-schedule-time")).toContainText(":");
         await expect(card.locator(".landing-schedule-days")).not.toBeEmpty();
-        await expect(card.getByRole("link", { name: `Consultar cupo en ${category} por WhatsApp` })).toHaveAttribute("href", /wa\.me|whatsapp/i);
+        await expect(card.getByRole("link", { name: `Preguntar por cupos en ${category} por WhatsApp` })).toHaveAttribute("href", /wa\.me|whatsapp/i);
       }
       await expect(layout.locator(".landing-schedule-help").getByRole("link", { name: /abrir whatsapp/i })).toBeVisible();
     });

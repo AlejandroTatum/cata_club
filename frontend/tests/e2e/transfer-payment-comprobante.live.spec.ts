@@ -147,7 +147,7 @@ test("un socio registra un pago por transferencia con comprobante y queda pendie
   // La recarga es la parte que importa: sin ella, la fila visible podría
   // venir del estado local del componente y no de la base.
   await page.reload();
-  await expect(page.getByText("Pendiente de validación").first()).toBeVisible({
+  await expect(page.getByText("Por validar").first()).toBeVisible({
     timeout: 15_000,
   });
   await expect(page.getByText(/Transferencia/).first()).toBeVisible();
@@ -172,7 +172,7 @@ async function prepararPagoEnColaDeAdmin(page: Page): Promise<{ pedroId: string;
   const pagoId = await registerTransferPaymentViaApi(page, pedroId, membresiaId);
 
   await page.goto("/payments");
-  await page.getByLabel("Buscar estudiante").fill(STUDENT_FULL_NAME);
+  await page.getByLabel("Buscar jugador").fill(STUDENT_FULL_NAME);
   const fila = page.getByTestId("payments-table").locator(`[data-payment-action="${pagoId}"]`);
   await expect(fila).toBeVisible({ timeout: 15_000 });
   await fila.click();

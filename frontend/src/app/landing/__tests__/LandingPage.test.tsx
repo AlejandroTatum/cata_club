@@ -223,7 +223,7 @@ describe("LandingPage", (): void => {
       "Misión y Visión",
       "Nuestros Valores",
       "Galería",
-      "Elija una categoría",
+      "Elige una categoría",
       "Cómo llegar",
     ]));
     expect(screen.getByRole("contentinfo")).toBeInTheDocument();
@@ -305,7 +305,7 @@ describe("LandingPage", (): void => {
     it("shows the audience label only for the categories that publish one", async (): Promise<void> => {
       render(<LandingPage />);
 
-      const section = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section") as HTMLElement;
+      const section = screen.getByRole("heading", { name: "Elige una categoría" }).closest("section") as HTMLElement;
       await waitFor((): void => { expect(within(section).getByRole("list", { name: "Categorías" })).toBeInTheDocument(); });
       const cardOf = (name: string): HTMLElement => within(section).getByRole("heading", { level: 3, name }).closest("li") as HTMLElement;
 
@@ -325,7 +325,7 @@ describe("LandingPage", (): void => {
       await waitFor((): void => {
         expect(contactHoursRow()).toHaveTextContent("Aún no hay horarios publicados.");
       });
-      const section = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section") as HTMLElement;
+      const section = screen.getByRole("heading", { name: "Elige una categoría" }).closest("section") as HTMLElement;
       expect(within(section).getByRole("status")).toHaveTextContent("Aún no hay horarios publicados.");
       // The row keeps its label and becomes a live region, so the visitor is
       // told what happened instead of reading a range nobody published.
@@ -348,7 +348,7 @@ describe("LandingPage", (): void => {
       await waitFor((): void => {
         expect(contactHoursRow()).toHaveTextContent("No se pudieron cargar los horarios.");
       });
-      const section = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section") as HTMLElement;
+      const section = screen.getByRole("heading", { name: "Elige una categoría" }).closest("section") as HTMLElement;
       expect(within(section).getByRole("status")).toHaveTextContent("No se pudieron cargar los horarios.");
       expect(within(contactHoursRow()).getByRole("status")).toHaveTextContent(/Aún no hay horarios|No se pudieron/);
     });
@@ -432,7 +432,7 @@ describe("LandingPage", (): void => {
   it("renders one card per published category, plus the help card", async (): Promise<void> => {
     render(<LandingPage />);
 
-    const scheduleSection = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section") as HTMLElement;
+    const scheduleSection = screen.getByRole("heading", { name: "Elige una categoría" }).closest("section") as HTMLElement;
     await waitFor((): void => { expect(within(scheduleSection).getByRole("list", { name: "Categorías" })).toBeInTheDocument(); });
     const cards = within(within(scheduleSection).getByRole("list", { name: "Categorías" })).getAllByRole("listitem")
       .filter((item): boolean => item.classList.contains("landing-schedule-tile"));
@@ -445,7 +445,7 @@ describe("LandingPage", (): void => {
     });
   });
 
-  it("orders the main content Hero → Ticker → Nosotros → Valores → Stats → Galería → Horarios → CTA → Visítenos", async (): Promise<void> => {
+  it("orders the main content Hero → Ticker → Nosotros → Valores → Stats → Galería → Horarios → Mensualidad → Pasos → Preguntas → CTA → Visítenos", async (): Promise<void> => {
     // The gallery only has a place in the order once it has photos (VIS-03).
     publishGallery([
       { id: 1, titulo: "En juego", descripcion: "Una jugada frente al público de la sala.", imagenUrl: "https://res.cloudinary.com/club/en-juego.jpg" },
@@ -466,6 +466,9 @@ describe("LandingPage", (): void => {
       "stats",
       "galeria",
       "horarios",
+      "mensualidad",
+      "como-empezar",
+      "preguntas",
       "motto",
       "contacto",
     ]);
@@ -477,7 +480,7 @@ describe("LandingPage", (): void => {
 
     const hero = document.querySelector(".landing-hero");
     expect(hero).not.toBeNull();
-    const heroPrimary = within(hero as HTMLElement).getByRole("link", { name: /inscríbase/i });
+    const heroPrimary = within(hero as HTMLElement).getByRole("link", { name: /inscríbete/i });
     expect(heroPrimary).toHaveAttribute("href", "/student/enroll");
     expect(within(hero as HTMLElement).getByRole("link", { name: "Ver horarios" })).toHaveAttribute("href", "#horarios");
   });
@@ -688,7 +691,8 @@ describe("LandingPage", (): void => {
     const enrollLinks = screen.getAllByRole("link", { name: /inscr/i });
     expect(enrollLinks.length).toBeGreaterThanOrEqual(3);
     enrollLinks.forEach((link): void => {
-      expect(link).toHaveAttribute("href", "/student/enroll");
+      // The two entry points of LAN-14 add a `?type=` the wizard preselects from.
+      expect(link.getAttribute("href")?.split("?")[0]).toBe("/student/enroll");
     });
     expect(document.querySelectorAll('a[href="/register"]')).toHaveLength(0);
   });
@@ -722,7 +726,7 @@ describe("LandingPage", (): void => {
     const mottoCta = within(motto as HTMLElement).getByRole("link");
     expect(mottoCta).toHaveAttribute("data-motto-cta", "true");
     expect(mottoCta).toHaveAttribute("href", "/student/enroll");
-    expect(mottoCta).toHaveTextContent("Inscríbase ya");
+    expect(mottoCta).toHaveTextContent("Inscríbete ya");
   });
 
   it("embeds the official crest inside the motto paddle as pure decoration", (): void => {
@@ -742,14 +746,14 @@ describe("LandingPage", (): void => {
     // readers inside the motto, and the CTA's accessible name stays exactly
     // "Inscríbase ya" — no extra noise leaked into the accessible tree.
     expect(within(motto).queryByText(/cata club/i)).toBeNull();
-    expect(within(motto).getByRole("link", { name: "Inscríbase ya" })).toHaveAttribute("data-motto-cta", "true");
+    expect(within(motto).getByRole("link", { name: "Inscríbete ya" })).toHaveAttribute("data-motto-cta", "true");
   });
 
   it("turns every WhatsApp contact number into a wa.me link", (): void => {
     render(<LandingPage />);
 
     landingConfig.contact.whatsapp.forEach((number): void => {
-      expect(within(document.querySelector(".landing-contact") as HTMLElement).getByRole("link", { name: number })).toHaveAttribute("href", toWhatsAppLink(number));
+      expect(within(document.querySelector(".landing-contact") as HTMLElement).getByRole("link", { name: `Administración · ${number}` })).toHaveAttribute("href", toWhatsAppLink(number));
     });
   });
 
@@ -757,7 +761,7 @@ describe("LandingPage", (): void => {
     render(<LandingPage />);
 
     const contact = document.querySelector(".landing-contact") as HTMLElement;
-    const whatsappCta = within(contact).getByRole("link", { name: /escríbanos por whatsapp/i });
+    const whatsappCta = within(contact).getByRole("link", { name: /escríbenos por whatsapp/i });
     expect(whatsappCta).toHaveAttribute("href", toWhatsAppLink(landingConfig.contact.whatsapp[0]));
     expect(whatsappCta.closest(".landing-contact-row")).toHaveTextContent("WhatsApp");
 

@@ -26,6 +26,7 @@ interface ActualizarCategoriaBody {
   hora_fin?: unknown;
   dias?: unknown;
   edades?: unknown;
+  mover_alumnos_a?: unknown;
 }
 
 export async function PUT(request: NextRequest, props: { params: Promise<{ codigo: string }> }): Promise<NextResponse> {
@@ -48,6 +49,9 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ codig
     // emptied input — is how the label gets CLEARED. So the `!== undefined`
     // test below is the whole contract: `""` must survive it.
     ["edades", "edades"],
+    // QA4 ADMB-04: players of the removed día(s) move to this categoría in the
+    // same transaction as the edit; without it the backend answers 409.
+    ["mover_alumnos_a", "mover_alumnos_a"],
   ];
   const payload: Record<string, unknown> = {};
   for (const [key, field] of UPDATABLE_FIELDS) {

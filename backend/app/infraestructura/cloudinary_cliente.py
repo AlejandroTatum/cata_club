@@ -72,8 +72,8 @@ def _redactar_detalle_sensible(detalle: str) -> str:
 # `detalle_tecnico` (log), no a `mensaje` (lo que `_MAPA_EXCEPCIONES` de
 # main.py devuelve tal cual en el body de la respuesta 503).
 _MENSAJE_SUBIDA_NO_DISPONIBLE = (
-    "No se pudo subir el archivo en este momento. Vuelva a intentarlo más "
-    "tarde o acérquese al club / escríbanos por WhatsApp."
+    "No se pudo subir el archivo en este momento. Vuelve a intentarlo más "
+    "tarde o acércate al club / escríbenos por WhatsApp."
 )
 
 # Circuit breaker en proceso (degradacion-controlada, slice 2): una única
@@ -413,7 +413,7 @@ def subir_voucher_pago(
     _configurar_cliente()
 
     if not contenido:
-        raise ValueError("El contenido del voucher está vacío; no se puede subir.")
+        raise ValueError("El contenido del comprobante está vacío; no se puede subir.")
 
     if content_type == "application/pdf":
         upload_kwargs = {
@@ -441,7 +441,7 @@ def subir_voucher_pago(
             "invalidate": True,
         }
     else:
-        raise ValueError(f"Tipo MIME no soportado para voucher: {content_type}")
+        raise ValueError(f"Tipo MIME no soportado para comprobante: {content_type}")
 
     return _subir(
         contenido, upload_kwargs,
@@ -691,7 +691,7 @@ def _destruir_en_cloudinary(
 
 
 _MENSAJE_BORRADO_NO_DISPONIBLE = (
-    "No se pudo eliminar el logo del patrocinador. Intente nuevamente."
+    "No se pudo eliminar el logo del patrocinador. Intenta nuevamente."
 )
 
 
@@ -728,7 +728,7 @@ def eliminar_logo_sponsor(
 
 
 _MENSAJE_BORRADO_GALERIA_NO_DISPONIBLE = (
-    "No se pudo eliminar la imagen de la galería. Intente nuevamente."
+    "No se pudo eliminar la imagen de la galería. Intenta nuevamente."
 )
 
 
@@ -750,7 +750,7 @@ def eliminar_imagen_galeria(nombre_publico: str) -> None:
 
 _MENSAJE_BORRADO_SUPRESION_NO_DISPONIBLE = (
     "No se pudo eliminar un archivo del almacenamiento externo. La supresion "
-    "de datos no se ejecuto; reintente mas tarde."
+    "de datos no se ejecuto; reintenta mas tarde."
 )
 
 

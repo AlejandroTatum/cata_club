@@ -337,6 +337,22 @@ describe("buildMemberAccounts", () => {
       expect(student?.membresia?.montoAdeudado).toBe(90);
     });
 
+    it("carries the end of the last coverage as deudaDesde (ADMA-24), null when never covered", () => {
+      const build = (ultimaCoberturaFin: string | null) =>
+        buildMemberAccounts(
+          [parent, child],
+          new Map([[3, pago]]),
+          new Map([[100, membresiaVencida]]),
+          new Map(),
+          new Map([[5, tipo]]),
+          new Set(),
+          new Map([[100, { mesesAdeudados: 3, montoMensual: 30, ultimaCoberturaFin }]]),
+        ).find((a) => a.id === "3")?.estudiantes[0];
+
+      expect(build("2026-05-31")?.membresia?.deudaDesde).toBe("2026-05-31");
+      expect(build(null)?.membresia?.deudaDesde).toBeNull();
+    });
+
     it("omits debt fields for a VENCIDA membership missing from the bulk map (fetch failure/degrade)", () => {
       const accounts = buildMemberAccounts(
         [parent, child],

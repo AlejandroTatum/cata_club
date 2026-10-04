@@ -1,7 +1,7 @@
 """
-Layout compartido de marca para los cinco correos transaccionales
-(issue #1375): recuperación de contraseña, verificación de correo, pago
-aprobado, pago rechazado y bienvenida.
+Layout compartido de marca para los correos transaccionales (issue #1375):
+recuperación de contraseña, bienvenida con verificación de correo, pago
+aprobado y pago rechazado.
 
 Una sola función, `construir_correo`, recibe el contenido ya redactado y
 devuelve la pareja `(texto, html)`. El HTML es la maquetación de email que
@@ -182,7 +182,7 @@ def _boton_con_enlace_crudo(etiqueta: str, url: str) -> str:
         "</tr></table>"
         f'<p style="margin:14px 0 0;{_FUENTE}font-size:13px;line-height:1.5;'
         f'color:{_TINTA_2};word-break:break-all;">'
-        f'Si el botón no funciona, copie este enlace: '
+        f'Si el botón no funciona, copia este enlace: '
         f'<a href="{escapar_html(url)}" style="color:{_ROJO};">'
         f"{escapar_html(url)}</a></p>"
     )
@@ -199,8 +199,8 @@ def _pie() -> str:
         f'<p style="margin:0;{_FUENTE}font-size:12px;line-height:1.5;'
         f'color:{_TINTA_2};">'
         "Este es un mensaje automático de Cata Club: se envía por una gestión "
-        "de su cuenta (verificación de correo, inscripción o pago). Si no lo "
-        "esperaba, puede ignorarlo.</p>"
+        "de tu cuenta (verificación de correo, inscripción o pago). Si no lo "
+        "esperabas, puedes ignorarlo.</p>"
         "</td>"
         "</tr>"
     )

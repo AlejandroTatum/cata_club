@@ -57,13 +57,29 @@ vi.mock("next/image", () => ({
 const mockFetchTrainingSchedules = vi.fn();
 const mockFetchAttendanceRecords = vi.fn();
 const mockFetchRosterDeTodosLosHorarios = vi.fn();
+const mockFetchAlumnosPorHorario = vi.fn();
 const mockFetchRecentAttendanceSessions = vi.fn();
+const mockFetchFichaEmergencia = vi.fn();
 
 vi.mock("@/services/api", () => ({
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
-  fetchRosterDeTodosLosHorarios: () => mockFetchRosterDeTodosLosHorarios(),
+  // QA4 PERF-01: counts for every horario, names only for the hero's horario.
+  // Fixtures keep the roster-row shape (`mockFetchRosterDeTodosLosHorarios` is
+  // the fixture source); the full-roster endpoint is deliberately not exported.
+  fetchConteosPorHorario: async () => {
+    const rows = (await mockFetchRosterDeTodosLosHorarios()) as { horarioId: number }[];
+    const byHorario = new Map<number, number>();
+    for (const row of rows) byHorario.set(row.horarioId, (byHorario.get(row.horarioId) ?? 0) + 1);
+    return [...byHorario].map(([horarioId, inscritos]) => ({ horarioId, inscritos }));
+  },
+  fetchAlumnosPorHorario: async (horarioId: number) => {
+    mockFetchAlumnosPorHorario(horarioId);
+    const rows = (await mockFetchRosterDeTodosLosHorarios()) as { horarioId: number }[];
+    return rows.filter((row) => row.horarioId === horarioId);
+  },
   fetchRecentAttendanceSessions: () => mockFetchRecentAttendanceSessions(),
+  fetchFichaEmergencia: (personaId: number) => mockFetchFichaEmergencia(personaId),
   fetchNotificaciones: vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 }),
   marcarNotificacionLeida: vi.fn().mockResolvedValue(undefined),
 }));
@@ -111,7 +127,7 @@ const MONTH_RECORDS: AttendanceRecord[] = [
   record("present", "Sofia Vera"),
   record("present", "Diego Mendoza"),
   record("late", "Ana Garcia"),
-  record("justified", "Melany Quimis"),
+  record("sick", "Melany Quimis"),
   record("absent", "Luis Lopez"),
   record("absent", "Luis Lopez", "2026-07-13"),
   record("absent", "Luis Lopez", "2026-07-06"),
@@ -122,14 +138,14 @@ const RECENT_SESSIONS: RecentAttendanceSession[] = [
     horarioId: 2,
     fecha: "2026-07-20",
     horario: "Lunes 16:00 — 17:00",
-    counts: { present: 6, late: 0, justified: 1, absent: 1, sick: 0, competition: 0 },
+    counts: { present: 6, late: 0, absent: 1, sick: 1, competition: 0 },
     total: 8,
   },
   {
     horarioId: 3,
     fecha: "2026-07-19",
     horario: "Domingo 09:00 — 10:00",
-    counts: { present: 4, late: 1, justified: 0, absent: 0, sick: 0, competition: 0 },
+    counts: { present: 4, late: 1, absent: 0, sick: 0, competition: 0 },
     total: 5,
   },
 ];
@@ -154,7 +170,7 @@ function alumno(horarioId: number): AlumnoHorario {
   return {
     id: Math.random(),
     personaId: Math.random(),
-    personaNombreCompleto: "Alumno",
+    personaNombreCompleto: "Jugador",
     edad: 12,
     horarioId,
     horarioDia: "lun",
@@ -205,7 +221,7 @@ describe("TrainerPage — Mi día", () => {
     const hero = within(await screen.findByTestId("session-hero"));
     expect(hero.getByText("Próxima sesión")).toBeInTheDocument();
     expect(hero.getByText("Empieza en 25 minutos")).toBeInTheDocument();
-    expect(await hero.findByText("12 estudiantes inscritos")).toBeInTheDocument();
+    expect(await hero.findByText("12 jugadores inscritos")).toBeInTheDocument();
   });
 
   it("'next': the hero is one card with a bar counting down to the start", async () => {
@@ -228,6 +244,14 @@ describe("TrainerPage — Mi día", () => {
     expect(hero.getByRole("link", { name: "Elegir otro horario" })).toHaveAttribute("href", "/trainer/attendance");
   });
 
+  it("fetches names for the hero's horario only, never the whole roster (QA4 PERF-01)", async () => {
+    mockFetchAlumnosPorHorario.mockReset();
+    render(<TrainerPage />);
+
+    await within(await screen.findByTestId("session-hero")).findByRole("list", { name: "Jugadores inscritos" });
+    expect(mockFetchAlumnosPorHorario.mock.calls).toEqual([[1]]);
+  });
+
   it("'next': names the enrolled students by first name, with a +N for the rest", async () => {
     mockFetchRosterDeTodosLosHorarios.mockResolvedValue(
       ["Ana Garcia", "Sofia Vera", "Luis Lopez", "Diego Mendoza", "Melany Quimis", "Pedro Salgado", "Maria Torres", "Jose Ruiz", "Rosa Mora", "Raul Paz"].map(
@@ -237,10 +261,34 @@ describe("TrainerPage — Mi día", () => {
     render(<TrainerPage />);
 
     const hero = within(await screen.findByTestId("session-hero"));
-    const chips = await hero.findByRole("list", { name: "Alumnos inscritos" });
+    const chips = await hero.findByRole("list", { name: "Jugadores inscritos" });
     expect(within(chips).getAllByRole("listitem")).toHaveLength(9);
     expect(within(chips).getByText("Ana")).toBeInTheDocument();
     expect(within(chips).getByText("+2 más")).toBeInTheDocument();
+  });
+
+  it("'next': each enrolled student opens their emergency card from Mi día (QA4 ENT-27)", async () => {
+    mockFetchRosterDeTodosLosHorarios.mockResolvedValue([
+      { ...alumno(1), personaId: 41, personaNombreCompleto: "Ana Garcia" },
+      { ...alumno(1), personaId: 42, personaNombreCompleto: "Sofia Vera" },
+    ]);
+    mockFetchFichaEmergencia.mockResolvedValue({
+      personaId: 42,
+      tipoSangre: "O_POSITIVO",
+      alergias: "Penicilina",
+      contactoEmergencia: "Rosa Vera",
+      telefonoEmergencia: "0991234567",
+      representanteNombreCompleto: null,
+      representanteTelefono: null,
+    });
+    render(<TrainerPage />);
+
+    const hero = within(await screen.findByTestId("session-hero"));
+    fireEvent.click(await hero.findByRole("button", { name: "Ficha de emergencia de Sofia Vera" }));
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(mockFetchFichaEmergencia).toHaveBeenCalledWith(42);
+    expect(await screen.findByText("Penicilina")).toBeInTheDocument();
   });
 
   it("'next': summarises how the previous session of the same horario went", async () => {
@@ -297,7 +345,7 @@ describe("TrainerPage — Mi día", () => {
     );
     render(<TrainerPage />);
 
-    expect(screen.getByText("Cargando su día…")).toBeInTheDocument();
+    expect(screen.getByText("Cargando tu día…")).toBeInTheDocument();
     expect(horarioLinks()).toHaveLength(0);
     resolveSchedules(TODAY_SCHEDULES);
     await screen.findByTestId("session-hero");
@@ -309,7 +357,7 @@ describe("TrainerPage — Mi día", () => {
 
     render(<TrainerPage />);
 
-    expect(await screen.findByText(/No se pudo cargar su día/)).toBeInTheDocument();
+    expect(await screen.findByText(/No se pudo cargar tu día/)).toBeInTheDocument();
     expect(horarioLinks()).toHaveLength(0);
 
     mockFetchTrainingSchedules.mockResolvedValue(TODAY_SCHEDULES);
@@ -326,7 +374,7 @@ describe("TrainerPage — Mi día", () => {
 
     const hero = within(await screen.findByTestId("session-hero"));
     expect(hero.getByText("Empieza en 25 minutos")).toBeInTheDocument();
-    expect(hero.queryByText(/estudiantes inscritos/)).not.toBeInTheDocument();
+    expect(hero.queryByText(/jugadores inscritos/)).not.toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------
@@ -379,7 +427,7 @@ describe("TrainerPage — Mi día", () => {
     render(<TrainerPage />);
 
     const trend = within(await screen.findByTestId("attendance-trend"));
-    // 3 of 7 records trained (present ×2, late ×1, justified ×1 and absent ×3 do not).
+    // 3 of 7 records trained (present ×2, late ×1, sick ×1 and absent ×3 do not).
     expect(trend.getByText(/3 de 7 registros/)).toBeInTheDocument();
     expect(trend.getByRole("group", { name: /Asistencia de las últimas 6 semanas/ })).toBeInTheDocument();
   });
@@ -431,11 +479,11 @@ describe("TrainerPage — Mi día", () => {
   // 7th and 14th — six sessions, newest first, capped at five.
   // -------------------------------------------------------------------------
 
-  it("keeps an always-visible 'Cómo funciona su día' guide in the rail", async () => {
+  it("keeps an always-visible 'Cómo funciona tu día' guide in the rail", async () => {
     render(<TrainerPage />);
 
-    const guide = await screen.findByRole("complementary", { name: "Cómo funciona su día" });
-    expect(within(screen.getByTestId("trainer-rail")).getByText("Cómo funciona su día")).toBeInTheDocument();
+    const guide = await screen.findByRole("complementary", { name: "Cómo funciona tu día" });
+    expect(within(screen.getByTestId("trainer-rail")).getByText("Cómo funciona tu día")).toBeInTheDocument();
     expect(guide).toHaveTextContent("Sesiones sin lista");
   });
 
@@ -576,7 +624,7 @@ describe("TrainerPage — el pulso mensual no pierde una sesión de días antes 
     horario: "Miércoles 17:00 — 18:00",
     horarioId: 30,
     personaId: i,
-    estudiante: `Alumno ${i + 1}`,
+    estudiante: `Jugador ${i + 1}`,
     estado: "present" as const,
     registradoPorNombre: "Coach Vera",
   }));

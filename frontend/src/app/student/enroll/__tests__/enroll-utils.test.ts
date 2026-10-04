@@ -3,6 +3,7 @@ import {
   buildEnrollmentRequest,
   ENROLL_FIELD_TOKEN,
   ENROLLMENT_TYPES,
+  enrollmentTypeFromParam,
   fieldsForStep,
   initialFormData,
   institutionOptionLabel,
@@ -68,8 +69,8 @@ describe("telefono — step 2 validates the local digits after +593 (#1296)", ()
       contrasenia: "password8",
       contraseniaConfirmacion: "password8",
     });
-    expect(errors.telefono).toBe(
-      "El teléfono no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+    expect(errors.telefono).toMatch(
+      /^El teléfono no es válido\. Escribe 9 dígitos si es celular \(por ejemplo, 991234567\) u 8 si es fijo, sin el 0 inicial\.$/,
     );
   });
 
@@ -202,7 +203,7 @@ describe("QA4 REG-04 — email format is checked at step 2", () => {
       { ...initialFormData, enrollmentType: "self", correo },
     );
     expect(errors).toContain(
-      "El correo electrónico no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.",
+      "El correo electrónico no es válido. Revísalo; debe tener un formato como nombre@ejemplo.com.",
     );
   });
 
@@ -222,5 +223,20 @@ describe("QA4 FAM-08 — option labels without internal codes", () => {
 
   it("institution label is just the name", () => {
     expect(institutionOptionLabel("Colegio Municipal Sucre")).toBe("Colegio Municipal Sucre");
+  });
+});
+
+describe("enrollmentTypeFromParam — the landing's ?type= (REG-25)", (): void => {
+  it("maps the landing's own words and the older aliases", (): void => {
+    expect(enrollmentTypeFromParam("self")).toBe(ENROLLMENT_TYPES.SELF);
+    expect(enrollmentTypeFromParam("player")).toBe(ENROLLMENT_TYPES.SELF);
+    expect(enrollmentTypeFromParam("child")).toBe(ENROLLMENT_TYPES.CHILD);
+    expect(enrollmentTypeFromParam("representative")).toBe(ENROLLMENT_TYPES.CHILD);
+  });
+
+  it("answers null for anything else, prototype keys included", (): void => {
+    for (const raw of [null, "", "SELF", " self", "admin", "constructor", "__proto__", "toString"]) {
+      expect(enrollmentTypeFromParam(raw)).toBeNull();
+    }
   });
 });

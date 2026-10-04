@@ -11,6 +11,7 @@ import {
   type EnrollmentRequest,
   type EnrollmentStudent,
 } from "@/types/enrollment";
+import { WIZARD_STEP_PARAM, stepParamValue } from "@/lib/wizard-history";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import { toUserMessage } from "@/lib/error-message";
 import { formatCurrency } from "@/lib/format-utils";
@@ -47,6 +48,51 @@ export const ENROLLMENT_TYPES = {
 } as const;
 
 export type EnrollmentType = (typeof ENROLLMENT_TYPES)[keyof typeof ENROLLMENT_TYPES];
+
+/**
+ * REG-25: the `?type=` the landing buttons link with. Both the product's own
+ * words (`self`, `child`) and the older aliases (`player`, `representative`)
+ * are accepted; anything else — including prototype keys such as
+ * `constructor` — is `null`, so an unknown value never picks a flow.
+ */
+const ENROLLMENT_TYPE_PARAMS: ReadonlyMap<string, EnrollmentType> = new Map([
+  ["self", ENROLLMENT_TYPES.SELF],
+  ["player", ENROLLMENT_TYPES.SELF],
+  ["child", ENROLLMENT_TYPES.CHILD],
+  ["representative", ENROLLMENT_TYPES.CHILD],
+]);
+
+export function enrollmentTypeFromParam(raw: string | null): EnrollmentType | null {
+  return (raw !== null && ENROLLMENT_TYPE_PARAMS.get(raw)) || null;
+}
+
+/**
+ * Reads the landing's `?type=` ONCE per mount (the ref keeps a StrictMode
+ * re-run from finding the URL already cleaned) and consumes it from the
+ * address bar:
+ * - `type` is removed, so a later reload cannot override a choice the visitor
+ *   changed on step 1;
+ * - a valid type with no `paso` yet lands on step 2, because the button
+ *   already answered step 1 (the «Tipo» step stays for whoever arrives without
+ *   choosing, or opens `?paso=1` on purpose).
+ * Uses `replaceState`, so Back leaves the wizard instead of walking into it.
+ */
+export function takePreselectedEnrollmentType(
+  cache: { current: EnrollmentType | null | undefined },
+): EnrollmentType | null {
+  if (cache.current !== undefined) return cache.current;
+  const url = new URL(window.location.href);
+  const type = enrollmentTypeFromParam(url.searchParams.get("type"));
+  if (url.searchParams.has("type")) {
+    url.searchParams.delete("type");
+    if (type && !url.searchParams.has(WIZARD_STEP_PARAM)) {
+      url.searchParams.set(WIZARD_STEP_PARAM, stepParamValue("personal", STEP_ORDER));
+    }
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+  cache.current = type;
+  return type;
+}
 
 /** Wizard step identifiers. */
 export type WizardStep = "type" | "personal" | "representative" | "health" | "summary";
@@ -104,7 +150,7 @@ export const STEP_ORDER: WizardStep[] = [
  */
 export const STEP_LABELS: Record<WizardStep, string> = {
   type: "Tipo de inscripción",
-  personal: "Datos del estudiante",
+  personal: "Datos del jugador",
   representative: "Datos del representante",
   health: "Salud y emergencia",
   summary: "Resumen y confirmación",
@@ -123,7 +169,7 @@ export const STEP_LABELS: Record<WizardStep, string> = {
  */
 export const STEP_SHORT_LABELS: Record<WizardStep, string> = {
   type: "Tipo",
-  personal: "Estudiante",
+  personal: "Jugador",
   representative: "Representante",
   health: "Salud",
   summary: "Confirmar",
@@ -235,10 +281,10 @@ export function isDemoQuickFillEnabled(
 export function getEnrollmentErrorMessage(error: unknown): string {
   const field = enrollmentValidationField(error);
   if (field === "correo") {
-    return "El servidor no aceptó el correo electrónico. Corríjalo en el paso «Datos del estudiante» e intente de nuevo.";
+    return "El servidor no aceptó el correo electrónico. Corrígelo en el paso «Datos del jugador» e intenta de nuevo.";
   }
   if (field === "correoRepresentante") {
-    return "El servidor no aceptó el correo electrónico del representante. Corríjalo en el paso «Datos del representante» e intente de nuevo.";
+    return "El servidor no aceptó el correo electrónico del representante. Corrígelo en el paso «Datos del representante» e intenta de nuevo.";
   }
   // The old helper carried two fallbacks — "revise sus datos" for 400/422 and
   // "intente más tarde" for everything else. The translator answers everything
@@ -247,7 +293,7 @@ export function getEnrollmentErrorMessage(error: unknown): string {
   // that user to wait would be the wrong advice; their form is what is wrong.
   const message = toUserMessage(
     error,
-    "No pudimos registrar la inscripción. Revise los datos de cada paso e intente de nuevo.",
+    "No pudimos registrar la inscripción. Revisa los datos de cada paso e intenta de nuevo.",
   );
   return isDuplicateIdentityError(message) ? DUPLICATE_IDENTITY_COPY : message;
 }
@@ -258,7 +304,7 @@ export function getEnrollmentErrorMessage(error: unknown): string {
  * the wizard restates it; `isDuplicateIdentityError` recognises this sentence.
  */
 const DUPLICATE_IDENTITY_COPY =
-  "Ya existe una cuenta registrada con la cédula o el correo que ingresó. Si es suya, inicie sesión; si no, revise que los datos estén bien escritos.";
+  "Ya existe una cuenta registrada con la cédula o el correo que ingresaste. Si es tuya, inicia sesión; si no, revisa que los datos estén bien escritos.";
 
 function enrollmentValidationField(error: unknown): EnrollField | undefined {
   if (!error || typeof error !== "object" || !("status" in error) || error.status !== 422) return undefined;
@@ -398,8 +444,8 @@ export function digitsOf(value: string): string {
  * caller — `FIELD_RULES` for self/representante credentials.
  */
 function passwordConfirmRule(confirm: string, password: string): string | null {
-  if (confirm.length === 0) return "Repita la contraseña para confirmarla.";
-  return confirm === password ? null : "Las contraseñas no coinciden. Escriba la misma contraseña en los dos campos.";
+  if (confirm.length === 0) return "Repite la contraseña para confirmarla.";
+  return confirm === password ? null : "Las contraseñas no coinciden. Escribe la misma contraseña en los dos campos.";
 }
 
 const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string | null>> = {
@@ -412,13 +458,13 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
       d.enrollmentType === ENROLLMENT_TYPES.SELF &&
       isMinorAge(calculatePersonAge(d.fechaNacimiento))
     ) {
-      return "El alumno es menor de edad y necesita un representante. Vuelva al primer paso y elija «Representante».";
+      return "El jugador es menor de edad y necesita un representante. Vuelve al primer paso y elige «Representante».";
     }
     if (
       d.enrollmentType === ENROLLMENT_TYPES.CHILD &&
       !isMinorAge(calculatePersonAge(d.fechaNacimiento))
     ) {
-      return "El alumno ya es mayor de edad y gestiona su propia cuenta. Vuelva al primer paso y elija «Jugador».";
+      return "El jugador ya es mayor de edad y gestiona su propia cuenta. Vuelve al primer paso y elige «Jugador».";
     }
     return null;
   },
@@ -430,13 +476,13 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
   telefono: (d) => phoneFieldRule(d.telefono, "El teléfono", { guided: true }),
   correo: (d) =>
     d.correo.trim().length === 0
-      ? "Escriba su correo electrónico: lo usará para iniciar sesión."
+      ? "Escribe tu correo electrónico: lo usarás para iniciar sesión."
       : isEmail(d.correo)
         ? null
-        : "El correo electrónico no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.",
+        : "El correo electrónico no es válido. Revísalo; debe tener un formato como nombre@ejemplo.com.",
   contrasenia: (d) =>
     d.contrasenia.length === 0
-      ? "Cree una contraseña para su cuenta."
+      ? "Crea una contraseña para tu cuenta."
       : passwordRule(d.contrasenia, "La contraseña"),
   contraseniaConfirmacion: (d) => passwordConfirmRule(d.contraseniaConfirmacion, d.contrasenia),
   nombreRepresentante: (d) => personNameRule(d.nombreRepresentante, "Los nombres del representante"),
@@ -451,30 +497,30 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
     representativeCedulaDiffersRule(d.cedulaRepresentante, d.cedula),
   fechaNacimientoRepresentante: (d) => {
     if (!d.fechaNacimientoRepresentante) {
-      return "Indique la fecha de nacimiento del representante.";
+      return "Indica la fecha de nacimiento del representante.";
     }
     if (!isValidCalendarDate(d.fechaNacimientoRepresentante)) {
-      return "La fecha de nacimiento del representante no existe. Revise el día, el mes y el año.";
+      return "La fecha de nacimiento del representante no existe. Revisa el día, el mes y el año.";
     }
     const edad = calculatePersonAge(d.fechaNacimientoRepresentante);
     return edad >= EDAD_MAYORIA_EDAD && edad <= EDAD_MAXIMA_ALUMNO
       ? null
-      : `El representante debe tener entre ${EDAD_MAYORIA_EDAD} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a ${edad} ${edad === 1 ? "año" : "años"}. Revise el año de nacimiento.`;
+      : `El representante debe tener entre ${EDAD_MAYORIA_EDAD} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a ${edad} ${edad === 1 ? "año" : "años"}. Revisa el año de nacimiento.`;
   },
   telefonoRepresentante: (d) => phoneRule(d.telefonoRepresentante, "El teléfono del representante"),
   correoRepresentante: (d) =>
     d.correoRepresentante.trim().length === 0
-      ? "Escriba el correo electrónico del representante: lo usará para iniciar sesión."
+      ? "Escribe el correo electrónico del representante: lo usarás para iniciar sesión."
       : isEmail(d.correoRepresentante)
         ? null
-        : "El correo del representante no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.",
+        : "El correo del representante no es válido. Revísalo; debe tener un formato como nombre@ejemplo.com.",
   contraseniaRepresentante: (d) =>
     d.contraseniaRepresentante.length === 0
-      ? "Cree una contraseña para la cuenta del representante."
+      ? "Crea una contraseña para la cuenta del representante."
       : passwordRule(d.contraseniaRepresentante, "La contraseña del representante"),
   contraseniaRepresentanteConfirmacion: (d) =>
     passwordConfirmRule(d.contraseniaRepresentanteConfirmacion, d.contraseniaRepresentante),
-  tipoSangre: (d) => (isBloodType(d.tipoSangre) ? null : "Seleccione el tipo de sangre del alumno."),
+  tipoSangre: (d) => (isBloodType(d.tipoSangre) ? null : "Selecciona el tipo de sangre del jugador."),
   contactoEmergencia: (d) =>
     personNameRule(d.contactoEmergencia, "El nombre del contacto de emergencia", { plural: false }),
   // Issue #860: chained after `phoneFieldRule` so a malformed number is

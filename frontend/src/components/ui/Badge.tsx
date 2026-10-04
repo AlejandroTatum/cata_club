@@ -7,7 +7,7 @@
  * `bad` swap in their state pair.
  *
  * This is where color is allowed to live. Attendance maps onto it directly:
- * presente → ok, tardanza → warn, justificado → neutral, ausente → bad.
+ * presente → ok, tardanza → warn, enfermo/competencia → neutral, ausente → bad.
  * "Sin membresía" is neutral, never bad.
  */
 

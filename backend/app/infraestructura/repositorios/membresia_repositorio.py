@@ -122,7 +122,7 @@ class MembresiaRepositorio:
             self.db, Membresia, membresia_id,
             mensaje_conflicto=(
                 "Esta membresía está siendo modificada por otra operación, "
-                "intente de nuevo en unos segundos."
+                "intenta de nuevo en unos segundos."
             ),
         )
 

@@ -932,6 +932,113 @@ export async function fetchAttendanceCorrections(asistenciaId: number): Promise<
 }
 
 // ---------------------------------------------------------------------------
+// Correction requests (QA4 ENT-25)
+// ---------------------------------------------------------------------------
+
+export type CorrectionRequestStatus = "PENDIENTE" | "APROBADA" | "RECHAZADA";
+
+/** One trainer's request to correct a closed attendance row. A trainer lists
+ *  only their own; an administrator lists all (the backend decides). */
+export interface CorrectionRequest {
+  id: number;
+  asistenciaId: number;
+  personaId: number;
+  personaNombre: string;
+  horarioId: number;
+  /** "YYYY-MM-DD" of the session. */
+  fecha: string;
+  /** "Juvenil · lunes 15:00". */
+  horarioEtiqueta: string;
+  estadoActual: EstadoAsistencia;
+  estadoSolicitado: EstadoAsistencia;
+  motivo: string;
+  solicitadoPorId: number;
+  solicitadoPorNombre: string;
+  solicitadoEn: string;
+  estado: CorrectionRequestStatus;
+  resueltoPorNombre: string | null;
+  resueltoEn: string | null;
+  motivoResolucion: string | null;
+}
+
+const ESTADO_ASISTENCIA_FROM_BACKEND: Record<string, EstadoAsistencia> = {
+  PRESENTE: "present",
+  AUSENTE: "absent",
+  ATRASADO: "late",
+  ENFERMO: "sick",
+  COMPETENCIA: "competition",
+};
+
+interface RawCorrectionRequest
+  extends Omit<CorrectionRequest, "estadoActual" | "estadoSolicitado" | "resueltoPorNombre" | "resueltoEn" | "motivoResolucion"> {
+  estadoActual: string;
+  estadoSolicitado: string;
+  resueltoPorNombre?: string | null;
+  resueltoEn?: string | null;
+  motivoResolucion?: string | null;
+}
+
+function toCorrectionRequest(raw: RawCorrectionRequest): CorrectionRequest {
+  return {
+    ...raw,
+    estadoActual: ESTADO_ASISTENCIA_FROM_BACKEND[raw.estadoActual] ?? "present",
+    estadoSolicitado: ESTADO_ASISTENCIA_FROM_BACKEND[raw.estadoSolicitado] ?? "present",
+    resueltoPorNombre: raw.resueltoPorNombre ?? null,
+    resueltoEn: raw.resueltoEn ?? null,
+    motivoResolucion: raw.motivoResolucion ?? null,
+  };
+}
+
+export interface CorrectionRequestFilters {
+  estado?: CorrectionRequestStatus;
+  horarioId?: number;
+  fecha?: string;
+}
+
+/** List correction requests — `GET /api/attendance/correction-requests`. A
+ *  trainer gets only their own; an administrator gets all, oldest first. */
+export async function fetchCorrectionRequests(filters: CorrectionRequestFilters = {}): Promise<CorrectionRequest[]> {
+  const query = new URLSearchParams();
+  if (filters.estado) query.set("estado", filters.estado);
+  if (filters.horarioId !== undefined) query.set("horario_id", String(filters.horarioId));
+  if (filters.fecha) query.set("fecha", filters.fecha);
+  const suffix = query.size > 0 ? `?${query.toString()}` : "";
+  const rows = await request<RawCorrectionRequest[]>(apiEndpoint(`/attendance/correction-requests${suffix}`));
+  return rows.map(toCorrectionRequest);
+}
+
+/** The trainer asks administration to correct one filed row —
+ *  `POST /api/attendance/correction-requests`. */
+export async function createCorrectionRequest(data: {
+  asistenciaId: number;
+  estado: EstadoAsistencia;
+  motivo: string;
+}): Promise<CorrectionRequest> {
+  const raw = await request<RawCorrectionRequest>(apiEndpoint("/attendance/correction-requests"), {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return toCorrectionRequest(raw);
+}
+
+/** Administrator approves: the backend applies the audited correction. */
+export async function approveCorrectionRequest(id: number): Promise<CorrectionRequest> {
+  const raw = await request<RawCorrectionRequest>(apiEndpoint(`/attendance/correction-requests/${id}/approve`), {
+    method: "POST",
+  });
+  return toCorrectionRequest(raw);
+}
+
+/** Administrator rejects with a reason the trainer will read. */
+export async function rejectCorrectionRequest(id: number, motivo: string): Promise<CorrectionRequest> {
+  const raw = await request<RawCorrectionRequest>(apiEndpoint(`/attendance/correction-requests/${id}/reject`), {
+    method: "POST",
+    body: JSON.stringify({ motivo }),
+  });
+  return toCorrectionRequest(raw);
+}
+
+// ---------------------------------------------------------------------------
 // Horarios (Training Schedules) CRUD
 // ---------------------------------------------------------------------------
 
@@ -1025,6 +1132,9 @@ export interface CategoriaGrupo {
   dias: string[];
   /** Optional ages label (#789) — `null` when the categoría publishes none. */
   edades?: string | null;
+  /** ADMB-14: non-blocking warnings the server attaches on create/edit (e.g.
+   *  a schedule overlap with another categoría). Empty or absent when none. */
+  advertencias?: string[];
 }
 
 /**
@@ -1054,6 +1164,21 @@ export interface ActualizarCategoriaDTO {
   /** Optional ages label (#789). OMIT it to leave the stored label untouched;
    *  send `""` to CLEAR it (the backend normalises blank to NULL). */
   edades?: string;
+  /** ADMB-04: when a día being removed has players, they all move to this
+   *  categoría in the same transaction as the edit. Without it the server
+   *  answers 409 «Reasigne primero…». */
+  mover_alumnos_a?: string;
+}
+
+/** `POST …/mover-y-eliminar` and `POST …/mover-alumnos` answer with this. */
+export interface MoverAlumnosResultado {
+  movidos: number;
+  categoriaDestino: string;
+  categoriaDestinoLabel: string;
+  /** `false` when the players moved but the categoría stayed because it has
+   *  attendance history; `motivo` says why. Always `true` for `mover-alumnos`. */
+  eliminada: boolean;
+  motivo: string | null;
 }
 
 /** Create a categoria AND a horario per día marked, in one atomic operation
@@ -1087,6 +1212,32 @@ export async function eliminarCategoria(codigo: string): Promise<void> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
   await request<unknown>(apiEndpoint(`/groups/categorias/${encodeURIComponent(codigo)}`), {
     method: "DELETE",
+    headers: mockHeaders,
+  });
+}
+
+/** ADMB-04, "todos a una": moves EVERY player to ONE target categoría and
+ *  deletes the origin in a single backend transaction — all or nothing. */
+export async function moverYEliminarCategoria(codigo: string, categoriaDestino: string): Promise<MoverAlumnosResultado> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<MoverAlumnosResultado>(apiEndpoint(`/groups/categorias/${encodeURIComponent(codigo)}/mover-y-eliminar`), {
+    method: "POST",
+    body: JSON.stringify({ categoria_destino: categoriaDestino }),
+    headers: mockHeaders,
+  });
+}
+
+/** ADMB-04, "de a uno": moves only the chosen players to a target categoría;
+ *  the origin is not deleted. Players no longer in the origin are ignored. */
+export async function moverAlumnosDeCategoria(
+  codigo: string,
+  categoriaDestino: string,
+  personaIds: number[],
+): Promise<MoverAlumnosResultado> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<MoverAlumnosResultado>(apiEndpoint(`/groups/categorias/${encodeURIComponent(codigo)}/mover-alumnos`), {
+    method: "POST",
+    body: JSON.stringify({ categoria_destino: categoriaDestino, persona_ids: personaIds }),
     headers: mockHeaders,
   });
 }
@@ -2590,7 +2741,8 @@ export interface RepresentadoCreatePayload {
    *  how the caller says "no phone" — the BFF drops it from the backend body
    *  and `RepresentadoCreateDTO` defaults it to NULL. */
   telefono?: string;
-  fichaMedica?: RepresentadoFichaMedicaPayload;
+  /** Required (QA4 FAM-10): the backend rejects a dependent without a medical record. */
+  fichaMedica: RepresentadoFichaMedicaPayload;
   institucionId?: number;
 }
 
@@ -2906,6 +3058,9 @@ export interface GaleriaEntry {
   titulo: string;
   descripcion: string;
   imagenUrl: string;
+  /** Position in the gallery (lower first) and whether the landing shows it (ADMB-34). */
+  orden: number;
+  visible: boolean;
 }
 
 /** Public entries shown on the landing page gallery. */
@@ -2920,6 +3075,34 @@ export async function crearEntradaGaleria(titulo: string, descripcion: string, a
   formData.append("descripcion", descripcion);
   formData.append("archivo", archivo);
   return request<GaleriaEntry>(apiEndpoint("/galeria"), { method: "POST", body: formData }, 30_000);
+}
+
+/** Admin-only: every entry in gallery order, hidden ones included. */
+export async function fetchGaleriaAdmin(): Promise<GaleriaEntry[]> {
+  return request<GaleriaEntry[]>(apiEndpoint("/galeria/admin"));
+}
+
+/** Admin-only: edit text and visibility; `archivo` (the cropped photo) replaces the hosted one. */
+export async function actualizarEntradaGaleria(
+  id: number,
+  datos: { titulo: string; descripcion: string; visible: boolean },
+  archivo?: File,
+): Promise<GaleriaEntry> {
+  const formData = new FormData();
+  formData.append("titulo", datos.titulo);
+  formData.append("descripcion", datos.descripcion);
+  formData.append("visible", String(datos.visible));
+  if (archivo) formData.append("archivo", archivo);
+  return request<GaleriaEntry>(apiEndpoint(`/galeria/${id}`), { method: "PUT", body: formData }, 30_000);
+}
+
+/** Admin-only: move an entry one step up or down in the gallery order. */
+export async function moverEntradaGaleria(id: number, direccion: "subir" | "bajar"): Promise<GaleriaEntry[]> {
+  return request<GaleriaEntry[]>(apiEndpoint(`/galeria/${id}/mover`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ direccion }),
+  });
 }
 
 /** Admin-only: remove a gallery entry and its hosted photo. */
@@ -3150,6 +3333,30 @@ export async function fetchAlumnosPorHorario(horarioId: number): Promise<AlumnoH
 export async function fetchRosterDeTodosLosHorarios(): Promise<AlumnoHorario[]> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
   return request<AlumnoHorario[]>(apiEndpoint("/groups/horarios/alumnos"), { headers: mockHeaders });
+}
+
+/** Enrolled students of one horario, without the students themselves (QA4 PERF-01). */
+export interface ConteoHorario {
+  horarioId: number;
+  inscritos: number;
+  /** Only present when requested with `incluirPersonas`. */
+  personaIds?: number[];
+}
+
+/**
+ * Enrolled-student COUNT per horario (QA4 PERF-01). The screens that only
+ * draw "N inscritos" read this (~1 KB) instead of
+ * `fetchRosterDeTodosLosHorarios` (~500 KB, grows with every student).
+ * Horarios nobody is enrolled in are absent, so a missing id means 0.
+ * `incluirPersonas` adds the enrolled person ids — still no names — for the
+ * screens that count DISTINCT students across horarios.
+ */
+export async function fetchConteosPorHorario(
+  options: { incluirPersonas?: boolean } = {},
+): Promise<ConteoHorario[]> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  const query = options.incluirPersonas ? "?incluir_personas=true" : "";
+  return request<ConteoHorario[]>(apiEndpoint(`/groups/horarios/conteos${query}`), { headers: mockHeaders });
 }
 
 /** List all schedules assigned to a specific student. */

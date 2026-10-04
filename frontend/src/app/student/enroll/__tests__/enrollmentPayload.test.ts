@@ -107,38 +107,38 @@ describe("buildEnrollmentRequest", () => {
 
 describe("getEnrollmentErrorMessage", () => {
   it("surfaces backend message for 400 when present", () => {
-    expect(getEnrollmentErrorMessage(apiError("El alumno ya tiene una inscripción activa.", 400)))
-      .toBe("El alumno ya tiene una inscripción activa.");
+    expect(getEnrollmentErrorMessage(apiError("El jugador ya tiene una inscripción activa.", 400)))
+      .toBe("El jugador ya tiene una inscripción activa.");
   });
 
   it("restates the anti-enumeration duplicate answer with the next move, still recognised as a duplicate", () => {
     const message = getEnrollmentErrorMessage(apiError(MENSAJE_IDENTIDAD_DUPLICADA, 409));
     expect(message).toBe(
-      "Ya existe una cuenta registrada con la cédula o el correo que ingresó. Si es suya, inicie sesión; si no, revise que los datos estén bien escritos.",
+      "Ya existe una cuenta registrada con la cédula o el correo que ingresaste. Si es tuya, inicia sesión; si no, revisa que los datos estén bien escritos.",
     );
     expect(isDuplicateIdentityError(message)).toBe(true);
   });
 
   it("names the email field for an identifiable backend 422", () => {
     const error = apiError("No se pudo completar la inscripción.", 422, ["body", "credenciales_alumno", "correo"]);
-    expect(getEnrollmentErrorMessage(error)).toBe("El servidor no aceptó el correo electrónico. Corríjalo en el paso «Datos del estudiante» e intente de nuevo.");
+    expect(getEnrollmentErrorMessage(error)).toBe("El servidor no aceptó el correo electrónico. Corrígelo en el paso «Datos del jugador» e intenta de nuevo.");
   });
 
   it("names the representative email field for an identifiable backend 422", () => {
     const error = apiError("No se pudo completar la inscripción.", 422, ["body", "representante", "correo"]);
-    expect(getEnrollmentErrorMessage(error)).toBe("El servidor no aceptó el correo electrónico del representante. Corríjalo en el paso «Datos del representante» e intente de nuevo.");
+    expect(getEnrollmentErrorMessage(error)).toBe("El servidor no aceptó el correo electrónico del representante. Corrígelo en el paso «Datos del representante» e intenta de nuevo.");
   });
 
   it("falls back to generic message for an unidentifiable 422", () => {
     expect(getEnrollmentErrorMessage(apiError("", 422)))
-      .toBe("No pudimos registrar la inscripción. Revise los datos de cada paso e intente de nuevo.");
+      .toBe("No pudimos registrar la inscripción. Revisa los datos de cada paso e intenta de nuevo.");
   });
 
   it("returns the one rate-limit sentence for 429", () => {
     // POST /inscripciones is rate-limited on the public form. The wording is
     // the translator's: this screen no longer keeps a private variant of it.
     expect(getEnrollmentErrorMessage(apiError("", 429)))
-      .toBe("Demasiados intentos. Espere un momento e intente nuevamente.");
+      .toMatch(/^Demasiados intentos\. Espera un momento e intenta nuevamente\.$/);
   });
 
   it("reports the connection when fetch never reached the backend", () => {
@@ -146,6 +146,6 @@ describe("getEnrollmentErrorMessage", () => {
     // status), so the only status-less error this catch can see is fetch
     // itself rejecting — and its message is the browser's, not the product's.
     expect(getEnrollmentErrorMessage(new TypeError("Failed to fetch")))
-      .toBe("No pudimos conectar. Revise su conexión a internet e intente nuevamente.");
+      .toMatch(/^No pudimos conectar\. Revisa tu conexión a internet e intenta nuevamente\.$/);
   });
 });

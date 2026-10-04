@@ -67,7 +67,7 @@ export interface SessionStudent {
   attendance: WizardAttendance;
   /**
    * True once a HUMAN set this row's state — a tap on the fiche, one of the
-   * four controls, "Marcar restantes presentes", a record already saved for
+   * four controls, "Marcar todos presentes", a record already saved for
    * this session, or a restored draft entry.
    *
    * Absent/false means the row still carries `DEFAULT_ATTENDANCE` because
@@ -106,7 +106,6 @@ export const ATTENDANCE_LABELS: Record<EstadoAsistencia, string> = {
   present: "Presente",
   absent: "Ausente",
   late: "Tardanza",
-  justified: "Justificado",
   // Issue #1373: mismos labels que la vista admin usa para los dos estados
   // nuevos, para que ninguna pantalla invente un segundo nombre.
   sick: "Enfermo",
@@ -124,7 +123,6 @@ export const ATTENDANCE_STATES: EstadoAsistencia[] = [
   "present",
   "absent",
   "late",
-  "justified",
   // Issue #1373: inasistencias autorizadas. Van al final del orden visual:
   // el caso común (presente) queda primero y los dos estados nuevos no
   // empujan a los cuatro de siempre fuera de su lugar.
@@ -138,16 +136,16 @@ export const ATTENDANCE_STATES: EstadoAsistencia[] = [
 
 /**
  * Cycle to the next attendance state in a defined order:
- * absent → present → late → justified → sick → competition → absent → ...
+ * absent → present → late → sick → competition → absent → ...
  *
  * This provides a predictable toggle sequence for the UI. The two issue
- * #1373 states sit between justified and absent: they are authorized
- * absences (justified family), never a worse verdict than absent.
+ * #1373 states sit between late and absent: they are authorized
+ * absences, never a worse verdict than absent.
  */
 export function nextAttendanceState(
   current: EstadoAsistencia,
 ): EstadoAsistencia {
-  const order: EstadoAsistencia[] = ["absent", "present", "late", "justified", "sick", "competition"];
+  const order: EstadoAsistencia[] = ["absent", "present", "late", "sick", "competition"];
   const idx = order.indexOf(current);
   if (idx === -1 || idx === order.length - 1) return order[0];
   return order[idx + 1];
@@ -177,7 +175,7 @@ export function arrowAttendanceState(
  * The order tapping a student's row walks through
  * (`docs/archive/prototypes/prototipos/20-tomar-lista.html`):
  *
- *   Sin marcar → Presente → Tardanza → Justificado → Ausente → Presente → …
+ *   Sin marcar → Presente → Tardanza → Enfermo → Competencia → Ausente → Presente → …
  *
  * "Presente" comes first because it is the overwhelmingly common answer: one
  * tap should settle the common case, not the rarest one.
@@ -195,8 +193,6 @@ export function cycleWizardAttendance(current: WizardAttendance): EstadoAsistenc
     case "present":
       return "late";
     case "late":
-      return "justified";
-    case "justified":
       return "sick";
     case "sick":
       return "competition";
@@ -241,7 +237,7 @@ export function resolveFailedStudentNames(
   students: SessionStudent[],
 ): string[] {
   const nameById = new Map(students.map((s) => [s.id, s.name]));
-  return failed.map((f) => nameById.get(String(f.personaId)) ?? `Alumno #${f.personaId}`);
+  return failed.map((f) => nameById.get(String(f.personaId)) ?? `Jugador #${f.personaId}`);
 }
 
 const WEEKDAY_SHORT_ES = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
@@ -282,19 +278,19 @@ export function describeAttendanceSaveError(error: unknown): string {
       ? Number((error as { status: unknown }).status)
       : NaN;
   if (status === 401 || status === 403) {
-    return "Su sesión no tiene permiso para registrar esta lista. Vuelva a iniciar sesión e intente nuevamente.";
+    return "Tu sesión no tiene permiso para registrar esta lista. Vuelve a iniciar sesión e intenta nuevamente.";
   }
   if (status >= 400 && status < 500) {
     // ENT-02: the backend's own reason ("solo se puede registrar … los últimos
     // 30 días") beats the generic text, but only when it marked it safe to show.
     const { message, safe } = error as { message?: unknown; safe?: unknown };
     if (safe === true && typeof message === "string" && message.trim()) return message;
-    return "La lista no se pudo registrar porque ya no coincide con lo que hay en el sistema. Actualice la página y revise los datos.";
+    return "La lista no se pudo registrar porque ya no coincide con lo que hay en el sistema. Actualiza la página y revisa los datos.";
   }
   if (status >= 500) {
-    return "El servidor tuvo un problema al guardar la lista. Sus marcas siguen aquí; intente de nuevo en unos minutos.";
+    return "El servidor tuvo un problema al guardar la lista. Tus marcas siguen aquí; intenta de nuevo en unos minutos.";
   }
-  return "No hay conexión con el servidor. Sus marcas siguen guardadas en este equipo; revise su conexión e intente de nuevo.";
+  return "No hay conexión con el servidor. Tus marcas siguen guardadas en este equipo; revisa tu conexión e intenta de nuevo.";
 }
 
 /**
@@ -425,7 +421,6 @@ export function buildAttendanceReceipt(
     present: countByState(saved, "present"),
     absent: countByState(saved, "absent"),
     late: countByState(saved, "late"),
-    justified: countByState(saved, "justified"),
     sick: countByState(saved, "sick"),
     competition: countByState(saved, "competition"),
   };
@@ -552,11 +547,12 @@ export function countRecordsByHorario(records: AttendanceRecord[]): Map<number, 
  * closed, as it always did.
  *
  * `records` is the trailing-week fetch (see `countRecordsByHorario`) and
- * `roster` the all-horarios roster (`fetchRosterDeTodosLosHorarios`).
+ * `personasPorHorario` the enrolled person ids per horario, from the
+ * lightweight counts (`fetchConteosPorHorario({ incluirPersonas: true })`).
  */
 export function closedHorariosFromWeek(
   records: AttendanceRecord[],
-  roster: AlumnoHorario[],
+  personasPorHorario: Record<number, readonly number[]>,
 ): Set<number> {
   const recordedByHorario = new Map<number, Set<number>>();
   for (const record of records) {
@@ -566,8 +562,8 @@ export function closedHorariosFromWeek(
   }
   const closed = new Set<number>();
   for (const [horarioId, recorded] of recordedByHorario) {
-    const students = roster.filter((r) => r.horarioId === horarioId);
-    if (students.every((r) => recorded.has(r.personaId))) closed.add(horarioId);
+    const students = personasPorHorario[horarioId] ?? [];
+    if (students.every((personaId) => recorded.has(personaId))) closed.add(horarioId);
   }
   return closed;
 }

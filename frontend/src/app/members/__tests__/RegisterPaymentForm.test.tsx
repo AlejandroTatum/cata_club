@@ -58,9 +58,15 @@ function fileInput(): HTMLInputElement {
   return document.querySelector('input[type="file"]') as HTMLInputElement;
 }
 
+/** ADMA-10: no method is preselected, so a transfer test has to choose it. */
+function chooseTransfer(): void {
+  fireEvent.click(screen.getByRole("radio", { name: "Transferencia" }));
+}
+
 function openAndSubmitEmpty(): void {
   render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
   fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+  chooseTransfer();
   fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
 }
 
@@ -76,6 +82,7 @@ describe("RegisterPaymentForm — controls follow the md sizing standard (#539)"
     expect(opener).toHaveClass("h-ctl", "text-sm", "px-4");
     expect(opener.querySelector("svg")).toHaveAttribute("width", "18");
     fireEvent.click(opener);
+    chooseTransfer();
 
     expect(screen.getByRole("spinbutton")).toHaveClass("h-ctl", "text-sm", "px-3");
     // `min-h-ctl` and not `h-ctl` since #778: still the same 40px next to the
@@ -95,6 +102,45 @@ describe("RegisterPaymentForm — controls follow the md sizing standard (#539)"
     const file = new File(["contenido"], "voucher.png", { type: "image/png" });
     fireEvent.change(fileInput(), { target: { files: [file] } });
     expect(screen.getByRole("button", { name: "Quitar" })).toHaveClass("h-ctl", "text-sm", "px-3");
+  });
+});
+
+describe("RegisterPaymentForm — ADMA-10: el admin elige el método, ninguno viene marcado", () => {
+  it("opens with neither Efectivo nor Transferencia selected, and no voucher field yet", () => {
+    render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    expect(screen.getByRole("radio", { name: "Efectivo" })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "Transferencia" })).not.toBeChecked();
+    expect(fileInput()).not.toBeInTheDocument();
+  });
+
+  it("blocks saving with a clear message until a method is chosen", () => {
+    render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: /^Monto/ }), { target: { value: "25" } });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Elige cómo pagó: efectivo o transferencia.");
+    expect(mockRegistrarPagoPresencial).not.toHaveBeenCalled();
+    expect(mockRegistrarPago).not.toHaveBeenCalled();
+  });
+
+  it("lets the payment through once Efectivo is chosen", async () => {
+    mockRegistrarPagoPresencial.mockResolvedValue({ id: 701, estadoPago: "APROBADO" });
+    render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: /^Monto/ }), { target: { value: "25" } });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    await waitFor(() =>
+      expect(mockRegistrarPagoPresencial).toHaveBeenCalledWith(expect.objectContaining({ tipoPago: "EFECTIVO" })),
+    );
   });
 });
 
@@ -150,6 +196,7 @@ describe("RegisterPaymentForm — método de pago (#540)", () => {
   it("clears the staged voucher and voucher error when switching to cash", () => {
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
     fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    chooseTransfer();
     fireEvent.change(fileInput(), {
       target: { files: [new File(["notas"], "notas.txt", { type: "text/plain" })] },
     });
@@ -167,6 +214,7 @@ describe("RegisterPaymentForm — el error de comprobante faltante ya no es sile
   it("marks the amount and transfer proof as required", () => {
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
     fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    chooseTransfer();
     expect(screen.getByRole("spinbutton", { name: /^Monto/ })).toBeRequired();
     expect(fileInput()).toHaveAttribute("aria-required", "true");
   });
@@ -254,6 +302,7 @@ describe("RegisterPaymentForm — pago presencial de primera inscripción (#1402
   function openTransferWithVoucher(): void {
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
     fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    chooseTransfer();
     fireEvent.change(fileInput(), {
       target: { files: [new File(["contenido"], "voucher.png", { type: "image/png" })] },
     });
@@ -350,6 +399,7 @@ describe("RegisterPaymentForm — renovación usa el flujo original registrarPag
     const onPaymentRegistered = vi.fn();
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA_RENOVACION} onPaymentRegistered={onPaymentRegistered} />);
     fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    chooseTransfer();
     fireEvent.change(fileInput(), {
       target: { files: [new File(["contenido"], "voucher.png", { type: "image/png" })] },
     });
@@ -413,6 +463,7 @@ describe("RegisterPaymentForm — el selector rechaza un tipo de archivo inváli
   it("rejects a .txt file with a clear error and does not stage it as the voucher", () => {
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
     fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    chooseTransfer();
 
     const file = new File(["notas"], "notas.txt", { type: "text/plain" });
     fireEvent.change(fileInput(), { target: { files: [file] } });
@@ -426,6 +477,7 @@ describe("RegisterPaymentForm — el selector rechaza un tipo de archivo inváli
   it("accepts a valid file after a rejected one, clearing the error", () => {
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
     fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    chooseTransfer();
 
     fireEvent.change(fileInput(), {
       target: { files: [new File(["notas"], "notas.txt", { type: "text/plain" })] },
@@ -476,7 +528,7 @@ describe("RegisterPaymentForm — el monto no puede comprar más de 12 meses (#6
     });
 
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "El pago no puede cubrir más de 12 meses. Reduzca el monto ingresado.",
+      "El pago no puede cubrir más de 12 meses. Reduce el monto ingresado.",
     );
     expect(screen.queryByText(/meses de vigencia/)).not.toBeInTheDocument();
   });
@@ -536,7 +588,7 @@ describe("RegisterPaymentForm — el monto no puede comprar más de 12 meses (#6
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent(
-        "El pago no puede cubrir más de 12 meses. Reduzca el monto ingresado.",
+        "El pago no puede cubrir más de 12 meses. Reduce el monto ingresado.",
       );
     });
   });

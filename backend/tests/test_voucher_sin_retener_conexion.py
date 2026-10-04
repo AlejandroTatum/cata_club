@@ -388,7 +388,7 @@ def test_un_pago_validado_durante_la_subida_no_recibe_el_voucher(monkeypatch):
     try:
         with pytest.raises(OperacionInvalida) as error:
             _adjuntar(sesion, pago_id, persona_id)
-        assert "pendiente" in str(error.value).lower()
+        assert "por validar" in str(error.value).lower()
         assert _voucher_persistido(pago_id) is None
         assert len(eliminados) == 1
         assert eliminados[0].startswith(f"voucher-pago-{pago_id:08d}-v1-")

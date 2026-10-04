@@ -100,7 +100,7 @@ describe("POST /api/auth/me/foto", () => {
 
   it("propagates the backend's error status (e.g. unsupported file type)", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(
-      jsonResponse({ detail: "Formato de archivo no permitido. Use JPG o PNG" }, 400),
+      jsonResponse({ detail: "Formato de archivo no permitido. Usa JPG o PNG" }, 400),
     );
 
     const access = makeJwt(3600);

@@ -44,7 +44,7 @@ type ParsedUpdateBody =
  */
 function parseUpdateBody(value: unknown): ParsedUpdateBody | { error: string } {
   if (typeof value !== "object" || value === null) {
-    return { error: "Acción inválida. Use 'approved' o 'rejected'." };
+    return { error: "Acción inválida. Usa 'approved' o 'rejected'." };
   }
   const body = value as Record<string, unknown>;
 
@@ -72,7 +72,7 @@ function parseUpdateBody(value: unknown): ParsedUpdateBody | { error: string } {
     return { action: "rejected", rejectionReason: reason.trim() };
   }
 
-  return { error: "Acción inválida. Use 'approved' o 'rejected'." };
+  return { error: "Acción inválida. Usa 'approved' o 'rejected'." };
 }
 
 export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }): Promise<NextResponse> {

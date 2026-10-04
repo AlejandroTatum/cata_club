@@ -50,7 +50,7 @@ describe("ReportProblemDialog", () => {
     expect(send()).toBeDisabled();
     fireEvent.submit(send().closest("form") as HTMLFormElement);
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.getByText("Sin captura (falta su autorización)")).toBeInTheDocument();
+    expect(screen.getByText("Sin captura (falta tu autorización)")).toBeInTheDocument();
   });
 
   it("sends the automatic capture once consent is given", async () => {

@@ -24,7 +24,7 @@ vi.mock("@/components/StudentSearch", () => ({
     onClear?: () => void;
   }): React.ReactElement => (
     <div>
-      <input aria-label="Buscar alumno" />
+      <input aria-label="Buscar jugador" />
       <button type="button" onClick={onClear}>
         clear search
       </button>

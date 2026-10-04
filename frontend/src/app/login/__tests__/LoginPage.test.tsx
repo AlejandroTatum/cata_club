@@ -89,8 +89,8 @@ const mockUseAuth = vi.mocked(useAuth);
  */
 function expectedWelcomeDescriptionFor(destination: string): string {
   return destination === "/login/activacion"
-    ? "Antes de entrar, le faltan un par de pasos."
-    : "Su sesión quedó iniciada. Le llevamos a su panel.";
+    ? "Antes de entrar, te faltan un par de pasos."
+    : "Tu sesión quedó iniciada. Te llevamos a tu panel.";
 }
 
 /** Fill and submit the login form with the given credentials. */
@@ -158,7 +158,7 @@ describe("LoginPage", () => {
 
     render(<LoginPage />);
 
-    expect(screen.getByText("Su sesión expiró. Vuelva a iniciar sesión.")).toBeInTheDocument();
+    expect(screen.getByText("Tu sesión expiró. Vuelve a iniciar sesión.")).toBeInTheDocument();
   });
 
   it("says nothing extra on an ordinary visit to /login — there is nothing to explain", () => {
@@ -166,7 +166,7 @@ describe("LoginPage", () => {
 
     render(<LoginPage />);
 
-    expect(screen.queryByText("Su sesión expiró. Vuelva a iniciar sesión.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Tu sesión expiró. Vuelve a iniciar sesión.")).not.toBeInTheDocument();
   });
 
   /**
@@ -182,7 +182,7 @@ describe("LoginPage", () => {
     render(<LoginPage />);
 
     expect(
-      screen.getByText("Su correo quedó verificado. Vuelva a iniciar sesión para continuar."),
+      screen.getByText("Tu correo quedó verificado. Vuelve a iniciar sesión para continuar."),
     ).toBeInTheDocument();
   });
 
@@ -194,7 +194,7 @@ describe("LoginPage", () => {
    *
    * The fix is hit area only — the icon still rides its step and the type is still
    * 12.5px/600. "Inscríbete" is deliberately left alone: it sits inside the
-   * sentence "¿No tiene una cuenta? Inscríbete" and is covered by the
+   * sentence "¿No tienes una cuenta? Inscríbete" and is covered by the
    * criterion's own Inline exception.
    */
   describe("targets big enough to hit — SC 2.5.8", () => {
@@ -214,7 +214,7 @@ describe("LoginPage", () => {
 
       render(<LoginPage />);
 
-      const recovery = screen.getByRole("link", { name: /olvidó su contraseña/i });
+      const recovery = screen.getByRole("link", { name: /olvidaste tu contraseña/i });
       expect(recovery.className).toContain("min-h-[24px]");
       expect(recovery.className).toContain("text-xs");
     });
@@ -263,7 +263,7 @@ describe("LoginPage", () => {
     fireEvent.change(screen.getByLabelText(/^contraseña/i), { target: { value: "safe-password" } });
     fireEvent.submit(screen.getByRole("button", { name: /iniciar sesión/i }).closest("form") as HTMLFormElement);
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Ingrese su correo electrónico.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Ingresa tu correo electrónico.");
     expect(screen.getByLabelText(/correo electrónico/i)).toHaveAttribute("aria-invalid", "true");
     expect(mockLogin).not.toHaveBeenCalled();
   });
@@ -286,6 +286,67 @@ describe("LoginPage", () => {
       expect(document.querySelector(".alert-error")).not.toBeInTheDocument();
     });
 
+    // REG-02: from the 3rd wrong password the server slows each answer (max
+    // 8 s). The person must read that as "too many attempts", not as a broken
+    // connection — and be pointed at the recovery link.
+    it("adds a «demasiados intentos» notice from the 3rd consecutive wrong password, not before", async () => {
+      const mockLogin = vi.fn().mockResolvedValue({ ok: false, error: "invalid_credentials" });
+      mockUseAuth.mockReturnValue({ ...createUnauthenticatedAuth(false), login: mockLogin });
+
+      render(<LoginPage />);
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        submitLoginForm();
+        await screen.findByTestId("credentials-error");
+        await waitFor(() => expect(mockLogin).toHaveBeenCalledTimes(attempt));
+        expect(screen.queryByTestId("too-many-attempts")).not.toBeInTheDocument();
+      }
+
+      submitLoginForm();
+      const notice = await screen.findByTestId("too-many-attempts");
+      expect(notice).toHaveTextContent("Demasiados intentos. Espera unos segundos y vuelve a intentarlo.");
+      expect(notice).toHaveTextContent(/enlace para recuperarla/);
+    });
+
+    it("drops the notice when a different failure follows, so it never blames the wrong thing", async () => {
+      const mockLogin = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: false, error: "invalid_credentials" })
+        .mockResolvedValueOnce({ ok: false, error: "invalid_credentials" })
+        .mockResolvedValueOnce({ ok: false, error: "invalid_credentials" })
+        .mockResolvedValueOnce({ ok: false, error: "backend_unavailable" });
+      mockUseAuth.mockReturnValue({ ...createUnauthenticatedAuth(false), login: mockLogin });
+
+      render(<LoginPage />);
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        submitLoginForm();
+        await waitFor(() => expect(mockLogin).toHaveBeenCalledTimes(attempt));
+      }
+      await screen.findByTestId("too-many-attempts");
+
+      submitLoginForm();
+      await screen.findByText("No se pudo conectar con el servidor");
+      expect(screen.queryByTestId("too-many-attempts")).not.toBeInTheDocument();
+    });
+
+    // REG-02: after 10 failed attempts the account is cooling down for 15
+    // minutes. The card says so and links to password recovery; it is not a
+    // wrong-password state, so no field is painted red.
+    it("names the 15-minute cooldown and links to password recovery, with no toast", async () => {
+      const mockLogin = vi.fn().mockResolvedValue({ ok: false, error: "login_cooldown" });
+      mockUseAuth.mockReturnValue({ ...createUnauthenticatedAuth(false), login: mockLogin });
+
+      render(<LoginPage />);
+      submitLoginForm();
+
+      const failure = await screen.findByTestId("login-failure");
+      expect(within(failure).getByText("Demasiados intentos fallidos.")).toBeInTheDocument();
+      expect(within(failure).getByText("Por seguridad, espera 15 minutos o restablece tu contraseña.")).toBeInTheDocument();
+      expect(within(failure).getByRole("link", { name: /restablecer tu contraseña/i })).toHaveAttribute("href", "/forgot-password");
+      expect(screen.queryByTestId("credentials-error")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("too-many-attempts")).not.toBeInTheDocument();
+      expect(mockShowError).not.toHaveBeenCalled();
+    });
+
     it("names the problem and the recovery inline for a server failure, with no toast", async () => {
       const mockLogin = vi.fn().mockResolvedValue({ ok: false, error: "backend_unavailable" });
       mockUseAuth.mockReturnValue({
@@ -299,7 +360,7 @@ describe("LoginPage", () => {
       const failure = await screen.findByTestId("login-failure");
       expect(failure).toHaveAttribute("role", "alert");
       expect(failure).toHaveTextContent("No se pudo conectar con el servidor");
-      expect(failure).toHaveTextContent("El servicio no está disponible. Intente nuevamente en unos minutos.");
+      expect(failure).toHaveTextContent("El servicio no está disponible. Intenta nuevamente en unos minutos.");
       expect(mockShowError).not.toHaveBeenCalled();
     });
 
@@ -314,9 +375,9 @@ describe("LoginPage", () => {
       submitLoginForm();
 
       const failure = await screen.findByTestId("login-failure");
-      expect(failure).toHaveTextContent("Su cuenta tiene más de un rol activo");
+      expect(failure).toHaveTextContent("Tu cuenta tiene más de un rol activo");
       expect(failure).toHaveTextContent(
-        "No podemos saber con cuál entrar. Comuníquese con el club para que le asignen uno solo.",
+        "No podemos saber con cuál entrar. Comunícate con el club para que te asignen uno solo.",
       );
       expect(mockShowError).not.toHaveBeenCalled();
     });
@@ -330,8 +391,8 @@ describe("LoginPage", () => {
       submitLoginForm();
 
       const failure = await screen.findByTestId("login-failure");
-      expect(failure).toHaveTextContent("Su cuenta está inactiva.");
-      expect(failure).toHaveTextContent("Comuníquese con el club para reactivarla.");
+      expect(failure).toHaveTextContent("Tu cuenta está inactiva.");
+      expect(failure).toHaveTextContent("Comunícate con el club para reactivarla.");
       expect(within(failure).getByRole("link", { name: /whatsapp/i })).toHaveAttribute(
         "href",
         expect.stringMatching(/^https:\/\/wa\.me\//),
@@ -377,7 +438,7 @@ describe("LoginPage", () => {
 
       const firstName = session.user.name.trim().split(/\s+/)[0];
       expect(mockShowSuccess).toHaveBeenCalledWith(`Hola, ${firstName}`, {
-        description: "Su sesión quedó iniciada. Le llevamos a su panel.",
+        description: "Tu sesión quedó iniciada. Te llevamos a tu panel.",
       });
       // Nothing paints over the page any more.
       expect(screen.queryByText(/inicio de sesión exitoso/i)).not.toBeInTheDocument();
@@ -464,7 +525,7 @@ describe("LoginPage", () => {
         description: expectedWelcomeDescriptionFor("/login/activacion"),
       });
       const [, { description }] = mockShowInfo.mock.calls[0];
-      expect(description).not.toContain("Le llevamos a su panel");
+      expect(description).not.toContain("Te llevamos a tu panel");
       vi.useRealTimers();
     });
   });
@@ -577,7 +638,7 @@ describe("LoginPage — the failed credentials leave a mark on the form", () => 
       screen.getByRole("button", { name: /iniciar sesión/i }).closest("form") as HTMLFormElement,
     );
 
-    const alert = screen.getByText("Ingrese su correo electrónico.");
+    const alert = screen.getByText("Ingresa tu correo electrónico.");
     expect(alert.className).toContain("text-state-bad");
     expect(alert.className).not.toContain("text-cata-red");
   });
@@ -603,7 +664,7 @@ describe("LoginPage — the links look like links", () => {
   });
 
   it("underlines both, in the readable shade of the brand red", () => {
-    for (const name of [/olvidó su contraseña/i, /inscríbete/i]) {
+    for (const name of [/olvidaste tu contraseña/i, /inscríbete/i]) {
       const link = screen.getByRole("link", { name });
       expect(link.className).toContain("underline");
       expect(link.className).toContain("text-cata-red-dark");
@@ -613,7 +674,7 @@ describe("LoginPage — the links look like links", () => {
   it("gives each one the arrow that says it leads off this screen", () => {
     // Both go somewhere else — /forgot-password and /student/enroll — which is
     // exactly the case the rule reserves the arrow for.
-    for (const name of [/olvidó su contraseña/i, /inscríbete/i]) {
+    for (const name of [/olvidaste tu contraseña/i, /inscríbete/i]) {
       const link = screen.getByRole("link", { name });
       expect(link.querySelector("svg[aria-hidden='true']")).not.toBeNull();
     }

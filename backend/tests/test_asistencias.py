@@ -1,4 +1,5 @@
 from app.dominio.cedula import cedula_valida
+from app.dominio.enums import EstadoAsistencia
 from tests.nombres_validos import nombre_unico
 from app.dominio.modelos import AsistenciaCorreccion, Persona
 from app.seguridad.gestor_auth import GestorAutenticacion
@@ -476,6 +477,90 @@ def test_roster_de_todos_los_horarios_requiere_admin_o_entrenador(client_sin_per
     assert resp.status_code == 403
 
 
+# --- QA4 PERF-01: conteos ligeros por horario ---------------------------------
+# `/horarios/alumnos` baja ~500 KB solo para que cuatro pantallas dibujen "N
+# inscritos". El conteo viaja aparte y el detalle se pide por horario.
+def test_conteos_por_horario_cuenta_inscritos_activos(client, db_session):
+    alumno_a = _crear_persona_api(client, cedula_valida(151), "Ana")
+    alumno_b = _crear_persona_api(client, cedula_valida(152), "Beto")
+    alumno_baja = _crear_persona_api(client, cedula_valida(153), "Cami")
+    horario_a = _crear_horario_api(client, "LUNES", "JUVENIL")
+    horario_b = _crear_horario_api(client, "MARTES", "FORMATIVO")
+    for alumno, horario in (
+        (alumno_a, horario_a), (alumno_b, horario_a), (alumno_baja, horario_a), (alumno_b, horario_b),
+    ):
+        client.post(
+            "/api/v1/asistencias/asignar-alumno",
+            json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+        )
+    db_session.get(Persona, alumno_baja["id"]).activo = False
+    db_session.commit()
+
+    resp = client.get("/api/v1/asistencias/horarios/conteos")
+
+    assert resp.status_code == 200
+    assert {f["horarioId"]: f["inscritos"] for f in resp.json()} == {
+        horario_a["id"]: 2,
+        horario_b["id"]: 1,
+    }
+    assert all(set(f) == {"horarioId", "inscritos"} for f in resp.json())
+
+
+def test_conteos_por_horario_coincide_con_el_roster_completo(client):
+    alumno = _crear_persona_api(client, cedula_valida(154), "Dani")
+    horario = _crear_horario_api(client)
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+    roster = client.get("/api/v1/asistencias/horarios/alumnos").json()
+    conteos = client.get("/api/v1/asistencias/horarios/conteos").json()
+
+    esperado: dict[int, int] = {}
+    for fila in roster:
+        esperado[fila["horarioId"]] = esperado.get(fila["horarioId"], 0) + 1
+    assert {f["horarioId"]: f["inscritos"] for f in conteos} == esperado
+
+
+def test_conteos_por_horario_incluye_personas_solo_si_se_piden(client):
+    """/groups cuenta alumnos DISTINTOS por categoría (uno entrena varios
+    días), así que necesita las identidades, no solo el conteo por fila."""
+    alumno_a = _crear_persona_api(client, cedula_valida(156), "Fer")
+    alumno_b = _crear_persona_api(client, cedula_valida(157), "Gus")
+    horario = _crear_horario_api(client)
+    for alumno in (alumno_a, alumno_b):
+        client.post(
+            "/api/v1/asistencias/asignar-alumno",
+            json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+        )
+
+    sin = client.get("/api/v1/asistencias/horarios/conteos").json()
+    con = client.get("/api/v1/asistencias/horarios/conteos?incluir_personas=true").json()
+
+    assert all("personaIds" not in f for f in sin)
+    fila = next(f for f in con if f["horarioId"] == horario["id"])
+    assert fila["inscritos"] == 2
+    assert sorted(fila["personaIds"]) == sorted([alumno_a["id"], alumno_b["id"]])
+
+
+def test_conteos_por_horario_requiere_admin_o_entrenador(client_sin_permisos):
+    assert client_sin_permisos.get("/api/v1/asistencias/horarios/conteos").status_code == 403
+
+
+def test_conteos_por_horario_funciona_con_token_de_entrenador_puro(client_entrenador, client):
+    alumno = _crear_persona_api(client, cedula_valida(155), "Eli")
+    horario = _crear_horario_api(client)
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+
+    _restaurar_token_entrenador()
+    resp = client_entrenador.get("/api/v1/asistencias/horarios/conteos")
+    assert resp.status_code == 200
+    assert {"horarioId": horario["id"], "inscritos": 1} in resp.json()
+
+
 # --- Issue #356: el recorte de permisos del entrenador (representados,
 # antecedentes-club) no le toca nada a su tarea diaria -- pasar lista. Este
 # candado prueba el roster con un token de ENTRENADOR PURO (sin
@@ -530,7 +615,7 @@ def test_listar_ultimas_listas_cuenta_los_cuatro_estados(client):
     estudiantes = [
         _crear_persona_api(client, cedula_valida(8100 + i), nombre_unico(i, "Alumno")) for i in range(4)
     ]
-    for persona, estado in zip(estudiantes, ["PRESENTE", "ATRASADO", "JUSTIFICADO", "AUSENTE"]):
+    for persona, estado in zip(estudiantes, ["PRESENTE", "ATRASADO", "ENFERMO", "AUSENTE"]):
         _registrar_lista(client, persona["id"], horario["id"], "2026-08-03", estado)
 
     resp = client.get("/api/v1/asistencias/ultimas-listas")
@@ -542,7 +627,9 @@ def test_listar_ultimas_listas_cuenta_los_cuatro_estados(client):
     assert lista["fechaEntrenamiento"] == "2026-08-03"
     assert lista["presentes"] == 1
     assert lista["tardanzas"] == 1
-    assert lista["justificados"] == 1
+    assert lista["enfermos"] == 1
+    assert lista["competencias"] == 0
+    assert "justificados" not in lista
     assert lista["ausentes"] == 1
     assert lista["total"] == 4
 
@@ -1057,7 +1144,7 @@ def test_dos_correcciones_sucesivas_encadenan_estado_anterior_sin_pisarse(
     assert primera.status_code == 200, primera.text
     segunda = client.patch(
         f"/api/v1/asistencias/{asistencia_id}/corregir",
-        json={"estado": "JUSTIFICADO", "motivo": "segunda corrección"},
+        json={"estado": "COMPETENCIA", "motivo": "segunda corrección"},
     )
     assert segunda.status_code == 200, segunda.text
 
@@ -1095,7 +1182,7 @@ def test_listar_correcciones_devuelve_mas_reciente_primero(client, monkeypatch):
     )
     client.patch(
         f"/api/v1/asistencias/{asistencia_id}/corregir",
-        json={"estado": "JUSTIFICADO", "motivo": "segunda corrección"},
+        json={"estado": "COMPETENCIA", "motivo": "segunda corrección"},
     )
 
     resp = client.get(f"/api/v1/asistencias/{asistencia_id}/correcciones")
@@ -1303,23 +1390,25 @@ def test_reporte_filtra_enfermo_y_competencia_por_periodo(client):
     assert [f["estado"] for f in julio.json()["items"]] == ["ENFERMO"]
 
 
-def test_listar_ultimas_listas_enfermo_y_competencia_son_justificados(client):
-    """AC estadística: ENFERMO y COMPETENCIA cuentan en `justificados` y
-    JAMÁS en `ausentes` -- no penalizan al alumno como ausencia
+def test_listar_ultimas_listas_enfermo_y_competencia_no_son_ausentes(client):
+    """AC estadística (ENT-23: ya no existe «justificados»): ENFERMO y
+    COMPETENCIA se cuentan cada uno en su propio campo, suman al total y
+    JAMÁS entran en `ausentes` -- no penalizan al alumno como ausencia
     injustificada."""
     horario = _crear_horario_api(client)
     estudiantes = [
         _crear_persona_api(client, cedula_valida(8210 + i), nombre_unico(i, "Alumno")) for i in range(5)
     ]
     for persona, estado in zip(
-        estudiantes, ["PRESENTE", "JUSTIFICADO", "ENFERMO", "COMPETENCIA", "AUSENTE"],
+        estudiantes, ["PRESENTE", "ATRASADO", "ENFERMO", "COMPETENCIA", "AUSENTE"],
     ):
         _registrar_lista(client, persona["id"], horario["id"], "2026-08-03", estado)
 
     resp = client.get("/api/v1/asistencias/ultimas-listas")
     assert resp.status_code == 200
     lista = resp.json()[0]
-    assert lista["justificados"] == 3  # JUSTIFICADO + ENFERMO + COMPETENCIA
+    assert lista["enfermos"] == 1
+    assert lista["competencias"] == 1
     assert lista["ausentes"] == 1      # solo AUSENTE
     assert lista["total"] == 5
 
@@ -1348,3 +1437,31 @@ def test_admin_corrige_hacia_enfermo_y_competencia_registra_anterior(client, mon
     assert segunda.status_code == 200, segunda.text
     assert segunda.json()["asistencia"]["estado"] == "COMPETENCIA"
     assert segunda.json()["estadoAnterior"] == "ENFERMO"
+
+
+def test_justificado_ya_no_es_un_estado_valido_al_registrar(client):
+    """ENT-23 (QA4): «Justificado» se eliminó. El enum de dominio no lo
+    declara y la API lo rechaza con 422 en vez de guardarlo."""
+    assert "JUSTIFICADO" not in {e.value for e in EstadoAsistencia}
+    horario = _crear_horario_api(client)
+    persona = _crear_persona_api(client, cedula_valida(8300), nombre_unico(0, "Alumno"))
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": persona["id"], "horario_id": horario["id"]},
+    )
+    resp = client.post(
+        "/api/v1/asistencias/",
+        json={
+            "fecha_entrenamiento": "2026-08-03", "estado": "JUSTIFICADO",
+            "persona_id": persona["id"], "horario_id": horario["id"],
+        },
+    )
+    assert resp.status_code == 422, resp.text
+
+
+def test_justificado_ya_no_es_un_estado_valido_al_corregir(client):
+    resp = client.patch(
+        "/api/v1/asistencias/1/corregir",
+        json={"estado": "JUSTIFICADO", "motivo": "ya no existe"},
+    )
+    assert resp.status_code == 422, resp.text

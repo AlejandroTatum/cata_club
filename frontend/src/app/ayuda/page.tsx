@@ -15,8 +15,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Dumbbell, Rocket, ShieldCheck, Users } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import AppShell from "@/components/shell/AppShell";
 import PublicShell from "@/components/shell/PublicShell";
@@ -40,47 +38,7 @@ import type { UserRole } from "@/types/domain";
 import { cn } from "@/components/ui/cn";
 import HowToPay from "@/components/payments/HowToPay";
 import { FAQ_SECTIONS } from "./faq-content";
-
-/**
- * The audience color system #203 asks for — one hue per "who this section is
- * for", so the grid reads as a set of audiences rather than a wall of
- * identical cards. Every value here is a named token from
- * `tailwind.config.ts`, never a literal hex: `color-contrast.test.ts` only
- * proves tokens are AA-safe, and `no screen paints with Tailwind's default
- * palette` only allows names it already knows.
- *
- * The icon/text pairs mirror the ones `/admin/crear-cuenta` already ships for
- * the same "estudiante" (`cuenta-representante`) and "entrenador"
- * (`cuenta-entrenador`) accounts, and reuse `cata-red` at the same `/15` tint
- * that screen uses for its own red card — both are icon-only usages (3:1,
- * not the 4.5:1 body-text floor), matching how those tokens already ship.
- *
- * Keyed by section title rather than folded into `faq-content.ts`: that file
- * is the copy that is tested against the club's knowledge snapshot, and
- * this is presentation the content module has no reason to know about.
- */
-const SECTION_ACCENT: Record<string, { icon: LucideIcon; iconBg: string; iconFg: string }> = {
-  "Para empezar": {
-    icon: Rocket,
-    iconBg: "bg-cata-yellow-soft",
-    iconFg: "text-ball-ink",
-  },
-  "Si es estudiante o representante": {
-    icon: Users,
-    iconBg: "bg-cuenta-representante-bg",
-    iconFg: "text-cuenta-representante",
-  },
-  "Si es entrenador": {
-    icon: Dumbbell,
-    iconBg: "bg-cuenta-entrenador-bg",
-    iconFg: "text-cuenta-entrenador",
-  },
-  "Si es administrador": {
-    icon: ShieldCheck,
-    iconBg: "bg-cata-red/15",
-    iconFg: "text-cata-red",
-  },
-};
+import { SECTION_ACCENT } from "./section-accent";
 
 function sectionSlug(title: string): string {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
@@ -146,26 +104,26 @@ const QUICK_LINKS_BY_ROLE: Partial<Record<UserRole, RoleShortcut[]>> = {
     { title: "Asistencias", description: "Registros de entrenamiento", href: "/attendance" },
   ],
   trainer: [
-    { title: "Mi día", description: "Sus próximas sesiones", href: "/trainer" },
+    { title: "Mi día", description: "Tus próximas sesiones", href: "/trainer" },
     { title: "Pasar lista", description: "Registrar la asistencia", href: "/trainer/attendance" },
-    { title: "Mi perfil", description: "Sus datos y su cuenta", href: "/profile" },
+    { title: "Mi perfil", description: "Tus datos y tu cuenta", href: "/profile" },
   ],
   estudiante: [
-    { title: "Mi cuenta", description: "Su resumen y próximas sesiones", href: "/student" },
-    { title: "Mis pagos", description: "Sus cuotas y comprobantes", href: "/student/payments" },
-    { title: "Mi asistencia", description: "Su historial de entrenamientos", href: "/student/attendance" },
-    { title: "Mi perfil", description: "Sus datos y su cuenta", href: "/profile" },
+    { title: "Mi cuenta", description: "Tu resumen y próximas sesiones", href: "/student" },
+    { title: "Mis pagos", description: "Tus mensualidades y comprobantes", href: "/student/payments" },
+    { title: "Mi asistencia", description: "Tu historial de entrenamientos", href: "/student/attendance" },
+    { title: "Mi perfil", description: "Tus datos y tu cuenta", href: "/profile" },
   ],
   representante: [
-    { title: "Mi cuenta", description: "El resumen de su familia", href: "/student" },
-    { title: "Mis pagos", description: "Cuotas y comprobantes", href: "/student/payments" },
-    { title: "Agregar estudiante", description: "Sumar a otra persona a su cargo", href: "/student/add-dependent" },
-    { title: "Mi perfil", description: "Sus datos y su cuenta", href: "/profile" },
+    { title: "Mi cuenta", description: "El resumen de tu familia", href: "/student" },
+    { title: "Mis pagos", description: "Mensualidades y comprobantes", href: "/student/payments" },
+    { title: "Agregar jugador", description: "Sumar a otra persona a tu cargo", href: "/student/add-dependent" },
+    { title: "Mi perfil", description: "Tus datos y tu cuenta", href: "/profile" },
   ],
 };
 
 const PUBLIC_QUICK_LINKS: RoleShortcut[] = [
-  { title: "Iniciar sesión", description: "Ingresar a su cuenta", href: "/login" },
+  { title: "Iniciar sesión", description: "Ingresar a tu cuenta", href: "/login" },
   { title: "Horarios del club", description: "Días y horas de entrenamiento", href: "/#horarios" },
   { title: "Página principal", description: "Conocer el club", href: "/" },
 ];
@@ -233,7 +191,7 @@ export default function AyudaPage(): React.ReactElement {
       {visibleSections.length === 0 && (
         <EmptyState
           title="Sin resultados"
-          description="Pruebe con otra palabra o elija «Todas» las categorías."
+          description="Prueba con otra palabra o elige «Todas» las categorías."
         />
       )}
       {/*
@@ -279,9 +237,10 @@ export default function AyudaPage(): React.ReactElement {
               <Accordion
                 idPrefix={`faq-${slug}`}
                 label={section.title}
-                // The category chips are already 40px; the sub-40px targets on a
-                // phone are the question triggers (24px), so lift them here.
-                className="max-md:[&_h3>button]:min-h-10"
+                // The question triggers are 24px by default; lift them to the 44px
+                // a thumb needs. This rule outranks the Accordion's own coarse-
+                // pointer floor, so it has to name the same 44px itself.
+                className="max-md:[&_h3>button]:min-h-11"
                 items={section.entries.map((entry) => ({
                   id: sectionSlug(entry.question),
                   question: entry.question,
@@ -296,18 +255,18 @@ export default function AyudaPage(): React.ReactElement {
 
       <div className="grid min-w-0 content-start gap-page">
         <InfoPanel title="Cómo usar esta página">
-          <p>Escriba una palabra en el buscador o elija una categoría para acotar las preguntas.</p>
-          <p>Toque una pregunta para ver su respuesta; se abre una a la vez por categoría.</p>
+          <p>Escribe una palabra en el buscador o elige una categoría para acotar las preguntas.</p>
+          <p>Toca una pregunta para ver su respuesta; se abre una a la vez por categoría.</p>
           <p>Los horarios y precios vigentes se consultan en la página principal del club.</p>
         </InfoPanel>
         <HowToPay />
-        <InfoPanel title="¿No encontró su respuesta?">
-          <p>Cuéntenos qué pasó y lo revisamos: se envía junto con una captura de esta pantalla.</p>
+        <InfoPanel title="¿No encontraste tu respuesta?">
+          <p>Cuéntanos qué pasó y lo revisamos: se envía junto con una captura de esta pantalla.</p>
           <Button variant="secondary" onClick={() => report.open()} disabled={report.busy}>
             Reportar un problema
           </Button>
         </InfoPanel>
-        <InfoPanel title="Qué encontrará aquí">
+        <InfoPanel title="Qué encontrarás aquí">
           <ul className="grid gap-2">
             {FAQ_SECTIONS.map((section) => (
               <li key={section.title} className="flex items-center justify-between gap-3">

@@ -47,7 +47,7 @@ function fila(
 }
 
 describe("agruparAlumnosDelPadron", () => {
-  it("junta las tres asignaciones de un alumno en un solo renglón", () => {
+  it("junta las tres asignaciones de un jugador en un solo renglón", () => {
     const alumnos = agruparAlumnosDelPadron([
       fila(7, "Melany Quimis", 12, "LUNES", "18:00:00", "19:00:00"),
       fila(7, "Melany Quimis", 12, "MIERCOLES", "18:00:00", "19:00:00"),
@@ -67,7 +67,7 @@ describe("agruparAlumnosDelPadron", () => {
     });
   });
 
-  it("lista cada categoría en la que el alumno tiene horario, sin repetir (ENT-08)", () => {
+  it("lista cada categoría en la que el jugador tiene horario, sin repetir (ENT-08)", () => {
     const juvenil = fila(1, "Ana", 10, "LUNES", "15:00:00", "16:00:00");
     const adultos = {
       ...fila(1, "Ana", 10, "LUNES", "20:00:00", "21:00:00"),

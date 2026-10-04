@@ -142,7 +142,7 @@ MENSAJE_CONTACTO_EMERGENCIA_NO_ADMITIDO_PARA_REPRESENTADO = (
 # emergencia -- porque "falta la ficha médica" a secas no le dice a nadie qué
 # tiene que ir a buscar.
 MENSAJE_FICHA_MEDICA_OBLIGATORIA = (
-    "Debe completar la ficha médica del alumno: el tipo de sangre y el "
+    "Debes completar la ficha médica del jugador: el tipo de sangre y el "
     "contacto de emergencia son obligatorios."
 )
 
@@ -219,7 +219,7 @@ class EnrollmentCreateDTO(BaseModel):
     def _representante_o_credenciales(self) -> "EnrollmentCreateDTO":
         if self.representante is None and self.credenciales_alumno is None:
             raise ValueError(
-                "Falta indicar las credenciales de acceso del alumno o los "
+                "Falta indicar las credenciales de acceso del jugador o los "
                 "datos del representante legal: debe completarse al menos "
                 "uno de los dos."
             )

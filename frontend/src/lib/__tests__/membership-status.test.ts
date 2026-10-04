@@ -43,8 +43,8 @@ describe("readsAsVencida", () => {
 // ---------------------------------------------------------------------------
 
 describe("inactivaMembershipBadge", () => {
-  it('returns "Pago pendiente" + warn while the first payment awaits validation', () => {
-    expect(inactivaMembershipBadge(true)).toEqual({ label: "Pago pendiente", tone: "warn" });
+  it('returns "Por validar" + warn while the first payment awaits validation', () => {
+    expect(inactivaMembershipBadge(true)).toEqual({ label: "Por validar", tone: "warn" });
   });
 
   it('returns "Sin activar" + neutral once nothing is awaiting validation', () => {

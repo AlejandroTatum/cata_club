@@ -24,6 +24,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { ACTIVATION_GATE_ROUTE, routeForSession } from "@/lib/activation-reasons";
 import type { AuthErrorKind } from "@/services/auth";
 import { REDIRECT_REASON_MESSAGES, redirectReasonFrom } from "@/lib/redirect-reason";
+import { safeNextPath } from "@/lib/safe-redirect";
 import AuthShell, {
   AUTH_INPUT_CLASSES,
   AUTH_LABEL_CLASSES,
@@ -55,14 +56,28 @@ function firstNameOf(fullName: string): string {
  * receives right after, never from a constant, so the two can't drift apart
  * again.
  */
-function welcomeDescriptionFor(route: string): string {
-  return route === ACTIVATION_GATE_ROUTE
-    ? "Antes de entrar, le faltan un par de pasos."
-    : "Su sesión quedó iniciada. Le llevamos a su panel.";
+function welcomeDescriptionFor(route: string, returningTo: string | null): string {
+  if (route === ACTIVATION_GATE_ROUTE) return "Antes de entrar, te faltan un par de pasos.";
+  return route === returningTo
+    ? "Tu sesión quedó iniciada. Te llevamos a la página que buscabas."
+    : "Tu sesión quedó iniciada. Te llevamos a tu panel.";
+}
+
+/**
+ * REG-21: where a signed-in session goes. The activation gate always wins —
+ * an account that has not finished activating can use nothing else — and
+ * otherwise the validated `?next=` (an internal path, see `safeNextPath`),
+ * falling back to the role's home.
+ */
+function destinationFor(session: Parameters<typeof routeForSession>[0], next: string | null): string {
+  const home = routeForSession(session);
+  return home === ACTIVATION_GATE_ROUTE || next === null ? home : next;
 }
 
 /** Written once because two fields point at it through `aria-describedby`. */
 const CREDENTIALS_ERROR_ID = "credentials-error";
+/** The server slows its answers from the 3rd consecutive wrong password (REG-02). */
+const TOO_MANY_ATTEMPTS_THRESHOLD = 3;
 
 /*
  * The skin of a link on this card now lives in `AuthShell` as
@@ -94,52 +109,59 @@ function loginErrorFeedback(error: AuthErrorKind): { message: string; descriptio
     // this card renders it. The way out is the club, not a retry.
     case "account_inactive":
       return {
-        message: "Su cuenta está inactiva.",
-        description: "Comuníquese con el club para reactivarla.",
+        message: "Tu cuenta está inactiva.",
+        description: "Comunícate con el club para reactivarla.",
       };
     case "invalid_credentials":
       return {
         message: "Credenciales incorrectas",
-        description: "Revise su correo y su contraseña, e intente nuevamente.",
+        description: "Revisa tu correo y tu contraseña, e intenta nuevamente.",
       };
     case "session_validation_failed":
       return {
-        message: "No se pudo validar su sesión",
-        description: "Sus datos son correctos, pero la sesión no quedó activa. Intente nuevamente.",
+        message: "No se pudo validar tu sesión",
+        description: "Tus datos son correctos, pero la sesión no quedó activa. Intenta nuevamente.",
       };
     case "session_not_persisted":
       return {
-        message: "Su navegador no guardó la sesión",
-        description: "Habilite las cookies para este sitio e intente nuevamente.",
+        message: "Tu navegador no guardó la sesión",
+        description: "Habilita las cookies para este sitio e intenta nuevamente.",
       };
     // Issue #762. Names the account, not the typing: the password was right.
     // The way out is a person at the club, not a retry — nothing about this
     // changes by trying again.
     case "role_conflict":
       return {
-        message: "Su cuenta tiene más de un rol activo",
-        description: "No podemos saber con cuál entrar. Comuníquese con el club para que le asignen uno solo.",
+        message: "Tu cuenta tiene más de un rol activo",
+        description: "No podemos saber con cuál entrar. Comunícate con el club para que te asignen uno solo.",
+      };
+    // REG-02. «tú» (register lock, #340). Names the account's state, not the typing: even
+    // the right password is refused until the cooldown ends or it is reset.
+    case "login_cooldown":
+      return {
+        message: "Demasiados intentos fallidos.",
+        description: "Por seguridad, espera 15 minutos o restablece tu contraseña.",
       };
     case "timeout":
       return {
         message: "El servidor tardó demasiado en responder",
-        description: "Revise su conexión e intente nuevamente.",
+        description: "Revisa tu conexión e intenta nuevamente.",
       };
     case "backend_unavailable":
       return {
         message: "No se pudo conectar con el servidor",
-        description: "El servicio no está disponible. Intente nuevamente en unos minutos.",
+        description: "El servicio no está disponible. Intenta nuevamente en unos minutos.",
       };
     case "config_error":
       return {
         message: "El servidor no está configurado correctamente",
-        description: "No es un problema de su conexión. Avise al administrador del sistema.",
+        description: "No es un problema de tu conexión. Avisa al administrador del sistema.",
       };
     case "unknown":
     default:
       return {
         message: "No se pudo iniciar sesión",
-        description: "Ocurrió un error inesperado. Intente nuevamente.",
+        description: "Ocurrió un error inesperado. Intenta nuevamente.",
       };
   }
 }
@@ -165,6 +187,8 @@ function LoginPageContent(): React.ReactElement {
    */
   const searchParams = useSearchParams();
   const redirectReason = redirectReasonFrom(searchParams.get("motivo"));
+  /** REG-21: the page the person was heading to, or `null` when `?next=` is absent or not an internal path. */
+  const nextPath = safeNextPath(searchParams.get("next"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -187,6 +211,13 @@ function LoginPageContent(): React.ReactElement {
    */
   const [credentialsRejected, setCredentialsRejected] = useState(false);
   /**
+   * REG-02: consecutive `invalid_credentials` answers in this visit. From the
+   * 3rd the server starts slowing each answer down (at most 8 s), so the
+   * person is told it is "too many attempts" — not left to blame the
+   * connection. Reset by any other outcome.
+   */
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  /**
    * The login succeeded but the browser did not keep the session cookies —
    * `session_not_persisted`. Held on the CARD, not only in the toast, for the
    * same reason `sessionExpired` gets a static banner: this is the one
@@ -204,7 +235,7 @@ function LoginPageContent(): React.ReactElement {
    * conflict…): nothing they typed was wrong, so no field is marked, but the
    * message and the way out stay on the card instead of in a toast.
    */
-  const [loginFailure, setLoginFailure] = useState<{ message: string; description: string; contactClub: boolean } | null>(null);
+  const [loginFailure, setLoginFailure] = useState<{ message: string; description: string; contactClub: boolean; offerRecovery: boolean } | null>(null);
   const [welcome, setWelcome] = useState<{ route: string } | null>(null);
   /**
    * #312 / hallazgo #30: tras un 401 el foco se quedaba en `<body>` — el
@@ -229,9 +260,9 @@ function LoginPageContent(): React.ReactElement {
   // below owns the (delayed) redirect instead.
   useEffect((): void => {
     if (!isLoading && isAuthenticated && session && !welcome) {
-      router.replace(routeForSession(session));
+      router.replace(destinationFor(session, nextPath));
     }
-  }, [isLoading, isAuthenticated, session, welcome, router]);
+  }, [isLoading, isAuthenticated, session, welcome, router, nextPath]);
 
   // Hold the form on screen for one beat after the confirmation toast fires,
   // so a successful login is actually seen instead of flashing past.
@@ -247,11 +278,11 @@ function LoginPageContent(): React.ReactElement {
     const trimmedPassword = password.trim();
     const nextFieldErrors = {
       email: !trimmedEmail
-        ? "Ingrese su correo electrónico."
+        ? "Ingresa tu correo electrónico."
         : !EMAIL_FORMAT_REGEX.test(trimmedEmail)
-          ? "Ingrese un correo electrónico válido."
+          ? "Ingresa un correo electrónico válido."
           : "",
-      password: trimmedPassword ? "" : "Ingrese su contraseña.",
+      password: trimmedPassword ? "" : "Ingresa tu contraseña.",
     };
     setFieldErrors(nextFieldErrors);
     setCredentialsRejected(false);
@@ -272,13 +303,19 @@ function LoginPageContent(): React.ReactElement {
       setLoginFailure(
         isCredentialsError || isCookieError
           ? null
-          : { message, description, contactClub: result.error === "account_inactive" },
+          : {
+              message,
+              description,
+              contactClub: result.error === "account_inactive",
+              offerRecovery: result.error === "login_cooldown",
+            },
       );
       // ONLY for `invalid_credentials`. The other kinds — a timeout, an
       // unreachable backend, a misconfigured server, a browser that dropped
       // the cookies — are not the person's typing, and painting their fields
       // red would send them to re-check something that was never wrong.
       setCredentialsRejected(isCredentialsError);
+      setFailedAttempts((previous: number): number => (isCredentialsError ? previous + 1 : 0));
       setSessionNotPersisted(isCookieError);
       setSubmitting(false);
       return;
@@ -290,12 +327,12 @@ function LoginPageContent(): React.ReactElement {
     // interruption for an event the user just caused and already expects.
     // A toast confirms without blocking, and carries the one thing the old
     // panel never said: where they are about to land.
-    const route = routeForSession(result.session);
+    const route = destinationFor(result.session, nextPath);
     const firstName = firstNameOf(result.session.user.name);
     // REG-20: pending activation steps are a heads-up, not a success.
     const showWelcome = route === ACTIVATION_GATE_ROUTE ? toast.showInfo : toast.showSuccess;
     showWelcome(firstName ? `Hola, ${firstName}` : "Sesión iniciada", {
-      description: welcomeDescriptionFor(route),
+      description: welcomeDescriptionFor(route, nextPath),
     });
 
     setWelcome({ route });
@@ -324,7 +361,7 @@ function LoginPageContent(): React.ReactElement {
   const invalidFieldClasses = credentialsRejected ? " border-state-bad" : "";
 
   return (
-    <AuthShell title="Bienvenido de nuevo" subtitle="Inicie sesión para continuar" eyebrow="Acceso al club">
+    <AuthShell title="Bienvenido de nuevo" subtitle="Inicia sesión para continuar" eyebrow="Acceso al club">
       {/* Issue #353/#1057: a redirect that lost the admin's session mid-form,
           or landed here right after a successful email verification, used to
           arrive with nothing to explain it — the toast on a FAILED login
@@ -351,9 +388,9 @@ function LoginPageContent(): React.ReactElement {
           data-testid="session-not-persisted-error"
           className="rounded-ctl border border-state-bad bg-canvas px-3.5 py-2.5 text-sm text-ink-2"
         >
-          Sus datos son correctos, pero este navegador no guardó la sesión. Suele ocurrir cuando las cookies
-          están bloqueadas o la ventana es de navegación privada. Habilite las cookies para este sitio e
-          intente nuevamente.
+          Tus datos son correctos, pero este navegador no guardó la sesión. Suele ocurrir cuando las cookies
+          están bloqueadas o la ventana es de navegación privada. Habilita las cookies para este sitio e
+          intenta nuevamente.
         </p>
       )}
       {loginFailure && (
@@ -364,6 +401,14 @@ function LoginPageContent(): React.ReactElement {
         >
           <p className="font-semibold text-state-bad">{loginFailure.message}</p>
           <p>{loginFailure.description}</p>
+          {loginFailure.offerRecovery && (
+            <p>
+              <Link href="/forgot-password" className={`${AUTH_LINK_CLASSES} min-h-[24px]`}>
+                Restablecer tu contraseña
+                <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+              </Link>
+            </p>
+          )}
           {loginFailure.contactClub && (
             <p>
               <a href={WHATSAPP_CONTACTO} target="_blank" rel="noopener noreferrer" className={AUTH_LINK_CLASSES}>
@@ -436,7 +481,7 @@ function LoginPageContent(): React.ReactElement {
                 setCredentialsRejected(false);
                 setLoginFailure(null);
               }}
-              placeholder="Ingrese su contraseña"
+              placeholder="Ingresa tu contraseña"
               required
               aria-invalid={Boolean(fieldErrors.password) || credentialsRejected}
               aria-describedby={
@@ -459,7 +504,7 @@ function LoginPageContent(): React.ReactElement {
             <button
               type="button"
               onClick={(): void => setShowPassword(!showPassword)}
-              className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center text-ink-3 transition-colors hover:text-ink"
+              className="touch-target-reach absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center text-ink-3 transition-colors hover:text-ink"
               aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
             >
               {showPassword ? (
@@ -495,7 +540,16 @@ function LoginPageContent(): React.ReactElement {
               // de la escala tipográfica declarada.
               className="mt-1.5 text-base font-semibold text-state-bad"
             >
-              El correo y la contraseña no coinciden. Verifique los dos e intente nuevamente.
+              El correo y la contraseña no coinciden. Verifica los dos e intenta nuevamente.
+            </p>
+          )}
+          {/* REG-02. Copy is in «usted» until the wave-3 register sweep (usted-register lock, #340). The backend caps its delay
+              at 8 s, under the 10 s the BFF waits, so this is what a slow
+              answer after several misses means. */}
+          {credentialsRejected && failedAttempts >= TOO_MANY_ATTEMPTS_THRESHOLD && (
+            <p data-testid="too-many-attempts" role="status" className="mt-1.5 text-sm text-cata-text/80">
+              Demasiados intentos. Espera unos segundos y vuelve a intentarlo. Si no recuerdas tu contraseña, usa
+              el enlace para recuperarla.
             </p>
           )}
         </div>
@@ -511,7 +565,7 @@ function LoginPageContent(): React.ReactElement {
             below relies on does not cover it. The arrow says it leaves the
             screen. */}
         <Link href="/forgot-password" className={`${AUTH_LINK_CLASSES} min-h-[24px] self-end`}>
-          ¿Olvidó su contraseña?
+          ¿Olvidaste tu contraseña?
           <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         </Link>
 
@@ -523,7 +577,7 @@ function LoginPageContent(): React.ReactElement {
       {/* `.fcard` footer (line 812) — 12.5px muted, with the destination as a
           link rather than as a second red phrase. */}
       <p className="text-center text-xs text-ink-3">
-        ¿No tiene una cuenta?{" "}
+        ¿No tienes una cuenta?{" "}
         <Link href="/student/enroll" className={AUTH_LINK_CLASSES}>
           Inscríbete
           <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />

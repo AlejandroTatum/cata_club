@@ -353,7 +353,7 @@ export async function anonymousAuthPost(
   const response = result.data;
   if (response.status === 429) {
     return NextResponse.json(
-      { error: "rate_limited", message: "Demasiados intentos. Espere un momento antes de volver a intentarlo." },
+      { error: "rate_limited", message: "Demasiados intentos. Espera un momento antes de volver a intentarlo." },
       { status: 429 },
     );
   }

@@ -58,7 +58,7 @@ describe("FamilyStrip", () => {
       />,
     );
 
-    const group = screen.getByRole("group", { name: "Estudiante" });
+    const group = screen.getByRole("group", { name: "Jugador" });
     const martin = within(group).getByRole("button", { name: /Martin/ });
     const sofia = within(group).getByRole("button", { name: /Sofia/ });
     expect(martin).toHaveAttribute("aria-pressed", "true");
@@ -107,7 +107,7 @@ describe("FamilyStrip", () => {
     const { rerender } = render(
       <FamilyStrip profiles={[profile("1", "A", null), profile("2", "B", null)]} value="1" onChange={vi.fn()} today={TODAY} />,
     );
-    const grid = () => screen.getByRole("group", { name: "Estudiante" });
+    const grid = () => screen.getByRole("group", { name: "Jugador" });
     expect(grid().className).toMatch(/\bgrid\b/);
     expect(grid().className).toMatch(/\bgrid-cols-1\b/);
     expect(grid().className).toMatch(/\blg:grid-cols-2\b/);

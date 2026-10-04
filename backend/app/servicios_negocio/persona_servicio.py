@@ -39,6 +39,7 @@ from app.infraestructura.repositorios.vinculacion_representante_repositorio impo
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.auth_servicio import AuthServicio
 from app.servicios_negocio.rol_servicio import RolServicio
+from app.servicios_negocio.dtos.validadores import validar_nombre_cambiado
 from app.servicios_negocio.dtos.persona_schemas import (
     PersonaCreateDTO, PersonaUpdateDTO, RepresentadoCreateDTO,
     VincularRepresentadoDTO,
@@ -122,12 +123,12 @@ class PersonaServicio:
         edad = _calcular_edad(datos.fecha_nacimiento)
         if edad < EDAD_MINIMA_ALUMNO or edad > EDAD_MAXIMA_ALUMNO:
             raise OperacionInvalida(
-                f"La edad del alumno debe estar entre {EDAD_MINIMA_ALUMNO} y "
+                f"La edad del jugador debe estar entre {EDAD_MINIMA_ALUMNO} y "
                 f"{EDAD_MAXIMA_ALUMNO} años; según la fecha de nacimiento, tiene {edad} años."
             )
         if EDAD_MINIMA_ALUMNO <= edad < EDAD_MAYORIA_EDAD and not datos.representante_id:
             raise OperacionInvalida(
-                "El alumno es menor de edad (3 a 17 años): debe indicar los datos "
+                "El jugador es menor de edad (3 a 17 años): debe indicar los datos "
                 "del representante o tutor legal.",
                 detalle_tecnico="falta representante_id en un alta de alumno menor",
             )
@@ -166,7 +167,7 @@ class PersonaServicio:
 
         Flujo:
         1. Crear Persona (vía `registrar_persona`, reusando reglas de edad/duplicado).
-        2. Crear FichaMedica si se proporcionó.
+        2. Crear FichaMedica (obligatoria, FAM-10).
 
         Issue #1137, invariante (B): este método NUNCA crea un `Usuario` para
         el representado -- solo crea la `Persona` (y su ficha médica). El
@@ -211,20 +212,20 @@ class PersonaServicio:
         try:
             representado = self._crear_persona_validada(persona_datos)
 
-            if datos.ficha_medica:
-                # Issue #1138: `EnrollmentFichaMedicaMenorDTO` no tiene
-                # `contacto_emergencia`/`telefono_emergencia` -- ese contacto
-                # se deriva del representante al leer (ver
-                # `FichaMedicaServicio.obtener_ficha_emergencia`), nunca se
-                # persiste acá.
-                ficha = FichaMedica(
-                    tipo_sangre=datos.ficha_medica.tipo_sangre,
-                    persona_id=representado.id,
-                    alergias=datos.ficha_medica.alergias,
-                )
-                for nombre in datos.ficha_medica.enfermedades:
-                    ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))
-                FichaMedicaRepositorio(self.db).crear(ficha)
+            # QA4 FAM-10: `ficha_medica` es obligatoria en el DTO.
+            # Issue #1138: `EnrollmentFichaMedicaMenorDTO` no tiene
+            # `contacto_emergencia`/`telefono_emergencia` -- ese contacto
+            # se deriva del representante al leer (ver
+            # `FichaMedicaServicio.obtener_ficha_emergencia`), nunca se
+            # persiste acá.
+            ficha = FichaMedica(
+                tipo_sangre=datos.ficha_medica.tipo_sangre,
+                persona_id=representado.id,
+                alergias=datos.ficha_medica.alergias,
+            )
+            for nombre in datos.ficha_medica.enfermedades:
+                ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))
+            FichaMedicaRepositorio(self.db).crear(ficha)
 
             # Issue #1133: el ledger completo -- alta inicial, no solo
             # reasignación. Sin `idempotency_key`: este comando no tiene
@@ -576,7 +577,7 @@ class PersonaServicio:
                 tipo=TipoNotificacion.VINCULACION_REPRESENTANTE,
                 mensaje=(
                     f"{nombre} (cédula {representado.cedula}) fue vinculado a otra cuenta "
-                    f"de representante. Si fue un error, complete \"Agregar dependiente\" "
+                    f"de representante. Si fue un error, completa \"Agregar jugador (menor de edad)\" "
                     f"con la misma cédula para deshacerlo."
                 ),
                 persona_id=representante_anterior_id,
@@ -622,6 +623,9 @@ class PersonaServicio:
         # servicio, que es quien tiene la fila real.
         if "telefono" in datos and not datos["telefono"] and persona.representante_id is None:
             raise OperacionInvalida("El teléfono es obligatorio.")
+        for campo in ("nombres", "apellidos"):
+            if datos.get(campo) is not None:
+                validar_nombre_cambiado(campo, datos[campo], getattr(persona, campo))
         resultado = self.repo.actualizar(persona, datos)
         self.db.commit()
         return resultado
@@ -638,20 +642,20 @@ class PersonaServicio:
         persona = self.obtener_persona(persona_id)
 
         if content_type not in AuthServicio.TIPOS_MIME_PERMITIDOS_FOTO_PERFIL:
-            raise OperacionInvalida("Formato de archivo no permitido. Use JPG o PNG")
+            raise OperacionInvalida("Formato de archivo no permitido. Usa JPG o PNG")
         # La firma binaria real debe coincidir con el tipo declarado: el
         # Content-Type que manda el cliente no prueba nada sobre el
         # contenido real (mismo criterio que `actualizar_foto_perfil`).
         if not es_firma_valida(contenido, content_type):
             if not contenido:
-                raise OperacionInvalida("La imagen está vacía o dañada. Elija otra foto JPG o PNG.")
+                raise OperacionInvalida("La imagen está vacía o dañada. Elige otra foto JPG o PNG.")
             raise OperacionInvalida(
-                "Ese archivo no es una imagen válida. Elija una foto JPG o PNG."
+                "Ese archivo no es una imagen válida. Elige una foto JPG o PNG."
             )
         # Defensa en profundidad: el router ya acota la lectura vía
         # `leer_con_limite` antes de llegar acá.
         if len(contenido) > AuthServicio.TAMANO_MAXIMO_FOTO_PERFIL_BYTES:
-            raise OperacionInvalida("La imagen pesa más de 5 MB. Elija una más liviana.")
+            raise OperacionInvalida("La imagen pesa más de 5 MB. Elige una más liviana.")
 
         from app.infraestructura.cloudinary_cliente import (
             componer_valor_foto_perfil,

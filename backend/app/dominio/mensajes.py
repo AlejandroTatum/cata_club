@@ -31,14 +31,16 @@ implementación de un servicio en particular.
 # se inscribía corregía el único que creía culpable, chocaba con el otro y
 # leía el mismo texto: la corrección parecía ignorada.
 #
+# QA4 W3-1: se queda en «usted» a propósito -- el frontend lo copia palabra por
+# palabra; pasarlo a «tú» es un cambio conjunto con el detector (ver abajo).
 # El frontend detecta este texto para ofrecer "Iniciar sesión" / "Recuperar
 # contraseña" (`frontend/src/lib/duplicate-identity.ts`); cambiarlo aquí sin
 # actualizar ese archivo rompe esa salida, y por eso hay un test que lo fija
 # (`tests/test_mensajes_identidad_duplicada.py`).
 MENSAJE_IDENTIDAD_DUPLICADA = (
     "Alguno de los datos ingresados, cédula o correo, ya pertenece a una "
-    "cuenta registrada. Si ya fue socio del club, comuníquese con nosotros "
-    "para reactivar su cuenta."
+    "cuenta registrada. Si ya fuiste socio del club, comunícate con nosotros "
+    "para reactivar tu cuenta."
 )
 
 # INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1, guardarraíl 3): respuesta
@@ -56,8 +58,8 @@ MENSAJE_IDENTIDAD_DUPLICADA = (
 # buscador de cédulas de menores -- justo el guardarraíl que la decisión de
 # negocio exige.
 MENSAJE_VINCULACION_NO_DISPONIBLE = (
-    "No fue posible vincular esa cédula a su cuenta. Verifique el número e "
-    "intente nuevamente."
+    "No fue posible vincular esa cédula a tu cuenta. Verifica el número e "
+    "intenta nuevamente."
 )
 
 # Issue #1133/#1137, decisión del dueño (2026-09-11, punto 3): la vinculación
@@ -71,7 +73,7 @@ MENSAJE_VINCULACION_NO_DISPONIBLE = (
 # cédula que resolver -- la parada corre ANTES de leer nada.
 MENSAJE_VINCULACION_SOLO_PRESENCIAL = (
     "La vinculación de un representado se realiza únicamente en persona. "
-    "Acérquese a administración del club."
+    "Acércate a administración del club."
 )
 
 # Issue #790: respuesta cuando la cuenta que intenta vincular a un representado
@@ -84,8 +86,8 @@ MENSAJE_VINCULACION_SOLO_PRESENCIAL = (
 # mirando un rechazo idéntico al de una cédula equivocada, sin manera de
 # descubrir que lo único que le falta es abrir un correo.
 MENSAJE_CORREO_SIN_VERIFICAR = (
-    "Para vincular a un representado primero debe verificar su correo. "
-    "Revise su bandeja de entrada o solicite un nuevo enlace de verificación."
+    "Para vincular a un representado primero debes verificar tu correo. "
+    "Revisa tu bandeja de entrada o solicita un nuevo enlace de verificación."
 )
 
 # Issue #1137, invariante (B): una Persona con `representante_id` nunca
@@ -148,19 +150,19 @@ MENSAJE_REPRESENTANTE_AUTORREFERENCIA = (
 # hay ninguna cédula ajena que sondear-- así que nombrar el motivo real no
 # abre ningún oráculo.
 MENSAJE_AUTOSERVICIO_REPRESENTANTE_MENOR_EDAD = (
-    "Debe ser mayor de edad para agregar un dependiente y pasar a ser "
+    "Debes ser mayor de edad para agregar un jugador menor de edad y pasar a ser "
     "representante."
 )
 
 MENSAJE_AUTOSERVICIO_REPRESENTANTE_YA_REPRESENTADO = (
-    "Su cuenta está representada por otra persona y no puede agregar "
-    "dependientes por su cuenta. Consulte a su representante o a "
+    "Tu cuenta está representada por otra persona y no puedes agregar "
+    "jugadores menores de edad por tu cuenta. Consulta a tu representante o a "
     "administración del club."
 )
 
 MENSAJE_AUTOSERVICIO_REPRESENTANTE_ROL_STAFF = (
     "Las cuentas de administrador o entrenador no pueden agregar "
-    "dependientes por esta vía; use el panel de administración."
+    "dependientes por esta vía; usa el panel de administración."
 )
 
 # Issue #790, misma disciplina anti-enumeración que la recuperación de

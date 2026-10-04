@@ -30,7 +30,7 @@ from app.dominio.modelos import Usuario
 from app.seguridad.gestor_auth import GestorAutenticacion
 
 MENSAJE_EXITO = "Si el correo está registrado, se envió un enlace de recuperación"
-MENSAJE_ERROR_GENERICO = "No se pudo procesar la solicitud. Intente nuevamente más tarde"
+MENSAJE_ERROR_GENERICO = "No se pudo procesar la solicitud. Intenta nuevamente más tarde"
 
 
 def _crear_persona(client, cedula):

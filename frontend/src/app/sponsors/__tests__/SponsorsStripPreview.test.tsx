@@ -37,6 +37,6 @@ describe("SponsorsStripPreview", () => {
     expect(
       screen.getAllByTestId("sponsors-strip-ghost").length,
     ).toBeGreaterThan(0);
-    expect(screen.getByText(/Cuando suba el primer logo/)).toBeInTheDocument();
+    expect(screen.getByText(/Cuando subas el primer logo/)).toBeInTheDocument();
   });
 });

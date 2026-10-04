@@ -25,7 +25,7 @@ function Harness(): React.ReactElement {
         type="button"
         onClick={() =>
           toast.showSuccess("Hola, Ana", {
-            description: "Su sesión quedó iniciada. Le llevamos a su panel.",
+            description: "Tu sesión quedó iniciada. Te llevamos a tu panel.",
           })
         }
       >
@@ -177,7 +177,7 @@ describe("ToastContainer — announcement and placement", () => {
       return (
         <button
           type="button"
-          onClick={() => toast.showError("Escríbanos: https://wa.me/593994219619")}
+          onClick={() => toast.showError("Escríbenos: https://wa.me/593994219619")}
         >
           Trigger wa
         </button>
@@ -229,7 +229,7 @@ describe("ToastContainer — a toast that explains itself", () => {
     const toast = screen.getByRole("status");
     expect(within(toast).getByText("Hola, Ana")).toBeInTheDocument();
     expect(
-      within(toast).getByText("Su sesión quedó iniciada. Le llevamos a su panel."),
+      within(toast).getByText("Tu sesión quedó iniciada. Te llevamos a tu panel."),
     ).toBeInTheDocument();
   });
 
@@ -241,7 +241,7 @@ describe("ToastContainer — a toast that explains itself", () => {
     const toast = screen.getByRole("status");
     expect(within(toast).getByText("Hola, Ana").className).toContain("font-semibold");
     expect(
-      within(toast).getByText("Su sesión quedó iniciada. Le llevamos a su panel.").className,
+      within(toast).getByText("Tu sesión quedó iniciada. Te llevamos a tu panel.").className,
     ).toContain("font-normal");
   });
 
@@ -271,7 +271,7 @@ describe("ToastContainer — a toast that explains itself", () => {
     // White at 85% on `.toast-success`'s #15803D measures 4.09:1. The two
     // tiers are separated by weight and size, never by opacity.
     const detail = within(screen.getByRole("status")).getByText(
-      "Su sesión quedó iniciada. Le llevamos a su panel.",
+      "Tu sesión quedó iniciada. Te llevamos a tu panel.",
     );
     expect(detail.className).not.toMatch(/text-(current|white)\/\d/);
     expect(detail.className).not.toMatch(/\bopacity-\d/);

@@ -23,6 +23,7 @@ def test_public_schedule_only_publishes_days_with_a_real_session(client_sin_perm
     sesión el Lunes publica ÚNICAMENTE ese día -- y una categoría del
     catálogo sin ninguna sesión no aparece en absoluto."""
     con_sesion = CategoriaHorario(
+        visible_en_landing=True,
         codigo="public-con-sesion", label="Public Con Sesión",
         hora_inicio=time(8), hora_fin=time(9),
         edades="Mayores de 18 años",
@@ -33,6 +34,7 @@ def test_public_schedule_only_publishes_days_with_a_real_session(client_sin_perm
         ],
     )
     sin_sesion = CategoriaHorario(
+        visible_en_landing=True,
         codigo="public-sin-sesion", label="Public Sin Sesión",
         hora_inicio=time(10), hora_fin=time(11),
         dias_permitidos=[CategoriaHorarioDia(dia_semana=DiaSemana.MARTES)],
@@ -65,6 +67,7 @@ def test_public_schedule_groups_sessions_on_different_days_into_one_block(
     franja horaria se agrupan en UN solo bloque con ambos días, no en dos
     bloques separados."""
     categoria = CategoriaHorario(
+        visible_en_landing=True,
         codigo="public-dos-dias", label="Public Dos Días",
         hora_inicio=time(18), hora_fin=time(19),
         dias_permitidos=[
@@ -103,6 +106,7 @@ def test_public_schedule_catalog_groups_ordered_blocks_without_internal_fields(
     client_sin_permisos, db_session
 ):
     adultos = CategoriaHorario(
+        visible_en_landing=True,
         codigo="public-adultos", label="Public Adultos", hora_inicio=time(8), hora_fin=time(9, 15),
         edades="Mayores de 18 años",
         dias_permitidos=[CategoriaHorarioDia(dia_semana=DiaSemana.VIERNES)],
@@ -111,6 +115,7 @@ def test_public_schedule_catalog_groups_ordered_blocks_without_internal_fields(
     # catálogo público tiene que seguir devolviéndola (con `ages: null`) en
     # vez de omitirla o de inventar un texto.
     formativo = CategoriaHorario(
+        visible_en_landing=True,
         codigo="public-formativo", label="Public Formativo", hora_inicio=time(15), hora_fin=time(16),
         dias_permitidos=[
             CategoriaHorarioDia(dia_semana=DiaSemana.MIERCOLES),
@@ -160,6 +165,7 @@ def test_public_schedule_omits_hidden_categories(client_sin_permisos, db_session
     categoría oculta tiene su sesión real y sigue viva en el ABM, pero no
     sale en el catálogo público."""
     visible = CategoriaHorario(
+        visible_en_landing=True,
         codigo="public-visible", label="Public Visible",
         hora_inicio=time(8), hora_fin=time(9),
         dias_permitidos=[CategoriaHorarioDia(dia_semana=DiaSemana.LUNES)],

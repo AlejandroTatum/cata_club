@@ -86,13 +86,17 @@ test("un socio registra un pago en efectivo y el historial lo conserva tras reca
     timeout: 15_000,
   });
 
-  // ── (2): el estado persistido ──
-  // La recarga es la parte que importa: sin ella, la fila visible podría venir
-  // del estado local del componente y no de la base. Un pago recién registrado
-  // queda PENDIENTE_VALIDACION y su fila muestra el método en efectivo.
+  // ── (2): persisted state ──
+  // The reload is what matters: without it, the visible row could come from
+  // the component's local state rather than the database. A freshly registered
+  // payment is PENDIENTE_VALIDACION and its row shows the cash method.
   await page.reload();
-  await expect(page.getByText("Pendiente de validación").first()).toBeVisible({
-    timeout: 15_000,
-  });
-  await expect(page.getByText(/Efectivo/).first()).toBeVisible();
+  // Scoped to the history table: «Por validar» also appears in the summary
+  // card and in the help text, where it is always visible.
+  const pendingRow = page
+    .getByTestId("student-payments-table")
+    .locator(":scope > li")
+    .filter({ hasText: "Por validar" })
+    .filter({ hasText: /Efectivo/ });
+  await expect(pendingRow.first()).toBeVisible({ timeout: 15_000 });
 });

@@ -242,7 +242,7 @@ def test_subir_logo_con_firma_que_no_coincide_da_400_antes_de_cloudinary(client,
 
     assert response.status_code == 400
     assert response.json()["detail"] == (
-        "Ese archivo no es una imagen válida. Elija una foto JPG o PNG."
+        "Ese archivo no es una imagen válida. Elige una foto JPG o PNG."
     )
     assert subidas == []
 

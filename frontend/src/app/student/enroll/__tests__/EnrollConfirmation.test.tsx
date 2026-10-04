@@ -19,7 +19,7 @@ function renderConfirmation(overrides: Partial<EnrollConfirmationProps> = {}) {
 describe("EnrollConfirmation", () => {
   it("names the place «el club», as the summary and the emails do (REG-26)", () => {
     renderConfirmation();
-    expect(screen.getByText(/Acérquese al club o escríbanos por WhatsApp/)).toBeInTheDocument();
+    expect(screen.getByText(/Acércate al club o escríbenos por WhatsApp/)).toBeInTheDocument();
     expect(screen.queryByText(/administración/i)).not.toBeInTheDocument();
   });
 
@@ -34,10 +34,10 @@ describe("EnrollConfirmation", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Qué sigue" })).toBeInTheDocument();
     const steps = within(screen.getByRole("list")).getAllByRole("listitem");
     expect(steps).toHaveLength(4);
-    ["Su cuenta", "Su correo", "El club", "Su membresía"].forEach((title, index) =>
+    ["Tu cuenta", "Tu correo", "El club", "Tu membresía"].forEach((title, index) =>
       expect(within(steps[index]).getByRole("heading", { level: 3, name: title })).toBeInTheDocument(),
     );
-    expect(steps[0]).toHaveTextContent("Su cuenta ya está creada y la sesión, iniciada.");
+    expect(steps[0]).toHaveTextContent("Tu cuenta ya está creada y la sesión, iniciada.");
     expect(steps[3]).toHaveTextContent("El club lo valida y ahí se activa la membresía.");
   });
 
@@ -45,14 +45,14 @@ describe("EnrollConfirmation", () => {
     renderConfirmation();
     expect(screen.getByRole("heading", { level: 1, name: /inscripción completada/i })).toBeInTheDocument();
     expect(screen.getByText("Lucas Martinez")).toBeInTheDocument();
-    expect(screen.getByText("¡Le damos la bienvenida a Cata Club!")).toBeInTheDocument();
-    expect(screen.getByText("Su camino en el tenis de mesa comienza aquí.")).toBeInTheDocument();
+    expect(screen.getByText("¡Te damos la bienvenida a Cata Club!")).toBeInTheDocument();
+    expect(screen.getByText("Tu camino en el tenis de mesa comienza aquí.")).toBeInTheDocument();
   });
 
   it("only claims the session when it was confirmed", () => {
     renderConfirmation({ sessionConfirmed: false, accountAreaLink: null });
     expect(screen.queryByText(/la sesión, iniciada/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/inicie sesión con su correo y su contraseña/i)).toBeInTheDocument();
+    expect(screen.getByText(/inicia sesión con tu correo y tu contraseña/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute("href", "/login");
   });
 
@@ -62,13 +62,13 @@ describe("EnrollConfirmation", () => {
         studentName="Lucas Martinez"
         isSelf={false}
         sessionConfirmed={false}
-        sessionNotice="No pudimos iniciar su sesión. Inicie sesión con su correo."
+        sessionNotice="No pudimos iniciar tu sesión. Inicia sesión con tu correo."
         accountAreaLink={null}
         onReset={vi.fn()}
       />,
     );
     const notice = screen.getByRole("alert");
-    expect(notice).toHaveTextContent("No pudimos iniciar su sesión. Inicie sesión con su correo.");
+    expect(notice).toHaveTextContent("No pudimos iniciar tu sesión. Inicia sesión con tu correo.");
     expect(notice).toHaveAttribute("data-testid", "enroll-session-not-confirmed");
     unmount();
 
@@ -85,6 +85,6 @@ describe("EnrollConfirmation", () => {
 
   it("states the role of the person enrolling", () => {
     renderConfirmation({ isSelf: true });
-    expect(screen.getByText(/titular de la cuenta y el estudiante/i)).toBeInTheDocument();
+    expect(screen.getByText(/titular de la cuenta y el jugador/i)).toBeInTheDocument();
   });
 });

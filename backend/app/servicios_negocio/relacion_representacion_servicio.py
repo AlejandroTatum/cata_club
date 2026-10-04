@@ -128,7 +128,7 @@ class RelacionRepresentacionServicio:
             if previo.request_fingerprint != huella:
                 raise ConflictoConcurrencia(
                     "La clave de idempotencia ya fue usada por otro comando. "
-                    "Genere una clave nueva para este intento.",
+                    "Genera una clave nueva para este intento.",
                     detalle_tecnico=(
                         f"clave={idempotency_key} registrada con huella distinta "
                         f"(evento_id={previo.id})"
@@ -295,7 +295,7 @@ class RelacionRepresentacionServicio:
             if previo.request_fingerprint != huella:
                 raise ConflictoConcurrencia(
                     "La clave de idempotencia ya fue usada por otro comando. "
-                    "Genere una clave nueva para este intento.",
+                    "Genera una clave nueva para este intento.",
                     detalle_tecnico=(
                         f"clave={idempotency_key} registrada con huella distinta "
                         f"(evento_id={previo.id})"
@@ -389,7 +389,7 @@ class RelacionRepresentacionServicio:
         if persona.representante_id != comando.representante_actual_id:
             raise ConflictoConcurrencia(
                 "El vínculo de representación cambió desde que se abrió el "
-                "trámite: recargue la ficha y reintente.",
+                "trámite: recarga la ficha y reintenta.",
                 detalle_tecnico=(
                     f"persona_id={persona_id} observado="
                     f"{comando.representante_actual_id} "
@@ -509,8 +509,8 @@ class RelacionRepresentacionServicio:
                 tipo=TipoNotificacion.VINCULACION_REPRESENTANTE,
                 mensaje=(
                     "La administración del club finalizó el vínculo de "
-                    "representación de una persona que figuraba bajo su cuenta. "
-                    "Su sesión quedó cerrada por seguridad."
+                    "representación de una persona que figuraba bajo tu cuenta. "
+                    "Tu sesión quedó cerrada por seguridad."
                 ),
                 entidad_relacionada_id=evento_id,
             ))

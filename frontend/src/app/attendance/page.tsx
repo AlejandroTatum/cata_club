@@ -33,6 +33,7 @@ import {
   narrowToHorarios,
   toApiParams,
 } from "@/components/attendance/attendance-filters-utils";
+import CorrectionRequestsInbox from "@/components/attendance/CorrectionRequestsInbox";
 import AttendancePeriodRail from "@/components/attendance/AttendancePeriodRail";
 import SessionHistoryList, {
   sessionKey,
@@ -45,8 +46,8 @@ import { ICON } from "@/lib/icon-size";
 import {
   fetchTrainingSchedules,
   fetchAttendanceRecords,
-  fetchRosterDeTodosLosHorarios,
-  type AlumnoHorario,
+  fetchConteosPorHorario,
+  type ConteoHorario,
 } from "@/services/api";
 import {
   BackLink,
@@ -66,7 +67,7 @@ export default function AttendancePage(): React.ReactElement {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [padron, setPadron] = useState<AlumnoHorario[] | null>(null);
+  const [conteos, setConteos] = useState<ConteoHorario[] | null>(null);
 
   const filters = useAttendanceFilters("this_month", schedules);
   const { query } = filters;
@@ -85,20 +86,20 @@ export default function AttendancePage(): React.ReactElement {
   // rail keeps its previous behaviour (ENT-13).
   useEffect(() => {
     let cancelled = false;
-    fetchRosterDeTodosLosHorarios()
+    fetchConteosPorHorario()
       .then((all) => {
-        if (!cancelled) setPadron(all);
+        if (!cancelled) setConteos(all);
       })
       .catch((err: unknown) => {
-        console.error("[attendance] fetchRosterDeTodosLosHorarios failed", err);
+        console.error("[attendance] fetchConteosPorHorario failed", err);
       });
     return (): void => {
       cancelled = true;
     };
   }, []);
   const inscritosPorHorario = useMemo(
-    () => (padron ? buildEnrolledCountsByHorario(schedules, padron) : undefined),
-    [padron, schedules],
+    () => (conteos ? buildEnrolledCountsByHorario(schedules, conteos) : undefined),
+    [conteos, schedules],
   );
 
   const loadRecords = useCallback(async (): Promise<void> => {
@@ -199,6 +200,11 @@ export default function AttendancePage(): React.ReactElement {
           className="lg:grid-cols-[1fr_1.7fr_1fr]"
         />
 
+        {/* QA4 ENT-25: trainers' requests to correct a closed list; draws
+            nothing when there are none. Approving changes a record, so the
+            list below reloads. */}
+        <CorrectionRequestsInbox onResolved={() => void loadRecords()} />
+
         {loading && <LoadingState label="Cargando registros…" />}
 
         {error && !loading && (
@@ -242,7 +248,7 @@ export default function AttendancePage(): React.ReactElement {
                 guideExtra={
                   <>
                     <p>
-                      Abra «Registros» en una sesión para ver a cada alumno.
+                      Abre «Registros» en una sesión para ver a cada jugador.
                       «Corregir» cambia el estado de un registro y exige un
                       motivo, que queda guardado con quien corrigió.
                     </p>

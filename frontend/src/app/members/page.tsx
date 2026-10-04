@@ -79,6 +79,7 @@ import {
   getAccountStatusBadge,
   getAccountStateBadge,
   getMembershipStatusBadge,
+  getDebtSummary,
   isRepresentativePersonaRow,
   paginateAccounts,
   getTotalPages,
@@ -108,7 +109,7 @@ import PaymentsDialog from "./PaymentsDialog";
 const FILTER_CHIPS: { flag: MemberFilterFlag; label: string }[] = [
   { flag: "all", label: "Todos" },
   { flag: "vencida", label: "Membresía vencida" },
-  { flag: "pendiente", label: "Pago pendiente" },
+  { flag: "pendiente", label: "Pago por validar" },
   // Issue #730. A count is not a worklist: the chip is both the number and
   // the route to the rows behind it — and from each row, the edit dialog's
   // medical-record editor is where it gets fixed.
@@ -475,6 +476,7 @@ function AccountRowActions({
 function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemProps): React.ReactElement {
   const statusBadge = getAccountStatusBadge(account);
   const accountBadge = getAccountStateBadge(account);
+  const debtSummary = getDebtSummary(account);
   const fullName = `${account.nombres} ${account.apellidos}`;
   // Issue #1199/#1211: the representative/payer's own row (badge
   // "Representante", "—" in "Representado por") has no student to show a
@@ -503,6 +505,8 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
       <TableCell className="hidden lg:table-cell">{account.representadoPor ?? "—"}</TableCell>
       <TableCell type="badge">
         <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
+        {/* ADMA-24: how much is owed and since when, without opening the ficha. */}
+        {debtSummary ? <p className="mt-1 text-2xs text-ink-3">{debtSummary}</p> : null}
       </TableCell>
       {/* Issue #869: `Cuenta` — `Usuario.activo`, never derived from the
           `Membresía` badge to its left. */}
@@ -528,6 +532,7 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
 function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItemProps): React.ReactElement {
   const statusBadge = getAccountStatusBadge(account);
   const accountBadge = getAccountStateBadge(account);
+  const debtSummary = getDebtSummary(account);
   // Issue #1199: same rule as `AccountRow` above.
   const showStudentActions = !isRepresentativePersonaRow(account);
 
@@ -553,6 +558,7 @@ function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItem
       status={
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
+          {debtSummary ? <span className="text-2xs text-ink-3">{debtSummary}</span> : null}
           {/* Issue #869: `Cuenta`, the mobile row equivalent of the desktop
               table's own column — never derived from the badge above. */}
           <Badge tone={accountBadge.tone}>{accountBadge.label}</Badge>
@@ -592,7 +598,7 @@ function MemberEditDialog({
     roleError,
     stateError,
     changed,
-    toggleRole,
+    selectRole,
     toggleEstado,
   } = useAccountRolesAndStatus(Number(account.id));
   // ADMA-08: switching the account off locks the person out, so it asks first.
@@ -628,9 +634,25 @@ function MemberEditDialog({
   // no distingue esa palabra de las otras tres. Solo ADMINISTRADOR gana esta
   // compuerta: es la única de las cuatro con ese efecto, y las otras siguen
   // siendo reversibles con un clic, como antes.
-  const [adminConfirmOpen, setAdminConfirmOpen] = useState(false);
   const accountFullName = `${account.nombres} ${account.apellidos}`;
-  const grantingAdmin = !roles.includes("ADMINISTRADOR");
+  // ADMA-07: the role waiting on that confirmation, if any. Picking Admin
+  // grants it; picking anything else while holding Admin revokes it.
+  const [pendingRole, setPendingRole] = useState<BackendTipoRol | null>(null);
+  const grantingAdmin = pendingRole === "ADMINISTRADOR";
+  // H3: the radios only move this pending choice. Native radio groups change
+  // selection on arrow keys, so committing from the change event silently
+  // re-roled an account while a keyboard user was just moving through the
+  // options. The change is committed only by «Guardar rol».
+  const [draftRole, setDraftRole] = useState<BackendTipoRol | null>(null);
+  const shownRole = draftRole ?? roles[0];
+  // A legacy multi-role account counts as different from any single pick.
+  const roleDirty = draftRole !== null && !(roles.length === 1 && roles[0] === draftRole);
+  const commitRole = async (role: BackendTipoRol): Promise<void> => {
+    // On success `roles` now equals the pick; on failure the hook rolled
+    // `roles` back and the error is shown. Either way the draft is spent.
+    await selectRole(role);
+    setDraftRole(null);
+  };
 
   // Native <dialog> shown via showModal(): the browser traps Tab focus and
   // renders the ::backdrop for us, so no manual focus trap is needed (unlike
@@ -767,7 +789,8 @@ function MemberEditDialog({
 
               <ModalSection
                 title="Roles"
-                saveMode="instant"
+                saveMode="manual"
+                dirty={roleDirty}
                 icon={
                   <ShieldCheck size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
                 }
@@ -779,17 +802,20 @@ function MemberEditDialog({
                       Cargando roles actuales…
                     </p>
                   )}
-                  <div className="grid grid-cols-2 gap-2">
+                  <div
+                    role="radiogroup"
+                    aria-label="Rol de la cuenta"
+                    className="grid grid-cols-2 gap-2"
+                  >
                     {ALL_BACKEND_ROLES.map((role) => {
-                      const selected = roles.includes(role);
+                      const selected = shownRole === role;
                       const isLoading = roleLoading === role;
                       const RoleIcon = ROLE_ICONS[role];
                       return (
                         // The audit found keyboard focus landing on nothing
-                        // here: the real checkbox was `sr-only`, the visible
-                        // switch was `aria-hidden`, and the wrapping <label>
-                        // carried no focus style — so tabbing through the
-                        // dialog moved an invisible cursor. `focus-within`
+                        // here: the real input was `sr-only` and the wrapping
+                        // <label> carried no focus style — so tabbing through
+                        // the dialog moved an invisible cursor. `focus-within`
                         // puts the ring on the box the user can actually see,
                         // around the control that actually has focus.
                         //
@@ -820,39 +846,49 @@ function MemberEditDialog({
                             <Loader2 size={ICON.sm} className="shrink-0 animate-spin" aria-hidden="true" />
                           )}
                           <input
-                            type="checkbox"
+                            type="radio"
+                            name={`rol-${account.id}`}
                             checked={selected}
-                            onChange={() => {
-                              // ADMINISTRADOR is the one role whose grant/revoke
-                              // is a privilege change, not a label — it needs an
-                              // explicit stop naming the effect (issue #314).
-                              if (role === "ADMINISTRADOR") {
-                                setAdminConfirmOpen(true);
-                                return;
-                              }
-                              void toggleRole(role);
-                            }}
+                            onChange={() => setDraftRole(role)}
                             disabled={roleLoading !== null || !rolesReady}
                             className="sr-only"
                           />
-                          {/* Selection is coal + the yellow ball knob, never
-                              red — red is the primary CTA and destructive
-                              actions only. */}
+                          {/* Selection is a coal ring + the yellow ball dot,
+                              never red — red is the primary CTA and
+                              destructive actions only. */}
                           <span
                             aria-hidden="true"
-                            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                              selected ? "bg-coal" : "bg-line-2"
+                            className={`relative inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                              selected ? "border-coal bg-coal" : "border-line-2 bg-white"
                             }`}
                           >
-                            <span
-                              className={`inline-block h-3.5 w-3.5 transform rounded-full shadow-soft transition-transform ${
-                                selected ? "translate-x-5 bg-ball" : "translate-x-1 bg-white"
-                              }`}
-                            />
+                            {selected && <span className="h-1.5 w-1.5 rounded-full bg-ball" />}
                           </span>
                         </label>
                       );
                     })}
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      disabled={!roleDirty || roleLoading !== null || !rolesReady}
+                      onClick={() => {
+                        if (draftRole === null) return;
+                        // Granting or revoking ADMINISTRADOR is a
+                        // privilege change, not a label — it needs an
+                        // explicit stop naming the effect (issue #314).
+                        if (draftRole === "ADMINISTRADOR" || roles.includes("ADMINISTRADOR")) {
+                          setPendingRole(draftRole);
+                          return;
+                        }
+                        void commitRole(draftRole);
+                      }}
+                    >
+                      {roleLoading !== null ? "Guardando…" : "Guardar rol"}
+                    </Button>
+                    <p className="text-xs text-ink-3">
+                      Elige un rol y pulsa «Guardar rol» para aplicarlo.
+                    </p>
                   </div>
                   {roleError && (
                     <p className="mt-2 text-xs text-state-bad" role="alert">
@@ -873,7 +909,7 @@ function MemberEditDialog({
                   dependants, same "hide rather than show an empty card"
                   convention the rest of this dialog already follows. */}
               {account.dependientes && account.dependientes.length > 0 && (
-                <ModalSection title="Estudiantes a cargo" saveMode="manual">
+                <ModalSection title="Jugadores a cargo" saveMode="manual">
                   {/* A list of people, so it takes the same divider hairlines
                       every other list of people in the product uses — not
                       `DataRowList`'s own outer border, which would nest a
@@ -904,7 +940,7 @@ function MemberEditDialog({
               open={deactivateConfirmOpen}
               variant="danger"
               title="Desactivar cuenta"
-              message={`¿Desactivar la cuenta de ${accountFullName}? No podrá iniciar sesión hasta que la active de nuevo.`}
+              message={`¿Desactivar la cuenta de ${accountFullName}? No podrá iniciar sesión hasta que la actives de nuevo.`}
               confirmLabel="Desactivar"
               onConfirm={() => {
                 setDeactivateConfirmOpen(false);
@@ -914,19 +950,23 @@ function MemberEditDialog({
             />
 
             <ConfirmDialog
-              open={adminConfirmOpen}
+              open={pendingRole !== null}
               variant="danger"
               title={grantingAdmin ? "Otorgar el rol Admin" : "Quitar el rol Admin"}
               message={
                 grantingAdmin
-                  ? `Va a convertir a ${accountFullName} en Administrador. Va a tener control total del club: podrá gestionar pagos, cuentas, roles y datos de todos los socios.`
-                  : `Va a quitarle el rol de Administrador a ${accountFullName}. Va a perder el control total del club: ya no va a poder gestionar pagos, cuentas, roles ni datos de otros socios.`
+                  ? `Vas a convertir a ${accountFullName} en Administrador. Va a tener control total del club: podrá gestionar pagos, cuentas, roles y datos de todos los socios.`
+                  : `Vas a quitarle el rol de Administrador a ${accountFullName}. Va a perder el control total del club: ya no va a poder gestionar pagos, cuentas, roles ni datos de otros socios.`
               }
               onConfirm={() => {
-                setAdminConfirmOpen(false);
-                void toggleRole("ADMINISTRADOR");
+                const role = pendingRole;
+                setPendingRole(null);
+                if (role) void commitRole(role);
               }}
-              onCancel={() => setAdminConfirmOpen(false)}
+              onCancel={() => {
+                setPendingRole(null);
+                setDraftRole(null);
+              }}
             />
           </dialog>,
           document.body,
@@ -1027,7 +1067,7 @@ function MembersRail({
       </InfoPanel>
 
       <InfoPanel title="Cómo usar el listado">
-        <p>Empiece por los pagos pendientes: filtre por «Pago pendiente» y valide cada uno.</p>
+        <p>Empieza por los pagos por validar: filtra por «Pago por validar» y valida cada uno.</p>
         <dl className="grid gap-2">
           <div>
             <dt className="font-semibold text-ink">Pagos</dt>
@@ -1048,7 +1088,7 @@ function MembersRail({
             <dd>Membresía al día.</dd>
           </div>
           <div className="flex items-center gap-2">
-            <dt><Badge tone="warn">Pago pendiente</Badge></dt>
+            <dt><Badge tone="warn">Pago por validar</Badge></dt>
             <dd>Hay un pago por validar.</dd>
           </div>
           <div className="flex items-center gap-2">
@@ -1111,8 +1151,8 @@ export default function MembersPage(): React.ReactElement {
       // saw: the write itself succeeded, only the re-read did not.
       setError(
         silent
-          ? "La membresía se creó, pero no se pudo actualizar la lista. Recargue para verla."
-          : "No se pudieron cargar los miembros. Intente nuevamente.",
+          ? "La membresía se creó, pero no se pudo actualizar la lista. Recarga para verla."
+          : "No se pudieron cargar los miembros. Intenta nuevamente.",
       );
     } finally {
       if (!silent) setLoading(false);
@@ -1175,7 +1215,7 @@ export default function MembersPage(): React.ReactElement {
           <div className="grid min-w-0 content-start gap-page">
         {/* Search + filter chips. They used to sit loose on the canvas as two
             unrelated rows; `FilterPanel` frames them and fixes their order.
-            Account creation is intentionally absent: new members use the
+            Account creation is intentionally absent: new members go through the
             public enrollment flow, while this screen remains focused on
             roles, account status, memberships, and payments. */}
         <FilterPanel
@@ -1325,7 +1365,7 @@ export default function MembersPage(): React.ReactElement {
             description={
               searchTerm || activeFlag !== "all"
                 ? "Ningún miembro coincide con la búsqueda y los filtros activos."
-                : "Cuando se registre la primera cuenta, aparecerá en este listado."
+                : "La primera cuenta registrada aparecerá en este listado."
             }
             action={
               searchTerm || activeFlag !== "all" ? (

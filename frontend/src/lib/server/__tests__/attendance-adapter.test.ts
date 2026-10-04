@@ -130,7 +130,7 @@ describe("buildAttendanceRecord", () => {
   it("threads justificativo/estadoJustificativo through for the correction form (issue #389)", () => {
     const conJustificativo: BackendAsistencia = {
       ...asistencia,
-      estado: "JUSTIFICADO",
+      estado: "ENFERMO",
       justificativo: "Certificado médico",
       estadoJustificativo: true,
     };
@@ -185,7 +185,8 @@ describe("buildRecentSession", () => {
     horaFin: "16:30:00",
     presentes: 5,
     tardanzas: 1,
-    justificados: 1,
+    enfermos: 1,
+    competencias: 0,
     ausentes: 1,
     total: 8,
   };
@@ -195,21 +196,18 @@ describe("buildRecentSession", () => {
       horarioId: 1,
       fecha: "2026-08-03",
       horario: "Lunes 15:00 — 16:30",
-      counts: { present: 5, late: 1, justified: 1, absent: 1, sick: 0, competition: 0 },
+      counts: { present: 5, late: 1, absent: 1, sick: 1, competition: 0 },
       total: 8,
     });
   });
 
-  // Issue #1373: the backend folds ENFERMO/COMPETENCIA into `justificados`
-  // (the justified/neutral family — never unexcused absences), and this
-  // summary card deliberately stays four counts wide. The 0s here are the
-  // shape contract, not lost data; the per-state breakdown lives in the
-  // record lists.
-  it("reports sick/competition as 0 and lets justified carry the authorized-absence family", () => {
-    const conAutorizadas = buildRecentSession({ ...lista, justificados: 3 });
-    expect(conAutorizadas.counts.sick).toBe(0);
-    expect(conAutorizadas.counts.competition).toBe(0);
-    expect(conAutorizadas.counts.justified).toBe(3);
+  // ENT-23: «justificados» is gone; the backend sends ENFERMO and COMPETENCIA
+  // (authorized absences, never unexcused) as their own counts.
+  it("maps enfermos/competencias to sick/competition", () => {
+    const conAutorizadas = buildRecentSession({ ...lista, enfermos: 2, competencias: 3 });
+    expect(conAutorizadas.counts.sick).toBe(2);
+    expect(conAutorizadas.counts.competition).toBe(3);
+    expect(conAutorizadas.counts.absent).toBe(1);
   });
 
   it("carries no author field — the club's list, not any one trainer's", () => {

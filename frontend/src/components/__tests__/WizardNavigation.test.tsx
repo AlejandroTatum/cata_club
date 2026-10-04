@@ -60,17 +60,17 @@ describe("WizardNavigation — already-registered escape hatch", () => {
     renderNav({ formErrors: [DUPLICADA], duplicateIdentityAudience: "self-service" });
 
     const alert = screen.getByRole("alert");
-    expect(within(alert).getByText(/inicie sesión y, desde su cuenta, agregue un dependiente/i))
+    expect(within(alert).getByText(/inicia sesión y, desde tu cuenta, agrega un jugador/i))
       .toBeInTheDocument();
-    expect(within(alert).getByText(/verificado su correo/i)).toBeInTheDocument();
-    expect(within(alert).queryByText(/inscríbase como jugador/i)).not.toBeInTheDocument();
+    expect(within(alert).getByText(/verificado tu correo/i)).toBeInTheDocument();
+    expect(within(alert).queryByText(/inscríbete como jugador/i)).not.toBeInTheDocument();
   });
 
   it("sends a guardian to their dependents instead of a login page", () => {
     renderNav({ formErrors: [DUPLICADA], duplicateIdentityAudience: "representative" });
 
     const alert = screen.getByRole("alert");
-    expect(within(alert).getByRole("link", { name: /ver mis dependientes/i })).toHaveAttribute("href", "/student");
+    expect(within(alert).getByRole("link", { name: /ver mis jugadores/i })).toHaveAttribute("href", "/student");
     expect(within(alert).queryByRole("link", { name: /iniciar sesión/i })).not.toBeInTheDocument();
   });
 

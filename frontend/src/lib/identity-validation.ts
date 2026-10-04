@@ -171,7 +171,7 @@ export const PHONE_FORMAT_HINT =
  * them.
  */
 export const PHONE_LOCAL_HINT =
-  "Escriba los 9 dígitos de su celular o los 8 de su fijo, sin el 0 inicial: por ejemplo, 991234567.";
+  "Escribe los 9 dígitos de tu celular o los 8 de tu fijo, sin el 0 inicial: por ejemplo, 991234567.";
 
 export function phoneError(value: string): PhoneErrorReason | null {
   // Normalize BEFORE the separator strip below: an international mobile
@@ -254,10 +254,10 @@ export function phoneFieldRule(
     // REG-05: the field's own hint says «sin el 0 inicial», so the error must
     // not talk about the «09» the person was told not to type, and a value
     // with no digits at all is not «obligatorio» — something was typed.
-    if (digits.trim() && !/\d/.test(digits)) return "Escriba solo números.";
+    if (digits.trim() && !/\d/.test(digits)) return "Escribe solo números.";
     const stored = toStoredPhone(digits);
     if (stored && phoneError(stored) === "invalid-number") {
-      return `${subject} no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.`;
+      return `${subject} no es válido. Escribe 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.`;
     }
     return phoneRule(stored, subject);
   }
@@ -274,7 +274,7 @@ export function phoneFieldRule(
  * so the two never drift.
  */
 export const EMERGENCY_PHONE_SAME_AS_PERSONAL_MESSAGE =
-  "El teléfono de emergencia debe ser diferente del teléfono del estudiante.";
+  "El teléfono de emergencia debe ser diferente del teléfono del jugador.";
 
 /**
  * Whether `emergencyPhone` is the same Ecuadorian number as `personalPhone`,
@@ -306,7 +306,7 @@ export function emergencyPhoneDiffersRule(emergencyPhone: string, personalPhone:
  * whoever submitted the form typed both values.
  */
 export const REPRESENTATIVE_CEDULA_SAME_AS_STUDENT_MESSAGE =
-  "La cédula del representante debe ser diferente de la cédula del estudiante.";
+  "La cédula del representante debe ser diferente de la cédula del jugador.";
 
 /**
  * Whether the representante's cédula is identical to the student's (issue
@@ -327,7 +327,12 @@ export function representativeCedulaDiffersRule(representativeCedula: string, st
 // contact, which is a person's name and was validated as if it were not one.
 // ---------------------------------------------------------------------------
 
-export const PERSON_NAME_MIN_LENGTH = 3;
+/**
+ * REG-08 (QA4): a person name needs at least 2 LETTERS (not characters), so
+ * real short names («Li», «Al», «Ng») can enroll. Mirrors
+ * `_NOMBRE_MIN_LETRAS` in `backend/.../dtos/validadores.py`.
+ */
+export const PERSON_NAME_MIN_LETTERS = 2;
 
 /**
  * (issue #1246) Some input sources — iOS/macOS keyboards, text pasted from
@@ -336,7 +341,7 @@ export const PERSON_NAME_MIN_LENGTH = 3;
  * instead of the precomposed U+00F1. `PERSON_NAME_PATTERN` only accepts
  * precomposed letters, so an NFD name used to fail validation while the
  * same name typed on a desktop keyboard (NFC) passed. Trimming first, then
- * normalizing, keeps the length check (`PERSON_NAME_MIN_LENGTH`) counting
+ * normalizing, keeps the letter count (`PERSON_NAME_MIN_LETTERS`) counting
  * the same characters a visitor sees.
  */
 export function normalizePersonName(value: string): string {
@@ -344,42 +349,61 @@ export function normalizePersonName(value: string): string {
 }
 
 /**
- * Letters (incl. accents), spaces, and the three connectors real names use:
- * apostrophe, hyphen, and interpunct. A connector may never open or close
- * the name, and two connectors may never sit next to each other — enforced
- * by requiring at least one letter between any two connector positions,
- * rather than by a denylist of "bad" sequences.
- *
- * The accented span is written as three runs rather than one `À-ɏ` sweep
- * because Latin-1 Supplement embeds two non-letters among its letters: `×`
- * (U+00D7) and `÷` (U+00F7). `À-Ö` stops before U+00D7, `Ø-ö` resumes after
- * it and stops before U+00F7, and `ø-ɏ` resumes after that — excluding
- * exactly those two code points and nothing else.
+ * REG-08 (QA4): letters (any accented letter, ñ, ü), spaces, apostrophe and
+ * hyphen — nothing else. A connector may never open or close the name, and
+ * two connectors may never sit next to each other — enforced by requiring a
+ * letter between any two connector positions, rather than by a denylist of
+ * "bad" sequences. A combining mark is only valid right after a letter.
  */
-export const PERSON_NAME_PATTERN =
-  /^[A-Za-zÀ-ÖØ-öø-ɏ]+(?:[ '\-·][A-Za-zÀ-ÖØ-öø-ɏ]+)*$/;
-
-/** Letters and the four connectors, sin exigir la alternancia que sí exige `PERSON_NAME_PATTERN` — sirve para aislar la causa de un rechazo. */
-const PERSON_NAME_ALLOWED_CHARS_PATTERN = /^[A-Za-zÀ-ÖØ-öø-ɏ '\-·]*$/;
+export const PERSON_NAME_PATTERN = /^\p{L}[\p{L}\p{M}]*(?:[ '\-]\p{L}[\p{L}\p{M}]*)*$/u;
 
 /** Un separador abriendo o cerrando el valor. */
-const PERSON_NAME_SEPARATOR_AT_EDGE_PATTERN = /^[ '\-·]|[ '\-·]$/;
+const PERSON_NAME_SEPARATOR_AT_EDGE_PATTERN = /^[ '\-]|[ '\-]$/;
+
+/** Dos separadores seguidos. */
+const PERSON_NAME_REPEATED_SEPARATOR_PATTERN = /[ '\-]{2}/;
+
+const PERSON_NAME_LETTER = /\p{L}/u;
+const PERSON_NAME_MARK = /\p{M}/u;
 
 /**
- * (issue #1042) `PERSON_NAME_PATTERN.test()` rechaza por tres causas
- * distintas y, al delegar todo a un único booleano, la causa se pierde antes
- * de poder nombrarla. Esta función la reconstruye, sin tocar qué se acepta:
- * dado que el patrón solo admite letras y los cuatro separadores, un valor
- * que lo cumple en composición (`PERSON_NAME_ALLOWED_CHARS_PATTERN`) pero no
- * en forma solo puede fallar por un separador en el borde o por dos
- * separadores seguidos — no hay una cuarta causa posible.
+ * The characters of `value` a name may not contain, each once, in order of
+ * appearance — what the error names («El nombre no puede contener “3”.»).
+ * Same rule as `_validar_caracteres_de_nombre` in the backend.
+ */
+export function personNameDisallowedChars(value: string): string[] {
+  const found: string[] = [];
+  let previous = "";
+  for (const char of value) {
+    const isConnector = char === " " || char === "'" || char === "-";
+    const isLetter = PERSON_NAME_LETTER.test(char);
+    const isMarkAfterLetter =
+      PERSON_NAME_MARK.test(char) && (PERSON_NAME_LETTER.test(previous) || PERSON_NAME_MARK.test(previous));
+    if (!isConnector && !isLetter && !isMarkAfterLetter && !found.includes(char)) found.push(char);
+    previous = char;
+  }
+  return found;
+}
+
+/** Number of letters (not marks, not connectors) in `value`. */
+function countPersonNameLetters(value: string): number {
+  let count = 0;
+  for (const char of value) if (PERSON_NAME_LETTER.test(char)) count += 1;
+  return count;
+}
+
+/**
+ * (issue #1042) `PERSON_NAME_PATTERN.test()` rejects for three distinct
+ * causes and a single boolean loses the cause before it can be named. This
+ * rebuilds it without changing what is accepted.
  */
 export type PersonNameErrorReason = "repeated-separator" | "separator-at-edge" | "invalid-char";
 
 export function personNameError(value: string): PersonNameErrorReason | null {
   if (PERSON_NAME_PATTERN.test(value)) return null;
-  if (!PERSON_NAME_ALLOWED_CHARS_PATTERN.test(value)) return "invalid-char";
-  return PERSON_NAME_SEPARATOR_AT_EDGE_PATTERN.test(value) ? "separator-at-edge" : "repeated-separator";
+  if (personNameDisallowedChars(value).length > 0) return "invalid-char";
+  if (PERSON_NAME_SEPARATOR_AT_EDGE_PATTERN.test(value)) return "separator-at-edge";
+  return PERSON_NAME_REPEATED_SEPARATOR_PATTERN.test(value) ? "repeated-separator" : "invalid-char";
 }
 
 /**
@@ -397,6 +421,12 @@ export const PERSON_NAME_MAX_LETTERS_PER_WORD = 20;
 export const PERSON_NAME_MAX_LENGTH = 60;
 
 /**
+ * H4 (QA4): `stored` is the value already saved for this field. An edit form
+ * that re-sends an unchanged name must not be blocked by a rule tightened
+ * after that name was stored («Jr.», a middle dot), so a value equal to
+ * `stored` (compared after trim + NFC) passes; any changed value still gets
+ * the full rule. Mirrors `validar_nombre_cambiado` in the backend.
+ *
  * `subject` is the noun phrase the message is built around, e.g.
  * `"Los apellidos"` (plural) or `"El nombre del contacto de emergencia"`
  * (singular — pass `{ plural: false }`).
@@ -404,22 +434,30 @@ export const PERSON_NAME_MAX_LENGTH = 60;
 export function personNameRule(
   value: string,
   subject: string,
-  { plural = true }: { plural?: boolean } = {},
+  { plural = true, stored }: { plural?: boolean; stored?: string | null } = {},
 ): string | null {
   const trimmed = normalizePersonName(value);
   if (!trimmed) return `${subject} ${plural ? "son" : "es"} obligatorio${plural ? "s" : ""}.`;
-  if (trimmed.length < PERSON_NAME_MIN_LENGTH) {
-    return `${subject} ${plural ? "deben" : "debe"} tener al menos ${PERSON_NAME_MIN_LENGTH} caracteres.`;
+  if (stored != null && trimmed === normalizePersonName(stored)) return null;
+  // REG-08: name the offending characters, e.g. «El nombre no puede contener “3”.».
+  const disallowed = personNameDisallowedChars(trimmed);
+  if (disallowed.length > 0) {
+    return `${subject} no ${plural ? "pueden" : "puede"} contener ${disallowed.map((char) => `“${char}”`).join(", ")}.`;
+  }
+  if (countPersonNameLetters(trimmed) < PERSON_NAME_MIN_LETTERS) {
+    return `${subject} ${plural ? "deben" : "debe"} tener al menos ${PERSON_NAME_MIN_LETTERS} letras.`;
   }
   const reason = personNameError(trimmed);
+  if (reason === "invalid-char") {
+    // `personNameDisallowedChars` is empty here only if the pattern and the
+    // character scan ever drift apart; never fall through to «valid» then.
+    return `${subject} ${plural ? "tienen" : "tiene"} caracteres no permitidos.`;
+  }
   if (reason === "repeated-separator") {
-    return `${subject} no ${plural ? "pueden" : "puede"} tener un espacio, guion, apóstrofe o punto medio repetido.`;
+    return `${subject} no ${plural ? "pueden" : "puede"} tener un espacio, guion o apóstrofe repetido.`;
   }
   if (reason === "separator-at-edge") {
-    return `${subject} no ${plural ? "pueden" : "puede"} empezar ni terminar con un espacio, guion, apóstrofe o punto medio.`;
-  }
-  if (reason === "invalid-char") {
-    return `${subject} ${plural ? "tienen" : "tiene"} un carácter que no reconocemos en un nombre de persona.`;
+    return `${subject} no ${plural ? "pueden" : "puede"} empezar ni terminar con un espacio, guion o apóstrofe.`;
   }
   // Issue #1323: los tres topes de arriba, en el mismo orden en que
   // `_validar_tope_nombre_propio` del backend los aplica.
@@ -543,12 +581,12 @@ export function isFutureBirthDate(birthDate: string, today: Date = new Date()): 
  * the wrong thing.
  */
 export function studentBirthDateRule(value: string, today: Date = new Date()): string | null {
-  if (!value) return "Indique la fecha de nacimiento del alumno.";
-  if (!isValidCalendarDate(value)) return "La fecha de nacimiento no existe. Revise el día, el mes y el año.";
-  if (isFutureBirthDate(value, today)) return "La fecha de nacimiento no puede ser posterior a hoy. Revise el año.";
+  if (!value) return "Indica la fecha de nacimiento del jugador.";
+  if (!isValidCalendarDate(value)) return "La fecha de nacimiento no existe. Revisa el día, el mes y el año.";
+  if (isFutureBirthDate(value, today)) return "La fecha de nacimiento no puede ser posterior a hoy. Revisa el año.";
   const age = calculatePersonAge(value, today);
   if (age < EDAD_MINIMA_ALUMNO || age > EDAD_MAXIMA_ALUMNO) {
-    return `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a ${age} ${age === 1 ? "año" : "años"}. Revise el año de nacimiento.`;
+    return `La edad del jugador debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a ${age} ${age === 1 ? "año" : "años"}. Revisa el año de nacimiento.`;
   }
   return null;
 }
@@ -706,10 +744,10 @@ export function passwordRule(value: string, subject: string): string | null {
     return `${subject} debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`;
   }
   if (passwordByteLength(password) > PASSWORD_MAX_BYTES) {
-    return `${subject} es demasiado larga. Use menos de 70 caracteres (las tildes, la ñ y los emoji cuentan doble).`;
+    return `${subject} es demasiado larga. Usa menos de 70 caracteres (las tildes, la ñ y los emoji cuentan doble).`;
   }
   return isCommonPassword(password)
-    ? `${subject} es una de las más usadas y fácil de adivinar; elija otra.`
+    ? `${subject} es una de las más usadas y fácil de adivinar; elige otra.`
     : null;
 }
 

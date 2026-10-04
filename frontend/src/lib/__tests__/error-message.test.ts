@@ -66,8 +66,8 @@ describe("toUserMessage — the status gate", () => {
 
   it("gives the generic answer to a 5xx explicitly marked NOT safe (issue #355)", () => {
     const detail =
-      "No se pudo subir el archivo en este momento. Vuelva a intentarlo más tarde " +
-      "o acérquese al club / escríbanos por WhatsApp.";
+      "No se pudo subir el archivo en este momento. Vuelve a intentarlo más tarde " +
+      "o acércate al club / escríbenos por WhatsApp.";
 
     expect(toUserMessage(apiErrorConSeguro(detail, 503, false), FALLBACK)).toBe(
       SERVER_FAILURE_TEXT,
@@ -81,8 +81,8 @@ describe("toUserMessage — the status gate", () => {
     // it unconditionally — a legitimate, hand-authored, actionable sentence
     // thrown away for no reason other than its status being 503.
     const detail =
-      "No se pudo subir el archivo en este momento. Vuelva a intentarlo más tarde " +
-      "o acérquese al club / escríbanos por WhatsApp.";
+      "No se pudo subir el archivo en este momento. Vuelve a intentarlo más tarde " +
+      "o acércate al club / escríbenos por WhatsApp.";
 
     expect(toUserMessage(apiErrorConSeguro(detail, 503, true), FALLBACK)).toBe(detail);
   });
@@ -105,11 +105,11 @@ describe("toUserMessage — the status gate", () => {
     // this backend written for the person reading it: it describes the
     // caller's OWN account, names no one else, and is the only thing that
     // tells a real guardian the link is waiting in their inbox. The canned
-    // "No tiene permisos" answered ahead of it and turned an actionable
+    // "No tienes permisos" answered ahead of it and turned an actionable
     // refusal into a dead end.
     const detail =
-      "Para vincular a un representado primero debe verificar su correo. " +
-      "Revise su bandeja de entrada o solicite un nuevo enlace de verificación.";
+      "Para vincular a un representado primero debe verificar tu correo. " +
+      "Revisa su bandeja de entrada o solicita un nuevo enlace de verificación.";
 
     expect(toUserMessage(apiErrorConSeguro(detail, 403, true), FALLBACK)).toBe(detail);
   });
@@ -141,20 +141,20 @@ describe("toUserMessage — the status gate", () => {
     expect(toUserMessage(apiErrorConSeguro("Su token venció hace 3 minutos.", 401, true), FALLBACK)).toBe(
       STATUS_MESSAGES[401],
     );
-    expect(toUserMessage(apiErrorConSeguro("Intente de nuevo en 42 segundos.", 429, true), FALLBACK)).toBe(
+    expect(toUserMessage(apiErrorConSeguro("Intenta de nuevo en 42 segundos.", 429, true), FALLBACK)).toBe(
       STATUS_MESSAGES[429],
     );
   });
 
   it("answers auth and rate limits from the status alone", () => {
     expect(toUserMessage(apiError("Not authenticated", 401), FALLBACK)).toBe(
-      "Su sesión expiró. Vuelva a iniciar sesión.",
+      "Tu sesión expiró. Vuelve a iniciar sesión.",
     );
     expect(toUserMessage(apiError("Forbidden", 403), FALLBACK)).toBe(
-      "No tiene permisos para realizar esta acción.",
+      "No tienes permisos para realizar esta acción.",
     );
     expect(toUserMessage(apiError("Too Many Requests", 429), FALLBACK)).toBe(
-      "Demasiados intentos. Espere un momento e intente nuevamente.",
+      "Demasiados intentos. Espera un momento e intenta nuevamente.",
     );
   });
 
@@ -166,8 +166,8 @@ describe("toUserMessage — the status gate", () => {
     // both gates through the INPUT_STATUSES branch — so the user reads it
     // as-is, never a generic line.
     expect(
-      toUserMessage(apiError("Formato de archivo no permitido. Use JPG o PNG", 400), FALLBACK),
-    ).toBe("Formato de archivo no permitido. Use JPG o PNG");
+      toUserMessage(apiError("Formato de archivo no permitido. Usa JPG o PNG", 400), FALLBACK),
+    ).toBe("Formato de archivo no permitido. Usa JPG o PNG");
     expect(
       toUserMessage(apiError("El archivo excede el tamaño máximo de 5MB", 400), FALLBACK),
     ).toBe("El archivo excede el tamaño máximo de 5MB");
@@ -305,7 +305,7 @@ describe("toUserMessage — anything that is not an API error", () => {
     // Firefox's "NetworkError when attempting to fetch resource") propagated
     // straight to `err.message` at 28 call sites.
     expect(toUserMessage(new TypeError("Failed to fetch"), FALLBACK)).toBe(
-      "No pudimos conectar. Revise su conexión a internet e intente nuevamente.",
+      "No pudimos conectar. Revisa tu conexión a internet e intenta nuevamente.",
     );
   });
 
@@ -313,7 +313,7 @@ describe("toUserMessage — anything that is not an API error", () => {
     const aborted = Object.assign(new Error("The operation was aborted."), { name: "AbortError" });
 
     expect(toUserMessage(aborted, FALLBACK)).toBe(
-      "La operación se canceló. Si todavía la necesita, vuelva a intentarlo.",
+      "La operación se canceló. Si todavía la necesitas, vuelve a intentarlo.",
     );
   });
 
@@ -329,10 +329,10 @@ describe("toUserMessage — anything that is not an API error", () => {
 
     expect(toUserMessage(timedOut, FALLBACK)).toBe(
       "Esto está tardando más de lo normal y no pudimos terminarlo. " +
-        `Escríbanos por WhatsApp y lo ayudamos: ${toWhatsAppLink(landingConfig.contact.whatsapp[0])}`,
+        `Escríbenos por WhatsApp y te ayudamos: ${toWhatsAppLink(landingConfig.contact.whatsapp[0])}`,
     );
     expect(toUserMessage(timedOut, FALLBACK)).not.toBe(
-      "La operación se canceló. Si todavía la necesita, vuelva a intentarlo.",
+      "La operación se canceló. Si todavía la necesitas, vuelve a intentarlo.",
     );
   });
 
@@ -434,7 +434,7 @@ describe("isUserFacingText — the gate on its own", () => {
     // into the verification that found PAG-3; five already passed, and this
     // is the sixth, now fixed rather than the gate loosened.
     const realProductMessages = [
-      "Ese tipo de archivo no se puede subir. Adjunte una foto (JPG o PNG) o un PDF.", // PAG-3, fixed
+      "Ese tipo de archivo no se puede subir. Adjunta una foto (JPG o PNG) o un PDF.", // PAG-3, fixed
       "Ya existe una persona con la cédula 0912345678",
       "El alumno ya está inscrito en este horario.",
       "No hay cupos disponibles en el nivel seleccionado.",

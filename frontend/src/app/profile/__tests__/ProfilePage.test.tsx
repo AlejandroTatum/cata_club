@@ -373,7 +373,7 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
 });
 
 describe("ProfilePage — student/representante summary view", () => {
-  it("renders the estudiante's own name and membership state on the identity card", async () => {
+  it("renders the jugador's own name and membership state on the identity card", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("estudiante"));
     mockFetchStudentPortal.mockResolvedValueOnce({
       self: {
@@ -435,7 +435,7 @@ describe("ProfilePage — student/representante summary view", () => {
     // is stated exactly once, never both as an absent badge AND text.
     const roleInfo = screen.getByTestId("profile-role-info");
     expect(within(roleInfo).getByText("Membresía")).toBeInTheDocument();
-    expect(within(roleInfo).getByText("No disponible — consulte con administración")).toBeInTheDocument();
+    expect(within(roleInfo).getByText("No disponible — consulta con administración")).toBeInTheDocument();
   });
 
   it("renders one row per representado for a representante session, always showing the honest 'no disponible' note for their membership (the backend never scopes /membresias/mias to a dependent, only to the caller) (triangulation)", async () => {
@@ -478,10 +478,10 @@ describe("ProfilePage — student/representante summary view", () => {
     // a student", not the ambiguous case — see the module docstring).
     // VIS-14: the sentence is stated ONCE (under the dependants list); the
     // other fields read "—".
-    expect(screen.getAllByText(/No disponible — consulte con administración/)).toHaveLength(1);
+    expect(screen.getAllByText(/No disponible — consulta con administración/)).toHaveLength(1);
     const roleInfo = screen.getByTestId("profile-role-info");
     expect(within(roleInfo).getByText("Membresía propia")).toBeInTheDocument();
-    expect(within(roleInfo).queryByText("No disponible — consulte con administración")).not.toBeInTheDocument();
+    expect(within(roleInfo).queryByText("No disponible — consulta con administración")).not.toBeInTheDocument();
     expect(within(roleInfo).getByText("Sin membresía visible")).toBeInTheDocument();
     expect(screen.queryByText("Vencida")).not.toBeInTheDocument();
     // A `self: null` account has no personal membership to report, so the
@@ -526,7 +526,7 @@ describe("ProfilePage — student/representante summary view", () => {
     // (no approved payments on file here); the fallback note appears once, on
     // Juan's row.
     expect(screen.getAllByText("Sin pagos aprobados").length).toBe(1);
-    expect(screen.getByText(/No disponible — consulte con administración/)).toBeInTheDocument();
+    expect(screen.getByText(/No disponible — consulta con administración/)).toBeInTheDocument();
   });
 
   it("includes a link to the full /student portal for detail", async () => {
@@ -571,7 +571,7 @@ describe("ProfilePage — student/representante summary view", () => {
 
   it("shows a loading state and then an error with retry when the portal fetch fails", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("estudiante"));
-    mockFetchStudentPortal.mockRejectedValueOnce(new Error("No se pudo cargar su cuenta."));
+    mockFetchStudentPortal.mockRejectedValueOnce(new Error("No se pudo cargar tu cuenta."));
 
     render(
       <ToastProvider>
@@ -579,7 +579,7 @@ describe("ProfilePage — student/representante summary view", () => {
       </ToastProvider>,
     );
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo cargar su cuenta.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo cargar tu cuenta.");
     expect(screen.getByRole("button", { name: /reintentar/i })).toBeInTheDocument();
   });
 });
@@ -624,7 +624,7 @@ describe("ProfilePage — issue #204 redesign: four role variants share one arch
     expect(within(roleInfo).queryByText("Rol principal")).not.toBeInTheDocument();
   });
 
-  it("shows the Estudiante variant's role and real fecha de nacimiento in 'Información de su rol'", async () => {
+  it("shows the Jugador variant's role and real fecha de nacimiento in 'Información de tu rol'", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("estudiante"));
     mockFetchStudentPortal.mockResolvedValueOnce({
       self: {
@@ -689,7 +689,7 @@ describe("ProfilePage — issue #204 redesign: four role variants share one arch
     // VIS-14: the dependant's row already states the sentence once, so this
     // fact reads "—" instead of repeating it.
     expect(within(roleInfo).getByText("Sin membresía visible")).toBeInTheDocument();
-    expect(screen.getAllByText(/No disponible — consulte con administración/)).toHaveLength(1);
+    expect(screen.getAllByText(/No disponible — consulta con administración/)).toHaveLength(1);
   });
 
   it("lists WHICH roles a multi-role representante holds, not just how many", async () => {
@@ -747,7 +747,7 @@ describe("ProfilePage — issue #204 redesign: representante with no representad
 
     const dependants = await screen.findByTestId("profile-dependants");
     expect(
-      within(dependants).getByText(/todavía no hay estudiantes representados/i),
+      within(dependants).getByText(/todavía no hay jugadores representados/i),
     ).toBeInTheDocument();
     // The way to fix that state stays reachable even while it's empty.
     expect(within(dependants).getByRole("link", { name: /agregar/i })).toBeInTheDocument();
@@ -833,7 +833,7 @@ describe("ProfilePage — issue #204 redesign: long content wraps, never truncat
 describe("ProfilePage — staff view loading/error (structurally distinct from the student branch)", () => {
   it("shows an error with retry when fetchMiPerfil fails, and refetches on retry", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("admin"));
-    mockFetchMiPerfil.mockRejectedValueOnce(new Error("No se pudo cargar su perfil."));
+    mockFetchMiPerfil.mockRejectedValueOnce(new Error("No se pudo cargar tu perfil."));
 
     render(
       <ToastProvider>
@@ -841,7 +841,7 @@ describe("ProfilePage — staff view loading/error (structurally distinct from t
       </ToastProvider>,
     );
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo cargar su perfil.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo cargar tu perfil.");
     const retryButton = screen.getByRole("button", { name: /reintentar/i });
 
     mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
@@ -918,12 +918,12 @@ describe("ProfilePage — inline teléfono edit (correo is read-only)", () => {
     fireEvent.change(telefonoInput, { target: { value: "12" } });
     fireEvent.click(screen.getByRole("button", { name: /^guardar/i }));
 
-    expect(await screen.findByText(/Escriba su celular de 9 dígitos/)).toBeInTheDocument();
+    expect(await screen.findByText(/Escribe tu celular de 9 dígitos/)).toBeInTheDocument();
     expect(screen.queryByText(/obligatorio/)).not.toBeInTheDocument();
     expect(mockActualizarMiPerfil).not.toHaveBeenCalled();
 
     fireEvent.change(telefonoInput, { target: { value: "" } });
-    expect(screen.queryByText(/Escriba su celular de 9 dígitos/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Escribe tu celular de 9 dígitos/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^guardar/i }));
     await waitFor(() => expect(mockActualizarMiPerfil).toHaveBeenCalledWith({ telefono: "" }));
   });
@@ -960,7 +960,7 @@ describe("ProfilePage — inline teléfono edit (correo is read-only)", () => {
    * anything but `kind === "staff"`, so the screen showed a teléfono the
    * account holder could not correct from the one screen that owns it.
    */
-  it("lets an estudiante edit their own teléfono through the same self-service PATCH as staff", async () => {
+  it("lets an jugador edit their own teléfono through the same self-service PATCH as staff", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("estudiante"));
     mockFetchStudentPortal.mockResolvedValueOnce({
       self: {
@@ -1025,7 +1025,7 @@ describe("ProfilePage — inline teléfono edit (correo is read-only)", () => {
       representados: [],
       membershipPlans: [],
     });
-    mockFetchMiPerfil.mockRejectedValueOnce(new Error("No se pudo cargar su perfil."));
+    mockFetchMiPerfil.mockRejectedValueOnce(new Error("No se pudo cargar tu perfil."));
 
     render(
       <ToastProvider>
@@ -1140,7 +1140,7 @@ describe("ProfilePage — change password", () => {
     });
     expect(
       await screen.findByText(
-        "Le enviamos un enlace a ana.admin@cataclub.com para cambiar su contraseña. Es válido por 30 minutos.",
+        "Te enviamos un enlace a ana.admin@cataclub.com para cambiar tu contraseña. Es válido por 30 minutos.",
       ),
     ).toBeInTheDocument();
     expect(
@@ -1209,7 +1209,7 @@ describe("ProfilePage — change password", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(
-      "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: WhatsApp",
+      /Tuvimos un problema de nuestro lado y no pudimos completar esto\. Escr[ií]benos por WhatsApp y te ayudamos: WhatsApp/,
     );
     expect(within(alert).getByRole("link", { name: "WhatsApp" })).toHaveAttribute(
       "href",
@@ -1237,7 +1237,7 @@ describe("ProfilePage — unified layout structure", () => {
     // it. The member card now carries the identity, so the header stays to
     // just the title.
     expect(
-      screen.queryByText("Gestione su información y consulte su estado en el club."),
+      screen.queryByText(/gestion(a|as|e) (tu|su) información/i),
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("profile-hero")).toBeInTheDocument();
     expect(screen.getByTestId("profile-column-info")).toBeInTheDocument();
@@ -1414,7 +1414,7 @@ describe("ProfilePage — profile photo upload (staff branch, own hero avatar)",
 });
 
 describe("ProfilePage — profile photo upload (student/representante branch, own hero avatar)", () => {
-  it("offers the photo-upload trigger for an estudiante session too", async () => {
+  it("offers the photo-upload trigger for an jugador session too", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("estudiante"));
     mockFetchStudentPortal.mockResolvedValueOnce({
       self: {
@@ -1814,7 +1814,7 @@ describe("ProfilePage — the redesigned account layout", () => {
 
     const security = screen.getByTestId("profile-column-status");
     const password = within(security).getByRole("button", { name: /^restablecer por correo$/i });
-    expect(password).toHaveAccessibleDescription(/enlace para restablecer su contraseña/i);
+    expect(password).toHaveAccessibleDescription(/enlace para restablecer tu contraseña/i);
     // FAM-17: the in-profile change form sits right below the tiles.
     expect(screen.getByTestId("profile-change-password")).toBeInTheDocument();
     const logoutTile = within(security).getByRole("button", { name: /^cerrar sesión$/i });
@@ -1899,7 +1899,7 @@ describe("ProfilePage — close other sessions (E01, slice B4)", () => {
 
   it("confirming the dialog calls the endpoint and surfaces the success message", async () => {
     mockInvalidarOtrasSesiones.mockResolvedValueOnce({
-      mensaje: "Se cerraron sus otras sesiones. Este dispositivo sigue conectado.",
+      mensaje: "Se cerraron tus otras sesiones. Este dispositivo sigue conectado.",
     });
     await renderAdmin();
 
@@ -1911,7 +1911,7 @@ describe("ProfilePage — close other sessions (E01, slice B4)", () => {
       expect(mockInvalidarOtrasSesiones).toHaveBeenCalledTimes(1);
     });
     expect(
-      await screen.findByText("Se cerraron sus otras sesiones. Este dispositivo sigue conectado."),
+      await screen.findByText("Se cerraron tus otras sesiones. Este dispositivo sigue conectado."),
     ).toBeInTheDocument();
     // The caller's own screen is untouched — no redirect, no crash, no 401 loop.
     expect(mockReplace).not.toHaveBeenCalled();
@@ -2054,7 +2054,7 @@ describe("ProfilePage — issue #204 redesign: prototype elements the first pass
   it("labels each section with the prototype's own subtitle copy", async () => {
     await renderAdmin();
 
-    expect(within(screen.getByTestId("profile-column-info")).getByText("Información de su cuenta")).toBeInTheDocument();
+    expect(within(screen.getByTestId("profile-column-info")).getByText("Información de tu cuenta")).toBeInTheDocument();
     expect(within(screen.getByTestId("profile-role-info")).getByText("Rol asignado a esta cuenta")).toBeInTheDocument();
     expect(within(screen.getByTestId("profile-column-status")).getByText("Acciones de acceso")).toBeInTheDocument();
   });
@@ -2062,7 +2062,7 @@ describe("ProfilePage — issue #204 redesign: prototype elements the first pass
   it("shows the role-specific 'bajada' under the page title", async () => {
     await renderAdmin();
 
-    expect(screen.getByText("Revise sus datos y mantenga segura su cuenta.")).toBeInTheDocument();
+    expect(screen.getByText("Revisa tus datos y mantén segura tu cuenta.")).toBeInTheDocument();
   });
 
   it("shows a decorative icon on each of the three Seguridad rows", async () => {
@@ -2206,7 +2206,7 @@ describe("ProfilePage — the club on the screen (faro: perfil y login)", () => 
 
     const shortcuts = within(await screen.findByTestId("profile-shortcuts"));
     expect(shortcuts.getByRole("link", { name: /Mi cuenta/ })).toHaveAttribute("href", "/student");
-    expect(shortcuts.getByRole("link", { name: /Agregar estudiante/ })).toHaveAttribute(
+    expect(shortcuts.getByRole("link", { name: /Agregar jugador \(menor de edad\)/ })).toHaveAttribute(
       "href",
       "/student/add-dependent",
     );
@@ -2218,7 +2218,7 @@ describe("ProfilePage — the club on the screen (faro: perfil y login)", () => 
     const membership = await screen.findByTestId("profile-membership");
     expect(within(membership).getByText("Plan")).toBeInTheDocument();
     expect(within(membership).getByText("Mensual Infantil")).toBeInTheDocument();
-    expect(within(membership).getByText("Socio desde")).toBeInTheDocument();
+    expect(within(membership).getByText("Jugador desde")).toBeInTheDocument();
     expect(within(membership).getByText("13/08/2026")).toBeInTheDocument();
   });
 
@@ -2467,7 +2467,7 @@ describe("ProfilePage — the type and colour rules the screen was breaking", ()
 
     const titles = [
       within(screen.getByTestId("profile-column-info")).getByText("Datos personales"),
-      within(screen.getByTestId("profile-role-info")).getByText("Información de su rol"),
+      within(screen.getByTestId("profile-role-info")).getByText("Información de tu rol"),
       within(screen.getByTestId("profile-column-status")).getByText("Seguridad"),
     ];
 
@@ -2523,17 +2523,17 @@ describe("ProfilePage — the type and colour rules the screen was breaking", ()
 });
 
 // ---------------------------------------------------------------------------
-// Register — issue #340. Perfil tuteaba/voseaba ("Revisá", "mantené", "tu
-// cuenta") while the other 20 audited screens use "usted" consistently. The
+// Register — issue #340, flipped by QA4 S6. Perfil voseaba ("Revisá",
+// "mantené") while the app speaks «tú» ("Revisa", "tu cuenta"). The
 // candado is a word-shape lock, not a fixed-string lock: the audit that found
 // this one also found the same origin could have left orphaned copy
 // elsewhere, and a lock on one literal sentence would miss a rewording that
 // keeps the same defect in different words. This one fails on the SHAPE
-// (voseo imperatives, "vos"/"tu"/"tus") wherever it appears in the rendered
-// screen, for any of the four role variants.
+// (voseo imperatives, "vos", "usted" forms) wherever it appears in the
+// rendered screen, for any of the four role variants.
 // ---------------------------------------------------------------------------
 
-describe("ProfilePage — usted register (issue #340)", () => {
+describe("ProfilePage — tú register (issue #340)", () => {
   async function renderRole(
     role: "admin" | "trainer" | "estudiante" | "representante",
   ): Promise<void> {
@@ -2584,17 +2584,17 @@ describe("ProfilePage — usted register (issue #340)", () => {
   // VIS-15: one header tone for "Su cuenta" whatever the role — the same
   // component used to change colour per role with no visible criterion.
   it.each(["admin", "trainer", "estudiante", "representante"] as const)(
-    "gives the %s view the same neutral 'Su cuenta' header tone as every other role",
+    "gives the %s view the same neutral 'Tu cuenta' header tone as every other role",
     async (role) => {
       await renderRole(role);
 
-      const header = screen.getByRole("complementary", { name: "Su cuenta" }).firstElementChild;
+      const header = screen.getByRole("complementary", { name: "Tu cuenta" }).firstElementChild;
       expect(header?.className).toMatch(/\bbg-sunken\b/);
     },
   );
 
   it.each(["admin", "trainer", "estudiante", "representante"] as const)(
-    "keeps the %s view entirely in usted — no voseo/tuteo shape in the rendered screen",
+    "keeps the %s view entirely in tú — no voseo/usted shape in the rendered screen",
     async (role) => {
       await renderRole(role);
 
@@ -2632,14 +2632,14 @@ describe("ProfilePage — main column plus rail (admin v4)", () => {
     expect(within(split.children[0] as HTMLElement).getByTestId("profile-column-status")).toBeInTheDocument();
   });
 
-  it("always shows the account summary and the 'Cómo proteger su cuenta' indications in the rail", async () => {
+  it("always shows the account summary and the 'Cómo proteger tu cuenta' indications in the rail", async () => {
     await renderAdmin();
 
     const rail = screen.getByTestId("profile-split").children[1] as HTMLElement;
     const summary = within(rail).getByTestId("profile-account-summary");
     expect(within(summary).getByText("Activa")).toBeInTheDocument();
     expect(within(summary).getByText("10/03/2024")).toBeInTheDocument();
-    expect(within(rail).getByRole("heading", { name: "Cómo proteger su cuenta" })).toBeVisible();
+    expect(within(rail).getByRole("heading", { name: "Cómo proteger tu cuenta" })).toBeVisible();
     expect(screen.queryByRole("button", { name: /ver ayuda/i })).not.toBeInTheDocument();
   });
 

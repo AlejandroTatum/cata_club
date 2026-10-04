@@ -19,7 +19,7 @@ export const HERO_PHOTOS: HeroPhoto[] = [
   },
   {
     src: "/landing/hero-competition.jpg",
-    alt: "Dos estudiantes de Cata Club posando",
+    alt: "Dos jugadores de Cata Club posando",
     objectPosition: "50% 42%",
   },
   {
@@ -39,3 +39,10 @@ export const HERO_PHOTOS: HeroPhoto[] = [
     objectPosition: "72% 62%",
   },
 ];
+
+/**
+ * Quality `next/image` re-encodes the hero slides at. 90 shipped ~200 KB per
+ * slide at 1440; 80 is visually indistinguishable on photos at this size
+ * (LAN-12).
+ */
+export const HERO_IMAGE_QUALITY = 80;

@@ -88,7 +88,7 @@ class TestArchivoCanonico:
         # no puede ser una excusa para perderlas.
         texto = conocimiento_club.texto_para_prompt(conocimiento)
         for hecho in (
-            "Reportes",  # el administrador genera reportes
+            "Informes",  # el administrador genera informes
             "Pagos",  # el administrador valida pagos
             "Pasar lista",  # el entrenador toma asistencia
             "recuperación",  # recuperación de contraseña por correo
@@ -149,7 +149,7 @@ class TestConocimientoSerializado:
         "hecho",
         [
             # Solo estaba en el FAQ de la web (`faq-content.ts`).
-            "selector de estudiante",
+            "selector de jugador",
             "Deshacer",
             "enviar otro comprobante",  # copy aprobada en la corrección C3 de #1374
             # Solo estaba en la landing.

@@ -86,6 +86,7 @@ def _datos_dependiente(seed: int) -> RepresentadoCreateDTO:
     return RepresentadoCreateDTO(
         nombres="Luis", apellidos="Reyes", cedula=cedula_valida(seed),
         fecha_nacimiento=date(2015, 1, 1), telefono=None,
+        ficha_medica={"tipo_sangre": "O_POSITIVO"},
     )
 
 
@@ -236,6 +237,7 @@ def test_endpoint_me_representados_via_http(client_sin_token, db_session):
         json={
             "nombres": datos.nombres, "apellidos": datos.apellidos,
             "cedula": datos.cedula, "fecha_nacimiento": str(datos.fecha_nacimiento),
+            "ficha_medica": {"tipo_sangre": "O_POSITIVO"},
         },
         headers={"Authorization": f"Bearer {_token(representante)}"},
     )
@@ -266,6 +268,7 @@ def test_endpoint_me_representados_no_espera_a_la_activacion_de_la_cuenta(client
         json={
             "nombres": datos.nombres, "apellidos": datos.apellidos,
             "cedula": datos.cedula, "fecha_nacimiento": str(datos.fecha_nacimiento),
+            "ficha_medica": {"tipo_sangre": "O_POSITIVO"},
         },
         headers={"Authorization": f"Bearer {_token(representante)}"},
     )
@@ -282,6 +285,7 @@ def test_endpoint_me_representados_rechaza_a_un_entrenador(client_sin_token, db_
         json={
             "nombres": datos.nombres, "apellidos": datos.apellidos,
             "cedula": datos.cedula, "fecha_nacimiento": str(datos.fecha_nacimiento),
+            "ficha_medica": {"tipo_sangre": "O_POSITIVO"},
         },
         headers={"Authorization": f"Bearer {_token(entrenador)}"},
     )

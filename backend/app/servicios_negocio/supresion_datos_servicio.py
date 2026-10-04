@@ -168,7 +168,7 @@ class SupresionDatosServicio:
 
         if solicitud.estado != ESTADO_APROBADA:
             raise OperacionInvalida(
-                "Solo una solicitud APROBADA puede ejecutarse."
+                "Solo una solicitud aprobada puede ejecutarse."
             )
 
         # D8: el plazo de gracia corre desde la fecha de solicitud.
@@ -188,7 +188,7 @@ class SupresionDatosServicio:
         # D2: representados vigentes bloquean la ejecución.
         if self.personas.contar_representados(persona.id) > 0:
             raise OperacionInvalida(
-                "La persona todavía representa a al menos un menor. Transfiera "
+                "La persona todavía representa a al menos un menor. Transfiere "
                 "la representación por el flujo autorizado antes de ejecutar "
                 "la supresión."
             )
@@ -197,8 +197,8 @@ class SupresionDatosServicio:
         pendientes = self._contar_pagos_pendientes(persona.id)
         if pendientes > 0 and not (solicitud.notas and solicitud.notas.strip()):
             raise OperacionInvalida(
-                "La persona tiene pagos pendientes de validación. Resuélvalos o "
-                "documente su tratamiento en las notas de la solicitud antes de "
+                "La persona tiene pagos por validar. Resuélvelos o "
+                "documenta su tratamiento en las notas de la solicitud antes de "
                 "ejecutar la supresión."
             )
 

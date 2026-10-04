@@ -82,7 +82,7 @@ def es_telefono_valido(telefono: str) -> bool:
 # `ValueError`) como el servicio de ficha médica (vía `OperacionInvalida`),
 # para que el 422 de un DTO y el 400 de un bypass digan exactamente lo mismo.
 MENSAJE_TELEFONO_EMERGENCIA_IGUAL = (
-    "El teléfono de emergencia debe ser diferente del teléfono del estudiante."
+    "El teléfono de emergencia debe ser diferente del teléfono del jugador."
 )
 
 

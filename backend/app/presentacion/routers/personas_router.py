@@ -18,7 +18,10 @@ from app.servicios_negocio.dtos.persona_schemas import (
     AntecedentesClubCreateDTO, AntecedentesClubUpdateDTO, AntecedentesClubResponseDTO,
 )
 from app.servicios_negocio.dtos.base import PaginatedResponse
-from app.presentacion.routers.reporte_helpers import exigir_tope_reporte
+from app.presentacion.routers.reporte_helpers import (
+    LIMITE_MAXIMO_FILAS_REPORTE,
+    exigir_tope_reporte,
+)
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import PersonaServicio
 from app.servicios_negocio.relacion_representacion_servicio import RelacionRepresentacionServicio
@@ -120,7 +123,7 @@ def listar_personas(
 # descarga entero, no un listado que se recorre en pantalla), así que un
 # rango sin acotar se truncaba en silencio. Mismo guardarraíl que
 # `LIMITE_MAXIMO_REPORTE_PAGOS` en `membresias_pagos_router.py`.
-LIMITE_MAXIMO_REPORTE_PERSONAS = 10000
+LIMITE_MAXIMO_REPORTE_PERSONAS = LIMITE_MAXIMO_FILAS_REPORTE
 
 
 @router.get(
@@ -198,7 +201,7 @@ async def reporte_nuevos_por_periodo_pdf(
     personas = servicio.reporte_nuevos_por_periodo(inicio, fin)
     pdf_bytes = await run_in_threadpool(
         generar_reporte_pdf,
-        titulo="Reporte de Nuevos Miembros por Período",
+        titulo="Informe de Nuevos Miembros por Período",
         columnas=_COLUMNAS_PERSONAS_PDF,
         filas=_personas_a_filas(personas),
     )
@@ -334,7 +337,7 @@ async def obtener_persona(
         # `frontend/src/app/api/student/route.ts`). Sin esta rama el nombre
         # del tutor desaparecía en silencio de la tarjeta de perfil.
         incluir_representante_propio=True,
-        mensaje="No puede consultar los datos personales de otra persona",
+        mensaje="No puedes consultar los datos personales de otra persona",
     )
     return PersonaServicio(db).obtener_persona(persona_id)
 
@@ -747,7 +750,7 @@ async def obtener_antecedentes_club(
         persona_id_solicitante=token_payload.get("persona_id"),
         roles_solicitante=token_payload.get("roles", []),
         roles_privilegiados=SOLO_ADMINISTRADOR,
-        mensaje="No puede consultar los antecedentes de club de otra persona",
+        mensaje="No puedes consultar los antecedentes de club de otra persona",
     )
     return AntecedentesClubServicio(db).obtener_por_persona(persona_id)
 

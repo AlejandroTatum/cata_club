@@ -6,7 +6,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Reportes de error",
+  title: "Errores reportados",
 };
 
 export default function ReportesErrorLayout({

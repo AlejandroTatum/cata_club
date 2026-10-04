@@ -4,7 +4,7 @@ from starlette.concurrency import run_in_threadpool
 from typing import List, Optional
 from datetime import date
 
-from app.dominio.enums import EstadoAsistencia
+from app.dominio.enums import EstadoAsistencia, EstadoSolicitudCorreccion
 from app.dominio.nombre_propio import nombre_completo
 from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.tiempo import hoy_club
@@ -14,16 +14,22 @@ from app.servicios_negocio.dtos.asistencia_schemas import (
     AsistenciaCorreccionDTO, AsistenciaCorreccionEntryDTO,
     AsistenciaCorreccionResponseDTO,
     AsistenciaResponseDTO, CategoriaCreateDTO, CategoriaPublicacionDTO, CategoriaResponseDTO,
-    CategoriaUpdateDTO, HorarioCreateDTO, HorarioUpdateDTO, HorarioResponseDTO,
+    CategoriaUpdateDTO, HorarioCreateDTO,
+    MoverAlumnosDTO, MoverAlumnosResponseDTO, MoverAlumnosSeleccionDTO, HorarioUpdateDTO, HorarioResponseDTO,
     PublicScheduleCategoryDTO,
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,
-    UltimaListaDTO,
+    ConteoHorarioDTO, UltimaListaDTO,
+    SolicitudCorreccionCreateDTO, SolicitudCorreccionRechazoDTO, SolicitudCorreccionResponseDTO,
 )
 from app.servicios_negocio.dtos.base import PaginatedResponse
-from app.presentacion.routers.reporte_helpers import exigir_tope_reporte
+from app.presentacion.routers.reporte_helpers import (
+    LIMITE_MAXIMO_FILAS_REPORTE,
+    exigir_tope_reporte,
+)
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
 from app.servicios_negocio.gestor_permisos import GestorPermisos
+from app.servicios_negocio.solicitud_correccion_servicio import SolicitudCorreccionServicio
 from app.servicios_negocio.politica_acceso import (
     ADMINISTRADOR_O_ENTRENADOR, PoliticaAccesoPersona,
 )
@@ -34,7 +40,7 @@ router = APIRouter(prefix="/asistencias", tags=["Asistencias"])
 # `_COLUMNAS_PERSONAS_PDF` y `_COLUMNAS_PAGOS_PDF`, para que el candado de
 # ancho de página pueda medir las columnas REALES del reporte y no una copia
 # escrita a mano en el test, que envejecería sin que nadie se entere.
-_COLUMNAS_ASISTENCIA_PDF = ["Fecha", "Horario", "Estudiante", "Estado"]
+_COLUMNAS_ASISTENCIA_PDF = ["Fecha", "Horario", "Jugador", "Estado"]
 
 # Issue #1240: el PDF imprimía `r.estado.value`, el miembro crudo del enum
 # (p.ej. "ATRASADO"), mientras la tabla de la misma pantalla, el export a
@@ -44,7 +50,6 @@ _ETIQUETAS_ESTADO_ASISTENCIA = {
     EstadoAsistencia.PRESENTE: "Presente",
     EstadoAsistencia.AUSENTE: "Ausente",
     EstadoAsistencia.ATRASADO: "Tardanza",
-    EstadoAsistencia.JUSTIFICADO: "Justificado",
     # Issue #1373: mismos labels que la UI usa para los dos estados nuevos,
     # para que el PDF y la tabla digan lo mismo de la misma fila.
     EstadoAsistencia.ENFERMO: "Enfermo",
@@ -123,6 +128,28 @@ async def eliminar_categoria(codigo: str, db: Session = Depends(obtener_sesion))
     AsistenciaServicio(db).eliminar_categoria(codigo)
 
 
+# QA4 ADMB-04: una categoría con alumnos se elimina solo vacía. Dos caminos,
+# ADMIN-only: todos a UNA categoría + borrado en una transacción, o de a uno.
+@router.post(
+    "/categorias/{codigo}/mover-y-eliminar", response_model=MoverAlumnosResponseDTO,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def mover_y_eliminar_categoria(
+    codigo: str, datos: MoverAlumnosDTO, db: Session = Depends(obtener_sesion),
+):
+    return AsistenciaServicio(db).mover_y_eliminar_categoria(codigo, datos.categoria_destino)
+
+
+@router.post(
+    "/categorias/{codigo}/mover-alumnos", response_model=MoverAlumnosResponseDTO,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def mover_alumnos_de_categoria(
+    codigo: str, datos: MoverAlumnosSeleccionDTO, db: Session = Depends(obtener_sesion),
+):
+    return AsistenciaServicio(db).mover_alumnos(codigo, datos)
+
+
 # Publicación en la landing (`categoria_horario.visible_en_landing`):
 # endpoint propio de un solo campo para que ocultar/mostrar no tenga que
 # pasar por la edición atómica de nombre/franja/días. ADMIN-only, como todo
@@ -194,6 +221,73 @@ async def registrar_asistencia_lote(
     )
 
 
+# QA4 ENT-25: el entrenador PIDE la corrección de una lista cerrada; solo el
+# administrador la resuelve (aprobar aplica `corregir_asistencia`). Declaradas
+# ANTES de las rutas `/{asistencia_id}/...` para que el segmento fijo no se
+# interprete como un id.
+@router.post(
+    "/solicitudes-correccion",
+    response_model=SolicitudCorreccionResponseDTO,
+    status_code=status.HTTP_201_CREATED,
+)
+async def crear_solicitud_correccion(
+    datos: SolicitudCorreccionCreateDTO,
+    token_payload: dict = Depends(GestorPermisos(["ENTRENADOR"])),
+    db: Session = Depends(obtener_sesion),
+):
+    return SolicitudCorreccionServicio(db).crear(
+        datos, token_payload.get("roles", []), token_payload.get("persona_id"),
+    )
+
+
+# El entrenador ve SOLO las suyas; el administrador, todas (el filtro por
+# dueño lo aplica el servicio según el rol del token).
+@router.get(
+    "/solicitudes-correccion",
+    response_model=List[SolicitudCorreccionResponseDTO],
+)
+async def listar_solicitudes_correccion(
+    estado: Optional[EstadoSolicitudCorreccion] = Query(default=None),
+    horario_id: Optional[int] = Query(default=None),
+    fecha: Optional[date] = Query(default=None),
+    token_payload: dict = Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"])),
+    db: Session = Depends(obtener_sesion),
+):
+    return SolicitudCorreccionServicio(db).listar(
+        token_payload.get("roles", []), token_payload.get("persona_id"),
+        estado=estado, horario_id=horario_id, fecha=fecha,
+    )
+
+
+@router.post(
+    "/solicitudes-correccion/{solicitud_id}/aprobar",
+    response_model=SolicitudCorreccionResponseDTO,
+)
+async def aprobar_solicitud_correccion(
+    solicitud_id: int,
+    token_payload: dict = Depends(GestorPermisos(["ADMINISTRADOR"])),
+    db: Session = Depends(obtener_sesion),
+):
+    return SolicitudCorreccionServicio(db).aprobar(
+        solicitud_id, token_payload.get("roles", []), token_payload.get("persona_id"),
+    )
+
+
+@router.post(
+    "/solicitudes-correccion/{solicitud_id}/rechazar",
+    response_model=SolicitudCorreccionResponseDTO,
+)
+async def rechazar_solicitud_correccion(
+    solicitud_id: int,
+    datos: SolicitudCorreccionRechazoDTO,
+    token_payload: dict = Depends(GestorPermisos(["ADMINISTRADOR"])),
+    db: Session = Depends(obtener_sesion),
+):
+    return SolicitudCorreccionServicio(db).rechazar(
+        solicitud_id, datos.motivo, token_payload.get("roles", []), token_payload.get("persona_id"),
+    )
+
+
 # Corrección explícita de UNA Asistencia ya cerrada (issue #389, slice 2):
 # camino DISTINTO de `registrar_asistencia`, exclusivo de ADMINISTRADOR y
 # con traza obligatoria.
@@ -262,7 +356,7 @@ async def historial_asistencia_persona(
         persona_id_solicitante=token_payload.get("persona_id"),
         roles_solicitante=token_payload.get("roles", []),
         roles_privilegiados=ADMINISTRADOR_O_ENTRENADOR,
-        mensaje="No puede consultar el historial de asistencia de otra persona",
+        mensaje="No puedes consultar el historial de asistencia de otra persona",
     )
     items, total = AsistenciaServicio(db).historial_por_persona(persona_id, skip=skip, limit=limit)
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
@@ -288,14 +382,17 @@ async def reporte_asistencia(
 ):
     _validar_rango_de_fechas(fecha_inicio, fecha_fin)
     servicio = AsistenciaServicio(db)
+    total = servicio.contar_reporte(
+        horario_id=horario_id, persona_id=persona_id,
+        fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
+    )
+    # PERF-11: el BFF recorre todas las páginas para la vista previa, así que
+    # el tope tiene que valer también acá, no solo en el PDF.
+    exigir_tope_reporte(total, LIMITE_MAXIMO_REPORTE_ASISTENCIAS, "asistencias")
     items = servicio.generar_reporte(
         horario_id=horario_id, persona_id=persona_id,
         fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
         skip=skip, limit=limit,
-    )
-    total = servicio.contar_reporte(
-        horario_id=horario_id, persona_id=persona_id,
-        fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
     )
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
@@ -315,7 +412,7 @@ async def reporte_asistencia(
 # descargado entero, no un listado paginado -- así que sin este guardarraíl
 # un rango sin filtrar se truncaba en silencio a las primeras N filas. Mismo
 # patrón que `LIMITE_MAXIMO_REPORTE_PAGOS` en `membresias_pagos_router.py`.
-LIMITE_MAXIMO_REPORTE_ASISTENCIAS = 10000
+LIMITE_MAXIMO_REPORTE_ASISTENCIAS = LIMITE_MAXIMO_FILAS_REPORTE
 
 
 @router.get(
@@ -352,7 +449,7 @@ async def reporte_asistencia_pdf(
     ]
     pdf_bytes = await run_in_threadpool(
         generar_reporte_pdf,
-        titulo="Reporte de Asistencia",
+        titulo="Informe de Asistencia",
         columnas=_COLUMNAS_ASISTENCIA_PDF,
         filas=filas,
     )
@@ -385,6 +482,7 @@ async def listar_ultimas_listas(
 
 
 # --- Asignación directa Alumno ↔ Categoria (todos sus horarios) ------------
+# QA4 ENT-N1: solo ADMINISTRADOR asigna/desasigna; el ENTRENADOR recibe 403.
 # El club inscribe por mes completo, nunca por día suelto: `horario_id` en el
 # body solo ancla la categoria, y el servicio inscribe al alumno en TODOS los
 # horarios vigentes de esa categoria en una única transacción. Por eso la
@@ -393,7 +491,7 @@ async def listar_ultimas_listas(
     "/asignar-alumno",
     response_model=AsignacionAlumnoHorarioResponseDTO,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
 )
 async def asignar_alumno_a_horario(
     datos: AlumnoHorarioCreateDTO, db: Session = Depends(obtener_sesion)
@@ -404,7 +502,7 @@ async def asignar_alumno_a_horario(
 @router.delete(
     "/desasignar-alumno",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
 )
 async def desasignar_alumno_de_horario(
     persona_id: int = Query(...),
@@ -457,6 +555,23 @@ async def listar_roster_de_todos_los_horarios(db: Session = Depends(obtener_sesi
     return AsistenciaServicio(db).listar_roster_de_todos_los_horarios()
 
 
+# QA4 PERF-01: el conteo "N inscritos" no necesita los alumnos. Este endpoint
+# devuelve `[{horarioId, inscritos}]` (~1 KB) en lugar del roster completo
+# (~500 KB); las pantallas que sí muestran alumnos piden el detalle del
+# horario elegido. Mismo gate que el roster completo.
+@router.get(
+    "/horarios/conteos",
+    response_model=List[ConteoHorarioDTO],
+    response_model_exclude_none=True,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
+)
+async def contar_inscritos_por_horario(
+    incluir_personas: bool = Query(default=False),
+    db: Session = Depends(obtener_sesion),
+):
+    return AsistenciaServicio(db).contar_inscritos_por_horario(incluir_personas)
+
+
 # Los horarios asignados a un alumno dicen dónde está y a qué hora. El portal
 # del alumno/representante lo consume con el `persona_id` seleccionado (ver
 # `frontend/src/app/student/page.tsx`), que siempre es el propio o el de un
@@ -476,6 +591,6 @@ async def listar_horarios_por_alumno(
         persona_id_solicitante=token_payload.get("persona_id"),
         roles_solicitante=token_payload.get("roles", []),
         roles_privilegiados=ADMINISTRADOR_O_ENTRENADOR,
-        mensaje="No puede consultar los horarios de otro alumno",
+        mensaje="No puedes consultar los horarios de otro jugador",
     )
     return AsistenciaServicio(db).listar_horarios_por_alumno(persona_id)

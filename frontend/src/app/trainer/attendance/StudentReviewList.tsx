@@ -6,7 +6,6 @@ import { ATTENDANCE_LABELS, isReviewed, type SessionStudent } from "./attendance
 export const STATE_DISPLAY_ORDER: EstadoAsistencia[] = [
   "present",
   "late",
-  "justified",
   "sick",
   "competition",
   "absent",
@@ -77,7 +76,7 @@ export default function StudentReviewList({
   const twoColumns = students.length > TWO_COLUMN_FROM;
   return (
     <ul
-      aria-label="Asistencia por alumno"
+      aria-label="Asistencia por jugador"
       className={`grid content-start gap-2 ${twoColumns ? "lg:grid-cols-2" : ""} ${className}`}
     >
       {students.map((student) => {

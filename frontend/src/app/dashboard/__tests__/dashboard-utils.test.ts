@@ -24,7 +24,6 @@ function buildStats(overrides: Partial<AttendanceDayStats> = {}): AttendanceDayS
     totalPresent: 0,
     totalAbsent: 0,
     totalLate: 0,
-    totalJustified: 0,
     totalSick: 0,
     totalCompetition: 0,
     totalUnknown: 0,
@@ -38,20 +37,19 @@ function buildStats(overrides: Partial<AttendanceDayStats> = {}): AttendanceDayS
 // ---------------------------------------------------------------------------
 
 describe("buildAttendanceStatusSegments", () => {
-  it("computes rounded percentages against the total record count, in present/late/justified/sick/competition/absent order", () => {
+  it("computes rounded percentages against the total record count, in present/late/sick/competition/absent order", () => {
     const stats = buildStats({
       totalPresent: 50,
       totalLate: 20,
-      totalJustified: 10,
-      totalSick: 10,
+      totalSick: 20,
       totalCompetition: 5,
       totalAbsent: 5,
       totalStudents: 100,
     });
     const segments = buildAttendanceStatusSegments(stats);
-    expect(segments.map((s) => s.estado)).toEqual(["present", "late", "justified", "sick", "competition", "absent"]);
-    expect(segments.map((s) => s.percentage)).toEqual([50, 20, 10, 10, 5, 5]);
-    expect(segments.map((s) => s.value)).toEqual([50, 20, 10, 10, 5, 5]);
+    expect(segments.map((s) => s.estado)).toEqual(["present", "late", "sick", "competition", "absent"]);
+    expect(segments.map((s) => s.percentage)).toEqual([50, 20, 20, 5, 5]);
+    expect(segments.map((s) => s.value)).toEqual([50, 20, 20, 5, 5]);
   });
 
   it("returns 0% for every segment when there are no records at all (never divides by zero)", () => {
@@ -66,9 +64,9 @@ describe("buildAttendanceStatusSegments", () => {
     }
   });
 
-  it("includes a segment even when its count is zero, so the legend always shows all 6 states", () => {
+  it("includes a segment even when its count is zero, so the legend always shows all 5 states", () => {
     const segments = buildAttendanceStatusSegments(buildStats({ totalPresent: 5, totalStudents: 5 }));
-    expect(segments).toHaveLength(6);
+    expect(segments).toHaveLength(5);
     expect(segments.find((s) => s.estado === "absent")?.value).toBe(0);
   });
 
@@ -234,8 +232,40 @@ describe("buildFourWeekAttendance", () => {
       NOW,
     );
     expect(result.bars[3].ratePercent).toBe(50);
-    expect(result.ratePercent).toBe(50);
+    expect(result.ratePercent).toBe(75);
+    expect(result.attended).toBe(3);
     expect(result.total).toBe(4);
+  });
+
+  it("counts tardanza as attendance, like the Asistencias screen (ADMA-34)", () => {
+    const result = buildFourWeekAttendance(
+      [
+        buildRecord({ id: "1", fecha: "2026-07-23", estado: "present" }),
+        buildRecord({ id: "2", fecha: "2026-07-23", estado: "late" }),
+        buildRecord({ id: "3", fecha: "2026-07-23", estado: "absent" }),
+        buildRecord({ id: "4", fecha: "2026-07-23", estado: "absent" }),
+      ],
+      NOW,
+    );
+    expect(result.attended).toBe(2);
+    expect(result.bars[3].attended).toBe(2);
+    expect(result.bars[3].ratePercent).toBe(50);
+    expect(result.ratePercent).toBe(50);
+  });
+
+  it("keeps enfermo and competencia in the total but never as attendance (C1 semantics)", () => {
+    const result = buildFourWeekAttendance(
+      [
+        buildRecord({ id: "1", fecha: "2026-07-23", estado: "present" }),
+        buildRecord({ id: "2", fecha: "2026-07-23", estado: "sick" }),
+        buildRecord({ id: "3", fecha: "2026-07-23", estado: "competition" }),
+        buildRecord({ id: "4", fecha: "2026-07-23", estado: "late" }),
+      ],
+      NOW,
+    );
+    expect(result.total).toBe(4);
+    expect(result.attended).toBe(2);
+    expect(result.ratePercent).toBe(50);
   });
 
   it("never produces NaN for a week with no records", () => {
@@ -342,7 +372,7 @@ describe("buildActivityFeed", () => {
     expect(feed[0]).toMatchObject({
       kind: "attendance-session",
       subject: "Lunes 15:00 — 16:00",
-      detail: "lista registrada · 3 estudiantes",
+      detail: "lista registrada · 3 jugadores",
     });
   });
 

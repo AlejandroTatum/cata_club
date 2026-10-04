@@ -17,6 +17,6 @@ import { metadata } from "@/app/login/activacion/layout";
 
 describe("activacion layout metadata", () => {
   it("sets an absolute, non-admin title naming the club", () => {
-    expect(metadata.title).toEqual({ absolute: "Verifique su cuenta — Cata Club" });
+    expect(metadata.title).toEqual({ absolute: "Verifica tu cuenta — Cata Club" });
   });
 });

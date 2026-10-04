@@ -1,7 +1,8 @@
 /**
- * Shared "usted" register word lists — origin: issue #340. `/profile` was
- * tuteando/voseando ("Revisá", "mantené", "tu cuenta") while every other
- * screen the audit checked uses "usted" consistently.
+ * Shared register word lists — origin: issue #340, flipped by QA4 S6 / W3-6.
+ * The app speaks «tú» ("Inscríbete", "tu cuenta") everywhere, never voseo
+ * ("Revisá", "mantené") and never "usted" ("Inscríbase", "su cuenta" as a
+ * form of address). The lock bans voseo and "usted" shapes; tú forms pass.
  *
  * JS's `\b` treats accented letters as non-word characters, so `\brevisá\b`
  * silently fails to match "Revisá " — there is no word/non-word transition
@@ -9,18 +10,10 @@
  * explicit Latin-letter class (including accents) is the boundary that
  * actually works here.
  *
- * The same follow-up audit that widened the check from one screen to the
- * whole app also found this exact list undercounted two shapes that don't
- * share the voseo stress pattern: "te" (a pronoun that, like "tú"/"vos",
- * never belongs to "usted") and specific tú-only conjugations ("entras",
- * "estás", "inténtalo") that read like ordinary prose everywhere else but
- * are unambiguous once you know "usted" would take the impersonal/3rd-person
- * form instead ("entra", "está", "inténtelo").
- *
  * Both copy locks build their regex from these same lists — the per-role
  * render check in ProfilePage.test.tsx and the app-wide source sweep in
  * usted-register.test.ts — so there is exactly one place that decides what
- * counts as voseo/tuteo.
+ * counts as a register violation.
  */
 
 /** Common voseo imperatives (2nd person singular, stressed final vowel). */
@@ -57,21 +50,50 @@ export const VOSEO_IMPERATIVOS = [
   "vení", "venís",
 ];
 
-/**
- * Tú-specific forms that don't carry the voseo stress pattern above but are
- * still unambiguous tuteo markers: the trailing "-s" (tú indicative) or the
- * attached clitic (tú imperative) rule out an "usted"/impersonal 3rd-person
- * reading, which is why these are safe as literal words and not just
- * suffix rules — "entra"/"está"/"inténtelo" (no "-s", no clitic in the tú
- * shape) are the correct "usted" forms and must NOT be on this list.
- */
-export const TUTEO_CONJUGACIONES = ["entras", "estás", "inténtalo"];
+/** Voseo pronoun — "tú"/"tu"/"tus"/"te" are the app's register and are NOT banned. */
+export const VOSEO_PRONOMBRES = ["vos"];
 
 /**
- * Pronouns that belong to "tú"/"vos" and never to "usted" (which uses
- * "su"/"sus"/"lo"/"la"/"le" instead).
+ * "Usted" address forms. "su"/"sus" are deliberately NOT listed: they are
+ * also the ordinary third-person possessive ("su equipo", "sus datos").
  */
-export const PRONOMBRES = ["vos", "tú", "tu", "tus", "te"];
+export const USTED_PRONOMBRES = ["usted", "ustedes"];
+
+/**
+ * Usted imperatives (subjunctive-shaped) this product's copy gives
+ * instructions with — the tú counterpart is "Inscríbete", "Ingresa", ….
+ * Only forms whose tú shape differs; "cree" is excluded because it is
+ * also the ordinary indicative "cree que" ("believes").
+ *
+ * These same shapes are ordinary third-person subjunctives in tú copy
+ * ("para que el club revise", "cuando se complete"), and a few collide with
+ * English code ("use", "complete"). So they only count in an IMPERATIVE
+ * POSITION — see `IMPERATIVE_POSITION` — never mid-clause.
+ */
+export const USTED_IMPERATIVOS = [
+  "inscríbase", "ingrese", "revise", "intente", "inténtelo", "elija",
+  "seleccione", "escriba", "complete", "verifique", "comuníquese", "corrija",
+  "adjunte", "registre", "espere", "consulte", "pruebe", "vuelva",
+  "pida", "contacte", "confirme", "acepte", "cambie", "use", "suba",
+  "descargue", "cargue", "envíe", "guarde", "actualice",
+  "cancele", "reduzca", "busque", "agregue", "recuerde",
+  "presione", "continúe", "regístrese",
+  "inicie", "elimine", "abra", "valide", "indique",
+  "evite", "mezcle", "gestione", "reasigne",
+];
+
+/**
+ * Imperative + clitic ("alárguela", "apruébelas", "revíselo"): the stressed
+ * vowel gains an accent, so a bare "-ela"/"-elo" suffix rule would also hit
+ * "escuela" and "vela". Listed by hand instead. The clitic makes these
+ * unambiguous (never a subjunctive, never English), so they match anywhere.
+ */
+export const USTED_IMPERATIVOS_CON_CLITICO = [
+  "alárguela", "alárguelo", "apruébela", "apruébelas", "apruébelo", "apruébelos",
+  "revísela", "revíselo", "corríjala", "corríjalo", "guárdela", "guárdelo",
+  "verifíquela", "verifíquelo", "cámbiela", "cámbielo", "elimínela", "elimínelo",
+  "descárguela", "descárguelo", "envíela", "envíelo", "pídala", "pídalo",
+];
 
 const LETTER = "a-záéíóúñA-ZÁÉÍÓÚÑ";
 
@@ -82,6 +104,19 @@ const LETTER = "a-záéíóúñA-ZÁÉÍÓÚÑ";
  * results when the same instance is reused across multiple input strings.
  */
 export function buildUstedRegisterRegex(): RegExp {
-  const words = [...VOSEO_IMPERATIVOS, ...TUTEO_CONJUGACIONES, ...PRONOMBRES];
-  return new RegExp(`(?<![${LETTER}])(${words.join("|")})(?![${LETTER}])`, "giu");
+  const always = [
+    ...VOSEO_IMPERATIVOS,
+    ...VOSEO_PRONOMBRES,
+    ...USTED_PRONOMBRES,
+    ...USTED_IMPERATIVOS_CON_CLITICO,
+  ];
+  // A bare usted imperative opens the string or a sentence/clause, follows
+  // «por favor», or continues a coordinated instruction («alárguela o mezcle»).
+  // "para que el club revise" / "cuando se complete" have a subject or
+  // «se» in front and so stay out.
+  const imperative = `(?<=(?:^|[.!?¿¡:;,"'\`>()\\n]|\\b(?:y|o|u|e|favor|luego|después|también))\\s*)(?:${USTED_IMPERATIVOS.join("|")})`;
+  return new RegExp(
+    `(?<![${LETTER}])(${always.join("|")}|${imperative})(?![${LETTER}])`,
+    "giu",
+  );
 }

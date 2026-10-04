@@ -91,7 +91,7 @@ export function ActivityListHeader({
     <div className={cn("flex items-center gap-3 border-b border-line py-4", GUTTER)}>
       {/* La regla de Graduate: a card title is the 20px display step. This
           was 15px Barlow bold, which is the BODY step — the same weight the
-          rows underneath it use for a person's name, so the header did not
+          rows underneath it apply to a person's name, so the header did not
           outrank its own list. */}
       <h2 className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">
         {title}
