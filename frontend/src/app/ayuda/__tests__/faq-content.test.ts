@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { CLUB_PROFILE, FAQ_SECTIONS } from "../faq-content";
+import { CLUB_PROFILE, FAQ_SECTIONS, faqSectionsFor } from "../faq-content";
 import { buildUstedRegisterRegex } from "@/lib/__tests__/usted-register-lock";
 
 describe("CLUB_PROFILE", () => {
@@ -52,6 +52,27 @@ describe("FAQ_SECTIONS", () => {
       "Si eres entrenador",
       "Si eres administrador",
     ]);
+  });
+
+  it("declares each section's audience in the data, not by its title (#1581)", () => {
+    expect(FAQ_SECTIONS.map((s) => [s.title, s.audience])).toEqual([
+      ["Para empezar", "publica"],
+      ["Si eres jugador o representante", "familia"],
+      ["Si eres entrenador", "entrenador"],
+      ["Si eres administrador", "administrador"],
+    ]);
+  });
+
+  it("maps each role to its own section plus the public one (#1581)", () => {
+    const titles = (role: Parameters<typeof faqSectionsFor>[0]): string[] =>
+      faqSectionsFor(role).map((s) => s.title);
+
+    expect(titles(undefined)).toEqual(["Para empezar"]);
+    expect(titles("estudiante")).toEqual(titles("representante"));
+    expect(titles("estudiante")).toEqual(["Para empezar", "Si eres jugador o representante"]);
+    expect(titles("trainer")).toEqual(["Para empezar", "Si eres entrenador"]);
+    expect(titles("admin")).toEqual(["Para empezar", "Si eres administrador"]);
+    expect(titles("unsupported")).toEqual(["Para empezar"]);
   });
 
   it("asks a question in every entry, and answers it", () => {

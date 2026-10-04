@@ -25,7 +25,7 @@ from app.soporte_transversal.configuracion import settings
 def _ficha() -> dict:
     return {
         "tipo_sangre": "O_POSITIVO",
-        "enfermedades": [],
+        "alergias": "Ninguna", "enfermedades": ["Ninguno"],
         "contacto_emergencia": "María Torres",
         "telefono_emergencia": "0991112233",
     }
@@ -67,7 +67,7 @@ def _cuerpo_menor_con_representante(secuencia: int) -> dict:
         },
         # Issue #1138: camino representado -- sin contacto de emergencia
         # propio (se deriva del representante).
-        "ficha_medica": {"tipo_sangre": "O_POSITIVO", "enfermedades": []},
+        "ficha_medica": {"tipo_sangre": "O_POSITIVO", "alergias": "Ninguna", "enfermedades": ["Ninguno"]},
         "acepta_consentimientos": True,
     }
 

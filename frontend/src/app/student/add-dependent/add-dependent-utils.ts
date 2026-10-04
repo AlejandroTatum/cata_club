@@ -14,6 +14,11 @@ import type { RepresentadoCreatePayload } from "@/services/api";
 import type { TipoSangre } from "@/types/domain";
 import { toUserMessage } from "@/lib/error-message";
 import {
+  ALERGIAS_REQUIRED,
+  ENFERMEDADES_REQUIRED,
+  requiredFichaTextError,
+} from "@/lib/ficha-declaration";
+import {
   cedulaRule,
   personNameRule,
   normalizePersonName,
@@ -239,6 +244,9 @@ const FIELD_RULES: Partial<Record<AddDependentField, (d: AddDependentFormData) =
   fechaNacimiento: (d) => studentBirthDateRule(d.fechaNacimiento),
   cedula: (d) => cedulaRule(d.cedula, "La cédula de identidad"),
   tipoSangre: (d) => (isTipoSangre(d.tipoSangre) ? null : "El tipo de sangre es obligatorio."),
+  // Issue #1574: both are required; «Ninguno» is the answer for "none".
+  enfermedades: (d) => requiredFichaTextError(d.enfermedades, ENFERMEDADES_REQUIRED),
+  alergias: (d) => requiredFichaTextError(d.alergias, ALERGIAS_REQUIRED),
 };
 
 const CHILD_FIELDS: AddDependentField[] = [
@@ -250,7 +258,7 @@ const CHILD_FIELDS: AddDependentField[] = [
 
 // Issue #1138: sin contacto de emergencia propio -- se deriva del
 // representante.
-const HEALTH_FIELDS: AddDependentField[] = ["tipoSangre"];
+const HEALTH_FIELDS: AddDependentField[] = ["tipoSangre", "enfermedades", "alergias"];
 
 /** The fields a given step actually renders. */
 export function fieldsForAddDependentStep(step: AddDependentStep): AddDependentField[] {
@@ -280,7 +288,7 @@ export function validateAddDependentFields(
 /** FAM-17: what pressing «Siguiente» on an incomplete step says is missing. */
 export const ADD_DEPENDENT_STEP_BLOCKED_MESSAGE: Record<AddDependentStep, string> = {
   child: "Completa los nombres, apellidos, fecha de nacimiento y cédula para continuar.",
-  health: "Selecciona el tipo de sangre para continuar.",
+  health: "Selecciona el tipo de sangre y completa las enfermedades y alergias (o escribe «Ninguno») para continuar.",
   summary: "",
 };
 
@@ -298,6 +306,8 @@ const FIELD_LABELS: Partial<Record<AddDependentField, string>> = {
   fechaNacimiento: "Fecha de nacimiento",
   cedula: "Cédula de identidad",
   tipoSangre: "Tipo de sangre",
+  enfermedades: "Enfermedades",
+  alergias: "Alergias",
 };
 
 /** Why "Siguiente" is disabled, in one sentence naming the fields. `null` when nothing is missing. */
@@ -387,7 +397,7 @@ export function buildRepresentadoPayload(data: AddDependentFormData): Representa
     fichaMedica: {
       tipoSangre: data.tipoSangre as TipoSangre,
       enfermedades: parseEnfermedades(data.enfermedades),
-      ...(data.alergias.trim() ? { alergias: data.alergias.trim() } : {}),
+      alergias: data.alergias.trim(),
     },
   };
   if (data.institucionId) {

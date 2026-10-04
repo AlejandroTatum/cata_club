@@ -76,8 +76,8 @@ describe("PATCH /api/attendance/records/[id]/correct — input validation", () =
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("returns 400 when motivo is empty", async () => {
-    const response = await PATCH(patchRequest({ estado: "present", motivo: "   " }), { params: Promise.resolve({ id: "501" }) });
+  it("returns 400 when motivo is present but not text", async () => {
+    const response = await PATCH(patchRequest({ estado: "present", motivo: 5 }), { params: Promise.resolve({ id: "501" }) });
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -154,5 +154,50 @@ describe("PATCH /api/attendance/records/[id]/correct — error propagation", () 
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Asistencia no encontrada" }, 404));
     const response = await PATCH(patchRequest(validBody), { params: Promise.resolve({ id: "999" }) });
     expect(response.status).toBe(404);
+  });
+});
+
+describe("PATCH /api/attendance/records/[id]/correct — admin without motivo (issue #1578)", () => {
+  it.each([
+    ["omitted", { estado: "present" }],
+    ["blank", { estado: "present", motivo: "   " }],
+  ])("relays the correction with an empty motivo when it is %s", async (_label, payload) => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({
+        asistencia: {
+          id: 501,
+          fechaEntrenamiento: "2026-07-20",
+          fechaRegistro: "2026-07-20T18:00:00Z",
+          estado: "PRESENTE",
+          justificativo: null,
+          estadoJustificativo: null,
+          personaId: 9,
+          personaNombreCompleto: "Ana López",
+          horarioId: 11,
+          registradoPorId: 3,
+          registradoPorNombre: "Coach Torres",
+        },
+        corregidoPorId: 1,
+        corregidoPorNombre: "Admin Demo",
+        corregidoEn: "2026-08-18T12:00:00Z",
+        motivo: "",
+        estadoAnterior: "AUSENTE",
+      }),
+    );
+
+    const response = await PATCH(patchRequest(payload), { params: Promise.resolve({ id: "501" }) });
+
+    expect(response.status).toBe(200);
+    expect(global.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/asistencias/501/corregir",
+      expect.objectContaining({
+        body: JSON.stringify({
+          estado: "PRESENTE",
+          justificativo: null,
+          estado_justificativo: null,
+          motivo: "",
+        }),
+      }),
+    );
   });
 });

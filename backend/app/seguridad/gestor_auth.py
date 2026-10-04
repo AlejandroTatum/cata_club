@@ -205,16 +205,28 @@ class GestorAutenticacion:
 
     # --- E01-RF003: recuperación de contraseña -------------------------------
     @staticmethod
-    def crear_token_recuperacion(correo: str, version_contrasenia: int, expiracion_minutos: int = 30) -> str:
+    def crear_token_recuperacion(
+        correo: str,
+        version_contrasenia: int,
+        expiracion_minutos: int = 30,
+        proposito: str | None = None,
+    ) -> str:
         """Token de un solo propósito (`type=reset_password`), corta duración
         (30 min por defecto). Incluye la versión actual de la contraseña para
-        invalidar el token tras un restablecimiento exitoso (single-use)."""
+        invalidar el token tras un restablecimiento exitoso (single-use).
+
+        `proposito` (claim `prp`) distingue la invitación de un entrenador
+        (`PROPOSITO_INVITACION_ENTRENADOR`) de una recuperación común: solo
+        quien llega con la invitación prueba el control del correo al fijar su
+        contraseña. Sin `proposito` el token es el de siempre."""
         payload = {
             "sub": correo,
             "type": "reset_password",
             "ver": version_contrasenia,
             "exp": datetime.now(timezone.utc) + timedelta(minutes=expiracion_minutos),
         }
+        if proposito is not None:
+            payload["prp"] = proposito
         return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algoritmo)
 
     @staticmethod

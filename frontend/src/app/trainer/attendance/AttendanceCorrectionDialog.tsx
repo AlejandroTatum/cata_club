@@ -55,8 +55,9 @@ export interface AttendanceCorrectionDialogProps {
   readonly studentName: string;
   readonly estado: EstadoAsistencia;
   readonly onEstadoChange: (estado: EstadoAsistencia) => void;
-  readonly motivo: string;
-  readonly onMotivoChange: (motivo: string) => void;
+  /** Only the trainer's `request` variant asks for a motivo (issue #1578). */
+  readonly motivo?: string;
+  readonly onMotivoChange?: (motivo: string) => void;
   readonly submitting: boolean;
   readonly error: string | null;
   readonly onSubmit: () => void;
@@ -69,7 +70,7 @@ export default function AttendanceCorrectionDialog({
   studentName,
   estado,
   onEstadoChange,
-  motivo,
+  motivo = "",
   onMotivoChange,
   submitting,
   error,
@@ -136,21 +137,23 @@ export default function AttendanceCorrectionDialog({
           ))}
         </div>
 
-        <label className="flex flex-col gap-1">
-          <span className="text-2xs font-bold uppercase text-ink-3">
-            Motivo <span aria-hidden="true" className="text-state-bad">*</span>
-          </span>
-          <textarea
-            rows={2}
-            required
-            value={motivo}
-            onChange={(e) => onMotivoChange(e.target.value.slice(0, MOTIVO_MAX_LENGTH))}
-            maxLength={MOTIVO_MAX_LENGTH}
-            placeholder={copy.placeholder}
-            className="resize-y rounded-ctl border border-line-2 bg-paper px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-3 focus:border-ink-3"
-            disabled={submitting}
-          />
-        </label>
+        {variant === "request" && (
+          <label className="flex flex-col gap-1">
+            <span className="text-2xs font-bold uppercase text-ink-3">
+              Motivo <span aria-hidden="true" className="text-state-bad">*</span>
+            </span>
+            <textarea
+              rows={2}
+              required
+              value={motivo}
+              onChange={(e) => onMotivoChange?.(e.target.value.slice(0, MOTIVO_MAX_LENGTH))}
+              maxLength={MOTIVO_MAX_LENGTH}
+              placeholder={copy.placeholder}
+              className="resize-y rounded-ctl border border-line-2 bg-paper px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-3 focus:border-ink-3"
+              disabled={submitting}
+            />
+          </label>
+        )}
 
         {error && (
           <p role="alert" className="text-xs text-state-bad">

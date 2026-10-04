@@ -95,7 +95,7 @@ export default function StudentFichaPanel({
       <aside
         aria-label="Ficha médica"
         data-testid="ficha-panel-ghost"
-        className="card overflow-hidden p-0 lg:sticky lg:top-4"
+        className="card overflow-hidden p-0"
       >
         <div className="flex items-start gap-3 px-5 py-4 text-ink-3">
           <UserRound size={ICON.lg} strokeWidth={1.5} aria-hidden="true" className="flex-none" />
@@ -131,7 +131,7 @@ export default function StudentFichaPanel({
     <aside
       aria-label="Ficha médica"
       data-testid="ficha-panel"
-      className="card overflow-hidden p-0 lg:sticky lg:top-4"
+      className="card overflow-hidden p-0"
     >
       <div className="flex items-center gap-3 border-b border-line bg-state-bad-bg px-5 py-4">
         <span

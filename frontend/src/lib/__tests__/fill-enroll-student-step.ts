@@ -40,6 +40,8 @@ export function fillEnrollStudentStep(): void {
 
 export function fillEnrollHealthStep(): void {
   fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
+  fireEvent.change(screen.getByLabelText(/^Condiciones de salud/i), { target: { value: "Ninguno" } });
+  fireEvent.change(screen.getByLabelText(/^Alergias/i), { target: { value: "Ninguno" } });
   fireEvent.change(screen.getByLabelText(/nombre del contacto/i), { target: { value: "Ana Martinez" } });
   fireEvent.change(screen.getByLabelText(/teléfono de emergencia/i), { target: { value: "0999888777" } });
 }

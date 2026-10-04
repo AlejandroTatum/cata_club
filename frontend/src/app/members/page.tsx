@@ -65,6 +65,7 @@ import {
   Wallet,
   ChevronRight,
   AlertTriangle,
+  UserPlus,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { fetchMembers, fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
@@ -105,6 +106,8 @@ import IndependizarSection from "./IndependizarSection";
 import { useNativeDialog, NATIVE_DIALOG_WIDE_SHELL_CLASS, NATIVE_DIALOG_BODY_CLASS } from "./useNativeDialog";
 import MedicalRecordDialog from "./MedicalRecordDialog";
 import PaymentsDialog from "./PaymentsDialog";
+import NewTrainerDialog from "./NewTrainerDialog";
+import ResendInvitationSection from "./ResendInvitationSection";
 
 const FILTER_CHIPS: { flag: MemberFilterFlag; label: string }[] = [
   { flag: "all", label: "Todos" },
@@ -785,6 +788,9 @@ function MemberEditDialog({
                     <LinkifiedText text={stateError} />
                   </p>
                 )}
+                {account.accountState === "invitation" && (
+                  <ResendInvitationSection personaId={personaId} trainerName={accountFullName} />
+                )}
               </ModalSection>
 
               <ModalSection
@@ -1129,6 +1135,9 @@ export default function MembersPage(): React.ReactElement {
     accountId: string;
   } | null>(null);
   const [page, setPage] = useState(1);
+  // Issue #1575: the admin's «Nuevo entrenador» form, independent of the
+  // per-account dialogs above.
+  const [newTrainerOpen, setNewTrainerOpen] = useState(false);
 
   const toggleDialog = useCallback((kind: "edit" | "medical" | "payments", accountId: string) => {
     setOpenDialog((prev) => (prev?.kind === kind && prev.accountId === accountId ? null : { kind, accountId }));
@@ -1202,6 +1211,12 @@ export default function MembersPage(): React.ReactElement {
         back={<BackLink href="/dashboard" />}
         title="Miembros"
         subtitle="Las cuentas que pagan y los jugadores que tienen a cargo."
+        actions={
+          <Button variant="primary" onClick={() => setNewTrainerOpen(true)}>
+            <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+            Nuevo entrenador
+          </Button>
+        }
       >
         {error && (
           <ErrorState
@@ -1215,9 +1230,10 @@ export default function MembersPage(): React.ReactElement {
           <div className="grid min-w-0 content-start gap-page">
         {/* Search + filter chips. They used to sit loose on the canvas as two
             unrelated rows; `FilterPanel` frames them and fixes their order.
-            Account creation is intentionally absent: new members go through the
-            public enrollment flow, while this screen remains focused on
-            roles, account status, memberships, and payments. */}
+            Player accounts are intentionally not created here: new members go
+            through the public enrollment flow. The one exception is «Nuevo
+            entrenador» in the page header (issue #1575); the rest of this
+            screen is roles, account status, memberships, and payments. */}
         <FilterPanel
           label="Filtros de miembros"
           search={
@@ -1393,6 +1409,12 @@ export default function MembersPage(): React.ReactElement {
             it with fresh state. Rendering it per row would portal two copies
             into the document, since each account exists twice in the DOM (a
             table row and a mobile card). */}
+        {newTrainerOpen && (
+          <NewTrainerDialog
+            onClose={() => setNewTrainerOpen(false)}
+            onCreated={() => void loadMembers({ silent: true })}
+          />
+        )}
         {editingAccount && (
           <MemberEditDialog
             key={editingAccount.id}

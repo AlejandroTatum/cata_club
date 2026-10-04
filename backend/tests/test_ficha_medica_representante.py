@@ -178,7 +178,10 @@ def test_el_representante_crea_la_ficha_via_patch_si_el_representado_no_tiene(db
             # `telefono_emergencia` desde #643: el upsert CREA una ficha, y una
             # ficha nueva nace completa. Lo que este test mide sigue siendo
             # QUIÉN puede crearla por PATCH, no con qué campos.
-            json={"tipo_sangre": "A_POSITIVO", "telefono_emergencia": "0991112233"},
+            json={
+                "tipo_sangre": "A_POSITIVO", "telefono_emergencia": "0991112233",
+                "alergias": "Ninguna", "enfermedades": ["Ninguno"],
+            },
         )
     app.dependency_overrides.clear()
     assert respuesta.status_code == 200
@@ -304,7 +307,7 @@ def test_el_representante_no_puede_crear_fichas_por_post(db_session, familia):
     with _client_como(db_session, representante.id, ["REPRESENTANTE"]) as c:
         respuesta = c.post(
             "/api/v1/fichas-medicas/",
-            json={"tipo_sangre": "O_POSITIVO", "persona_id": hijo.id, "enfermedades": []},
+            json={"tipo_sangre": "O_POSITIVO", "persona_id": hijo.id, "alergias": "Ninguna", "enfermedades": ["Ninguno"]},
         )
     app.dependency_overrides.clear()
     assert respuesta.status_code == 403

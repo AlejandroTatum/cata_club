@@ -556,10 +556,15 @@ interface WizardTextareaProps {
   required?: boolean;
   icon?: ReactNode;
   rows?: number;
+  error?: string;
+  hint?: string;
+  onBlur?: () => void;
 }
 
 export function WizardTextarea(opts: WizardTextareaProps): ReactElement {
   const fieldId = `${opts.idPrefix}-${opts.field ?? slugifyLabel(opts.label)}`;
+  const messageId = `${fieldId}-message`;
+  const hasError = Boolean(opts.error);
   return (
     <div className="mb-4">
       <label htmlFor={fieldId} className="mb-field block text-sm font-semibold text-ink">
@@ -576,13 +581,21 @@ export function WizardTextarea(opts: WizardTextareaProps): ReactElement {
           id={fieldId}
           value={opts.value}
           onChange={(e) => opts.onChange(e.target.value)}
+          onBlur={opts.onBlur}
           placeholder={opts.placeholder}
           required={opts.required}
           disabled={opts.disabled}
           rows={opts.rows ?? 3}
-          className={`input-field ${opts.icon ? "pl-10" : ""} resize-none`}
+          aria-invalid={hasError || undefined}
+          aria-describedby={opts.error || opts.hint ? messageId : undefined}
+          className={`input-field ${opts.icon ? "pl-10" : ""} resize-none ${hasError ? "border-state-bad" : ""}`}
         />
       </div>
+      {hasError ? (
+        <FieldErrorMessage id={messageId}>{opts.error}</FieldErrorMessage>
+      ) : opts.hint ? (
+        <FieldHintMessage id={messageId}>{opts.hint}</FieldHintMessage>
+      ) : null}
     </div>
   );
 }
