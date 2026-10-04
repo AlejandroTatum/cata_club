@@ -249,7 +249,7 @@ class AsistenciaServicio:
                 avisos.append(
                     f"Este horario se cruza con {otra.label} ({dia_en_castellano(dia)} "
                     f"{otra.hora_inicio:%H:%M}–{otra.hora_fin:%H:%M}). "
-                    "Puedes continuar si es intencional."
+                    "Puede continuar si es intencional."
                 )
         return avisos
 

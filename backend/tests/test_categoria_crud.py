@@ -998,7 +998,7 @@ def test_crear_categoria_con_cruce_avisa_pero_la_crea(db_session):
     assert db_session.get(CategoriaHorario, nueva.codigo) is not None
     assert nueva.advertencias == [
         "Este horario se cruza con Mayores (sábado 06:00–08:00). "
-        "Puedes continuar si es intencional."
+        "Puede continuar si es intencional."
     ]
 
 
