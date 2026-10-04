@@ -374,7 +374,7 @@ describe("MembersPage — Editar member modal", () => {
     expect(within(right).getByRole("heading", { name: "Roles" })).toBeInTheDocument();
     // Each group still declares how it persists.
     expect(within(left).getByText("Sin cambios")).toBeInTheDocument();
-    expect(within(right).getAllByText("Se guarda al instante")).toHaveLength(2);
+    expect(within(right).getAllByText("Se guarda al instante")).toHaveLength(1);
     // Nombres and apellidos share one row from `sm`.
     const nombres = within(dialog).getByLabelText("Nombres");
     expect(nombres.parentElement?.parentElement).toHaveClass("sm:grid-cols-2");
@@ -718,8 +718,19 @@ describe("MembersPage — Editar member modal", () => {
   // other change stays one click (reversible). ADMA-07: an account has exactly
   // one role, so the editor is a single-select — picking a role replaces the
   // current one (quitarRol of the old, then asignarRol of the new).
-  function pickRole(dialog: HTMLElement, name: RegExp): void {
+  // H3: a radio only moves the pending selection; the change is committed by
+  // «Guardar rol» (arrow keys on a native radio group fire the same change).
+  function selectRadio(dialog: HTMLElement, name: RegExp): void {
     fireEvent.click(within(dialog).getByRole("radio", { name }));
+  }
+
+  function saveRole(dialog: HTMLElement): void {
+    fireEvent.click(within(dialog).getByRole("button", { name: /^guardar rol$/i }));
+  }
+
+  function pickRole(dialog: HTMLElement, name: RegExp): void {
+    selectRadio(dialog, name);
+    saveRole(dialog);
   }
 
   function confirmAdmin(dialog: HTMLElement): void {
@@ -819,7 +830,7 @@ describe("MembersPage — Editar member modal", () => {
     expect(within(dialog).getByRole("radio", { name: /admin/i })).not.toBeChecked();
   });
 
-  it("a switch between non-Admin roles replaces the role on a single click, with no confirmation step", async () => {
+  it("a switch between non-Admin roles needs only «Guardar rol», with no Admin confirmation step", async () => {
     mockObtenerRolesDePersona.mockResolvedValue({ roles: ["ENTRENADOR"], activo: true });
     render(
       <ToastProvider>
@@ -836,6 +847,96 @@ describe("MembersPage — Editar member modal", () => {
     expect(mockQuitarRol).toHaveBeenCalledWith(1, "ENTRENADOR");
     expect(within(dialog).getByRole("radio", { name: /alumno/i })).toBeChecked();
     expect(within(dialog).getByRole("radio", { name: /entrenador/i })).not.toBeChecked();
+  });
+
+  it("H3: moving the selection (arrow keys / clicks) never calls the API until «Guardar rol» is used", async () => {
+    mockObtenerRolesDePersona.mockResolvedValue({ roles: ["ENTRENADOR"], activo: true });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const dialog = await openModalAndWaitForRoles(row);
+    const save = within(dialog).getByRole("button", { name: /^guardar rol$/i });
+    expect(save).toBeDisabled();
+
+    // Walk the whole group the way arrow keys do: each step is a change event.
+    selectRadio(dialog, /representante/i);
+    selectRadio(dialog, /alumno/i);
+    selectRadio(dialog, /admin/i);
+
+    expect(mockAsignarRol).not.toHaveBeenCalled();
+    expect(mockQuitarRol).not.toHaveBeenCalled();
+    expect(screen.queryByText(/control total del club/i)).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("radio", { name: /admin/i })).toBeChecked();
+
+    // Coming back to the current role leaves nothing to save.
+    selectRadio(dialog, /entrenador/i);
+    expect(save).toBeDisabled();
+  });
+
+  it("H3: «Guardar rol» commits the pending role exactly once", async () => {
+    mockObtenerRolesDePersona.mockResolvedValue({ roles: ["ENTRENADOR"], activo: true });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const dialog = await openModalAndWaitForRoles(row);
+
+    selectRadio(dialog, /alumno/i);
+    const save = within(dialog).getByRole("button", { name: /^guardar rol$/i });
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
+
+    await waitFor(() => expect(mockAsignarRol).toHaveBeenCalledTimes(1));
+    expect(mockAsignarRol).toHaveBeenCalledWith(1, "ALUMNO");
+    expect(mockQuitarRol).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: /^guardar rol$/i })).toBeDisabled());
+    expect(within(dialog).getByRole("radio", { name: /alumno/i })).toBeChecked();
+  });
+
+  it("H3: a failed save rolls the selection back to the stored role and shows the error", async () => {
+    mockObtenerRolesDePersona.mockResolvedValue({ roles: ["ENTRENADOR"], activo: true });
+    const { ApiClientError } = await import("@/services/api");
+    mockQuitarRol.mockRejectedValueOnce(new ApiClientError("No se puede cambiar el rol ahora.", 400));
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const dialog = await openModalAndWaitForRoles(row);
+
+    pickRole(dialog, /alumno/i);
+
+    await waitFor(() => expect(within(dialog).getByRole("alert")).toHaveTextContent(/no se puede cambiar el rol ahora/i));
+    expect(within(dialog).getByRole("radio", { name: /entrenador/i })).toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: /alumno/i })).not.toBeChecked();
+    expect(mockAsignarRol).not.toHaveBeenCalled();
+  });
+
+  it("H3: when the rollback re-assign also fails the panel shows no role and the error", async () => {
+    mockObtenerRolesDePersona.mockResolvedValue({ roles: ["ENTRENADOR"], activo: true });
+    const { ApiClientError } = await import("@/services/api");
+    mockAsignarRol
+      .mockRejectedValueOnce(new ApiClientError("No se pudo asignar el rol.", 400))
+      .mockRejectedValueOnce(new ApiClientError("Tampoco se pudo restaurar.", 400));
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const dialog = await openModalAndWaitForRoles(row);
+
+    pickRole(dialog, /alumno/i);
+
+    await waitFor(() => expect(within(dialog).getByRole("alert")).toHaveTextContent(/no se pudo asignar el rol/i));
+    expect(mockAsignarRol).toHaveBeenCalledTimes(2);
+    for (const radio of within(dialog).getAllByRole("radio")) expect(radio).not.toBeChecked();
   });
 
   it("picking the role the account already has does nothing", async () => {
@@ -1200,6 +1301,7 @@ describe("MembersPage — Editar member modal", () => {
       expect(screen.getByRole("radio", { name: /admin/i })).not.toBeDisabled();
     });
     fireEvent.click(screen.getByRole("radio", { name: /admin/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^guardar rol$/i }));
     fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "No pudimos conectar. Revise su conexión a internet e intente nuevamente.",
@@ -2382,7 +2484,8 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
     expect(within(datos).getByText("Sin cambios")).toBeInTheDocument();
 
     const roles = within(dialog).getByRole("heading", { name: "Roles" }).parentElement as HTMLElement;
-    expect(within(roles).getByText("Se guarda al instante")).toBeInTheDocument();
+    // H3: roles are committed by an explicit «Guardar rol», not instantly.
+    expect(within(roles).getByText("Sin cambios")).toBeInTheDocument();
   });
 
   it("gives the role switch a visible focus ring on the box that holds focus", async () => {

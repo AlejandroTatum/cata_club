@@ -639,6 +639,20 @@ function MemberEditDialog({
   // grants it; picking anything else while holding Admin revokes it.
   const [pendingRole, setPendingRole] = useState<BackendTipoRol | null>(null);
   const grantingAdmin = pendingRole === "ADMINISTRADOR";
+  // H3: the radios only move this pending choice. Native radio groups change
+  // selection on arrow keys, so committing from the change event silently
+  // re-roled an account while a keyboard user was just moving through the
+  // options. The change is committed only by «Guardar rol».
+  const [draftRole, setDraftRole] = useState<BackendTipoRol | null>(null);
+  const shownRole = draftRole ?? roles[0];
+  // A legacy multi-role account counts as different from any single pick.
+  const roleDirty = draftRole !== null && !(roles.length === 1 && roles[0] === draftRole);
+  const commitRole = async (role: BackendTipoRol): Promise<void> => {
+    // On success `roles` now equals the pick; on failure the hook rolled
+    // `roles` back and the error is shown. Either way the draft is spent.
+    await selectRole(role);
+    setDraftRole(null);
+  };
 
   // Native <dialog> shown via showModal(): the browser traps Tab focus and
   // renders the ::backdrop for us, so no manual focus trap is needed (unlike
@@ -775,7 +789,8 @@ function MemberEditDialog({
 
               <ModalSection
                 title="Roles"
-                saveMode="instant"
+                saveMode="manual"
+                dirty={roleDirty}
                 icon={
                   <ShieldCheck size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
                 }
@@ -793,7 +808,7 @@ function MemberEditDialog({
                     className="grid grid-cols-2 gap-2"
                   >
                     {ALL_BACKEND_ROLES.map((role) => {
-                      const selected = roles[0] === role;
+                      const selected = shownRole === role;
                       const isLoading = roleLoading === role;
                       const RoleIcon = ROLE_ICONS[role];
                       return (
@@ -834,16 +849,7 @@ function MemberEditDialog({
                             type="radio"
                             name={`rol-${account.id}`}
                             checked={selected}
-                            onChange={() => {
-                              // Granting or revoking ADMINISTRADOR is a
-                              // privilege change, not a label — it needs an
-                              // explicit stop naming the effect (issue #314).
-                              if (role === "ADMINISTRADOR" || roles.includes("ADMINISTRADOR")) {
-                                setPendingRole(role);
-                                return;
-                              }
-                              void selectRole(role);
-                            }}
+                            onChange={() => setDraftRole(role)}
                             disabled={roleLoading !== null || !rolesReady}
                             className="sr-only"
                           />
@@ -861,6 +867,28 @@ function MemberEditDialog({
                         </label>
                       );
                     })}
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      disabled={!roleDirty || roleLoading !== null || !rolesReady}
+                      onClick={() => {
+                        if (draftRole === null) return;
+                        // Granting or revoking ADMINISTRADOR is a
+                        // privilege change, not a label — it needs an
+                        // explicit stop naming the effect (issue #314).
+                        if (draftRole === "ADMINISTRADOR" || roles.includes("ADMINISTRADOR")) {
+                          setPendingRole(draftRole);
+                          return;
+                        }
+                        void commitRole(draftRole);
+                      }}
+                    >
+                      {roleLoading !== null ? "Guardando…" : "Guardar rol"}
+                    </Button>
+                    <p className="text-xs text-ink-3">
+                      Elija un rol y pulse «Guardar rol» para aplicarlo.
+                    </p>
                   </div>
                   {roleError && (
                     <p className="mt-2 text-xs text-state-bad" role="alert">
@@ -933,9 +961,12 @@ function MemberEditDialog({
               onConfirm={() => {
                 const role = pendingRole;
                 setPendingRole(null);
-                if (role) void selectRole(role);
+                if (role) void commitRole(role);
               }}
-              onCancel={() => setPendingRole(null)}
+              onCancel={() => {
+                setPendingRole(null);
+                setDraftRole(null);
+              }}
             />
           </dialog>,
           document.body,
