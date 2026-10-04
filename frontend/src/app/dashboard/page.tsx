@@ -61,6 +61,7 @@ import {
   StackedBars,
   Timeline,
 } from "@/components/charts";
+import AttentionStrip, { type AttentionItem } from "@/components/dashboard/AttentionStrip";
 import CompactEmpty from "@/components/dashboard/CompactEmpty";
 import DashboardSection from "@/components/dashboard/DashboardSection";
 import KpiTile from "@/components/dashboard/KpiTile";
@@ -118,6 +119,13 @@ const QUEUE_LIMIT = 4;
 
 /** Weeks the attendance-by-state chart spans. */
 const CHART_WEEKS = 6;
+
+/** The action label of each «Urgente» row, keyed like `todoItems`. */
+const URGENT_CTA: Record<string, string> = {
+  payments: "Revisar pagos",
+  attendance: "Ver listas",
+  members: "Ver alumnos",
+};
 
 const ACTIVITY_FILTERS: { value: ActivityFilter; label: string }[] = [
   { value: "all", label: "Todo" },
@@ -339,6 +347,19 @@ export default function DashboardPage(): React.ReactElement {
     },
   ];
 
+  // ADMA-27: what the day asks of the administrator, for the top of a phone
+  // screen. Same counts and order as «Qué hacer hoy»; rows at 0 are dropped.
+  const urgentItems: AttentionItem[] = todoItems
+    .filter((item) => item.count > 0)
+    .map((item) => ({
+      id: item.key,
+      count: item.count,
+      label: item.label,
+      tone: item.tone,
+      href: item.href,
+      cta: URGENT_CTA[item.key],
+    }));
+
   const pendingPayments = stats?.pendingPayments ?? 0;
   const overAWeek = countPaymentsWaitingOverAWeek(payments);
   const activeMemberships = stats?.activeMemberships ?? 0;
@@ -374,7 +395,7 @@ export default function DashboardPage(): React.ReactElement {
     key: bar.startIso,
     label: index === all.length - 1 ? "Act." : `S-${all.length - 1 - index}`,
     value: bar.ratePercent,
-    detail: `Semana del ${formatDate(bar.startIso).slice(0, 5)}: ${bar.ratePercent}% · ${bar.present} de ${bar.total}`,
+    detail: `Semana del ${formatDate(bar.startIso).slice(0, 5)}: ${bar.ratePercent}% · ${bar.attended} de ${bar.total}`,
   }));
 
   return (
@@ -400,6 +421,20 @@ export default function DashboardPage(): React.ReactElement {
           <LoadingState label="Cargando estadísticas…" />
         ) : (
           <>
+            {/*
+              Phones only (ADMA-27): the urgent items lead, ahead of the day's
+              timeline. On a desktop the same facts sit in the hero's chips row
+              and «Qué hacer hoy», so this block stays out.
+            */}
+            {urgentItems.length > 0 && (
+              <div data-testid="urgent-first" className="lg:hidden">
+                <AttentionStrip
+                  title="Urgente"
+                  items={urgentItems}
+                  allClearMessage="Todo al día."
+                />
+              </div>
+            )}
             {/*
               The hero. The timeline is the day; the chips under it are what the
               day asks of the administrator. With nothing to do the chips row
@@ -453,7 +488,11 @@ export default function DashboardPage(): React.ReactElement {
 
                 <div
                   data-testid="attention-chips"
-                  className="flex flex-col gap-3 border-t border-line pt-4"
+                  className={cn(
+                    "flex flex-col gap-3 border-t border-line pt-4",
+                    // The phone's «Urgente» block already says it.
+                    urgentItems.length > 0 && "max-lg:hidden",
+                  )}
                 >
                   <PaymentsAction
                     count={pendingPayments}
@@ -575,7 +614,7 @@ export default function DashboardPage(): React.ReactElement {
                 caption={
                   recordsStatus === "loading"
                     ? "Calculando…"
-                    : `${fourWeeks.present} de ${fourWeeks.total} presentes`
+                    : `${fourWeeks.attended} de ${fourWeeks.total} registros`
                 }
                 href="/attendance"
               />

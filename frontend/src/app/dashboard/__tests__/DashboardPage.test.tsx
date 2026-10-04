@@ -434,7 +434,7 @@ describe("DashboardPage — QA4 fixes", () => {
     const tile = (await screen.findByText("Asistencia · 4 semanas")).closest("[data-testid=kpi-tile]") as HTMLElement;
     expect(within(tile).getByText("—")).toBeInTheDocument();
     expect(within(tile).queryByText("0")).not.toBeInTheDocument();
-    expect(within(tile).queryByText(/0 de 0 presentes/)).not.toBeInTheDocument();
+    expect(within(tile).queryByText(/0 de 0 registros/)).not.toBeInTheDocument();
   });
 
   it("reserves the height of the activity block while it loads (PERF-06)", async () => {
@@ -443,6 +443,20 @@ describe("DashboardPage — QA4 fixes", () => {
 
     const feed = await screen.findByTestId("activity-feed");
     expect(within(feed).getByTestId("section-skeleton")).toBeInTheDocument();
+  });
+
+  it("counts tardanza as attendance and labels the figure as records (ADMA-34)", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([
+      todayRecord("1"),
+      { ...todayRecord("2"), estado: "late" },
+      { ...todayRecord("3"), estado: "absent" },
+      { ...todayRecord("4"), estado: "sick" },
+    ]);
+    render(<DashboardPage />);
+
+    const tile = (await screen.findByText("Asistencia · 4 semanas")).closest("[data-testid=kpi-tile]") as HTMLElement;
+    expect(await within(tile).findByText("2 de 4 registros")).toBeInTheDocument();
+    expect(within(tile).getByText("50")).toBeInTheDocument();
   });
 
   it("describes the card for members without a plan as what it counts (ADMA-14)", async () => {
@@ -458,5 +472,27 @@ describe("DashboardPage — QA4 fixes", () => {
 
     expect(await screen.findByText("40 alumnos · 4 representantes y personal")).toBeInTheDocument();
     expect(screen.queryByText(/staff/i)).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// QA4 ADMA-27 — on a phone the urgent items lead the page
+// ---------------------------------------------------------------------------
+
+describe("DashboardPage — urgent items first on small screens (ADMA-27)", () => {
+  it("renders a phone-only «Urgente» block before the day's timeline, in order", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([pendingPayment("a", 1)]);
+    mockFetchDashboardStats.mockResolvedValue(statsFixture({ personasSinMembresia: 5 }));
+    render(<DashboardPage />);
+
+    const urgent = await screen.findByTestId("urgent-first");
+    expect(urgent).toHaveClass("lg:hidden");
+    expect(within(urgent).getByText("Pagos por validar")).toBeInTheDocument();
+    expect(within(urgent).getByText("Alumnos sin membresía activa")).toBeInTheDocument();
+    const links = within(urgent).getAllByRole("link").map((a) => a.getAttribute("href"));
+    expect(links).toEqual(["/payments", "/members"]);
+
+    const hero = screen.getByTestId("today-hero");
+    expect(urgent.compareDocumentPosition(hero) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
