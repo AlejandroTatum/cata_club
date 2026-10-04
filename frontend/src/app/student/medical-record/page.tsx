@@ -65,11 +65,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { fetchStudentPortal } from "@/services/api";
 import type { StudentPortalSummary } from "@/services/api";
-import { BackLink, EmptyState, ErrorState, InfoPanel, LoadingState, buttonClasses } from "@/components/ui";
+import { BackLink, EmptyState, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
 import MedicalRecordEditor from "@/app/members/MedicalRecordEditor";
 import ManagedStudentPicker, { useManagedProfiles } from "../ManagedStudentPicker";
 import { firstNameOf, isMinor } from "../student-utils";
-import { Stethoscope } from "lucide-react";
+import { ChevronDown, Stethoscope } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
 
@@ -83,18 +83,30 @@ type LoadState =
   | { status: "ready"; data: StudentPortalSummary };
 
 /**
- * The guide in the editor's rail, under the emergency card: it says how to
- * use the form, not what is in it.
+ * The guide under the editor's cards: it says how to use the form, not what is
+ * in it. Collapsed — a family that already knows the form should not scroll
+ * past it, and one that does not is one tap from it.
  */
 function MedicalRecordGuide(): React.ReactElement {
   return (
-    <InfoPanel title="Cómo completar la ficha médica" as="div">
-      <ol className="grid list-decimal gap-y-field pl-4">
+    <details className="card group">
+      <summary className="flex min-h-[44px] cursor-pointer items-center justify-between gap-3 px-[18px] py-2 [&::-webkit-details-marker]:hidden">
+        <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
+          Cómo completar la ficha médica
+        </h2>
+        <ChevronDown
+          size={ICON.sm}
+          strokeWidth={1.75}
+          aria-hidden="true"
+          className="flex-none text-ink-3-strong transition-transform group-open:rotate-180 motion-reduce:transition-none"
+        />
+      </summary>
+      <ol className="grid list-decimal gap-y-field px-[18px] pb-[18px] pl-8 text-sm text-ink-2">
         <li>El tipo de sangre y el teléfono de emergencia son obligatorios.</li>
         <li>Al guardar se reemplaza la ficha completa: revisa alergias y enfermedades antes.</li>
         <li>La tarjeta de emergencia se actualiza con cada cambio guardado.</li>
       </ol>
-    </InfoPanel>
+    </details>
   );
 }
 
@@ -176,7 +188,7 @@ function RepresentanteMedicalRecordView({
         studentName={studentName}
         withEmergencyCard
         viewerIsOwner={false}
-        railFooter={<MedicalRecordGuide />}
+        formFooter={<MedicalRecordGuide />}
       />
     </>
   );
@@ -279,7 +291,7 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
             personaId={Number(state.data.self.personaId)}
             studentName={firstNameOf(state.data.self.nombres)}
             withEmergencyCard
-            railFooter={<MedicalRecordGuide />}
+            formFooter={<MedicalRecordGuide />}
           />
         </>
       )}

@@ -6,7 +6,7 @@ import { Loader2, Save, CheckCircle2, Stethoscope, Pencil, X } from "lucide-reac
 import { ICON } from "@/lib/icon-size";
 import { fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
-import { Badge, Button, DataBox, ErrorState, LoadingState, PAGE_RAIL } from "@/components/ui";
+import { Badge, Button, DataBox, ErrorState, LoadingState, PAGE_RAIL, cn } from "@/components/ui";
 import EmergencyCard, { type EmergencyCardValues } from "./EmergencyCard";
 import type { FichaMedicaEditable, TipoSangre } from "@/types/domain";
 import { toUserMessage, isNotFound } from "@/lib/error-message";
@@ -112,11 +112,13 @@ function FilaLectura({
   );
 }
 
-function GroupHeading({ children, className = "" }: { children: React.ReactNode; className?: string }): React.ReactElement {
+/** One group of the page-mode form: a card with the health blue on its top edge. */
+function RecordSection({ title, children }: { title: string; children: ReactNode }): React.ReactElement {
   return (
-    <h4 className={`border-b border-line pb-1.5 text-2xs font-bold uppercase tracking-caps text-ink-3-strong ${className}`}>
-      {children}
-    </h4>
+    <section className="rounded-2xl border border-line border-t-[3px] border-t-cuenta-representante bg-paper">
+      <h4 className="border-b border-line px-4 py-3 text-sm font-bold text-ink">{title}</h4>
+      <div className="p-4">{children}</div>
+    </section>
   );
 }
 
@@ -141,8 +143,8 @@ interface MedicalRecordEditorProps {
   viewerIsOwner?: boolean;
   /** The caller already announces "no record yet"; skip the editor's own notice. */
   hideNewNotice?: boolean;
-  /** Extra card stacked under the emergency card in the rail; only read with `withEmergencyCard`. */
-  railFooter?: ReactNode;
+  /** Extra block under the form's cards (e.g. a collapsed guide); only read with `withEmergencyCard`. */
+  formFooter?: ReactNode;
 }
 
 export default function MedicalRecordEditor({
@@ -151,7 +153,7 @@ export default function MedicalRecordEditor({
   withEmergencyCard = false,
   viewerIsOwner = true,
   hideNewNotice = false,
-  railFooter,
+  formFooter,
 }: MedicalRecordEditorProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
   const [state, setState] = useState<
@@ -387,281 +389,278 @@ export default function MedicalRecordEditor({
           telefonoEmergencia: state.ficha.telefonoEmergencia ?? "",
         };
 
-  const recordCard = (
-    // Sized to its content, never stretched to the emergency-card rail: three
-    // read-mode rows in a card as tall as the rail left a large empty area
-    // under them (QA round 2). The rail aligns to the top (`lg:items-start`).
-    <div
-      data-testid="medical-record-card"
-      className="mt-3 rounded-2xl border border-line bg-paper"
-    >
-      {/* `sticky top-0`, not a plain header: on a narrow screen this card's
-          own fields can outgrow the viewport, and the student's identity —
-          shown only once, above this editor, by the caller — scrolls out of
-          view first. Pinning this band keeps whoever is editing from ever
-          losing sight of whose medical data they're touching. `bg-paper`
-          keeps it opaque so it actually covers the fields as they scroll
-          under it, and `rounded-t-2xl` matches the card's own corners since
-          the card no longer clips overflow (clipping would break the sticky
-          positioning by making this its own scroll container instead of the
-          real one further up the tree). */}
-      <header className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-t-2xl border-b border-line bg-paper px-3 py-2.5 sm:px-4">
-        <Stethoscope size={ICON.sm} strokeWidth={1.5} className="flex-none text-state-bad" aria-hidden="true" />
-        <div className="min-w-0 flex-1">
-          {/* The owner's name belongs IN the title, not on a second line under
-              it. Two lines said "Ficha médica" and then "Martín", which is one
-              statement split in half — and on `/student/medical-record` the
-              first half was already the page's own `<h1>`, so the card header
-              repeated the page title verbatim and the name arrived as an
-              orphan. One heading says the whole thing, and it is still the
-              element the sticky band pins (D11c). */}
-          <h3 className="break-words text-base font-extrabold text-ink sm:truncate">
-            {studentName ? `Ficha médica de ${studentName}` : "Ficha médica"}
-          </h3>
-        </div>
-        {state.isNew && <Badge tone="neutral">Nueva</Badge>}
+  const recordReadMode = !editing && state.status === "ready" && !state.isNew;
 
-        {/* Las acciones viven en la banda pegada (`sticky`), no al pie del
-            formulario: es la única parte de la tarjeta que sigue en pantalla
-            cuando los campos se van scrolleando, así que guardar queda siempre
-            a mano y al lado del nombre de quien es la ficha. Al pie quedan los
-            mensajes de resultado, que se leen DESPUÉS de apretar y por lo
-            tanto no necesitan estar fijos. */}
-        {editing ? (
-          <div className="flex flex-none items-center gap-2">
-            {/* «Cancelar» sólo cuando hay algo a lo que volver. Una ficha nueva
-                no tiene estado anterior: el botón prometería descartar hacia
-                un formulario vacío que es exactamente el que ya se ve. */}
-            {!state.isNew && (
-              <Button variant="tertiary" size="sm" onClick={cancelarEdicion} disabled={saving}>
-                <X size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-                Cancelar
-              </Button>
-            )}
-            <Button variant="primary" size="sm" onClick={() => void handleSave()} disabled={saving}>
-              {saving ? (
-                <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
-              ) : (
-                <Save size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-              )}
-              {saving ? "Guardando…" : "Guardar"}
-            </Button>
-          </div>
-        ) : (
-          <Button variant="secondary" size="sm" onClick={empezarEdicion} className="flex-none">
-            <Pencil size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-            Editar
-          </Button>
-        )}
-      </header>
-
-      <div className="p-3 sm:p-4">
-      {!editing && state.status === "ready" && !state.isNew && (
-        /* El reposo: filas etiqueta-valor, no la grilla de dos columnas de
-         * abajo. Son dos formas distintas porque dicen dos cosas distintas —
-         * una grilla de cajas invita a escribir, una lista de filas se lee de
-         * arriba abajo — y `/profile` ya resolvió el mismo par así.
-         *
-         * Sin fecha. `FichaMedicaEditable` no trae ningún timestamp, así que
-         * acá no se puede decir cuándo se cargó ni cuándo se actualizó el
-         * dato, y una línea «actualizado el…» sería inventada.
-         *
-         * `flex-1 justify-around` (#514): the same surplus `EmptyState`'s
-         * `fill` centres for a single statement, spread between these FIVE
-         * rows instead — the sobrante lands as air between them rather than
-         * as bare canvas below the last one. */
-        <div
-          data-testid="medical-record-rows"
-          className={withEmergencyCard ? "grid gap-x-10 gap-y-4 lg:grid-cols-2" : "space-y-0"}
-        >
-          <div>
-            {withEmergencyCard && <GroupHeading>Salud</GroupHeading>}
-            <FilaLectura label="Tipo de sangre" value={etiquetaTipoSangre(state.ficha.tipoSangre)} />
-            <FilaLectura label="Alergias" value={state.ficha.alergias ?? ""} />
-            <FilaLectura
-              label="Enfermedades"
-              value={state.ficha.enfermedades.map((e) => e.nombreEnfermedad).join(", ")}
-            />
-          </div>
-          <div>
-            {withEmergencyCard && <GroupHeading>Contacto de emergencia</GroupHeading>}
-            <FilaLectura label="Contacto de emergencia" value={state.ficha.contactoEmergencia ?? ""} />
-            <FilaLectura label="Teléfono de emergencia" value={state.ficha.telefonoEmergencia ?? ""} />
-          </div>
-        </div>
-      )}
-
-      {editing && (
+  // The five fields as two groups. Page mode draws each group in its own card
+  // so the form fills its column with cards, not with stretched inputs; the
+  // dialog draws both groups in one grid. The controls are the same either way.
+  const saludFields = (
+    <>
       <div>
-      {state.isNew && !hideNewNotice && (
-        <p className="mb-3 rounded-ctl border border-line bg-sunken px-3 py-2 text-xs text-ink-3-strong">
-          Todavía no hay una ficha médica cargada para esta persona. Completa los datos y guárdalos.
-        </p>
-      )}
-      {/* Two columns at every width above `sm`, never three. Esta grilla es
-       * la de los CONTROLES — sólo se dibuja en edición; el reposo de arriba
-       * usa filas, que es otra forma y otra decisión.
-       *
-       * Three across put all five controls into exactly TWO rows of 40px — a
-       * strip of controls rather than a form — and it was the same two rows
-       * whether the record was empty or full, because nothing here grows with
-       * data. On `/student/medical-record`, drawn at the page's full measure,
-       * that is a ~300px block under a 900px window: the worst dead-air
-       * reading in the product (57%, D11b). El reposo no cambia esa medición
-       * y no pretende hacerlo: es un encargo aparte.
-       *
-       * Two across is also the honest shape: the pairs mean something. Blood
-       * type sits beside allergies (what the club needs to know before it acts),
-       * the illness list gets the full width it needs for a comma-separated
-       * value, and the two emergency-contact fields are adjacent because they
-       * are one fact written in two boxes. */}
-      {/* In page mode the card is stretched to the rail's height; the rows
-          spread over that height instead of leaving a void under the last. */}
-      <div className="grid gap-3 sm:grid-cols-2">
-        {withEmergencyCard && <GroupHeading className="sm:col-span-2">Salud</GroupHeading>}
-        <div>
-          {/* The asterisk sits OUTSIDE the `<label>` on purpose: inside, it
-              becomes part of the control's accessible name, so the field a
-              screen reader announces stops being called "Tipo de sangre".
-              `aria-required` carries the meaning; this only carries the look. */}
-          <div className="mb-1 flex items-center gap-1">
-            <label htmlFor={`tipo-sangre-${personaId}`} className="block text-xs font-semibold text-ink-2">
-              Tipo de sangre
-            </label>
-            <span className="text-xs font-semibold text-state-bad" aria-hidden="true">*</span>
-          </div>
-          <select
-            id={`tipo-sangre-${personaId}`}
-            value={tipoSangre}
-            onChange={(e) => setTipoSangre(e.target.value as TipoSangreElegido)}
-            aria-required="true"
-            aria-invalid={fieldErrors.tipoSangre ? true : undefined}
-            aria-describedby={fieldErrors.tipoSangre ? `tipo-sangre-error-${personaId}` : undefined}
-            className={`input-field w-full ${fieldErrors.tipoSangre ? "border-state-bad" : ""}`}
+        {/* The asterisk sits OUTSIDE the `<label>` on purpose: inside, it
+            becomes part of the control's accessible name, so the field a
+            screen reader announces stops being called "Tipo de sangre".
+            `aria-required` carries the meaning; this only carries the look. */}
+        <div className="mb-1 flex items-center gap-1">
+          <label htmlFor={`tipo-sangre-${personaId}`} className="block text-xs font-semibold text-ink-2">
+            Tipo de sangre
+          </label>
+          <span className="text-xs font-semibold text-state-bad" aria-hidden="true">*</span>
+        </div>
+        <select
+          id={`tipo-sangre-${personaId}`}
+          value={tipoSangre}
+          onChange={(e) => setTipoSangre(e.target.value as TipoSangreElegido)}
+          aria-required="true"
+          aria-invalid={fieldErrors.tipoSangre ? true : undefined}
+          aria-describedby={fieldErrors.tipoSangre ? `tipo-sangre-error-${personaId}` : undefined}
+          className={`input-field w-full ${fieldErrors.tipoSangre ? "border-state-bad" : ""}`}
+        >
+          <option value="">Selecciona una opción</option>
+          {TIPOS_SANGRE.map((t) => (
+            <option key={t} value={t}>
+              {etiquetaTipoSangre(t)}
+            </option>
+          ))}
+        </select>
+        {fieldErrors.tipoSangre && (
+          <p
+            id={`tipo-sangre-error-${personaId}`}
+            className="mt-1 text-xs font-semibold text-state-bad"
+            role="alert"
           >
-            <option value="">Selecciona una opción</option>
-            {TIPOS_SANGRE.map((t) => (
-              <option key={t} value={t}>
-                {etiquetaTipoSangre(t)}
-              </option>
-            ))}
-          </select>
-          {fieldErrors.tipoSangre && (
-            <p
-              id={`tipo-sangre-error-${personaId}`}
-              className="mt-1 text-xs font-semibold text-state-bad"
-              role="alert"
-            >
-              {fieldErrors.tipoSangre}
-            </p>
-          )}
-        </div>
-        <div>
-          <label htmlFor={`alergias-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
-            Alergias
-          </label>
-          <input
-            id={`alergias-${personaId}`}
-            type="text"
-            value={alergias}
-            onChange={(e) => setAlergias(e.target.value)}
-            className="input-field w-full"
-          />
-        </div>
-        <div className="sm:col-span-2">
-          <label htmlFor={`enfermedades-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
-            Enfermedades (separadas por coma)
-          </label>
-          <input
-            id={`enfermedades-${personaId}`}
-            type="text"
-            value={enfermedadesInput}
-            onChange={(e) => setEnfermedadesInput(e.target.value)}
-            placeholder="Ej: Asma, Diabetes"
-            className="input-field w-full"
-          />
-          <p className="mt-1 text-2xs tracking-flat text-ink-3">
-            Al guardar se reemplaza la lista completa. Dejar vacío borra todas las enfermedades.
+            {fieldErrors.tipoSangre}
           </p>
-        </div>
-        {withEmergencyCard && (
-          <GroupHeading className="mt-2 sm:col-span-2">Contacto de emergencia</GroupHeading>
         )}
-        <div>
-          <label htmlFor={`contacto-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
-            Contacto de emergencia
-          </label>
-          <input
-            id={`contacto-${personaId}`}
-            type="text"
-            value={contactoEmergencia}
-            onChange={(e) => setContactoEmergencia(e.target.value)}
-            // 150 chars, same cap `EmergencyContactFields` (wizard-fields.tsx)
-            // uses for the identical field on the enrollment wizards —
-            // issue #667's emergency-contact parity gap.
-            maxLength={150}
-            className="input-field w-full"
-          />
-        </div>
-        {/* Issue #1296: the same `PhoneField` every other phone field on the
-            app shares (fixed +593, local digits, no trunk 0) — this editor's
-            own hand-rolled markup (label/input/error/hint) is retired in
-            favor of it. */}
-        {/* `PhoneField` draws its label at `text-sm`; every other label in
-            this form is `text-xs`, which left the two emergency-contact inputs
-            5px out of line side by side. Restyled from here because the field
-            is shared with the wizards. */}
-        <div className="[&_label]:mb-1 [&_label]:text-xs [&_label]:text-ink-2">
-          <PhoneField
-            idPrefix="telefono"
-            field={String(personaId)}
-            label="Teléfono de emergencia"
-            value={telefonoEmergencia}
-            onChange={setTelefonoEmergencia}
-            required
-            error={fieldErrors.telefonoEmergencia}
-          />
-        </div>
       </div>
+      <div>
+        <label htmlFor={`alergias-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
+          Alergias
+        </label>
+        <input
+          id={`alergias-${personaId}`}
+          type="text"
+          value={alergias}
+          onChange={(e) => setAlergias(e.target.value)}
+          className="input-field w-full"
+        />
+      </div>
+      <div className="sm:col-span-2">
+        <label htmlFor={`enfermedades-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
+          Enfermedades (separadas por coma)
+        </label>
+        <input
+          id={`enfermedades-${personaId}`}
+          type="text"
+          value={enfermedadesInput}
+          onChange={(e) => setEnfermedadesInput(e.target.value)}
+          placeholder="Ej: Asma, Diabetes"
+          className="input-field w-full"
+        />
+        <p className="mt-1 text-2xs tracking-flat text-ink-3">
+          Al guardar se reemplaza la lista completa. Dejar vacío borra todas las enfermedades.
+        </p>
+      </div>
+    </>
+  );
 
-      {/* El botón de guardar se fue al encabezado pegado; acá quedan sólo los
-          mensajes de resultado. Dos botones «Guardar» — uno arriba y otro al
-          pie — serían dos afordancias para el mismo acto, y la que se lee
-          primero mandaría sobre la otra sin ningún motivo. */}
-      {(saveError || saveSuccess) && (
-        <div className="mt-4 flex items-center gap-3">
-          {saveError && (
-            <p className="text-sm text-state-bad" role="alert">
-              <LinkifiedText text={saveError} />
-            </p>
+  const contactoFields = (
+    <>
+      <div>
+        <label htmlFor={`contacto-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
+          Contacto de emergencia
+        </label>
+        <input
+          id={`contacto-${personaId}`}
+          type="text"
+          value={contactoEmergencia}
+          onChange={(e) => setContactoEmergencia(e.target.value)}
+          // 150 chars, same cap `EmergencyContactFields` (wizard-fields.tsx)
+          // uses for the identical field on the enrollment wizards —
+          // issue #667's emergency-contact parity gap.
+          maxLength={150}
+          className="input-field w-full"
+        />
+      </div>
+      {/* Issue #1296: the same `PhoneField` every other phone field on the
+          app shares (fixed +593, local digits, no trunk 0). `PhoneField`
+          draws its label at `text-sm`; every other label in this form is
+          `text-xs`, which left the two emergency-contact inputs 5px out of
+          line side by side. Restyled from here because the field is shared
+          with the wizards. */}
+      <div className="[&_label]:mb-1 [&_label]:text-xs [&_label]:text-ink-2">
+        <PhoneField
+          idPrefix="telefono"
+          field={String(personaId)}
+          label="Teléfono de emergencia"
+          value={telefonoEmergencia}
+          onChange={setTelefonoEmergencia}
+          required
+          error={fieldErrors.telefonoEmergencia}
+        />
+      </div>
+    </>
+  );
+
+  // Read mode: label-value rows, not the controls' grid. A grid of boxes
+  // invites typing, a list of rows reads top to bottom — `/profile` resolved
+  // the same pair this way. No date: `FichaMedicaEditable` carries no
+  // timestamp, so an «updated on…» line would be invented.
+  const saludRows = recordReadMode ? (
+    <>
+      <FilaLectura label="Tipo de sangre" value={etiquetaTipoSangre(state.ficha.tipoSangre)} />
+      <FilaLectura label="Alergias" value={state.ficha.alergias ?? ""} />
+      <FilaLectura
+        label="Enfermedades"
+        value={state.ficha.enfermedades.map((e) => e.nombreEnfermedad).join(", ")}
+      />
+    </>
+  ) : null;
+
+  const contactoRows = recordReadMode ? (
+    <>
+      <FilaLectura label="Contacto de emergencia" value={state.ficha.contactoEmergencia ?? ""} />
+      <FilaLectura label="Teléfono de emergencia" value={state.ficha.telefonoEmergencia ?? ""} />
+    </>
+  ) : null;
+
+  const newNotice =
+    editing && state.isNew && !hideNewNotice ? (
+      <p className="rounded-ctl border border-line bg-sunken px-3 py-2 text-xs text-ink-3-strong">
+        Todavía no hay una ficha médica cargada para esta persona. Completa los datos y guárdalos.
+      </p>
+    ) : null;
+
+  // The save button lives in the pinned header; only the outcome is read here,
+  // AFTER pressing, so it does not need to be pinned. Two «Guardar» buttons
+  // would be two affordances for one act.
+  const resultMessages =
+    editing && (saveError || saveSuccess) ? (
+      <div className="flex items-center gap-3">
+        {saveError && (
+          <p className="text-sm text-state-bad" role="alert">
+            <LinkifiedText text={saveError} />
+          </p>
+        )}
+        {saveSuccess && (
+          <p className="flex items-center gap-1 text-sm text-state-ok" role="status">
+            <CheckCircle2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+            Ficha médica guardada.
+          </p>
+        )}
+      </div>
+    ) : null;
+
+  // `sticky top-0`, not a plain header: on a narrow screen the fields can
+  // outgrow the viewport and the student's identity — shown once, above this
+  // editor, by the caller — scrolls out of view first. Pinning this band keeps
+  // whoever is editing from losing sight of whose medical data they touch.
+  // `bg-paper` keeps it opaque over the fields scrolling under it. The owner's
+  // name sits IN the title: one heading says the whole thing (D11c).
+  const headerBand = (
+    <header
+      className={
+        withEmergencyCard
+          ? "sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-paper px-3 py-2.5 sm:px-4"
+          : "sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-t-2xl border-b border-line bg-paper px-3 py-2.5 sm:px-4"
+      }
+    >
+      {/* Blue, the calm colour of health data; red stays for the required
+          mark and for errors (EXTRA colour rule). */}
+      <Stethoscope size={ICON.sm} strokeWidth={1.5} className="flex-none text-cuenta-representante" aria-hidden="true" />
+      <div className="min-w-0 flex-1">
+        <h3 className="break-words text-base font-extrabold text-ink sm:truncate">
+          {studentName ? `Ficha médica de ${studentName}` : "Ficha médica"}
+        </h3>
+      </div>
+      {state.isNew && <Badge tone="neutral">Nueva</Badge>}
+
+      {editing ? (
+        <div className="flex flex-none items-center gap-2">
+          {/* «Cancelar» only when there is something to go back to: a new
+              record has no previous state. */}
+          {!state.isNew && (
+            <Button variant="tertiary" size="sm" onClick={cancelarEdicion} disabled={saving}>
+              <X size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+              Cancelar
+            </Button>
           )}
-          {saveSuccess && (
-            <p className="flex items-center gap-1 text-sm text-state-ok" role="status">
-              <CheckCircle2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-              Ficha médica guardada.
-            </p>
+          <Button variant="primary" size="sm" onClick={() => void handleSave()} disabled={saving}>
+            {saving ? (
+              <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
+            ) : (
+              <Save size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+            )}
+            {saving ? "Guardando…" : "Guardar"}
+          </Button>
+        </div>
+      ) : (
+        <Button variant="secondary" size="sm" onClick={empezarEdicion} className="flex-none">
+          <Pencil size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+          Editar
+        </Button>
+      )}
+    </header>
+  );
+
+  if (!withEmergencyCard) {
+    // The admin dialog: one card, sized to its content (#514).
+    return (
+      <div data-testid="medical-record-card" className="mt-3 rounded-2xl border border-line bg-paper">
+        {headerBand}
+        <div className="p-3 sm:p-4">
+          {recordReadMode && (
+            <div data-testid="medical-record-rows" className="space-y-0">
+              <div>{saludRows}</div>
+              <div>{contactoRows}</div>
+            </div>
+          )}
+          {editing && (
+            <div>
+              {newNotice && <div className="mb-3">{newNotice}</div>}
+              {/* Two columns above `sm`, never three: three put the five
+                  controls into two rows of 40px — a strip, not a form (D11b).
+                  Two is the honest shape too: blood type beside allergies, the
+                  illness list at full width, the two contact fields adjacent. */}
+              <div className="grid gap-3 sm:grid-cols-2">
+                {saludFields}
+                {contactoFields}
+              </div>
+              {resultMessages && <div className="mt-4">{resultMessages}</div>}
+            </div>
           )}
         </div>
-      )}
       </div>
-      )}
-      </div>
+    );
+  }
+
+  // Page mode: the form is two cards (health, emergency contact) in the left
+  // column and the live emergency card in the right one, balanced so neither
+  // leaves dead air under it. Fields keep their natural width; cards fill the
+  // space (FAM-31). Each card wears the calm blue of health data.
+  const recordCard = (
+    <div data-testid="medical-record-card" className="mt-3 flex flex-col gap-section">
+      {headerBand}
+      {newNotice}
+      <RecordSection title="Salud">
+        {recordReadMode ? <div data-testid="medical-record-rows">{saludRows}</div> : (
+          <div className="grid gap-3 sm:grid-cols-2">{saludFields}</div>
+        )}
+      </RecordSection>
+      <RecordSection title="Contacto de emergencia">
+        {recordReadMode ? <div>{contactoRows}</div> : (
+          <div className="grid gap-3 sm:grid-cols-2">{contactoFields}</div>
+        )}
+      </RecordSection>
+      {resultMessages}
+      {formFooter}
     </div>
   );
 
-  if (!withEmergencyCard) return recordCard;
-
   return (
-    <div className={PAGE_RAIL}>
+    <div className={cn(PAGE_RAIL, "lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]")}>
       <div className="min-w-0 [&>[data-testid=medical-record-card]]:mt-0">{recordCard}</div>
-      {railFooter ? (
-        <div className="flex min-w-0 flex-col gap-section">
-          <EmergencyCard studentName={studentName} values={cardValues} ownerIsViewer={viewerIsOwner} />
-          {railFooter}
-        </div>
-      ) : (
-        <EmergencyCard studentName={studentName} values={cardValues} ownerIsViewer={viewerIsOwner} />
-      )}
+      <EmergencyCard studentName={studentName} values={cardValues} ownerIsViewer={viewerIsOwner} />
     </div>
   );
 }

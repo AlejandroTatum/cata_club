@@ -3061,6 +3061,53 @@ describe("StudentPage — QA4 family portal findings", () => {
     expect(within(strip).getByText("Suspendida")).toBeInTheDocument();
   });
 
+  // EXTRA redesign: the guardian's own four figures, same colour rule.
+  it("gives a guardian four tiles — cobertura, próximo pago, a tu cargo, fichas médicas — each with a word", async () => {
+    asGuardian();
+    mockFetchStudentPortal.mockResolvedValue({
+      self: null,
+      representados: [
+        { ...PORTAL.self!, personaId: "41", nombres: "Sofia", apellidos: "Vera", membership: membership({ personaId: 41 }) },
+        { ...PORTAL.self!, personaId: "42", nombres: "Martín", apellidos: "Vera", membership: membership({ personaId: 42 }) },
+      ],
+      membershipPlans: [],
+    });
+
+    render(<StudentPage />);
+
+    const pulse = within(await screen.findByTestId("student-pulse"));
+    for (const label of ["Cobertura", "Próximo pago", "A tu cargo", "Fichas médicas"]) {
+      const tile = (await pulse.findByText(label)).parentElement as HTMLElement;
+      expect(within(tile).getByTestId("statcard-status").textContent?.trim()).toBeTruthy();
+    }
+    expect(pulse.queryByText("Entrenamientos")).toBeNull();
+    const cargo = pulse.getByText("A tu cargo").parentElement as HTMLElement;
+    expect(within(cargo).getByText("2")).toBeInTheDocument();
+    expect(cargo.dataset.tone).toBe("info");
+  });
+
+  it("makes «Próximo pago» the one coal tile when the coverage is about to end, and links the ficha tile to the medical record", async () => {
+    asGuardian();
+    mockFetchStudentPortal.mockResolvedValue({
+      self: null,
+      representados: [
+        { ...PORTAL.self!, personaId: "41", nombres: "Sofia", apellidos: "Vera", membership: membership({ personaId: 41, cubiertoHasta: "2020-01-01" }) },
+      ],
+      membershipPlans: [],
+    });
+
+    render(<StudentPage />);
+
+    const pulse = within(await screen.findByTestId("student-pulse"));
+    const pago = (await pulse.findByText("Próximo pago")).parentElement as HTMLElement;
+    expect(pago.dataset.tone).toBe("action");
+    expect(pago.closest("a")).toHaveAttribute("href", expect.stringContaining("/student/payments"));
+    const tiles = Array.from(document.querySelectorAll("[data-testid='student-pulse'] [data-tone]"));
+    expect(tiles.filter((tile) => (tile as HTMLElement).dataset.tone === "action")).toHaveLength(1);
+    const ficha = pulse.getByText("Fichas médicas").closest("a");
+    expect(ficha).toHaveAttribute("href", expect.stringContaining("/student/medical-record"));
+  });
+
   // FAM-11
   it("shows a rejected payment's reason on the Cuota card with a way to register a new one", async () => {
     mockFetchStudentPortal.mockResolvedValue({

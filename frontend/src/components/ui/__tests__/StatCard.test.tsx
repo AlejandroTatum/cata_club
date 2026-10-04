@@ -353,7 +353,7 @@ describe("StatCard — icon and tone", () => {
 
   it("draws a decorative tinted tile and keeps the figure in ink", () => {
     render(
-      <StatCard label="Miembros" value={86} tone="ok" icon={<svg data-testid="glyph" />} />,
+      <StatCard label="Miembros" value={86} tone="ok" status="Al día" icon={<svg data-testid="glyph" />} />,
     );
     const tile = screen.getByTestId("statcard-icon");
     expect(tile).toHaveAttribute("aria-hidden", "true");
@@ -365,7 +365,7 @@ describe("StatCard — icon and tone", () => {
 
   it("adds a tone-tinted top accent border only when an icon is given", () => {
     const { rerender } = render(
-      <StatCard label="Miembros" value={86} tone="warn" icon={<svg />} />,
+      <StatCard label="Miembros" value={86} tone="warn" status="Pendiente" icon={<svg />} />,
     );
     expect(card().className).toMatch(/border-t-\[3px\]/);
     expect(card().className).toMatch(/border-t-state-warn/);
@@ -385,5 +385,71 @@ describe("StatCard — label and hint contrast (FAM-14)", () => {
     expect(screen.getByText("Miembros")).toHaveClass("text-ink-3-strong");
     expect(screen.getByText("de 44")).toHaveClass("text-ink-3-strong");
     expect(screen.getByText("responsables")).toHaveClass("text-ink-3-strong");
+  });
+});
+
+/**
+ * EXTRA color rule: the colour of a card is the meaning of its datum, never
+ * the viewer's role, and it never travels alone — a toned card always says
+ * its state in a word (WCAG 1.4.1).
+ */
+describe("StatCard — tone is the meaning of the datum, said in a word", () => {
+  it("draws the status word with a dot in the tone's own colour", () => {
+    render(
+      <StatCard label="Miembros" value={86} tone="ok" icon={<svg />} status="Al día" />,
+    );
+    const word = screen.getByTestId("statcard-status");
+    expect(word).toHaveTextContent("Al día");
+    expect(word.className).toMatch(/\btext-state-ok\b/);
+    expect(word.querySelector("[aria-hidden=true]")).not.toBeNull();
+    expect(card().dataset.tone).toBe("ok");
+  });
+
+  it("has a red tone for a problem datum", () => {
+    render(
+      <StatCard label="Miembros" value={1} tone="bad" icon={<svg />} status="Sin justificar" />,
+    );
+    expect(screen.getByTestId("statcard-icon").className).toMatch(/bg-state-bad-bg/);
+    expect(card().className).toMatch(/border-t-state-bad/);
+    expect(screen.getByTestId("statcard-status").className).toMatch(/\btext-state-bad\b/);
+  });
+
+  it("keeps the figure in ink on every tone", () => {
+    for (const tone of ["ok", "info", "warn", "bad"] as const) {
+      const { unmount } = render(
+        <StatCard label="Miembros" value={86} tone={tone} icon={<svg />} status="Estado" />,
+      );
+      expect(screen.getByText("86").className).toMatch(/\btext-ink\b/);
+      unmount();
+    }
+  });
+
+  it("shows the status word on the coal «needs action» card with the ball dot", () => {
+    render(<StatCard label="Miembros" value={37} variant="hot" status="Por validar" />);
+    expect(screen.getByTestId("statcard-status")).toHaveTextContent("Por validar");
+    expect(screen.getByTestId("statcard-ball-dot")).toBeInTheDocument();
+    expect(card().dataset.tone).toBe("action");
+  });
+
+  it("places the hint under the status word, not in place of it", () => {
+    render(
+      <StatCard
+        label="Miembros"
+        value={86}
+        tone="warn"
+        icon={<svg />}
+        status="Por validar"
+        hint="esperan al club"
+      />,
+    );
+    expect(screen.getByTestId("statcard-status")).toHaveTextContent("Por validar");
+    expect(screen.getByText("esperan al club")).toBeInTheDocument();
+  });
+
+  it("refuses at compile time a judged tone with no status word", () => {
+    // `@ts-expect-error` fails `pnpm type-check` the day the union is relaxed.
+    // @ts-expect-error — «ok» without `status`
+    const bad = <StatCard label="Miembros" value={1} tone="ok" icon={<svg />} />;
+    expect(bad).toBeTruthy();
   });
 });
