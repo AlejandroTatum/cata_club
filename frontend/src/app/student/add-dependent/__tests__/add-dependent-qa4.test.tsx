@@ -48,6 +48,7 @@ vi.mock("@/services/api", () => ({
   ]),
   inscribirRepresentadoConPago: vi.fn(),
   subirVoucherPago: vi.fn(),
+  fetchClubPaymentInfo: vi.fn().mockResolvedValue({ holder: "Titular Prueba", accountType: "Cuenta de Ahorros", accountNumber: "1234567890", bank: "Banco Prueba", holderId: "0102030405" }),
 }));
 
 installAddDependentHarness();
@@ -166,6 +167,14 @@ describe("the dependent's first payment (FAM-09, FAM-08)", () => {
     fireEvent.click(screen.getByRole("button", { name: /agregar dependiente/i }));
     await screen.findByLabelText("Plan de membresía");
   }
+
+  it("shows the club's «Cómo pagar» transfer data on the payment step (FAM-04)", async () => {
+    await openPaymentStep();
+
+    const block = await screen.findByTestId("how-to-pay");
+    expect(block).toHaveTextContent("Titular Prueba");
+    expect(block).toHaveTextContent("1234567890");
+  });
 
   it("labels the plan with a Spanish price and no dot decimal", async () => {
     await openPaymentStep();

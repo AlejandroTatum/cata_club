@@ -55,6 +55,7 @@ import { BackLink, InfoPanel, Select, Stepper, buttonClasses, cn, PAGE_RAIL } fr
 import { BLOOD_TYPE_LABELS, SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
 import { institutionOptionLabel, planOptionLabel } from "@/app/student/enroll/enroll-utils";
 import { addMonthsIso, estimateTotal } from "@/app/student/payments/payments-utils";
+import HowToPay from "@/components/payments/HowToPay";
 import { ProofPreview } from "@/app/student/payments/ProofPreview";
 import { formatCurrency, formatDateRange } from "@/lib/format-utils";
 import { calendarIsoDate, clubToday } from "@/lib/club-date";
@@ -717,6 +718,7 @@ function AddDependentContent(): React.ReactElement {
     return (
       <div className="space-y-section">
         <p className="text-sm text-ink-2">El dependiente ya fue agregado. Seleccione el plan y registre su primer pago. Administración lo validará antes de activar la membresía.</p>
+        {method === "TRANSFERENCIA" && <HowToPay />}
         <label className="block text-sm text-ink-2" htmlFor="dependent-plan">Plan de membresía</label>
         <Select id="dependent-plan" className="input-field" value={planId} onChange={(e) => setPlanId(e.target.value)} disabled={submitting}>
           <option value="">Seleccione un plan</option>

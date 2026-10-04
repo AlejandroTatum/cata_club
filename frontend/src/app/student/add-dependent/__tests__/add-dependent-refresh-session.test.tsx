@@ -61,6 +61,7 @@ vi.mock("@/services/api", () => ({
   crearRepresentadoPropio: vi.fn(),
   fetchInstituciones: vi.fn().mockResolvedValue([]),
   fetchTiposMembresia: vi.fn().mockResolvedValue([]),
+  fetchClubPaymentInfo: vi.fn().mockResolvedValue(null),
 }));
 
 installAddDependentHarness();

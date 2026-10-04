@@ -63,6 +63,7 @@ import { CreditCard } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
 
+import HowToPay from "@/components/payments/HowToPay";
 import { MembershipCard } from "./MembershipAside";
 import { BeneficioNote, PaymentOrBenefitForm } from "./PaymentForms";
 import { VoucherUploadPreview } from "./VoucherUploadPreview";
@@ -571,6 +572,8 @@ function PaymentsContent({
           </p>
         )}
       </MembershipCard>
+
+      <HowToPay className="max-lg:order-2" />
 
       <InfoPanel title="Cómo pagar y validar" as="div" className="max-lg:order-2">
         <ol className="flex list-decimal flex-col gap-2 pl-4">

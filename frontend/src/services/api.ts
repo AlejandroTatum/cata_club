@@ -20,6 +20,7 @@
  *          deadline; see `PDF_DOWNLOAD_TIMEOUT_MS`.
  */
 
+import type { ClubPaymentInfo } from "@/lib/club-payment-info";
 import type {
   UserRole,
   EstadoAsistencia,
@@ -1386,6 +1387,35 @@ export interface DashboardStats {
 /** Fetch aggregate dashboard stats, composed server-side from `/personas`, `/membresias/pagos*` and `/asistencias/horarios` — `GET /api/dashboard`. */
 export function fetchDashboardStats(): Promise<DashboardStats> {
   return shareInFlight("dashboard", () => request<DashboardStats>(apiEndpoint("/dashboard")));
+}
+
+/**
+ * The club's transfer data — `GET /api/club/payment-info`. Signed-in users only
+ * (401 otherwise); `null` when unconfigured.
+ *
+ * Deliberately NOT routed through `request()`: this block is optional, and a
+ * 401 there runs refresh-and-retry and then `notifyAuthFailure()`, which clears
+ * the session app-wide. A failure of a side block must never log the user out,
+ * so a 401 is surfaced to the caller as an `ApiClientError` and nothing else.
+ */
+export async function fetchClubPaymentInfo(): Promise<ClubPaymentInfo | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${getBaseUrl()}${apiEndpoint("/club/payment-info")}`, {
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) {
+      throw new ApiClientError(GENERIC_FAILURE, response.status);
+    }
+    return (await response.json()) as ClubPaymentInfo | null;
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === "AbortError") throw new ApiTimeoutError(DEFAULT_TIMEOUT_MS);
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 /** Club usage figures for the admin activity screen — `GET /api/actividad/resumen?rango=`. Admin only. */
