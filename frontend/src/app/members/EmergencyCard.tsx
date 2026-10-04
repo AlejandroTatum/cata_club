@@ -79,8 +79,8 @@ export default function EmergencyCard({
           </span>
         </header>
         <dl className="px-4">
-          <Line label="Alergias" value={values.alergias} emptyText="Sin registrar" />
-          <Line label="Enfermedades" value={values.enfermedades} emptyText="Sin registrar" />
+          <Line label="Alergias" value={values.alergias} emptyText="Sin declarar" />
+          <Line label="Enfermedades" value={values.enfermedades} emptyText="Sin declarar" />
           <Line label="Contacto" value={values.contactoEmergencia} emptyText="Sin registrar" />
           <Line label="Teléfono" value={values.telefonoEmergencia} emptyText="Sin registrar" />
         </dl>

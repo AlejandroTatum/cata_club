@@ -47,7 +47,7 @@ def test_representado_con_ficha_medica_se_crea_con_ficha(client, db_session):
     representante = _representante(db_session, 3)
     respuesta = client.post(
         f"/api/v1/personas/{representante.id}/representados",
-        json=_cuerpo(3, ficha_medica={"tipo_sangre": "O_POSITIVO"}),
+        json=_cuerpo(3, ficha_medica={"tipo_sangre": "O_POSITIVO", "alergias": "Ninguna", "enfermedades": ["Ninguno"]}),
     )
     assert respuesta.status_code == 201, respuesta.text
     hija = db_session.query(Persona).filter(Persona.cedula == cedula_valida(9603)).one()
@@ -67,7 +67,10 @@ def test_ficha_de_un_representado_no_exige_telefono_de_emergencia(db_session):
     db_session.commit()
 
     ficha = FichaMedicaServicio(db_session).actualizar_por_persona(
-        hijo.id, FichaMedicaUpdateDTO(tipo_sangre=TipoSangre.A_POSITIVO),
+        hijo.id,
+        FichaMedicaUpdateDTO(
+            tipo_sangre=TipoSangre.A_POSITIVO, alergias="Ninguna", enfermedades=["Ninguno"],
+        ),
     )
     assert ficha.tipo_sangre == TipoSangre.A_POSITIVO
     # Ya con ficha: un parche que no toca el teléfono tampoco lo exige.

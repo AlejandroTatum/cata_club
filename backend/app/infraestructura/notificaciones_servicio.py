@@ -38,6 +38,7 @@ from app.dominio.modelos import (
 from app.infraestructura.asuntos_correo import (
     ASUNTO_PAGO_APROBADO,
     ASUNTO_PAGO_RECHAZADO,
+    ASUNTO_INVITACION_ENTRENADOR,
     ASUNTO_RECUPERACION,
     ASUNTO_VERIFICACION_CORREO,
 )
@@ -552,6 +553,29 @@ class ServicioNotificaciones:
         )
         self.enviar_correo(correo, asunto, texto, html)
         logger.info("[RECUPERAR_CONTRASENIA] correo=%s", _enmascarar_correo(correo))
+
+    def enviar_invitacion_entrenador(self, correo: str, token: str, nombre: Optional[str] = None) -> None:
+        """Invita a un entrenador creado por el administrador a crear su
+        contraseña (issue #1575). Mismo enlace y vigencia que la recuperación,
+        con `invitacion=1` para que la pantalla pida aceptar los términos."""
+        enlace = f"{self._frontend_url}/reset-password?token={token}&invitacion=1"
+        saludo = f"Hola {nombre}," if nombre else "Hola,"
+        texto, html = construir_correo(
+            titulo="Te invitamos a Cata Club",
+            preheader="Crea tu contraseña para entrar como entrenador. El enlace es de un solo uso.",
+            saludo=saludo,
+            parrafos=(
+                "El club creó tu cuenta de entrenador en Cata Club.",
+                "Crea tu contraseña con el botón de abajo. El enlace es válido por 30 "
+                "minutos y de un solo uso; si vence, pide al administrador que te lo reenvíe "
+                "o usa «¿Olvidaste tu contraseña?» al iniciar sesión.",
+                "Si no esperabas este correo, ignóralo.",
+            ),
+            cta_etiqueta="Crear mi contraseña",
+            cta_url=enlace,
+        )
+        self.enviar_correo(correo, ASUNTO_INVITACION_ENTRENADOR, texto, html)
+        logger.info("[INVITAR_ENTRENADOR] correo=%s", _enmascarar_correo(correo))
 
     def enviar_verificacion_correo(self, correo: str, token: str, nombre: Optional[str] = None) -> None:
         """Envía el enlace que prueba el control de la dirección (issue #790).

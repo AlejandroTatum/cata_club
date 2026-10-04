@@ -163,6 +163,8 @@ const mockSearchStudents = vi.fn().mockResolvedValue([]);
 const mockVincularRepresentado = vi.fn();
 const mockIndependizarPersona = vi.fn();
 const mockReasignarRepresentante = vi.fn();
+const mockCrearEntrenador = vi.fn();
+const mockReenviarInvitacionEntrenador = vi.fn();
 
 vi.mock("@/services/api", () => {
   class MockApiClientError extends Error {
@@ -175,6 +177,8 @@ vi.mock("@/services/api", () => {
   }
   return {
     fetchMembers: () => mockFetchMembers(),
+    crearEntrenador: (data: unknown) => mockCrearEntrenador(data),
+    reenviarInvitacionEntrenador: (personaId: number) => mockReenviarInvitacionEntrenador(personaId),
     obtenerRolesDePersona: (personaId: number) => mockObtenerRolesDePersona(personaId),
     asignarRol: (personaId: number, tipoRol: string) => mockAsignarRol(personaId, tipoRol),
     quitarRol: (personaId: number, tipoRol: string) => mockQuitarRol(personaId, tipoRol),
@@ -4673,5 +4677,71 @@ describe("MembersPage — Pagos dialog hierarchy (admin redesign v4)", () => {
     expect(within(dialog).getByRole("button", { name: "Regularizar deuda" })).toHaveClass("bg-cata-red");
     expect(within(dialog).getByRole("button", { name: "Registrar pago" })).not.toHaveClass("bg-cata-red");
     expect(dialog.querySelectorAll("button.bg-cata-red")).toHaveLength(1);
+  });
+});
+
+// --- Issue #1575: admin creates trainers directly ----------------------------
+describe("MembersPage — Nuevo entrenador (#1575)", () => {
+  it("offers «Nuevo entrenador» in the page header and opens the minimal form", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT] });
+    render(<ToastProvider><MembersPage /></ToastProvider>);
+    await findAccountRow();
+
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo entrenador" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Nuevo entrenador" });
+    expect(within(dialog).getByLabelText(/^Cédula/)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Crear y enviar invitación" })).toBeInTheDocument();
+  });
+
+  it("refreshes the list after a trainer is created", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT] });
+    mockCrearEntrenador.mockResolvedValue({ personaId: 91 });
+    render(<ToastProvider><MembersPage /></ToastProvider>);
+    await findAccountRow();
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo entrenador" }));
+    const dialog = await screen.findByRole("dialog", { name: "Nuevo entrenador" });
+    fireEvent.change(within(dialog).getByLabelText(/^Nombres/), { target: { value: "Marta" } });
+    fireEvent.change(within(dialog).getByLabelText(/^Apellidos/), { target: { value: "Zambrano" } });
+    fireEvent.change(within(dialog).getByLabelText(/^Cédula/), { target: { value: "1710034065" } });
+    fireEvent.change(within(dialog).getByLabelText(/^Fecha de nacimiento/), { target: { value: "1988-03-02" } });
+    fireEvent.change(within(dialog).getByLabelText(/^Correo/), { target: { value: "marta@cataclub.com" } });
+    fireEvent.change(within(dialog).getByLabelText(/^Celular/), { target: { value: "0991234567" } });
+    const callsBefore = mockFetchMembers.mock.calls.length;
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Crear y enviar invitación" }));
+
+    await waitFor(() => expect(mockCrearEntrenador).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockFetchMembers.mock.calls.length).toBeGreaterThan(callsBefore));
+  });
+
+  it("marks an account whose trainer has not set a password as «Invitación pendiente»", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [{ ...ACCOUNT, accountState: "invitation" }] });
+    render(<ToastProvider><MembersPage /></ToastProvider>);
+
+    const row = await findAccountRow();
+
+    expect(within(row).getByText("Invitación pendiente")).toBeInTheDocument();
+  });
+
+  it("lets the admin resend the invitation from a pending account", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [{ ...ACCOUNT, accountState: "invitation" }] });
+    mockReenviarInvitacionEntrenador.mockResolvedValue(undefined);
+    render(<ToastProvider><MembersPage /></ToastProvider>);
+    fireEvent.click(getEditButton(await findAccountRow()));
+    const dialog = await screen.findByRole("dialog");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Reenviar invitación" }));
+
+    await waitFor(() => expect(mockReenviarInvitacionEntrenador).toHaveBeenCalledWith(Number(ACCOUNT.id)));
+  });
+
+  it("offers no resend once the account is active", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [{ ...ACCOUNT, accountState: "active" }] });
+    render(<ToastProvider><MembersPage /></ToastProvider>);
+    fireEvent.click(getEditButton(await findAccountRow()));
+    const dialog = await screen.findByRole("dialog");
+
+    expect(within(dialog).queryByRole("button", { name: "Reenviar invitación" })).not.toBeInTheDocument();
   });
 });

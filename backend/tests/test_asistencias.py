@@ -952,7 +952,28 @@ def _preparar_para_validar_correccion(client, monkeypatch):
     return _id_de_la_asistencia(client, payload["persona_id"])
 
 
-def test_correccion_con_motivo_en_blanco_se_rechaza_con_400(client, monkeypatch):
+def test_correccion_del_admin_sin_motivo_se_acepta_y_deja_traza(client, monkeypatch):
+    """Issue #1578: el admin corrige con autoridad propia, sin motivo. La
+    traza (autor, fecha, estado anterior) se graba igual y el motivo queda
+    vacío."""
+    asistencia_id = _preparar_para_validar_correccion(client, monkeypatch)
+
+    resp = client.patch(
+        f"/api/v1/asistencias/{asistencia_id}/corregir",
+        json={"estado": "AUSENTE"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["motivo"] == ""
+    assert resp.json()["estadoAnterior"] == "PRESENTE"
+    assert resp.json()["corregidoPorId"] == 1
+    entradas = client.get(f"/api/v1/asistencias/{asistencia_id}/correcciones").json()
+    assert len(entradas) == 1
+    assert entradas[0]["motivo"] == ""
+    assert entradas[0]["estadoAnterior"] == "PRESENTE"
+
+
+def test_correccion_del_admin_con_motivo_en_blanco_se_guarda_vacia(client, monkeypatch):
     asistencia_id = _preparar_para_validar_correccion(client, monkeypatch)
 
     resp = client.patch(
@@ -960,8 +981,8 @@ def test_correccion_con_motivo_en_blanco_se_rechaza_con_400(client, monkeypatch)
         json={"estado": "AUSENTE", "motivo": "   "},
     )
 
-    assert resp.status_code == 400, resp.text
-    assert client.get(f"/api/v1/asistencias/{asistencia_id}/correcciones").json() == []
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["motivo"] == ""
 
 
 def test_correccion_sin_ningun_cambio_se_rechaza_con_400(client, monkeypatch):
@@ -1111,9 +1132,8 @@ def test_corregir_asistencia_inexistente_da_404(client):
     assert resp.status_code == 404
 
 
-def test_corregir_asistencia_exige_motivo(client, monkeypatch):
-    """`motivo` vacío se rechaza en validación Pydantic (422), antes de
-    llegar al servicio."""
+def test_corregir_asistencia_rechaza_un_motivo_demasiado_largo(client, monkeypatch):
+    """El motivo es opcional, pero si viene sigue acotado a 500 (422)."""
     _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
     fecha = str(_HOY_CORRECCION - timedelta(days=5))
     payload = _preparar_asistencia_para_corregir(client, fecha)
@@ -1121,7 +1141,7 @@ def test_corregir_asistencia_exige_motivo(client, monkeypatch):
 
     resp = client.patch(
         f"/api/v1/asistencias/{asistencia_id}/corregir",
-        json={"estado": "AUSENTE", "motivo": ""},
+        json={"estado": "AUSENTE", "motivo": "x" * 501},
     )
     assert resp.status_code == 422
 

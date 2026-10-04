@@ -14,7 +14,7 @@ def test_crear_y_obtener_ficha_medica(client):
         "/api/v1/fichas-medicas/",
         json={
             "tipo_sangre": "O_POSITIVO", "persona_id": persona["id"],
-            "enfermedades": ["Asma"], "telefono_emergencia": "0991112233",
+            "alergias": "Ninguna", "enfermedades": ["Asma"], "telefono_emergencia": "0991112233",
         },
     )
     assert resp.status_code == 201
@@ -33,7 +33,7 @@ def test_actualizar_tipo_sangre(client):
         "/api/v1/fichas-medicas/",
         json={
             "tipo_sangre": "O_POSITIVO", "persona_id": persona["id"],
-            "enfermedades": [], "telefono_emergencia": "0991112233",
+            "alergias": "Ninguna", "enfermedades": ["Ninguno"], "telefono_emergencia": "0991112233",
         },
     )
 
@@ -51,7 +51,7 @@ def test_actualizar_enfermedades_reemplaza_la_lista_completa(client):
         "/api/v1/fichas-medicas/",
         json={
             "tipo_sangre": "O_POSITIVO", "persona_id": persona["id"],
-            "enfermedades": ["Asma"], "telefono_emergencia": "0991112233",
+            "alergias": "Ninguna", "enfermedades": ["Asma"], "telefono_emergencia": "0991112233",
         },
     )
 
@@ -88,7 +88,7 @@ def test_crear_ficha_medica_con_datos_de_emergencia(client):
     resp = client.post(
         "/api/v1/fichas-medicas/",
         json={
-            "tipo_sangre": "O_POSITIVO", "persona_id": persona["id"], "enfermedades": [],
+            "tipo_sangre": "O_POSITIVO", "persona_id": persona["id"], "enfermedades": ["Ninguno"],
             "alergias": "Penicilina", "contacto_emergencia": "María Torres",
             "telefono_emergencia": "0991112233",
         },
@@ -114,13 +114,13 @@ def test_crear_ficha_medica_sin_datos_de_emergencia_son_opcionales(client):
     resp = client.post(
         "/api/v1/fichas-medicas/",
         json={
-            "tipo_sangre": "O_POSITIVO", "persona_id": persona["id"], "enfermedades": [],
+            "tipo_sangre": "O_POSITIVO", "persona_id": persona["id"], "alergias": "Ninguno", "enfermedades": ["Ninguno"],
             "telefono_emergencia": "0991112233",
         },
     )
     assert resp.status_code == 201
     body = resp.json()
-    assert body["alergias"] is None
+    assert body["alergias"] == "Ninguna"
     assert body["contactoEmergencia"] is None
     assert body["telefonoEmergencia"] == "0991112233"
 
@@ -131,7 +131,7 @@ def test_crear_ficha_medica_sin_telefono_de_emergencia_se_rechaza(client):
     persona = _crear_persona(client, cedula="1710034073")
     resp = client.post(
         "/api/v1/fichas-medicas/",
-        json={"tipo_sangre": "O_POSITIVO", "persona_id": persona["id"], "enfermedades": []},
+        json={"tipo_sangre": "O_POSITIVO", "persona_id": persona["id"], "alergias": "Ninguna", "enfermedades": ["Ninguno"]},
     )
     assert resp.status_code == 422
 
@@ -141,7 +141,7 @@ def test_actualizar_datos_de_emergencia_parcial(client):
     client.post(
         "/api/v1/fichas-medicas/",
         json={
-            "tipo_sangre": "O_POSITIVO", "persona_id": persona["id"], "enfermedades": [],
+            "tipo_sangre": "O_POSITIVO", "persona_id": persona["id"], "enfermedades": ["Ninguno"],
             "alergias": "Ninguna", "telefono_emergencia": "0991112233",
         },
     )
@@ -175,7 +175,7 @@ def test_vaciar_alergias_y_contacto_los_borra(client):
     client.post(
         "/api/v1/fichas-medicas/",
         json={
-            "tipo_sangre": "O_POSITIVO", "persona_id": persona["id"], "enfermedades": [],
+            "tipo_sangre": "O_POSITIVO", "persona_id": persona["id"], "enfermedades": ["Ninguno"],
             "alergias": "Polen", "contacto_emergencia": "Ana Torres",
             "telefono_emergencia": "0991112233",
         },
@@ -183,17 +183,16 @@ def test_vaciar_alergias_y_contacto_los_borra(client):
 
     resp = client.patch(
         f"/api/v1/fichas-medicas/persona/{persona['id']}",
-        json={"alergias": None, "contacto_emergencia": None},
+        json={"contacto_emergencia": None},
     )
     assert resp.status_code == 200
     body = resp.json()
-    assert body["alergias"] is None
     assert body["contactoEmergencia"] is None
 
     # Confirma que no fue solo la respuesta: releer también da vacío.
     resp = client.get(f"/api/v1/fichas-medicas/persona/{persona['id']}")
     body = resp.json()
-    assert body["alergias"] is None
+    assert body["alergias"] == "Polen"
     assert body["contactoEmergencia"] is None
     # Y el teléfono, que no se tocó, sigue donde estaba.
     assert body["telefonoEmergencia"] == "0991112233"
@@ -208,7 +207,7 @@ def test_vaciar_el_telefono_de_emergencia_ya_no_lo_borra(client):
     client.post(
         "/api/v1/fichas-medicas/",
         json={
-            "tipo_sangre": "O_POSITIVO", "persona_id": persona["id"], "enfermedades": [],
+            "tipo_sangre": "O_POSITIVO", "persona_id": persona["id"], "alergias": "Ninguna", "enfermedades": ["Ninguno"],
             "telefono_emergencia": "0991112233",
         },
     )
@@ -254,7 +253,7 @@ def test_existe_ficha_medica_distingue_quien_tiene_ficha_de_quien_no(client):
         "/api/v1/fichas-medicas/",
         json={
             "tipo_sangre": "O_POSITIVO", "persona_id": con_ficha["id"],
-            "enfermedades": [], "telefono_emergencia": "0991112233",
+            "alergias": "Ninguna", "enfermedades": ["Ninguno"], "telefono_emergencia": "0991112233",
         },
     )
 

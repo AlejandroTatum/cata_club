@@ -95,7 +95,7 @@ def _inscribir(db_session, correo="sofia@example.com", semilla=800) -> Usuario:
         # Issue #1138: camino representado -- sin contacto de emergencia
         # propio (se deriva del representante).
         ficha_medica=EnrollmentFichaMedicaMenorDTO(
-            tipo_sangre=TipoSangre.O_POSITIVO, enfermedades=[],
+            tipo_sangre=TipoSangre.O_POSITIVO, alergias="Ninguna", enfermedades=["Ninguno"],
         ),
         acepta_consentimientos=True,
     )

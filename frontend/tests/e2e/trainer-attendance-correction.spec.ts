@@ -166,9 +166,9 @@ test("Corregir opens that session's roll call, and the row-level Corregir actual
   expect(runtime.postedBatches).toHaveLength(0);
 
   // The real working door lives beside Ana's row instead: this slice's
-  // per-row "Corregir" (motivo + traza, PATCH /asistencias/{id}/corregir
-  // through its own BFF proxy). Prove it end to end — click it, submit a
-  // motivo, and check the button + its own BFF route agree on the payload.
+  // per-row "Corregir" (traza, sin motivo, PATCH /asistencias/{id}/corregir
+  // through its own BFF proxy). Prove it end to end — click it, save, and
+  // check the button + its own BFF route agree on the payload.
   let correctionRequestBody: unknown = null;
   await page.route(`**/api/attendance/records/${FILED_RECORD.id}/correct`, async (route: Route) => {
     correctionRequestBody = route.request().postDataJSON();
@@ -177,23 +177,20 @@ test("Corregir opens that session's roll call, and the row-level Corregir actual
       corregidoPorId: 1,
       corregidoPorNombre: "Admin Demo",
       corregidoEn: "2026-07-22T18:00:00Z",
-      motivo: "Se confirmó presencia con el profesor.",
+      motivo: "",
       estadoAnterior: "absent",
     });
   });
 
   await page.getByRole("button", { name: "Corregir" }).click();
   await page.getByRole("radio", { name: "Presente" }).click();
-  await page
-    .getByPlaceholder("Por qué se corrige este registro")
-    .fill("Se confirmó presencia con el profesor.");
+  // Issue #1578: the admin's dialog has no motivo field.
+  await expect(page.getByPlaceholder("Por qué se corrige este registro")).toHaveCount(0);
   await page.getByRole("button", { name: "Guardar corrección" }).click();
 
   await expect(page.getByText("Corrección guardada.")).toBeVisible();
-  expect(correctionRequestBody).toMatchObject({
-    estado: "present",
-    motivo: "Se confirmó presencia con el profesor.",
-  });
+  expect(correctionRequestBody).toMatchObject({ estado: "present" });
+  expect(correctionRequestBody).not.toHaveProperty("motivo");
   // Updated in place — the badge next to Ana's name now reads her new state.
   await expect(page.getByText("Presente", { exact: true })).toBeVisible();
 });

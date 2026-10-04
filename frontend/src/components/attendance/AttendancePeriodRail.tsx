@@ -70,6 +70,8 @@ export interface AttendancePeriodRailProps {
   studentFiltered: boolean;
   /** Enrolled students per horario id. With it, a list holding fewer records than that is listed as incomplete. */
   inscritosPorHorario?: Record<number, number>;
+  /** Draws the «Cómo leer el historial» card (default). The trainer's history turns it off. */
+  showGuide?: boolean;
   /** Extra paragraphs for the indications card (role-specific rules). */
   guideExtra?: ReactNode;
 }
@@ -82,6 +84,7 @@ export default function AttendancePeriodRail({
   horarioId,
   studentFiltered,
   inscritosPorHorario,
+  showGuide = true,
   guideExtra,
 }: AttendancePeriodRailProps): React.ReactElement {
   const coverageInput = useMemo(
@@ -102,7 +105,14 @@ export default function AttendancePeriodRail({
       horaActual: clubTimeHHMM(),
       horarioId,
     }),
-    [sessions, schedules, fechaInicio, fechaFin, horarioId, inscritosPorHorario],
+    [
+      sessions,
+      schedules,
+      fechaInicio,
+      fechaFin,
+      horarioId,
+      inscritosPorHorario,
+    ],
   );
   const coverage = useMemo(
     () => summarizePeriodCoverage(coverageInput),
@@ -165,7 +175,10 @@ export default function AttendancePeriodRail({
                 hint="diferencia estimada"
               />
             </div>
-            <p className="col-span-2 px-1 text-xs text-ink-3-strong" role="note">
+            <p
+              className="col-span-2 px-1 text-xs text-ink-3-strong"
+              role="note"
+            >
               {AVISO_ESTIMACION}
             </p>
           </section>
@@ -220,18 +233,21 @@ export default function AttendancePeriodRail({
                       <span className="text-xs tabular-nums text-ink-2">
                         {m.schedule.horaInicio} — {m.schedule.horaFin}
                       </span>
-                      {m.registrados !== undefined && m.inscritos !== undefined && (
-                        <span className="ml-2 text-xs font-semibold text-state-warn">
-                          {m.registrados} de {m.inscritos} registrados
-                        </span>
-                      )}
+                      {m.registrados !== undefined &&
+                        m.inscritos !== undefined && (
+                          <span className="ml-2 text-xs font-semibold text-state-warn">
+                            {m.registrados} de {m.inscritos} registrados
+                          </span>
+                        )}
                     </span>
                     <Link
                       href={`/trainer/attendance${buildWizardQuery(m.schedule.id, m.fecha, "mark-attendance")}`}
                       className={buttonClasses("secondary", "sm")}
                       aria-label={`${m.registrados !== undefined ? "Completar lista" : "Pasar lista"} del ${formatMissingSessionDate(m.fecha)} ${m.schedule.horaInicio}`}
                     >
-                      {m.registrados !== undefined ? "Completar lista" : "Pasar lista"}
+                      {m.registrados !== undefined
+                        ? "Completar lista"
+                        : "Pasar lista"}
                     </Link>
                   </li>
                 ))}
@@ -247,22 +263,24 @@ export default function AttendancePeriodRail({
         </>
       )}
 
-      <InfoPanel title="Cómo leer el historial" as="div">
-        <p>
-          Cada fila es una sesión con lista: la fecha, quién la pasó y cómo
-          quedó el grupo. Las sesiones del horario sin lista se pasan desde «Sin
-          lista en el período».
-        </p>
-        <ul className="flex flex-col gap-1.5">
-          {STATE_GUIDE.map((state) => (
-            <li key={state.label}>
-              <span className="font-semibold text-ink">{`${state.label}: `}</span>
-              {state.meaning}
-            </li>
-          ))}
-        </ul>
-        {guideExtra}
-      </InfoPanel>
+      {showGuide && (
+        <InfoPanel title="Cómo leer el historial" as="div">
+          <p>
+            Cada fila es una sesión con lista: la fecha, quién la pasó y cómo
+            quedó el grupo. Las sesiones del horario sin lista se pasan desde
+            «Sin lista en el período».
+          </p>
+          <ul className="flex flex-col gap-1.5">
+            {STATE_GUIDE.map((state) => (
+              <li key={state.label}>
+                <span className="font-semibold text-ink">{`${state.label}: `}</span>
+                {state.meaning}
+              </li>
+            ))}
+          </ul>
+          {guideExtra}
+        </InfoPanel>
+      )}
     </aside>
   );
 }

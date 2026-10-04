@@ -230,6 +230,7 @@ export default function AttendancePage(): React.ReactElement {
               // enforced by this page's `ProtectedRoute`, so no second role check.
               renderDetail={(session) => (
                 <SessionRecordsPanel
+                  key={sessionKey(session)}
                   records={recordsBySession.get(sessionKey(session)) ?? []}
                   onCorrected={handleCorrected}
                 />
@@ -249,8 +250,8 @@ export default function AttendancePage(): React.ReactElement {
                   <>
                     <p>
                       Abre «Registros» en una sesión para ver a cada jugador.
-                      «Corregir» cambia el estado de un registro y exige un
-                      motivo, que queda guardado con quien corrigió.
+                      «Corregir» cambia el estado de un registro; queda guardado
+                      quién lo corrigió y cuándo.
                     </p>
                     <p>
                       Solo se puede corregir una sesión de los últimos 30 días;

@@ -10,6 +10,10 @@
  * no request. The selection contract is the picker's own (`?alumno=`, see
  * `ManagedStudentPicker`), which this only drives through `onChange`.
  *
+ * Picking a different child says so with a toast («Ahora ves a {nombre}»): the
+ * screen's data changes under the guardian, and nothing else announces it. The
+ * same child, or the first render, stays silent.
+ *
  * The cards share the row equally (one column per dependent, four at most, one
  * column on a phone) so the strip fills its line instead of leaving two chips
  * huddled at the left of an empty one.
@@ -18,8 +22,9 @@
 "use client";
 
 import { Badge, cn } from "@/components/ui";
+import { useToast } from "@/contexts/ToastContext";
 import type { StudentProfileSummary } from "@/services/api";
-import { describeFamilyCoverage, personInitials } from "./student-utils";
+import { describeFamilyCoverage, firstNameOf, personInitials } from "./student-utils";
 
 export interface FamilyStripProps {
   profiles: StudentProfileSummary[];
@@ -43,7 +48,15 @@ export default function FamilyStrip({
   onChange,
   today,
 }: FamilyStripProps): React.ReactElement | null {
+  const { showInfo } = useToast();
+
   if (profiles.length < 2) return null;
+
+  const select = (profile: StudentProfileSummary): void => {
+    if (profile.personaId === value) return;
+    onChange(profile.personaId);
+    showInfo(`Ahora ves a ${firstNameOf(profile.nombres)}`);
+  };
 
   return (
     <div
@@ -62,7 +75,8 @@ export default function FamilyStrip({
             key={profile.personaId}
             type="button"
             aria-pressed={selected}
-            onClick={() => onChange(profile.personaId)}
+            aria-current={selected ? "true" : undefined}
+            onClick={() => select(profile)}
             className={cn(
               "flex min-h-[64px] min-w-0 items-center gap-3 rounded-ctl border bg-paper px-4 py-3 text-left transition-colors",
               selected
