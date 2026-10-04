@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  healthCopy,
   NO_READING,
   STALE_AFTER_MINUTES,
   formatAge,
@@ -166,5 +167,44 @@ describe("missing readings", () => {
       expect(statusCopy(key, "unknown").sentence).toMatch(/Sin datos todavía/);
       expect(statusCopy(key, "unknown").action).toBeNull();
     }
+  });
+});
+
+describe("healthCopy (ADMB-N1)", () => {
+  it("is null when health is missing, null or ok", () => {
+    expect(healthCopy(undefined)).toBeNull();
+    expect(healthCopy(null)).toBeNull();
+    expect(healthCopy({ state: "ok", degraded: false, heartbeatAgeSeconds: 5, components: [] })).toBeNull();
+  });
+
+  it("names every degraded component, in usted", () => {
+    const copy = healthCopy({
+      state: "degraded",
+      degraded: true,
+      heartbeatAgeSeconds: null,
+      components: [
+        { key: "workers", reason: "heartbeat_missing" },
+        { key: "email", reason: "heartbeat_missing" },
+        { key: "outbox", reason: "heartbeat_missing" },
+      ],
+    });
+    expect(copy?.sentence).toBe(
+      "Hay una falla en los procesos en segundo plano, el envío de correos y la cola de correos.",
+    );
+    expect(copy?.action).toMatch(/Avise de inmediato/);
+  });
+
+  it("explains a stuck outbox without blaming the workers", () => {
+    const copy = healthCopy({
+      state: "degraded",
+      degraded: true,
+      heartbeatAgeSeconds: 30,
+      components: [
+        { key: "email", reason: "outbox_stale" },
+        { key: "outbox", reason: "outbox_stale" },
+      ],
+    });
+    expect(copy?.sentence).toBe("Hay una falla en el envío de correos y la cola de correos.");
+    expect(copy?.action).toMatch(/30 minutos/);
   });
 });

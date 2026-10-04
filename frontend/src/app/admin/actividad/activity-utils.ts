@@ -9,7 +9,7 @@
  */
 
 import type { ChartTone } from "@/components/charts";
-import type { HealthLevel, PeriodSpan, StatusKey, Tone } from "./actividad-types";
+import type { HealthComponentKey, HealthLevel, PeriodSpan, StatusKey, SystemHealth, Tone } from "./actividad-types";
 
 export type ActivityView = "resumen" | "avanzadas";
 
@@ -234,4 +234,33 @@ const STATUS_COPY: Record<StatusKey, Record<HealthLevel, { sentence: string; act
 
 export function statusCopy(key: StatusKey, level: HealthLevel): { sentence: string; action: string | null } {
   return STATUS_COPY[key][level];
+}
+
+const HEALTH_COMPONENT_NAME: Record<HealthComponentKey, string> = {
+  workers: "los procesos en segundo plano",
+  email: "el envío de correos",
+  outbox: "la cola de correos",
+};
+
+/** «a», «a y b», «a, b y c». */
+function joinNames(names: readonly string[]): string {
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`;
+}
+
+/**
+ * The «Estado del sistema» row for a degraded heartbeat (ADMB-N1), or `null`
+ * when `health` is missing, null or ok: a field the backend did not send must
+ * never read as an alarm.
+ */
+export function healthCopy(health: SystemHealth | null | undefined): { sentence: string; action: string } | null {
+  if (!health || !health.degraded || health.components.length === 0) return null;
+  const names = joinNames(health.components.map(({ key }) => HEALTH_COMPONENT_NAME[key]));
+  const silent = health.components.some(({ reason }) => reason !== "outbox_stale");
+  return {
+    sentence: `Hay una falla en ${names}.`,
+    action: silent
+      ? "Los avisos y correos pueden no estar saliendo. Avise de inmediato al equipo técnico."
+      : "Hay correos detenidos hace más de 30 minutos. Avise al equipo técnico.",
+  };
 }

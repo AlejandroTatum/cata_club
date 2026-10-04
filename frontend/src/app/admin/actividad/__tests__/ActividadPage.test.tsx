@@ -164,6 +164,44 @@ describe("ActividadPage — Resumen", () => {
     expect(within(card).getAllByText("Atención").length).toBeGreaterThan(0);
   });
 
+  it("names the degraded component under «Atención» when the heartbeat reports it (ADMB-N1)", async () => {
+    mockResumen.mockResolvedValue({
+      ...resumenFixture("7d"),
+      health: {
+        state: "degraded",
+        degraded: true,
+        heartbeatAgeSeconds: 400,
+        components: [
+          { key: "workers", reason: "heartbeat_stale" },
+          { key: "email", reason: "heartbeat_stale" },
+        ],
+      },
+    });
+    await renderResumen();
+    const card = screen.getByTestId("system-status");
+    const row = within(card).getByTestId("system-health");
+    expect(row).toHaveTextContent(/procesos en segundo plano/i);
+    expect(row).toHaveTextContent(/envío de correos/i);
+    expect(within(row).getByText("Atención")).toBeInTheDocument();
+  });
+
+  it("shows no health row when the heartbeat reports ok or the field is missing (ADMB-N1)", async () => {
+    mockResumen.mockResolvedValue({
+      ...resumenFixture("7d"),
+      health: { state: "ok", degraded: false, heartbeatAgeSeconds: 12, components: [] },
+    });
+    await renderResumen();
+    expect(within(screen.getByTestId("system-status")).queryByTestId("system-health")).toBeNull();
+  });
+
+  it("tolerates a null or absent health field (ADMB-N1)", async () => {
+    mockResumen.mockResolvedValue({ ...resumenFixture("7d"), health: null });
+    await renderResumen();
+    const card = screen.getByTestId("system-status");
+    expect(within(card).queryByTestId("system-health")).toBeNull();
+    expect(within(card).getAllByRole("listitem")).toHaveLength(3);
+  });
+
   it("does not mention the daily email limit when nothing is waiting for it", async () => {
     await renderResumen();
     expect(screen.queryByTestId("queued-by-quota")).toBeNull();
