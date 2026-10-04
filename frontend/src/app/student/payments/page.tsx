@@ -70,6 +70,7 @@ import { BeneficioNote, PaymentOrBenefitForm } from "./PaymentForms";
 import { VoucherUploadPreview } from "./VoucherUploadPreview";
 import { PagoRow, CoberturaRow } from "./PagoHistoryRows";
 import StudentErrorState from "../StudentErrorState";
+import { useLatestPick } from "@/lib/useLatestPick";
 import { WHATSAPP_CONTACTO } from "@/lib/error-message";
 
 // ---------------------------------------------------------------------------
@@ -168,6 +169,7 @@ function PaymentsContent({
   /** Issue #463 — the file staged by the OS picker, awaiting an explicit
    *  "Confirmar y subir" before `subirVoucherPago` ever runs. */
   const [previewFile, setPreviewFile] = useState<File | null>(null);
+  const latestPick = useLatestPick();
   /** Object URL for `previewFile`'s thumbnail — only set for an image, and
    *  always revoked, either when a new file replaces it or on unmount. */
   const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null);
@@ -441,7 +443,10 @@ function PaymentsContent({
     // already in flight. Both are caught here before the preview/confirm
     // step below.
     // FAM-26: a photo over 5 MB is shrunk before it is staged.
-    const prepared = await prepareVoucher(file);
+    // Nothing older may be confirmed while the new pick is still being shrunk.
+    setPreviewFile(null);
+    const prepared = await latestPick.run(prepareVoucher(file));
+    if (!prepared) return;
     if ("error" in prepared) {
       setUploadError(prepared.error);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -473,6 +478,7 @@ function PaymentsContent({
   }
 
   function handleCancelUpload(): void {
+    latestPick.cancel();
     setPendingUploadPagoId(null);
     setPreviewFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";

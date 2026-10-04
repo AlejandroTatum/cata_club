@@ -54,6 +54,7 @@ import {
 import { BackLink, InfoPanel, Select, Stepper, buttonClasses, cn, PAGE_RAIL } from "@/components/ui";
 import { BLOOD_TYPE_LABELS, SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
 import { institutionOptionLabel, planOptionLabel } from "@/app/student/enroll/enroll-utils";
+import { useLatestPick } from "@/lib/useLatestPick";
 import { addMonthsIso, estimateTotal, prepareVoucher } from "@/app/student/payments/payments-utils";
 import HowToPay from "@/components/payments/HowToPay";
 import { ProofPreview } from "@/app/student/payments/ProofPreview";
@@ -121,6 +122,7 @@ function AddDependentContent(): React.ReactElement {
   const [months, setMonths] = useState(1);
   const [method, setMethod] = useState<"EFECTIVO" | "TRANSFERENCIA">("TRANSFERENCIA");
   const [voucher, setVoucher] = useState<File | null>(null);
+  const latestPick = useLatestPick();
   const voucherInputRef = useRef<HTMLInputElement>(null);
   const stepTitleRef = useRef<HTMLHeadingElement>(null);
 
@@ -238,14 +240,17 @@ function AddDependentContent(): React.ReactElement {
    * be fixed stays as picked, so `validateDependentPayment` reports the size.
    */
   async function pickVoucher(file: File | null): Promise<void> {
-    if (!file) { setVoucher(null); return; }
-    const prepared = await prepareVoucher(file);
+    if (!file) { latestPick.cancel(); setVoucher(null); return; }
+    // Nothing older may be uploaded while the new pick is still being shrunk.
+    setVoucher(null);
+    const prepared = await latestPick.run(prepareVoucher(file));
+    if (!prepared) return;
     setVoucher("file" in prepared ? prepared.file : file);
   }
 
   async function handleConfirm(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
-    if (submitting) return;
+    if (submitting || latestPick.pending) return;
     if (showAdded) return;
     if (paymentDependentId !== null) {
       const errors = validateDependentPayment(planId, months, method, voucher);

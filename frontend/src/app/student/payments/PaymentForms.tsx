@@ -9,6 +9,7 @@ import type { PagoPersona, MembershipSummary, RegistrarPagoInput, BeneficioAsign
 import { Button, DataBox } from "@/components/ui";
 import { formatCurrency, formatDateRange } from "@/lib/format-utils";
 import { calendarIsoDate, clubToday } from "@/lib/club-date";
+import { useLatestPick } from "@/lib/useLatestPick";
 import { addMonthsIso, estimateTotal, prepareVoucher } from "./payments-utils";
 import { CreditCard, Loader2, Minus, Paperclip, Plus, Upload, X } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -397,6 +398,7 @@ function RenewPaymentForm({
   const [tipoPago, setTipoPago] = useState<"EFECTIVO" | "TRANSFERENCIA">("TRANSFERENCIA");
   const [fechaInicio, setFechaInicio] = useState<string>("");
   const [voucherFile, setVoucherFile] = useState<File | null>(null);
+  const latestPick = useLatestPick();
   /** FAM-20: why the last picked file was refused. Kept until a valid file is picked. */
   const [voucherRejection, setVoucherRejection] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -434,6 +436,9 @@ function RenewPaymentForm({
   /** The first thing wrong with the form as it stands, or `null`. */
   function findProblem(): string | null {
     if (!fechaInicio || !fechaFin) return "No se pudo calcular el período que cubre este pago.";
+    if (tipoPago === "TRANSFERENCIA" && latestPick.pending) {
+      return "Espere un momento: se está preparando el comprobante.";
+    }
     if (tipoPago === "TRANSFERENCIA" && !voucherFile) {
       // FAM-20: a refused file is not «no file»; say why it was refused.
       if (voucherRejection) return voucherRejection;
@@ -468,7 +473,10 @@ function RenewPaymentForm({
   async function handleVoucherChange(picked: File | null): Promise<void> {
     let file = picked;
     if (picked) {
-      const prepared = await prepareVoucher(picked);
+      // Nothing older may be uploaded while the new pick is still being shrunk.
+      setVoucherFile(null);
+      const prepared = await latestPick.run(prepareVoucher(picked));
+      if (!prepared) return;
       if ("error" in prepared) {
         setVoucherFile(null);
         setVoucherRejection(prepared.error);
@@ -478,6 +486,7 @@ function RenewPaymentForm({
       }
       file = prepared.file;
     }
+    if (!picked) latestPick.cancel();
     setVoucherFile(file);
     setVoucherRejection(null);
     action.setError(null);
@@ -746,7 +755,7 @@ function RenewPaymentForm({
       ) : (
         <OpenCheckpointTrigger
           label="Registrar pago"
-          disabled={!fechaInicio || !fechaFin}
+          disabled={!fechaInicio || !fechaFin || (tipoPago === "TRANSFERENCIA" && latestPick.pending)}
           onRequestConfirm={action.handleRequestConfirm}
           onCancel={handleCancel}
           submitButtonRef={action.submitButtonRef}

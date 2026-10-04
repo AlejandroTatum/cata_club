@@ -1096,6 +1096,30 @@ describe("StudentPaymentsPage — the history", () => {
     expect(mockSubirVoucherPago).not.toHaveBeenCalled();
   });
 
+  it("stages the newer pick when an older shrink resolves last", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ id: 77, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "TRANSFERENCIA", voucherUrl: null }),
+    ]);
+    let resolveA: (f: File) => void = () => {};
+    shrinkImage
+      .mockImplementationOnce(() => new Promise<File>((resolve) => { resolveA = resolve; }))
+      .mockResolvedValueOnce(new File([new Uint8Array(1024)], "b.jpg", { type: "image/jpeg" }));
+    render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
+    fireEvent.click(within(historyTable()).getByRole("button", { name: /^reintentar subir comprobante$/i }));
+    const input = screen.getByTestId("pago-voucher-input");
+    const big = (name: string) => new File([new Uint8Array(6 * 1024 * 1024)], name, { type: "image/jpeg" });
+    fireEvent.change(input, { target: { files: [big("a.jpeg")] } });
+    fireEvent.change(input, { target: { files: [big("b.jpeg")] } });
+    await screen.findByText("b.jpg");
+
+    resolveA(new File([new Uint8Array(1024)], "a.jpg", { type: "image/jpeg" }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(screen.queryByText("a.jpg")).not.toBeInTheDocument();
+    expect(screen.getByText("b.jpg")).toBeInTheDocument();
+  });
+
   // FAM-26: a phone photo over 5 MB is shrunk in the browser, not rejected.
   it("stages a shrunk copy of a photo over 5 MB instead of rejecting it (FAM-26)", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([
@@ -1574,6 +1598,26 @@ describe("StudentPaymentsPage — registering a payment", () => {
     );
     expect(screen.queryByText("comprobante.png")).not.toBeInTheDocument();
     expect(mockRegistrarPago).not.toHaveBeenCalled();
+  });
+
+  it("keeps the newer pick when an older shrink resolves last", async () => {
+    let resolveA: (f: File) => void = () => {};
+    shrinkImage
+      .mockImplementationOnce(() => new Promise<File>((resolve) => { resolveA = resolve; }))
+      .mockResolvedValueOnce(new File([new Uint8Array(1024)], "b.jpg", { type: "image/jpeg" }));
+    render(<StudentPaymentsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
+    const input = screen.getByTestId("renew-voucher-input");
+    const big = (name: string) => new File([new Uint8Array(6 * 1024 * 1024)], name, { type: "image/jpeg" });
+    fireEvent.change(input, { target: { files: [big("a.jpeg")] } });
+    fireEvent.change(input, { target: { files: [big("b.jpeg")] } });
+    await screen.findByText("b.jpg");
+
+    resolveA(new File([new Uint8Array(1024)], "a.jpg", { type: "image/jpeg" }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(screen.queryByText("a.jpg")).not.toBeInTheDocument();
+    expect(screen.getByText("b.jpg")).toBeInTheDocument();
   });
 
   it("shrinks a photo over 5 MB and keeps it as the comprobante (FAM-26)", async () => {

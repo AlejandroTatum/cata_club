@@ -93,4 +93,24 @@ describe("receipt photo over 5 MB (FAM-26)", () => {
     expect(await screen.findByText(/pesar hasta 5 MB/)).toBeInTheDocument();
     expect(subirVoucherPago).not.toHaveBeenCalled();
   });
+
+  it("keeps the newer pick when an older shrink resolves last", async () => {
+    let resolveA: (f: File) => void = () => {};
+    const shrunkB = new File([new Uint8Array(1 * MB)], "b.jpg", { type: "image/jpeg" });
+    shrinkImage
+      .mockImplementationOnce(() => new Promise<File>((resolve) => { resolveA = resolve; }))
+      .mockResolvedValueOnce(shrunkB);
+    await pickTransferVoucher(new File([new Uint8Array(6 * MB)], "a.jpeg", { type: "image/jpeg" }));
+    fireEvent.change(document.getElementById("dependent-voucher") as HTMLInputElement, {
+      target: { files: [new File([new Uint8Array(6 * MB)], "b.jpeg", { type: "image/jpeg" })] },
+    });
+    await screen.findByText("b.jpg");
+
+    resolveA(new File([new Uint8Array(1 * MB)], "a.jpg", { type: "image/jpeg" }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(screen.queryByText("a.jpg")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^registrar pago$/i }));
+    await waitFor(() => expect(subirVoucherPago).toHaveBeenCalledWith(900, shrunkB));
+  });
 });
