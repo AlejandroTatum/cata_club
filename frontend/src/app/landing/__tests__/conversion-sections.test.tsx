@@ -115,8 +115,21 @@ describe("contact (LAN-15)", () => {
   it("keeps a call and a WhatsApp link for every configured number", () => {
     render(<LandingPage />);
     landingConfig.contact.whatsapp.forEach((number) => {
-      expect(screen.getByRole("link", { name: `Llamar al ${number}` })).toHaveAttribute("href", expect.stringMatching(/^tel:\+593\d{9}$/));
+      expect(screen.getByRole("link", { name: `Llamar a Administración · ${number}` })).toHaveAttribute("href", expect.stringMatching(/^tel:\+593\d{9}$/));
     });
+  });
+});
+
+describe("phone labels (LAN-15)", () => {
+  it("labels both numbers Administración and keeps each link's name distinct", () => {
+    render(<LandingPage />);
+    const numbers = landingConfig.contact.whatsapp;
+    expect(numbers).toHaveLength(2);
+    numbers.forEach((number) => {
+      expect(landingConfig.contact.phoneLabels[number]).toBe("Administración");
+      expect(screen.getByRole("link", { name: `Administración · ${number}` })).toHaveAttribute("href", toWhatsAppLink(number));
+    });
+    expect(screen.queryByText(/Entrenadores/)).toBeNull();
   });
 });
 

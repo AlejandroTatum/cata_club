@@ -753,7 +753,7 @@ describe("LandingPage", (): void => {
     render(<LandingPage />);
 
     landingConfig.contact.whatsapp.forEach((number): void => {
-      expect(within(document.querySelector(".landing-contact") as HTMLElement).getByRole("link", { name: number })).toHaveAttribute("href", toWhatsAppLink(number));
+      expect(within(document.querySelector(".landing-contact") as HTMLElement).getByRole("link", { name: `Administración · ${number}` })).toHaveAttribute("href", toWhatsAppLink(number));
     });
   });
 

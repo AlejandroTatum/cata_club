@@ -457,7 +457,7 @@ function Location(): React.ReactElement {
           <dt>Llamadas</dt>
           <dd className="landing-contact-numbers">
             {contact.whatsapp.map((number): React.ReactElement => (
-              <a key={number} href={`tel:+${toWhatsAppNumber(number)}`} aria-label={`Llamar al ${number}`}>{phoneText(number)}</a>
+              <a key={number} href={`tel:+${toWhatsAppNumber(number)}`} aria-label={`Llamar a ${phoneText(number)}`}>{phoneText(number)}</a>
             ))}
           </dd>
           <dd aria-hidden="true" />

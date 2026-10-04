@@ -180,4 +180,11 @@ describe("landingConfig", (): void => {
     expect(Object.keys(landingConfig)).toEqual(["contact"]);
     expect(Object.keys(landingConfig.contact)).toEqual(["whatsapp", "phoneLabels", "email", "facebook", "instagram"]);
   });
+
+  it("labels both landing numbers as Administración (QA4 LAN-15)", (): void => {
+    expect(landingConfig.contact.phoneLabels).toEqual({
+      "0994219619": "Administración",
+      "0990288152": "Administración",
+    });
+  });
 });
