@@ -38,9 +38,9 @@ test("a representative adds a minor and registers the first pending payment", as
   await page.getByRole("button", { name: /siguiente/i }).click();
   await page.getByLabel(/cuándo desea pagar/i).selectOption("now");
   await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: /agregar dependiente/i }).click();
+  await page.getByRole("button", { name: /agregar jugador/i }).click();
 
-  await expect(page.getByText(/el dependiente ya fue agregado/i)).toBeVisible();
+  await expect(page.getByText(/el jugador ya fue agregado/i)).toBeVisible();
   await page.getByLabel(/plan de membresía/i).selectOption("3");
   await page.getByLabel(/medio de pago/i).selectOption("EFECTIVO");
   const paymentRequest = page.waitForRequest("**/api/membresias/representado/pago");

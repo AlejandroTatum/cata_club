@@ -315,7 +315,7 @@ async function enterFromLogin(page: Page): Promise<void> {
 async function goToPersonal(page: Page, type: "Jugador" | "Representante"): Promise<void> {
   await page.getByRole("radio", { name: new RegExp(`^${type}`) }).click();
   await nextButton(page).click();
-  await expect(page.getByRole("heading", { name: /datos del estudiante/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /datos del jugador/i })).toBeVisible();
 }
 
 /** Completa el paso del estudiante con datos válidos, sin avanzar. */
@@ -502,7 +502,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     await fillAndBlur(page, F.telefono, "099123");
     await expect(field(page, F.telefono)).toHaveValue("99123");
     await expect(fieldError(page, F.telefono)).toHaveText(
-      "El teléfono no es válido. Escribe 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+      "El teléfono no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
     );
     await shot(page, "P11", "telefono-corto");
   });
@@ -522,7 +522,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     await birthDatePart(page, F.fechaNacimiento, "dia").focus();
     await birthDatePart(page, F.fechaNacimiento, "dia").blur();
     await expect(fieldError(page, F.fechaNacimiento)).toHaveText(
-      "Indica la fecha de nacimiento del alumno.",
+      "Indique la fecha de nacimiento del alumno.",
     );
     await shot(page, "P13", "fecha-vacia");
   });
@@ -530,7 +530,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
   test("P14 · un menor de edad no puede autoinscribirse", async ({ page }) => {
     await fillAndBlur(page, F.fechaNacimiento, isoYearsAgo(12));
     await expect(fieldError(page, F.fechaNacimiento)).toContainText(
-      "El alumno es menor de edad y necesita un representante.",
+      "El jugador es menor de edad y necesita un representante.",
     );
     await expectStepBlocked(page);
     await shot(page, "P14", "menor-autoinscripcion");
@@ -551,7 +551,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     const iso = `${almost.getFullYear()}-${String(almost.getMonth() + 1).padStart(2, "0")}-${String(almost.getDate()).padStart(2, "0")}`;
     await fillAndBlur(page, F.fechaNacimiento, iso);
     await expect(fieldError(page, F.fechaNacimiento)).toContainText(
-      "El alumno es menor de edad y necesita un representante.",
+      "El jugador es menor de edad y necesita un representante.",
     );
     await shot(page, "P16", "borde-17-anios-11-meses");
   });
@@ -801,7 +801,7 @@ test.describe("H · Salud y emergencia", () => {
     const select = field(page, F.tipoSangre);
     await select.focus();
     await select.blur();
-    await expect(page.getByText("Selecciona el tipo de sangre del alumno.")).toBeVisible();
+    await expect(page.getByText("Selecciona el tipo de sangre del jugador.")).toBeVisible();
     await shot(page, "H02", "tipo-de-sangre-vacio");
   });
 
@@ -816,7 +816,7 @@ test.describe("H · Salud y emergencia", () => {
   test("H04 · teléfono de emergencia de 5 dígitos", async ({ page }) => {
     await fillAndBlur(page, F.telefonoEmergencia, "12345");
     await expect(fieldError(page, F.telefonoEmergencia)).toHaveText(
-      "El teléfono de emergencia no es válido. Escribe 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+      "El teléfono de emergencia no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
     );
     await expectStepBlocked(page);
     await shot(page, "H04", "telefono-emergencia-corto");
@@ -888,9 +888,9 @@ test.describe("S · Resumen, envío y errores del servidor", () => {
     await goToSummary(page);
     const confirmar = page.getByRole("button", { name: /confirmar inscripción/i });
     await expect(confirmar).toBeEnabled();
-    await expect(page.getByText(/marca la casilla de aceptación/i)).toHaveCount(0);
+    await expect(page.getByText(/marque la casilla de aceptación/i)).toHaveCount(0);
     await confirmar.click();
-    await expect(page.getByText(/marca la casilla de aceptación/i)).toBeVisible();
+    await expect(page.getByText(/marque la casilla de aceptación/i)).toBeVisible();
     await shot(page, "S01", "resumen-sin-confirmar");
   });
 
@@ -955,7 +955,7 @@ test.describe("S · Resumen, envío y errores del servidor", () => {
     // el paso honesto ya disponible desde la propia cuenta (jugador o
     // dependiente), no solo "entrar".
     const alerta = stepAlert(page);
-    await expect(alerta).toContainText("Si ya tienes cuenta, no necesitas volver a inscribirse");
+    await expect(alerta).toContainText("Si ya tiene cuenta, no necesita volver a inscribirse");
     await expect(alerta.getByRole("link", { name: /iniciar sesión/i })).toBeVisible();
     await expect(alerta.getByRole("link", { name: /recuperar contraseña/i })).toBeVisible();
     await shot(page, "S08", "duplicado-ofrece-salida");
@@ -1188,7 +1188,7 @@ test.describe("N · Navegación del asistente", () => {
     await expect(page.getByRole("heading", { name: /salud y emergencia/i })).toBeVisible();
 
     await page.getByRole("button", { name: /atrás/i }).click();
-    await expect(page.getByRole("heading", { name: /datos del estudiante/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /datos del jugador/i })).toBeVisible();
     await expect(field(page, F.cedula)).toHaveValue(VALID_STUDENT.cedula);
     await shot(page, "N01", "atras-conserva-datos");
   });
@@ -1202,7 +1202,7 @@ test.describe("N · Navegación del asistente", () => {
     await expect(page.getByRole("heading", { name: /salud y emergencia/i })).toBeVisible();
 
     await page.goBack();
-    await expect(page.getByRole("heading", { name: /datos del estudiante/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /datos del jugador/i })).toBeVisible();
     await expect(field(page, F.cedula)).toHaveValue(VALID_STUDENT.cedula);
     await shot(page, "N02", "back-del-navegador");
   });
@@ -1231,12 +1231,12 @@ test.describe("N · Navegación del asistente", () => {
     await expect(tipoButton).toHaveCount(1);
     await expect(tipoButton).toBeVisible();
 
-    for (const label of ["Estudiante", "Salud", "Confirmar"]) {
+    for (const label of ["Jugador", "Salud", "Confirmar"]) {
       await expect(stepper.getByText(label)).toBeVisible();
       await expect(stepper.getByRole("button", { name: label })).toHaveCount(0);
     }
     await expect(stepper.getByRole("link")).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: /datos del estudiante/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /datos del jugador/i })).toBeVisible();
     await shot(page, "N03", "sin-salto-de-pasos");
   });
 });
@@ -1264,7 +1264,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     // antes leía la edad negativa como "menor de edad" sobre alguien que
     // todavía no nació.
     await expect(fieldError(page, F.fechaNacimiento)).toHaveText(
-      "La fecha de nacimiento no puede ser posterior a hoy. Revisa el año.",
+      "La fecha de nacimiento no puede ser posterior a hoy. Revise el año.",
     );
     await expectStepBlocked(page);
     await shot(page, "G01", "fecha-futura-mensaje-correcto");
@@ -1282,7 +1282,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     // autoinscripción o dependiente: corre siempre (#224). Un alumno con
     // fecha de nacimiento del año que viene bloquea el paso, no lo pasa.
     await expect(fieldError(page, F.fechaNacimiento)).toHaveText(
-      "La fecha de nacimiento no puede ser posterior a hoy. Revisa el año.",
+      "La fecha de nacimiento no puede ser posterior a hoy. Revise el año.",
     );
     await expectStepBlocked(page);
     await shot(page, "G02", "dependiente-fecha-futura-rechazada");
@@ -1390,7 +1390,7 @@ test.describe("V · Laxitud frente a la norma ecuatoriana — CERRADA (issues #2
     await fillAndBlur(page, F.telefono, "099abc1234");
     await expect(field(page, F.telefono)).toHaveValue("991234");
     await expect(fieldError(page, F.telefono)).toHaveText(
-      "El teléfono no es válido. Escribe 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+      "El teléfono no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
     );
     await shot(page, "V01", "telefono-con-letras-limpiado");
   });
@@ -1402,7 +1402,7 @@ test.describe("V · Laxitud frente a la norma ecuatoriana — CERRADA (issues #2
     await fillAndBlur(page, F.telefono, "0991234");
     await expect(field(page, F.telefono)).toHaveValue("991234");
     await expect(fieldError(page, F.telefono)).toHaveText(
-      "El teléfono no es válido. Escribe 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+      "El teléfono no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
     );
     await shot(page, "V02", "telefono-de-7-digitos-rechazado");
   });
@@ -1451,7 +1451,7 @@ test.describe("V · Laxitud frente a la norma ecuatoriana — CERRADA (issues #2
     // de las más usadas del mundo, así que la lista la ataja igual.
     await fillAndBlur(page, F.contrasenia, "12345678");
     await expect(fieldError(page, F.contrasenia)).toHaveText(
-      "La contraseña es una de las más usadas y fácil de adivinar; elige otra.",
+      "La contraseña es una de las más usadas y fácil de adivinar; elija otra.",
     );
     await shot(page, "V08", "contrasenia-debil-rechazada");
   });
@@ -1525,7 +1525,7 @@ test.describe("X · Robustez del envío", () => {
     // El resumen ofrece "Editar" por bloque — es el atajo que evita rehacer
     // el asistente entero por un dígito.
     await page.getByRole("button", { name: /^editar/i }).nth(1).click();
-    await expect(page.getByRole("heading", { name: /datos del estudiante/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /datos del jugador/i })).toBeVisible();
     await expect(field(page, F.cedula)).toHaveValue(VALID_STUDENT.cedula);
     await shot(page, "X03", "corregir-desde-resumen");
   });
@@ -1623,7 +1623,7 @@ test.describe("D · Borrador en sessionStorage tras un alta fallida", () => {
     // directo al paso "Datos del estudiante", que queda incompleto por la
     // contraseña faltante y por eso es donde el visitante retoma.
     await page.reload();
-    await expect(page.getByRole("heading", { name: /datos del estudiante/i })).toBeVisible({
+    await expect(page.getByRole("heading", { name: /datos del jugador/i })).toBeVisible({
       timeout: 20_000,
     });
     await expect(page.getByText(/recuperamos los datos/i)).toBeVisible();
