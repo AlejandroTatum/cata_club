@@ -837,7 +837,7 @@
   .landing-mobile-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; display: flex; align-items: center; gap: 12px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--landing-border); background: var(--landing-surface); box-shadow: 0 -6px 18px color-mix(in srgb, var(--landing-brand-black) 14%, transparent); }
   .landing-mobile-bar .landing-button { flex: 1; }
   /* @touch-target 48px, the same as every landing CTA. */
-  .landing-mobile-bar-whatsapp { display: grid; flex: none; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--landing-third-party-whatsapp); color: var(--landing-brand-black); }
+  .landing-mobile-bar-whatsapp { display: grid; flex: none; place-items: center; width: 48px; min-height: 48px; height: 48px; border-radius: 50%; background: var(--landing-third-party-whatsapp); color: var(--landing-brand-black); }
   .landing-mobile-bar-whatsapp:focus-visible { outline: 3px solid var(--landing-focus); outline-offset: 3px; }
   .landing-mobile-bar-whatsapp svg { width: 24px; height: 24px; }
   /* Keeps the footer's last line clear of the bar. */
