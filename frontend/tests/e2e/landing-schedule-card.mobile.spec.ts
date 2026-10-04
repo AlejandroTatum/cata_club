@@ -47,7 +47,7 @@ test.describe("Schedule cards on a real mobile engine", () => {
     await expect(infantil.locator(".landing-schedule-time")).toContainText("16:00");
     await expect(infantil.locator(".landing-schedule-days")).not.toBeEmpty();
 
-    const cta = page.getByRole("link", { name: "Consultar cupo en Infantil por WhatsApp" });
+    const cta = page.getByRole("link", { name: "Preguntar por cupos en Infantil por WhatsApp" });
     await cta.scrollIntoViewIfNeeded();
     await expect(cta).toHaveAttribute("href", /wa\.me|whatsapp/i);
     const ctaBox = await cta.boundingBox();
