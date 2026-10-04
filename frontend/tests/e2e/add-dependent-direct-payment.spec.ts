@@ -36,7 +36,7 @@ test("a representative adds a minor and registers the first pending payment", as
   await page.getByRole("button", { name: /siguiente/i }).click();
   await page.getByLabel(/^Tipo de sangre/).selectOption("O_POSITIVO");
   await page.getByRole("button", { name: /siguiente/i }).click();
-  await page.getByLabel(/cuándo desea pagar/i).selectOption("now");
+  await page.getByLabel(/cuándo quieres pagar/i).selectOption("now");
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: /agregar jugador/i }).click();
 
