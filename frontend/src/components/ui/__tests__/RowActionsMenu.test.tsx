@@ -160,3 +160,41 @@ describe("RowActionsMenu with a visible trigger label", () => {
     expect(screen.getByRole("menuitem", { name: "Editar Ana Paz" })).toBeInTheDocument();
   });
 });
+
+describe("RowActionsMenu alignment and custom trigger", () => {
+  const rect = { top: 100, bottom: 132, left: 40, right: 72, width: 32, height: 32, x: 40, y: 100, toJSON: () => ({}) } as DOMRect;
+
+  it("lines the menu up with the trigger's right edge by default", () => {
+    const { trigger } = setup();
+    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue(rect);
+
+    fireEvent.click(trigger);
+
+    const menu = screen.getByRole("menu");
+    expect(menu.style.right).toBe(`${window.innerWidth - 72}px`);
+    expect(menu.style.left).toBe("");
+  });
+
+  it("lines the menu up with the trigger's left edge with align=\"start\", using the given icon and classes", () => {
+    render(
+      <RowActionsMenu
+        label="Editar foto de perfil"
+        align="start"
+        triggerClassName="pencil-badge"
+        triggerIcon={<svg data-testid="pencil-icon" />}
+        items={[{ label: "Ver foto", onSelect: vi.fn() }]}
+      />,
+    );
+    const trigger = screen.getByRole("button", { name: "Editar foto de perfil" });
+    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue(rect);
+
+    expect(trigger).toHaveClass("pencil-badge");
+    expect(within(trigger).getByTestId("pencil-icon")).toBeInTheDocument();
+    fireEvent.click(trigger);
+
+    const menu = screen.getByRole("menu");
+    expect(menu.style.left).toBe("40px");
+    expect(menu.style.right).toBe("");
+    expect(menu.style.top).toBe("136px");
+  });
+});
