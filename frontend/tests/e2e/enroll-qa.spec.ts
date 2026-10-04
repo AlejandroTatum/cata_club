@@ -502,7 +502,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     await fillAndBlur(page, F.telefono, "099123");
     await expect(field(page, F.telefono)).toHaveValue("99123");
     await expect(fieldError(page, F.telefono)).toHaveText(
-      "El teléfono no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+      "El teléfono no es válido. Escribe 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
     );
     await shot(page, "P11", "telefono-corto");
   });
@@ -522,7 +522,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     await birthDatePart(page, F.fechaNacimiento, "dia").focus();
     await birthDatePart(page, F.fechaNacimiento, "dia").blur();
     await expect(fieldError(page, F.fechaNacimiento)).toHaveText(
-      "Indique la fecha de nacimiento del alumno.",
+      "Indica la fecha de nacimiento del jugador.",
     );
     await shot(page, "P13", "fecha-vacia");
   });
@@ -816,7 +816,7 @@ test.describe("H · Salud y emergencia", () => {
   test("H04 · teléfono de emergencia de 5 dígitos", async ({ page }) => {
     await fillAndBlur(page, F.telefonoEmergencia, "12345");
     await expect(fieldError(page, F.telefonoEmergencia)).toHaveText(
-      "El teléfono de emergencia no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+      "El teléfono de emergencia no es válido. Escribe 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
     );
     await expectStepBlocked(page);
     await shot(page, "H04", "telefono-emergencia-corto");
@@ -1278,7 +1278,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     const nextYear = new Date().getFullYear() + 1;
     await fillAndBlur(page, F.fechaNacimiento, `${nextYear}-06-15`);
 
-    // La regla de fecha de nacimiento del alumno ya no depende de si es
+    // La regla de fecha de nacimiento del jugador ya no depende de si es
     // autoinscripción o dependiente: corre siempre (#224). Un alumno con
     // fecha de nacimiento del año que viene bloquea el paso, no lo pasa.
     await expect(fieldError(page, F.fechaNacimiento)).toHaveText(
@@ -1300,7 +1300,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     // tipo de inscripción, así que la misma persona ya no puede ser rechazada
     // como representante y aceptada como jugador (ver también G04).
     await expect(fieldError(page, F.fechaNacimiento)).toContainText(
-      "La edad del alumno debe estar entre 3 y 95 años",
+      "La edad del jugador debe estar entre 3 y 95 años",
     );
     await expectStepBlocked(page);
     await shot(page, "G03", "techo-de-edad-jugador-120");
@@ -1313,7 +1313,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     await fillAndBlur(page, F.fechaNacimiento, "1750-03-15");
 
     await expect(fieldError(page, F.fechaNacimiento)).toContainText(
-      "La edad del alumno debe estar entre 3 y 95 años",
+      "La edad del jugador debe estar entre 3 y 95 años",
     );
     await expectStepBlocked(page);
     await shot(page, "G04", "jugador-anio-1750-rechazado");
@@ -1340,7 +1340,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     );
   });
 
-  test("G08 · el piso de edad del alumno es 3 años: 3 pasa, 2 se rechaza", async ({ page }) => {
+  test("G08 · el piso de edad del jugador es 3 años: 3 pasa, 2 se rechaza", async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Representante");
     await fillValidChildStudent(page);
@@ -1352,7 +1352,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     // …y uno de 2 años bloquea en el primer paso, no en el resumen.
     await fillAndBlur(page, F.fechaNacimiento, isoYearsAgo(2, 1, 1));
     await expect(fieldError(page, F.fechaNacimiento)).toContainText(
-      "La edad del alumno debe estar entre 3 y 95 años; la fecha ingresada corresponde a 2 años.",
+      "La edad del jugador debe estar entre 3 y 95 años; la fecha ingresada corresponde a 2 años.",
     );
     await expectStepBlocked(page);
     await shot(page, "G08", "dependiente-menor-de-3-rechazado");
@@ -1390,7 +1390,7 @@ test.describe("V · Laxitud frente a la norma ecuatoriana — CERRADA (issues #2
     await fillAndBlur(page, F.telefono, "099abc1234");
     await expect(field(page, F.telefono)).toHaveValue("991234");
     await expect(fieldError(page, F.telefono)).toHaveText(
-      "El teléfono no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+      "El teléfono no es válido. Escribe 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
     );
     await shot(page, "V01", "telefono-con-letras-limpiado");
   });
@@ -1402,7 +1402,7 @@ test.describe("V · Laxitud frente a la norma ecuatoriana — CERRADA (issues #2
     await fillAndBlur(page, F.telefono, "0991234");
     await expect(field(page, F.telefono)).toHaveValue("991234");
     await expect(fieldError(page, F.telefono)).toHaveText(
-      "El teléfono no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+      "El teléfono no es válido. Escribe 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
     );
     await shot(page, "V02", "telefono-de-7-digitos-rechazado");
   });

@@ -620,7 +620,7 @@ describe("nombre de persona", () => {
   });
 });
 
-describe("edad del alumno", () => {
+describe("edad del jugador", () => {
   describe("calculatePersonAge", () => {
     it("computes age from a birth date component-wise, not via UTC parsing", () => {
       expect(calculatePersonAge("2024-01-01", FROZEN_TODAY)).toBe(5);
@@ -692,7 +692,7 @@ describe("edad del alumno", () => {
 
   describe("studentBirthDateRule — issue #224's five reproduction cases", () => {
     it("requires a value", () => {
-      expect(studentBirthDateRule("", FROZEN_TODAY)).toBe("Indica la fecha de nacimiento del alumno.");
+      expect(studentBirthDateRule("", FROZEN_TODAY)).toBe("Indica la fecha de nacimiento del jugador.");
     });
 
     it("rejects an invalid calendar date", () => {
@@ -713,19 +713,19 @@ describe("edad del alumno", () => {
 
     it("rejects a birth date 2 years ago, naming the computed age", () => {
       expect(studentBirthDateRule("2027-01-01", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 2 años. Revisa el año de nacimiento.`,
+        `La edad del jugador debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 2 años. Revisa el año de nacimiento.`,
       );
     });
 
     it("rejects a birth date 120 years ago, naming the computed age", () => {
       expect(studentBirthDateRule("1909-01-01", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 120 años. Revisa el año de nacimiento.`,
+        `La edad del jugador debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 120 años. Revisa el año de nacimiento.`,
       );
     });
 
     it("rejects an implausible historical date (1750), naming the computed age", () => {
       expect(studentBirthDateRule("1750-03-15", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 278 años. Revisa el año de nacimiento.`,
+        `La edad del jugador debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 278 años. Revisa el año de nacimiento.`,
       );
     });
 
@@ -739,13 +739,13 @@ describe("edad del alumno", () => {
 
     it("rejects one day past the maximum boundary (96 years old)", () => {
       expect(studentBirthDateRule("1933-01-01", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 96 años. Revisa el año de nacimiento.`,
+        `La edad del jugador debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 96 años. Revisa el año de nacimiento.`,
       );
     });
 
     it("rejects one day short of the minimum boundary (2 years old)", () => {
       expect(studentBirthDateRule("2026-01-02", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 2 años. Revisa el año de nacimiento.`,
+        `La edad del jugador debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 2 años. Revisa el año de nacimiento.`,
       );
     });
   });

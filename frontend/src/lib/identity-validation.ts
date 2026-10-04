@@ -274,7 +274,7 @@ export function phoneFieldRule(
  * so the two never drift.
  */
 export const EMERGENCY_PHONE_SAME_AS_PERSONAL_MESSAGE =
-  "El teléfono de emergencia debe ser diferente del teléfono del estudiante.";
+  "El teléfono de emergencia debe ser diferente del teléfono del jugador.";
 
 /**
  * Whether `emergencyPhone` is the same Ecuadorian number as `personalPhone`,
@@ -306,7 +306,7 @@ export function emergencyPhoneDiffersRule(emergencyPhone: string, personalPhone:
  * whoever submitted the form typed both values.
  */
 export const REPRESENTATIVE_CEDULA_SAME_AS_STUDENT_MESSAGE =
-  "La cédula del representante debe ser diferente de la cédula del estudiante.";
+  "La cédula del representante debe ser diferente de la cédula del jugador.";
 
 /**
  * Whether the representante's cédula is identical to the student's (issue
@@ -581,12 +581,12 @@ export function isFutureBirthDate(birthDate: string, today: Date = new Date()): 
  * the wrong thing.
  */
 export function studentBirthDateRule(value: string, today: Date = new Date()): string | null {
-  if (!value) return "Indica la fecha de nacimiento del alumno.";
+  if (!value) return "Indica la fecha de nacimiento del jugador.";
   if (!isValidCalendarDate(value)) return "La fecha de nacimiento no existe. Revisa el día, el mes y el año.";
   if (isFutureBirthDate(value, today)) return "La fecha de nacimiento no puede ser posterior a hoy. Revisa el año.";
   const age = calculatePersonAge(value, today);
   if (age < EDAD_MINIMA_ALUMNO || age > EDAD_MAXIMA_ALUMNO) {
-    return `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a ${age} ${age === 1 ? "año" : "años"}. Revisa el año de nacimiento.`;
+    return `La edad del jugador debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a ${age} ${age === 1 ? "año" : "años"}. Revisa el año de nacimiento.`;
   }
   return null;
 }
