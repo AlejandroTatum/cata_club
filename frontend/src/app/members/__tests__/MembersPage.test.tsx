@@ -2,7 +2,7 @@
  * Component tests for MembersPage — Editar member modal replacing the inline
  * Roles popover + activo/inactivo toggle button in each account row.
  * Covers: a single "Editar" trigger per row opens a floating modal dialog
- * (role="dialog") with the same role checkboxes and activo toggle, closeable
+ * (role="dialog") with the same single-select role group and activo toggle, closeable
  * via the X button, backdrop click, and Escape; only one modal can be open
  * at a time; and the same asignarRol/quitarRol/cambiarEstadoCuenta calls and
  * "ya tiene el rol" reconciliation the old inline popover fired.
@@ -318,7 +318,7 @@ describe("MembersPage — Editar member modal", () => {
     fireEvent.click(getEditButton(row));
     const dialog = screen.getByRole("dialog");
     await waitFor(() => {
-      expect(within(dialog).getByRole("checkbox", { name: /admin/i })).not.toBeDisabled();
+      expect(within(dialog).getByRole("radio", { name: /admin/i })).not.toBeDisabled();
     });
     return dialog;
   }
@@ -400,7 +400,7 @@ describe("MembersPage — Editar member modal", () => {
     }
     expect(within(row).queryAllByRole("button", { name: /^editar/i })).toHaveLength(0);
     expect(within(row).queryByRole("button", { name: /^roles$/i })).not.toBeInTheDocument();
-    expect(within(row).queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(within(row).queryByRole("radio")).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -630,10 +630,10 @@ describe("MembersPage — Editar member modal", () => {
 
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveAttribute("aria-modal", "true");
-    expect(within(dialog).getByRole("checkbox", { name: /admin/i })).toBeInTheDocument();
-    expect(within(dialog).getByRole("checkbox", { name: /entrenador/i })).toBeInTheDocument();
-    expect(within(dialog).getByRole("checkbox", { name: /representante/i })).toBeInTheDocument();
-    expect(within(dialog).getByRole("checkbox", { name: /alumno/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole("radio", { name: /admin/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole("radio", { name: /entrenador/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole("radio", { name: /representante/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole("radio", { name: /alumno/i })).toBeInTheDocument();
   });
 
   it("shows the member's read-only name and telefono inside the modal", async () => {
@@ -713,16 +713,37 @@ describe("MembersPage — Editar member modal", () => {
     );
   });
 
-  // Issue #314 (K6 hallazgo #16): clicking the Admin checkbox used to fire
-  // asignarRol/quitarRol on the very first click, no confirmation, no naming
-  // of what granting or revoking total club control does. `confirmAdmin`
-  // clicks the "Admin" checkbox and then the confirmation's own "Confirmar"
-  // button — the two-step path the fix now requires. Every other role stays
-  // one click (reversible), so those keep firing directly.
+  // Issue #314 (K6 hallazgo #16): picking Admin, or leaving it, changes who
+  // controls the club, so it stops at a confirmation naming the effect. Every
+  // other change stays one click (reversible). ADMA-07: an account has exactly
+  // one role, so the editor is a single-select — picking a role replaces the
+  // current one (quitarRol of the old, then asignarRol of the new).
+  function pickRole(dialog: HTMLElement, name: RegExp): void {
+    fireEvent.click(within(dialog).getByRole("radio", { name }));
+  }
+
   function confirmAdmin(dialog: HTMLElement): void {
-    fireEvent.click(within(dialog).getByRole("checkbox", { name: /admin/i }));
+    pickRole(dialog, /admin/i);
     fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
   }
+
+  it("ADMA-07: shows the four roles as ONE single-select group, with no switches", async () => {
+    mockObtenerRolesDePersona.mockResolvedValue({ roles: ["ENTRENADOR"], activo: true });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    const dialog = await openModalAndWaitForRoles(row);
+    const group = within(dialog).getByRole("radiogroup", { name: /rol/i });
+    expect(within(group).getAllByRole("radio")).toHaveLength(4);
+    expect(within(group).getByRole("radio", { name: /entrenador/i })).toBeChecked();
+    expect(within(group).getAllByRole("radio").filter((r) => (r as HTMLInputElement).checked)).toHaveLength(1);
+    expect(within(dialog).queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("switch")).not.toBeInTheDocument();
+  });
 
   it("clicking Admin opens a confirmation naming the account and the effect, without mutating yet", async () => {
     render(
@@ -733,7 +754,7 @@ describe("MembersPage — Editar member modal", () => {
     const row = await findAccountRow();
 
     const dialog = await openModalAndWaitForRoles(row);
-    fireEvent.click(within(dialog).getByRole("checkbox", { name: /admin/i }));
+    pickRole(dialog, /admin/i);
 
     const confirmDialogs = screen.getAllByRole("dialog");
     const confirmDialog = confirmDialogs[confirmDialogs.length - 1];
@@ -751,14 +772,14 @@ describe("MembersPage — Editar member modal", () => {
     const row = await findAccountRow();
 
     const dialog = await openModalAndWaitForRoles(row);
-    fireEvent.click(within(dialog).getByRole("checkbox", { name: /admin/i }));
+    pickRole(dialog, /admin/i);
     fireEvent.click(screen.getByRole("button", { name: /^cancelar$/i }));
 
     expect(mockAsignarRol).not.toHaveBeenCalled();
-    expect(within(dialog).getByRole("checkbox", { name: /admin/i })).not.toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: /admin/i })).not.toBeChecked();
   });
 
-  it("selecting a role in the modal fires asignarRol only after the Admin confirmation is accepted", async () => {
+  it("selecting Admin on a roleless account fires asignarRol only after the confirmation is accepted", async () => {
     render(
       <ToastProvider>
         <MembersPage />
@@ -772,9 +793,34 @@ describe("MembersPage — Editar member modal", () => {
     await waitFor(() => {
       expect(mockAsignarRol).toHaveBeenCalledWith(1, "ADMINISTRADOR");
     });
+    expect(mockQuitarRol).not.toHaveBeenCalled();
   });
 
-  it("deselecting an already-selected Admin role fires quitarRol, also gated behind confirmation", async () => {
+  it("ADMA-07: picking Entrenador on an Admin account replaces the role in one step, behind the Admin confirmation", async () => {
+    mockObtenerRolesDePersona.mockResolvedValue({ roles: ["ADMINISTRADOR"], activo: true });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const dialog = await openModalAndWaitForRoles(row);
+
+    pickRole(dialog, /entrenador/i);
+    const confirmDialogs = screen.getAllByRole("dialog");
+    expect(within(confirmDialogs[confirmDialogs.length - 1]).getByText(/quitarle el rol de administrador/i)).toBeInTheDocument();
+    expect(mockQuitarRol).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
+
+    await waitFor(() => expect(mockAsignarRol).toHaveBeenCalledWith(1, "ENTRENADOR"));
+    expect(mockQuitarRol).toHaveBeenCalledWith(1, "ADMINISTRADOR");
+    expect(mockQuitarRol.mock.invocationCallOrder[0]).toBeLessThan(mockAsignarRol.mock.invocationCallOrder[0]);
+    expect(within(dialog).getByRole("radio", { name: /entrenador/i })).toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: /admin/i })).not.toBeChecked();
+  });
+
+  it("a switch between non-Admin roles replaces the role on a single click, with no confirmation step", async () => {
+    mockObtenerRolesDePersona.mockResolvedValue({ roles: ["ENTRENADOR"], activo: true });
     render(
       <ToastProvider>
         <MembersPage />
@@ -783,37 +829,36 @@ describe("MembersPage — Editar member modal", () => {
     const row = await findAccountRow();
 
     const dialog = await openModalAndWaitForRoles(row);
-    confirmAdmin(dialog);
-    await waitFor(() => expect(mockAsignarRol).toHaveBeenCalledWith(1, "ADMINISTRADOR"));
-
-    confirmAdmin(dialog);
-    await waitFor(() => {
-      expect(mockQuitarRol).toHaveBeenCalledWith(1, "ADMINISTRADOR");
-    });
-  });
-
-  it("a non-Admin role still toggles on a single click, with no confirmation step", async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-
-    const dialog = await openModalAndWaitForRoles(row);
-    fireEvent.click(within(dialog).getByRole("checkbox", { name: /entrenador/i }));
+    pickRole(dialog, /alumno/i);
 
     expect(screen.queryByText(/control total del club/i)).not.toBeInTheDocument();
-    await waitFor(() => {
-      expect(mockAsignarRol).toHaveBeenCalledWith(1, "ENTRENADOR");
-    });
+    await waitFor(() => expect(mockAsignarRol).toHaveBeenCalledWith(1, "ALUMNO"));
+    expect(mockQuitarRol).toHaveBeenCalledWith(1, "ENTRENADOR");
+    expect(within(dialog).getByRole("radio", { name: /alumno/i })).toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: /entrenador/i })).not.toBeChecked();
+  });
+
+  it("picking the role the account already has does nothing", async () => {
+    mockObtenerRolesDePersona.mockResolvedValue({ roles: ["ENTRENADOR"], activo: true });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    const dialog = await openModalAndWaitForRoles(row);
+    pickRole(dialog, /entrenador/i);
+
+    expect(mockAsignarRol).not.toHaveBeenCalled();
+    expect(mockQuitarRol).not.toHaveBeenCalled();
   });
 
   it('reconciles local state when the backend reports "ya tiene el rol" on assign', async () => {
     // `rol_servicio.asignar_rol` raises OperacionInvalida, which backend/main.py
     // maps to 400 — the status that means "about what you sent". The sentence
     // is hand-authored and names no implementation, so it survives both gates
-    // and reaches the branch in page.tsx that reconciles the checkbox.
+    // and reaches the branch that reconciles the selection.
     const { ApiClientError } = await import("@/services/api");
     mockAsignarRol.mockRejectedValueOnce(
       new ApiClientError("Esta persona ya tiene el rol ADMINISTRADOR", 400),
@@ -829,45 +874,17 @@ describe("MembersPage — Editar member modal", () => {
     confirmAdmin(dialog);
 
     await waitFor(() => {
-      expect(within(dialog).getByRole("checkbox", { name: /admin/i })).toBeChecked();
+      expect(within(dialog).getByRole("radio", { name: /admin/i })).toBeChecked();
     });
     expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it('reconciles local state when the backend reports "no tiene el rol" on unassign', async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-
-    const dialog = await openModalAndWaitForRoles(row);
-    const adminCheckbox = within(dialog).getByRole("checkbox", { name: /admin/i });
-
-    // First round-trip assigns (default mockAsignarRol success) so the
-    // checkbox is checked before we exercise the removal-reconciliation branch.
-    confirmAdmin(dialog);
-    await waitFor(() => expect(adminCheckbox).toBeChecked());
-
-    // `rol_servicio.quitar_rol` raises OperacionInvalida → 400. It used to
-    // raise EntidadNoEncontrada → 404, and a 404 `detail` is one the frontend
-    // does not trust: the sentence never reached the branch in page.tsx that
-    // reconciles the checkbox. The persona exists — what is invalid is
-    // removing a role that was never assigned.
+  it('carries on with the new role when the backend reports "no tiene el rol" on the removal', async () => {
+    mockObtenerRolesDePersona.mockResolvedValue({ roles: ["ENTRENADOR"], activo: true });
     const { ApiClientError } = await import("@/services/api");
     mockQuitarRol.mockRejectedValueOnce(
-      new ApiClientError("Esta persona no tiene el rol ADMINISTRADOR", 400),
+      new ApiClientError("Esta persona no tiene el rol ENTRENADOR", 400),
     );
-    confirmAdmin(dialog);
-
-    await waitFor(() => {
-      expect(adminCheckbox).not.toBeChecked();
-    });
-    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
-  });
-
-  it("surfaces the last-admin refusal and leaves the role checkbox checked", async () => {
     render(
       <ToastProvider>
         <MembersPage />
@@ -876,10 +893,22 @@ describe("MembersPage — Editar member modal", () => {
     const row = await findAccountRow();
 
     const dialog = await openModalAndWaitForRoles(row);
-    const adminCheckbox = within(dialog).getByRole("checkbox", { name: /admin/i });
+    pickRole(dialog, /alumno/i);
 
-    confirmAdmin(dialog);
-    await waitFor(() => expect(adminCheckbox).toBeChecked());
+    await waitFor(() => expect(mockAsignarRol).toHaveBeenCalledWith(1, "ALUMNO"));
+    expect(within(dialog).getByRole("radio", { name: /alumno/i })).toBeChecked();
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("surfaces the last-admin refusal once, keeps Admin selected and never assigns the new role", async () => {
+    mockObtenerRolesDePersona.mockResolvedValue({ roles: ["ADMINISTRADOR"], activo: true });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const dialog = await openModalAndWaitForRoles(row);
 
     // Verbatim from rol_servicio._asegurar_que_queda_otro_administrador, not
     // the truncated version this test used to carry: the real sentence is 196
@@ -891,13 +920,36 @@ describe("MembersPage — Editar member modal", () => {
       "ADMINISTRADOR a otra cuenta activa antes de continuar.";
     const { ApiClientError } = await import("@/services/api");
     mockQuitarRol.mockRejectedValueOnce(new ApiClientError(refusal, 400));
-    confirmAdmin(dialog);
+    pickRole(dialog, /entrenador/i);
+    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
 
     await waitFor(() => {
       expect(within(dialog).getByRole("alert")).toHaveTextContent(/último administrador activo/i);
     });
-    // The role was NOT removed on the backend, so the toggle must stay checked.
-    expect(adminCheckbox).toBeChecked();
+    expect(within(dialog).getAllByRole("alert")).toHaveLength(1);
+    expect(mockAsignarRol).not.toHaveBeenCalled();
+    expect(within(dialog).getByRole("radio", { name: /admin/i })).toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: /entrenador/i })).not.toBeChecked();
+  });
+
+  it("puts the old role back and shows one error when the new role is refused after the old one was removed", async () => {
+    mockObtenerRolesDePersona.mockResolvedValue({ roles: ["ENTRENADOR"], activo: true });
+    const { ApiClientError } = await import("@/services/api");
+    mockAsignarRol.mockRejectedValueOnce(new ApiClientError("No se pudo asignar el rol.", 400));
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const dialog = await openModalAndWaitForRoles(row);
+
+    pickRole(dialog, /alumno/i);
+
+    await waitFor(() => expect(within(dialog).getByRole("alert")).toHaveTextContent(/no se pudo asignar el rol/i));
+    expect(within(dialog).getAllByRole("alert")).toHaveLength(1);
+    expect(mockAsignarRol).toHaveBeenLastCalledWith(1, "ENTRENADOR");
+    expect(within(dialog).getByRole("radio", { name: /entrenador/i })).toBeChecked();
   });
 
   it("FAM-21: a WhatsApp address inside a role error renders as a link, not plain text", async () => {
@@ -914,7 +966,7 @@ describe("MembersPage — Editar member modal", () => {
     mockQuitarRol.mockRejectedValueOnce(
       new ApiClientError("No se pudo actualizar el rol. Escriba al club: https://wa.me/593999999999.", 400),
     );
-    fireEvent.click(within(dialog).getByRole("checkbox", { name: /admin/i }));
+    pickRole(dialog, /entrenador/i);
     fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
 
     const alert = await within(dialog).findByRole("alert");
@@ -1031,8 +1083,8 @@ describe("MembersPage — Editar member modal", () => {
     });
   });
 
-  it("seeds the role checkboxes from the persona's real current roles when the modal opens (not all unchecked)", async () => {
-    mockObtenerRolesDePersona.mockResolvedValue({ roles: ["ENTRENADOR", "ADMINISTRADOR"], activo: true });
+  it("seeds the role radios from the persona's real current roles when the modal opens (not all unchecked)", async () => {
+    mockObtenerRolesDePersona.mockResolvedValue({ roles: ["ENTRENADOR"], activo: true });
     render(
       <ToastProvider>
         <MembersPage />
@@ -1047,11 +1099,11 @@ describe("MembersPage — Editar member modal", () => {
       expect(mockObtenerRolesDePersona).toHaveBeenCalledWith(1);
     });
     await waitFor(() => {
-      expect(within(dialog).getByRole("checkbox", { name: /admin/i })).toBeChecked();
+      expect(within(dialog).getByRole("radio", { name: /entrenador/i })).toBeChecked();
     });
-    expect(within(dialog).getByRole("checkbox", { name: /entrenador/i })).toBeChecked();
-    expect(within(dialog).getByRole("checkbox", { name: /representante/i })).not.toBeChecked();
-    expect(within(dialog).getByRole("checkbox", { name: /alumno/i })).not.toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: /admin/i })).not.toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: /representante/i })).not.toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: /alumno/i })).not.toBeChecked();
   });
 
   it("reflects the persona's real activo:false state when the modal opens, instead of the true placeholder", async () => {
@@ -1071,7 +1123,7 @@ describe("MembersPage — Editar member modal", () => {
     });
   });
 
-  it("disables the role checkboxes and shows an error instead of silently keeping stale data when the roles fetch fails", async () => {
+  it("disables the role radios and shows an error instead of silently keeping stale data when the roles fetch fails", async () => {
     // fetch itself rejected — the modal opened with the backend unreachable.
     // Every failure route in services/api.ts throws ApiClientError(message,
     // status), so this is the one status-less shape a call site can see.
@@ -1096,7 +1148,7 @@ describe("MembersPage — Editar member modal", () => {
         "No pudimos conectar. Revise su conexión a internet e intente nuevamente.",
       );
     }
-    expect(within(dialog).getByRole("checkbox", { name: /admin/i })).toBeDisabled();
+    expect(within(dialog).getByRole("radio", { name: /admin/i })).toBeDisabled();
   });
 
   it("closes the modal when the close (X) button is clicked", async () => {
@@ -1145,9 +1197,9 @@ describe("MembersPage — Editar member modal", () => {
 
     fireEvent.click(getEditButton(row));
     await waitFor(() => {
-      expect(screen.getByRole("checkbox", { name: /admin/i })).not.toBeDisabled();
+      expect(screen.getByRole("radio", { name: /admin/i })).not.toBeDisabled();
     });
-    fireEvent.click(screen.getByRole("checkbox", { name: /admin/i }));
+    fireEvent.click(screen.getByRole("radio", { name: /admin/i }));
     fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "No pudimos conectar. Revise su conexión a internet e intente nuevamente.",
@@ -2346,7 +2398,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
     // The audit: the real checkbox is `sr-only` and the visible switch is
     // `aria-hidden`, so without a focus style on the wrapping label, keyboard
     // focus landed somewhere invisible.
-    const checkbox = within(dialog).getByRole("checkbox", { name: /admin/i });
+    const checkbox = within(dialog).getByRole("radio", { name: /admin/i });
     const label = checkbox.closest("label") as HTMLElement;
     expect(label.className).toContain("focus-within:outline");
     expect(label.className).toContain("focus-within:outline-ball");
@@ -2372,7 +2424,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
     fireEvent.click(getEditButton(row));
     const dialog = screen.getByRole("dialog");
 
-    const checkbox = await within(dialog).findByRole("checkbox", { name: /admin/i });
+    const checkbox = await within(dialog).findByRole("radio", { name: /admin/i });
     await waitFor(() => expect(checkbox).toBeChecked());
     const label = checkbox.closest("label") as HTMLElement;
     expect(label.className).toContain("border-coal");
@@ -3551,7 +3603,7 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
 
     const dialog = await screen.findByRole("dialog");
     // No role checkboxes and no "Roles" heading — this is not MemberEditDialog.
-    expect(within(dialog).queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("radio")).not.toBeInTheDocument();
     expect(within(dialog).queryByText("Roles")).not.toBeInTheDocument();
     await waitFor(() => expect(mockFetchFichaMedica).toHaveBeenCalledWith(10));
     expect(within(dialog).getByText(/ficha médica de sofía gonzález/i)).toBeInTheDocument();
@@ -3568,7 +3620,7 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     fireEvent.click(getRowButton(row, /^pagos/i));
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("radio")).not.toBeInTheDocument();
     expect(within(dialog).queryByText("Roles")).not.toBeInTheDocument();
     expect(await within(dialog).findByRole("button", { name: /crear membresía/i })).toBeInTheDocument();
   });
@@ -3601,7 +3653,7 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("Estudiantes a cargo")).toBeInTheDocument();
-    expect(within(dialog).getByRole("checkbox", { name: /admin/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole("radio", { name: /admin/i })).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: /ficha médica/i })).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: /crear membresía|registrar pago|regularizar deuda/i })).not.toBeInTheDocument();
   });

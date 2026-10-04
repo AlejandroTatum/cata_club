@@ -598,7 +598,7 @@ function MemberEditDialog({
     roleError,
     stateError,
     changed,
-    toggleRole,
+    selectRole,
     toggleEstado,
   } = useAccountRolesAndStatus(Number(account.id));
   // ADMA-08: switching the account off locks the person out, so it asks first.
@@ -634,9 +634,11 @@ function MemberEditDialog({
   // no distingue esa palabra de las otras tres. Solo ADMINISTRADOR gana esta
   // compuerta: es la única de las cuatro con ese efecto, y las otras siguen
   // siendo reversibles con un clic, como antes.
-  const [adminConfirmOpen, setAdminConfirmOpen] = useState(false);
   const accountFullName = `${account.nombres} ${account.apellidos}`;
-  const grantingAdmin = !roles.includes("ADMINISTRADOR");
+  // ADMA-07: the role waiting on that confirmation, if any. Picking Admin
+  // grants it; picking anything else while holding Admin revokes it.
+  const [pendingRole, setPendingRole] = useState<BackendTipoRol | null>(null);
+  const grantingAdmin = pendingRole === "ADMINISTRADOR";
 
   // Native <dialog> shown via showModal(): the browser traps Tab focus and
   // renders the ::backdrop for us, so no manual focus trap is needed (unlike
@@ -785,17 +787,20 @@ function MemberEditDialog({
                       Cargando roles actuales…
                     </p>
                   )}
-                  <div className="grid grid-cols-2 gap-2">
+                  <div
+                    role="radiogroup"
+                    aria-label="Rol de la cuenta"
+                    className="grid grid-cols-2 gap-2"
+                  >
                     {ALL_BACKEND_ROLES.map((role) => {
-                      const selected = roles.includes(role);
+                      const selected = roles[0] === role;
                       const isLoading = roleLoading === role;
                       const RoleIcon = ROLE_ICONS[role];
                       return (
                         // The audit found keyboard focus landing on nothing
-                        // here: the real checkbox was `sr-only`, the visible
-                        // switch was `aria-hidden`, and the wrapping <label>
-                        // carried no focus style — so tabbing through the
-                        // dialog moved an invisible cursor. `focus-within`
+                        // here: the real input was `sr-only` and the wrapping
+                        // <label> carried no focus style — so tabbing through
+                        // the dialog moved an invisible cursor. `focus-within`
                         // puts the ring on the box the user can actually see,
                         // around the control that actually has focus.
                         //
@@ -826,35 +831,32 @@ function MemberEditDialog({
                             <Loader2 size={ICON.sm} className="shrink-0 animate-spin" aria-hidden="true" />
                           )}
                           <input
-                            type="checkbox"
+                            type="radio"
+                            name={`rol-${account.id}`}
                             checked={selected}
                             onChange={() => {
-                              // ADMINISTRADOR is the one role whose grant/revoke
-                              // is a privilege change, not a label — it needs an
+                              // Granting or revoking ADMINISTRADOR is a
+                              // privilege change, not a label — it needs an
                               // explicit stop naming the effect (issue #314).
-                              if (role === "ADMINISTRADOR") {
-                                setAdminConfirmOpen(true);
+                              if (role === "ADMINISTRADOR" || roles.includes("ADMINISTRADOR")) {
+                                setPendingRole(role);
                                 return;
                               }
-                              void toggleRole(role);
+                              void selectRole(role);
                             }}
                             disabled={roleLoading !== null || !rolesReady}
                             className="sr-only"
                           />
-                          {/* Selection is coal + the yellow ball knob, never
-                              red — red is the primary CTA and destructive
-                              actions only. */}
+                          {/* Selection is a coal ring + the yellow ball dot,
+                              never red — red is the primary CTA and
+                              destructive actions only. */}
                           <span
                             aria-hidden="true"
-                            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                              selected ? "bg-coal" : "bg-line-2"
+                            className={`relative inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                              selected ? "border-coal bg-coal" : "border-line-2 bg-white"
                             }`}
                           >
-                            <span
-                              className={`inline-block h-3.5 w-3.5 transform rounded-full shadow-soft transition-transform ${
-                                selected ? "translate-x-5 bg-ball" : "translate-x-1 bg-white"
-                              }`}
-                            />
+                            {selected && <span className="h-1.5 w-1.5 rounded-full bg-ball" />}
                           </span>
                         </label>
                       );
@@ -920,7 +922,7 @@ function MemberEditDialog({
             />
 
             <ConfirmDialog
-              open={adminConfirmOpen}
+              open={pendingRole !== null}
               variant="danger"
               title={grantingAdmin ? "Otorgar el rol Admin" : "Quitar el rol Admin"}
               message={
@@ -929,10 +931,11 @@ function MemberEditDialog({
                   : `Va a quitarle el rol de Administrador a ${accountFullName}. Va a perder el control total del club: ya no va a poder gestionar pagos, cuentas, roles ni datos de otros socios.`
               }
               onConfirm={() => {
-                setAdminConfirmOpen(false);
-                void toggleRole("ADMINISTRADOR");
+                const role = pendingRole;
+                setPendingRole(null);
+                if (role) void selectRole(role);
               }}
-              onCancel={() => setAdminConfirmOpen(false)}
+              onCancel={() => setPendingRole(null)}
             />
           </dialog>,
           document.body,
