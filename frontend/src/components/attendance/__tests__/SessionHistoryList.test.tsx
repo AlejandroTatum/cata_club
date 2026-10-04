@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import SessionHistoryList from "@/components/attendance/SessionHistoryList";
 import AttendancePeriodRail from "@/components/attendance/AttendancePeriodRail";
@@ -141,6 +141,91 @@ describe("SessionHistoryList", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /^Registros/ })[1]);
     expect(screen.queryByText("Detalle 2026-06-02")).not.toBeInTheDocument();
     expect(screen.getByText("Detalle 2026-06-01")).toBeInTheDocument();
+  });
+
+  describe("detail placement", () => {
+    const original = window.matchMedia;
+    afterEach(() => {
+      window.matchMedia = original;
+    });
+    const setViewport = (desktop: boolean): void => {
+      window.matchMedia = ((query: string) => ({
+        matches: desktop,
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      })) as unknown as typeof window.matchMedia;
+    };
+    const renderThree = (): void => {
+      render(
+        <SessionHistoryList
+          pageSize={10}
+          sessions={[session(3), session(2), session(1)]}
+          rangeInvalid={false}
+          emptyAction={EMPTY_ACTION}
+          renderDetail={(s) => <button type="button" id={`fix-${s.fecha}`}>Corregir {s.fecha}</button>}
+        />,
+      );
+    };
+
+    it("opens the detail in the row right under the selected session on desktop", () => {
+      setViewport(true);
+      renderThree();
+      const table = screen.getByTestId("history-desktop-table");
+      const toggle = within(table).getAllByRole("button", { name: /^Registros/ })[1];
+      fireEvent.click(toggle);
+
+      const panel = screen.getByTestId("session-detail");
+      const selectedRow = toggle.closest("tr") as HTMLElement;
+      expect(selectedRow.nextElementSibling).toBe(panel.closest("tr"));
+      expect(selectedRow).toHaveTextContent("02/06/2026");
+      expect(panel.closest("td")).toHaveAttribute("colspan");
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+      expect(toggle).toHaveAttribute("aria-controls", panel.id);
+    });
+
+    it("opens the detail inside the selected card on mobile", () => {
+      setViewport(false);
+      renderThree();
+      const list = screen.getByTestId("history-mobile-list");
+      const toggle = within(list).getAllByRole("button", { name: /^Registros/ })[1];
+      fireEvent.click(toggle);
+
+      const panel = screen.getByTestId("session-detail");
+      expect(screen.getByTestId("history-mobile-card-2026-06-02-1")).toContainElement(panel);
+      expect(toggle).toHaveAttribute("aria-controls", panel.id);
+    });
+
+    it("keeps a single panel, with no duplicated ids, and closes the previous one", () => {
+      setViewport(true);
+      renderThree();
+      fireEvent.click(screen.getAllByRole("button", { name: /^Registros/ })[0]);
+      fireEvent.click(screen.getAllByRole("button", { name: /^Registros/ })[2]);
+
+      expect(screen.getAllByTestId("session-detail")).toHaveLength(1);
+      expect(screen.getAllByRole("button", { name: /^Corregir/ })).toHaveLength(1);
+      const ids = Array.from(document.querySelectorAll("[id]")).map((el) => el.id);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(screen.getByTestId("session-detail").closest("tr")?.previousElementSibling).toHaveTextContent("01/06/2026");
+    });
+
+    it("closes the open detail when the page changes", () => {
+      setViewport(true);
+      const many = Array.from({ length: 11 }, (_, i) => session(i + 1));
+      render(
+        <SessionHistoryList
+          pageSize={10}
+          sessions={many}
+          rangeInvalid={false}
+          emptyAction={EMPTY_ACTION}
+          renderDetail={() => <p>Detalle</p>}
+        />,
+      );
+      fireEvent.click(screen.getAllByRole("button", { name: /^Registros/ })[0]);
+      expect(screen.getByTestId("session-detail")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
+      expect(screen.queryByTestId("session-detail")).not.toBeInTheDocument();
+    });
   });
 
   it("adds the actions column only when a role-specific action is given", () => {
