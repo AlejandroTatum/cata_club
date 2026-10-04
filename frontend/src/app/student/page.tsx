@@ -59,6 +59,7 @@ import {
   contarEntrenamientosSemanales,
   daysUntil,
   type UpcomingTraining,
+  noScheduleWhatsAppHref,
 } from "./student-utils";
 import {
   CalendarDays,
@@ -870,9 +871,9 @@ function TrainingPanel({
           </div>
         ) : (
           // One line with its way out (D11: what is missing, why, what to
-          // do). `/ayuda` is where the club answers "who assigns a schedule",
-          // labelled with the destination's registered name (D12b). A tall
-          // empty card here would only stretch the column beside the carnet.
+          // do). FAM-29: the text asks to write to administration, so the
+          // button is that message, sent to the club's WhatsApp. A tall empty
+          // card here would only stretch the column beside the carnet.
           <div className="flex flex-wrap items-center gap-x-4 gap-y-field border-t border-line px-5 py-4">
             <p className="min-w-0 flex-1 text-sm text-ink-2">
               <span className="font-semibold text-ink">
@@ -882,10 +883,15 @@ function TrainingPanel({
               </span>
               . El club asigna los días y las horas; escriba a administración para que le asignen uno.
             </p>
-            <Link href="/ayuda" className={buttonClasses("secondary", "sm")}>
-              Preguntas frecuentes
+            <a
+              href={noScheduleWhatsAppHref(studentName, viewingOwnProfile)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonClasses("secondary", "sm")}
+            >
+              Escribir al club por WhatsApp
               <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-            </Link>
+            </a>
           </div>
         ))}
 

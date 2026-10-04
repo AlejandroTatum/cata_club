@@ -13,6 +13,7 @@ import type {
 } from "@/services/api";
 import { CLUB_TIME_ZONE, calendarIsoDate, clubToday } from "@/lib/club-date";
 import { calculatePersonAge, isMinorAge } from "@/lib/identity-validation";
+import { landingConfig, toWhatsAppLink } from "@/app/landing/landing-config";
 
 // ---------------------------------------------------------------------------
 // Age gate
@@ -1139,4 +1140,16 @@ export function describeFamilyCoverage(
     label: `${days} ${days === 1 ? "día" : "días"} de cobertura`,
     tone: days <= COVERAGE_ENDING_SOON_DAYS ? "warn" : "ok",
   };
+}
+
+/**
+ * FAM-29: the «Esta semana» card with no schedule sends the family to the
+ * club's WhatsApp (the contact in the landing config, never a number typed
+ * here) with the message already written.
+ */
+export function noScheduleWhatsAppHref(studentName: string, viewingOwnProfile: boolean): string {
+  const message = viewingOwnProfile
+    ? "Hola, quisiera que me asignen un horario."
+    : `Hola, quisiera que asignen un horario a ${studentName}.`;
+  return `${toWhatsAppLink(landingConfig.contact.whatsapp[0])}?text=${encodeURIComponent(message)}`;
 }

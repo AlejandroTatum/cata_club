@@ -17,6 +17,7 @@ import { STAT_GRID } from "@/components/ui";
 import StudentPage from "@/app/student/page";
 import type { StudentPortalSummary } from "@/services/api";
 import type { PagoPersona } from "@/services/api";
+import { landingConfig, toWhatsAppLink } from "@/app/landing/landing-config";
 
 vi.mock("@/components/ProtectedRoute", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -2196,7 +2197,9 @@ describe("StudentPage — the family strip has no help toggle", () => {
  * canvas above and below it.
  */
 describe("StudentPage — the no-schedule state fills its box and offers a way out", () => {
-  it("gives the reader somewhere to go when the club has assigned no schedule", async () => {
+  // FAM-29: the text says «escriba a administración», so the button is the way
+  // to do it — the club's WhatsApp from the landing config, not the FAQ.
+  it("sends the reader to the club's WhatsApp when the club has assigned no schedule", async () => {
     mockFetchHorariosPorAlumno.mockResolvedValue([]);
 
     render(<StudentPage />);
@@ -2206,10 +2209,28 @@ describe("StudentPage — the no-schedule state fills its box and offers a way o
       expect(within(panel).getByText(/todavía no tiene un horario asignado/i)).toBeInTheDocument();
     });
 
-    // The label is the destination's registered name (D12b), not a hand-written
-    // phrase: `/ayuda` is "Preguntas frecuentes" everywhere else in the shell.
-    const action = within(panel).getByRole("link", { name: /Preguntas frecuentes/i });
-    expect(action).toHaveAttribute("href", "/ayuda");
+    const action = within(panel).getByRole("link", { name: /escribir al club por whatsapp/i });
+    const href = new URL(action.getAttribute("href") ?? "");
+    expect(`${href.origin}${href.pathname}`).toBe(toWhatsAppLink(landingConfig.contact.whatsapp[0]));
+    expect(href.searchParams.get("text")).toMatch(/^Hola, quisiera que (me )?asignen un horario/);
+    expect(action).toHaveAttribute("target", "_blank");
+    expect(within(panel).queryByRole("link", { name: /Preguntas frecuentes/i })).not.toBeInTheDocument();
+  });
+
+  it("names the child in the WhatsApp message when a guardian looks at a dependent", async () => {
+    mockFetchHorariosPorAlumno.mockResolvedValue([]);
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      self: null,
+      representados: [{ ...PORTAL.self!, personaId: "41", nombres: "Valeria", apellidos: "Vera" }],
+      membershipPlans: [],
+    });
+
+    render(<StudentPage />);
+
+    const panel = await screen.findByTestId("student-situation");
+    const action = await within(panel).findByRole("link", { name: /escribir al club por whatsapp/i });
+    const text = new URL(action.getAttribute("href") ?? "").searchParams.get("text") ?? "";
+    expect(text).toMatch(/^Hola, quisiera que asignen un horario a Valeria\.$/);
   });
 
   it("stays one line instead of a tall empty card", async () => {
