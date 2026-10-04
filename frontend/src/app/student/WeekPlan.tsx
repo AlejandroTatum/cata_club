@@ -111,14 +111,26 @@ export default function WeekPlan({ sessions, now = new Date() }: WeekPlanProps):
               aria-current={isToday ? "date" : undefined}
               aria-label={name}
               className={cn(
-                "flex flex-col items-center justify-center gap-0.5 rounded-ctl border px-1 py-2.5 text-center",
+                "relative flex flex-col items-center justify-center gap-0.5 rounded-ctl border px-1 py-2.5 text-center",
+                // The days that train carry the brand: white on `cata-red` is
+                // 5.00:1. The next session is coal so it still reads first. A
+                // training day already gone drops to the `state-bad` pair the
+                // Badge spends instead of fading with opacity, which would take
+                // the text under AA. Rest days stay on the quiet sunken fill.
                 state === "next" && "border-ink bg-ink text-white",
-                state === "active" && "border-line-2 bg-paper text-ink",
+                state === "active" && !isPast && "border-cata-red bg-cata-red text-white",
+                state === "active" && isPast && "border-state-bad/25 bg-state-bad-bg text-state-bad",
                 state === "idle" && "border-transparent bg-sunken text-ink-3-strong",
-                isPast && state !== "next" && "opacity-55",
-                isToday && state !== "next" && "ring-2 ring-ink",
+                isToday && "ring-2 ring-ink ring-offset-2 ring-offset-paper",
               )}
             >
+              {isToday ? (
+                <span
+                  data-testid="week-plan-today-dot"
+                  aria-hidden="true"
+                  className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-ball"
+                />
+              ) : null}
               <span aria-hidden="true" className="text-2xs font-bold">
                 {label.charAt(0)}
               </span>
