@@ -98,7 +98,10 @@ const VIEWPORTS = [
  *  with the section in #1372 (see the file header). */
 const CEILINGS: Record<(typeof VIEWPORTS)[number]["name"], Record<string, number>> = {
   desktop: { valores: 709, cta: 400, scrollHeight: 6592 },
-  mobile: { valores: 1170, cta: 450, scrollHeight: 9177 },
+  /* Mobile scrollHeight re-based 9177 -> 9300 for the FAQ card accordion
+     (intro card stacked above three bordered cards) and the colored plan and
+     step cards; measured 9270px at 390x844 with the tariffs catalog absent. */
+  mobile: { valores: 1170, cta: 450, scrollHeight: 9300 },
 };
 
 test.describe("landing vertical space", () => {
