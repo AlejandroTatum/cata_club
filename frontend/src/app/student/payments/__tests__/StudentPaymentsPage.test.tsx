@@ -4,7 +4,7 @@
  * The screen arrived from upstream unmigrated, so these tests pin the four
  * things that migration had to fix and that a future edit could quietly undo:
  * one currency grammar, one date grammar, a selection that is coal-and-ball
- * rather than red, and copy in Ecuadorian usted rather than voseo. Plus the
+ * rather than red, and copy in Ecuadorian «tú» rather than voseo. Plus the
  * substantive correction: coverage is derived from approved payments, never
  * from `MembershipSummary.fechaFin`, which no adapter populates.
  *
@@ -296,7 +296,7 @@ afterEach(() => {
 /**
  * A guardian with exactly ONE dependent never sees the profile switcher (it
  * hides below two profiles), so before this pass the screen never once named
- * the student it was about: "Mis pagos", "Su membresía", and a form that
+ * the student it was about: "Mis pagos", "Tu membresía", and a form that
  * debited a persona the reader had no way to identify.
  */
 describe("StudentPaymentsPage — whose payment this is", () => {
@@ -337,10 +337,10 @@ describe("StudentPaymentsPage — whose payment this is", () => {
     expect(await screen.findByText(/se registra a nombre de/i)).toBeInTheDocument();
   });
 
-  it("keeps usted for a student reading their own account", async () => {
+  it("addresses a student in «tú» reading their own account", async () => {
     render(<StudentPaymentsPage />);
 
-    expect(await screen.findByText("Su membresía")).toBeInTheDocument();
+    expect(await screen.findByText("Tu membresía")).toBeInTheDocument();
     expect(screen.queryByText(/Membresía de/)).not.toBeInTheDocument();
   });
 });
@@ -363,7 +363,7 @@ describe("StudentPaymentsPage — a representative who manages nobody yet", () =
 
     render(<StudentPaymentsPage />);
 
-    expect(await screen.findByText("No se encontraron estudiantes asociados a esta cuenta")).toBeInTheDocument();
+    expect(await screen.findByText("No se encontraron jugadores asociados a esta cuenta")).toBeInTheDocument();
     const action = screen.getByRole("link", { name: /agregar hijo o dependiente/i });
     expect(action).toHaveAttribute("href", "/student/add-dependent");
     expect(screen.queryByRole("link", { name: /^ir a mi cuenta$/i })).not.toBeInTheDocument();
@@ -543,7 +543,7 @@ describe("StudentPaymentsPage — the membership card", () => {
     // The helper copy follows the same reading: the coverage ended, it is not
     // "cubierta hasta" a date that already went by.
     expect(
-      within(card).getByText("Su cobertura terminó en esta fecha, según sus pagos aprobados."),
+      within(card).getByText("Tu cobertura terminó en esta fecha, según tus pagos aprobados."),
     ).toBeInTheDocument();
   });
 
@@ -567,7 +567,7 @@ describe("StudentPaymentsPage — the membership card", () => {
     expect(within(card).getAllByText("Membresía activa")).toHaveLength(2);
     expect(within(card).queryByText(/cobertura vencida/i)).not.toBeInTheDocument();
     expect(
-      within(card).getByText("Su membresía está cubierta hasta esta fecha según sus pagos aprobados."),
+      within(card).getByText("Tu membresía está cubierta hasta esta fecha según tus pagos aprobados."),
     ).toBeInTheDocument();
     expect(within(card).queryByText(/llega más lejos/i)).not.toBeInTheDocument();
   });
@@ -629,7 +629,7 @@ describe("StudentPaymentsPage — the club's benefit, read before paying", () =>
     render(<StudentPaymentsPage />);
 
     await screen.findByTestId("membership-status");
-    expect(screen.queryByText(/su beneficio/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/tu beneficio/i)).not.toBeInTheDocument();
   });
 
   it("shows the benefit's percentage before the payment form, and folds it into the estimated total", async () => {
@@ -637,7 +637,7 @@ describe("StudentPaymentsPage — the club's benefit, read before paying", () =>
 
     render(<StudentPaymentsPage />);
 
-    expect(await screen.findByText(/su beneficio/i)).toBeInTheDocument();
+    expect(await screen.findByText(/tu beneficio/i)).toBeInTheDocument();
     expect(screen.getByText("50% OFF")).toBeInTheDocument();
     expect(screen.getByText("Beca deportiva")).toBeInTheDocument();
 
@@ -1269,7 +1269,7 @@ describe("StudentPaymentsPage — the row accordion (#513)", () => {
     render(<StudentPaymentsPage />);
     await screen.findByTestId("student-payments-table");
 
-    for (const label of ["Pagado hasta", "Pagos aprobados", "En revisión"]) {
+    for (const label of ["Pagado hasta", "Pagos aprobados", "Por validar"]) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     }
     expect(screen.getByText(/^Último pago/)).toBeInTheDocument();
@@ -1393,7 +1393,7 @@ describe("StudentPaymentsPage — registering a payment", () => {
     expect(screen.getByText(/12 meses a \$25,00 por mes/i)).toBeInTheDocument();
   });
 
-  it("addresses the reader as usted — the portal is not voseo", async () => {
+  it("addresses the reader in «tú» — the portal is never voseo", async () => {
     render(<StudentPaymentsPage />);
 
     fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
@@ -1520,7 +1520,7 @@ describe("StudentPaymentsPage — registering a payment", () => {
 
     render(<StudentPaymentsPage />);
 
-    expect(await screen.findByText(/ya tiene un pago esperando validación/i)).toBeInTheDocument();
+    expect(await screen.findByText(/ya tienes un pago esperando validación/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /registrar un pago/i })).not.toBeInTheDocument();
   });
 
@@ -1572,13 +1572,13 @@ describe("StudentPaymentsPage — registering a payment", () => {
     // Transferencia is the default method; requesting the checkpoint with no
     // voucher attached surfaces findProblem()'s message.
     fireEvent.click(screen.getByRole("button", { name: /^registrar pago$/i }));
-    expect(await screen.findByText(/adjunte el comprobante/i)).toBeInTheDocument();
+    expect(await screen.findByText(/adjunta el comprobante/i)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/forma de pago/i), {
       target: { value: "EFECTIVO" },
     });
 
-    expect(screen.queryByText(/adjunte el comprobante/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/adjunta el comprobante/i)).not.toBeInTheDocument();
   });
 
   // Issue #1226: same "ghost payment" class #482 closed for the type check —
@@ -1676,7 +1676,7 @@ describe("StudentPaymentsPage — the checkpoint before the money moves", () => 
 
     const confirm = await screen.findByTestId("renew-confirm");
     expect(within(confirm).getByText("Martín")).toBeInTheDocument();
-    expect(within(confirm).getByText(/no puede eliminarlo desde el portal/i)).toBeInTheDocument();
+    expect(within(confirm).getByText(/no puedes eliminarlo desde el portal/i)).toBeInTheDocument();
   });
 
   it("lets the reader back out of the checkpoint without registering", async () => {
@@ -1712,7 +1712,7 @@ describe("StudentPaymentsPage — the checkpoint before the money moves", () => 
     // No "Deshacer": there is no endpoint behind one. The toast says what the
     // club does instead, which is the only recovery that actually exists.
     const [message, detail] = mockShowSuccess.mock.calls[0];
-    expect(message).toMatch(/en revisión/i);
+    expect(message).toMatch(/por validar/i);
     expect(detail.description).toMatch(/lo rechaza indicando el motivo/i);
     expect(document.body.textContent).not.toMatch(/deshacer/i);
   });
@@ -2076,7 +2076,7 @@ describe("StudentPaymentsPage — the rail guide", () => {
 
     const guide = await screen.findByRole("heading", { name: "Cómo pagar y validar" });
     const panel = guide.parentElement as HTMLElement;
-    expect(within(panel).getByText(/pendiente de validación/i)).toBeInTheDocument();
+    expect(within(panel).getByText(/por validar/i)).toBeInTheDocument();
     expect(panel.closest("details")).toBeNull();
   });
 });
@@ -2094,7 +2094,7 @@ describe("StudentPaymentsPage — QA4 findings", () => {
 
     render(<StudentPaymentsPage />);
 
-    expect(await screen.findByText(/Su membresía está suspendida\. Escriba al club para reactivarla/)).toBeInTheDocument();
+    expect(await screen.findByText(/Tu membresía está suspendida\. Escribe al club para reactivarla/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /registrar un pago/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /registrar un pago/i })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /whatsapp/i })).toHaveAttribute("href", expect.stringContaining("wa.me"));
@@ -2109,10 +2109,10 @@ describe("StudentPaymentsPage — QA4 findings", () => {
   });
 
   // FAM-14
-  it("does not dim the «En revisión» card when it is at zero", async () => {
+  it("does not dim the «Por validar» card when it is at zero", async () => {
     render(<StudentPaymentsPage />);
 
-    const label = await screen.findByText("En revisión");
+    const label = await screen.findByText("Por validar");
     expect(label.closest(".opacity-60")).toBeNull();
   });
 
@@ -2128,7 +2128,7 @@ describe("StudentPaymentsPage — QA4 findings", () => {
     fireEvent.click(screen.getByRole("button", { name: /^registrar pago$/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("El comprobante debe ser un archivo PDF, JPG o PNG.");
-    expect(screen.queryByText(/adjunte el comprobante/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/adjunta el comprobante/i)).not.toBeInTheDocument();
   });
 
   // REG-26
@@ -2141,7 +2141,7 @@ describe("StudentPaymentsPage — QA4 findings", () => {
 
     render(<StudentPaymentsPage />);
 
-    expect(await screen.findByText(/Acérquese al club para activarla/)).toBeInTheDocument();
+    expect(await screen.findByText(/Acércate al club para activarla/)).toBeInTheDocument();
   });
 
   // FAM-21
@@ -2176,7 +2176,7 @@ describe("StudentPaymentsPage — QA4 findings", () => {
 
       const link = await screen.findByRole("link", { name: /registrar el primer pago de valeria/i });
       expect(link).toHaveAttribute("href", "/student/add-dependent?pagar=42");
-      expect(screen.queryByText(/acérquese al club para activarla/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/acércate al club para activarla/i)).not.toBeInTheDocument();
     });
 
     it("keeps the in-person copy while the guardian's account is not activated yet", async () => {
@@ -2186,7 +2186,7 @@ describe("StudentPaymentsPage — QA4 findings", () => {
       session.session.activacionCompleta = false;
       renderChildAs(session);
 
-      expect(await screen.findByText(/acérquese al club para activarla/i)).toBeInTheDocument();
+      expect(await screen.findByText(/acércate al club para activarla/i)).toBeInTheDocument();
       expect(screen.queryByRole("link", { name: /primer pago/i })).not.toBeInTheDocument();
     });
   });

@@ -14,8 +14,7 @@
  * - `formatCurrency` / `formatDate` / `formatDateRange` from
  *   `src/lib/format-utils.ts` — this screen was the second currency grammar
  *   and the third date grammar in the product.
- * - Neutral Ecuadorian Spanish, usted. The student portal is not tuteo and it
- *   is certainly not voseo.
+ * - Neutral Ecuadorian Spanish in «tú» (S6). Never voseo.
  * - Selection is coal plus the yellow ball dot (`FilterPill`), never red. Red
  *   is the primary CTA and destructive intent only, so a red "Aprobados" chip
  *   read as an alarm about approved payments.
@@ -493,8 +492,8 @@ function PaymentsContent({
     return (
       <EmptyState
         icon={<CreditCard size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-        title="No se encontraron estudiantes asociados a esta cuenta"
-        description="Inscríbete como jugador o agregue un hijo o dependiente para registrar pagos."
+        title="No se encontraron jugadores asociados a esta cuenta"
+        description="Inscríbete como jugador o agrega un hijo o dependiente para registrar pagos."
         // Issue #460 (Escenario 2): the description already promised "agregue
         // un hijo o dependiente", but the only action here used to be "Ir a mi
         // cuenta" — a dead end for a representative whose child is already
@@ -558,7 +557,7 @@ function PaymentsContent({
         ) : isSuspended ? (
           <div className="flex flex-col items-start gap-2">
             <p className="text-sm text-ink-2">
-              {situation.headline} Escriba al club para reactivarla.
+              {situation.headline} Escribe al club para reactivarla.
             </p>
             <a
               href={WHATSAPP_CONTACTO}
@@ -595,7 +594,7 @@ function PaymentsContent({
           <div className="flex flex-col items-start gap-2">
             <p className="text-sm text-ink-2">
               {studentName} todavía no tiene una membresía. Con el primer pago se crea; el club
-              lo revisa y la activa. Después podrá renovarla desde aquí.
+              lo revisa y la activa. Después podrás renovarla desde aquí.
             </p>
             <Link
               href={`/student/add-dependent?pagar=${selectedProfile.personaId}`}
@@ -606,8 +605,8 @@ function PaymentsContent({
           </div>
         ) : (
           <p className="text-sm text-ink-2">
-            El club crea la membresía al registrar el primer pago. Acérquese al club para
-            activarla y después podrá renovarla desde aquí.
+            El club crea la membresía al registrar el primer pago. Acércate al club para
+            activarla y después podrás renovarla desde aquí.
           </p>
         )}
       </MembershipCard>
@@ -616,9 +615,9 @@ function PaymentsContent({
 
       <InfoPanel title="Cómo pagar y validar" as="div" className="max-lg:order-2">
         <ol className="flex list-decimal flex-col gap-2 pl-4">
-          <li>Registre el pago con el valor y el medio que usó (efectivo o transferencia).</li>
-          <li>Si fue transferencia, suba la foto o el PDF del recibo.</li>
-          <li>El club lo revisa: queda «Pendiente de validación» hasta que lo apruebe o rechace.</li>
+          <li>Registra el pago con el valor y el medio que usaste (efectivo o transferencia).</li>
+          <li>Si fue transferencia, sube la foto o el PDF del comprobante.</li>
+          <li>El club lo revisa: queda «Por validar» hasta que lo apruebe o rechace.</li>
           <li>Al aprobarse, la cobertura de la membresía se extiende.</li>
         </ol>
       </InfoPanel>
@@ -633,9 +632,9 @@ function PaymentsContent({
             value={<StatValue>{coverageEnd ? formatDate(coverageEnd) : "—"}</StatValue>}
             hint={coverageEnd ? "fin de la cobertura aprobada" : "sin pagos aprobados"}
           />
-          <StatCard label="Pagos aprobados" value={<StatValue>{counts.APROBADO}</StatValue>} hint="en su historial" />
+          <StatCard label="Pagos aprobados" value={<StatValue>{counts.APROBADO}</StatValue>} hint="en tu historial" />
           <StatCard
-            label="En revisión"
+            label="Por validar"
             value={<StatValue>{counts.PENDIENTE_VALIDACION}</StatValue>}
             hint="esperando al club"
             
@@ -678,7 +677,7 @@ function PaymentsContent({
 
       {pagosState.status === "loading" && (
         <div className="card">
-          <LoadingState label="Cargando sus pagos…" />
+          <LoadingState label="Cargando tus pagos…" />
         </div>
       )}
       {pagosState.status === "error" && (
@@ -727,12 +726,12 @@ function PaymentsContent({
                 title={getEmptyStateMessage(filter)}
                 description={
                   filter !== "TODOS"
-                    ? "Pruebe con otro estado para ver el resto de su historial."
+                    ? "Prueba con otro estado para ver el resto de tu historial."
                     : blockedAsMinor
                       ? // "Cuando registre un pago" is an instruction this
                         // reader cannot follow — the club registers it.
-                        "Cuando el club registre un pago suyo aparecerá aquí, con el período que cubre."
-                      : "Cuando registre un pago aparecerá aquí, junto con el resultado de su validación."
+                        "Cuando el club registre un pago tuyo aparecerá aquí, con el período que cubre."
+                      : "Cuando registres un pago aparecerá aquí, junto con el resultado de su validación."
                 }
                 // D11's third part. The action used to appear ONLY when a filter
                 // was on, which is backwards: a filtered empty list is the
@@ -857,10 +856,10 @@ function PaymentsPageContent(): React.ReactElement {
       // screen then refused to let them follow.
       subtitle={
         accountCannotRegister
-          ? "Consulte su membresía, vea cómo se paga y siga el historial de sus pagos."
+          ? "Consulta tu membresía, mira cómo se paga y sigue el historial de tus pagos."
           : hasAlumnoRole || ownMembership
-            ? "Registre un pago, siga su validación y consulte lo que ya pagó."
-            : "Registre el pago de un dependiente, siga su validación y consulte lo que ya pagó."
+            ? "Registra un pago, sigue su validación y consulta lo que ya pagaste."
+            : "Registra el pago de un dependiente, sigue su validación y consulta lo que ya pagó."
       }
       // Issue #1396: through the shell's `back` slot, so the control precedes
       // the title in document order — `PageHeader` is drawn above `<main>`,
@@ -872,7 +871,7 @@ function PaymentsPageContent(): React.ReactElement {
 
       {state.status === "loading" && (
         <div className="card">
-          <LoadingState label="Cargando sus pagos…" />
+          <LoadingState label="Cargando tus pagos…" />
         </div>
       )}
       {state.status === "error" && (

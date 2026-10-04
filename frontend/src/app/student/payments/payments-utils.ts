@@ -71,7 +71,7 @@ export function describePagoEstado(
 ): { label: string; tone: BadgeTone } {
   if (estado === "APROBADO") return { label: "Aprobado", tone: "ok" };
   if (estado === "RECHAZADO") return { label: "Rechazado", tone: "bad" };
-  return { label: "Pendiente de validación", tone: "warn" };
+  return { label: "Por validar", tone: "warn" };
 }
 
 /**
@@ -484,6 +484,6 @@ export function getEmptyStateMessage(filter: PagoStatusFilter): string {
     case "RECHAZADO":
       return "No hay pagos rechazados.";
     case "PENDIENTE_VALIDACION":
-      return "No hay pagos pendientes de validación.";
+      return "No hay pagos por validar.";
   }
 }
