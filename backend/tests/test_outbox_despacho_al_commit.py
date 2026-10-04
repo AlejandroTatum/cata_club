@@ -6,7 +6,6 @@ existe. Un broker caído no rompe la petición (la fila sigue `PENDIENTE` y el
 barrido de 5 min la recoge), y el despacho inmediato más el barrido nunca
 mandan dos veces la misma fila porque ambos pasan por `claim_pending`.
 """
-import logging
 
 import pytest
 from sqlalchemy import text
