@@ -477,6 +477,90 @@ def test_roster_de_todos_los_horarios_requiere_admin_o_entrenador(client_sin_per
     assert resp.status_code == 403
 
 
+# --- QA4 PERF-01: conteos ligeros por horario ---------------------------------
+# `/horarios/alumnos` baja ~500 KB solo para que cuatro pantallas dibujen "N
+# inscritos". El conteo viaja aparte y el detalle se pide por horario.
+def test_conteos_por_horario_cuenta_inscritos_activos(client, db_session):
+    alumno_a = _crear_persona_api(client, cedula_valida(151), "Ana")
+    alumno_b = _crear_persona_api(client, cedula_valida(152), "Beto")
+    alumno_baja = _crear_persona_api(client, cedula_valida(153), "Cami")
+    horario_a = _crear_horario_api(client, "LUNES", "JUVENIL")
+    horario_b = _crear_horario_api(client, "MARTES", "FORMATIVO")
+    for alumno, horario in (
+        (alumno_a, horario_a), (alumno_b, horario_a), (alumno_baja, horario_a), (alumno_b, horario_b),
+    ):
+        client.post(
+            "/api/v1/asistencias/asignar-alumno",
+            json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+        )
+    db_session.get(Persona, alumno_baja["id"]).activo = False
+    db_session.commit()
+
+    resp = client.get("/api/v1/asistencias/horarios/conteos")
+
+    assert resp.status_code == 200
+    assert {f["horarioId"]: f["inscritos"] for f in resp.json()} == {
+        horario_a["id"]: 2,
+        horario_b["id"]: 1,
+    }
+    assert all(set(f) == {"horarioId", "inscritos"} for f in resp.json())
+
+
+def test_conteos_por_horario_coincide_con_el_roster_completo(client):
+    alumno = _crear_persona_api(client, cedula_valida(154), "Dani")
+    horario = _crear_horario_api(client)
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+    roster = client.get("/api/v1/asistencias/horarios/alumnos").json()
+    conteos = client.get("/api/v1/asistencias/horarios/conteos").json()
+
+    esperado: dict[int, int] = {}
+    for fila in roster:
+        esperado[fila["horarioId"]] = esperado.get(fila["horarioId"], 0) + 1
+    assert {f["horarioId"]: f["inscritos"] for f in conteos} == esperado
+
+
+def test_conteos_por_horario_incluye_personas_solo_si_se_piden(client):
+    """/groups cuenta alumnos DISTINTOS por categoría (uno entrena varios
+    días), así que necesita las identidades, no solo el conteo por fila."""
+    alumno_a = _crear_persona_api(client, cedula_valida(156), "Fer")
+    alumno_b = _crear_persona_api(client, cedula_valida(157), "Gus")
+    horario = _crear_horario_api(client)
+    for alumno in (alumno_a, alumno_b):
+        client.post(
+            "/api/v1/asistencias/asignar-alumno",
+            json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+        )
+
+    sin = client.get("/api/v1/asistencias/horarios/conteos").json()
+    con = client.get("/api/v1/asistencias/horarios/conteos?incluir_personas=true").json()
+
+    assert all("personaIds" not in f for f in sin)
+    fila = next(f for f in con if f["horarioId"] == horario["id"])
+    assert fila["inscritos"] == 2
+    assert sorted(fila["personaIds"]) == sorted([alumno_a["id"], alumno_b["id"]])
+
+
+def test_conteos_por_horario_requiere_admin_o_entrenador(client_sin_permisos):
+    assert client_sin_permisos.get("/api/v1/asistencias/horarios/conteos").status_code == 403
+
+
+def test_conteos_por_horario_funciona_con_token_de_entrenador_puro(client_entrenador, client):
+    alumno = _crear_persona_api(client, cedula_valida(155), "Eli")
+    horario = _crear_horario_api(client)
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+
+    _restaurar_token_entrenador()
+    resp = client_entrenador.get("/api/v1/asistencias/horarios/conteos")
+    assert resp.status_code == 200
+    assert {"horarioId": horario["id"], "inscritos": 1} in resp.json()
+
+
 # --- Issue #356: el recorte de permisos del entrenador (representados,
 # antecedentes-club) no le toca nada a su tarea diaria -- pasar lista. Este
 # candado prueba el roster con un token de ENTRENADOR PURO (sin

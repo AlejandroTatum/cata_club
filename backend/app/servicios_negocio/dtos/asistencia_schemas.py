@@ -328,6 +328,15 @@ class AlumnoHorarioDetalleDTO(ResponseBase, BaseModel):
     horario_categoria_label: Optional[str] = None
 
 
+class ConteoHorarioDTO(ResponseBase, BaseModel):
+    """Inscritos activos de un horario (QA4 PERF-01), sin el detalle de cada
+    alumno. Solo aparecen los horarios con al menos un inscrito."""
+    horario_id: int
+    inscritos: int
+    # Solo con `incluir_personas`: ids de los inscritos, sin más datos.
+    persona_ids: Optional[list[int]] = None
+
+
 class SolapeHorarioDTO(ResponseBase, BaseModel):
     """Un horario que el alumno YA tenía y que se pisa con uno de los que se
     le acaban de asignar (issue #731).

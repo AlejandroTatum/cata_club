@@ -17,7 +17,7 @@ from app.servicios_negocio.dtos.asistencia_schemas import (
     CategoriaUpdateDTO, HorarioCreateDTO, HorarioUpdateDTO, HorarioResponseDTO,
     PublicScheduleCategoryDTO,
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,
-    UltimaListaDTO,
+    ConteoHorarioDTO, UltimaListaDTO,
 )
 from app.servicios_negocio.dtos.base import PaginatedResponse
 from app.presentacion.routers.reporte_helpers import exigir_tope_reporte
@@ -455,6 +455,23 @@ async def listar_alumnos_por_horario(
 )
 async def listar_roster_de_todos_los_horarios(db: Session = Depends(obtener_sesion)):
     return AsistenciaServicio(db).listar_roster_de_todos_los_horarios()
+
+
+# QA4 PERF-01: el conteo "N inscritos" no necesita los alumnos. Este endpoint
+# devuelve `[{horarioId, inscritos}]` (~1 KB) en lugar del roster completo
+# (~500 KB); las pantallas que sí muestran alumnos piden el detalle del
+# horario elegido. Mismo gate que el roster completo.
+@router.get(
+    "/horarios/conteos",
+    response_model=List[ConteoHorarioDTO],
+    response_model_exclude_none=True,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
+)
+async def contar_inscritos_por_horario(
+    incluir_personas: bool = Query(default=False),
+    db: Session = Depends(obtener_sesion),
+):
+    return AsistenciaServicio(db).contar_inscritos_por_horario(incluir_personas)
 
 
 # Los horarios asignados a un alumno dicen dónde está y a qué hora. El portal

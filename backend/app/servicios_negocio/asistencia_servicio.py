@@ -34,7 +34,7 @@ from app.servicios_negocio.dtos.asistencia_schemas import (
     AsistenciaCreateDTO, AsistenciaCorreccionDTO, AsistenciaLoteCreateDTO,
     AsistenciaLoteFallidoDTO, AsistenciaLoteResponseDTO, CategoriaCreateDTO, CategoriaResponseDTO,
     CategoriaUpdateDTO, HorarioCreateDTO, HorarioResponseDTO, HorarioUpdateDTO,
-    AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,
+    AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, ConteoHorarioDTO, AsignacionAlumnoHorarioResponseDTO,
     PublicScheduleBlockDTO, PublicScheduleCategoryDTO,
     SolapeHorarioDTO, UltimaListaDTO,
 )
@@ -1305,6 +1305,23 @@ class AsistenciaServicio:
         asignaciones = self.repo_alumno_horario.listar_activos_de_todos_los_horarios()
         labels = {c.codigo: c.label for c in self.repo_categoria.listar()}
         return [self._a_detalle_dto(a, labels.get(a.horario.categoria)) for a in asignaciones]
+
+    def contar_inscritos_por_horario(
+        self, incluir_personas: bool = False
+    ) -> list[ConteoHorarioDTO]:
+        """QA4 PERF-01: el conteo de inscritos por horario, para las pantallas
+        que dibujan "N inscritos" y no necesitan los alumnos. Con
+        `incluir_personas` suma los ids (no los datos) de cada inscrito, para
+        quien cuenta alumnos distintos entre varios horarios."""
+        ids = self.repo_alumno_horario.listar_persona_ids_por_horario() if incluir_personas else None
+        return [
+            ConteoHorarioDTO(
+                horario_id=horario_id,
+                inscritos=inscritos,
+                persona_ids=ids.get(horario_id, []) if ids is not None else None,
+            )
+            for horario_id, inscritos in self.repo_alumno_horario.contar_inscritos_por_horario()
+        ]
 
     def listar_horarios_por_alumno(self, persona_id: int) -> list[AlumnoHorarioDetalleDTO]:
         """Lista todos los horarios asignados a un alumno específico."""
