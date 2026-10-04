@@ -502,7 +502,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     await fillAndBlur(page, F.telefono, "099123");
     await expect(field(page, F.telefono)).toHaveValue("99123");
     await expect(fieldError(page, F.telefono)).toHaveText(
-      "El teléfono no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+      "El teléfono no es válido. Escribe 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
     );
     await shot(page, "P11", "telefono-corto");
   });
@@ -522,7 +522,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     await birthDatePart(page, F.fechaNacimiento, "dia").focus();
     await birthDatePart(page, F.fechaNacimiento, "dia").blur();
     await expect(fieldError(page, F.fechaNacimiento)).toHaveText(
-      "Indique la fecha de nacimiento del alumno.",
+      "Indica la fecha de nacimiento del alumno.",
     );
     await shot(page, "P13", "fecha-vacia");
   });
@@ -625,7 +625,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     await field(page, F.contrasenia).fill(VALID_CREDENTIALS.contrasenia);
     await fillAndBlur(page, F.contraseniaConfirmacion, "otra-clave-9");
     await expect(fieldError(page, F.contraseniaConfirmacion)).toHaveText(
-      "Las contraseñas no coinciden. Escriba la misma contraseña en los dos campos.",
+      "Las contraseñas no coinciden. Escribe la misma contraseña en los dos campos.",
     );
     await expectStepBlocked(page);
     await shot(page, "P24", "confirmacion-no-coincide");
@@ -703,7 +703,7 @@ test.describe("R · Datos del representante", () => {
   test("R03 · un representante de 17 años queda fuera del piso de edad", async ({ page }) => {
     await fillAndBlur(page, F.fechaNacimientoRepresentante, isoYearsAgo(17));
     await expect(fieldError(page, F.fechaNacimientoRepresentante)).toHaveText(
-      "El representante debe tener entre 18 y 95 años; la fecha ingresada corresponde a 17 años. Revise el año de nacimiento.",
+      "El representante debe tener entre 18 y 95 años; la fecha ingresada corresponde a 17 años. Revisa el año de nacimiento.",
     );
     await expectStepBlocked(page);
     await shot(page, "R03", "representante-menor");
@@ -716,7 +716,7 @@ test.describe("R · Datos del representante", () => {
     // quedando afuera.
     await fillAndBlur(page, F.fechaNacimientoRepresentante, isoYearsAgo(96));
     await expect(fieldError(page, F.fechaNacimientoRepresentante)).toHaveText(
-      "El representante debe tener entre 18 y 95 años; la fecha ingresada corresponde a 96 años. Revise el año de nacimiento.",
+      "El representante debe tener entre 18 y 95 años; la fecha ingresada corresponde a 96 años. Revisa el año de nacimiento.",
     );
     await shot(page, "R04", "representante-sobre-el-techo");
   });
@@ -740,7 +740,7 @@ test.describe("R · Datos del representante", () => {
     // contenía, y la regla de las palabras no admite abreviaturas. El número
     // sigue estando, en la rama que sí puede nombrarlo (R05, "entre 18 y 95").
     await expect(fieldError(page, F.fechaNacimientoRepresentante)).toHaveText(
-      "Indique la fecha de nacimiento del representante.",
+      "Indica la fecha de nacimiento del representante.",
     );
     await shot(page, "R06", "fecha-representante-vacia");
   });
@@ -801,7 +801,7 @@ test.describe("H · Salud y emergencia", () => {
     const select = field(page, F.tipoSangre);
     await select.focus();
     await select.blur();
-    await expect(page.getByText("Seleccione el tipo de sangre del alumno.")).toBeVisible();
+    await expect(page.getByText("Selecciona el tipo de sangre del alumno.")).toBeVisible();
     await shot(page, "H02", "tipo-de-sangre-vacio");
   });
 
@@ -816,7 +816,7 @@ test.describe("H · Salud y emergencia", () => {
   test("H04 · teléfono de emergencia de 5 dígitos", async ({ page }) => {
     await fillAndBlur(page, F.telefonoEmergencia, "12345");
     await expect(fieldError(page, F.telefonoEmergencia)).toHaveText(
-      "El teléfono de emergencia no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+      "El teléfono de emergencia no es válido. Escribe 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
     );
     await expectStepBlocked(page);
     await shot(page, "H04", "telefono-emergencia-corto");
@@ -888,9 +888,9 @@ test.describe("S · Resumen, envío y errores del servidor", () => {
     await goToSummary(page);
     const confirmar = page.getByRole("button", { name: /confirmar inscripción/i });
     await expect(confirmar).toBeEnabled();
-    await expect(page.getByText(/marque la casilla de aceptación/i)).toHaveCount(0);
+    await expect(page.getByText(/marca la casilla de aceptación/i)).toHaveCount(0);
     await confirmar.click();
-    await expect(page.getByText(/marque la casilla de aceptación/i)).toBeVisible();
+    await expect(page.getByText(/marca la casilla de aceptación/i)).toBeVisible();
     await shot(page, "S01", "resumen-sin-confirmar");
   });
 
@@ -955,7 +955,7 @@ test.describe("S · Resumen, envío y errores del servidor", () => {
     // el paso honesto ya disponible desde la propia cuenta (jugador o
     // dependiente), no solo "entrar".
     const alerta = stepAlert(page);
-    await expect(alerta).toContainText("Si ya tiene cuenta, no necesita volver a inscribirse");
+    await expect(alerta).toContainText("Si ya tienes cuenta, no necesitas volver a inscribirse");
     await expect(alerta.getByRole("link", { name: /iniciar sesión/i })).toBeVisible();
     await expect(alerta.getByRole("link", { name: /recuperar contraseña/i })).toBeVisible();
     await shot(page, "S08", "duplicado-ofrece-salida");
@@ -1264,7 +1264,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     // antes leía la edad negativa como "menor de edad" sobre alguien que
     // todavía no nació.
     await expect(fieldError(page, F.fechaNacimiento)).toHaveText(
-      "La fecha de nacimiento no puede ser posterior a hoy. Revise el año.",
+      "La fecha de nacimiento no puede ser posterior a hoy. Revisa el año.",
     );
     await expectStepBlocked(page);
     await shot(page, "G01", "fecha-futura-mensaje-correcto");
@@ -1282,7 +1282,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     // autoinscripción o dependiente: corre siempre (#224). Un alumno con
     // fecha de nacimiento del año que viene bloquea el paso, no lo pasa.
     await expect(fieldError(page, F.fechaNacimiento)).toHaveText(
-      "La fecha de nacimiento no puede ser posterior a hoy. Revise el año.",
+      "La fecha de nacimiento no puede ser posterior a hoy. Revisa el año.",
     );
     await expectStepBlocked(page);
     await shot(page, "G02", "dependiente-fecha-futura-rechazada");
@@ -1390,7 +1390,7 @@ test.describe("V · Laxitud frente a la norma ecuatoriana — CERRADA (issues #2
     await fillAndBlur(page, F.telefono, "099abc1234");
     await expect(field(page, F.telefono)).toHaveValue("991234");
     await expect(fieldError(page, F.telefono)).toHaveText(
-      "El teléfono no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+      "El teléfono no es válido. Escribe 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
     );
     await shot(page, "V01", "telefono-con-letras-limpiado");
   });
@@ -1402,7 +1402,7 @@ test.describe("V · Laxitud frente a la norma ecuatoriana — CERRADA (issues #2
     await fillAndBlur(page, F.telefono, "0991234");
     await expect(field(page, F.telefono)).toHaveValue("991234");
     await expect(fieldError(page, F.telefono)).toHaveText(
-      "El teléfono no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+      "El teléfono no es válido. Escribe 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
     );
     await shot(page, "V02", "telefono-de-7-digitos-rechazado");
   });
@@ -1451,7 +1451,7 @@ test.describe("V · Laxitud frente a la norma ecuatoriana — CERRADA (issues #2
     // de las más usadas del mundo, así que la lista la ataja igual.
     await fillAndBlur(page, F.contrasenia, "12345678");
     await expect(fieldError(page, F.contrasenia)).toHaveText(
-      "La contraseña es una de las más usadas y fácil de adivinar; elija otra.",
+      "La contraseña es una de las más usadas y fácil de adivinar; elige otra.",
     );
     await shot(page, "V08", "contrasenia-debil-rechazada");
   });

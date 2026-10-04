@@ -191,7 +191,7 @@ test.describe.serial("Alta de un dependiente sin cuenta propia y frontera de aut
     await contextA.close();
   });
 
-  test("un representante inscribe a un dependiente sin cuenta propia y lo ve en su panel", async () => {
+  test("un representante inscribe a un dependiente sin cuenta propia y lo ve en tu panel", async () => {
     // El dependiente existe y el representante -- con su propia sesión
     // recién autenticada -- lo ve: un solo representado, el que acaba de
     // inscribir. El nombre no se compara contra lo tipeado en el asistente

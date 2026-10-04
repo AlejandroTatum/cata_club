@@ -57,7 +57,7 @@ test.describe("Schedule cards on a real mobile engine", () => {
 
     // The help card is always the last one and links to WhatsApp too.
     const help = layout.locator(".landing-schedule-help");
-    await expect(help.getByRole("heading", { level: 3, name: "¿No sabe cuál elegir?" })).toBeVisible();
+    await expect(help.getByRole("heading", { level: 3, name: "¿No sabes cuál elegir?" })).toBeVisible();
     await expect(help.getByRole("link", { name: /abrir whatsapp/i })).toHaveAttribute("href", /wa\.me|whatsapp/i);
 
     // No horizontal scroll on the page, and every card sits inside the viewport.

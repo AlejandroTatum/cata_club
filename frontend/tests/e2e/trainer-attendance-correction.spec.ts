@@ -146,7 +146,7 @@ test("Corregir opens that session's roll call, and the row-level Corregir actual
   await expect(page).toHaveURL(
     new RegExp(`/trainer/attendance\\?horario=${HORARIO_ID}&fecha=${SESSION_DATE}&paso=lista$`),
   );
-  await expect(page.getByText("Elija el horario")).toBeHidden();
+  await expect(page.getByText("Elige el horario")).toBeHidden();
 
   // The marks already filed for THAT day are on screen — proof the wizard
   // asked the API for the corrected session and not for today.

@@ -314,7 +314,7 @@ export async function enrollDependentViaWizard(
  * (`src/services/api.ts`) es interno al bundle del cliente y no está pensado
  * para reusarse desde un test.
  */
-const MENSAJE_DEMASIADOS_INTENTOS = "Demasiados intentos. Espere un momento e intente nuevamente.";
+const MENSAJE_DEMASIADOS_INTENTOS = "Demasiados intentos. Espera un momento e intenta nuevamente.";
 
 /** Cuántas veces reintentar "Confirmar inscripción" ante ese 429 real. */
 const MAX_INTENTOS_CONFIRMACION = 3;

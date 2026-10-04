@@ -77,7 +77,7 @@ const ASUNTO_VERIFICACION = "Cata Club | Verificación de correo";
 /** Correo nuevo por corrida: `persona.cedula` y el índice de correo son `unique` (ver `newPlayer`). */
 const player = newPlayer(`qa-activacion-${Date.now()}@cataclub.com`);
 
-test("un jugador se autoinscribe, verifica su correo en otra pestaña, y /login/activacion pasa de una pantalla a la otra sin recargar", async ({
+test("un jugador se autoinscribe, verifica tu correo en otra pestaña, y /login/activacion pasa de una pantalla a la otra sin recargar", async ({
   page,
   context,
   request,
@@ -97,7 +97,7 @@ test("un jugador se autoinscribe, verifica su correo en otra pestaña, y /login/
     // `/login/activacion` porque el correo todavía no está verificado.
     await page.goto("/login");
     await expect(page).toHaveURL(/\/login\/activacion$/, { timeout: 20_000 });
-    await expect(page.getByRole("heading", { name: "Verifique su correo" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Verifica tu correo" })).toBeVisible();
     const yaVerifiqueButton = page.getByRole("button", { name: "Ya verifiqué mi correo" });
     await expect(yaVerifiqueButton).toBeVisible();
 
@@ -123,11 +123,11 @@ test("un jugador se autoinscribe, verifica su correo en otra pestaña, y /login/
     await yaVerifiqueButton.click();
 
     await expect(page).toHaveURL(/\/login\/activacion$/);
-    await expect(page.getByRole("heading", { name: "Complete su inscripción en el club" })).toBeVisible({
+    await expect(page.getByRole("heading", { name: "Completa tu inscripción en el club" })).toBeVisible({
       timeout: 15_000,
     });
     await expect(page.getByText("Correo verificado")).toBeVisible();
-    await expect(page.getByText("Su correo quedó verificado.")).toBeVisible();
+    await expect(page.getByText("Tu correo quedó verificado.")).toBeVisible();
     await expect(yaVerifiqueButton).toHaveCount(0);
 
     // ── 5. Cerrar sesión y volver a entrar: el estado persistió, no era del cliente ──
@@ -145,8 +145,8 @@ test("un jugador se autoinscribe, verifica su correo en otra pestaña, y /login/
     // logout/login, no era un estado que vivía en el navegador. Al ser un
     // load nuevo — no una transición desde "Ya verifiqué mi correo" — el
     // aviso puntual de la sesión anterior tampoco reaparece.
-    await expect(page.getByRole("heading", { name: "Complete su inscripción en el club" })).toBeVisible();
-    await expect(page.getByText("Su correo quedó verificado.")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Completa tu inscripción en el club" })).toBeVisible();
+    await expect(page.getByText("Tu correo quedó verificado.")).toHaveCount(0);
   } finally {
     await purgeMessagesTo(request, player.correo);
   }

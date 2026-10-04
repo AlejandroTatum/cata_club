@@ -52,7 +52,7 @@ const CONTRASENIA_NUEVA = "clave-recuperada-9";
 
 const player = newPlayer(`qa-recuperacion-${Date.now()}@cataclub.com`, "clave-original-8");
 
-test("un jugador recupera su contraseña por correo y entra con la nueva; la vieja queda rechazada", async ({
+test("un jugador recupera tu contraseña por correo y entra con la nueva; la vieja queda rechazada", async ({
   page,
   request,
 }) => {
@@ -73,7 +73,7 @@ test("un jugador recupera su contraseña por correo y entra con la nueva; la vie
     await page.goto("/forgot-password");
     await page.getByLabel(/correo electrónico/i).fill(player.correo);
     await page.getByRole("button", { name: /enviar enlace de recuperación/i }).click();
-    await expect(page.getByRole("heading", { name: /revise su correo/i })).toBeVisible({
+    await expect(page.getByRole("heading", { name: /revisa tu correo/i })).toBeVisible({
       timeout: 15_000,
     });
 
