@@ -400,7 +400,19 @@ export function CoberturaRow({ cobertura }: { cobertura: CoberturaBonificada }):
       <p className="flex-none text-xl font-extrabold tabular-nums text-ink md:w-24 md:text-right">
         {formatPagoMonto("0")}
       </p>
-      <div className="hidden md:block md:w-48 md:flex-none" />
+      <div className="flex flex-col gap-1.5 md:w-48 md:flex-none">
+        {/* The coverage's own receipt, generated on demand (issue #1609). */}
+        <a
+          href={`/api/membresias/coberturas/${cobertura.id}/comprobante`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Descargar comprobante oficial"
+          className={ACTION_PRIMARY}
+        >
+          <Download size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+          Recibo oficial
+        </a>
+      </div>
     </li>
   );
 }

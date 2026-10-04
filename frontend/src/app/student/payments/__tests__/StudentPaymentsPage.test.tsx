@@ -1188,6 +1188,12 @@ describe("StudentPaymentsPage — the merged coverage rows (issue #1369)", () =>
     expect(within(table).getByText(/Otorgada el/)).toBeInTheDocument();
     // Owner decision (QA round 2): the zero charge is shown, not a dash.
     expect(within(table).getByText("$0,00")).toBeInTheDocument();
+    // …and the same "Recibo oficial" a normal approved payment has, served
+    // by the coverage's own on-demand PDF.
+    expect(within(table).getByText("Recibo oficial").closest("a")).toHaveAttribute(
+      "href",
+      "/api/membresias/coberturas/7/comprobante",
+    );
   });
 
   it("sorts a newer activation above an older payment, newest-first across kinds", async () => {

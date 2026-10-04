@@ -76,6 +76,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { BonificacionesSection } from "./BonificacionesSection";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import PagoCorreccionSection from "@/app/payments/PagoCorreccionSection";
@@ -2094,6 +2095,7 @@ export default function PaymentsPage(): React.ReactElement {
         }
       >
         {selectedRequest ? renderDetail(selectedRequest) : renderQueue()}
+        {!selectedRequest && <BonificacionesSection />}
 
         {/* Fullscreen voucher viewer modal */}
         {voucherModalOpen && selectedRequest?.proofPreviewUrl &&
