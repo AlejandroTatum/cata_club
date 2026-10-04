@@ -222,7 +222,7 @@ export default function LegalReviewDialog({
           <LegalDocumentProse
             blocks={document_.blocks}
             headingLevel={3}
-            className="space-y-6 leading-prose text-cata-text"
+            className="space-y-4 leading-snug text-cata-text"
           />
         </div>
 

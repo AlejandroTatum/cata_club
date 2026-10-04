@@ -49,6 +49,51 @@ function documentBlocks(html: string): { tag: string; text: string }[] {
   return blocks;
 }
 
+describe("terms wording (owner QA r2, S2)", () => {
+  const texts = termsBlocks.map((block) => block.text);
+
+  function chapter(startsWith: string): string[] {
+    const start = termsBlocks.findIndex((block) => block.kind === "heading" && block.text.startsWith(startsWith));
+    const end = termsBlocks.findIndex((block, index) => index > start && block.kind === "heading" && block.text.startsWith("Capítulo"));
+    return termsBlocks.slice(start + 1, end).map((block) => block.text);
+  }
+
+  it("keeps the defined term «el club» without the 'nombre comercial' aside", () => {
+    expect(texts.join("\n")).not.toMatch(/nombre comercial/i);
+    expect(texts.some((text) => text.includes("propietaria de Cata Club (en adelante, «el club»)"))).toBe(true);
+  });
+
+  it("publishes Chapter II exactly as the owner approved it", () => {
+    expect(chapter("Capítulo II.")).toEqual([
+      "El club se compromete a:",
+      "• Hacer lo posible para que la plataforma funcione de forma segura y continua.",
+      "• Mostrar a cada cuenta únicamente la información que su rol necesita.",
+      "• Tratar los datos personales conforme a la Ley Orgánica de Protección de Datos Personales y a lo descrito en el Capítulo VIII.",
+      "• Revisar los pagos que se registren, emitir el recibo cuando los valide y responder por sus canales de contacto las consultas, los errores de pago y las solicitudes de devolución.",
+      "• Registrar el documento y la versión aceptada por el usuario, junto con la fecha de aceptación y la cuenta asociada. La aceptación deberá ser realizada directamente por el usuario y no por el sistema en su nombre.",
+      "• Respetar los derechos que la ley le reconoce como titular de datos personales y como consumidor, y actuar siempre según el interés superior del niño, niña o adolescente.",
+    ]);
+  });
+
+  it("starts every Chapter IV list item with a capital letter and ends it with a period", () => {
+    const items = chapter("Capítulo IV.").filter((text) => text.startsWith("• "));
+    expect(items).toHaveLength(9);
+    for (const item of items) {
+      expect(item).toMatch(/^• \p{Lu}/u);
+      expect(item).toMatch(/\.$/);
+    }
+  });
+
+  it("spaces the whole document with one tight rhythm", () => {
+    const html = renderToStaticMarkup(<TermsPage />);
+    const article = /<article class="([^"]*)"/.exec(html);
+    expect(article?.[1]).toContain("space-y-4");
+    expect(article?.[1]).toContain("leading-snug");
+    expect(article?.[1]).not.toContain("space-y-6");
+    expect(article?.[1]).not.toContain("leading-prose");
+  });
+});
+
 describe("public legal documents", () => {
   it.each(pages)("%s publishes version and effective date", (_name, Page) => {
     const html = renderToStaticMarkup(<Page />);
