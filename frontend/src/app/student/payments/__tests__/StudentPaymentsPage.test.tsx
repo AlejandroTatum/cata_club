@@ -94,6 +94,7 @@ vi.mock("@/services/api", () => ({
   registrarPago: (...args: unknown[]) => mockRegistrarPago(...args),
   fetchBeneficio: (...args: unknown[]) => mockFetchBeneficio(...args),
   aplicarBeneficio: (...args: unknown[]) => mockAplicarBeneficio(...args),
+  fetchClubPaymentInfo: () => Promise.resolve({ holder: "Titular Prueba", accountType: "Cuenta de Ahorros", accountNumber: "1234567890", bank: "Banco Prueba", holderId: "0102030405" }),
 }));
 
 function authSession(role: "estudiante" | "representante" = "estudiante") {
@@ -309,8 +310,8 @@ describe("StudentPaymentsPage — whose payment this is", () => {
     renderAsGuardian();
 
     const block = await screen.findByTestId("how-to-pay");
-    expect(within(block).getByText("2901580636")).toBeInTheDocument();
-    expect(within(block).getByText("Banco de Loja")).toBeInTheDocument();
+    expect(await within(block).findByText("1234567890")).toBeInTheDocument();
+    expect(within(block).getByText("Banco Prueba")).toBeInTheDocument();
     expect(within(block).getByRole("button", { name: "Copiar número" })).toBeInTheDocument();
   });
 

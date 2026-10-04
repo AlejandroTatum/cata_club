@@ -50,6 +50,7 @@ vi.mock("@/services/api", () => ({
   fetchTiposMembresia: vi.fn().mockResolvedValue([{ id: 3, categoria: "Infantil", precio: "30.00", modalidad: "MENSUAL" }]),
   inscribirRepresentadoConPago: vi.fn(),
   subirVoucherPago: vi.fn(),
+  fetchClubPaymentInfo: vi.fn().mockResolvedValue(null),
 }));
 
 installAddDependentHarness();

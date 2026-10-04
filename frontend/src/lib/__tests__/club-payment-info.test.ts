@@ -1,19 +1,30 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { CLUB_PAYMENT_INFO, getClubPaymentInfo } from "../club-payment-info";
+import { getClubPaymentInfo } from "../club-payment-info";
+import { CLUB_PAYMENT_INFO, getServerClubPaymentInfo } from "../server/club-payment-info";
+
+const SHARED_SOURCE = readFileSync(path.resolve(__dirname, "../club-payment-info.ts"), "utf8");
 
 describe("club payment info", () => {
-  it("carries the club's account from its card", () => {
-    expect(getClubPaymentInfo()).toMatchObject({
-      holder: "Lucía Catalina Cedillo Flor",
+  it("serves the club's account from the server-only module", () => {
+    expect(getServerClubPaymentInfo()).toMatchObject({
       accountType: "Cuenta de Ahorros",
-      accountNumber: "2901580636",
       bank: "Banco de Loja",
-      holderId: "0102724358",
     });
+    expect(getServerClubPaymentInfo()?.accountNumber).toMatch(/^\d{10}$/);
+    expect(getServerClubPaymentInfo()?.holderId).toMatch(/^\d{10}$/);
+  });
+
+  it("keeps every literal out of the shared client module", () => {
+    for (const value of Object.values(CLUB_PAYMENT_INFO)) {
+      expect(SHARED_SOURCE).not.toContain(value);
+    }
+    expect(SHARED_SOURCE).not.toMatch(/\d{10}/);
   });
 
   it("has no QR, cash place or cash hours configured", () => {
-    const info = getClubPaymentInfo();
+    const info = getServerClubPaymentInfo();
     expect(info?.qrImageSrc).toBeUndefined();
     expect(info?.cashPlace).toBeUndefined();
     expect(info?.cashHours).toBeUndefined();

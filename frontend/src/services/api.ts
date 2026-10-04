@@ -20,6 +20,7 @@
  *          deadline; see `PDF_DOWNLOAD_TIMEOUT_MS`.
  */
 
+import type { ClubPaymentInfo } from "@/lib/club-payment-info";
 import type {
   UserRole,
   EstadoAsistencia,
@@ -1386,6 +1387,11 @@ export interface DashboardStats {
 /** Fetch aggregate dashboard stats, composed server-side from `/personas`, `/membresias/pagos*` and `/asistencias/horarios` — `GET /api/dashboard`. */
 export function fetchDashboardStats(): Promise<DashboardStats> {
   return shareInFlight("dashboard", () => request<DashboardStats>(apiEndpoint("/dashboard")));
+}
+
+/** The club's transfer data — `GET /api/club/payment-info`. Signed-in users only (401 otherwise); `null` when unconfigured. */
+export async function fetchClubPaymentInfo(): Promise<ClubPaymentInfo | null> {
+  return request<ClubPaymentInfo | null>(apiEndpoint("/club/payment-info"));
 }
 
 /** Club usage figures for the admin activity screen — `GET /api/actividad/resumen?rango=`. Admin only. */

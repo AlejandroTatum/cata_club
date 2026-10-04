@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within, fireEvent } from "@testing-library/react";
 import AyudaPage from "@/app/ayuda/page";
+import { fetchClubPaymentInfo } from "@/services/api";
 import { FAQ_SECTIONS } from "@/app/ayuda/faq-content";
 import { PAGE_RAIL } from "@/components/ui";
 import type { UserRole } from "@/types/domain";
@@ -30,8 +31,11 @@ vi.mock("@/contexts/AuthContext", () => ({
   }),
 }));
 
+vi.mock("@/services/api", () => ({ fetchClubPaymentInfo: vi.fn() }));
+
 beforeEach(() => {
   mockRole = null;
+  vi.mocked(fetchClubPaymentInfo).mockReset().mockResolvedValue({ holder: "Titular Prueba", accountType: "Cuenta de Ahorros", accountNumber: "1234567890", bank: "Banco Prueba", holderId: "0102030405" });
 });
 
 vi.mock("@/components/shell/AppShell", () => ({
@@ -98,12 +102,25 @@ describe("AyudaPage — the shell follows the session (VIS-05)", () => {
 });
 
 describe("AyudaPage — «Cómo pagar» (FAM-04)", () => {
-  it("shows the club's transfer data", () => {
+  it("shows a visitor only a sign-in notice, never the data, and does not request it", () => {
     render(<AyudaPage />);
 
-    const block = screen.getByTestId("how-to-pay");
-    expect(block).toHaveTextContent("Banco de Loja");
-    expect(block).toHaveTextContent("2901580636");
+    const notice = screen.getByTestId("how-to-pay-signin");
+    expect(notice).toHaveTextContent("Los datos para transferencia se muestran al iniciar sesión.");
+    expect(within(notice).getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute("href", "/login?next=/ayuda");
+    expect(screen.queryByTestId("how-to-pay")).toBeNull();
+    expect(document.body).not.toHaveTextContent("1234567890");
+    expect(fetchClubPaymentInfo).not.toHaveBeenCalled();
+  });
+
+  it("shows the club's transfer data to a signed-in user", async () => {
+    mockRole = "estudiante";
+    render(<AyudaPage />);
+
+    const block = await screen.findByTestId("how-to-pay");
+    expect(block).toHaveTextContent("Banco Prueba");
+    expect(block).toHaveTextContent("1234567890");
+    expect(screen.queryByTestId("how-to-pay-signin")).toBeNull();
   });
 });
 
@@ -454,6 +471,8 @@ describe("AyudaPage — search, categories and rail (admin v4)", () => {
   it("offers sign-in and the public site to a signed-out visitor", () => {
     render(<AyudaPage />);
 
-    expect(screen.getByRole("link", { name: /Iniciar sesión/ })).toHaveAttribute("href", "/login");
+    // The quick-links rail and the «Cómo pagar» notice both offer sign-in.
+    const hrefs = screen.getAllByRole("link", { name: /Iniciar sesión/ }).map((link) => link.getAttribute("href"));
+    expect(hrefs).toContain("/login");
   });
 });
