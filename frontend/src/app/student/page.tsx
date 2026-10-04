@@ -51,6 +51,7 @@ import {
   buildWeeklyTrainingSchedule,
   describeAssignedWindows,
   describePaymentSituation,
+  describeNextPayment,
   findNextTrainingSessions,
   describeRejectedPago,
   displayNameFor,
@@ -67,8 +68,10 @@ import {
   CalendarCheck,
   Dumbbell,
   Hourglass,
+  Banknote,
   ShieldCheck,
   Stethoscope,
+  Users,
   User,
   UserPlus,
   ArrowRight,
@@ -1113,6 +1116,13 @@ function ActivePortalView({
    * horario que no cargó no es un alumno sin entrenamientos.
    */
   const diasDeCobertura = useMemo(() => daysUntil(coverageEnd), [coverageEnd]);
+  const nextPayment = describeNextPayment({
+    monthlyPrice: selectedProfile?.membership?.montoAplicado ?? null,
+    esGratuidadFamiliar: selectedProfile?.membership?.esGratuidadFamiliar ?? false,
+    coverageEnd,
+    daysLeft: diasDeCobertura,
+    pendingCount: pendingPagos,
+  });
   const entrenamientosSemanales = useMemo(
     () =>
       horariosState.status === "ready"
@@ -1323,6 +1333,66 @@ function ActivePortalView({
           que una tile no puede decir.
         */}
         <div data-testid="student-pulse" className={STAT_GRID}>
+          {representative ? (
+            /* The guardian's four figures: what the club needs from them. The
+               same tiles, the same colour rule — cambia QUÉ se mide, no la
+               paleta. «Fichas médicas» cannot say «2 de 3»: the portal does
+               not receive each child's record status, so the tile points at
+               the screen where it is reviewed instead of inventing a count. */
+            <>
+              <StatCard
+                label="Cobertura"
+                {...(diasDeCobertura === null
+                  ? { tone: "neutral" as const, status: "Sin pago" }
+                  : diasDeCobertura < 0
+                    ? { tone: "bad" as const, status: "Vencida" }
+                    : { tone: "ok" as const, status: "Al día" })}
+                icon={<ShieldCheck size={ICON.sm} strokeWidth={1.75} />}
+                href={withSelectedStudent("/student/payments", selectedPersonaId)}
+                value={diasDeCobertura === null ? "—" : Math.abs(diasDeCobertura)}
+                unit={diasDeCobertura === null ? undefined : diasDeCobertura === 1 || diasDeCobertura === -1 ? "día" : "días"}
+                hint={selectedName}
+              />
+              {nextPayment.hot ? (
+                <StatCard
+                  label="Próximo pago"
+                  variant="hot"
+                  href={withSelectedStudent("/student/payments", selectedPersonaId)}
+                  value={nextPayment.value}
+                  status={nextPayment.status}
+                  hint={nextPayment.hint}
+                />
+              ) : (
+                <StatCard
+                  label="Próximo pago"
+                  tone={nextPayment.tone}
+                  status={nextPayment.status}
+                  icon={<Banknote size={ICON.sm} strokeWidth={1.75} />}
+                  href={withSelectedStudent("/student/payments", selectedPersonaId)}
+                  value={nextPayment.value}
+                  hint={nextPayment.hint}
+                />
+              )}
+              <StatCard
+                label="A tu cargo"
+                tone="info"
+                status="Registrados"
+                icon={<Users size={ICON.sm} strokeWidth={1.75} />}
+                value={data.representados.length}
+                unit={data.representados.length === 1 ? "jugador" : "jugadores"}
+              />
+              <StatCard
+                label="Fichas médicas"
+                tone="info"
+                status="Revisa la ficha"
+                icon={<Stethoscope size={ICON.sm} strokeWidth={1.75} />}
+                href={withSelectedStudent("/student/medical-record", selectedPersonaId)}
+                value="—"
+                hint={`de ${selectedName}`}
+              />
+            </>
+          ) : (
+            <>
           <StatCard
             label="Cobertura"
             {...(diasDeCobertura === null
@@ -1377,6 +1447,8 @@ function ActivePortalView({
             value={pendingPagos}
             hint={pendingPagos === 0 ? "nada esperando validación" : "esperan validación del club"}
           />
+            </>
+          )}
         </div>
 
         <div className={cn(PAGE_RAIL, "lg:!grid-cols-[minmax(0,336px)_minmax(0,1fr)]", "flex-1")}>

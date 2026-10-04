@@ -244,6 +244,16 @@ describe("admin dashboard — the pulse tiles", () => {
     expect(within(tiles[3]).getByRole("link")).toHaveAttribute("href", "/attendance");
   });
 
+  it("tones each tile by what it measures, with a word, and leaves one coal tile for the action", async () => {
+    render(<DashboardPage />);
+    const kpis = await screen.findByTestId("dashboard-kpis");
+    const tiles = within(kpis).getAllByTestId("kpi-tile");
+    expect(tiles.map((tile) => tile.dataset.tone)).toEqual(["info", "ok", "action", expect.stringMatching(/^(ok|warn|info)$/)]);
+    for (const tile of tiles) expect(within(tile).getByTestId("kpi-status").textContent?.trim()).toBeTruthy();
+    expect(tiles.filter((tile) => tile.dataset.tone === "action")).toHaveLength(1);
+    expect(within(tiles[2]).getByTestId("kpi-status")).toHaveTextContent("Por validar");
+  });
+
   it("counts Miembros over the whole padrón and memberships over the alumnos", async () => {
     render(<DashboardPage />);
     const kpis = await screen.findByTestId("dashboard-kpis");

@@ -65,6 +65,7 @@ import AttentionStrip, { type AttentionItem } from "@/components/dashboard/Atten
 import CompactEmpty from "@/components/dashboard/CompactEmpty";
 import DashboardSection from "@/components/dashboard/DashboardSection";
 import KpiTile from "@/components/dashboard/KpiTile";
+import { attendanceTone } from "@/lib/attendance-tone";
 import PaymentsAction from "@/components/dashboard/PaymentsAction";
 import TimelineDayList from "@/components/dashboard/TimelineDayList";
 import SectionNotice from "@/components/dashboard/SectionNotice";
@@ -540,6 +541,8 @@ export default function DashboardPage(): React.ReactElement {
             <div data-testid="dashboard-kpis" className={STAT_GRID}>
               <KpiTile
                 label="Miembros"
+                tone="info"
+                status="Registrados"
                 value={totalPersonas}
                 visualPlacement="below"
                 visual={
@@ -568,6 +571,8 @@ export default function DashboardPage(): React.ReactElement {
               />
               <KpiTile
                 label="Membresías activas"
+                tone="ok"
+                status="Activas"
                 value={activeMemberships}
                 unit={`de ${totalAlumnos}`}
                 visual={
@@ -584,6 +589,11 @@ export default function DashboardPage(): React.ReactElement {
               />
               <KpiTile
                 label="Pagos por validar"
+                // The row's one «needs action» tile: coal while there is
+                // something to validate, quiet when the queue is empty.
+                {...(pendingPayments > 0
+                  ? { variant: "hot" as const, status: "Por validar" }
+                  : { tone: "neutral" as const, status: "Nada pendiente" })}
                 value={pendingPayments}
                 visual={
                   ageTotal > 0 ? (
@@ -601,6 +611,9 @@ export default function DashboardPage(): React.ReactElement {
               />
               <KpiTile
                 label="Asistencia · 4 semanas"
+                {...(recordsStatus === "loading"
+                  ? { tone: "neutral" as const }
+                  : attendanceTone(fourWeeks.total > 0 ? fourWeeks.ratePercent : null))}
                 value={recordsStatus === "loading" ? "—" : fourWeeks.ratePercent}
                 unit={recordsStatus === "loading" ? undefined : "%"}
                 visual={

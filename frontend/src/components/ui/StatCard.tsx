@@ -207,12 +207,12 @@ export type StatCardTone = "ball" | "ok" | "info" | "warn" | "bad" | "trainer" |
  * optional there. Composition rules the type cannot see: at most four tiles
  * per row and at most ONE `hot` (coal, "needs action") tile among them.
  */
-type StatCardToneProps =
+export type StatCardToneProps =
   | { tone?: "ball" | "trainer" | "neutral"; status?: string }
   | { tone: "ok" | "info" | "warn" | "bad"; status: string };
 
 /** The status word's ink: each tone's own strong foreground, ≥4.5:1 on its tint. */
-const STATUS_INK: Record<StatCardTone, string> = {
+export const STATUS_INK: Record<StatCardTone, string> = {
   ball: "text-ball-ink",
   ok: "text-state-ok",
   info: "text-cuenta-representante",
@@ -222,7 +222,7 @@ const STATUS_INK: Record<StatCardTone, string> = {
   neutral: "text-ink-3-strong",
 };
 
-const STAT_TONE: Record<StatCardTone, { icon: string; accent: string }> = {
+export const STAT_TONE: Record<StatCardTone, { icon: string; accent: string }> = {
   ball: { icon: "bg-ball/25 text-ink", accent: "border-t-ball bg-ball/5" },
   ok: { icon: "bg-state-ok-bg text-state-ok", accent: "border-t-state-ok bg-state-ok-bg/30" },
   info: {
