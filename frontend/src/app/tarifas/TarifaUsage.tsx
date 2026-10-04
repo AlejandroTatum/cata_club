@@ -20,7 +20,7 @@ const USES = [
     key: "cambio",
     icon: Repeat,
     title: "Cambio de plan",
-    what: "El alumno que cambia de tarifa pasa a pagar el precio de la nueva.",
+    what: "El jugador que cambia de tarifa pasa a pagar el precio de la nueva.",
     note: "El cambio se refleja desde el siguiente pago, sin tocar el historial.",
   },
 ];

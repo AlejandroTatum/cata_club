@@ -372,7 +372,7 @@ describe("buildActivityFeed", () => {
     expect(feed[0]).toMatchObject({
       kind: "attendance-session",
       subject: "Lunes 15:00 — 16:00",
-      detail: "lista registrada · 3 estudiantes",
+      detail: "lista registrada · 3 jugadores",
     });
   });
 

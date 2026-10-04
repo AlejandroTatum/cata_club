@@ -225,7 +225,7 @@ describe("DashboardPage — actividad reciente", () => {
     expect(await screen.findByText(/subió un comprobante de \$25,00/)).toBeInTheDocument();
     // Synchronous on purpose: both rows come out of the same `Promise.allSettled`
     // continuation, which sets records and payments in one React commit.
-    expect(screen.getByText(/lista registrada · 2 estudiantes/)).toBeInTheDocument();
+    expect(screen.getByText(/lista registrada · 2 jugadores/)).toBeInTheDocument();
     expect(screen.getByText("Actividad reciente")).toBeInTheDocument();
   });
 
@@ -462,15 +462,15 @@ describe("DashboardPage — QA4 fixes", () => {
   it("describes the card for members without a plan as what it counts (ADMA-14)", async () => {
     render(<DashboardPage />);
 
-    expect(await screen.findByText("Alumnos sin membresía activa")).toBeInTheDocument();
-    expect(screen.getByText("Asígneles un plan o regularice su deuda.")).toBeInTheDocument();
+    expect(await screen.findByText("Jugadores sin membresía activa")).toBeInTheDocument();
+    expect(screen.getByText("Asígnales un plan o regulariza su deuda.")).toBeInTheDocument();
     expect(screen.queryByText("Miembros sin datos")).not.toBeInTheDocument();
   });
 
   it("does not call anyone «staff» (TXT-12)", async () => {
     render(<DashboardPage />);
 
-    expect(await screen.findByText("40 alumnos · 4 representantes y personal")).toBeInTheDocument();
+    expect(await screen.findByText("40 jugadores · 4 representantes y personal")).toBeInTheDocument();
     expect(screen.queryByText(/staff/i)).not.toBeInTheDocument();
   });
 });
@@ -488,7 +488,7 @@ describe("DashboardPage — urgent items first on small screens (ADMA-27)", () =
     const urgent = await screen.findByTestId("urgent-first");
     expect(urgent).toHaveClass("lg:hidden");
     expect(within(urgent).getByText("Pagos por validar")).toBeInTheDocument();
-    expect(within(urgent).getByText("Alumnos sin membresía activa")).toBeInTheDocument();
+    expect(within(urgent).getByText("Jugadores sin membresía activa")).toBeInTheDocument();
     const links = within(urgent).getAllByRole("link").map((a) => a.getAttribute("href"));
     expect(links).toEqual(["/payments", "/members"]);
 

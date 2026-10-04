@@ -228,7 +228,7 @@ export default function DiscountsPage(): React.ReactElement {
     }
     if (nombre.length > MAX_NOMBRE_LENGTH) {
       setFormError(
-        `El nombre no puede superar los ${MAX_NOMBRE_LENGTH} caracteres (tiene ${nombre.length}). Acórtelo para continuar.`,
+        `El nombre no puede superar los ${MAX_NOMBRE_LENGTH} caracteres (tiene ${nombre.length}). Acórtalo para continuar.`,
       );
       return;
     }
@@ -480,7 +480,7 @@ export default function DiscountsPage(): React.ReactElement {
           >
             {current.nombre.length}/{MAX_NOMBRE_LENGTH}
             {current.nombre.length > MAX_NOMBRE_LENGTH
-              ? ` — supera el máximo por ${current.nombre.length - MAX_NOMBRE_LENGTH}. Acórtelo para poder guardar.`
+              ? ` — supera el máximo por ${current.nombre.length - MAX_NOMBRE_LENGTH}. Acórtalo para poder guardar.`
               : ""}
           </span>
         </label>
@@ -683,7 +683,7 @@ export default function DiscountsPage(): React.ReactElement {
                     description={
                       searchTerm
                         ? "Ningún descuento coincide con la búsqueda."
-                        : "Cree el primer descuento para poder aplicarlo al registrar pagos."
+                        : "Crea el primer descuento para poder aplicarlo al registrar pagos."
                     }
                     action={
                       searchTerm ? (
@@ -747,7 +747,7 @@ export default function DiscountsPage(): React.ReactElement {
           open={pendingFull}
           variant="danger"
           title="¿Guardar un descuento del 100 %?"
-          message={`«${form?.nombre.trim() ?? ""}» dejará en $0,00 cada pago al que se aplique. Confirme solo si es una beca completa.`}
+          message={`«${form?.nombre.trim() ?? ""}» dejará en $0,00 cada pago al que se aplique. Confirma solo si es una beca completa.`}
           confirmLabel="Guardar al 100 %"
           onConfirm={() => {
             setPendingFull(false);

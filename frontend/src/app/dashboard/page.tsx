@@ -124,7 +124,7 @@ const CHART_WEEKS = 6;
 const URGENT_CTA: Record<string, string> = {
   payments: "Revisar pagos",
   attendance: "Ver listas",
-  members: "Ver alumnos",
+  members: "Ver jugadores",
 };
 
 const ACTIVITY_FILTERS: { value: ActivityFilter; label: string }[] = [
@@ -180,7 +180,7 @@ export default function DashboardPage(): React.ReactElement {
       setStats(await fetchDashboardStats());
     } catch {
       setError(
-        "No se pudieron cargar las estadísticas del panel. Intente nuevamente.",
+        "No se pudieron cargar las estadísticas del panel. Intenta nuevamente.",
       );
     } finally {
       setLoading(false);
@@ -324,7 +324,7 @@ export default function DashboardPage(): React.ReactElement {
     {
       key: "payments",
       label: "Pagos por validar",
-      hint: "Revise cada comprobante y apruébelo o recházelo.",
+      hint: "Revisa cada comprobante y apruébalo o recházalo.",
       href: "/payments",
       count: stats?.pendingPayments ?? 0,
       tone: "warn",
@@ -339,8 +339,8 @@ export default function DashboardPage(): React.ReactElement {
     },
     {
       key: "members",
-      label: "Alumnos sin membresía activa",
-      hint: "Asígneles un plan o regularice su deuda.",
+      label: "Jugadores sin membresía activa",
+      hint: "Asígnales un plan o regulariza su deuda.",
       href: "/members",
       count: stats?.personasSinMembresia ?? 0,
       tone: "warn",
@@ -544,12 +544,12 @@ export default function DashboardPage(): React.ReactElement {
                 visualPlacement="below"
                 visual={
                   <SegmentBar
-                    ariaLabel={`Miembros: ${totalAlumnos} alumnos y ${staff} representantes y personal`}
+                    ariaLabel={`Miembros: ${totalAlumnos} jugadores y ${staff} representantes y personal`}
                     hideLegend
                     segments={[
                       {
                         key: "alumnos",
-                        label: "Alumnos",
+                        label: "Jugadores",
                         value: totalAlumnos,
                         tone: "coal",
                       },
@@ -562,7 +562,7 @@ export default function DashboardPage(): React.ReactElement {
                     ]}
                   />
                 }
-                caption={`${totalAlumnos} alumnos · ${staff} representantes y personal`}
+                caption={`${totalAlumnos} jugadores · ${staff} representantes y personal`}
                 captionClassName="max-lg:min-h-[44px]"
                 href="/members"
               />
@@ -882,7 +882,7 @@ export default function DashboardPage(): React.ReactElement {
             </DashboardSection>
 
             <InfoPanel title="Qué hacer hoy" as="div">
-              <p>Revise en este orden; cada punto abre su pantalla.</p>
+              <p>Revisa en este orden; cada punto abre su pantalla.</p>
               <div className="grid gap-3">
                 {todoItems.map((item) => (
                   <div key={item.key} className="flex items-start gap-2">

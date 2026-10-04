@@ -368,7 +368,7 @@ export function buildActivityFeed(
       kind: "attendance-session",
       initials: initialsFor(record.horario),
       subject: record.horario,
-      detail: `lista registrada · ${count} ${count === 1 ? "estudiante" : "estudiantes"}`,
+      detail: `lista registrada · ${count} ${count === 1 ? "jugador" : "jugadores"}`,
       at: record.fecha,
     });
   }
