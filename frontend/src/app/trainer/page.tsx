@@ -95,7 +95,6 @@ const DOT_SESSIONS = 6;
 const STATE_TONE: Record<EstadoAsistencia, ChartTone> = {
   present: "ok",
   late: "warn",
-  justified: "neutral",
   sick: "neutral",
   competition: "neutral",
   absent: "bad",

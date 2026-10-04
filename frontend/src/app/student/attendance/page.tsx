@@ -16,8 +16,8 @@
  *   asistencia" — which is a claim about the student's habits that this data
  *   cannot support. The ratio carries its own denominator, so it stays true at
  *   N = 1 and at N = 13.
- * - `late` counts as attended (the student came); `justified` does not (an
- *   excused absence is still an absence). The four-way breakdown below the
+ * - `late` counts as attended (the student came); sick/competition do not (an
+ *   excused absence is still an absence). The breakdown below the
  *   ratio is what keeps that distinction visible instead of hidden in the
  *   arithmetic.
  * - There is no "próxima sesión" on this page. This screen reports what was
@@ -104,7 +104,6 @@ type LoadState =
 const BREAKDOWN_ROWS: { key: keyof Omit<AttendanceBreakdown, "total">; estado: string }[] = [
   { key: "present", estado: "present" },
   { key: "late", estado: "late" },
-  { key: "justified", estado: "justified" },
   { key: "absent", estado: "absent" },
   // FAM-22: left out, the tallies summed to less than the sessions listed.
   { key: "sick", estado: "sick" },
@@ -115,7 +114,6 @@ const BREAKDOWN_ROWS: { key: keyof Omit<AttendanceBreakdown, "total">; estado: s
 const DOT_CLASS: Record<string, string> = {
   present: "bg-state-ok",
   late: "bg-state-warn",
-  justified: "bg-state-neutral",
   absent: "bg-state-bad",
   sick: "bg-state-neutral",
   competition: "bg-state-neutral",
@@ -126,7 +124,6 @@ const ATTENDANCE_LEGEND: { estado: EstadoAsistencia; meaning: string }[] = [
   { estado: "present", meaning: "Estuvo en la sesión" },
   { estado: "late", meaning: "Llegó después de la hora" },
   { estado: "absent", meaning: "No asistió" },
-  { estado: "justified", meaning: "Avisó que no podía ir" },
   { estado: "sick", meaning: "Faltó por enfermedad" },
   { estado: "competition", meaning: "Estuvo en una competencia" },
 ];
@@ -167,7 +164,7 @@ function AttendanceRecap({
         </h2>
         <p className="mt-1.5 text-sm text-ink-3-strong">
           {recap
-            ? "Una tardanza cuenta como asistencia; una falta justificada, no."
+            ? "Una tardanza cuenta como asistencia; una falta, no."
             : studentName
               ? `La asistencia de ${studentName} aparecerá aquí en cuanto el entrenador tome lista.`
               : "Su asistencia aparecerá aquí en cuanto el entrenador tome lista."}
@@ -178,7 +175,7 @@ function AttendanceRecap({
           inset area inside the card, not a second card.
 
           A fixed 2×2, at every width: the card now lives in a 340px rail on
-          large screens, where a 4-up row gives "Justificada" 45px of content
+          large screens, where a 4-up row gives "Competencia" 45px of content
           box and breaks it across three lines. The hairlines are computed per
           index rather than written as `divide-x` — a 2×2 needs a right border
           on the even cells and a bottom border on the first row, and no single
@@ -193,7 +190,7 @@ function AttendanceRecap({
             data-testid={`breakdown-${getAttendanceLabel(estado).toLowerCase()}`}
             className={cn(
               "px-5 py-3.5",
-              index < BREAKDOWN_ROWS.length - 2 ? "border-b border-line" : null,
+              Math.floor(index / 2) < Math.floor((BREAKDOWN_ROWS.length - 1) / 2) ? "border-b border-line" : null,
               index % 2 === 0 ? "border-r border-line" : null,
             )}
           >

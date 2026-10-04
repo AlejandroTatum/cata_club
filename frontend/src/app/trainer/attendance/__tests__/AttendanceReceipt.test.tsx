@@ -12,7 +12,7 @@ const students: SessionStudent[] = [
 ];
 
 function renderReceipt(failed: { personaId: number; message: string; alreadyRegistered?: boolean; registradoPorNombre?: string | null }[]) {
-  const counts = { present: 0, late: 0, justified: 0, sick: 0, competition: 0, absent: 0 };
+  const counts = { present: 0, late: 0, sick: 0, competition: 0, absent: 0 };
   render(
     <AttendanceReceipt
       selectedSchedule={null}

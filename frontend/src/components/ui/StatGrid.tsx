@@ -1,6 +1,6 @@
 /**
  * StatGrid — the count grid that replaces a sentence like "17 presente •
- * 4 ausente • 4 tardanza • 4 justificado", where four values hide inside a
+ * 4 ausente • 4 tardanza • 4 enfermo", where four values hide inside a
  * sentence and a reader has to READ them one at a time instead of seeing
  * them at a glance.
  *

@@ -187,14 +187,15 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     // Issue #1373: the two authorized-absence states are first-class controls.
     expect(within(stateSelector).getByRole("radio", { name: "Enfermo" })).toBeVisible();
     expect(within(stateSelector).getByRole("radio", { name: "Competencia" })).toBeVisible();
-    const justified = within(stateSelector).getByRole("radio", { name: "Justificado" });
+    expect(within(stateSelector).queryByRole("radio", { name: "Justificado" })).toBeNull();
+    const sick = within(stateSelector).getByRole("radio", { name: "Enfermo" });
 
-    fireEvent.click(justified);
+    fireEvent.click(sick);
 
-    expect(justified).toHaveAttribute("aria-checked", "true");
+    expect(sick).toHaveAttribute("aria-checked", "true");
   });
 
-  it("submits the existing justified state mapping after direct selection", async () => {
+  it("submits the sick state mapping after direct selection", async () => {
     const trainerAuth = createAuthenticatedAuth("trainer", "Coach Torres");
     if (trainerAuth.session) trainerAuth.session.user.id = "17";
     mockUseAuth.mockReturnValue(trainerAuth);
@@ -210,14 +211,14 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     fireEvent.click(await screen.findByRole("button", { name: /18:00/i }));
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     const stateSelector = await screen.findByRole("radiogroup", { name: "Estado de asistencia de Ana López" });
-    fireEvent.click(within(stateSelector).getByRole("radio", { name: "Justificado" }));
+    fireEvent.click(within(stateSelector).getByRole("radio", { name: "Enfermo" }));
     fireEvent.click(screen.getByRole("button", { name: "Revisar y confirmar" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirmar asistencia" }));
 
     await waitFor(() => {
       expect(mockRegisterAttendance).toHaveBeenCalledWith(expect.objectContaining({
         horarioId: 12,
-        students: [{ personaId: 9, estado: "justified" }],
+        students: [{ personaId: 9, estado: "sick" }],
       }));
     });
   });
@@ -587,7 +588,7 @@ describe("TrainerAttendancePage — the present default never passes for a revie
       "aria-checked",
       "true",
     );
-    for (const label of ["Ausente", "Tardanza", "Justificado"]) {
+    for (const label of ["Ausente", "Tardanza", "Enfermo"]) {
       expect(within(group).getByRole("radio", { name: label })).toHaveAttribute("aria-checked", "false");
     }
     // …and the value being present must not read as a decision anybody made.
@@ -742,10 +743,10 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     await openRoster();
     await screen.findByText("Student 01");
 
-    // Pre-mark one student justified — the bulk action must not overwrite an
+    // Pre-mark one student sick — the bulk action must not overwrite an
     // explicit decision the trainer already made.
     const first = screen.getByRole("radiogroup", { name: /Student 01/ });
-    fireEvent.click(within(first).getByRole("radio", { name: "Justificado" }));
+    fireEvent.click(within(first).getByRole("radio", { name: "Enfermo" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
 
@@ -753,7 +754,7 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     // has to clear the flag as well as set the state.
     expect(screen.queryByText(/sin revisar/)).not.toBeInTheDocument();
     expect(screen.getByText("24 presentes")).toBeInTheDocument();
-    expect(within(first).getByRole("radio", { name: "Justificado" })).toHaveAttribute("aria-checked", "true");
+    expect(within(first).getByRole("radio", { name: "Enfermo" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("button", { name: /Revisar y confirmar/ })).toBeEnabled();
   });
 
@@ -850,7 +851,7 @@ describe("TrainerAttendancePage — attendance state selector affordances", () =
       labelledBy.map((id) => document.getElementById(id)?.textContent).join(" "),
     ).toContain("Ana López");
 
-    expect(within(group).getAllByRole("radio")).toHaveLength(6);
+    expect(within(group).getAllByRole("radio")).toHaveLength(5);
     expect(group.querySelector("fieldset")).toBeNull();
   });
 
@@ -942,18 +943,16 @@ describe("TrainerAttendancePage — teclado y rótulos del radiogroup de asisten
     await openRoster();
 
     const group = await screen.findByRole("radiogroup", { name: /Ana López/ });
-    fireEvent.click(within(group).getByRole("radio", { name: "Justificado" }));
-    const justificado = within(group).getByRole("radio", { name: "Justificado" });
-    justificado.focus();
+    fireEvent.click(within(group).getByRole("radio", { name: "Competencia" }));
+    const competencia = within(group).getByRole("radio", { name: "Competencia" });
+    competencia.focus();
 
-    fireEvent.keyDown(justificado, { key: "ArrowRight" });
+    fireEvent.keyDown(competencia, { key: "ArrowRight" });
 
-    // Issue #1373: Justificado is no longer last — the walk continues into
-    // the authorized-absence states (justified → sick → competition) before
-    // wrapping around to present.
-    const enfermo = within(group).getByRole("radio", { name: "Enfermo" });
-    expect(enfermo).toHaveAttribute("aria-checked", "true");
-    expect(document.activeElement).toBe(enfermo);
+    // Competencia is the last control in the row; ArrowRight wraps to the first.
+    const presente = within(group).getByRole("radio", { name: "Presente" });
+    expect(presente).toHaveAttribute("aria-checked", "true");
+    expect(document.activeElement).toBe(presente);
   });
 
   it("moves backward and wraps with ArrowLeft", async () => {
@@ -967,7 +966,7 @@ describe("TrainerAttendancePage — teclado y rótulos del radiogroup de asisten
     fireEvent.keyDown(presente, { key: "ArrowLeft" });
 
     // Issue #1373: wrapping left from the first state lands on the NEW last
-    // state (Competencia), not Justificado.
+    // state (Competencia).
     const competencia = within(group).getByRole("radio", { name: "Competencia" });
     expect(competencia).toHaveAttribute("aria-checked", "true");
     expect(document.activeElement).toBe(competencia);
@@ -1060,7 +1059,7 @@ describe("TrainerAttendancePage — the fiche is the target", () => {
     expect(row).toHaveAttribute("data-attendance", "present");
     expect(row).toHaveAttribute("data-reviewed", "true");
 
-    for (const expected of ["late", "justified", "sick", "competition", "absent", "present"]) {
+    for (const expected of ["late", "sick", "competition", "absent", "present"]) {
       fireEvent.click(fiche);
       expect(row).toHaveAttribute("data-attendance", expected);
     }
@@ -1106,8 +1105,8 @@ describe("TrainerAttendancePage — the fiche is the target", () => {
     expect(within(group).getAllByRole("radio", { checked: true })).toHaveLength(1);
 
     // …and the explicit control still wins when used directly.
-    fireEvent.click(within(group).getByRole("radio", { name: "Justificado" }));
-    expect(within(group).getByRole("radio", { name: "Justificado" })).toHaveAttribute(
+    fireEvent.click(within(group).getByRole("radio", { name: "Enfermo" }));
+    expect(within(group).getByRole("radio", { name: "Enfermo" })).toHaveAttribute(
       "aria-checked",
       "true",
     );
@@ -1130,7 +1129,7 @@ describe("TrainerAttendancePage — the fiche is the target", () => {
     // What the row still carries: the fiche that cycles the state, and the
     // radiogroup's six explicit controls.
     expect(within(row).getByRole("button", { name: /^Ana López:/ })).toBeInTheDocument();
-    expect(within(row).getAllByRole("radio")).toHaveLength(6);
+    expect(within(row).getAllByRole("radio")).toHaveLength(5);
   });
 
   it("names the tap target with the student, their current state, and whether it is anybody's answer", async () => {
@@ -2447,13 +2446,13 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     expect(within(rows[0]).getByText("Presente")).toBeInTheDocument();
 
     const tiles = screen.getByRole("list", { name: "Conteo por estado" });
-    expect(within(tiles).getAllByRole("listitem")).toHaveLength(6);
+    expect(within(tiles).getAllByRole("listitem")).toHaveLength(5);
     expect(within(tiles).getByText("Ausente").closest("li")).toHaveTextContent("0");
   });
 
   // Decision 2: with failed records, the breakdown counts what was SAVED, not
-  // what the trainer marked. Student 02 is marked "Justificado" but fails to
-  // save, so the receipt must show 0 justificados, not 1.
+  // what the trainer marked. Student 02 is marked "Enfermo" but fails to
+  // save, so the receipt must show 0 enfermos, not 1.
   it("counts what was saved, not what was marked, when a record failed", async () => {
     mockRegisterAttendance.mockReset().mockResolvedValue({
       createdCount: 2,
@@ -2464,7 +2463,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     await screen.findByText("Student 01");
     fireEvent.click(
       within(screen.getByRole("radiogroup", { name: /Student 02/ })).getByRole("radio", {
-        name: "Justificado",
+        name: "Enfermo",
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
@@ -2476,7 +2475,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     expect(within(list).getAllByRole("listitem")).toHaveLength(2);
     expect(within(list).queryByText("Student 02")).not.toBeInTheDocument();
     const tiles = screen.getByRole("list", { name: "Conteo por estado" });
-    expect(within(tiles).getByText("Justificado").closest("li")).toHaveTextContent("0");
+    expect(within(tiles).getByText("Enfermo").closest("li")).toHaveTextContent("0");
     expect(within(tiles).getByText("Presente").closest("li")).toHaveTextContent("2");
   });
 
@@ -2498,7 +2497,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
 
     expect(
       screen.getByRole("img", {
-        name: "3 presentes, 0 tardanzas, 0 justificados, 0 enfermos, 0 competencias y 0 ausentes sobre 3 registros",
+        name: "3 presentes, 0 tardanzas, 0 enfermos, 0 competencias y 0 ausentes sobre 3 registros",
       }),
     ).toBeInTheDocument();
   });

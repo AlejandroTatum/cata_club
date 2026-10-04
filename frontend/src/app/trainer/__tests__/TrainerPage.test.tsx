@@ -111,7 +111,7 @@ const MONTH_RECORDS: AttendanceRecord[] = [
   record("present", "Sofia Vera"),
   record("present", "Diego Mendoza"),
   record("late", "Ana Garcia"),
-  record("justified", "Melany Quimis"),
+  record("sick", "Melany Quimis"),
   record("absent", "Luis Lopez"),
   record("absent", "Luis Lopez", "2026-07-13"),
   record("absent", "Luis Lopez", "2026-07-06"),
@@ -122,14 +122,14 @@ const RECENT_SESSIONS: RecentAttendanceSession[] = [
     horarioId: 2,
     fecha: "2026-07-20",
     horario: "Lunes 16:00 — 17:00",
-    counts: { present: 6, late: 0, justified: 1, absent: 1, sick: 0, competition: 0 },
+    counts: { present: 6, late: 0, absent: 1, sick: 1, competition: 0 },
     total: 8,
   },
   {
     horarioId: 3,
     fecha: "2026-07-19",
     horario: "Domingo 09:00 — 10:00",
-    counts: { present: 4, late: 1, justified: 0, absent: 0, sick: 0, competition: 0 },
+    counts: { present: 4, late: 1, absent: 0, sick: 0, competition: 0 },
     total: 5,
   },
 ];
@@ -379,7 +379,7 @@ describe("TrainerPage — Mi día", () => {
     render(<TrainerPage />);
 
     const trend = within(await screen.findByTestId("attendance-trend"));
-    // 3 of 7 records trained (present ×2, late ×1, justified ×1 and absent ×3 do not).
+    // 3 of 7 records trained (present ×2, late ×1, sick ×1 and absent ×3 do not).
     expect(trend.getByText(/3 de 7 registros/)).toBeInTheDocument();
     expect(trend.getByRole("group", { name: /Asistencia de las últimas 6 semanas/ })).toBeInTheDocument();
   });

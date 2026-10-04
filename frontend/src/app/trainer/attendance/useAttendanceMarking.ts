@@ -42,7 +42,7 @@ interface RosterUndoEntry {
  */
 const UNDO_DEPTH = 20;
 
-const TOTAL_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "sick", "competition", "absent"];
+const TOTAL_ORDER: EstadoAsistencia[] = ["present", "late", "sick", "competition", "absent"];
 
 interface UseAttendanceMarkingArgs {
   students: SessionStudent[];

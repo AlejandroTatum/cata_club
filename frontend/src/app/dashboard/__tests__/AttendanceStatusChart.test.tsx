@@ -14,7 +14,6 @@ const STATS: AttendanceDayStats = {
   totalPresent: 6,
   totalAbsent: 2,
   totalLate: 1,
-  totalJustified: 1,
   totalSick: 0,
   totalCompetition: 0,
   totalUnknown: 0,

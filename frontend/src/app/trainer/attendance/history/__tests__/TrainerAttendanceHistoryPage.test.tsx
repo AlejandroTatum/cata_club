@@ -113,7 +113,7 @@ const RECORDS: AttendanceRecord[] = [
   record("absent", "Luis Lopez", "2026-07-20", "Lunes 15:00 — 16:00", 12, "Carlos Mendoza"),
   // A different session, on an earlier day and on a different horario.
   record("present", "Kevin Sabando", "2026-07-17", "Viernes 17:00 — 18:00", 7),
-  record("justified", "Melany Quimis", "2026-07-17", "Viernes 17:00 — 18:00", 7),
+  record("sick", "Melany Quimis", "2026-07-17", "Viernes 17:00 — 18:00", 7),
 ];
 
 // Fixed "today" for the clock-dependent correction gate (issue #389, the
@@ -220,7 +220,7 @@ describe("TrainerAttendanceHistoryPage", () => {
     expect(resultCell).toHaveTextContent("1 ausente");
     // Compact result: a state nobody is in is not printed (the bar's accessible
     // name still carries every count).
-    expect(resultCell).not.toHaveTextContent("justificados");
+    expect(resultCell).not.toHaveTextContent("competencia");
   });
 
   it("draws the session's composition as the one bar the panel already uses, named for a screen reader", async () => {
@@ -229,7 +229,7 @@ describe("TrainerAttendanceHistoryPage", () => {
     const rows = await screen.findAllByRole("row");
     expect(
       within(rows[1]).getByRole("img", {
-        name: "2 presentes, 1 tardanza, 0 justificados, 0 enfermos, 0 competencias y 1 ausente sobre 4 registros",
+        name: "2 presentes, 1 tardanza, 0 enfermos, 0 competencias y 1 ausente sobre 4 registros",
       }),
     ).toBeInTheDocument();
     // One bar per row, and nothing left of the four-badge table it replaces.

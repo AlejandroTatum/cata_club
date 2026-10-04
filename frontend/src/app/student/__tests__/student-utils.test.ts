@@ -168,12 +168,12 @@ describe("summarizeRecentAttendance", () => {
     expect(summarizeRecentAttendance([])).toBeNull();
   });
 
-  it("counts present and late as attended, absent and justified as missed", () => {
+  it("counts present and late as attended, absent and sick as missed", () => {
     const result = summarizeRecentAttendance([
       session("present", "2026-07-20"),
       session("late", "2026-07-18"),
       session("absent", "2026-07-15"),
-      session("justified", "2026-07-13"),
+      session("sick", "2026-07-13"),
     ]);
     expect(result).toEqual({ attended: 2, total: 4 });
   });
@@ -526,16 +526,16 @@ describe("describeMembershipState", () => {
 // ---------------------------------------------------------------------------
 
 describe("breakdownAttendance", () => {
-  it("counts each of the four states separately", () => {
+  it("counts each state separately", () => {
     expect(
       breakdownAttendance([
         session("present", "2026-07-20"),
         session("present", "2026-07-19"),
         session("late", "2026-07-18"),
-        session("justified", "2026-07-17"),
+        session("sick", "2026-07-17"),
         session("absent", "2026-07-16"),
       ]),
-    ).toEqual({ present: 2, late: 1, justified: 1, absent: 1, sick: 0, competition: 0, total: 5 });
+    ).toEqual({ present: 2, late: 1, absent: 1, sick: 1, competition: 0, total: 5 });
   });
 
   it("returns an all-zero breakdown for an empty history rather than null", () => {
@@ -544,7 +544,6 @@ describe("breakdownAttendance", () => {
     expect(breakdownAttendance([])).toEqual({
       present: 0,
       late: 0,
-      justified: 0,
       absent: 0,
       sick: 0,
       competition: 0,
@@ -556,7 +555,7 @@ describe("breakdownAttendance", () => {
     const unknown = { fecha: "2026-07-15", horario: "Lunes 15:00 — 16:00", estado: "cancelled" };
     expect(
       breakdownAttendance([session("present", "2026-07-20"), unknown as StudentSessionSummary]),
-    ).toEqual({ present: 1, late: 0, justified: 0, absent: 0, sick: 0, competition: 0, total: 2 });
+    ).toEqual({ present: 1, late: 0, absent: 0, sick: 0, competition: 0, total: 2 });
   });
 });
 
@@ -1170,14 +1169,14 @@ describe("QA4 FAM-23 — siblings with the same first name stay distinguishable"
 
 describe("QA4 FAM-22 — the attendance breakdown covers every state", () => {
   it("counts sick and competition sessions too", () => {
-    const sessions = ["present", "late", "absent", "sick", "justified"].map(
+    const sessions = ["present", "late", "absent", "sick"].map(
       (estado) => ({ estado }) as StudentSessionSummary,
     );
     sessions.push({ estado: "competition" } as StudentSessionSummary);
 
     const result = breakdownAttendance(sessions);
 
-    expect(result).toMatchObject({ present: 1, late: 1, absent: 1, justified: 1, sick: 1, competition: 1, total: 6 });
+    expect(result).toMatchObject({ present: 1, late: 1, absent: 1, sick: 1, competition: 1, total: 5 });
   });
 });
 

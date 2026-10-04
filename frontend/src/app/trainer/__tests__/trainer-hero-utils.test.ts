@@ -28,7 +28,7 @@ function rec(estudiante: string, fecha: string, estado: AttendanceRecord["estado
 describe("buildWeeklyAttendanceTrend", () => {
   it("rates quienes entrenaron — presentes MÁS tardanzas — per week, 0 for an empty week", () => {
     const trend = buildWeeklyAttendanceTrend(
-      [rec("A", "2026-09-30", "present"), rec("B", "2026-09-30", "late"), rec("C", "2026-09-30", "absent"), rec("D", "2026-09-29", "justified")],
+      [rec("A", "2026-09-30", "present"), rec("B", "2026-09-30", "late"), rec("C", "2026-09-30", "absent"), rec("D", "2026-09-29", "sick")],
       NOW,
       6,
     );

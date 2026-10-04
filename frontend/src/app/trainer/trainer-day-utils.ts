@@ -153,7 +153,7 @@ function horarioStartMinutes(horario: string): number {
 function emptyCounts(): Record<EstadoAsistencia, number> {
   // Issue #1373: the two authorized-absence states start at zero like the
   // rest — every state is always a key, even before any record arrives.
-  return { present: 0, absent: 0, late: 0, justified: 0, sick: 0, competition: 0 };
+  return { present: 0, absent: 0, late: 0, sick: 0, competition: 0 };
 }
 
 /**
@@ -226,7 +226,7 @@ export interface AbsenceAlert {
  * reaches the alert threshold. Ties break alphabetically so the panel does not
  * reshuffle between refreshes for no reason.
  *
- * Only `absent` counts — a justified absence is precisely the case the club
+ * Only `absent` counts — a sick or competition absence is precisely the case the club
  * has already been told about.
  */
 export function findAbsenceAlert(records: AttendanceRecord[]): AbsenceAlert | null {
@@ -253,7 +253,7 @@ export function findAbsenceAlert(records: AttendanceRecord[]): AbsenceAlert | nu
 /**
  * Every student at or above the alert threshold, most absences first, ties
  * alphabetical, capped for a dashboard block. Same counting rule as
- * `findAbsenceAlert` (only `absent`; a justified absence is already known) —
+ * `findAbsenceAlert` (only `absent`; a sick or competition absence is already known) —
  * this is its list form, for "Alumnos a seguir".
  */
 export function findStudentsToFollow(records: AttendanceRecord[], limit = 5): AbsenceAlert[] {
@@ -550,9 +550,9 @@ export function buildDayRail(
 // ---------------------------------------------------------------------------
 
 /** Reading order for the six attendance states — best news first, as on every other screen.
- *  Issue #1373 slots the two authorized-absence states between justified and absent:
+ *  Issue #1373 slots the two authorized-absence states between late and absent:
  *  a known reason is never a worse verdict than an unexcused one. */
-export const STATE_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "sick", "competition", "absent"];
+export const STATE_ORDER: EstadoAsistencia[] = ["present", "late", "sick", "competition", "absent"];
 
 export interface SessionBarSegment {
   estado: EstadoAsistencia;
@@ -577,7 +577,6 @@ export function buildSessionBarSegments(
 const BAR_STATE_NOUNS: Record<EstadoAsistencia, [singular: string, plural: string]> = {
   present: ["presente", "presentes"],
   late: ["tardanza", "tardanzas"],
-  justified: ["justificado", "justificados"],
   // Issue #1373: inasistencias autorizadas — mismos nombres que usa el resto
   // de la app (getAttendanceLabel), en singular y plural para el aria-label.
   sick: ["enfermo", "enfermos"],
@@ -590,7 +589,7 @@ function pluralizedCount(count: number, [singular, plural]: [string, string]): s
 }
 
 /**
- * "9 presentes", "1 tardanza", "0 justificados" — the ONE way this product
+ * "9 presentes", "1 tardanza", "0 enfermos" — the ONE way this product
  * counts a state out loud.
  *
  * The nouns above were private and spent only on the bar's accessible name,
@@ -664,8 +663,8 @@ export interface MonthAttendanceRate {
  * llegó tarde entrenó igual, y un tile llamado "Asistencia del mes" que solo
  * contaba `totalPresent` subdeclaraba la asistencia real en 16 puntos frente
  * a la propia tabla "Distribución de asistencias" de la misma pantalla (60%
- * vs 73% sobre el mismo mes). Justificado y ausente siguen fuera: ninguno de
- * los dos es "entrenó".
+ * vs 73% sobre el mismo mes). Enfermo, competencia y ausente siguen fuera: ninguno de
+ * los tres es "entrenó".
  *
  * A month with no records is 0%, not NaN: this runs on the first day of every
  * month, before anyone has taken a list.

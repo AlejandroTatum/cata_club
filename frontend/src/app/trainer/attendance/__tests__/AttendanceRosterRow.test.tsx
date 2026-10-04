@@ -17,7 +17,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import AttendanceRosterRow from "@/app/trainer/attendance/AttendanceRosterRow";
 import { UNMARKED, type SessionStudent } from "../attendance-utils";
 
-const ALL_STATE_NAMES = ["Presente", "Ausente", "Tardanza", "Justificado", "Enfermo", "Competencia"];
+const ALL_STATE_NAMES = ["Presente", "Ausente", "Tardanza", "Enfermo", "Competencia"];
 
 function buildStudent(overrides: Partial<SessionStudent> = {}): SessionStudent {
   return { id: "alumno-1", name: "Ana López", attendance: UNMARKED, ...overrides };
@@ -66,14 +66,14 @@ describe("AttendanceRosterRow — the row never clips its own radiogroup (#1373)
     expect(row.className).not.toContain("sm:h-12");
   });
 
-  it("renders all six states as radios on a 3-column base grid with 44px targets", () => {
+  it("renders all five states as radios on a 3-column base grid with 44px targets", () => {
     renderRow();
 
     const group = screen.getByRole("radiogroup", { name: /Ana López/ });
     expect(group.className).toContain("grid-cols-3");
 
     const radios = within(group).getAllByRole("radio");
-    expect(radios).toHaveLength(6);
+    expect(radios).toHaveLength(5);
     radios.forEach((radio, i) => {
       expect(radio).toHaveAccessibleName(ALL_STATE_NAMES[i]);
       expect(radio.className).toContain("min-h-[44px]");
@@ -99,7 +99,7 @@ describe("AttendanceRosterRow — the row never clips its own radiogroup (#1373)
     expect(handlers.onRadioKeyDown.mock.calls[0][2]).toBe("absent");
   });
 
-  it("wraps 3-wide on narrow devices and puts all six in ONE row from lg up (#1373 feedback)", () => {
+  it("wraps 3-wide on narrow devices and puts all five in ONE row from lg up (#1373 feedback)", () => {
     renderRow();
 
     const group = screen.getByRole("radiogroup", { name: /Ana López/ });
@@ -107,16 +107,16 @@ describe("AttendanceRosterRow — the row never clips its own radiogroup (#1373)
     // no intermediate breakpoint rewrapping the grid again.
     expect(group.className).toContain("grid-cols-3");
     expect(group.className).not.toMatch(/(?:^|\s)(?:sm|md):grid-cols-\d+(?=$|\s)/);
-    // Desktop (lg+): six equal columns = a single horizontal row of six.
-    expect(group.className).toContain("lg:grid-cols-6");
+    // Desktop (lg+): five equal columns = a single horizontal row of five.
+    expect(group.className).toContain("lg:grid-cols-5");
 
-    /* jsdom has no layout, so "one row" here is the class contract — six
-     * `1fr` tracks cannot wrap. The measured geometry (six boxes in one
+    /* jsdom has no layout, so "one row" here is the class contract — five
+     * `1fr` tracks cannot wrap. The measured geometry (five boxes in one
      * y-band inside the row, no horizontal overflow, first/sixth clickable)
      * is proven by the batched Playwright check against the production
      * build, recorded in odd/tasks/1373-attendance.md. */
     const radios = within(group).getAllByRole("radio");
-    expect(radios).toHaveLength(6);
+    expect(radios).toHaveLength(5);
     radios.forEach((radio) => {
       // Meaningful label survives the one-row desktop layout.
       expect(radio).toHaveAccessibleName(/.+/);

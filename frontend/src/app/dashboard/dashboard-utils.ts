@@ -27,7 +27,6 @@ import { toMinutes, type TimelineItem, type TimelineStatus } from "@/components/
 export const ATTENDANCE_STATUS_CHART_COLORS: Record<EstadoAsistencia, string> = {
   present: "#008300",
   late: "#eda100",
-  justified: "#2a78d6",
   absent: "#e34948",
   // Issue #1373: sick (violet) and competition (teal) join the donut. The
   // four original colors were validated with the dataviz skill's palette
@@ -39,7 +38,7 @@ export const ATTENDANCE_STATUS_CHART_COLORS: Record<EstadoAsistencia, string> = 
 };
 
 /** Fixed render order — also the validated adjacent-pair order (do not reorder without re-running the validator). */
-const ATTENDANCE_STATUS_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "sick", "competition", "absent"];
+const ATTENDANCE_STATUS_ORDER: EstadoAsistencia[] = ["present", "late", "sick", "competition", "absent"];
 
 export interface AttendanceStatusSegment {
   estado: EstadoAsistencia;
@@ -59,9 +58,8 @@ export function buildAttendanceStatusSegments(stats: AttendanceDayStats): Attend
   const countByEstado: Record<EstadoAsistencia, number> = {
     present: stats.totalPresent,
     late: stats.totalLate,
-    justified: stats.totalJustified,
     // Issue #1373: sick/competition carry their own stats counts — they are
-    // never folded into absent (justified/neutral family, never unexcused).
+    // never folded into absent (authorized absences, never unexcused).
     sick: stats.totalSick,
     competition: stats.totalCompetition,
     absent: stats.totalAbsent,
@@ -666,7 +664,7 @@ export function buildWeeklyStatusBreakdown(
   const endOfToday = new Date(clubNow.getFullYear(), clubNow.getMonth(), clubNow.getDate()).getTime();
   const columns: WeeklyStatusColumn[] = Array.from({ length: weeks }, (_, i) => ({
     startIso: calendarIsoDate(new Date(endOfToday - ((weeks - 1 - i) * 7 + 6) * DAY_MS)),
-    counts: { present: 0, late: 0, justified: 0, sick: 0, competition: 0, absent: 0 },
+    counts: { present: 0, late: 0, sick: 0, competition: 0, absent: 0 },
     total: 0,
   }));
 

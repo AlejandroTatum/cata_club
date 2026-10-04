@@ -21,7 +21,7 @@ import {
 } from "./attendance-utils";
 import { registerAttendance, type RegisterAttendanceResult } from "@/services/api";
 
-const TOTAL_ORDER = ["present", "late", "justified", "sick", "competition", "absent"] as const;
+const TOTAL_ORDER = ["present", "late", "sick", "competition", "absent"] as const;
 
 interface UseAttendanceSubmissionArgs {
   selectedScheduleId: number | null;

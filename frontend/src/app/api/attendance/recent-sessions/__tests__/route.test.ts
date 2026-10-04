@@ -77,7 +77,7 @@ describe("GET /api/attendance/recent-sessions", () => {
         horarioId: 1,
         fecha: "2026-08-03",
         horario: "Lunes 15:00 — 16:30",
-        counts: { present: 5, late: 1, justified: 0, absent: 1, sick: 1, competition: 0 },
+        counts: { present: 5, late: 1, absent: 1, sick: 1, competition: 0 },
         total: 8,
       },
     ]);

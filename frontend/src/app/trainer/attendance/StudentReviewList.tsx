@@ -6,7 +6,6 @@ import { ATTENDANCE_LABELS, isReviewed, type SessionStudent } from "./attendance
 export const STATE_DISPLAY_ORDER: EstadoAsistencia[] = [
   "present",
   "late",
-  "justified",
   "sick",
   "competition",
   "absent",

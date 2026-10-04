@@ -26,7 +26,7 @@ export type BackendDiaSemana = "LUNES" | "MARTES" | "MIERCOLES" | "JUEVES" | "VI
 /** Mirror of the backend `EstadoAsistencia` enum — kept in lockstep by the
  *  enum-parity test. `ENFERMO`/`COMPETENCIA` (issue #1373) are the two
  *  authorized-absence states added on top of the original four. */
-export type BackendEstadoAsistencia = "PRESENTE" | "AUSENTE" | "ATRASADO" | "JUSTIFICADO" | "ENFERMO" | "COMPETENCIA";
+export type BackendEstadoAsistencia = "PRESENTE" | "AUSENTE" | "ATRASADO" | "ENFERMO" | "COMPETENCIA";
 
 export interface BackendHorario {
   id: number;
@@ -95,7 +95,6 @@ export const ESTADO_ASISTENCIA_BACKEND_TO_FRONTEND: Record<BackendEstadoAsistenc
   PRESENTE: "present",
   AUSENTE: "absent",
   ATRASADO: "late",
-  JUSTIFICADO: "justified",
   ENFERMO: "sick",
   COMPETENCIA: "competition",
 };
@@ -104,7 +103,6 @@ export const ESTADO_ASISTENCIA_FRONTEND_TO_BACKEND: Record<EstadoAsistencia, Bac
   present: "PRESENTE",
   absent: "AUSENTE",
   late: "ATRASADO",
-  justified: "JUSTIFICADO",
   sick: "ENFERMO",
   competition: "COMPETENCIA",
 };
@@ -220,9 +218,6 @@ export function buildRecentSession(lista: BackendUltimaLista): RecentSession {
     counts: {
       present: lista.presentes,
       late: lista.tardanzas,
-      // The `justified` state no longer exists in the backend (ENT-23); the
-      // key stays at 0 until it is dropped from `EstadoAsistencia`.
-      justified: 0,
       absent: lista.ausentes,
       sick: lista.enfermos,
       competition: lista.competencias,

@@ -145,8 +145,8 @@ export interface AttendanceRecap {
  * month-scoped figure cannot be computed here without inventing the
  * denominator.
  *
- * `late` counts as attended — the student came. `justified` does not: it is an
- * excused absence, and counting it would overstate the figure a parent reads.
+ * `late` counts as attended — the student came. Sick and competition do not:
+ * they are excused absences, and counting them would overstate the figure a parent reads.
  */
 export function summarizeRecentAttendance(
   sessions: StudentSessionSummary[],
@@ -157,12 +157,12 @@ export function summarizeRecentAttendance(
 }
 
 /**
- * How the persona's recorded sessions split across the four attendance states.
+ * How the persona's recorded sessions split across the attendance states.
  *
  * `summarizeRecentAttendance` answers "did they come?"; this answers "what
  * happened", which is the question `/student/attendance` exists to show. The
- * two are kept apart on purpose: collapsing `justified` into `absent` in the
- * ratio is correct (an excused absence is still an absence), but collapsing it
+ * two are kept apart on purpose: collapsing `sick`/`competition` into `absent` in the
+ * ratio is correct (an excused absence is still an absence), but collapsing them
  * in the breakdown would hide the one state a parent most wants to verify.
  *
  * `total` counts every record, including an `estado` this build does not know
@@ -172,7 +172,6 @@ export function summarizeRecentAttendance(
 export interface AttendanceBreakdown {
   present: number;
   late: number;
-  justified: number;
   absent: number;
   /** FAM-22: «Enfermo» and «Competencia» used to be left out of the tally. */
   sick: number;
@@ -184,7 +183,6 @@ export function breakdownAttendance(sessions: StudentSessionSummary[]): Attendan
   return {
     present: sessions.filter((s) => s.estado === "present").length,
     late: sessions.filter((s) => s.estado === "late").length,
-    justified: sessions.filter((s) => s.estado === "justified").length,
     absent: sessions.filter((s) => s.estado === "absent").length,
     sick: sessions.filter((s) => s.estado === "sick").length,
     competition: sessions.filter((s) => s.estado === "competition").length,

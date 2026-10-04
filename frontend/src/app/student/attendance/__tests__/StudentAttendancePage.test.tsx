@@ -2,8 +2,8 @@
  * Component tests for `/student/attendance`.
  *
  * The behaviour worth protecting here is honesty about a small, capped data
- * set: a counted ratio instead of a rate, a four-way breakdown that keeps
- * "justificado" visible, and a stated window so five rows are never read as a
+ * set: a counted ratio instead of a rate, a breakdown that keeps
+ * every state visible, and a stated window so five rows are never read as a
  * complete record.
  *
  * Mocking follows StudentPage.test.tsx (ProtectedRoute, next/navigation,
@@ -103,7 +103,7 @@ function portalWith(sessions: StudentProfileSummary["recentSessions"]): StudentP
 const FIVE_SESSIONS: StudentProfileSummary["recentSessions"] = [
   { fecha: "2026-07-23", horario: "Jueves 15:00 — 16:00", estado: "present" },
   { fecha: "2026-07-21", horario: "Martes 15:00 — 16:00", estado: "late" },
-  { fecha: "2026-07-16", horario: "Jueves 15:00 — 16:00", estado: "justified" },
+  { fecha: "2026-07-16", horario: "Jueves 15:00 — 16:00", estado: "sick" },
   { fecha: "2026-07-14", horario: "Martes 15:00 — 16:00", estado: "absent" },
   { fecha: "2026-07-09", horario: "Jueves 15:00 — 16:00", estado: "present" },
 ];
@@ -175,16 +175,16 @@ describe("StudentAttendancePage — the recap", () => {
     expect(screen.queryByText(/%/)).not.toBeInTheDocument();
   });
 
-  it("says out loud how a tardanza and a falta justificada are counted", async () => {
+  it("says out loud how a tardanza and a falta are counted", async () => {
     render(<StudentAttendancePage />);
 
     expect(await screen.findByRole("heading", { name: /asistió a/i })).toBeInTheDocument();
     expect(
-      screen.getByText(/una tardanza cuenta como asistencia; una falta justificada, no/i),
+      screen.getByText(/una tardanza cuenta como asistencia; una falta, no/i),
     ).toBeInTheDocument();
   });
 
-  it("breaks the record into its four states so 'justificado' stays visible", async () => {
+  it("breaks the record into its states so 'enfermo' stays visible", async () => {
     render(<StudentAttendancePage />);
 
     await screen.findByText("3 de 5");
@@ -192,8 +192,8 @@ describe("StudentAttendancePage — the recap", () => {
     for (const [label, count] of [
       ["Presente", "2"],
       ["Tardanza", "1"],
-      ["Justificado", "1"],
       ["Ausente", "1"],
+      ["Enfermo", "1"],
     ]) {
       const cell = within(recap).getByTestId(`breakdown-${label.toLowerCase()}`);
       expect(within(cell).getByText(label)).toBeInTheDocument();
@@ -276,7 +276,7 @@ describe("StudentAttendancePage — the socio nuevo", () => {
     const empty = await screen.findByTestId("sessions-empty");
     expect(within(empty).getByText(/aún no hay asistencias registradas/i)).toBeInTheDocument();
     // The legend rides in the rail's guide, beside the record.
-    for (const label of ["Presente", "Ausente", "Tardanza", "Justificado"]) {
+    for (const label of ["Presente", "Ausente", "Tardanza", "Enfermo", "Competencia"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
   });
@@ -366,7 +366,6 @@ describe("StudentAttendancePage — the rail guide", () => {
     const guide = await screen.findByRole("heading", { name: "Cómo se registra la asistencia" });
     const panel = guide.parentElement as HTMLElement;
     expect(within(panel).getByText("Faltó por enfermedad")).toBeInTheDocument();
-    expect(within(panel).getByText("Avisó que no podía ir")).toBeInTheDocument();
   });
 
   it("closes the gap under a short record with decorative ghost rows", async () => {
@@ -388,11 +387,10 @@ describe("StudentAttendancePage — the rail guide", () => {
 
 describe("StudentAttendancePage — QA4 findings", () => {
   // FAM-22: «Enfermo» and «Competencia» were missing, so the tallies summed to less than the list.
-  it("tallies all six states so the counters add up to the sessions listed", async () => {
+  it("tallies all five states so the counters add up to the sessions listed", async () => {
     mockFetchStudentPortal.mockReset().mockResolvedValue(
       portalWith([
         ...FIVE_SESSIONS,
-        { fecha: "2026-07-07", horario: "Martes 15:00 — 16:00", estado: "sick" },
         { fecha: "2026-07-02", horario: "Jueves 15:00 — 16:00", estado: "competition" },
       ]),
     );
@@ -402,7 +400,6 @@ describe("StudentAttendancePage — QA4 findings", () => {
     for (const [label, count] of [
       ["Presente", "2"],
       ["Tardanza", "1"],
-      ["Justificado", "1"],
       ["Ausente", "1"],
       ["Enfermo", "1"],
       ["Competencia", "1"],
