@@ -143,3 +143,71 @@ describe("FAQ screen names (TXT-14, ENT-18)", () => {
     expect(everything).toMatch(/solo administración puede corregirla/);
   });
 });
+
+describe("admin answers for the catalog, the public site and the activity screen (QA4 ADMB-18)", () => {
+  const admin = FAQ_SECTIONS.find((s) => s.title === "Si es administrador")!;
+  const answerOf = (question: string): string => {
+    const entry = admin.entries.find((e) => e.question === question);
+    expect(entry, question).toBeDefined();
+    return entry!.answer;
+  };
+
+  it.each([
+    "¿Qué pasa si oculto una tarifa?",
+    "¿Por qué no puedo eliminar una tarifa?",
+    "¿Qué pasa si oculto un descuento?",
+    "¿Por qué no puedo eliminar un descuento?",
+    "¿Cómo oculto una categoría de la página pública?",
+    "¿Cómo cambio las fotos de la página pública?",
+    "¿Qué muestra «Actividad del club»?",
+  ])("answers «%s» in the administrator section", (question) => {
+    expect(answerOf(question).length).toBeGreaterThan(40);
+  });
+
+  it("says a hidden tariff keeps charging whoever already has it, and can come back", () => {
+    const answer = answerOf("¿Qué pasa si oculto una tarifa?");
+    expect(answer).toContain("siguen pagando igual");
+    expect(answer).toContain("Mostrar");
+  });
+
+  it("explains that only a tariff or discount nobody used can be deleted, and offers hiding instead", () => {
+    for (const question of ["¿Por qué no puedo eliminar una tarifa?", "¿Por qué no puedo eliminar un descuento?"]) {
+      const answer = answerOf(question);
+      expect(answer).toMatch(/nadie|nunca se usó/);
+      expect(answer).toContain("Ocultar");
+    }
+  });
+
+  it("says a hidden discount cannot go to anyone new but stays on whoever has it", () => {
+    const answer = answerOf("¿Qué pasa si oculto un descuento?");
+    expect(answer).toContain("a nadie nuevo");
+    expect(answer).toContain("ya lo tienen");
+  });
+
+  it("says a new category starts hidden and where to show or hide it", () => {
+    const answer = answerOf("¿Cómo oculto una categoría de la página pública?");
+    expect(answer).toContain("Grupos y horarios");
+    expect(answer).toContain("Ocultar del sitio");
+    expect(answer).toMatch(/nueva.*oculta/i);
+  });
+
+  it("names the gallery and sponsors screens, the file rule, and that a photo is replaced by deleting and uploading", () => {
+    const answer = answerOf("¿Cómo cambio las fotos de la página pública?");
+    expect(answer).toContain("Galería");
+    expect(answer).toContain("Patrocinadores");
+    expect(answer).toContain("JPG o PNG");
+    expect(answer).toContain("5 MB");
+  });
+
+  it("describes the activity screen's two views and its periods", () => {
+    const answer = answerOf("¿Qué muestra «Actividad del club»?");
+    expect(answer).toContain("Resumen");
+    expect(answer).toContain("Métricas avanzadas");
+    expect(answer).toContain("solo lectura");
+  });
+
+  it("keeps the new copy in «usted»", () => {
+    const text = admin.entries.map((e) => `${e.question} ${e.answer}`).join(" ");
+    expect(text).not.toMatch(/\b(puedes|quieres|tienes|elige|oculta tu|haz clic|tu )\b/i);
+  });
+});

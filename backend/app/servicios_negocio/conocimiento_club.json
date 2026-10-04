@@ -120,6 +120,34 @@
         {
           "pregunta": "¿Dónde genero los reportes del club?",
           "respuesta": "En Reportes puede generar los informes con los datos registrados."
+        },
+        {
+          "pregunta": "¿Qué pasa si oculto una tarifa?",
+          "respuesta": "En Tarifas, «Ocultar» la saca del sitio público y de las inscripciones y cambios de plan nuevos. Quienes ya la tienen siguen pagando igual. Puede volver a mostrarla cuando quiera con «Mostrar»."
+        },
+        {
+          "pregunta": "¿Por qué no puedo eliminar una tarifa?",
+          "respuesta": "«Eliminar» solo aparece mientras nadie usó la tarifa: si alguna membresía o cambio de plan la usó, ya no se puede borrar, porque quedaría sin respaldo el historial. En ese caso use «Ocultar» para que deje de ofrecerse."
+        },
+        {
+          "pregunta": "¿Qué pasa si oculto un descuento?",
+          "respuesta": "En Descuentos, «Ocultar» hace que ya no pueda asignarse a nadie nuevo. A quienes ya lo tienen se les sigue aplicando y los pagos ya registrados no cambian. Puede volver a mostrarlo con «Mostrar»."
+        },
+        {
+          "pregunta": "¿Por qué no puedo eliminar un descuento?",
+          "respuesta": "«Eliminar» solo aparece mientras nadie recibió el descuento: si ya se aplicó o se asignó, no se puede borrar. En ese caso use «Ocultar» para que deje de ofrecerse."
+        },
+        {
+          "pregunta": "¿Cómo oculto una categoría de la página pública?",
+          "respuesta": "En Grupos y horarios, use «Ocultar del sitio» en la categoría; «Mostrar en el sitio» la publica de nuevo. La categoría sigue activa para inscripciones y asistencia. Una categoría nueva se crea oculta: no se publica hasta que usted la muestre."
+        },
+        {
+          "pregunta": "¿Cómo cambio las fotos de la página pública?",
+          "respuesta": "Las fotos de la galería se cargan en Galería, con un título y una descripción, y los logos de los patrocinadores en Patrocinadores, con un nombre corto. Se aceptan archivos JPG o PNG de hasta 5 MB y se publican de inmediato. Para cambiar una, elimínela y suba la nueva: lo eliminado no se puede recuperar."
+        },
+        {
+          "pregunta": "¿Qué muestra «Actividad del club»?",
+          "respuesta": "Es una pantalla de solo lectura. «Resumen» muestra cuántas personas ingresaron, cuántas asistencias, pagos e inscripciones nuevas se registraron en el período elegido (24 h, 7 días o 30 días) y el estado de la aplicación, los errores y los correos. «Métricas avanzadas» da el detalle técnico para el equipo que da soporte."
         }
       ]
     }
