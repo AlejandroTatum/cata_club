@@ -18,6 +18,7 @@
 
 import { describe, it, expect } from "vitest";
 import { CLUB_PROFILE, FAQ_SECTIONS } from "../faq-content";
+import { buildUstedRegisterRegex } from "@/lib/__tests__/usted-register-lock";
 
 describe("CLUB_PROFILE", () => {
   it("quotes no price, because the club's plans are not written down here", () => {
@@ -47,9 +48,9 @@ describe("FAQ_SECTIONS", () => {
   it("covers every role that has a screen", () => {
     expect(FAQ_SECTIONS.map((s) => s.title)).toEqual([
       "Para empezar",
-      "Si es estudiante o representante",
-      "Si es entrenador",
-      "Si es administrador",
+      "Si eres jugador o representante",
+      "Si eres entrenador",
+      "Si eres administrador",
     ]);
   });
 
@@ -70,7 +71,7 @@ describe("FAQ_SECTIONS", () => {
     expect(entry).toBeDefined();
     // The approved copy opens with the condition and names both people who
     // can act — the old copy's lie (a flat "No") must not come back.
-    expect(entry!.answer).toMatch(/^Sí, si gestiona su propia cuenta o representa al estudiante\./);
+    expect(entry!.answer).toMatch(/^Sí, si gestionas tu propia cuenta o representas al jugador\./);
     expect(entry!.answer).toContain("su representante o un administrador");
     expect(entry!.answer.toLowerCase().trim().startsWith("no:")).toBe(false);
   });
@@ -84,7 +85,7 @@ describe("FAQ_SECTIONS", () => {
     );
     expect(entry).toBeDefined();
     expect(entry!.answer.trim().startsWith("Sí.")).toBe(false);
-    expect(entry!.answer.trim().startsWith("Sí, si gestiona")).toBe(true);
+    expect(entry!.answer.trim().startsWith("Sí, si gestionas")).toBe(true);
   });
 
   it("never teaches the batch-approval flow /payments does not have (#315 hallazgo #13)", () => {
@@ -124,7 +125,7 @@ describe("FAQ_SECTIONS", () => {
 describe("FAQ screen names (TXT-14, ENT-18)", () => {
   const everything = FAQ_SECTIONS.flatMap((s) => s.entries.flatMap((e) => [e.question, e.answer])).join("\n");
 
-  it.each(["Membresías y Pagos", "Historial Asistencia", "Abra Asistencia", "Mi Cuenta", "de a uno", "en Horarios"])(
+  it.each(["Membresías y Pagos", "Historial Asistencia", "Abre Asistencia", "Mi Cuenta", "de a uno", "en Horarios"])(
     "never says «%s», which is not what the menu or the club says",
     (phrase) => {
       expect(everything).not.toContain(phrase);
@@ -132,9 +133,9 @@ describe("FAQ screen names (TXT-14, ENT-18)", () => {
   );
 
   it("names the real screens", () => {
-    expect(everything).toContain("Abra Pagos");
+    expect(everything).toContain("Abre Pagos");
     expect(everything).toContain("Pasar lista → Historial");
-    expect(everything).toContain("Abra Pasar lista");
+    expect(everything).toContain("Abre Pasar lista");
     expect(everything).toContain("Grupos y horarios");
     expect(everything).toContain("uno por uno");
   });
@@ -145,7 +146,7 @@ describe("FAQ screen names (TXT-14, ENT-18)", () => {
 });
 
 describe("admin answers for the catalog, the public site and the activity screen (QA4 ADMB-18)", () => {
-  const admin = FAQ_SECTIONS.find((s) => s.title === "Si es administrador")!;
+  const admin = FAQ_SECTIONS.find((s) => s.title === "Si eres administrador")!;
   const answerOf = (question: string): string => {
     const entry = admin.entries.find((e) => e.question === question);
     expect(entry, question).toBeDefined();
@@ -206,8 +207,8 @@ describe("admin answers for the catalog, the public site and the activity screen
     expect(answer).toContain("solo lectura");
   });
 
-  it("keeps the new copy in «usted»", () => {
+  it("keeps the new copy in «tú»", () => {
     const text = admin.entries.map((e) => `${e.question} ${e.answer}`).join(" ");
-    expect(text).not.toMatch(/\b(puedes|quieres|tienes|elige|oculta tu|haz clic|tu )\b/i);
+    expect(text).not.toMatch(buildUstedRegisterRegex());
   });
 });

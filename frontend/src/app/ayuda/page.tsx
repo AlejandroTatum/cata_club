@@ -65,17 +65,17 @@ const SECTION_ACCENT: Record<string, { icon: LucideIcon; iconBg: string; iconFg:
     iconBg: "bg-cata-yellow-soft",
     iconFg: "text-ball-ink",
   },
-  "Si es estudiante o representante": {
+  "Si eres jugador o representante": {
     icon: Users,
     iconBg: "bg-cuenta-representante-bg",
     iconFg: "text-cuenta-representante",
   },
-  "Si es entrenador": {
+  "Si eres entrenador": {
     icon: Dumbbell,
     iconBg: "bg-cuenta-entrenador-bg",
     iconFg: "text-cuenta-entrenador",
   },
-  "Si es administrador": {
+  "Si eres administrador": {
     icon: ShieldCheck,
     iconBg: "bg-cata-red/15",
     iconFg: "text-cata-red",
