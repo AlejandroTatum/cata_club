@@ -8,7 +8,6 @@ import {
   galleryImageSrc,
   galleryImageSrcSet,
   GALLERY_BROWSE_HOLD_MS,
-  GALLERY_EMPTY_EVENT,
   GALLERY_HOLD_EVENT,
   GALLERY_READY_EVENT,
   GALLERY_SEEK_EVENT,
@@ -91,9 +90,8 @@ function measureRatios(entries: GalleryEntry[]): Promise<Map<number, number>> {
  * pixel of motion.
  *
  * Empty is the gallery's real initial state — the club publishes entries
- * from `/galeria`. VIS-03: the section then renders nothing at all and tells
- * the page (`GALLERY_EMPTY_EVENT`) to drop its nav entries, instead of
- * showing a header over an apology or shipping placeholder photographs.
+ * from `/galeria`. The section (and its nav entries) stays on the page with a
+ * brief empty state (#1622) instead of shipping placeholder photographs.
  */
 export default function Gallery(): React.ReactElement {
   const [state, setState] = useState<GalleryState>({ kind: "loading" });
@@ -141,10 +139,6 @@ export default function Gallery(): React.ReactElement {
       });
     return (): void => { cancelled = true; };
   }, []);
-
-  useEffect((): void => {
-    if (state.kind === "empty") document.dispatchEvent(new CustomEvent(GALLERY_EMPTY_EVENT));
-  }, [state.kind]);
 
   // Fired after the ready commit, so the track already holds its full run.
   // A runtime mounted later still finds it via the `data-ready` attribute.
@@ -257,14 +251,12 @@ export default function Gallery(): React.ReactElement {
   if (state.kind === "ready") {
     accessibleStatus = `Galería: ${state.entries.map((entry): string => entry.title).join(", ")}.`;
   } else if (state.kind === "empty") {
-    accessibleStatus = "Aún no hay fotos en la galería.";
+    accessibleStatus = "Pronto vas a ver aquí fotos del club";
   } else if (state.kind === "error") {
     accessibleStatus = "No se pudieron cargar las fotos de la galería.";
   } else {
     accessibleStatus = "Cargando la galería…";
   }
-
-  if (state.kind === "empty") return <></>;
 
   return (
     <section className="landing-section landing-gallery" id="galeria" data-motion-section data-testid="motion-section">

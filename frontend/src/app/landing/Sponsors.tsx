@@ -123,7 +123,7 @@ export default function Sponsors(): React.ReactElement {
   if (state.kind === "ready") {
     accessibleStatus = `Patrocinadores: ${state.sponsors.map((sponsor): string => sponsor.name).join(", ")}.`;
   } else if (state.kind === "empty") {
-    accessibleStatus = "Aún no hay patrocinadores cargados.";
+    accessibleStatus = "Pronto anunciaremos a nuestros patrocinadores";
   } else if (state.kind === "error") {
     accessibleStatus = "No se pudieron cargar los patrocinadores.";
   } else {
@@ -148,7 +148,7 @@ export default function Sponsors(): React.ReactElement {
     : [];
 
   return (
-    <section className="landing-sponsors" aria-label="Patrocinadores del club">
+    <section className="landing-sponsors" id="patrocinadores" aria-label="Patrocinadores del club">
       <p className="landing-sponsors-head">Patrocinadores</p>
       {/* The empty/error paragraphs below are themselves the accessible status;
           only loading/ready states need a screen-reader-only copy. */}

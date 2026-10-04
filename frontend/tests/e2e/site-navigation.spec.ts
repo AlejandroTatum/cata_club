@@ -54,6 +54,7 @@ test.describe("public navigation (issue #771)", () => {
       "Cómo empezar",
       "Preguntas",
       "Contacto",
+      "Patrocinadores",
     ]);
 
     // "A link to nothing is worse than an inconsistent menu", checked against
