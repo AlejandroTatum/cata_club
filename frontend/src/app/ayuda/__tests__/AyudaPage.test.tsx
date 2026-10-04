@@ -203,6 +203,15 @@ describe("AyudaPage — FAQ grid (#203)", () => {
     expect(grid).toHaveClass("xl:grid-cols-2");
   });
 
+  it("sizes each section card to its own content (#1618)", () => {
+    render(<AyudaPage />);
+    const grid = screen.getByTestId("faq-grid");
+
+    expect(grid).toHaveClass("items-start");
+    expect(grid.className).not.toMatch(/auto-rows-fr/);
+    expect(grid.className).not.toMatch(/min-h-/);
+  });
+
   it("keeps every section, and all of its questions, inside one grid cell", () => {
     mockRole = "estudiante";
     render(<AyudaPage />);
