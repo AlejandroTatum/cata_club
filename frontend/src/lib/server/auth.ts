@@ -292,6 +292,8 @@ export type AuthErrorCode =
   | "invalid_credentials"
   // REG-10: the password was right but the account is deactivated.
   | "account_inactive"
+  // REG-02: 15-minute cooldown after 10 failed logins (backend 429 + codigo).
+  | "login_cooldown"
   | "config_error"
   | "backend_unavailable"
   | "timeout"
@@ -579,6 +581,20 @@ export async function backendLogin(
   const response = result.data;
   if (response.status === 401 || response.status === 400) {
     return { ok: false, error: { code: "invalid_credentials", message: "Credenciales inválidas." } };
+  }
+  // REG-02: the account is cooling down. Only a 429 carrying the cooldown
+  // `codigo` counts: the per-IP limiter's 429 has none and keeps its old path.
+  if (response.status === 429) {
+    const body: unknown = await response.json().catch((): unknown => undefined);
+    if (typeof body === "object" && body !== null && (body as { codigo?: unknown }).codigo === "login_enfriamiento") {
+      return {
+        ok: false,
+        error: {
+          code: "login_cooldown",
+          message: "Demasiados intentos fallidos. Por seguridad, espere 15 minutos o restablezca su contraseña.",
+        },
+      };
+    }
   }
   // REG-10: the backend raises 403 here only AFTER verifying the password, for
   // an account the club deactivated. It is not "bad credentials": the person

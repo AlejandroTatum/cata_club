@@ -443,6 +443,30 @@ describe("backendLogin", () => {
     });
   });
 
+  // REG-02: the backend's 15-minute cooldown after 10 failed logins is a 429
+  // carrying `codigo: "login_enfriamiento"`. The per-IP limiter's 429 has no
+  // such code and must not be mistaken for it.
+  it("reports login_cooldown on a 429 that carries the cooldown code", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      jsonResponse({ message: "Demasiados intentos fallidos.", codigo: "login_enfriamiento" }, 429),
+    );
+
+    const result = await backendLogin("ana@cataclub.com", "Secreta123");
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "login_cooldown", message: expect.stringContaining("Demasiados intentos") },
+    });
+  });
+
+  it("does not report login_cooldown for the generic per-IP 429", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(jsonResponse({ message: "Demasiadas solicitudes." }, 429));
+
+    const result = await backendLogin("ana@cataclub.com", "Secreta123");
+
+    expect(result).toMatchObject({ ok: false, error: { code: "backend_unavailable" } });
+  });
+
   it("returns ok:true with the parsed tokens on success", async () => {
     vi.mocked(global.fetch).mockResolvedValue(
       jsonResponse({ access_token: "a", refresh_token: "r", token_type: "bearer" }),

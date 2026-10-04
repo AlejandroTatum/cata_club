@@ -328,6 +328,25 @@ describe("LoginPage", () => {
       expect(screen.queryByTestId("too-many-attempts")).not.toBeInTheDocument();
     });
 
+    // REG-02: after 10 failed attempts the account is cooling down for 15
+    // minutes. The card says so and links to password recovery; it is not a
+    // wrong-password state, so no field is painted red.
+    it("names the 15-minute cooldown and links to password recovery, with no toast", async () => {
+      const mockLogin = vi.fn().mockResolvedValue({ ok: false, error: "login_cooldown" });
+      mockUseAuth.mockReturnValue({ ...createUnauthenticatedAuth(false), login: mockLogin });
+
+      render(<LoginPage />);
+      submitLoginForm();
+
+      const failure = await screen.findByTestId("login-failure");
+      expect(within(failure).getByText("Demasiados intentos fallidos.")).toBeInTheDocument();
+      expect(within(failure).getByText("Por seguridad, espere 15 minutos o restablezca su contraseña.")).toBeInTheDocument();
+      expect(within(failure).getByRole("link", { name: /restablecer su contraseña/i })).toHaveAttribute("href", "/forgot-password");
+      expect(screen.queryByTestId("credentials-error")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("too-many-attempts")).not.toBeInTheDocument();
+      expect(mockShowError).not.toHaveBeenCalled();
+    });
+
     it("names the problem and the recovery inline for a server failure, with no toast", async () => {
       const mockLogin = vi.fn().mockResolvedValue({ ok: false, error: "backend_unavailable" });
       mockUseAuth.mockReturnValue({

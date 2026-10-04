@@ -122,6 +122,13 @@ function loginErrorFeedback(error: AuthErrorKind): { message: string; descriptio
         message: "Su cuenta tiene más de un rol activo",
         description: "No podemos saber con cuál entrar. Comuníquese con el club para que le asignen uno solo.",
       };
+    // REG-02. «usted» (usted-register lock, #340). Names the account's state, not the typing: even
+    // the right password is refused until the cooldown ends or it is reset.
+    case "login_cooldown":
+      return {
+        message: "Demasiados intentos fallidos.",
+        description: "Por seguridad, espere 15 minutos o restablezca su contraseña.",
+      };
     case "timeout":
       return {
         message: "El servidor tardó demasiado en responder",
@@ -213,7 +220,7 @@ function LoginPageContent(): React.ReactElement {
    * conflict…): nothing they typed was wrong, so no field is marked, but the
    * message and the way out stay on the card instead of in a toast.
    */
-  const [loginFailure, setLoginFailure] = useState<{ message: string; description: string; contactClub: boolean } | null>(null);
+  const [loginFailure, setLoginFailure] = useState<{ message: string; description: string; contactClub: boolean; offerRecovery: boolean } | null>(null);
   const [welcome, setWelcome] = useState<{ route: string } | null>(null);
   /**
    * #312 / hallazgo #30: tras un 401 el foco se quedaba en `<body>` — el
@@ -281,7 +288,12 @@ function LoginPageContent(): React.ReactElement {
       setLoginFailure(
         isCredentialsError || isCookieError
           ? null
-          : { message, description, contactClub: result.error === "account_inactive" },
+          : {
+              message,
+              description,
+              contactClub: result.error === "account_inactive",
+              offerRecovery: result.error === "login_cooldown",
+            },
       );
       // ONLY for `invalid_credentials`. The other kinds — a timeout, an
       // unreachable backend, a misconfigured server, a browser that dropped
@@ -374,6 +386,14 @@ function LoginPageContent(): React.ReactElement {
         >
           <p className="font-semibold text-state-bad">{loginFailure.message}</p>
           <p>{loginFailure.description}</p>
+          {loginFailure.offerRecovery && (
+            <p>
+              <Link href="/forgot-password" className={`${AUTH_LINK_CLASSES} min-h-[24px]`}>
+                Restablecer su contraseña
+                <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+              </Link>
+            </p>
+          )}
           {loginFailure.contactClub && (
             <p>
               <a href={WHATSAPP_CONTACTO} target="_blank" rel="noopener noreferrer" className={AUTH_LINK_CLASSES}>

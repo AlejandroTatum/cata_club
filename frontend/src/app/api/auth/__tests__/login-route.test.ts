@@ -131,6 +131,19 @@ describe("POST /api/auth/login", () => {
     expect(response.headers.get("set-cookie")).toBeNull();
   });
 
+  it("returns 429 with login_cooldown and no cookies during the 15-minute cooldown (REG-02)", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ message: "Demasiados intentos fallidos.", codigo: "login_enfriamiento" }, 429),
+    );
+
+    const response = await POST(loginRequest({ email: "ana@cataclub.com", password: "Secreta123" }));
+    const json = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(json.error).toBe("login_cooldown");
+    expect(response.headers.get("set-cookie")).toBeNull();
+  });
+
   it("returns 503 (not a raw error) when the backend is unreachable", async () => {
     vi.mocked(global.fetch).mockRejectedValueOnce(new TypeError("fetch failed"));
 

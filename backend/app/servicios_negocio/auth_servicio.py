@@ -1,4 +1,5 @@
 import logging
+import math
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -91,7 +92,7 @@ _log = logging.getLogger(__name__)
 # lejos de los 320m del contenedor). Ver
 # `tests/test_auth_login_dos_no_autenticado.py` para los tres escenarios
 # (mapa acotado, cuenta real sobrevive relleno, freno no regresiona).
-_INTENTOS_FALLIDOS_LOGIN: "OrderedDict[str, tuple[int, float]]" = OrderedDict()
+_INTENTOS_FALLIDOS_LOGIN: "OrderedDict[str, tuple[int, float, float | None]]" = OrderedDict()
 _MAX_ENTRADAS_INTENTOS_LOGIN = 50_000
 _TTL_INTENTOS_LOGIN_SEGUNDOS = 15 * 60
 _UMBRAL_RETRASO_INTENTOS = 3
@@ -100,6 +101,47 @@ _UMBRAL_RETRASO_INTENTOS = 3
 # contador sigue creciendo y se resetea igual, y cada intento sigue pagando
 # ese retraso (con el rate limiter de 60/min por IP encima).
 _TECHO_RETRASO_SEGUNDOS = 8
+
+# QA4 REG-02 (decisión del dueño: «freno después de 10 intentos»): el techo de
+# 8 s acota la espera de CADA intento, así que solo no frena a quien insiste.
+# Lo compensa un enfriamiento por cuenta: al 10.º fallo consecutivo (el mismo
+# contador, que el techo no resetea) la cuenta rechaza TODO intento durante 15
+# minutos -- también el de la contraseña correcta -- de inmediato y sin correr
+# bcrypt. Vive en la misma tupla del contador: (intentos, último toque,
+# fin del enfriamiento | None).
+#
+# Al entrar en enfriamiento el "último toque" se corre al FIN del enfriamiento:
+# así el TTL deslizante de 15 min cuenta desde ahí y el contador sobrevive al
+# enfriamiento. Eso es lo que hace que, vencido, el siguiente fallo (el 11.º)
+# reentre al enfriamiento de inmediato; solo un éxito (o el restablecimiento
+# de contraseña) o 15 min sin tocar la cuenta lo resetean. Los intentos
+# rechazados durante el enfriamiento NO tocan el mapa: no lo prolongan ni
+# alargan la espera de nadie.
+#
+# Igual que el contador, es memoria POR PROCESO: con varios workers (PERF-12)
+# cada uno lleva su propia cuenta y su propio enfriamiento, así que el atacante
+# necesita 10 fallos en el worker que le toque y el enfriamiento solo vale en
+# ese worker; no se comparte ni sobrevive a un reinicio. Se moverá a un
+# almacén compartido (Redis) junto con el contador (#1553).
+_UMBRAL_ENFRIAMIENTO_INTENTOS = 10
+_ENFRIAMIENTO_LOGIN_SEGUNDOS = 15 * 60
+MENSAJE_LOGIN_ENFRIAMIENTO = (
+    "Demasiados intentos fallidos. Por seguridad, espere 15 minutos o "
+    "restablezca su contraseña."
+)
+
+
+class LoginEnEnfriamiento(Exception):
+    """La cuenta está en el enfriamiento de 15 minutos (-> HTTP 429 con
+    `Retry-After`, ver `auth_router.login`).
+
+    NO es un `ErrorDominio`: el router la traduce a mano, así no entra al mapa
+    global de `main.py`. Se lanza ANTES de buscar el usuario, igual para una
+    cuenta real que para una inexistente (anti-enumeración)."""
+
+    def __init__(self, segundos_restantes: int):
+        self.segundos_restantes = segundos_restantes
+        super().__init__(MENSAJE_LOGIN_ENFRIAMIENTO)
 
 
 # REG-10: lo que lee quien intenta entrar con una cuenta dada de baja o
@@ -127,7 +169,7 @@ def _purgar_entradas_expiradas(ahora: float) -> None:
     el primer no-expirado: como el orden es por último toque, ninguna
     entrada más atrás puede estar expirada si esta no lo está."""
     while _INTENTOS_FALLIDOS_LOGIN:
-        clave_mas_vieja, (_, ultimo_toque) = next(iter(_INTENTOS_FALLIDOS_LOGIN.items()))
+        clave_mas_vieja, (_, ultimo_toque, _) = next(iter(_INTENTOS_FALLIDOS_LOGIN.items()))
         if ahora - ultimo_toque < _TTL_INTENTOS_LOGIN_SEGUNDOS:
             break
         _INTENTOS_FALLIDOS_LOGIN.pop(clave_mas_vieja)
@@ -143,21 +185,38 @@ def _acotar_tamano_mapa() -> None:
         _INTENTOS_FALLIDOS_LOGIN.popitem(last=False)
 
 
-def _registrar_intento_fallido(clave: str) -> int:
+def _registrar_intento_fallido(clave: str, ahora: float | None = None) -> int:
     """Incrementa el contador de `clave`, la marca como la más recientemente
     tocada (mueve al FINAL) y purga el mapa (TTL + tope de tamaño) antes de
-    devolver el nuevo total. Separado de `AuthServicio._penalizar_intento_
-    fallido` para poder probarlo directo, sin DB ni sleep (ver
-    `tests/test_auth_login_dos_no_autenticado.py::
+    devolver el nuevo total. Al llegar a `_UMBRAL_ENFRIAMIENTO_INTENTOS` (y en
+    cada fallo posterior) arranca el enfriamiento de la cuenta. Separado de
+    `AuthServicio._penalizar_intento_fallido` para poder probarlo directo, sin
+    DB ni sleep (ver `tests/test_auth_login_dos_no_autenticado.py::
     test_mapa_de_intentos_fallidos_no_crece_sin_limite`)."""
-    ahora = time.monotonic()
-    intentos_previos, _ = _INTENTOS_FALLIDOS_LOGIN.get(clave, (0, ahora))
+    if ahora is None:
+        ahora = time.monotonic()
+    intentos_previos, _, _ = _INTENTOS_FALLIDOS_LOGIN.get(clave, (0, ahora, None))
     intentos = intentos_previos + 1
-    _INTENTOS_FALLIDOS_LOGIN[clave] = (intentos, ahora)
+    enfriada_hasta = None
+    ultimo_toque = ahora
+    if intentos >= _UMBRAL_ENFRIAMIENTO_INTENTOS:
+        enfriada_hasta = ahora + _ENFRIAMIENTO_LOGIN_SEGUNDOS
+        ultimo_toque = enfriada_hasta  # ver el bloque REG-02 de arriba
+    _INTENTOS_FALLIDOS_LOGIN[clave] = (intentos, ultimo_toque, enfriada_hasta)
     _INTENTOS_FALLIDOS_LOGIN.move_to_end(clave)
     _purgar_entradas_expiradas(ahora)
     _acotar_tamano_mapa()
     return intentos
+
+
+def _segundos_de_enfriamiento(clave: str, ahora: float) -> int:
+    """Segundos que le faltan al enfriamiento de `clave`; 0 si no está
+    enfriada o ya venció. Solo lee: rechazar un intento no toca el mapa."""
+    entrada = _INTENTOS_FALLIDOS_LOGIN.get(clave)
+    if entrada is None or entrada[2] is None or ahora >= entrada[2]:
+        return 0
+    return math.ceil(entrada[2] - ahora)
+
 
 # Cuántas sesiones devuelve `listar_sesiones`. La tarjeta del perfil responde
 # "¿desde dónde entré últimamente?", no "dame la bitácora completa". Es un
@@ -201,7 +260,12 @@ def _calcular_retraso_login(intentos_fallidos: int) -> int:
 
 
 class AuthServicio:
-    def __init__(self, db: Session, dormir: Callable[[float], None] = time.sleep):
+    def __init__(
+        self,
+        db: Session,
+        dormir: Callable[[float], None] = time.sleep,
+        reloj: Callable[[], float] = time.monotonic,
+    ):
         self.db = db
         self.repo = UsuarioRepositorio(db)
         self.repo_persona = PersonaRepositorio(db)
@@ -209,6 +273,9 @@ class AuthServicio:
         # varios segundos). El router de producción no pasa `dormir`, así que
         # usa el `time.sleep` real.
         self._dormir = dormir
+        # Inyectable por lo mismo: los tests del enfriamiento de 15 min avanzan
+        # un reloj falso en vez de esperar.
+        self._reloj = reloj
 
     # --- Login ---------------------------------------------------------------
     def login(self, correo: str, contrasenia: str, user_agent: str | None = None) -> dict:
@@ -231,6 +298,13 @@ class AuthServicio:
         etiqueta diciendo que no se sabe qué dispositivo es.
         """
         clave = correo.strip().lower()
+        # REG-02: antes de buscar al usuario y de correr bcrypt, y con total
+        # independencia de que la cuenta exista -- misma respuesta, mismo
+        # costo y mismo texto para una real y una inexistente.
+        segundos_restantes = _segundos_de_enfriamiento(clave, self._reloj())
+        if segundos_restantes:
+            contar_login(ok=False)
+            raise LoginEnEnfriamiento(segundos_restantes)
         try:
             usuario = self._verificar_credenciales(correo, contrasenia)
         except CuentaInactiva:
@@ -297,7 +371,7 @@ class AuthServicio:
         return usuario
 
     def _penalizar_intento_fallido(self, clave: str) -> None:
-        intentos = _registrar_intento_fallido(clave)
+        intentos = _registrar_intento_fallido(clave, self._reloj())
         retraso = _calcular_retraso_login(intentos)
         if retraso:
             self._dormir(retraso)
@@ -896,6 +970,10 @@ class AuthServicio:
         # sobrevivir al reset.
         usuario.revocar_sesiones()
         self.db.commit()
+        # REG-02: quien restablece recupera la cuenta, así que se limpia el
+        # contador y el enfriamiento (si no, seguiría bloqueado con la clave
+        # nueva en la mano).
+        _INTENTOS_FALLIDOS_LOGIN.pop(usuario.correo.strip().lower(), None)
 
     def cambiar_contrasenia(
         self, correo: str, contrasenia_actual: str, nueva_contrasenia: str,

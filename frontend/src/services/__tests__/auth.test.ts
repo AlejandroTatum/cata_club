@@ -169,6 +169,14 @@ describe("login", () => {
     expect(result).toEqual({ ok: false, error: "account_inactive" });
   });
 
+  it("returns login_cooldown on a 429 from the BFF (REG-02)", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(errorResponse(429, { error: "login_cooldown", message: "cooldown" }));
+
+    const result = await login("ana@cataclub.com", "Secreta123");
+
+    expect(result).toEqual({ ok: false, error: "login_cooldown" });
+  });
+
   it("returns session_validation_failed on 401 when the BFF reports error: unauthorized (backendMe rejected the fresh token)", async () => {
     vi.mocked(global.fetch).mockResolvedValue(
       errorResponse(401, { error: "unauthorized", message: "token rejected" }),
