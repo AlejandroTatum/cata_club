@@ -278,7 +278,7 @@ test.describe("Landing page", () => {
    * the first measurement is of a freshly loaded page, not a resized one.
    */
   test("keeps the navbar collision- and overflow-free at every relevant breakpoint", async ({ page }) => {
-    const widths = [1280, 1024, 900, 768, 390];
+    const widths = [1920, 1440, 1280, 1024, 900, 768, 390];
     await page.setViewportSize({ width: widths[0], height: 900 });
     await page.goto("/");
     // Web fonts change every text metric under test, and `load` does not wait
@@ -293,6 +293,18 @@ test.describe("Landing page", () => {
       );
       const nav = page.locator(".landing-navbar");
       await expect(nav).toBeVisible();
+      if (width >= 1024) {
+        // #1622: nine links, one row — every pill shares a top edge, none wraps
+        // its label, and the bar keeps its single-row height.
+        const pills = await page.locator(".landing-nav-links a").evaluateAll((els) =>
+          els.map((el) => { const r = el.getBoundingClientRect(); return { y: r.y, h: r.height }; }));
+        expect(pills, `nine nav links at ${width}px`).toHaveLength(9);
+        pills.forEach((pill, index) => {
+          expect(pill.y, `link ${index} y at ${width}px`).toBeCloseTo(pills[0].y, 0);
+          expect(pill.h, `link ${index} height at ${width}px`).toBeLessThan(50);
+        });
+        expect((await nav.boundingBox())?.height, `navbar height at ${width}px`).toBeLessThanOrEqual(101);
+      }
       const overflow = await nav.evaluate((el) => el.scrollWidth - el.clientWidth);
       expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
 
@@ -578,8 +590,9 @@ test.describe("Landing page", () => {
         route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
 
       await page.goto("/");
-      // VIS-03: an empty catalog renders no section at all, not an apology.
-      await expect(page.locator("#galeria")).toHaveCount(0);
+      // #1622: an empty catalog keeps the section, with a brief empty state.
+      await expect(page.locator("#galeria")).toContainText("Pronto vas a ver aquí fotos del club");
+      await expect(page.locator(".landing-nav-links a[href='#galeria']")).toHaveCount(1);
     });
 
     test("runs the restored loop over a one-photo catalog with silent clones", async ({ page }) => {

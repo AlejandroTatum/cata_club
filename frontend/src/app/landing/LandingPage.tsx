@@ -28,7 +28,6 @@ import { PublicTarifas } from "./tarifas-context";
 import { buildLandingStats, deriveContactHours, landingConfig, toWhatsAppLink, toWhatsAppNumber } from "./landing-config";
 import { ARRIVAL_PHOTO_SIZES, FOOTER_PHOTO_SIZES, MISSION_VISION_PHOTO_SIZES } from "./landing-image-sizes";
 import { mapPublicSchedules, type LandingSchedule } from "./schedule-data";
-import { GALLERY_EMPTY_EVENT } from "./landing-gallery";
 import { SITE_NAV_SECTIONS, landingSectionHref } from "@/lib/site-navigation";
 import { buildOpeningHoursJsonLd, serializeJsonLd } from "@/lib/seo-structured-data";
 
@@ -164,24 +163,7 @@ function SectionHeader({ eyebrow, title }: SectionHeaderProps): React.ReactEleme
   );
 }
 
-/**
- * VIS-03: whether the two places that link to the gallery (navbar, footer)
- * should still offer it. The gallery announces when the club has published
- * nothing; the answer lives in each consumer, not in `LandingPage`, so the
- * announcement re-renders only these two and not the whole page.
- */
-function useGalleryShown(): boolean {
-  const [shown, setShown] = useState(true);
-  useEffect((): (() => void) => {
-    const hide = (): void => setShown(false);
-    document.addEventListener(GALLERY_EMPTY_EVENT, hide);
-    return (): void => document.removeEventListener(GALLERY_EMPTY_EVENT, hide);
-  }, []);
-  return shown;
-}
-
 function Navbar(): React.ReactElement {
-  const showGallery = useGalleryShown();
   return (
     <nav className="landing-navbar" aria-label="Navegación principal">
       <a className="landing-logo" href="#inicio" aria-label="Cata Club, inicio">
@@ -193,7 +175,7 @@ function Navbar(): React.ReactElement {
           built here and not stored there. The first entry ships active because
           the page opens on it; `NavScrollSpy` takes over after hydration. */}
       <div className="landing-nav-links">
-        {SITE_NAV_SECTIONS.filter((section): boolean => showGallery || section.id !== "galeria").map((section, index): React.ReactElement => (
+        {SITE_NAV_SECTIONS.map((section, index): React.ReactElement => (
           <a
             key={section.id}
             className={index === 0 ? "active" : undefined}
@@ -481,7 +463,6 @@ function Location(): React.ReactElement {
 }
 
 function Footer(): React.ReactElement {
-  const showGallery = useGalleryShown();
   const { contact } = landingConfig;
   return (
     <footer className="landing-footer" data-motion-section data-testid="motion-section">
@@ -512,7 +493,7 @@ function Footer(): React.ReactElement {
           </div>
         </div>
         <nav aria-label="Servicios"><h2>Servicios</h2><a href="#horarios">Horarios y categorías</a><a href="#mensualidad">Mensualidad</a><a href="#como-empezar">Cómo empezar</a><a href="#preguntas">Preguntas</a><Link href={ENROLL_HREF}>Inscripciones</Link><a href="#contacto">Contacto</a></nav>
-        <nav aria-label="Nosotros"><h2>Nosotros</h2><a href="#nosotros">Misión y Visión</a><a href="#valores">Valores</a>{showGallery ? <a href="#galeria">Galería</a> : null}<a href="#contacto">Ubicación</a></nav>
+        <nav aria-label="Nosotros"><h2>Nosotros</h2><a href="#nosotros">Misión y Visión</a><a href="#valores">Valores</a><a href="#galeria">Galería</a><a href="#contacto">Ubicación</a><a href="#patrocinadores">Patrocinadores</a></nav>
         <nav aria-label="Información legal"><h2>Información legal</h2><Link href="/terminos">Términos y condiciones</Link><Link href="/terminos#privacidad">Aviso de privacidad</Link><Link href="/consentimiento-salud">Consentimiento de datos de salud</Link><Link href="/permiso-imagen-fetm">Permiso de uso de imagen</Link></nav>
         <figure className="landing-footer-photo">
           <Image

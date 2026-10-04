@@ -40,8 +40,8 @@ test.describe("Landing header and schedule hours on a real mobile engine", () =>
 
     const links = page.locator(".landing-nav-links a");
     // Inicio · Valores · Galería · Horarios · Mensualidad · Cómo empezar ·
-    // Preguntas · Contacto (#1587); the gallery is on in the e2e seed.
-    await expect(links).toHaveCount(8);
+    // Preguntas · Contacto · Patrocinadores (#1587, #1622): every section, always.
+    await expect(links).toHaveCount(9);
 
     // One row: every link shares the same top edge. This is the assertion
     // that goes RED on today's code — "Contacto" drops onto a second row.

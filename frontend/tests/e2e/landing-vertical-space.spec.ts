@@ -104,8 +104,10 @@ const CEILINGS: Record<(typeof VIEWPORTS)[number]["name"], Record<string, number
      Re-based 9300 -> 9360 for the legal texts v2.2 footer, which lists a
      fourth required document (health consent); measured 9318px.
      Re-based 9360 -> 9480 for the footer's Mensualidad, Cómo empezar and
-     Preguntas links (#1587); measured 9462px. */
-  mobile: { valores: 1170, cta: 450, scrollHeight: 9480 },
+     Preguntas links (#1587); measured 9462px.
+     Re-based 9480 -> 9540 for the always-present Galería empty state and the
+     footer's Patrocinadores link (#1622); measured 9510px. */
+  mobile: { valores: 1170, cta: 450, scrollHeight: 9540 },
 };
 
 test.describe("landing vertical space", () => {
