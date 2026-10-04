@@ -50,6 +50,7 @@ import { useSearchParams } from "next/navigation";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
+import { isActivationComplete, type ActivationSession } from "@/lib/activation-reasons";
 
 import { fetchStudentPortal, fetchPagosDePersona, fetchCoberturasDePersona, fetchBeneficio, subirVoucherPago, registrarPago } from "@/services/api";
 import type { StudentPortalSummary, PagoPersona, MembershipSummary, BeneficioAsignado, CoberturaBonificada } from "@/services/api";
@@ -128,6 +129,7 @@ function PaymentsContent({
   wantsRegisterForm: boolean;
   onRegistered: () => void;
 }): React.ReactElement {
+  const { session } = useAuth();
   const { managedProfiles, selectedId, setSelectedId, selectedProfile } = useManagedProfiles(
     data,
     hasAlumnoRole,
@@ -357,6 +359,16 @@ function PaymentsContent({
    */
   const isGratuitous = selectedProfile?.membership?.esGratuidadFamiliar ?? false;
 
+  // FAM-12 «c»: a guardian whose account is activated may pay a minor
+  // dependent's first payment online (same gate as the add-dependent wizard:
+  // the membership endpoints stay closed to an account pending activation).
+  const canPayFirstOnline =
+    !viewingOwnProfile &&
+    !blockedAsMinor &&
+    selectedProfile?.membership == null &&
+    studentName !== null &&
+    (session ? isActivationComplete(session as ActivationSession) : false);
+
   /**
    * FAM-03: the backend refuses a payment on a suspended membership
    * («reactívela antes de registrar un pago»), an instruction only the club can
@@ -565,6 +577,22 @@ function PaymentsContent({
             beneficioMonto={beneficioMonto}
             onRegistered={handleRegistered}
           />
+        ) : canPayFirstOnline ? (
+          // FAM-12 «c»: the FIRST payment of a dependent can be made online —
+          // it creates the membership and the club activates it when it
+          // approves the payment. After that the normal renewal form applies.
+          <div className="flex flex-col items-start gap-2">
+            <p className="text-sm text-ink-2">
+              {studentName} todavía no tiene una membresía. Con el primer pago se crea; el club
+              lo revisa y la activa. Después podrá renovarla desde aquí.
+            </p>
+            <Link
+              href={`/student/add-dependent?pagar=${selectedProfile.personaId}`}
+              className={buttonClasses("primary", "md")}
+            >
+              Registrar el primer pago de {studentName}
+            </Link>
+          </div>
         ) : (
           <p className="text-sm text-ink-2">
             El club crea la membresía al registrar el primer pago. Acérquese al club para

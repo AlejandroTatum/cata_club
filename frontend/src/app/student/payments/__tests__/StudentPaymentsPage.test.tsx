@@ -2019,4 +2019,38 @@ describe("StudentPaymentsPage — QA4 findings", () => {
     const alert = await screen.findByRole("alert");
     expect(within(alert).getByRole("link")).toHaveAttribute("href", expect.stringContaining("wa.me"));
   });
+
+  // FAM-12 «c»: a child without a membership can pay online, but only the first payment
+  describe("the first payment of a dependent without a membership (FAM-12)", () => {
+    const CHILD = { ...SELF, personaId: "42", nombres: "Valeria", apellidos: "Vera", membership: null };
+
+    function renderChildAs(session: ReturnType<typeof authSession>): void {
+      mockUseAuth.mockReturnValue(session);
+      mockFetchStudentPortal.mockReset().mockResolvedValue({
+        self: null,
+        representados: [CHILD],
+        membershipPlans: [],
+      });
+      render(<StudentPaymentsPage />);
+    }
+
+    it("offers the guardian a way to pay the first payment online", async () => {
+      renderChildAs(authSession("representante"));
+
+      const link = await screen.findByRole("link", { name: /registrar el primer pago de valeria/i });
+      expect(link).toHaveAttribute("href", "/student/add-dependent?pagar=42");
+      expect(screen.queryByText(/acérquese al club para activarla/i)).not.toBeInTheDocument();
+    });
+
+    it("keeps the in-person copy while the guardian's account is not activated yet", async () => {
+      const session = authSession("representante") as ReturnType<typeof authSession> & {
+        session: Record<string, unknown>;
+      };
+      session.session.activacionCompleta = false;
+      renderChildAs(session);
+
+      expect(await screen.findByText(/acérquese al club para activarla/i)).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /primer pago/i })).not.toBeInTheDocument();
+    });
+  });
 });
