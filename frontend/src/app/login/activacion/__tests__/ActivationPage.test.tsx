@@ -181,7 +181,7 @@ describe("ActivationPage — the email screen", () => {
     renderPending(pendingSession());
 
     await screen.findByRole("button", { name: "Ya verifiqué mi correo" });
-    expect(lastSubtitle()).toContain("Le enviamos un enlace a estudiante@cataclub.com.");
+    expect(lastSubtitle()).toContain("Te enviamos un enlace a estudiante@cataclub.com.");
   });
 
   /**
@@ -296,7 +296,7 @@ describe("ActivationPage — the email screen", () => {
     rerender(<ActivationPage />);
 
     expect(await screen.findByRole("button", { name: "Consultar estado nuevamente" })).toBeInTheDocument();
-    expect(screen.getByText("Su correo quedó verificado.")).toBeInTheDocument();
+    expect(screen.getByText("Tu correo quedó verificado.")).toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalledWith("/login");
   });
 
@@ -404,7 +404,7 @@ describe("ActivationPage — the enrolment screen", () => {
     renderPending(enrolmentPendingSession());
 
     await screen.findByText("Correo verificado");
-    expect(screen.queryByText("Su correo quedó verificado.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Tu correo quedó verificado.")).not.toBeInTheDocument();
   });
 
   // The old checklist carried `aria-live="polite"` (#1045) so a
@@ -437,7 +437,7 @@ describe("ActivationPage — the enrolment screen", () => {
     await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
     rerender(<ActivationPage />);
 
-    await screen.findByText("Su correo quedó verificado.");
+    await screen.findByText("Tu correo quedó verificado.");
     expect(screen.getAllByText("Correo verificado")).toHaveLength(1);
   });
 
@@ -450,7 +450,7 @@ describe("ActivationPage — the enrolment screen", () => {
 
     expect(
       await screen.findByText(
-        /acérquese al club o escríbanos por whatsapp para registrar la inscripción y el primer pago/i,
+        /acércate al club o escríbenos por whatsapp para registrar la inscripción y el primer pago/i,
       ),
     ).toBeInTheDocument();
     expect(screen.getByText(/el club lo\s*valida y ahí se activa la membresía/i)).toBeInTheDocument();
@@ -468,7 +468,7 @@ describe("ActivationPage — the enrolment screen", () => {
 
     expect(
       await screen.findByText(
-        "Su primer pago está en revisión. El club lo valida y ahí se activa la membresía; no hace falta volver al club.",
+        "Tu primer pago está en revisión. El club lo valida y ahí se activa la membresía; no hace falta volver al club.",
       ),
     ).toBeInTheDocument();
   });
@@ -482,8 +482,8 @@ describe("ActivationPage — the enrolment screen", () => {
 
     expect(
       await screen.findByText(
-        "Su primer pago fue rechazado: El voucher no corresponde a la cuenta del club. Acérquese al club o " +
-          "escríbanos por WhatsApp para registrarlo de nuevo.",
+        "Tu primer pago fue rechazado: El voucher no corresponde a la cuenta del club. Acércate al club o " +
+          "escríbenos por WhatsApp para registrarlo de nuevo.",
       ),
     ).toBeInTheDocument();
   });
@@ -497,7 +497,7 @@ describe("ActivationPage — the enrolment screen", () => {
 
     expect(
       await screen.findByText(
-        "Su primer pago fue rechazado. Acérquese al club o escríbanos por WhatsApp para registrarlo de nuevo.",
+        "Tu primer pago fue rechazado. Acércate al club o escríbenos por WhatsApp para registrarlo de nuevo.",
       ),
     ).toBeInTheDocument();
   });
@@ -507,7 +507,7 @@ describe("ActivationPage — the enrolment screen", () => {
 
     expect(
       await screen.findByText(
-        /acérquese al club o escríbanos por whatsapp para registrar la inscripción y el primer pago/i,
+        /acércate al club o escríbenos por whatsapp para registrar la inscripción y el primer pago/i,
       ),
     ).toBeInTheDocument();
   });
@@ -530,7 +530,7 @@ describe("ActivationPage — the enrolment screen", () => {
     await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
     rerender(<ActivationPage />);
 
-    const mensaje = await screen.findByText(/todavía no registramos su inscripción en el club/i);
+    const mensaje = await screen.findByText(/todavía no registramos tu inscripción en el club/i);
     expect(mensaje.closest('[aria-live="polite"]')).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Consultar estado nuevamente" })).toBeInTheDocument();
   });
@@ -550,7 +550,7 @@ describe("ActivationPage — the enrolment screen", () => {
     rerender(<ActivationPage />);
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/student"));
-    expect(screen.queryByText(/todavía no registramos su inscripción en el club/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/todavía no registramos tu inscripción en el club/i)).not.toBeInTheDocument();
   });
 });
 
@@ -680,7 +680,7 @@ describe("ActivationPage — correcting a mistyped email (#1245)", () => {
     // The affordance closes and the existing status copy now names the
     // corrected address — no separate confirmation banner is introduced.
     expect(screen.queryByLabelText(/correo correcto/i)).not.toBeInTheDocument();
-    expect(lastSubtitle()).toContain("Le enviamos un enlace a corregido@cataclub.com.");
+    expect(lastSubtitle()).toContain("Te enviamos un enlace a corregido@cataclub.com.");
   });
 
   it("keeps the resend button working against the corrected address afterward", async () => {
@@ -740,7 +740,7 @@ describe("ActivationPage — correcting a mistyped email (#1245)", () => {
     fireEvent.click(await screen.findByRole("button", { name: /reenviar correo de verificación/i }));
 
     expect(await screen.findByRole("status")).toHaveTextContent(
-      "Le enviamos un enlace nuevo a su correo. Puede tardar unos minutos.",
+      "Te enviamos un enlace nuevo a tu correo. Puede tardar unos minutos.",
     );
     expect(screen.queryByText(/si el correo está registrado/i)).not.toBeInTheDocument();
   });

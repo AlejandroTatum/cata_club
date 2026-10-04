@@ -154,8 +154,8 @@ describe("LoginPage — the success state is conditional on a confirmed session"
         expect(announcements.length).toBeGreaterThan(0);
       });
 
-      expect(screen.queryByText(/Su sesión quedó iniciada/)).not.toBeInTheDocument();
-      expect(screen.queryByText(/Le llevamos a su panel/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Tu sesión quedó iniciada/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Te llevamos a tu panel/)).not.toBeInTheDocument();
       expect(screen.queryByText(/Hola, Admin/)).not.toBeInTheDocument();
     });
 
@@ -164,7 +164,7 @@ describe("LoginPage — the success state is conditional on a confirmed session"
 
       expect(notice).toHaveTextContent(/este navegador no guardó la sesión/i);
       expect(notice).toHaveTextContent(/cookies/i);
-      expect(notice).toHaveTextContent(/intente nuevamente/i);
+      expect(notice).toHaveTextContent(/intenta nuevamente/i);
     });
 
     // The remedy is in a browser settings panel, so the notice has to still
@@ -206,7 +206,7 @@ describe("LoginPage — the success state is conditional on a confirmed session"
         await screen.findByRole("button", { name: /iniciar sesión/i });
         submitLoginForm();
 
-        expect(await screen.findByText(/Su sesión quedó iniciada/)).toBeInTheDocument();
+        expect(await screen.findByText(/Tu sesión quedó iniciada/)).toBeInTheDocument();
         expect(screen.queryByTestId("session-not-persisted-error")).not.toBeInTheDocument();
 
         // `WELCOME_HOLD_MS` — the beat the page already held before this fix,
@@ -224,7 +224,7 @@ describe("LoginPage — the success state is conditional on a confirmed session"
       await screen.findByRole("button", { name: /iniciar sesión/i });
       submitLoginForm();
 
-      await screen.findByText(/Su sesión quedó iniciada/);
+      await screen.findByText(/Tu sesión quedó iniciada/);
 
       const calls = vi.mocked(global.fetch).mock.calls.map(([input, init]) => `${init?.method ?? "GET"} ${String(input)}`);
       const loginIndex = calls.indexOf("POST /api/auth/login");

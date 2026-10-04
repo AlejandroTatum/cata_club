@@ -71,12 +71,12 @@ function UnauthorizedContent(): React.ReactElement {
             what keeps the two lines even instead of leaving one word alone.
             `tracking-flat` cancels the -0.02em the size step carries. */}
         <h1 className="m-0 text-balance font-display text-lg uppercase tracking-flat text-ink">
-          Su cuenta todavía no tiene rol
+          Tu cuenta todavía no tiene rol
         </h1>
 
         {/* What happened, then what to do — in that order, in one paragraph. */}
         <p className="m-0 text-sm leading-relaxed text-ink-3">
-          El club todavía no le asignó un rol. Espere el correo de confirmación —
+          El club todavía no te asignó un rol. Espera el correo de confirmación —
           apenas se lo asignen, entra directo.
         </p>
 

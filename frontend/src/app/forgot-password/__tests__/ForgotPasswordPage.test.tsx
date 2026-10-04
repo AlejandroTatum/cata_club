@@ -72,7 +72,7 @@ describe("ForgotPasswordPage", () => {
 
     expect(screen.getByLabelText(/^Correo electrónico/)).toBeRequired();
     expect(
-      screen.queryByText(/revise su correo/i),
+      screen.queryByText(/revisa tu correo/i),
     ).not.toBeInTheDocument();
   });
 
@@ -82,7 +82,7 @@ describe("ForgotPasswordPage", () => {
     render(<ForgotPasswordPage />);
     submitForgotPasswordForm();
 
-    expect(await screen.findByText(/revise su correo/i)).toBeInTheDocument();
+    expect(await screen.findByText(/revisa tu correo/i)).toBeInTheDocument();
     expect(mockShowError).not.toHaveBeenCalled();
   });
 
@@ -106,14 +106,14 @@ describe("ForgotPasswordPage", () => {
 
       render(<ForgotPasswordPage />);
       submitForgotPasswordForm("abuelo.audit@ejemplo.com");
-      await screen.findByText(/revise su correo/i);
+      await screen.findByText(/revisa tu correo/i);
 
       fireEvent.click(screen.getByRole("button", { name: /enviar otro enlace/i }));
 
       // Back on the form — same screen, the address still there to correct or resend.
       const field = await screen.findByLabelText(/^Correo electrónico/);
       expect(field).toHaveValue("abuelo.audit@ejemplo.com");
-      expect(screen.queryByText(/revise su correo/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/revisa tu correo/i)).not.toBeInTheDocument();
     });
 
     it("tells the reader to check the spam folder (hallazgo #64)", async () => {
@@ -121,7 +121,7 @@ describe("ForgotPasswordPage", () => {
 
       render(<ForgotPasswordPage />);
       submitForgotPasswordForm();
-      await screen.findByText(/revise su correo/i);
+      await screen.findByText(/revisa tu correo/i);
 
       expect(screen.getByText(/correo no deseado/i)).toBeInTheDocument();
     });
@@ -142,7 +142,7 @@ describe("ForgotPasswordPage", () => {
 
       await waitFor(() => {
         expect(mockShowError).toHaveBeenCalledWith(
-          "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: https://wa.me/593994219619",
+          "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbenos por WhatsApp y te ayudamos: https://wa.me/593994219619",
         );
       });
       expect(document.querySelector(".alert-error")).not.toBeInTheDocument();
@@ -156,7 +156,7 @@ describe("ForgotPasswordPage", () => {
 
       await waitFor(() => {
         expect(mockShowError).toHaveBeenCalledWith(
-          "No se pudo procesar la solicitud. Intente nuevamente.",
+          "No se pudo procesar la solicitud. Intenta nuevamente.",
         );
       });
       expect(document.querySelector(".alert-error")).not.toBeInTheDocument();
@@ -173,7 +173,7 @@ describe("ForgotPasswordPage", () => {
       fireEvent.submit(form as HTMLFormElement);
 
       expect(mockShowError).toHaveBeenCalledWith(
-        "Ingrese su correo electrónico.",
+        "Ingresa tu correo electrónico.",
       );
       expect(document.querySelector(".alert-error")).not.toBeInTheDocument();
     });
@@ -221,7 +221,7 @@ describe("ForgotPasswordPage — the eyebrow is not the admin one", () => {
     expect(screen.queryByText("Panel de gestión")).not.toBeInTheDocument();
 
     submitForgotPasswordForm();
-    await screen.findByText(/revise su correo/i);
+    await screen.findByText(/revisa tu correo/i);
 
     expect(screen.getByText("Acceso al club")).toBeInTheDocument();
     expect(screen.queryByText("Panel de gestión")).not.toBeInTheDocument();

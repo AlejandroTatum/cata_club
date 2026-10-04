@@ -73,7 +73,7 @@ describe("LoginPage ?next=", () => {
     expect(mockReplace).toHaveBeenCalledWith("/student/payments?month=3");
     expect(mockReplace).toHaveBeenCalledTimes(1);
     expect(mockShowSuccess).toHaveBeenCalledWith(expect.any(String), {
-      description: "Su sesión quedó iniciada. Le llevamos a la página que buscaba.",
+      description: "Tu sesión quedó iniciada. Te llevamos a la página que buscabas.",
     });
   });
 
@@ -82,7 +82,7 @@ describe("LoginPage ?next=", () => {
 
     expect(mockReplace).toHaveBeenCalledWith("/dashboard");
     expect(mockShowSuccess).toHaveBeenCalledWith(expect.any(String), {
-      description: "Su sesión quedó iniciada. Le llevamos a su panel.",
+      description: "Tu sesión quedó iniciada. Te llevamos a tu panel.",
     });
   });
 

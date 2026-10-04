@@ -431,7 +431,7 @@ describe("ResetPasswordPage", () => {
 
       const card = await screen.findByRole("alert");
       expect(card).toHaveTextContent(
-        "El enlace ya se usó o venció. Solicite uno nuevo y vuelva a intentarlo.",
+        "El enlace ya se usó o venció. Solicita uno nuevo y vuelve a intentarlo.",
       );
       expect(screen.getByText(/enlace no válido/i)).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /solicitar nuevo enlace/i })).toHaveAttribute(
