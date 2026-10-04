@@ -12,7 +12,13 @@
 
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { ChevronDown, ClipboardList } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { formatDate } from "@/lib/format-utils";
@@ -80,6 +86,22 @@ function GhostSessionRows({
   );
 }
 
+/** `ResponsiveListTable` switches from cards to the table at Tailwind's `sm`. */
+const DESKTOP_QUERY = "(min-width: 640px)";
+
+/** Which of the two renderings is on screen; desktop when there is no `matchMedia` (SSR, jsdom). */
+function useIsDesktop(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const mql = window.matchMedia?.(DESKTOP_QUERY);
+      mql?.addEventListener("change", onChange);
+      return () => mql?.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia?.(DESKTOP_QUERY).matches ?? true,
+    () => true,
+  );
+}
+
 export interface SessionHistoryListProps {
   sessions: readonly SessionSummary[];
   /** Sessions per page; short lists are padded with ghost rows up to it. */
@@ -104,6 +126,7 @@ export default function SessionHistoryList({
 }: SessionHistoryListProps): React.ReactElement {
   const [page, setPage] = useState(1);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const isDesktop = useIsDesktop();
 
   // Back to page 1 whenever the result set changes — page 3 of a shorter list
   // is an empty screen with no explanation.
@@ -111,6 +134,11 @@ export default function SessionHistoryList({
     setPage(1);
     setExpanded(null);
   }, [sessions.length]);
+
+  // The open detail belongs to the page it was opened on.
+  useEffect(() => {
+    setExpanded(null);
+  }, [page]);
 
   const totalPages = getTotalPages(sessions.length, pageSize);
   const visible = useMemo(
@@ -120,19 +148,20 @@ export default function SessionHistoryList({
   const hasActions = renderAction !== undefined || renderDetail !== undefined;
 
   const renderComposition = (session: SessionSummary): React.ReactElement => (
-    <div className="flex w-full min-w-0 flex-col gap-2 sm:min-w-[240px]">
-      {(session.reviewCount ?? 0) > 0 && (
-        // ENT-07: records accepted for a not-operative student or before their enrolment.
-        <Badge tone="warn" className="self-start">
-          {session.reviewCount} por revisar
-        </Badge>
-      )}
-      <SessionCompositionBar counts={session.counts} total={session.total} />
-      <SessionCompositionCounts
-        counts={session.counts}
-        total={session.total}
-        hideZero
-      />
+    <div className="flex w-full min-w-0 flex-col gap-2">
+      {/* Cards stack bar over counts; from `lg` the bar keeps a short fixed width with the counts beside it. */}
+      <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
+        <SessionCompositionBar
+          counts={session.counts}
+          total={session.total}
+          className="lg:w-40 lg:flex-none"
+        />
+        <SessionCompositionCounts
+          counts={session.counts}
+          total={session.total}
+          hideZero
+        />
+      </div>
     </div>
   );
 
@@ -164,25 +193,42 @@ export default function SessionHistoryList({
     );
   };
 
-  // One panel under the list, not one per rendering: the mobile cards and the
-  // desktop table both stay in the DOM, and a second copy would duplicate ids
-  // and every correction dialog inside it.
-  const openSession = renderDetail
-    ? visible.find((session) => sessionKey(session) === expanded)
-    : undefined;
-  const detailPanel = openSession ? (
-    <section
-      id={`session-detail-${sessionKey(openSession)}`}
-      data-testid="session-detail"
-      aria-label={`Registros del ${formatDate(openSession.fecha)}, ${openSession.horario}`}
-      className="border-t border-line bg-sunken px-4 py-3"
-    >
-      <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-ink-3">
-        Registros · {formatDate(openSession.fecha)} · {openSession.horario}
-      </h3>
-      {renderDetail?.(openSession)}
-    </section>
-  ) : null;
+  // The panel opens right under its session, in whichever rendering is on
+  // screen: the mobile cards and the desktop table both walk the same items,
+  // and a copy in each would duplicate ids and every correction dialog.
+  const renderPanel = (
+    session: SessionSummary,
+    view: "card" | "row",
+  ): React.ReactElement | null => {
+    if (!renderDetail || expanded !== sessionKey(session)) return null;
+    if ((view === "row") !== isDesktop) return null;
+    const panel = (
+      <section
+        id={`session-detail-${sessionKey(session)}`}
+        data-testid="session-detail"
+        aria-label={`Registros del ${formatDate(session.fecha)}, ${session.horario}`}
+        className={
+          view === "row"
+            ? "border-t border-line bg-sunken px-4 py-3"
+            : "-mx-4 -mb-4 border-t border-line bg-sunken px-4 py-3"
+        }
+      >
+        <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-ink-3">
+          Registros · {formatDate(session.fecha)} · {session.horario}
+        </h3>
+        {renderDetail(session)}
+      </section>
+    );
+    return view === "row" ? (
+      <tr>
+        <td colSpan={hasActions ? 4 : 3} className="p-0">
+          {panel}
+        </td>
+      </tr>
+    ) : (
+      panel
+    );
+  };
 
   return (
     <div className="card flex flex-col overflow-hidden lg:min-h-[calc(100dvh-21rem)]">
@@ -253,36 +299,39 @@ export default function SessionHistoryList({
               {hasActions && (
                 <div className="flex justify-end">{renderActions(session)}</div>
               )}
+              {renderPanel(session, "card")}
             </li>
           )}
           renderRow={(session) => (
-            <TableRow>
-              <TableNameCell
-                className="w-px whitespace-nowrap"
-                name={formatDate(session.fecha)}
-                sub={session.horario}
-              />
-              <TableCell>
-                {session.registradoPorNombre ? (
-                  <span
-                    className="block max-w-[240px] truncate"
-                    title={session.registradoPorNombre}
-                  >
-                    {session.registradoPorNombre}
-                  </span>
-                ) : (
-                  NO_AUTHOR
+            <>
+              <TableRow>
+                <TableNameCell
+                  className="w-px whitespace-nowrap"
+                  name={formatDate(session.fecha)}
+                  sub={session.horario}
+                />
+                <TableCell>
+                  {session.registradoPorNombre ? (
+                    <span
+                      className="block max-w-[240px] truncate"
+                      title={session.registradoPorNombre}
+                    >
+                      {session.registradoPorNombre}
+                    </span>
+                  ) : (
+                    NO_AUTHOR
+                  )}
+                </TableCell>
+                <TableCell>{renderComposition(session)}</TableCell>
+                {hasActions && (
+                  <TableCell align="right">{renderActions(session)}</TableCell>
                 )}
-              </TableCell>
-              <TableCell>{renderComposition(session)}</TableCell>
-              {hasActions && (
-                <TableCell align="right">{renderActions(session)}</TableCell>
-              )}
-            </TableRow>
+              </TableRow>
+              {renderPanel(session, "row")}
+            </>
           )}
           footer={
             <>
-              {detailPanel}
               {totalPages > 1 && (
                 <Pagination
                   variant="footer"

@@ -41,6 +41,7 @@
   "faq": [
     {
       "titulo": "Para empezar",
+      "audiencia": "publica",
       "entradas": [
         {
           "pregunta": "¿Cómo inicio sesión?",
@@ -62,6 +63,7 @@
     },
     {
       "titulo": "Si eres jugador o representante",
+      "audiencia": "familia",
       "entradas": [
         {
           "pregunta": "¿Dónde veo si mi pago fue aprobado?",
@@ -83,6 +85,7 @@
     },
     {
       "titulo": "Si eres entrenador",
+      "audiencia": "entrenador",
       "entradas": [
         {
           "pregunta": "¿Cómo tomo asistencia?",
@@ -100,6 +103,7 @@
     },
     {
       "titulo": "Si eres administrador",
+      "audiencia": "administrador",
       "entradas": [
         {
           "pregunta": "¿Cómo valido un pago?",

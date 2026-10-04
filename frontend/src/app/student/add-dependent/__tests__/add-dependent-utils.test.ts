@@ -52,8 +52,8 @@ function validForm(overrides: Partial<AddDependentFormData> = {}): AddDependentF
     fechaNacimiento: "2015-06-15",
     cedula: "1798765432",
     tipoSangre: "O_POSITIVO",
-    enfermedades: "",
-    alergias: "",
+    enfermedades: "Ninguno",
+    alergias: "Ninguno",
     ...overrides,
   };
 }
@@ -185,15 +185,17 @@ describe("validateAddDependentStep — health step", () => {
     ).toContain("El tipo de sangre es obligatorio.");
   });
 
-  it("keeps alergias and enfermedades optional", () => {
-    expect(
-      validateAddDependentStep("health", validForm({ alergias: "", enfermedades: "" })),
-    ).toEqual([]);
+  // Issue #1574: both are required; «Ninguno» is the answer for "none".
+  it("requires alergias and enfermedades, naming «Ninguno» as the way out", () => {
+    const errors = validateAddDependentStep("health", validForm({ alergias: " ", enfermedades: "" }));
+    expect(errors).toContain('Escribe tus alergias o "Ninguno" si no tienes.');
+    expect(errors).toContain('Escribe tus enfermedades o "Ninguno" si no tienes.');
   });
 
-  it("enfermedades and alergias are optional", () => {
-    expect(validateAddDependentStep("health", validForm({ enfermedades: "", alergias: "" })))
-      .toEqual([]);
+  it("accepts «Ninguno» for both", () => {
+    expect(
+      validateAddDependentStep("health", validForm({ alergias: "Ninguno", enfermedades: "Ninguno" })),
+    ).toEqual([]);
   });
 
   /**
@@ -254,7 +256,8 @@ describe("buildRepresentadoPayload", () => {
       fechaNacimiento: "2015-06-15",
       fichaMedica: {
         tipoSangre: "O_POSITIVO",
-        enfermedades: [],
+        enfermedades: ["Ninguno"],
+        alergias: "Ninguno",
       },
     });
   });
@@ -283,11 +286,6 @@ describe("buildRepresentadoPayload", () => {
       validForm({ enfermedades: "Asma, Diabetes ,  , Alergia al polen" }),
     );
     expect(payload.fichaMedica?.enfermedades).toEqual(["Asma", "Diabetes", "Alergia al polen"]);
-  });
-
-  it("omits alergias when blank", () => {
-    const payload = buildRepresentadoPayload(validForm({ alergias: "" }));
-    expect(payload.fichaMedica).not.toHaveProperty("alergias");
   });
 
   it("includes alergias when present", () => {

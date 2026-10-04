@@ -5,7 +5,7 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import FamilyStrip from "@/app/student/FamilyStrip";
 import type { StudentProfileSummary } from "@/services/api";
@@ -38,7 +38,14 @@ function profile(
   } as StudentProfileSummary;
 }
 
+const mockShowInfo = vi.fn();
+vi.mock("@/contexts/ToastContext", () => ({
+  useToast: () => ({ showInfo: mockShowInfo }),
+}));
+
 const TODAY = new Date(2026, 8, 29);
+
+beforeEach(() => mockShowInfo.mockClear());
 
 describe("FamilyStrip", () => {
   it("renders nothing for a single profile", () => {
@@ -80,6 +87,38 @@ describe("FamilyStrip", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Sofia/ }));
     expect(onChange).toHaveBeenCalledWith("2");
+  });
+
+  it("announces «Ahora ves a {nombre}» when another child is picked", () => {
+    render(
+      <FamilyStrip
+        profiles={[profile("1", "Martin", null), profile("2", "Sofia Isabel", null)]}
+        value="1"
+        onChange={vi.fn()}
+        today={TODAY}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Sofia/ }));
+    expect(mockShowInfo).toHaveBeenCalledTimes(1);
+    expect(mockShowInfo).toHaveBeenCalledWith("Ahora ves a Sofia");
+  });
+
+  it("stays silent on first render and when the same child is picked again", () => {
+    const onChange = vi.fn();
+    render(
+      <FamilyStrip
+        profiles={[profile("1", "Martin", null), profile("2", "Sofia", null)]}
+        value="1"
+        onChange={onChange}
+        today={TODAY}
+      />,
+    );
+    expect(mockShowInfo).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /Martin/ }));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(mockShowInfo).not.toHaveBeenCalled();
   });
 
   it("gives each dependent an equal-width card with initials, plan and a status badge", () => {

@@ -78,7 +78,7 @@ class PersonaRepositorio:
     def listar(self, skip: int = 0, limit: int = 50) -> List[Persona]:
         return (
             self.db.query(Persona)
-            .options(joinedload(Persona.usuario))
+            .options(joinedload(Persona.usuario).selectinload(Usuario.roles))
             .order_by(*self._ORDEN_NOMINA)
             .offset(skip)
             .limit(limit)

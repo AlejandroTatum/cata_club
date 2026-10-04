@@ -14,6 +14,11 @@ import {
 import { WIZARD_STEP_PARAM, stepParamValue } from "@/lib/wizard-history";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import { toUserMessage } from "@/lib/error-message";
+import {
+  ALERGIAS_REQUIRED,
+  ENFERMEDADES_REQUIRED,
+  requiredFichaTextError,
+} from "@/lib/ficha-declaration";
 import { formatCurrency } from "@/lib/format-utils";
 import {
   cedulaRule,
@@ -521,6 +526,9 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
   contraseniaRepresentanteConfirmacion: (d) =>
     passwordConfirmRule(d.contraseniaRepresentanteConfirmacion, d.contraseniaRepresentante),
   tipoSangre: (d) => (isBloodType(d.tipoSangre) ? null : "Selecciona el tipo de sangre del jugador."),
+  // Issue #1574: both are required; «Ninguno» is the answer for "none".
+  condicionesSalud: (d) => requiredFichaTextError(d.condicionesSalud, ENFERMEDADES_REQUIRED),
+  alergias: (d) => requiredFichaTextError(d.alergias, ALERGIAS_REQUIRED),
   contactoEmergencia: (d) =>
     personNameRule(d.contactoEmergencia, "El nombre del contacto de emergencia", { plural: false }),
   // Issue #860: chained after `phoneFieldRule` so a malformed number is
@@ -565,8 +573,14 @@ const REPRESENTATIVE_FIELDS: EnrollField[] = [
 // Issue #1138: a represented child never has a contact of their own — the
 // health step only asks for the two emergency-contact fields on the "self"
 // (adult) path.
-const HEALTH_FIELDS_SELF: EnrollField[] = ["tipoSangre", "contactoEmergencia", "telefonoEmergencia"];
-const HEALTH_FIELDS_CHILD: EnrollField[] = ["tipoSangre"];
+const HEALTH_FIELDS_SELF: EnrollField[] = [
+  "tipoSangre",
+  "condicionesSalud",
+  "alergias",
+  "contactoEmergencia",
+  "telefonoEmergencia",
+];
+const HEALTH_FIELDS_CHILD: EnrollField[] = ["tipoSangre", "condicionesSalud", "alergias"];
 
 function healthFieldsFor(type: EnrollmentType): EnrollField[] {
   return type === ENROLLMENT_TYPES.CHILD ? HEALTH_FIELDS_CHILD : HEALTH_FIELDS_SELF;

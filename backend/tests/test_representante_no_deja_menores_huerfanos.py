@@ -271,7 +271,7 @@ def _representado_payload(cedula: str) -> dict:
     return {
         "nombres": "Beto", "apellidos": "Vega", "cedula": cedula,
         "fecha_nacimiento": MENOR_NACIMIENTO.isoformat(), "telefono": "0991230002",
-        "ficha_medica": {"tipo_sangre": "O_POSITIVO"},
+        "ficha_medica": {"tipo_sangre": "O_POSITIVO", "alergias": "Ninguna", "enfermedades": ["Ninguno"]},
     }
 
 

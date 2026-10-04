@@ -215,8 +215,8 @@ export default function EnrollAside(props: EnrollAsideProps): ReactElement {
             Es información que el club necesita conocer para la seguridad del
             jugador.
           </Item>
-          <Item title="Campos opcionales">
-            Condiciones de salud y alergias son opcionales.
+          <Item title="Alergias y condiciones de salud">
+            Son obligatorias. Si no tiene, escribe «Ninguno».
           </Item>
           <PrivacyLink onOpen={() => props.onOpenDocument("privacidad")} />
         </>

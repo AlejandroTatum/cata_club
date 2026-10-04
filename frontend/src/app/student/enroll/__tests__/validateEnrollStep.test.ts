@@ -29,6 +29,8 @@ function validForm(overrides: Partial<EnrollFormData> = {}): EnrollFormData {
     contraseniaConfirmacion: "password8",
     contraseniaRepresentanteConfirmacion: "password8",
     tipoSangre: BLOOD_TYPES.O_POSITIVO,
+    condicionesSalud: "Ninguno",
+    alergias: "Ninguno",
     contactoEmergencia: "María Pérez",
     // Issue #860: has to be a different valid mobile than `telefono` above —
     // an equal number is now rejected, and this is the "everything valid"
@@ -462,9 +464,10 @@ describe("validateEnrollStep — health step", () => {
     expect(errors).toContain("El teléfono de emergencia es obligatorio.");
   });
 
-  it("health fields are optional (not required)", () => {
+  it("requires condicionesSalud and alergias (#1574), with «Ninguno» as the way out", () => {
     const errors = validateEnrollStep("health", validForm({ condicionesSalud: "", alergias: "" }));
-    expect(errors).toEqual([]);
+    expect(errors).toContain('Escribe tus enfermedades o "Ninguno" si no tienes.');
+    expect(errors).toContain('Escribe tus alergias o "Ninguno" si no tienes.');
   });
 });
 

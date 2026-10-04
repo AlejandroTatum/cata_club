@@ -69,7 +69,8 @@ import {
 } from "@/components/ui";
 import { attendanceTone } from "@/lib/attendance-tone";
 import { breakdownAttendance, firstNameOf, hasOwnMembership, summarizeRecentAttendance } from "../student-utils";
-import ManagedStudentPicker, { useManagedProfiles } from "../ManagedStudentPicker";
+import { useManagedProfiles } from "../ManagedStudentPicker";
+import FamilyStrip from "../FamilyStrip";
 import { CalendarCheck, CheckCircle2, Clock, UserX, User } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import StudentErrorState from "../StudentErrorState";
@@ -415,8 +416,7 @@ function AttendanceView({
     // column empty at 1440 — the record is the subject and takes the main
     // column; the counted recap rides in the rail beside it.
     <>
-      <ManagedStudentPicker
-        id="student-select-attendance"
+      <FamilyStrip
         profiles={managedProfiles}
         value={selectedId}
         onChange={setSelectedId}

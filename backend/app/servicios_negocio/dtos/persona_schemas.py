@@ -13,7 +13,8 @@ from app.servicios_negocio.dtos.validadores import (
     ContactoEmergenciaValidado,
     ContraseniaValidada,
     CorreoValidado,
-    EnfermedadesValidadas,
+    AlergiasObligatorias,
+    EnfermedadesObligatorias,
     NombrePresentado,
     NombrePresentadoOpcional,
     NombreEditable,
@@ -69,6 +70,20 @@ class PersonaCreateDTO(BaseModel):
         if self.representante_id is None and not self.telefono:
             raise ValueError("El teléfono es obligatorio.")
         return self
+
+
+# --- Entrenador creado por el administrador (issue #1575) -------------------
+class EntrenadorCreateDTO(BaseModel):
+    """Datos mínimos de `POST /personas/entrenadores`: sin ficha médica, plan,
+    mensualidad ni categoría. La fecha de nacimiento es obligatoria porque
+    `persona.fecha_nacimiento` es NOT NULL (decisión del dueño: se pide en el
+    formulario, sin migración). Mismas validaciones que el resto de la app."""
+    nombres: NombreValidado = Field(...)
+    apellidos: ApellidoValidado = Field(...)
+    cedula: CedulaValidada = Field(..., max_length=32)
+    fecha_nacimiento: date
+    correo: CorreoValidado = Field(..., max_length=100)
+    telefono: TelefonoValidado = Field(..., max_length=32)
 
 
 # --- Representado (portal autoservicio) -------------------------------------
@@ -268,6 +283,9 @@ class PersonaListItemDTO(PersonaResponseDTO):
     # ninguna membresía. `None` = "sin cuenta" (no existe `Usuario` para esta
     # persona) -- nunca se infiere, siempre viene de `Persona.cuenta_activa`.
     cuenta_activa: Optional[bool] = Field(default=None, examples=[True])
+    # Issue #1575: entrenador creado por el administrador que todavía no fijó
+    # su contraseña. Derivado (ver `dominio/invitacion_entrenador.py`).
+    invitacion_pendiente: bool = Field(default=False, examples=[False])
 
 
 class PersonaBusquedaDTO(ResponseBase, BaseModel):
@@ -334,8 +352,8 @@ class FichaMedicaCreateDTO(BaseModel):
     """
     tipo_sangre: TipoSangreValidado
     persona_id: int
-    enfermedades: EnfermedadesValidadas = Field(default_factory=list)  # nombres de enfermedades, opcional
-    alergias: Optional[str] = Field(default=None, max_length=255)
+    enfermedades: EnfermedadesObligatorias = Field(default=None, validate_default=True)  # nombres; «Ninguno» => []
+    alergias: AlergiasObligatorias = Field(default=None, max_length=255, validate_default=True)
     contacto_emergencia: Optional[ContactoEmergenciaValidado] = Field(default=None, max_length=150)
     telefono_emergencia: TelefonoValidado = Field(..., max_length=32)
 
@@ -366,8 +384,8 @@ class FichaMedicaUpdateDTO(BaseModel):
     sin poder borrarse acá, para CUALQUIER persona.
     """
     tipo_sangre: Optional[TipoSangreValidado] = None
-    enfermedades: Optional[EnfermedadesValidadas] = None
-    alergias: Optional[str] = Field(default=None, max_length=255)
+    enfermedades: EnfermedadesObligatorias = None
+    alergias: AlergiasObligatorias = Field(default=None, max_length=255)
     contacto_emergencia: Optional[ContactoEmergenciaValidado] = Field(default=None, max_length=150)
     telefono_emergencia: Optional[TelefonoValidado] = Field(default=None, max_length=32)
 

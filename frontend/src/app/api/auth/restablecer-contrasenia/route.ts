@@ -26,6 +26,17 @@ const MENSAJE_CAMPOS_OBLIGATORIOS =
  * route, not inside a generic utility.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  // Issue #1575: only a trainer's invitation link asks for the terms
+  // acceptance; the flag is forwarded as-is and ignored by an ordinary reset.
+  const acceptsTerms = await request
+    .clone()
+    .json()
+    .then(
+      (body: unknown) =>
+        typeof body === "object" && body !== null && (body as { acepta_terminos?: unknown }).acepta_terminos === true,
+      () => false,
+    );
+
   const [campos, error] = await readRequiredStringFields(
     request,
     ["token", "nueva_contrasenia"],
@@ -38,7 +49,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   return anonymousAuthPost("/auth/restablecer-contrasenia", {
-    payload: { token: campos.token, nueva_contrasenia: campos.nueva_contrasenia },
+    payload: {
+      token: campos.token,
+      nueva_contrasenia: campos.nueva_contrasenia,
+      ...(acceptsTerms ? { acepta_terminos: true } : {}),
+    },
     forwardedFor: forwardedForFrom(request),
     invalidLinkMessage: "El enlace de recuperación es inválido o expiró.",
   });

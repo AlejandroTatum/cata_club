@@ -35,6 +35,8 @@ test("a representative adds a minor and registers the first pending payment", as
   await page.getByLabel("Año").fill("2014");
   await page.getByRole("button", { name: /siguiente/i }).click();
   await page.getByLabel(/^Tipo de sangre/).selectOption("O_POSITIVO");
+  await page.getByLabel(/^Enfermedades/).fill("Ninguno");
+  await page.getByLabel(/^Alergias/).fill("Ninguno");
   await page.getByRole("button", { name: /siguiente/i }).click();
   await page.getByLabel(/cuándo quieres pagar/i).selectOption("now");
   await page.getByRole("checkbox").check();

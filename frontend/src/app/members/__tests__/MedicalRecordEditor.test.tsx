@@ -14,9 +14,10 @@
  * and it validates the phone with `phoneRule` — the project's one phone
  * validator, shared with the enrollment wizards — rather than a second copy.
  *
- * Deliberately still optional, and asserted as such: alergias, enfermedades,
- * and `contactoEmergencia` (the NAME). See the PR body for why the name stays
- * optional here while remaining required in the enrollment DTO.
+ * Deliberately still optional, and asserted as such: `contactoEmergencia` (the
+ * NAME). See the PR body for why the name stays optional here while remaining
+ * required in the enrollment DTO. Alergias and enfermedades became required in
+ * #1574: a blank is never an answer, «Ninguno» is.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -45,6 +46,14 @@ vi.mock("@/contexts/ToastContext", () => ({
  */
 function notFound(): Error & { status: number } {
   return Object.assign(new Error("Ficha médica no encontrada"), { status: 404 });
+}
+
+/** #1574: the two fields a save now needs besides the blood type and the phone. */
+function fillHealth(): void {
+  fireEvent.change(screen.getByLabelText("Alergias"), { target: { value: "Ninguno" } });
+  fireEvent.change(screen.getByLabelText("Enfermedades (separadas por coma)"), {
+    target: { value: "Ninguno" },
+  });
 }
 
 describe("MedicalRecordEditor blood type", () => {
@@ -94,7 +103,7 @@ describe("MedicalRecordEditor blood type", () => {
     mockFetchFichaMedica.mockResolvedValue({
       tipoSangre: "O_POSITIVO",
       enfermedades: [],
-      alergias: null,
+      alergias: "Ninguna",
       contactoEmergencia: null,
       telefonoEmergencia: "0991112233",
     });
@@ -128,6 +137,7 @@ describe("MedicalRecordEditor blood type", () => {
     fireEvent.change(screen.getByLabelText(/^Teléfono de emergencia/), {
       target: { value: "991112233" },
     });
+    fillHealth();
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() => {
@@ -156,6 +166,7 @@ describe("MedicalRecordEditor emergency phone (#643)", () => {
     fireEvent.change(await screen.findByLabelText("Tipo de sangre"), {
       target: { value: "O_POSITIVO" },
     });
+    fillHealth();
   }
 
   it("refuses to save with a blank emergency phone", async () => {
@@ -282,6 +293,7 @@ describe("MedicalRecordEditor emergency contact — shared PhoneField (#667, #12
     fireEvent.change(await screen.findByLabelText("Tipo de sangre"), {
       target: { value: "O_POSITIVO" },
     });
+    fillHealth();
   }
 
   it("carries the same inputMode='tel' every other phone field has", async () => {
@@ -366,6 +378,8 @@ describe("MedicalRecordEditor legacy records (#643)", () => {
 
     expect(await screen.findByText("El tipo de sangre es obligatorio.")).toBeInTheDocument();
     expect(screen.getByText("El teléfono de emergencia es obligatorio.")).toBeInTheDocument();
+    expect(screen.getByText('Escribe tus alergias o "Ninguno" si no tienes.')).toBeInTheDocument();
+    expect(screen.getByText('Escribe tus enfermedades o "Ninguno" si no tienes.')).toBeInTheDocument();
     expect(mockActualizarFichaMedica).not.toHaveBeenCalled();
   });
 
@@ -378,6 +392,7 @@ describe("MedicalRecordEditor legacy records (#643)", () => {
     fireEvent.change(screen.getByLabelText(/^Teléfono de emergencia/), {
       target: { value: "991112233" },
     });
+    fillHealth();
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() =>
@@ -390,9 +405,10 @@ describe("MedicalRecordEditor legacy records (#643)", () => {
 });
 
 /**
- * The other half of #643, and the easier half to lose: exactly TWO fields
- * became required. If this block ever goes green while the optional fields
- * carry a required marker, the change overshot.
+ * The other half of #643, and the easier half to lose: only the fields the
+ * product asked for are required (blood type and phone in #643, alergias and
+ * enfermedades in #1574). If this block ever goes green while the contact NAME
+ * carries a required marker, the change overshot.
  */
 describe("MedicalRecordEditor required markers (#643)", () => {
   beforeEach(() => {
@@ -411,16 +427,24 @@ describe("MedicalRecordEditor required markers (#643)", () => {
     expect(screen.getByLabelText(/^Teléfono de emergencia/)).toBeRequired();
   });
 
+  it("marks alergias and enfermedades as required too (#1574) and says «Ninguno» is the answer", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+
+    await screen.findByLabelText("Tipo de sangre");
+    for (const label of ["Alergias", "Enfermedades (separadas por coma)"]) {
+      expect(screen.getByLabelText(label)).toHaveAttribute("aria-required", "true");
+    }
+    expect(screen.getAllByText(/Si no tiene, escribe Ninguno\./)).toHaveLength(2);
+  });
+
   it("marks nothing else as required", async () => {
     render(<MedicalRecordEditor personaId={7} />);
 
     await screen.findByLabelText("Tipo de sangre");
-    for (const label of ["Alergias", "Enfermedades (separadas por coma)", "Contacto de emergencia"]) {
-      expect(screen.getByLabelText(label)).not.toHaveAttribute("aria-required", "true");
-    }
+    expect(screen.getByLabelText("Contacto de emergencia")).not.toHaveAttribute("aria-required", "true");
   });
 
-  it("saves with every optional field left empty", async () => {
+  it("refuses to save with blank alergias or enfermedades, naming «Ninguno»", async () => {
     render(<MedicalRecordEditor personaId={7} />);
 
     fireEvent.change(await screen.findByLabelText("Tipo de sangre"), {
@@ -431,15 +455,32 @@ describe("MedicalRecordEditor required markers (#643)", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
+    expect(await screen.findByText('Escribe tus alergias o "Ninguno" si no tienes.')).toBeInTheDocument();
+    expect(screen.getByText('Escribe tus enfermedades o "Ninguno" si no tienes.')).toBeInTheDocument();
+    expect(mockActualizarFichaMedica).not.toHaveBeenCalled();
+  });
+
+  it("saves with «Ninguno» for both and the contact name left empty", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+
+    fireEvent.change(await screen.findByLabelText("Tipo de sangre"), {
+      target: { value: "O_NEGATIVO" },
+    });
+    fireEvent.change(screen.getByLabelText(/^Teléfono de emergencia/), {
+      target: { value: "991112233" },
+    });
+    fillHealth();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
     await waitFor(() =>
       expect(mockActualizarFichaMedica).toHaveBeenCalledWith(
         7,
         expect.objectContaining({
           tipoSangre: "O_NEGATIVO",
           telefonoEmergencia: "0991112233",
-          alergias: null,
+          alergias: "Ninguno",
           contactoEmergencia: null,
-          enfermedades: [],
+          enfermedades: ["Ninguno"],
         }),
       ),
     );
@@ -503,7 +544,7 @@ describe("MedicalRecordEditor clearing a field (FIC-5)", () => {
    * explicitly is what actually clears it (see the backend's
    * `test_vaciar_alergias_contacto_y_telefono_los_borra`).
    */
-  it("sends null, not undefined, for alergias/contactoEmergencia once emptied", async () => {
+  it("sends null, not undefined, for contactoEmergencia once emptied", async () => {
     mockFetchFichaMedica.mockResolvedValue({
       tipoSangre: "O_POSITIVO",
       enfermedades: [],
@@ -520,7 +561,6 @@ describe("MedicalRecordEditor clearing a field (FIC-5)", () => {
     expect(alergias.value).toBe("Polen");
     const contacto = screen.getByLabelText<HTMLInputElement>("Contacto de emergencia");
 
-    fireEvent.change(alergias, { target: { value: "" } });
     fireEvent.change(contacto, { target: { value: "" } });
 
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
@@ -529,7 +569,7 @@ describe("MedicalRecordEditor clearing a field (FIC-5)", () => {
       expect(mockActualizarFichaMedica).toHaveBeenCalledWith(
         7,
         expect.objectContaining({
-          alergias: null,
+          alergias: "Polen",
           contactoEmergencia: null,
         }),
       );
@@ -699,8 +739,10 @@ describe("MedicalRecordEditor — ficha guardada en reposo", () => {
     render(<MedicalRecordEditor personaId={7} />);
 
     await screen.findByRole("button", { name: "Editar" });
-    // Los cuatro campos opcionales; el tipo de sangre nunca puede faltar.
-    expect(screen.getAllByText("—")).toHaveLength(4);
+    // El contacto y el teléfono; el tipo de sangre nunca puede faltar. Alergias
+    // y enfermedades vacías no son «nada»: son una ficha SIN DECLARAR (#1574).
+    expect(screen.getAllByText("—")).toHaveLength(2);
+    expect(screen.getAllByText("Sin declarar")).toHaveLength(2);
   });
 
   it("«Editar» devuelve los inputs de siempre, ya cargados con lo guardado", async () => {
@@ -813,5 +855,72 @@ describe("MedicalRecordEditor page mode — two cards beside the emergency card"
     const glyph = heading.parentElement?.parentElement?.querySelector("svg");
     expect(glyph?.getAttribute("class")).toMatch(/text-cuenta-representante/);
     expect(glyph?.getAttribute("class")).not.toMatch(/text-state-bad/);
+  });
+});
+
+/**
+ * Issue #1574: «Ninguno» is stored as an explicit declaration, and the editor
+ * tells it apart from a ficha that never declared anything.
+ */
+describe("MedicalRecordEditor — «Ninguna» vs «Sin declarar» (#1574)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockActualizarFichaMedica.mockResolvedValue({});
+  });
+
+  const DECLARADA = {
+    id: 3,
+    personaId: 7,
+    tipoSangre: "O_POSITIVO",
+    enfermedades: [],
+    alergias: "Ninguna",
+    contactoEmergencia: "Ana Torres",
+    telefonoEmergencia: "0991112233",
+  };
+
+  it("reads a declared «none» as «Ninguna» in both rows", async () => {
+    mockFetchFichaMedica.mockResolvedValue(DECLARADA);
+
+    render(<MedicalRecordEditor personaId={7} />);
+
+    await screen.findByRole("button", { name: "Editar" });
+    expect(screen.getAllByText("Ninguna")).toHaveLength(2);
+    expect(screen.queryByText("Sin declarar")).toBeNull();
+  });
+
+  it("re-saves a declared «none» untouched, as «Ninguno» for the illnesses", async () => {
+    mockFetchFichaMedica.mockResolvedValue(DECLARADA);
+
+    render(<MedicalRecordEditor personaId={7} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+    expect(screen.getByLabelText<HTMLInputElement>("Enfermedades (separadas por coma)").value).toBe("Ninguno");
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() =>
+      expect(mockActualizarFichaMedica).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({ alergias: "Ninguna", enfermedades: ["Ninguno"] }),
+      ),
+    );
+  });
+
+  it("shows «Sin declarar» on the emergency card for a legacy record", async () => {
+    mockFetchFichaMedica.mockResolvedValue({ ...DECLARADA, alergias: null });
+
+    render(<MedicalRecordEditor personaId={7} withEmergencyCard />);
+
+    const card = await screen.findByTestId("emergency-card");
+    expect(card).toHaveTextContent(/Alergias\s*Sin declarar/);
+    expect(card).toHaveTextContent(/Enfermedades\s*Sin declarar/);
+  });
+
+  it("shows «Ninguna» on the emergency card for a declared record", async () => {
+    mockFetchFichaMedica.mockResolvedValue(DECLARADA);
+
+    render(<MedicalRecordEditor personaId={7} withEmergencyCard />);
+
+    const card = await screen.findByTestId("emergency-card");
+    expect(card).toHaveTextContent(/Alergias\s*Ninguna/);
+    expect(card).toHaveTextContent(/Enfermedades\s*Ninguna/);
   });
 });

@@ -306,6 +306,7 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                 horarioId={query.horarioId ?? null}
                 studentFiltered={Boolean(filters.student)}
                 inscritosPorHorario={inscritosPorHorario}
+                showGuide={false}
               />
             )}
           </div>

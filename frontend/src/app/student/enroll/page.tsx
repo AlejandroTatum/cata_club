@@ -69,6 +69,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
+import { NINGUNO_HELP } from "@/lib/ficha-declaration";
 import {
   calculatePersonAge,
   EDAD_MAXIMA_ALUMNO,
@@ -574,6 +575,8 @@ function EnrollWizard(): React.ReactElement {
       // Issue #1296: the local digits without the trunk 0, same shape as `telefono`.
       telefonoEmergencia: "998765432",
       tipoSangre: BLOOD_TYPES.O_POSITIVO,
+      condicionesSalud: "Ninguno",
+      alergias: "Ninguno",
     };
 
     switch (type) {
@@ -709,6 +712,7 @@ function EnrollWizard(): React.ReactElement {
     required?: boolean;
     icon?: React.ReactNode;
     rows?: number;
+    hint?: string;
   }): React.ReactElement {
     return (
       <WizardTextarea
@@ -716,6 +720,8 @@ function EnrollWizard(): React.ReactElement {
         field={ENROLL_FIELD_TOKEN[field]}
         disabled={submitting}
         {...opts}
+        error={shownError(field)}
+        onBlur={() => markTouched(field)}
       />
     );
   }
@@ -1199,6 +1205,8 @@ function EnrollWizard(): React.ReactElement {
           placeholder: example("asma, diabetes, lesiones previas"),
           icon: <Heart size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
           rows: 2,
+          required: true,
+          hint: NINGUNO_HELP,
         })}
 
         {renderTextarea("alergias", {
@@ -1208,6 +1216,8 @@ function EnrollWizard(): React.ReactElement {
           placeholder: example("polvo, látex, picaduras de insectos"),
           icon: <AlertTriangle size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
           rows: 2,
+          required: true,
+          hint: NINGUNO_HELP,
         })}
         </EnrollFieldGrid>
 
@@ -1398,8 +1408,8 @@ function EnrollWizard(): React.ReactElement {
                 `${formData.contactoEmergencia} · ${toStoredPhone(formData.telefonoEmergencia)}`.trim(),
                 "health",
               )}
-          {summaryRow("Condiciones de salud", formData.condicionesSalud || "Ninguna reportada", "health")}
-          {summaryRow("Alergias", formData.alergias || "Ninguna reportada", "health")}
+          {summaryRow("Condiciones de salud", formData.condicionesSalud, "health")}
+          {summaryRow("Alergias", formData.alergias, "health")}
         </DataRowList>
         </div>
 

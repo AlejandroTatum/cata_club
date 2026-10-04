@@ -78,6 +78,8 @@ function goToSummary(): void {
   fireEvent.change(document.getElementById(addDependentFieldId("tipoSangre")) as HTMLElement, {
     target: { value: "O_POSITIVO" },
   });
+  fireEvent.change(screen.getByLabelText(/^Enfermedades/), { target: { value: "Ninguno" } });
+  fireEvent.change(screen.getByLabelText(/^Alergias/), { target: { value: "Ninguno" } });
   next();
 }
 

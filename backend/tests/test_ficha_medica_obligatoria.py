@@ -11,7 +11,7 @@ from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentCreateDTO
 def _ficha(**overrides) -> dict:
     cuerpo = {
         "tipo_sangre": "O_POSITIVO",
-        "enfermedades": [],
+        "alergias": "Ninguna", "enfermedades": ["Ninguno"],
         "contacto_emergencia": "María Torres",
         "telefono_emergencia": "0991112233",
     }

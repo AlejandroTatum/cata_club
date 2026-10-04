@@ -189,15 +189,13 @@ describe("groupRecordsBySession", () => {
     expect(sessions[0].horarioId).toBe(7);
   });
 
-  it("counts the records of a session flagged for review (ENT-07)", () => {
+  it("no longer tallies records flagged for review (issue #1578)", () => {
     const sessions = groupRecordsBySession([
       record({ estado: "present", requiereRevision: true }),
-      record({ estado: "present", requiereRevision: false }),
-      record({ estado: "late" }),
       record({ estado: "absent", requiereRevision: true }),
     ]);
 
-    expect(sessions[0].reviewCount).toBe(2);
+    expect(sessions[0]).not.toHaveProperty("reviewCount");
   });
 
   it("carries who took the list from the first record of a session (issue #263)", () => {
