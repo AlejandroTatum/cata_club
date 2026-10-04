@@ -19,7 +19,9 @@
  * recientes cerradas por el bulk-seed dentro de la ventana de 30 días. Eso lo
  * hace robusto a un re-seed: no depende de un id de horario o de una fecha
  * fija, solo de que EXISTA al menos una sesión corregible, que es justamente
- * lo que el propio historial garantiza filtrando por la ventana.
+ * lo que el propio historial garantiza filtrando por la ventana. Lo único que
+ * sí arma es completar por API el roster de esa sesión (ver el comentario en
+ * el test): con ENT-03 solo una lista completa abre como cerrada.
  *
  * ## Repetibilidad
  *
@@ -67,10 +69,34 @@ test("un administrador corrige una asistencia real y la corrección sobrevive a 
 
   // ── El historial real: cualquier sesión corregible sirve (ver encabezado) ──
   await page.goto("/trainer/attendance/history");
-  const corregirLink = page.getByRole("link", { name: "Corregir" }).first();
-  await expect(corregirLink).toBeVisible({ timeout: 20_000 });
-  await corregirLink.click();
+  const corregirLinks = page.getByRole("link", { name: "Corregir" });
+  await expect(corregirLinks.first()).toBeVisible({ timeout: 20_000 });
 
+  // ENT-03: una lista cuenta como cerrada solo cuando CADA alumno del roster
+  // tiene fila, y el bulk-seed da historial a una fracción del roster, así que
+  // sus sesiones abren como «lista incompleta» (sin «Corregir» por fila). Se
+  // completa por API la sesión que el historial muestra primero: las filas que
+  // ya existían se rechazan como `alreadyRegistered` (la primera gana) y solo
+  // se crean las que faltaban. Repetible: la segunda vez ya no falta ninguna.
+  const href = (await corregirLinks.first().getAttribute("href")) ?? "";
+  const params = new URL(href, "http://localhost").searchParams;
+  const horarioId = Number(params.get("horario"));
+  const fecha = params.get("fecha");
+  expect(horarioId && fecha, `El enlace «Corregir» no trae horario y fecha: ${href}`).toBeTruthy();
+
+  const roster = (await page.request
+    .get(`/api/groups/horarios/${horarioId}/alumnos?limit=200`)
+    .then((r) => r.json())) as { items: Array<{ personaId: number }> };
+  const completion = await page.request.post("/api/attendance/records", {
+    data: {
+      horarioId,
+      fechaEntrenamiento: fecha,
+      students: roster.items.map((i) => ({ personaId: i.personaId, estado: "present" })),
+    },
+  });
+  expect(completion.ok(), `No se pudo completar la sesión ${horarioId}/${fecha}: ${completion.status()}`).toBe(true);
+
+  await page.goto(href);
   await expect(page.getByText("Esta lista ya fue registrada.")).toBeVisible({ timeout: 20_000 });
 
   const row = firstCorrectableRow(page);

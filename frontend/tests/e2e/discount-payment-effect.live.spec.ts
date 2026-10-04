@@ -293,6 +293,10 @@ async function crearDescuentoPorcentaje(page: Page, nombre: string, porcentaje: 
   // "Tipo" ya nace en "Porcentaje (%)" (`EMPTY_FORM.modalidad`) — no hace falta tocarlo.
   await page.getByLabel("Valor").fill(String(porcentaje));
   await page.getByRole("button", { name: "Crear", exact: true }).click();
+  // ADMB-10: un descuento del 100 % pide una confirmación explícita antes de guardarse.
+  if (porcentaje === 100) {
+    await page.getByRole("button", { name: "Guardar al 100 %" }).click();
+  }
   await expect(page.getByText("Descuento creado correctamente.")).toBeVisible({ timeout: 15_000 });
 
   // `findDiscountByName` pagina de verdad — ver su docstring: este entorno
@@ -453,7 +457,9 @@ test("retirar el beneficio de un alumno restaura el monto completo en su siguien
 
     await alumnoPage.reload();
     const table = alumnoPage.getByTestId("student-payments-table");
-    const primeraFila = table.locator("tbody tr").first();
+    // El historial es una lista (`ul > li`), no una tabla; corridas previas
+    // dejan filas rechazadas, así que se acota a la que quedó por validar.
+    const primeraFila = table.locator(":scope > li").filter({ hasText: "Por validar" }).first();
     await expect(primeraFila).toContainText("$40,00");
     // Sin descuento, sin voucher, sin rechazo: la fila no tiene nada que
     // desplegar (`pagoHasDetail`), así que no hay botón "Detalle" que abrir.

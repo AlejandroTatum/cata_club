@@ -81,13 +81,13 @@ test("credenciales inválidas no entran y muestran el error real del backend", a
   await page.getByRole("button", { name: /iniciar sesión/i }).click();
 
   // El backend real (no un mock) responde 401 `invalid_credentials`, y el
-  // formulario lo traduce en el toast Y en el mensaje fijo bajo el campo de
-  // contraseña (`data-testid="credentials-error"`), sin decir cuál de los dos
-  // datos fue el que falló.
-  await expect(page.getByText("Credenciales incorrectas")).toBeVisible({ timeout: 15_000 });
+  // formulario lo anuncia SOLO en línea (FAM-15 quitó el toast): el mensaje
+  // fijo bajo el campo de contraseña (`data-testid="credentials-error"`), sin
+  // decir cuál de los dos datos fue el que falló.
   await expect(page.getByTestId("credentials-error")).toHaveText(
     "El correo y la contraseña no coinciden. Verifica los dos e intenta nuevamente.",
   );
+  await expect(page.getByText("Credenciales incorrectas")).toHaveCount(0);
 
   // Sin sesión: la URL nunca se mueve del formulario.
   await expect(page).toHaveURL(/\/login$/);
