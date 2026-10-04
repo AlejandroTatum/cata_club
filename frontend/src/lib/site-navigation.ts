@@ -52,6 +52,9 @@ export const SITE_NAV_SECTIONS: readonly SiteNavSection[] = [
   { id: "valores", label: "Valores" },
   { id: "galeria", label: "Galería" },
   { id: "horarios", label: "Horarios" },
+  { id: "mensualidad", label: "Mensualidad" },
+  { id: "como-empezar", label: "Cómo empezar" },
+  { id: "preguntas", label: "Preguntas" },
   { id: "contacto", label: "Contacto" },
 ];
 

@@ -108,7 +108,7 @@
 .landing-logo small, .landing-footer-brand small { display: block; color: var(--landing-action); font-family: var(--font-landing-barlow); font-size: 12px; font-weight: 700; letter-spacing: 3px; }
 .landing-nav-links { display: flex; gap: 8px; }
 /* @touch-target Declares `touch-action: manipulation`; a thumb is the pointer. */
-.landing-nav-links a { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: 999px; padding: 10px 18px; color: var(--landing-text); font-size: 15px; font-weight: 600; touch-action: manipulation; transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease; }
+.landing-nav-links a { display: inline-flex; white-space: nowrap; min-height: 44px; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: 999px; padding: 10px 18px; color: var(--landing-text); font-size: 15px; font-weight: 600; touch-action: manipulation; transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease; }
 .landing-nav-links a:hover { border-color: var(--landing-link-hover); color: var(--landing-link-hover); }
 .landing-nav-links a.active { border-color: var(--landing-action); background: var(--landing-action); color: var(--landing-on-action); font-weight: 700; }
 .landing-nav-links a.active:hover { border-color: var(--landing-action-hover); background: var(--landing-action-hover); color: var(--landing-on-action); }
@@ -650,6 +650,18 @@
   .landing-schedule-ages { font-size: 44px; }
   .landing-schedule-when { padding-top: 14px; }
   .landing-schedule-help:nth-child(n):last-child { grid-column: auto; }
+}
+
+/* Eight links (issue #1587) no longer fit the 18px-padded pills at laptop widths:
+   the labels wrapped inside their own pill. Tighter pills, one line each, from
+   the tablet-landscape width up to where the roomy layout fits again. */
+@media (min-width: 769px) and (max-width: 1366px) {
+  .landing-navbar { padding-inline: 20px; }
+  .landing-nav-links { gap: 2px; }
+  .landing-nav-links a { padding: 10px 9px; font-size: 14px; }
+}
+@media (min-width: 769px) and (max-width: 1100px) {
+  .landing-nav-links a { padding-inline: 6px; font-size: 13px; }
 }
 
 @media (max-width: 768px) {
