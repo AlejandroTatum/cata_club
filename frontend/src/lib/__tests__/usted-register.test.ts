@@ -80,11 +80,13 @@ describe("usted register — app-wide copy sweep (issue #340 follow-up)", () => 
     // #666 cap message shipped "Reducí el monto ingresado." in #679.
     expect(buildUstedRegisterRegex().test("Reducí el monto ingresado.")).toBe(true);
     expect(buildUstedRegisterRegex().test("Reduzca el monto ingresado.")).toBe(false);
-    expect(buildUstedRegisterRegex().test("tu cuenta")).toBe(true);
+    // W3-0: tú forms are allowed during the wave-3 sweep (W3-6 flips the lock
+    // to enforce «tú»); only voseo is banned for now.
+    expect(buildUstedRegisterRegex().test("tu cuenta")).toBe(false);
     expect(buildUstedRegisterRegex().test("vos podés")).toBe(true);
-    expect(buildUstedRegisterRegex().test("apenas te lo asignen, entras directo")).toBe(true);
-    expect(buildUstedRegisterRegex().test("Estás preguntando muy seguido")).toBe(true);
-    // "usted" forms of the exact same verbs must NOT trip the lock.
+    expect(buildUstedRegisterRegex().test("apenas te lo asignen, entras directo")).toBe(false);
+    expect(buildUstedRegisterRegex().test("Estás preguntando muy seguido")).toBe(false);
+    // Both "usted" and "tú" forms must NOT trip the lock for now.
     expect(buildUstedRegisterRegex().test("su cuenta")).toBe(false);
     expect(buildUstedRegisterRegex().test("entra directamente")).toBe(false);
     expect(buildUstedRegisterRegex().test("está disponible")).toBe(false);

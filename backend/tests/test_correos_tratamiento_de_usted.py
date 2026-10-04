@@ -27,15 +27,16 @@ MODULOS = [
     "servicios_negocio/relacion_representacion_servicio.py",
 ]
 
-# Imperativos y presentes de voseo, más posesivos/pronombres de tuteo.
+# TEMPORAL (QA4 W3-0): durante el barrido de registro de la ola 3 solo se veta
+# el voseo; «usted» y «tú» pasan. W3-6 cambia este candado (y el del frontend)
+# para exigir «tú».
+# Imperativos y presentes de voseo.
 VOSEO_Y_TUTEO = re.compile(
     r"\b(?:"
     r"vos|sos|tenés|podés|querés|sabés|debés|necesitás|"
     r"hacé|ingresá|revisá|copiá|usá|elegí|mirá|esperá|intentá|volvé|"
     r"confirmá|verificá|presioná|escribinos|acercate|fijate|avisanos|"
-    r"contactanos|cargá|subí|seleccioná|completá|"
-    r"tu|tus|te|ti|tuyo|tuya|"
-    r"va a poder|van a poder"
+    r"contactanos|cargá|subí|seleccioná|completá"
     r")\b",
     re.IGNORECASE,
 )
@@ -63,24 +64,26 @@ def _literales(ruta: Path):
 
 
 @pytest.mark.parametrize("modulo", MODULOS)
-def test_ningun_literal_de_correo_usa_voseo_ni_tuteo(modulo):
+def test_ningun_literal_de_correo_usa_voseo(modulo):
     ruta = RAIZ / modulo
     infracciones = [
         f"{modulo}:{linea}: «{m.group(0)}» en {texto[:60]!r}"
         for linea, texto in _literales(ruta)
         for m in VOSEO_Y_TUTEO.finditer(texto)
     ]
-    assert not infracciones, "Use «usted»:\n" + "\n".join(infracciones)
+    assert not infracciones, "No use voseo:\n" + "\n".join(infracciones)
 
 
-def test_el_detector_reconoce_el_voseo_y_el_tuteo_que_ya_se_filtraron():
+def test_el_detector_reconoce_el_voseo_que_ya_se_filtro():
     for frase in (
         "copiá este enlace",
         "podés ignorarlo",
-        "gestión de tu cuenta",
-        "va a poder verla",
-        "Tu sesión quedó cerrada",
+        "vos sos",
+        "avisanos",
     ):
         assert VOSEO_Y_TUTEO.search(frase), frase
-    for frase in ("copie este enlace", "puede ignorarlo", "su cuenta", "podrá verla"):
+    for frase in (
+        "copie este enlace", "puede ignorarlo", "su cuenta", "podrá verla",
+        "copia este enlace", "puedes ignorarlo", "tu cuenta", "te avisaremos",
+    ):
         assert not VOSEO_Y_TUTEO.search(frase), frase

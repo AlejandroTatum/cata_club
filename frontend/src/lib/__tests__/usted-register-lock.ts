@@ -73,6 +73,15 @@ export const TUTEO_CONJUGACIONES = ["entras", "estás", "inténtalo"];
  */
 export const PRONOMBRES = ["vos", "tú", "tu", "tus", "te"];
 
+/**
+ * TEMPORARY (QA4 W3-0): while the wave-3 register sweep runs in parallel, the
+ * lock bans ONLY voseo (the imperatives above and the pronoun "vos"), so both
+ * "usted" and "tú" forms pass. TUTEO_CONJUGACIONES and PRONOMBRES stay
+ * exported but are not enforced. W3-6 flips this lock (and the backend email
+ * lock) to enforce «tú»: ban "usted" forms and re-enable the tú word lists.
+ */
+export const VOSEO_PRONOMBRES = ["vos"];
+
 const LETTER = "a-záéíóúñA-ZÁÉÍÓÚÑ";
 
 /**
@@ -82,6 +91,6 @@ const LETTER = "a-záéíóúñA-ZÁÉÍÓÚÑ";
  * results when the same instance is reused across multiple input strings.
  */
 export function buildUstedRegisterRegex(): RegExp {
-  const words = [...VOSEO_IMPERATIVOS, ...TUTEO_CONJUGACIONES, ...PRONOMBRES];
+  const words = [...VOSEO_IMPERATIVOS, ...VOSEO_PRONOMBRES];
   return new RegExp(`(?<![${LETTER}])(${words.join("|")})(?![${LETTER}])`, "giu");
 }
