@@ -1,5 +1,5 @@
 /**
- * The guardian → dependent switcher, and the selection state behind it.
+ * The guardian → dependent selection state behind the family strip.
  *
  * Three family screens ask the same question — "whose account am I looking
  * at?" — and each used to answer it with its own copy of the select, its own
@@ -35,8 +35,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown } from "lucide-react";
-import { ICON } from "@/lib/icon-size";
 import type { StudentPortalSummary, StudentProfileSummary } from "@/services/api";
 
 /** The query parameter that names the profile a family screen is about. */
@@ -178,58 +176,4 @@ export function withSelectedStudent(href: string, personaId: string): string {
   const params = new URLSearchParams(query);
   params.set(SELECTED_STUDENT_PARAM, personaId);
   return `${path}?${params.toString()}`;
-}
-
-export interface ManagedStudentPickerProps {
-  id: string;
-  profiles: StudentProfileSummary[];
-  value: string;
-  onChange: (personaId: string) => void;
-}
-
-/**
- * The switcher itself. Renders nothing for a single profile — a select with
- * one option is a control that cannot do anything.
- *
- * 40px (`h-ctl`) and a 10px radius (`rounded-ctl`) like every other control in
- * the system, with the `ball` focus ring `_sistema.css:80` specifies.
- */
-export default function ManagedStudentPicker({
-  id,
-  profiles,
-  value,
-  onChange,
-}: ManagedStudentPickerProps): React.ReactElement | null {
-  if (profiles.length < 2) return null;
-
-  return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-      <label
-        htmlFor={id}
-        className="text-2xs font-bold uppercase text-ink-3-strong"
-      >
-        Estudiante
-      </label>
-      <div className="relative max-w-full">
-        <select
-          id={id}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          className="h-ctl max-w-full appearance-none rounded-ctl border border-line-2 bg-paper pl-3.5 pr-10 text-sm font-semibold text-ink"
-        >
-          {profiles.map((profile) => (
-            <option key={profile.personaId} value={profile.personaId}>
-              {profile.nombres} {profile.apellidos}
-            </option>
-          ))}
-        </select>
-        <ChevronDown
-          size={ICON.sm}
-          strokeWidth={1.5}
-          className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-3"
-          aria-hidden="true"
-        />
-      </div>
-    </div>
-  );
 }
