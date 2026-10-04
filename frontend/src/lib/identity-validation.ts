@@ -327,7 +327,12 @@ export function representativeCedulaDiffersRule(representativeCedula: string, st
 // contact, which is a person's name and was validated as if it were not one.
 // ---------------------------------------------------------------------------
 
-export const PERSON_NAME_MIN_LENGTH = 3;
+/**
+ * REG-08 (QA4): a person name needs at least 2 LETTERS (not characters), so
+ * real short names («Li», «Al», «Ng») can enroll. Mirrors
+ * `_NOMBRE_MIN_LETRAS` in `backend/.../dtos/validadores.py`.
+ */
+export const PERSON_NAME_MIN_LETTERS = 2;
 
 /**
  * (issue #1246) Some input sources — iOS/macOS keyboards, text pasted from
@@ -336,7 +341,7 @@ export const PERSON_NAME_MIN_LENGTH = 3;
  * instead of the precomposed U+00F1. `PERSON_NAME_PATTERN` only accepts
  * precomposed letters, so an NFD name used to fail validation while the
  * same name typed on a desktop keyboard (NFC) passed. Trimming first, then
- * normalizing, keeps the length check (`PERSON_NAME_MIN_LENGTH`) counting
+ * normalizing, keeps the letter count (`PERSON_NAME_MIN_LETTERS`) counting
  * the same characters a visitor sees.
  */
 export function normalizePersonName(value: string): string {
@@ -344,42 +349,61 @@ export function normalizePersonName(value: string): string {
 }
 
 /**
- * Letters (incl. accents), spaces, and the three connectors real names use:
- * apostrophe, hyphen, and interpunct. A connector may never open or close
- * the name, and two connectors may never sit next to each other — enforced
- * by requiring at least one letter between any two connector positions,
- * rather than by a denylist of "bad" sequences.
- *
- * The accented span is written as three runs rather than one `À-ɏ` sweep
- * because Latin-1 Supplement embeds two non-letters among its letters: `×`
- * (U+00D7) and `÷` (U+00F7). `À-Ö` stops before U+00D7, `Ø-ö` resumes after
- * it and stops before U+00F7, and `ø-ɏ` resumes after that — excluding
- * exactly those two code points and nothing else.
+ * REG-08 (QA4): letters (any accented letter, ñ, ü), spaces, apostrophe and
+ * hyphen — nothing else. A connector may never open or close the name, and
+ * two connectors may never sit next to each other — enforced by requiring a
+ * letter between any two connector positions, rather than by a denylist of
+ * "bad" sequences. A combining mark is only valid right after a letter.
  */
-export const PERSON_NAME_PATTERN =
-  /^[A-Za-zÀ-ÖØ-öø-ɏ]+(?:[ '\-·][A-Za-zÀ-ÖØ-öø-ɏ]+)*$/;
-
-/** Letters and the four connectors, sin exigir la alternancia que sí exige `PERSON_NAME_PATTERN` — sirve para aislar la causa de un rechazo. */
-const PERSON_NAME_ALLOWED_CHARS_PATTERN = /^[A-Za-zÀ-ÖØ-öø-ɏ '\-·]*$/;
+export const PERSON_NAME_PATTERN = /^\p{L}[\p{L}\p{M}]*(?:[ '\-]\p{L}[\p{L}\p{M}]*)*$/u;
 
 /** Un separador abriendo o cerrando el valor. */
-const PERSON_NAME_SEPARATOR_AT_EDGE_PATTERN = /^[ '\-·]|[ '\-·]$/;
+const PERSON_NAME_SEPARATOR_AT_EDGE_PATTERN = /^[ '\-]|[ '\-]$/;
+
+/** Dos separadores seguidos. */
+const PERSON_NAME_REPEATED_SEPARATOR_PATTERN = /[ '\-]{2}/;
+
+const PERSON_NAME_LETTER = /\p{L}/u;
+const PERSON_NAME_MARK = /\p{M}/u;
 
 /**
- * (issue #1042) `PERSON_NAME_PATTERN.test()` rechaza por tres causas
- * distintas y, al delegar todo a un único booleano, la causa se pierde antes
- * de poder nombrarla. Esta función la reconstruye, sin tocar qué se acepta:
- * dado que el patrón solo admite letras y los cuatro separadores, un valor
- * que lo cumple en composición (`PERSON_NAME_ALLOWED_CHARS_PATTERN`) pero no
- * en forma solo puede fallar por un separador en el borde o por dos
- * separadores seguidos — no hay una cuarta causa posible.
+ * The characters of `value` a name may not contain, each once, in order of
+ * appearance — what the error names («El nombre no puede contener “3”.»).
+ * Same rule as `_validar_caracteres_de_nombre` in the backend.
+ */
+export function personNameDisallowedChars(value: string): string[] {
+  const found: string[] = [];
+  let previous = "";
+  for (const char of value) {
+    const isConnector = char === " " || char === "'" || char === "-";
+    const isLetter = PERSON_NAME_LETTER.test(char);
+    const isMarkAfterLetter =
+      PERSON_NAME_MARK.test(char) && (PERSON_NAME_LETTER.test(previous) || PERSON_NAME_MARK.test(previous));
+    if (!isConnector && !isLetter && !isMarkAfterLetter && !found.includes(char)) found.push(char);
+    previous = char;
+  }
+  return found;
+}
+
+/** Number of letters (not marks, not connectors) in `value`. */
+function countPersonNameLetters(value: string): number {
+  let count = 0;
+  for (const char of value) if (PERSON_NAME_LETTER.test(char)) count += 1;
+  return count;
+}
+
+/**
+ * (issue #1042) `PERSON_NAME_PATTERN.test()` rejects for three distinct
+ * causes and a single boolean loses the cause before it can be named. This
+ * rebuilds it without changing what is accepted.
  */
 export type PersonNameErrorReason = "repeated-separator" | "separator-at-edge" | "invalid-char";
 
 export function personNameError(value: string): PersonNameErrorReason | null {
   if (PERSON_NAME_PATTERN.test(value)) return null;
-  if (!PERSON_NAME_ALLOWED_CHARS_PATTERN.test(value)) return "invalid-char";
-  return PERSON_NAME_SEPARATOR_AT_EDGE_PATTERN.test(value) ? "separator-at-edge" : "repeated-separator";
+  if (personNameDisallowedChars(value).length > 0) return "invalid-char";
+  if (PERSON_NAME_SEPARATOR_AT_EDGE_PATTERN.test(value)) return "separator-at-edge";
+  return PERSON_NAME_REPEATED_SEPARATOR_PATTERN.test(value) ? "repeated-separator" : "invalid-char";
 }
 
 /**
@@ -408,18 +432,20 @@ export function personNameRule(
 ): string | null {
   const trimmed = normalizePersonName(value);
   if (!trimmed) return `${subject} ${plural ? "son" : "es"} obligatorio${plural ? "s" : ""}.`;
-  if (trimmed.length < PERSON_NAME_MIN_LENGTH) {
-    return `${subject} ${plural ? "deben" : "debe"} tener al menos ${PERSON_NAME_MIN_LENGTH} caracteres.`;
+  // REG-08: name the offending characters, e.g. «El nombre no puede contener “3”.».
+  const disallowed = personNameDisallowedChars(trimmed);
+  if (disallowed.length > 0) {
+    return `${subject} no ${plural ? "pueden" : "puede"} contener ${disallowed.map((char) => `“${char}”`).join(", ")}.`;
+  }
+  if (countPersonNameLetters(trimmed) < PERSON_NAME_MIN_LETTERS) {
+    return `${subject} ${plural ? "deben" : "debe"} tener al menos ${PERSON_NAME_MIN_LETTERS} letras.`;
   }
   const reason = personNameError(trimmed);
   if (reason === "repeated-separator") {
-    return `${subject} no ${plural ? "pueden" : "puede"} tener un espacio, guion, apóstrofe o punto medio repetido.`;
+    return `${subject} no ${plural ? "pueden" : "puede"} tener un espacio, guion o apóstrofe repetido.`;
   }
   if (reason === "separator-at-edge") {
-    return `${subject} no ${plural ? "pueden" : "puede"} empezar ni terminar con un espacio, guion, apóstrofe o punto medio.`;
-  }
-  if (reason === "invalid-char") {
-    return `${subject} ${plural ? "tienen" : "tiene"} un carácter que no reconocemos en un nombre de persona.`;
+    return `${subject} no ${plural ? "pueden" : "puede"} empezar ni terminar con un espacio, guion o apóstrofe.`;
   }
   // Issue #1323: los tres topes de arriba, en el mismo orden en que
   // `_validar_tope_nombre_propio` del backend los aplica.

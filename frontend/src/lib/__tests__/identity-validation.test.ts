@@ -367,18 +367,39 @@ describe("nombre de persona", () => {
       );
     });
 
-    it("enforces the minimum length, in the right grammatical number", () => {
-      expect(personNameRule("Al", "Los apellidos")).toBe(
-        "Los apellidos deben tener al menos 3 caracteres.",
+    it("enforces the 2-letter minimum, in the right grammatical number (REG-08)", () => {
+      expect(personNameRule("A", "Los apellidos")).toBe("Los apellidos deben tener al menos 2 letras.");
+      expect(personNameRule("A", "El nombre del contacto de emergencia", { plural: false })).toBe(
+        "El nombre del contacto de emergencia debe tener al menos 2 letras.",
       );
-      expect(personNameRule("Al", "El nombre del contacto de emergencia", { plural: false })).toBe(
-        "El nombre del contacto de emergencia debe tener al menos 3 caracteres.",
-      );
+      expect(personNameRule("-'", "Los nombres")).toBe("Los nombres deben tener al menos 2 letras.");
     });
 
-    it("does not claim the pattern only allows letters and spaces", () => {
-      const message = personNameRule("Pérez123", "Los apellidos");
-      expect(message).not.toContain("solo pueden contener letras y espacios");
+    it.each(["Li", "Al", "Ng", "Jo"])("accepts the short real name %s (REG-08)", (value) => {
+      expect(personNameRule(value, "Los nombres")).toBeNull();
+    });
+
+    // REG-08 (QA4): the same table lives in backend/tests/test_nombres_lista_blanca.py
+    it.each([
+      "María José", "Núñez", "Peña", "Ángel de la Cruz", "O'Brien", "Ana-María", "Çağlar", "Müller",
+      "Güemes", "ÑANDÚ", "Muñoz", "D'Angelo", "Pérez-Mora", "Juan dos Santos", "Li",
+    ])("accepts the valid name %s (REG-08)", (value) => {
+      expect(personNameRule(value, "Los nombres")).toBeNull();
+    });
+
+    it.each([
+      ["<b>Ana", ["<", ">"]], ["Ana & Co", ["&"]], ["Ana2", ["2"]], ["Ana_Pérez", ["_"]],
+      ["Ana@Pérez", ["@"]], ["Ana😀", ["😀"]], ["Ana/Pérez", ["/"]], ["Ana;DROP", [";"]],
+      ["Ana(1)", ["(", "1", ")"]], ['"Ana"', ['"']], ["Juan123", ["1", "2", "3"]],
+      ["Dr. Pérez", ["."]], ["Jr.", ["."]], ["Pérez×Mora", ["×"]], ["L·l", ["·"]],
+    ])("rejects %s, naming %j (REG-08)", (value, chars) => {
+      const list = chars.map((char) => `“${char}”`).join(", ");
+      expect(personNameRule(value, "El nombre", { plural: false })).toBe(`El nombre no puede contener ${list}.`);
+      expect(personNameRule(value, "Los nombres")).toBe(`Los nombres no pueden contener ${list}.`);
+    });
+
+    it("names a single digit exactly like the owner's example (REG-08)", () => {
+      expect(personNameRule("Ana3", "El nombre", { plural: false })).toBe("El nombre no puede contener “3”.");
     });
 
     it("passes a real hyphenated surname", () => {
@@ -436,10 +457,9 @@ describe("nombre de persona", () => {
       ["repeated-separator", "juan  carlos"], // doble espacio
       ["repeated-separator", "juan--carlos"], // doble guion
       ["repeated-separator", "o''brien"], // doble apóstrofe
-      ["repeated-separator", "juan··carlos"], // doble punto medio
       ["separator-at-edge", "-juan"],
       ["separator-at-edge", "juan-"],
-      ["separator-at-edge", "·juan"],
+      ["invalid-char", "juan·carlos"], // punto medio ya no es válido (REG-08)
       ["invalid-char", "juan carlos 3"], // dígito
       ["invalid-char", "juan_carlos"], // guion bajo
       ["invalid-char", "juan@carlos"], // arroba
@@ -455,25 +475,25 @@ describe("nombre de persona", () => {
   describe("personNameRule nombra la causa real, no siempre un carácter (issue #1042)", () => {
     it("nombra la repetición del separador, no un carácter", () => {
       expect(personNameRule("juan  carlos", "Los apellidos")).toBe(
-        "Los apellidos no pueden tener un espacio, guion, apóstrofe o punto medio repetido.",
+        "Los apellidos no pueden tener un espacio, guion o apóstrofe repetido.",
       );
     });
 
     it("nombra la repetición también con guiones dobles", () => {
       expect(personNameRule("juan--carlos", "Los apellidos")).toBe(
-        "Los apellidos no pueden tener un espacio, guion, apóstrofe o punto medio repetido.",
+        "Los apellidos no pueden tener un espacio, guion o apóstrofe repetido.",
       );
     });
 
     it("nombra la repetición también con apóstrofes dobles", () => {
       expect(personNameRule("o''brien", "Los apellidos")).toBe(
-        "Los apellidos no pueden tener un espacio, guion, apóstrofe o punto medio repetido.",
+        "Los apellidos no pueden tener un espacio, guion o apóstrofe repetido.",
       );
     });
 
     it("nombra la posición cuando el separador abre el nombre", () => {
       expect(personNameRule("-juan", "Los apellidos")).toBe(
-        "Los apellidos no pueden empezar ni terminar con un espacio, guion, apóstrofe o punto medio.",
+        "Los apellidos no pueden empezar ni terminar con un espacio, guion o apóstrofe.",
       );
     });
 
@@ -481,13 +501,13 @@ describe("nombre de persona", () => {
       expect(
         personNameRule("juan-", "El nombre del contacto de emergencia", { plural: false }),
       ).toBe(
-        "El nombre del contacto de emergencia no puede empezar ni terminar con un espacio, guion, apóstrofe o punto medio.",
+        "El nombre del contacto de emergencia no puede empezar ni terminar con un espacio, guion o apóstrofe.",
       );
     });
 
     it("sigue nombrando un carácter no permitido cuando esa es la causa real", () => {
       expect(personNameRule("juan_carlos", "Los apellidos")).toBe(
-        "Los apellidos tienen un carácter que no reconocemos en un nombre de persona.",
+        "Los apellidos no pueden contener “_”.",
       );
     });
   });
@@ -538,7 +558,6 @@ describe("nombre de persona", () => {
       "D'Angelo",
       "José Ñandú",
       "María",
-      "Juan·Carlos",
     ])("sigue aceptando %s", (value) => {
       expect(personNameRule(value, "Los apellidos")).toBeNull();
     });
@@ -552,6 +571,7 @@ describe("nombre de persona", () => {
       "juan carlos 3",
       "juan_carlos",
       "juan@carlos",
+      "Juan·Carlos", // REG-08: el punto medio ya no es válido
     ])("sigue rechazando %s", (value) => {
       expect(personNameRule(value, "Los apellidos")).not.toBeNull();
     });
