@@ -449,6 +449,48 @@ describe("nombre de persona", () => {
     });
   });
 
+  // H4 (QA4): a name stored before REG-08 must not block saving other fields.
+  describe("personNameRule — stored name (H4)", () => {
+    it("accepts an unchanged stored name that breaks the new rule", () => {
+      expect(personNameRule("Torres Jr.", "Los apellidos", { stored: "Torres Jr." })).toBeNull();
+      expect(personNameRule("Pérez·Mora", "Los apellidos", { stored: "Pérez·Mora" })).toBeNull();
+    });
+
+    it("compares in NFC and ignoring surrounding spaces", () => {
+      expect(personNameRule("Núñez Jr.".normalize("NFD"), "Los apellidos", { stored: " Núñez Jr." })).toBeNull();
+    });
+
+    it("still rejects a changed name", () => {
+      expect(personNameRule("Torres Jr.3", "Los apellidos", { stored: "Torres Jr." })).toBe(
+        "Los apellidos no pueden contener “.”, “3”.",
+      );
+    });
+
+    it("still requires a value even when the stored one is empty or invalid", () => {
+      expect(personNameRule("", "Los apellidos", { stored: "" })).toBe("Los apellidos son obligatorios.");
+    });
+  });
+
+  // R3-mark-parity / R3-invalid-char-fallthrough: every invalid string gets a
+  // message, and a combining mark is only valid right after a letter (same as
+  // the backend).
+  describe("personNameRule — marks and invalid characters", () => {
+    it.each([
+      ["\u0301Ana", "\u0301"],
+      ["Ana \u0301Pérez", "\u0301"],
+      ["Ana-\u0301Pérez", "\u0301"],
+    ])("names a combining mark with no letter before it: %j", (value, mark) => {
+      expect(personNameRule(value, "El nombre", { plural: false })).toBe(`El nombre no puede contener “${mark}”.`);
+    });
+
+    it("never accepts a value personNameError classifies as invalid-char", () => {
+      for (const value of ["juan·carlos", "Ana3", "Ana_Pérez", "Ana😀"]) {
+        expect(personNameError(value)).toBe("invalid-char");
+        expect(personNameRule(value, "El nombre", { plural: false })).toMatch(/^El nombre no puede contener “.+”\.$/);
+      }
+    });
+  });
+
   // Issue #1042: las tres causas de rechazo compartían un único mensaje, que
   // solo describe bien una de ellas ("juan  carlos" acusaba a un carácter
   // cuando lo que sobra es un separador repetido).

@@ -421,6 +421,12 @@ export const PERSON_NAME_MAX_LETTERS_PER_WORD = 20;
 export const PERSON_NAME_MAX_LENGTH = 60;
 
 /**
+ * H4 (QA4): `stored` is the value already saved for this field. An edit form
+ * that re-sends an unchanged name must not be blocked by a rule tightened
+ * after that name was stored («Jr.», a middle dot), so a value equal to
+ * `stored` (compared after trim + NFC) passes; any changed value still gets
+ * the full rule. Mirrors `validar_nombre_cambiado` in the backend.
+ *
  * `subject` is the noun phrase the message is built around, e.g.
  * `"Los apellidos"` (plural) or `"El nombre del contacto de emergencia"`
  * (singular — pass `{ plural: false }`).
@@ -428,10 +434,11 @@ export const PERSON_NAME_MAX_LENGTH = 60;
 export function personNameRule(
   value: string,
   subject: string,
-  { plural = true }: { plural?: boolean } = {},
+  { plural = true, stored }: { plural?: boolean; stored?: string | null } = {},
 ): string | null {
   const trimmed = normalizePersonName(value);
   if (!trimmed) return `${subject} ${plural ? "son" : "es"} obligatorio${plural ? "s" : ""}.`;
+  if (stored != null && trimmed === normalizePersonName(stored)) return null;
   // REG-08: name the offending characters, e.g. «El nombre no puede contener “3”.».
   const disallowed = personNameDisallowedChars(trimmed);
   if (disallowed.length > 0) {
@@ -441,6 +448,11 @@ export function personNameRule(
     return `${subject} ${plural ? "deben" : "debe"} tener al menos ${PERSON_NAME_MIN_LETTERS} letras.`;
   }
   const reason = personNameError(trimmed);
+  if (reason === "invalid-char") {
+    // `personNameDisallowedChars` is empty here only if the pattern and the
+    // character scan ever drift apart; never fall through to «valid» then.
+    return `${subject} ${plural ? "tienen" : "tiene"} caracteres no permitidos.`;
+  }
   if (reason === "repeated-separator") {
     return `${subject} no ${plural ? "pueden" : "puede"} tener un espacio, guion o apóstrofe repetido.`;
   }
