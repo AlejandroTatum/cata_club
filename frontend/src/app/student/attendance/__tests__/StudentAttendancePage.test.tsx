@@ -240,7 +240,7 @@ describe("StudentAttendancePage — the record", () => {
     render(<StudentAttendancePage />);
 
     expect(
-      await screen.findByText(/su portal recibe las 30 sesiones más recientes/i),
+      await screen.findByText(/tu portal recibe las 30 sesiones más recientes/i),
     ).toBeInTheDocument();
   });
 

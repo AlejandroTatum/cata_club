@@ -2090,7 +2090,10 @@ describe("PaymentsPage — la insignia de membresía distingue INACTIVA de VENCI
     mockFetchPaymentValidations.mockResolvedValue([NEVER_ACTIVATED_PENDING_REQUEST]);
     renderPage();
     await openRequest("Lucía Andrade");
-    expect((await screen.findAllByText("Por validar")).length).toBeGreaterThan(1);
+    // The membership badge lives in the detail's "Membresía" cell; the queue
+    // row and the stat card also say "Por validar", so scope to that cell.
+    const cell = (await screen.findByText("Membresía")).closest("div") as HTMLElement;
+    expect(within(cell).getByText("Por validar")).toBeInTheDocument();
     expect(screen.queryByText("Vencida")).not.toBeInTheDocument();
   });
 

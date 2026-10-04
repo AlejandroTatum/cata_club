@@ -21,6 +21,7 @@ from app.dominio.excepciones import (
 from app.dominio.modelos import CategoriaHorario, CategoriaHorarioDia, Membresia, TipoMembresia
 from app.servicios_negocio.dtos.asistencia_schemas import (
     AlumnoHorarioCreateDTO, CategoriaCreateDTO, CategoriaUpdateDTO, HorarioCreateDTO,
+    MoverAlumnosSeleccionDTO,
 )
 from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
 
@@ -286,6 +287,23 @@ def test_actualizar_categoria_quitar_dia_con_alumnos_asignados_bloquea_con_confl
 
 
 # --- Baja de la categoría entera ------------------------------------------
+def test_mover_alumnos_a_la_misma_categoria_pide_una_distinta_en_tu(db_session):
+    """Pina el mensaje exacto en «tú»: el candado de registro solo vigila
+    voseo y usted, no que la frase siga diciendo esto."""
+    servicio = AsistenciaServicio(db_session)
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES],
+    ))
+
+    with pytest.raises(OperacionInvalida) as exc_info:
+        servicio.mover_alumnos(categoria.codigo, MoverAlumnosSeleccionDTO(
+            categoria_destino=categoria.codigo, persona_ids=[1],
+        ))
+
+    assert str(exc_info.value) == "Elige una categoría distinta de la que vas a dejar."
+
+
 def test_eliminar_categoria_sin_historial_borra_categoria_dias_y_horarios(db_session):
     servicio = AsistenciaServicio(db_session)
     categoria = servicio.crear_categoria(CategoriaCreateDTO(

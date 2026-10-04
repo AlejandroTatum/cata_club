@@ -68,23 +68,33 @@ TRATO_INCORRECTO = re.compile(f"{VOSEO.pattern}|{USTED.pattern}", re.IGNORECASE)
 # Usted en CUALQUIER literal del backend (mensajes de dominio, validación,
 # avisos de servicio, no solo correos). Es más angosto que `USTED` a propósito:
 # fuera de los correos hay subjuntivos de tercera persona legítimos ("que lo
-# haga", "que su dueño elija", "no se puede enviar"), así que «haga», «elija»,
-# «ignore» y «puede enviar» NO van aquí. Lo que sí va: los imperativos de
-# usted, incluso con clítico («apruébelas», «alárguela»), y «va a dejar». El
-# lookaround excluye guiones y letras para no leer "do-not-use-in-production"
-# como la orden «use».
-USTED_EN_LA_APP = re.compile(
-    r"(?<![-\w])(?:"
-    r"usted(?:es)?|intente|ingrese|revise|verifique|comuníquese|acérquese|"
+# haga", "que su dueño elija", "para que el club revise", "cuando se
+# complete"), así que los verbos sueltos («revise», «use», «confirme», …) solo
+# cuentan en POSICIÓN DE IMPERATIVO: al abrir el literal o una oración/cláusula,
+# tras «por favor» o en una instrucción coordinada («alárguela o mezcle»). Con
+# clítico («apruébelas», «alárguela») el imperativo es inequívoco y cuenta en
+# cualquier parte, igual que «usted», «va a dejar» y las formas de cortesía en
+# futuro. El lookaround excluye guiones y letras para no leer
+# "do-not-use-in-production" como la orden «use».
+_USTED_IMPERATIVOS_SUELTOS = (
+    r"intente|ingrese|revise|verifique|comuníquese|acérquese|"
     r"escríbanos|espere|reinicie|contacte|indique|regularice|registre|genere|"
     r"consulte|confirme|copie|adjunte|escriba|seleccione|recuerde|solicite|"
     r"vuelva|use|suba|cargue|envíe|corrija|elimine|guarde|actualice|pruebe|"
     r"complete|pida|busque|agregue|presione|continúe|acepte|reduzca|"
-    r"evite|mezcle|gestione|reasigne|"
+    r"evite|mezcle|gestione|reasigne"
+)
+_POSICION_DE_IMPERATIVO = (
+    r"(?:^\s*|[.!?¿¡:;,\"'`>()\n]\s*|(?<![-\w])(?:y|o|u|e|favor|luego|después|también)\s+)"
+)
+USTED_EN_LA_APP = re.compile(
+    r"(?<![-\w])(?:"
+    r"usted(?:es)?|"
     r"apruébel[aeo]s?|alárguel[aeo]s?|"
     r"va a dejar|puede continuar|"
     r"le damos|le informamos|le avisamos|le enviamos|recibirá|verá|podrá"
-    r")(?![-\w])",
+    r")(?![-\w])"
+    rf"|{_POSICION_DE_IMPERATIVO}(?:{_USTED_IMPERATIVOS_SUELTOS})(?![-\w])",
     re.IGNORECASE,
 )
 TRATO_INCORRECTO_EN_LA_APP = re.compile(
@@ -156,6 +166,8 @@ def test_el_detector_de_la_app_reconoce_los_restos_de_usted():
         "para que sea segura, alárguela o mezcle números",
         "Evite las contraseñas comunes",
         "Puede continuar si es intencional.",
+        "Si no llega, use otro correo",
+        "Por favor confirme su correo",
     ):
         assert TRATO_INCORRECTO_EN_LA_APP.search(frase), frase
     for frase in (
@@ -167,6 +179,9 @@ def test_el_detector_de_la_app_reconoce_los_restos_de_usted():
         "requiere que su dueño elija qué rol conservar",
         "no se puede enviar correo real",
         "Puedes continuar si es intencional.",
+        "para que el club revise el pago",
+        "cuando se complete el registro",
+        "hasta que el club confirme tu pago",
     ):
         assert not TRATO_INCORRECTO_EN_LA_APP.search(frase), frase
 

@@ -64,6 +64,11 @@ export const USTED_PRONOMBRES = ["usted", "ustedes"];
  * instructions with — the tú counterpart is "Inscríbete", "Ingresa", ….
  * Only forms whose tú shape differs; "cree" is excluded because it is
  * also the ordinary indicative "cree que" ("believes").
+ *
+ * These same shapes are ordinary third-person subjunctives in tú copy
+ * ("para que el club revise", "cuando se complete"), and a few collide with
+ * English code ("use", "complete"). So they only count in an IMPERATIVE
+ * POSITION — see `IMPERATIVE_POSITION` — never mid-clause.
  */
 export const USTED_IMPERATIVOS = [
   "inscríbase", "ingrese", "revise", "intente", "inténtelo", "elija",
@@ -75,9 +80,15 @@ export const USTED_IMPERATIVOS = [
   "presione", "continúe", "regístrese",
   "inicie", "elimine", "abra", "valide", "indique",
   "evite", "mezcle", "gestione", "reasigne",
-  // Imperative + clitic ("alárguela", "apruébelas", "revíselo"): the stressed
-  // vowel gains an accent, so a bare "-ela"/"-elo" suffix rule would also hit
-  // "escuela" and "vela". Listed by hand instead.
+];
+
+/**
+ * Imperative + clitic ("alárguela", "apruébelas", "revíselo"): the stressed
+ * vowel gains an accent, so a bare "-ela"/"-elo" suffix rule would also hit
+ * "escuela" and "vela". Listed by hand instead. The clitic makes these
+ * unambiguous (never a subjunctive, never English), so they match anywhere.
+ */
+export const USTED_IMPERATIVOS_CON_CLITICO = [
   "alárguela", "alárguelo", "apruébela", "apruébelas", "apruébelo", "apruébelos",
   "revísela", "revíselo", "corríjala", "corríjalo", "guárdela", "guárdelo",
   "verifíquela", "verifíquelo", "cámbiela", "cámbielo", "elimínela", "elimínelo",
@@ -93,11 +104,19 @@ const LETTER = "a-záéíóúñA-ZÁÉÍÓÚÑ";
  * results when the same instance is reused across multiple input strings.
  */
 export function buildUstedRegisterRegex(): RegExp {
-  const words = [
+  const always = [
     ...VOSEO_IMPERATIVOS,
     ...VOSEO_PRONOMBRES,
     ...USTED_PRONOMBRES,
-    ...USTED_IMPERATIVOS,
+    ...USTED_IMPERATIVOS_CON_CLITICO,
   ];
-  return new RegExp(`(?<![${LETTER}])(${words.join("|")})(?![${LETTER}])`, "giu");
+  // A bare usted imperative opens the string or a sentence/clause, follows
+  // «por favor», or continues a coordinated instruction («alárguela o mezcle»).
+  // "para que el club revise" / "cuando se complete" have a subject or
+  // «se» in front and so stay out.
+  const imperative = `(?<=(?:^|[.!?¿¡:;,"'\`>()\\n]|\\b(?:y|o|u|e|favor|luego|después|también))\\s*)(?:${USTED_IMPERATIVOS.join("|")})`;
+  return new RegExp(
+    `(?<![${LETTER}])(${always.join("|")}|${imperative})(?![${LETTER}])`,
+    "giu",
+  );
 }

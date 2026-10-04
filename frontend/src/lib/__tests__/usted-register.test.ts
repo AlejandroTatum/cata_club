@@ -43,18 +43,29 @@ function templateLiterals(text: string): string[] {
   return lines.flatMap((line) => line.match(/`[^`\n]{4,}`/g) ?? []);
 }
 
+/**
+ * Blanks out module specifiers — `from "x"`, `import "x"`, `import("x")`,
+ * `require("x")` — which are code, not copy. Scoped to those positions so a
+ * string that merely LOOKS like a path ("Use/mezcle", "confirme") is still
+ * checked as copy.
+ */
+function withoutModuleSpecifiers(text: string): string {
+  return text.replace(
+    /\b(from\s+|import\s+|import\s*\(\s*|require\s*\(\s*)(["'])[^"'\n]*\2/g,
+    '$1""',
+  );
+}
+
 /** Legal pages stay in "usted" until the lawyer replies (QA4 S6). */
 const USTED_ALLOWLIST = ["app/terminos/", "app/privacidad/"];
 
 function findOffenders(): string[] {
   return sourceFiles(SRC, { exclude: USTED_ALLOWLIST }).flatMap((path) => {
-    const text = readFileSync(path, "utf8");
+    const text = withoutModuleSpecifiers(readFileSync(path, "utf8"));
     return [...readableText(text), ...templateLiterals(text)]
       .filter((literal) => {
         // The "use client"/"use server" directives are code, not copy.
         if (/^"use (client|server)"$/.test(literal.trim())) return false;
-        // A module specifier ("@/lib/use-numeric-field-masking") is code too.
-        if (/^"[@\w./-]+"$/.test(literal.trim())) return false;
         const regex = buildUstedRegisterRegex();
         return regex.test(literal);
       })
@@ -111,6 +122,37 @@ describe("tú register — app-wide copy sweep (issue #340 follow-up, QA4 S6)", 
     // "cree" (indicative "believes") and "estas" (demonstrative) are not flagged.
     expect(banned("el club cree que")).toBe(false);
     expect(banned("estas seis fichas")).toBe(false);
+  });
+
+  it("only exempts real module specifiers, not path-like copy", () => {
+    const banned = (text: string) => buildUstedRegisterRegex().test(text);
+    const stripped = withoutModuleSpecifiers(
+      'import { x } from "@/lib/use-numeric-field-masking";\nconst a = require("./revise");\nconst b = "Ingrese";',
+    );
+    expect(stripped).not.toContain("use-numeric");
+    expect(stripped).not.toContain("./revise");
+    // The unrelated string literal survives and is still flagged.
+    expect(stripped).toContain('"Ingrese"');
+    expect(banned(stripped)).toBe(true);
+    // A bare path-like word is copy when it is not a specifier.
+    expect(withoutModuleSpecifiers('const label = "Ingrese";')).toContain("Ingrese");
+    expect(banned('"Ingrese/cambie"')).toBe(true);
+  });
+
+  it("flags usted imperatives only in imperative position", () => {
+    const banned = (text: string) => buildUstedRegisterRegex().test(text);
+    // Third-person subjunctives in tú copy pass.
+    expect(banned("para que el club revise el pago")).toBe(false);
+    expect(banned("cuando se complete el registro")).toBe(false);
+    expect(banned("hasta que el club confirme tu pago")).toBe(false);
+    expect(banned("so you can use the app")).toBe(false);
+    // Real usted copy is still caught: sentence start, after «por favor»,
+    // after a comma, and in a coordinated instruction.
+    expect(banned("Revise el resumen")).toBe(true);
+    expect(banned("Por favor confirme su correo")).toBe(true);
+    expect(banned("Si no llega, use otro correo")).toBe(true);
+    expect(banned("Complete el formulario. Luego cancele")).toBe(true);
+    expect(banned("alárguela o mezcle números")).toBe(true);
   });
 
   it("leaves no voseo or usted shape in shipped copy anywhere in the app", () => {

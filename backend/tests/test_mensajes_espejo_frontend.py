@@ -13,6 +13,8 @@ está escrito junto a cada una (`# Espejo verbatim de ...`).
 """
 from pathlib import Path
 
+import pytest
+
 from app.dominio.telefono import MENSAJE_TELEFONO_EMERGENCIA_IGUAL
 from app.servicios_negocio.auth_servicio import (
     MENSAJE_CUENTA_INACTIVA,
@@ -23,6 +25,14 @@ from app.servicios_negocio.enrollment_servicio import (
 )
 
 FRONTEND = Path(__file__).resolve().parents[2] / "frontend" / "src"
+
+# La imagen Docker del backend y el job de CI solo del backend no traen el
+# árbol del frontend: sin él no hay nada que comparar. Con el árbol presente,
+# la suite sigue siendo obligatoria.
+pytestmark = pytest.mark.skipif(
+    not FRONTEND.is_dir(),
+    reason="el árbol del frontend no está presente (imagen o job solo de backend)",
+)
 
 
 def _fuente(ruta: str) -> str:
