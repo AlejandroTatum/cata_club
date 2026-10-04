@@ -182,7 +182,7 @@ function setRange(desde: string, hasta: string): void {
 /** Types into the alumno search and picks the first suggestion offered. */
 async function pickStudent(): Promise<void> {
   mockSearchStudents.mockResolvedValue([ALUMNO]);
-  fireEvent.change(screen.getByLabelText("Buscar alumno"), { target: { value: "Ana" } });
+  fireEvent.change(screen.getByLabelText("Buscar jugador"), { target: { value: "Ana" } });
   fireEvent.click(await screen.findByRole("option", { name: /Ana García/i }));
 }
 
@@ -497,7 +497,7 @@ describe("ReportsPage — preview area", () => {
     });
     mockFetchAttendanceRecords.mockClear();
 
-    fireEvent.change(screen.getByLabelText("Buscar alumno"), { target: { value: "Ana Garcí" } });
+    fireEvent.change(screen.getByLabelText("Buscar jugador"), { target: { value: "Ana Garcí" } });
 
     await waitFor(() => {
       const lastCall = mockFetchAttendanceRecords.mock.calls.at(-1)?.[0];

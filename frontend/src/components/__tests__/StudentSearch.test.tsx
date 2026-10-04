@@ -111,10 +111,10 @@ describe("StudentSearch — autocomplete and accessibility contract", () => {
     renderSearch();
 
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "An" } });
-    expect(await screen.findByRole("status", { name: /Buscando alumnos/i })).toBeInTheDocument();
+    expect(await screen.findByRole("status", { name: /Buscando jugadores/i })).toBeInTheDocument();
 
     await act(async () => resolveSearch([]));
-    expect(await screen.findByRole("status", { name: /No se encontraron alumnos/i })).toBeInTheDocument();
+    expect(await screen.findByRole("status", { name: /No se encontraron jugadores/i })).toBeInTheDocument();
   });
 
   it("shows an explicit error state when the search fails", async () => {
@@ -123,7 +123,7 @@ describe("StudentSearch — autocomplete and accessibility contract", () => {
 
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "An" } });
 
-    expect(await screen.findByRole("alert", { name: /No se pudo buscar alumnos/i })).toBeInTheDocument();
+    expect(await screen.findByRole("alert", { name: /No se pudo buscar jugadores/i })).toBeInTheDocument();
   });
 
   it("supports keyboard navigation, Enter selection, and Escape close/clear", async () => {
@@ -172,7 +172,7 @@ describe("StudentSearch — autocomplete and accessibility contract", () => {
     renderSearch();
 
     const input = screen.getByRole("combobox");
-    expect(input).toHaveAttribute("aria-label", "Buscar alumno");
+    expect(input).toHaveAttribute("aria-label", "Buscar jugador");
     expect(input).toHaveAttribute("aria-autocomplete", "list");
     expect(input).toHaveAttribute("aria-expanded", "false");
 

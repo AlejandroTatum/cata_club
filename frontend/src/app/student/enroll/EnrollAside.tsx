@@ -230,7 +230,7 @@ export default function EnrollAside(props: EnrollAsideProps): ReactElement {
             Corrige cualquier bloque antes de confirmar con tu botón Editar.
           </Item>
           <Item title="Tu consentimiento">
-            Para confirmar, acepte los Términos de uso, el Aviso de privacidad y
+            Para confirmar, acepta los Términos de uso, el Aviso de privacidad y
             el Permiso de imagen FETM.
           </Item>
         </>

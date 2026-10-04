@@ -66,7 +66,7 @@ function describe(password: string, level: PasswordMeterLevel): string {
       }.`;
     }
     case "fair":
-      return "Válida. Para que sea segura, alárguela o mezcle mayúsculas, números y símbolos.";
+      return "Válida. Para que sea segura, alárgala o mezcla mayúsculas, números y símbolos.";
     case "strong":
       return "Contraseña segura.";
   }

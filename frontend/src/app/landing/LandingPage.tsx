@@ -224,7 +224,7 @@ function Hero(): React.ReactElement {
           it as slack — see `.landing-hero-copy`'s gap. */}
       <div className="landing-hero-copy">
         <h1 className="landing-display" data-split>FORMANDO <span className="landing-hero-accent">CAMPEONES</span> PARA LA VIDA</h1>
-        <p>Únase a nuestro club, donde la técnica y el carácter se forjan en cada punto.</p>
+        <p>Únete a nuestro club, donde la técnica y el carácter se forjan en cada punto.</p>
         <div className="landing-hero-actions">
           <Link className="landing-button" href={ENROLL_HREF}>Inscríbete <ArrowRight aria-hidden="true" /></Link>
           <a className="landing-button landing-button-outline" href="#horarios">Ver horarios</a>

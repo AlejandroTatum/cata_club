@@ -59,7 +59,7 @@ describe("PasswordStrengthMeter", () => {
     expect(filledSegments(container)).toBe(2);
     expect(
       screen.getByText(
-        "Válida. Para que sea segura, alárguela o mezcle mayúsculas, números y símbolos.",
+        "Válida. Para que sea segura, alárgala o mezcla mayúsculas, números y símbolos.",
       ),
     ).toBeInTheDocument();
   });

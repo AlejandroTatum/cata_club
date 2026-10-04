@@ -48,7 +48,7 @@ interface Guidance {
 
 const GUIDANCE: Record<DuplicateIdentityAudience, Guidance> = {
   "self-service": {
-    hint: "Si ya tienes cuenta, no necesitas volver a inscribirse: inicia sesión y, desde tu cuenta, agrega un jugador. Para eso solo necesitas haber verificado tu correo.",
+    hint: "Si ya tienes cuenta, no necesitas volver a inscribirte: inicia sesión y, desde tu cuenta, agrega un jugador. Para eso solo necesitas haber verificado tu correo.",
     contact: {
       before: "Si ya fuiste socio del club, escríbenos por ",
       after: " para reactivar tu cuenta.",

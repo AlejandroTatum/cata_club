@@ -124,7 +124,7 @@ describe("validateEnrollFields", () => {
     // sentence `phoneRule` gives everywhere else.
     expect(validateEnrollFields("personal", validForm({ telefono: "9912" })).telefono)
       .toMatch(
-        /^El teléfono no es válido\. Escrib[ae] 9 dígitos si es celular \(por ejemplo, 991234567\) u 8 si es fijo, sin el 0 inicial\.$/,
+        /^El teléfono no es válido\. Escribe 9 dígitos si es celular \(por ejemplo, 991234567\) u 8 si es fijo, sin el 0 inicial\.$/,
       );
   });
 
@@ -159,7 +159,7 @@ describe("validateEnrollFields", () => {
       "representative",
       validForm({ enrollmentType: "child", correoRepresentante: "no-es-correo" }),
     );
-    expect(errors.correoRepresentante).toBe("El correo del representante no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.");
+    expect(errors.correoRepresentante).toBe("El correo del representante no es válido. Revísalo; debe tener un formato como nombre@ejemplo.com.");
   });
 
   it("asks for the representante's birth date when it is empty", () => {
@@ -203,7 +203,7 @@ describe("validateEnrollFields", () => {
     );
     expect(errors.tipoSangre).toBe("Selecciona el tipo de sangre del jugador.");
     expect(errors.telefonoEmergencia).toMatch(
-      /^El teléfono de emergencia no es válido\. Escrib[ae] 9 dígitos si es celular \(por ejemplo, 991234567\) u 8 si es fijo, sin el 0 inicial\.$/,
+      /^El teléfono de emergencia no es válido\. Escribe 9 dígitos si es celular \(por ejemplo, 991234567\) u 8 si es fijo, sin el 0 inicial\.$/,
     );
   });
 

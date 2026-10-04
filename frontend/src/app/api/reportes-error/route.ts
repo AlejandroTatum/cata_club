@@ -15,7 +15,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ message: "Adjunta una imagen PNG, JPEG o WebP de hasta 2 MB." }, { status: 400 });
   }
   if (screenshot !== null && form.get("consentimiento_captura") !== "true") {
-    return NextResponse.json({ message: "Debe aceptar el envío de la captura." }, { status: 400 });
+    return NextResponse.json({ message: "Debes aceptar el envío de la captura." }, { status: 400 });
   }
   const requestId = request.headers.get("X-Request-ID");
   // The backend stores the User-Agent it receives; without this it records the BFF's own ("node").

@@ -559,7 +559,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
   test("P17 · correo sin arroba", async ({ page }) => {
     await fillAndBlur(page, F.correo, "juanexample.com");
     await expect(fieldError(page, F.correo)).toHaveText(
-      "El correo electrónico no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.",
+      "El correo electrónico no es válido. Revísalo; debe tener un formato como nombre@ejemplo.com.",
     );
     await shot(page, "P17", "correo-sin-arroba");
   });
@@ -567,7 +567,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
   test("P18 · correo sin dominio de primer nivel", async ({ page }) => {
     await fillAndBlur(page, F.correo, "juan@example");
     await expect(fieldError(page, F.correo)).toHaveText(
-      "El correo electrónico no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.",
+      "El correo electrónico no es válido. Revísalo; debe tener un formato como nombre@ejemplo.com.",
     );
     await shot(page, "P18", "correo-sin-tld");
   });
@@ -575,7 +575,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
   test("P19 · correo con espacios", async ({ page }) => {
     await fillAndBlur(page, F.correo, "juan perez@example.com");
     await expect(fieldError(page, F.correo)).toHaveText(
-      "El correo electrónico no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.",
+      "El correo electrónico no es válido. Revísalo; debe tener un formato como nombre@ejemplo.com.",
     );
     await shot(page, "P19", "correo-con-espacios");
   });
@@ -748,7 +748,7 @@ test.describe("R · Datos del representante", () => {
   test("R07 · correo del representante inválido", async ({ page }) => {
     await fillAndBlur(page, F.correoRepresentante, "maria@correo");
     await expect(fieldError(page, F.correoRepresentante)).toHaveText(
-      "El correo del representante no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.",
+      "El correo del representante no es válido. Revísalo; debe tener un formato como nombre@ejemplo.com.",
     );
     await shot(page, "R07", "correo-representante-invalido");
   });
@@ -955,7 +955,7 @@ test.describe("S · Resumen, envío y errores del servidor", () => {
     // el paso honesto ya disponible desde la propia cuenta (jugador o
     // dependiente), no solo "entrar".
     const alerta = stepAlert(page);
-    await expect(alerta).toContainText("Si ya tiene cuenta, no necesita volver a inscribirse");
+    await expect(alerta).toContainText("Si ya tienes cuenta, no necesitas volver a inscribirte");
     await expect(alerta.getByRole("link", { name: /iniciar sesión/i })).toBeVisible();
     await expect(alerta.getByRole("link", { name: /recuperar contraseña/i })).toBeVisible();
     await shot(page, "S08", "duplicado-ofrece-salida");
@@ -1264,7 +1264,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     // antes leía la edad negativa como "menor de edad" sobre alguien que
     // todavía no nació.
     await expect(fieldError(page, F.fechaNacimiento)).toHaveText(
-      "La fecha de nacimiento no puede ser posterior a hoy. Revise el año.",
+      "La fecha de nacimiento no puede ser posterior a hoy. Revisa el año.",
     );
     await expectStepBlocked(page);
     await shot(page, "G01", "fecha-futura-mensaje-correcto");
@@ -1282,7 +1282,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     // autoinscripción o dependiente: corre siempre (#224). Un alumno con
     // fecha de nacimiento del año que viene bloquea el paso, no lo pasa.
     await expect(fieldError(page, F.fechaNacimiento)).toHaveText(
-      "La fecha de nacimiento no puede ser posterior a hoy. Revise el año.",
+      "La fecha de nacimiento no puede ser posterior a hoy. Revisa el año.",
     );
     await expectStepBlocked(page);
     await shot(page, "G02", "dependiente-fecha-futura-rechazada");
@@ -1451,7 +1451,7 @@ test.describe("V · Laxitud frente a la norma ecuatoriana — CERRADA (issues #2
     // de las más usadas del mundo, así que la lista la ataja igual.
     await fillAndBlur(page, F.contrasenia, "12345678");
     await expect(fieldError(page, F.contrasenia)).toHaveText(
-      "La contraseña es una de las más usadas y fácil de adivinar; elija otra.",
+      "La contraseña es una de las más usadas y fácil de adivinar; elige otra.",
     );
     await shot(page, "V08", "contrasenia-debil-rechazada");
   });

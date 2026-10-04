@@ -82,7 +82,7 @@ describe("validateEnrollStep — personal step", () => {
 
   it("requires fechaNacimiento", () => {
     const errors = validateEnrollStep("personal", validForm({ fechaNacimiento: "" }));
-    expect(errors).toContainEqual(expect.stringMatching(/^Indi(ca|que) la fecha de nacimiento del (alumno|jugador)\.$/));
+    expect(errors).toContainEqual(expect.stringMatching(/^Indica la fecha de nacimiento del jugador\.$/));
   });
 
   it("requires cedula", () => {
@@ -108,7 +108,7 @@ describe("validateEnrollStep — personal step", () => {
     expect(errors.length).toBeGreaterThanOrEqual(4);
     expect(errors).toContain("Los nombres son obligatorios.");
     expect(errors).toContain("Los apellidos son obligatorios.");
-    expect(errors).toContainEqual(expect.stringMatching(/^Indi(ca|que) la fecha de nacimiento del (alumno|jugador)\.$/));
+    expect(errors).toContainEqual(expect.stringMatching(/^Indica la fecha de nacimiento del jugador\.$/));
     expect(errors).toContain("La cédula de identidad es obligatoria.");
   });
 
@@ -228,13 +228,13 @@ describe("validateEnrollStep — personal step", () => {
 
   it("requires valid email for self-enrollment", () => {
     const errors = validateEnrollStep("personal", validForm({ correo: "sin-arroba" }));
-    expect(errors).toContain("El correo electrónico no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.");
+    expect(errors).toContain("El correo electrónico no es válido. Revísalo; debe tener un formato como nombre@ejemplo.com.");
   });
 
   it("says the email is required, not invalid, when it is empty", () => {
     const errors = validateEnrollStep("personal", validForm({ correo: "" }));
     expect(errors).toContain("Escribe tu correo electrónico: lo usarás para iniciar sesión.");
-    expect(errors).not.toContain("El correo electrónico no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.");
+    expect(errors).not.toContain("El correo electrónico no es válido. Revísalo; debe tener un formato como nombre@ejemplo.com.");
   });
 
   it("says the password is required, not too short, when it is empty", () => {
@@ -275,7 +275,7 @@ describe("validateEnrollStep — personal step", () => {
       validForm({ enrollmentType: "child", correo: "invalid" }),
     );
     expect(errors).not.toContain("El correo del jugador no es válido.");
-    expect(errors).not.toContain("El correo electrónico no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.");
+    expect(errors).not.toContain("El correo electrónico no es válido. Revísalo; debe tener un formato como nombre@ejemplo.com.");
   });
 
   it("ignores a short student password on a child enrollment's personal step", () => {
@@ -372,7 +372,7 @@ describe("validateEnrollStep — representative step", () => {
       }),
     );
     expect(errors).toContain("Escribe el correo electrónico del representante: lo usarás para iniciar sesión.");
-    expect(errors).not.toContain("El correo del representante no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.");
+    expect(errors).not.toContain("El correo del representante no es válido. Revísalo; debe tener un formato como nombre@ejemplo.com.");
   });
 
   it("flags a non-empty malformed representative email as invalid", () => {
@@ -380,7 +380,7 @@ describe("validateEnrollStep — representative step", () => {
       "representative",
       validForm({ enrollmentType: "child", correoRepresentante: "maria@correo" }),
     );
-    expect(errors).toContain("El correo del representante no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.");
+    expect(errors).toContain("El correo del representante no es válido. Revísalo; debe tener un formato como nombre@ejemplo.com.");
   });
 
   it("says the representative password is required, not too short, when empty", () => {

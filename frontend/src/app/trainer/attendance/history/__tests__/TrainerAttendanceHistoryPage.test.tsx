@@ -477,7 +477,7 @@ describe("TrainerAttendanceHistoryPage", () => {
     await screen.findAllByRole("row");
     mockFetchAttendanceRecords.mockClear();
 
-    fireEvent.change(screen.getByLabelText("Buscar alumno"), { target: { value: "Ana" } });
+    fireEvent.change(screen.getByLabelText("Buscar jugador"), { target: { value: "Ana" } });
     fireEvent.click(await screen.findByRole("option", { name: /Ana García/ }));
 
     await waitFor(() => {
@@ -779,7 +779,7 @@ describe("TrainerAttendanceHistoryPage — las tres cifras del período", () => 
     await screen.findAllByRole("row");
     expect(screen.getByText("Sesiones programadas")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Buscar alumno"), { target: { value: "Ana" } });
+    fireEvent.change(screen.getByLabelText("Buscar jugador"), { target: { value: "Ana" } });
     fireEvent.click(await screen.findByRole("option", { name: /Ana García/ }));
 
     await waitFor(() => {

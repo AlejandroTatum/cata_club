@@ -74,6 +74,14 @@ export const USTED_IMPERATIVOS = [
   "cancele", "reduzca", "busque", "agregue", "recuerde",
   "presione", "continúe", "regístrese",
   "inicie", "elimine", "abra", "valide", "indique",
+  "evite", "mezcle", "gestione", "reasigne",
+  // Imperative + clitic ("alárguela", "apruébelas", "revíselo"): the stressed
+  // vowel gains an accent, so a bare "-ela"/"-elo" suffix rule would also hit
+  // "escuela" and "vela". Listed by hand instead.
+  "alárguela", "alárguelo", "apruébela", "apruébelas", "apruébelo", "apruébelos",
+  "revísela", "revíselo", "corríjala", "corríjalo", "guárdela", "guárdelo",
+  "verifíquela", "verifíquelo", "cámbiela", "cámbielo", "elimínela", "elimínelo",
+  "descárguela", "descárguelo", "envíela", "envíelo", "pídala", "pídalo",
 ];
 
 const LETTER = "a-záéíóúñA-ZÁÉÍÓÚÑ";

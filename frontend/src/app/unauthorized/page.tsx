@@ -77,7 +77,7 @@ function UnauthorizedContent(): React.ReactElement {
         {/* What happened, then what to do — in that order, in one paragraph. */}
         <p className="m-0 text-sm leading-relaxed text-ink-3">
           El club todavía no te asignó un rol. Espera el correo de confirmación —
-          apenas se lo asignen, entra directo.
+          apenas te lo asignen, entras directo.
         </p>
 
         <div className="mt-1.5 flex flex-wrap justify-center gap-2.5">

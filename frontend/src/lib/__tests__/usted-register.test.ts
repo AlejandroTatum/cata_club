@@ -91,6 +91,10 @@ describe("tú register — app-wide copy sweep (issue #340 follow-up, QA4 S6)", 
     expect(banned("Inténtelo de nuevo")).toBe(true);
     expect(banned("Reduzca el monto ingresado.")).toBe(true);
     expect(banned("Comuníquese con el club")).toBe(true);
+    expect(banned("Para que sea segura, alárguela o mezcle números")).toBe(true);
+    expect(banned("Evite las contraseñas más usadas")).toBe(true);
+    expect(banned("Apruébelas desde Pagos")).toBe(true);
+    expect(banned("Gestione su cuenta")).toBe(true);
     // Tú forms pass.
     expect(banned("tu cuenta")).toBe(false);
     expect(banned("Inscríbete aquí")).toBe(false);
@@ -99,6 +103,9 @@ describe("tú register — app-wide copy sweep (issue #340 follow-up, QA4 S6)", 
     expect(banned("Estás preguntando muy seguido")).toBe(false);
     expect(banned("Inténtalo de nuevo")).toBe(false);
     expect(banned("Reduce el monto ingresado.")).toBe(false);
+    expect(banned("Alárgala o mezcla números")).toBe(false);
+    expect(banned("Evita las contraseñas más usadas")).toBe(false);
+    expect(banned("la escuela y la vela")).toBe(false);
     // "su"/"sus" are ordinary possessives, not banned.
     expect(banned("sus datos y su equipo")).toBe(false);
     // "cree" (indicative "believes") and "estas" (demonstrative) are not flagged.

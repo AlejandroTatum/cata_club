@@ -355,7 +355,7 @@ function PortalWindowNote(): React.ReactElement {
   return (
     <p className="max-w-[68ch] text-xs leading-relaxed text-ink-3-strong">
       Su portal recibe las {PORTAL_SESSION_WINDOW} sesiones más recientes que el club registró. Si
-      necesita un período anterior, pídalo al club.
+      necesita un período anterior, pídelo al club.
     </p>
   );
 }

@@ -139,7 +139,7 @@ test("un jugador se autoinscribe, verifica tu correo en otra pestaña, y /login/
     await page.getByRole("button", { name: /iniciar sesión/i }).click();
 
     await expect(page.getByText("Hola, QA")).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByText("Antes de entrar, le faltan un par de pasos.")).toBeVisible();
+    await expect(page.getByText("Antes de entrar, te faltan un par de pasos.")).toBeVisible();
     await expect(page).toHaveURL(/\/login\/activacion$/, { timeout: 20_000 });
     // La pantalla de correo no reaparece: el correo verificado sobrevivió al
     // logout/login, no era un estado que vivía en el navegador. Al ser un

@@ -30,14 +30,14 @@ export async function POST(request: NextRequest, props: { params: Promise<{ codi
 
   const body = rawBody as MoverAlumnosBody;
   if (typeof body.categoria_destino !== "string" || body.categoria_destino.length === 0) {
-    return badRequestResponse("Elige la categoría a la que pasarán los alumnos.");
+    return badRequestResponse("Elige la categoría a la que pasarán los jugadores.");
   }
   if (
     !Array.isArray(body.persona_ids) ||
     body.persona_ids.length === 0 ||
     !body.persona_ids.every((id) => typeof id === "number")
   ) {
-    return badRequestResponse("Elige al menos un alumno.");
+    return badRequestResponse("Elige al menos un jugador.");
   }
 
   return proxyToBackend(`/asistencias/categorias/${encodeURIComponent(params.codigo)}/mover-alumnos`, {

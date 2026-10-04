@@ -1209,7 +1209,7 @@ describe("ProfilePage — change password", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(
-      /Tuvimos un problema de nuestro lado y no pudimos completar esto\. Escr[ií]b(enos|anos) por WhatsApp y te ayudamos: WhatsApp/,
+      /Tuvimos un problema de nuestro lado y no pudimos completar esto\. Escr[ií]benos por WhatsApp y te ayudamos: WhatsApp/,
     );
     expect(within(alert).getByRole("link", { name: "WhatsApp" })).toHaveAttribute(
       "href",
@@ -1237,7 +1237,7 @@ describe("ProfilePage — unified layout structure", () => {
     // it. The member card now carries the identity, so the header stays to
     // just the title.
     expect(
-      screen.queryByText(/gestion(a|e) (tu|su) información/i),
+      screen.queryByText(/gestion(a|as|e) (tu|su) información/i),
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("profile-hero")).toBeInTheDocument();
     expect(screen.getByTestId("profile-column-info")).toBeInTheDocument();

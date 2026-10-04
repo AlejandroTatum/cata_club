@@ -479,7 +479,7 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
       ? "Escribe tu correo electrónico: lo usarás para iniciar sesión."
       : isEmail(d.correo)
         ? null
-        : "El correo electrónico no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.",
+        : "El correo electrónico no es válido. Revísalo; debe tener un formato como nombre@ejemplo.com.",
   contrasenia: (d) =>
     d.contrasenia.length === 0
       ? "Crea una contraseña para tu cuenta."
@@ -513,7 +513,7 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
       ? "Escribe el correo electrónico del representante: lo usarás para iniciar sesión."
       : isEmail(d.correoRepresentante)
         ? null
-        : "El correo del representante no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.",
+        : "El correo del representante no es válido. Revísalo; debe tener un formato como nombre@ejemplo.com.",
   contraseniaRepresentante: (d) =>
     d.contraseniaRepresentante.length === 0
       ? "Crea una contraseña para la cuenta del representante."

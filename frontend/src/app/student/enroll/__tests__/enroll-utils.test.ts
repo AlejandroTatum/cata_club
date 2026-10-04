@@ -70,7 +70,7 @@ describe("telefono — step 2 validates the local digits after +593 (#1296)", ()
       contraseniaConfirmacion: "password8",
     });
     expect(errors.telefono).toMatch(
-      /^El teléfono no es válido\. Escrib[ae] 9 dígitos si es celular \(por ejemplo, 991234567\) u 8 si es fijo, sin el 0 inicial\.$/,
+      /^El teléfono no es válido\. Escribe 9 dígitos si es celular \(por ejemplo, 991234567\) u 8 si es fijo, sin el 0 inicial\.$/,
     );
   });
 
@@ -203,7 +203,7 @@ describe("QA4 REG-04 — email format is checked at step 2", () => {
       { ...initialFormData, enrollmentType: "self", correo },
     );
     expect(errors).toContain(
-      "El correo electrónico no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.",
+      "El correo electrónico no es válido. Revísalo; debe tener un formato como nombre@ejemplo.com.",
     );
   });
 

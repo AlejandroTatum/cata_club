@@ -57,7 +57,7 @@ function firstNameOf(fullName: string): string {
  * again.
  */
 function welcomeDescriptionFor(route: string, returningTo: string | null): string {
-  if (route === ACTIVATION_GATE_ROUTE) return "Antes de entrar, le faltan un par de pasos.";
+  if (route === ACTIVATION_GATE_ROUTE) return "Antes de entrar, te faltan un par de pasos.";
   return route === returningTo
     ? "Tu sesión quedó iniciada. Te llevamos a la página que buscabas."
     : "Tu sesión quedó iniciada. Te llevamos a tu panel.";

@@ -94,7 +94,7 @@ describe("steps and enrollment entry points (LAN-14)", () => {
 describe("copy (LAN-08, LAN-09)", () => {
   it("fixes the hero sentence, the founding line and the cupo link", () => {
     render(<LandingPage />);
-    expect(screen.getByText("Únase a nuestro club, donde la técnica y el carácter se forjan en cada punto.")).toBeInTheDocument();
+    expect(screen.getByText("Únete a nuestro club, donde la técnica y el carácter se forjan en cada punto.")).toBeInTheDocument();
     expect(screen.getByText("Desde el 10 de octubre de 2013")).toBeInTheDocument();
   });
 

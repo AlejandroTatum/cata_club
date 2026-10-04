@@ -89,7 +89,7 @@ const mockUseAuth = vi.mocked(useAuth);
  */
 function expectedWelcomeDescriptionFor(destination: string): string {
   return destination === "/login/activacion"
-    ? "Antes de entrar, le faltan un par de pasos."
+    ? "Antes de entrar, te faltan un par de pasos."
     : "Tu sesión quedó iniciada. Te llevamos a tu panel.";
 }
 

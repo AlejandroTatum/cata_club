@@ -138,7 +138,7 @@ describe("getEnrollmentErrorMessage", () => {
     // POST /inscripciones is rate-limited on the public form. The wording is
     // the translator's: this screen no longer keeps a private variant of it.
     expect(getEnrollmentErrorMessage(apiError("", 429)))
-      .toMatch(/^Demasiados intentos\. Esper[ae] un momento e intent[ae] nuevamente\.$/);
+      .toMatch(/^Demasiados intentos\. Espera un momento e intenta nuevamente\.$/);
   });
 
   it("reports the connection when fetch never reached the backend", () => {
@@ -146,6 +146,6 @@ describe("getEnrollmentErrorMessage", () => {
     // status), so the only status-less error this catch can see is fetch
     // itself rejecting — and its message is the browser's, not the product's.
     expect(getEnrollmentErrorMessage(new TypeError("Failed to fetch")))
-      .toMatch(/^No pudimos conectar\. Revis[ae] (tu|su) conexión a internet e intent[ae] nuevamente\.$/);
+      .toMatch(/^No pudimos conectar\. Revisa tu conexión a internet e intenta nuevamente\.$/);
   });
 });

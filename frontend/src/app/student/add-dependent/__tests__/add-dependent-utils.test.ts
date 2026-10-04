@@ -84,25 +84,25 @@ describe("validateAddDependentStep — child step", () => {
 
   it("requires fechaNacimiento", () => {
     expect(validateAddDependentStep("child", validForm({ fechaNacimiento: "" })))
-      .toContainEqual(expect.stringMatching(/^Indi(ca|que) la fecha de nacimiento del (alumno|jugador)\.$/));
+      .toContainEqual(expect.stringMatching(/^Indica la fecha de nacimiento del jugador\.$/));
   });
 
   it("rejects a malformed fechaNacimiento", () => {
     expect(validateAddDependentStep("child", validForm({ fechaNacimiento: "2015-13-40" })))
-      .toContainEqual(expect.stringMatching(/^La fecha de nacimiento no existe\. Revis[ae] el día, el mes y el año\.$/));
+      .toContainEqual(expect.stringMatching(/^La fecha de nacimiento no existe\. Revisa el día, el mes y el año\.$/));
   });
 
   it("rejects a fechaNacimiento in the future", () => {
     const nextYear = new Date().getFullYear() + 1;
     expect(validateAddDependentStep("child", validForm({ fechaNacimiento: `${nextYear}-01-01` })))
-      .toContainEqual(expect.stringMatching(/^La fecha de nacimiento no puede ser posterior a hoy\. Revis[ae] el año\.$/));
+      .toContainEqual(expect.stringMatching(/^La fecha de nacimiento no puede ser posterior a hoy\. Revisa el año\.$/));
   });
 
   it("accepts today as a valid fechaNacimiento (not future)", () => {
     const today = new Date();
     const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     expect(validateAddDependentStep("child", validForm({ fechaNacimiento: iso })))
-      .not.toContainEqual(expect.stringMatching(/^La fecha de nacimiento no puede ser posterior a hoy\. Revis[ae] el año\.$/));
+      .not.toContainEqual(expect.stringMatching(/^La fecha de nacimiento no puede ser posterior a hoy\. Revisa el año\.$/));
   });
 
   it("rejects an impossible age on step 1 instead of letting the wizard reach the backend (INS-8)", () => {
@@ -355,6 +355,6 @@ describe("getAddDependentErrorMessage", () => {
     // route in services/api.ts throws ApiClientError(message, status), so a
     // bare Error can only come from fetch itself rejecting.
     expect(getAddDependentErrorMessage(new TypeError("Failed to fetch")))
-      .toMatch(/^No pudimos conectar\. Revis[ae] (tu|su) conexión a internet e intent[ae] nuevamente\.$/);
+      .toMatch(/^No pudimos conectar\. Revisa tu conexión a internet e intenta nuevamente\.$/);
   });
 });
