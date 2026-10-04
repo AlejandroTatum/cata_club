@@ -25,7 +25,7 @@ import {
   describeRejectedPago,
   displayNameFor,
 } from "../student-utils";
-import { describeNextPayment } from "../student-utils";
+import { describeNextPayment, describeCoverageStat, describePendingStat } from "../student-utils";
 import type { PaymentSituationInput, StudentPortalMode } from "../student-utils";
 import type { PagoPersona, StudentSessionSummary } from "@/services/api";
 
@@ -1271,5 +1271,47 @@ describe("describeNextPayment — the representante's «Próximo pago» tile", (
 
   it("prints the monthly price as the figure", () => {
     expect(describeNextPayment(base).value).toBe("$40,00");
+  });
+});
+
+describe("describeCoverageStat — the «Cobertura» tile copy (#QA-R2 S4)", () => {
+  it("reads «restantes · hasta el …» while coverage runs", () => {
+    expect(describeCoverageStat(31, "2026-11-04")).toEqual({
+      tone: "ok", status: "Al día", value: 31, unit: "días", hint: "restantes · hasta el 04/11/2026",
+    });
+  });
+
+  it("uses the singular for one day", () => {
+    expect(describeCoverageStat(1, "2026-10-05")).toMatchObject({ value: 1, unit: "día", hint: "restante · hasta el 05/10/2026" });
+  });
+
+  it("says it ends today", () => {
+    expect(describeCoverageStat(0, "2026-10-04")).toMatchObject({
+      tone: "ok", status: "Al día", value: 0, unit: "días", hint: "vence hoy · 04/10/2026",
+    });
+  });
+
+  it("says how long ago an overdue coverage ended", () => {
+    expect(describeCoverageStat(-5, "2026-09-29")).toEqual({
+      tone: "bad", status: "Vencida", value: 5, unit: "días", hint: "vencida hace 5 días · desde el 29/09/2026",
+    });
+    expect(describeCoverageStat(-1, "2026-10-03")).toMatchObject({ unit: "día", hint: "vencida hace 1 día · desde el 03/10/2026" });
+  });
+
+  it("reads «Sin pago» when there is no coverage yet", () => {
+    expect(describeCoverageStat(null, null)).toEqual({
+      tone: "neutral", status: "Sin pago", value: "—", unit: undefined, hint: "sin pago aprobado todavía",
+    });
+  });
+});
+
+describe("describePendingStat — the «Pagos por validar» tile copy (#QA-R2 S5)", () => {
+  it("is not «Al día» when nothing is pending", () => {
+    expect(describePendingStat(0)).toEqual({ tone: "neutral", status: "Sin pendientes", hint: "ningún pago espera validación" });
+  });
+
+  it("stays «Por validar» when payments wait", () => {
+    expect(describePendingStat(2)).toEqual({ tone: "warn", status: "Por validar", hint: "esperan validación del club" });
+    expect(describePendingStat(1)).toMatchObject({ hint: "espera validación del club" });
   });
 });

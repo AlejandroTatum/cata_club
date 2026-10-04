@@ -59,6 +59,8 @@ import {
   summarizeRecentAttendance,
   contarEntrenamientosSemanales,
   daysUntil,
+  describeCoverageStat,
+  describePendingStat,
   type UpcomingTraining,
   noScheduleWhatsAppHref,
   hasOwnMembership,
@@ -1116,6 +1118,8 @@ function ActivePortalView({
    * horario que no cargó no es un alumno sin entrenamientos.
    */
   const diasDeCobertura = useMemo(() => daysUntil(coverageEnd), [coverageEnd]);
+  const coverageStat = describeCoverageStat(diasDeCobertura, coverageEnd);
+  const pendingStat = describePendingStat(pendingPagos);
   const nextPayment = describeNextPayment({
     monthlyPrice: selectedProfile?.membership?.montoAplicado ?? null,
     esGratuidadFamiliar: selectedProfile?.membership?.esGratuidadFamiliar ?? false,
@@ -1395,22 +1399,13 @@ function ActivePortalView({
             <>
           <StatCard
             label="Cobertura"
-            {...(diasDeCobertura === null
-              ? { tone: "neutral" as const, status: "Sin pago" }
-              : diasDeCobertura < 0
-                ? { tone: "bad" as const, status: "Vencida" }
-                : { tone: "ok" as const, status: "Al día" })}
+            tone={coverageStat.tone}
+            status={coverageStat.status}
             icon={<ShieldCheck size={ICON.sm} strokeWidth={1.75} />}
             href={withSelectedStudent("/student/payments", selectedPersonaId)}
-            value={diasDeCobertura === null ? "—" : Math.abs(diasDeCobertura)}
-            unit={diasDeCobertura === null ? undefined : diasDeCobertura === 1 || diasDeCobertura === -1 ? "día" : "días"}
-            hint={
-              diasDeCobertura === null
-                ? "sin pago aprobado todavía"
-                : diasDeCobertura < 0
-                  ? "renueva tu pago"
-                  : "de membresía paga"
-            }
+            value={coverageStat.value}
+            unit={coverageStat.unit}
+            hint={coverageStat.hint}
           />
           <StatCard
             label="Asistencia"
@@ -1439,13 +1434,12 @@ function ActivePortalView({
           />
           <StatCard
             label="Pagos por validar"
-            {...(pendingPagos > 0
-              ? { tone: "warn" as const, status: "Por validar" }
-              : { tone: "neutral" as const, status: "Al día" })}
+            tone={pendingStat.tone}
+            status={pendingStat.status}
             icon={<Hourglass size={ICON.sm} strokeWidth={1.75} />}
             href={withSelectedStudent("/student/payments", selectedPersonaId)}
             value={pendingPagos}
-            hint={pendingPagos === 0 ? "nada esperando validación" : "esperan validación del club"}
+            hint={pendingStat.hint}
           />
             </>
           )}
