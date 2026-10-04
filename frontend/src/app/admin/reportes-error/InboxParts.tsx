@@ -77,11 +77,3 @@ export function HowItWorks(): ReactElement {
     </ol>
   </InfoPanel>;
 }
-
-/** Faint outline of a report detail; fills the rail below the guide on an empty inbox. */
-export function GhostDetail(): ReactElement {
-  return <div aria-hidden="true" data-testid="ghost-detail" className="card relative hidden min-h-32 flex-1 overflow-hidden lg:block">
-    <GhostRows count={14} className="absolute inset-0" />
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-paper to-transparent" />
-  </div>;
-}
