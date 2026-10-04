@@ -253,6 +253,9 @@ RUTAS_ROLES_REQUERIDOS = {
     # mismo tier que su vecino de sponsors -- decidir qué muestra la landing
     # es una decisión del club, no de cualquier autenticado.
     ("DELETE", "/galeria/{entrada_id}"): frozenset({"ADMINISTRADOR"}),
+    ("GET", "/galeria/admin"): frozenset({"ADMINISTRADOR"}),
+    ("PUT", "/galeria/{entrada_id}"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/galeria/{entrada_id}/mover"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/asistencias/horarios/alumnos"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/horarios/conteos"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/horarios/{horario_id}/alumnos"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),

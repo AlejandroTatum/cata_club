@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.infraestructura.db import obtener_sesion
 from app.servicios_negocio.dtos.galeria_schemas import (
-    EntradaGaleriaCreateDTO, EntradaGaleriaResponseDTO,
+    EntradaGaleriaCreateDTO, EntradaGaleriaResponseDTO, EntradaGaleriaUpdateDTO,
+    MoverEntradaGaleriaDTO,
 )
 from app.servicios_negocio.galeria_servicio import GaleriaServicio
 from app.servicios_negocio.gestor_permisos import GestorPermisos
@@ -20,7 +21,16 @@ ROL_ADMIN = ["ADMINISTRADOR"]
 @router.get("/", response_model=list[EntradaGaleriaResponseDTO])
 async def listar_entradas(db: Session = Depends(obtener_sesion)):
     """Las imágenes publicadas son parte de la landing pública."""
-    return GaleriaServicio(db).listar()
+    return GaleriaServicio(db).listar(solo_visibles=True)
+
+
+@router.get(
+    "/admin", response_model=list[EntradaGaleriaResponseDTO],
+    dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
+)
+async def listar_entradas_admin(db: Session = Depends(obtener_sesion)):
+    """ADMB-34: el administrador ve también las fotos ocultas."""
+    return GaleriaServicio(db).listar(solo_visibles=False)
 
 
 @router.post(
@@ -71,3 +81,41 @@ async def eliminar_entrada(entrada_id: int, db: Session = Depends(obtener_sesion
     # llama a `cloudinary.uploader.destroy`, con el mismo presupuesto de red
     # que la subida): mismo motivo de `run_in_threadpool` que el POST.
     await run_in_threadpool(GaleriaServicio(db).eliminar, entrada_id)
+
+
+@router.put(
+    "/{entrada_id}", response_model=EntradaGaleriaResponseDTO,
+    dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
+)
+async def actualizar_entrada(
+    entrada_id: int,
+    titulo: str = Form(...),
+    descripcion: str = Form(...),
+    visible: bool = Form(True),
+    archivo: UploadFile | None = File(None),
+    db: Session = Depends(obtener_sesion),
+):
+    # Mismo armado manual del DTO que `crear_entrada` (ver su comentario).
+    try:
+        datos = EntradaGaleriaUpdateDTO(titulo=titulo, descripcion=descripcion, visible=visible)
+    except ValidationError as exc:
+        raise RequestValidationError(exc.errors()) from exc
+    contenido = None
+    if archivo is not None and archivo.filename:
+        contenido = await leer_con_limite(archivo, GaleriaServicio.TAMANO_MAXIMO_IMAGEN_BYTES)
+    # Puede subir la foto nueva a Cloudinary: mismo motivo de
+    # `run_in_threadpool` que el POST.
+    return await run_in_threadpool(
+        GaleriaServicio(db).actualizar, entrada_id, datos, contenido,
+        archivo.content_type if contenido is not None else None,
+    )
+
+
+@router.post(
+    "/{entrada_id}/mover", response_model=list[EntradaGaleriaResponseDTO],
+    dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
+)
+async def mover_entrada(
+    entrada_id: int, datos: MoverEntradaGaleriaDTO, db: Session = Depends(obtener_sesion),
+):
+    return GaleriaServicio(db).mover(entrada_id, datos.direccion)

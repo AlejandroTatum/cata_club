@@ -2622,6 +2622,10 @@ class EntradaGaleria(Base):
     imagen_url: Mapped[str] = mapped_column(String(500))
     # Identificador interno para retirar el recurso del proveedor al borrar.
     imagen_public_id: Mapped[str] = mapped_column(String(64), unique=True)
+    # ADMB-34: posición en la galería (menor primero; el id desempata) y
+    # visibilidad. Ocultar una foto no la borra del proveedor.
+    orden: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    visible: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
 
 
 # ---------------------------------------------------------------------------
