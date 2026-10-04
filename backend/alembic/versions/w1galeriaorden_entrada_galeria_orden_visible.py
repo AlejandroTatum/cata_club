@@ -1,7 +1,7 @@
 """entrada_galeria.orden y .visible (editar, ordenar y ocultar fotos).
 
 Revision ID: w1galeriaorden
-Revises: v1retiretarifa
+Revises: c3solcorrec
 
 ADMB-34: una foto se puede ocultar sin borrarla y ordenar a mano. Las filas
 existentes arrancan visibles y con `orden` igual a su id, que conserva el
@@ -12,7 +12,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "w1galeriaorden"
-down_revision = "v1retiretarifa"
+down_revision = "c3solcorrec"
 branch_labels = None
 depends_on = None
 
