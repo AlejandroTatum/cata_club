@@ -410,10 +410,10 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     await shot(page, "P01", "paso-en-blanco");
   });
 
-  test("P02 · nombres de menos de 3 caracteres", async ({ page }) => {
-    await fillAndBlur(page, F.nombres, "Al");
+  test("P02 · nombres de menos de 2 letras", async ({ page }) => {
+    await fillAndBlur(page, F.nombres, "A");
     await expect(fieldError(page, F.nombres)).toHaveText(
-      "Los nombres deben tener al menos 3 caracteres.",
+      "Los nombres deben tener al menos 2 letras.",
     );
     await expectStepBlocked(page);
     await shot(page, "P02", "nombres-cortos");
@@ -422,7 +422,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
   test("P03 · nombres con dígitos", async ({ page }) => {
     await fillAndBlur(page, F.nombres, "Juan123");
     await expect(fieldError(page, F.nombres)).toHaveText(
-      "Los nombres tienen un carácter que no reconocemos en un nombre de persona.",
+      "Los nombres no pueden contener “1”, “2”, “3”.",
     );
     await shot(page, "P03", "nombres-con-digitos");
   });
@@ -430,7 +430,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
   test("P04 · nombres con símbolos", async ({ page }) => {
     await fillAndBlur(page, F.nombres, "Juan@Carlos");
     await expect(fieldError(page, F.nombres)).toHaveText(
-      "Los nombres tienen un carácter que no reconocemos en un nombre de persona.",
+      "Los nombres no pueden contener “@”.",
     );
     await shot(page, "P04", "nombres-con-simbolos");
   });
@@ -441,10 +441,10 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
     await shot(page, "P05", "nombres-con-tildes-validos");
   });
 
-  test("P06 · apellidos de menos de 3 caracteres", async ({ page }) => {
-    await fillAndBlur(page, F.apellidos, "Pé");
+  test("P06 · apellidos de menos de 2 letras", async ({ page }) => {
+    await fillAndBlur(page, F.apellidos, "P");
     await expect(fieldError(page, F.apellidos)).toHaveText(
-      "Los apellidos deben tener al menos 3 caracteres.",
+      "Los apellidos deben tener al menos 2 letras.",
     );
     await shot(page, "P06", "apellidos-cortos");
   });
@@ -452,7 +452,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
   test("P07 · apellidos con dígitos", async ({ page }) => {
     await fillAndBlur(page, F.apellidos, "Pérez2");
     await expect(fieldError(page, F.apellidos)).toHaveText(
-      "Los apellidos tienen un carácter que no reconocemos en un nombre de persona.",
+      "Los apellidos no pueden contener “2”.",
     );
     await shot(page, "P07", "apellidos-con-digitos");
   });
@@ -764,7 +764,7 @@ test.describe("R · Datos del representante", () => {
   test("R09 · nombres del representante con dígitos", async ({ page }) => {
     await fillAndBlur(page, F.nombresRepresentante, "María3");
     await expect(fieldError(page, F.nombresRepresentante)).toHaveText(
-      "Los nombres del representante tienen un carácter que no reconocemos en un nombre de persona.",
+      "Los nombres del representante no pueden contener “3”.",
     );
     await shot(page, "R09", "nombres-representante-con-digitos");
   });
@@ -805,10 +805,10 @@ test.describe("H · Salud y emergencia", () => {
     await shot(page, "H02", "tipo-de-sangre-vacio");
   });
 
-  test("H03 · contacto de emergencia de menos de 3 caracteres", async ({ page }) => {
-    await fillAndBlur(page, F.contactoEmergencia, "Ma");
+  test("H03 · contacto de emergencia de menos de 2 letras", async ({ page }) => {
+    await fillAndBlur(page, F.contactoEmergencia, "M");
     await expect(fieldError(page, F.contactoEmergencia)).toHaveText(
-      "El nombre del contacto de emergencia debe tener al menos 3 caracteres.",
+      "El nombre del contacto de emergencia debe tener al menos 2 letras.",
     );
     await shot(page, "H03", "contacto-emergencia-corto");
   });
