@@ -294,3 +294,23 @@ def test_comprobante_convierte_la_aprobacion_a_hora_de_ecuador(monkeypatch):
     textos = _textos_del_comprobante(capturado)
 
     assert "Fecha de aprobación: 17/08/2026 20:05 (hora de Ecuador)" in textos
+
+
+# --- QA4 FAM-07: nombre del club y pie del comprobante --------------------
+
+def test_comprobante_nombra_el_deporte_del_club_y_el_pie_sin_firma(monkeypatch):
+    """El título decía «Academia de Tenis»: el club es de Tenis de Mesa."""
+    capturado = _comprobante_construido(monkeypatch)
+    textos = _textos_del_comprobante(capturado)
+
+    assert "Cata Club - Tenis de Mesa" in textos
+    assert not any("Academia de Tenis" in t for t in textos)
+    assert any(
+        "Este comprobante se genera electrónicamente y no requiere firma." in t
+        for t in textos
+    )
+    assert not any("plena validez" in t for t in textos)
+
+
+def test_el_nombre_del_club_es_tenis_de_mesa_en_todo_el_generador():
+    assert generador_pdf._NOMBRE_CLUB == "Cata Club - Tenis de Mesa"

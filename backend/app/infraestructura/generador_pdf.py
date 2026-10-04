@@ -37,7 +37,7 @@ _NEGRO_INSTITUCIONAL = "#111111"
 # solo sirve para que el ojo no se salte de renglón. Lo comparten las dos
 # tablas porque una familia y un administrador miran documentos del mismo club.
 _GRIS_FILAS_ALTERNAS = "#F3F0F0"
-_NOMBRE_CLUB = "Cata Club - Academia de Tenis"
+_NOMBRE_CLUB = "Cata Club - Tenis de Mesa"
 
 # Alto que la cabecera institucional se reserva arriba de la hoja: el logo baja
 # hasta 24mm del borde y la barra roja se dibuja a 26mm. Ninguno de los dos es
@@ -109,7 +109,7 @@ def generar_comprobante_pago_pdf(
 
     El PDF incluye:
       - Cabecera institucional (logo + barra roja), la misma que el reporte
-      - Encabezado de la academia (cata club)
+      - Encabezado del club (Cata Club - Tenis de Mesa)
       - Datos del alumno (nombre, cédula, teléfono)
       - Detalle del pago (monto, tipo, estado, fechas)
       - Sello de aprobación / datos de rechazo (si aplica)
