@@ -143,7 +143,7 @@
         },
         {
           "pregunta": "¿Cómo cambio las fotos de la página pública?",
-          "respuesta": "Las fotos de la galería se cargan en Galería, con un título y una descripción, y los logos de los patrocinadores en Patrocinadores, con un nombre corto. Se aceptan archivos JPG o PNG de hasta 5 MB y se publican de inmediato. Para cambiar una, elimínela y suba la nueva: lo eliminado no se puede recuperar."
+          "respuesta": "Las fotos de la galería se cargan en Galería, con un título y una descripción, y los logos de los patrocinadores en Patrocinadores, con un nombre corto. Se aceptan archivos JPG o PNG de hasta 5 MB y se publican de inmediato. Para cambiar una, use «Editar»: puede corregir el título, la descripción y el encuadre, o reemplazar la foto. «Subir» y «Bajar» cambian el orden, y «Ocultar» la quita de la landing sin borrarla. «Eliminar» la borra para siempre y no se puede recuperar."
         },
         {
           "pregunta": "¿Qué muestra «Actividad del club»?",
