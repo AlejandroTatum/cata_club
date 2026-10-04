@@ -104,6 +104,7 @@ const APPROVED_NAV: ReadonlyArray<{ label: string; section: string }> = [
   { label: "Cómo empezar", section: "como-empezar" },
   { label: "Preguntas", section: "preguntas" },
   { label: "Contacto", section: "contacto" },
+  { label: "Patrocinadores", section: "patrocinadores" },
 ];
 
 /** The landing's own navbar: the six anchors inside `.landing-nav-links`. */
