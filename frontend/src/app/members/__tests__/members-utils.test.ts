@@ -407,8 +407,8 @@ describe("getPayerTypeLabel", () => {
     expect(getPayerTypeLabel("representante")).toBe("Representante");
   });
 
-  it('returns "Estudiante" for estudiante', () => {
-    expect(getPayerTypeLabel("estudiante")).toBe("Estudiante");
+  it('returns "Jugador" for estudiante', () => {
+    expect(getPayerTypeLabel("estudiante")).toBe("Jugador");
   });
 });
 
@@ -436,8 +436,8 @@ describe("getAccountRoleLabel", () => {
     expect(getAccountRoleLabel({ ...base, dependientes: [dependiente] })).toBe("Representante");
   });
 
-  it('keeps "Estudiante" for a student', () => {
-    expect(getAccountRoleLabel({ ...base, role: "estudiante" })).toBe("Estudiante");
+  it('labels as "Jugador" a a student', () => {
+    expect(getAccountRoleLabel({ ...base, role: "estudiante" })).toBe("Jugador");
   });
 
   it('ADMA-06: names an admin «Administrador» and a trainer «Entrenador», not «Representante»', () => {
@@ -589,12 +589,12 @@ describe("getAccountStatusBadge", () => {
     });
   });
 
-  it('returns "Pago pendiente de validación" + the warn tone when not active but a payment awaits validation', () => {
+  it('returns "Pago por validar" + the warn tone when not active but a payment awaits validation', () => {
     // Santiago (stu-007): vencida membership, pendiente_validacion payment —
     // on his own row, not aggregated with anyone else's.
     const account = MOCK_MEMBER_ACCOUNTS.find((a) => a.id === "stu-007")!;
     expect(getAccountStatusBadge(account)).toEqual({
-      label: "Pago pendiente de validación",
+      label: "Pago por validar",
       tone: "warn",
     });
   });
@@ -671,7 +671,7 @@ describe("getAccountStatusBadge", () => {
     });
   });
 
-  it('returns "Pago pendiente de validación" for an INACTIVA membership whose first payment IS awaiting review', () => {
+  it('returns "Pago por validar" for an INACTIVA membership whose first payment IS awaiting review', () => {
     expect(
       getAccountStatusBadge(
         buildInactivaAccount({
@@ -681,7 +681,7 @@ describe("getAccountStatusBadge", () => {
           periodo: "Julio 2026",
         }),
       ),
-    ).toEqual({ label: "Pago pendiente de validación", tone: "warn" });
+    ).toEqual({ label: "Pago por validar", tone: "warn" });
   });
 });
 

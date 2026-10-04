@@ -185,7 +185,7 @@ describe("RegularizarDeudaForm — ayuda en lenguaje del club (#1492, ADMA-13)",
     await open();
     expect(
       screen.getByText(
-        "Registre aquí los meses atrasados que el alumno ya pagó o debe regularizar. " +
+        "Registra aquí los meses atrasados que el jugador ya pagó o debe regularizar. " +
           "Si el período incluye hoy, la membresía queda activa.",
       ),
     ).toBeInTheDocument();

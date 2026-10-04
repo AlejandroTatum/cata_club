@@ -495,7 +495,7 @@ export default function MedicalRecordEditor({
       <div>
       {state.isNew && !hideNewNotice && (
         <p className="mb-3 rounded-ctl border border-line bg-sunken px-3 py-2 text-xs text-ink-3-strong">
-          Todavía no hay una ficha médica cargada para esta persona. Complete los datos y guárdelos.
+          Todavía no hay una ficha médica cargada para esta persona. Completa los datos y guárdalos.
         </p>
       )}
       {/* Two columns at every width above `sm`, never three. Esta grilla es
@@ -539,7 +539,7 @@ export default function MedicalRecordEditor({
             aria-describedby={fieldErrors.tipoSangre ? `tipo-sangre-error-${personaId}` : undefined}
             className={`input-field w-full ${fieldErrors.tipoSangre ? "border-state-bad" : ""}`}
           >
-            <option value="">Seleccione una opción</option>
+            <option value="">Selecciona una opción</option>
             {TIPOS_SANGRE.map((t) => (
               <option key={t} value={t}>
                 {etiquetaTipoSangre(t)}

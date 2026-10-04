@@ -121,7 +121,7 @@ describe("RegisterPaymentForm — ADMA-10: el admin elige el método, ninguno vi
     fireEvent.change(screen.getByRole("spinbutton", { name: /^Monto/ }), { target: { value: "25" } });
     fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Elija cómo pagó: efectivo o transferencia.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Elige cómo pagó: efectivo o transferencia.");
     expect(mockRegistrarPagoPresencial).not.toHaveBeenCalled();
     expect(mockRegistrarPago).not.toHaveBeenCalled();
   });

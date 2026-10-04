@@ -66,7 +66,7 @@ interface RegisterPaymentFormProps {
 }
 
 /** ADMA-10: shown when the admin tries to save without picking cash or transfer. */
-const MENSAJE_METODO_REQUERIDO = "Elija cómo pagó: efectivo o transferencia.";
+const MENSAJE_METODO_REQUERIDO = "Elige cómo pagó: efectivo o transferencia.";
 
 export default function RegisterPaymentForm({
   personaId,
@@ -280,7 +280,7 @@ export default function RegisterPaymentForm({
    *  to approve a transfer without its voucher (issue #459 rule intact). */
   async function subirYFinalizar(pagoId: number): Promise<void> {
     if (!voucherFile) {
-      setError("Seleccione el comprobante de la transferencia para reintentar.");
+      setError("Selecciona el comprobante de la transferencia para reintentar.");
       setErrorAnnounceKey((key) => key + 1);
       return;
     }
@@ -321,7 +321,7 @@ export default function RegisterPaymentForm({
         // on any upload/approval failure: actionable retry, same flow.
         setError(
           "El pago sigue pendiente: no se pudo subir el comprobante o aprobarlo. "
-          + "Verifique el archivo y presione \"Reintentar comprobante\".",
+          + "Verifica el archivo y presiona \"Reintentar comprobante\".",
         );
         setErrorAnnounceKey((key) => key + 1);
       } finally {
@@ -406,7 +406,7 @@ export default function RegisterPaymentForm({
       if (pagoRegistradoId !== null) {
         const pendienteMsg =
           "El pago quedó registrado y PENDIENTE: no se pudo completar el comprobante "
-          + "o su aprobación. Verifique el archivo y presione \"Reintentar comprobante\".";
+          + "o su aprobación. Verifica el archivo y presiona \"Reintentar comprobante\".";
         setError(pendienteMsg);
         setErrorAnnounceKey((key) => key + 1);
         showError(pendienteMsg);

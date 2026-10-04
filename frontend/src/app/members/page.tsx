@@ -109,7 +109,7 @@ import PaymentsDialog from "./PaymentsDialog";
 const FILTER_CHIPS: { flag: MemberFilterFlag; label: string }[] = [
   { flag: "all", label: "Todos" },
   { flag: "vencida", label: "Membresía vencida" },
-  { flag: "pendiente", label: "Pago pendiente" },
+  { flag: "pendiente", label: "Pago por validar" },
   // Issue #730. A count is not a worklist: the chip is both the number and
   // the route to the rows behind it — and from each row, the edit dialog's
   // medical-record editor is where it gets fixed.
@@ -887,7 +887,7 @@ function MemberEditDialog({
                       {roleLoading !== null ? "Guardando…" : "Guardar rol"}
                     </Button>
                     <p className="text-xs text-ink-3">
-                      Elija un rol y pulse «Guardar rol» para aplicarlo.
+                      Elige un rol y pulsa «Guardar rol» para aplicarlo.
                     </p>
                   </div>
                   {roleError && (
@@ -909,7 +909,7 @@ function MemberEditDialog({
                   dependants, same "hide rather than show an empty card"
                   convention the rest of this dialog already follows. */}
               {account.dependientes && account.dependientes.length > 0 && (
-                <ModalSection title="Estudiantes a cargo" saveMode="manual">
+                <ModalSection title="Jugadores a cargo" saveMode="manual">
                   {/* A list of people, so it takes the same divider hairlines
                       every other list of people in the product uses — not
                       `DataRowList`'s own outer border, which would nest a
@@ -940,7 +940,7 @@ function MemberEditDialog({
               open={deactivateConfirmOpen}
               variant="danger"
               title="Desactivar cuenta"
-              message={`¿Desactivar la cuenta de ${accountFullName}? No podrá iniciar sesión hasta que la active de nuevo.`}
+              message={`¿Desactivar la cuenta de ${accountFullName}? No podrá iniciar sesión hasta que la actives de nuevo.`}
               confirmLabel="Desactivar"
               onConfirm={() => {
                 setDeactivateConfirmOpen(false);
@@ -955,8 +955,8 @@ function MemberEditDialog({
               title={grantingAdmin ? "Otorgar el rol Admin" : "Quitar el rol Admin"}
               message={
                 grantingAdmin
-                  ? `Va a convertir a ${accountFullName} en Administrador. Va a tener control total del club: podrá gestionar pagos, cuentas, roles y datos de todos los socios.`
-                  : `Va a quitarle el rol de Administrador a ${accountFullName}. Va a perder el control total del club: ya no va a poder gestionar pagos, cuentas, roles ni datos de otros socios.`
+                  ? `Vas a convertir a ${accountFullName} en Administrador. Va a tener control total del club: podrá gestionar pagos, cuentas, roles y datos de todos los socios.`
+                  : `Vas a quitarle el rol de Administrador a ${accountFullName}. Va a perder el control total del club: ya no va a poder gestionar pagos, cuentas, roles ni datos de otros socios.`
               }
               onConfirm={() => {
                 const role = pendingRole;
@@ -1067,7 +1067,7 @@ function MembersRail({
       </InfoPanel>
 
       <InfoPanel title="Cómo usar el listado">
-        <p>Empiece por los pagos pendientes: filtre por «Pago pendiente» y valide cada uno.</p>
+        <p>Empieza por los pagos por validar: filtra por «Pago por validar» y valida cada uno.</p>
         <dl className="grid gap-2">
           <div>
             <dt className="font-semibold text-ink">Pagos</dt>
@@ -1088,7 +1088,7 @@ function MembersRail({
             <dd>Membresía al día.</dd>
           </div>
           <div className="flex items-center gap-2">
-            <dt><Badge tone="warn">Pago pendiente</Badge></dt>
+            <dt><Badge tone="warn">Pago por validar</Badge></dt>
             <dd>Hay un pago por validar.</dd>
           </div>
           <div className="flex items-center gap-2">
@@ -1151,8 +1151,8 @@ export default function MembersPage(): React.ReactElement {
       // saw: the write itself succeeded, only the re-read did not.
       setError(
         silent
-          ? "La membresía se creó, pero no se pudo actualizar la lista. Recargue para verla."
-          : "No se pudieron cargar los miembros. Intente nuevamente.",
+          ? "La membresía se creó, pero no se pudo actualizar la lista. Recarga para verla."
+          : "No se pudieron cargar los miembros. Intenta nuevamente.",
       );
     } finally {
       if (!silent) setLoading(false);

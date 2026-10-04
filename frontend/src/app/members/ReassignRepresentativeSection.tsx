@@ -53,7 +53,7 @@ export default function ReassignRepresentativeSection({
 
   async function handleSubmit(): Promise<void> {
     if (!selected) {
-      setError("Busque y seleccione al nuevo representante.");
+      setError("Busca y selecciona al nuevo representante.");
       return;
     }
     if (!evidenciaIdentidad.trim()) {

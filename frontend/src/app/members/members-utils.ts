@@ -291,7 +291,7 @@ export const PAYMENT_STATUS_TONE: Record<PaymentStatus, BadgeTone> = {
 
 export const PAYER_TYPE_LABELS: Record<PayerType, string> = {
   representante: "Representante",
-  estudiante: "Estudiante",
+  estudiante: "Jugador",
 };
 
 export const MEMBERSHIP_TYPE_LABELS: Record<TipoMembresia, string> = {
@@ -666,7 +666,7 @@ export function getAccountStatusBadge(account: MemberAccount): {
       (a) => a.ultimoPago?.estado === "pendiente_validacion",
     )
   ) {
-    return { label: "Pago pendiente de validación", tone: "warn" };
+    return { label: "Pago por validar", tone: "warn" };
   }
   // Issue #1199: `MEMBERSHIP_STATUS_BY_ESTADO` folds a just-created backend
   // INACTIVA membership into the same `"vencida"` bucket as a real VENCIDA

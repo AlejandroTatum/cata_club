@@ -171,8 +171,8 @@ export default function RegularizarDeudaForm({
   function validate(): string | null {
     if (!fechaInicio || !fechaFin) return "Las fechas son obligatorias.";
     if (fechaInicio >= fechaFin) return "La fecha de inicio debe ser anterior a la de fin.";
-    if (!motivo.trim()) return "Debe indicar el motivo de la regularización.";
-    if (!cotizacion) return cotizacionError ?? "Espere a que se calcule el monto de la regularización.";
+    if (!motivo.trim()) return "Debes indicar el motivo de la regularización.";
+    if (!cotizacion) return cotizacionError ?? "Espera a que se calcule el monto de la regularización.";
     if (cotizacion.meses > MAX_MESES_COBERTURA) return MENSAJE_MESES_MAXIMO_EXCEDIDO;
     // $0 is valid: a 100% discount quotes zero and the backend accepts exactly that.
     if (!(Number(cotizacion.montoEsperado) >= 0)) return "El monto a regularizar no es válido.";
@@ -264,7 +264,7 @@ export default function RegularizarDeudaForm({
           )}
 
           <p className="mb-2 text-2xs text-ink-3">
-            Registre aquí los meses atrasados que el alumno ya pagó o debe regularizar. Si el
+            Registra aquí los meses atrasados que el jugador ya pagó o debe regularizar. Si el
             período incluye hoy, la membresía queda activa.
           </p>
 
@@ -304,7 +304,7 @@ export default function RegularizarDeudaForm({
               </>
             )}
             {!cotizando && !cotizacion && !cotizacionError && (
-              <p className="text-xs text-ink-3">Indique las fechas para calcular el monto.</p>
+              <p className="text-xs text-ink-3">Indica las fechas para calcular el monto.</p>
             )}
             {cotizacionError && <p className="text-2xs text-cata-red"><LinkifiedText text={cotizacionError} /></p>}
           </div>
@@ -314,7 +314,7 @@ export default function RegularizarDeudaForm({
             type="textarea"
             value={motivo}
             onChange={setMotivo}
-            placeholder="Por qué se regulariza (p. ej. demora del club, acuerdo con el alumno)"
+            placeholder="Por qué se regulariza (p. ej. demora del club, acuerdo con el jugador)"
             labelClassName="mt-2 block text-2xs text-ink-3"
             required
           />

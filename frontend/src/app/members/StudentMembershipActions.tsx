@@ -28,7 +28,7 @@ function MembershipSummary({ student }: { student: MemberStudentSummary }): Reac
     return (
       <div className="flex flex-wrap items-center gap-2 rounded-ctl border border-line bg-sunken px-4 py-3 text-sm text-ink-2">
         <Badge tone="neutral">Sin membresía</Badge>
-        Cree una membresía para poder registrar pagos.
+        Crea una membresía para poder registrar pagos.
       </div>
     );
   }
@@ -259,7 +259,7 @@ export default function StudentMembershipActions({
                 data-secondary-action={secondaryAction.name}
                 description={
                   suspended
-                    ? "Reactive la membresía para registrar pagos."
+                    ? "Reactiva la membresía para registrar pagos."
                     : ACTION_DESCRIPTION[secondaryAction.name]
                 }
               >

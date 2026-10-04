@@ -29,7 +29,7 @@ export const ROLE_LABELS: Record<BackendTipoRol, string> = {
   ADMINISTRADOR: "Admin",
   ENTRENADOR: "Entrenador",
   REPRESENTANTE: "Representante",
-  ALUMNO: "Alumno",
+  ALUMNO: "Jugador",
 };
 
 export interface AccountRolesAndStatus {

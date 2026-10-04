@@ -215,10 +215,10 @@ vi.mock("@/services/api", () => {
 // Issue #1221: `estudiantes` (the row's own summary) and `dependientes` (who
 // this account represents) are two independent fields now — most of this
 // file's fixtures only care that SOME `MemberStudentSummary` renders inside
-// "Estudiantes a cargo", so `SOFIA_SUMMARY` is shared by both to keep every
+// "Jugadores a cargo", so `SOFIA_SUMMARY` is shared by both to keep every
 // pre-existing test below unchanged. Tests that specifically exercise the
 // issue's fix (a representative's real dependents list) build their own
-// distinct fixtures — see "MembersPage — Estudiantes a cargo lists real
+// distinct fixtures — see "MembersPage — Jugadores a cargo lists real
 // dependents (issue #1221)" further down.
 const SOFIA_SUMMARY: MemberStudentSummary = {
   id: "10",
@@ -586,7 +586,7 @@ describe("MembersPage — Editar member modal", () => {
     fireEvent.click(getEditButton(row));
     const dialog = screen.getByRole("dialog");
 
-    expect(within(dialog).getByText("Estudiantes a cargo")).toBeInTheDocument();
+    expect(within(dialog).getByText("Jugadores a cargo")).toBeInTheDocument();
     expect(within(dialog).getByText("Sofía González")).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: /ficha médica/i })).not.toBeInTheDocument();
   });
@@ -633,7 +633,7 @@ describe("MembersPage — Editar member modal", () => {
     expect(within(dialog).getByRole("radio", { name: /admin/i })).toBeInTheDocument();
     expect(within(dialog).getByRole("radio", { name: /entrenador/i })).toBeInTheDocument();
     expect(within(dialog).getByRole("radio", { name: /representante/i })).toBeInTheDocument();
-    expect(within(dialog).getByRole("radio", { name: /alumno/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole("radio", { name: /jugador/i })).toBeInTheDocument();
   });
 
   it("shows the member's read-only name and telefono inside the modal", async () => {
@@ -840,12 +840,12 @@ describe("MembersPage — Editar member modal", () => {
     const row = await findAccountRow();
 
     const dialog = await openModalAndWaitForRoles(row);
-    pickRole(dialog, /alumno/i);
+    pickRole(dialog, /jugador/i);
 
     expect(screen.queryByText(/control total del club/i)).not.toBeInTheDocument();
     await waitFor(() => expect(mockAsignarRol).toHaveBeenCalledWith(1, "ALUMNO"));
     expect(mockQuitarRol).toHaveBeenCalledWith(1, "ENTRENADOR");
-    expect(within(dialog).getByRole("radio", { name: /alumno/i })).toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: /jugador/i })).toBeChecked();
     expect(within(dialog).getByRole("radio", { name: /entrenador/i })).not.toBeChecked();
   });
 
@@ -863,7 +863,7 @@ describe("MembersPage — Editar member modal", () => {
 
     // Walk the whole group the way arrow keys do: each step is a change event.
     selectRadio(dialog, /representante/i);
-    selectRadio(dialog, /alumno/i);
+    selectRadio(dialog, /jugador/i);
     selectRadio(dialog, /admin/i);
 
     expect(mockAsignarRol).not.toHaveBeenCalled();
@@ -886,7 +886,7 @@ describe("MembersPage — Editar member modal", () => {
     const row = await findAccountRow();
     const dialog = await openModalAndWaitForRoles(row);
 
-    selectRadio(dialog, /alumno/i);
+    selectRadio(dialog, /jugador/i);
     const save = within(dialog).getByRole("button", { name: /^guardar rol$/i });
     expect(save).toBeEnabled();
     fireEvent.click(save);
@@ -895,7 +895,7 @@ describe("MembersPage — Editar member modal", () => {
     expect(mockAsignarRol).toHaveBeenCalledWith(1, "ALUMNO");
     expect(mockQuitarRol).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(within(dialog).getByRole("button", { name: /^guardar rol$/i })).toBeDisabled());
-    expect(within(dialog).getByRole("radio", { name: /alumno/i })).toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: /jugador/i })).toBeChecked();
   });
 
   it("H3: a failed save rolls the selection back to the stored role and shows the error", async () => {
@@ -910,11 +910,11 @@ describe("MembersPage — Editar member modal", () => {
     const row = await findAccountRow();
     const dialog = await openModalAndWaitForRoles(row);
 
-    pickRole(dialog, /alumno/i);
+    pickRole(dialog, /jugador/i);
 
     await waitFor(() => expect(within(dialog).getByRole("alert")).toHaveTextContent(/no se puede cambiar el rol ahora/i));
     expect(within(dialog).getByRole("radio", { name: /entrenador/i })).toBeChecked();
-    expect(within(dialog).getByRole("radio", { name: /alumno/i })).not.toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: /jugador/i })).not.toBeChecked();
     expect(mockAsignarRol).not.toHaveBeenCalled();
   });
 
@@ -932,7 +932,7 @@ describe("MembersPage — Editar member modal", () => {
     const row = await findAccountRow();
     const dialog = await openModalAndWaitForRoles(row);
 
-    pickRole(dialog, /alumno/i);
+    pickRole(dialog, /jugador/i);
 
     await waitFor(() => expect(within(dialog).getByRole("alert")).toHaveTextContent(/no se pudo asignar el rol/i));
     expect(mockAsignarRol).toHaveBeenCalledTimes(2);
@@ -994,10 +994,10 @@ describe("MembersPage — Editar member modal", () => {
     const row = await findAccountRow();
 
     const dialog = await openModalAndWaitForRoles(row);
-    pickRole(dialog, /alumno/i);
+    pickRole(dialog, /jugador/i);
 
     await waitFor(() => expect(mockAsignarRol).toHaveBeenCalledWith(1, "ALUMNO"));
-    expect(within(dialog).getByRole("radio", { name: /alumno/i })).toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: /jugador/i })).toBeChecked();
     expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
   });
 
@@ -1045,7 +1045,7 @@ describe("MembersPage — Editar member modal", () => {
     const row = await findAccountRow();
     const dialog = await openModalAndWaitForRoles(row);
 
-    pickRole(dialog, /alumno/i);
+    pickRole(dialog, /jugador/i);
 
     await waitFor(() => expect(within(dialog).getByRole("alert")).toHaveTextContent(/no se pudo asignar el rol/i));
     expect(within(dialog).getAllByRole("alert")).toHaveLength(1);
@@ -1086,7 +1086,7 @@ describe("MembersPage — Editar member modal", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /^activa$/i }));
 
     expect(screen.getByText(/¿Desactivar la cuenta de María González\?/)).toBeInTheDocument();
-    expect(screen.getByText(/No podrá iniciar sesión hasta que la active de nuevo/)).toBeInTheDocument();
+    expect(screen.getByText(/No podrá iniciar sesión hasta que la actives de nuevo/)).toBeInTheDocument();
     expect(mockCambiarEstadoCuenta).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /^cancelar$/i }));
@@ -1162,7 +1162,7 @@ describe("MembersPage — Editar member modal", () => {
     const row = await findAccountRow();
 
     const dialog = await openModalAndWaitForRoles(row);
-    const panel = within(dialog).getByRole("heading", { name: "Estudiantes a cargo" }).closest("section") as HTMLElement;
+    const panel = within(dialog).getByRole("heading", { name: "Jugadores a cargo" }).closest("section") as HTMLElement;
     expect(within(panel).getByText("En el club")).toBeInTheDocument();
     expect(within(panel).queryByText("Estado")).not.toBeInTheDocument();
   });
@@ -1204,7 +1204,7 @@ describe("MembersPage — Editar member modal", () => {
     });
     expect(within(dialog).getByRole("radio", { name: /admin/i })).not.toBeChecked();
     expect(within(dialog).getByRole("radio", { name: /representante/i })).not.toBeChecked();
-    expect(within(dialog).getByRole("radio", { name: /alumno/i })).not.toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: /jugador/i })).not.toBeChecked();
   });
 
   it("reflects the persona's real activo:false state when the modal opens, instead of the true placeholder", async () => {
@@ -1446,7 +1446,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     } = {},
   ): Promise<HTMLElement> {
     // Issue #1221: `entryPoint: "edit"` opens the account dialog, which now
-    // renders "Estudiantes a cargo" from `dependientes`, not `estudiantes` —
+    // renders "Jugadores a cargo" from `dependientes`, not `estudiantes` —
     // this same summary object has to back both fields so the (majority)
     // default entryPoint ("payments", PaymentsDialog reading `estudiantes`)
     // and the one "edit" test below keep seeing the same data.
@@ -2473,7 +2473,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
     // and estado, false of the identity fields and the membership form.
     expect(within(dialog).queryByText(/los cambios se guardan al instante/i)).not.toBeInTheDocument();
 
-    for (const title of ["Datos de la cuenta", "Estado de la cuenta", "Roles", "Estudiantes a cargo"]) {
+    for (const title of ["Datos de la cuenta", "Estado de la cuenta", "Roles", "Jugadores a cargo"]) {
       const heading = within(dialog).getByRole("heading", { name: title });
       const header = heading.parentElement as HTMLElement;
       expect(within(header).getByText(/se guarda al instante|sin cambios|cambios sin guardar/i)).toBeInTheDocument();
@@ -2736,7 +2736,7 @@ describe("MembersPage — counts live in the filter chips", () => {
     expect(document.querySelector(".min-h-stat")).toBeNull();
     expect(screen.queryByTestId("stat-track")).not.toBeInTheDocument();
     const chips = screen.getByRole("group", { name: "Filtrar miembros" });
-    for (const label of ["Todos", "Pago pendiente", "Sin datos de emergencia", "Membresía vencida"]) {
+    for (const label of ["Todos", "Pago por validar", "Sin datos de emergencia", "Membresía vencida"]) {
       expect(within(chips).getByRole("button", { name: new RegExp(label) })).toBeInTheDocument();
     }
   });
@@ -2933,7 +2933,7 @@ describe("MembersPage — missing emergency data reads as informational, not an 
     fireEvent.click(getRowAction(row, /^ficha médica de maría gonzález$/i));
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByRole("status")).toHaveTextContent("Complete los datos y guárdelos.");
+    expect(within(dialog).getByRole("status")).toHaveTextContent("Completa los datos y guárdalos.");
     // The status itself is stated once, by the editor's "Nueva" chip.
     expect(within(dialog).queryByText(/Sin ficha médica/)).not.toBeInTheDocument();
     // The editor stays fully available: the banner is additive.
@@ -3562,13 +3562,13 @@ describe("MembersPage — Independizar (issue #1137)", () => {
 // ---------------------------------------------------------------------------
 // Issue #505: the row's single "Editar" trigger used to be the only entry
 // point into ficha médica (behind an internal "Ficha médica" toggle inside
-// the account dialog's "Estudiantes a cargo" section) AND pagos/membresía
+// the account dialog's "Jugadores a cargo" section) AND pagos/membresía
 // (the create/register/regularizar/suspender/cambiar-plan block in that same
 // section) — both reachable only after opening the generic account dialog
 // first. "Ficha médica" and "Pagos" are now their own direct entry points,
 // each reaching its flow with no intermediate dialog. `Editar` itself is
 // untouched — it still opens the full account dialog with roles, estado,
-// datos personales and "Estudiantes a cargo", exactly as before.
+// datos personales and "Jugadores a cargo", exactly as before.
 // ---------------------------------------------------------------------------
 
 describe("MembersPage — direct Ficha médica and Pagos entry points (issue #505)", () => {
@@ -3755,7 +3755,7 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     fireEvent.click(getRowButton(row, /^editar/i));
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("Estudiantes a cargo")).toBeInTheDocument();
+    expect(within(dialog).getByText("Jugadores a cargo")).toBeInTheDocument();
     expect(within(dialog).getByRole("radio", { name: /admin/i })).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: /ficha médica/i })).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: /crear membresía|registrar pago|regularizar deuda/i })).not.toBeInTheDocument();
@@ -4369,7 +4369,7 @@ describe("MembersPage — representative-only row actions (issue #1199, #1211)",
 });
 
 // ---------------------------------------------------------------------------
-// Issue #1221: "Estudiantes a cargo" was rendering `account.estudiantes` —
+// Issue #1221: "Jugadores a cargo" was rendering `account.estudiantes` —
 // the row's OWN summary — instead of the personas this account actually
 // represents. Every dialog showed the account holder themself; a
 // representative's real dependents never appeared. This suite exercises the
@@ -4377,7 +4377,7 @@ describe("MembersPage — representative-only row actions (issue #1199, #1211)",
 // and hides (rather than fakes an entry) when there are none.
 // ---------------------------------------------------------------------------
 
-describe('MembersPage — "Estudiantes a cargo" lists real dependents (issue #1221)', () => {
+describe('MembersPage — "Jugadores a cargo" lists real dependents (issue #1221)', () => {
   beforeEach(() => {
     mockFetchMembers.mockReset();
   });
@@ -4428,7 +4428,7 @@ describe('MembersPage — "Estudiantes a cargo" lists real dependents (issue #12
       fireEvent.click(getEditButton(row));
       const dialog = screen.getByRole("dialog");
 
-      expect(within(dialog).getByText("Estudiantes a cargo")).toBeInTheDocument();
+      expect(within(dialog).getByText("Jugadores a cargo")).toBeInTheDocument();
       expect(within(dialog).getByText("Ana Reyes")).toBeInTheDocument();
       expect(within(dialog).getByText("10 años")).toBeInTheDocument();
       expect(within(dialog).getByText("Luis Reyes")).toBeInTheDocument();
@@ -4436,14 +4436,14 @@ describe('MembersPage — "Estudiantes a cargo" lists real dependents (issue #12
 
       // The account holder's own name only ever appears in the dialog's
       // header/identity fields, never as an entry inside this section's list.
-      const section = within(dialog).getByText("Estudiantes a cargo").closest("section") as HTMLElement;
+      const section = within(dialog).getByText("Jugadores a cargo").closest("section") as HTMLElement;
       expect(within(section).queryByText("Carla Reyes")).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('hides "Estudiantes a cargo" for a represented minor — it never lists themself', async () => {
+  it('hides "Jugadores a cargo" for a represented minor — it never lists themself', async () => {
     const minor: MemberAccount = {
       id: "60",
       role: "representante",
@@ -4469,10 +4469,10 @@ describe('MembersPage — "Estudiantes a cargo" lists real dependents (issue #12
     fireEvent.click(getEditButton(row));
     const dialog = screen.getByRole("dialog");
 
-    expect(within(dialog).queryByText("Estudiantes a cargo")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Jugadores a cargo")).not.toBeInTheDocument();
   });
 
-  it('hides "Estudiantes a cargo" for a self-managed adult with no dependientes', async () => {
+  it('hides "Jugadores a cargo" for a self-managed adult with no dependientes', async () => {
     const selfManaged: MemberAccount = {
       id: "70",
       role: "representante",
@@ -4496,10 +4496,10 @@ describe('MembersPage — "Estudiantes a cargo" lists real dependents (issue #12
     fireEvent.click(getEditButton(row));
     const dialog = screen.getByRole("dialog");
 
-    expect(within(dialog).queryByText("Estudiantes a cargo")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Jugadores a cargo")).not.toBeInTheDocument();
   });
 
-  it('hides "Estudiantes a cargo" when the fixture omits dependientes entirely (older/unmigrated data)', async () => {
+  it('hides "Jugadores a cargo" when the fixture omits dependientes entirely (older/unmigrated data)', async () => {
     const noDependientesField: MemberAccount = {
       id: "80",
       role: "representante",
@@ -4522,7 +4522,7 @@ describe('MembersPage — "Estudiantes a cargo" lists real dependents (issue #12
     fireEvent.click(getEditButton(row));
     const dialog = screen.getByRole("dialog");
 
-    expect(within(dialog).queryByText("Estudiantes a cargo")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Jugadores a cargo")).not.toBeInTheDocument();
   });
 });
 
