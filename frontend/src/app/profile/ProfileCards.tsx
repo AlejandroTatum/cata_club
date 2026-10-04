@@ -7,10 +7,12 @@
  * state and the requests.
  */
 
+import { useState } from "react";
 import Link from "next/link";
-import { Camera, Loader2, Pencil } from "lucide-react";
+import { Camera, Eye, Loader2, Pencil } from "lucide-react";
 import AvatarPhoto from "@/components/AvatarPhoto";
-import { Badge, buttonClasses, cn } from "@/components/ui";
+import PhotoViewerDialog from "@/components/PhotoViewerDialog";
+import { Badge, buttonClasses, cn, RowActionsMenu } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui/Badge";
 import { ICON } from "@/lib/icon-size";
 import type { StudentProfileSummary } from "@/services/api";
@@ -53,6 +55,95 @@ interface IdentityCardProps {
   fotoError: string | null;
   fotoInputRef: React.RefObject<HTMLInputElement>;
   onFotoChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}
+
+/**
+ * The round badge on the avatar's lower-right edge, WhatsApp's pencil. 32px to
+ * sit on an 84px avatar; `touch-target-reach` gives a thumb its 44px anyway.
+ */
+const PENCIL_BADGE =
+  "touch-target-reach absolute -bottom-0.5 -right-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-paper bg-coal text-white shadow-card hover:bg-ink-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cata-red disabled:opacity-80";
+
+/**
+ * The avatar with its pencil. With a photo, the pencil offers «Ver foto» and
+ * «Cambiar foto», and the photo itself opens full size; without one there is
+ * nothing to view, so the pencil goes straight to the file picker.
+ */
+function AvatarWithPencil({
+  fotoUrl,
+  initials,
+  uploadingFoto,
+  onPick,
+}: {
+  fotoUrl?: string | null;
+  initials: string;
+  uploadingFoto: boolean;
+  onPick: () => void;
+}): React.ReactElement {
+  const [viewing, setViewing] = useState(false);
+  const circle =
+    "flex h-[84px] w-[84px] items-center justify-center overflow-hidden rounded-full border-4 border-paper bg-coal font-display text-xl tracking-flat text-ball shadow-card";
+  const photo = (
+    <AvatarPhoto fotoUrl={fotoUrl} initials={initials} className="h-full w-full rounded-full object-cover" />
+  );
+
+  return (
+    <div data-testid="profile-avatar" className="relative flex-none">
+      {fotoUrl ? (
+        <button
+          type="button"
+          aria-label="Ver foto de perfil"
+          onClick={() => setViewing(true)}
+          className={cn(circle, "cursor-zoom-in")}
+        >
+          {photo}
+        </button>
+      ) : (
+        <div className={circle}>{photo}</div>
+      )}
+
+      {uploadingFoto ? (
+        <button type="button" disabled aria-label="Subiendo foto de perfil…" className={PENCIL_BADGE}>
+          <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
+        </button>
+      ) : fotoUrl ? (
+        <RowActionsMenu
+          label="Editar foto de perfil"
+          align="start"
+          triggerClassName={PENCIL_BADGE}
+          triggerIcon={<Pencil size={ICON.sm} strokeWidth={1.75} aria-hidden="true" />}
+          items={[
+            {
+              label: "Ver foto",
+              icon: <Eye size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+              onSelect: () => setViewing(true),
+            },
+            {
+              label: "Cambiar foto",
+              icon: <Camera size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+              onSelect: onPick,
+            },
+          ]}
+        />
+      ) : (
+        <button type="button" aria-label="Cambiar foto de perfil" title="Cambiar foto de perfil" onClick={onPick} className={PENCIL_BADGE}>
+          <Pencil size={ICON.sm} strokeWidth={1.75} aria-hidden="true" />
+        </button>
+      )}
+
+      {fotoUrl && (
+        <PhotoViewerDialog
+          open={viewing}
+          fotoUrl={fotoUrl}
+          onClose={() => setViewing(false)}
+          onChange={() => {
+            setViewing(false);
+            onPick();
+          }}
+        />
+      )}
+    </div>
+  );
 }
 
 /** One bounce when the card first draws; nothing at all under reduced motion. */
@@ -103,13 +194,12 @@ export function IdentityCard({
       <style>{BALL_MOTION}</style>
 
       <div className="relative -mt-1.5 flex items-end gap-3.5">
-        <div className="flex h-[84px] w-[84px] flex-none items-center justify-center overflow-hidden rounded-full border-4 border-paper bg-coal font-display text-xl tracking-flat text-ball shadow-card">
-          <AvatarPhoto
-            fotoUrl={fotoUrl}
-            initials={initials}
-            className="h-full w-full rounded-full object-cover"
-          />
-        </div>
+        <AvatarWithPencil
+          fotoUrl={fotoUrl}
+          initials={initials}
+          uploadingFoto={uploadingFoto}
+          onPick={() => fotoInputRef.current?.click()}
+        />
         <h2 className="min-w-0 break-words pb-1.5 font-display text-lg uppercase leading-tight tracking-flat text-ink">
           {name}
         </h2>
@@ -149,19 +239,6 @@ export function IdentityCard({
       </dl>
 
       <div className="pb-3">
-        <button
-          type="button"
-          onClick={() => fotoInputRef.current?.click()}
-          disabled={uploadingFoto}
-          className="touch-target inline-flex items-center gap-1.5 text-sm font-semibold text-ink-2 underline underline-offset-4 hover:text-ink disabled:opacity-60"
-        >
-          {uploadingFoto ? (
-            <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
-          ) : (
-            <Camera size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          )}
-          {uploadingFoto ? "Subiendo…" : "Cambiar foto"}
-        </button>
         <input
           ref={fotoInputRef}
           type="file"

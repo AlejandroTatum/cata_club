@@ -2185,3 +2185,113 @@ describe("ProfilePage — tú register (issue #340)", () => {
     },
   );
 });
+
+/**
+ * The photo control the way WhatsApp does it: a pencil on the avatar itself.
+ * With a photo the pencil opens «Ver foto» / «Cambiar foto» and the avatar
+ * opens the photo full size; without one there is nothing to view, so the
+ * pencil goes straight to the file picker.
+ */
+describe("ProfilePage — pencil on the avatar to view or change the photo", () => {
+  const FOTO = "https://res.cloudinary.com/test/image/upload/perfil-ana.jpg";
+
+  async function renderAdmin(fotoUrl: string | null): Promise<HTMLElement> {
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce({ ...PERFIL_ADMIN, fotoUrl });
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    return waitForStaffProfile();
+  }
+
+  it("puts the pencil on the avatar and drops the separate «Cambiar foto» link", async () => {
+    const hero = await renderAdmin(null);
+
+    const avatar = within(hero).getByTestId("profile-avatar");
+    const pencil = within(avatar).getByRole("button", { name: "Cambiar foto de perfil" });
+    expect(pencil).toBeInTheDocument();
+    expect(within(hero).getAllByRole("button", { name: /cambiar foto/i })).toHaveLength(1);
+  });
+
+  it("without a photo, the pencil opens the file picker and nothing offers to view a photo", async () => {
+    const hero = await renderAdmin(null);
+    const input = screen.getByTestId("foto-perfil-input") as HTMLInputElement;
+    const clickSpy = vi.spyOn(input, "click");
+
+    fireEvent.click(within(hero).getByRole("button", { name: "Cambiar foto de perfil" }));
+
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(within(hero).queryByRole("button", { name: /ver foto/i })).not.toBeInTheDocument();
+  });
+
+  it("with a photo, the pencil offers «Ver foto» and «Cambiar foto»", async () => {
+    const hero = await renderAdmin(FOTO);
+    const input = screen.getByTestId("foto-perfil-input") as HTMLInputElement;
+    const clickSpy = vi.spyOn(input, "click");
+
+    fireEvent.click(within(hero).getByRole("button", { name: "Editar foto de perfil" }));
+
+    const menu = screen.getByRole("menu", { name: "Editar foto de perfil" });
+    expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+      "Ver foto",
+      "Cambiar foto",
+    ]);
+
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Cambiar foto" }));
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("«Ver foto» opens the photo full size, and Escape closes it", async () => {
+    const hero = await renderAdmin(FOTO);
+
+    fireEvent.click(within(hero).getByRole("button", { name: "Editar foto de perfil" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Ver foto" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Foto de perfil" });
+    expect(within(dialog).getByRole("img", { name: "Foto de perfil" })).toHaveAttribute("src", FOTO);
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("tapping the avatar photo opens the viewer, which can change the photo too", async () => {
+    const hero = await renderAdmin(FOTO);
+    const input = screen.getByTestId("foto-perfil-input") as HTMLInputElement;
+    const clickSpy = vi.spyOn(input, "click");
+
+    fireEvent.click(within(hero).getByRole("button", { name: "Ver foto de perfil" }));
+    const dialog = screen.getByRole("dialog", { name: "Foto de perfil" });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cambiar foto" }));
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("the viewer closes from its «Cerrar» button", async () => {
+    const hero = await renderAdmin(FOTO);
+
+    fireEvent.click(within(hero).getByRole("button", { name: "Ver foto de perfil" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cerrar" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("disables the pencil and shows a spinner while the photo uploads", async () => {
+    let resolve: (value: PerfilPropio) => void = () => {};
+    mockSubirFotoPerfil.mockReturnValueOnce(new Promise<PerfilPropio>((r) => (resolve = r)));
+    const hero = await renderAdmin(null);
+
+    const archivo = new File(["contenido"], "foto.jpg", { type: "image/jpeg" });
+    fireEvent.change(screen.getByTestId("foto-perfil-input"), { target: { files: [archivo] } });
+
+    const pencil = await within(hero).findByRole("button", { name: "Subiendo foto de perfil…" });
+    expect(pencil).toBeDisabled();
+
+    await act(async () => resolve({ ...PERFIL_ADMIN, fotoUrl: FOTO }));
+    expect(await within(hero).findByRole("button", { name: "Editar foto de perfil" })).toBeEnabled();
+  });
+});
