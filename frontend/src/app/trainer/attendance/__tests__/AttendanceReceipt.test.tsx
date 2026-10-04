@@ -73,4 +73,17 @@ describe("AttendanceReceipt — another trainer filed first (ENT-03)", () => {
     expect(aside.className).toMatch(/self-start/);
     expect(aside.firstElementChild?.className).not.toMatch(/flex-1/);
   });
+
+  it("keeps the title above the grid so both columns start on the same row (#1617)", () => {
+    renderReceipt([]);
+
+    const aside = screen.getByRole("complementary", { name: "Siguientes pasos" });
+    const grid = aside.parentElement as HTMLElement;
+    const title = screen.getByRole("heading", { level: 2 });
+    const darkCard = screen.getByText("Guardada en el historial del club");
+    expect(grid.contains(title)).toBe(false);
+    expect(grid.contains(darkCard)).toBe(true);
+    // Mobile order: the title still precedes the columns in the DOM.
+    expect(title.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });
