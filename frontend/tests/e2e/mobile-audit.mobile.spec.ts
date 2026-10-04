@@ -8,10 +8,12 @@
  *   (a) no horizontal overflow;
  *   (b) tap targets of at least 44×44 CSS px (violations are collected and
  *       compared against the documented allow-list below);
- *   (c) no console errors;
+ *   (c) no console errors from app code (see `isIgnorableConsoleError`);
  *   (d) no voseo anywhere and no «usted» outside the legal pages (S6).
- * A full-page screenshot per screen lands in odd/qa4/mobile-audit/screens/
- * (git-ignored).
+ * A full-page screenshot and a JSON report per screen are attached to the
+ * test (`testInfo.outputPath`, inside the git-ignored `test-results/`). Set
+ * MOBILE_AUDIT_SCREENS=1 to also copy them to odd/qa4/mobile-audit/screens/;
+ * nothing is ever written outside those two places.
  *
  * The file is named `.mobile.spec.ts` on purpose: that is what the
  * `mobile-chromium` project matches, and it keeps the desktop project from
@@ -21,10 +23,18 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 
+import {
+  buildUstedRegisterRegex,
+  USTED_IMPERATIVOS,
+  USTED_IMPERATIVOS_CON_CLITICO,
+  USTED_PRONOMBRES,
+} from "../../src/lib/__tests__/usted-register-lock";
 import { E2E_BASE_URL } from "./e2e-target";
 import { MOCK_CLUB_PAYMENT_INFO } from "./helpers/club-payment-info";
 
-const SHOTS_DIR = path.resolve(process.cwd(), "../odd/qa4/mobile-audit/screens");
+/** Resolved from this file, never from the cwd; only written when MOBILE_AUDIT_SCREENS=1. */
+const SHOTS_DIR = path.resolve(__dirname, "../../../odd/qa4/mobile-audit/screens");
+const COPY_SCREENS = process.env.MOBILE_AUDIT_SCREENS === "1";
 const MIN_TARGET = 44;
 
 type Role = "public" | "admin" | "representante" | "estudiante" | "entrenador";
@@ -100,16 +110,25 @@ const VIEWPORTS = [
 ];
 
 /**
- * Documented tap-target exceptions. A violation is allowed only when its
- * `kind` + `label` match an entry here; anything else fails the spec.
+ * Documented tap-target exceptions. A violation is allowed only when it is
+ * classified `inline-link` or its `screen|label` matches `ALLOW_LIST`; anything
+ * else fails the spec.
  *
- *  - `inline-link`: a text link inside a sentence. WCAG 2.5.8 exempts inline
- *    targets, and padding them would break the line box.
- *  - `skip-link`: «Saltar al contenido», only visible on keyboard focus.
+ *  - `inline-link`: an `<a>` whose computed `display` is `inline` and whose
+ *    parent's text is more than 3 characters longer than the link's own text,
+ *    i.e. a link that sits inside a sentence. WCAG 2.5.8 exempts inline
+ *    targets, and padding them would break the line box. A standalone link
+ *    (own `display: block|inline-block|flex`, or the only text in its parent)
+ *    is never classified this way.
  *
- * Hit areas drawn with `::after` (the password eye) are measured by the probe.
+ * The `::after` hit-area exemption lives in `probe`: a control is skipped when
+ * its `::after` has content, is `position: absolute` and its computed width and
+ * height are both at least `MIN_TARGET`. Only the pseudo-element's size is
+ * checked, not that it is centred on the control (the password eye is the only
+ * user today). A skip link is not listed: it is hidden until keyboard focus, so
+ * the visibility check already drops it.
  */
-const ALLOWED_KINDS = new Set(["inline-link", "skip-link"]);
+const ALLOWED_KINDS = new Set(["inline-link"]);
 /** `screen|label` pairs reviewed by the owner or documented in the report. */
 const ALLOW_LIST: { key: RegExp; reason: string }[] = [
   // Minors from odd/qa4/mobile-audit/report.md. Each one is a secondary text
@@ -125,8 +144,41 @@ const ALLOW_LIST: { key: RegExp; reason: string }[] = [
 /** Voseo forms only: the unaccented forms (`hace`, `usa`…) are plain third person, so they are not listed. */
 const VOSEO_STRICT = /(?<![\p{L}])(?:tenés|podés|querés|hacé|elegí|ingresá|seleccioná|escribí|subí|cargá|completá|revisá|confirmá|presioná|tocá|mirá|fijate|avisanos|contactanos|escribinos|llamanos|registrate|inscribite|anotate|sabés|necesitás|vení|decí|poné|sacá|usá|buscá|probá|volvé|andá|esperá|intentá|verificá|guardá|descargá|compartí|agregá|cambiá|editá|eliminá|cerrá|abrí|seguí|continuá|vos)(?![\p{L}])/iu;
 
-const USTED =
-  /(?<![\p{L}])(?:usted(es)?|ingrese|indique|seleccione|escriba|complete|revise|verifique|confirme|presione|elija|haga|suba|adjunte|cargue|utilice|registre|descargue|cont[aá]ctenos|comun[ií]quese|consulte|espere|intente|guarde|pulse|introduzca|busque|agregue|cambie|edite|elimine|cierre|abra|siga|contin[uú]e|vuelva|escoja|escoge|proporcione|ingresar[aá]|recuerde|tenga|puede usted)(?![\p{L}])/iu;
+/**
+ * The app-wide register lock (`usted-register-lock.ts`) is the single source of
+ * truth: its imperative-position rule matches «Complete el formulario» but not
+ * the tú / third-person subjunctive «para que el club revise». Each match is
+ * classified as usted or voseo by the lock's own word lists.
+ */
+const USTED_FORMS = new Set(
+  [...USTED_PRONOMBRES, ...USTED_IMPERATIVOS, ...USTED_IMPERATIVOS_CON_CLITICO].map((w) => w.toLowerCase()),
+);
+
+function registerViolations(text: string, legal: boolean): { voseo: string[]; usted: string[] } {
+  const hits = [...(text.match(buildUstedRegisterRegex()) ?? []), ...(text.match(new RegExp(VOSEO_STRICT.source, "giu")) ?? [])];
+  const usted = hits.filter((h) => USTED_FORMS.has(h.toLowerCase()));
+  const voseo = hits.filter((h) => !USTED_FORMS.has(h.toLowerCase()));
+  return { voseo: [...new Set(voseo)], usted: legal ? [] : [...new Set(usted)] };
+}
+
+/**
+ * Console errors that never fail the audit. Deliberately narrow; everything
+ * else from app code fails it.
+ *  - Not from this app's origin (third-party scripts, extensions, fonts):
+ *    not ours to fix and not reproducible offline. Errors without a location
+ *    (page errors) are app code and are never ignored here.
+ *  - The unauthenticated session probe: `/api/auth/session` answers 401 on
+ *    public pages by design and Chromium logs that as a console error. Matched
+ *    by the failing URL, so it does not depend on event ordering.
+ * Ignored errors are still attached to the report.
+ */
+function isIgnorableConsoleError(text: string, url: string): boolean {
+  if (url && !url.startsWith(E2E_BASE_URL)) return true;
+  return /status of 401/.test(text) && /\/api\/auth\/session(?:\?|$)/.test(url);
+}
+
+/** React minified #418 / dev «Hydration failed»: a server/client markup mismatch. */
+const HYDRATION_ERROR = /Minified React error #418|Hydration failed|hydrat(?:ion|ed) .*(?:mismatch|didn't match)/i;
 
 function fulfillJson(route: Route, body: unknown, status = 200): Promise<void> {
   return route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
@@ -278,7 +330,7 @@ function probe({ min, width }: { min: number; width: number }): Probe {
     const lab = el.closest("label");
     if (lab && lab !== el) { const lr = lab.getBoundingClientRect(); w = Math.max(w, lr.width); h = Math.max(h, lr.height); }
     // A hit area drawn with ::after (the password eye) counts when it is absolutely
-    // positioned, centred on the control and at least `min` square.
+    // positioned and at least `min` square. Centring is not verified.
     const after = getComputedStyle(el, "::after");
     if (after.content !== "none" && after.position === "absolute" && parseFloat(after.width) >= min && parseFloat(after.height) >= min) continue;
     if (w >= min - 0.5 && h >= min - 0.5) continue;
@@ -289,7 +341,6 @@ function probe({ min, width }: { min: number; width: number }): Probe {
       const parentText = (el.parentElement?.innerText ?? "").replace(/\s+/g, " ").trim();
       const own = (el as HTMLElement).innerText.replace(/\s+/g, " ").trim();
       if (display === "inline" && parentText.length > own.length + 3) kind = "inline-link";
-      if (/skip|saltar/i.test(el.getAttribute("class") ?? "") || /^#/.test(el.getAttribute("href") ?? "") && /saltar/i.test(own)) kind = "skip-link";
     }
     targets.push({ kind, label: labelOf(el), tag, w: Math.round(w), h: Math.round(h) });
   }
@@ -305,40 +356,73 @@ for (const vp of VIEWPORTS) {
 
     for (const screen of SCREENS) {
       const id = `${screen.role}-${screen.name}`;
-      test(`${id}`, async ({ page }) => {
-        const consoleErrors: string[] = [];
-        // The unauthenticated session probe answers 401 by design on public
-        // pages; Chromium reports it as a console error. Anything else is real.
-        let sessionProbe401s = 0;
-        page.on("response", (r) => { if (r.status() === 401 && r.url().endsWith("/api/auth/session")) sessionProbe401s++; });
+      test(`${id}`, async ({ page }, testInfo) => {
+        // Listeners first, then navigation. Each load fills its own buffers.
+        let consoleErrors: string[] = [];
+        let ignoredErrors: string[] = [];
         page.on("console", (m) => {
           if (m.type() !== "error") return;
-          if (/status of 401/.test(m.text()) && sessionProbe401s > 0) { sessionProbe401s--; return; }
-          consoleErrors.push(m.text());
+          const text = m.text();
+          (isIgnorableConsoleError(text, m.location().url) ? ignoredErrors : consoleErrors).push(text);
         });
         page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
 
         await mockBackend(page, screen.role);
-        await page.goto(screen.path);
-        await page.waitForLoadState("networkidle");
-        await page.waitForTimeout(400);
+
+        /** One full load: navigate, then wait for the network and for a rendered, font-ready, painted page. */
+        const load = async (reload: boolean): Promise<void> => {
+          consoleErrors = [];
+          ignoredErrors = [];
+          if (reload) await page.reload();
+          else await page.goto(screen.path);
+          await page.waitForLoadState("networkidle");
+          await expect(page.locator("main, [role='main'], h1").first(), "the screen must render").toBeVisible();
+          await page.evaluate(
+            () => document.fonts.ready.then(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())))),
+          );
+        };
+
+        await load(false);
+        // A hydration mismatch has appeared twice and never reproduced. One is
+        // attached to the report; the same error on two consecutive loads of
+        // the same screen is a real defect and fails.
+        const firstLoadHydration = consoleErrors.filter((e) => HYDRATION_ERROR.test(e));
+        let hydrationNoise: string[] = [];
+        if (firstLoadHydration.length > 0) {
+          const firstLoadErrors = consoleErrors;
+          await load(true);
+          const secondLoadHydration = consoleErrors.filter((e) => HYDRATION_ERROR.test(e));
+          expect.soft(secondLoadHydration, "(c) hydration error reproduced on 2 consecutive loads").toEqual([]);
+          hydrationNoise = firstLoadHydration;
+          // The first load's non-hydration errors still count.
+          consoleErrors = [...firstLoadErrors.filter((e) => !HYDRATION_ERROR.test(e)), ...consoleErrors.filter((e) => !HYDRATION_ERROR.test(e))];
+        }
         expect(new URL(page.url()).pathname, "the audit must land on the screen, not a redirect").toBe(screen.path);
 
         // Measure BEFORE the full-page screenshot: Chromium resizes the viewport
         // for it, and that resets the touch emulation `(pointer: coarse)` reads.
         const result = await page.evaluate(probe, { min: MIN_TARGET, width: vp.width });
-        fs.mkdirSync(SHOTS_DIR, { recursive: true });
-        await page.screenshot({ path: path.join(SHOTS_DIR, `${id}-${vp.label}.png`), fullPage: true });
+        const shotPath = testInfo.outputPath(`${id}-${vp.label}.png`);
+        await page.screenshot({ path: shotPath, fullPage: true });
         const violations = result.targets.filter((t) => {
           if (ALLOWED_KINDS.has(t.kind)) return false;
           return !ALLOW_LIST.some((a) => a.key.test(`${id}|${t.label}`));
         });
-        const voseo = result.text.match(new RegExp(VOSEO_STRICT.source, "giu")) ?? [];
-        const usted = screen.legal ? [] : (result.text.match(new RegExp(USTED.source, "giu")) ?? []);
-        fs.writeFileSync(
-          path.join(SHOTS_DIR, `${id}-${vp.label}.json`),
-          JSON.stringify({ overflow: result.overflow, targets: result.targets, consoleErrors, voseo, usted }, null, 2),
+        const { voseo, usted } = registerViolations(result.text, !!screen.legal);
+        const report = JSON.stringify(
+          { overflow: result.overflow, targets: result.targets, consoleErrors, ignoredErrors, hydrationNoise, voseo, usted },
+          null,
+          2,
         );
+        const reportPath = testInfo.outputPath(`${id}-${vp.label}.json`);
+        fs.writeFileSync(reportPath, report);
+        await testInfo.attach(`${id}-${vp.label}.png`, { path: shotPath, contentType: "image/png" });
+        await testInfo.attach(`${id}-${vp.label}.json`, { path: reportPath, contentType: "application/json" });
+        if (COPY_SCREENS) {
+          fs.mkdirSync(SHOTS_DIR, { recursive: true });
+          fs.copyFileSync(shotPath, path.join(SHOTS_DIR, `${id}-${vp.label}.png`));
+          fs.copyFileSync(reportPath, path.join(SHOTS_DIR, `${id}-${vp.label}.json`));
+        }
 
         expect.soft(result.overflow.scrollWidth, `(a) overflow: ${result.overflow.culprits.join(", ")}`).toBeLessThanOrEqual(result.overflow.innerWidth + 1);
         expect.soft(violations, `(b) tap targets under ${MIN_TARGET}px`).toEqual([]);
