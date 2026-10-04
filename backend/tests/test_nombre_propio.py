@@ -93,3 +93,22 @@ def test_nombre_completo_es_idempotente_sobre_su_propia_salida():
     resultado = nombre_completo("faby", "ESPINOZA")
     nombre, apellido = resultado.split(" ", 1)
     assert nombre_completo(nombre, apellido) == resultado
+
+
+# --- ADMA-30 (QA4): partículas en minúscula en medio, mayúscula al inicio ----
+
+
+@pytest.mark.parametrize("particula", ["de", "del", "la", "las", "los", "y", "da", "dos", "das", "van", "von"])
+def test_particula_en_minuscula_en_medio_y_capitalizada_al_inicio(particula):
+    assert normalizar_nombre_propio(f"juan {particula.upper()} santos") == f"Juan {particula} Santos"
+    assert normalizar_nombre_propio(f"{particula} santos") == f"{particula.capitalize()} Santos"
+
+
+@pytest.mark.parametrize("valor, esperado", [
+    ("juan dos santos", "Juan dos Santos"),
+    ("maría de la cruz", "María de la Cruz"),
+    ("DE LA TORRE", "De la Torre"),
+])
+def test_particulas_ejemplos_del_dueno(valor, esperado):
+    assert normalizar_nombre_propio(valor) == esperado
+    assert normalizar_nombre_propio(esperado) == esperado

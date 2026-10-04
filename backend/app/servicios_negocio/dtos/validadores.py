@@ -148,21 +148,28 @@ def _rechazar_nul(valor: str, etiqueta: str) -> None:
         raise ValueError(f"{etiqueta} contiene caracteres no permitidos.")
 
 
-# ADM-05 (QA3): lista blanca de caracteres de un nombre o apellido de persona
-# -- letras Unicode (tildes, ñ), espacio, apóstrofo, guion y punto--. Evita
-# que dígitos, marcado (`<b>`, `&`) o emoji lleguen a la base y de ahí a PDF,
-# correos y pantallas. Solo la usan `NombreValidado`/`ApellidoValidado`
-# (nombres de persona); categorías, descuentos y tipos de membresía tienen
-# sus propios DTOs y pueden llevar dígitos.
+# ADM-05 (QA3) y REG-08 (QA4): lista blanca de caracteres de un nombre o
+# apellido de persona -- letras Unicode (tildes, ñ, ü), espacio, apóstrofo y
+# guion--, con al menos 2 letras. Evita que dígitos, puntos, marcado (`<b>`,
+# `&`) o emoji lleguen a la base y de ahí a PDF, correos y pantallas. El
+# mensaje NOMBRA los caracteres sobrantes (mismo texto que `personNameRule`
+# en `identity-validation.ts`). Solo la usan `NombreValidado`/
+# `ApellidoValidado` (nombres de persona); categorías, descuentos y tipos de
+# membresía tienen sus propios DTOs y pueden llevar dígitos.
+_NOMBRE_MIN_LETRAS = 2
+
+
 def _validar_caracteres_de_nombre(valor: str, etiqueta: str) -> None:
-    if not all(
-        unicodedata.category(c)[0] in ("L", "M") or c in " '-."
-        for c in valor
-    ):
+    no_permitidos = list(dict.fromkeys(
+        c for c in valor
+        if unicodedata.category(c)[0] not in ("L", "M") and c not in " '-"
+    ))
+    if no_permitidos:
         raise ValueError(
-            f"{etiqueta} solo puede contener letras, espacios, apóstrofos, "
-            "guiones y puntos."
+            f"{etiqueta} no puede contener " + ", ".join(f"“{c}”" for c in no_permitidos) + "."
         )
+    if sum(unicodedata.category(c)[0] == "L" for c in valor) < _NOMBRE_MIN_LETRAS:
+        raise ValueError(f"{etiqueta} debe tener al menos {_NOMBRE_MIN_LETRAS} letras.")
 
 
 def _validar_nombre(valor: str) -> str:
