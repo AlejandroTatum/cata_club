@@ -721,6 +721,12 @@ class PagoServicio:
                 "acción \"Regularizar deuda\" de la membresía."
             )
 
+    @staticmethod
+    def _validar_meses_con_beneficio(descuento_congelado, meses: int) -> None:
+        """Con un beneficio vigente solo se paga un mes a la vez (QA owner R2, S12)."""
+        if descuento_congelado is not None and meses > 1:
+            raise OperacionInvalida(MENSAJE_BENEFICIO_SOLO_MES_A_MES)
+
     def _registrar_pago_sin_commit(
         self,
         datos: PagoCreateDTO,
@@ -889,8 +895,7 @@ class PagoServicio:
             descuento_congelado, monto_final = self._congelar_beneficio_activo(
                 datos.persona_id, monto_base,
             )
-            if descuento_congelado is not None and meses > 1:
-                raise OperacionInvalida(MENSAJE_BENEFICIO_SOLO_MES_A_MES)
+            self._validar_meses_con_beneficio(descuento_congelado, meses)
 
         # `Pago(**datos.model_dump(), ...)` ya no alcanza: `PagoCreateDTO`
         # perdió `monto` (la columna) y ganó `meses` (que NO es columna de
