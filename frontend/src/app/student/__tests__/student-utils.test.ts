@@ -25,6 +25,7 @@ import {
   describeRejectedPago,
   displayNameFor,
 } from "../student-utils";
+import { describeNextPayment } from "../student-utils";
 import type { PaymentSituationInput, StudentPortalMode } from "../student-utils";
 import type { PagoPersona, StudentSessionSummary } from "@/services/api";
 
@@ -1236,5 +1237,39 @@ describe("QA4 REG-26 — «el club», not «administración»", () => {
 
     expect(result.detail).toContain("Acércate al club para activarla");
     expect(result.detail).not.toMatch(/administración/i);
+  });
+});
+
+describe("describeNextPayment — the representante's «Próximo pago» tile", () => {
+  const base = { monthlyPrice: "40.00", esGratuidadFamiliar: false, coverageEnd: "2026-10-28", daysLeft: 24, pendingCount: 0 };
+
+  it("is the coal action tile when the coverage ends within 7 days", () => {
+    expect(describeNextPayment({ ...base, daysLeft: 7 })).toMatchObject({ hot: true, status: "Vence pronto" });
+    expect(describeNextPayment({ ...base, daysLeft: 0 })).toMatchObject({ hot: true, status: "Vence pronto" });
+  });
+
+  it("calls an overdue coverage overdue, also as the action tile", () => {
+    expect(describeNextPayment({ ...base, daysLeft: -3 })).toMatchObject({ hot: true, status: "Vencido" });
+  });
+
+  it("is green and quiet with more than 7 days left, with the due date as its hint", () => {
+    expect(describeNextPayment({ ...base, daysLeft: 8 })).toMatchObject({ hot: false, tone: "ok", status: "Al día", hint: "vence el 28/10/2026" });
+  });
+
+  it("is amber while a payment awaits the club's validation, whatever the days", () => {
+    expect(describeNextPayment({ ...base, daysLeft: 2, pendingCount: 1 })).toMatchObject({ hot: false, tone: "warn", status: "Por validar" });
+  });
+
+  it("asks for the first payment when none was ever approved", () => {
+    expect(describeNextPayment({ ...base, coverageEnd: null, daysLeft: null })).toMatchObject({ hot: true, status: "Por pagar" });
+  });
+
+  it("states no figure and stays neutral when there is no fee (gratuity or no plan)", () => {
+    expect(describeNextPayment({ ...base, esGratuidadFamiliar: true })).toMatchObject({ hot: false, tone: "neutral", value: "—", status: "Sin cuota" });
+    expect(describeNextPayment({ ...base, monthlyPrice: null })).toMatchObject({ tone: "neutral", value: "—" });
+  });
+
+  it("prints the monthly price as the figure", () => {
+    expect(describeNextPayment(base).value).toBe("$40,00");
   });
 });

@@ -1168,3 +1168,58 @@ export function noScheduleWhatsAppHref(studentName: string, viewingOwnProfile: b
 export function hasOwnMembership(data: Pick<StudentPortalSummary, "self">): boolean {
   return data.self?.membership != null;
 }
+
+// ---------------------------------------------------------------------------
+// The representante's «Próximo pago» tile
+// ---------------------------------------------------------------------------
+
+export interface NextPaymentInput {
+  /** `Membresia.montoAplicado` — the monthly price, or `null` when the plan has none. */
+  monthlyPrice: string | null;
+  /** `Membresia.esGratuidadFamiliar` — the family does not pay. */
+  esGratuidadFamiliar: boolean;
+  /** The furthest APPROVED `fechaFin`, or `null` when nothing was ever approved. */
+  coverageEnd: string | null;
+  /** `daysUntil(coverageEnd)`; negative once it has lapsed. */
+  daysLeft: number | null;
+  /** Payments the club has not validated yet. */
+  pendingCount: number;
+}
+
+export interface NextPaymentTile {
+  /** True for the coal «needs action» tile — at most one per stat row. */
+  hot: boolean;
+  tone: "ok" | "warn" | "neutral";
+  value: string;
+  status: string;
+  hint: string;
+}
+
+/** Days before the coverage ends from which the payment is the row's action tile. */
+const PAYMENT_DUE_SOON_DAYS = 7;
+
+/**
+ * What the guardian's «Próximo pago» tile says, from data the portal already
+ * holds: the plan's monthly price and when the paid coverage ends. The tile is
+ * the row's coal action tile within 7 days of the end (or past it), because
+ * that is the moment the guardian has something to do.
+ */
+export function describeNextPayment(input: NextPaymentInput): NextPaymentTile {
+  if (input.esGratuidadFamiliar || !input.monthlyPrice) {
+    return { hot: false, tone: "neutral", value: "—", status: "Sin cuota", hint: "este jugador no paga cuota" };
+  }
+  const value = formatCurrency(input.monthlyPrice);
+  if (input.pendingCount > 0) {
+    return { hot: false, tone: "warn", value, status: "Por validar", hint: "el club revisa tu pago" };
+  }
+  if (input.coverageEnd === null || input.daysLeft === null) {
+    return { hot: true, tone: "warn", value, status: "Por pagar", hint: "sin pago aprobado todavía" };
+  }
+  if (input.daysLeft < 0) {
+    return { hot: true, tone: "warn", value, status: "Vencido", hint: `venció el ${formatDate(input.coverageEnd)}` };
+  }
+  if (input.daysLeft <= PAYMENT_DUE_SOON_DAYS) {
+    return { hot: true, tone: "warn", value, status: "Vence pronto", hint: `vence el ${formatDate(input.coverageEnd)}` };
+  }
+  return { hot: false, tone: "ok", value, status: "Al día", hint: `vence el ${formatDate(input.coverageEnd)}` };
+}

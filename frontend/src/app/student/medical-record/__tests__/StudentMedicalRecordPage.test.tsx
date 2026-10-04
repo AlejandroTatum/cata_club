@@ -335,10 +335,12 @@ describe("StudentMedicalRecordPage — emergency card rail", () => {
 });
 
 describe("StudentMedicalRecordPage — the guide", () => {
-  it("tells a guardian how to complete the ficha, below the editor", async () => {
+  it("tells a guardian how to complete the ficha, in a collapsed block below the form", async () => {
     render(<StudentMedicalRecordPage />);
 
     const guide = await screen.findByRole("heading", { name: "Cómo completar la ficha médica" });
-    expect(within(guide.parentElement as HTMLElement).getByText(/obligatorios/i)).toBeInTheDocument();
+    const block = guide.closest("details") as HTMLElement;
+    expect(block).not.toHaveAttribute("open");
+    expect(within(block).getByText(/obligatorios/i)).toBeInTheDocument();
   });
 });

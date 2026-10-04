@@ -149,7 +149,7 @@ describe("StudentAttendancePage — whose record this is", () => {
 
     expect(await screen.findByText("Asistencia de Martín")).toBeInTheDocument();
     expect(screen.getByText("Sesiones registradas de Martín")).toBeInTheDocument();
-    expect(screen.getByText("3 de 5")).toBeInTheDocument();
+    expect(screen.getByText("3 de 5 sesiones")).toBeInTheDocument();
   });
 
   it("restores the stored selection when the sidebar arrives without a param", async () => {
@@ -164,41 +164,77 @@ describe("StudentAttendancePage — whose record this is", () => {
   });
 });
 
-describe("StudentAttendancePage — the recap", () => {
-  it("states a counted ratio and never a percentage", async () => {
+describe("StudentAttendancePage — the summary tiles", () => {
+  it("prints the rate over its denominator, in a tile with a status word", async () => {
     render(<StudentAttendancePage />);
 
-    // 3 of 5: two presents plus one tardanza. A "60%" here would read as an
-    // attendance rate, which five records cannot support.
-    expect(await screen.findByText(/asistió a/i)).toBeInTheDocument();
-    expect(screen.getByText("3 de 5")).toBeInTheDocument();
-    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
+    // 3 of 5: two presents plus one tardanza = 60%, under the 75% goal.
+    expect(await screen.findByText("3 de 5 sesiones")).toBeInTheDocument();
+    const tile = screen.getByText("Asistencia", { selector: "span" }).parentElement as HTMLElement;
+    expect(within(tile).getByText("60")).toBeInTheDocument();
+    expect(tile.dataset.tone).toBe("warn");
+    expect(within(tile).getByTestId("statcard-status")).toHaveTextContent("Bajo la meta de 75%");
   });
 
-  it("says out loud how a tardanza and a falta are counted", async () => {
+  it("turns the rate green with its word at or above the 75% goal", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue(
+      portalWith([
+        { fecha: "2026-07-23", horario: "Jueves 15:00 — 16:00", estado: "present" },
+        { fecha: "2026-07-21", horario: "Martes 15:00 — 16:00", estado: "late" },
+        { fecha: "2026-07-16", horario: "Jueves 15:00 — 16:00", estado: "present" },
+        { fecha: "2026-07-14", horario: "Martes 15:00 — 16:00", estado: "absent" },
+      ]),
+    );
     render(<StudentAttendancePage />);
 
-    expect(await screen.findByRole("heading", { name: /asistió a/i })).toBeInTheDocument();
-    expect(
-      screen.getByText(/una tardanza cuenta como asistencia; una falta, no/i),
-    ).toBeInTheDocument();
+    const tile = (await screen.findByText("Asistencia", { selector: "span" })).parentElement as HTMLElement;
+    expect(within(tile).getByText("75")).toBeInTheDocument();
+    expect(tile.dataset.tone).toBe("ok");
+    expect(within(tile).getByTestId("statcard-status")).toHaveTextContent("Buen ritmo");
   });
 
-  it("breaks the record into its states so 'enfermo' stays visible", async () => {
+  it("gives present, late and absent their own semáforo tone and word", async () => {
     render(<StudentAttendancePage />);
 
-    await screen.findByText("3 de 5");
-    const recap = screen.getByTestId("attendance-breakdown");
-    for (const [label, count] of [
-      ["Presente", "2"],
-      ["Tardanza", "1"],
-      ["Ausente", "1"],
-      ["Enfermo", "1"],
-    ]) {
-      const cell = within(recap).getByTestId(`breakdown-${label.toLowerCase()}`);
-      expect(within(cell).getByText(label)).toBeInTheDocument();
-      expect(within(cell).getByText(count)).toBeInTheDocument();
-    }
+    await screen.findByText("3 de 5 sesiones");
+    const present = within(screen.getByTestId("breakdown-presente"));
+    const late = within(screen.getByTestId("breakdown-tardanza"));
+    const absent = within(screen.getByTestId("breakdown-ausente"));
+    expect(present.getByTestId("statcard-status").closest("[data-tone]")).toHaveAttribute("data-tone", "ok");
+    expect(late.getByTestId("statcard-status").closest("[data-tone]")).toHaveAttribute("data-tone", "warn");
+    expect(absent.getByTestId("statcard-status").closest("[data-tone]")).toHaveAttribute("data-tone", "bad");
+    expect(absent.getByTestId("statcard-status")).toHaveTextContent("No asistió");
+  });
+
+  it("stays quiet — neutral or green — when there is nothing to flag", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue(
+      portalWith([{ fecha: "2026-07-23", horario: "Jueves 15:00 — 16:00", estado: "present" }]),
+    );
+    render(<StudentAttendancePage />);
+
+    await screen.findByText("1 de 1 sesiones");
+    const late = within(screen.getByTestId("breakdown-tardanza"));
+    const absent = within(screen.getByTestId("breakdown-ausente"));
+    expect(late.getByTestId("statcard-status").closest("[data-tone]")).toHaveAttribute("data-tone", "neutral");
+    expect(absent.getByTestId("statcard-status")).toHaveTextContent("Sin ausencias");
+  });
+
+  it("keeps the tardanza and falta counting rule on the tiles", async () => {
+    render(<StudentAttendancePage />);
+
+    await screen.findByText("3 de 5 sesiones");
+    expect(screen.getByText("cuentan como asistencia")).toBeInTheDocument();
+    expect(screen.getByText("no cuentan como asistencia")).toBeInTheDocument();
+  });
+
+  it("tallies 'enfermo' and 'competencia' under the tiles so they stay visible", async () => {
+    render(<StudentAttendancePage />);
+
+    await screen.findByText("3 de 5 sesiones");
+    const enfermo = screen.getByTestId("breakdown-enfermo");
+    expect(within(enfermo).getByText("Enfermo")).toBeInTheDocument();
+    expect(within(enfermo).getByText("1")).toBeInTheDocument();
+    expect(within(screen.getByTestId("breakdown-competencia")).getByText("0")).toBeInTheDocument();
   });
 
   /**
@@ -221,7 +257,7 @@ describe("StudentAttendancePage — the recap", () => {
     render(<StudentAttendancePage />);
 
     expect(await screen.findByText(/aún no hay asistencias registradas/i)).toBeInTheDocument();
-    expect(screen.queryByText(/asistió a/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/sesiones$/)).not.toBeInTheDocument();
     expect(screen.queryByTestId("attendance-breakdown")).not.toBeInTheDocument();
   });
 });
@@ -247,7 +283,7 @@ describe("StudentAttendancePage — the record", () => {
   it("never claims a next training session — the API cannot derive one per student", async () => {
     render(<StudentAttendancePage />);
 
-    await screen.findByText("3 de 5");
+    await screen.findByText("3 de 5 sesiones");
     expect(screen.queryByText(/próxim/i)).not.toBeInTheDocument();
   });
 });
@@ -268,20 +304,29 @@ describe("StudentAttendancePage — the socio nuevo", () => {
     expect(screen.queryByTestId("session-ghost-rows")).toBeNull();
   });
 
-  it("guides with one line and the states a session can carry", async () => {
+  it("draws the empty state on a dotted ground instead of a bare block", async () => {
     mockFetchStudentPortal.mockReset().mockResolvedValue(portalWith([]));
 
     render(<StudentAttendancePage />);
 
     const empty = await screen.findByTestId("sessions-empty");
+    expect(empty.innerHTML).toMatch(/radial-gradient/);
     expect(within(empty).getByText(/aún no hay asistencias registradas/i)).toBeInTheDocument();
-    // The legend rides in the rail's guide, beside the record.
+  });
+
+  it("shows the states a session can carry in the legend glued under the record", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue(portalWith([]));
+
+    render(<StudentAttendancePage />);
+
+    const card = await screen.findByTestId("sessions-card");
+    expect(within(card).getByTestId("attendance-legend")).toBeInTheDocument();
     for (const label of ["Presente", "Ausente", "Tardanza", "Enfermo", "Competencia"]) {
-      expect(screen.getByText(label)).toBeInTheDocument();
+      expect(within(card).getByText(label)).toBeInTheDocument();
     }
   });
 
-  it("stretches a single-session record to the rail, filled with ghost rows", async () => {
+  it("does not stretch a single-session record or pad it with ghost rows", async () => {
     mockFetchStudentPortal
       .mockReset()
       .mockResolvedValue(portalWith([FIVE_SESSIONS[0]]));
@@ -289,8 +334,8 @@ describe("StudentAttendancePage — the socio nuevo", () => {
     render(<StudentAttendancePage />);
 
     const card = await screen.findByTestId("sessions-card");
-    expect(card.className).toMatch(/\blg:flex-1\b/);
-    expect(within(card).getByTestId("session-ghost-rows")).toBeInTheDocument();
+    expect(card.className).not.toMatch(/\blg:flex-1\b/);
+    expect(within(card).queryByTestId("session-ghost-rows")).toBeNull();
   });
 });
 
@@ -314,12 +359,12 @@ describe("StudentAttendancePage — guardian with dependents", () => {
 
     render(<StudentAttendancePage />);
 
-    expect(await screen.findByText("3 de 5")).toBeInTheDocument();
+    expect(await screen.findByText("3 de 5 sesiones")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Estudiante"), { target: { value: "20" } });
 
     expect(await screen.findByText("22/07/2026")).toBeInTheDocument();
-    expect(screen.queryByText("3 de 5")).not.toBeInTheDocument();
+    expect(screen.queryByText("3 de 5 sesiones")).not.toBeInTheDocument();
   });
 });
 
@@ -359,29 +404,30 @@ describe("StudentAttendancePage — the way back", () => {
   });
 });
 
-describe("StudentAttendancePage — the rail guide", () => {
+describe("StudentAttendancePage — the legend", () => {
   it("always shows how attendance is recorded, with every state's meaning", async () => {
     render(<StudentAttendancePage />);
 
-    const guide = await screen.findByRole("heading", { name: "Cómo se registra la asistencia" });
-    const panel = guide.parentElement as HTMLElement;
-    expect(within(panel).getByText("Faltó por enfermedad")).toBeInTheDocument();
+    const legend = await screen.findByTestId("attendance-legend");
+    expect(within(legend).getByText("Faltó por enfermedad")).toBeInTheDocument();
+    expect(within(legend).getByText(/si un registro no es correcto, pide la corrección/i)).toBeInTheDocument();
   });
 
-  it("closes the gap under a short record with decorative ghost rows", async () => {
+  it("sits under the list, not in a rail beside it", async () => {
     render(<StudentAttendancePage />);
 
-    const ghost = await screen.findByTestId("session-ghost-rows");
-    expect(ghost).toHaveAttribute("aria-hidden", "true");
+    const legend = await screen.findByTestId("attendance-legend");
+    expect(screen.getByTestId("sessions-card")).toContainElement(legend);
+    expect(legend.closest("aside")).toBeNull();
   });
 
-  it("gives the socio nuevo the guide rail but no counted recap", async () => {
+  it("gives the socio nuevo the legend but no tiles", async () => {
     mockFetchStudentPortal.mockReset().mockResolvedValue(portalWith([]));
     render(<StudentAttendancePage />);
 
     await screen.findByTestId("sessions-card");
-    expect(screen.getByRole("heading", { name: "Cómo se registra la asistencia" })).toBeInTheDocument();
-    expect(screen.queryByText(/asistió a/i)).toBeNull();
+    expect(screen.getByTestId("attendance-legend")).toBeInTheDocument();
+    expect(screen.queryByTestId("attendance-breakdown")).toBeNull();
   });
 });
 
