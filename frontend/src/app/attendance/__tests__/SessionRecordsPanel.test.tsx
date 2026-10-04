@@ -24,8 +24,8 @@ function record(overrides: Partial<AttendanceRecord>): AttendanceRecord {
   };
 }
 
-describe("SessionRecordsPanel — review flag (ENT-07)", () => {
-  it("marks only the records that need review", () => {
+describe("SessionRecordsPanel — review flag removed (issue #1578)", () => {
+  it("never shows «Requiere revisión», even for flagged records", () => {
     render(
       <ToastProvider>
       <SessionRecordsPanel
@@ -39,8 +39,7 @@ describe("SessionRecordsPanel — review flag (ENT-07)", () => {
       </ToastProvider>,
     );
 
-    expect(screen.getAllByText("Requiere revisión")).toHaveLength(1);
-    const flaggedRow = screen.getByText("Ana Torres").closest("li");
-    expect(flaggedRow).toHaveTextContent("Requiere revisión");
+    expect(screen.getByText("Ana Torres")).toBeInTheDocument();
+    expect(screen.queryByText("Requiere revisión")).not.toBeInTheDocument();
   });
 });

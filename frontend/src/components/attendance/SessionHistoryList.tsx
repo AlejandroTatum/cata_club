@@ -149,12 +149,6 @@ export default function SessionHistoryList({
 
   const renderComposition = (session: SessionSummary): React.ReactElement => (
     <div className="flex w-full min-w-0 flex-col gap-2">
-      {(session.reviewCount ?? 0) > 0 && (
-        // ENT-07: records accepted for a not-operative student or before their enrolment.
-        <Badge tone="warn" className="self-start">
-          {session.reviewCount} por revisar
-        </Badge>
-      )}
       {/* Cards stack bar over counts; from `lg` the bar keeps a short fixed width with the counts beside it. */}
       <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
         <SessionCompositionBar

@@ -883,7 +883,8 @@ export interface CorrectAttendanceInput {
   estado: EstadoAsistencia;
   justificativo?: string | null;
   estadoJustificativo?: boolean | null;
-  motivo: string;
+  /** Optional for the admin's direct correction (issue #1578). */
+  motivo?: string;
 }
 
 /** Confirms the correction with the updated row plus the trace that got
