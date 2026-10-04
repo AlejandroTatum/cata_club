@@ -425,7 +425,7 @@ describe("LandingPage", (): void => {
 
     const sponsors = screen.getByRole("region", { name: "Patrocinadores del club" });
     expect(within(sponsors).getByText("Patrocinadores")).toBeInTheDocument();
-    expect(await within(sponsors).findByText(/aún no hay patrocinadores/i)).toBeInTheDocument();
+    expect(await within(sponsors).findByText("Pronto anunciaremos a nuestros patrocinadores")).toBeInTheDocument();
     expect(within(sponsors).queryByRole("img")).not.toBeInTheDocument();
   });
 
@@ -837,20 +837,24 @@ describe("LandingPage", (): void => {
    * photos from /galeria. The default fetch stub answers with an empty list,
    * which is the section's real initial state.
    */
-  // VIS-03: an empty gallery is not a section worth showing, nor a nav entry
-  // worth offering — both disappear until the club publishes a photo.
-  it("hides the gallery section and its nav entries while the club has published nothing", async (): Promise<void> => {
+  // Issue #1622: the menu always lists every section, so an empty gallery keeps
+  // its section (and id) with a brief empty state instead of vanishing.
+  it("keeps the gallery section, its nav entries and a brief empty state while the club has published nothing", async (): Promise<void> => {
     render(<LandingPage />);
 
-    // The section unmounts before GALLERY_EMPTY_EVENT re-renders the navbar and
-    // footer, so wait on the final state: section and nav entries both gone.
-    await waitFor((): void => {
-      expect(document.querySelector("#galeria")).toBeNull();
-      // Neither the navbar nor the footer points at a section that is not there.
-      expect(document.querySelector("a[href='#galeria']")).toBeNull();
-    });
-    expect(screen.queryByRole("heading", { name: "Galería" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Aún no hay fotos en la galería.")).not.toBeInTheDocument();
+    expect(await within(gallerySection()).findByText("Pronto vas a ver aquí fotos del club")).toBeInTheDocument();
+    expect(within(gallerySection()).getByRole("heading", { name: "Galería" })).toBeInTheDocument();
+    // Navbar and footer both keep pointing at the section.
+    expect(document.querySelectorAll("a[href='#galeria']").length).toBe(2);
+  });
+
+  it("keeps the sponsors section, its id, nav entries and a brief empty state while there are none", async (): Promise<void> => {
+    render(<LandingPage />);
+
+    const sponsors = document.querySelector("#patrocinadores") as HTMLElement;
+    expect(sponsors).not.toBeNull();
+    expect(await within(sponsors).findByText("Pronto anunciaremos a nuestros patrocinadores")).toBeInTheDocument();
+    expect(document.querySelectorAll("a[href='#patrocinadores']").length).toBe(2);
   });
 
   it("keeps the gallery's nav entries once there are photos to show", async (): Promise<void> => {
@@ -1291,6 +1295,7 @@ describe("LandingPage", (): void => {
       ["Cómo empezar", "#como-empezar"],
       ["Preguntas", "#preguntas"],
       ["Contacto", "#contacto"],
+      ["Patrocinadores", "#patrocinadores"],
     ]);
   });
 
