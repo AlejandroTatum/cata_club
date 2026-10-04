@@ -73,6 +73,7 @@ import {
   User,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
+import { NINGUNO_HELP } from "@/lib/ficha-declaration";
 import {
   ADD_DEPENDENT_FIELD_TOKEN,
   ADD_DEPENDENT_ID_PREFIX,
@@ -343,6 +344,7 @@ function AddDependentContent(): React.ReactElement {
     required?: boolean;
     icon?: React.ReactNode;
     rows?: number;
+    hint?: string;
   }): React.ReactElement {
     const { field, ...rest } = opts;
     return (
@@ -351,6 +353,8 @@ function AddDependentContent(): React.ReactElement {
         field={ADD_DEPENDENT_FIELD_TOKEN[field]}
         disabled={submitting}
         {...rest}
+        error={shownError(field)}
+        onBlur={() => markTouched(field)}
         rows={opts.rows ?? 2}
       />
     );
@@ -586,6 +590,8 @@ function AddDependentContent(): React.ReactElement {
           onChange: (v) => updateField("enfermedades", v),
           placeholder: example("Asma, diabetes (separadas por comas)"),
           icon: <Heart size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+          required: true,
+          hint: NINGUNO_HELP,
         })}
 
         {renderTextarea({
@@ -595,6 +601,8 @@ function AddDependentContent(): React.ReactElement {
           onChange: (v) => updateField("alergias", v),
           placeholder: example("Alergia al polvo, al látex, a picaduras de insectos"),
           icon: <AlertTriangle size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+          required: true,
+          hint: NINGUNO_HELP,
         })}
 
         {/*
@@ -695,8 +703,8 @@ function AddDependentContent(): React.ReactElement {
             formData.tipoSangre ? BLOOD_TYPE_LABELS[formData.tipoSangre] : "—",
             "health",
           )}
-          {summaryRow("Enfermedades", formData.enfermedades || "Ninguna reportada", "health")}
-          {summaryRow("Alergias", formData.alergias || "Ninguna reportada", "health")}
+          {summaryRow("Enfermedades", formData.enfermedades, "health")}
+          {summaryRow("Alergias", formData.alergias, "health")}
         </div>
 
         {/* Issue #1318: only for a caller who isn't REPRESENTANTE yet — an
@@ -972,7 +980,7 @@ function AddDependentContent(): React.ReactElement {
       <InfoPanel title="Cómo se agrega un jugador">
         <ol className="flex list-decimal flex-col gap-2 pl-4">
           <li>Estudiante: nombres, apellidos, fecha de nacimiento y cédula.</li>
-          <li>Salud: tipo de sangre (obligatorio), enfermedades y alergias.</li>
+          <li>Salud: tipo de sangre (obligatorio), enfermedades y alergias (obligatorias; si no tiene, escribe Ninguno).</li>
           <li>Confirmar: revisa el resumen y agrega; el jugador aparecerá en tu cuenta.</li>
         </ol>
       </InfoPanel>

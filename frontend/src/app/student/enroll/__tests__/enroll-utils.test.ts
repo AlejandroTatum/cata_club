@@ -98,22 +98,26 @@ describe("telefono — step 2 validates the local digits after +593 (#1296)", ()
 // ---------------------------------------------------------------------------
 describe("health step — emergency contact only exists on the self (adult) path", (): void => {
   it("does not render contactoEmergencia/telefonoEmergencia for a child enrollment", (): void => {
-    expect(fieldsForStep("health", ENROLLMENT_TYPES.CHILD)).toEqual(["tipoSangre"]);
+    expect(fieldsForStep("health", ENROLLMENT_TYPES.CHILD)).toEqual(["tipoSangre", "condicionesSalud", "alergias"]);
   });
 
   it("still requires both for a self (adult) enrollment", (): void => {
     expect(fieldsForStep("health", ENROLLMENT_TYPES.SELF)).toEqual([
       "tipoSangre",
+      "condicionesSalud",
+      "alergias",
       "contactoEmergencia",
       "telefonoEmergencia",
     ]);
   });
 
-  it("a child enrollment's health step is valid with only tipoSangre filled", (): void => {
+  it("a child enrollment's health step is valid with tipoSangre, condiciones and alergias filled", (): void => {
     const data: EnrollFormData = {
       ...initialFormData,
       enrollmentType: ENROLLMENT_TYPES.CHILD,
       tipoSangre: "O_POSITIVO",
+      condicionesSalud: "Ninguno",
+      alergias: "Ninguno",
     };
     expect(validateEnrollStep("health", data)).toEqual([]);
   });

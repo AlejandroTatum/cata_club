@@ -47,6 +47,8 @@ const F = {
   contraseniaRepresentante: "enroll-contrasenia-representante",
   contraseniaRepresentanteConfirmacion: "enroll-confirmar-contrasena-representante",
   tipoSangre: "enroll-tipo-sangre",
+  condicionesSalud: "enroll-condiciones-salud",
+  alergias: "enroll-alergias",
 } as const;
 
 const DEPENDENT = {
@@ -133,6 +135,8 @@ async function reachSummaryAsRepresentative(page: Page): Promise<void> {
   // de sangre (el contacto de emergencia se deriva del representante, #1138).
   await expect(page.getByRole("heading", { name: /salud y emergencia/i })).toBeVisible();
   await page.locator(`#${F.tipoSangre}`).selectOption("O_POSITIVO");
+  await page.locator(`#${F.condicionesSalud}`).fill("Ninguno");
+  await page.locator(`#${F.alergias}`).fill("Ninguno");
   await page.getByRole("button", { name: /siguiente/i }).click();
 
   await expect(page.getByRole("heading", { name: /resumen y confirmación/i })).toBeVisible();
