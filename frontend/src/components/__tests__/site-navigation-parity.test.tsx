@@ -100,6 +100,9 @@ const APPROVED_NAV: ReadonlyArray<{ label: string; section: string }> = [
   { label: "Valores", section: "valores" },
   { label: "Galería", section: "galeria" },
   { label: "Horarios", section: "horarios" },
+  { label: "Mensualidad", section: "mensualidad" },
+  { label: "Cómo empezar", section: "como-empezar" },
+  { label: "Preguntas", section: "preguntas" },
   { label: "Contacto", section: "contacto" },
 ];
 

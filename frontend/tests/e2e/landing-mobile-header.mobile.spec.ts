@@ -39,7 +39,9 @@ test.describe("Landing header and schedule hours on a real mobile engine", () =>
     await page.goto("/");
 
     const links = page.locator(".landing-nav-links a");
-    await expect(links).toHaveCount(5);
+    // Inicio · Valores · Galería · Horarios · Mensualidad · Cómo empezar ·
+    // Preguntas · Contacto (#1587); the gallery is on in the e2e seed.
+    await expect(links).toHaveCount(8);
 
     // One row: every link shares the same top edge. This is the assertion
     // that goes RED on today's code — "Contacto" drops onto a second row.
@@ -48,13 +50,10 @@ test.describe("Landing header and schedule hours on a real mobile engine", () =>
       expect(y, `link ${index} y vs first`).toBeCloseTo(boxes[0], 0);
     });
 
-    // Since #1372 removed Logros the five links fit this track (measured
-    // overflow: 0 on Pixel 7), so the strip has nothing to scroll — there is
-    // no overflow figure worth locking (a `<= 0` bound is vacuous:
-    // `scrollWidth >= clientWidth` always, and it would misfire the day the
-    // menu legitimately grows again). What stays load-bearing is page
-    // safety: any overflow that ever returns lives inside the strip's own
-    // scroll container, never on the body.
+    // With the eight links of #1587 the strip scrolls on its own track; there
+    // is no overflow figure worth locking. What stays load-bearing is page
+    // safety: any overflow lives inside the strip's own scroll container,
+    // never on the body.
     const bodyOverflow = await page.evaluate(() => {
       const root = document.documentElement;
       return root.scrollWidth - root.clientWidth;
