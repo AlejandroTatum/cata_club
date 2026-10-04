@@ -267,6 +267,19 @@ describe("getAttendanceRatePercent", () => {
     expect(getAttendanceRatePercent(stats)).toBe(89);
   });
 
+  it("counts tardanza as attended (the shared attendance rule)", () => {
+    const stats = {
+      totalPresent: 50,
+      totalAbsent: 30,
+      totalLate: 20,
+      totalSick: 0,
+      totalCompetition: 0,
+      totalUnknown: 0,
+      totalStudents: 100,
+    };
+    expect(getAttendanceRatePercent(stats)).toBe(70);
+  });
+
   it("rounds to the nearest whole percent", () => {
     const stats = {
       totalPresent: 2,

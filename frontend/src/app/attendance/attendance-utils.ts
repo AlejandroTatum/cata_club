@@ -10,6 +10,7 @@
 
 import type { DiaSemana, EstadoAsistencia } from "@/types/domain";
 import type { BadgeTone } from "@/components/ui/Badge";
+import { attendanceRatePercent } from "@/lib/attendance-rule";
 import { MONTH_ABBR } from "@/lib/format-utils";
 
 // ---------------------------------------------------------------------------
@@ -302,13 +303,13 @@ export function buildAttendanceStats(
 }
 
 /**
- * Share of attendance records marked "present", as a rounded 0-100 percent.
+ * Share of attendance records that count as attended (presente + tardanza,
+ * `lib/attendance-rule`), as a rounded 0-100 percent.
  *
  * Returns 0 (not NaN) when there are no records to derive a rate from.
  */
 export function getAttendanceRatePercent(stats: AttendanceDayStats): number {
-  if (stats.totalStudents === 0) return 0;
-  return Math.round((stats.totalPresent / stats.totalStudents) * 100);
+  return attendanceRatePercent(stats.totalPresent + stats.totalLate, stats.totalStudents);
 }
 
 /**

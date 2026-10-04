@@ -87,6 +87,7 @@ import SessionsWithoutList from "./SessionsWithoutList";
 import TodaySessionList from "./TodaySessionList";
 import { buildWizardQuery } from "@/app/trainer/attendance/attendance-utils";
 import { findMissingSessions } from "@/app/trainer/attendance/history/history-utils";
+import { countsAsAttended } from "@/lib/attendance-rule";
 
 /** Weeks the attendance trend spans. */
 const TREND_WEEKS = 6;
@@ -400,7 +401,7 @@ export default function TrainerPage(): React.ReactElement {
                           key: entry.fecha,
                           label: `${formatDate(entry.fecha).slice(0, 5)} ${ATTENDANCE_LABELS[entry.estado].toLowerCase()}`,
                           tone: STATE_TONE[entry.estado],
-                          hollow: entry.estado !== "present" && entry.estado !== "late",
+                          hollow: !countsAsAttended(entry.estado),
                         }));
                         return (
                           <li

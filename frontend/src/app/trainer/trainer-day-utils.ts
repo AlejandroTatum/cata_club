@@ -19,6 +19,7 @@
  */
 
 import type { EstadoAsistencia } from "@/types/domain";
+import { attendanceRatePercent, attendedCount, countsAsAttended } from "@/lib/attendance-rule";
 import {
   buildDateRange,
   calendarIsoDate,
@@ -669,15 +670,9 @@ export interface MonthAttendanceRate {
  * month, before anyone has taken a list.
  */
 export function buildMonthAttendanceRate(stats: AttendanceDayStats): MonthAttendanceRate {
-  const total = stats.totalStudents;
-  if (total <= 0) return { percent: 0, present: 0, total: 0 };
-
-  const present = stats.totalPresent + stats.totalLate;
-  return {
-    percent: Math.round((present / total) * 100),
-    present,
-    total,
-  };
+  const total = Math.max(stats.totalStudents, 0);
+  const present = total > 0 ? stats.totalPresent + stats.totalLate : 0;
+  return { percent: attendanceRatePercent(present, total), present, total };
 }
 
 // ---------------------------------------------------------------------------
@@ -757,12 +752,12 @@ export function buildWeeklyAttendanceTrend(
   weeks = 6,
 ): WeeklyTrendPoint[] {
   return buildWeeklyStatusBreakdown(records, now, weeks).map((week) => {
-    const attended = week.counts.present + week.counts.late;
+    const attended = attendedCount(week.counts);
     return {
       startIso: week.startIso,
       total: week.total,
       attended,
-      ratePercent: week.total > 0 ? Math.round((attended / week.total) * 100) : 0,
+      ratePercent: attendanceRatePercent(attended, week.total),
     };
   });
 }
@@ -837,7 +832,7 @@ export function buildLastSessionSummary(
   const list = byDate.get(latest) ?? [];
   return {
     fecha: latest,
-    attended: list.filter((record) => record.estado === "present" || record.estado === "late").length,
+    attended: list.filter((record) => countsAsAttended(record.estado)).length,
     total: list.length,
   };
 }
