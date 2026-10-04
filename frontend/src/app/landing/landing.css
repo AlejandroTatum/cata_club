@@ -806,18 +806,34 @@
   .landing-gallery-nav { display: none; }
 }
 
-/* Plan prices (LAN-03): one card per plan the app publishes. */
+/* Plan prices (LAN-03): one card per plan the app publishes. The cards cycle
+   red / yellow / coal so a catalog of any length stays on the brand palette;
+   the hard offset shadow is the same "sticker" edge the steps and the FAQ use.
+   Contrast: white on red 4.9:1; coal on yellow 14:1; yellow on coal 14:1;
+   yellow on red 3.7:1 is only used for the 40px+ amount (large text, 3:1). */
 .landing-prices { background: var(--landing-surface); }
-.landing-prices-list { display: grid; width: 100%; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
-.landing-price { display: flex; flex-direction: column; gap: 6px; padding: 24px 26px; border: 1px solid var(--landing-border); border-radius: 20px; background: var(--landing-stats-bg); }
-.landing-price-name { color: var(--landing-text); font-size: 13px; font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase; }
-.landing-price-amount { color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(40px, 4.4vw, 54px); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.landing-prices-list { display: grid; width: 100%; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; margin: 0; padding: 0; list-style: none; }
+.landing-price { --price-bg: var(--landing-brand-red); --price-fg: var(--landing-on-action); --price-accent: var(--landing-brand-yellow); --price-shadow: var(--landing-brand-black); position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 40px; min-height: 190px; padding: 24px 26px 26px; overflow: hidden; border: 2px solid var(--landing-brand-black); border-radius: 20px; background: var(--price-bg); color: var(--price-fg); box-shadow: 6px 6px 0 var(--price-shadow); }
+.landing-price:nth-child(3n + 2) { --price-bg: var(--landing-brand-yellow); --price-fg: var(--landing-brand-black); --price-accent: var(--landing-brand-black); }
+.landing-price:nth-child(3n) { --price-bg: var(--landing-brand-black); --price-fg: var(--landing-on-action); --price-accent: var(--landing-brand-yellow); --price-shadow: var(--landing-brand-red); }
+/* A tennis-ball seam, drawn, behind the figures. */
+.landing-price::after { content: ""; position: absolute; right: -46px; bottom: -58px; width: 150px; height: 150px; border: 12px solid currentColor; border-radius: 50%; opacity: 0.14; pointer-events: none; }
+.landing-price-name { position: relative; z-index: 1; display: flex; align-items: center; gap: 10px; color: inherit; font-size: 14px; font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase; }
+.landing-price-name::before { content: ""; width: 22px; height: 4px; border-radius: 2px; background: var(--price-accent); }
+.landing-price-amount { position: relative; z-index: 1; color: var(--price-accent); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(48px, 5vw, 64px); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: no-preference) {
+  .landing-price { transition: transform 180ms ease, box-shadow 180ms ease; }
+  .landing-price:hover { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 var(--price-shadow); }
+}
 
-/* Three steps and the two enrollment entry points (LAN-14). */
+/* Three steps and the two enrollment entry points (LAN-14). Each badge takes
+   one brand colour (red, yellow, coal) and the card's left edge repeats it. */
 .landing-steps { background: var(--landing-stats-bg); }
-.landing-steps-list { display: grid; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; counter-reset: landing-step; }
-.landing-steps-list li { display: flex; align-items: center; gap: 16px; padding: 22px 24px; border-radius: 16px; background: var(--landing-surface); color: var(--landing-text-strong); font-size: 20px; font-weight: 700; counter-increment: landing-step; }
-.landing-steps-list li::before { content: counter(landing-step); display: grid; flex: none; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--landing-brand-black); color: var(--landing-surface); font-family: var(--font-landing-barlow), sans-serif; font-size: 22px; font-weight: 700; }
+.landing-steps-list { display: grid; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin: 0; padding: 0; list-style: none; counter-reset: landing-step; }
+.landing-steps-list li { --step-bg: var(--landing-brand-red); --step-fg: var(--landing-on-action); display: flex; align-items: center; gap: 18px; padding: 22px 24px; border: 2px solid var(--landing-brand-black); border-left: 10px solid var(--step-bg); border-radius: 18px; background: var(--landing-surface); box-shadow: 5px 5px 0 var(--landing-brand-black); color: var(--landing-text-strong); font-size: 20px; font-weight: 700; line-height: 1.2; counter-increment: landing-step; }
+.landing-steps-list li:nth-child(3n + 2) { --step-bg: var(--landing-brand-yellow); --step-fg: var(--landing-brand-black); }
+.landing-steps-list li:nth-child(3n) { --step-bg: var(--landing-brand-black); --step-fg: var(--landing-brand-yellow); }
+.landing-steps-list li::before { content: counter(landing-step); display: grid; flex: none; place-items: center; width: 56px; height: 56px; border: 2px solid var(--landing-brand-black); border-radius: 50%; background: var(--step-bg); color: var(--step-fg); font-family: var(--font-landing-barlow), sans-serif; font-size: 30px; font-weight: 800; line-height: 1; }
 .landing-steps-actions { display: flex; flex-wrap: wrap; gap: 12px; width: 100%; }
 .landing-steps-actions .landing-button-outline { border-color: var(--landing-text-strong); color: var(--landing-text-strong); }
 .landing-steps-actions .landing-button-outline:hover { background: var(--landing-brand-black); color: var(--landing-surface); }
