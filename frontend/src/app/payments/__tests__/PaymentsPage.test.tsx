@@ -1900,7 +1900,7 @@ describe("PaymentsPage — a decision only becomes real once the server confirms
     // `TypeError`) rather than falling back to `confirmation.failure` — same
     // classification every other error site in the app uses.
     expect(
-      await screen.findByText("No pudimos conectar. Revise su conexión a internet e intente nuevamente."),
+      await screen.findByText("No pudimos conectar. Revisa tu conexión a internet e intenta nuevamente."),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/no se pudo confirmar el estado real/i),
@@ -2086,11 +2086,11 @@ describe("PaymentsPage — panel único de validar pago (issue #510)", () => {
 // ---------------------------------------------------------------------------
 
 describe("PaymentsPage — la insignia de membresía distingue INACTIVA de VENCIDA", () => {
-  it('renders "Pago pendiente" — never "Vencida" — for a never-activated membership with its first payment pending', async () => {
+  it('renders "Por validar" — never "Vencida" — for a never-activated membership with its first payment pending', async () => {
     mockFetchPaymentValidations.mockResolvedValue([NEVER_ACTIVATED_PENDING_REQUEST]);
     renderPage();
     await openRequest("Lucía Andrade");
-    await screen.findByText("Pago pendiente");
+    expect((await screen.findAllByText("Por validar")).length).toBeGreaterThan(1);
     expect(screen.queryByText("Vencida")).not.toBeInTheDocument();
   });
 
@@ -2181,7 +2181,7 @@ describe("PaymentsPage — cash vs transfer review (admin v4)", () => {
     await openRequest(PENDING_REQUEST.studentName);
 
     expect(await screen.findByText("Pago por transferencia")).toBeInTheDocument();
-    expect(screen.getByText(/indique el motivo de la excepción/i)).toBeInTheDocument();
+    expect(screen.getByText(/indica el motivo de la excepción/i)).toBeInTheDocument();
     expect(screen.queryByText("Monto a recibir")).not.toBeInTheDocument();
   });
 

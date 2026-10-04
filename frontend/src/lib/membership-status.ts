@@ -47,13 +47,13 @@ export function readsAsVencida(estado: BackendEstadoMembresia): boolean {
  * Label/tone for a backend INACTIVA membership — the state
  * `MEMBERSHIP_STATUS_BY_ESTADO` folds into the same `"vencida"` bucket as a
  * real VENCIDA one, for a display type with no `"inactiva"` value of its
- * own. "Pago pendiente" while its first payment awaits validation,
+ * own. "Por validar" while its first payment awaits validation,
  * otherwise "Sin activar" — never "Vencida" (issue #1199, #1208). `/members`
  * (`getMembershipStatusBadge`) and `/payments` both render this state and
  * share the rule so it cannot drift between the two screens.
  */
 export function inactivaMembershipBadge(paymentPending: boolean): { label: string; tone: BadgeTone } {
   return paymentPending
-    ? { label: "Pago pendiente", tone: "warn" }
+    ? { label: "Por validar", tone: "warn" }
     : { label: "Sin activar", tone: "neutral" };
 }

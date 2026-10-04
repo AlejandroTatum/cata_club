@@ -730,7 +730,7 @@ describe("getMembershipStatusBadge", () => {
     ).toEqual({ label: "Sin activar", tone: "neutral" });
   });
 
-  it('returns "Pago pendiente" + warn for a backend INACTIVA membership with a payment awaiting review', () => {
+  it('returns "Por validar" + warn for a backend INACTIVA membership with a payment awaiting review', () => {
     expect(
       getMembershipStatusBadge({
         membresia: {
@@ -744,7 +744,7 @@ describe("getMembershipStatusBadge", () => {
         },
         ultimoPago: { estado: "pendiente_validacion", fechaPago: "2026-07-01", monto: 35, periodo: "Julio 2026" },
       }),
-    ).toEqual({ label: "Pago pendiente", tone: "warn" });
+    ).toEqual({ label: "Por validar", tone: "warn" });
   });
 
   it('never returns "Vencida" for a backend INACTIVA membership', () => {

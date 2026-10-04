@@ -701,7 +701,7 @@ export function getAccountStatusBadge(account: MemberAccount): {
  * `MEMBERSHIP_STATUS_LABELS[estado]` lookup, which is the SAME "Vencida" an
  * actually lapsed membership gets (`MEMBERSHIP_STATUS_BY_ESTADO` folds both
  * into `"vencida"`). This reads `estadoBackend`, the one field that still
- * carries the raw enum, to tell them apart: "Pago pendiente" while a payment
+ * carries the raw enum, to tell them apart: "Por validar" while a payment
  * is queued for review, "Sin activar" once nothing is — never "Vencida".
  */
 export function getMembershipStatusBadge(
