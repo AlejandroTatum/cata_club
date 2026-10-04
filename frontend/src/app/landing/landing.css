@@ -843,10 +843,10 @@
    summary, the answer sits in the SAME card, a chevron shows open/close) in
    CataClub colours. Nothing here clips or fixes a height: the answer is plain
    flow content inside the <details>, whatever its length or the viewport. */
-.landing-faq { display: grid; grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr); align-items: start; gap: 32px 48px; background: var(--landing-brand-yellow-pale); }
+.landing-faq { display: grid; grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr); align-items: start; gap: 32px 48px; background: var(--landing-brand-yellow-pale); }
 .landing-faq .landing-section-header { position: relative; padding: 28px; overflow: hidden; border: 2px solid var(--landing-brand-black); border-radius: 22px; background: var(--landing-surface); box-shadow: 6px 6px 0 var(--landing-brand-red); }
 /* Decorative question mark; the empty alt keeps it out of the accessibility tree. */
-.landing-faq .landing-section-header::after { content: "?" / ""; position: absolute; right: 18px; bottom: -22px; color: var(--landing-brand-yellow); font-family: var(--font-landing-barlow), sans-serif; font-size: 150px; font-weight: 800; line-height: 1; pointer-events: none; }
+.landing-faq .landing-section-header::after { content: "?" / ""; position: absolute; right: 18px; top: 50%; transform: translateY(-50%); color: var(--landing-brand-yellow); font-family: var(--font-landing-barlow), sans-serif; font-size: 150px; font-weight: 800; line-height: 1; pointer-events: none; }
 .landing-faq .landing-section-header > * { position: relative; z-index: 1; }
 .landing-faq-list { display: flex; width: 100%; flex-direction: column; gap: 14px; }
 .landing-faq-list details { border: 2px solid var(--landing-brand-black); border-radius: 18px; background: var(--landing-surface); box-shadow: 4px 4px 0 var(--landing-brand-black); }
@@ -858,7 +858,7 @@
 .landing-faq-list details[open] summary { border-bottom-right-radius: 0; border-bottom-left-radius: 0; }
 .landing-faq-list summary::after { content: ""; flex: none; width: 36px; height: 36px; border: 2px solid var(--landing-brand-black); border-radius: 50%; background: var(--landing-highlight) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23111111' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / 20px 20px no-repeat; }
 .landing-faq-list details[open] summary::after { background: var(--landing-brand-red) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / 20px 20px no-repeat; transform: rotate(180deg); }
-.landing-faq-list p { margin: 0; max-width: 64ch; padding: 4px 20px 20px; color: var(--landing-text); font-size: 17px; line-height: 1.6; }
+.landing-faq-list p { margin: 0; padding: 4px 20px 20px; color: var(--landing-text); font-size: 17px; line-height: 1.6; }
 @media (prefers-reduced-motion: no-preference) {
   .landing-faq-list summary { transition: background-color 160ms ease; }
   .landing-faq-list summary::after { transition: transform 220ms ease; }
@@ -872,12 +872,11 @@
   .landing-faq-list summary { font-size: 18px; padding-left: 16px; }
   .landing-faq-list p { padding-inline: 16px; font-size: 16px; }
   .landing-faq .landing-section-header { padding: 22px; }
+  .landing-faq .landing-section-header::after { right: 12px; font-size: 104px; }
   .landing-steps-list li { padding: 18px 18px; font-size: 19px; }
   .landing-price { min-height: 170px; }
 }
 
-/* Caption over the hero photo, on the same dark pill as the counter. */
-.landing-hero-caption { position: absolute; left: 24px; bottom: 20px; z-index: 20; max-width: calc(100% - 48px); margin: 0; padding: 8px 14px; border-radius: 22px; background: rgba(0, 0, 0, 0.6); color: var(--landing-on-action); font-size: 13px; font-weight: 600; }
 
 /* Fixed bottom bar, phones only (LAN-14). */
 .landing-mobile-bar { display: none; }
@@ -892,5 +891,4 @@
   .landing-page { padding-bottom: 72px; }
   .landing-steps-list { grid-template-columns: 1fr; }
   .landing-steps-actions .landing-button { flex: 1 1 100%; }
-  .landing-hero-caption { left: 16px; bottom: 16px; }
 }
