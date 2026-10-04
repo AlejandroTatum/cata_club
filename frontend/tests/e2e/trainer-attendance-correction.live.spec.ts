@@ -36,7 +36,6 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 const ADMIN_EMAIL = "admin@cataclub.com";
 const ADMIN_PASSWORD = "admin12345";
 
-const MOTIVO = "Verificación E2E en vivo (módulo 4): confirma que la corrección persiste tras un reload.";
 
 async function loginAsAdmin(page: Page): Promise<void> {
   await page.goto("/login");
@@ -86,7 +85,6 @@ test("un administrador corrige una asistencia real y la corrección sobrevive a 
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   await dialog.getByRole("radio", { name: target, exact: true }).click();
-  await dialog.getByPlaceholder("Por qué se corrige este registro").fill(MOTIVO);
 
   const correctionResponse = page.waitForResponse(
     (res) => res.url().includes("/attendance/records/") && res.url().includes("/correct") && res.request().method() === "PATCH",

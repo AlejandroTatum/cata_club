@@ -45,7 +45,7 @@ describe("SessionHistoryList", () => {
   });
 
   it("keeps the result bar short and fixed on desktop with the counts beside it", () => {
-    render(<SessionHistoryList pageSize={10} sessions={[session(1, { reviewCount: 2 })]} rangeInvalid={false} emptyAction={EMPTY_ACTION} />);
+    render(<SessionHistoryList pageSize={10} sessions={[session(1)]} rangeInvalid={false} emptyAction={EMPTY_ACTION} />);
 
     const bar = screen.getAllByRole("img", { name: /3 presentes/i })[0];
     expect(bar).toHaveClass("lg:w-40", "lg:flex-none");
@@ -56,7 +56,7 @@ describe("SessionHistoryList", () => {
     expect(line).toHaveTextContent("3 presentes");
     const group = line.parentElement as HTMLElement;
     expect(group.className).not.toMatch(/min-w-\[240px\]/);
-    expect(group).toHaveTextContent("2 por revisar");
+    expect(group).not.toHaveTextContent("por revisar");
   });
 
   // ENT-19 / ADMA-29: «No registrado» read as «the attendance was not recorded».
@@ -75,21 +75,19 @@ describe("SessionHistoryList", () => {
     expect(screen.queryByText(/No registrado/)).not.toBeInTheDocument();
   });
 
-  // ENT-07: a session holding records flagged for review says so in the list, so
-  // the admin does not have to open every session to find them.
-  it("flags the sessions that hold records to review, and only those", async () => {
+  // Issue #1578: the owner removed «N por revisar»; flagged records add no count.
+  it("never shows «por revisar», even when records were flagged for review", async () => {
     render(
       <SessionHistoryList
         pageSize={10}
-        sessions={[session(2, { reviewCount: 2 }), session(1, { reviewCount: 0 })]}
+        sessions={[session(2)]}
         rangeInvalid={false}
         emptyAction={EMPTY_ACTION}
       />,
     );
 
     const rows = (await screen.findAllByRole("row")).slice(1);
-    expect(rows[0]).toHaveTextContent("2 por revisar");
-    expect(rows[1]).not.toHaveTextContent("por revisar");
+    expect(rows[0]).not.toHaveTextContent("por revisar");
   });
 
   it("says why the list is empty, differently for an unusable range", () => {

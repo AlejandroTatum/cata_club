@@ -16,7 +16,7 @@
  * to and reports back through callbacks; it does not know what a correction
  * is.
  *
- * The correction form asks for `estado` + `motivo` only. `justificativo`/
+ * The correction form asks for `estado` only (issue #1578: no motivo for the admin). `justificativo`/
  * `estadoJustificativo` are NOT exposed here as inputs — the original
  * registration wizard never captures them either (checked: `page.tsx` never
  * mentions them), so this form does not invent new surface for them. It
@@ -97,7 +97,6 @@ export default function AttendanceCorrectionRow({
   const [estado, setEstado] = useState<EstadoAsistencia>(
     student.attendance === UNMARKED ? "present" : student.attendance,
   );
-  const [motivo, setMotivo] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastCorrection, setLastCorrection] = useState<CorrectAttendanceResult | null>(null);
@@ -108,7 +107,6 @@ export default function AttendanceCorrectionRow({
 
   function openDialog(): void {
     setEstado(student.attendance === UNMARKED ? "present" : student.attendance);
-    setMotivo("");
     setError(null);
     setDialogOpen(true);
   }
@@ -134,12 +132,6 @@ export default function AttendanceCorrectionRow({
 
   async function handleSubmit(): Promise<void> {
     if (asistenciaId === null || submitting) return;
-    const trimmed = motivo.trim();
-    if (trimmed.length === 0) {
-      setError("El motivo es obligatorio.");
-      return;
-    }
-
     setSubmitting(true);
     setError(null);
     try {
@@ -149,7 +141,6 @@ export default function AttendanceCorrectionRow({
         // comment above for why this can never be omitted.
         justificativo: student.justificativo ?? null,
         estadoJustificativo: student.estadoJustificativo ?? null,
-        motivo: trimmed,
       });
       setLastCorrection(result);
       setDialogOpen(false);
@@ -229,8 +220,6 @@ export default function AttendanceCorrectionRow({
           studentName={student.name}
           estado={estado}
           onEstadoChange={setEstado}
-          motivo={motivo}
-          onMotivoChange={setMotivo}
           submitting={submitting}
           error={error}
           onSubmit={() => void handleSubmit()}
@@ -241,7 +230,8 @@ export default function AttendanceCorrectionRow({
       {lastCorrection && (
         <p className="text-xs text-ink-2">
           Corregido por {lastCorrection.corregidoPorNombre} el {formatDateTime(lastCorrection.corregidoEn)} ·
-          antes: {ATTENDANCE_LABELS[lastCorrection.estadoAnterior]} · motivo: {lastCorrection.motivo}
+          antes: {ATTENDANCE_LABELS[lastCorrection.estadoAnterior]}
+          {lastCorrection.motivo ? ` · motivo: ${lastCorrection.motivo}` : ""}
         </p>
       )}
 
@@ -261,7 +251,8 @@ export default function AttendanceCorrectionRow({
               {history.map((entry) => (
                 <li key={entry.id} className="text-xs text-ink-2">
                   {formatDateTime(entry.corregidoEn)} · {entry.corregidoPorNombre} · antes:{" "}
-                  {ATTENDANCE_LABELS[entry.estadoAnterior]} · {entry.motivo}
+                  {ATTENDANCE_LABELS[entry.estadoAnterior]}
+                  {entry.motivo ? ` · ${entry.motivo}` : ""}
                 </li>
               ))}
             </ul>
