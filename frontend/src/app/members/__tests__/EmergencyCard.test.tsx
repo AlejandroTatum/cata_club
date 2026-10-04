@@ -37,7 +37,9 @@ describe("EmergencyCard — hierarchy (QA R2 S8)", () => {
   it("shows no warning block when there is nothing to warn about, and says so quietly", () => {
     const card = renderCard(EMPTY);
     expect(within(card).queryByTestId("emergency-card-health")).toBeNull();
-    expect(within(card).getAllByText("Sin registrar").length).toBeGreaterThanOrEqual(3);
+    // Alergias/enfermedades read «Sin declarar» (#1574); the contact stays «Sin registrar».
+    expect(within(card).getAllByText("Sin declarar")).toHaveLength(2);
+    expect(within(card).getAllByText("Sin registrar").length).toBeGreaterThanOrEqual(1);
   });
 
   it("warns only for what is filled", () => {
