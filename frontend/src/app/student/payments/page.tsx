@@ -57,7 +57,8 @@ import type { StudentPortalSummary, PagoPersona, MembershipSummary, BeneficioAsi
 import { BackLink, Badge, Button, EmptyState, FilterPanel, FilterPill, InfoPanel, LoadingState, PAGE_RAIL, StatCard, buttonClasses, cn } from "@/components/ui";
 
 import { describePaymentSituation, firstNameOf, hasOwnMembership, isMinor } from "../student-utils";
-import ManagedStudentPicker, { useManagedProfiles, withSelectedStudent } from "../ManagedStudentPicker";
+import { useManagedProfiles, withSelectedStudent } from "../ManagedStudentPicker";
+import FamilyStrip from "../FamilyStrip";
 import { getEmptyStateMessage, countPagosByStatus, formatPagoMonto, PAGO_FILTER_LABELS, prepareVoucher, type PagoStatusFilter } from "./payments-utils";
 import { formatDate } from "@/lib/format-utils";
 import { CreditCard } from "lucide-react";
@@ -518,8 +519,7 @@ function PaymentsContent({
     // buys a rail that says HOW a payment is made, which is the thing this
     // screen was missing rather than a thing it was too narrow for.
     <>
-      <ManagedStudentPicker
-        id="student-select-payments"
+      <FamilyStrip
         profiles={managedProfiles}
         value={selectedId}
         onChange={(id) => {

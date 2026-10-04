@@ -1890,9 +1890,10 @@ describe("StudentPaymentsPage — the representative pays her own membership (FA
 
     const card = await screen.findByTestId("membership-status");
     expect(within(card).getByText("$40,00")).toBeInTheDocument();
-    const selector = screen.getByLabelText("Estudiante");
-    expect(within(selector).getByRole("option", { name: "Marta Reyes" })).toBeInTheDocument();
-    expect(within(selector).getByRole("option", { name: "Sofía Vera" })).toBeInTheDocument();
+    const strip = screen.getByRole("group", { name: "Jugador" });
+    expect(within(strip).getByRole("button", { name: /Marta Reyes/ })).toBeInTheDocument();
+    expect(within(strip).getByRole("button", { name: /Sofía Vera/ })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Estudiante")).not.toBeInTheDocument();
     expect(mockFetchPagosDePersona).toHaveBeenCalledWith("9");
     expect(screen.queryByText(/a nombre de Sofía/)).not.toBeInTheDocument();
   });
