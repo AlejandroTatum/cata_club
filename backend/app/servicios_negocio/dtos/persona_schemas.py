@@ -7,6 +7,7 @@ from app.infraestructura.cloudinary_cliente import resolver_url_foto_perfil
 from app.servicios_negocio.dtos.base import ResponseBase
 from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentFichaMedicaMenorDTO
 from app.servicios_negocio.dtos.validadores import (
+    ApellidoEditable,
     ApellidoValidado,
     CedulaValidada,
     ContactoEmergenciaValidado,
@@ -15,6 +16,7 @@ from app.servicios_negocio.dtos.validadores import (
     EnfermedadesValidadas,
     NombrePresentado,
     NombrePresentadoOpcional,
+    NombreEditable,
     NombreValidado,
     TelefonoValidado,
     TelefonoValidadoOpcional,
@@ -127,10 +129,13 @@ class VincularRepresentadoDTO(BaseModel):
 
 
 class PersonaUpdateDTO(BaseModel):
+    # H4 (QA4): `NombreEditable`/`ApellidoEditable` solo normalizan; la regla
+    # estricta de REG-08 se aplica en `PersonaServicio.actualizar_persona`
+    # solo a un nombre que cambió (ver `validar_nombre_cambiado`).
     # Issue #1323: sin `max_length` -- ver el comentario junto a
     # `NombreValidado`/`ApellidoValidado` en `validadores.py`.
-    nombres: Optional[NombreValidado] = Field(default=None)
-    apellidos: Optional[ApellidoValidado] = Field(default=None)
+    nombres: Optional[NombreEditable] = Field(default=None)
+    apellidos: Optional[ApellidoEditable] = Field(default=None)
     # Issue #1207: `TelefonoValidadoOpcional` en vez de `TelefonoValidado` --
     # un desk-edit reenvía el formulario completo, y para un menor
     # representado sin celular propio eso incluye `telefono: ""`. Este DTO

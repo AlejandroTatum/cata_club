@@ -39,6 +39,7 @@ from app.infraestructura.repositorios.vinculacion_representante_repositorio impo
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.auth_servicio import AuthServicio
 from app.servicios_negocio.rol_servicio import RolServicio
+from app.servicios_negocio.dtos.validadores import validar_nombre_cambiado
 from app.servicios_negocio.dtos.persona_schemas import (
     PersonaCreateDTO, PersonaUpdateDTO, RepresentadoCreateDTO,
     VincularRepresentadoDTO,
@@ -622,6 +623,9 @@ class PersonaServicio:
         # servicio, que es quien tiene la fila real.
         if "telefono" in datos and not datos["telefono"] and persona.representante_id is None:
             raise OperacionInvalida("El teléfono es obligatorio.")
+        for campo in ("nombres", "apellidos"):
+            if datos.get(campo) is not None:
+                validar_nombre_cambiado(campo, datos[campo], getattr(persona, campo))
         resultado = self.repo.actualizar(persona, datos)
         self.db.commit()
         return resultado
