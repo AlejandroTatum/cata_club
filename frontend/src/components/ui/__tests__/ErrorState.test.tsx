@@ -48,4 +48,14 @@ describe("ErrorState — links in the message (FAM-21)", () => {
     const link = screen.getByRole("link", { name: /wa\.me|WhatsApp/i });
     expect(link).toHaveAttribute("href", "https://wa.me/593999999999");
   });
+
+  it("gives the link a 24px minimum hit target (FAM-21)", () => {
+    render(<ErrorState message="Escríbanos: https://wa.me/593999999999." />);
+    const link = screen.getByRole("link", { name: /wa\.me|WhatsApp/i });
+    // LinkifiedText takes no className, so the message wrapper styles its anchors.
+    const wrapper = link.closest("p");
+    expect(wrapper?.className).toContain("[&_a]:min-h-6");
+    expect(wrapper?.className).toContain("[&_a]:inline-flex");
+    expect(wrapper?.className).toContain("[&_a]:items-center");
+  });
 });

@@ -63,7 +63,7 @@ export default function ErrorState({
         <AlertTriangle size={ICON.lg} strokeWidth={1.5} />
       </span>
       <b className="text-base font-bold text-ink">{title}</b>
-      {message ? <p className="max-w-[44ch] text-sm text-ink-2"><LinkifiedText text={message} /></p> : null}
+      {message ? <p className="max-w-[44ch] text-sm text-ink-2 [&_a]:inline-flex [&_a]:min-h-6 [&_a]:items-center"><LinkifiedText text={message} /></p> : null}
       {onRetry ? (
         <div className="mt-1">
           <Button size="sm" onClick={onRetry}>
