@@ -24,6 +24,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { ACTIVATION_GATE_ROUTE, routeForSession } from "@/lib/activation-reasons";
 import type { AuthErrorKind } from "@/services/auth";
 import { REDIRECT_REASON_MESSAGES, redirectReasonFrom } from "@/lib/redirect-reason";
+import { safeNextPath } from "@/lib/safe-redirect";
 import AuthShell, {
   AUTH_INPUT_CLASSES,
   AUTH_LABEL_CLASSES,
@@ -55,10 +56,22 @@ function firstNameOf(fullName: string): string {
  * receives right after, never from a constant, so the two can't drift apart
  * again.
  */
-function welcomeDescriptionFor(route: string): string {
-  return route === ACTIVATION_GATE_ROUTE
-    ? "Antes de entrar, le faltan un par de pasos."
+function welcomeDescriptionFor(route: string, returningTo: string | null): string {
+  if (route === ACTIVATION_GATE_ROUTE) return "Antes de entrar, le faltan un par de pasos.";
+  return route === returningTo
+    ? "Su sesión quedó iniciada. Le llevamos a la página que buscaba."
     : "Su sesión quedó iniciada. Le llevamos a su panel.";
+}
+
+/**
+ * REG-21: where a signed-in session goes. The activation gate always wins —
+ * an account that has not finished activating can use nothing else — and
+ * otherwise the validated `?next=` (an internal path, see `safeNextPath`),
+ * falling back to the role's home.
+ */
+function destinationFor(session: Parameters<typeof routeForSession>[0], next: string | null): string {
+  const home = routeForSession(session);
+  return home === ACTIVATION_GATE_ROUTE || next === null ? home : next;
 }
 
 /** Written once because two fields point at it through `aria-describedby`. */
@@ -174,6 +187,8 @@ function LoginPageContent(): React.ReactElement {
    */
   const searchParams = useSearchParams();
   const redirectReason = redirectReasonFrom(searchParams.get("motivo"));
+  /** REG-21: the page the person was heading to, or `null` when `?next=` is absent or not an internal path. */
+  const nextPath = safeNextPath(searchParams.get("next"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -245,9 +260,9 @@ function LoginPageContent(): React.ReactElement {
   // below owns the (delayed) redirect instead.
   useEffect((): void => {
     if (!isLoading && isAuthenticated && session && !welcome) {
-      router.replace(routeForSession(session));
+      router.replace(destinationFor(session, nextPath));
     }
-  }, [isLoading, isAuthenticated, session, welcome, router]);
+  }, [isLoading, isAuthenticated, session, welcome, router, nextPath]);
 
   // Hold the form on screen for one beat after the confirmation toast fires,
   // so a successful login is actually seen instead of flashing past.
@@ -312,12 +327,12 @@ function LoginPageContent(): React.ReactElement {
     // interruption for an event the user just caused and already expects.
     // A toast confirms without blocking, and carries the one thing the old
     // panel never said: where they are about to land.
-    const route = routeForSession(result.session);
+    const route = destinationFor(result.session, nextPath);
     const firstName = firstNameOf(result.session.user.name);
     // REG-20: pending activation steps are a heads-up, not a success.
     const showWelcome = route === ACTIVATION_GATE_ROUTE ? toast.showInfo : toast.showSuccess;
     showWelcome(firstName ? `Hola, ${firstName}` : "Sesión iniciada", {
-      description: welcomeDescriptionFor(route),
+      description: welcomeDescriptionFor(route, nextPath),
     });
 
     setWelcome({ route });
