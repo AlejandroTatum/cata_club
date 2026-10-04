@@ -317,6 +317,17 @@ async function mockGroups(page: Page, n: number): Promise<void> {
   // 401, and the app's global session handling redirected to /login before
   // the grid this test measures ever drew.
   await page.route("**/api/groups/horarios/alumnos", (r) => fulfillJson(r, []));
+  // QA4 PERF-01 (C16): the screen asks for per-horario counts, not the full roster.
+  await page.route("**/api/groups/horarios/conteos*", (r) =>
+    fulfillJson(
+      r,
+      SCHEDULES.map((s) => ({
+        horarioId: s.id,
+        inscritos: n,
+        personaIds: Array.from({ length: n }, (_, i) => i + 1),
+      })),
+    ),
+  );
   await page.route("**/api/members", (r) =>
     fulfillJson(r, { accounts: [], personasCapped: false }),
   );
