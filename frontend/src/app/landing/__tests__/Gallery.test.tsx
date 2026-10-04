@@ -2,7 +2,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Gallery, { wrapTime } from "../Gallery";
-import { GALLERY_EMPTY_EVENT } from "../landing-gallery";
 
 const PHOTOS = [
   { id: 1, titulo: "En juego", descripcion: "Una jugada frente al público de la sala.", imagenUrl: "https://res.cloudinary.com/club/en-juego.jpg" },
@@ -213,14 +212,13 @@ describe("Gallery", (): void => {
     });
   });
 
-  it("renders nothing and announces the empty gallery when the club published no photo", async (): Promise<void> => {
-    const onEmpty = vi.fn();
-    document.addEventListener(GALLERY_EMPTY_EVENT, onEmpty);
+  it("keeps the section with a brief empty state when the club published no photo (#1622)", async (): Promise<void> => {
     stubFetch([]);
-    const { container } = render(<Gallery />);
-    await waitFor((): void => expect(onEmpty).toHaveBeenCalled());
-    expect(container).toBeEmptyDOMElement();
-    document.removeEventListener(GALLERY_EMPTY_EVENT, onEmpty);
+    render(<Gallery />);
+    const section = document.getElementById("galeria") as HTMLElement;
+    expect(await within(section).findByRole("status")).toHaveTextContent("Pronto vas a ver aquí fotos del club");
+    expect(within(section).getByRole("heading", { name: "Galería" })).toBeInTheDocument();
+    expect(within(section).queryByRole("group", { name: "Navegar por la galería" })).toBeNull();
   });
 
   it("reports a failed fetch honestly", async (): Promise<void> => {

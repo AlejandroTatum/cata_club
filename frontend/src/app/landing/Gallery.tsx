@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   galleryImageSrc,
   galleryImageSrcSet,
-  GALLERY_EMPTY_EVENT,
   mapGallery,
   type GalleryEntry,
 } from "./landing-gallery";
@@ -51,8 +50,9 @@ export function wrapTime(time: number, duration: number): number {
  * is off (sponsors' stylesheet rule): the strip is a plain horizontally
  * scrollable row and the arrows scroll it by one tile.
  *
- * Empty is the gallery's real initial state: the section renders nothing and
- * tells the page (`GALLERY_EMPTY_EVENT`) to drop its nav entries.
+ * Empty is the gallery's real initial state — the club publishes entries
+ * from `/galeria`. The section (and its nav entries) stays on the page with a
+ * brief empty state (#1622) instead of shipping placeholder photographs.
  */
 export default function Gallery(): React.ReactElement {
   const [state, setState] = useState<GalleryState>({ kind: "loading" });
@@ -82,10 +82,6 @@ export default function Gallery(): React.ReactElement {
       });
     return (): void => { cancelled = true; };
   }, []);
-
-  useEffect((): void => {
-    if (state.kind === "empty") document.dispatchEvent(new CustomEvent(GALLERY_EMPTY_EVENT));
-  }, [state.kind]);
 
   useEffect((): (() => void) => {
     const query = window.matchMedia?.(REDUCED_MOTION_QUERY);
@@ -161,14 +157,12 @@ export default function Gallery(): React.ReactElement {
   if (state.kind === "ready") {
     accessibleStatus = `Galería: ${state.entries.map((entry): string => entry.title).join(", ")}.`;
   } else if (state.kind === "empty") {
-    accessibleStatus = "Aún no hay fotos en la galería.";
+    accessibleStatus = "Pronto vas a ver aquí fotos del club";
   } else if (state.kind === "error") {
     accessibleStatus = "No se pudieron cargar las fotos de la galería.";
   } else {
     accessibleStatus = "Cargando la galería…";
   }
-
-  if (state.kind === "empty") return <></>;
 
   // Only the first pass of the first copy is exposed (focusable, announced);
   // every repeat is decoration, exactly like the sponsors strip.
