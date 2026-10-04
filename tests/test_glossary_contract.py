@@ -30,15 +30,15 @@ SUPERFICIES = {
 # evidencia el uso del término — no hace falta citar el término ni sus
 # `context_forms` textuales.
 USOS_BACKEND = [
-    ("backend:prompt", "membresia", "estado de sus pagos y de su membresía"),
+    ("backend:prompt", "membresia", "estado de tus pagos y de tu membresía"),
     ("backend:prompt", "ficha_medica", "Ficha médica"),
     ("backend:prompt", "horario_entrenamiento", "horarios vigentes"),
     ("backend:prompt", "asistencia", "¿Cómo tomo asistencia?"),
 ]
 USOS_FRONTEND = [
-    ("frontend:ayuda", "membresia", "estado de sus pagos y de su membresía"),
-    ("frontend:ayuda", "tipo_membresia", "valor de su plan"),
-    ("frontend:ayuda", "jugador", "selector de estudiante"),
+    ("frontend:ayuda", "membresia", "estado de tus pagos y de tu membresía"),
+    ("frontend:ayuda", "tipo_membresia", "valor de tu plan"),
+    ("frontend:ayuda", "jugador", "selector de jugador"),
     ("frontend:atajos", "asistencia", "¿Dónde veo la asistencia?"),
 ]
 

@@ -25,54 +25,54 @@ Preguntas frecuentes:
 
 [Para empezar]
 P: ¿Cómo inicio sesión?
-R: Ingrese con su correo y contraseña. Si olvidó la contraseña, solicite un enlace de recuperación en la pantalla de inicio de sesión.
+R: Ingresa con tu correo y contraseña. Si olvidaste la contraseña, solicita un enlace de recuperación en la pantalla de inicio de sesión.
 P: ¿Cuáles son los horarios?
-R: Consulte los horarios vigentes en la sección Horarios de la página principal.
+R: Consulta los horarios vigentes en la sección Horarios de la página principal.
 P: ¿Cuánto cuesta la mensualidad?
-R: Consulte el valor de su plan en la sección Mensualidad de la página principal o, si ya es parte del club, en Mi cuenta.
+R: Consulta el valor de tu plan en la sección Mensualidad de la página principal o, si ya eres parte del club, en Mi cuenta.
 P: ¿Por qué mi pantalla no se parece a la de otra persona del club?
 R: Cada persona ve las funciones que corresponden a su rol: administrador, entrenador o familia.
 
-[Si es estudiante o representante]
+[Si eres jugador o representante]
 P: ¿Dónde veo si mi pago fue aprobado?
-R: En Mi cuenta puede consultar el estado de sus pagos y de su membresía. Si un pago fue rechazado, verá el motivo y podrá enviar otro comprobante.
+R: En Mi cuenta puedes consultar el estado de tus pagos y de tu membresía. Si un pago fue rechazado, verás el motivo y podrás enviar otro comprobante.
 P: ¿Dónde veo la asistencia?
-R: En Mi cuenta puede consultar las clases y asistencias registradas.
+R: En Mi cuenta puedes consultar las clases y asistencias registradas.
 P: Necesito corregir la ficha médica. ¿Puedo hacerlo yo?
-R: Sí, si gestiona su propia cuenta o representa al estudiante. Abra Ficha médica en Mi cuenta. La ficha de un menor con cuenta propia la corrige su representante o un administrador.
+R: Sí, si gestionas tu propia cuenta o representas al jugador. Abre Ficha médica en Mi cuenta. La ficha de un menor con cuenta propia la corrige su representante o un administrador.
 P: Represento a más de un hijo. ¿Cómo cambio entre ellos?
-R: Use el selector de estudiante en Mi cuenta para elegir a quién desea consultar.
+R: Usa el selector de jugador en Mi cuenta para elegir a quién quieres consultar.
 
-[Si es entrenador]
+[Si eres entrenador]
 P: ¿Cómo tomo asistencia?
-R: Abra Pasar lista, elija el día y el horario, marque a cada alumno y confirme.
+R: Abre Pasar lista, elige el día y el horario, marca a cada jugador y confirma.
 P: Me equivoqué al marcar. ¿Puedo deshacerlo?
-R: Antes de confirmar puede usar Deshacer. Una vez registrada la lista, solo administración puede corregirla: escriba a administración con el día, el horario y el alumno.
+R: Antes de confirmar puedes usar Deshacer. Una vez registrada la lista, solo administración puede corregirla: escribe a administración con el día, el horario y el jugador.
 P: ¿Dónde veo lo que ya cargué?
-R: En Pasar lista → Historial puede consultar las listas registradas.
+R: En Pasar lista → Historial puedes consultar las listas registradas.
 
-[Si es administrador]
+[Si eres administrador]
 P: ¿Cómo valido un pago?
-R: Abra Pagos, revise la solicitud y confirme su decisión.
+R: Abre Pagos, revisa la solicitud y confirma tu decisión.
 P: Tengo muchos pagos iguales. ¿Debo aprobarlos uno por uno?
 R: Sí. Cada solicitud se revisa y aprueba por separado.
 P: Aprobé un pago por error. ¿Puedo revertirlo?
-R: Puede usar Deshacer durante los segundos posteriores a la aprobación. Después, el pago queda registrado.
+R: Puedes usar Deshacer durante los segundos posteriores a la aprobación. Después, el pago queda registrado.
 P: ¿Quién define los horarios?
 R: El administrador los configura en Grupos y horarios.
-P: ¿Dónde genero los reportes del club?
-R: En Reportes puede generar los informes con los datos registrados.
+P: ¿Dónde genero los informes del club?
+R: En Informes puedes generar los informes con los datos registrados.
 P: ¿Qué pasa si oculto una tarifa?
-R: En Tarifas, «Ocultar» la saca del sitio público y de las inscripciones y cambios de plan nuevos. Quienes ya la tienen siguen pagando igual. Puede volver a mostrarla cuando quiera con «Mostrar».
+R: En Tarifas, «Ocultar» la saca del sitio público y de las inscripciones y cambios de plan nuevos. Quienes ya la tienen siguen pagando igual. Puedes volver a mostrarla cuando quieras con «Mostrar».
 P: ¿Por qué no puedo eliminar una tarifa?
-R: «Eliminar» solo aparece mientras nadie usó la tarifa: si alguna membresía o cambio de plan la usó, ya no se puede borrar, porque quedaría sin respaldo el historial. En ese caso use «Ocultar» para que deje de ofrecerse.
+R: «Eliminar» solo aparece mientras nadie usó la tarifa: si alguna membresía o cambio de plan la usó, ya no se puede borrar, porque quedaría sin respaldo el historial. En ese caso usa «Ocultar» para que deje de ofrecerse.
 P: ¿Qué pasa si oculto un descuento?
-R: En Descuentos, «Ocultar» hace que ya no pueda asignarse a nadie nuevo. A quienes ya lo tienen se les sigue aplicando y los pagos ya registrados no cambian. Puede volver a mostrarlo con «Mostrar».
+R: En Descuentos, «Ocultar» hace que ya no pueda asignarse a nadie nuevo. A quienes ya lo tienen se les sigue aplicando y los pagos ya registrados no cambian. Puedes volver a mostrarlo con «Mostrar».
 P: ¿Por qué no puedo eliminar un descuento?
-R: «Eliminar» solo aparece mientras nadie recibió el descuento: si ya se aplicó o se asignó, no se puede borrar. En ese caso use «Ocultar» para que deje de ofrecerse.
+R: «Eliminar» solo aparece mientras nadie recibió el descuento: si ya se aplicó o se asignó, no se puede borrar. En ese caso usa «Ocultar» para que deje de ofrecerse.
 P: ¿Cómo oculto una categoría de la página pública?
-R: En Grupos y horarios, use «Ocultar del sitio» en la categoría; «Mostrar en el sitio» la publica de nuevo. La categoría sigue activa para inscripciones y asistencia. Una categoría nueva se crea oculta: no se publica hasta que usted la muestre.
+R: En Grupos y horarios, usa «Ocultar del sitio» en la categoría; «Mostrar en el sitio» la publica de nuevo. La categoría sigue activa para inscripciones y asistencia. Una categoría nueva se crea oculta: no se publica hasta que la muestres.
 P: ¿Cómo cambio las fotos de la página pública?
-R: Las fotos de la galería se cargan en Galería, con un título y una descripción, y los logos de los patrocinadores en Patrocinadores, con un nombre corto. Se aceptan archivos JPG o PNG de hasta 5 MB y se publican de inmediato. Para cambiar una, use «Editar»: puede corregir el título, la descripción y el encuadre, o reemplazar la foto. «Subir» y «Bajar» cambian el orden, y «Ocultar» la quita de la landing sin borrarla. «Eliminar» la borra para siempre y no se puede recuperar.
+R: Las fotos de la galería se cargan en Galería, con un título y una descripción, y los logos de los patrocinadores en Patrocinadores, con un nombre corto. Se aceptan archivos JPG o PNG de hasta 5 MB y se publican de inmediato. Para cambiar una, usa «Editar»: puedes corregir el título, la descripción y el encuadre, o reemplazar la foto. «Subir» y «Bajar» cambian el orden, y «Ocultar» la quita de la landing sin borrarla. «Eliminar» la borra para siempre y no se puede recuperar.
 P: ¿Qué muestra «Actividad del club»?
 R: Es una pantalla de solo lectura. «Resumen» muestra cuántas personas ingresaron, cuántas asistencias, pagos e inscripciones nuevas se registraron en el período elegido (24 h, 7 días o 30 días) y el estado de la aplicación, los errores y los correos. «Métricas avanzadas» da el detalle técnico para el equipo que da soporte.
