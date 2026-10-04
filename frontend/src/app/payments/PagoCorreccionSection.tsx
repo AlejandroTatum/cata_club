@@ -40,26 +40,13 @@ interface PagoCorreccionSectionProps {
   onCorrected: () => void;
 }
 
-/** Los seis campos financieros que `CorreccionPagoDTO` admite, todos opcionales. */
+/** ADMA-16: the admin writes only the correct final amount (and why). */
 interface FormState {
-  tarifaMensualAplicada: string;
-  mesesComprados: string;
-  montoBase: string;
   monto: string;
-  fechaInicio: string;
-  fechaFin: string;
   motivo: string;
 }
 
-const EMPTY_FORM: FormState = {
-  tarifaMensualAplicada: "",
-  mesesComprados: "",
-  montoBase: "",
-  monto: "",
-  fechaInicio: "",
-  fechaFin: "",
-  motivo: "",
-};
+const EMPTY_FORM: FormState = { monto: "", motivo: "" };
 
 const EFECTO_LABEL: Record<CorreccionPago["efectoCobertura"], string> = {
   SIN_CAMBIO: "Sin cambio en la cobertura",
@@ -67,16 +54,9 @@ const EFECTO_LABEL: Record<CorreccionPago["efectoCobertura"], string> = {
   REDUCIDA: "Cobertura reducida",
 };
 
-/** Solo los campos con valor se envían — "sin cambio" para el resto. */
+/** The server derives the base amount and the tariff from the final amount. */
 function buildInput(form: FormState): CorreccionPagoInput {
-  const input: CorreccionPagoInput = { motivo: form.motivo.trim() };
-  if (form.tarifaMensualAplicada.trim()) input.tarifaMensualAplicada = form.tarifaMensualAplicada.trim();
-  if (form.mesesComprados.trim()) input.mesesComprados = Number(form.mesesComprados);
-  if (form.montoBase.trim()) input.montoBase = form.montoBase.trim();
-  if (form.monto.trim()) input.monto = form.monto.trim();
-  if (form.fechaInicio.trim()) input.fechaInicio = form.fechaInicio.trim();
-  if (form.fechaFin.trim()) input.fechaFin = form.fechaFin.trim();
-  return input;
+  return { motivo: form.motivo.trim(), monto: form.monto.trim() };
 }
 
 export default function PagoCorreccionSection({
@@ -117,7 +97,7 @@ export default function PagoCorreccionSection({
 
   async function handleSubmit(event: React.FormEvent): Promise<void> {
     event.preventDefault();
-    if (!form.motivo.trim()) return;
+    if (!form.monto.trim() || !form.motivo.trim()) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -195,47 +175,16 @@ export default function PagoCorreccionSection({
 
             {formOpen && (
               <form onSubmit={handleSubmit} className="mt-2 rounded-lg border border-line bg-surface p-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <CampoFormularioAdmin
-                    label="Tarifa mensual"
-                    type="number"
-                    value={form.tarifaMensualAplicada}
-                    onChange={(v) => setForm((f) => ({ ...f, tarifaMensualAplicada: v }))}
-                  />
-                  <CampoFormularioAdmin
-                    label="Meses comprados"
-                    type="number"
-                    value={form.mesesComprados}
-                    onChange={(v) => setForm((f) => ({ ...f, mesesComprados: v }))}
-                    numberMin="1"
-                    numberStep="1"
-                    numberInputMode="numeric"
-                  />
-                  <CampoFormularioAdmin
-                    label="Monto base"
-                    type="number"
-                    value={form.montoBase}
-                    onChange={(v) => setForm((f) => ({ ...f, montoBase: v }))}
-                  />
-                  <CampoFormularioAdmin
-                    label="Monto final"
-                    type="number"
-                    value={form.monto}
-                    onChange={(v) => setForm((f) => ({ ...f, monto: v }))}
-                  />
-                  <CampoFormularioAdmin
-                    label="Fecha inicio"
-                    type="date"
-                    value={form.fechaInicio}
-                    onChange={(v) => setForm((f) => ({ ...f, fechaInicio: v }))}
-                  />
-                  <CampoFormularioAdmin
-                    label="Fecha fin"
-                    type="date"
-                    value={form.fechaFin}
-                    onChange={(v) => setForm((f) => ({ ...f, fechaFin: v }))}
-                  />
-                </div>
+                <CampoFormularioAdmin
+                  label="Monto correcto"
+                  type="number"
+                  value={form.monto}
+                  onChange={(v) => setForm((f) => ({ ...f, monto: v }))}
+                  required
+                />
+                <p className="mt-1 text-2xs text-ink-3">
+                  Escribe el monto correcto; el sistema ajusta la tarifa y la base.
+                </p>
 
                 <CampoFormularioAdmin
                   label="Motivo (obligatorio)"
@@ -250,7 +199,7 @@ export default function PagoCorreccionSection({
                 {submitError && <p className="mt-2 text-2xs text-state-bad">{submitError}</p>}
 
                 <div className="mt-3 flex items-center gap-2">
-                  <Button type="submit" size="sm" disabled={submitting || !form.motivo.trim()}>
+                  <Button type="submit" size="sm" disabled={submitting || !form.monto.trim() || !form.motivo.trim()}>
                     {submitting ? (
                       <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
                     ) : (

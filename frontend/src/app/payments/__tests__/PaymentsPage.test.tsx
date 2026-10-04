@@ -705,7 +705,7 @@ describe("PaymentsPage — comprobante oficial y correcciones", () => {
     expect(mockFetchCorrecciones).toHaveBeenCalledWith(3);
   });
 
-  it("submits a new correction with only the fields filled in, plus the mandatory motivo", async () => {
+  it("submits a correction with only the final amount plus the mandatory motivo", async () => {
     mockFetchPaymentValidations.mockResolvedValue([RESOLVED_WITH_NUMERIC_ID]);
     mockCorregirPago.mockResolvedValue({
       pago: { id: 3 },
@@ -715,15 +715,67 @@ describe("PaymentsPage — comprobante oficial y correcciones", () => {
     await openResolvedRequestDetail();
 
     fireEvent.click(await screen.findByRole("button", { name: /corregir pago/i }));
-    expect(screen.getByLabelText(/monto final/i)).not.toBeRequired();
+    // ADMA-16: the admin is asked for the final amount only — no tariff,
+    // months, base amount or dates to reconcile by hand.
+    expect(screen.getByLabelText(/monto correcto/i)).toBeRequired();
+    for (const gone of [/tarifa mensual/i, /meses comprados/i, /monto base/i, /fecha inicio/i, /fecha fin/i]) {
+      expect(screen.queryByLabelText(gone)).not.toBeInTheDocument();
+    }
+    expect(screen.getByText(/escribe el monto correcto/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^motivo/i)).toBeRequired();
-    fireEvent.change(screen.getByLabelText(/monto final/i), { target: { value: "45.00" } });
+    expect(screen.getByRole("button", { name: /registrar corrección/i })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/monto correcto/i), { target: { value: "45.00" } });
     fireEvent.change(screen.getByLabelText(/^motivo/i), { target: { value: "Descuento mal aplicado" } });
     fireEvent.click(screen.getByRole("button", { name: /registrar corrección/i }));
 
     await waitFor(() =>
       expect(mockCorregirPago).toHaveBeenCalledWith(3, { motivo: "Descuento mal aplicado", monto: "45.00" }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ADMA-25: how long each payment has waited, and a filter by method
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — age and method filter (ADMA-25)", () => {
+  it("shows how long each payment has been waiting", async () => {
+    vi.setSystemTime(new Date("2026-07-04T12:00:00Z"));
+    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST]);
+    renderPage();
+    await screen.findByTestId("payments-table");
+
+    expect(within(queueTable()).getByRole("columnheader", { name: /subido/i })).toBeInTheDocument();
+    expect(await within(queueTable()).findByText("Hace 3 días")).toBeInTheDocument();
+  });
+
+  it("filters the queue by method and brings every row back with «Cualquier método»", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, CASH_REQUEST]);
+    renderPage();
+    await waitFor(() => expect(within(queueTable()).getAllByRole("row")).toHaveLength(3));
+
+    const group = screen.getByRole("group", { name: /filtrar pagos por método/i });
+    fireEvent.click(within(group).getByRole("button", { name: /^efectivo/i }));
+    await waitFor(() => expect(within(queueTable()).getAllByRole("row")).toHaveLength(2));
+    expect(within(queueTable()).getByText("Sofía Vera")).toBeInTheDocument();
+    expect(within(queueTable()).queryByText("Juan Pérez")).not.toBeInTheDocument();
+
+    fireEvent.click(within(group).getByRole("button", { name: /^transferencia/i }));
+    await waitFor(() => expect(within(queueTable()).queryByText("Sofía Vera")).not.toBeInTheDocument());
+    expect(within(queueTable()).getByText("Juan Pérez")).toBeInTheDocument();
+
+    fireEvent.click(within(group).getByRole("button", { name: /cualquier método/i }));
+    await waitFor(() => expect(within(queueTable()).getAllByRole("row")).toHaveLength(3));
+  });
+
+  it("tells the admin when no payment uses the chosen method", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST]);
+    renderPage();
+    await screen.findByTestId("payments-table");
+
+    const group = screen.getByRole("group", { name: /filtrar pagos por método/i });
+    fireEvent.click(within(group).getByRole("button", { name: /^efectivo/i }));
+    expect(await screen.findByText(/ningún pago en efectivo/i)).toBeInTheDocument();
   });
 });
 
@@ -2195,7 +2247,7 @@ describe("PaymentsPage — QA4 fixes", () => {
     // the three states: only the two light counters hit the paginated endpoint.
     await waitFor(() => expect(pageCallLog.length).toBe(2));
     expect(pageCallLog.map((call) => call.estadoPago).sort()).toEqual(["APROBADO", "RECHAZADO"]);
-    const pills = screen.getByRole("group", { name: /filtrar/i });
+    const pills = screen.getByRole("group", { name: /filtrar pagos por estado/i });
     expect(within(pills).getByRole("button", { name: /todos/i })).toHaveTextContent("3");
   });
 

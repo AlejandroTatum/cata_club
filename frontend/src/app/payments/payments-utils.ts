@@ -211,6 +211,28 @@ export function classifyPaymentMethod(paymentMethod: string): PaymentMethodKind 
   return "otro";
 }
 
+/** The method chips of the queue: every method, or one of the two the club takes. */
+export type MethodFilterKey = "all" | "efectivo" | "transferencia";
+
+/** ADMA-25: does a payment's method label belong under the chosen method chip? */
+export function matchesMethodFilter(paymentMethod: string, filter: MethodFilterKey): boolean {
+  return filter === "all" || classifyPaymentMethod(paymentMethod) === filter;
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * ADMA-25: how long a payment has waited — «Hoy», «Hace 1 día», «Hace 3 días».
+ * Empty (never invented) when the timestamp cannot be read.
+ */
+export function waitingAgeLabel(uploadedAt: string, now: Date = new Date()): string {
+  const time = Date.parse(uploadedAt);
+  if (Number.isNaN(time)) return "";
+  const days = Math.max(0, Math.floor((now.getTime() - time) / DAY_MS));
+  if (days === 0) return "Hoy";
+  return days === 1 ? "Hace 1 día" : `Hace ${days} días`;
+}
+
 export interface ApprovalChecklistContext {
   /** `PaymentValidationRequest.paymentMethod` — the label, verbatim. */
   paymentMethod: string;

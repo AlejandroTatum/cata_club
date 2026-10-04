@@ -119,6 +119,9 @@ import {
   rejectionPayerNotice,
   rejectionReasonsFor,
   uploadedAtLabel,
+  waitingAgeLabel,
+  matchesMethodFilter,
+  type MethodFilterKey,
   REJECTION_NOTE_MAX_LENGTH,
   requiresExceptionReason,
   EXCEPTION_REASON_MAX_LENGTH,
@@ -182,6 +185,12 @@ const VALIDATION_STATUS_LABELS: Record<ValidationStatus, string> = {
   validado: "Validado",
   rechazado: "Rechazado",
 };
+
+const METHOD_FILTERS: { key: MethodFilterKey; label: string }[] = [
+  { key: "all", label: "Cualquier método" },
+  { key: "efectivo", label: "Efectivo" },
+  { key: "transferencia", label: "Transferencia" },
+];
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "pendiente", label: "Pendientes" },
@@ -273,6 +282,8 @@ interface RowFields {
   period: string;
   amount: string;
   method: string;
+  /** ADMA-25: «Hace 3 días». */
+  waiting: string;
 }
 
 /**
@@ -293,6 +304,7 @@ function buildRowFields(req: PaymentValidationRequest): RowFields {
     period: humanizePaymentPeriod(req.membershipPeriod),
     amount: formatCurrency(req.expectedAmount),
     method: req.paymentMethod,
+    waiting: waitingAgeLabel(req.uploadedAt),
   };
 }
 
@@ -611,6 +623,8 @@ export default function PaymentsPage(): React.ReactElement {
     isFilterKey,
   );
   const [query, setQuery] = useState("");
+  /** ADMA-25: narrows the queue to cash or transfer, client-side over the drained set. */
+  const [methodFilter, setMethodFilter] = useState<MethodFilterKey>("all");
   /** Selection is by id, never by object: the object is replaced on every
    *  approve/reject, and holding the old one is how a detail view goes stale. */
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -790,7 +804,7 @@ export default function PaymentsPage(): React.ReactElement {
   }, [isAdmin, loadPage]);
 
   const normalizedQuery = query.trim().toLowerCase();
-  const isSearching = normalizedQuery.length > 0;
+  const isSearching = normalizedQuery.length > 0 || methodFilter !== "all";
 
   /**
    * The full set the search box searches over for the CURRENTLY ACTIVE
@@ -831,8 +845,11 @@ export default function PaymentsPage(): React.ReactElement {
   }, [isAdmin, isSearching, loadSearchDrain, searchDrainRetryToken]);
 
   const searchMatches = useMemo(
-    () => searchSource.filter((r) => r.studentName.toLowerCase().includes(normalizedQuery)),
-    [searchSource, normalizedQuery],
+    () =>
+      searchSource.filter(
+        (r) => r.studentName.toLowerCase().includes(normalizedQuery) && matchesMethodFilter(r.paymentMethod, methodFilter),
+      ),
+    [searchSource, normalizedQuery, methodFilter],
   );
 
   // Not searching: the table IS the server page, paginated EXPLICITLY
@@ -879,7 +896,7 @@ export default function PaymentsPage(): React.ReactElement {
   // paginator never gets stuck on a stale/out-of-range page.
   useEffect(() => {
     setPage(1);
-  }, [activeFilter, normalizedQuery]);
+  }, [activeFilter, normalizedQuery, methodFilter]);
 
   const totalPages = useMemo(() => getTotalPages(visibleTotal), [visibleTotal]);
 
@@ -1304,6 +1321,7 @@ export default function PaymentsPage(): React.ReactElement {
             />
           }
           chips={
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <div
               className="flex flex-wrap items-center gap-2"
               role="group"
@@ -1318,6 +1336,22 @@ export default function PaymentsPage(): React.ReactElement {
                   onClick={() => setActiveFilter(f.key)}
                 />
               ))}
+            </div>
+              {/* ADMA-25: a second, separate group — method is not a status. */}
+              <div
+                className="flex flex-wrap items-center gap-2"
+                role="group"
+                aria-label="Filtrar pagos por método"
+              >
+                {METHOD_FILTERS.map((f) => (
+                  <FilterPill
+                    key={f.key}
+                    label={f.label}
+                    active={methodFilter === f.key}
+                    onClick={() => setMethodFilter(f.key)}
+                  />
+                ))}
+              </div>
             </div>
           }
           // D11c, and the panel's fourth slot, which this screen left empty
@@ -1363,19 +1397,23 @@ export default function PaymentsPage(): React.ReactElement {
             title={
               normalizedQuery
                 ? "Ningún estudiante coincide con la búsqueda"
-                : activeFilter === "all"
+                : methodFilter !== "all"
+                  ? `Ningún pago en ${methodFilter === "efectivo" ? "efectivo" : "transferencia"} en esta lista`
+                  : activeFilter === "all"
                   ? "Aún no hay solicitudes de validación de pago"
                   : `No hay solicitudes ${EMPTY_FILTER_NOUN[activeFilter]}`
             }
             description={
               normalizedQuery
                 ? "Revise el nombre o limpie la búsqueda para ver toda la lista."
-                : activeFilter === "all"
+                : methodFilter !== "all"
+                  ? "Elige «Cualquier método» para ver toda la lista."
+                  : activeFilter === "all"
                   ? "Cuando un estudiante suba un comprobante, aparecerá aquí para su revisión."
                   : "La lista está al día."
             }
             action={
-              activeFilter === "all" && !normalizedQuery ? (
+              activeFilter === "all" && !normalizedQuery && methodFilter === "all" ? (
                 // The one branch that shipped WITHOUT a way out — "an empty
                 // state without a next action is a dead end", in the shared
                 // component's own words. It is the club with no requests at
@@ -1392,6 +1430,7 @@ export default function PaymentsPage(): React.ReactElement {
                   onClick={() => {
                     setActiveFilter("all");
                     setQuery("");
+                    setMethodFilter("all");
                   }}
                 >
                   Ver todas
@@ -1414,6 +1453,7 @@ export default function PaymentsPage(): React.ReactElement {
               <TableHeaderCell key="periodo" type="text">Período</TableHeaderCell>,
               <TableHeaderCell key="monto" type="number">Monto</TableHeaderCell>,
               <TableHeaderCell key="metodo" type="text">Método</TableHeaderCell>,
+              <TableHeaderCell key="subido" type="text">Subido</TableHeaderCell>,
                   <TableHeaderCell key="estado" type="text">Estado</TableHeaderCell>,
               <TableHeaderCell key="accion" type="action">
                 <span className="sr-only">Acción</span>
@@ -1433,6 +1473,7 @@ export default function PaymentsPage(): React.ReactElement {
                   <TableCell type="text">
                     <MethodTag method={fields.method} />
                   </TableCell>
+                  <TableCell type="text">{fields.waiting}</TableCell>
                       <TableCell type="text">
                         <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
                           {VALIDATION_STATUS_LABELS[req.validationStatus]}
@@ -1460,6 +1501,7 @@ export default function PaymentsPage(): React.ReactElement {
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-field text-xs text-ink-2">
                     <span>{fields.period}</span>
                     <MethodTag method={fields.method} />
+                    {fields.waiting ? <span>{fields.waiting}</span> : null}
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
