@@ -143,15 +143,19 @@ def test_inscripcion_del_menor_entrega_aviso_propio_al_representante(monkeypatch
     ).all()
     assert len(eventos) == 1
     assert eventos[0].admin_persona_id == alumno.representante_id
+    # Leídos ANTES de entregar: la entrega cierra la sesión inyectada y deja
+    # `alumno` y el evento desvinculados (ya no hay una bienvenida que lo recargue, REG-20).
+    representante_id = alumno.representante_id
+    evento_id = eventos[0].id
     eventos[0].status = "ENVIANDO"
     db_session.commit()
     monkeypatch.setattr(tasks, "SessionLocal", lambda: db_session)
-    assert tasks.entregar_inscripcion_notificacion(eventos[0].id)["enviado"]
+    assert tasks.entregar_inscripcion_notificacion(evento_id)["enviado"]
     assert db_session.query(Notificacion).filter_by(
-        persona_id=alumno.representante_id,
-        enrollment_outbox_id=eventos[0].id,
+        persona_id=representante_id,
+        enrollment_outbox_id=evento_id,
     ).count() == 1
-    assert tasks.entregar_inscripcion_notificacion(eventos[0].id)["enviado"] is False
+    assert tasks.entregar_inscripcion_notificacion(evento_id)["enviado"] is False
 
 
 def test_inscripcion_con_admin_conserva_ambos_destinatarios_y_lider(monkeypatch, db_session):
