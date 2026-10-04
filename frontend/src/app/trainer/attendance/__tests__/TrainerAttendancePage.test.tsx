@@ -465,7 +465,7 @@ describe("TrainerAttendancePage — schedule accordion grouped by day (Slice A)"
     expect(marker).toHaveTextContent("0/15");
 
     // Interaction 1 of ≤3: the bulk action.
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
 
     // `reviewedCount`, not the raw "presente" default: this must read the
     // truth of what the trainer actually confirmed, not what the roster
@@ -747,7 +747,7 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     const first = screen.getByRole("radiogroup", { name: /Student 01/ });
     fireEvent.click(within(first).getByRole("radio", { name: "Justificado" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
 
     // The button is how a trainer says "I looked, the rest are here", so it
     // has to clear the flag as well as set the state.
@@ -768,7 +768,7 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     await openRoster();
     await screen.findByText("Student 01");
 
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
@@ -788,11 +788,11 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     await openRoster();
 
     const group = await screen.findByRole("radiogroup", { name: /Ana López/ });
-    expect(screen.getByRole("button", { name: "Marcar restantes presentes" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Marcar todos presentes" })).toBeInTheDocument();
 
     fireEvent.click(within(group).getByRole("radio", { name: "Presente" }));
 
-    expect(screen.queryByRole("button", { name: "Marcar restantes presentes" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Marcar todos presentes" })).not.toBeInTheDocument();
   });
 
   it("renders an unreviewed row with a neutral dashed outline that a reviewed row does not have", async () => {
@@ -1181,7 +1181,7 @@ describe("TrainerAttendancePage — live marker and sticky commit bar", () => {
     expect(marker).toHaveTextContent("0/12");
     expect(screen.getByText("12 alumnos sin revisar")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
 
     expect(marker).toHaveTextContent("12/12");
     expect(screen.queryByText(/sin revisar/)).not.toBeInTheDocument();
@@ -1249,7 +1249,7 @@ describe("TrainerAttendancePage — live marker and sticky commit bar", () => {
 
     expect(screen.getByText("12 presentes")).toBeInTheDocument();
     expect(screen.getByText("12 sin revisar")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     expect(screen.getByText("12 presentes")).toBeInTheDocument();
     expect(screen.queryByText(/sin revisar/)).not.toBeInTheDocument();
   });
@@ -1358,7 +1358,7 @@ describe("TrainerAttendancePage — draft persistence", () => {
     const first = render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -1390,7 +1390,7 @@ describe("TrainerAttendancePage — draft persistence", () => {
     const first = render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     expect(window.sessionStorage.getItem("cata_attendance_draft:12:2026-07-21")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
@@ -1583,7 +1583,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     expect(window.sessionStorage.getItem("cata_attendance_draft:12:2026-07-21")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
@@ -1625,7 +1625,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     // The network is down for the save AND for the reload that follows it.
     mockFetchAlumnosPorHorario.mockRejectedValueOnce(new Error("Failed to fetch"));
@@ -1648,7 +1648,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     // 2026-07-21 is a Tuesday (the pinned club clock of this file).
     expect(await screen.findByText("Sesión del mar 21/07")).toBeInTheDocument();
@@ -1658,7 +1658,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     expect(screen.getByText("Sesión del mar 21/07")).toBeInTheDocument();
   });
 
-  // ENT-12: the "Deshacer" offer of "Marcar restantes presentes" must not outlive
+  // ENT-12: the "Deshacer" offer of "Marcar todos presentes" must not outlive
   // the roll call — it used to hang over a receipt that was already closed.
   it("descarta el aviso «Deshacer» al confirmar la asistencia (ENT-12)", async () => {
     mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
@@ -1673,7 +1673,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     );
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     expect(await screen.findByText("3 alumnos marcados presentes")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
@@ -1696,7 +1696,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
@@ -1730,7 +1730,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     );
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
@@ -1801,7 +1801,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     );
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
@@ -2275,7 +2275,7 @@ describe("TrainerAttendancePage — refreshes the week-taken guard after a reset
   async function fileSession(): Promise<void> {
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -2366,7 +2366,7 @@ describe("TrainerAttendancePage — partial failures name the students", () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -2426,7 +2426,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
   async function fileSession(): Promise<void> {
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -2467,7 +2467,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
         name: "Justificado",
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -2555,7 +2555,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -2580,7 +2580,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -2608,7 +2608,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -2632,7 +2632,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -2673,7 +2673,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -3022,7 +3022,7 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
@@ -3367,7 +3367,7 @@ describe("TrainerAttendancePage — undo", () => {
     await openRoster();
     await screen.findByText("Student 01");
 
-    fireEvent.click(screen.getByRole("button", { name: /marcar restantes presentes/i }));
+    fireEvent.click(screen.getByRole("button", { name: /marcar todos presentes/i }));
     expect(screen.queryByText(/sin revisar/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^deshacer/i }));
@@ -3378,7 +3378,7 @@ describe("TrainerAttendancePage — undo", () => {
 
   it("offers the bulk undo in the toast too — it changes rows nobody deliberately reviewed", async () => {
     // 25 students, all rendered at once (#318/#58 removed the wizard's
-    // pagination). "Marcar restantes presentes" still rewrites every
+    // pagination). "Marcar todos presentes" still rewrites every
     // unreviewed row in one tap, including ones far below the fold the
     // trainer never scrolled to, so the confirmation of that action has to
     // carry its own way back.
@@ -3394,7 +3394,7 @@ describe("TrainerAttendancePage — undo", () => {
     await openRoster();
     await screen.findByText("Student 01");
 
-    fireEvent.click(screen.getByRole("button", { name: /marcar restantes presentes/i }));
+    fireEvent.click(screen.getByRole("button", { name: /marcar todos presentes/i }));
 
     const toast = await screen.findByRole("status");
     fireEvent.click(within(toast).getByRole("button", { name: "Deshacer" }));
@@ -3454,7 +3454,7 @@ describe("TrainerAttendancePage — a corrected session keeps its own date", () 
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
@@ -3523,7 +3523,7 @@ describe("TrainerAttendancePage — a corrected session keeps its own date", () 
       horarioId: 12,
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
@@ -3605,7 +3605,7 @@ describe("TrainerAttendancePage — a schedule from a different day keeps ITS OW
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openWednesdayRoster();
     await screen.findByText("Student 01");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 

@@ -26,7 +26,7 @@
  * DECISION and never conflates the two:
  *   - `SessionStudent.reviewed` says whether a human touched the row. Every
  *     path that sets a state sets it: the fiche tap, the four controls,
- *     "Marcar restantes presentes", a record already saved for this session,
+ *     "Marcar todos presentes", a record already saved for this session,
  *     and a restored draft entry.
  *   - `countUnreviewed` spans the FULL roster, never the visible page or the
  *     name filter, and both the roll call and the confirmation step show it.

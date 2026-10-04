@@ -67,7 +67,7 @@ export interface SessionStudent {
   attendance: WizardAttendance;
   /**
    * True once a HUMAN set this row's state — a tap on the fiche, one of the
-   * four controls, "Marcar restantes presentes", a record already saved for
+   * four controls, "Marcar todos presentes", a record already saved for
    * this session, or a restored draft entry.
    *
    * Absent/false means the row still carries `DEFAULT_ATTENDANCE` because
