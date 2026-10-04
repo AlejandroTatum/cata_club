@@ -9,7 +9,7 @@ import type { PagoPersona, MembershipSummary, RegistrarPagoInput, BeneficioAsign
 import { Button, DataBox } from "@/components/ui";
 import { formatCurrency, formatDateRange } from "@/lib/format-utils";
 import { calendarIsoDate, clubToday } from "@/lib/club-date";
-import { addMonthsIso, estimateTotal, voucherFileError } from "./payments-utils";
+import { addMonthsIso, estimateTotal, prepareVoucher } from "./payments-utils";
 import { CreditCard, Loader2, Minus, Paperclip, Plus, Upload, X } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
@@ -463,17 +463,20 @@ function RenewPaymentForm({
    * the payment. Reject either case here, the moment it is selected,
    * instead of letting `registrarPago` succeed and only failing the
    * follow-up `subirVoucherPago` call once the backend checks catch it.
+   * FAM-26: a photo over 5 MB is shrunk before that check (`prepareVoucher`).
    */
-  function handleVoucherChange(file: File | null): void {
-    if (file) {
-      const error = voucherFileError(file);
-      if (error) {
+  async function handleVoucherChange(picked: File | null): Promise<void> {
+    let file = picked;
+    if (picked) {
+      const prepared = await prepareVoucher(picked);
+      if ("error" in prepared) {
         setVoucherFile(null);
-        setVoucherRejection(error);
-        action.setError(error);
+        setVoucherRejection(prepared.error);
+        action.setError(prepared.error);
         if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
+      file = prepared.file;
     }
     setVoucherFile(file);
     setVoucherRejection(null);
@@ -658,7 +661,7 @@ function RenewPaymentForm({
             type="file"
             aria-required="true"
             accept="image/jpeg,image/png,application/pdf"
-            onChange={(e) => handleVoucherChange(e.target.files?.[0] ?? null)}
+            onChange={(e) => void handleVoucherChange(e.target.files?.[0] ?? null)}
             className="hidden"
             data-testid="renew-voucher-input"
           />

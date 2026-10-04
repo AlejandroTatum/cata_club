@@ -54,7 +54,7 @@ import {
 import { BackLink, InfoPanel, Select, Stepper, buttonClasses, cn, PAGE_RAIL } from "@/components/ui";
 import { BLOOD_TYPE_LABELS, SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
 import { institutionOptionLabel, planOptionLabel } from "@/app/student/enroll/enroll-utils";
-import { addMonthsIso, estimateTotal } from "@/app/student/payments/payments-utils";
+import { addMonthsIso, estimateTotal, prepareVoucher } from "@/app/student/payments/payments-utils";
 import HowToPay from "@/components/payments/HowToPay";
 import { ProofPreview } from "@/app/student/payments/ProofPreview";
 import { formatCurrency, formatDateRange } from "@/lib/format-utils";
@@ -231,6 +231,16 @@ function AddDependentContent(): React.ReactElement {
   function handleBack(): void {
     setFormErrors([]);
     if (currentIndex > 0) goBack();
+  }
+
+  /**
+   * FAM-26: a photo over 5 MB is shrunk before it is staged. A file that cannot
+   * be fixed stays as picked, so `validateDependentPayment` reports the size.
+   */
+  async function pickVoucher(file: File | null): Promise<void> {
+    if (!file) { setVoucher(null); return; }
+    const prepared = await prepareVoucher(file);
+    setVoucher("file" in prepared ? prepared.file : file);
   }
 
   async function handleConfirm(e: FormEvent<HTMLFormElement>): Promise<void> {
@@ -786,7 +796,7 @@ function AddDependentContent(): React.ReactElement {
             type="file"
             aria-labelledby="dependent-voucher-label"
             accept="image/jpeg,image/png,application/pdf"
-            onChange={(e) => setVoucher(e.target.files?.[0] ?? null)}
+            onChange={(e) => void pickVoucher(e.target.files?.[0] ?? null)}
             disabled={submitting}
             className="hidden"
           />

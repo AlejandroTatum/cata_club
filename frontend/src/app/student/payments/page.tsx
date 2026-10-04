@@ -58,7 +58,7 @@ import { BackLink, Badge, Button, EmptyState, FilterPanel, FilterPill, InfoPanel
 
 import { describePaymentSituation, firstNameOf, isMinor } from "../student-utils";
 import ManagedStudentPicker, { useManagedProfiles, withSelectedStudent } from "../ManagedStudentPicker";
-import { getEmptyStateMessage, countPagosByStatus, formatPagoMonto, PAGO_FILTER_LABELS, voucherFileError, type PagoStatusFilter } from "./payments-utils";
+import { getEmptyStateMessage, countPagosByStatus, formatPagoMonto, PAGO_FILTER_LABELS, prepareVoucher, type PagoStatusFilter } from "./payments-utils";
 import { formatDate } from "@/lib/format-utils";
 import { CreditCard } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -429,21 +429,22 @@ function PaymentsContent({
    * `VoucherUploadPreview` below; the request fires from
    * `handleConfirmUpload`, never from here.
    */
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>): void {
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
     const file = e.target.files?.[0];
     if (!file) return;
     // Issue #482: `accept` alone lets a reader pick a `.txt` via "All Files".
     // Issue #1226: the BFF's own 5 MB limit only rejects once the upload is
     // already in flight. Both are caught here before the preview/confirm
     // step below.
-    const error = voucherFileError(file);
-    if (error) {
-      setUploadError(error);
+    // FAM-26: a photo over 5 MB is shrunk before it is staged.
+    const prepared = await prepareVoucher(file);
+    if ("error" in prepared) {
+      setUploadError(prepared.error);
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
     setUploadError(null);
-    setPreviewFile(file);
+    setPreviewFile(prepared.file);
   }
 
   async function handleConfirmUpload(): Promise<void> {
@@ -643,7 +644,7 @@ function PaymentsContent({
         accept="image/jpeg,image/png,application/pdf"
         className="hidden"
         data-testid="pago-voucher-input"
-        onChange={handleFileChange}
+        onChange={(e) => void handleFileChange(e)}
       />
 
       {/* Issue #463: the confirm/cancel step between picking a file and

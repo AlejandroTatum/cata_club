@@ -8,6 +8,7 @@
 import type { PagoPersona } from "@/services/api";
 import type { BadgeTone } from "@/components/ui/Badge";
 import { formatCurrency } from "@/lib/format-utils";
+import { shrinkImage } from "@/lib/shrink-image";
 
 // ---------------------------------------------------------------------------
 // Filters
@@ -375,6 +376,27 @@ export function voucherFileSizeError(file: File): string | null {
 /** Runs the #482 type check, then the #1226 size check — one call per picked file. */
 export function voucherFileError(file: File): string | null {
   return voucherFileTypeError(file) ?? voucherFileSizeError(file);
+}
+
+/**
+ * FAM-26: what a voucher input does with a picked file. A photo over 5 MB is
+ * shrunk in the browser first (phone cameras go past the limit easily); a PDF
+ * is never touched, and when shrinking fails the person gets the same 5 MB
+ * message as before.
+ */
+export async function prepareVoucher(file: File): Promise<{ file: File } | { error: string }> {
+  const typeError = voucherFileTypeError(file);
+  if (typeError) return { error: typeError };
+  let candidate = file;
+  if (file.type.startsWith("image/") && file.size > MAX_VOUCHER_BYTES) {
+    try {
+      candidate = await shrinkImage(file, MAX_VOUCHER_BYTES);
+    } catch {
+      candidate = file;
+    }
+  }
+  const error = voucherFileSizeError(candidate);
+  return error ? { error } : { file: candidate };
 }
 
 // ---------------------------------------------------------------------------

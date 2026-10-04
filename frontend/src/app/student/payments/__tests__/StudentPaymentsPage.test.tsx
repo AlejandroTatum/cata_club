@@ -16,6 +16,9 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import StudentPaymentsPage from "@/app/student/payments/page";
 import type { PagoPersona, StudentPortalSummary, StudentProfileSummary, CoberturaBonificada } from "@/services/api";
 
+const shrinkImage = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/shrink-image", () => ({ shrinkImage }));
+
 vi.mock("@/components/ProtectedRoute", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -259,6 +262,9 @@ function makePago(overrides: Partial<PagoPersona> = {}): PagoPersona {
 }
 
 beforeEach(() => {
+  // jsdom has no canvas: shrinking fails unless a test says otherwise.
+  shrinkImage.mockReset();
+  shrinkImage.mockRejectedValue(new Error("no canvas"));
   // Solo `Date`: la pantalla no depende de temporizadores, y falsear también
   // `setTimeout` colgaría las consultas `findBy*`, que sondean con timers.
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -1089,6 +1095,25 @@ describe("StudentPaymentsPage — the history", () => {
     expect(screen.queryByRole("button", { name: /confirmar y subir/i })).not.toBeInTheDocument();
     expect(mockSubirVoucherPago).not.toHaveBeenCalled();
   });
+
+  // FAM-26: a phone photo over 5 MB is shrunk in the browser, not rejected.
+  it("stages a shrunk copy of a photo over 5 MB instead of rejecting it (FAM-26)", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ id: 77, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "TRANSFERENCIA", voucherUrl: null }),
+    ]);
+    shrinkImage.mockResolvedValueOnce(new File([new Uint8Array(1024)], "foto.jpg", { type: "image/jpeg" }));
+
+    render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
+    fireEvent.click(within(historyTable()).getByRole("button", { name: /^reintentar subir comprobante$/i }));
+
+    const file = new File([new Uint8Array(6 * 1024 * 1024)], "foto.jpeg", { type: "image/jpeg" });
+    fireEvent.change(screen.getByTestId("pago-voucher-input"), { target: { files: [file] } });
+
+    expect(await screen.findByText("foto.jpg")).toBeInTheDocument();
+    expect(screen.queryByText(/supera el límite/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /confirmar y subir/i })).toBeInTheDocument();
+  });
 });
 
 /**
@@ -1550,6 +1575,19 @@ describe("StudentPaymentsPage — registering a payment", () => {
     expect(screen.queryByText("comprobante.png")).not.toBeInTheDocument();
     expect(mockRegistrarPago).not.toHaveBeenCalled();
   });
+
+  it("shrinks a photo over 5 MB and keeps it as the comprobante (FAM-26)", async () => {
+    shrinkImage.mockResolvedValueOnce(new File([new Uint8Array(1024)], "foto.jpg", { type: "image/jpeg" }));
+    render(<StudentPaymentsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
+
+    const file = new File([new Uint8Array(6 * 1024 * 1024)], "foto.jpeg", { type: "image/jpeg" });
+    fireEvent.change(screen.getByTestId("renew-voucher-input"), { target: { files: [file] } });
+
+    expect(await screen.findByText("foto.jpg")).toBeInTheDocument();
+    expect(screen.queryByTestId("voucher-rejection")).not.toBeInTheDocument();
+  });
 });
 
 /**
@@ -1653,6 +1691,8 @@ describe("StudentPaymentsPage — a voucher failure after the payment is already
     fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
     const fileInput = await screen.findByTestId("renew-voucher-input");
     fireEvent.change(fileInput, { target: { files: [voucherFile] } });
+    // The pick is async since FAM-26 (it may shrink the photo first).
+    await screen.findByText(voucherFile.name);
   }
 
   it("closes the form, states the payment survived, and refreshes the history instead of reoffering the same button", async () => {
