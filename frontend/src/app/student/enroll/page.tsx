@@ -144,7 +144,7 @@ const ENROLLMENT_CHOICES: {
     value: ENROLLMENT_TYPES.CHILD,
     title: "Representante",
     description:
-      "Gestiono la inscripción de un hijo o menor a tu cargo. El jugador es distinto de mi cuenta.",
+      "Gestiono la inscripción de un hijo o menor a mi cargo. El jugador es distinto de mi cuenta.",
     asks: [
       "Los datos del jugador",
       "Tus propios datos y los de acceso a la cuenta",

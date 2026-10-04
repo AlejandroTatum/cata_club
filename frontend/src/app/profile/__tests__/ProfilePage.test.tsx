@@ -1237,7 +1237,7 @@ describe("ProfilePage — unified layout structure", () => {
     // it. The member card now carries the identity, so the header stays to
     // just the title.
     expect(
-      screen.queryByText("Gestione tu información y consulte tu estado en el club."),
+      screen.queryByText(/gestion(a|e) (tu|su) información/i),
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("profile-hero")).toBeInTheDocument();
     expect(screen.getByTestId("profile-column-info")).toBeInTheDocument();

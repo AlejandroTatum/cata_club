@@ -163,8 +163,8 @@ export default function EnrollAside(props: EnrollAsideProps): ReactElement {
                 de la cuenta.
               </Item>
               <Item title="Tu contraseña">
-                Use al menos 8 caracteres y evite las contraseñas más usadas.
-                Para que sea segura, alárguela o mezcle mayúsculas, números y
+                Usa al menos 8 caracteres y evita las contraseñas más usadas.
+                Para que sea segura, alárgala o mezcla mayúsculas, números y
                 símbolos.
               </Item>
             </>
