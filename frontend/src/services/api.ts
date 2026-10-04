@@ -1132,6 +1132,9 @@ export interface CategoriaGrupo {
   dias: string[];
   /** Optional ages label (#789) — `null` when the categoría publishes none. */
   edades?: string | null;
+  /** ADMB-14: non-blocking warnings the server attaches on create/edit (e.g.
+   *  a schedule overlap with another categoría). Empty or absent when none. */
+  advertencias?: string[];
 }
 
 /**
@@ -1161,6 +1164,17 @@ export interface ActualizarCategoriaDTO {
   /** Optional ages label (#789). OMIT it to leave the stored label untouched;
    *  send `""` to CLEAR it (the backend normalises blank to NULL). */
   edades?: string;
+  /** ADMB-04: when a día being removed has players, they all move to this
+   *  categoría in the same transaction as the edit. Without it the server
+   *  answers 409 «Reasigne primero…». */
+  mover_alumnos_a?: string;
+}
+
+/** `POST …/mover-y-eliminar` and `POST …/mover-alumnos` answer with this. */
+export interface MoverAlumnosResultado {
+  movidos: number;
+  categoriaDestino: string;
+  categoriaDestinoLabel: string;
 }
 
 /** Create a categoria AND a horario per día marked, in one atomic operation
@@ -1194,6 +1208,32 @@ export async function eliminarCategoria(codigo: string): Promise<void> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
   await request<unknown>(apiEndpoint(`/groups/categorias/${encodeURIComponent(codigo)}`), {
     method: "DELETE",
+    headers: mockHeaders,
+  });
+}
+
+/** ADMB-04, "todos a una": moves EVERY player to ONE target categoría and
+ *  deletes the origin in a single backend transaction — all or nothing. */
+export async function moverYEliminarCategoria(codigo: string, categoriaDestino: string): Promise<MoverAlumnosResultado> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<MoverAlumnosResultado>(apiEndpoint(`/groups/categorias/${encodeURIComponent(codigo)}/mover-y-eliminar`), {
+    method: "POST",
+    body: JSON.stringify({ categoria_destino: categoriaDestino }),
+    headers: mockHeaders,
+  });
+}
+
+/** ADMB-04, "de a uno": moves only the chosen players to a target categoría;
+ *  the origin is not deleted. Players no longer in the origin are ignored. */
+export async function moverAlumnosDeCategoria(
+  codigo: string,
+  categoriaDestino: string,
+  personaIds: number[],
+): Promise<MoverAlumnosResultado> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<MoverAlumnosResultado>(apiEndpoint(`/groups/categorias/${encodeURIComponent(codigo)}/mover-alumnos`), {
+    method: "POST",
+    body: JSON.stringify({ categoria_destino: categoriaDestino, persona_ids: personaIds }),
     headers: mockHeaders,
   });
 }

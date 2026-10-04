@@ -55,6 +55,8 @@ import {
   crearTipoMembresia,
   eliminarTipoMembresia,
   eliminarDescuento,
+  moverYEliminarCategoria,
+  moverAlumnosDeCategoria,
 } from "../api";
 import type { PaymentValidationRequest, Horario, AlumnoHorario, DescuentoCatalogo } from "../api";
 import type { Notificacion, PerfilPropio } from "@/types/domain";
@@ -951,6 +953,40 @@ describe("eliminarHorario", () => {
     expect(global.fetch).toHaveBeenCalledWith(
       "/api/groups/horarios/1",
       expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+});
+
+describe("moverYEliminarCategoria (ADMB-04)", () => {
+  it("POSTs /api/groups/categorias/:codigo/mover-y-eliminar with the target", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      okResponse({ movidos: 3, categoriaDestino: "INFANTIL", categoriaDestinoLabel: "Infantil" }),
+    );
+
+    const result = await moverYEliminarCategoria("FORMATIVO", "INFANTIL");
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/groups/categorias/FORMATIVO/mover-y-eliminar",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ categoria_destino: "INFANTIL" }) }),
+    );
+    expect(result.movidos).toBe(3);
+  });
+});
+
+describe("moverAlumnosDeCategoria (ADMB-04)", () => {
+  it("POSTs /api/groups/categorias/:codigo/mover-alumnos with the target and the chosen players", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      okResponse({ movidos: 1, categoriaDestino: "INFANTIL", categoriaDestinoLabel: "Infantil" }),
+    );
+
+    await moverAlumnosDeCategoria("FORMATIVO", "INFANTIL", [10]);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/groups/categorias/FORMATIVO/mover-alumnos",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ categoria_destino: "INFANTIL", persona_ids: [10] }),
+      }),
     );
   });
 });
