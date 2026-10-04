@@ -32,6 +32,7 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
+import ReportProblemFab from "./ReportProblemFab";
 import {
   Menu,
   X,
@@ -1132,6 +1133,8 @@ export default function AppShell({
           </nav>
         )}
       </div>
+
+      <ReportProblemFab />
 
       {/* Command palette — "go to" navigation search, role-aware */}
       {paletteOpen && (
