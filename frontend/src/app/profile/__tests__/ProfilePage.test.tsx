@@ -1590,3 +1590,598 @@ describe("ProfilePage — the type and colour rules the screen was breaking", ()
     expect(photo.className).not.toContain("bg-cata-red");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Profile v2 — identity card, the block of the role, Seguridad
+// ---------------------------------------------------------------------------
+
+describe("ProfilePage — v2: identity card", () => {
+  async function renderAdmin(perfil: PerfilPropio = PERFIL_ADMIN): Promise<HTMLElement> {
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce(perfil);
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    return waitForStaffProfile();
+  }
+
+  it("names the account once, with the role as the card's first word and the ball as its full stop", async () => {
+    const hero = await renderAdmin();
+
+    expect(hero).toHaveAccessibleName(/ana admin/i);
+    expect(within(hero).getByRole("heading", { level: 2, name: "Ana Admin" })).toBeInTheDocument();
+    expect(within(screen.getByRole("main")).getAllByText("Ana Admin")).toHaveLength(1);
+    const role = within(hero).getByTestId("profile-shoulder");
+    expect(role).toHaveTextContent("Administrador");
+    // The yellow ball is decorative and sits inside the role's own line.
+    const ball = role.querySelector("span.bg-ball");
+    expect(ball).not.toBeNull();
+    expect(ball).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("draws the asymmetric red field and the coal avatar that bridges into the white body", async () => {
+    const hero = await renderAdmin();
+
+    const field = hero.querySelector<HTMLElement>("span.bg-cata-red");
+    expect(field).not.toBeNull();
+    expect(field?.style.clipPath).toContain("polygon");
+    expect(hero.className).toContain("bg-paper");
+    expect(hero.querySelector("div.bg-coal")).toHaveTextContent("AA");
+  });
+
+  it("states the correo on a full row of its own, and says the club manages it", async () => {
+    const hero = await renderAdmin();
+
+    const correo = within(hero).getByTestId("profile-correo");
+    expect(correo).toHaveTextContent("ana.admin@cataclub.com");
+    expect(correo.parentElement?.className).toContain("sm:col-span-2");
+    expect(within(hero).getByText(/lo gestiona el club/i)).toBeInTheDocument();
+    expect(screen.getAllByText("ana.admin@cataclub.com")).toHaveLength(1);
+    expect(screen.queryByLabelText(/correo electrónico/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps teléfono, the edit trigger, the photo trigger and the creation date inside the card", async () => {
+    const hero = await renderAdmin();
+
+    expect(within(hero).getByText("099111222")).toBeInTheDocument();
+    expect(within(hero).getByRole("button", { name: /editar datos/i })).toBeInTheDocument();
+    expect(within(hero).getByRole("button", { name: /cambiar foto/i })).toBeInTheDocument();
+    expect(within(hero).getByText("Cuenta creada")).toBeInTheDocument();
+    expect(within(hero).getByText("10/03/2024")).toBeInTheDocument();
+  });
+
+  it("says nothing about the creation date when the account carries none", async () => {
+    const hero = await renderAdmin({ ...PERFIL_ADMIN, fechaCreacion: "" });
+
+    expect(within(hero).queryByText(/Cuenta creada/)).not.toBeInTheDocument();
+    expect(hero.textContent).not.toContain("undefined");
+  });
+
+  it("wraps a long name and correo instead of truncating them", async () => {
+    const hero = await renderAdmin({
+      ...PERFIL_ADMIN,
+      nombres: "Jefferson Alejandro Maximiliano",
+      apellidos: "Delgado Rivadeneira Fernández-Villalobos",
+      correo: "jefferson.alejandro.maximiliano.delgado.rivadeneira@administracion.cataclub.com",
+    });
+
+    expect(within(hero).getByRole("heading", { level: 2 }).className).toContain("break-words");
+    expect(within(hero).getByTestId("profile-correo").className).toContain("[overflow-wrap:anywhere]");
+  });
+
+  it("marks the account active for staff, and lists every role only when there is more than one", async () => {
+    const hero = await renderAdmin();
+    expect(within(hero).getByText("Cuenta activa")).toBeInTheDocument();
+    expect(within(hero).queryByText(/rol activo en esta sesión/i)).not.toBeInTheDocument();
+  });
+
+  it("lists every assigned role as a chip and marks the one in use, without relying on colour", async () => {
+    const hero = await renderAdmin({
+      ...PERFIL_ADMIN,
+      roles: ["ADMINISTRADOR", "ENTRENADOR", "ALUMNO", "REPRESENTANTE"],
+    });
+
+    for (const label of ["Administrador", "Entrenador", "Jugador", "Representante"]) {
+      expect(within(hero).getAllByText(new RegExp(label)).length).toBeGreaterThan(0);
+    }
+    expect(within(hero).getByText(/rol activo en esta sesión/i)).toBeInTheDocument();
+  });
+
+  it("removes what the prototype cut: shortcuts, the long guides, the rail and the profile's own logout", async () => {
+    await renderAdmin();
+
+    const main = within(screen.getByRole("main"));
+    expect(screen.queryByTestId("profile-shortcuts")).not.toBeInTheDocument();
+    expect(main.queryByText(/atajos de tu rol/i)).not.toBeInTheDocument();
+    expect(main.queryByText(/cómo proteger tu cuenta/i)).not.toBeInTheDocument();
+    expect(main.queryByText(/qué hacer si necesita ayuda/i)).not.toBeInTheDocument();
+    expect(main.queryByText(/datos personales/i)).not.toBeInTheDocument();
+    expect(main.queryByRole("button", { name: /cerrar sesión/i })).not.toBeInTheDocument();
+    expect(main.queryByText(/no disponible — consulta con administración/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /ver portal completo/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/cédula/i)).not.toBeInTheDocument();
+  });
+
+  it("adds no request beyond the ones the page already made", async () => {
+    await renderAdmin();
+
+    expect(mockFetchMiPerfil).toHaveBeenCalledTimes(1);
+    expect(mockFetchStudentPortal).not.toHaveBeenCalled();
+    expect(mockFetchPagosDePersona).not.toHaveBeenCalled();
+  });
+});
+
+describe("ProfilePage — v2: the block of each role", () => {
+  const MEMBERSHIP: MembershipSummary = {
+    id: 4,
+    estado: "ACTIVA",
+    personaId: 8,
+    montoAplicado: "25.00",
+    categoria: "Mensual Adultos",
+    modalidad: "MENSUAL",
+    fechaActivacion: "2026-08-13T23:25:09.290557Z",
+    fechaFin: null,
+  };
+  const SELF: StudentProfileSummary = {
+    personaId: "1",
+    nombres: "Pedro",
+    apellidos: "Salgado",
+    fechaNacimiento: "1999-10-04",
+    recentSessions: [],
+    membership: MEMBERSHIP,
+    representante: null,
+    representanteId: null,
+  };
+  const DEPENDANTS: StudentProfileSummary[] = [
+    {
+      personaId: "20",
+      nombres: "Martin",
+      apellidos: "Vera",
+      fechaNacimiento: "2014-02-01",
+      recentSessions: [],
+      membership: { ...MEMBERSHIP, id: 20, estado: "ACTIVA" },
+      representante: null,
+      representanteId: null,
+    },
+    {
+      personaId: "21",
+      nombres: "Sofia",
+      apellidos: "Vera",
+      fechaNacimiento: "2016-08-15",
+      recentSessions: [],
+      membership: { ...MEMBERSHIP, id: 21, estado: "SUSPENDIDA" },
+      representante: null,
+      representanteId: null,
+    },
+    {
+      personaId: "22",
+      nombres: "Lucas",
+      apellidos: "Vera",
+      fechaNacimiento: "2018-01-01",
+      recentSessions: [],
+      membership: null,
+      representante: null,
+      representanteId: null,
+    },
+  ];
+
+  function daysFromToday(days: number): string {
+    const date = clubToday();
+    date.setDate(date.getDate() + days);
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${date.getFullYear()}-${month}-${day}`;
+  }
+
+  function pago(fechaFin: string): PagoPersona {
+    return {
+      id: 1,
+      monto: "25.00",
+      motivoRechazo: null,
+      estadoPago: "APROBADO",
+      tipoPago: "TRANSFERENCIA",
+      fechaRegistro: "2026-08-01T10:00:00",
+      fechaValidacion: "2026-08-02T10:00:00",
+      fechaInicio: "2026-08-01",
+      fechaFin,
+      personaId: 1,
+      membresiaId: 4,
+      voucherUrl: null,
+      voucherFormato: null,
+      descuentoValorAplicado: null,
+      descuentoPorcentajeAplicado: null,
+    };
+  }
+
+  async function renderStudent(
+    self: StudentProfileSummary | null,
+    opts: { role?: "estudiante" | "representante"; representados?: StudentProfileSummary[]; pagos?: PagoPersona[] } = {},
+  ): Promise<HTMLElement> {
+    mockUseAuth.mockReturnValue(sessionForRole(opts.role ?? "estudiante"));
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      self,
+      representados: opts.representados ?? [],
+      membershipPlans: [],
+    });
+    mockFetchMiPerfil.mockResolvedValue(PERFIL_ESTUDIANTE);
+    mockFetchPagosDePersona.mockResolvedValue(opts.pagos ?? []);
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    return screen.findByTestId("profile-hero");
+  }
+
+  // ---- jugador ----------------------------------------------------------
+
+  it("jugador: the ticket counts the days left and draws a 30-day strip", async () => {
+    await renderStudent(SELF, { pagos: [pago(daysFromToday(24))] });
+
+    const ticket = await screen.findByTestId("profile-membership");
+    expect(within(ticket).getByTestId("profile-coverage")).toHaveTextContent("24");
+    expect(within(ticket).getByText("días restantes")).toBeInTheDocument();
+    expect(within(ticket).getByText(/Al día · hasta/)).toBeInTheDocument();
+    const strip = within(ticket).getByRole("progressbar", { name: /cobertura restante/i });
+    expect(strip).toHaveAttribute("aria-valuenow", "24");
+    expect(strip.children).toHaveLength(30);
+    expect(strip.querySelectorAll("i.bg-state-ok")).toHaveLength(24);
+    expect(strip.querySelectorAll("i.bg-state-ok\\/25")).toHaveLength(6);
+    expect(within(ticket).getByText("Mensual Adultos")).toBeInTheDocument();
+    expect(within(ticket).getByText("Jugador desde")).toBeInTheDocument();
+    expect(within(ticket).getByText("13/08/2026")).toBeInTheDocument();
+  });
+
+  it("jugador: the ticket warns in the last week and shows lapsed coverage as such", async () => {
+    await renderStudent(SELF, { pagos: [pago(daysFromToday(5))] });
+    const warn = await screen.findByTestId("profile-membership");
+    expect(warn.className).toContain("border-t-state-warn");
+    expect(within(warn).getByText(/Vence pronto/)).toBeInTheDocument();
+  });
+
+  it("jugador: lapsed coverage turns the ticket red and says how long ago", async () => {
+    const hero = await renderStudent(SELF, { pagos: [pago(daysFromToday(-3))] });
+
+    const ticket = await screen.findByTestId("profile-membership");
+    expect(ticket.className).toContain("border-t-state-bad");
+    expect(within(ticket).getByText("Venció hace 3 días")).toBeInTheDocument();
+    expect(within(ticket).getByText(/Venció · hasta/)).toBeInTheDocument();
+    expect(within(hero).getByText("Cobertura vencida")).toBeInTheDocument();
+  });
+
+  it("jugador: with no payment date the ticket keeps the plan and drops the day count", async () => {
+    const hero = await renderStudent(SELF);
+
+    const ticket = await screen.findByTestId("profile-membership");
+    expect(within(ticket).queryByTestId("profile-coverage")).not.toBeInTheDocument();
+    expect(within(ticket).queryByRole("progressbar")).not.toBeInTheDocument();
+    expect(within(ticket).getByText("Mensual Adultos")).toBeInTheDocument();
+    expect(within(hero).getByText("Sin pagos aprobados")).toBeInTheDocument();
+    expect(ticket.className).toContain("border-t-state-warn");
+  });
+
+  it("jugador: with no membership there is no ticket, no board and no filler sentence", async () => {
+    const hero = await renderStudent({ ...SELF, membership: null });
+
+    expect(within(hero).getByText("Jugador")).toBeInTheDocument();
+    expect(screen.queryByTestId("profile-membership")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("profile-role-board")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("profile-dependants")).not.toBeInTheDocument();
+    expect(screen.queryByText(/no disponible — consulta/i)).not.toBeInTheDocument();
+  });
+
+  it("jugador: the card carries the birth date and the representante the portal already provides", async () => {
+    const hero = await renderStudent({ ...SELF, representante: { nombres: "Laura", apellidos: "Vera" } as never });
+
+    expect(within(hero).getByText("Nacimiento")).toBeInTheDocument();
+    expect(within(hero).getByText("04/10/1999")).toBeInTheDocument();
+    expect(within(hero).getByText("Tu representante")).toBeInTheDocument();
+    expect(within(hero).getByText("Laura Vera")).toBeInTheDocument();
+  });
+
+  it("jugador: no recent-attendance card — that history has its own screen", async () => {
+    await renderStudent({
+      ...SELF,
+      recentSessions: [{ fecha: "2026-08-10", horario: "Lunes 16:00 - 17:30", estado: "present" }],
+    });
+    await screen.findByTestId("profile-membership");
+
+    expect(screen.queryByTestId("profile-activity")).not.toBeInTheDocument();
+    expect(screen.queryByText("Lunes 16:00 - 17:30")).not.toBeInTheDocument();
+  });
+
+  it("jugador: asks only for what the page always asked for", async () => {
+    await renderStudent(SELF);
+    await screen.findByTestId("profile-membership");
+
+    expect(mockFetchStudentPortal).toHaveBeenCalledTimes(1);
+    expect(mockFetchPagosDePersona).toHaveBeenCalledTimes(1);
+  });
+
+  // ---- representante ----------------------------------------------------
+
+  it("representante: «A tu cargo» lists each player with a status chip and a count", async () => {
+    const hero = await renderStudent(null, { role: "representante", representados: DEPENDANTS });
+
+    const card = await screen.findByTestId("profile-dependants");
+    expect(within(card).getByRole("heading", { name: "A tu cargo" })).toBeInTheDocument();
+    expect(within(card).getByText("3 jugadores")).toBeInTheDocument();
+    expect(within(hero).getByText("3 jugadores a cargo")).toBeInTheDocument();
+    const rows = within(card).getAllByTestId("profile-dependant");
+    expect(rows).toHaveLength(3);
+    expect(within(rows[0]).getByText("Martin Vera")).toBeInTheDocument();
+    expect(within(rows[0]).getByText("Activa")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("Suspendida")).toBeInTheDocument();
+    // Null is ambiguous (no membership OR a refused lookup), so it never says «sin membresía».
+    expect(within(rows[2]).getByText("Sin membresía visible")).toBeInTheDocument();
+    expect(screen.queryByText(/no disponible — consulta/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("profile-membership")).not.toBeInTheDocument();
+  });
+
+  it("representante: «+ Agregar jugador (menor de edad)» links to the existing add-dependent route", async () => {
+    await renderStudent(null, { role: "representante", representados: DEPENDANTS });
+
+    const card = await screen.findByTestId("profile-dependants");
+    expect(within(card).getByRole("link", { name: /agregar jugador \(menor de edad\)/i })).toHaveAttribute(
+      "href",
+      "/student/add-dependent",
+    );
+  });
+
+  it("representante with nobody to look after: an empty state, and the way to add one", async () => {
+    await renderStudent(null, { role: "representante" });
+
+    const card = await screen.findByTestId("profile-dependants");
+    expect(within(card).getByText(/todavía no hay jugadores representados/i)).toBeInTheDocument();
+    expect(within(card).queryByText(/\d+ jugadores?$/)).not.toBeInTheDocument();
+    expect(within(card).getByRole("link", { name: /agregar jugador/i })).toHaveAttribute(
+      "href",
+      "/student/add-dependent",
+    );
+  });
+
+  it("representante who also holds a membership gets «A tu cargo» first and their own ticket after", async () => {
+    await renderStudent(SELF, {
+      role: "representante",
+      representados: DEPENDANTS,
+      pagos: [pago(daysFromToday(20))],
+    });
+
+    const card = await screen.findByTestId("profile-dependants");
+    const ticket = await screen.findByTestId("profile-membership");
+    expect(card.compareDocumentPosition(ticket) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  // ---- entrenador / administrador ----------------------------------------
+
+  it("entrenador: the coal board draws a table-tennis table with a brand-yellow ball", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("trainer"));
+    mockFetchMiPerfil.mockResolvedValueOnce({ ...PERFIL_ADMIN, roles: ["ENTRENADOR"] });
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await waitForStaffProfile();
+
+    const board = screen.getByTestId("profile-role-board");
+    expect(board.className).toContain("bg-coal");
+    expect(within(board).getByRole("heading", { name: "Entrenador" })).toBeInTheDocument();
+    expect(within(board).getByText(/Mi día y Pasar lista/)).toBeInTheDocument();
+    const svg = board.querySelector("svg");
+    expect(svg).toHaveAttribute("aria-hidden", "true");
+    // border + centre line + net band, and a ball in the brand yellow
+    expect(svg?.querySelectorAll("rect")).toHaveLength(2);
+    expect(svg?.querySelectorAll("path")).toHaveLength(1);
+    expect(svg?.querySelector("circle")).toHaveAttribute("fill", "#FFD600");
+  });
+
+  it("administrador: the coal board draws a dotted trajectory that ends on the yellow ball, top right", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await waitForStaffProfile();
+
+    const board = screen.getByTestId("profile-role-board");
+    expect(within(board).getByRole("heading", { name: "Administración" })).toBeInTheDocument();
+    expect(within(board).getByText(/se gestionan desde Miembros/)).toBeInTheDocument();
+    const svg = board.querySelector("svg");
+    expect(svg?.querySelector("path[stroke-dasharray]")).not.toBeNull();
+    const ball = svg?.querySelector("circle[fill='#FFD600']");
+    expect(ball).not.toBeNull();
+    // The ball sits in the right half and the top half of its viewBox…
+    expect(Number(ball?.getAttribute("cx"))).toBeGreaterThan(100);
+    expect(Number(ball?.getAttribute("cy"))).toBeLessThan(60);
+    // …and the motif's box is pinned to the board's top-right corner.
+    const motif = svg?.parentElement as HTMLElement;
+    expect(motif.className).toContain("right-4");
+    expect(motif.className).toContain("top-4");
+    expect(motif.className).toContain("pointer-events-none");
+  });
+
+  it("the staff roles show no membership ticket and no dependants", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await waitForStaffProfile();
+
+    expect(screen.queryByTestId("profile-membership")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("profile-dependants")).not.toBeInTheDocument();
+  });
+
+  it("an unrecognised role still gets a block, so the column is never empty", async () => {
+    mockUseAuth.mockReturnValue({
+      ...ADMIN_SESSION,
+      session: { ...ADMIN_SESSION.session, user: { ...ADMIN_SESSION.session.user, role: "unsupported" as const } },
+    } as never);
+    mockFetchMiPerfil.mockResolvedValueOnce({ ...PERFIL_ADMIN, roles: [] });
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await waitForStaffProfile();
+
+    expect(within(screen.getByTestId("profile-role-board")).getByText(/no tiene un rol reconocido/i)).toBeInTheDocument();
+  });
+});
+
+describe("ProfilePage — v2: Seguridad", () => {
+  async function renderAdmin(): Promise<void> {
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await waitForStaffProfile();
+  }
+
+  it("keeps the password change folded until «Cambiar» is pressed, then folds it again", async () => {
+    await renderAdmin();
+
+    const security = within(screen.getByTestId("profile-column-status"));
+    expect(security.getByRole("heading", { name: "Seguridad" })).toBeInTheDocument();
+    expect(screen.queryByTestId("profile-change-password")).not.toBeInTheDocument();
+    const toggle = security.getByRole("button", { name: "Cambiar" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(toggle);
+    expect(screen.getByTestId("profile-change-password")).toBeInTheDocument();
+    expect(screen.getByLabelText("Contraseña actual")).toBeInTheDocument();
+    expect(security.getByRole("button", { name: "Cerrar" })).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(security.getByRole("button", { name: "Cerrar" }));
+    expect(screen.queryByTestId("profile-change-password")).not.toBeInTheDocument();
+  });
+
+  it("reuses the sessions card inside Seguridad when the account has a history", async () => {
+    mockFetchMisSesiones.mockResolvedValueOnce([
+      { id: 1, dispositivo: "Linux · Chrome", iniciadaEn: "2026-10-04T10:00:00Z", actual: true, vigente: true },
+      { id: 2, dispositivo: "Android · Chrome", iniciadaEn: "2026-10-03T10:00:00Z", actual: false, vigente: true },
+    ]);
+    await renderAdmin();
+
+    const sessions = await screen.findByTestId("profile-sessions");
+    expect(screen.getByTestId("profile-column-status").contains(sessions)).toBe(true);
+    expect(within(sessions).getByText("Este equipo")).toBeInTheDocument();
+    expect(sessions.className).not.toContain("card");
+  });
+
+  it("closes the other sessions from its own row, behind the confirmation", async () => {
+    mockInvalidarOtrasSesiones.mockReset();
+    await renderAdmin();
+
+    const security = within(screen.getByTestId("profile-column-status"));
+    fireEvent.click(security.getByRole("button", { name: "Cerrar otras sesiones" }));
+    expect(mockInvalidarOtrasSesiones).not.toHaveBeenCalled();
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("offers the reset-by-email link and the FAQ as one line at the foot", async () => {
+    await renderAdmin();
+
+    const security = within(screen.getByTestId("profile-column-status"));
+    expect(security.getByRole("button", { name: "Restablecer contraseña" })).toBeInTheDocument();
+    expect(security.getByRole("link", { name: "Preguntas frecuentes" })).toHaveAttribute("href", "/ayuda");
+    expect(security.getByText(/escribe a administración/i)).toBeInTheDocument();
+  });
+});
+
+describe("ProfilePage — v2: the page title", () => {
+  it.each([
+    ["admin", "Administra tus datos de cuenta."],
+    ["trainer", "Administra tus datos de cuenta."],
+  ] as const)("says the %s lede in tú", async (role, lede) => {
+    mockUseAuth.mockReturnValue(sessionForRole(role));
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await waitForStaffProfile();
+
+    expect(screen.getByRole("heading", { level: 1, name: "Perfil" })).toBeInTheDocument();
+    expect(screen.getByText(lede)).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Register — issue #340, flipped by QA4 S6. A word-shape lock, not a fixed
+// string: it fails on voseo imperatives, "vos" and "usted" forms wherever they
+// appear in the rendered screen, for any of the four role variants.
+// ---------------------------------------------------------------------------
+
+describe("ProfilePage — tú register (issue #340)", () => {
+  async function renderRole(
+    role: "admin" | "trainer" | "estudiante" | "representante",
+  ): Promise<void> {
+    mockUseAuth.mockReturnValue(sessionForRole(role));
+    if (role === "admin" || role === "trainer") {
+      mockFetchMiPerfil.mockResolvedValueOnce({
+        ...PERFIL_ADMIN,
+        roles: role === "admin" ? ["ADMINISTRADOR"] : ["ENTRENADOR"],
+      });
+    } else if (role === "estudiante") {
+      mockFetchStudentPortal.mockResolvedValueOnce({
+        self: {
+          personaId: "1",
+          nombres: "Sofía",
+          apellidos: "Alumna",
+          fechaNacimiento: "2012-05-10",
+          recentSessions: [],
+          membership: null,
+        },
+        representados: [],
+        membershipPlans: [],
+      });
+    } else {
+      mockFetchStudentPortal.mockResolvedValueOnce({
+        self: null,
+        representados: [
+          {
+            personaId: "20",
+            nombres: "Juan",
+            apellidos: "Hijo",
+            fechaNacimiento: "2014-02-01",
+            recentSessions: [],
+            membership: null,
+          },
+        ],
+        membershipPlans: [],
+      });
+    }
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await screen.findByTestId("profile-column-status");
+  }
+
+  it.each(["admin", "trainer", "estudiante", "representante"] as const)(
+    "keeps the %s view entirely in tú — no voseo/usted shape in the rendered screen",
+    async (role) => {
+      await renderRole(role);
+
+      const main = screen.getByRole("main");
+      const offenders = [...(main.textContent ?? "").matchAll(buildUstedRegisterRegex())].map(
+        (m) => m[0],
+      );
+      expect(offenders).toEqual([]);
+    },
+  );
+});
