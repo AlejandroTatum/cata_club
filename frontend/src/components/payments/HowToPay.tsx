@@ -33,6 +33,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }):
 type Load =
   | { status: "loading" }
   | { status: "error"; message: string }
+  | { status: "expired" }
   | { status: "ready"; info: ClubPaymentInfo | null };
 
 const CARD = "card flex flex-col gap-3 p-[18px]";
@@ -53,7 +54,11 @@ export default function HowToPay({ className }: { className?: string }): React.R
         if (!cancelled) setLoad({ status: "ready", info });
       },
       (error: unknown) => {
-        if (!cancelled) setLoad({ status: "error", message: toUserMessage(error, "No se pudieron cargar los datos de pago.") });
+        if (cancelled) return;
+        // A genuinely expired session shows the sign-in notice, not an error.
+        // This block only ever reports locally: it never triggers app-wide logout.
+        if ((error as { status?: number } | null)?.status === 401) setLoad({ status: "expired" });
+        else setLoad({ status: "error", message: toUserMessage(error, "No se pudieron cargar los datos de pago.") });
       },
     );
     return () => {
@@ -64,7 +69,7 @@ export default function HowToPay({ className }: { className?: string }): React.R
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   if (authLoading) return null;
-  if (!signedIn) {
+  if (!signedIn || load.status === "expired") {
     return (
       <section data-testid="how-to-pay-signin" aria-labelledby="how-to-pay-title" className={cn(CARD, className)}>
         <h2 id="how-to-pay-title" className="font-display text-lg uppercase leading-tight tracking-flat text-ink">

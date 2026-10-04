@@ -55,6 +55,24 @@ describe("GET /api/club/payment-info", () => {
     expect(await response.text()).not.toContain(CLUB_PAYMENT_INFO.accountNumber);
   });
 
+  it("answers 503, not 401, when the backend is unreachable", async () => {
+    vi.spyOn(global, "fetch").mockRejectedValue(new TypeError("fetch failed"));
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt()}`));
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(await response.text()).not.toContain(CLUB_PAYMENT_INFO.accountNumber);
+  });
+
+  it("answers 502, not 401, when the backend fails the session check", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(new Response("{}", { status: 500 }));
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt()}`));
+
+    expect(response.status).toBe(502);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(await response.text()).not.toContain(CLUB_PAYMENT_INFO.accountNumber);
+  });
+
   it("returns the normalized info, uncached, to a signed-in user", async () => {
     vi.spyOn(global, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ correo: "a@b.c" }), { status: 200, headers: { "Content-Type": "application/json" } }),

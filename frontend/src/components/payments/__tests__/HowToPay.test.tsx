@@ -61,6 +61,20 @@ describe("HowToPay", () => {
     expect(await screen.findByText("Titular Prueba")).toBeInTheDocument();
   });
 
+  it("shows the sign-in notice, not an error, when the session has expired", async () => {
+    mockGetInfo.mockRejectedValue(Object.assign(new Error("No autenticado."), { status: 401 }));
+    render(<HowToPay />);
+    expect(await screen.findByText("Los datos para transferencia se muestran al iniciar sesión.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reintentar" })).toBeNull();
+  });
+
+  it("shows a local retryable error on a 503 and never the sign-in notice", async () => {
+    mockGetInfo.mockRejectedValue(Object.assign(new Error("down"), { status: 503 }));
+    render(<HowToPay />);
+    expect(await screen.findByRole("button", { name: "Reintentar" })).toBeInTheDocument();
+    expect(screen.queryByTestId("how-to-pay-signin")).toBeNull();
+  });
+
   it("omits QR, cash place and hours when not configured, with no placeholder", async () => {
     mockGetInfo.mockResolvedValue(FULL);
     render(<HowToPay />);
