@@ -976,6 +976,89 @@ def test_reporte_personas_exactamente_en_el_limite_da_200(client, monkeypatch):
     assert len(resp.json()) == 2
 
 
+# --- QA4 PERF-11: un solo tope para los tres reportes, también en el JSON de
+# asistencias -----------------------------------------------------------------
+#
+# El JSON de asistencias estaba paginado (skip/limit), pero el BFF recorre
+# todas las páginas para armar la vista previa: un rango sin acotar bajaba
+# decenas de miles de filas aunque el PDF hermano ya lo rechazara. Ahora el JSON
+# aplica el mismo tope y el mismo 422 que el PDF; el Excel se arma en el
+# navegador con esas mismas filas, así que queda cubierto sin truncar nada.
+
+
+def test_el_tope_de_filas_es_uno_solo_para_los_tres_reportes():
+    from app.presentacion.routers import (
+        asistencias_router, membresias_pagos_router, personas_router, reporte_helpers,
+    )
+
+    assert reporte_helpers.LIMITE_MAXIMO_FILAS_REPORTE == 5000
+    assert asistencias_router.LIMITE_MAXIMO_REPORTE_ASISTENCIAS == 5000
+    assert membresias_pagos_router.LIMITE_MAXIMO_REPORTE_PAGOS == 5000
+    assert personas_router.LIMITE_MAXIMO_REPORTE_PERSONAS == 5000
+
+
+def test_el_422_del_tope_dice_cuantas_filas_hay_y_trata_de_usted():
+    from fastapi import HTTPException
+
+    from app.presentacion.routers.reporte_helpers import exigir_tope_reporte
+
+    with pytest.raises(HTTPException) as exc:
+        exigir_tope_reporte(7312, 5000, "asistencias")
+    assert exc.value.status_code == 422
+    detalle = exc.value.detail
+    assert "7312" in detalle and "5000" in detalle
+    assert "Reduzca el rango de fechas" in detalle
+
+
+def _horario_con_asistencias(client, db_session, cedula, dia, fechas):
+    alumno = _crear_persona(client, cedula)
+    _habilitar_como_jugador(db_session, alumno["id"])
+    horario = client.post(
+        "/api/v1/asistencias/horarios",
+        json={"categoria": "FORMATIVO", "dia_semana": dia},
+    ).json()
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+    for fecha in fechas:
+        client.post(
+            "/api/v1/asistencias/",
+            json={
+                "fecha_entrenamiento": fecha, "estado": "PRESENTE",
+                "persona_id": alumno["id"], "horario_id": horario["id"],
+            },
+        )
+    return horario
+
+
+def test_reporte_asistencia_json_supera_el_limite_maximo_da_422(client, monkeypatch, db_session):
+    monkeypatch.setattr(
+        "app.presentacion.routers.asistencias_router.LIMITE_MAXIMO_REPORTE_ASISTENCIAS", 2,
+    )
+    horario = _horario_con_asistencias(
+        client, db_session, cedula_valida(610), "MIERCOLES",
+        ("2026-07-01", "2026-07-08", "2026-07-15"),
+    )
+
+    resp = client.get("/api/v1/asistencias/reportes", params={"horario_id": horario["id"]})
+    assert resp.status_code == 422
+    assert "Reduzca el rango de fechas" in resp.json()["detail"]
+
+
+def test_reporte_asistencia_json_exactamente_en_el_limite_da_200(client, monkeypatch, db_session):
+    monkeypatch.setattr(
+        "app.presentacion.routers.asistencias_router.LIMITE_MAXIMO_REPORTE_ASISTENCIAS", 2,
+    )
+    horario = _horario_con_asistencias(
+        client, db_session, cedula_valida(611), "JUEVES", ("2026-07-02", "2026-07-09"),
+    )
+
+    resp = client.get("/api/v1/asistencias/reportes", params={"horario_id": horario["id"]})
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 2
+
+
 # --- Candado de ancho: ninguna tabla de reporte excede la página (#366) ------
 
 # Peor caso conocido de cada reporte, con los datos que el club produce de

@@ -18,7 +18,10 @@ from app.servicios_negocio.dtos.persona_schemas import (
     AntecedentesClubCreateDTO, AntecedentesClubUpdateDTO, AntecedentesClubResponseDTO,
 )
 from app.servicios_negocio.dtos.base import PaginatedResponse
-from app.presentacion.routers.reporte_helpers import exigir_tope_reporte
+from app.presentacion.routers.reporte_helpers import (
+    LIMITE_MAXIMO_FILAS_REPORTE,
+    exigir_tope_reporte,
+)
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import PersonaServicio
 from app.servicios_negocio.relacion_representacion_servicio import RelacionRepresentacionServicio
@@ -120,7 +123,7 @@ def listar_personas(
 # descarga entero, no un listado que se recorre en pantalla), así que un
 # rango sin acotar se truncaba en silencio. Mismo guardarraíl que
 # `LIMITE_MAXIMO_REPORTE_PAGOS` en `membresias_pagos_router.py`.
-LIMITE_MAXIMO_REPORTE_PERSONAS = 10000
+LIMITE_MAXIMO_REPORTE_PERSONAS = LIMITE_MAXIMO_FILAS_REPORTE
 
 
 @router.get(

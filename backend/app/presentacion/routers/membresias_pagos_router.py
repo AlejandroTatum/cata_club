@@ -36,6 +36,10 @@ from app.servicios_negocio.membresia_pago_servicio import (
     MembresiaServicio, PagoServicio, TAMANO_MAXIMO_VOUCHER_BYTES,
 )
 from app.servicios_negocio.gestor_permisos import GestorPermisos
+from app.presentacion.routers.reporte_helpers import (
+    LIMITE_MAXIMO_FILAS_REPORTE,
+    exigir_tope_reporte,
+)
 from app.soporte_transversal.lectura_archivos import leer_con_limite
 from app.soporte_transversal.rate_limit import limiter
 
@@ -355,7 +359,7 @@ def listar_pagos(
 # así que un rango con más de 10000 pagos se truncaba en silencio: 200 con
 # los primeros N y ninguna señal de que faltaban filas. Ahora se rechaza con
 # 422, mismo patrón que el rango de fechas invertido más abajo.
-LIMITE_MAXIMO_REPORTE_PAGOS = 10000
+LIMITE_MAXIMO_REPORTE_PAGOS = LIMITE_MAXIMO_FILAS_REPORTE
 
 
 def _reporte_pagos_items(
@@ -382,14 +386,7 @@ def _reporte_pagos_items(
         estado_pago=estado_pago, fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
         skip=0, limit=LIMITE_MAXIMO_REPORTE_PAGOS,
     )
-    if total > LIMITE_MAXIMO_REPORTE_PAGOS:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                f"El reporte supera el límite máximo de {LIMITE_MAXIMO_REPORTE_PAGOS} "
-                "pagos. Reduzca el rango de fechas para continuar."
-            ),
-        )
+    exigir_tope_reporte(total, LIMITE_MAXIMO_REPORTE_PAGOS, "pagos")
     return items
 
 

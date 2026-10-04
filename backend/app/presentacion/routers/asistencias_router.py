@@ -22,7 +22,10 @@ from app.servicios_negocio.dtos.asistencia_schemas import (
     SolicitudCorreccionCreateDTO, SolicitudCorreccionRechazoDTO, SolicitudCorreccionResponseDTO,
 )
 from app.servicios_negocio.dtos.base import PaginatedResponse
-from app.presentacion.routers.reporte_helpers import exigir_tope_reporte
+from app.presentacion.routers.reporte_helpers import (
+    LIMITE_MAXIMO_FILAS_REPORTE,
+    exigir_tope_reporte,
+)
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
 from app.servicios_negocio.gestor_permisos import GestorPermisos
@@ -379,14 +382,17 @@ async def reporte_asistencia(
 ):
     _validar_rango_de_fechas(fecha_inicio, fecha_fin)
     servicio = AsistenciaServicio(db)
+    total = servicio.contar_reporte(
+        horario_id=horario_id, persona_id=persona_id,
+        fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
+    )
+    # PERF-11: el BFF recorre todas las páginas para la vista previa, así que
+    # el tope tiene que valer también acá, no solo en el PDF.
+    exigir_tope_reporte(total, LIMITE_MAXIMO_REPORTE_ASISTENCIAS, "asistencias")
     items = servicio.generar_reporte(
         horario_id=horario_id, persona_id=persona_id,
         fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
         skip=skip, limit=limit,
-    )
-    total = servicio.contar_reporte(
-        horario_id=horario_id, persona_id=persona_id,
-        fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
     )
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
@@ -406,7 +412,7 @@ async def reporte_asistencia(
 # descargado entero, no un listado paginado -- así que sin este guardarraíl
 # un rango sin filtrar se truncaba en silencio a las primeras N filas. Mismo
 # patrón que `LIMITE_MAXIMO_REPORTE_PAGOS` en `membresias_pagos_router.py`.
-LIMITE_MAXIMO_REPORTE_ASISTENCIAS = 10000
+LIMITE_MAXIMO_REPORTE_ASISTENCIAS = LIMITE_MAXIMO_FILAS_REPORTE
 
 
 @router.get(
