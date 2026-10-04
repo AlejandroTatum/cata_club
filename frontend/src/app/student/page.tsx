@@ -60,6 +60,7 @@ import {
   daysUntil,
   type UpcomingTraining,
   noScheduleWhatsAppHref,
+  hasOwnMembership,
 } from "./student-utils";
 import {
   CalendarDays,
@@ -1568,7 +1569,7 @@ function StudentPortalContent(): React.ReactElement {
   // just joined has one waiting on its first payment: it must appear as a
   // profile they can pay for, and "Unirme como jugador" must not be offered
   // again (it created a duplicate membership).
-  const hasOwnMembership = state.status === "ready" && state.data.self?.membership != null;
+  const ownMembership = state.status === "ready" && hasOwnMembership(state.data);
   /**
    * Issue #1132: "es jugador" (the domain's single predicate — an ACTIVA
    * Membresia, `app/dominio/jugador.py::es_jugador`) is the union of both
@@ -1579,7 +1580,7 @@ function StudentPortalContent(): React.ReactElement {
    * would otherwise read as "not a player" forever despite having exactly
    * the membership this feature is about.
    */
-  const isPlayer = hasAlumnoRole || hasOwnMembership;
+  const isPlayer = hasAlumnoRole || ownMembership;
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {

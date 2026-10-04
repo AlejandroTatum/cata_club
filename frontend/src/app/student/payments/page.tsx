@@ -56,7 +56,7 @@ import { fetchStudentPortal, fetchPagosDePersona, fetchCoberturasDePersona, fetc
 import type { StudentPortalSummary, PagoPersona, MembershipSummary, BeneficioAsignado, CoberturaBonificada } from "@/services/api";
 import { BackLink, Badge, Button, EmptyState, FilterPanel, FilterPill, InfoPanel, LoadingState, PAGE_RAIL, StatCard, buttonClasses, cn } from "@/components/ui";
 
-import { describePaymentSituation, firstNameOf, isMinor } from "../student-utils";
+import { describePaymentSituation, firstNameOf, hasOwnMembership, isMinor } from "../student-utils";
 import ManagedStudentPicker, { useManagedProfiles, withSelectedStudent } from "../ManagedStudentPicker";
 import { getEmptyStateMessage, countPagosByStatus, formatPagoMonto, PAGO_FILTER_LABELS, prepareVoucher, type PagoStatusFilter } from "./payments-utils";
 import { formatDate } from "@/lib/format-utils";
@@ -134,10 +134,9 @@ function PaymentsContent({
   // included) makes her a profile she can pay for. She keeps the single role
   // REPRESENTANTE after "Unirme como jugador", so the role alone would leave
   // her out of the selector and show only her children's forms.
-  const hasOwnMembership = data.self?.membership != null;
   const { managedProfiles, selectedId, setSelectedId, selectedProfile } = useManagedProfiles(
     data,
-    hasAlumnoRole || hasOwnMembership,
+    hasAlumnoRole || hasOwnMembership(data),
     accountPersonaId,
   );
 
@@ -832,7 +831,7 @@ function PaymentsPageContent(): React.ReactElement {
    * selected); this is only the page's own promise to its reader.
    */
   // FAM-01: a representative's own membership (even INACTIVA) is a payment she can register.
-  const hasOwnMembership = state.status === "ready" && state.data.self?.membership != null;
+  const ownMembership = state.status === "ready" && hasOwnMembership(state.data);
   const accountCannotRegister =
     state.status === "ready" &&
     state.data.representados.length === 0 &&
@@ -853,7 +852,7 @@ function PaymentsPageContent(): React.ReactElement {
       subtitle={
         accountCannotRegister
           ? "Consulte su membresía, vea cómo se paga y siga el historial de sus pagos."
-          : hasAlumnoRole || hasOwnMembership
+          : hasAlumnoRole || ownMembership
             ? "Registre un pago, siga su validación y consulte lo que ya pagó."
             : "Registre el pago de un dependiente, siga su validación y consulte lo que ya pagó."
       }

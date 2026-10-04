@@ -66,7 +66,7 @@ import {
   buttonClasses,
   cn,
 } from "@/components/ui";
-import { breakdownAttendance, firstNameOf, summarizeRecentAttendance } from "../student-utils";
+import { breakdownAttendance, firstNameOf, hasOwnMembership, summarizeRecentAttendance } from "../student-utils";
 import type { AttendanceBreakdown } from "../student-utils";
 import ManagedStudentPicker, { useManagedProfiles } from "../ManagedStudentPicker";
 import { CalendarCheck, User } from "lucide-react";
@@ -438,7 +438,7 @@ function AttendanceView({
 }): React.ReactElement {
   const { managedProfiles, selectedId, setSelectedId, selectedProfile } = useManagedProfiles(
     data,
-    hasAlumnoRole,
+    hasAlumnoRole || hasOwnMembership(data),
     accountPersonaId,
   );
 

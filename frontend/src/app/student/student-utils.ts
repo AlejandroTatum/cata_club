@@ -8,6 +8,7 @@
 import type {
   AlumnoHorario,
   MembershipSummary,
+  StudentPortalSummary,
   PagoPersona,
   StudentSessionSummary,
 } from "@/services/api";
@@ -1152,4 +1153,14 @@ export function noScheduleWhatsAppHref(studentName: string, viewingOwnProfile: b
     ? "Hola, quisiera que me asignen un horario."
     : `Hola, quisiera que asignen un horario a ${studentName}.`;
   return `${toWhatsAppLink(landingConfig.contact.whatsapp[0])}?text=${encodeURIComponent(message)}`;
+}
+
+/**
+ * FAM-01: whether the account has a membership of its OWN, INACTIVA (waiting
+ * on its first payment) included. A representative who joins as a player keeps
+ * the single role REPRESENTANTE, so the role alone never says «is a player»:
+ * every selector and CTA on the portal asks this one question instead.
+ */
+export function hasOwnMembership(data: Pick<StudentPortalSummary, "self">): boolean {
+  return data.self?.membership != null;
 }

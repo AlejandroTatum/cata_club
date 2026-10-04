@@ -418,3 +418,27 @@ describe("StudentAttendancePage — QA4 findings", () => {
     expect(within(alert).getByRole("link")).toHaveAttribute("href", expect.stringContaining("wa.me"));
   });
 });
+
+// QA4 FAM-01: a representative who joined as a player keeps the single role
+// REPRESENTANTE; her own membership (pending included) puts her in the selector.
+describe("StudentAttendancePage — the representative with her own membership (FAM-01)", () => {
+  it("lists her next to her children, even with a pending membership", async () => {
+    mockUseAuth.mockReturnValue(sessionFor("representante"));
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      self: {
+        ...BASE_PROFILE,
+        nombres: "Marta",
+        apellidos: "Reyes",
+        membership: { id: 11, estado: "INACTIVA", personaId: 9, montoAplicado: "40.00", categoria: "Mensual Adultos", modalidad: "MENSUAL", fechaActivacion: "2026-07-22T20:51:01", fechaFin: "" },
+      },
+      representados: [{ ...BASE_PROFILE, personaId: "41", nombres: "Sofía", apellidos: "Vera" }],
+      membershipPlans: [],
+    } satisfies StudentPortalSummary);
+
+    render(<StudentAttendancePage />);
+
+    const selector = await screen.findByLabelText("Estudiante");
+    expect(within(selector).getByRole("option", { name: "Marta Reyes" })).toBeInTheDocument();
+    expect(within(selector).getByRole("option", { name: "Sofía Vera" })).toBeInTheDocument();
+  });
+});
