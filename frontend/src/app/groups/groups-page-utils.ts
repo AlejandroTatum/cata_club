@@ -51,9 +51,9 @@ export function uniqueAlumnos(
   return Array.from(seen, ([personaId, nombre]) => ({ personaId, nombre }));
 }
 
-/** "1 alumno inscrito" / "3 alumnos inscritos" — never "alumno(s)" (ADMB-22). */
+/** "1 jugador inscrito" / "3 jugadores inscritos" — never "jugador(es)" (ADMB-22). */
 export function alumnosInscritosLabel(n: number): string {
-  return n === 1 ? "1 alumno inscrito" : `${n} alumnos inscritos`;
+  return n === 1 ? "1 jugador inscrito" : `${n} jugadores inscritos`;
 }
 
 /**
@@ -65,7 +65,7 @@ export function mensajeCategoriaConAlumnos(
   input: { accion: "quitar-dias"; dias: string; alumnos: number } | { accion: "eliminar"; alumnos: number },
 ): string {
   const objeto = input.accion === "eliminar" ? "eliminar la categoría" : `quitar ${input.dias}`;
-  return `No puede ${objeto} mientras haya ${alumnosInscritosLabel(input.alumnos)}. Pase primero a esos alumnos a otra categoría.`;
+  return `No puedes ${objeto} mientras haya ${alumnosInscritosLabel(input.alumnos)}. Pasa primero a esos jugadores a otra categoría.`;
 }
 
 // ---------------------------------------------------------------------------

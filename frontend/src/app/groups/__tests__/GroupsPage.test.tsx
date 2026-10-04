@@ -1033,8 +1033,8 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
 
     const dialog = await screen.findByRole("dialog");
     // ADMB-04: the server blocks this, so the dialog must not promise to unassign.
-    expect(within(dialog).getByText(/no puede quitar miércoles mientras haya 2 jugadores inscritos/i)).toBeInTheDocument();
-    expect(within(dialog).getByText(/pase primero a esos jugadores a otra categoría/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/no puedes quitar miércoles mientras haya 2 jugadores inscritos/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/pasa primero a esos jugadores a otra categoría/i)).toBeInTheDocument();
     expect(within(dialog).queryByText(/desasignad/i)).not.toBeInTheDocument();
     expect(mockActualizarCategoria).not.toHaveBeenCalled();
     // The server would answer 409, so no destructive confirm is offered.
@@ -1513,7 +1513,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     // asserts presence rather than a single unique match.
     expect((await screen.findAllByText(/asignado correctamente/i)).length).toBeGreaterThan(0);
     expect(
-      await screen.findByText("Diego Vega tiene la cuota vencida hace 14 días."),
+      await screen.findByText("Diego Vega tiene la mensualidad vencida hace 14 días."),
     ).toBeInTheDocument();
   });
 
@@ -1864,9 +1864,9 @@ describe("GroupsPage — deleting removes la categoría entera atomically (docs/
     // Total across all 3 días (1 + 0 + 1), not just the first row's count.
     // ADMB-04: blocked copy, not a promise to unassign.
     expect(
-      within(dialog).getByText(/no puede eliminar la categoría mientras haya 2 jugadores inscritos/i),
+      within(dialog).getByText(/no puedes eliminar la categoría mientras haya 2 jugadores inscritos/i),
     ).toBeInTheDocument();
-    expect(within(dialog).getByText(/pase primero a esos jugadores a otra categoría/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/pasa primero a esos jugadores a otra categoría/i)).toBeInTheDocument();
     expect(within(dialog).queryByText(/desasignad/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: /de todos modos/i })).not.toBeInTheDocument();
     expect(mockEliminarCategoria).not.toHaveBeenCalled();
