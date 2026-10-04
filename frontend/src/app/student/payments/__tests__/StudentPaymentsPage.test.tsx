@@ -1536,7 +1536,9 @@ describe("StudentPaymentsPage — registering a payment", () => {
     await pickProof(new File(["x"], "comprobante.png", { type: "image/png" }));
 
     const preview = await screen.findByTestId("renew-proof-preview");
-    expect(within(preview).getByRole("img")).toHaveAttribute("src", "blob:mock-voucher-preview");
+    // The object URL is set in an effect, so the <img> lands one render after
+    // the preview wrapper; wait for it instead of racing a slow CI runner.
+    expect(await within(preview).findByRole("img")).toHaveAttribute("src", "blob:mock-voucher-preview");
     expect(within(preview).getByText("comprobante.png")).toBeInTheDocument();
     expect(within(preview).getByRole("button", { name: /cambiar archivo/i })).toBeInTheDocument();
   });
