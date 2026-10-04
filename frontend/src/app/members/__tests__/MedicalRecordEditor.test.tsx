@@ -21,7 +21,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import MedicalRecordEditor from "../MedicalRecordEditor";
 
 const mockFetchFichaMedica = vi.fn();
@@ -743,6 +743,67 @@ describe("MedicalRecordEditor — ficha guardada en reposo", () => {
     // y enfermedades vacías no son «nada»: son una ficha SIN DECLARAR (#1574).
     expect(screen.getAllByText("—")).toHaveLength(2);
     expect(screen.getAllByText("Sin declarar")).toHaveLength(2);
+  });
+
+  it("lee con el mismo formato que al editar: mismas etiquetas, mismo orden, mismas celdas (#1619)", async () => {
+    render(<MedicalRecordEditor personaId={7} withEmergencyCard />);
+
+    await screen.findByRole("button", { name: "Editar" });
+    const labelsOf = (): string[] =>
+      Array.from(
+        screen.getByTestId("medical-record-card").querySelectorAll("dt, label"),
+      ).map((n) => (n.textContent ?? "").replace(/\s*\*$/, "").trim());
+    const wideOf = (): string[] =>
+      Array.from(
+        screen.getByTestId("medical-record-card").querySelectorAll(".sm\\:col-span-2"),
+      ).map((n) => n.textContent ?? "");
+    const reading = labelsOf();
+    expect(reading.slice(0, 5)).toEqual([
+      "Tipo de sangre",
+      "Alergias",
+      "Enfermedades",
+      "Contacto de emergencia",
+      "Teléfono de emergencia",
+    ]);
+    expect(screen.getByRole("heading", { name: "Salud" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Contacto de emergencia" })).toBeInTheDocument();
+    expect(wideOf()).toHaveLength(1);
+    expect(wideOf()[0]).toMatch(/^Enfermedades/);
+
+    // Read mode: no editable box, no asterisk, no helper hint.
+    const card = screen.getByTestId("medical-record-card");
+    expect(card.querySelector("input, select, textarea")).toBeNull();
+    expect(card.textContent).not.toContain("*");
+    expect(screen.queryByText(/Si no tiene, escribe Ninguno/)).toBeNull();
+
+    // Label and value are one accessible unit.
+    const dt = within(card).getByText("Alergias", { selector: "dt" });
+    expect(dt.nextElementSibling?.tagName).toBe("DD");
+    expect(dt.nextElementSibling).toHaveTextContent("Polen");
+
+    // Toggling to edit keeps every label in the same place.
+    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+    // The only wording difference is the «(separadas por coma)» input hint.
+    const editing = labelsOf().map((l) => l.replace(" (separadas por coma)", ""));
+    expect(editing.slice(0, 5)).toEqual(reading.slice(0, 5));
+    expect(wideOf()).toHaveLength(1);
+    expect(wideOf()[0]).toMatch(/^Enfermedades/);
+  });
+
+  it("uses the same field grid in the admin dialog (no emergency card)", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+
+    await screen.findByRole("button", { name: "Editar" });
+    const rows = screen.getByTestId("medical-record-rows");
+    expect(rows.className).toMatch(/\bgrid\b/);
+    expect(rows.className).toMatch(/sm:grid-cols-2/);
+    expect(Array.from(rows.querySelectorAll("dt")).map((n) => n.textContent)).toEqual([
+      "Tipo de sangre",
+      "Alergias",
+      "Enfermedades",
+      "Contacto de emergencia",
+      "Teléfono de emergencia",
+    ]);
   });
 
   it("«Editar» devuelve los inputs de siempre, ya cargados con lo guardado", async () => {
