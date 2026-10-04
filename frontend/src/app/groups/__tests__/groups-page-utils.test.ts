@@ -144,6 +144,31 @@ describe("buildCategoriaCards", () => {
   it("returns an empty list for no groups", () => {
     expect(buildCategoriaCards([])).toEqual([]);
   });
+
+  // ADMB-35: a Saturday 10:00 group used to jump ahead of Formativo (Mon–Fri 15:00).
+  it("orders by first weekday and then by hour, so a Saturday morning follows the week", () => {
+    const sabado: HorarioGroup = {
+      key: "sabado-10",
+      categoria: "ESCUELA",
+      horaInicio: "10:00",
+      horaFin: "11:00",
+      rows: [{ id: 301, diaSemana: "SABADO" }],
+    };
+    const lunesTarde: HorarioGroup = {
+      key: "lunes-20",
+      categoria: "ADULTOS",
+      horaInicio: "20:00",
+      horaFin: "21:00",
+      rows: [{ id: 302, diaSemana: "LUNES" }],
+    };
+    const cards = buildCategoriaCards([sabado, ...CATEGORIA_GROUPS, lunesTarde]);
+    expect(cards.map((card) => card.categoria)).toEqual([
+      "FORMATIVO",
+      "COMPETITIVO",
+      "ADULTOS",
+      "ESCUELA",
+    ]);
+  });
 });
 
 describe("formatDiaSet", () => {
@@ -403,6 +428,15 @@ describe("buildCatalogoSinHorarios", () => {
     };
     const result = buildCatalogoSinHorarios(catalogo, []);
     expect(result.map((c) => c.categoria)).toEqual(["UNICO_ACENTO", "UNICO_PLANO"]);
+  });
+
+  it("orders by first allowed weekday before hour (ADMB-35)", () => {
+    const catalogo = {
+      SABADO: makeCategoria("Sabatino", "10:00", "11:00", ["SABADO"]),
+      SEMANA: makeCategoria("Semana", "15:00", "16:00", ["LUNES", "MARTES"]),
+    };
+    const result = buildCatalogoSinHorarios(catalogo, []);
+    expect(result.map((c) => c.categoria)).toEqual(["SEMANA", "SABADO"]);
   });
 
   it("omits a catalog entry that already has schedules", () => {

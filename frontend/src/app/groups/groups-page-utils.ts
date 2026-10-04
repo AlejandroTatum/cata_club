@@ -144,9 +144,16 @@ export interface CategoriaCard {
   rows: HorarioGroupRow[];
 }
 
+/** Index of the earliest weekday in the set — where the group sits in the week. */
+function primerDiaIndex(dias: readonly string[]): number {
+  return dias.length === 0 ? DIA_ORDER.length : Math.min(...dias.map(diaIndex));
+}
+
 /**
- * Collapse día-groups into one card per categoría, ordered by start time —
- * which is also how the club's afternoon runs (Formativo 15:00 → Adultos 20:00).
+ * Collapse día-groups into one card per categoría, ordered by first weekday
+ * and then start time (ADMB-35): the Monday–Friday afternoon runs Formativo
+ * 15:00 → Adultos 20:00 and a Saturday morning follows the week instead of
+ * jumping ahead of it.
  */
 export function buildCategoriaCards(groups: HorarioGroup[]): CategoriaCard[] {
   const byCategoria = new Map<string, CategoriaCard>();
@@ -175,7 +182,10 @@ export function buildCategoriaCards(groups: HorarioGroup[]): CategoriaCard[] {
   }
 
   return cards.sort(
-    (a, b) => a.horaInicio.localeCompare(b.horaInicio) || a.categoria.localeCompare(b.categoria),
+    (a, b) =>
+      primerDiaIndex(a.dias) - primerDiaIndex(b.dias) ||
+      a.horaInicio.localeCompare(b.horaInicio) ||
+      a.categoria.localeCompare(b.categoria),
   );
 }
 
@@ -322,8 +332,9 @@ export interface CategoriaSinHorarios {
 }
 
 /**
- * Catalog entries with no schedules yet, ordered by start time then label —
- * the same order `buildCategoriaCards` gives the real cards.
+ * Catalog entries with no schedules yet, ordered by first allowed weekday,
+ * start time, then label — the same order `buildCategoriaCards` gives the real
+ * cards.
  *
  * `categoriasConHorarios` is the set of `categoria` codes that already have at
  * least one card, so a catalog entry never appears twice on the screen.
@@ -347,6 +358,7 @@ export function buildCatalogoSinHorarios(
   }
   return pendientes.sort(
     (a, b) =>
+      primerDiaIndex(a.dias) - primerDiaIndex(b.dias) ||
       a.horaInicio.localeCompare(b.horaInicio) ||
       a.label.localeCompare(b.label, "es", { sensitivity: "base" }),
   );
