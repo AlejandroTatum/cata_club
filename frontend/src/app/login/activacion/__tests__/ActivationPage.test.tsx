@@ -23,6 +23,7 @@
 
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { fireEvent, render, screen, waitFor, type RenderResult } from "@testing-library/react";
+import { MENSAJE_IDENTIDAD_DUPLICADA } from "@/lib/duplicate-identity";
 import ActivationPage from "@/app/login/activacion/page";
 
 const mockReplace = vi.fn();
@@ -728,5 +729,33 @@ describe("ActivationPage — correcting a mistyped email (#1245)", () => {
       "El correo ya está verificado y no puede modificarse por esta vía.",
     );
     expect(screen.getByLabelText(/correo correcto/i)).toBeInTheDocument();
+  });
+
+  it("answers a resend directly, not with the anonymous-form sentence (REG-12)", async () => {
+    mockReenviarVerificacionCorreo.mockResolvedValueOnce({
+      mensaje: "Si el correo está registrado y falta verificarlo, se envió un enlace de verificación",
+    });
+    renderPending(pendingSession());
+
+    fireEvent.click(await screen.findByRole("button", { name: /reenviar correo de verificación/i }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Le enviamos un enlace nuevo a su correo. Puede tardar unos minutos.",
+    );
+    expect(screen.queryByText(/si el correo está registrado/i)).not.toBeInTheDocument();
+  });
+
+  it("says «Ese correo ya pertenece a otra cuenta.» when the corrected address is taken (REG-12)", async () => {
+    mockCambiarCorreoNoVerificado.mockRejectedValueOnce(
+      Object.assign(new Error(MENSAJE_IDENTIDAD_DUPLICADA), { status: 400 }),
+    );
+    renderPending(pendingSession());
+
+    fireEvent.click(await screen.findByRole("button", { name: /correo equivocado/i }));
+    fireEvent.change(screen.getByLabelText(/correo correcto/i), { target: { value: "usado@cataclub.com" } });
+    fireEvent.click(screen.getByRole("button", { name: /guardar correo/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Ese correo ya pertenece a otra cuenta.");
+    expect(screen.queryByText(/cédula/i)).not.toBeInTheDocument();
   });
 });

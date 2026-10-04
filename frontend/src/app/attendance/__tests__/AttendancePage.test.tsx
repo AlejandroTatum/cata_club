@@ -95,6 +95,7 @@ function renderPage(): ReturnType<typeof render> {
 
 const mockFetchTrainingSchedules = vi.fn();
 const mockFetchAttendanceRecords = vi.fn();
+const mockFetchRoster = vi.fn();
 const mockSearchStudents = vi.fn().mockResolvedValue([]);
 const mockFetchNotificaciones = vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 });
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
@@ -103,6 +104,7 @@ const mockCorrectAttendance = vi.fn();
 vi.mock("@/services/api", () => ({
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
+  fetchRosterDeTodosLosHorarios: () => mockFetchRoster(),
   searchStudents: (query: string) => mockSearchStudents(query),
   fetchNotificaciones: () => mockFetchNotificaciones(),
   marcarNotificacionLeida: (id: number) => mockMarcarNotificacionLeida(id),
@@ -112,6 +114,7 @@ vi.mock("@/services/api", () => ({
 beforeEach(() => {
   mockFetchTrainingSchedules.mockReset().mockResolvedValue(SCHEDULES);
   mockFetchAttendanceRecords.mockReset().mockResolvedValue(buildRecords(5));
+  mockFetchRoster.mockReset().mockResolvedValue([]);
   mockCorrectAttendance.mockReset();
   mockProtectedRouteProps.mockReset();
 });
@@ -414,5 +417,36 @@ describe("AttendancePage — rail", () => {
     expect(within(rail).getByRole("region", { name: "Sin lista en el período" })).toBeInTheDocument();
     expect(within(rail).getByRole("heading", { name: "Cómo leer el historial" })).toBeInTheDocument();
     expect(rail).toHaveTextContent("últimos 30 días");
+  });
+});
+
+describe("AttendancePage — partial lists on the rail (ENT-13)", () => {
+  it("lists a partly-filled list as «N de M registrados» using the roster", async () => {
+    // The rail only lists a Monday (the schedule's day) that is already past.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-07-20T15:00:00Z"));
+    mockFetchAttendanceRecords.mockResolvedValue(
+      buildRecords(2).map((r) => ({ ...r, fecha: "2026-07-06" })),
+    );
+    mockFetchRoster.mockResolvedValue(
+      [1, 2, 3, 4, 5].map((personaId) => ({ personaId, horarioId: 1 })),
+    );
+    renderPage();
+
+    try {
+      expect(await screen.findByText("2 de 5 registrados")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps working when the roster fetch fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    mockFetchAttendanceRecords.mockResolvedValue(buildRecords(2));
+    mockFetchRoster.mockRejectedValue(new Error("boom"));
+    renderPage();
+
+    await screen.findAllByRole("row");
+    expect(screen.queryByText(/de 5 registrados/)).not.toBeInTheDocument();
   });
 });

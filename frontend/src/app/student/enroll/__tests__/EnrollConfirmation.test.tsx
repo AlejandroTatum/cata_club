@@ -17,6 +17,12 @@ function renderConfirmation(overrides: Partial<EnrollConfirmationProps> = {}) {
 }
 
 describe("EnrollConfirmation", () => {
+  it("names the place «el club», as the summary and the emails do (REG-26)", () => {
+    renderConfirmation();
+    expect(screen.getByText(/Acérquese al club o escríbanos por WhatsApp/)).toBeInTheDocument();
+    expect(screen.queryByText(/administración/i)).not.toBeInTheDocument();
+  });
+
   it("shows a real, local club photo with a text alternative", () => {
     renderConfirmation();
     const photo = screen.getByRole("img", { name: /cata club entrenando en las mesas/i });

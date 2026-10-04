@@ -49,3 +49,10 @@ export function isDuplicateIdentityError(message: unknown): boolean {
   if (typeof message !== "string" || !message.trim()) return false;
   return PATRONES_IDENTIDAD_DUPLICADA.some((patron) => patron.test(message));
 }
+
+/**
+ * What a signed-in person reads when the e-mail they typed in "Corregirlo"
+ * belongs to another account. The shared sentence above is written for public
+ * forms (it also names the cédula, which was never asked here — REG-12).
+ */
+export const MENSAJE_CORREO_DE_OTRA_CUENTA = "Ese correo ya pertenece a otra cuenta.";

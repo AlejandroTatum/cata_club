@@ -50,7 +50,7 @@ function nextSteps(sessionConfirmed: boolean): NextStep[] {
     },
     {
       title: "El club",
-      body: "Acérquese a administración o escríbanos por WhatsApp para registrar la inscripción y el primer pago.",
+      body: "Acérquese al club o escríbanos por WhatsApp para registrar la inscripción y el primer pago.",
     },
     {
       title: "Su membresía",

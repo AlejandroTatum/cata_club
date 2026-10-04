@@ -1479,7 +1479,7 @@ describe("EnrollPage — la confirmación no manda a una acción que el rol nuev
     // no le ofrece ningún botón de alta -- student-utils.ts::
     // describePaymentSituation ya lo dice para ese mismo estado ("El club
     // crea la membresía al registrar el primer pago. Acérquese a
-    // administración..."). La confirmación no puede prometer una acción que
+    // administración..."; y la confirmación dice «Acérquese al club»). La confirmación no puede prometer una acción que
     // esa pantalla no tiene.
     expect(
       screen.queryByText(/registre el pago y suba el comprobante desde mis pagos/i)
@@ -1489,7 +1489,7 @@ describe("EnrollPage — la confirmación no manda a una acción que el rol nuev
   it("dice la verdad del primer pago: acercarse al club, no una ruta que el rol nuevo no puede usar", async () => {
     await completarInscripcionPropia();
 
-    expect(screen.getByText(/administraci[oó]n/i)).toBeInTheDocument();
+    expect(screen.getByText(/acérquese al club/i)).toBeInTheDocument();
   });
 
   it("muestra la bienvenida de marca y la línea emocional en la confirmación (#877)", async () => {

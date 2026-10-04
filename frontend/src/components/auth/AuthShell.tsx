@@ -199,7 +199,7 @@ export default function AuthShell({
        */}
       <div
         data-testid="auth-panel-dark"
-        className="relative flex flex-col justify-between gap-8 overflow-hidden bg-coal px-6 py-5 text-left text-white split:w-5/12 split:shrink-0 split:gap-10 split:px-14 split:py-12"
+        className="relative flex flex-col justify-between gap-4 overflow-hidden bg-coal px-6 py-5 text-left text-white split:w-5/12 split:shrink-0 split:gap-10 split:px-14 split:py-12"
       >
         {/*
          * The photo: a real club shot, full bleed behind everything, with a coal
@@ -234,7 +234,7 @@ export default function AuthShell({
          */}
         <header
           aria-label="Marca de Cata Club"
-          className="relative z-[1] flex flex-1 flex-col justify-between gap-8 split:gap-10"
+          className="relative z-[1] flex flex-1 flex-col justify-between gap-4 split:gap-10"
         >
           <div className="flex items-center justify-between gap-4">
             {!hideBack ? (
@@ -258,7 +258,7 @@ export default function AuthShell({
                   priority
                 />
               </span>
-              <span className="font-display text-lg uppercase tracking-flat">
+              <span className="whitespace-nowrap font-display text-lg uppercase tracking-flat">
                 Cata Club
               </span>
             </div>
@@ -321,7 +321,7 @@ export default function AuthShell({
        */}
       <main
         data-testid="auth-panel-light"
-        className="flex flex-1 flex-col bg-paper px-6 py-8 text-ink split:px-16 split:py-12"
+        className="flex flex-1 flex-col bg-paper px-6 py-6 text-ink split:px-16 split:py-12"
       >
         {/*
          * One column, one axis: the form and the help footer share the same 448px column (same max-width, same left edge).
@@ -332,7 +332,7 @@ export default function AuthShell({
             the help footer anchors the foot, so the form centres in the room
             between the brand header and that footer instead of leaving the
             bottom third blank. */}
-        <div className="flex flex-1 flex-col justify-center py-6 split:pb-24 split:py-0">
+        <div className="flex flex-1 flex-col justify-center py-4 split:pb-24 split:py-0">
           <div
             data-testid="auth-card"
             className="mx-auto flex w-full max-w-md flex-col gap-6"
@@ -374,7 +374,7 @@ export default function AuthShell({
         {/* Bottom anchor: a human to ask when the access fails. */}
         <p
           data-testid="auth-help"
-          className="mt-8 flex flex-wrap items-center gap-x-2 text-xs text-ink-3-strong"
+          className="mt-4 flex flex-wrap items-center gap-x-2 text-xs text-ink-3-strong"
         >
           ¿Problemas para ingresar?
           <a

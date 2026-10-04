@@ -39,10 +39,15 @@ import SessionHistoryList, {
 } from "@/components/attendance/SessionHistoryList";
 import { type AttendanceCorrectionPatch } from "@/app/attendance/AttendanceCorrectionAction";
 import SessionRecordsPanel from "@/app/attendance/SessionRecordsPanel";
-import { groupRecordsBySession } from "@/app/trainer/trainer-day-utils";
+import { buildEnrolledCountsByHorario, groupRecordsBySession } from "@/app/trainer/trainer-day-utils";
 import { ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { fetchTrainingSchedules, fetchAttendanceRecords } from "@/services/api";
+import {
+  fetchTrainingSchedules,
+  fetchAttendanceRecords,
+  fetchRosterDeTodosLosHorarios,
+  type AlumnoHorario,
+} from "@/services/api";
 import {
   BackLink,
   buttonClasses,
@@ -61,6 +66,7 @@ export default function AttendancePage(): React.ReactElement {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [padron, setPadron] = useState<AlumnoHorario[] | null>(null);
 
   const filters = useAttendanceFilters("this_month", schedules);
   const { query } = filters;
@@ -74,6 +80,26 @@ export default function AttendancePage(): React.ReactElement {
       console.error("[attendance] fetchTrainingSchedules failed", err);
     }
   }, []);
+
+  // The roster only sharpens the rail («N de M registrados»); if it fails the
+  // rail keeps its previous behaviour (ENT-13).
+  useEffect(() => {
+    let cancelled = false;
+    fetchRosterDeTodosLosHorarios()
+      .then((all) => {
+        if (!cancelled) setPadron(all);
+      })
+      .catch((err: unknown) => {
+        console.error("[attendance] fetchRosterDeTodosLosHorarios failed", err);
+      });
+    return (): void => {
+      cancelled = true;
+    };
+  }, []);
+  const inscritosPorHorario = useMemo(
+    () => (padron ? buildEnrolledCountsByHorario(schedules, padron) : undefined),
+    [padron, schedules],
+  );
 
   const loadRecords = useCallback(async (): Promise<void> => {
     /**
@@ -212,6 +238,7 @@ export default function AttendancePage(): React.ReactElement {
                 fechaFin={query.fechaFin ?? ""}
                 horarioId={query.horarioId ?? null}
                 studentFiltered={Boolean(filters.student)}
+                inscritosPorHorario={inscritosPorHorario}
                 guideExtra={
                   <>
                     <p>

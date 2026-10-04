@@ -199,18 +199,17 @@ export default function Stepper({
             // #1332 (R4-001, review advisory de #1331): a clickable dot used
             // to BE the 8px visual mark, so its own hit area was 8px on the
             // one breakpoint where this row only ever meets a thumb. The
-            // 8px mark stays exactly as small, now centred inside a 24px
-            // square button — the project's `MIN_TARGET_CLASS` floor
-            // (`lib/target-size.ts`), spelled as `h-6 w-6` because this
-            // control is icon-only, the same carve-out that constant's own
-            // doc comment names for `app/student/enroll`'s checkbox.
+            // 8px mark stays exactly as small, now centred inside a 40px
+            // square button (REG-19, QA4: 24px was still easy to miss with a
+            // thumb), spelled as `h-10 w-10` because this control is
+            // icon-only, the carve-out `lib/target-size.ts` documents.
             return clickable ? (
               <button
                 key={step}
                 type="button"
                 data-state={dotState}
                 aria-label={`Volver a ${step}`}
-                className="flex h-6 w-6 flex-none items-center justify-center"
+                className="flex h-10 w-10 flex-none items-center justify-center"
                 onClick={() => onStepClick?.(index)}
               >
                 <span aria-hidden="true" className={dotVisualClassName} />
