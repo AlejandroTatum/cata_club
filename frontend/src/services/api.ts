@@ -3013,6 +3013,9 @@ export interface GaleriaEntry {
   titulo: string;
   descripcion: string;
   imagenUrl: string;
+  /** Position in the gallery (lower first) and whether the landing shows it (ADMB-34). */
+  orden: number;
+  visible: boolean;
 }
 
 /** Public entries shown on the landing page gallery. */
@@ -3027,6 +3030,34 @@ export async function crearEntradaGaleria(titulo: string, descripcion: string, a
   formData.append("descripcion", descripcion);
   formData.append("archivo", archivo);
   return request<GaleriaEntry>(apiEndpoint("/galeria"), { method: "POST", body: formData }, 30_000);
+}
+
+/** Admin-only: every entry in gallery order, hidden ones included. */
+export async function fetchGaleriaAdmin(): Promise<GaleriaEntry[]> {
+  return request<GaleriaEntry[]>(apiEndpoint("/galeria/admin"));
+}
+
+/** Admin-only: edit text and visibility; `archivo` (the cropped photo) replaces the hosted one. */
+export async function actualizarEntradaGaleria(
+  id: number,
+  datos: { titulo: string; descripcion: string; visible: boolean },
+  archivo?: File,
+): Promise<GaleriaEntry> {
+  const formData = new FormData();
+  formData.append("titulo", datos.titulo);
+  formData.append("descripcion", datos.descripcion);
+  formData.append("visible", String(datos.visible));
+  if (archivo) formData.append("archivo", archivo);
+  return request<GaleriaEntry>(apiEndpoint(`/galeria/${id}`), { method: "PUT", body: formData }, 30_000);
+}
+
+/** Admin-only: move an entry one step up or down in the gallery order. */
+export async function moverEntradaGaleria(id: number, direccion: "subir" | "bajar"): Promise<GaleriaEntry[]> {
+  return request<GaleriaEntry[]>(apiEndpoint(`/galeria/${id}/mover`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ direccion }),
+  });
 }
 
 /** Admin-only: remove a gallery entry and its hosted photo. */
