@@ -109,6 +109,15 @@ async function mockGuardianPortal(page: Page): Promise<void> {
   await page.route("**/api/personas/*/beneficio", (route: Route) => fulfillJson(route, null));
   // «Cómo pagar» on `/student/payments` reads the club transfer data.
   await mockClubPaymentInfo(page);
+  await page.route("**/api/fichas-medicas/persona/*", (route: Route) =>
+    fulfillJson(route, {
+      tipoSangre: "O_POSITIVO",
+      enfermedades: [],
+      alergias: "Ninguna",
+      contactoEmergencia: null,
+      telefonoEmergencia: null,
+    }),
+  );
 }
 
 /** The sidebar row a guardian actually clicks — not a scripted `goto`. */
@@ -124,8 +133,7 @@ test("the dependent selection survives Mi cuenta → Pagos → Asistencias", asy
   await page.goto("/student");
 
   // Step 2 of the issue's reproduction: switch to the SECOND child.
-  // The dashboard drives it with the family strip (one button per child);
-  // Pagos and Asistencias below still use the select.
+  // Every family screen drives it with the same family strip (one button per child).
   const strip = page.getByRole("group", { name: "Jugador", exact: true });
   await expect(strip).toBeVisible();
   await strip.getByRole("button", { name: /Martín Vera/ }).click();
@@ -141,8 +149,8 @@ test("the dependent selection survives Mi cuenta → Pagos → Asistencias", asy
 
   // Step 4: whose data is on screen. The screen's own answer, not the select's.
   await expect(page.getByText("Membresía de Martín")).toBeVisible();
-  await expect(page.getByText("Plan de Martín")).toBeVisible();
-  await expect(page.getByLabel("Estudiante")).toHaveValue("42");
+  await expect(page.getByTestId("membership-status").getByText("Plan de Martín")).toBeVisible();
+  await expect(strip.getByRole("button", { name: /Martín Vera/ })).toHaveAttribute("aria-pressed", "true");
 
   // The third section named by the acceptance criterion.
   await sidebarLink(page, "Asistencias").click();
@@ -156,7 +164,9 @@ test("the dependent selection survives Mi cuenta → Pagos → Asistencias", asy
   // `SessionList` renders in BOTH branches and names its subject in both, which
   // is what this test is actually about: whose attendance is on screen.
   await expect(page.getByRole("heading", { name: "Sesiones registradas de Martín" })).toBeVisible();
-  await expect(page.getByLabel("Estudiante")).toHaveValue("42");
+  await expect(
+    page.getByRole("group", { name: "Jugador", exact: true }).getByRole("button", { name: /Martín Vera/ }),
+  ).toHaveAttribute("aria-pressed", "true");
 
   // And back, because a selection that only survives forwards is not kept.
   await sidebarLink(page, "Mi cuenta").click();
@@ -164,4 +174,27 @@ test("the dependent selection survives Mi cuenta → Pagos → Asistencias", asy
     "aria-label",
     "Carnet de jugador de Martín Vera",
   );
+});
+
+test("switching child in Pagos announces it and sticks on Ficha médica", async ({ page }) => {
+  await mockGuardianPortal(page);
+
+  await page.goto("/student/payments");
+  const strip = page.getByRole("group", { name: "Jugador", exact: true });
+  await expect(page.getByText("Membresía de Sofía")).toBeVisible();
+  await expect(page.getByLabel("Estudiante")).toHaveCount(0);
+
+  // Loading the page and re-picking the current child say nothing.
+  await strip.getByRole("button", { name: /Sofía Vera/ }).click();
+  await expect(page.getByText(/Ahora ves a/)).toHaveCount(0);
+
+  await strip.getByRole("button", { name: /Martín Vera/ }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Ahora ves a Martín" })).toBeVisible();
+  await expect(page.getByText("Membresía de Martín")).toBeVisible();
+
+  await sidebarLink(page, "Ficha médica").click();
+  await expect(page).toHaveURL(/\/student\/medical-record/);
+  await expect(
+    page.getByRole("group", { name: "Jugador", exact: true }).getByRole("button", { name: /Martín Vera/ }),
+  ).toHaveAttribute("aria-pressed", "true");
 });

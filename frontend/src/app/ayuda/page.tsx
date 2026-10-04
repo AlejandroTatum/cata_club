@@ -37,7 +37,7 @@ import { backHrefForRole } from "@/lib/auth-utils";
 import type { UserRole } from "@/types/domain";
 import { cn } from "@/components/ui/cn";
 import HowToPay from "@/components/payments/HowToPay";
-import { FAQ_SECTIONS } from "./faq-content";
+import { faqSectionsFor } from "./faq-content";
 import { SECTION_ACCENT } from "./section-accent";
 
 function sectionSlug(title: string): string {
@@ -142,10 +142,13 @@ export default function AyudaPage(): React.ReactElement {
   const filtering = query.trim() !== "" || category !== null;
   const role = session?.user.role;
   const quickLinks = (role && QUICK_LINKS_BY_ROLE[role]) || PUBLIC_QUICK_LINKS;
+  // Each person only ever sees the questions of their own role (#1581): the
+  // chips, the search and the rail all work from this list, never the whole FAQ.
+  const roleSections = useMemo(() => faqSectionsFor(role), [role]);
 
   const visibleSections = useMemo(() => {
     const needle = normalize(query.trim());
-    return FAQ_SECTIONS.filter((section) => category === null || section.title === category)
+    return roleSections.filter((section) => category === null || section.title === category)
       .map((section) => ({
         ...section,
         entries: section.entries.filter(
@@ -154,7 +157,7 @@ export default function AyudaPage(): React.ReactElement {
         ),
       }))
       .filter((section) => section.entries.length > 0);
-  }, [query, category]);
+  }, [roleSections, query, category]);
 
   const title = "Preguntas frecuentes";
   const subtitle = "Cómo funciona la app del club, sección por sección.";
@@ -177,7 +180,7 @@ export default function AyudaPage(): React.ReactElement {
         chips={
           <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por categoría">
             <FilterPill label="Todas" active={category === null} onClick={() => setCategory(null)} />
-            {FAQ_SECTIONS.map((section) => (
+            {roleSections.map((section) => (
               <FilterPill
                 key={section.title}
                 label={section.title}
@@ -196,7 +199,7 @@ export default function AyudaPage(): React.ReactElement {
       )}
       {/*
        * Two columns on wide screens, one on narrow ones — #203's grid. Each
-       * `FAQ_SECTIONS` entry renders as exactly one `<section>`, which is
+       * visible FAQ section renders as exactly one `<section>`, which is
        * also exactly one grid cell: a section's questions can never split
        * across columns because there is nothing splitting them, the CSS
        * grid just wraps whole cells.
@@ -268,7 +271,7 @@ export default function AyudaPage(): React.ReactElement {
         </InfoPanel>
         <InfoPanel title="Qué encontrarás aquí">
           <ul className="grid gap-2">
-            {FAQ_SECTIONS.map((section) => (
+            {roleSections.map((section) => (
               <li key={section.title} className="flex items-center justify-between gap-3">
                 <span>{section.title}</span>
                 <span className="text-xs text-ink-3-strong">
