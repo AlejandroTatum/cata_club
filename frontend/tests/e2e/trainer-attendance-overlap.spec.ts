@@ -101,7 +101,7 @@ async function mockTrainerAttendanceRuntime(page: Page): Promise<void> {
   await page.route("**/api/attendance/records*", (route: Route) => fulfillJson(route, []));
 }
 
-test("ningún elemento de la barra de acciones se superpone a una ficha de alumno, en el primer pintado (1440×900)", async ({ page }) => {
+test("ningún elemento de la barra de acciones se superpone a una ficha de jugador, en el primer pintado (1440×900)", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockTrainerAttendanceRuntime(page);
 

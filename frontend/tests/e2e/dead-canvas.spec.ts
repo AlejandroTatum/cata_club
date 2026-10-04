@@ -461,13 +461,13 @@ const SCREENS: Screen[] = [
     open: async (page, n) => {
       await mockGroups(page, n);
       await page
-        .getByRole("button", { name: /^Ver alumnos de / })
+        .getByRole("button", { name: /^Ver jugadores de / })
         .first()
         .click({ timeout: 20_000 });
       // The roster's own count, not a row — the collapsed card already holds a
       // list, so waiting on "a list item" would measure the page before the
       // accordion had drawn anything.
-      await expect(page.getByText(`Alumnos asignados (${n})`)).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByText(`Jugadores asignados (${n})`)).toBeVisible({ timeout: 20_000 });
       // The roster row's age used to render as "Nombre · N años" in one text
       // node; converting the row to DataRow/DataBox split it into a separate
       // element holding just "N años" (no "· " prefix survives it).
@@ -496,7 +496,7 @@ const SCREENS: Screen[] = [
     paginated: false,
     open: async (page) => {
       await mockGroups(page, 1);
-      await expect(page.getByRole("button", { name: /^Ver alumnos de / }).first()).toBeVisible({
+      await expect(page.getByRole("button", { name: /^Ver jugadores de / }).first()).toBeVisible({
         timeout: 20_000,
       });
     },

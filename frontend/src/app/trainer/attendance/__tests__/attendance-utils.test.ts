@@ -243,7 +243,7 @@ describe("buildRosterFromAlumnoHorarios", () => {
   // at them is the same defect pointing the other way. So the VALUE is not the
   // DECISION — every row starts NOT reviewed, and that is what the roll call
   // counts, flags and reports. See `countUnreviewed`.
-  it("maps each alumno-horario row to a SessionStudent defaulted to present but NOT reviewed", () => {
+  it("maps each jugador-horario row to a SessionStudent defaulted to present but NOT reviewed", () => {
     const roster = buildRosterFromAlumnoHorarios(alumnoHorarios);
     expect(roster).toEqual([
       {
@@ -677,7 +677,7 @@ describe("resolveFailedStudentNames", () => {
 
   it("falls back to the id rather than dropping an unknown student", () => {
     // A partially named failure is still more actionable than a bare count.
-    expect(resolveFailedStudentNames([{ personaId: 404 }], roster)).toEqual(["Alumno #404"]);
+    expect(resolveFailedStudentNames([{ personaId: 404 }], roster)).toEqual(["Jugador #404"]);
   });
 
   it("returns an empty list when nothing failed", () => {
@@ -972,7 +972,7 @@ describe("describeAttendanceSaveError", () => {
 
   it("says permission for 401/403, stale data for other 4xx, server for 5xx and connection for no status", () => {
     expect(describeAttendanceSaveError(withStatus(401))).toMatch(/permiso/);
-    expect(describeAttendanceSaveError(withStatus(422))).toMatch(/Actualice la página/);
+    expect(describeAttendanceSaveError(withStatus(422))).toMatch(/Actualiza la página/);
     expect(describeAttendanceSaveError(withStatus(500))).toMatch(/servidor tuvo un problema/);
     expect(describeAttendanceSaveError(new Error("timeout"))).toMatch(/No hay conexión/);
     expect(describeAttendanceSaveError("???")).toMatch(/No hay conexión/);
@@ -984,7 +984,7 @@ describe("partial sessions", () => {
   const roster = (filed: boolean[]): SessionStudent[] =>
     filed.map((isFiledRow, i) => ({
       id: String(i + 1),
-      name: `Alumno ${i + 1}`,
+      name: `Jugador ${i + 1}`,
       attendance: "present",
       reviewed: isFiledRow,
       asistenciaId: isFiledRow ? 500 + i : null,

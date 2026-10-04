@@ -72,8 +72,8 @@ export default function SchedulePickerStep({
             <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">{heading}</h2>
             <p className="text-sm text-ink-3">
               {activeGroup
-                ? `${activeDay === today ? `Horarios de hoy · ${activeGroup.label}` : `Horarios del ${activeGroup.label.toLowerCase()}`} — toque el que va a pasar`
-                : "Seleccione el horario de entrenamiento:"}
+                ? `${activeDay === today ? `Horarios de hoy · ${activeGroup.label}` : `Horarios del ${activeGroup.label.toLowerCase()}`} — toca el que vas a pasar`
+                : "Selecciona el horario de entrenamiento:"}
             </p>
           </div>
           {activeDay && (
@@ -97,14 +97,14 @@ export default function SchedulePickerStep({
         <div>
           {activeDay !== today && daysWithSchedules.size > 0 && !daysWithSchedules.has(today) && (
             <p className="mb-3 text-xs text-ink-3">
-              No hay entrenamientos hoy ({formatDay(today).toLowerCase()}). Elija otro día.
+              No hay entrenamientos hoy ({formatDay(today).toLowerCase()}). Elige otro día.
             </p>
           )}
           {schedules.length === 0 ? (
             <EmptyState
               icon={<Calendar size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
               title="No hay horarios registrados"
-              description="Sin un horario no se puede tomar lista. Pida a administración que registre uno."
+              description="Sin un horario no se puede tomar lista. Pide a administración registrar uno."
             />
           ) : (
             activeGroup && (
@@ -132,7 +132,7 @@ export default function SchedulePickerStep({
           >
             <p className="font-semibold">Esta lista ya fue tomada.</p>
             <p>
-              Puede continuar para consultarla, pero no para volver a tomarla: una vez registrada, la lista
+              Puedes continuar para consultarla, pero no para volver a tomarla: una vez registrada, la lista
               queda cerrada. Ante un error, podrá pedir la corrección a administración desde esa lista.
             </p>
           </div>
@@ -161,9 +161,9 @@ export default function SchedulePickerStep({
           commitBar={commitBar}
         />
         <InfoPanel title="Cómo pasar lista">
-          <p>1. Elija el día y toque el horario que va a pasar.</p>
-          <p>2. Marque a cada alumno; todos parten como presentes, revise a quien falta.</p>
-          <p>3. Confirme: una vez registrada, la lista queda cerrada.</p>
+          <p>1. Elige el día y toca el horario que vas a pasar.</p>
+          <p>2. Marca a cada jugador; todos parten como presentes, revisa a quien falta.</p>
+          <p>3. Confirma: una vez registrada, la lista queda cerrada.</p>
         </InfoPanel>
       </div>
     </div>

@@ -22,8 +22,8 @@ export default function ReadOnlyReasonNotice({
       <p>
         Quedó cerrada de forma permanente — no se puede editar desde aquí.{" "}
         {canRequestCorrection
-          ? "Ante un error, pida la corrección a administración desde el alumno que corresponda."
-          : "Ante un error, consulte con administración."}
+          ? "Ante un error, pide la corrección a administración desde el jugador que corresponda."
+          : "Ante un error, consulta con administración."}
       </p>
     </div>
   );

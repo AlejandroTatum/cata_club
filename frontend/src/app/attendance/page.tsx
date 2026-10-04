@@ -248,7 +248,7 @@ export default function AttendancePage(): React.ReactElement {
                 guideExtra={
                   <>
                     <p>
-                      Abra «Registros» en una sesión para ver a cada alumno.
+                      Abre «Registros» en una sesión para ver a cada jugador.
                       «Corregir» cambia el estado de un registro y exige un
                       motivo, que queda guardado con quien corrigió.
                     </p>

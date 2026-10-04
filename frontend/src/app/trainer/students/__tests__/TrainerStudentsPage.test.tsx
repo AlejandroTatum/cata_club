@@ -150,27 +150,27 @@ beforeEach(() => {
 });
 
 describe("un entrenador llega a la pantalla y ve la nómina", () => {
-  it("lista a cada alumno por su nombre completo", async () => {
+  it("lista a cada jugador por su nombre completo", async () => {
     render(<TrainerStudentsPage />);
 
     const melany = await screen.findByTestId("student-row-7");
     expect(within(melany).getByText("Melany Quimis")).toBeInTheDocument();
   });
 
-  it("muestra la edad y los horarios bajo el nombre, para reconocer al alumno sin abrir la ficha", async () => {
+  it("muestra la edad y los horarios bajo el nombre, para reconocer al jugador sin abrir la ficha", async () => {
     render(<TrainerStudentsPage />);
 
     const melany = await screen.findByTestId("student-row-7");
     expect(melany).toHaveTextContent("12 años · Lun, Mié, Vie 18:00");
   });
 
-  it("se titula «Alumnos del club» y nunca dice que los alumnos son suyos", async () => {
+  it("se titula «Jugadores del club» y nunca dice que los jugadores son suyos", async () => {
     // El club no asigna entrenadores a horarios: el backend lo deja escrito en
     // `ficha_medica_router.py`. "Sus alumnos" sería una promesa sin dato detrás.
     render(<TrainerStudentsPage />);
 
-    expect(await screen.findByRole("heading", { name: "Alumnos del club" })).toBeInTheDocument();
-    expect(document.body.textContent).not.toMatch(/sus alumnos/i);
+    expect(await screen.findByRole("heading", { name: "Jugadores del club" })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/sus jugadores/i);
   });
 
   it("pide el padrón una sola vez, aunque la lista traiga cinco filas", async () => {
@@ -198,7 +198,7 @@ describe("el nombre no se superpone con las acciones del renglón (issue #664)",
   });
 });
 
-describe("un alumno es una persona, no una asignación", () => {
+describe("un jugador es una persona, no una asignación", () => {
   it("junta las tres inscripciones de Melany en un solo renglón", async () => {
     render(<TrainerStudentsPage />);
 
@@ -232,7 +232,7 @@ describe("un alumno es una persona, no una asignación", () => {
 });
 
 describe("la ficha de emergencia es la única acción del renglón", () => {
-  it("abre la ficha del alumno cuyo botón se tocó", async () => {
+  it("abre la ficha del jugador cuyo botón se tocó", async () => {
     render(<TrainerStudentsPage />);
 
     const diego = await screen.findByTestId("student-row-3");
@@ -306,7 +306,7 @@ describe("la ficha de emergencia es la única acción del renglón", () => {
    * foco guardaría `body` como origen y al cerrar la ficha el entrenador
    * quedaría al principio de la página, no en el renglón que estaba mirando.
    */
-  it("devuelve el foco al renglón al cerrar la ficha, aunque el toque no lo haya enfocado (issue #911)", async () => {
+  it("devuelve el foco al renglón al cerrar la ficha, aunque el toca no lo haya enfocado (issue #911)", async () => {
     render(<TrainerStudentsPage />);
 
     const diego = await screen.findByTestId("student-row-3");
@@ -404,12 +404,12 @@ describe("el buscador filtra la nómina que ya está en memoria", () => {
       target: { value: "zzz" },
     });
 
-    expect(await screen.findByText(/ningún alumno/i)).toBeInTheDocument();
+    expect(await screen.findByText(/ningún jugador/i)).toBeInTheDocument();
   });
 });
 
 describe("la nómina es la tabla compartida del producto (issue #1156)", () => {
-  it("en escritorio es una tabla con Estudiante y una única columna de acciones (issue #1291)", async () => {
+  it("en escritorio es una tabla con Jugador y una única columna de acciones (issue #1291)", async () => {
     render(<TrainerStudentsPage />);
 
     const tabla = await screen.findByTestId("students-desktop-table");
@@ -422,7 +422,7 @@ describe("la nómina es la tabla compartida del producto (issue #1156)", () => {
     // Ficha médica y Horario se fusionaron en una única columna de acciones
     // sr-only (issue #1291): el layout automático ya no reparte el ancho
     // sobrante entre tres columnas.
-    expect(encabezados).toEqual(["Estudiante", "Categoría y horario", "Acciones"]);
+    expect(encabezados).toEqual(["Jugador", "Categoría y horario", "Acciones"]);
   });
 
   it("los dos botones de un renglón viven en la misma celda de acciones (issue #1291)", async () => {
@@ -456,7 +456,7 @@ describe("la nómina es la tabla compartida del producto (issue #1156)", () => {
     expect(horario).toHaveClass("h-ctl");
   });
 
-  it("debajo de sm cada alumno sigue siendo una tarjeta legible con sus dos acciones", async () => {
+  it("debajo de sm cada jugador sigue siendo una tarjeta legible con sus dos acciones", async () => {
     render(<TrainerStudentsPage />);
 
     const moviles = await screen.findByTestId("students-mobile-list");
@@ -514,7 +514,7 @@ describe("la puerta de la pantalla", () => {
     expect(mockProtectedRoute).toHaveBeenCalledWith(["trainer"]);
   });
 
-  it("no deja pasar a un alumno, a un representante ni al administrador", async () => {
+  it("no deja pasar a un jugador, a un representante ni al administrador", async () => {
     render(<TrainerStudentsPage />);
     await screen.findByTestId("student-row-7");
 
@@ -534,7 +534,7 @@ describe("cuando no hay padrón que mostrar", () => {
 
     render(<TrainerStudentsPage />);
 
-    expect(await screen.findByText(/todavía no hay alumnos inscritos/i)).toBeInTheDocument();
+    expect(await screen.findByText(/todavía no hay jugadores inscritos/i)).toBeInTheDocument();
   });
 
   it("ofrece reintentar, sin culpar al entrenador, cuando el padrón no carga", async () => {
@@ -553,7 +553,7 @@ describe("cuando no hay padrón que mostrar", () => {
 // ---------------------------------------------------------------------------
 
 describe("el camino de vuelta queda sobre el título (#1396)", () => {
-  it("dibuja «Volver a Mi día» antes del «Alumnos del club» en el documento", async () => {
+  it("dibuja «Volver a Mi día» antes del «Jugadores del club» en el documento", async () => {
     render(<TrainerStudentsPage />);
 
     await screen.findByTestId("student-row-7");
@@ -563,7 +563,7 @@ describe("el camino de vuelta queda sobre el título (#1396)", () => {
     // Orden del documento, no CSS: el tabulador y un lector de pantalla
     // encuentran «Volver» antes que el nombre de la pantalla. El control viaja
     // por el slot `AppShell.back`, que el shell dibuja antes del `<h1>`.
-    const title = screen.getByRole("heading", { name: "Alumnos del club", level: 1 });
+    const title = screen.getByRole("heading", { name: "Jugadores del club", level: 1 });
     expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
@@ -687,7 +687,7 @@ describe("maestro–detalle en escritorio", () => {
 
     const tabla = await screen.findByTestId("students-desktop-table");
     expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual([
-      "Estudiante",
+      "Jugador",
       "Categoría y horario",
       "Acciones",
     ]);
@@ -714,7 +714,7 @@ describe("maestro–detalle en escritorio", () => {
     expect(screen.queryByTestId("ficha-panel")).not.toBeInTheDocument();
   });
 
-  it("agrupa por categoría aunque sus alumnos entrenen a distinta hora", async () => {
+  it("agrupa por categoría aunque sus jugadores entrenen a distinta hora", async () => {
     const juvenil: [string, string] = ["JUVENIL", "Juvenil"];
     mockFetchRoster.mockResolvedValue([
       fila(1, "Ana Mora", 14, "LUNES", "17:00:00", juvenil),
@@ -733,22 +733,22 @@ describe("maestro–detalle en escritorio", () => {
     expect(screen.queryByTestId("student-row-3")).not.toBeInTheDocument();
   });
 
-  it("cuenta los alumnos y filtra por categoría del padrón", async () => {
+  it("cuenta los jugadores y filtra por categoría del padrón", async () => {
     render(<TrainerStudentsPage />);
 
     await screen.findByTestId("student-row-7");
-    expect(document.querySelector("p[aria-live=polite]")).toHaveTextContent("3 alumnos");
+    expect(document.querySelector("p[aria-live=polite]")).toHaveTextContent("3 jugadores");
 
     // Melany is in Cat 18, Diego in Cat 17, Sofía in Cat 09.
     fireEvent.click(screen.getByRole("button", { name: "Categoría Cat 17, 1" }));
     expect(screen.queryByTestId("student-row-7")).not.toBeInTheDocument();
     expect(screen.getByTestId("student-row-3")).toBeInTheDocument();
-    expect(document.querySelector("p[aria-live=polite]")).toHaveTextContent("1 alumno de 3");
+    expect(document.querySelector("p[aria-live=polite]")).toHaveTextContent("1 jugador de 3");
 
     fireEvent.click(screen.getByRole("button", { name: "Todos, 3" }));
     expect(screen.getByTestId("student-row-7")).toBeInTheDocument();
   });
-  it("cuenta a un alumno en cada categoría donde tiene horario, y el chip coincide con la lista (ENT-08)", async () => {
+  it("cuenta a un jugador en cada categoría donde tiene horario, y el chip coincide con la lista (ENT-08)", async () => {
     const juvenil: [string, string] = ["JUVENIL", "Juvenil"];
     const adultos: [string, string] = ["ADULTOS", "Adultos"];
     mockFetchRoster.mockResolvedValue([
@@ -771,7 +771,7 @@ describe("maestro–detalle en escritorio", () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
     mockFetchRoster.mockResolvedValue(
-      Array.from({ length: 12 }, (_, i) => fila(100 + i, `Alumno ${String(i).padStart(2, "0")}`, 10, "LUNES")),
+      Array.from({ length: 12 }, (_, i) => fila(100 + i, `Jugador ${String(i).padStart(2, "0")}`, 10, "LUNES")),
     );
     render(<TrainerStudentsPage />);
 

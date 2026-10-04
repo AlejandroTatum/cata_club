@@ -7,7 +7,7 @@ import {
 
 const fail = (message: string, status: number): Error =>
   Object.assign(new Error(message), { status });
-const GENERIC = "No se pudo subir el logo. Intente de nuevo.";
+const GENERIC = "No se pudo subir el logo. Intenta de nuevo.";
 
 describe("uploadErrorMessage", () => {
   it.each([500, 502, 503, 504])(
@@ -34,7 +34,7 @@ describe("uploadErrorMessage", () => {
   });
   it("falls back to a neutral file message when the detail is not for people", () => {
     expect(uploadErrorMessage(fail("archivo_invalido", 400), GENERIC)).toBe(
-      "Revise el archivo e intente de nuevo.",
+      "Revisa el archivo e intenta de nuevo.",
     );
   });
   it("explains 413 and 415 by what the status itself says", () => {

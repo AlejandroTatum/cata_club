@@ -108,7 +108,7 @@ export default function GaleriaPage(): React.ReactElement {
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    if (!titulo.trim() || !descripcion.trim() || (!archivo && !editando)) { setError("Escriba el título, la descripción y seleccione una foto."); return; }
+    if (!titulo.trim() || !descripcion.trim() || (!archivo && !editando)) { setError("Escribe el título, la descripción y selecciona una foto."); return; }
     if (contarPalabras(titulo) > TITULO_MAX_PALABRAS) { setError(`El título no puede superar las ${TITULO_MAX_PALABRAS} palabras.`); return; }
     if (contarPalabras(descripcion) > DESCRIPCION_MAX_PALABRAS) { setError(`La descripción no puede superar las ${DESCRIPCION_MAX_PALABRAS} palabras.`); return; }
     if (archivo) {
@@ -120,7 +120,7 @@ export default function GaleriaPage(): React.ReactElement {
       let foto: File | undefined;
       if (archivo) {
         try { foto = await recortarImagen(archivo, crop); }
-        catch { setError("No se pudo recortar la foto. Pruebe con otra imagen."); return; }
+        catch { setError("No se pudo recortar la foto. Prueba con otra imagen."); return; }
         const errorRecorte = errorDeArchivo(foto);
         if (errorRecorte) { setError(errorRecorte); return; }
       }
@@ -135,7 +135,7 @@ export default function GaleriaPage(): React.ReactElement {
       await load();
     }
     catch (error: unknown) {
-      setError(uploadErrorMessage(error, "No se pudo publicar la foto. Intente de nuevo."));
+      setError(uploadErrorMessage(error, "No se pudo publicar la foto. Intenta de nuevo."));
     }
     finally { setSaving(false); }
   }
@@ -175,7 +175,7 @@ export default function GaleriaPage(): React.ReactElement {
 
   return <ProtectedRoute allowedRoles={["admin"]}><AppShell
     title="Galería"
-    subtitle="Publique las fotos que se muestran en la galería de la landing, con su título y descripción."
+    subtitle="Publica las fotos que se muestran en la galería de la landing, con su título y descripción."
   >
     <>
       <div className={PAGE_RAIL}>
@@ -183,8 +183,8 @@ export default function GaleriaPage(): React.ReactElement {
         <PublishGuide className="max-lg:order-3" title="Cómo se publica en el sitio" rules={[
           { term: "Dónde aparece", detail: "Cada foto es una diapositiva de la galería de la landing, con su título y descripción." },
           { term: "Título y descripción", detail: `Hasta ${TITULO_MAX_PALABRAS} palabras el título y ${DESCRIPCION_MAX_PALABRAS} la descripción; esta última es también la descripción accesible de la foto.` },
-          { term: "Orden y visibilidad", detail: "Se muestran de inmediato, en el orden de esta lista; use Subir y Bajar para cambiarlo. Una foto oculta no se muestra en la landing, pero se conserva." },
-          { term: "Encuadre", detail: "La galería usa fotos de 3:2: arrastre la foto y use el zoom para elegir el recorte antes de publicarla." },
+          { term: "Orden y visibilidad", detail: "Se muestran de inmediato, en el orden de esta lista; usa Subir y Bajar para cambiarlo. Una foto oculta no se muestra en la landing, pero se conserva." },
+          { term: "Encuadre", detail: "La galería usa fotos de 3:2: arrastra la foto y usa el zoom para elegir el recorte antes de publicarla." },
           { term: "Al eliminar", detail: "La foto deja de mostrarse en la landing y no se puede recuperar." },
         ]} />
         <form onSubmit={submit} className="card flex max-lg:order-1 min-w-0 flex-col gap-4 p-4">

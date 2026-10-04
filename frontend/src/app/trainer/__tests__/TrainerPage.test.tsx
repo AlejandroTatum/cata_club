@@ -170,7 +170,7 @@ function alumno(horarioId: number): AlumnoHorario {
   return {
     id: Math.random(),
     personaId: Math.random(),
-    personaNombreCompleto: "Alumno",
+    personaNombreCompleto: "Jugador",
     edad: 12,
     horarioId,
     horarioDia: "lun",
@@ -221,7 +221,7 @@ describe("TrainerPage — Mi día", () => {
     const hero = within(await screen.findByTestId("session-hero"));
     expect(hero.getByText("Próxima sesión")).toBeInTheDocument();
     expect(hero.getByText("Empieza en 25 minutos")).toBeInTheDocument();
-    expect(await hero.findByText("12 estudiantes inscritos")).toBeInTheDocument();
+    expect(await hero.findByText("12 jugadores inscritos")).toBeInTheDocument();
   });
 
   it("'next': the hero is one card with a bar counting down to the start", async () => {
@@ -248,7 +248,7 @@ describe("TrainerPage — Mi día", () => {
     mockFetchAlumnosPorHorario.mockReset();
     render(<TrainerPage />);
 
-    await within(await screen.findByTestId("session-hero")).findByRole("list", { name: "Alumnos inscritos" });
+    await within(await screen.findByTestId("session-hero")).findByRole("list", { name: "Jugadores inscritos" });
     expect(mockFetchAlumnosPorHorario.mock.calls).toEqual([[1]]);
   });
 
@@ -261,7 +261,7 @@ describe("TrainerPage — Mi día", () => {
     render(<TrainerPage />);
 
     const hero = within(await screen.findByTestId("session-hero"));
-    const chips = await hero.findByRole("list", { name: "Alumnos inscritos" });
+    const chips = await hero.findByRole("list", { name: "Jugadores inscritos" });
     expect(within(chips).getAllByRole("listitem")).toHaveLength(9);
     expect(within(chips).getByText("Ana")).toBeInTheDocument();
     expect(within(chips).getByText("+2 más")).toBeInTheDocument();
@@ -345,7 +345,7 @@ describe("TrainerPage — Mi día", () => {
     );
     render(<TrainerPage />);
 
-    expect(screen.getByText("Cargando su día…")).toBeInTheDocument();
+    expect(screen.getByText("Cargando tu día…")).toBeInTheDocument();
     expect(horarioLinks()).toHaveLength(0);
     resolveSchedules(TODAY_SCHEDULES);
     await screen.findByTestId("session-hero");
@@ -357,7 +357,7 @@ describe("TrainerPage — Mi día", () => {
 
     render(<TrainerPage />);
 
-    expect(await screen.findByText(/No se pudo cargar su día/)).toBeInTheDocument();
+    expect(await screen.findByText(/No se pudo cargar tu día/)).toBeInTheDocument();
     expect(horarioLinks()).toHaveLength(0);
 
     mockFetchTrainingSchedules.mockResolvedValue(TODAY_SCHEDULES);
@@ -374,7 +374,7 @@ describe("TrainerPage — Mi día", () => {
 
     const hero = within(await screen.findByTestId("session-hero"));
     expect(hero.getByText("Empieza en 25 minutos")).toBeInTheDocument();
-    expect(hero.queryByText(/estudiantes inscritos/)).not.toBeInTheDocument();
+    expect(hero.queryByText(/jugadores inscritos/)).not.toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------
@@ -479,11 +479,11 @@ describe("TrainerPage — Mi día", () => {
   // 7th and 14th — six sessions, newest first, capped at five.
   // -------------------------------------------------------------------------
 
-  it("keeps an always-visible 'Cómo funciona su día' guide in the rail", async () => {
+  it("keeps an always-visible 'Cómo funciona tu día' guide in the rail", async () => {
     render(<TrainerPage />);
 
-    const guide = await screen.findByRole("complementary", { name: "Cómo funciona su día" });
-    expect(within(screen.getByTestId("trainer-rail")).getByText("Cómo funciona su día")).toBeInTheDocument();
+    const guide = await screen.findByRole("complementary", { name: "Cómo funciona tu día" });
+    expect(within(screen.getByTestId("trainer-rail")).getByText("Cómo funciona tu día")).toBeInTheDocument();
     expect(guide).toHaveTextContent("Sesiones sin lista");
   });
 
@@ -624,7 +624,7 @@ describe("TrainerPage — el pulso mensual no pierde una sesión de días antes 
     horario: "Miércoles 17:00 — 18:00",
     horarioId: 30,
     personaId: i,
-    estudiante: `Alumno ${i + 1}`,
+    estudiante: `Jugador ${i + 1}`,
     estado: "present" as const,
     registradoPorNombre: "Coach Vera",
   }));

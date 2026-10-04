@@ -109,7 +109,7 @@ export default function NextSessionHero({
             <>
               <span className="text-xs font-semibold text-ink-2">{formatEnrolledCount(names.length)}</span>
               {shown.length > 0 && (
-                <ul aria-label="Alumnos inscritos" className="m-0 grid list-none grid-cols-2 gap-1.5 p-0 sm:grid-cols-4">
+                <ul aria-label="Jugadores inscritos" className="m-0 grid list-none grid-cols-2 gap-1.5 p-0 sm:grid-cols-4">
                   {shown.map((name, index) => {
                     const student = students?.[index];
                     const chip = (
@@ -148,7 +148,7 @@ export default function NextSessionHero({
                 </ul>
               )}
               {shown.length > 0 && onOpenEmergency && (
-                <span className="text-xs text-ink-3">Toque un nombre para ver su ficha de emergencia.</span>
+                <span className="text-xs text-ink-3">Toca un nombre para ver su ficha de emergencia.</span>
               )}
             </>
           ) : (

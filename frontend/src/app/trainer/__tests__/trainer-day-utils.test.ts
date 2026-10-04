@@ -153,9 +153,9 @@ describe("minutesUntilStart", () => {
 
 describe("formatEnrolledCount", () => {
   it("says inscritos, not esperan — the backend only knows who is enrolled", () => {
-    expect(formatEnrolledCount(12)).toBe("12 estudiantes inscritos");
-    expect(formatEnrolledCount(1)).toBe("1 estudiante inscrito");
-    expect(formatEnrolledCount(0)).toBe("0 estudiantes inscritos");
+    expect(formatEnrolledCount(12)).toBe("12 jugadores inscritos");
+    expect(formatEnrolledCount(1)).toBe("1 jugador inscrito");
+    expect(formatEnrolledCount(0)).toBe("0 jugadores inscritos");
   });
 
   it("says nothing at all while the count is unknown", () => {

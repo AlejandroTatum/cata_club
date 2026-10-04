@@ -235,7 +235,7 @@ const CELL_LABEL = "text-2xs font-bold uppercase text-ink-3-strong";
 // word for the same thing was the finding, not the column itself. The
 // user-facing screen name stays "Grupos y horarios" (see the NAMING note at the top
 // of this file): that rename is deliberately out of scope, this one is not.
-const COLUMNS = ["Categoría", "Horario", "Alumnos", "Acciones"] as const;
+const COLUMNS = ["Categoría", "Horario", "Jugadores", "Acciones"] as const;
 
 /**
  * A cell's own label. Visible below `xl`, where the stacked row has no header
@@ -504,19 +504,19 @@ function validarCategoria(
   const errores: CategoriaFieldErrors = {};
   const fueraDeVentana = `Los entrenamientos deben programarse entre las ${HORA_MINIMA_ENTRENAMIENTO} y las ${HORA_MAXIMA_ENTRENAMIENTO}.`;
 
-  if (!form.nombre.trim()) errores.nombre = "Ingrese un nombre para la categoría.";
+  if (!form.nombre.trim()) errores.nombre = "Ingresa un nombre para la categoría.";
 
-  if (!form.horaInicio) errores.horaInicio = "Ingrese la hora de inicio.";
+  if (!form.horaInicio) errores.horaInicio = "Ingresa la hora de inicio.";
   else if (!dentroDeLaVentana(form.horaInicio)) errores.horaInicio = fueraDeVentana;
 
-  if (!form.horaFin) errores.horaFin = "Ingrese la hora de fin.";
+  if (!form.horaFin) errores.horaFin = "Ingresa la hora de fin.";
   else if (!dentroDeLaVentana(form.horaFin)) errores.horaFin = fueraDeVentana;
 
   if (!errores.horaInicio && !errores.horaFin && form.horaInicio >= form.horaFin) {
     errores.franja = "La hora de inicio debe ser anterior a la hora de fin.";
   }
 
-  if (cantidadDeDias === 0) errores.dias = "Seleccione al menos un día.";
+  if (cantidadDeDias === 0) errores.dias = "Selecciona al menos un día.";
   else if (cantidadDeDias > MAXIMO_DIAS_POR_CATEGORIA) {
     errores.dias = `Una categoría no puede entrenar más de ${MAXIMO_DIAS_POR_CATEGORIA} días.`;
   }
@@ -707,7 +707,7 @@ export default function GroupsPage(): React.ReactElement {
       setAllStudents(students);
       setCategorias(categoriasData);
     } catch {
-      setLoadError("No se pudieron cargar los horarios. Intente nuevamente.");
+      setLoadError("No se pudieron cargar los horarios. Intenta nuevamente.");
     } finally {
       setLoading(false);
     }
@@ -1182,9 +1182,9 @@ export default function GroupsPage(): React.ReactElement {
         // The players moved but the history keeps the categoría: say so and
         // offer to hide it instead of a dead end. Reload behind the dialog.
         void loadData();
-        return { noEliminada: resultado.motivo ?? "Los alumnos pasaron, pero la categoría no se pudo eliminar." };
+        return { noEliminada: resultado.motivo ?? "Los jugadores pasaron, pero la categoría no se pudo eliminar." };
       }
-      const quienes = resultado.movidos === 1 ? "1 alumno" : `${resultado.movidos} alumnos`;
+      const quienes = resultado.movidos === 1 ? "1 jugador" : `${resultado.movidos} jugadores`;
       const message = `Se pasó a ${quienes} a ${resultado.categoriaDestinoLabel} y se eliminó la categoría.`;
       handleCancelPendingDeletions();
       showNotification("success", message);
@@ -1490,8 +1490,8 @@ export default function GroupsPage(): React.ReactElement {
             <div className="min-w-[220px] flex-1">
               <p className="text-sm font-semibold text-state-bad">Eliminar esta categoría</p>
               <p className="text-xs text-ink-3">
-                Se eliminan todos sus días. No se puede mientras tenga alumnos inscritos
-                (reasígnelos primero) ni si alguno de sus días tiene asistencias registradas.
+                Se eliminan todos sus días. No se puede mientras tenga jugadores inscritos
+                (reasígnalos primero) ni si alguno de sus días tiene asistencias registradas.
               </p>
             </div>
             <Button
@@ -1534,7 +1534,7 @@ export default function GroupsPage(): React.ReactElement {
           </div>
           <p className="mb-3 text-xs text-ink-3">
             Los días de esta categoría no comparten la misma configuración, así que se
-            configuran por separado. Elija cuál editar.
+            configuran por separado. Elige cuál editar.
           </p>
           <ul className="overflow-hidden rounded-ctl border border-line">
             {card.groups.map((group) => {
@@ -1598,7 +1598,7 @@ export default function GroupsPage(): React.ReactElement {
           <div className="flex items-center gap-2">
             <UserPlus size={ICON.sm} strokeWidth={1.5} className="text-state-bad" aria-hidden="true" />
             <h3 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
-              Alumnos de {categoriaLabel(card.categoria)}
+              Jugadores de {categoriaLabel(card.categoria)}
             </h3>
           </div>
           <Button size="sm" onClick={closeExpanded}>
@@ -1611,12 +1611,12 @@ export default function GroupsPage(): React.ReactElement {
         <div className="mb-4 flex flex-col gap-3 rounded-card border border-line bg-sunken p-4 sm:flex-row sm:items-end">
           <div className="flex-1">
             <label htmlFor="alumno-select" className="mb-1 block text-xs font-semibold text-ink-2">
-              Agregar un alumno a esta categoría
+              Agregar un jugador a esta categoría
             </label>
             <StudentSearch
               id="alumno-select"
-              ariaLabel="Seleccionar alumno"
-              placeholder="Buscar alumno por nombre…"
+              ariaLabel="Seleccionar jugador"
+              placeholder="Buscar jugador por nombre…"
               role="ALUMNO"
               excludeIds={roster.alumnos.map((alumno) => alumno.personaId)}
                   showExcluded
@@ -1646,7 +1646,7 @@ export default function GroupsPage(): React.ReactElement {
         </div>
 
         {roster.loading ? (
-          <LoadingState label="Cargando alumnos…" />
+          <LoadingState label="Cargando jugadores…" />
         ) : roster.alumnos.length === 0 ? (
           /*
            * The hole this panel shipped with. The branch below was
@@ -1664,15 +1664,15 @@ export default function GroupsPage(): React.ReactElement {
             <EmptyState
               surface="inset"
               icon={<UserPlus size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-              title="Esta categoría todavía no tiene alumnos"
-              description="Elija un alumno en el selector de arriba y presione «Asignar» para inscribirlo en todos los días de la categoría."
+              title="Esta categoría todavía no tiene jugadores"
+              description="Elige un jugador en el selector de arriba y presiona «Asignar» para inscribirlo en todos los días de la categoría."
             />
           </div>
         ) : (
           roster.alumnos.length > 0 && (
             <div className="border-t border-line pt-4">
               <p className="mb-2 text-2xs font-semibold uppercase tracking-wider text-ink-3-strong">
-                Alumnos asignados ({roster.alumnos.length})
+                Jugadores asignados ({roster.alumnos.length})
               </p>
               <ul className="grid gap-2 lg:grid-cols-2 2xl:grid-cols-3">
                 {alumnosVisibles.map((a) => (
@@ -1708,7 +1708,8 @@ export default function GroupsPage(): React.ReactElement {
                   onPageChange={roster.setPage}
                   totalItems={roster.alumnos.length}
                   pageSize={ALUMNOS_PAGE_SIZE}
-                  itemNoun="alumno"
+                  itemNoun="jugador"
+                  itemNounPlural="jugadores"
                   variant="footer"
                 />
               )}
@@ -1741,7 +1742,7 @@ export default function GroupsPage(): React.ReactElement {
             <div>
               <dt className="font-semibold text-ink">Inscripción</dt>
               <dd>
-                «Agregar alumnos» inscribe al alumno en todos los días de la categoría a la vez, nunca solo en algunos.
+                «Agregar jugadores» inscribe al jugador en todos los días de la categoría a la vez, nunca solo en algunos.
               </dd>
             </div>
             <div>
@@ -1756,8 +1757,8 @@ export default function GroupsPage(): React.ReactElement {
 
         <InfoPanel title="Qué hacer después">
           <ul className="grid gap-2">
-            <li>Asigne a los alumnos sin grupo desde «Agregar alumnos» en la categoría que les corresponda.</li>
-            <li>Use «Editar» para cambiar la franja horaria o los días de una categoría.</li>
+            <li>Asigna a los jugadores sin grupo desde «Agregar jugadores» en la categoría que les corresponda.</li>
+            <li>Usa «Editar» para cambiar la franja horaria o los días de una categoría.</li>
           </ul>
         </InfoPanel>
 
@@ -1767,9 +1768,9 @@ export default function GroupsPage(): React.ReactElement {
         >
           <div id="sin-grupo" className="scroll-mt-24" />
           {summary.sinGrupo === null ? (
-            <p>Calculando alumnos sin horario…</p>
+            <p>Calculando jugadores sin horario…</p>
           ) : sinGrupoAlumnos.length === 0 ? (
-            <p>Todos los alumnos activos tienen un horario asignado.</p>
+            <p>Todos los jugadores activos tienen un horario asignado.</p>
           ) : (
             <>
               <ul className="grid gap-1" data-testid="sin-grupo-list">
@@ -1823,7 +1824,7 @@ export default function GroupsPage(): React.ReactElement {
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
         title="Grupos y horarios"
-        subtitle="Organice las categorías, sus horarios y los alumnos de cada una."
+        subtitle="Organiza las categorías, sus horarios y los jugadores de cada una."
         actions={
           // Disabled while `categorias` (part of `loadData`'s Promise.all,
           // same as `horarios`/`allStudents`) hasn't loaded yet — the create
@@ -1894,9 +1895,9 @@ export default function GroupsPage(): React.ReactElement {
             />
             <StatCard label="Horarios" value={horarios.length} hint="Sesiones por semana, sumando todos los días" />
             <StatCard
-              label="Alumnos en grupos"
+              label="Jugadores en grupos"
               value={summary.inscriptos ?? "—"}
-              hint={summary.inscriptos === null ? "Calculando…" : `De ${summary.activos} alumnos activos`}
+              hint={summary.inscriptos === null ? "Calculando…" : `De ${summary.activos} jugadores activos`}
             />
             {/* Attention card: the one figure that is a queue of work. */}
             <StatCard
@@ -2033,7 +2034,7 @@ export default function GroupsPage(): React.ReactElement {
                               className="rounded-ctl text-base font-semibold text-ink underline decoration-line-2 underline-offset-4 hover:decoration-ink max-md:inline-flex max-md:min-h-10 max-md:items-center"
                               onClick={() => openAlumnosTab(card)}
                               disabled={isDeleting}
-                              aria-label={`Ver alumnos de ${cardTitle(card)}`}
+                              aria-label={`Ver jugadores de ${cardTitle(card)}`}
                             >
                               {inscriptos} inscrito{inscriptos === 1 ? "" : "s"}
                             </button>
@@ -2049,10 +2050,10 @@ export default function GroupsPage(): React.ReactElement {
                           className="flex-1 md:flex-none"
                           onClick={() => openAlumnosTab(card, true)}
                           disabled={isDeleting}
-                          aria-label={`Agregar alumnos a ${cardTitle(card)}`}
+                          aria-label={`Agregar jugadores a ${cardTitle(card)}`}
                         >
                           <UserPlus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                          Agregar alumnos
+                          Agregar jugadores
                         </Button>
                         <Button
                           variant="secondary"
@@ -2153,7 +2154,7 @@ export default function GroupsPage(): React.ReactElement {
           <EmptyState
             icon={<Calendar size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
             title="No hay categorías configuradas"
-            description="Cree una categoría con sus días de entrenamiento para empezar a asignarle alumnos."
+            description="Crea una categoría con sus días de entrenamiento para empezar a asignarle jugadores."
             action={
               <Button variant="primary" onClick={openCreateForm}>
                 <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
@@ -2170,7 +2171,7 @@ export default function GroupsPage(): React.ReactElement {
 
         {pendingDeletions !== null && pendingDeletions.length > 0 && countUniqueAlumnos(pendingDeletions) > 0 && (
           <MoverAlumnosDialog
-            title="Categoría con alumnos inscritos"
+            title="Categoría con jugadores inscritos"
             message={pendingDeletionsMessage(pendingDeletions, pendingDeletionScope)}
             alumnos={uniqueAlumnos(pendingDeletions)}
             destinos={Object.entries(categorias)
@@ -2208,7 +2209,7 @@ export default function GroupsPage(): React.ReactElement {
         <ConfirmDialog
           open={pendingUnassign !== null}
           variant="danger"
-          title="Desasignar alumno"
+          title="Desasignar jugador"
           message={
             pendingUnassign
               ? `¿Desasignar a ${pendingUnassign.alumno.personaNombreCompleto} de ${categoriaLabel(

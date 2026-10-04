@@ -103,7 +103,7 @@ describe("SessionCard", () => {
     // The number that used to be here said nothing on its own.
     expect(screen.queryByText("25")).not.toBeInTheDocument();
     expect(screen.getByText("Lunes 15:00 — 16:00")).toBeInTheDocument();
-    expect(screen.getByText(/12 estudiantes inscritos/)).toBeInTheDocument();
+    expect(screen.getByText(/12 jugadores inscritos/)).toBeInTheDocument();
 
     const primary = screen.getByRole("link", { name: "Pasar lista de las 15:00" });
     expect(primary).toHaveAttribute("href", "/trainer/attendance?horario=7&paso=lista");
@@ -213,17 +213,17 @@ describe("SessionCard", () => {
       />,
     );
 
-    const rail = screen.getByRole("list", { name: "Sus sesiones de hoy" });
+    const rail = screen.getByRole("list", { name: "Tus sesiones de hoy" });
     expect(within(rail).getAllByRole("listitem")).toHaveLength(3);
 
     expect(
-      screen.getByRole("listitem", { name: "13:00 a 14:00, terminada, 4 estudiantes inscritos" }),
+      screen.getByRole("listitem", { name: "13:00 a 14:00, terminada, 4 jugadores inscritos" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("listitem", { name: "15:00 a 16:00, en curso, 12 estudiantes inscritos" }),
+      screen.getByRole("listitem", { name: "15:00 a 16:00, en curso, 12 jugadores inscritos" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("listitem", { name: "17:00 a 18:00, por venir, 3 estudiantes inscritos" }),
+      screen.getByRole("listitem", { name: "17:00 a 18:00, por venir, 3 jugadores inscritos" }),
     ).toBeInTheDocument();
   });
 
@@ -333,7 +333,7 @@ describe("SessionCard", () => {
     render(<SessionCard state={NEXT_AT_15} rail={null} enrolledCounts={{ 7: 12 }} />);
 
     expect(screen.getByText("15:00")).toBeInTheDocument();
-    expect(screen.queryByRole("list", { name: "Sus sesiones de hoy" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Tus sesiones de hoy" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Pasar lista de las 15:00" })).toBeInTheDocument();
   });
 
@@ -346,7 +346,7 @@ describe("SessionCard", () => {
       />,
     );
 
-    const rail = screen.getByRole("list", { name: "Sus sesiones de hoy" });
+    const rail = screen.getByRole("list", { name: "Tus sesiones de hoy" });
     // The rail is context, not a second CTA.
     expect(rail.querySelectorAll("a, button")).toHaveLength(0);
     // Exactly the two real actions carry a link — nothing per block.
@@ -377,7 +377,7 @@ describe("SessionCard", () => {
       />,
     );
 
-    const strip = screen.getByLabelText("Su día de hoy");
+    const strip = screen.getByLabelText("Tu día de hoy");
     expect(within(strip).getByText(/No quedan sesiones hoy/)).toBeInTheDocument();
     expect(within(strip).getByText(/Próxima: miércoles 15:00/)).toBeInTheDocument();
     // Compact: no coal band padding, and the button sits inline in the strip.

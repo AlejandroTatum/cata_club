@@ -76,7 +76,7 @@ function buildRecords(count: number): AttendanceRecord[] {
     horario: "Lunes 15:00",
     horarioId: 1,
     personaId: i + 1,
-    estudiante: `Estudiante ${i + 1}`,
+    estudiante: `Jugador ${i + 1}`,
     estado: "present" as const,
     correctable: true,
   }));
@@ -133,7 +133,7 @@ describe("AttendancePage — trainers' correction requests (QA4 ENT-25)", () => 
   it("mounts the admin inbox with the pending requests above the records", async () => {
     mockFetchCorrectionRequests.mockReset().mockResolvedValue([
       {
-        id: 1, asistenciaId: 901, personaId: 1, personaNombre: "Alumno Uno", horarioId: 12, fecha: "2026-07-21",
+        id: 1, asistenciaId: 901, personaId: 1, personaNombre: "Jugador Uno", horarioId: 12, fecha: "2026-07-21",
         horarioEtiqueta: "Juvenil · martes 18:00", estadoActual: "present", estadoSolicitado: "absent",
         motivo: "Debía figurar como ausente.", solicitadoPorId: 3, solicitadoPorNombre: "Coach Torres",
         solicitadoEn: "2026-07-21T20:00:00Z", estado: "PENDIENTE", resueltoPorNombre: null, resueltoEn: null,
@@ -144,7 +144,7 @@ describe("AttendancePage — trainers' correction requests (QA4 ENT-25)", () => 
 
     expect(await screen.findByText("Solicitudes de corrección")).toBeInTheDocument();
     expect(mockFetchCorrectionRequests).toHaveBeenCalledWith({ estado: "PENDIENTE" });
-    expect(screen.getByText("Alumno Uno")).toBeInTheDocument();
+    expect(screen.getByText("Jugador Uno")).toBeInTheDocument();
   });
 });
 
@@ -268,7 +268,7 @@ describe("AttendancePage — session history (same format as the trainer's)", ()
     expect(rows[0]).toHaveTextContent("01/07/2026");
     expect(rows[0]).toHaveTextContent("Lunes 15:00");
     expect(screen.getByRole("columnheader", { name: "Registró" })).toBeInTheDocument();
-    expect(screen.queryByText("Estudiante 1")).not.toBeInTheDocument();
+    expect(screen.queryByText("Jugador 1")).not.toBeInTheDocument();
   });
 
   it("draws the session's result as the shared composition bar", async () => {
@@ -367,11 +367,11 @@ describe("AttendancePage — per-record correction inside the session drill-down
     fireEvent.click(toggle);
 
     expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("Estudiante 1")).toBeInTheDocument();
+    expect(screen.getByText("Jugador 1")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Corregir" })).toHaveLength(5);
 
     fireEvent.click(toggle);
-    expect(screen.queryByText("Estudiante 1")).not.toBeInTheDocument();
+    expect(screen.queryByText("Jugador 1")).not.toBeInTheDocument();
   });
 
   it("shows a disabled Corregir with the reason stated once the 30-day window closed", async () => {
@@ -410,7 +410,7 @@ describe("AttendancePage — per-record correction inside the session drill-down
     const callsBeforeCorrection = mockFetchAttendanceRecords.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: "Corregir" }));
 
-    expect(await screen.findByText("Corregir asistencia de Estudiante 1")).toBeInTheDocument();
+    expect(await screen.findByText("Corregir asistencia de Jugador 1")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: "Ausente" }));
     fireEvent.change(screen.getByPlaceholderText("Por qué se corrige este registro"), {
       target: { value: "Se cargó mal el estado." },

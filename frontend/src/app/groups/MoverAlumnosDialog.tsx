@@ -77,7 +77,7 @@ function DestinoSelect({
       onChange={(event) => onChange(event.target.value)}
       className={FIELD_CONTROL}
     >
-      <option value="">Elija una categoría</option>
+      <option value="">Elige una categoría</option>
       {destinos.map((destino) => (
         <option key={destino.codigo} value={destino.codigo}>
           {destino.label}
@@ -136,7 +136,7 @@ export default function MoverAlumnosDialog({
       const resultado = await onMoveAll(destinoTodos);
       if (resultado?.noEliminada) setNoEliminada(resultado.noEliminada);
     } catch (err) {
-      setError(toUserMessage(err, "No se pudo pasar a los alumnos. No se cambió nada."));
+      setError(toUserMessage(err, "No se pudo pasar a los jugadores. No se cambió nada."));
     } finally {
       setOcupado(false);
     }
@@ -196,12 +196,12 @@ export default function MoverAlumnosDialog({
           </div>
         ) : restantes.length === 0 ? (
           <div className="flex flex-col gap-3">
-            <p className="text-sm text-ink">Ya no quedan alumnos aquí. Puede continuar.</p>
+            <p className="text-sm text-ink">Ya no quedan jugadores aquí. Puedes continuar.</p>
             <Button variant="primary" onClick={onConfirmEmpty}>{emptyConfirmLabel}</Button>
           </div>
         ) : sinDestinos ? (
           <p className="text-sm text-ink">
-            No hay otra categoría a la que pasar a los alumnos. Cree una primero.
+            No hay otra categoría a la que pasar a los jugadores. Crea una primero.
           </p>
         ) : (
           <>
@@ -227,7 +227,7 @@ export default function MoverAlumnosDialog({
             </section>
 
             <section className="flex flex-col gap-2">
-              <h3 className="text-sm font-semibold text-ink">O pase a cada alumno por separado</h3>
+              <h3 className="text-sm font-semibold text-ink">O pasa a cada jugador por separado</h3>
               <ul className="flex max-h-60 flex-col gap-2 overflow-y-auto">
                 {restantes.map((alumno) => {
                   const destino = destinoPorAlumno[alumno.personaId] ?? "";

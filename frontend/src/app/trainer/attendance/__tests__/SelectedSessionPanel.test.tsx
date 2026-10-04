@@ -21,7 +21,7 @@ describe("SelectedSessionPanel", () => {
   });
 
   it("shows the session, its status and a roster preview with overflow", () => {
-    const names = Array.from({ length: 10 }, (_, i) => `Alumno ${i + 1}`);
+    const names = Array.from({ length: 10 }, (_, i) => `Jugador ${i + 1}`);
     render(
       <SelectedSessionPanel
         schedule={schedule}
@@ -35,7 +35,7 @@ describe("SelectedSessionPanel", () => {
     expect(screen.getByText("Martes 18:00 — 20:00")).toBeInTheDocument();
     expect(screen.getByText("Competitivo")).toBeInTheDocument();
     expect(screen.getByText("Sin lista tomada hoy")).toBeInTheDocument();
-    expect(screen.getByText("10 alumnos en la lista")).toBeInTheDocument();
+    expect(screen.getByText("10 jugadores en la lista")).toBeInTheDocument();
     expect(screen.getByText("+2 más")).toBeInTheDocument();
   });
 

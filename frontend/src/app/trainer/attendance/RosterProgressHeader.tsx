@@ -43,7 +43,7 @@ export default function RosterProgressHeader({
         {unreviewedCount > 0 && (
           <span className="flex items-center gap-1.5 text-xs font-bold text-ball">
             <AlertTriangle size={ICON.sm} strokeWidth={2.5} aria-hidden="true" />
-            {unreviewedCount === 1 ? "1 alumno sin revisar" : `${unreviewedCount} alumnos sin revisar`}
+            {unreviewedCount === 1 ? "1 jugador sin revisar" : `${unreviewedCount} jugadores sin revisar`}
           </span>
         )}
       </span>

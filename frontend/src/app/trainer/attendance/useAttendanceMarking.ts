@@ -124,7 +124,7 @@ export function useAttendanceMarking({
       if (students[studentIndex] && isFiled(students[studentIndex])) return;
       commitStudents(
         students.map((s, i) => (i === studentIndex ? { ...s, attendance: state, reviewed: true } : s)),
-        `marcar a ${students[studentIndex]?.name ?? "un alumno"}`,
+        `marcar a ${students[studentIndex]?.name ?? "un jugador"}`,
       );
     },
     [commitStudents, students],
@@ -161,7 +161,7 @@ export function useAttendanceMarking({
         students.map((s, i) =>
           i === studentIndex ? { ...s, attendance: tapWizardAttendance(s), reviewed: true } : s,
         ),
-        `marcar a ${students[studentIndex]?.name ?? "un alumno"}`,
+        `marcar a ${students[studentIndex]?.name ?? "un jugador"}`,
       );
     },
     [commitStudents, students],
@@ -174,7 +174,7 @@ export function useAttendanceMarking({
     const depthBefore = undoStack.length;
     commitStudents(markRemainingPresent(students), "marcar restantes presentes");
     showSuccess(
-      affected === 1 ? "1 alumno marcado presente" : `${affected} alumnos marcados presentes`,
+      affected === 1 ? "1 jugador marcado presente" : `${affected} jugadores marcados presentes`,
       {
         description: "Quedaban sin revisar. Puede deshacerlo desde aquí.",
         action: {

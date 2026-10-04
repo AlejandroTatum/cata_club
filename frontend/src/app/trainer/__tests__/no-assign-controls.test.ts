@@ -30,7 +30,7 @@ describe("trainer screens never offer assign/unassign (QA4 ENT-N1)", () => {
     (_name, file) => {
       const source = readFileSync(file, "utf8");
       expect(source).not.toMatch(/asignarAlumnoAHorario|desasignarAlumnoDeHorario|assignStudent|unassignStudent|asignar-alumno/);
-      expect(source).not.toMatch(/>\s*(Asignar|Desasignar|Quitar) (alumno|de la categoría)/i);
+      expect(source).not.toMatch(/>\s*(Asignar|Desasignar|Quitar) (alumno|jugador|de la categoría)/i);
     },
   );
 });

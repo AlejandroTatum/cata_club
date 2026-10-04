@@ -122,7 +122,7 @@ export function minutesUntilStart(schedule: TrainingSchedule, now: Date = new Da
  */
 export function formatEnrolledCount(count: number | null): string | null {
   if (count === null) return null;
-  return count === 1 ? "1 estudiante inscrito" : `${count} estudiantes inscritos`;
+  return count === 1 ? "1 jugador inscrito" : `${count} jugadores inscritos`;
 }
 
 // ---------------------------------------------------------------------------

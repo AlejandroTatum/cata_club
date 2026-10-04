@@ -158,7 +158,7 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
 
-    expect(await screen.findByText("Seleccione el horario de entrenamiento:")).toBeInTheDocument();
+    expect(await screen.findByText("Selecciona el horario de entrenamiento:")).toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
@@ -168,7 +168,7 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/student"));
-    expect(screen.queryByText("Seleccione el horario de entrenamiento:")).not.toBeInTheDocument();
+    expect(screen.queryByText("Selecciona el horario de entrenamiento:")).not.toBeInTheDocument();
   });
 
   it("lets a trainer directly select each visibly labeled attendance state", async () => {
@@ -255,7 +255,7 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     expect(screen.queryByText(/Nivel \d/)).not.toBeInTheDocument();
   });
 
-  it("shows an explanatory empty state and blocks final submit when the horario has no assigned alumnos", async () => {
+  it("shows an explanatory empty state and blocks final submit when the horario has no assigned jugadores", async () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
     mockFetchTrainingSchedules.mockResolvedValue([
       { id: 12, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres" },
@@ -267,7 +267,7 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     fireEvent.click(await screen.findByRole("button", { name: /18:00/i }));
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
 
-    expect(await screen.findByText("Este horario no tiene alumnos asignados.")).toBeInTheDocument();
+    expect(await screen.findByText("Este horario no tiene jugadores asignados.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
   });
 
@@ -437,7 +437,7 @@ describe("TrainerAttendancePage — schedule accordion grouped by day (Slice A)"
   // the existing bulk action (K5's `markRemainingPresent`, unchanged by this
   // cluster) reviews the whole roster regardless of how many render on
   // screen — the fix is that all 15 are now ON screen to begin with.
-  it("marks 15 alumnos as reviewed-present in a single interaction, honestly", async () => {
+  it("marks 15 jugadores as reviewed-present in a single interaction, honestly", async () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
     mockFetchTrainingSchedules.mockResolvedValue([
       { id: 12, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres" },
@@ -612,7 +612,7 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     await openRoster();
 
     await screen.findByText("Student 01");
-    fireEvent.change(screen.getByRole("textbox", { name: "Filtrar alumnos" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Filtrar jugadores" }), {
       target: { value: "Student 01" },
     });
     expect(screen.queryByText("Student 11")).not.toBeInTheDocument();
@@ -620,7 +620,7 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     // the filter hides is exactly the one about to be filed present sight
     // unseen.
     expect(screen.getByText("25 sin revisar")).toBeInTheDocument();
-    expect(screen.getByText("25 alumnos sin revisar")).toBeInTheDocument();
+    expect(screen.getByText("25 jugadores sin revisar")).toBeInTheDocument();
   });
 
   it("carries the unreviewed count into the confirmation summary when only some students were reviewed", async () => {
@@ -649,7 +649,7 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     expect(await screen.findByText("25 presentes")).toBeInTheDocument();
     expect(screen.getByText("15 sin revisar")).toBeInTheDocument();
     expect(
-      screen.getByText(/15 de 25 alumnos siguen en "Presente" porque nadie los revisó/),
+      screen.getByText(/15 de 25 jugadores siguen en "Presente" porque nadie los revisó/),
     ).toBeInTheDocument();
   });
 
@@ -665,7 +665,7 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     const next = screen.getByRole("button", { name: /Revisar y confirmar/ });
     expect(next).toBeEnabled();
     expect(next).not.toHaveAttribute("aria-describedby");
-    expect(screen.getByText("3 alumnos sin revisar")).toBeInTheDocument();
+    expect(screen.getByText("3 jugadores sin revisar")).toBeInTheDocument();
   });
 
   it("stops flagging a student the moment the trainer decides on them", async () => {
@@ -731,13 +731,13 @@ describe("TrainerAttendancePage — the present default never passes for a revie
     await openRoster();
     await screen.findByText("Student 01");
 
-    fireEvent.change(screen.getByLabelText("Filtrar alumnos"), { target: { value: "zzz" } });
-    expect(await screen.findByText("No se encontraron alumnos con ese nombre.")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Filtrar jugadores"), { target: { value: "zzz" } });
+    expect(await screen.findByText("No se encontraron jugadores con ese nombre.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Borrar el filtro" }));
 
     expect(await screen.findByText("Student 01")).toBeInTheDocument();
-    expect(screen.getByLabelText("Filtrar alumnos")).toHaveValue("");
+    expect(screen.getByLabelText("Filtrar jugadores")).toHaveValue("");
   });
 
   it("marks every remaining student present across all pages via the bulk action", async () => {
@@ -1182,7 +1182,7 @@ describe("TrainerAttendancePage — live marker and sticky commit bar", () => {
     // It reads 0/12 from the first second — nobody has been reviewed yet.
     const marker = screen.getByText("0", { selector: "[aria-live]" });
     expect(marker).toHaveTextContent("0/12");
-    expect(screen.getByText("12 alumnos sin revisar")).toBeInTheDocument();
+    expect(screen.getByText("12 jugadores sin revisar")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
 
@@ -1498,7 +1498,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
   // ENT-03 (supersedes the #485 decision): a student enrolled AFTER the other
   // students were recorded has no row, so the list is NOT closed — it is partial,
   // editable only for that student, who is NOT pre-filled as "Presente".
-  it("trata como parcial —no cerrada— una lista a la que le falta un alumno (ENT-03)", async () => {
+  it("trata como parcial —no cerrada— una lista a la que le falta un jugador (ENT-03)", async () => {
     mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
     mockFetchAlumnosPorHorario.mockResolvedValue([
       ...buildAlumnoHorarios(3),
@@ -1530,7 +1530,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     expect(screen.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
   });
 
-  it("al completar una lista parcial envía solo al alumno que falta (ENT-03/ENT-04)", async () => {
+  it("al completar una lista parcial envía solo al jugador que falta (ENT-03/ENT-04)", async () => {
     mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
     mockFetchAlumnosPorHorario.mockResolvedValue([
       ...buildAlumnoHorarios(3),
@@ -1677,19 +1677,19 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     await openRoster();
     await screen.findByText("Student 01");
     fireEvent.click(screen.getByRole("button", { name: "Marcar todos presentes" }));
-    expect(await screen.findByText("3 alumnos marcados presentes")).toBeInTheDocument();
+    expect(await screen.findByText("3 jugadores marcados presentes")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
     expect(await screen.findByText("Asistencia registrada")).toBeInTheDocument();
-    expect(screen.queryByText("3 alumnos marcados presentes")).not.toBeInTheDocument();
+    expect(screen.queryByText("3 jugadores marcados presentes")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Deshacer" })).not.toBeInTheDocument();
   });
 
   // ENT-06: the message follows the KIND of failure.
   it.each([
     [403, /no tiene permiso/i],
-    [409, /Actualice la página/],
+    [409, /Actualiza la página/],
     [503, /servidor tuvo un problema/],
   ])("muestra un mensaje distinto para un error %i del guardado (ENT-06)", async (status, expected) => {
     mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
@@ -1742,7 +1742,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     // would match either node — this test is about the TOAST specifically,
     // the one that is allowed to disappear on its own clock.
     const networkCutToast = await screen.findByText(
-      "No hay conexión con el servidor. Sus marcas siguen guardadas en este equipo; revise su conexión e intente de nuevo.",
+      "No hay conexión con el servidor. Tus marcas siguen guardadas en este equipo; revisa tu conexión e intenta de nuevo.",
       { selector: ".toast-error p" },
     );
     expect(networkCutToast).toBeInTheDocument();
@@ -1755,7 +1755,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
       vi.advanceTimersByTime(15_000);
     });
     expect(
-      screen.queryByText("No hay conexión con el servidor. Sus marcas siguen guardadas en este equipo; revise su conexión e intente de nuevo.", {
+      screen.queryByText("No hay conexión con el servidor. Tus marcas siguen guardadas en este equipo; revisa tu conexión e intenta de nuevo.", {
         selector: ".toast-error p",
       }),
     ).not.toBeInTheDocument();
@@ -1773,7 +1773,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
 
     const timeoutToast = await screen.findByText(
-      "No hay conexión con el servidor. Sus marcas siguen guardadas en este equipo; revise su conexión e intente de nuevo.",
+      "No hay conexión con el servidor. Tus marcas siguen guardadas en este equipo; revisa tu conexión e intenta de nuevo.",
       { selector: ".toast-error p" },
     );
     expect(timeoutToast).toBeInTheDocument();
@@ -1810,7 +1810,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
 
     // The persistent, inline copy — distinct from the toast's own `<p>`, and
     // the one this test is actually about.
-    await screen.findByText("No hay conexión con el servidor. Sus marcas siguen guardadas en este equipo; revise su conexión e intente de nuevo.", {
+    await screen.findByText("No hay conexión con el servidor. Tus marcas siguen guardadas en este equipo; revisa tu conexión e intenta de nuevo.", {
       selector: ".alert-error",
     });
 
@@ -1821,7 +1821,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     });
 
     expect(
-      screen.getByText("No hay conexión con el servidor. Sus marcas siguen guardadas en este equipo; revise su conexión e intente de nuevo.", {
+      screen.getByText("No hay conexión con el servidor. Tus marcas siguen guardadas en este equipo; revisa tu conexión e intenta de nuevo.", {
         selector: ".alert-error",
       }),
     ).toBeInTheDocument();
@@ -2309,7 +2309,7 @@ describe("TrainerAttendancePage — refreshes the week-taken guard after a reset
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Registrar otra asistencia" }));
-    await screen.findByText("Elija el horario");
+    await screen.findByText("Elige el horario");
 
     await waitFor(() =>
       expect(mockFetchAttendanceRecords.mock.calls.length).toBeGreaterThan(callsBeforeReset),
@@ -2340,7 +2340,7 @@ describe("TrainerAttendancePage — refreshes the week-taken guard after a reset
     const callsBeforeBack = mockFetchAttendanceRecords.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: /Atrás/ }));
 
-    expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
+    expect(await screen.findByText("Elige el horario")).toBeInTheDocument();
     const scheduleButton = await screen.findByRole("button", { name: /18:00/i });
     // No session was ever filed — the card stays exactly as it was on mount.
     expect(scheduleButton).toBeEnabled();
@@ -2401,7 +2401,7 @@ describe("TrainerAttendancePage — partial failures name the students", () => {
   it("still names an id it cannot match rather than dropping it silently", async () => {
     await fileSessionWithFailures([{ personaId: 999, message: "conflict" }]);
 
-    expect(within(screen.getByRole("alert")).getByText("Alumno #999")).toBeInTheDocument();
+    expect(within(screen.getByRole("alert")).getByText("Jugador #999")).toBeInTheDocument();
   });
 
   it("shows no failure block at all when everything saved", async () => {
@@ -2443,7 +2443,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await fileSession();
 
-    const list = screen.getByRole("list", { name: "Asistencia por alumno" });
+    const list = screen.getByRole("list", { name: "Asistencia por jugador" });
     const rows = within(list).getAllByRole("listitem");
     expect(rows).toHaveLength(3);
     expect(within(rows[0]).getByText("Student 01")).toBeInTheDocument();
@@ -2475,7 +2475,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
 
-    const list = screen.getByRole("list", { name: "Asistencia por alumno" });
+    const list = screen.getByRole("list", { name: "Asistencia por jugador" });
     expect(within(list).getAllByRole("listitem")).toHaveLength(2);
     expect(within(list).queryByText("Student 02")).not.toBeInTheDocument();
     const tiles = screen.getByRole("list", { name: "Conteo por estado" });
@@ -2544,7 +2544,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Registrar otra asistencia" }));
 
-    expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
+    expect(await screen.findByText("Elige el horario")).toBeInTheDocument();
   });
 
   // Decision 2: the primary action displaces to the retry — it is the only
@@ -2909,7 +2909,7 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
 
     // Step 2, not /trainer and not "Elija el horario".
     expect(screen.getByRole("button", { name: /Revisar y confirmar/ })).toBeInTheDocument();
-    expect(screen.queryByText("Elija el horario")).not.toBeInTheDocument();
+    expect(screen.queryByText("Elige el horario")).not.toBeInTheDocument();
     expect(window.location.search).toBe("?horario=12&paso=lista");
     expect(
       within(screen.getByRole("radiogroup", { name: /Student 01/ })).getByRole("radio", {
@@ -2929,7 +2929,7 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
     expect(screen.getByRole("button", { name: /Revisar y confirmar/ })).toBeInTheDocument();
 
     await pressBrowserBack();
-    expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
+    expect(await screen.findByText("Elige el horario")).toBeInTheDocument();
     expect(window.location.search).toBe("");
   });
 
@@ -2944,10 +2944,10 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
     expect(screen.getByRole("button", { name: /Revisar y confirmar/ })).toBeInTheDocument();
 
     await pressBrowserBack();
-    expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
+    expect(await screen.findByText("Elige el horario")).toBeInTheDocument();
   });
 
-  it("resumes the roll call on a reload instead of restarting at Elija el horario", async () => {
+  it("resumes the roll call on a reload instead of restarting at Elige el horario", async () => {
     const first = render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
     await screen.findByText("Student 01");
@@ -3016,7 +3016,7 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
 
-    expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
+    expect(await screen.findByText("Elige el horario")).toBeInTheDocument();
     await waitFor(() => expect(window.location.search).toBe(""));
     expect(mockFetchAlumnosPorHorario).not.toHaveBeenCalled();
   });
@@ -3065,7 +3065,7 @@ describe("TrainerAttendancePage — leaving asks first", () => {
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("¿Salir sin registrar la asistencia?")).toBeInTheDocument();
-    expect(within(dialog).getByText(/Marcó 1 de 3 alumnos/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Marcaste 1 de 3 jugadores/)).toBeInTheDocument();
     // Nothing has navigated yet.
     expect(mockPush).not.toHaveBeenCalled();
 
@@ -3230,9 +3230,9 @@ describe("TrainerAttendancePage — the picker offers an unfinished list back", 
 
     // Still the picker — a trainer who came to file a DIFFERENT session must
     // not land inside the old one.
-    expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
+    expect(await screen.findByText("Elige el horario")).toBeInTheDocument();
     expect(screen.getByText("Tiene una lista sin terminar")).toBeInTheDocument();
-    expect(screen.getByText(/1 alumno marcado/)).toBeInTheDocument();
+    expect(screen.getByText(/1 jugador marcado/)).toBeInTheDocument();
     expect(screen.getByText("Martes 18:00 — 19:00")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Retomar la lista/ }));
@@ -3275,7 +3275,7 @@ describe("TrainerAttendancePage — the picker offers an unfinished list back", 
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
 
-    expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
+    expect(await screen.findByText("Elige el horario")).toBeInTheDocument();
     expect(screen.queryByText(/lista sin terminar/)).not.toBeInTheDocument();
   });
 });
@@ -3508,7 +3508,7 @@ describe("TrainerAttendancePage — a corrected session keeps its own date", () 
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
 
-    expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
+    expect(await screen.findByText("Elige el horario")).toBeInTheDocument();
     expect(mockFetchAlumnosPorHorario).not.toHaveBeenCalled();
   });
 
@@ -3815,11 +3815,11 @@ describe("TrainerAttendancePage — pedir corrección a administración (QA4 ENT
     expect(mockFetchCorrectionRequests).toHaveBeenCalledTimes(1);
   });
 
-  it("explica en la nota de lista cerrada cómo pedir la corrección, en «usted»", async () => {
+  it("explica en la nota de lista cerrada cómo pedir la corrección, en «tú»", async () => {
     mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
     await openClosedList(filedRecords());
 
-    expect(screen.getByText(/pida la corrección a administración desde el alumno/)).toBeInTheDocument();
+    expect(screen.getByText(/pide la corrección a administración desde el jugador/)).toBeInTheDocument();
     expect(screen.queryByText(/consulte con administración/)).not.toBeInTheDocument();
   });
 
@@ -3831,7 +3831,7 @@ describe("TrainerAttendancePage — pedir corrección a administración (QA4 ENT
     expect(screen.getAllByText("La ventana de corrección de 30 días ya cerró para esta sesión.")).toHaveLength(3);
   });
 
-  it("pide la sesión de esta lista y manda alumno, estado y motivo", async () => {
+  it("pide la sesión de esta lista y manda jugador, estado y motivo", async () => {
     mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
     await openClosedList(filedRecords());
     mockCreateCorrectionRequest.mockResolvedValue(request());

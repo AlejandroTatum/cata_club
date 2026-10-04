@@ -237,7 +237,7 @@ export function resolveFailedStudentNames(
   students: SessionStudent[],
 ): string[] {
   const nameById = new Map(students.map((s) => [s.id, s.name]));
-  return failed.map((f) => nameById.get(String(f.personaId)) ?? `Alumno #${f.personaId}`);
+  return failed.map((f) => nameById.get(String(f.personaId)) ?? `Jugador #${f.personaId}`);
 }
 
 const WEEKDAY_SHORT_ES = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
@@ -278,19 +278,19 @@ export function describeAttendanceSaveError(error: unknown): string {
       ? Number((error as { status: unknown }).status)
       : NaN;
   if (status === 401 || status === 403) {
-    return "Su sesión no tiene permiso para registrar esta lista. Vuelva a iniciar sesión e intente nuevamente.";
+    return "Tu sesión no tiene permiso para registrar esta lista. Vuelve a iniciar sesión e intenta nuevamente.";
   }
   if (status >= 400 && status < 500) {
     // ENT-02: the backend's own reason ("solo se puede registrar … los últimos
     // 30 días") beats the generic text, but only when it marked it safe to show.
     const { message, safe } = error as { message?: unknown; safe?: unknown };
     if (safe === true && typeof message === "string" && message.trim()) return message;
-    return "La lista no se pudo registrar porque ya no coincide con lo que hay en el sistema. Actualice la página y revise los datos.";
+    return "La lista no se pudo registrar porque ya no coincide con lo que hay en el sistema. Actualiza la página y revisa los datos.";
   }
   if (status >= 500) {
-    return "El servidor tuvo un problema al guardar la lista. Sus marcas siguen aquí; intente de nuevo en unos minutos.";
+    return "El servidor tuvo un problema al guardar la lista. Tus marcas siguen aquí; intenta de nuevo en unos minutos.";
   }
-  return "No hay conexión con el servidor. Sus marcas siguen guardadas en este equipo; revise su conexión e intente de nuevo.";
+  return "No hay conexión con el servidor. Tus marcas siguen guardadas en este equipo; revisa tu conexión e intenta de nuevo.";
 }
 
 /**

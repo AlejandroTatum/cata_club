@@ -20,7 +20,7 @@ import { UNMARKED, type SessionStudent } from "../attendance-utils";
 const ALL_STATE_NAMES = ["Presente", "Ausente", "Tardanza", "Enfermo", "Competencia"];
 
 function buildStudent(overrides: Partial<SessionStudent> = {}): SessionStudent {
-  return { id: "alumno-1", name: "Ana López", attendance: UNMARKED, ...overrides };
+  return { id: "jugador-1", name: "Ana López", attendance: UNMARKED, ...overrides };
 }
 
 interface RenderRowOptions {

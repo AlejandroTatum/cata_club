@@ -121,7 +121,7 @@ export function useAttendanceRoster(): AttendanceRoster {
       } catch (err) {
         console.error("[trainer/attendance] fetchAlumnosPorHorario failed", err);
         setRosterError(
-          "No se pudo cargar el listado de estudiantes de este horario. Revise su conexión e intente nuevamente.",
+          "No se pudo cargar el listado de jugadores de este horario. Revisa tu conexión e intenta nuevamente.",
         );
         return false;
       } finally {

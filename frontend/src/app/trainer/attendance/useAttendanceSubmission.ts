@@ -137,7 +137,7 @@ export function useAttendanceSubmission({
         if (reloaded) {
           rosterStale.current = false;
         } else {
-          setSubmitError("No se pudo actualizar la lista. Revise su conexión e intente nuevamente.");
+          setSubmitError("No se pudo actualizar la lista. Revisa tu conexión e intenta nuevamente.");
         }
         return;
       }
@@ -186,8 +186,8 @@ export function useAttendanceSubmission({
   const retryButtonLabel = (() => {
     if (rosterLoading) return "Reintentando…";
     const failedCount = result?.failed.length ?? 0;
-    if (failedCount === 1) return "Reintentar con ese alumno";
-    return `Reintentar con esos ${failedCount} alumnos`;
+    if (failedCount === 1) return "Reintentar con ese jugador";
+    return `Reintentar con esos ${failedCount} jugadores`;
   })();
 
   const resetSubmission = useCallback((): void => {

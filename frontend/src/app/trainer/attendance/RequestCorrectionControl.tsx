@@ -86,7 +86,7 @@ export default function RequestCorrectionControl({
       return;
     }
     if (estado === current) {
-      setError("Elija un estado distinto del que figura hoy.");
+      setError("Elige un estado distinto del que figura hoy.");
       return;
     }
     setSubmitting(true);

@@ -61,7 +61,7 @@ export default function SponsorsPage(): React.ReactElement {
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    if (!nombre.trim() || !archivo) { setError("Escriba el nombre y seleccione un logo."); return; }
+    if (!nombre.trim() || !archivo) { setError("Escribe el nombre y selecciona un logo."); return; }
     const nombreLimpio = nombre.trim();
     setSaving(true); setError(null);
     try {
@@ -70,7 +70,7 @@ export default function SponsorsPage(): React.ReactElement {
       showSuccess(`Logo de ${nombreLimpio} subido.`);
       await load();
     }
-    catch (error: unknown) { setError(uploadErrorMessage(error, "No se pudo subir el logo. Intente de nuevo.")); }
+    catch (error: unknown) { setError(uploadErrorMessage(error, "No se pudo subir el logo. Intenta de nuevo.")); }
     finally { setSaving(false); }
   }
 
@@ -87,7 +87,7 @@ export default function SponsorsPage(): React.ReactElement {
 
   return <ProtectedRoute allowedRoles={["admin"]}><AppShell
     title="Patrocinadores"
-    subtitle="Suba el logo y el nombre que se leerá como texto alternativo en la landing."
+    subtitle="Sube el logo y el nombre que se leerá como texto alternativo en la landing."
   >
     <>
       <div className={`${PAGE_RAIL} ${vacio ? "lg:flex-1" : ""}`}>

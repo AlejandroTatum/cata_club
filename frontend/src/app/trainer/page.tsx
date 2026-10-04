@@ -141,7 +141,7 @@ export default function TrainerPage(): React.ReactElement {
       setRecords(recordData);
     } catch (err) {
       console.error("[trainer] loadData failed", err);
-      setError("No se pudo cargar su día. Intente nuevamente.");
+      setError("No se pudo cargar tu día. Intenta nuevamente.");
     } finally {
       setLoading(false);
     }
@@ -318,7 +318,7 @@ export default function TrainerPage(): React.ReactElement {
        * hero, named by the session's own hour.
        */}
       <AppShell title={`Hola, ${firstNameOf(session?.user?.name)}`} subtitle={buildContextLine("Entrenador")}>
-        {loading && <LoadingState label="Cargando su día…" />}
+        {loading && <LoadingState label="Cargando tu día…" />}
 
         {error && !loading && <ErrorState message={error} onRetry={() => loadData()} />}
 
@@ -339,7 +339,7 @@ export default function TrainerPage(): React.ReactElement {
                 <div className="flex min-w-0 flex-1 basis-72 flex-col gap-0.5">
                   <b className="text-sm font-bold text-ink">Hoy no hay entrenamientos</b>
                   <span className="text-sm text-ink-2">
-                    {`El club no tiene sesiones programadas para hoy, ${formatDay(todayDiaSemana()).toLowerCase()}. Puede pasar la lista de otro día si quedó pendiente.`}
+                    {`El club no tiene sesiones programadas para hoy, ${formatDay(todayDiaSemana()).toLowerCase()}. Puedes pasar la lista de otro día si quedó pendiente.`}
                   </span>
                 </div>
                 <Link href="/trainer/attendance" className={buttonClasses("secondary")}>
@@ -393,7 +393,7 @@ export default function TrainerPage(): React.ReactElement {
                   )}
                 </DashboardSection>
 
-                <DashboardSection title="Alumnos a seguir" testId="students-to-follow">
+                <DashboardSection title="Jugadores a seguir" testId="students-to-follow">
                   {studentsToFollow.length > 0 ? (
                     <ul className="m-0 grid list-none p-0 sm:grid-cols-2 lg:grid-cols-3">
                       {studentsToFollow.map((student) => {
@@ -432,10 +432,10 @@ export default function TrainerPage(): React.ReactElement {
                 <section className="card flex flex-col gap-4 p-[18px]">
                   <SessionsWithoutList missing={missingSessions} coverageKnown={conteos !== null} />
                 </section>
-                <InfoPanel title="Cómo funciona su día">
+                <InfoPanel title="Cómo funciona tu día">
                   <p>El botón principal abre la lista de la próxima sesión; la línea de «Hoy» muestra el estado de cada una.</p>
-                  <p>«Sesiones sin lista» reúne las del mes que nadie registró: use «Pasar lista» para completarlas.</p>
-                  <p>«Alumnos a seguir» marca a quienes faltaron dos veces o más este mes.</p>
+                  <p>«Sesiones sin lista» reúne las del mes que nadie registró: usa «Pasar lista» para completarlas.</p>
+                  <p>«Jugadores a seguir» marca a quienes faltaron dos veces o más este mes.</p>
                 </InfoPanel>
               </div>
             </div>

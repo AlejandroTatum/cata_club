@@ -97,8 +97,8 @@ export default function AttendanceCommitBar({
       {step === "select-session" && (
         <p className="min-w-[200px] flex-1 text-xs text-ink-3 lg:order-1 lg:min-w-0 lg:text-sm">
           {selectedScheduleId === null
-            ? "Elija un horario de la lista para ver a sus alumnos y marcar la asistencia de cada uno."
-            : "Horario elegido: siga para ver a sus alumnos y marcar la asistencia de cada uno."}
+            ? "Elige un horario de la lista para ver a sus jugadores y marcar la asistencia de cada uno."
+            : "Horario elegido: sigue para ver a sus jugadores y marcar la asistencia de cada uno."}
         </p>
       )}
 
@@ -112,7 +112,7 @@ export default function AttendanceCommitBar({
             an invariant still has to say why. */}
         {unmarkedCount > 0 && (
           <p id={UNMARKED_REASON_ID} role="status" className="text-xs font-semibold text-ink-2">
-            {unmarkedCount === 1 ? "Falta 1 alumno por marcar" : `Faltan ${unmarkedCount} alumnos por marcar`}
+            {unmarkedCount === 1 ? "Falta 1 jugador por marcar" : `Faltan ${unmarkedCount} jugadores por marcar`}
           </p>
         )}
         {/*

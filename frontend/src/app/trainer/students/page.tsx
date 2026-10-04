@@ -268,14 +268,14 @@ export default function TrainerStudentsPage(): React.ReactElement {
   if (nomina.length === 0) {
     estadoVacio = {
       icon: <BookUser size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />,
-      title: "Todavía no hay alumnos inscritos",
-      description: "Cuando la administración asigne alumnos a un horario, van a aparecer aquí.",
+      title: "Todavía no hay jugadores inscritos",
+      description: "Cuando la administración asigne jugadores a un horario, van a aparecer aquí.",
     };
   } else if (encontrados.length === 0) {
     estadoVacio = {
       icon: <SearchX size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />,
-      title: "Ningún alumno coincide con la búsqueda",
-      description: `No hay nadie en el padrón que se llame «${busqueda.trim()}». Pruebe con el apellido o con menos letras.`,
+      title: "Ningún jugador coincide con la búsqueda",
+      description: `No hay nadie en el padrón que se llame «${busqueda.trim()}». Prueba con el apellido o con menos letras.`,
     };
   }
 
@@ -311,8 +311,8 @@ export default function TrainerStudentsPage(): React.ReactElement {
   return (
     <ProtectedRoute allowedRoles={["trainer"]}>
       <AppShell
-        title="Alumnos del club"
-        subtitle="El padrón completo, con la ficha de emergencia de cada chico a un toque."
+        title="Jugadores del club"
+        subtitle="El padrón completo, con la ficha de emergencia de cada chico a un toca."
         back={<BackLink href="/trainer" />}
       >
         {/*
@@ -328,7 +328,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
             <SearchInput
               value={busqueda}
               onChange={buscar}
-              label="Buscar un alumno por nombre"
+              label="Buscar un jugador por nombre"
               placeholder="Buscar por nombre"
             />
           }
@@ -366,7 +366,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
             !cargando && !fallo ? (
               <p className="text-sm text-ink-2 lg:ml-auto" aria-live="polite">
                 <b className="font-bold tabular-nums text-ink">{encontrados.length}</b>{" "}
-                {encontrados.length === 1 ? "alumno" : "alumnos"}
+                {encontrados.length === 1 ? "jugador" : "jugadores"}
                 {encontrados.length !== nomina.length ? ` de ${nomina.length}` : ""}
               </p>
             ) : undefined
@@ -380,7 +380,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
             title="No se pudo cargar el padrón"
             // El mensaje del fetch no se muestra: "Failed to fetch" no le dice
             // nada a nadie parado al borde de una cancha.
-            message="Revise su conexión e intente nuevamente."
+            message="Revisa tu conexión e intenta nuevamente."
             onRetry={() => void cargarPadron()}
           />
         )}
@@ -417,7 +417,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
                     tableHead={
                       <TableRow>
                         {/* El número de renglón se retiró: ya no numera. */}
-                        <TableHeaderCell>Estudiante</TableHeaderCell>
+                        <TableHeaderCell>Jugador</TableHeaderCell>
                         {/* Sigue en el árbol de accesibilidad porque un
                               `<th>` sin nombre es una columna que un lector
                               de pantalla anuncia en blanco; un encabezado
@@ -524,7 +524,8 @@ export default function TrainerStudentsPage(): React.ReactElement {
                         onPageChange={cambiarPagina}
                         totalItems={encontrados.length}
                         pageSize={PAGE_SIZE}
-                        itemNoun="alumno"
+                        itemNoun="jugador"
+                        itemNounPlural="jugadores"
                         variant="footer"
                       />
                     }
@@ -533,8 +534,8 @@ export default function TrainerStudentsPage(): React.ReactElement {
               )}
             </div>
             {esEscritorio && !estadoVacio && grupos.length > 0 && (
-              <section aria-label="Alumnos por categoría" data-testid="students-by-group" className="card flex flex-col gap-2 p-[18px]">
-                <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Alumnos por categoría</h2>
+              <section aria-label="Jugadores por categoría" data-testid="students-by-group" className="card flex flex-col gap-2 p-[18px]">
+                <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Jugadores por categoría</h2>
                 <ul className="m-0 flex list-none flex-col p-0">
                   {grupos.map(({ valor: codigo, etiqueta, cuenta }) => (
                     <li key={codigo} className="border-b border-line last:border-b-0">
@@ -547,7 +548,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
                       >
                         <span className="font-semibold text-ink">Categoría {etiqueta}</span>
                         <span className="text-ink-2">
-                          <b className="font-bold tabular-nums text-ink">{cuenta}</b> {cuenta === 1 ? "alumno" : "alumnos"}
+                          <b className="font-bold tabular-nums text-ink">{cuenta}</b> {cuenta === 1 ? "jugador" : "jugadores"}
                         </span>
                       </button>
                     </li>
@@ -560,9 +561,9 @@ export default function TrainerStudentsPage(): React.ReactElement {
               <div className="flex min-w-0 flex-col gap-page">
                 <StudentFichaPanel student={seleccionado} />
                 <InfoPanel title="Cómo usar la nómina">
-                  <p>Busque por nombre o filtre por categoría; un alumno en varios horarios aparece una sola vez.</p>
-                  <p>Toque el botón «Ficha médica» de un renglón para ver sus datos médicos y a quién llamar en una emergencia.</p>
-                  <p>«Horario» muestra los días y horas en que entrena cada alumno.</p>
+                  <p>Busca por nombre o filtra por categoría; un jugador en varios horarios aparece una sola vez.</p>
+                  <p>Toca el botón «Ficha médica» de un renglón para ver sus datos médicos y a quién llamar en una emergencia.</p>
+                  <p>«Horario» muestra los días y horas en que entrena cada jugador.</p>
                 </InfoPanel>
               </div>
             )}

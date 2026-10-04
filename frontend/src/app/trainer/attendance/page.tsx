@@ -116,7 +116,7 @@ import AttendanceLeaveDialog from "./AttendanceLeaveDialog";
 
 /** The card heading per step. */
 const STEP_LABELS: Record<WizardStep, string> = {
-  "select-session": "Elija el horario",
+  "select-session": "Elige el horario",
   "mark-attendance": "Pasar lista",
   confirm: "Confirmar y finalizar",
 };

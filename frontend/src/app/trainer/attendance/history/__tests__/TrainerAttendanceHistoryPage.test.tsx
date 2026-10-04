@@ -174,7 +174,7 @@ describe("TrainerAttendanceHistoryPage", () => {
     // 11 distinct sessions (one record each, all different dates) force a
     // second page at PAGE_SIZE=10, which is what renders the range readout.
     const manySessions: AttendanceRecord[] = Array.from({ length: 11 }, (_, i) =>
-      record("present", `Alumno ${i}`, `2026-07-${String(i + 1).padStart(2, "0")}`),
+      record("present", `Jugador ${i}`, `2026-07-${String(i + 1).padStart(2, "0")}`),
     );
     mockFetchAttendanceRecords.mockResolvedValue(manySessions);
 
@@ -471,7 +471,7 @@ describe("TrainerAttendanceHistoryPage", () => {
     });
   });
 
-  it("narrows to one student through the alumno search", async () => {
+  it("narrows to one student through the jugador search", async () => {
     mockSearchStudents.mockResolvedValue([{ id: 42, nombres: "Ana", apellidos: "García" }]);
     render(<TrainerAttendanceHistoryPage />);
     await screen.findAllByRole("row");
@@ -612,7 +612,7 @@ describe("TrainerAttendanceHistoryPage — el conteo de una sesión sale de su p
   const CLOSED_WEDNESDAY_SESSION: AttendanceRecord[] = Array.from({ length: 15 }, (_, i) =>
     record(
       "present",
-      `Alumno ${i + 1}`,
+      `Jugador ${i + 1}`,
       WEDNESDAY_SESSION_DATE,
       "Miércoles 17:00 — 18:00",
       20,
@@ -769,7 +769,7 @@ describe("TrainerAttendanceHistoryPage — las tres cifras del período", () => 
     expect(estimado.querySelector('[class*="state-bad"]')).toBeNull();
   });
 
-  it("no cruza nada cuando el período se filtra por un alumno", async () => {
+  it("no cruza nada cuando el período se filtra por un jugador", async () => {
     // Filtrando por Ana, "listas tomadas" pasa a ser "listas donde figura Ana",
     // y el horario semanal sigue siendo el del club entero: restar uno del otro
     // daría un hueco enorme y falso. Los dos universos dejan de ser comparables,

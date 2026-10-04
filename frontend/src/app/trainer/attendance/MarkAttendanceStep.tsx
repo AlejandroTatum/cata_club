@@ -127,8 +127,8 @@ export default function MarkAttendanceStep({
             <p className="font-semibold">Esta lista está incompleta.</p>
             <p>
               {filedStudents.length} de {students.length} alumnos ya tienen asistencia registrada y no
-              se pueden cambiar desde aquí. Complete solo a{" "}
-              {pendingCount === 1 ? "el alumno que falta" : `los ${pendingCount} alumnos que faltan`}.
+              se pueden cambiar desde aquí. Completa solo a{" "}
+              {pendingCount === 1 ? "el jugador que falta" : `los ${pendingCount} jugadores que faltan`}.
             </p>
           </div>
         )}
@@ -141,18 +141,18 @@ export default function MarkAttendanceStep({
         {students.length === 0 ? (
           <EmptyState
             icon={<Users size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-            title="Este horario no tiene alumnos asignados."
-            description="Pida a administración que asigne alumnos a este horario para poder tomar lista."
+            title="Este horario no tiene jugadores asignados."
+            description="Pide a administración que asigne jugadores a este horario para poder tomar lista."
           />
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="text"
-                placeholder="Filtrar alumnos por nombre…"
+                placeholder="Filtrar jugadores por nombre…"
                 value={searchFilter}
                 onChange={(e) => onSearchFilterChange(e.target.value)}
-                aria-label="Filtrar alumnos"
+                aria-label="Filtrar jugadores"
                 className="h-ctl min-w-[180px] flex-1 rounded-ctl border border-line-2 bg-paper px-[13px] text-sm text-ink placeholder:text-ink-3 focus:border-cata-red focus:outline-none"
               />
               {(unreviewedCount > 0 || onlyUnreviewed) && (

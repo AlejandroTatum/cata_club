@@ -59,13 +59,13 @@ export default function SelectedSessionPanel({
               <p className="flex items-center gap-2 text-xs font-bold uppercase text-ink-3">
                 <Users size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                 {preview.loading
-                  ? "Alumnos…"
-                  : `${preview.names.length} ${preview.names.length === 1 ? "alumno" : "alumnos"} en la lista`}
+                  ? "Jugadores…"
+                  : `${preview.names.length} ${preview.names.length === 1 ? "jugador" : "jugadores"} en la lista`}
               </p>
               {preview.loading ? (
                 <GhostLines count={4} animate />
               ) : preview.names.length === 0 ? (
-                <p className="text-xs text-ink-3">Este horario todavía no tiene alumnos asignados.</p>
+                <p className="text-xs text-ink-3">Este horario todavía no tiene jugadores asignados.</p>
               ) : (
                 <ul className="flex flex-wrap gap-1.5">
                   {shown.map((name) => (
@@ -87,13 +87,13 @@ export default function SelectedSessionPanel({
           <div className="flex flex-col gap-4" data-testid="selected-session-ghost">
             <div className="flex items-start gap-3 text-ink-3">
               <CalendarClock size={ICON.lg} strokeWidth={1.5} aria-hidden="true" className="flex-none" />
-              <p className="text-sm">Elija un horario para ver a sus alumnos y cómo quedó su última lista.</p>
+              <p className="text-sm">Elige un horario para ver a sus jugadores y cómo quedó su última lista.</p>
             </div>
             <dl
               aria-hidden="true"
               className="flex flex-col divide-y divide-dashed divide-line border-t border-dashed border-line text-xs"
             >
-              {["Categoría", "Alumnos en la lista", "Última lista"].map((label) => (
+              {["Categoría", "Jugadores en la lista", "Última lista"].map((label) => (
                 <div key={label} className="flex items-center justify-between gap-3 py-2.5">
                   <dt className="font-bold uppercase text-ink-3">{label}</dt>
                   <dd className="text-ink-3">—</dd>

@@ -67,7 +67,7 @@ export default function GaleriaPreview({ imageUrl, title, description, crop }: G
       className={`relative m-0 w-full overflow-hidden rounded-card ${empty ? "border border-line bg-sunken" : "bg-coal"} ${crop ? "cursor-grab touch-none active:cursor-grabbing" : ""}`}
       {...(crop ? {
         tabIndex: 0,
-        "aria-label": "Encuadre de la foto: arrastre o use las flechas",
+        "aria-label": "Encuadre de la foto: arrastra o usa las flechas",
         onPointerDown: alPresionar,
         onPointerMove: alArrastrar,
         onPointerUp: () => { arrastre.current = null; },

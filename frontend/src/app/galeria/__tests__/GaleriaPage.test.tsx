@@ -75,7 +75,7 @@ describe("GaleriaPage", () => {
     render(<GaleriaPage />); await screen.findByText("En juego");
     fireEvent.change(screen.getByLabelText("Foto (JPG o PNG)"), { target: { files: [fotoValida()] } });
     fireEvent.click(screen.getByRole("button", { name: "Publicar foto" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/título, la descripción y seleccione/i);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/título, la descripción y selecciona/i);
     expect(crearEntradaGaleria).not.toHaveBeenCalled();
   });
   it("keeps Publicar foto disabled until a photo is chosen", async () => {
@@ -149,7 +149,7 @@ describe("GaleriaPage", () => {
     crearEntradaGaleria.mockRejectedValueOnce(new ApiClientError("Fallo del proveedor de imágenes.", 503));
     fireEvent.click(screen.getByRole("button", { name: "Publicar foto" }));
     const alerta = await screen.findByRole("alert");
-    expect(alerta).toHaveTextContent("El servicio de imágenes no está disponible en este momento. Intente de nuevo más tarde.");
+    expect(alerta).toHaveTextContent("El servicio de imágenes no está disponible en este momento. Intenta de nuevo más tarde.");
     expect(alerta.textContent).not.toMatch(/5 MB|JPG|PNG|proveedor/);
   });
   it("keeps actionable backend 4xx messages visible", async () => {

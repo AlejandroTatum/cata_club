@@ -691,7 +691,7 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
     await waitForHorarios();
 
     for (const card of screen.getAllByTestId("horario-card")) {
-      for (const column of ["Categoría", "Horario", "Alumnos", "Acciones"]) {
+      for (const column of ["Categoría", "Horario", "Jugadores", "Acciones"]) {
         expect(within(card).getByText(column), `${column} is unnamed in the row`).toBeInTheDocument();
       }
       expect(within(card).queryByText("Grupo")).not.toBeInTheDocument();
@@ -894,8 +894,8 @@ describe("GroupsPage — categoria title + labeled Ver alumnos button (PR1 layou
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
-    const agregar = within(card()).getByRole("button", { name: /agregar alumnos/i });
-    expect(agregar).toHaveTextContent(/agregar alumnos/i);
+    const agregar = within(card()).getByRole("button", { name: /agregar jugadores/i });
+    expect(agregar).toHaveTextContent(/agregar jugadores/i);
     // Repeated per-row actions are carbon: red is reserved for one primary.
     expect(agregar.className).toContain("bg-coal");
     expect(agregar.className).not.toContain("bg-cata-red");
@@ -903,17 +903,17 @@ describe("GroupsPage — categoria title + labeled Ver alumnos button (PR1 layou
     expect(within(card()).getByRole("button", { name: /^editar/i }).className).not.toContain("bg-cata-red");
 
     fireEvent.click(agregar);
-    await screen.findByRole("heading", { name: "Alumnos de Competitivo" });
-    expect(screen.getByLabelText("Seleccionar alumno")).toHaveFocus();
+    await screen.findByRole("heading", { name: "Jugadores de Competitivo" });
+    expect(screen.getByLabelText("Seleccionar jugador")).toHaveFocus();
   });
 
   it("opens the roster from the 'N inscritos' count without focusing the add selector", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
-    fireEvent.click(await within(card()).findByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Alumnos de Competitivo" });
-    expect(screen.getByLabelText("Seleccionar alumno")).not.toHaveFocus();
+    fireEvent.click(await within(card()).findByRole("button", { name: /ver jugadores/i }));
+    await screen.findByRole("heading", { name: "Jugadores de Competitivo" });
+    expect(screen.getByLabelText("Seleccionar jugador")).not.toHaveFocus();
   });
 
   it("labels the landing toggle in words and explains it in a tooltip", async () => {
@@ -1033,8 +1033,8 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
 
     const dialog = await screen.findByRole("dialog");
     // ADMB-04: the server blocks this, so the dialog must not promise to unassign.
-    expect(within(dialog).getByText(/no puede quitar miércoles mientras haya 2 alumnos inscritos/i)).toBeInTheDocument();
-    expect(within(dialog).getByText(/pase primero a esos alumnos a otra categoría/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/no puede quitar miércoles mientras haya 2 jugadores inscritos/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/pase primero a esos jugadores a otra categoría/i)).toBeInTheDocument();
     expect(within(dialog).queryByText(/desasignad/i)).not.toBeInTheDocument();
     expect(mockActualizarCategoria).not.toHaveBeenCalled();
     // The server would answer 409, so no destructive confirm is offered.
@@ -1181,8 +1181,8 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
     fireEvent.click(within(cardA).getByRole("button", { name: /^editar /i }));
     await screen.findByRole("heading", { name: "Editar categoría" });
 
-    fireEvent.click(within(cardB).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Alumnos de Competitivo" });
+    fireEvent.click(within(cardB).getByRole("button", { name: /ver jugadores/i }));
+    await screen.findByRole("heading", { name: "Jugadores de Competitivo" });
 
     expect(screen.queryByRole("heading", { name: "Editar categoría" })).not.toBeInTheDocument();
   });
@@ -1195,8 +1195,8 @@ describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
     fireEvent.click(within(cardA).getByRole("button", { name: /^editar /i }));
     await screen.findByRole("heading", { name: "Editar categoría" });
 
-    fireEvent.click(within(cardA).getByRole("button", { name: /ver alumnos/i }));
-    const alumnosHeading = await screen.findByRole("heading", { name: "Alumnos de Formativo" });
+    fireEvent.click(within(cardA).getByRole("button", { name: /ver jugadores/i }));
+    const alumnosHeading = await screen.findByRole("heading", { name: "Jugadores de Formativo" });
     expect(cardA.contains(alumnosHeading)).toBe(true);
     expect(screen.queryByRole("heading", { name: "Editar categoría" })).not.toBeInTheDocument();
   });
@@ -1303,7 +1303,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
-    expect(screen.queryByText("Alumnos asignados")).not.toBeInTheDocument();
+    expect(screen.queryByText("Jugadores asignados")).not.toBeInTheDocument();
     // The rail's "Sin grupo" list may name her; no categoría row may.
     for (const row of cards()) expect(within(row).queryByText("Carla Ruiz")).not.toBeInTheDocument();
   });
@@ -1313,8 +1313,8 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await waitForHorarios();
 
     const [multiDiaCard] = cards();
-    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
+    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver jugadores/i }));
+    await screen.findByRole("heading", { name: "Jugadores de Formativo" });
 
     expect(await screen.findByText("Ana Pérez")).toBeInTheDocument();
     expect(screen.getByText("12 años")).toBeInTheDocument();
@@ -1327,15 +1327,15 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await waitForHorarios();
 
     const [multiDiaCard] = cards();
-    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
+    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver jugadores/i }));
+    await screen.findByRole("heading", { name: "Jugadores de Formativo" });
 
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(601));
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
 
     // Ana (personaId 20) appears on both LUNES and MIERCOLES rows but only
     // once in the rendered roster — deduplicated by personaId.
-    expect(await screen.findByText("Alumnos asignados (2)")).toBeInTheDocument();
+    expect(await screen.findByText("Jugadores asignados (2)")).toBeInTheDocument();
     expect(screen.getAllByText("Ana Pérez")).toHaveLength(1);
     expect(screen.getByText("Bruno Díaz")).toBeInTheDocument();
   });
@@ -1359,14 +1359,14 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
     const [multiDiaCard] = cards();
-    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
+    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver jugadores/i }));
+    await screen.findByRole("heading", { name: "Jugadores de Formativo" });
   }
 
   async function searchForStudent(query: string): Promise<void> {
     vi.useFakeTimers();
     try {
-      fireEvent.change(screen.getByRole("combobox", { name: "Seleccionar alumno" }), { target: { value: query } });
+      fireEvent.change(screen.getByRole("combobox", { name: "Seleccionar jugador" }), { target: { value: query } });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(300);
       });
@@ -1385,8 +1385,8 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     // On the 44-student categoría the picker sat under every enrolled name, so
     // adding somebody meant scrolling the whole roster to reach it.
     await openFormativoAlumnos();
-    const roster = await screen.findByText("Alumnos asignados (2)");
-    const picker = screen.getByLabelText("Seleccionar alumno");
+    const roster = await screen.findByText("Jugadores asignados (2)");
+    const picker = screen.getByLabelText("Seleccionar jugador");
 
     expect(picker).toHaveAttribute("id", "alumno-select");
     expect(picker.compareDocumentPosition(roster) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -1398,8 +1398,8 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     );
     await openFormativoAlumnos();
 
-    expect(await screen.findByText("Alumnos asignados (25)")).toBeInTheDocument();
-    expect(screen.getByText(/1–10 de 25 alumnos/)).toBeInTheDocument();
+    expect(await screen.findByText("Jugadores asignados (25)")).toBeInTheDocument();
+    expect(screen.getByText(/1–10 de 25 jugadores/)).toBeInTheDocument();
     expect(screen.getByText("Alumno 01")).toBeInTheDocument();
     expect(screen.queryByText("Alumno 11")).not.toBeInTheDocument();
 
@@ -1407,13 +1407,13 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
 
     expect(await screen.findByText("Alumno 11")).toBeInTheDocument();
     expect(screen.queryByText("Alumno 01")).not.toBeInTheDocument();
-    expect(screen.getByText(/11–20 de 25 alumnos/)).toBeInTheDocument();
+    expect(screen.getByText(/11–20 de 25 jugadores/)).toBeInTheDocument();
   });
 
   it("shows no pager for a roster that fits on one page", async () => {
     await openFormativoAlumnos();
 
-    expect(await screen.findByText("Alumnos asignados (2)")).toBeInTheDocument();
+    expect(await screen.findByText("Jugadores asignados (2)")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /siguiente/i })).not.toBeInTheDocument();
   });
 
@@ -1422,15 +1422,15 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
       Promise.resolve(horarioId === 601 ? rosterOf(25) : []),
     );
     await openFormativoAlumnos();
-    await screen.findByText(/1–10 de 25 alumnos/);
+    await screen.findByText(/1–10 de 25 jugadores/);
     fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
-    await screen.findByText(/11–20 de 25 alumnos/);
+    await screen.findByText(/11–20 de 25 jugadores/);
 
     fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
     const [multiDiaCard] = cards();
-    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
+    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver jugadores/i }));
 
-    expect(await screen.findByText(/1–10 de 25 alumnos/)).toBeInTheDocument();
+    expect(await screen.findByText(/1–10 de 25 jugadores/)).toBeInTheDocument();
   });
 
   it("no longer renders a día-pill selector — assignment acts on the whole grupo now", async () => {
@@ -1438,8 +1438,8 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await waitForHorarios();
 
     const [multiDiaCard] = cards();
-    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
+    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver jugadores/i }));
+    await screen.findByRole("heading", { name: "Jugadores de Formativo" });
 
     expect(screen.queryByRole("button", { name: "Lun" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mié" })).not.toBeInTheDocument();
@@ -1454,8 +1454,8 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await waitForHorarios();
 
     const [multiDiaCard] = cards();
-    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
+    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver jugadores/i }));
+    await screen.findByRole("heading", { name: "Jugadores de Formativo" });
 
     await searchForStudent("Di");
 
@@ -1470,8 +1470,8 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await waitForHorarios();
 
     const [multiDiaCard] = cards();
-    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
+    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver jugadores/i }));
+    await screen.findByRole("heading", { name: "Jugadores de Formativo" });
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
 
     await selectDiego();
@@ -1500,8 +1500,8 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await waitForHorarios();
 
     const [multiDiaCard] = cards();
-    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
+    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver jugadores/i }));
+    await screen.findByRole("heading", { name: "Jugadores de Formativo" });
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
 
     await selectDiego();
@@ -1543,8 +1543,8 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await waitForHorarios();
 
     const [multiDiaCard] = cards();
-    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
+    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver jugadores/i }));
+    await screen.findByRole("heading", { name: "Jugadores de Formativo" });
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
 
     await selectDiego();
@@ -1578,8 +1578,8 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await waitForHorarios();
 
     const [multiDiaCard] = cards();
-    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
+    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver jugadores/i }));
+    await screen.findByRole("heading", { name: "Jugadores de Formativo" });
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
 
     await selectDiego();
@@ -1596,8 +1596,8 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await waitForHorarios();
 
     const [multiDiaCard] = cards();
-    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
+    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver jugadores/i }));
+    await screen.findByRole("heading", { name: "Jugadores de Formativo" });
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
 
     await selectDiego();
@@ -1624,8 +1624,8 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await waitForHorarios();
 
     const [multiDiaCard] = cards();
-    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
+    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver jugadores/i }));
+    await screen.findByRole("heading", { name: "Jugadores de Formativo" });
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
 
     await selectDiego();
@@ -1651,8 +1651,8 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
   /** Opens the roster panel and returns Ana Pérez's row `<li>`. */
   async function openFormativoRosterAndFindAna(): Promise<HTMLElement> {
     const [multiDiaCard] = cards();
-    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
+    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver jugadores/i }));
+    await screen.findByRole("heading", { name: "Jugadores de Formativo" });
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
     return (await screen.findByText("Ana Pérez")).closest("li") as HTMLElement;
   }
@@ -1792,13 +1792,13 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await waitForHorarios();
     expect(await screen.findByText("2 inscritos")).toBeInTheDocument();
     const anaRow = await openFormativoRosterAndFindAna();
-    await screen.findByText("Alumnos asignados (2)");
+    await screen.findByText("Jugadores asignados (2)");
 
     fireEvent.click(within(anaRow).getByRole("button", { name: "Desasignar a Ana Pérez" }));
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Desasignar" }));
 
-    await screen.findByText("Alumnos asignados (1)");
+    await screen.findByText("Jugadores asignados (1)");
     // The regression this guards: the card badge used to keep whatever the
     // ONE bulk fetch on mount returned, so it stayed at "2 inscritos" forever
     // — disagreeing with the panel it sits right next to.
@@ -1864,9 +1864,9 @@ describe("GroupsPage — deleting removes la categoría entera atomically (docs/
     // Total across all 3 días (1 + 0 + 1), not just the first row's count.
     // ADMB-04: blocked copy, not a promise to unassign.
     expect(
-      within(dialog).getByText(/no puede eliminar la categoría mientras haya 2 alumnos inscritos/i),
+      within(dialog).getByText(/no puede eliminar la categoría mientras haya 2 jugadores inscritos/i),
     ).toBeInTheDocument();
-    expect(within(dialog).getByText(/pase primero a esos alumnos a otra categoría/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/pase primero a esos jugadores a otra categoría/i)).toBeInTheDocument();
     expect(within(dialog).queryByText(/desasignad/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: /de todos modos/i })).not.toBeInTheDocument();
     expect(mockEliminarCategoria).not.toHaveBeenCalled();
@@ -2058,7 +2058,7 @@ describe("GroupsPage — categoria catalog fetch failure does not blank the page
     // The schedule list loaded fine — an outage of the categoria catalog
     // alone must not replace it with the full-page ErrorState.
     expect(screen.getAllByTestId("horario-card").length).toBeGreaterThan(0);
-    expect(screen.queryByText("No se pudieron cargar los horarios. Intente nuevamente.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No se pudieron cargar los horarios. Intenta nuevamente.")).not.toBeInTheDocument();
   });
 
   it("shows a non-blocking toast for the categoria catalog failure", async () => {
@@ -2175,7 +2175,7 @@ describe("GroupsPage — per-field mirror of the training window and día cap (#
     fireEvent.click(screen.getByRole("button", { name: "Lunes" }));
     fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
 
-    await expectMarked(screen.getByLabelText(/^Nombre/), "Ingrese un nombre para la categoría.");
+    await expectMarked(screen.getByLabelText(/^Nombre/), "Ingresa un nombre para la categoría.");
     expect(mockCrearCategoria).not.toHaveBeenCalled();
   });
 
@@ -2184,8 +2184,8 @@ describe("GroupsPage — per-field mirror of the training window and día cap (#
 
     submitWith("", "", ["Lunes"]);
 
-    await expectMarked(horaInicio(), "Ingrese la hora de inicio.");
-    await expectMarked(horaFin(), "Ingrese la hora de fin.");
+    await expectMarked(horaInicio(), "Ingresa la hora de inicio.");
+    await expectMarked(horaFin(), "Ingresa la hora de fin.");
   });
 
   it("accepts the window's own borders — 06:00 and 22:00 are inside", async () => {
@@ -2234,7 +2234,7 @@ describe("GroupsPage — per-field mirror of the training window and día cap (#
 
     submitWith("15:00", "16:00", []);
 
-    await expectMarked(diasFieldset(), "Seleccione al menos un día.");
+    await expectMarked(diasFieldset(), "Selecciona al menos un día.");
     expect(mockCrearCategoria).not.toHaveBeenCalled();
   });
 
@@ -2253,12 +2253,12 @@ describe("GroupsPage — per-field mirror of the training window and día cap (#
   it("clears a field's mark once the admin fixes what it complained about", async () => {
     await openCreateForm();
     submitWith("", "20:00", []);
-    await expectMarked(horaInicio(), "Ingrese la hora de inicio.");
+    await expectMarked(horaInicio(), "Ingresa la hora de inicio.");
 
     elegirHora("Hora de inicio", "15:00");
     fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
 
-    await expectMarked(diasFieldset(), "Seleccione al menos un día.");
+    await expectMarked(diasFieldset(), "Selecciona al menos un día.");
     expect(horaInicio()).not.toHaveAttribute("aria-invalid");
     expect(horaInicio()).not.toHaveAttribute("aria-describedby");
   });
@@ -2465,7 +2465,7 @@ describe("GroupsPage — catalog categorías visible on a fresh install (issue #
     fireEvent.click(screen.getByRole("button", { name: "Lunes" }));
     fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
 
-    await screen.findByText("Seleccione al menos un día.");
+    await screen.findByText("Selecciona al menos un día.");
     expect(
       screen.queryByText('Ya existe una categoría llamada "Formativo".'),
     ).not.toBeInTheDocument();
@@ -2569,7 +2569,7 @@ describe("GroupsPage — summary strip", () => {
 
     const strip = await screen.findByTestId("groups-summary");
     await waitFor(() => {
-      expect(within(strip).getByText("Alumnos en grupos").parentElement).toHaveTextContent("1");
+      expect(within(strip).getByText("Jugadores en grupos").parentElement).toHaveTextContent("1");
     });
     // Luis is active and unassigned; Eva is inactive and is not counted.
     expect(within(strip).getByText("Sin grupo").parentElement).toHaveTextContent("1");
@@ -2582,7 +2582,7 @@ describe("GroupsPage — summary strip", () => {
     await waitForHorarios();
 
     const strip = await screen.findByTestId("groups-summary");
-    expect(within(strip).getByText("Alumnos en grupos").parentElement).toHaveTextContent("—");
+    expect(within(strip).getByText("Jugadores en grupos").parentElement).toHaveTextContent("—");
   });
 });
 
@@ -2742,7 +2742,7 @@ describe("GroupsPage — move players before deleting (QA4 ADMB-04)", () => {
   it("when history keeps the categoría, says why and offers to hide it instead of a dead end", async () => {
     mockMoverYEliminarCategoria.mockResolvedValue({
       movidos: 2, categoriaDestino: "INFANTIL", categoriaDestinoLabel: "Infantil", eliminada: false,
-      motivo: "Los alumnos ya pasaron a Infantil, pero la categoría Competitivo no se puede eliminar: tiene asistencias registradas y el historial no se borra.",
+      motivo: "Los jugadores ya pasaron a Infantil, pero la categoría Competitivo no se puede eliminar: tiene asistencias registradas y el historial no se borra.",
     });
     const dialog = await openBlockedDelete();
 
@@ -2873,7 +2873,7 @@ describe("GroupsPage — new categoría starts hidden and warns about overlaps (
   it("shows the server's overlap warnings after saving, without blocking the save", async () => {
     mockCrearCategoria.mockResolvedValue({
       codigo: "PREINFANTIL",
-      advertencias: ["Este horario se cruza con Formativo (lunes 15:00–16:00). Puede continuar si es intencional."],
+      advertencias: ["Este horario se cruza con Formativo (lunes 15:00–16:00). Puedes continuar si es intencional."],
     });
     await crearPreinfantil();
 

@@ -156,7 +156,7 @@ export default function SessionCard({
     return (
       <section
         className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-card bg-coal px-5 py-3 text-white"
-        aria-label="Su día de hoy"
+        aria-label="Tu día de hoy"
       >
         <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
           <span aria-hidden="true" className="h-1.5 w-1.5 flex-none rounded-full bg-ball" />
@@ -179,7 +179,7 @@ export default function SessionCard({
   return (
     <section
       className="flex flex-col gap-3 rounded-card bg-coal px-7 py-6 text-white"
-      aria-label="Su día de hoy"
+      aria-label="Tu día de hoy"
     >
       {/* El kicker y la escala del riel comparten fila: la escala no merece un
           renglón propio en una banda que se está achicando, y al ras del borde
@@ -223,7 +223,7 @@ export default function SessionCard({
               // `list-none` saca las viñetas — la misma razón por la que lo
               // llevaba la lista que este riel reemplaza.
               role="list"
-              aria-label="Sus sesiones de hoy"
+              aria-label="Tus sesiones de hoy"
               className="absolute inset-0 m-0 list-none p-0"
             >
               {rail.blocks.map((block) => (

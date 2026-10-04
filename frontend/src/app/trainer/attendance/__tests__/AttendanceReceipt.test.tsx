@@ -25,7 +25,7 @@ function renderReceipt(failed: { personaId: number; message: string; alreadyRegi
       receiptTotal={0}
       hasFailedRecords={failed.length > 0}
       rosterLoading={false}
-      retryButtonLabel="Reintentar con esos 2 alumnos"
+      retryButtonLabel="Reintentar con esos 2 jugadores"
       onRetryFailed={vi.fn()}
       onReset={vi.fn()}
       attendanceHistoryHref="/trainer/attendance/history"
