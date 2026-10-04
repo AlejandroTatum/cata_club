@@ -70,13 +70,13 @@ export default function ConfirmationStep({
               <AlertTriangle size={ICON.sm} strokeWidth={2} className="mt-0.5 flex-none" aria-hidden="true" />
               <span>
                 {unreviewedCount === 1
-                  ? `1 de ${totalStudents} alumnos sigue en "Presente" porque nadie lo revisó.`
-                  : `${unreviewedCount} de ${totalStudents} alumnos siguen en "Presente" porque nadie los revisó.`}
+                  ? `1 de ${totalStudents} jugadores sigue en "Presente" porque nadie lo revisó.`
+                  : `${unreviewedCount} de ${totalStudents} jugadores siguen en "Presente" porque nadie los revisó.`}
               </span>
             </p>
             <div className="flex flex-wrap gap-2">
               <Button type="button" onClick={onReviewUnreviewed}>
-                {unreviewedCount === 1 ? "Revisar a ese alumno" : `Revisar a esos ${unreviewedCount}`}
+                {unreviewedCount === 1 ? "Revisar a ese jugador" : `Revisar a esos ${unreviewedCount}`}
               </Button>
               <Button type="button" variant="tertiary" onClick={onMarkRemainingPresent}>
                 <UserCheck size={ICON.sm} strokeWidth={2} aria-hidden="true" />
@@ -126,7 +126,7 @@ export default function ConfirmationStep({
 
           <p className="text-xs text-ink-3">
             Se registrará la asistencia de {totalStudents}{" "}
-            {totalStudents === 1 ? "estudiante" : "estudiantes"}.
+            {totalStudents === 1 ? "jugador" : "jugadores"}.
           </p>
 
           {submitError && (

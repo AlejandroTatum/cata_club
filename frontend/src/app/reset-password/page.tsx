@@ -98,7 +98,7 @@ function InvalidLinkCard({ message }: { message: string }): React.ReactElement {
           <AlertCircle size={ICON.lg} className="text-state-bad" strokeWidth={1.5} aria-hidden="true" />
         </span>
         <p role="alert" className="text-sm leading-relaxed text-ink-2">
-          {message} Solicite uno nuevo y vuelva a intentarlo.
+          {message} Solicita uno nuevo y vuelve a intentarlo.
         </p>
       </div>
       {/* The product's one recipe for "a navigation that is this block's
@@ -175,8 +175,8 @@ function ResetPasswordContent(): React.ReactElement {
             <CheckCircle2 size={ICON.lg} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
           </span>
           <p className="text-sm leading-relaxed text-ink-2">
-            Su contraseña ha sido restablecida correctamente. Ya puede iniciar sesión con
-            su nueva contraseña.
+            Tu contraseña ha sido restablecida correctamente. Ya puedes iniciar sesión con
+            tu nueva contraseña.
           </p>
         </div>
         {/* Same recipe as the dead-link exit, and sentence case: the interface
@@ -190,7 +190,7 @@ function ResetPasswordContent(): React.ReactElement {
 
   return (
     <AuthShell
-      title="Elija una contraseña nueva"
+      title="Elige una contraseña nueva"
       subtitle="Debe cumplir las condiciones de abajo"
       note={EXPIRED_LINK_NOTE}
       // Every state of this screen ends at the login form: the link is dead,
@@ -226,7 +226,7 @@ function ResetPasswordContent(): React.ReactElement {
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-3 transition-colors hover:text-ink"
+              className="touch-target-reach absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-3 transition-colors hover:text-ink"
               aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
             >
               {showPassword ? (
@@ -287,7 +287,7 @@ function ResetPasswordContent(): React.ReactElement {
               name="confirmPassword"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Repita su contraseña"
+              placeholder="Repite tu contraseña"
               required
               disabled={submitting}
               aria-invalid={mismatch}

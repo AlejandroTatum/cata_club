@@ -95,7 +95,7 @@ describe("PaymentHistorySection", () => {
       expect(screen.getByText("Aprobado")).toBeInTheDocument();
     });
     expect(screen.getByText("Rechazado")).toBeInTheDocument();
-    expect(screen.getByText("Pendiente de validación")).toBeInTheDocument();
+    expect(screen.getByText("Por validar")).toBeInTheDocument();
     // The rejection reason is real evidence the admin can act on, not omitted.
     expect(screen.getByText(/Comprobante ilegible/)).toBeInTheDocument();
   });

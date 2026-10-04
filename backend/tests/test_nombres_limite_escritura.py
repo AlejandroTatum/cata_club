@@ -27,6 +27,9 @@ def _instanciar(dto_cls, **overrides):
     kwargs = {**_PERSONA_KWARGS, **overrides}
     if dto_cls is EnrollmentRepresentanteDTO:
         return dto_cls(**kwargs, **_CREDENCIALES)
+    if dto_cls is RepresentadoCreateDTO:
+        # QA4 FAM-10: la ficha médica del dependiente es obligatoria.
+        return dto_cls(**kwargs, ficha_medica={"tipo_sangre": "O_POSITIVO"})
     return dto_cls(**kwargs)
 
 

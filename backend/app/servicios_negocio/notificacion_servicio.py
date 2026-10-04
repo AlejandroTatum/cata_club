@@ -186,7 +186,7 @@ class NotificacionServicio:
         if notificacion is None:
             raise EntidadNoEncontrada(f"Notificación con id {notificacion_id} no encontrada")
         if notificacion.persona_id != persona_id:
-            raise PermisosInsuficientes("No puede marcar como leída una notificación ajena")
+            raise PermisosInsuficientes("No puedes marcar como leída una notificación ajena")
         resultado = self.repo.marcar_leida(notificacion)
         self.db.commit()
         return resultado

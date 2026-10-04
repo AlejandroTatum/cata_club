@@ -169,7 +169,11 @@ def test_admin_no_puede_quitarse_su_propio_rol_administrador(client):
     resp = client.delete(f"/api/v1/personas/{uno['id']}/roles/ADMINISTRADOR")
 
     assert resp.status_code == 400
-    assert "sí mismo" in resp.json()["detail"]
+    assert resp.json()["detail"] == (
+        "No puedes quitarte a ti mismo el rol de administrador: perderías el "
+        "acceso de administración de inmediato. Pídele a otro "
+        "administrador que lo haga."
+    )
     # El rol sigue ahí: la operación no se aplicó a medias.
     assert "ADMINISTRADOR" in client.get(f"/api/v1/personas/{uno['id']}/roles").json()["roles"]
 
@@ -183,7 +187,10 @@ def test_admin_no_puede_desactivar_su_propia_cuenta_aunque_haya_otro_admin(clien
     resp = client.patch(f"/api/v1/personas/{uno['id']}/cuenta/estado", json={"activo": False})
 
     assert resp.status_code == 400
-    assert "su propia cuenta" in resp.json()["detail"]
+    assert resp.json()["detail"] == (
+        "No puedes desactivar tu propia cuenta: perderías el acceso de "
+        "inmediato. Pídele a otro administrador que lo haga."
+    )
     assert client.get(f"/api/v1/personas/{uno['id']}/roles").json()["activo"] is True
 
 
@@ -195,7 +202,10 @@ def test_admin_no_puede_darse_de_baja_a_si_mismo(client):
     resp = client.patch(f"/api/v1/personas/{uno['id']}/estado", json={"activo": False})
 
     assert resp.status_code == 400
-    assert "su propia cuenta" in resp.json()["detail"]
+    assert resp.json()["detail"] == (
+        "No puedes desactivar tu propia cuenta: perderías el acceso de "
+        "inmediato. Pídele a otro administrador que lo haga."
+    )
 
 
 def test_otro_admin_si_puede_desactivar_la_cuenta_de_un_admin(client):

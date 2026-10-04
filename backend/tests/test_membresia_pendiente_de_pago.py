@@ -14,7 +14,7 @@ from tests.fabricas_pagos import (
 
 MENSAJE = "Ya tiene una membresía pendiente de pago."
 MENSAJE_INACTIVA = (
-    "Esta persona ya tiene una membresía inactiva. Registre el pago en esa "
+    "Esta persona ya tiene una membresía inactiva. Registra el pago en esa "
     "membresía para activarla."
 )
 

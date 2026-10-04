@@ -46,7 +46,6 @@ describe("buildAttendanceStats", () => {
       totalPresent: 0,
       totalAbsent: 0,
       totalLate: 0,
-      totalJustified: 0,
       totalSick: 0,
       totalCompetition: 0,
       totalUnknown: 0,
@@ -58,9 +57,8 @@ describe("buildAttendanceStats", () => {
     const stats = buildAttendanceStats(MOCK_ATTENDANCE_RECORDS);
     expect(stats.totalStudents).toBe(6);
     expect(stats.totalPresent).toBe(3);
-    expect(stats.totalAbsent).toBe(1);
+    expect(stats.totalAbsent).toBe(2);
     expect(stats.totalLate).toBe(1);
-    expect(stats.totalJustified).toBe(1);
     expect(stats.totalUnknown).toBe(0);
   });
 
@@ -112,13 +110,13 @@ describe("buildAttendanceStats", () => {
       { id: "a1", fecha: "2026-07-01", horario: "T1", horarioId: 1, personaId: 1, estudiante: "S1", estado: "present" },
       { id: "a2", fecha: "2026-07-01", horario: "T1", horarioId: 1, personaId: 2, estudiante: "S2", estado: "absent" },
       { id: "a3", fecha: "2026-07-01", horario: "T1", horarioId: 1, personaId: 3, estudiante: "S3", estado: "late" },
-      { id: "a4", fecha: "2026-07-01", horario: "T1", horarioId: 1, personaId: 4, estudiante: "S4", estado: "justified" },
+      { id: "a4", fecha: "2026-07-01", horario: "T1", horarioId: 1, personaId: 4, estudiante: "S4", estado: "sick" },
     ];
     const stats = buildAttendanceStats(records);
     expect(stats.totalPresent).toBe(1);
     expect(stats.totalAbsent).toBe(1);
     expect(stats.totalLate).toBe(1);
-    expect(stats.totalJustified).toBe(1);
+    expect(stats.totalSick).toBe(1);
     expect(stats.totalUnknown).toBe(0);
     expect(stats.totalStudents).toBe(4);
   });
@@ -188,7 +186,7 @@ describe("MOCK_ATTENDANCE_RECORDS", () => {
       expect(r.fecha).toBeTruthy();
       expect(r.horario).toBeTruthy();
       expect(r.estudiante).toBeTruthy();
-      expect(["present", "absent", "late", "justified"] as const).toContain(r.estado);
+      expect(["present", "absent", "late"] as const).toContain(r.estado);
     }
   });
 });
@@ -219,13 +217,6 @@ describe("getAttendanceBadgeTokens", () => {
     });
   });
 
-  it("returns blue-50/blue-700 light tokens for justified", () => {
-    expect(getAttendanceBadgeTokens("justified")).toEqual({
-      badgeClass: "bg-blue-50 text-blue-700",
-      iconClass: "text-blue-700",
-    });
-  });
-
   it("returns violet/teal light tokens for the issue #1373 states", () => {
     expect(getAttendanceBadgeTokens("sick")).toEqual({
       badgeClass: "bg-violet-50 text-violet-700",
@@ -245,7 +236,7 @@ describe("getAttendanceBadgeTokens", () => {
   });
 
   it("never returns a dark-theme (rgba/900 or bare white) token — regression guard for B4", () => {
-    for (const estado of ["present", "absent", "late", "justified", "sick", "competition", "unknown_value"]) {
+    for (const estado of ["present", "absent", "late", "sick", "competition", "unknown_value"]) {
       const tokens = getAttendanceBadgeTokens(estado);
       expect(tokens.badgeClass).not.toMatch(/900|text-white|bg-white/);
       expect(tokens.iconClass).not.toMatch(/900|text-white|bg-white/);
@@ -268,7 +259,6 @@ describe("getAttendanceRatePercent", () => {
       totalPresent: 89,
       totalAbsent: 11,
       totalLate: 0,
-      totalJustified: 0,
       totalSick: 0,
       totalCompetition: 0,
       totalUnknown: 0,
@@ -277,12 +267,24 @@ describe("getAttendanceRatePercent", () => {
     expect(getAttendanceRatePercent(stats)).toBe(89);
   });
 
+  it("counts tardanza as attended (the shared attendance rule)", () => {
+    const stats = {
+      totalPresent: 50,
+      totalAbsent: 30,
+      totalLate: 20,
+      totalSick: 0,
+      totalCompetition: 0,
+      totalUnknown: 0,
+      totalStudents: 100,
+    };
+    expect(getAttendanceRatePercent(stats)).toBe(70);
+  });
+
   it("rounds to the nearest whole percent", () => {
     const stats = {
       totalPresent: 2,
       totalAbsent: 1,
       totalLate: 0,
-      totalJustified: 0,
       totalSick: 0,
       totalCompetition: 0,
       totalUnknown: 0,

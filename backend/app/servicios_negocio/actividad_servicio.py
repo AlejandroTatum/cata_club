@@ -7,7 +7,7 @@ Fuentes de cada cifra:
     administrador no es ninguno de los tres roles de la gráfica y queda fuera.
   - Asistencias: filas de `asistencia` con estado PRESENTE o ATRASADO, por
     `fecha_registro` (el instante en que se anotó). `fecha_entrenamiento` es un
-    día, no sirve para las columnas de 2 h; AUSENTE/JUSTIFICADO/... no son una
+    día, no sirve para las columnas de 2 h; AUSENTE/ENFERMO/... no son una
     asistencia.
   - Pagos: filas de `pago` (cualquier estado: "comprobantes recibidos"), por
     `fecha_registro`.
@@ -32,11 +32,12 @@ from app.infraestructura.actividad import FRANJAS_POR_DIA, HORAS_POR_FRANJA, fec
 from app.infraestructura.colector_metricas import percentil_ms
 from app.infraestructura.repositorios.outbox_cupo import contar_en_espera_por_cupo
 from app.servicios_negocio.dtos.actividad_schemas import (
-    AvanzadasResponse, BaseDeDatos, Colas, ConteoPorRol, ContenedorMemoria, EndpointLento, EstadoSistema,
+    AvanzadasResponse, BaseDeDatos, Colas, ConteoPorRol, ContenedorMemoria, EndpointLento, EstadoSistema, SaludSistema,
     HostAvanzado, Latencia, MemoriaConSerie, PeriodoResumen, RangoAvanzadas, RangoResumen, RedisMemoria,
     ResumenResponse, RuntimeAvanzado, Serie, ServicioAvanzado, SesionesPorRol, UsuariosAvanzado,
     VisitantesUnicos,
 )
+from app.servicios_negocio import salud_sistema
 from app.soporte_transversal.tiempo import ZONA_HORARIA_CLUB
 
 ROL_A_COLUMNA = {
@@ -100,8 +101,18 @@ def ventana_resumen(rango: str, ahora: datetime) -> VentanaResumen:
 
 
 class ActividadServicio:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, edad_latido_s: float | None = None) -> None:
         self.db = db
+        # Edad del último latido de los workers; `None` = sin latido legible.
+        self.edad_latido_s = edad_latido_s
+
+    def _salud(self, outbox_mas_antiguo_s: int | None) -> SaludSistema:
+        return salud_sistema.evaluar(self.edad_latido_s, outbox_mas_antiguo_s)
+
+    def _outbox_mas_antiguo_s(self) -> int | None:
+        return self.db.scalars(
+            select(MetricaInstantanea.outbox_mas_antiguo_s).order_by(MetricaInstantanea.capturada_en.desc()).limit(1)
+        ).first()
 
     # =================== Resumen ===================================================
     def resumen(self, rango: RangoResumen, ahora: datetime) -> ResumenResponse:
@@ -113,6 +124,11 @@ class ActividadServicio:
         )
         pagos = self._conteo_por_periodo(Pago.fecha_registro, ventana)
         inscripciones = self._conteo_por_periodo(Persona.fecha_registro, ventana)
+        salud = self._salud(self._outbox_mas_antiguo_s())
+        estado = self._estado_del_sistema(ahora)
+        if any(c.key == "email" and c.reason != "outbox_stale" for c in salud.components):
+            # Sin workers no sale ningún correo: «notifications» no puede decir «ok».
+            estado = [EstadoSistema(key=e.key, level="bad" if e.key == "notifications" else e.level) for e in estado]
         periodos = [
             PeriodoResumen(
                 start=_iso(ventana.inicios[i]),
@@ -129,8 +145,9 @@ class ActividadServicio:
             span=ventana.span,
             periods=periodos,
             uniqueVisitors=self._visitantes_unicos(rango, ventana),
-            status=self._estado_del_sistema(ahora),
+            status=estado,
             queuedByQuota=contar_en_espera_por_cupo(self.db),
+            health=salud,
         )
 
     @staticmethod
@@ -265,7 +282,10 @@ class ActividadServicio:
             select(MetricaInstantanea).where(*en_rango).order_by(MetricaInstantanea.capturada_en.desc()).limit(1)
         ).first()
         if ultima is None:
-            return AvanzadasResponse(range=rango, service=None, host=None, runtime=None, users=None)
+            return AvanzadasResponse(
+                range=rango, service=None, host=None, runtime=None, users=None,
+                health=self._salud(self._outbox_mas_antiguo_s()),
+            )
 
         series = self._series(inicio, ahora, puntos, paso_min)
         return AvanzadasResponse(
@@ -274,6 +294,7 @@ class ActividadServicio:
             host=self._host(series, paso_min, en_rango),
             runtime=self._runtime(ultima, en_rango),
             users=self._usuarios(ultima, en_rango),
+            health=self._salud(ultima.outbox_mas_antiguo_s),
         )
 
     def _series(self, inicio: datetime, ahora: datetime, puntos: int, paso_min: int) -> dict[str, list[Optional[float]]]:

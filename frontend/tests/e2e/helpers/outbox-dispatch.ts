@@ -115,7 +115,7 @@ export async function dispatchPendingOutboxTask(task: OutboxDispatchTask): Promi
     const detalle = error instanceof Error ? error.message : String(error);
     throw new Error(
       `No se pudo despachar "${task}" en celery-worker del stack de QA (proyecto cataclub-qa). ` +
-        "Verifique que `make qa-up` esté corriendo, que Docker esté disponible para este proceso, " +
+        "Verifica que `make qa-up` esté corriendo, que Docker esté disponible para este proceso, " +
         `y que el contenedor celery-worker exista. Detalle: ${detalle}`,
     );
   }

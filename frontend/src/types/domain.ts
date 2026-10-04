@@ -317,11 +317,11 @@ export interface FichaMedica {
 
 /** Attendance state for a single student in a session.
  *
- *  `sick` and `competition` (issue #1373) are justified/neutral states: the
+ *  `sick` and `competition` (issue #1373) are authorized-absence states: the
  *  student did not train, but neither one is an unexcused absence — reports
  *  and statistics must never count them against the student.
  */
-export type EstadoAsistencia = "present" | "absent" | "late" | "justified" | "sick" | "competition";
+export type EstadoAsistencia = "present" | "absent" | "late" | "sick" | "competition";
 
 /** An attendance record (Asistencia). */
 export interface Asistencia {

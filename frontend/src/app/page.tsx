@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { publicPageMetadata, socialMetadata } from "@/lib/seo";
+import { publicPageMetadata, resolveSiteUrl, socialMetadata } from "@/lib/seo";
 import StructuredData from "@/components/landing/StructuredData";
 import LandingPage from "./landing/LandingPage";
 import "./landing/landing.css";
@@ -29,17 +29,17 @@ const playfair = localFont({ src: "../../public/fonts/playfair-display-600.woff2
 export const metadata: Metadata = {
   title: { absolute: "Cata Club — Tenis de Mesa en Loja" },
   description:
-    "Club formativo de tenis de mesa en Loja, Ecuador. Entrenamientos para niños, jóvenes y adultos de lunes a sábado, junto al Coliseo Ciudad de Loja. Inscríbase o escríbanos por WhatsApp.",
+    "Club formativo de tenis de mesa en Loja, Ecuador. Entrenamientos para niños, jóvenes y adultos de lunes a sábado, junto al Coliseo Ciudad de Loja. Inscríbete o escríbenos por WhatsApp.",
   ...publicPageMetadata("/"),
   openGraph: {
     ...socialMetadata().openGraph,
     url: "/",
     title: "Cata Club — Tenis de Mesa en Loja",
     description:
-      "Formando campeones para la vida desde 2013. Entrenamientos formativos, infantiles, juveniles, competitivos y para adultos en Loja, Ecuador.",
+      "Formando campeones para la vida desde 2013. Entrenamientos de tenis de mesa para niños, jóvenes y adultos en Loja, Ecuador.",
   },
 };
 
 export default function HomePage(): React.ReactElement {
-  return <div className={`${barlow.variable} ${graduate.variable} ${playfair.variable}`}><StructuredData /><LandingPage /></div>;
+  return <div className={`${barlow.variable} ${graduate.variable} ${playfair.variable}`}><StructuredData /><LandingPage siteUrl={resolveSiteUrl()} /></div>;
 }

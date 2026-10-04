@@ -574,7 +574,7 @@ def test_reporte_asistencia_pdf_imprime_las_etiquetas_de_la_ui_no_el_enum(
     """Issue #1240: el PDF armaba la columna Estado con `r.estado.value` --el
     miembro crudo del enum-- mientras la tabla de la misma pantalla, el
     export a Excel y el resto de la UI usan las etiquetas en español
-    (`Presente`, `Ausente`, `Tardanza`, `Justificado`). `ATRASADO` es una
+    (`Presente`, `Ausente`, `Tardanza`, `Enfermo`). `ATRASADO` es una
     palabra que la UI nunca usa. Se espían las filas que llegan a
     `generar_reporte_pdf` --igual que en el PDF de personas-- porque los
     bytes del PDF no son legibles como texto."""
@@ -595,7 +595,7 @@ def test_reporte_asistencia_pdf_imprime_las_etiquetas_de_la_ui_no_el_enum(
         ("2026-07-06", "PRESENTE"),
         ("2026-07-13", "AUSENTE"),
         ("2026-07-20", "ATRASADO"),
-        ("2026-07-27", "JUSTIFICADO"),
+        ("2026-07-27", "ENFERMO"),
     ):
         client.post(
             "/api/v1/asistencias/",
@@ -619,11 +619,11 @@ def test_reporte_asistencia_pdf_imprime_las_etiquetas_de_la_ui_no_el_enum(
     assert resp.status_code == 200
 
     columna_estado = [fila[-1] for fila in filas_generadas]
-    assert sorted(columna_estado) == ["Ausente", "Justificado", "Presente", "Tardanza"]
+    assert sorted(columna_estado) == ["Ausente", "Enfermo", "Presente", "Tardanza"]
     assert "ATRASADO" not in columna_estado
     assert "PRESENTE" not in columna_estado
     assert "AUSENTE" not in columna_estado
-    assert "JUSTIFICADO" not in columna_estado
+    assert "ENFERMO" not in columna_estado
 
 
 # --- Phase 5: regresión -- offload de `generar_reporte_pdf` fuera del ------
@@ -976,6 +976,89 @@ def test_reporte_personas_exactamente_en_el_limite_da_200(client, monkeypatch):
     assert len(resp.json()) == 2
 
 
+# --- QA4 PERF-11: un solo tope para los tres reportes, también en el JSON de
+# asistencias -----------------------------------------------------------------
+#
+# El JSON de asistencias estaba paginado (skip/limit), pero el BFF recorre
+# todas las páginas para armar la vista previa: un rango sin acotar bajaba
+# decenas de miles de filas aunque el PDF hermano ya lo rechazara. Ahora el JSON
+# aplica el mismo tope y el mismo 422 que el PDF; el Excel se arma en el
+# navegador con esas mismas filas, así que queda cubierto sin truncar nada.
+
+
+def test_el_tope_de_filas_es_uno_solo_para_los_tres_reportes():
+    from app.presentacion.routers import (
+        asistencias_router, membresias_pagos_router, personas_router, reporte_helpers,
+    )
+
+    assert reporte_helpers.LIMITE_MAXIMO_FILAS_REPORTE == 5000
+    assert asistencias_router.LIMITE_MAXIMO_REPORTE_ASISTENCIAS == 5000
+    assert membresias_pagos_router.LIMITE_MAXIMO_REPORTE_PAGOS == 5000
+    assert personas_router.LIMITE_MAXIMO_REPORTE_PERSONAS == 5000
+
+
+def test_el_422_del_tope_dice_cuantas_filas_hay_y_trata_de_tu():
+    from fastapi import HTTPException
+
+    from app.presentacion.routers.reporte_helpers import exigir_tope_reporte
+
+    with pytest.raises(HTTPException) as exc:
+        exigir_tope_reporte(7312, 5000, "asistencias")
+    assert exc.value.status_code == 422
+    detalle = exc.value.detail
+    assert "7312" in detalle and "5000" in detalle
+    assert "Reduce el rango de fechas" in detalle
+
+
+def _horario_con_asistencias(client, db_session, cedula, dia, fechas):
+    alumno = _crear_persona(client, cedula)
+    _habilitar_como_jugador(db_session, alumno["id"])
+    horario = client.post(
+        "/api/v1/asistencias/horarios",
+        json={"categoria": "FORMATIVO", "dia_semana": dia},
+    ).json()
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+    for fecha in fechas:
+        client.post(
+            "/api/v1/asistencias/",
+            json={
+                "fecha_entrenamiento": fecha, "estado": "PRESENTE",
+                "persona_id": alumno["id"], "horario_id": horario["id"],
+            },
+        )
+    return horario
+
+
+def test_reporte_asistencia_json_supera_el_limite_maximo_da_422(client, monkeypatch, db_session):
+    monkeypatch.setattr(
+        "app.presentacion.routers.asistencias_router.LIMITE_MAXIMO_REPORTE_ASISTENCIAS", 2,
+    )
+    horario = _horario_con_asistencias(
+        client, db_session, cedula_valida(610), "MIERCOLES",
+        ("2026-07-01", "2026-07-08", "2026-07-15"),
+    )
+
+    resp = client.get("/api/v1/asistencias/reportes", params={"horario_id": horario["id"]})
+    assert resp.status_code == 422
+    assert "Reduce el rango de fechas" in resp.json()["detail"]
+
+
+def test_reporte_asistencia_json_exactamente_en_el_limite_da_200(client, monkeypatch, db_session):
+    monkeypatch.setattr(
+        "app.presentacion.routers.asistencias_router.LIMITE_MAXIMO_REPORTE_ASISTENCIAS", 2,
+    )
+    horario = _horario_con_asistencias(
+        client, db_session, cedula_valida(611), "JUEVES", ("2026-07-02", "2026-07-09"),
+    )
+
+    resp = client.get("/api/v1/asistencias/reportes", params={"horario_id": horario["id"]})
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 2
+
+
 # --- Candado de ancho: ninguna tabla de reporte excede la página (#366) ------
 
 # Peor caso conocido de cada reporte, con los datos que el club produce de
@@ -990,7 +1073,7 @@ _REPORTES_PEOR_CASO = [
         _COLUMNAS_PAGOS_PDF,
         [[
             _ESTUDIANTE_LARGO, _ESTUDIANTE_LARGO, "01/03/2026", "31/03/2026", "$1.200,00",
-            "Regularización", "17/08/2026", "Pendiente",
+            "Regularización", "17/08/2026", "Por validar",
         ]],
     ),
     (
@@ -1004,7 +1087,7 @@ _REPORTES_PEOR_CASO = [
     (
         "asistencias",
         _COLUMNAS_ASISTENCIA_PDF,
-        [["17/08/2026", "MIERCOLES 18:00–19:30", _ESTUDIANTE_LARGO, "JUSTIFICADO"]],
+        [["17/08/2026", "MIERCOLES 18:00–19:30", _ESTUDIANTE_LARGO, "COMPETENCIA"]],
     ),
 ]
 

@@ -49,7 +49,7 @@ export default function AttendanceCommitPrimaryAction({
         onClick={onContinueToRoster}
         disabled={!selectedScheduleId || rosterLoading}
       >
-        {rosterLoading ? "Cargando estudiantes…" : "Continuar"}
+        {rosterLoading ? "Cargando jugadores…" : "Continuar"}
         <ChevronRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
       </Button>
     );

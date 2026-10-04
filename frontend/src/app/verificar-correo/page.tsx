@@ -56,7 +56,7 @@ function FormularioReenvio(): React.ReactElement {
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!correo.trim()) {
-      toast.showError("Ingrese su correo electrónico.");
+      toast.showError("Ingresa tu correo electrónico.");
       return;
     }
 
@@ -66,7 +66,7 @@ function FormularioReenvio(): React.ReactElement {
       setMensaje(respuesta.mensaje);
     } catch (err) {
       toast.showError(
-        toUserMessage(err, "No se pudo procesar la solicitud. Intente nuevamente."),
+        toUserMessage(err, "No se pudo procesar la solicitud. Intenta nuevamente."),
       );
     } finally {
       setEnviando(false);
@@ -146,9 +146,9 @@ function VerificarCorreoContent(): React.ReactElement {
 
   if (estado === "verificando") {
     return (
-      <AuthShell title="Verificando su correo" note={LINK_LIFETIME_NOTE} backHref="/login" eyebrow="Acceso al club">
+      <AuthShell title="Verificando tu correo" note={LINK_LIFETIME_NOTE} backHref="/login" eyebrow="Acceso al club">
         <p role="status" className="text-sm leading-relaxed text-ink-2">
-          Un momento, estamos confirmando su dirección…
+          Un momento, estamos confirmando tu dirección…
         </p>
       </AuthShell>
     );
@@ -162,7 +162,7 @@ function VerificarCorreoContent(): React.ReactElement {
             <CheckCircle2 size={ICON.lg} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
           </span>
           <p className="text-sm leading-relaxed text-ink-2">
-            Su dirección quedó confirmada. Acérquese al club o escríbanos por
+            Tu dirección quedó confirmada. Acércate al club o escríbenos por
             WhatsApp para registrar la inscripción y el primer pago: el club
             lo valida y ahí se activa la membresía.
           </p>
@@ -183,7 +183,7 @@ function VerificarCorreoContent(): React.ReactElement {
   return (
     <AuthShell
       title="Enlace no válido"
-      subtitle="Pida uno nuevo con su correo"
+      subtitle="Pide uno nuevo con tu correo"
       note={LINK_LIFETIME_NOTE}
       backHref="/login"
       eyebrow="Acceso al club"

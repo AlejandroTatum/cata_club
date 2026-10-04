@@ -22,6 +22,7 @@ from pydantic import AfterValidator, EmailStr
 from app.dominio.cedula import es_cedula_valida
 from app.dominio.contrasenia import validar_contrasenia
 from app.dominio.enums import TipoSangre
+from app.dominio.excepciones import OperacionInvalida
 from app.dominio.nombre_propio import normalizar_nombre_propio
 from app.dominio.reglas_negocio import EDAD_MAYORIA_EDAD, calcular_edad
 from app.dominio.telefono import (
@@ -107,7 +108,7 @@ def _validar_tipo_sangre(valor: TipoSangre) -> TipoSangre:
     """
     if valor is TipoSangre.DESCONOCIDO:
         raise ValueError(
-            "Debe indicar el tipo de sangre: «No lo sé» no es una opción "
+            "Debes indicar el tipo de sangre: «No lo sé» no es una opción "
             "válida para una ficha médica."
         )
     return valor
@@ -128,17 +129,17 @@ _NOMBRE_PROPIO_MAX_LETRAS_POR_PALABRA = 20
 _NOMBRE_PROPIO_MAX_CARACTERES = 60
 
 
-def _validar_tope_nombre_propio(valor: str, etiqueta: str) -> None:
+def _validar_tope_nombre_propio(valor: str, etiqueta: str, error: type[Exception] = ValueError) -> None:
     palabras = valor.split(" ")
     if len(palabras) > _NOMBRE_PROPIO_MAX_PALABRAS:
-        raise ValueError(f"{etiqueta} no puede tener más de {_NOMBRE_PROPIO_MAX_PALABRAS} palabras.")
+        raise error(f"{etiqueta} no puede tener más de {_NOMBRE_PROPIO_MAX_PALABRAS} palabras.")
     if any(len(palabra) > _NOMBRE_PROPIO_MAX_LETRAS_POR_PALABRA for palabra in palabras):
-        raise ValueError(
+        raise error(
             f"{etiqueta} no puede tener una palabra de más de "
             f"{_NOMBRE_PROPIO_MAX_LETRAS_POR_PALABRA} letras."
         )
     if len(valor) > _NOMBRE_PROPIO_MAX_CARACTERES:
-        raise ValueError(f"{etiqueta} no puede tener más de {_NOMBRE_PROPIO_MAX_CARACTERES} caracteres.")
+        raise error(f"{etiqueta} no puede tener más de {_NOMBRE_PROPIO_MAX_CARACTERES} caracteres.")
 
 
 # REG-01 (QA3): PostgreSQL no admite U+0000 en columnas de texto; llegaba
@@ -148,41 +149,88 @@ def _rechazar_nul(valor: str, etiqueta: str) -> None:
         raise ValueError(f"{etiqueta} contiene caracteres no permitidos.")
 
 
-# ADM-05 (QA3): lista blanca de caracteres de un nombre o apellido de persona
-# -- letras Unicode (tildes, ñ), espacio, apóstrofo, guion y punto--. Evita
-# que dígitos, marcado (`<b>`, `&`) o emoji lleguen a la base y de ahí a PDF,
-# correos y pantallas. Solo la usan `NombreValidado`/`ApellidoValidado`
-# (nombres de persona); categorías, descuentos y tipos de membresía tienen
-# sus propios DTOs y pueden llevar dígitos.
-def _validar_caracteres_de_nombre(valor: str, etiqueta: str) -> None:
-    if not all(
-        unicodedata.category(c)[0] in ("L", "M") or c in " '-."
-        for c in valor
-    ):
-        raise ValueError(
-            f"{etiqueta} solo puede contener letras, espacios, apóstrofos, "
-            "guiones y puntos."
+# ADM-05 (QA3) y REG-08 (QA4): lista blanca de caracteres de un nombre o
+# apellido de persona -- letras Unicode (tildes, ñ, ü), espacio, apóstrofo y
+# guion--, con al menos 2 letras. Evita que dígitos, puntos, marcado (`<b>`,
+# `&`) o emoji lleguen a la base y de ahí a PDF, correos y pantallas. El
+# mensaje NOMBRA los caracteres sobrantes (mismo texto que `personNameRule`
+# en `identity-validation.ts`). Solo la usan `NombreValidado`/
+# `ApellidoValidado` (nombres de persona); categorías, descuentos y tipos de
+# membresía tienen sus propios DTOs y pueden llevar dígitos.
+_NOMBRE_MIN_LETRAS = 2
+
+
+def _es_marca_tras_letra(valor: str, i: int) -> bool:
+    """Una marca combinante solo es válida justo después de una letra o de
+    otra marca (misma regla que `personNameDisallowedChars` del frontend)."""
+    return i > 0 and unicodedata.category(valor[i - 1])[0] in ("L", "M")
+
+
+def _validar_caracteres_de_nombre(valor: str, etiqueta: str, error: type[Exception] = ValueError) -> None:
+    no_permitidos = list(dict.fromkeys(
+        c for i, c in enumerate(valor)
+        if c not in " '-"
+        and unicodedata.category(c)[0] != "L"
+        and not (unicodedata.category(c)[0] == "M" and _es_marca_tras_letra(valor, i))
+    ))
+    if no_permitidos:
+        raise error(
+            f"{etiqueta} no puede contener " + ", ".join(f"“{c}”" for c in no_permitidos) + "."
         )
+    if sum(unicodedata.category(c)[0] == "L" for c in valor) < _NOMBRE_MIN_LETRAS:
+        raise error(f"{etiqueta} debe tener al menos {_NOMBRE_MIN_LETRAS} letras.")
+    if valor[0] in " '-" or valor[-1] in " '-":
+        raise error(f"{etiqueta} no puede empezar ni terminar con un espacio, guion o apóstrofe.")
+    if any(a in " '-" and b in " '-" for a, b in zip(valor, valor[1:])):
+        raise error(f"{etiqueta} no puede tener un espacio, guion o apóstrofe repetido.")
+
+
+# H4 (QA4): la regla estricta (REG-08) solo se exige a un nombre NUEVO o
+# CAMBIADO. Las filas guardadas antes de la regla («Jr.», un «·») no pueden
+# bloquear una edición ajena, así que `PersonaUpdateDTO` solo normaliza y
+# exige que no esté vacío (`NombreEditable`/`ApellidoEditable`);
+# `PersonaServicio.actualizar_persona` aplica `validar_nombre_cambiado` solo
+# si el valor normalizado difiere del guardado.
+def _normalizar_nombre_basico(valor: str, etiqueta_sustantivo: str) -> str:
+    _rechazar_nul(valor, f"El {etiqueta_sustantivo}")
+    if not valor.strip():
+        raise ValueError(f"El {etiqueta_sustantivo} es obligatorio.")
+    return normalizar_nombre_propio(valor)
+
+
+def _validar_nombre_estricto(
+    normalizado: str, etiqueta_sustantivo: str, error: type[Exception] = ValueError,
+) -> str:
+    _validar_caracteres_de_nombre(normalizado, f"El {etiqueta_sustantivo}", error)
+    _validar_tope_nombre_propio(normalizado, f"El {etiqueta_sustantivo}", error)
+    return normalizado
 
 
 def _validar_nombre(valor: str) -> str:
-    _rechazar_nul(valor, "El nombre")
-    if not valor.strip():
-        raise ValueError("El nombre es obligatorio.")
-    normalizado = normalizar_nombre_propio(valor)
-    _validar_caracteres_de_nombre(normalizado, "El nombre")
-    _validar_tope_nombre_propio(normalizado, "El nombre")
-    return normalizado
+    return _validar_nombre_estricto(_normalizar_nombre_basico(valor, "nombre"), "nombre")
 
 
 def _validar_apellido(valor: str) -> str:
-    _rechazar_nul(valor, "El apellido")
-    if not valor.strip():
-        raise ValueError("El apellido es obligatorio.")
-    normalizado = normalizar_nombre_propio(valor)
-    _validar_caracteres_de_nombre(normalizado, "El apellido")
-    _validar_tope_nombre_propio(normalizado, "El apellido")
-    return normalizado
+    return _validar_nombre_estricto(_normalizar_nombre_basico(valor, "apellido"), "apellido")
+
+
+def _normalizar_nombre_editable(valor: str) -> str:
+    return _normalizar_nombre_basico(valor, "nombre")
+
+
+def _normalizar_apellido_editable(valor: str) -> str:
+    return _normalizar_nombre_basico(valor, "apellido")
+
+
+def validar_nombre_cambiado(campo: str, nuevo: str, guardado: str | None) -> str:
+    """`campo` es `"nombres"` o `"apellidos"`. Devuelve `nuevo` (ya normalizado
+    por el DTO) sin exigir la regla estricta si es igual al valor guardado
+    (comparado en forma NFC y normalizada); si cambió, la exige completa y
+    lanza `OperacionInvalida` con el mismo mensaje que el alta."""
+    sustantivo = "nombre" if campo == "nombres" else "apellido"
+    if guardado is not None and nuevo in (guardado, normalizar_nombre_propio(guardado)):
+        return nuevo
+    return _validar_nombre_estricto(nuevo, sustantivo, OperacionInvalida)
 
 
 # Issue #875: `contacto_emergencia` (el NOMBRE de a quién llamar) es la
@@ -319,6 +367,9 @@ TipoSangreValidado = Annotated[TipoSangre, AfterValidator(_validar_tipo_sangre)]
 # causas que ya comparte.
 NombreValidado = Annotated[str, AfterValidator(_validar_nombre)]
 ApellidoValidado = Annotated[str, AfterValidator(_validar_apellido)]
+# H4: solo `PersonaUpdateDTO`; ver `validar_nombre_cambiado`.
+NombreEditable = Annotated[str, AfterValidator(_normalizar_nombre_editable)]
+ApellidoEditable = Annotated[str, AfterValidator(_normalizar_apellido_editable)]
 ContactoEmergenciaValidado = Annotated[str, AfterValidator(_validar_contacto_emergencia)]
 EnfermedadValidada = Annotated[str, AfterValidator(_validar_enfermedad)]
 EnfermedadesValidadas = Annotated[List[EnfermedadValidada], AfterValidator(_sin_repetidos_ni_vacias)]

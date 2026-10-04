@@ -128,7 +128,7 @@ test("trainer directly selects every attendance state at 390px", async ({ page }
   const stateGroup = page.getByRole("radiogroup", { name: "Estado de asistencia de Ana López" });
   await expect(stateGroup).toBeVisible();
 
-  for (const name of ["Presente", "Ausente", "Tardanza", "Justificado", "Enfermo", "Competencia"]) {
+  for (const name of ["Presente", "Ausente", "Tardanza", "Enfermo", "Competencia"]) {
     const stateControl = stateGroup.getByRole("radio", { name, exact: true });
     await expect(stateControl).toBeVisible();
     await stateControl.click();
@@ -136,7 +136,7 @@ test("trainer directly selects every attendance state at 390px", async ({ page }
   }
 });
 
-test("trainer discovers mobile navigation and Justificado guidance at 390px", async ({ page }) => {
+test("trainer discovers mobile navigation at 390px", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockTrainerAttendanceRuntime(page);
 

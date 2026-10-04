@@ -29,6 +29,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/auth-cookies";
 import { robotsTagFor } from "@/lib/seo";
+import { loginPathWithNext } from "@/lib/safe-redirect";
 import {
   isProtectedPath,
   hasPendingActivation,
@@ -53,7 +54,8 @@ export function middleware(request: NextRequest): NextResponse {
   if (isProtectedPath(pathname)) {
     const token = request.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
     if (!hasPlausibleAccessToken(token)) {
-      response = NextResponse.redirect(new URL("/login", request.url));
+      // REG-21: remember where the visit was going so the login can return there.
+      response = NextResponse.redirect(new URL(loginPathWithNext(pathname, request.nextUrl.search), request.url));
     } else if (hasPendingActivation(token)) {
       response = NextResponse.redirect(new URL("/login/activacion", request.url));
     } else {

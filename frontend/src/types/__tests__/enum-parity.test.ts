@@ -75,6 +75,7 @@ const ENUM_TABLE: Record<string, FrontendMirror | null> = {
   // in services/api.ts — no exported `type EfectoCoberturaCorreccion`.
   EfectoCoberturaCorreccion: null,
   TipoNotificacion: { file: "types/domain.ts", type: "TipoNotificacion" },
+  EstadoSolicitudCorreccion: { file: "services/api.ts", type: "CorrectionRequestStatus" },
 };
 
 describe("enum-parity table — exhaustiveness over the backend's enums", () => {

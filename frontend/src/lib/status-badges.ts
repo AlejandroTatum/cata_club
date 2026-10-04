@@ -39,7 +39,7 @@ export const VALIDATION_STATUS_TONES: Record<ValidationStatus, BadgeTone> = {
 };
 
 export const VALIDATION_STATUS_LABELS: Record<ValidationStatus, string> = {
-  pendiente: "Pendiente",
+  pendiente: "Por validar",
   validado: "Validado",
   rechazado: "Rechazado",
 };
@@ -68,7 +68,7 @@ export const ESTADO_PAGO_TO_VALIDATION_STATUS: Record<EstadoPago, ValidationStat
  */
 export const PAGOS_ESTADO_OPTIONS: { value: "" | EstadoPago; label: string }[] = [
   { value: "", label: "Todas" },
-  { value: "PENDIENTE_VALIDACION", label: "Pendientes" },
+  { value: "PENDIENTE_VALIDACION", label: "Por validar" },
   { value: "APROBADO", label: "Validados" },
   { value: "RECHAZADO", label: "Rechazados" },
 ];

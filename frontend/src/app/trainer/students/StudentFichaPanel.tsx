@@ -100,14 +100,14 @@ export default function StudentFichaPanel({
         <div className="flex items-start gap-3 px-5 py-4 text-ink-3">
           <UserRound size={ICON.lg} strokeWidth={1.5} aria-hidden="true" className="flex-none" />
           <div>
-            <h2 className="text-base font-bold text-ink">Elija un alumno</h2>
+            <h2 className="text-base font-bold text-ink">Elige un jugador</h2>
             <p className="text-sm">Su ficha médica y a quién llamar aparecen aquí.</p>
           </div>
         </div>
         <dl aria-hidden="true" className="flex flex-col border-t border-dashed border-line">
           {[
-            ["Tipo de sangre", "Se muestra al elegir un alumno"],
-            ["Alergias", "Se muestra al elegir un alumno"],
+            ["Tipo de sangre", "Se muestra al elegir un jugador"],
+            ["Alergias", "Se muestra al elegir un jugador"],
             ["Contacto de emergencia", "Nombre y teléfono para llamar"],
             ["Representante legal", "Nombre y teléfono de respaldo"],
           ].map(([label, hint]) => (
@@ -155,7 +155,7 @@ export default function StudentFichaPanel({
         <div className="p-5">
           <ErrorState
             title="No se pudo cargar la ficha"
-            message="Revise su conexión e intente nuevamente."
+            message="Revisa tu conexión e intenta nuevamente."
             onRetry={() => setIntento((n) => n + 1)}
           />
         </div>

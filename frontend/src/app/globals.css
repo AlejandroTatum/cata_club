@@ -391,6 +391,43 @@
 }
 
 /* ---------------------------------------------------------------------------
+ * QA4 mobile audit — touch-target floor (WCAG 2.5.5, 44 CSS px).
+ *
+ * Every control built on the `ctl` tokens (Button, SearchInput, FilterPill,
+ * `.input-field`, the selects) is 40px, and the in-table `ctl-sm` is 32px:
+ * right for a mouse, under the 44px a thumb needs. `min-height` rather than
+ * rewriting the tokens, so the desktop metrics `design-tokens.test.ts` pins
+ * stay exactly as they are and only a coarse pointer — the DEVICE, as with the
+ * font-size floor above — gets the taller control. The attribute selector
+ * covers `h-ctl`, `h-ctl-sm` and `min-h-ctl`, and their responsive variants.
+ * ------------------------------------------------------------------------- */
+@media (pointer: coarse) {
+  [class*="h-ctl"],
+  .input-field {
+    min-height: 44px;
+  }
+
+  /* An icon-only control whose box may grow: the header's search and bell. */
+  .touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* A control that must not move or grow — the password eye sits inside the
+     field's padding: an invisible 44px hit area centred on it instead. The
+     host is already `absolute`, so the pseudo-element anchors to it. */
+  .touch-target-reach::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* ---------------------------------------------------------------------------
  * DSH-5 — a keyboard-focused control could land behind the fixed mobile tab
  * bar, fully hidden by an opaque layer (WCAG 2.4.11).
  *

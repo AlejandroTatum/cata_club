@@ -38,7 +38,8 @@ const ultimaLista = {
   horaFin: "16:30:00",
   presentes: 5,
   tardanzas: 1,
-  justificados: 1,
+  enfermos: 1,
+  competencias: 0,
   ausentes: 1,
   total: 8,
 };
@@ -76,7 +77,7 @@ describe("GET /api/attendance/recent-sessions", () => {
         horarioId: 1,
         fecha: "2026-08-03",
         horario: "Lunes 15:00 — 16:30",
-        counts: { present: 5, late: 1, justified: 1, absent: 1, sick: 0, competition: 0 },
+        counts: { present: 5, late: 1, absent: 1, sick: 1, competition: 0 },
         total: 8,
       },
     ]);

@@ -92,7 +92,7 @@ describe("SponsorsPage", () => {
     render(<SponsorsPage />); await screen.findByText("Municipio");
     fireEvent.click(screen.getByRole("button", { name: "Subir logo" }));
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent(/nombre y seleccione/i);
+    expect(alert).toHaveTextContent(/nombre y selecciona/i);
     expect(alert).toHaveFocus();
     expect(crearSponsor).not.toHaveBeenCalled();
   });
@@ -140,7 +140,7 @@ describe("SponsorsPage", () => {
     crearSponsor.mockRejectedValueOnce(fail("ServicioNoDisponible", 503));
     await intentarSubir();
     const alerta = await screen.findByRole("alert");
-    expect(alerta).toHaveTextContent("El servicio de imágenes no está disponible en este momento. Intente de nuevo más tarde.");
+    expect(alerta).toHaveTextContent("El servicio de imágenes no está disponible en este momento. Intenta de nuevo más tarde.");
     expect(alerta.textContent).not.toMatch(/5 MB|JPG|PNG/);
   });
   it("shows the backend's validation message on a 400", async () => {
@@ -156,7 +156,7 @@ describe("SponsorsPage", () => {
   it("uses a neutral generic message for an unknown failure", async () => {
     crearSponsor.mockRejectedValueOnce(new Error("boom"));
     await intentarSubir();
-    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo subir el logo. Intente de nuevo.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo subir el logo. Intenta de nuevo.");
   });
   it("blames the size client-side only for an actually oversized logo, without calling the backend", async () => {
     render(<SponsorsPage />); await screen.findByText("Municipio");

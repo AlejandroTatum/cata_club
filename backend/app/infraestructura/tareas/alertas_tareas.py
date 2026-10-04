@@ -89,12 +89,12 @@ def _render_vencimiento(nombre: str, mensaje: str) -> tuple[str, str]:
     """`(asunto, cuerpo_texto)` del correo de vencimiento. Pura -- sin I/O.
     Ronda 2 del issue #898: solo texto (asunto, mención de "Ir a mis pagos" y
     de WhatsApp) sobre la misma estructura de siempre -- sin HTML nuevo."""
-    asunto = "Cata Club | Su membresía vence pronto"
+    asunto = "Cata Club | Tu membresía vence pronto"
     cuerpo = (
         f"Hola {nombre},\n\n"
-        f"{mensaje} Por favor, regularice su pago para evitar la suspensión "
-        f"de beneficios. Puede hacerlo desde \"Ir a mis pagos\", en su cuenta.\n\n"
-        f"Ante cualquier duda, escríbanos por WhatsApp al {WHATSAPP_CANONICO}."
+        f"{mensaje} Por favor, regulariza tu pago para evitar la suspensión "
+        f"de beneficios. Puedes hacerlo desde \"Ir a mis pagos\", en tu cuenta.\n\n"
+        f"Ante cualquier duda, escríbenos por WhatsApp al {WHATSAPP_CANONICO}."
     )
     return asunto, cuerpo
 
@@ -108,7 +108,7 @@ def _render_mora(tipo: TipoNotificacion, nombre: str, mensaje: str) -> tuple[str
     asunto = (
         "Cata Club | Último aviso de mora" if ultimo_aviso else "Cata Club | Aviso de mora"
     )
-    accion = 'Para recuperar sus beneficios, ingrese a "Ir a mis pagos" y registre su pago.'
+    accion = 'Para recuperar tus beneficios, ingresa a "Ir a mis pagos" y registra tu pago.'
     if ultimo_aviso:
         # `mensaje` ya dice que es el último aviso (ver `_construir_
         # notificaciones_mora`); acá se funde en la MISMA oración con la
@@ -118,7 +118,7 @@ def _render_mora(tipo: TipoNotificacion, nombre: str, mensaje: str) -> tuple[str
         cuerpo_principal = f"{mensaje}\n\n{accion}"
     return asunto, (
         f"Hola {nombre},\n\n{cuerpo_principal}\n\n"
-        f"Ante cualquier duda, escríbanos por WhatsApp al {WHATSAPP_CANONICO}."
+        f"Ante cualquier duda, escríbenos por WhatsApp al {WHATSAPP_CANONICO}."
     )
 
 
@@ -350,7 +350,7 @@ def _construir_notificacion_vencimiento(
         return [], None  # ya procesado por completo en un intento anterior
 
     if responsable.id == persona.id:
-        mensaje = f"Su membresía vence el {vence.strftime('%d/%m/%Y')}."
+        mensaje = f"Tu membresía vence el {vence.strftime('%d/%m/%Y')}."
     else:
         nombre_alumno = acortar_nombre_para_notificacion(
             nombre_completo(persona.nombres, persona.apellidos)
@@ -421,7 +421,7 @@ def _construir_notificaciones_mora(
     fecha_str = fecha_vencimiento.strftime("%d/%m/%Y")
     if tipo == TipoNotificacion.MIEMBRESIA_MORA_DIA_1:
         base = (
-            f"Su membresía venció el {fecha_str}. Regularice su pago para no "
+            f"Tu membresía venció el {fecha_str}. Regulariza tu pago para no "
             f"perder los beneficios."
         )
     else:
@@ -429,7 +429,7 @@ def _construir_notificaciones_mora(
         # beneficios" -- esa acción la agrega `_render_mora` una sola vez,
         # fundida en la misma oración; repetirla acá duplicaba "último
         # aviso" en dos frases seguidas del correo.
-        base = "Su membresía sigue vencida y este es el último aviso automático que recibirá."
+        base = "Tu membresía sigue vencida y este es el último aviso automático que recibirás."
 
     if responsable.id == persona.id:
         mensaje = base
@@ -509,7 +509,7 @@ def _formatear_resumen_mora(hoy: date, morosos: list[dict]) -> str:
         nombre = acortar_nombre_para_notificacion(moroso["nombre"])
         partes.append(f"{nombre} ({moroso['meses_adeudados']} meses, {moroso['monto_mensual']})")
     return (
-        f"Mora del {hoy.strftime('%d/%m/%Y')}: {len(morosos)} miembros — "
+        f"Mora del {hoy.strftime('%d/%m/%Y')}: {len(morosos)} jugadores — "
         + ", ".join(partes)
     )
 

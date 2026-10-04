@@ -174,7 +174,7 @@ export default function AttendanceFilters({
           <StudentSearch
             onSelect={filters.selectStudent}
             onClear={filters.clearStudent}
-            placeholder="Buscar alumno…"
+            placeholder="Buscar jugador…"
           />
         </FilterGroup>
       }

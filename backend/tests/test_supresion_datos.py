@@ -336,7 +336,7 @@ def test_pagos_pendientes_sin_notas_bloquean_la_ejecucion(db_session, cloudinary
 
     with pytest.raises(OperacionInvalida) as exc:
         servicio.ejecutar(solicitud.id, admin_persona_id=1)
-    assert "pagos pendientes" in exc.value.mensaje
+    assert "pagos por validar" in exc.value.mensaje
     assert cloudinary_falso.llamadas == []
 
 

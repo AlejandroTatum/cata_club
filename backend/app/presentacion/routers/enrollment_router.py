@@ -29,7 +29,7 @@ router = APIRouter(prefix="/enrollment", tags=["Autoinscripción"])
     "/",
     response_model=EnrollmentResponseDTO,
     status_code=status.HTTP_201_CREATED,
-    summary="Autoinscripción pública de alumno",
+    summary="Autoinscripción pública de jugador",
     description=(
         "Endpoint público (sin auth) que crea Persona, Usuario, "
         "opcionalmente FichaMedica y AntecedentesClub en un solo request. "

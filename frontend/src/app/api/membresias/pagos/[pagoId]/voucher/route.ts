@@ -46,7 +46,7 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
     // MIME type in the sentence: plain Spanish naming what IS accepted is
     // both what a non-technical user needs and what passes the gate.
     return NextResponse.json(
-      { message: "Ese tipo de archivo no se puede subir. Adjunte una foto (JPG o PNG) o un PDF." },
+      { message: "Ese tipo de archivo no se puede subir. Adjunta una foto (JPG o PNG) o un PDF." },
       { status: 400 },
     );
   }
@@ -67,10 +67,10 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
   });
 
   if (!result.ok) {
-    return NextResponse.json({ message: "No se pudo subir el voucher." }, { status: result.status });
+    return NextResponse.json({ message: "No se pudo subir el comprobante." }, { status: result.status });
   }
   if (!result.response.ok) {
-    return passthroughBackendError(result.response, "No se pudo subir el voucher.");
+    return passthroughBackendError(result.response, "No se pudo subir el comprobante.");
   }
 
   const data = (await result.response.json()) as Record<string, unknown>;

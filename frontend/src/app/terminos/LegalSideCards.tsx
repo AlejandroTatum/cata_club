@@ -24,7 +24,7 @@ export function LegalRelated({ path, className }: { path?: string; className?: s
       <ul className="grid divide-y divide-cata-border text-sm font-semibold text-cata-red-dark">
         {DOCUMENTS.map((doc) => (
           <li key={doc.href}>
-            <Link href={doc.href} aria-current={doc.href === path ? "page" : undefined} className="flex items-center justify-between gap-3 py-2.5 aria-[current=page]:text-cata-text">
+            <Link href={doc.href} aria-current={doc.href === path ? "page" : undefined} className="flex min-h-ctl items-center justify-between gap-3 py-2.5 aria-[current=page]:text-cata-text">
               <span className="underline underline-offset-4">{doc.label}</span>
               <ChevronRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" className="flex-none text-ink-3" />
             </Link>

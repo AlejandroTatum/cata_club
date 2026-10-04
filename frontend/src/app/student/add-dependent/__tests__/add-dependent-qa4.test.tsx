@@ -77,7 +77,7 @@ describe("«Siguiente» on an incomplete step (FAM-17)", () => {
     next();
 
     expect(
-      screen.getByText("Complete los nombres, apellidos, fecha de nacimiento y cédula para continuar."),
+      screen.getByText("Completa los nombres, apellidos, fecha de nacimiento y cédula para continuar."),
     ).toBeInTheDocument();
     expect(screen.getByLabelText(/^Nombres/)).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByLabelText(/^Cédula/)).toHaveAttribute("aria-invalid", "true");
@@ -162,9 +162,9 @@ describe("the dependent's first payment (FAM-09, FAM-08)", () => {
       target: { value: "O_POSITIVO" },
     });
     next();
-    fireEvent.change(screen.getByLabelText(/Cuándo desea pagar/), { target: { value: "now" } });
+    fireEvent.change(screen.getByLabelText(/Cuándo quieres pagar/), { target: { value: "now" } });
     fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.click(screen.getByRole("button", { name: /agregar dependiente/i }));
+    fireEvent.click(screen.getByRole("button", { name: /agregar jugador/i }));
     await screen.findByLabelText("Plan de membresía");
   }
 
@@ -201,7 +201,7 @@ describe("the dependent's first payment (FAM-09, FAM-08)", () => {
   it("hides the wizard help once the dependent exists", async () => {
     await openPaymentStep();
 
-    expect(screen.queryByText("Cómo se agrega un dependiente")).not.toBeInTheDocument();
+    expect(screen.queryByText("Cómo se agrega un jugador")).not.toBeInTheDocument();
     expect(screen.queryByText("Antes de empezar")).not.toBeInTheDocument();
   });
 

@@ -22,15 +22,15 @@ export default function EnrollSignedInNotice(props: EnrollSignedInNoticeProps): 
       <BackLink href={props.backHref} />
       <section className="flex flex-col gap-4 rounded-card border border-line bg-white p-page shadow-elevated">
         <h1 className="font-display text-2xl uppercase tracking-flat text-coal">
-          Ya tiene una sesión iniciada
+          Ya tienes una sesión iniciada
         </h1>
         <p className="text-sm text-ink-2">
-          La inscripción crea una cuenta nueva. Para sumar a otra persona a su cargo, agregue un
-          dependiente. Si desea inscribir a una persona con su propia cuenta, cierre sesión primero.
+          La inscripción crea una cuenta nueva. Para sumar a otra persona a tu cargo, agrega un
+          jugador. Si quieres inscribir a una persona con tu propia cuenta, cierra sesión primero.
         </p>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <Link href="/student/add-dependent" className={buttonClasses("primary")}>
-            Agregar un dependiente
+            Agregar jugador (menor de edad)
           </Link>
           <Button variant="secondary" onClick={props.onLogout} disabled={props.loggingOut}>
             Cerrar sesión para inscribir a otra persona

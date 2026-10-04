@@ -278,7 +278,7 @@ def test_listar_correcciones_por_asistencia_ordena_mas_reciente_primero(db_sessi
     admin = _crear_persona(db_session, cedula_valida(192), "Leo", "Pardo")
     asistencia = Asistencia(
         persona_id=alumno.id, horario_id=horario.id, fecha_entrenamiento=date(2026, 7, 13),
-        estado=EstadoAsistencia.JUSTIFICADO,
+        estado=EstadoAsistencia.ENFERMO,
     )
     db_session.add(asistencia)
     db_session.flush()

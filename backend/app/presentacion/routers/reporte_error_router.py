@@ -17,7 +17,7 @@ from app.servicios_negocio.reporte_error_servicio import MAX_CAPTURA, validar_ca
 from app.soporte_transversal.lectura_archivos import leer_con_limite
 from app.soporte_transversal.rate_limit import limiter
 
-router = APIRouter(prefix="/reportes-error", tags=["Reportes de error"])
+router = APIRouter(prefix="/reportes-error", tags=["Errores reportados"])
 
 
 class ReporteDTO(BaseModel):
@@ -54,13 +54,13 @@ async def crear_reporte(
     mime = None
     if captura is not None:
         if not consentimiento_captura:
-            raise HTTPException(422, "Debe aceptar el envío de la captura")
+            raise HTTPException(422, "Debes aceptar el envío de la captura")
         try:
             contenido = await leer_con_limite(captura, MAX_CAPTURA)
             mime = captura.content_type or ""
             validar_captura(mime, contenido)
         except (ValueError, OperacionInvalida) as exc:
-            raise HTTPException(422, "Captura inválida: use PNG, JPEG o WebP de hasta 2 MB") from exc
+            raise HTTPException(422, "Captura inválida: usa PNG, JPEG o WebP de hasta 2 MB") from exc
     repo = ReporteErrorRepositorio(db)
     reporte = repo.crear(ReporteError(
         persona_id=token_payload["persona_id"], descripcion=descripcion.strip(),
@@ -72,7 +72,7 @@ async def crear_reporte(
     ).all():
         db.add(Notificacion(
             persona_id=admin.persona_id, tipo=TipoNotificacion.NUEVO_REPORTE_ERROR,
-            mensaje=f"Nuevo reporte de error #{reporte.id}", entidad_relacionada_id=reporte.id,
+            mensaje=f"Nuevo error reportado #{reporte.id}", entidad_relacionada_id=reporte.id,
         ))
     db.commit()
     db.refresh(reporte)
@@ -88,7 +88,7 @@ def listar_reportes(skip: int = Query(0, ge=0), limit: int = Query(20, ge=1, le=
 def obtener_reporte(reporte_id: int, db: Session = Depends(obtener_sesion)):
     reporte = ReporteErrorRepositorio(db).obtener(reporte_id)
     if reporte is None:
-        raise HTTPException(404, "Reporte no encontrado")
+        raise HTTPException(404, "Error reportado no encontrado")
     return reporte
 
 

@@ -96,16 +96,16 @@ export default function ScheduleSelector({ schedules, header }: ScheduleSelector
             <a
               className="landing-schedule-cta" target="_blank" rel="noreferrer"
               href={whatsAppHref(`Hola, quiero consultar cupo en ${schedule.category}.`)}
-              aria-label={`Consultar cupo en ${schedule.category} por WhatsApp`}
+              aria-label={`Preguntar por cupos en ${schedule.category} por WhatsApp`}
             >
-              Consultar cupo <ArrowRight aria-hidden="true" />
+              Preguntar por cupos <ArrowRight aria-hidden="true" />
             </a>
           </div>
         </li>;
       })}
       <li className="landing-schedule-tile landing-schedule-help" style={{ "--landing-tile-index": entries.length } as React.CSSProperties}>
-        <h3>¿No sabe cuál elegir?</h3>
-        <p>Escríbanos con la edad y le indicamos la categoría.</p>
+        <h3>¿No sabes cuál elegir?</h3>
+        <p>Escríbenos con la edad y te indicamos la categoría.</p>
         <a href={whatsAppHref("Hola, quiero ayuda para elegir categoría.")} target="_blank" rel="noreferrer">Abrir WhatsApp <ArrowRight aria-hidden="true" /></a>
       </li>
     </ScheduleReveal>

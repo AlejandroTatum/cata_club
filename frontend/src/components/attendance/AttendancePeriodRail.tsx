@@ -49,10 +49,6 @@ const STATE_GUIDE: ReadonlyArray<{ label: string; meaning: string }> = [
     label: "Tardanza",
     meaning: "llegó después de la hora de inicio; cuenta como asistencia.",
   },
-  {
-    label: "Justificado",
-    meaning: "avisó con motivo y la ausencia fue aceptada.",
-  },
   { label: "Enfermo", meaning: "ausencia autorizada por salud." },
   {
     label: "Competencia",
@@ -122,7 +118,6 @@ export default function AttendancePeriodRail({
       present: 0,
       absent: 0,
       late: 0,
-      justified: 0,
       sick: 0,
       competition: 0,
     };

@@ -37,7 +37,7 @@ _DIAS: dict[DiaSemana, str] = {
 }
 
 _ROLES: dict[TipoRol, str] = {
-    TipoRol.ALUMNO: "alumno",
+    TipoRol.ALUMNO: "jugador",
     TipoRol.ENTRENADOR: "entrenador",
     TipoRol.ADMINISTRADOR: "administrador",
     TipoRol.REPRESENTANTE: "representante",
@@ -47,7 +47,7 @@ _ROLES: dict[TipoRol, str] = {
 # los tres estados y "pendiente" solo no dice pendiente de qué.
 _ESTADOS_DE_PAGO: dict[EstadoPago, str] = {
     EstadoPago.APROBADO: "aprobado",
-    EstadoPago.PENDIENTE_VALIDACION: "pendiente de validación",
+    EstadoPago.PENDIENTE_VALIDACION: "por validar",
     EstadoPago.RECHAZADO: "rechazado",
 }
 

@@ -12,7 +12,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: { absolute: "Verifique su cuenta — Cata Club" },
+  title: { absolute: "Verifica tu cuenta — Cata Club" },
 };
 
 export default function ActivacionLayout({

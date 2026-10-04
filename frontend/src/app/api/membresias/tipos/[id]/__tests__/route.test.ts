@@ -133,7 +133,7 @@ describe("PATCH /api/membresias/tipos/[id]", () => {
 
   it("relays a 403 from the backend instead of flattening it", async () => {
     vi.mocked(global.fetch).mockResolvedValue(
-      jsonResponse({ detail: "No tiene permisos suficientes" }, 403),
+      jsonResponse({ detail: "No tienes permisos suficientes" }, 403),
     );
 
     const response = await PATCH(patchRequest({ precio: "40.00" }, TOKEN()), {

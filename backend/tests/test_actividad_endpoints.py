@@ -33,6 +33,16 @@ def _reloj_fijo(monkeypatch):
     monkeypatch.setattr(actividad_router, "_ahora", lambda: AHORA)
 
 
+@pytest.fixture(autouse=True)
+def _latido_fresco(monkeypatch):
+    """Sin Redis en la suite: un latido reciente deja la salud de los workers en
+    ok; `test_salud_sistema.py` cubre el latido viejo o ausente."""
+    from types import SimpleNamespace
+
+    cliente = SimpleNamespace(get=lambda _clave: (AHORA - timedelta(seconds=10)).isoformat())
+    monkeypatch.setattr(actividad_router, "_cliente_latido", lambda: cliente)
+
+
 def _claves(valor) -> set[str]:
     if isinstance(valor, dict):
         return set(valor) | {k for v in valor.values() for k in _claves(v)}
@@ -128,7 +138,7 @@ def test_resumen_24h_tiene_la_forma_del_demo(client, db_session):
 
     cuerpo = client.get(RUTA_RESUMEN + "?rango=24h").json()
 
-    assert set(cuerpo) == {"range", "generatedAt", "span", "periods", "uniqueVisitors", "status", "queuedByQuota"}
+    assert set(cuerpo) == {"range", "generatedAt", "span", "periods", "uniqueVisitors", "status", "queuedByQuota", "health"}
     assert cuerpo["range"] == "24h" and cuerpo["span"] == "2h"
     assert cuerpo["generatedAt"] == "2026-10-01T15:30:00-05:00"
     periodos = cuerpo["periods"]
@@ -319,7 +329,7 @@ def _serie_ok(serie, rango):
 def test_avanzadas_sin_datos_conserva_la_forma_con_secciones_nulas(client, rango):
     cuerpo = client.get(RUTA_AVANZADAS + f"?rango={rango}").json()
 
-    assert set(cuerpo) == {"range", "service", "host", "runtime", "users"}
+    assert set(cuerpo) == {"range", "service", "host", "runtime", "users", "health"}
     assert cuerpo["range"] == rango
     assert cuerpo["service"] is None and cuerpo["host"] is None
     assert cuerpo["runtime"] is None and cuerpo["users"] is None
@@ -391,7 +401,7 @@ def test_avanzadas_tiene_la_forma_exacta_del_demo(client, db_session, rango):
 
     cuerpo = client.get(RUTA_AVANZADAS + f"?rango={rango}").json()
 
-    assert set(cuerpo) == {"range", "service", "host", "runtime", "users"}
+    assert set(cuerpo) == {"range", "service", "host", "runtime", "users", "health"}
     servicio = cuerpo["service"]
     assert set(servicio) == {
         "updatedAt", "requestsPerMinute", "errorRate5xx", "errorRate4xx", "latencyMs", "slowEndpoints",

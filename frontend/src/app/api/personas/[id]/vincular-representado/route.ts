@@ -50,7 +50,7 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
     body: JSON.stringify({ cedula }),
   });
 
-  const fallback = "No se pudo vincular esa cédula a su cuenta.";
+  const fallback = "No se pudo vincular esa cédula a tu cuenta.";
   if (!result.ok) {
     return NextResponse.json({ message: fallback }, { status: result.status });
   }

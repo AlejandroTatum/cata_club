@@ -46,7 +46,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const body = rawBody as CrearHorarioBody;
   if (typeof body.categoria !== "string" || typeof body.dia_semana !== "string") {
-    return badRequestResponse("Seleccione la categoría y el día.");
+    return badRequestResponse("Selecciona la categoría y el día.");
   }
 
   return proxyToBackend("/asistencias/horarios", {

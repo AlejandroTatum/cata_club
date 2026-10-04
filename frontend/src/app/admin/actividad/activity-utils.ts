@@ -9,7 +9,7 @@
  */
 
 import type { ChartTone } from "@/components/charts";
-import type { HealthLevel, PeriodSpan, StatusKey, Tone } from "./actividad-types";
+import type { HealthComponentKey, HealthLevel, PeriodSpan, StatusKey, SystemHealth, Tone } from "./actividad-types";
 
 export type ActivityView = "resumen" | "avanzadas";
 
@@ -198,11 +198,11 @@ const STATUS_COPY: Record<StatusKey, Record<HealthLevel, { sentence: string; act
     ok: { sentence: "La aplicación responde con normalidad.", action: null },
     warn: {
       sentence: "La aplicación responde con lentitud.",
-      action: "Si las personas se quejan de demoras, avise al equipo técnico.",
+      action: "Si las personas se quejan de demoras, avisa al equipo técnico.",
     },
     bad: {
       sentence: "La aplicación no está respondiendo.",
-      action: "Avise de inmediato al equipo técnico.",
+      action: "Avisa de inmediato al equipo técnico.",
     },
     unknown: { sentence: "Sin datos todavía sobre la aplicación.", action: null },
   },
@@ -210,11 +210,11 @@ const STATUS_COPY: Record<StatusKey, Record<HealthLevel, { sentence: string; act
     ok: { sentence: "No hay errores que afecten al club.", action: null },
     warn: {
       sentence: "Hay algunos errores que pueden afectar a ciertas personas.",
-      action: "Revise «Reportes de error» y avise al equipo técnico si se repiten.",
+      action: "Revisa «Errores reportados» y avisa al equipo técnico si se repiten.",
     },
     bad: {
       sentence: "Hay errores frecuentes que afectan al club.",
-      action: "Avise de inmediato al equipo técnico.",
+      action: "Avisa de inmediato al equipo técnico.",
     },
     unknown: { sentence: "Sin datos todavía sobre los errores.", action: null },
   },
@@ -222,11 +222,11 @@ const STATUS_COPY: Record<StatusKey, Record<HealthLevel, { sentence: string; act
     ok: { sentence: "Los correos y avisos están al día.", action: null },
     warn: {
       sentence: "Hay correos o avisos esperando para salir.",
-      action: "Si siguen acumulándose, avise al equipo técnico.",
+      action: "Si siguen acumulándose, avisa al equipo técnico.",
     },
     bad: {
       sentence: "Los correos y avisos no están saliendo.",
-      action: "Avise de inmediato al equipo técnico.",
+      action: "Avisa de inmediato al equipo técnico.",
     },
     unknown: { sentence: "Sin datos todavía sobre los correos y avisos.", action: null },
   },
@@ -234,4 +234,33 @@ const STATUS_COPY: Record<StatusKey, Record<HealthLevel, { sentence: string; act
 
 export function statusCopy(key: StatusKey, level: HealthLevel): { sentence: string; action: string | null } {
   return STATUS_COPY[key][level];
+}
+
+const HEALTH_COMPONENT_NAME: Record<HealthComponentKey, string> = {
+  workers: "los procesos en segundo plano",
+  email: "el envío de correos",
+  outbox: "la cola de correos",
+};
+
+/** «a», «a y b», «a, b y c». */
+function joinNames(names: readonly string[]): string {
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`;
+}
+
+/**
+ * The «Estado del sistema» row for a degraded heartbeat (ADMB-N1), or `null`
+ * when `health` is missing, null or ok: a field the backend did not send must
+ * never read as an alarm.
+ */
+export function healthCopy(health: SystemHealth | null | undefined): { sentence: string; action: string } | null {
+  if (!health || !health.degraded || health.components.length === 0) return null;
+  const names = joinNames(health.components.map(({ key }) => HEALTH_COMPONENT_NAME[key]));
+  const silent = health.components.some(({ reason }) => reason !== "outbox_stale");
+  return {
+    sentence: `Hay una falla en ${names}.`,
+    action: silent
+      ? "Los avisos y correos pueden no estar saliendo. Avisa de inmediato al equipo técnico."
+      : "Hay correos detenidos hace más de 30 minutos. Avisa al equipo técnico.",
+  };
 }

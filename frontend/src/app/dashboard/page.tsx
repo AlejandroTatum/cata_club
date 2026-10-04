@@ -61,6 +61,7 @@ import {
   StackedBars,
   Timeline,
 } from "@/components/charts";
+import AttentionStrip, { type AttentionItem } from "@/components/dashboard/AttentionStrip";
 import CompactEmpty from "@/components/dashboard/CompactEmpty";
 import DashboardSection from "@/components/dashboard/DashboardSection";
 import KpiTile from "@/components/dashboard/KpiTile";
@@ -73,7 +74,7 @@ import {
   fetchDashboardStats,
   fetchAttendanceRecords,
   fetchPaymentValidations,
-  fetchRosterDeTodosLosHorarios,
+  fetchConteosPorHorario,
   fetchTrainingSchedules,
   type DashboardStats,
   type PaymentValidationRequest,
@@ -118,6 +119,13 @@ const QUEUE_LIMIT = 4;
 
 /** Weeks the attendance-by-state chart spans. */
 const CHART_WEEKS = 6;
+
+/** The action label of each «Urgente» row, keyed like `todoItems`. */
+const URGENT_CTA: Record<string, string> = {
+  payments: "Revisar pagos",
+  attendance: "Ver listas",
+  members: "Ver jugadores",
+};
 
 const ACTIVITY_FILTERS: { value: ActivityFilter; label: string }[] = [
   { value: "all", label: "Todo" },
@@ -172,7 +180,7 @@ export default function DashboardPage(): React.ReactElement {
       setStats(await fetchDashboardStats());
     } catch {
       setError(
-        "No se pudieron cargar las estadísticas del panel. Intente nuevamente.",
+        "No se pudieron cargar las estadísticas del panel. Intenta nuevamente.",
       );
     } finally {
       setLoading(false);
@@ -243,8 +251,8 @@ export default function DashboardPage(): React.ReactElement {
   }, [schedules]);
 
   /**
-   * Enrolled students per class: a garnish for the tooltips, so a failed
-   * roster leaves the counts unknown (the tooltip simply omits them) instead
+   * Enrolled students per class: a garnish for the tooltips, so failed
+   * counts leave the counts unknown (the tooltip simply omits them) instead
    * of blocking the timeline.
    */
   useEffect((): (() => void) => {
@@ -253,10 +261,10 @@ export default function DashboardPage(): React.ReactElement {
       setEnrolled(null);
       return (): void => {};
     }
-    fetchRosterDeTodosLosHorarios()
-      .then((roster) => {
+    fetchConteosPorHorario()
+      .then((conteos) => {
         if (!cancelled)
-          setEnrolled(buildEnrolledCountsByHorario(todaySchedules, roster));
+          setEnrolled(buildEnrolledCountsByHorario(todaySchedules, conteos));
       })
       .catch(() => {
         if (!cancelled) setEnrolled(null);
@@ -316,7 +324,7 @@ export default function DashboardPage(): React.ReactElement {
     {
       key: "payments",
       label: "Pagos por validar",
-      hint: "Revise cada comprobante y apruébelo o recházelo.",
+      hint: "Revisa cada comprobante y apruébalo o recházalo.",
       href: "/payments",
       count: stats?.pendingPayments ?? 0,
       tone: "warn",
@@ -331,13 +339,26 @@ export default function DashboardPage(): React.ReactElement {
     },
     {
       key: "members",
-      label: "Alumnos sin membresía activa",
-      hint: "Asígneles un plan o regularice su deuda.",
+      label: "Jugadores sin membresía activa",
+      hint: "Asígnales un plan o regulariza su deuda.",
       href: "/members",
       count: stats?.personasSinMembresia ?? 0,
       tone: "warn",
     },
   ];
+
+  // ADMA-27: what the day asks of the administrator, for the top of a phone
+  // screen. Same counts and order as «Qué hacer hoy»; rows at 0 are dropped.
+  const urgentItems: AttentionItem[] = todoItems
+    .filter((item) => item.count > 0)
+    .map((item) => ({
+      id: item.key,
+      count: item.count,
+      label: item.label,
+      tone: item.tone,
+      href: item.href,
+      cta: URGENT_CTA[item.key],
+    }));
 
   const pendingPayments = stats?.pendingPayments ?? 0;
   const overAWeek = countPaymentsWaitingOverAWeek(payments);
@@ -374,7 +395,7 @@ export default function DashboardPage(): React.ReactElement {
     key: bar.startIso,
     label: index === all.length - 1 ? "Act." : `S-${all.length - 1 - index}`,
     value: bar.ratePercent,
-    detail: `Semana del ${formatDate(bar.startIso).slice(0, 5)}: ${bar.ratePercent}% · ${bar.present} de ${bar.total}`,
+    detail: `Semana del ${formatDate(bar.startIso).slice(0, 5)}: ${bar.ratePercent}% · ${bar.attended} de ${bar.total}`,
   }));
 
   return (
@@ -400,6 +421,20 @@ export default function DashboardPage(): React.ReactElement {
           <LoadingState label="Cargando estadísticas…" />
         ) : (
           <>
+            {/*
+              Phones only (ADMA-27): the urgent items lead, ahead of the day's
+              timeline. On a desktop the same facts sit in the hero's chips row
+              and «Qué hacer hoy», so this block stays out.
+            */}
+            {urgentItems.length > 0 && (
+              <div data-testid="urgent-first" className="lg:hidden">
+                <AttentionStrip
+                  title="Urgente"
+                  items={urgentItems}
+                  allClearMessage="Todo al día."
+                />
+              </div>
+            )}
             {/*
               The hero. The timeline is the day; the chips under it are what the
               day asks of the administrator. With nothing to do the chips row
@@ -453,7 +488,11 @@ export default function DashboardPage(): React.ReactElement {
 
                 <div
                   data-testid="attention-chips"
-                  className="flex flex-col gap-3 border-t border-line pt-4"
+                  className={cn(
+                    "flex flex-col gap-3 border-t border-line pt-4",
+                    // The phone's «Urgente» block already says it.
+                    urgentItems.length > 0 && "max-lg:hidden",
+                  )}
                 >
                   <PaymentsAction
                     count={pendingPayments}
@@ -505,12 +544,12 @@ export default function DashboardPage(): React.ReactElement {
                 visualPlacement="below"
                 visual={
                   <SegmentBar
-                    ariaLabel={`Miembros: ${totalAlumnos} alumnos y ${staff} representantes y personal`}
+                    ariaLabel={`Miembros: ${totalAlumnos} jugadores y ${staff} representantes y personal`}
                     hideLegend
                     segments={[
                       {
                         key: "alumnos",
-                        label: "Alumnos",
+                        label: "Jugadores",
                         value: totalAlumnos,
                         tone: "coal",
                       },
@@ -523,7 +562,7 @@ export default function DashboardPage(): React.ReactElement {
                     ]}
                   />
                 }
-                caption={`${totalAlumnos} alumnos · ${staff} representantes y personal`}
+                caption={`${totalAlumnos} jugadores · ${staff} representantes y personal`}
                 captionClassName="max-lg:min-h-[44px]"
                 href="/members"
               />
@@ -575,7 +614,7 @@ export default function DashboardPage(): React.ReactElement {
                 caption={
                   recordsStatus === "loading"
                     ? "Calculando…"
-                    : `${fourWeeks.present} de ${fourWeeks.total} presentes`
+                    : `${fourWeeks.attended} de ${fourWeeks.total} registros`
                 }
                 href="/attendance"
               />
@@ -843,7 +882,7 @@ export default function DashboardPage(): React.ReactElement {
             </DashboardSection>
 
             <InfoPanel title="Qué hacer hoy" as="div">
-              <p>Revise en este orden; cada punto abre su pantalla.</p>
+              <p>Revisa en este orden; cada punto abre su pantalla.</p>
               <div className="grid gap-3">
                 {todoItems.map((item) => (
                   <div key={item.key} className="flex items-start gap-2">

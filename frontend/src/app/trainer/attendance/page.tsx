@@ -26,7 +26,7 @@
  * DECISION and never conflates the two:
  *   - `SessionStudent.reviewed` says whether a human touched the row. Every
  *     path that sets a state sets it: the fiche tap, the four controls,
- *     "Marcar restantes presentes", a record already saved for this session,
+ *     "Marcar todos presentes", a record already saved for this session,
  *     and a restored draft entry.
  *   - `countUnreviewed` spans the FULL roster, never the visible page or the
  *     name filter, and both the roll call and the confirmation step show it.
@@ -116,7 +116,7 @@ import AttendanceLeaveDialog from "./AttendanceLeaveDialog";
 
 /** The card heading per step. */
 const STEP_LABELS: Record<WizardStep, string> = {
-  "select-session": "Elija el horario",
+  "select-session": "Elige el horario",
   "mark-attendance": "Pasar lista",
   confirm: "Confirmar y finalizar",
 };

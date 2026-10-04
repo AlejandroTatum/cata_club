@@ -10,6 +10,7 @@
 
 import type { DiaSemana, EstadoAsistencia } from "@/types/domain";
 import type { BadgeTone } from "@/components/ui/Badge";
+import { attendanceRatePercent } from "@/lib/attendance-rule";
 import { MONTH_ABBR } from "@/lib/format-utils";
 
 // ---------------------------------------------------------------------------
@@ -96,14 +97,13 @@ export interface AttendanceRecord {
 /** Aggregate counts for today's attendance overview.
  *
  *  Issue #1373 adds `totalSick`/`totalCompetition` for the two authorized-
- *  absence states — the justified/neutral family. They are deliberately
+ *  absence states (the JUSTIFICADO status was removed, ENT-23). They are deliberately
  *  NOT part of the "no asistió" bucket on any consumer: sick/competition
  *  never count as unexcused absences (issue AC #3). */
 export interface AttendanceDayStats {
   totalPresent: number;
   totalAbsent: number;
   totalLate: number;
-  totalJustified: number;
   totalSick: number;
   totalCompetition: number;
   /** Count of records with an unknown/unexpected estado value. */
@@ -143,7 +143,6 @@ export const ATTENDANCE_LABELS: Record<EstadoAsistencia, string> = {
   present: "Presente",
   absent: "Ausente",
   late: "Tardanza",
-  justified: "Justificado",
   // Issue #1373: mismos labels que el PDF del backend usa para los dos
   // estados nuevos (_ETIQUETAS_ESTADO_ASISTENCIA), para que tabla, badges y
   // exports digan lo mismo de la misma fila.
@@ -172,7 +171,6 @@ export const ATTENDANCE_BADGE_TOKENS: Record<EstadoAsistencia, AttendanceBadgeTo
   present: { badgeClass: "bg-cata-state-ok/10 text-cata-state-ok", iconClass: "text-cata-state-ok" },
   absent: { badgeClass: "bg-red-50 text-red-700", iconClass: "text-red-700" },
   late: { badgeClass: "bg-amber-50 text-amber-700", iconClass: "text-amber-700" },
-  justified: { badgeClass: "bg-blue-50 text-blue-700", iconClass: "text-blue-700" },
   // Issue #1373: sick/competition follow the same -50/-700 semantic pairing.
   // Violet (sick) and teal (competition) are unused elsewhere in this map,
   // so each of the six states keeps a distinguishable pill.
@@ -213,17 +211,14 @@ export function getAttendanceBadgeTokens(estado: string): AttendanceBadgeTokens 
  * they could drift apart again.
  *
  * The tones mirror `Badge`'s own doc comment: presente → ok, tardanza → warn,
- * justificado → neutral, ausente → bad. `justified` moves from blue to neutral
- * because the design system has no blue state pair; a justified absence is
- * informational, which is exactly what neutral means. The two issue #1373
- * states are informational the same way — an authorized absence never asks
+ * ausente → bad. The two issue #1373
+ * states are informational — an authorized absence never asks
  * anybody to act — so sick and competition are neutral too.
  */
 export const ATTENDANCE_BADGE_TONES: Record<EstadoAsistencia, BadgeTone> = {
   present: "ok",
   absent: "bad",
   late: "warn",
-  justified: "neutral",
   sick: "neutral",
   competition: "neutral",
 };
@@ -267,7 +262,6 @@ export function buildAttendanceStats(
   let totalPresent = 0;
   let totalAbsent = 0;
   let totalLate = 0;
-  let totalJustified = 0;
   let totalSick = 0;
   let totalCompetition = 0;
   let totalUnknown = 0;
@@ -282,9 +276,6 @@ export function buildAttendanceStats(
         break;
       case "late":
         totalLate++;
-        break;
-      case "justified":
-        totalJustified++;
         break;
       // Issue #1373: the two authorized-absence states get their own counts
       // (the fallback below would otherwise swallow them as "unknown").
@@ -304,7 +295,6 @@ export function buildAttendanceStats(
     totalPresent,
     totalAbsent,
     totalLate,
-    totalJustified,
     totalSick,
     totalCompetition,
     totalUnknown,
@@ -313,13 +303,13 @@ export function buildAttendanceStats(
 }
 
 /**
- * Share of attendance records marked "present", as a rounded 0-100 percent.
+ * Share of attendance records that count as attended (presente + tardanza,
+ * `lib/attendance-rule`), as a rounded 0-100 percent.
  *
  * Returns 0 (not NaN) when there are no records to derive a rate from.
  */
 export function getAttendanceRatePercent(stats: AttendanceDayStats): number {
-  if (stats.totalStudents === 0) return 0;
-  return Math.round((stats.totalPresent / stats.totalStudents) * 100);
+  return attendanceRatePercent(stats.totalPresent + stats.totalLate, stats.totalStudents);
 }
 
 /**

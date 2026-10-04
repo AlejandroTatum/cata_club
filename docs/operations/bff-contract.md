@@ -98,7 +98,7 @@ congela la API.
 
 ## Los enums compartidos
 
-Las rutas coinciden; lo que viaja por ellas es otro contrato. Los **14** enums de
+Las rutas coinciden; lo que viaja por ellas es otro contrato. Los **15** enums de
 `backend/app/dominio/enums.py` no tienen todos la misma relación con el frontend,
 y un gate que asumiera una sola se equivocaría en la mayoría. Se declaran cuatro:
 
@@ -128,6 +128,7 @@ en rojo: esa es la parte que no envejece.
 | 12 | `TipoEscuela` | (d) sin contraparte | — | en la lista justificada |
 | 13 | `NivelTecnicoAlumno` | (d) sin contraparte | — | en la lista justificada |
 | 14 | `EfectoCoberturaCorreccion` | (d) sin contraparte | — | en la lista justificada |
+| 15 | `EstadoSolicitudCorreccion` | (a) | `CorrectionRequestStatus` (`services/api.ts:937`) | verificado |
 
 `Categoria` se excluye por el mismo criterio —y sobre el mismo enum— con que
 `backend/tests/test_drift_enums_postgres.py:70` lo excluye en

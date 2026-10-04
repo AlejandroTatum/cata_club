@@ -1,4 +1,4 @@
-import { FileText, Thermometer, Timer, Trophy, UserCheck, UserX } from "lucide-react";
+import { Thermometer, Timer, Trophy, UserCheck, UserX } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { Badge } from "@/components/ui";
 import { getAttendanceBadgeTone, getAttendanceBadgeTokens } from "@/app/attendance/attendance-utils";
@@ -17,7 +17,6 @@ const ATTENDANCE_ICONS: Record<EstadoAsistencia, React.ReactNode> = {
   present: <UserCheck size={ICON.sm} strokeWidth={2} aria-hidden="true" />,
   absent: <UserX size={ICON.sm} strokeWidth={2} aria-hidden="true" />,
   late: <Timer size={ICON.sm} strokeWidth={2} aria-hidden="true" />,
-  justified: <FileText size={ICON.sm} strokeWidth={2} aria-hidden="true" />,
   // Issue #1373: inasistencias autorizadas, cada una con su ícono propio
   // para que el toggle no dependa solo del color del badge.
   sick: <Thermometer size={ICON.sm} strokeWidth={2} aria-hidden="true" />,
@@ -45,9 +44,9 @@ interface AttendanceRosterRowProps {
  * #318/#25's `overflow-y-auto` box only needed `shrink-0` fixed here).
  *
  * The row's height is CONTENT-DRIVEN at every breakpoint (#1373): no fixed
- * height may fight the picker. The picker itself wraps 3-wide (3×2 of 44px
- * targets) below `lg`, and from `lg` up — where the fiche is wide — all six
- * states sit in ONE horizontal row (`lg:grid-cols-6`, user feedback on the
+ * height may fight the picker. The picker itself wraps 3-wide (3+2 of 44px
+ * targets) below `lg`, and from `lg` up — where the fiche is wide — all five
+ * states sit in ONE horizontal row (`lg:grid-cols-5`, user feedback on the
  * #1373 preview: the desktop 2×3 block made rows read as too tall).
  * `overflow-hidden` stays only as the rounded-corner clip for the name
  * button's hover surface — harmless once no fixed height can fight the grid.
@@ -122,7 +121,7 @@ export default function AttendanceRosterRow({
       <div
         role="radiogroup"
         aria-labelledby={`${groupLabelId} ${nameId}`}
-        className="grid w-full grid-cols-3 gap-0.5 border-t border-line p-1 sm:h-full sm:w-auto sm:border-l sm:border-t-0 sm:p-0.5 lg:grid-cols-6"
+        className="grid w-full grid-cols-3 gap-0.5 border-t border-line p-1 sm:h-full sm:w-auto sm:border-l sm:border-t-0 sm:p-0.5 lg:grid-cols-5"
       >
         <span id={groupLabelId} className="sr-only">
           Estado de asistencia de

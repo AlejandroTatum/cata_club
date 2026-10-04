@@ -1,5 +1,5 @@
 /**
- * CuotaCard — the family portal's "Cuota" card.
+ * CuotaCard — the family portal's "Mensualidad" card (FAM-27; it was «Cuota»).
  *
  * A calm, compact card with ONE urgency signal. It states the situation as a
  * headline with a single coloured badge (Vencida / Vence en N días / Al día),
@@ -39,7 +39,13 @@ import { ICON } from "@/lib/icon-size";
 import { Badge, buttonClasses, cn } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/format-utils";
 import { MIN_TARGET_CLASS } from "@/lib/target-size";
-import { describeCuotaBadge, paymentBandTone, type PaymentSituation } from "./student-utils";
+import {
+  COVERAGE_ENDING_SOON_DAYS,
+  daysUntil,
+  describeCuotaBadge,
+  paymentBandTone,
+  type PaymentSituation,
+} from "./student-utils";
 
 export interface CuotaCardProps {
   situation: PaymentSituation;
@@ -53,10 +59,31 @@ export interface CuotaCardProps {
   viewPagosHref: string;
   /** FAM-11: the sentence for a rejected payment the family still has to redo, or `null`. */
   notice?: string | null;
+  /** "Today" for the day count; only tests pass it. */
+  today?: Date;
 }
 
 /** Kinds whose `detail` only restates the "Cubierta hasta" date the figure row already shows. */
 const DETAIL_IS_THE_DATE = new Set<PaymentSituation["kind"]>(["expired", "ending-soon", "covered"]);
+
+/** The kinds that have a coverage date to count down to and a plan price to pay. */
+const COUNTDOWN_KINDS = new Set<PaymentSituation["kind"]>(["expired", "ending-soon", "covered"]);
+
+/**
+ * FAM-27: how much, until when and what comes next, in one sentence the family
+ * can act on. «Vence en 12 días (03/11/2026). Paga $25,00 y sube el
+ * comprobante; el club lo revisa y te avisamos aquí.»
+ */
+function describeNextStep(daysLeft: number, coverageEnd: string, price: string): string {
+  const date = formatDate(coverageEnd);
+  const when =
+    daysLeft < 0
+      ? `Venció hace ${-daysLeft} ${daysLeft === -1 ? "día" : "días"} (${date}).`
+      : daysLeft === 0
+        ? `Vence hoy (${date}).`
+        : `Vence en ${daysLeft} ${daysLeft === 1 ? "día" : "días"} (${date}).`;
+  return `${when} Paga ${price} y sube el comprobante; el club lo revisa y te avisamos aquí.`;
+}
 
 /** One figure: a small label over a large tabular number. */
 function CuotaFigure({ label, value, note }: { label: string; value: string; note?: string }): React.ReactElement {
@@ -78,6 +105,7 @@ export default function CuotaCard({
   action,
   viewPagosHref,
   notice = null,
+  today,
 }: CuotaCardProps): React.ReactElement {
   const tone = paymentBandTone(situation);
   const badge = describeCuotaBadge(situation);
@@ -85,15 +113,22 @@ export default function CuotaCard({
   const monthlyPriceLabel = monthlyPrice && !isGratuitous ? formatCurrency(monthlyPrice) : null;
   const showDetail = !(coverageEnd && DETAIL_IS_THE_DATE.has(situation.kind));
   const hasFigures = Boolean(coverageEnd || monthlyPriceLabel);
+  const daysLeft = daysUntil(coverageEnd, today);
+  // The primary (red) button is the one nudge: only when 7 days or fewer remain.
+  const dueSoon = daysLeft !== null && daysLeft <= COVERAGE_ENDING_SOON_DAYS;
+  const nextStep =
+    action && coverageEnd && monthlyPriceLabel && daysLeft !== null && COUNTDOWN_KINDS.has(situation.kind)
+      ? describeNextStep(daysLeft, coverageEnd, monthlyPriceLabel)
+      : null;
 
   return (
     <section
       data-testid="student-cuota-card"
-      aria-label="Su cuota"
+      aria-label="Tu mensualidad"
       className="card overflow-hidden"
     >
       <div className="flex items-center gap-3 border-b border-line px-5 py-3">
-        <h2 className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">Cuota</h2>
+        <h2 className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">Mensualidad</h2>
         <Link
           href={viewPagosHref}
           // `MIN_TARGET_CLASS` (issue #818, WCAG 2.5.8 AA): the link used to
@@ -119,7 +154,7 @@ export default function CuotaCard({
               <p className="text-sm font-semibold text-ink">{situation.headline}</p>
             </div>
             {action && (
-              <Link href={action.href} className={buttonClasses("secondary", "md")}>
+              <Link href={action.href} className={buttonClasses(dueSoon ? "primary" : "secondary", "md")}>
                 {situation.urgent ? (
                   <CreditCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
                 ) : null}
@@ -142,6 +177,11 @@ export default function CuotaCard({
             </div>
           )}
         </div>
+        {nextStep && (
+          <p data-testid="cuota-next-step" className="text-sm leading-relaxed text-ink-2">
+            {nextStep}
+          </p>
+        )}
         {showDetail && <p className="text-xs leading-relaxed text-ink-3-strong">{situation.detail}</p>}
         {notice && (
           <p

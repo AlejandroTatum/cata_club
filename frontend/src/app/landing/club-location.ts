@@ -46,3 +46,11 @@ export function clubOpenStreetMapUrl(): string {
   const [latitude, longitude] = CLUB_POSITION;
   return `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=${OPENSTREETMAP_LINK_ZOOM}/${latitude}/${longitude}`;
 }
+
+/**
+ * The street address the landing's contact card, footer and the SEO structured
+ * data all print. The street carries no number (see `CLUB_PLUS_CODE`), so none
+ * is invented here.
+ */
+export const CLUB_STREET_ADDRESS = "Av. Manuel Agustín Aguirre";
+export const CLUB_NEIGHBORHOOD = "Barrio Perpetuo Socorro";

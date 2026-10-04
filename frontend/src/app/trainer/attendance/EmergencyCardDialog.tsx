@@ -270,7 +270,7 @@ export default function EmergencyCardDialog({
             <div className="p-5">
               <ErrorState
                 title="No se pudo cargar la ficha de emergencia"
-                message="Revise su conexión e intente nuevamente."
+                message="Revisa tu conexión e intenta nuevamente."
                 onRetry={reintentar}
               />
             </div>
@@ -288,7 +288,7 @@ export default function EmergencyCardDialog({
                 surface="inset"
                 icon={<AlertTriangle size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
                 title="Sin datos de emergencia"
-                description={`El club no tiene cargada la ficha médica de ${student.name} ni un representante legal, así que esta tarjeta no puede decirle a quién llamar. Pídalos en secretaría antes del próximo entrenamiento.`}
+                description={`El club no tiene cargada la ficha médica de ${student.name} ni un representante legal, así que esta tarjeta no puede decirte a quién llamar. Pídelos en secretaría antes del próximo entrenamiento.`}
               />
             </div>
           )}

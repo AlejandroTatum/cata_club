@@ -47,6 +47,17 @@ const DAY_LABELS: Record<string, string> = {
   DOMINGO: "Domingo",
 };
 
+/** Spanish day label → schema.org `DayOfWeek`, for the SEO opening hours. */
+export const SCHEMA_DAY_OF_WEEK: Record<string, string> = {
+  Lunes: "Monday",
+  Martes: "Tuesday",
+  Miércoles: "Wednesday",
+  Jueves: "Thursday",
+  Viernes: "Friday",
+  Sábado: "Saturday",
+  Domingo: "Sunday",
+};
+
 const WEEK_DAYS = new Set(["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"]);
 const VALID_TIME = /^\d{2}:\d{2}$/;
 

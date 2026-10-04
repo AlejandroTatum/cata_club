@@ -11,14 +11,14 @@ from app.servicios_negocio.dtos.asistencia_schemas import (
 
 def _crear(justificativo):
     return AsistenciaCreateDTO(
-        fecha_entrenamiento="2026-01-05", estado="JUSTIFICADO",
+        fecha_entrenamiento="2026-01-05", estado="PRESENTE",
         justificativo=justificativo, persona_id=1, horario_id=1,
     )
 
 
 def _corregir(justificativo):
     return AsistenciaCorreccionDTO(
-        estado="JUSTIFICADO", justificativo=justificativo, motivo="error de carga",
+        estado="PRESENTE", justificativo=justificativo, motivo="error de carga",
     )
 
 

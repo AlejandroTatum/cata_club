@@ -87,7 +87,7 @@ describe("bandeja de reportes", () => {
     await screen.findByRole("button", { name: /Reporte #7/ });
 
     const detail = screen.getByRole("complementary", { name: "Detalle" });
-    expect(within(detail).getByText("Seleccione un reporte de la lista para ver su detalle.")).toBeInTheDocument();
+    expect(within(detail).getByText("Selecciona un reporte de la lista para ver su detalle.")).toBeInTheDocument();
     expect(within(detail).getByText("Hay 2 reportes recibidos.")).toBeInTheDocument();
   });
   it("shows a summary strip derived from the list", async () => {

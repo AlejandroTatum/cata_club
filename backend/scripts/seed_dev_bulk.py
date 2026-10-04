@@ -26,7 +26,7 @@ Creates (idempotent -- safe to run multiple times, following the same
     with a ComprobantePago for some approved payments and a voucher attached
     to pending ones, so /payments has a real validation queue.
   - Asistencia across the trainer's first 3 horarios, for the last 4 sessions
-    of each, mixing PRESENTE / AUSENTE / ATRASADO / JUSTIFICADO.
+    of each, mixing PRESENTE / AUSENTE / ATRASADO / ENFERMO.
   - Domain events across 16 tables that had zero rows in QA before this
     section existed: discount assignments and their bonified coverage,
     membership status/plan history, payment corrections, legal consents
@@ -1405,7 +1405,7 @@ def main() -> None:
             estados_ciclo = [
                 EstadoAsistencia.PRESENTE, EstadoAsistencia.PRESENTE,
                 EstadoAsistencia.AUSENTE, EstadoAsistencia.ATRASADO,
-                EstadoAsistencia.PRESENTE, EstadoAsistencia.JUSTIFICADO,
+                EstadoAsistencia.PRESENTE, EstadoAsistencia.ENFERMO,
             ]
             # La asistencia histórica cubre a los primeros 24, como antes: el
             # resto queda inscrito y sin historial, que es el caso real de un
@@ -1455,7 +1455,7 @@ def main() -> None:
                             continue
                         # `justificativo` / `estado_justificativo` quedan sin
                         # tocar a propósito: la app nunca los escribe ni los
-                        # muestra ("Justificado" es una marca sin motivo,
+                        # muestra ("Enfermo" es una marca sin motivo,
                         # decisión de negocio del 11 de agosto -- ver ASI-2).
                         # Llenarlos acá era el propio seed inventando una
                         # "Cita médica" que ningún entrenador tipeó, y

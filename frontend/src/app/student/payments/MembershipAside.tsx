@@ -78,7 +78,7 @@ export function MembershipCard({
   // Both already loaded: they sit beside the heading so the card's right side
   // carries the membership's facts instead of staying blank on a wide screen.
   if (membership?.fechaActivacion) {
-    facts.push({ label: "Socio desde", value: formatDate(membership.fechaActivacion) });
+    facts.push({ label: "Jugador desde", value: formatDate(membership.fechaActivacion) });
   }
   if (approvedCount) facts.push({ label: "Pagos aprobados", value: String(approvedCount) });
 
@@ -95,7 +95,7 @@ export function MembershipCard({
       <div className="px-5 py-[18px]">
         <div className="mb-2 flex flex-wrap items-center gap-2.5">
           <p className="text-2xs font-bold uppercase text-ink-3-strong">
-            {studentName ? `Membresía de ${studentName}` : "Su membresía"}
+            {studentName ? `Membresía de ${studentName}` : "Tu membresía"}
           </p>
           <Badge tone={state.tone}>{state.label}</Badge>
         </div>
@@ -111,8 +111,8 @@ export function MembershipCard({
         <p className="mt-1.5 text-sm text-ink-3-strong">
           {coverageEnd
             ? state.tone === "bad"
-              ? "Su cobertura terminó en esta fecha, según sus pagos aprobados."
-              : "Su membresía está cubierta hasta esta fecha según sus pagos aprobados."
+              ? "Tu cobertura terminó en esta fecha, según tus pagos aprobados."
+              : "Tu membresía está cubierta hasta esta fecha según tus pagos aprobados."
             : "En cuanto el club apruebe un pago, aquí aparecerá hasta qué fecha queda cubierto."}
         </p>
 
@@ -122,7 +122,7 @@ export function MembershipCard({
             className="mt-3 rounded-ctl bg-state-warn-bg px-3 py-2 text-sm text-ink"
           >
             <span className="font-bold">Motivo de la suspensión: </span>
-            {membership.motivoSuspension ?? "El club no registró un motivo. Consulte con administración."}
+            {membership.motivoSuspension ?? "El club no registró un motivo. Consulta con administración."}
           </p>
         )}
 

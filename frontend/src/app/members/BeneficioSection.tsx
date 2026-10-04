@@ -195,7 +195,7 @@ export default function BeneficioSection({ personaId, tarifaMensual }: Beneficio
                   onChange={(e) => setSelectedDescuentoId(e.target.value ? Number(e.target.value) : "")}
                   className="input-field text-xs"
                 >
-                  <option value="">Elija un descuento</option>
+                  <option value="">Elige un descuento</option>
                   {ofrecidos.map((descuento) => (
                     <option key={descuento.id} value={descuento.id}>
                       {descuento.nombre} · {descuentoValorLabel(descuento)}
@@ -205,7 +205,7 @@ export default function BeneficioSection({ personaId, tarifaMensual }: Beneficio
               )}
               {excedeTarifa && (
                 <p className="text-xs text-state-bad">
-                  Este beneficio supera la tarifa mensual ({formatCurrency(tarifaMensual)}). Elija un
+                  Este beneficio supera la tarifa mensual ({formatCurrency(tarifaMensual)}). Elige un
                   descuento de menor valor.
                 </p>
               )}
@@ -243,7 +243,7 @@ export default function BeneficioSection({ personaId, tarifaMensual }: Beneficio
         title="Retirar beneficio"
         message={
           beneficio
-            ? `Va a retirar el beneficio «${beneficio.descuento.nombre}» de esta persona. Los pagos históricos no cambian.`
+            ? `Vas a retirar el beneficio «${beneficio.descuento.nombre}» de esta persona. Los pagos históricos no cambian.`
             : ""
         }
         confirmLabel="Retirar"

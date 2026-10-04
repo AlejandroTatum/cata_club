@@ -38,7 +38,7 @@ export default function ResumableDraftsPanel({
             <span className="min-w-[180px] flex-1 text-sm text-ink-2">
               <b className="font-semibold text-ink">{describeSchedule(draft.horarioId)}</b>
               <span aria-hidden="true"> · </span>
-              {draft.markCount === 1 ? "1 alumno marcado" : `${draft.markCount} alumnos marcados`}
+              {draft.markCount === 1 ? "1 jugador marcado" : `${draft.markCount} jugadores marcados`}
             </span>
             <Button
               type="button"

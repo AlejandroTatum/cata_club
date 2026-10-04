@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field, computed_field
 from datetime import date, time, datetime
 from typing import Optional
 
-from app.dominio.enums import EstadoAsistencia, DiaSemana
+from app.dominio.enums import DiaSemana, EstadoAsistencia, EstadoSolicitudCorreccion
 from app.dominio.reglas_negocio import LIMITE_CORRECCION_ASISTENCIA_DIAS
 from app.servicios_negocio.dtos.base import ResponseBase
 from app.servicios_negocio.dtos.validadores import NombrePresentado
@@ -77,6 +77,9 @@ class CategoriaResponseDTO(ResponseBase, BaseModel):
     hora_inicio: time
     hora_fin: time
     dias: list[DiaSemana]
+    # QA4 ADMB-14: avisos NO bloqueantes (hoy, cruce de horario con otra
+    # categoría). Solo los llenan el alta y la edición; vacío en el resto.
+    advertencias: list[str] = Field(default_factory=list)
 
 
 class CategoriaCreateDTO(BaseModel):
@@ -98,10 +101,10 @@ class CategoriaCreateDTO(BaseModel):
     una sola representación en la base."""
     nombre: str = Field(min_length=1, max_length=50)
     edades: Optional[str] = Field(default=None, max_length=50)
-    # TRUE ("se publica") es el default: una categoría nueva se publica
-    # salvo que el cuerpo pida lo contrario (ver
+    # QA4 ADMB-13: FALSE ("no se publica") es el default: una categoría
+    # nueva sale a la landing solo si el cuerpo lo pide (ver
     # `CategoriaHorario.visible_en_landing`).
-    visible: bool = True
+    visible: bool = False
     hora_inicio: time
     hora_fin: time
     dias: list[DiaSemana] = Field(min_length=1)
@@ -127,6 +130,32 @@ class CategoriaUpdateDTO(BaseModel):
     hora_inicio: Optional[time] = None
     hora_fin: Optional[time] = None
     dias: Optional[list[DiaSemana]] = Field(default=None, min_length=1)
+    # QA4 ADMB-04: si un día a quitar tiene alumnos, `mover_alumnos_a` pasa a
+    # TODOS los alumnos de la categoría a ese destino en la misma
+    # transacción de la edición. Sin él, el día con alumnos sigue dando 409.
+    mover_alumnos_a: Optional[str] = Field(default=None, min_length=1, max_length=50)
+
+
+class MoverAlumnosDTO(BaseModel):
+    """Cuerpo de `POST /categorias/{codigo}/mover-y-eliminar`."""
+    categoria_destino: str = Field(min_length=1, max_length=50)
+
+
+class MoverAlumnosSeleccionDTO(MoverAlumnosDTO):
+    """Cuerpo de `POST /categorias/{codigo}/mover-alumnos`: pasar solo a
+    algunos alumnos (de a uno, ADMB-04) sin borrar la categoría."""
+    persona_ids: list[int] = Field(min_length=1, max_length=500)
+
+
+class MoverAlumnosResponseDTO(ResponseBase, BaseModel):
+    movidos: int
+    categoria_destino: str
+    categoria_destino_label: str
+    # `mover-y-eliminar`: False cuando los alumnos pasaron pero la categoría
+    # se queda (historial de asistencias); `motivo` dice por qué. Siempre
+    # True/None en `mover-alumnos`, que nunca elimina.
+    eliminada: bool = True
+    motivo: Optional[str] = None
 
 
 class CategoriaPublicacionDTO(BaseModel):
@@ -274,6 +303,40 @@ class AsistenciaCorreccionEntryDTO(ResponseBase, BaseModel):
     estado_justificativo_anterior: Optional[bool] = None
 
 
+# --- QA4 ENT-25: el entrenador pide una corrección de una lista cerrada ----
+class SolicitudCorreccionCreateDTO(BaseModel):
+    """Alumno y sesión salen de la `Asistencia` pedida, así que el entrenador
+    solo manda cuál, qué estado debería figurar y por qué."""
+    asistencia_id: int
+    estado_solicitado: EstadoAsistencia
+    motivo: str = Field(min_length=1, max_length=500)
+
+
+class SolicitudCorreccionRechazoDTO(BaseModel):
+    motivo: str = Field(min_length=1, max_length=500)
+
+
+class SolicitudCorreccionResponseDTO(ResponseBase, BaseModel):
+    id: int
+    asistencia_id: int
+    persona_id: int
+    persona_nombre: str
+    horario_id: int
+    fecha: date
+    horario_etiqueta: str
+    estado_actual: EstadoAsistencia
+    estado_solicitado: EstadoAsistencia
+    motivo: str
+    solicitado_por_id: int
+    solicitado_por_nombre: str
+    solicitado_en: datetime
+    estado: EstadoSolicitudCorreccion
+    resuelto_por_id: Optional[int] = None
+    resuelto_por_nombre: Optional[str] = None
+    resuelto_en: Optional[datetime] = None
+    motivo_resolucion: Optional[str] = None
+
+
 # --- Asignación directa Alumno ↔ Horario ------------------------------------
 class AlumnoHorarioCreateDTO(BaseModel):
     persona_id: int
@@ -289,7 +352,8 @@ class AlumnoHorarioResponseDTO(ResponseBase, BaseModel):
 
 class UltimaListaDTO(ResponseBase, BaseModel):
     """Una sesión (horario + fecha) con al menos una Asistencia registrada,
-    con sus cuatro conteos. Esta tarjeta sigue sin autor a propósito: es un
+    con sus conteos por estado (presentes, tardanzas, enfermos, competencias,
+    ausentes). Esta tarjeta sigue sin autor a propósito: es un
     resumen de conteos, no un detalle (ver decisiones-de-negocio-2026-08-11.md
     §8) -- `Asistencia` SÍ guarda quién tomó la lista desde #263
     (`registrado_por_id`), expuesto en el historial. Usada por el panel del
@@ -301,7 +365,8 @@ class UltimaListaDTO(ResponseBase, BaseModel):
     hora_fin: time
     presentes: int
     tardanzas: int
-    justificados: int
+    enfermos: int
+    competencias: int
     ausentes: int
     total: int
 
@@ -321,6 +386,15 @@ class AlumnoHorarioDetalleDTO(ResponseBase, BaseModel):
     # padrón por categoría. El nombre solo se resuelve en el roster completo.
     horario_categoria: str
     horario_categoria_label: Optional[str] = None
+
+
+class ConteoHorarioDTO(ResponseBase, BaseModel):
+    """Inscritos activos de un horario (QA4 PERF-01), sin el detalle de cada
+    alumno. Solo aparecen los horarios con al menos un inscrito."""
+    horario_id: int
+    inscritos: int
+    # Solo con `incluir_personas`: ids de los inscritos, sin más datos.
+    persona_ids: Optional[list[int]] = None
 
 
 class SolapeHorarioDTO(ResponseBase, BaseModel):

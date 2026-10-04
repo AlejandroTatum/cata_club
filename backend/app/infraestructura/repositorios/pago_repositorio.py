@@ -85,7 +85,7 @@ class PagoRepositorio:
             self.db, Pago, pago_id,
             mensaje_conflicto=(
                 "Este pago está siendo modificado por otra operación, "
-                "intente de nuevo en unos segundos."
+                "intenta de nuevo en unos segundos."
             ),
         )
 

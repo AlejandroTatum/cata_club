@@ -9,7 +9,8 @@ import type { PagoPersona, MembershipSummary, RegistrarPagoInput, BeneficioAsign
 import { Button, DataBox } from "@/components/ui";
 import { formatCurrency, formatDateRange } from "@/lib/format-utils";
 import { calendarIsoDate, clubToday } from "@/lib/club-date";
-import { addMonthsIso, estimateTotal, voucherFileError } from "./payments-utils";
+import { useLatestPick } from "@/lib/useLatestPick";
+import { addMonthsIso, estimateTotal, prepareVoucher } from "./payments-utils";
 import { CreditCard, Loader2, Minus, Paperclip, Plus, Upload, X } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
@@ -53,7 +54,7 @@ export function BeneficioNote({ beneficio }: { beneficio: BeneficioAsignado | nu
 
   return (
     <p className="flex flex-wrap items-center gap-2 text-sm text-ink-2">
-      Su beneficio: <DataBox>{etiqueta}</DataBox>
+      Tu beneficio: <DataBox>{etiqueta}</DataBox>
       <span className="text-ink-3-strong">{descuento.nombre}</span>
     </p>
   );
@@ -397,6 +398,7 @@ function RenewPaymentForm({
   const [tipoPago, setTipoPago] = useState<"EFECTIVO" | "TRANSFERENCIA">("TRANSFERENCIA");
   const [fechaInicio, setFechaInicio] = useState<string>("");
   const [voucherFile, setVoucherFile] = useState<File | null>(null);
+  const latestPick = useLatestPick();
   /** FAM-20: why the last picked file was refused. Kept until a valid file is picked. */
   const [voucherRejection, setVoucherRejection] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -434,10 +436,13 @@ function RenewPaymentForm({
   /** The first thing wrong with the form as it stands, or `null`. */
   function findProblem(): string | null {
     if (!fechaInicio || !fechaFin) return "No se pudo calcular el período que cubre este pago.";
+    if (tipoPago === "TRANSFERENCIA" && latestPick.pending) {
+      return "Espera un momento: se está preparando el comprobante.";
+    }
     if (tipoPago === "TRANSFERENCIA" && !voucherFile) {
       // FAM-20: a refused file is not «no file»; say why it was refused.
       if (voucherRejection) return voucherRejection;
-      return "Adjunte el comprobante de la transferencia para que el club pueda validarla.";
+      return "Adjunta el comprobante de la transferencia para que el club pueda validarla.";
     }
     return null;
   }
@@ -463,18 +468,25 @@ function RenewPaymentForm({
    * the payment. Reject either case here, the moment it is selected,
    * instead of letting `registrarPago` succeed and only failing the
    * follow-up `subirVoucherPago` call once the backend checks catch it.
+   * FAM-26: a photo over 5 MB is shrunk before that check (`prepareVoucher`).
    */
-  function handleVoucherChange(file: File | null): void {
-    if (file) {
-      const error = voucherFileError(file);
-      if (error) {
+  async function handleVoucherChange(picked: File | null): Promise<void> {
+    let file = picked;
+    if (picked) {
+      // Nothing older may be uploaded while the new pick is still being shrunk.
+      setVoucherFile(null);
+      const prepared = await latestPick.run(prepareVoucher(picked));
+      if (!prepared) return;
+      if ("error" in prepared) {
         setVoucherFile(null);
-        setVoucherRejection(error);
-        action.setError(error);
+        setVoucherRejection(prepared.error);
+        action.setError(prepared.error);
         if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
+      file = prepared.file;
     }
+    if (!picked) latestPick.cancel();
     setVoucherFile(file);
     setVoucherRejection(null);
     action.setError(null);
@@ -535,9 +547,9 @@ function RenewPaymentForm({
         showWarning(
           studentName
             ? `El pago de ${studentName} se registró, pero no pudimos subir el comprobante`
-            : "Su pago se registró, pero no pudimos subir el comprobante",
+            : "Tu pago se registró, pero no pudimos subir el comprobante",
           {
-            description: `${toUserMessage(err, "No pudimos subir el comprobante.")} Súbalo desde el historial para que el club pueda validarlo.`,
+            description: `${toUserMessage(err, "No pudimos subir el comprobante.")} Súbelo desde el historial para que el club pueda validarlo.`,
           },
         );
         onRegistered();
@@ -557,10 +569,10 @@ function RenewPaymentForm({
     // benefit applies.
     showSuccess(
       studentName
-        ? `Pago de ${studentName} registrado y en revisión`
-        : "Pago registrado y en revisión",
+        ? `Pago de ${studentName} registrado y por validar`
+        : "Pago registrado y por validar",
       {
-        description: `${formatCurrency(nuevoPago.monto)} por el período ${formatDateRange(fechaInicio, fechaFin)}. El club lo valida; si algo está mal lo rechaza indicando el motivo y usted registra el pago correcto.`,
+        description: `${formatCurrency(nuevoPago.monto)} por el período ${formatDateRange(fechaInicio, fechaFin)}. El club lo valida; si algo está mal lo rechaza indicando el motivo y tú registras el pago correcto.`,
       },
     );
     onRegistered();
@@ -571,8 +583,8 @@ function RenewPaymentForm({
     return (
       <p className="text-sm text-ink-2">
         {studentName
-          ? `Ya hay un pago de ${studentName} esperando validación. Espere a que el club lo apruebe para registrar otro; en el historial de abajo verá si queda aprobado o rechazado.`
-          : "Ya tiene un pago esperando validación. Espere a que el club lo apruebe para registrar otro; en el historial de abajo verá si queda aprobado o rechazado."}
+          ? `Ya hay un pago de ${studentName} esperando validación. Espera a que el club lo apruebe para registrar otro; en el historial de abajo verás si queda aprobado o rechazado.`
+          : "Ya tienes un pago esperando validación. Espera a que el club lo apruebe para registrar otro; en el historial de abajo verás si queda aprobado o rechazado."}
       </p>
     );
   }
@@ -587,7 +599,7 @@ function RenewPaymentForm({
           {studentName ? `Registrar un pago de ${studentName}` : "Registrar un pago"}
         </Button>
         <p className="min-w-0 text-sm text-ink-3-strong">
-          Elija los meses y la forma de pago; el club valida cada pago y lo verá «En revisión» en
+          Elige los meses y la forma de pago; el club valida cada pago y lo verás «Por validar» en
           el historial.
         </p>
       </div>
@@ -658,7 +670,7 @@ function RenewPaymentForm({
             type="file"
             aria-required="true"
             accept="image/jpeg,image/png,application/pdf"
-            onChange={(e) => handleVoucherChange(e.target.files?.[0] ?? null)}
+            onChange={(e) => void handleVoucherChange(e.target.files?.[0] ?? null)}
             className="hidden"
             data-testid="renew-voucher-input"
           />
@@ -711,24 +723,24 @@ function RenewPaymentForm({
            exactly the numbers the reader is being asked to check. */
         <div data-testid="renew-confirm" className="rounded-ctl border border-line-2 bg-sunken px-4 py-4">
           <p className="text-2xs font-bold uppercase text-ink-3-strong">
-            Confirme antes de registrar
+            Confirma antes de registrar
           </p>
           <p id="renew-confirm-summary" className="mt-1.5 max-w-[68ch] text-sm leading-relaxed text-ink">
-            Va a registrar un total estimado de{" "}
+            Vas a registrar un total estimado de{" "}
             <b className="font-bold tabular-nums">{formatCurrency(estimatedTotal)}</b>{" "}
             {studentName ? (
               <>
                 a nombre de <b className="font-bold">{studentName}</b>
               </>
             ) : (
-              "a su nombre"
+              "a tu nombre"
             )}
             , {tipoPago === "TRANSFERENCIA" ? "por transferencia" : "en efectivo"}, para el período{" "}
             <b className="font-bold tabular-nums">{formatDateRange(fechaInicio, fechaFin)}</b>.
           </p>
           <p className="mt-2 max-w-[68ch] text-xs leading-relaxed text-ink-3-strong">
-            Una vez registrado no puede eliminarlo desde el portal. El club revisa cada pago: si
-            algo está mal lo rechaza indicando el motivo y usted registra el correcto.
+            Una vez registrado no puedes eliminarlo desde el portal. El club revisa cada pago: si
+            algo está mal lo rechaza indicando el motivo y tú registras el correcto.
           </p>
           <ConfirmCheckpointActions
             loading={action.loading}
@@ -743,7 +755,7 @@ function RenewPaymentForm({
       ) : (
         <OpenCheckpointTrigger
           label="Registrar pago"
-          disabled={!fechaInicio || !fechaFin}
+          disabled={!fechaInicio || !fechaFin || (tipoPago === "TRANSFERENCIA" && latestPick.pending)}
           onRequestConfirm={action.handleRequestConfirm}
           onCancel={handleCancel}
           submitButtonRef={action.submitButtonRef}
@@ -849,8 +861,8 @@ function ApplyBenefitForm({
     return (
       <p className="text-sm text-ink-2">
         {studentName
-          ? `Ya hay un pago de ${studentName} esperando validación. Espere a que el club lo resuelva antes de aplicar el beneficio.`
-          : "Ya tiene un pago esperando validación. Espere a que el club lo resuelva antes de aplicar el beneficio."}
+          ? `Ya hay un pago de ${studentName} esperando validación. Espera a que el club lo resuelva antes de aplicar el beneficio.`
+          : "Ya tienes un pago esperando validación. Espera a que el club lo resuelva antes de aplicar el beneficio."}
       </p>
     );
   }
@@ -890,22 +902,22 @@ function ApplyBenefitForm({
 
       {action.confirming ? (
         <div data-testid="benefit-confirm" className="rounded-ctl border border-line-2 bg-sunken px-4 py-4">
-          <p className="text-2xs font-bold uppercase text-ink-3-strong">Confirme antes de aplicar</p>
+          <p className="text-2xs font-bold uppercase text-ink-3-strong">Confirma antes de aplicar</p>
           <p id="benefit-confirm-summary" className="mt-1.5 max-w-[68ch] text-sm leading-relaxed text-ink">
-            Va a aplicar su beneficio del 100%{" "}
+            Vas a aplicar tu beneficio del 100%{" "}
             {studentName ? (
               <>
                 a nombre de <b className="font-bold">{studentName}</b>
               </>
             ) : (
-              "a su nombre"
+              "a tu nombre"
             )}
             , para el período{" "}
             <b className="font-bold tabular-nums">{formatDateRange(fechaInicio, fechaFin)}</b>. No se
             genera ningún pago ni comprobante.
           </p>
           <p className="mt-2 max-w-[68ch] text-xs leading-relaxed text-ink-3-strong">
-            La cobertura queda activa de inmediato. Una vez aplicado no puede deshacerlo desde el
+            La cobertura queda activa de inmediato. Una vez aplicado no puedes deshacerlo desde el
             portal.
           </p>
           <ConfirmCheckpointActions

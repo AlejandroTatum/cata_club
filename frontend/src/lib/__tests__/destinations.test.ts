@@ -58,11 +58,11 @@ const EXPECTED_PHRASES: Record<string, string> = {
   "/discounts": "Volver a Descuentos",
   "/sponsors": "Volver a Patrocinadores",
   "/galeria": "Volver a Galería",
-  "/admin/reportes-error": "Volver a Reportes de error",
+  "/admin/reportes-error": "Volver a Errores reportados",
   "/admin/actividad": "Volver a Actividad del club",
   "/tarifas": "Volver a Tarifas",
   "/attendance": "Volver a Asistencias",
-  "/reports": "Volver a Reportes",
+  "/reports": "Volver a Informes",
   "/trainer": "Volver a Mi día",
   "/trainer/attendance": "Volver a Pasar lista",
   "/trainer/attendance/history": "Volver al Historial",
@@ -70,7 +70,7 @@ const EXPECTED_PHRASES: Record<string, string> = {
   // Miembros". El nombre dice "del club" a propósito — el club no asigna
   // entrenadores a horarios, así que "Sus alumnos" sería una promesa que el
   // dato no respalda (ver `ficha_medica_router.py`).
-  "/trainer/students": "Volver a Alumnos del club",
+  "/trainer/students": "Volver a Jugadores del club",
   "/student": "Volver a Mi cuenta",
   "/student/payments": "Volver a Pagos",
   "/student/attendance": "Volver a Asistencias",

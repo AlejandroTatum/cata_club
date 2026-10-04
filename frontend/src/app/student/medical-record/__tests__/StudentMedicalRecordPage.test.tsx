@@ -265,7 +265,7 @@ describe("StudentMedicalRecordPage — no representados", () => {
     render(<StudentMedicalRecordPage />);
 
     expect(
-      await screen.findByText(/no se encontraron estudiantes asociados a esta cuenta/i),
+      await screen.findByText(/no se encontraron jugadores asociados a esta cuenta/i),
     ).toBeInTheDocument();
     expect(mockFetchFichaMedica).not.toHaveBeenCalled();
   });
@@ -298,7 +298,7 @@ describe("StudentMedicalRecordPage — the no-representados state fills its page
 
     render(<StudentMedicalRecordPage />);
 
-    const title = await screen.findByText(/no se encontraron estudiantes asociados a esta cuenta/i);
+    const title = await screen.findByText(/no se encontraron jugadores asociados a esta cuenta/i);
     const emptyState = title.parentElement;
     expect(emptyState?.className).toMatch(/\bflex-1\b/);
     expect(emptyState?.className).toMatch(/justify-center/);

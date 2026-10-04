@@ -270,7 +270,7 @@ def test_subir_imagen_con_firma_que_no_coincide_da_400_antes_de_cloudinary(clien
 
     assert response.status_code == 400
     assert response.json()["detail"] == (
-        "Ese archivo no es una imagen válida. Elija una foto JPG o PNG."
+        "Ese archivo no es una imagen válida. Elige una foto JPG o PNG."
     )
     assert subidas == []
 
@@ -320,3 +320,149 @@ def test_admb33_descripcion_de_mas_de_45_palabras_se_rechaza_en_el_servidor():
 def test_admb33_titulo_de_mas_de_8_palabras_se_rechaza_en_el_servidor():
     with pytest.raises(ValidationError, match="8 palabras"):
         EntradaGaleriaCreateDTO(titulo=" ".join(["palabra"] * 9), descripcion="Cierre anual")
+
+
+# --- ADMB-34/37: editar, ordenar y ocultar sin borrar ------------------------
+
+def _entrada(db_session, n: int, **extra) -> EntradaGaleria:
+    entrada = EntradaGaleria(
+        titulo=f"Foto {n}", descripcion=f"Descripción {n}",
+        imagen_url=f"https://cdn/{n}.png", imagen_public_id=f"entrada-{n}", **extra,
+    )
+    db_session.add(entrada)
+    db_session.commit()
+    return entrada
+
+
+def test_nueva_entrada_queda_al_final_y_visible(client, monkeypatch):
+    _registrar_subidas(monkeypatch)
+    for titulo in ("Primera", "Segunda"):
+        client.post(
+            RUTA, data={"titulo": titulo, "descripcion": "Texto"},
+            files={"archivo": ("foto.jpg", JPEG_VALIDO, "image/jpeg")},
+        )
+
+    cuerpo = client.get(f"{RUTA}admin").json()
+
+    assert [e["titulo"] for e in cuerpo] == ["Primera", "Segunda"]
+    assert cuerpo[0]["orden"] < cuerpo[1]["orden"]
+    assert all(e["visible"] for e in cuerpo)
+
+
+def test_listado_publico_omite_las_ocultas(client_sin_permisos, db_session):
+    _entrada(db_session, 1)
+    _entrada(db_session, 2, visible=False)
+
+    assert [e["titulo"] for e in client_sin_permisos.get(RUTA).json()] == ["Foto 1"]
+
+
+def test_listado_admin_incluye_las_ocultas(client, db_session):
+    _entrada(db_session, 1)
+    _entrada(db_session, 2, visible=False)
+
+    assert [e["titulo"] for e in client.get(f"{RUTA}admin").json()] == ["Foto 1", "Foto 2"]
+
+
+def test_listado_admin_de_galeria_exige_administrador(client_sin_token):
+    assert client_sin_token.get(f"{RUTA}admin").status_code in (401, 403)
+
+
+def test_admin_edita_titulo_descripcion_y_visibilidad(client, db_session):
+    entrada = _entrada(db_session, 1)
+
+    response = client.put(
+        f"{RUTA}{entrada.id}",
+        data={"titulo": "  Corregida  ", "descripcion": "Nueva", "visible": "false"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["titulo"] == "Corregida"
+    assert response.json()["visible"] is False
+    db_session.refresh(entrada)
+    assert entrada.descripcion == "Nueva" and entrada.visible is False
+    assert entrada.imagen_url == "https://cdn/1.png"
+
+
+def test_editar_con_titulo_en_blanco_da_422(client, db_session):
+    entrada = _entrada(db_session, 1)
+    response = client.put(
+        f"{RUTA}{entrada.id}", data={"titulo": "  ", "descripcion": "Nueva", "visible": "true"},
+    )
+    assert response.status_code == 422
+
+
+def test_editar_entrada_inexistente_da_404(client):
+    response = client.put(
+        f"{RUTA}99999", data={"titulo": "A", "descripcion": "B", "visible": "true"},
+    )
+    assert response.status_code == 404
+
+
+def test_admin_reemplaza_la_foto_y_se_retira_la_anterior(client, db_session, monkeypatch):
+    entrada = _entrada(db_session, 1)
+    _registrar_subidas(monkeypatch)
+    borrados: list[str] = []
+    monkeypatch.setattr(
+        "app.servicios_negocio.galeria_servicio.eliminar_imagen_galeria", borrados.append,
+    )
+
+    response = client.put(
+        f"{RUTA}{entrada.id}",
+        data={"titulo": "Foto 1", "descripcion": "Descripción 1", "visible": "true"},
+        files={"archivo": ("recorte.jpg", JPEG_VALIDO, "image/jpeg")},
+    )
+
+    assert response.status_code == 200, response.text
+    db_session.refresh(entrada)
+    assert entrada.imagen_url != "https://cdn/1.png"
+    assert entrada.imagen_public_id != "entrada-1"
+    assert borrados == ["entrada-1"]
+
+
+def test_reemplazar_con_archivo_invalido_no_toca_la_entrada(client, db_session, monkeypatch):
+    entrada = _entrada(db_session, 1)
+    subidas = _registrar_subidas(monkeypatch)
+
+    response = client.put(
+        f"{RUTA}{entrada.id}",
+        data={"titulo": "Otro", "descripcion": "Texto", "visible": "true"},
+        files={"archivo": ("x.jpg", b"no es imagen" + b"\x00" * 30, "image/jpeg")},
+    )
+
+    assert response.status_code == 400
+    assert subidas == []
+    db_session.refresh(entrada)
+    assert entrada.titulo == "Foto 1"
+
+
+def test_admin_sube_y_baja_una_entrada(client, db_session):
+    a, b, c = (_entrada(db_session, n, orden=n) for n in (1, 2, 3))
+
+    assert client.post(f"{RUTA}{c.id}/mover", json={"direccion": "subir"}).status_code == 200
+    ids = [e["id"] for e in client.get(f"{RUTA}admin").json()]
+    assert ids == [a.id, c.id, b.id]
+
+    assert client.post(f"{RUTA}{a.id}/mover", json={"direccion": "bajar"}).status_code == 200
+    ids = [e["id"] for e in client.get(f"{RUTA}admin").json()]
+    assert ids == [c.id, a.id, b.id]
+
+
+def test_mover_la_primera_hacia_arriba_no_cambia_nada(client, db_session):
+    a, b = (_entrada(db_session, n, orden=n) for n in (1, 2))
+
+    assert client.post(f"{RUTA}{a.id}/mover", json={"direccion": "subir"}).status_code == 200
+    assert [e["id"] for e in client.get(f"{RUTA}admin").json()] == [a.id, b.id]
+
+
+def test_mover_con_direccion_desconocida_da_422(client, db_session):
+    a = _entrada(db_session, 1)
+    assert client.post(f"{RUTA}{a.id}/mover", json={"direccion": "lado"}).status_code == 422
+
+
+def test_mover_con_ordenes_repetidos_igual_intercambia(client, db_session):
+    # Filas previas a la migración: todas con orden 0, desempata el id.
+    a, b = _entrada(db_session, 1), _entrada(db_session, 2)
+
+    client.post(f"{RUTA}{b.id}/mover", json={"direccion": "subir"})
+
+    assert [e["id"] for e in client.get(f"{RUTA}admin").json()] == [b.id, a.id]

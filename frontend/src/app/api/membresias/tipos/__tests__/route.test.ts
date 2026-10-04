@@ -127,7 +127,7 @@ describe("POST /api/membresias/tipos", () => {
 
   it("relays a 403 from the backend instead of flattening it", async () => {
     vi.mocked(global.fetch).mockResolvedValue(
-      jsonResponse({ detail: "No tiene permisos suficientes" }, 403),
+      jsonResponse({ detail: "No tienes permisos suficientes" }, 403),
     );
 
     const response = await POST(

@@ -209,3 +209,11 @@ describe("DELETE /api/groups/categorias/[codigo]", () => {
     expect(body.message).toMatch(/el historial no se borra/i);
   });
 });
+
+describe("PUT /api/groups/categorias/[codigo] — mover_alumnos_a (ADMB-04)", () => {
+  it("forwards mover_alumnos_a so removing a day can move its players atomically", async () => {
+    await putCategoria({ dias: ["LUNES"], mover_alumnos_a: "INFANTIL" });
+
+    expect(forwardedBody()).toEqual({ dias: ["LUNES"], mover_alumnos_a: "INFANTIL" });
+  });
+});

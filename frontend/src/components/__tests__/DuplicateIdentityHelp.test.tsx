@@ -13,7 +13,7 @@ describe("DuplicateIdentityHelp", () => {
   it("never prints the raw wa.me address (REG-09)", () => {
     const { container } = render(<DuplicateIdentityHelp audience="self-service" />);
     expect(container.textContent).not.toContain("wa.me");
-    expect(container.textContent).toContain("escríbanos por WhatsApp para reactivar su cuenta.");
+    expect(container.textContent).toContain("escríbenos por WhatsApp para reactivar tu cuenta.");
   });
 
   it("does not add the WhatsApp link for the other audiences", () => {

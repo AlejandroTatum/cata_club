@@ -350,7 +350,7 @@ describe("PaymentsPage — opens on the pending queue", () => {
     // synchronously, so this needs to wait for that round trip.
     fireEvent.click(screen.getByRole("button", { name: /^todos/i }));
     await waitFor(() => expect(within(queueTable()).getByText("Kevin Sabando")).toBeInTheDocument());
-    expect(within(queueTable()).getByText("Pendiente de validar")).toBeInTheDocument();
+    expect(within(queueTable()).getByText("Por validar")).toBeInTheDocument();
     expect(within(queueTable()).getByText("Validado")).toBeInTheDocument();
     expect(within(queueTable()).getByText("Estado")).toBeInTheDocument();
   });
@@ -450,7 +450,7 @@ describe("PaymentsPage — pagination reaches every request, past the old 200 ca
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: /^pendientes/i }));
 
-    fireEvent.change(await screen.findByLabelText(/buscar estudiante/i), { target: { value: "Zoe Especial" } });
+    fireEvent.change(await screen.findByLabelText(/buscar jugador/i), { target: { value: "Zoe Especial" } });
 
     expect(await within(queueTable()).findByText("Zoe Especial")).toBeInTheDocument();
   });
@@ -475,7 +475,7 @@ describe("PaymentsPage — pagination reaches every request, past the old 200 ca
     // (for the "pendiente" tab) reuses the same drained `pendingAll` the
     // navigator itself reads from.
     await screen.findByTestId("payments-table");
-    fireEvent.change(screen.getByLabelText(/buscar estudiante/i), { target: { value: "Último Pendiente" } });
+    fireEvent.change(screen.getByLabelText(/buscar jugador/i), { target: { value: "Último Pendiente" } });
     await openRequest("Último Pendiente");
 
     // The total is the real 205, not the old 200 cap, and there is nothing
@@ -509,11 +509,11 @@ describe("PaymentsPage — the status badge doesn't echo the active tab", () => 
     // that the filtered render has settled, so the absence check that
     // follows it means something instead of getting lucky on timing.
     await waitFor(() => expect(within(queueTable()).getAllByRole("row")).toHaveLength(2));
-    expect(within(queueTable()).getByText("Pendiente de validar")).toBeInTheDocument();
+    expect(within(queueTable()).getByText("Por validar")).toBeInTheDocument();
 
     const cards = screen.getByTestId("payments-cards");
     await waitFor(() => expect(within(cards).getAllByRole("listitem")).toHaveLength(1));
-    expect(within(cards).getByText("Pendiente de validar")).toBeInTheDocument();
+    expect(within(cards).getByText("Por validar")).toBeInTheDocument();
   });
 
   it("shows the per-row status badge once the tab stops fixing a single status", async () => {
@@ -524,12 +524,12 @@ describe("PaymentsPage — the status badge doesn't echo the active tab", () => 
     // Same async round trip as the previous describe block's note.
     fireEvent.click(screen.getByRole("button", { name: /^todos/i }));
 
-    await waitFor(() => expect(within(queueTable()).getByText("Pendiente de validar")).toBeInTheDocument());
+    await waitFor(() => expect(within(queueTable()).getByText("Por validar")).toBeInTheDocument());
     expect(within(queueTable()).getByText("Validado")).toBeInTheDocument();
     // The mobile cards render the same rows through their own branch
     // (`payments-cards`), which carries its own copy of this badge.
     const cards = screen.getByTestId("payments-cards");
-    expect(within(cards).getByText("Pendiente de validar")).toBeInTheDocument();
+    expect(within(cards).getByText("Por validar")).toBeInTheDocument();
     expect(within(cards).getByText("Validado")).toBeInTheDocument();
   });
 });
@@ -705,7 +705,7 @@ describe("PaymentsPage — comprobante oficial y correcciones", () => {
     expect(mockFetchCorrecciones).toHaveBeenCalledWith(3);
   });
 
-  it("submits a new correction with only the fields filled in, plus the mandatory motivo", async () => {
+  it("submits a correction with only the final amount plus the mandatory motivo", async () => {
     mockFetchPaymentValidations.mockResolvedValue([RESOLVED_WITH_NUMERIC_ID]);
     mockCorregirPago.mockResolvedValue({
       pago: { id: 3 },
@@ -715,15 +715,67 @@ describe("PaymentsPage — comprobante oficial y correcciones", () => {
     await openResolvedRequestDetail();
 
     fireEvent.click(await screen.findByRole("button", { name: /corregir pago/i }));
-    expect(screen.getByLabelText(/monto final/i)).not.toBeRequired();
+    // ADMA-16: the admin is asked for the final amount only — no tariff,
+    // months, base amount or dates to reconcile by hand.
+    expect(screen.getByLabelText(/monto correcto/i)).toBeRequired();
+    for (const gone of [/tarifa mensual/i, /meses comprados/i, /monto base/i, /fecha inicio/i, /fecha fin/i]) {
+      expect(screen.queryByLabelText(gone)).not.toBeInTheDocument();
+    }
+    expect(screen.getByText(/escribe el monto correcto/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^motivo/i)).toBeRequired();
-    fireEvent.change(screen.getByLabelText(/monto final/i), { target: { value: "45.00" } });
+    expect(screen.getByRole("button", { name: /registrar corrección/i })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/monto correcto/i), { target: { value: "45.00" } });
     fireEvent.change(screen.getByLabelText(/^motivo/i), { target: { value: "Descuento mal aplicado" } });
     fireEvent.click(screen.getByRole("button", { name: /registrar corrección/i }));
 
     await waitFor(() =>
       expect(mockCorregirPago).toHaveBeenCalledWith(3, { motivo: "Descuento mal aplicado", monto: "45.00" }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ADMA-25: how long each payment has waited, and a filter by method
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — age and method filter (ADMA-25)", () => {
+  it("shows how long each payment has been waiting", async () => {
+    vi.setSystemTime(new Date("2026-07-04T12:00:00Z"));
+    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST]);
+    renderPage();
+    await screen.findByTestId("payments-table");
+
+    expect(within(queueTable()).getByRole("columnheader", { name: /subido/i })).toBeInTheDocument();
+    expect(await within(queueTable()).findByText("Hace 3 días")).toBeInTheDocument();
+  });
+
+  it("filters the queue by method and brings every row back with «Cualquier método»", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, CASH_REQUEST]);
+    renderPage();
+    await waitFor(() => expect(within(queueTable()).getAllByRole("row")).toHaveLength(3));
+
+    const group = screen.getByRole("group", { name: /filtrar pagos por método/i });
+    fireEvent.click(within(group).getByRole("button", { name: /^efectivo/i }));
+    await waitFor(() => expect(within(queueTable()).getAllByRole("row")).toHaveLength(2));
+    expect(within(queueTable()).getByText("Sofía Vera")).toBeInTheDocument();
+    expect(within(queueTable()).queryByText("Juan Pérez")).not.toBeInTheDocument();
+
+    fireEvent.click(within(group).getByRole("button", { name: /^transferencia/i }));
+    await waitFor(() => expect(within(queueTable()).queryByText("Sofía Vera")).not.toBeInTheDocument());
+    expect(within(queueTable()).getByText("Juan Pérez")).toBeInTheDocument();
+
+    fireEvent.click(within(group).getByRole("button", { name: /cualquier método/i }));
+    await waitFor(() => expect(within(queueTable()).getAllByRole("row")).toHaveLength(3));
+  });
+
+  it("tells the admin when no payment uses the chosen method", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST]);
+    renderPage();
+    await screen.findByTestId("payments-table");
+
+    const group = screen.getByRole("group", { name: /filtrar pagos por método/i });
+    fireEvent.click(within(group).getByRole("button", { name: /^efectivo/i }));
+    expect(await screen.findByText(/ningún pago en efectivo/i)).toBeInTheDocument();
   });
 });
 
@@ -855,7 +907,6 @@ describe("PaymentsPage — the detail view keeps the admin's place in the queue"
     completeChecklist();
 
     fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
 
     // The queue lost one item, and the admin is now on the survivor.
     expect(await screen.findByText("Pendiente 1 de 1")).toBeInTheDocument();
@@ -871,7 +922,6 @@ describe("PaymentsPage — the detail view keeps the admin's place in the queue"
     await openPendingWithChecklistDone();
 
     fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
 
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: /aprobar pago/i })).not.toBeInTheDocument(),
@@ -944,8 +994,8 @@ describe("PaymentsPage — the checklist adapts to the payment method", () => {
   function checklistLabels(): string[] {
     const group = screen.getByRole("group", { name: /antes de aprobar/i });
     return within(group)
-      .getAllByRole("checkbox")
-      .map((box) => (box.closest("label")?.textContent ?? "").trim());
+      .getAllByRole("listitem")
+      .map((item) => (item.textContent ?? "").trim());
   }
 
   it("never asks a cash payment about a comprobante it does not have", async () => {
@@ -968,16 +1018,9 @@ describe("PaymentsPage — the checklist adapts to the payment method", () => {
 
     const approve = await screen.findByRole("button", { name: /aprobar pago/i });
     expect(approve).toBeDisabled();
-    expect(screen.getByText(/faltan 2 puntos de la lista/i)).toBeInTheDocument();
+    expect(screen.getByText(/falta confirmar la revisión para poder aprobar/i)).toBeInTheDocument();
 
-    const [first, second] = within(
-      screen.getByRole("group", { name: /antes de aprobar/i }),
-    ).getAllByRole("checkbox");
-    fireEvent.click(first);
-    expect(screen.getByText(/falta confirmar 1 punto de la lista/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /aprobar pago/i })).toBeDisabled();
-
-    fireEvent.click(second);
+    completeChecklist();
     expect(screen.getByRole("button", { name: /aprobar pago/i })).toBeEnabled();
   });
 
@@ -1131,12 +1174,6 @@ describe("PaymentsPage — approvals and rejections read the membership status",
 
     completeChecklist();
     fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-    expect(
-      screen.getByText(
-        /¿Confirma que aprueba este pago\? La cobertura se extiende de inmediato y esta acción no se puede deshacer\./,
-      ),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
 
     expect(
       await screen.findByText(/Pago aprobado\. La cobertura de Mateo Salazar se extendió\./),
@@ -1156,12 +1193,6 @@ describe("PaymentsPage — approvals and rejections read the membership status",
     completeChecklist();
 
     fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-    expect(
-      screen.getByText(
-        /¿Confirma que aprueba este pago\? La membresía pasará a activa de inmediato y esta acción no se puede deshacer\./,
-      ),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
 
     expect(
       await screen.findByText(/Pago aprobado\. La membresía ahora está activa\./),
@@ -1173,71 +1204,86 @@ describe("PaymentsPage — approvals and rejections read the membership status",
 // Pre-existing contracts kept green
 // ---------------------------------------------------------------------------
 
-describe("PaymentsPage — approve confirmation gating", () => {
-  it("opens a confirmation dialog on 'Aprobar Pago' click without mutating yet", async () => {
+describe("PaymentsPage — fast review: one tick, one click (QA4 ADMA-23)", () => {
+  it("never approves on its own: reviewing the payment sends nothing until 'Aprobar pago' is clicked", async () => {
     await openPendingWithChecklistDone();
-
-    fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(mockUpdatePaymentValidation).not.toHaveBeenCalled();
-  });
-
-  it("mutates the payment status only after the confirm control is activated, sending only the approve action", async () => {
-    await openPendingWithChecklistDone();
-
-    fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
-
-    // Confirming sends the real request immediately (issue #456) — no hold
-    // to step over anymore.
-    await waitFor(() => {
-      expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1);
-    });
-    // Issue #400 supersedes issue #314 (K6 hallazgo #11). That hallazgo was
-    // about a lossy calendar-month recompute leaking into what got saved —
-    // this used to assert `endDate: "2026-08-01"` was wrong and
-    // `"2026-07-31"` was the fix. Now there is no date to get right or wrong:
-    // Administración cannot edit the coverage period at approval at all, so
-    // approving sends ONLY the action, never date fields.
-    expect(mockUpdatePaymentValidation).toHaveBeenCalledWith("req-1", {
-      action: "approved",
-    });
-  });
-
-  it("leaves the payment status unchanged when the confirmation is canceled", async () => {
-    await openPendingWithChecklistDone();
-
-    fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^cancelar$/i }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(mockUpdatePaymentValidation).not.toHaveBeenCalled();
   });
 
-  // Issue #313 (K5 hallazgo #12): en vivo, tres clics seguidos en "Confirmar"
-  // (el botón no se deshabilitaba tras el primero) mandaron DOS PUT reales
-  // para el mismo pago — 400 y 200 — dejaron tres toasts de éxito, y el 400
-  // disparó un toast de error que afirmaba "volvió a la cola de pendientes"
-  // cuando el pago seguía aprobado. Tres clics síncronos (mismo tick, sin
-  // esperar el re-render) reproducen la carrera real de un triple-click o un
-  // script más rápido que React.
-  it("un triple clic en Confirmar produce UNA sola decisión, nunca un segundo PUT ni un error falso", async () => {
+  it("approves a reviewed payment with the review tick plus one click, sending only the approve action", async () => {
     await openPendingWithChecklistDone();
 
     fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-    const confirmBtn = screen.getByRole("button", { name: /^confirmar$/i });
 
+    await waitFor(() => {
+      expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1);
+    });
+    // Issue #400: Administración cannot edit the coverage period at approval,
+    // so approving sends ONLY the action, never date fields.
+    expect(mockUpdatePaymentValidation).toHaveBeenCalledWith("req-1", {
+      action: "approved",
+    });
+  });
+
+  it("asks for a single review confirmation, not one box per check", async () => {
+    renderPage();
+    await openRequest("Juan Pérez");
+    await screen.findByRole("button", { name: /aprobar pago/i });
+
+    const group = screen.getByRole("group", { name: /antes de aprobar/i });
+    expect(within(group).getAllByRole("checkbox")).toHaveLength(1);
+    // The points stay on screen next to the voucher, as text to read.
+    expect(within(group).getAllByRole("listitem")).toHaveLength(3);
+  });
+
+  it("opens the next pending payment, with the approval locked again, after an approval", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, SECOND_PENDING]);
+    mockUpdatePaymentValidation.mockResolvedValue({
+      ...PENDING_REQUEST,
+      validationStatus: "validado",
+    });
+    renderPage();
+    await openRequest("Juan Pérez");
+    await screen.findByRole("button", { name: /aprobar pago/i });
+    completeChecklist();
+
+    fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
+
+    expect(await screen.findByText("Pendiente 1 de 1")).toBeInTheDocument();
+    expect(screen.getAllByText("Sofia Vera").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /aprobar pago/i })).toBeDisabled();
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+  });
+
+  it("requires a reason to reject, and sends nothing without one", async () => {
+    renderPage();
+    await openRequest("Juan Pérez");
+
+    fireEvent.click(await screen.findByRole("button", { name: /rechazar pago/i }));
+    const submit = screen.getByRole("button", { name: /rechazar y avisar/i });
+    expect(submit).toBeDisabled();
+    fireEvent.click(submit);
+    expect(mockUpdatePaymentValidation).not.toHaveBeenCalled();
+  });
+
+  // Issue #313 (K5 hallazgo #12): fast repeated clicks on the decision button
+  // sent two real PUTs for the same payment. Synchronous clicks (same tick,
+  // before any re-render) reproduce the real race.
+  it("un triple clic en Aprobar produce UNA sola decisión, nunca un segundo PUT ni un error falso", async () => {
+    await openPendingWithChecklistDone();
+
+    const approve = screen.getByRole("button", { name: /aprobar pago/i });
     act(() => {
-      confirmBtn.click();
-      confirmBtn.click();
-      confirmBtn.click();
+      approve.click();
+      approve.click();
+      approve.click();
     });
 
     await waitFor(() => {
       expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1);
     });
-    // Give any second, wrongly-fired request a chance to have landed too.
     await act(async () => {
       await Promise.resolve();
     });
@@ -1273,7 +1319,6 @@ describe("PaymentsPage — issue #456: no success before the real server respons
     await screen.findByRole("button", { name: /aprobar pago/i });
     completeChecklist();
     fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
 
     // The real request is in flight (mockUpdatePaymentValidation was called)
     // but has not resolved — nothing may claim success yet.
@@ -1289,30 +1334,6 @@ describe("PaymentsPage — issue #456: no success before the real server respons
     });
 
     expect(await screen.findByText(/Pago aprobado/)).toBeInTheDocument();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Issue #314 (K6 hallazgo #17) — the irreversibility warning has to be
-// announced BEFORE the click, not discoverable two clicks away in /ayuda.
-//
-// Issue #456 changed WHAT is irreversible: approving used to be held for a
-// few seconds so "Deshacer" could cancel it before it was ever sent — that
-// hold is gone (the confirm dialog is now the only cancel-before-send step),
-// so the warning had to be reworded from "you'll have a few seconds to undo
-// it" to "this cannot be undone once confirmed". The guarantee these two
-// tests hold — reachable without leaving the screen, repeated in the dialog
-// — is unchanged.
-// ---------------------------------------------------------------------------
-
-describe("PaymentsPage — approving announces that it cannot be undone, before it happens", () => {
-  it("repeats the irreversibility warning in the confirmation dialog itself", async () => {
-    await openPendingWithChecklistDone();
-
-    fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-
-    const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText(/no se puede deshacer/i)).toBeInTheDocument();
   });
 });
 
@@ -1736,7 +1757,6 @@ describe("PaymentsPage — a decision only becomes real once the server confirms
     await screen.findByRole("button", { name: /aprobar pago/i });
     completeChecklist();
     fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
   }
 
   it("sends the decision immediately on confirm — no artificial hold", async () => {
@@ -1880,7 +1900,7 @@ describe("PaymentsPage — a decision only becomes real once the server confirms
     // `TypeError`) rather than falling back to `confirmation.failure` — same
     // classification every other error site in the app uses.
     expect(
-      await screen.findByText("No pudimos conectar. Revise su conexión a internet e intente nuevamente."),
+      await screen.findByText("No pudimos conectar. Revisa tu conexión a internet e intenta nuevamente."),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/no se pudo confirmar el estado real/i),
@@ -2066,11 +2086,14 @@ describe("PaymentsPage — panel único de validar pago (issue #510)", () => {
 // ---------------------------------------------------------------------------
 
 describe("PaymentsPage — la insignia de membresía distingue INACTIVA de VENCIDA", () => {
-  it('renders "Pago pendiente" — never "Vencida" — for a never-activated membership with its first payment pending', async () => {
+  it('renders "Por validar" — never "Vencida" — for a never-activated membership with its first payment pending', async () => {
     mockFetchPaymentValidations.mockResolvedValue([NEVER_ACTIVATED_PENDING_REQUEST]);
     renderPage();
     await openRequest("Lucía Andrade");
-    await screen.findByText("Pago pendiente");
+    // The membership badge lives in the detail's "Membresía" cell; the queue
+    // row and the stat card also say "Por validar", so scope to that cell.
+    const cell = (await screen.findByText("Membresía")).closest("div") as HTMLElement;
+    expect(within(cell).getByText("Por validar")).toBeInTheDocument();
     expect(screen.queryByText("Vencida")).not.toBeInTheDocument();
   });
 
@@ -2102,7 +2125,7 @@ describe("PaymentsPage — queue stat strip and rail (admin v4)", () => {
     renderPage();
     await screen.findByTestId("payments-table");
 
-    expect(screen.getByText("Pendientes por validar")).toBeInTheDocument();
+    expect(within(screen.getByTestId("payments-stats")).getByText("Por validar")).toBeInTheDocument();
     // 50 + 25 across the two pending payments.
     expect(await screen.findByText("$75,00")).toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: "Cómo se revisa un pago" })).toBeInTheDocument();
@@ -2161,7 +2184,7 @@ describe("PaymentsPage — cash vs transfer review (admin v4)", () => {
     await openRequest(PENDING_REQUEST.studentName);
 
     expect(await screen.findByText("Pago por transferencia")).toBeInTheDocument();
-    expect(screen.getByText(/indique el motivo de la excepción/i)).toBeInTheDocument();
+    expect(screen.getByText(/indica el motivo de la excepción/i)).toBeInTheDocument();
     expect(screen.queryByText("Monto a recibir")).not.toBeInTheDocument();
   });
 
@@ -2172,7 +2195,7 @@ describe("PaymentsPage — cash vs transfer review (admin v4)", () => {
 
     const approve = await screen.findByRole("button", { name: /aprobar pago/i });
     expect(approve).toBeDisabled();
-    expect(approve.parentElement!.parentElement).toHaveTextContent(/faltan \d+ puntos de la lista/i);
+    expect(approve.parentElement!.parentElement).toHaveTextContent(/falta confirmar la revisión/i);
     expect(screen.getByRole("button", { name: /rechazar pago/i })).toBeEnabled();
   });
 });
@@ -2195,7 +2218,7 @@ describe("PaymentsPage — QA4 fixes", () => {
     // the three states: only the two light counters hit the paginated endpoint.
     await waitFor(() => expect(pageCallLog.length).toBe(2));
     expect(pageCallLog.map((call) => call.estadoPago).sort()).toEqual(["APROBADO", "RECHAZADO"]);
-    const pills = screen.getByRole("group", { name: /filtrar/i });
+    const pills = screen.getByRole("group", { name: /filtrar pagos por estado/i });
     expect(within(pills).getByRole("button", { name: /todos/i })).toHaveTextContent("3");
   });
 
@@ -2213,7 +2236,7 @@ describe("PaymentsPage — QA4 fixes", () => {
     await openRequest("Sofía Vera");
 
     expect(await screen.findByText(/Efectivo recibido el .* por Admin Dev/)).toBeInTheDocument();
-    expect(screen.queryByText(/Reciba el dinero en mano/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Recibe el dinero en mano/)).not.toBeInTheDocument();
     expect(screen.queryByText("Confirmación de efectivo")).not.toBeInTheDocument();
   });
 
@@ -2222,7 +2245,7 @@ describe("PaymentsPage — QA4 fixes", () => {
     renderPage();
     await openRequest("Sofía Vera");
 
-    expect(await screen.findByText(/Reciba el dinero en mano/)).toBeInTheDocument();
+    expect(await screen.findByText(/Recibe el dinero en mano/)).toBeInTheDocument();
   });
 
   it("gives a cash example in the rejection note, with no receipt (ADMA-31)", async () => {

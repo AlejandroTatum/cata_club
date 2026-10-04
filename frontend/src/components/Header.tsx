@@ -223,7 +223,7 @@ function InstitutionalAccount(): React.ReactElement {
   return (
     <Link
       href="/login"
-      className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white/65 transition-all duration-200 hover:text-white"
+      className="flex min-h-ctl items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white/65 transition-all duration-200 hover:text-white"
     >
       <User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
       Iniciar sesión
@@ -295,7 +295,7 @@ export function InstitutionalHeader({ minimal = false }: InstitutionalHeaderProp
         className={`mx-auto flex ${minimal ? "max-w-[106rem]" : "max-w-8xl"} items-center justify-between px-4 py-3 sm:px-8 lg:px-12`}
       >
         {/* Brand — real logo as identity anchor */}
-        <Link href="/" className="flex items-center gap-3">
+        <Link href="/" className="flex min-h-ctl items-center gap-3">
           <div className="relative h-10 w-10 overflow-hidden rounded-lg">
             <Image
               src="/brand/cata-club-logo.jpeg"

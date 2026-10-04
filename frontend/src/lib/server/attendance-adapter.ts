@@ -26,7 +26,7 @@ export type BackendDiaSemana = "LUNES" | "MARTES" | "MIERCOLES" | "JUEVES" | "VI
 /** Mirror of the backend `EstadoAsistencia` enum — kept in lockstep by the
  *  enum-parity test. `ENFERMO`/`COMPETENCIA` (issue #1373) are the two
  *  authorized-absence states added on top of the original four. */
-export type BackendEstadoAsistencia = "PRESENTE" | "AUSENTE" | "ATRASADO" | "JUSTIFICADO" | "ENFERMO" | "COMPETENCIA";
+export type BackendEstadoAsistencia = "PRESENTE" | "AUSENTE" | "ATRASADO" | "ENFERMO" | "COMPETENCIA";
 
 export interface BackendHorario {
   id: number;
@@ -95,7 +95,6 @@ export const ESTADO_ASISTENCIA_BACKEND_TO_FRONTEND: Record<BackendEstadoAsistenc
   PRESENTE: "present",
   AUSENTE: "absent",
   ATRASADO: "late",
-  JUSTIFICADO: "justified",
   ENFERMO: "sick",
   COMPETENCIA: "competition",
 };
@@ -104,7 +103,6 @@ export const ESTADO_ASISTENCIA_FRONTEND_TO_BACKEND: Record<EstadoAsistencia, Bac
   present: "PRESENTE",
   absent: "AUSENTE",
   late: "ATRASADO",
-  justified: "JUSTIFICADO",
   sick: "ENFERMO",
   competition: "COMPETENCIA",
 };
@@ -178,16 +176,13 @@ export function buildAttendanceRecord(
 // ---------------------------------------------------------------------------
 
 /** `GET /asistencias/ultimas-listas` DTO — a session (horario + fecha) with
- *  at least one Asistencia, and its four counts. This summary card carries
+ *  at least one Asistencia, and its per-state counts. This summary card carries
  *  no author (it's counts-only): `Asistencia` now records who took the list
  *  (#263), but that author is surfaced in the history, not here.
  *
- *  Issue #1373: the backend folds `ENFERMO` and `COMPETENCIA` into
- *  `justificados` (they are the justified/neutral family, never unexcused
- *  absences), so this summary shape stays four counts wide on purpose —
- *  the per-state breakdown lives in the record lists, not in the summary
- *  card. `buildRecentSession` therefore reports `sick`/`competition` as 0
- *  here; that is the shape contract, not lost data. */
+ *  ENT-23: the `justificados` bucket was removed with the JUSTIFICADO status.
+ *  `ENFERMO` and `COMPETENCIA` (issue #1373: authorized absences, never
+ *  unexcused) now arrive as their own `enfermos`/`competencias` counts. */
 export interface BackendUltimaLista {
   horarioId: number;
   fechaEntrenamiento: string;
@@ -196,7 +191,8 @@ export interface BackendUltimaLista {
   horaFin: string;
   presentes: number;
   tardanzas: number;
-  justificados: number;
+  enfermos: number;
+  competencias: number;
   ausentes: number;
   total: number;
 }
@@ -222,13 +218,9 @@ export function buildRecentSession(lista: BackendUltimaLista): RecentSession {
     counts: {
       present: lista.presentes,
       late: lista.tardanzas,
-      // Includes ENFERMO/COMPETENCIA records — see BackendUltimaLista's doc
-      // comment: the backend folds the justified/neutral family into this
-      // one count, and the summary card deliberately stays four counts wide.
-      justified: lista.justificados,
       absent: lista.ausentes,
-      sick: 0,
-      competition: 0,
+      sick: lista.enfermos,
+      competition: lista.competencias,
     },
     total: lista.total,
   };

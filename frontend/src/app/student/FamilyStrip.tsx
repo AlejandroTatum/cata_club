@@ -48,7 +48,7 @@ export default function FamilyStrip({
   return (
     <div
       role="group"
-      aria-label="Estudiante"
+      aria-label="Jugador"
       className={cn(
         "grid grid-cols-1 gap-3 sm:grid-cols-2",
         LG_COLUMNS[Math.min(profiles.length, 4)],

@@ -114,7 +114,7 @@ export async function waitForMessageTo(
       const detalle = asuntosVistos.length > 0 ? `; asuntos que sí llegaron: ${asuntosVistos.join(", ")}` : "";
       throw new Error(
         `Mailpit no recibió "${subject}" para ${to} en ${timeoutMs / 1000}s${detalle}. ` +
-          "Verifique que celery-worker haya despachado la fila del outbox.",
+          "Verifica que celery-worker haya despachado la fila del outbox.",
       );
     }
     await sleep(pollIntervalMs);

@@ -8,11 +8,13 @@
 import type {
   AlumnoHorario,
   MembershipSummary,
+  StudentPortalSummary,
   PagoPersona,
   StudentSessionSummary,
 } from "@/services/api";
 import { CLUB_TIME_ZONE, calendarIsoDate, clubToday } from "@/lib/club-date";
 import { calculatePersonAge, isMinorAge } from "@/lib/identity-validation";
+import { landingConfig, toWhatsAppLink } from "@/app/landing/landing-config";
 
 // ---------------------------------------------------------------------------
 // Age gate
@@ -145,8 +147,8 @@ export interface AttendanceRecap {
  * month-scoped figure cannot be computed here without inventing the
  * denominator.
  *
- * `late` counts as attended — the student came. `justified` does not: it is an
- * excused absence, and counting it would overstate the figure a parent reads.
+ * `late` counts as attended — the student came. Sick and competition do not:
+ * they are excused absences, and counting them would overstate the figure a parent reads.
  */
 export function summarizeRecentAttendance(
   sessions: StudentSessionSummary[],
@@ -157,12 +159,12 @@ export function summarizeRecentAttendance(
 }
 
 /**
- * How the persona's recorded sessions split across the four attendance states.
+ * How the persona's recorded sessions split across the attendance states.
  *
  * `summarizeRecentAttendance` answers "did they come?"; this answers "what
  * happened", which is the question `/student/attendance` exists to show. The
- * two are kept apart on purpose: collapsing `justified` into `absent` in the
- * ratio is correct (an excused absence is still an absence), but collapsing it
+ * two are kept apart on purpose: collapsing `sick`/`competition` into `absent` in the
+ * ratio is correct (an excused absence is still an absence), but collapsing them
  * in the breakdown would hide the one state a parent most wants to verify.
  *
  * `total` counts every record, including an `estado` this build does not know
@@ -172,7 +174,6 @@ export function summarizeRecentAttendance(
 export interface AttendanceBreakdown {
   present: number;
   late: number;
-  justified: number;
   absent: number;
   /** FAM-22: «Enfermo» and «Competencia» used to be left out of the tally. */
   sick: number;
@@ -184,7 +185,6 @@ export function breakdownAttendance(sessions: StudentSessionSummary[]): Attendan
   return {
     present: sessions.filter((s) => s.estado === "present").length,
     late: sessions.filter((s) => s.estado === "late").length,
-    justified: sessions.filter((s) => s.estado === "justified").length,
     absent: sessions.filter((s) => s.estado === "absent").length,
     sick: sessions.filter((s) => s.estado === "sick").length,
     competition: sessions.filter((s) => s.estado === "competition").length,
@@ -673,21 +673,30 @@ export function readCoverageStanding(
 
 import { formatCurrency, formatDate } from "@/lib/format-utils";
 
+/** Default subject of `describeRejectedPago`: the account holder's own view. */
+const OWN_PAGO_SUBJECT = { viewingOwnProfile: true, studentName: "" };
+
 /**
  * FAM-11: the sentence for a payment the club rejected, or `null`.
  *
  * Only the NEWEST payment counts: once the family registered another one (or it
  * was approved) the rejection is history, not something to act on.
+ *
+ * `subject` says whose payment it is. It defaults to the account holder's own
+ * view («Tu pago»); a representative viewing a dependent must pass
+ * `viewingOwnProfile: false` and the jugador's name («El pago de {name}»).
  */
 export function describeRejectedPago(
   pagos: Pick<PagoPersona, "estadoPago" | "fechaRegistro" | "monto" | "motivoRechazo">[],
+  subject: { viewingOwnProfile: boolean; studentName: string } = OWN_PAGO_SUBJECT,
 ): string | null {
   const latest = [...pagos].sort((a, b) => b.fechaRegistro.localeCompare(a.fechaRegistro))[0];
   if (!latest || latest.estadoPago !== "RECHAZADO") return null;
   const reason = latest.motivoRechazo?.trim();
-  return `Su pago de ${formatCurrency(latest.monto)} del ${formatDate(latest.fechaRegistro)} fue rechazado${
+  const payment = subject.viewingOwnProfile ? "Tu pago" : `El pago de ${subject.studentName}`;
+  return `${payment} de ${formatCurrency(latest.monto)} del ${formatDate(latest.fechaRegistro)} fue rechazado${
     reason ? `: ${reason}` : ""
-  }. Registre uno nuevo.`;
+  }. Registra uno nuevo.`;
 }
 
 /**
@@ -764,16 +773,6 @@ export interface PaymentSituation {
   urgent: boolean;
 }
 
-/** "A Sofía le quedan…" for a guardian, "Le quedan…" for the account holder. */
-function possessivePrefix(input: PaymentSituationInput): string {
-  return input.viewingOwnProfile ? "" : `A ${input.studentName} `;
-}
-
-/** "Sofía no tiene…" for a guardian, "No tiene…" for the account holder. */
-function subjectPrefix(input: PaymentSituationInput): string {
-  return input.viewingOwnProfile ? "" : `${input.studentName} `;
-}
-
 /** Upper-case the first letter, so the same clause can open a sentence or sit inside one. */
 function sentence(clause: string): string {
   return clause.charAt(0).toUpperCase() + clause.slice(1);
@@ -810,7 +809,7 @@ export function describePaymentSituation(
   if (!input.hasMembership && situation.kind !== "no-membership") {
     return {
       ...situation,
-      detail: `${situation.detail} El club no tiene una membresía activa a este nombre: acérquese a administración para reactivarla.`,
+      detail: `${situation.detail} El club no tiene una membresía activa a este nombre: acércate a administración para reactivarla.`,
       canRegister: false,
       urgent: false,
     };
@@ -833,7 +832,7 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
         daysLeft !== null && daysLeft > 0
           ? { value: daysLeft, unit: daysLeft === 1 ? "día de cobertura" : "días de cobertura" }
           : null,
-      headline: "Sus pagos los registra el club",
+      headline: "Tus pagos los registra el club",
       // The old copy said "Lo hace su representante desde la suya" to EVERY
       // minor, including the ones whose `representanteId` is null — it named a
       // person who does not exist and left the reader with nowhere to go.
@@ -847,8 +846,8 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
       // financial module), so this stays informational text, never a link —
       // but it now names BOTH real paths instead of only the in-person one.
       detail: input.representanteName
-        ? `Un estudiante menor de edad no registra pagos desde su propia cuenta: lo hace ${input.representanteName} desde la suya.`
-        : 'Un estudiante menor de edad no registra pagos desde su propia cuenta. Su cuenta no tiene un representante vinculado: pídale a la persona responsable que use "Agregar dependiente" en su cuenta para vincularse, o acérquese a administración del club para que lo vinculen.',
+        ? `Un jugador menor de edad no registra pagos desde su propia cuenta: lo hace ${input.representanteName} desde la suya.`
+        : 'Un jugador menor de edad no registra pagos desde su propia cuenta. Su cuenta no tiene un representante vinculado: pídele a la persona responsable que use "Agregar dependiente" en su cuenta para vincularse, o acércate a administración del club para que lo vinculen.',
       priceNote,
       canRegister: false,
       urgent: false,
@@ -862,9 +861,11 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
     return {
       kind: "no-membership",
       figure: null,
-      headline: sentence(`${subjectPrefix(input)}todavía no tiene una membresía`),
+      headline: input.viewingOwnProfile
+        ? "Todavía no tienes una membresía"
+        : `${input.studentName} todavía no tiene una membresía`,
       detail:
-        "El club crea la membresía al registrar el primer pago. Acérquese al club para activarla y después podrá renovarla desde aquí.",
+        "El club crea la membresía al registrar el primer pago. Acércate al club para activarla y después podrás renovarla desde aquí.",
       priceNote,
       canRegister: false,
       urgent: false,
@@ -875,19 +876,20 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
   // suspended membership cannot be paid whatever the dates say — the club has
   // to reactivate it first. Paid coverage is not forfeited by a suspension.
   if (input.suspended) {
+    const coverageSubject = input.viewingOwnProfile ? "Tu cobertura" : `La cobertura de ${input.studentName}`;
     const coverage = coverageEnd
       ? (daysLeft ?? 0) < 0
-        ? ` Su cobertura venció el ${formatDate(coverageEnd)}.`
-        : ` Su cobertura sigue vigente hasta ${formatDate(coverageEnd)}.`
+        ? ` ${coverageSubject} venció el ${formatDate(coverageEnd)}.`
+        : ` ${coverageSubject} sigue vigente hasta ${formatDate(coverageEnd)}.`
       : "";
     const reason = input.motivoSuspension ? ` Motivo: ${input.motivoSuspension}.` : "";
     return {
       kind: "suspended",
       figure: null,
       headline: input.viewingOwnProfile
-        ? "Su membresía está suspendida."
+        ? "Tu membresía está suspendida."
         : `La membresía de ${input.studentName} está suspendida.`,
-      detail: `${coverage}${reason} Escriba al club para reactivarla.`.trim(),
+      detail: `${coverage}${reason} Escribe al club para reactivarla.`.trim(),
       priceNote,
       canRegister: false,
       urgent: false,
@@ -898,9 +900,9 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
     const one = input.pendingCount === 1;
     return {
       kind: "awaiting-validation",
-      figure: { value: input.pendingCount, unit: one ? "pago en revisión" : "pagos en revisión" },
+      figure: { value: input.pendingCount, unit: one ? "pago por validar" : "pagos por validar" },
       headline: one
-        ? `El club está validando ${input.viewingOwnProfile ? "su pago" : `el pago de ${input.studentName}`}`
+        ? `El club está validando ${input.viewingOwnProfile ? "tu pago" : `el pago de ${input.studentName}`}`
         : `El club está validando ${input.pendingCount} pagos${input.viewingOwnProfile ? "" : ` de ${input.studentName}`}`,
       detail: coverageEnd
         ? `Mientras tanto, ${coverageClause(coverageEnd, (daysLeft ?? 0) < 0)}.`
@@ -927,10 +929,10 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
       kind: "gratuitous",
       figure: null,
       headline: input.viewingOwnProfile
-        ? "Su membresía tiene gratuidad familiar"
+        ? "Tu membresía tiene gratuidad familiar"
         : `La membresía de ${input.studentName} tiene gratuidad familiar`,
       detail:
-        "El club le otorgó gratuidad familiar por ser el cuarto integrante de la familia inscrito: esta membresía no genera ningún cobro. Para extender su cobertura, acérquese a administración del club.",
+        "El club otorgó gratuidad familiar por ser el cuarto integrante de la familia inscrito: esta membresía no genera ningún cobro. Para extender la cobertura, acércate a administración del club.",
       priceNote: null,
       canRegister: false,
       urgent: false,
@@ -941,9 +943,11 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
     return {
       kind: "never-paid",
       figure: null,
-      headline: sentence(`${subjectPrefix(input)}no tiene ningún pago aprobado`),
+      headline: input.viewingOwnProfile
+        ? "No tienes ningún pago aprobado"
+        : `${input.studentName} no tiene ningún pago aprobado`,
       detail:
-        "El club no lleva un saldo pendiente: usted registra el pago del período que quiere cubrir y el club lo valida.",
+        "El club no lleva un saldo pendiente: registras el pago del período que quieres cubrir y el club lo valida.",
       priceNote,
       canRegister: true,
       urgent: true,
@@ -956,7 +960,7 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
       kind: "expired",
       figure: { value: overdue, unit: overdue === 1 ? "día vencida" : "días vencida" },
       headline: input.viewingOwnProfile
-        ? "Su cobertura venció"
+        ? "Tu cobertura venció"
         : `La cobertura de ${input.studentName} venció`,
       detail: sentence(`${coverageClause(coverageEnd, true)}.`),
       priceNote,
@@ -977,10 +981,10 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
       headline:
         daysLeft === 0
           ? input.viewingOwnProfile
-            ? "Su cobertura termina hoy"
+            ? "Tu cobertura termina hoy"
             : `La cobertura de ${input.studentName} termina hoy`
           : sentence(
-              `${possessivePrefix(input)}le ${
+              `${input.viewingOwnProfile ? "te" : `a ${input.studentName} le`} ${
                 daysLeft === 1 ? "queda 1 día" : `quedan ${daysLeft} días`
               } de cobertura`,
             ),
@@ -995,7 +999,7 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
     kind: "covered",
     figure: { value: daysLeft, unit: "días de cobertura" },
     headline: input.viewingOwnProfile
-      ? "Está al día con el club"
+      ? "Estás al día con el club"
       : `${input.studentName} está al día con el club`,
     detail: sentence(`${coverageClause(coverageEnd, false)}.`),
     priceNote,
@@ -1051,7 +1055,7 @@ export function describeCuotaBadge(situation: PaymentSituation): { label: string
     case "covered":
       return { label: "Al día", tone: "ok" };
     case "awaiting-validation":
-      return { label: "En revisión", tone: "neutral" };
+      return { label: "Por validar", tone: "neutral" };
     case "no-membership":
       return { label: "Sin membresía", tone: "neutral" };
     case "suspended":
@@ -1141,4 +1145,26 @@ export function describeFamilyCoverage(
     label: `${days} ${days === 1 ? "día" : "días"} de cobertura`,
     tone: days <= COVERAGE_ENDING_SOON_DAYS ? "warn" : "ok",
   };
+}
+
+/**
+ * FAM-29: the «Esta semana» card with no schedule sends the family to the
+ * club's WhatsApp (the contact in the landing config, never a number typed
+ * here) with the message already written.
+ */
+export function noScheduleWhatsAppHref(studentName: string, viewingOwnProfile: boolean): string {
+  const message = viewingOwnProfile
+    ? "Hola, quisiera que me asignen un horario."
+    : `Hola, quisiera que asignen un horario a ${studentName}.`;
+  return `${toWhatsAppLink(landingConfig.contact.whatsapp[0])}?text=${encodeURIComponent(message)}`;
+}
+
+/**
+ * FAM-01: whether the account has a membership of its OWN, INACTIVA (waiting
+ * on its first payment) included. A representative who joins as a player keeps
+ * the single role REPRESENTANTE, so the role alone never says «is a player»:
+ * every selector and CTA on the portal asks this one question instead.
+ */
+export function hasOwnMembership(data: Pick<StudentPortalSummary, "self">): boolean {
+  return data.self?.membership != null;
 }

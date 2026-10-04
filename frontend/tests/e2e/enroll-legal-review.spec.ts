@@ -102,7 +102,7 @@ async function reachSummaryAsRepresentative(page: Page): Promise<void> {
 
   // Paso "Datos del estudiante" — describe al DEPENDIENTE (sin teléfono:
   // issue #1197). La cédula necesita el dígito verificador módulo 10 real.
-  await expect(page.getByRole("heading", { name: /datos del estudiante/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /datos del jugador/i })).toBeVisible();
   await page.locator(`#${F.nombres}`).fill(DEPENDENT.nombres);
   await page.locator(`#${F.apellidos}`).fill(DEPENDENT.apellidos);
   await fillBirthDate(page, F.fechaNacimiento, DEPENDENT.fechaNacimiento);

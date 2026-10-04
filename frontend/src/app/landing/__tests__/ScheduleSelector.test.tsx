@@ -55,7 +55,7 @@ describe("ScheduleSelector (cards side by side)", (): void => {
     renderCards();
     const list = screen.getByRole("list", { name: "Categorías" });
     const names = within(list).getAllByRole("heading", { level: 3 }).map((heading): string => heading.textContent ?? "");
-    expect(names).toEqual(["Formativo", "Infantil", "Juvenil", "Adultos", "Competitivo", "Juego Libre", "¿No sabe cuál elegir?"]);
+    expect(names).toEqual(["Formativo", "Infantil", "Juvenil", "Adultos", "Competitivo", "Juego Libre", "¿No sabes cuál elegir?"]);
   });
 
   it("leads each card with its age label, and omits it when the category publishes none", (): void => {
@@ -83,7 +83,7 @@ describe("ScheduleSelector (cards side by side)", (): void => {
   it("links every card to the club's first WhatsApp number with a message naming its category", (): void => {
     renderCards();
     SCHEDULES.forEach((schedule): void => {
-      const link = within(card(schedule.category)).getByRole("link", { name: `Consultar cupo en ${schedule.category} por WhatsApp` });
+      const link = within(card(schedule.category)).getByRole("link", { name: `Preguntar por cupos en ${schedule.category} por WhatsApp` });
       expect(link).toHaveAttribute("href", `${WA}?text=${encodeURIComponent(`Hola, quiero consultar cupo en ${schedule.category}.`)}`);
       expect(link).toHaveAttribute("target", "_blank");
       expect(link).toHaveAttribute("rel", "noreferrer");
@@ -117,7 +117,7 @@ describe("ScheduleSelector (cards side by side)", (): void => {
 
   it("closes with a 'no sabe cuál elegir' card that asks for help over WhatsApp", (): void => {
     renderCards();
-    const help = screen.getByRole("heading", { level: 3, name: "¿No sabe cuál elegir?" }).closest("li") as HTMLElement;
+    const help = screen.getByRole("heading", { level: 3, name: "¿No sabes cuál elegir?" }).closest("li") as HTMLElement;
     expect(within(help).getByRole("link", { name: /abrir whatsapp/i })).toHaveAttribute(
       "href",
       `${WA}?text=${encodeURIComponent("Hola, quiero ayuda para elegir categoría.")}`,
@@ -135,7 +135,7 @@ describe("ScheduleSelector (cards side by side)", (): void => {
     renderCards([category("Nocturno", [weekSlot("22:00 – 23:00", MON_WED_FRI)], "6 a 9 años")]);
     expect(screen.getAllByRole("heading", { level: 3 }).map((heading): string => heading.textContent ?? "")).toEqual([
       "Nocturno",
-      "¿No sabe cuál elegir?",
+      "¿No sabes cuál elegir?",
     ]);
   });
 

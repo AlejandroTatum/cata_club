@@ -138,7 +138,7 @@ export default function SessionsCard({ refreshKey = 0 }: SessionsCardProps): Rea
       className="card flex flex-none flex-col overflow-hidden"
     >
       <SectionHead
-        title="Sus sesiones"
+        title="Tus sesiones"
         icon={<Monitor size={ICON.sm} strokeWidth={1.5} />}
         tone="info"
       />

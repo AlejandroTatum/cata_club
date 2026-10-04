@@ -146,8 +146,8 @@ def _enviar_mora_dia_8() -> None:
 # (accion, asunto_esperado, partes_esperadas)
 CASOS = [
     pytest.param(_enviar_recuperacion, "Cata Club | Recuperación de contraseña", 2, id="recuperacion"),
-    pytest.param(_enviar_verificacion, "Cata Club | Verificación de correo", 2, id="verificacion"),
-    pytest.param(_enviar_vencimiento, "Cata Club | Su membresía vence pronto", 1, id="vencimiento"),
+    pytest.param(_enviar_verificacion, "Cata Club | Bienvenida y verificación de correo", 2, id="verificacion"),
+    pytest.param(_enviar_vencimiento, "Cata Club | Tu membresía vence pronto", 1, id="vencimiento"),
     pytest.param(_enviar_mora_dia_1, "Cata Club | Aviso de mora", 1, id="mora_dia_1"),
     pytest.param(_enviar_mora_dia_8, "Cata Club | Último aviso de mora", 1, id="mora_dia_8"),
 ]
@@ -243,6 +243,19 @@ def test_verificacion_advierte_24_horas_y_cuenta_la_historia_de_la_inscripcion(s
     assert "se activa la membresía" in texto
 
 
+def test_verificacion_es_tambien_la_bienvenida_en_un_solo_correo(smtp_capturado):
+    """QA4 REG-20: la bienvenida y la verificación eran dos correos casi
+    iguales; ahora es uno, que da la bienvenida, confirma la inscripción y
+    lleva el enlace."""
+    _enviar_verificacion_con_nombre()
+    _, partes = _partes(smtp_capturado["mensaje"])
+    texto = _decodificar(partes[0])
+    assert "Te damos la bienvenida a Cata Club" in texto
+    assert "Tu inscripción quedó registrada" in texto
+    assert TOKEN_FICTICIO in texto
+    assert "Verificar mi correo" in _html(smtp_capturado)
+
+
 def test_verificacion_no_afirma_uso_normal_ni_vincular_representado(smtp_capturado):
     """Guardia de no-regresión: ambas frases retiradas por el issue #1196 eran
     falsas -- la activación bloquea la cuenta por completo mientras el correo
@@ -263,7 +276,7 @@ def test_verificacion_saluda_con_el_nombre_cuando_esta_disponible(smtp_capturado
     _, partes = _partes(smtp_capturado["mensaje"])
     texto = _decodificar(partes[0])
     html = _html(smtp_capturado)
-    assert texto.startswith("Verificación de correo\n\nHola Ana Ficticia,")
+    assert texto.startswith("Bienvenida y verificación de correo\n\nHola Ana Ficticia,")
     assert "Hola Ana Ficticia," in html
 
 
@@ -271,7 +284,7 @@ def test_verificacion_saluda_generico_sin_nombre(smtp_capturado):
     _enviar_verificacion()
     _, partes = _partes(smtp_capturado["mensaje"])
     texto = _decodificar(partes[0])
-    assert texto.startswith("Verificación de correo\n\nHola,")
+    assert texto.startswith("Bienvenida y verificación de correo\n\nHola,")
 
 
 def test_vencimiento_menciona_ir_a_mis_pagos_whatsapp_y_fecha(smtp_capturado):
@@ -289,7 +302,7 @@ def test_aviso_de_mora_dia_1_indica_como_recuperar_beneficios(smtp_capturado):
     texto = _decodificar(partes[0])
     assert "Ir a mis pagos" in texto
     assert WHATSAPP_ESPERADO in texto
-    assert "recuperar sus beneficios" in texto
+    assert "recuperar tus beneficios" in texto
 
 
 def test_ultimo_aviso_de_mora_indica_que_es_automatico_y_como_recuperar(smtp_capturado):

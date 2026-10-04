@@ -201,7 +201,7 @@ def test_eliminar_horario_con_alumnos_asignados_responde_409_y_no_toca_nada(clie
     resp = client.delete(f"/api/v1/asistencias/horarios/{lunes['id']}")
 
     assert resp.status_code == 409
-    assert "Reasigne primero al alumno de" in resp.text
+    assert "Reasigna primero al jugador de" in resp.text
     assert _horarios_del_alumno(client, alumno["id"]) == {lunes["id"], martes["id"]}
 
 

@@ -31,15 +31,73 @@ sigan inyectando una sesión con `monkeypatch.setattr(modulo, "SessionLocal",
 ...)` sobre el módulo que ya parcheaban. Importarlo acá rompería esa costura
 sin que ningún test lo dijera hasta que fallara la entrega en producción.
 """
+import logging
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, event, func, or_, select
 
 from app.dominio.excepciones import CupoCorreoDiarioAgotado
 from app.infraestructura.repositorios import outbox_auditoria_entrega as auditoria
 from app.infraestructura.repositorios import outbox_cupo
+from app.infraestructura.tareas.celery_app import celery_app
 from app.soporte_transversal.configuracion import settings
+
+_log = logging.getLogger("cataclub.tareas.outbox_despacho")
+
+_CLAVE_PENDIENTES = "_despachos_tras_commit"
+
+
+def encolar_despacho_tras_commit(db, nombre_tarea: str) -> None:
+    """Publica la tarea de despacho de una cola DESPUÉS del commit de `db`.
+
+    Se llama donde se crea la fila del outbox. Publicar antes del commit
+    dejaría al worker leyendo una fila que todavía no existe, y si la
+    transacción se revierte no hay nada que despachar: por eso se engancha a
+    `after_commit` y se descarta en `after_rollback`.
+
+    Se publica el DESPACHADOR (el mismo que el beat corre como barrido) y no
+    la entrega de una fila: el despachador pasa por `claim_pending`
+    (`FOR UPDATE SKIP LOCKED` + estado `ENVIANDO` con lease), así que el
+    despacho inmediato y el barrido no pueden reclamar -- ni mandar -- la
+    misma fila dos veces.
+
+    Un broker caído NO rompe la petición: la fila ya está commiteada y
+    `PENDIENTE`, y el barrido (cada 5 min) la recoge. Se loguea y se sigue.
+    Varias filas de la misma cola en una transacción publican un solo
+    despacho.
+    """
+    pendientes = db.info.setdefault(_CLAVE_PENDIENTES, set())
+    if nombre_tarea in pendientes:
+        return
+    pendientes.add(nombre_tarea)
+
+    def _quitar(oyente, evento_otro):
+        try:
+            event.remove(db, evento_otro, oyente)
+        except Exception:  # ya se consumió: no hay nada que quitar
+            pass
+
+    def _publicar(_sesion):
+        pendientes.discard(nombre_tarea)
+        _quitar(_descartar, "after_rollback")
+        try:
+            # `retry=False`: con el broker caído no se reintenta la conexión
+            # dentro de la petición del usuario.
+            celery_app.send_task(nombre_tarea, retry=False)
+        except Exception as exc:
+            _log.warning(
+                "No se pudo publicar el despacho %s tras el commit (%s); "
+                "el barrido de respaldo recogerá la fila",
+                nombre_tarea, type(exc).__name__,
+            )
+
+    def _descartar(_sesion):
+        pendientes.discard(nombre_tarea)
+        _quitar(_publicar, "after_commit")
+
+    event.listen(db, "after_commit", _publicar, once=True)
+    event.listen(db, "after_rollback", _descartar, once=True)
 
 
 def tope_de_lote() -> int:
@@ -186,7 +244,7 @@ def entregar_fila(
             db.commit()
             logger.error(
                 "%s alcanzó el techo de %s entregas iniciadas: fila %s del "
-                "usuario %s, NO se manda de nuevo; revisá por qué el worker "
+                "usuario %s, NO se manda de nuevo; revisa por qué el worker "
                 "muere entregando esta fila",
                 etiqueta, entregas, evento_id, usuario_id,
             )

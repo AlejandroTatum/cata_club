@@ -1002,7 +1002,7 @@ export default function AppShell({
             type="button"
             onClick={(): void => setPaletteOpen(true)}
             aria-label="Buscar secciones"
-            className="flex h-ctl items-center gap-2 rounded-ctl border border-line-2 bg-paper px-3 text-xs text-ink-3 transition-colors hover:border-ink-3"
+            className="touch-target flex h-ctl items-center justify-center gap-2 rounded-ctl border border-line-2 bg-paper px-3 text-xs text-ink-3 transition-colors hover:border-ink-3"
           >
             <Search size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             <span className="hidden sm:inline">Buscar una sección…</span>

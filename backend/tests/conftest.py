@@ -170,6 +170,16 @@ def _mock_disparo_celery_comprobante(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _sin_broker_para_el_despacho_al_commit(monkeypatch):
+    """Los servicios publican el despacho del outbox tras el commit
+    (`outbox_despacho.encolar_despacho_tras_commit`); sin broker Redis en la
+    suite, `send_task` quedaría reintentando una conexión. Los tests que
+    miran esa publicación parchean `send_task` por su cuenta."""
+    from app.infraestructura.tareas.celery_app import celery_app
+    monkeypatch.setattr(celery_app, "send_task", lambda *a, **k: None)
+
+
+@pytest.fixture(autouse=True)
 def _cloudinary_credenciales_de_prueba(monkeypatch):
     """Fija credenciales Cloudinary FALSAS pero no vacías para toda la
     suite. Nunca tocan la red -- `cloudinary.uploader.upload`/`.destroy` ya

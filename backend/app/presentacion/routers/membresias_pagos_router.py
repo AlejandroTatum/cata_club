@@ -36,6 +36,10 @@ from app.servicios_negocio.membresia_pago_servicio import (
     MembresiaServicio, PagoServicio, TAMANO_MAXIMO_VOUCHER_BYTES,
 )
 from app.servicios_negocio.gestor_permisos import GestorPermisos
+from app.presentacion.routers.reporte_helpers import (
+    LIMITE_MAXIMO_FILAS_REPORTE,
+    exigir_tope_reporte,
+)
 from app.soporte_transversal.lectura_archivos import leer_con_limite
 from app.soporte_transversal.rate_limit import limiter
 
@@ -44,7 +48,7 @@ logger = logging.getLogger("cataclub.membresias_pagos")
 # Mismos nombres que la pantalla `/reports` y el Excel (QA4 ADMB-06): quien
 # compara el PDF con el Excel no debe creer que son datos distintos.
 _COLUMNAS_PAGOS_PDF = [
-    "Estudiante", "Responsable de pago", "Desde", "Hasta", "Monto", "Método",
+    "Jugador", "Responsable de pago", "Desde", "Hasta", "Monto", "Método",
     "Fecha de registro", "Estado",
 ]
 
@@ -355,7 +359,7 @@ def listar_pagos(
 # así que un rango con más de 10000 pagos se truncaba en silencio: 200 con
 # los primeros N y ninguna señal de que faltaban filas. Ahora se rechaza con
 # 422, mismo patrón que el rango de fechas invertido más abajo.
-LIMITE_MAXIMO_REPORTE_PAGOS = 10000
+LIMITE_MAXIMO_REPORTE_PAGOS = LIMITE_MAXIMO_FILAS_REPORTE
 
 
 def _reporte_pagos_items(
@@ -382,14 +386,7 @@ def _reporte_pagos_items(
         estado_pago=estado_pago, fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
         skip=0, limit=LIMITE_MAXIMO_REPORTE_PAGOS,
     )
-    if total > LIMITE_MAXIMO_REPORTE_PAGOS:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                f"El reporte supera el límite máximo de {LIMITE_MAXIMO_REPORTE_PAGOS} "
-                "pagos. Reduzca el rango de fechas para continuar."
-            ),
-        )
+    exigir_tope_reporte(total, LIMITE_MAXIMO_REPORTE_PAGOS, "pagos")
     return items
 
 
@@ -429,7 +426,7 @@ async def reporte_pagos_pdf(
     items = _reporte_pagos_items(db, estado_pago, fecha_inicio, fecha_fin)
     pdf_bytes = await run_in_threadpool(
         generar_reporte_pdf,
-        titulo="Reporte de Pagos",
+        titulo="Informe de Pagos",
         columnas=_COLUMNAS_PAGOS_PDF,
         filas=_pagos_a_filas(items),
         resumen=_resumen_de_pagos(fecha_inicio, fecha_fin, estado_pago, len(items)),
@@ -501,7 +498,7 @@ def obtener_deuda_membresias_bulk(
     db: Session = Depends(obtener_sesion),
 ):
     if not membresia_ids:
-        raise HTTPException(status_code=422, detail="Debe indicar al menos una membresía.")
+        raise HTTPException(status_code=422, detail="Debes indicar al menos una membresía.")
     if len(membresia_ids) > _MAX_BULK_DEUDA_IDS:
         raise HTTPException(
             status_code=422,

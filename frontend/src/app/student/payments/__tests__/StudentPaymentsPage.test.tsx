@@ -4,7 +4,7 @@
  * The screen arrived from upstream unmigrated, so these tests pin the four
  * things that migration had to fix and that a future edit could quietly undo:
  * one currency grammar, one date grammar, a selection that is coal-and-ball
- * rather than red, and copy in Ecuadorian usted rather than voseo. Plus the
+ * rather than red, and copy in Ecuadorian «tú» rather than voseo. Plus the
  * substantive correction: coverage is derived from approved payments, never
  * from `MembershipSummary.fechaFin`, which no adapter populates.
  *
@@ -15,6 +15,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import StudentPaymentsPage from "@/app/student/payments/page";
 import type { PagoPersona, StudentPortalSummary, StudentProfileSummary, CoberturaBonificada } from "@/services/api";
+
+const shrinkImage = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/shrink-image", () => ({ shrinkImage }));
 
 vi.mock("@/components/ProtectedRoute", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -259,6 +262,9 @@ function makePago(overrides: Partial<PagoPersona> = {}): PagoPersona {
 }
 
 beforeEach(() => {
+  // jsdom has no canvas: shrinking fails unless a test says otherwise.
+  shrinkImage.mockReset();
+  shrinkImage.mockRejectedValue(new Error("no canvas"));
   // Solo `Date`: la pantalla no depende de temporizadores, y falsear también
   // `setTimeout` colgaría las consultas `findBy*`, que sondean con timers.
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -290,7 +296,7 @@ afterEach(() => {
 /**
  * A guardian with exactly ONE dependent never sees the profile switcher (it
  * hides below two profiles), so before this pass the screen never once named
- * the student it was about: "Mis pagos", "Su membresía", and a form that
+ * the student it was about: "Mis pagos", "Tu membresía", and a form that
  * debited a persona the reader had no way to identify.
  */
 describe("StudentPaymentsPage — whose payment this is", () => {
@@ -331,10 +337,10 @@ describe("StudentPaymentsPage — whose payment this is", () => {
     expect(await screen.findByText(/se registra a nombre de/i)).toBeInTheDocument();
   });
 
-  it("keeps usted for a student reading their own account", async () => {
+  it("addresses a student in «tú» reading their own account", async () => {
     render(<StudentPaymentsPage />);
 
-    expect(await screen.findByText("Su membresía")).toBeInTheDocument();
+    expect(await screen.findByText("Tu membresía")).toBeInTheDocument();
     expect(screen.queryByText(/Membresía de/)).not.toBeInTheDocument();
   });
 });
@@ -357,7 +363,7 @@ describe("StudentPaymentsPage — a representative who manages nobody yet", () =
 
     render(<StudentPaymentsPage />);
 
-    expect(await screen.findByText("No se encontraron estudiantes asociados a esta cuenta")).toBeInTheDocument();
+    expect(await screen.findByText("No se encontraron jugadores asociados a esta cuenta")).toBeInTheDocument();
     const action = screen.getByRole("link", { name: /agregar hijo o dependiente/i });
     expect(action).toHaveAttribute("href", "/student/add-dependent");
     expect(screen.queryByRole("link", { name: /^ir a mi cuenta$/i })).not.toBeInTheDocument();
@@ -537,7 +543,7 @@ describe("StudentPaymentsPage — the membership card", () => {
     // The helper copy follows the same reading: the coverage ended, it is not
     // "cubierta hasta" a date that already went by.
     expect(
-      within(card).getByText("Su cobertura terminó en esta fecha, según sus pagos aprobados."),
+      within(card).getByText("Tu cobertura terminó en esta fecha, según tus pagos aprobados."),
     ).toBeInTheDocument();
   });
 
@@ -561,7 +567,7 @@ describe("StudentPaymentsPage — the membership card", () => {
     expect(within(card).getAllByText("Membresía activa")).toHaveLength(2);
     expect(within(card).queryByText(/cobertura vencida/i)).not.toBeInTheDocument();
     expect(
-      within(card).getByText("Su membresía está cubierta hasta esta fecha según sus pagos aprobados."),
+      within(card).getByText("Tu membresía está cubierta hasta esta fecha según tus pagos aprobados."),
     ).toBeInTheDocument();
     expect(within(card).queryByText(/llega más lejos/i)).not.toBeInTheDocument();
   });
@@ -623,7 +629,7 @@ describe("StudentPaymentsPage — the club's benefit, read before paying", () =>
     render(<StudentPaymentsPage />);
 
     await screen.findByTestId("membership-status");
-    expect(screen.queryByText(/su beneficio/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/tu beneficio/i)).not.toBeInTheDocument();
   });
 
   it("shows the benefit's percentage before the payment form, and folds it into the estimated total", async () => {
@@ -631,7 +637,7 @@ describe("StudentPaymentsPage — the club's benefit, read before paying", () =>
 
     render(<StudentPaymentsPage />);
 
-    expect(await screen.findByText(/su beneficio/i)).toBeInTheDocument();
+    expect(await screen.findByText(/tu beneficio/i)).toBeInTheDocument();
     expect(screen.getByText("50% OFF")).toBeInTheDocument();
     expect(screen.getByText("Beca deportiva")).toBeInTheDocument();
 
@@ -1089,6 +1095,49 @@ describe("StudentPaymentsPage — the history", () => {
     expect(screen.queryByRole("button", { name: /confirmar y subir/i })).not.toBeInTheDocument();
     expect(mockSubirVoucherPago).not.toHaveBeenCalled();
   });
+
+  it("stages the newer pick when an older shrink resolves last", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ id: 77, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "TRANSFERENCIA", voucherUrl: null }),
+    ]);
+    let resolveA: (f: File) => void = () => {};
+    shrinkImage
+      .mockImplementationOnce(() => new Promise<File>((resolve) => { resolveA = resolve; }))
+      .mockResolvedValueOnce(new File([new Uint8Array(1024)], "b.jpg", { type: "image/jpeg" }));
+    render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
+    fireEvent.click(within(historyTable()).getByRole("button", { name: /^reintentar subir comprobante$/i }));
+    const input = screen.getByTestId("pago-voucher-input");
+    const big = (name: string) => new File([new Uint8Array(6 * 1024 * 1024)], name, { type: "image/jpeg" });
+    fireEvent.change(input, { target: { files: [big("a.jpeg")] } });
+    fireEvent.change(input, { target: { files: [big("b.jpeg")] } });
+    await screen.findByText("b.jpg");
+
+    resolveA(new File([new Uint8Array(1024)], "a.jpg", { type: "image/jpeg" }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(screen.queryByText("a.jpg")).not.toBeInTheDocument();
+    expect(screen.getByText("b.jpg")).toBeInTheDocument();
+  });
+
+  // FAM-26: a phone photo over 5 MB is shrunk in the browser, not rejected.
+  it("stages a shrunk copy of a photo over 5 MB instead of rejecting it (FAM-26)", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ id: 77, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "TRANSFERENCIA", voucherUrl: null }),
+    ]);
+    shrinkImage.mockResolvedValueOnce(new File([new Uint8Array(1024)], "foto.jpg", { type: "image/jpeg" }));
+
+    render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
+    fireEvent.click(within(historyTable()).getByRole("button", { name: /^reintentar subir comprobante$/i }));
+
+    const file = new File([new Uint8Array(6 * 1024 * 1024)], "foto.jpeg", { type: "image/jpeg" });
+    fireEvent.change(screen.getByTestId("pago-voucher-input"), { target: { files: [file] } });
+
+    expect(await screen.findByText("foto.jpg")).toBeInTheDocument();
+    expect(screen.queryByText(/supera el límite/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /confirmar y subir/i })).toBeInTheDocument();
+  });
 });
 
 /**
@@ -1220,7 +1269,7 @@ describe("StudentPaymentsPage — the row accordion (#513)", () => {
     render(<StudentPaymentsPage />);
     await screen.findByTestId("student-payments-table");
 
-    for (const label of ["Pagado hasta", "Pagos aprobados", "En revisión"]) {
+    for (const label of ["Pagado hasta", "Pagos aprobados", "Por validar"]) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     }
     expect(screen.getByText(/^Último pago/)).toBeInTheDocument();
@@ -1344,7 +1393,7 @@ describe("StudentPaymentsPage — registering a payment", () => {
     expect(screen.getByText(/12 meses a \$25,00 por mes/i)).toBeInTheDocument();
   });
 
-  it("addresses the reader as usted — the portal is not voseo", async () => {
+  it("addresses the reader in «tú» — the portal is never voseo", async () => {
     render(<StudentPaymentsPage />);
 
     fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
@@ -1471,7 +1520,7 @@ describe("StudentPaymentsPage — registering a payment", () => {
 
     render(<StudentPaymentsPage />);
 
-    expect(await screen.findByText(/ya tiene un pago esperando validación/i)).toBeInTheDocument();
+    expect(await screen.findByText(/ya tienes un pago esperando validación/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /registrar un pago/i })).not.toBeInTheDocument();
   });
 
@@ -1523,13 +1572,13 @@ describe("StudentPaymentsPage — registering a payment", () => {
     // Transferencia is the default method; requesting the checkpoint with no
     // voucher attached surfaces findProblem()'s message.
     fireEvent.click(screen.getByRole("button", { name: /^registrar pago$/i }));
-    expect(await screen.findByText(/adjunte el comprobante/i)).toBeInTheDocument();
+    expect(await screen.findByText(/adjunta el comprobante/i)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/forma de pago/i), {
       target: { value: "EFECTIVO" },
     });
 
-    expect(screen.queryByText(/adjunte el comprobante/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/adjunta el comprobante/i)).not.toBeInTheDocument();
   });
 
   // Issue #1226: same "ghost payment" class #482 closed for the type check —
@@ -1549,6 +1598,39 @@ describe("StudentPaymentsPage — registering a payment", () => {
     );
     expect(screen.queryByText("comprobante.png")).not.toBeInTheDocument();
     expect(mockRegistrarPago).not.toHaveBeenCalled();
+  });
+
+  it("keeps the newer pick when an older shrink resolves last", async () => {
+    let resolveA: (f: File) => void = () => {};
+    shrinkImage
+      .mockImplementationOnce(() => new Promise<File>((resolve) => { resolveA = resolve; }))
+      .mockResolvedValueOnce(new File([new Uint8Array(1024)], "b.jpg", { type: "image/jpeg" }));
+    render(<StudentPaymentsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
+    const input = screen.getByTestId("renew-voucher-input");
+    const big = (name: string) => new File([new Uint8Array(6 * 1024 * 1024)], name, { type: "image/jpeg" });
+    fireEvent.change(input, { target: { files: [big("a.jpeg")] } });
+    fireEvent.change(input, { target: { files: [big("b.jpeg")] } });
+    await screen.findByText("b.jpg");
+
+    resolveA(new File([new Uint8Array(1024)], "a.jpg", { type: "image/jpeg" }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(screen.queryByText("a.jpg")).not.toBeInTheDocument();
+    expect(screen.getByText("b.jpg")).toBeInTheDocument();
+  });
+
+  it("shrinks a photo over 5 MB and keeps it as the comprobante (FAM-26)", async () => {
+    shrinkImage.mockResolvedValueOnce(new File([new Uint8Array(1024)], "foto.jpg", { type: "image/jpeg" }));
+    render(<StudentPaymentsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
+
+    const file = new File([new Uint8Array(6 * 1024 * 1024)], "foto.jpeg", { type: "image/jpeg" });
+    fireEvent.change(screen.getByTestId("renew-voucher-input"), { target: { files: [file] } });
+
+    expect(await screen.findByText("foto.jpg")).toBeInTheDocument();
+    expect(screen.queryByTestId("voucher-rejection")).not.toBeInTheDocument();
   });
 });
 
@@ -1594,7 +1676,7 @@ describe("StudentPaymentsPage — the checkpoint before the money moves", () => 
 
     const confirm = await screen.findByTestId("renew-confirm");
     expect(within(confirm).getByText("Martín")).toBeInTheDocument();
-    expect(within(confirm).getByText(/no puede eliminarlo desde el portal/i)).toBeInTheDocument();
+    expect(within(confirm).getByText(/no puedes eliminarlo desde el portal/i)).toBeInTheDocument();
   });
 
   it("lets the reader back out of the checkpoint without registering", async () => {
@@ -1630,7 +1712,7 @@ describe("StudentPaymentsPage — the checkpoint before the money moves", () => 
     // No "Deshacer": there is no endpoint behind one. The toast says what the
     // club does instead, which is the only recovery that actually exists.
     const [message, detail] = mockShowSuccess.mock.calls[0];
-    expect(message).toMatch(/en revisión/i);
+    expect(message).toMatch(/por validar/i);
     expect(detail.description).toMatch(/lo rechaza indicando el motivo/i);
     expect(document.body.textContent).not.toMatch(/deshacer/i);
   });
@@ -1653,6 +1735,8 @@ describe("StudentPaymentsPage — a voucher failure after the payment is already
     fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
     const fileInput = await screen.findByTestId("renew-voucher-input");
     fireEvent.change(fileInput, { target: { files: [voucherFile] } });
+    // The pick is async since FAM-26 (it may shrink the photo first).
+    await screen.findByText(voucherFile.name);
   }
 
   it("closes the form, states the payment survived, and refreshes the history instead of reoffering the same button", async () => {
@@ -1772,6 +1856,59 @@ describe("StudentPaymentsPage — the dependent selection survives navigation", 
         scroll: false,
       });
     });
+  });
+});
+
+/**
+ * QA4 FAM-01 «a»: a representative who joined as a player has an own
+ * membership, born INACTIVA, that waits on its first payment. She keeps the
+ * single technical role REPRESENTANTE, so "is a player" cannot come from the
+ * role: the membership itself puts her in the selector and lets her pay it.
+ */
+describe("StudentPaymentsPage — the representative pays her own membership (FAM-01)", () => {
+  const OWN_PENDING: StudentProfileSummary = {
+    ...SELF,
+    personaId: "9",
+    nombres: "Marta",
+    apellidos: "Reyes",
+    membership: { ...SELF.membership!, id: 11, estado: "INACTIVA", montoAplicado: "40.00", categoria: "Mensual Adultos", cubiertoHasta: null },
+  };
+  const CHILD: StudentProfileSummary = { ...SELF, personaId: "41", nombres: "Sofía", apellidos: "Vera" };
+
+  beforeEach(() => {
+    mockUseAuth.mockReturnValue(authSession("representante"));
+    mockFetchPagosDePersona.mockResolvedValue([]);
+  });
+
+  it("lists her in the selector and opens on her own membership for ?alumno=", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      self: OWN_PENDING, representados: [CHILD], membershipPlans: [],
+    });
+    searchParams = new URLSearchParams("registrar=1&alumno=9");
+
+    render(<StudentPaymentsPage />);
+
+    const card = await screen.findByTestId("membership-status");
+    expect(within(card).getByText("$40,00")).toBeInTheDocument();
+    const selector = screen.getByLabelText("Estudiante");
+    expect(within(selector).getByRole("option", { name: "Marta Reyes" })).toBeInTheDocument();
+    expect(within(selector).getByRole("option", { name: "Sofía Vera" })).toBeInTheDocument();
+    expect(mockFetchPagosDePersona).toHaveBeenCalledWith("9");
+    expect(screen.queryByText(/a nombre de Sofía/)).not.toBeInTheDocument();
+  });
+
+  it("registers the payment of her own membership when she has no dependents", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      self: OWN_PENDING, representados: [], membershipPlans: [],
+    });
+    mockRegistrarPago.mockResolvedValue({ id: 70 });
+    searchParams = new URLSearchParams("registrar=1");
+
+    render(<StudentPaymentsPage />);
+
+    await screen.findByTestId("membership-status");
+    expect(mockFetchPagosDePersona).toHaveBeenCalledWith("9");
+    expect(await screen.findByRole("button", { name: /^registrar pago$/i })).toBeInTheDocument();
   });
 });
 
@@ -1939,7 +2076,7 @@ describe("StudentPaymentsPage — the rail guide", () => {
 
     const guide = await screen.findByRole("heading", { name: "Cómo pagar y validar" });
     const panel = guide.parentElement as HTMLElement;
-    expect(within(panel).getByText(/pendiente de validación/i)).toBeInTheDocument();
+    expect(within(panel).getByText(/por validar/i)).toBeInTheDocument();
     expect(panel.closest("details")).toBeNull();
   });
 });
@@ -1957,7 +2094,7 @@ describe("StudentPaymentsPage — QA4 findings", () => {
 
     render(<StudentPaymentsPage />);
 
-    expect(await screen.findByText(/Su membresía está suspendida\. Escriba al club para reactivarla/)).toBeInTheDocument();
+    expect(await screen.findByText(/Tu membresía está suspendida\. Escribe al club para reactivarla/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /registrar un pago/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /registrar un pago/i })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /whatsapp/i })).toHaveAttribute("href", expect.stringContaining("wa.me"));
@@ -1972,11 +2109,17 @@ describe("StudentPaymentsPage — QA4 findings", () => {
   });
 
   // FAM-14
-  it("does not dim the «En revisión» card when it is at zero", async () => {
+  it("does not dim the «Por validar» card when it is at zero", async () => {
     render(<StudentPaymentsPage />);
 
-    const label = await screen.findByText("En revisión");
-    expect(label.closest(".opacity-60")).toBeNull();
+    // «Por validar» also labels the filter pill and the info panel; only the
+    // stat tile (`min-h-stat`) is the card under test.
+    await screen.findByTestId("student-payments-table");
+    const cards = screen
+      .getAllByText("Por validar")
+      .filter((element) => element.closest(".min-h-stat") !== null);
+    expect(cards).toHaveLength(1);
+    expect(cards[0].closest(".opacity-60")).toBeNull();
   });
 
   // FAM-20
@@ -1991,7 +2134,7 @@ describe("StudentPaymentsPage — QA4 findings", () => {
     fireEvent.click(screen.getByRole("button", { name: /^registrar pago$/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("El comprobante debe ser un archivo PDF, JPG o PNG.");
-    expect(screen.queryByText(/adjunte el comprobante/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/adjunta el comprobante/i)).not.toBeInTheDocument();
   });
 
   // REG-26
@@ -2004,7 +2147,7 @@ describe("StudentPaymentsPage — QA4 findings", () => {
 
     render(<StudentPaymentsPage />);
 
-    expect(await screen.findByText(/Acérquese al club para activarla/)).toBeInTheDocument();
+    expect(await screen.findByText(/Acércate al club para activarla/)).toBeInTheDocument();
   });
 
   // FAM-21
@@ -2018,5 +2161,39 @@ describe("StudentPaymentsPage — QA4 findings", () => {
 
     const alert = await screen.findByRole("alert");
     expect(within(alert).getByRole("link")).toHaveAttribute("href", expect.stringContaining("wa.me"));
+  });
+
+  // FAM-12 «c»: a child without a membership can pay online, but only the first payment
+  describe("the first payment of a dependent without a membership (FAM-12)", () => {
+    const CHILD = { ...SELF, personaId: "42", nombres: "Valeria", apellidos: "Vera", membership: null };
+
+    function renderChildAs(session: ReturnType<typeof authSession>): void {
+      mockUseAuth.mockReturnValue(session);
+      mockFetchStudentPortal.mockReset().mockResolvedValue({
+        self: null,
+        representados: [CHILD],
+        membershipPlans: [],
+      });
+      render(<StudentPaymentsPage />);
+    }
+
+    it("offers the guardian a way to pay the first payment online", async () => {
+      renderChildAs(authSession("representante"));
+
+      const link = await screen.findByRole("link", { name: /registrar el primer pago de valeria/i });
+      expect(link).toHaveAttribute("href", "/student/add-dependent?pagar=42");
+      expect(screen.queryByText(/acércate al club para activarla/i)).not.toBeInTheDocument();
+    });
+
+    it("keeps the in-person copy while the guardian's account is not activated yet", async () => {
+      const session = authSession("representante") as ReturnType<typeof authSession> & {
+        session: Record<string, unknown>;
+      };
+      session.session.activacionCompleta = false;
+      renderChildAs(session);
+
+      expect(await screen.findByText(/acércate al club para activarla/i)).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /primer pago/i })).not.toBeInTheDocument();
+    });
   });
 });

@@ -99,16 +99,16 @@ export default function AttendanceReceipt({
             allAlreadyRegistered
               ? "Ya estaba guardada en el historial del club"
               : needsRetry
-              ? `Falta${result && result.failed.length === 1 ? "" : "n"} ${result?.failed.length ?? 0} ${result?.failed.length === 1 ? "alumno" : "alumnos"} por guardar`
+              ? `Falta${result && result.failed.length === 1 ? "" : "n"} ${result?.failed.length ?? 0} ${result?.failed.length === 1 ? "jugador" : "jugadores"} por guardar`
               : "Guardada en el historial del club"
           }
           value={allAlreadyRegistered ? students.length : (result?.createdCount ?? 0)}
           unit={
             allAlreadyRegistered
               ? students.length === 1
-                ? "alumno"
-                : "alumnos"
-              : `/${students.length} ${students.length === 1 ? "alumno" : "alumnos"}`
+                ? "jugador"
+                : "jugadores"
+              : `/${students.length} ${students.length === 1 ? "jugador" : "jugadores"}`
           }
           hint={
             allAlreadyRegistered

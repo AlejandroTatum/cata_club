@@ -16,8 +16,8 @@
  *   asistencia" — which is a claim about the student's habits that this data
  *   cannot support. The ratio carries its own denominator, so it stays true at
  *   N = 1 and at N = 13.
- * - `late` counts as attended (the student came); `justified` does not (an
- *   excused absence is still an absence). The four-way breakdown below the
+ * - `late` counts as attended (the student came); sick/competition do not (an
+ *   excused absence is still an absence). The breakdown below the
  *   ratio is what keeps that distinction visible instead of hidden in the
  *   arithmetic.
  * - There is no "próxima sesión" on this page. This screen reports what was
@@ -66,7 +66,7 @@ import {
   buttonClasses,
   cn,
 } from "@/components/ui";
-import { breakdownAttendance, firstNameOf, summarizeRecentAttendance } from "../student-utils";
+import { breakdownAttendance, firstNameOf, hasOwnMembership, summarizeRecentAttendance } from "../student-utils";
 import type { AttendanceBreakdown } from "../student-utils";
 import ManagedStudentPicker, { useManagedProfiles } from "../ManagedStudentPicker";
 import { CalendarCheck, User } from "lucide-react";
@@ -104,7 +104,6 @@ type LoadState =
 const BREAKDOWN_ROWS: { key: keyof Omit<AttendanceBreakdown, "total">; estado: string }[] = [
   { key: "present", estado: "present" },
   { key: "late", estado: "late" },
-  { key: "justified", estado: "justified" },
   { key: "absent", estado: "absent" },
   // FAM-22: left out, the tallies summed to less than the sessions listed.
   { key: "sick", estado: "sick" },
@@ -115,7 +114,6 @@ const BREAKDOWN_ROWS: { key: keyof Omit<AttendanceBreakdown, "total">; estado: s
 const DOT_CLASS: Record<string, string> = {
   present: "bg-state-ok",
   late: "bg-state-warn",
-  justified: "bg-state-neutral",
   absent: "bg-state-bad",
   sick: "bg-state-neutral",
   competition: "bg-state-neutral",
@@ -126,7 +124,6 @@ const ATTENDANCE_LEGEND: { estado: EstadoAsistencia; meaning: string }[] = [
   { estado: "present", meaning: "Estuvo en la sesión" },
   { estado: "late", meaning: "Llegó después de la hora" },
   { estado: "absent", meaning: "No asistió" },
-  { estado: "justified", meaning: "Avisó que no podía ir" },
   { estado: "sick", meaning: "Faltó por enfermedad" },
   { estado: "competition", meaning: "Estuvo en una competencia" },
 ];
@@ -167,7 +164,7 @@ function AttendanceRecap({
         </h2>
         <p className="mt-1.5 text-sm text-ink-3-strong">
           {recap
-            ? "Una tardanza cuenta como asistencia; una falta justificada, no."
+            ? "Una tardanza cuenta como asistencia; una falta, no."
             : studentName
               ? `La asistencia de ${studentName} aparecerá aquí en cuanto el entrenador tome lista.`
               : "Su asistencia aparecerá aquí en cuanto el entrenador tome lista."}
@@ -178,7 +175,7 @@ function AttendanceRecap({
           inset area inside the card, not a second card.
 
           A fixed 2×2, at every width: the card now lives in a 340px rail on
-          large screens, where a 4-up row gives "Justificada" 45px of content
+          large screens, where a 4-up row gives "Competencia" 45px of content
           box and breaks it across three lines. The hairlines are computed per
           index rather than written as `divide-x` — a 2×2 needs a right border
           on the even cells and a bottom border on the first row, and no single
@@ -193,7 +190,7 @@ function AttendanceRecap({
             data-testid={`breakdown-${getAttendanceLabel(estado).toLowerCase()}`}
             className={cn(
               "px-5 py-3.5",
-              index < BREAKDOWN_ROWS.length - 2 ? "border-b border-line" : null,
+              Math.floor(index / 2) < Math.floor((BREAKDOWN_ROWS.length - 1) / 2) ? "border-b border-line" : null,
               index % 2 === 0 ? "border-r border-line" : null,
             )}
           >
@@ -333,7 +330,7 @@ function GhostSessionRows(): React.ReactElement {
 function AttendanceGuide(): React.ReactElement {
   return (
     <InfoPanel title="Cómo se registra la asistencia" as="div" className="min-w-0">
-      <p>El entrenador toma lista en cada sesión. Si un registro no es correcto, pida la corrección al club.</p>
+      <p>El entrenador toma lista en cada sesión. Si un registro no es correcto, pide la corrección al club.</p>
       <ul className="flex flex-col gap-2">
         {ATTENDANCE_LEGEND.map(({ estado, meaning }) => (
           <li key={estado} className="flex items-center gap-2.5">
@@ -357,8 +354,8 @@ function AttendanceGuide(): React.ReactElement {
 function PortalWindowNote(): React.ReactElement {
   return (
     <p className="max-w-[68ch] text-xs leading-relaxed text-ink-3-strong">
-      Su portal recibe las {PORTAL_SESSION_WINDOW} sesiones más recientes que el club registró. Si
-      necesita un período anterior, pídalo al club.
+      Tu portal recibe las {PORTAL_SESSION_WINDOW} sesiones más recientes que el club registró. Si
+      necesitas un período anterior, pídelo al club.
     </p>
   );
 }
@@ -388,7 +385,7 @@ function StudentAttendanceContent(): React.ReactElement {
         setState({
           status: "error",
           message:
-            toUserMessage(error, "No se pudo cargar su historial de asistencia."),
+            toUserMessage(error, "No se pudo cargar tu historial de asistencia."),
         });
       });
     return () => {
@@ -412,7 +409,7 @@ function StudentAttendanceContent(): React.ReactElement {
 
       {state.status === "loading" && (
         <div className="card">
-          <LoadingState label="Cargando su asistencia…" />
+          <LoadingState label="Cargando tu asistencia…" />
         </div>
       )}
       {state.status === "error" && (
@@ -441,7 +438,7 @@ function AttendanceView({
 }): React.ReactElement {
   const { managedProfiles, selectedId, setSelectedId, selectedProfile } = useManagedProfiles(
     data,
-    hasAlumnoRole,
+    hasAlumnoRole || hasOwnMembership(data),
     accountPersonaId,
   );
 
@@ -465,8 +462,8 @@ function AttendanceView({
       {selectedProfile === null ? (
         <EmptyState
           icon={<User size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-          title="No se encontraron estudiantes asociados a esta cuenta"
-          description="Inscríbete como jugador o agregue un hijo o dependiente para empezar a ver asistencias."
+          title="No se encontraron jugadores asociados a esta cuenta"
+          description="Inscríbete como jugador o agrega un hijo o dependiente para empezar a ver asistencias."
           action={
             <Link href="/student" className={buttonClasses("secondary", "sm")}>
               Ir a mi cuenta

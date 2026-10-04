@@ -80,7 +80,7 @@ describe("VerificarCorreoPage", () => {
 
     expect(
       await screen.findByText(
-        /acérquese al club o escríbanos por whatsapp para registrar la inscripción y el primer pago/i,
+        /acércate al club o escríbenos por whatsapp para registrar la inscripción y el primer pago/i,
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/subir el comprobante/i)).not.toBeInTheDocument();

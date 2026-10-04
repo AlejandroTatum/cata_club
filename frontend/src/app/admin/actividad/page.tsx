@@ -55,8 +55,8 @@ const AVANZADAS_RANGES: { value: AvanzadasRange; label: string }[] = [
 function failureMessage(error: unknown): string {
   const status = typeof error === "object" && error !== null ? (error as { status?: unknown }).status : undefined;
   return status === 403
-    ? "No tiene permiso para ver la actividad del club."
-    : "No se pudo cargar la actividad del club. Intente nuevamente.";
+    ? "No tienes permiso para ver la actividad del club."
+    : "No se pudo cargar la actividad del club. Intenta nuevamente.";
 }
 
 function FailedBlock({ title, error, onRetry }: { title: string; error: unknown; onRetry: () => void }): React.ReactElement {

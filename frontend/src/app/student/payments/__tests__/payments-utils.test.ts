@@ -124,7 +124,7 @@ describe("getEmptyStateMessage", () => {
     ["TODOS", "Todavía no hay pagos registrados."],
     ["APROBADO", "No hay pagos aprobados."],
     ["RECHAZADO", "No hay pagos rechazados."],
-    ["PENDIENTE_VALIDACION", "No hay pagos pendientes de validación."],
+    ["PENDIENTE_VALIDACION", "No hay pagos por validar."],
   ];
 
   it.each(cases)("returns correct message for %s", (filter, expected) => {
@@ -155,7 +155,7 @@ describe("describePagoEstado", () => {
     // Waiting for the club to check a voucher is the normal path, so it must
     // not wear the same colour as a rejection.
     expect(describePagoEstado("PENDIENTE_VALIDACION")).toEqual({
-      label: "Pendiente de validación",
+      label: "Por validar",
       tone: "warn",
     });
   });
@@ -234,7 +234,7 @@ function fileOfSize(bytes: number, type = "image/png"): File {
 
 // Issue #1226: the BFF already rejects a comprobante over 5 MB, but only
 // after `registrarPago` already created the payment — the reader is left
-// with a "Pendiente de validación — Falta el comprobante" payment and has to
+// with a "Por validar — Falta el comprobante" payment and has to
 // retry from the history. This checks the same limit client-side, at
 // selection time.
 describe("voucherFileSizeError", () => {
@@ -368,7 +368,7 @@ describe("excedeMesesMaximo", () => {
 describe("MENSAJE_MESES_MAXIMO_EXCEDIDO", () => {
   it("names the real cap, not the 36 the original issue asked for", () => {
     expect(MENSAJE_MESES_MAXIMO_EXCEDIDO).toBe(
-      "El pago no puede cubrir más de 12 meses. Reduzca el monto ingresado.",
+      "El pago no puede cubrir más de 12 meses. Reduce el monto ingresado.",
     );
   });
 });

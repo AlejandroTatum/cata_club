@@ -245,7 +245,7 @@ def test_guardia_bloqueante_en_reapply_falla_con_reporte_y_salida_no_cero(
 
     db_session.expire_all()
     assert "fallo" in resultados[0]
-    assert "pagos pendientes" in resultados[0]["fallo"]
+    assert "pagos por validar" in resultados[0]["fallo"]
     assert reaplicador._hubo_fallos(resultados)
     assert db_session.get(Persona, persona.id).nombres == "Ana"
     assert db_session.get(SolicitudSupresionDatos, solicitud_id).estado == "APROBADA"

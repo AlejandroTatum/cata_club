@@ -60,10 +60,17 @@ vi.mock("next/image", () => ({
 const mockFetchAttendanceRecords = vi.fn();
 const mockFetchTrainingSchedules = vi.fn();
 const mockSearchStudents = vi.fn();
-const mockFetchRoster = vi.fn();
+const mockFetchConteos = vi.fn();
 
 vi.mock("@/services/api", () => ({
-  fetchRosterDeTodosLosHorarios: () => mockFetchRoster(),
+  // QA4 PERF-01: the screen reads counts, never the ~500 KB roster. Fixtures
+  // keep the roster-row shape; this folds them into the counts the API returns.
+  fetchConteosPorHorario: async () => {
+    const rows = (await mockFetchConteos()) as { horarioId: number }[];
+    const byHorario = new Map<number, number>();
+    for (const row of rows) byHorario.set(row.horarioId, (byHorario.get(row.horarioId) ?? 0) + 1);
+    return [...byHorario].map(([horarioId, inscritos]) => ({ horarioId, inscritos }));
+  },
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
   searchStudents: (...args: unknown[]) => mockSearchStudents(...args),
@@ -113,7 +120,7 @@ const RECORDS: AttendanceRecord[] = [
   record("absent", "Luis Lopez", "2026-07-20", "Lunes 15:00 — 16:00", 12, "Carlos Mendoza"),
   // A different session, on an earlier day and on a different horario.
   record("present", "Kevin Sabando", "2026-07-17", "Viernes 17:00 — 18:00", 7),
-  record("justified", "Melany Quimis", "2026-07-17", "Viernes 17:00 — 18:00", 7),
+  record("sick", "Melany Quimis", "2026-07-17", "Viernes 17:00 — 18:00", 7),
 ];
 
 // Fixed "today" for the clock-dependent correction gate (issue #389, the
@@ -131,7 +138,7 @@ describe("TrainerAttendanceHistoryPage", () => {
     mockFetchAttendanceRecords.mockReset().mockResolvedValue(RECORDS);
     mockFetchTrainingSchedules.mockReset().mockResolvedValue(SCHEDULES);
     mockSearchStudents.mockReset().mockResolvedValue([]);
-    mockFetchRoster.mockReset().mockResolvedValue([]);
+    mockFetchConteos.mockReset().mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -155,7 +162,7 @@ describe("TrainerAttendanceHistoryPage", () => {
       record("present", "Sofia Vera", "2026-08-10", "Lunes 15:00 — 16:00", 7, "Carlos Mendoza"),
       record("absent", "Luis Lopez", "2026-08-10", "Lunes 15:00 — 16:00", 7, "Carlos Mendoza"),
     ]);
-    mockFetchRoster.mockResolvedValue(
+    mockFetchConteos.mockResolvedValue(
       [1, 2, 3, 4, 5].map((personaId) => ({ personaId, horarioId: 7 })),
     );
     render(<TrainerAttendanceHistoryPage />);
@@ -167,7 +174,7 @@ describe("TrainerAttendanceHistoryPage", () => {
     // 11 distinct sessions (one record each, all different dates) force a
     // second page at PAGE_SIZE=10, which is what renders the range readout.
     const manySessions: AttendanceRecord[] = Array.from({ length: 11 }, (_, i) =>
-      record("present", `Alumno ${i}`, `2026-07-${String(i + 1).padStart(2, "0")}`),
+      record("present", `Jugador ${i}`, `2026-07-${String(i + 1).padStart(2, "0")}`),
     );
     mockFetchAttendanceRecords.mockResolvedValue(manySessions);
 
@@ -220,7 +227,7 @@ describe("TrainerAttendanceHistoryPage", () => {
     expect(resultCell).toHaveTextContent("1 ausente");
     // Compact result: a state nobody is in is not printed (the bar's accessible
     // name still carries every count).
-    expect(resultCell).not.toHaveTextContent("justificados");
+    expect(resultCell).not.toHaveTextContent("competencia");
   });
 
   it("draws the session's composition as the one bar the panel already uses, named for a screen reader", async () => {
@@ -229,7 +236,7 @@ describe("TrainerAttendanceHistoryPage", () => {
     const rows = await screen.findAllByRole("row");
     expect(
       within(rows[1]).getByRole("img", {
-        name: "2 presentes, 1 tardanza, 0 justificados, 0 enfermos, 0 competencias y 1 ausente sobre 4 registros",
+        name: "2 presentes, 1 tardanza, 0 enfermos, 0 competencias y 1 ausente sobre 4 registros",
       }),
     ).toBeInTheDocument();
     // One bar per row, and nothing left of the four-badge table it replaces.
@@ -464,13 +471,13 @@ describe("TrainerAttendanceHistoryPage", () => {
     });
   });
 
-  it("narrows to one student through the alumno search", async () => {
+  it("narrows to one student through the jugador search", async () => {
     mockSearchStudents.mockResolvedValue([{ id: 42, nombres: "Ana", apellidos: "García" }]);
     render(<TrainerAttendanceHistoryPage />);
     await screen.findAllByRole("row");
     mockFetchAttendanceRecords.mockClear();
 
-    fireEvent.change(screen.getByLabelText("Buscar alumno"), { target: { value: "Ana" } });
+    fireEvent.change(screen.getByLabelText("Buscar jugador"), { target: { value: "Ana" } });
     fireEvent.click(await screen.findByRole("option", { name: /Ana García/ }));
 
     await waitFor(() => {
@@ -605,7 +612,7 @@ describe("TrainerAttendanceHistoryPage — el conteo de una sesión sale de su p
   const CLOSED_WEDNESDAY_SESSION: AttendanceRecord[] = Array.from({ length: 15 }, (_, i) =>
     record(
       "present",
-      `Alumno ${i + 1}`,
+      `Jugador ${i + 1}`,
       WEDNESDAY_SESSION_DATE,
       "Miércoles 17:00 — 18:00",
       20,
@@ -762,7 +769,7 @@ describe("TrainerAttendanceHistoryPage — las tres cifras del período", () => 
     expect(estimado.querySelector('[class*="state-bad"]')).toBeNull();
   });
 
-  it("no cruza nada cuando el período se filtra por un alumno", async () => {
+  it("no cruza nada cuando el período se filtra por un jugador", async () => {
     // Filtrando por Ana, "listas tomadas" pasa a ser "listas donde figura Ana",
     // y el horario semanal sigue siendo el del club entero: restar uno del otro
     // daría un hueco enorme y falso. Los dos universos dejan de ser comparables,
@@ -772,7 +779,7 @@ describe("TrainerAttendanceHistoryPage — las tres cifras del período", () => 
     await screen.findAllByRole("row");
     expect(screen.getByText("Sesiones programadas")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Buscar alumno"), { target: { value: "Ana" } });
+    fireEvent.change(screen.getByLabelText("Buscar jugador"), { target: { value: "Ana" } });
     fireEvent.click(await screen.findByRole("option", { name: /Ana García/ }));
 
     await waitFor(() => {

@@ -182,7 +182,7 @@ function setRange(desde: string, hasta: string): void {
 /** Types into the alumno search and picks the first suggestion offered. */
 async function pickStudent(): Promise<void> {
   mockSearchStudents.mockResolvedValue([ALUMNO]);
-  fireEvent.change(screen.getByLabelText("Buscar alumno"), { target: { value: "Ana" } });
+  fireEvent.change(screen.getByLabelText("Buscar jugador"), { target: { value: "Ana" } });
   fireEvent.click(await screen.findByRole("option", { name: /Ana García/i }));
 }
 
@@ -202,9 +202,9 @@ describe("ReportsPage — preset cards (18-reportes.html)", () => {
 
     const presets = screen.getAllByRole("radio");
     expect(presets).toHaveLength(3);
-    expect(presets[0]).toHaveTextContent("Reporte de período");
-    expect(presets[1]).toHaveTextContent("Reporte de asistencia");
-    expect(presets[2]).toHaveTextContent("Reporte de pagos");
+    expect(presets[0]).toHaveTextContent("Informe de período");
+    expect(presets[1]).toHaveTextContent("Informe de asistencia");
+    expect(presets[2]).toHaveTextContent("Informe de pagos");
     // There is no etiquetas/label generator in the backend — see the page docstring.
     expect(screen.queryByText(/etiquetas/i)).not.toBeInTheDocument();
   });
@@ -277,8 +277,8 @@ describe("ReportsPage — preview area", () => {
     // nothing typed in yet.
     chooseRangePreset("Personalizado");
 
-    expect(screen.getByRole("heading", { name: /vista previa — reporte de período/i })).toBeInTheDocument();
-    expect(screen.getByText("Elija un rango de fechas")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /vista previa — informe de período/i })).toBeInTheDocument();
+    expect(screen.getByText("Elige un rango de fechas")).toBeInTheDocument();
     expect(mockFetchNuevosPorPeriodo).not.toHaveBeenCalled();
   });
 
@@ -287,11 +287,11 @@ describe("ReportsPage — preview area", () => {
     render(<ReportsPage />);
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
 
-    choosePreset(/reporte de pagos/i);
+    choosePreset(/informe de pagos/i);
     chooseRangePreset("Personalizado");
     mockFetchPagosReporte.mockClear();
 
-    expect(screen.getAllByText(/Elija Desde y Hasta para continuar/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Elige Desde y Hasta para continuar/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/Rango sin definir/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Listo: descargue/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Generar PDF/ })).toBeDisabled();
@@ -397,16 +397,43 @@ describe("ReportsPage — preview area", () => {
     expect(await screen.findByText("No se encontraron personas")).toBeInTheDocument();
   });
 
-  it("previews attendance with an open range, when 'Personalizado' is chosen with nothing typed", async () => {
+  it("asks for both dates and keeps downloads off on an empty custom range in asistencia (ADMB-31)", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([ATTENDANCE_RECORD]);
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+
+    choosePreset(/asistencia/i);
+    await waitFor(() => expect(mockFetchAttendanceRecords).toHaveBeenCalled());
+    mockFetchAttendanceRecords.mockClear();
+    chooseRangePreset("Personalizado");
+
+    expect(screen.getAllByText("Elige la fecha de inicio y de fin.").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Rango sin definir/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Listo: descargue/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Generar PDF/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Exportar a Excel/ })).toBeDisabled();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(mockFetchAttendanceRecords).not.toHaveBeenCalled();
+  });
+
+  it("keeps the asistencia custom range disabled while only one date is chosen (ADMB-31)", async () => {
     mockFetchAttendanceRecords.mockResolvedValue([ATTENDANCE_RECORD]);
     render(<ReportsPage />);
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
 
     choosePreset(/asistencia/i);
     chooseRangePreset("Personalizado");
+    mockFetchAttendanceRecords.mockClear();
+    fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2026-01-01" } });
 
-    await waitFor(() => expect(mockFetchAttendanceRecords).toHaveBeenCalledWith({}));
-    expect(await screen.findByText("Ana Pérez")).toBeInTheDocument();
+    expect(screen.getAllByText("Elige la fecha de inicio y de fin.").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /Generar PDF/ })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Hasta"), { target: { value: "2026-01-31" } });
+    await waitFor(() =>
+      expect(mockFetchAttendanceRecords).toHaveBeenCalledWith({ fechaInicio: "2026-01-01", fechaFin: "2026-01-31" }),
+    );
+    expect(screen.queryByText("Elige la fecha de inicio y de fin.")).not.toBeInTheDocument();
   });
 
   it("narrows the asistencia preview to one alumno through the shared student search (ASI-7)", async () => {
@@ -470,7 +497,7 @@ describe("ReportsPage — preview area", () => {
     });
     mockFetchAttendanceRecords.mockClear();
 
-    fireEvent.change(screen.getByLabelText("Buscar alumno"), { target: { value: "Ana Garcí" } });
+    fireEvent.change(screen.getByLabelText("Buscar jugador"), { target: { value: "Ana Garcí" } });
 
     await waitFor(() => {
       const lastCall = mockFetchAttendanceRecords.mock.calls.at(-1)?.[0];
@@ -508,7 +535,7 @@ describe("ReportsPage — preview area", () => {
     setRange("2026-01-01", "2026-12-31");
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(
-      "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: WhatsApp",
+      "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbenos por WhatsApp y te ayudamos: WhatsApp",
     );
     expect(within(alert).getByRole("link", { name: "WhatsApp" })).toHaveAttribute(
       "href",
@@ -571,7 +598,7 @@ describe("ReportsPage — date-range validation", () => {
     expect(
       screen.queryByText("La fecha de inicio debe ser anterior a la fecha de fin."),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText("Elija un rango de fechas")).not.toBeInTheDocument();
+    expect(screen.queryByText("Elige un rango de fechas")).not.toBeInTheDocument();
   });
 
   it("período: never queries with an end date before the start date", async () => {
@@ -649,10 +676,13 @@ describe("ReportsPage — Generar PDF", () => {
 
     choosePreset(/asistencia/i);
     chooseRangePreset("Personalizado");
+    setRange("2026-01-01", "2026-12-31");
     await waitFor(() => expect(generateButton()).toBeEnabled());
     fireEvent.click(generateButton());
 
-    await waitFor(() => expect(mockExportAsistenciaReportePdf).toHaveBeenCalledWith({}));
+    await waitFor(() =>
+      expect(mockExportAsistenciaReportePdf).toHaveBeenCalledWith({ fechaInicio: "2026-01-01", fechaFin: "2026-12-31" }),
+    );
   });
 
   describe("horario → día filter", () => {
@@ -766,7 +796,7 @@ describe("ReportsPage — Generar PDF", () => {
 
   it("reports a failed download instead of failing silently", async () => {
     mockFetchNuevosPorPeriodo.mockResolvedValue([PERSONA]);
-    mockExportNuevosPorPeriodoPdf.mockRejectedValue(new Error("No se pudo generar el PDF del reporte."));
+    mockExportNuevosPorPeriodoPdf.mockRejectedValue(new Error("No se pudo generar el PDF del informe."));
 
     render(<ReportsPage />);
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
@@ -774,7 +804,7 @@ describe("ReportsPage — Generar PDF", () => {
     await waitFor(() => expect(generateButton()).toBeEnabled());
     fireEvent.click(generateButton());
 
-    expect(await screen.findByText("No se pudo generar el PDF del reporte.")).toBeInTheDocument();
+    expect(await screen.findByText("No se pudo generar el PDF del informe.")).toBeInTheDocument();
   });
 });
 
@@ -865,7 +895,7 @@ describe("ReportsPage — Exportar a Excel", () => {
     render(<ReportsPage />);
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
 
-    choosePreset(/reporte de pagos/i);
+    choosePreset(/informe de pagos/i);
     await waitFor(() => expect(xlsxButton()).toBeEnabled());
     fireEvent.click(xlsxButton());
 
@@ -873,7 +903,7 @@ describe("ReportsPage — Exportar a Excel", () => {
     const [sheetName, columns] = mockBuildWorkbook.mock.calls[0] as [string, { header: string }[]];
     expect(sheetName).toBe("Pagos");
     expect(columns.map((c) => c.header)).toEqual([
-      "Estudiante",
+      "Jugador",
       "Responsable de pago",
       "Desde",
       "Hasta",
@@ -926,7 +956,7 @@ describe("ReportsPage — Exportar a Excel", () => {
     fireEvent.click(xlsxButton());
 
     expect(
-      await screen.findByText("No se pudo generar el archivo de Excel. Intente nuevamente."),
+      await screen.findByText("No se pudo generar el archivo de Excel. Intenta nuevamente."),
     ).toBeInTheDocument();
     await waitFor(() => expect(xlsxButton()).toBeEnabled());
   });
@@ -948,11 +978,11 @@ describe("ReportsPage — three-step flow, grouped exports and rail", () => {
     mockSearchStudents.mockResolvedValue([]);
   });
 
-  it("numbers the steps: tipo de reporte, then rango de fechas", async () => {
+  it("numbers the steps: tipo de informe, then rango de fechas", async () => {
     render(<ReportsPage />);
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
 
-    const type = screen.getByRole("heading", { name: "Tipo de reporte" });
+    const type = screen.getByRole("heading", { name: "Tipo de informe" });
     const range = screen.getByRole("heading", { name: "Rango de fechas" });
     expect(type.previousElementSibling).toHaveTextContent("1");
     expect(range.previousElementSibling).toHaveTextContent("2");
@@ -977,7 +1007,7 @@ describe("ReportsPage — three-step flow, grouped exports and rail", () => {
 
     await waitFor(() =>
       expect(screen.getByTestId("report-summary")).toHaveTextContent(
-        "Reporte de período · Este mes · 1 persona · 1 página",
+        "Informe de período · Este mes · 1 persona · 1 página",
       ),
     );
   });
@@ -987,7 +1017,7 @@ describe("ReportsPage — three-step flow, grouped exports and rail", () => {
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
 
     const rail = screen.getByTestId("reports-rail");
-    expect(rail).toHaveTextContent("Qué contiene cada reporte");
+    expect(rail).toHaveTextContent("Qué contiene cada informe");
     expect(rail).toHaveTextContent("PDF");
     expect(rail).toHaveTextContent("Excel");
     expect(screen.getByText(/Los listados del club por rango de fechas/)).toBeInTheDocument();

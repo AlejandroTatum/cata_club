@@ -61,7 +61,7 @@ const MODALIDAD_LABEL: Record<TipoMembresiaCatalogo["modalidad"], string> = {
 const PRECIO_REGEX = /^(?:[1-9]\d*(?:\.\d{1,2})?|0\.(?:[1-9]\d?|0[1-9]))$/;
 
 const PRECIO_ERROR =
-  "Ingrese un precio válido: un número positivo con hasta 2 decimales (ej. 45.00).";
+  "Ingresa un precio válido: un número positivo con hasta 2 decimales (ej. 45.00).";
 
 /**
  * Both "," and "." are accepted as the decimal separator (es-EC/es-AR admins
@@ -85,7 +85,7 @@ function normalizePrecio(value: string): string {
  *  `categoria: Optional[str] = Field(None, min_length=1, max_length=80)`) so
  *  an admin sees the rejection before the round trip, not after it. */
 const CATEGORIA_MAX_LENGTH = 80;
-const CATEGORIA_ERROR_VACIA = "Ingrese un nombre para la tarifa.";
+const CATEGORIA_ERROR_VACIA = "Ingresa un nombre para la tarifa.";
 const CATEGORIA_ERROR_LARGA = `El nombre no puede superar los ${CATEGORIA_MAX_LENGTH} caracteres.`;
 
 const CATEGORIA_INPUT_CLASS =
@@ -327,12 +327,12 @@ export default function TarifasPage(): React.ReactElement {
     const parts: string[] = [];
     if (pending.categoriaNueva !== null) {
       parts.push(
-        `Va a cambiar el nombre de «${pending.categoriaActual}» a «${pending.categoriaNueva}».`,
+        `Vas a cambiar el nombre de «${pending.categoriaActual}» a «${pending.categoriaNueva}».`,
       );
     }
     if (pending.precioNuevo !== null) {
       parts.push(
-        `Va a cambiar el precio a $${pending.precioNuevo}. El cambio aplica solo a los pagos futuros: las membresías y los pagos ya registrados no se modifican.`,
+        `Vas a cambiar el precio a $${pending.precioNuevo}. El cambio aplica solo a los pagos futuros: las membresías y los pagos ya registrados no se modifican.`,
       );
     }
     return parts.join(" ");
@@ -349,7 +349,7 @@ export default function TarifasPage(): React.ReactElement {
       showSuccess(
         activo
           ? `Tarifa «${tarifa.categoria}» visible de nuevo.`
-          : `Tarifa «${tarifa.categoria}» oculta. Los alumnos que ya la tienen siguen pagando igual.`,
+          : `Tarifa «${tarifa.categoria}» oculta. Los jugadores que ya la tienen siguen pagando igual.`,
       );
     } catch (err) {
       const message = toUserMessage(err, "No se pudo actualizar la tarifa.");
@@ -424,7 +424,7 @@ export default function TarifasPage(): React.ReactElement {
   async function handleCreateSubmit(): Promise<void> {
     const categoria = newTarifa.categoria.trim();
     if (!categoria) {
-      setCreateError("Escriba el nombre de la tarifa.");
+      setCreateError("Escribe el nombre de la tarifa.");
       return;
     }
     const precio = normalizePrecio(newTarifa.precioInput);
@@ -611,7 +611,7 @@ export default function TarifasPage(): React.ReactElement {
           <strong className="text-ink">Eliminar</strong> solo aparece mientras nadie la usó y no se
           puede deshacer.
         </p>
-        <p>Para sumar una categoría o modalidad, use «Nueva tarifa».</p>
+        <p>Para sumar una categoría o modalidad, usa «Nueva tarifa».</p>
       </InfoPanel>
     );
   }
@@ -793,7 +793,7 @@ export default function TarifasPage(): React.ReactElement {
                             >{`$ ${tarifa.precio}`}</p>
                             <p className="text-xs text-ink-3">
                               {oculta
-                                ? "No aparece en el sitio ni en inscripciones. Los alumnos que ya la tienen siguen pagando igual."
+                                ? "No aparece en el sitio ni en inscripciones. Los jugadores que ya la tienen siguen pagando igual."
                                 : tarifa.enUso
                                   ? "Se usa en inscripción, pagos y cambio de plan."
                                   : "Todavía no se usó."}
@@ -841,7 +841,7 @@ export default function TarifasPage(): React.ReactElement {
           open={pendingHide !== null}
           variant="danger"
           title={pendingHide ? `¿Ocultar «${pendingHide.categoria}»?` : ""}
-          message="Deja de aparecer en el sitio y en inscripciones nuevas. Los alumnos que ya la tienen siguen pagando igual. Puede volver a mostrarla cuando quiera."
+          message="Deja de aparecer en el sitio y en inscripciones nuevas. Los jugadores que ya la tienen siguen pagando igual. Puedes volver a mostrarla cuando quieras."
           confirmLabel="Ocultar"
           onConfirm={() => void confirmHide()}
           onCancel={() => setPendingHide(null)}

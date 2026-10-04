@@ -158,21 +158,21 @@ interface PresetDef {
 const PRESETS: PresetDef[] = [
   {
     key: "periodo",
-    title: "Reporte de período",
+    title: "Informe de período",
     description: "Personas registradas entre dos fechas.",
     noun: "persona",
     icon: Users,
   },
   {
     key: "asistencia",
-    title: "Reporte de asistencia",
-    description: "Presencias por estudiante, horario y fecha.",
+    title: "Informe de asistencia",
+    description: "Presencias por jugador, horario y fecha.",
     noun: "registro",
     icon: CheckCircle,
   },
   {
     key: "pagos",
-    title: "Reporte de pagos",
+    title: "Informe de pagos",
     description: "Pagos y membresías entre dos fechas.",
     noun: "pago",
     icon: Wallet,
@@ -181,6 +181,9 @@ const PRESETS: PresetDef[] = [
 
 /** Sticky head for the bounded preview tables — the scroll region is the table's own. */
 const STICKY_TH = "sticky top-0 z-10";
+/** ADMB-31: what the asistencia report says while its custom range is missing a date. */
+const ASISTENCIA_RANGE_PROMPT = "Elige la fecha de inicio y de fin.";
+
 /** The preview lists one page (10 rows) at a time, so no max height: a bound used to cut the last row in half (ADMB-29). */
 const PREVIEW_SCROLL = "overflow-y-auto";
 
@@ -225,12 +228,12 @@ const PERSONA_XLSX_COLUMNS: XlsxColumn[] = [
 const ASISTENCIA_XLSX_COLUMNS: XlsxColumn[] = [
   { header: "Fecha", key: "fecha", type: "date" },
   { header: "Horario", key: "horario", type: "text" },
-  { header: "Estudiante", key: "estudiante", type: "text" },
+  { header: "Jugador", key: "estudiante", type: "text" },
   { header: "Estado", key: "estado", type: "text" },
 ];
 
 const PAGOS_XLSX_COLUMNS: XlsxColumn[] = [
-  { header: "Estudiante", key: "estudiante", type: "text" },
+  { header: "Jugador", key: "estudiante", type: "text" },
   { header: "Responsable de pago", key: "responsable", type: "text" },
   { header: "Desde", key: "desde", type: "date" },
   { header: "Hasta", key: "hasta", type: "date" },
@@ -326,7 +329,11 @@ function ReportsContent(): React.ReactElement {
   // ADMB-31 (pagos): an empty "Personalizado" range is not "everything" — the user has
   // not chosen a range yet, so nothing is previewed or downloadable.
   const customRangeEmpty = preset === "pagos" && rangePreset === "custom" && fechaInicio === "" && fechaFin === "";
-  const canQuery = !rangeInverted && !periodoRangeIncomplete && !customRangeEmpty;
+  // ADMB-31 (asistencia): same rule, stricter — a "Personalizado" range needs BOTH dates,
+  // so one empty end no longer means "everything" either.
+  const asistenciaRangeIncomplete =
+    preset === "asistencia" && rangePreset === "custom" && (fechaInicio === "" || fechaFin === "");
+  const canQuery = !rangeInverted && !periodoRangeIncomplete && !customRangeEmpty && !asistenciaRangeIncomplete;
 
   // Horarios feed the asistencia filter's dropdown (once, on mount).
   useEffect(() => {
@@ -469,7 +476,7 @@ function ReportsContent(): React.ReactElement {
         await exportPagosReportePdf(params);
       }
     } catch (err: unknown) {
-      const message = toUserMessage(err, "No se pudo generar el PDF del reporte.");
+      const message = toUserMessage(err, "No se pudo generar el PDF del informe.");
       setError(message);
     } finally {
       setExportingPdf(false);
@@ -532,7 +539,7 @@ function ReportsContent(): React.ReactElement {
         await downloadXlsx(xlsxFilename("pagos"), workbook);
       }
     } catch {
-      setError("No se pudo generar el archivo de Excel. Intente nuevamente.");
+      setError("No se pudo generar el archivo de Excel. Intenta nuevamente.");
     } finally {
       setExportingXlsx(false);
     }
@@ -550,15 +557,19 @@ function ReportsContent(): React.ReactElement {
     summaryParts.push(`${resultCount} ${pluralize(activePreset.noun, resultCount)}`);
     if (resultCount > 0) summaryParts.push(`${totalPages} ${totalPages === 1 ? "página" : "páginas"}`);
   }
-  const summary = customRangeEmpty ? "Elija Desde y Hasta para continuar" : summaryParts.join(" · ");
+  const summary = asistenciaRangeIncomplete
+    ? ASISTENCIA_RANGE_PROMPT
+    : customRangeEmpty
+      ? "Elige Desde y Hasta para continuar"
+      : summaryParts.join(" · ");
   const downloadHint =
     canQuery && !loading && resultCount > 0
-      ? "Listo: descargue con «Generar PDF» o «Exportar a Excel», arriba."
+      ? "Listo: descarga con «Generar PDF» o «Exportar a Excel», arriba."
       : "La descarga se habilita cuando la vista previa tiene resultados.";
 
   return (
     <AppShell
-      title="Reportes"
+      title="Informes"
       subtitle="Los listados del club por rango de fechas, para descargar en PDF o Excel."
       /*
        * Both exports live in ONE group in the header slot, same size: "Generar
@@ -599,10 +610,10 @@ function ReportsContent(): React.ReactElement {
       <div data-testid="reports-split" className={PAGE_RAIL}>
         <div className="flex min-w-0 flex-col gap-page lg:min-h-[calc(100dvh-10rem)]">
       <section className="card grid gap-section p-4">
-        <StepHeading step={1} title="Tipo de reporte" />
+        <StepHeading step={1} title="Tipo de informe" />
         <div
           role="radiogroup"
-          aria-label="Tipo de reporte"
+          aria-label="Tipo de informe"
           className="grid items-stretch gap-field sm:grid-cols-3"
         >
           {PRESETS.map((item) => {
@@ -654,7 +665,7 @@ function ReportsContent(): React.ReactElement {
           hand-written card with its own `p-[17px_18px]` and no caption — one
           pixel off the panel every other screen filters through. */}
       <FilterPanel
-        label="Filtros del reporte"
+        label="Filtros del informe"
         chips={
           <FilterGroup label="Rango de fechas">
             <div className="flex flex-wrap gap-2">
@@ -742,11 +753,11 @@ function ReportsContent(): React.ReactElement {
                 </div>
 
                 <div className="flex min-w-[220px] flex-col gap-field">
-                  <span className={FILTER_LABEL}>Alumno</span>
+                  <span className={FILTER_LABEL}>Jugador</span>
                   <StudentSearch
                     onSelect={setStudent}
                     onClear={clearStudent}
-                    placeholder="Buscar alumno…"
+                    placeholder="Buscar jugador…"
                   />
                 </div>
               </>
@@ -794,7 +805,7 @@ function ReportsContent(): React.ReactElement {
       )}
 
       {/* Preview — the canvas that used to sit empty until you pressed Buscar. */}
-      <section className="card flex flex-1 flex-col overflow-hidden" aria-label="Vista previa del reporte">
+      <section className="card flex flex-1 flex-col overflow-hidden" aria-label="Vista previa del informe">
         <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-[15px]">
           <h2 className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">
             Vista previa — {activePreset.title}
@@ -810,13 +821,15 @@ function ReportsContent(): React.ReactElement {
         {!canQuery ? (
           <EmptyState surface="inset"
             icon={<FileText size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-            title="Elija un rango de fechas"
+            title="Elige un rango de fechas"
             description={
-              customRangeEmpty
-                ? "Elija Desde y Hasta (dd/mm/aaaa) para ver la vista previa y habilitar la descarga."
+              asistenciaRangeIncomplete
+                ? ASISTENCIA_RANGE_PROMPT
+                : customRangeEmpty
+                ? "Elige Desde y Hasta (dd/mm/aaaa) para ver la vista previa y habilitar la descarga."
                 : preset === "periodo"
-                ? "El reporte de período necesita una fecha de inicio y una de fin (dd/mm/aaaa) para generarse."
-                : "Corrija el rango de fechas para ver la vista previa."
+                ? "El informe de período necesita una fecha de inicio y una de fin (dd/mm/aaaa) para generarse."
+                : "Corrige el rango de fechas para ver la vista previa."
             }
           />
         ) : loading ? (
@@ -872,13 +885,13 @@ function ReportsContent(): React.ReactElement {
         </div>
 
         <div data-testid="reports-rail" className="grid content-start gap-page lg:sticky lg:top-4">
-          <InfoPanel title="Resumen del reporte">
+          <InfoPanel title="Resumen del informe">
             <p data-testid="report-summary" className="font-bold text-ink">
               {summary}
             </p>
             <p>{downloadHint}</p>
           </InfoPanel>
-          <InfoPanel title="Qué contiene cada reporte">
+          <InfoPanel title="Qué contiene cada informe">
             <dl className="grid gap-2">
               <div>
                 <dt className="font-semibold text-ink">Período</dt>
@@ -886,7 +899,7 @@ function ReportsContent(): React.ReactElement {
               </div>
               <div>
                 <dt className="font-semibold text-ink">Asistencia</dt>
-                <dd>Presencias por estudiante, horario y fecha; admite filtrar por horario y alumno.</dd>
+                <dd>Presencias por jugador, horario y fecha; admite filtrar por horario y jugador.</dd>
               </div>
               <div>
                 <dt className="font-semibold text-ink">Pagos</dt>
@@ -945,7 +958,7 @@ function PersonaPreview({
         fill
         icon={<Users size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
         title="No se encontraron personas"
-        description="Ninguna persona se registró en este rango. Pruebe con un rango de fechas más amplio."
+        description="Ninguna persona se registró en este rango. Prueba con un rango de fechas más amplio."
         action={action}
       />
     );
@@ -994,7 +1007,7 @@ function AsistenciaPreview({
         fill
         icon={<CheckCircle size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
         title="No se encontraron registros de asistencia"
-        description="Ningún registro coincide con los filtros. Amplíe el rango de fechas o quite el filtro de horario."
+        description="Ningún registro coincide con los filtros. Amplía el rango de fechas o quita el filtro de horario."
         action={action}
       />
     );
@@ -1006,7 +1019,7 @@ function AsistenciaPreview({
           <tr>
             <TableHeaderCell className={STICKY_TH}>Fecha</TableHeaderCell>
             <TableHeaderCell className={STICKY_TH}>Horario</TableHeaderCell>
-            <TableHeaderCell className={STICKY_TH}>Estudiante</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Jugador</TableHeaderCell>
             <TableHeaderCell className={STICKY_TH}>Estado</TableHeaderCell>
           </tr>
         </TableHead>
@@ -1056,7 +1069,7 @@ function PagosPreview({
         fill
         icon={<Wallet size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
         title="No se encontraron pagos"
-        description="Ningún pago coincide con los filtros. Amplíe el rango de fechas o elija otro estado."
+        description="Ningún pago coincide con los filtros. Amplía el rango de fechas o elige otro estado."
         action={action}
       />
     );
@@ -1066,7 +1079,7 @@ function PagosPreview({
       <Table>
         <TableHead>
           <tr>
-            <TableHeaderCell className={STICKY_TH}>Estudiante</TableHeaderCell>
+            <TableHeaderCell className={STICKY_TH}>Jugador</TableHeaderCell>
             <TableHeaderCell className={STICKY_TH}>Responsable de pago</TableHeaderCell>
             <TableHeaderCell className={STICKY_TH}>Desde</TableHeaderCell>
             <TableHeaderCell className={STICKY_TH}>Hasta</TableHeaderCell>

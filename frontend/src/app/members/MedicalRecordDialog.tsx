@@ -53,7 +53,7 @@ export default function MedicalRecordDialog({
             stated twice. The form below stays fully available. */}
         {account.sinDatosEmergencia ? (
           <p role="status" className="rounded-lg border border-line bg-sunken px-3 py-2 text-sm font-semibold text-ink-2">
-            Complete los datos y guárdelos.
+            Completa los datos y guárdalos.
           </p>
         ) : null}
         {account.estudiantes.map((student) => (

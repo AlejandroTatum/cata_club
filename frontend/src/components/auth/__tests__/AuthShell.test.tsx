@@ -36,7 +36,7 @@ import { yearsSinceFounding } from "@/app/landing/landing-config";
 
 function renderShell(): void {
   render(
-    <AuthShell title="Bienvenido de nuevo" subtitle="Inicie sesión para continuar" note="Nota">
+    <AuthShell title="Bienvenido de nuevo" subtitle="Inicia sesión para continuar" note="Nota">
       <button type="submit">Iniciar sesión</button>
     </AuthShell>,
   );
@@ -144,7 +144,7 @@ describe("AuthShell", () => {
   // pass their own (this file's own `renderShell`, unchanged above).
   it("lets a caller override the eyebrow for a visitor-facing screen", () => {
     render(
-      <AuthShell title="Verifique su correo" eyebrow="Acceso al club">
+      <AuthShell title="Verifica tu correo" eyebrow="Acceso al club">
         <button type="submit">Continuar</button>
       </AuthShell>,
     );
@@ -200,7 +200,7 @@ describe("AuthShell", () => {
     // "Inicio". D12b took the naming off the screen (see lib/destinations.ts).
     expect(screen.getAllByRole("link", { name: /volver al inicio/i }).length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Bienvenido de nuevo" })).toBeInTheDocument();
-    expect(screen.getByText("Inicie sesión para continuar")).toBeInTheDocument();
+    expect(screen.getByText("Inicia sesión para continuar")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Iniciar sesión" })).toBeInTheDocument();
     expect(screen.getByText("Nota")).toBeInTheDocument();
   });
@@ -430,7 +430,7 @@ describe("AuthShell — the exit points at the previous step, not always at the 
 
 function renderHiddenBackShell(): void {
   render(
-    <AuthShell title="Active su cuenta" hideBack>
+    <AuthShell title="Active tu cuenta" hideBack>
       <button type="submit">Continuar</button>
     </AuthShell>,
   );

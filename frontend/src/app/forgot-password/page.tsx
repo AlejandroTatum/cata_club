@@ -36,7 +36,7 @@ export default function ForgotPasswordPage(): React.ReactElement {
     event.preventDefault();
 
     if (!correo.trim()) {
-      toast.showError("Ingrese su correo electrónico.");
+      toast.showError("Ingresa tu correo electrónico.");
       return;
     }
 
@@ -46,7 +46,7 @@ export default function ForgotPasswordPage(): React.ReactElement {
       setSubmitted(true);
     } catch (err) {
       toast.showError(
-        toUserMessage(err, "No se pudo procesar la solicitud. Intente nuevamente."),
+        toUserMessage(err, "No se pudo procesar la solicitud. Intenta nuevamente."),
       );
     } finally {
       setSubmitting(false);
@@ -81,13 +81,13 @@ export default function ForgotPasswordPage(): React.ReactElement {
 
   return (
     <AuthShell
-      title={submitted ? "Revise su correo" : "Recuperar contraseña"}
+      title={submitted ? "Revisa tu correo" : "Recuperar contraseña"}
       subtitle={
         submitted
           ? undefined
-          : "Ingrese su correo para recibir un enlace de recuperación"
+          : "Ingresa tu correo para recibir un enlace de recuperación"
       }
-      note="Los enlaces de recuperación duran 30 minutos. Si vence, puede pedir uno nuevo desde esta misma pantalla."
+      note="Los enlaces de recuperación duran 30 minutos. Si vence, puedes pedir uno nuevo desde esta misma pantalla."
       // Reached from the login form, so that is the step behind this one — the
       // shell's default ("/") would skip the user past what they were doing.
       backHref="/login"
@@ -106,7 +106,7 @@ export default function ForgotPasswordPage(): React.ReactElement {
           </span>
           <p className="text-sm leading-relaxed text-ink-2">
             Si <strong className="font-semibold text-ink">{correo.trim()}</strong> está
-            registrado, recibirá un enlace para restablecer su contraseña.
+            registrado, recibirás un enlace para restablecer tu contraseña.
           </p>
           {/*
            * Issue #316 hallazgo #64: the confirmation named neither of the

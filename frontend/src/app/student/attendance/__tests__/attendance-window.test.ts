@@ -72,9 +72,9 @@ describe("attendance window — the adapter's slice, the page's constant and the
 
   it("prints the constant instead of a number typed into the sentence", () => {
     // A hardcoded figure in the footnote is the same drift with no constant to
-    // compare it against: `Su portal recibe las 30 sesiones…` would stay at 30
+    // compare it against: `Tu portal recibe las 30 sesiones…` would stay at 30
     // forever, whatever the adapter does.
-    expect(read(PAGE)).toMatch(/Su portal recibe las \{PORTAL_SESSION_WINDOW\} sesiones/);
+    expect(read(PAGE)).toMatch(/Tu portal recibe las \{PORTAL_SESSION_WINDOW\} sesiones/);
   });
 
   it("asks the backend for a page that contains the whole window", () => {

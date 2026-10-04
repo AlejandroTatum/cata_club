@@ -1,6 +1,7 @@
 import { ATTENDANCE_STATUS_CHART_COLORS, buildDonutArcs } from "@/app/dashboard/dashboard-utils";
 import { buildSessionBarAriaLabel } from "@/app/trainer/trainer-day-utils";
 import type { EstadoAsistencia } from "@/types/domain";
+import { attendedCount } from "@/lib/attendance-rule";
 import { STATE_DISPLAY_ORDER } from "./StudentReviewList";
 
 const SIZE = 120;
@@ -33,7 +34,7 @@ export default function SessionDonut({
     STATE_DISPLAY_ORDER.map((state) => counts[state]),
     CIRCUMFERENCE,
   );
-  const attending = centerValue ?? counts.present + counts.late;
+  const attending = centerValue ?? attendedCount(counts);
 
   return (
     <div className={`relative inline-flex ${className}`} style={{ width: SIZE, height: SIZE }}>

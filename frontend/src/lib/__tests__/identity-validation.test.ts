@@ -367,18 +367,39 @@ describe("nombre de persona", () => {
       );
     });
 
-    it("enforces the minimum length, in the right grammatical number", () => {
-      expect(personNameRule("Al", "Los apellidos")).toBe(
-        "Los apellidos deben tener al menos 3 caracteres.",
+    it("enforces the 2-letter minimum, in the right grammatical number (REG-08)", () => {
+      expect(personNameRule("A", "Los apellidos")).toBe("Los apellidos deben tener al menos 2 letras.");
+      expect(personNameRule("A", "El nombre del contacto de emergencia", { plural: false })).toBe(
+        "El nombre del contacto de emergencia debe tener al menos 2 letras.",
       );
-      expect(personNameRule("Al", "El nombre del contacto de emergencia", { plural: false })).toBe(
-        "El nombre del contacto de emergencia debe tener al menos 3 caracteres.",
-      );
+      expect(personNameRule("-'", "Los nombres")).toBe("Los nombres deben tener al menos 2 letras.");
     });
 
-    it("does not claim the pattern only allows letters and spaces", () => {
-      const message = personNameRule("Pérez123", "Los apellidos");
-      expect(message).not.toContain("solo pueden contener letras y espacios");
+    it.each(["Li", "Al", "Ng", "Jo"])("accepts the short real name %s (REG-08)", (value) => {
+      expect(personNameRule(value, "Los nombres")).toBeNull();
+    });
+
+    // REG-08 (QA4): the same table lives in backend/tests/test_nombres_lista_blanca.py
+    it.each([
+      "María José", "Núñez", "Peña", "Ángel de la Cruz", "O'Brien", "Ana-María", "Çağlar", "Müller",
+      "Güemes", "ÑANDÚ", "Muñoz", "D'Angelo", "Pérez-Mora", "Juan dos Santos", "Li",
+    ])("accepts the valid name %s (REG-08)", (value) => {
+      expect(personNameRule(value, "Los nombres")).toBeNull();
+    });
+
+    it.each([
+      ["<b>Ana", ["<", ">"]], ["Ana & Co", ["&"]], ["Ana2", ["2"]], ["Ana_Pérez", ["_"]],
+      ["Ana@Pérez", ["@"]], ["Ana😀", ["😀"]], ["Ana/Pérez", ["/"]], ["Ana;DROP", [";"]],
+      ["Ana(1)", ["(", "1", ")"]], ['"Ana"', ['"']], ["Juan123", ["1", "2", "3"]],
+      ["Dr. Pérez", ["."]], ["Jr.", ["."]], ["Pérez×Mora", ["×"]], ["L·l", ["·"]],
+    ])("rejects %s, naming %j (REG-08)", (value, chars) => {
+      const list = chars.map((char) => `“${char}”`).join(", ");
+      expect(personNameRule(value, "El nombre", { plural: false })).toBe(`El nombre no puede contener ${list}.`);
+      expect(personNameRule(value, "Los nombres")).toBe(`Los nombres no pueden contener ${list}.`);
+    });
+
+    it("names a single digit exactly like the owner's example (REG-08)", () => {
+      expect(personNameRule("Ana3", "El nombre", { plural: false })).toBe("El nombre no puede contener “3”.");
     });
 
     it("passes a real hyphenated surname", () => {
@@ -428,6 +449,48 @@ describe("nombre de persona", () => {
     });
   });
 
+  // H4 (QA4): a name stored before REG-08 must not block saving other fields.
+  describe("personNameRule — stored name (H4)", () => {
+    it("accepts an unchanged stored name that breaks the new rule", () => {
+      expect(personNameRule("Torres Jr.", "Los apellidos", { stored: "Torres Jr." })).toBeNull();
+      expect(personNameRule("Pérez·Mora", "Los apellidos", { stored: "Pérez·Mora" })).toBeNull();
+    });
+
+    it("compares in NFC and ignoring surrounding spaces", () => {
+      expect(personNameRule("Núñez Jr.".normalize("NFD"), "Los apellidos", { stored: " Núñez Jr." })).toBeNull();
+    });
+
+    it("still rejects a changed name", () => {
+      expect(personNameRule("Torres Jr.3", "Los apellidos", { stored: "Torres Jr." })).toBe(
+        "Los apellidos no pueden contener “.”, “3”.",
+      );
+    });
+
+    it("still requires a value even when the stored one is empty or invalid", () => {
+      expect(personNameRule("", "Los apellidos", { stored: "" })).toBe("Los apellidos son obligatorios.");
+    });
+  });
+
+  // R3-mark-parity / R3-invalid-char-fallthrough: every invalid string gets a
+  // message, and a combining mark is only valid right after a letter (same as
+  // the backend).
+  describe("personNameRule — marks and invalid characters", () => {
+    it.each([
+      ["\u0301Ana", "\u0301"],
+      ["Ana \u0301Pérez", "\u0301"],
+      ["Ana-\u0301Pérez", "\u0301"],
+    ])("names a combining mark with no letter before it: %j", (value, mark) => {
+      expect(personNameRule(value, "El nombre", { plural: false })).toBe(`El nombre no puede contener “${mark}”.`);
+    });
+
+    it("never accepts a value personNameError classifies as invalid-char", () => {
+      for (const value of ["juan·carlos", "Ana3", "Ana_Pérez", "Ana😀"]) {
+        expect(personNameError(value)).toBe("invalid-char");
+        expect(personNameRule(value, "El nombre", { plural: false })).toMatch(/^El nombre no puede contener “.+”\.$/);
+      }
+    });
+  });
+
   // Issue #1042: las tres causas de rechazo compartían un único mensaje, que
   // solo describe bien una de ellas ("juan  carlos" acusaba a un carácter
   // cuando lo que sobra es un separador repetido).
@@ -436,10 +499,9 @@ describe("nombre de persona", () => {
       ["repeated-separator", "juan  carlos"], // doble espacio
       ["repeated-separator", "juan--carlos"], // doble guion
       ["repeated-separator", "o''brien"], // doble apóstrofe
-      ["repeated-separator", "juan··carlos"], // doble punto medio
       ["separator-at-edge", "-juan"],
       ["separator-at-edge", "juan-"],
-      ["separator-at-edge", "·juan"],
+      ["invalid-char", "juan·carlos"], // punto medio ya no es válido (REG-08)
       ["invalid-char", "juan carlos 3"], // dígito
       ["invalid-char", "juan_carlos"], // guion bajo
       ["invalid-char", "juan@carlos"], // arroba
@@ -455,25 +517,25 @@ describe("nombre de persona", () => {
   describe("personNameRule nombra la causa real, no siempre un carácter (issue #1042)", () => {
     it("nombra la repetición del separador, no un carácter", () => {
       expect(personNameRule("juan  carlos", "Los apellidos")).toBe(
-        "Los apellidos no pueden tener un espacio, guion, apóstrofe o punto medio repetido.",
+        "Los apellidos no pueden tener un espacio, guion o apóstrofe repetido.",
       );
     });
 
     it("nombra la repetición también con guiones dobles", () => {
       expect(personNameRule("juan--carlos", "Los apellidos")).toBe(
-        "Los apellidos no pueden tener un espacio, guion, apóstrofe o punto medio repetido.",
+        "Los apellidos no pueden tener un espacio, guion o apóstrofe repetido.",
       );
     });
 
     it("nombra la repetición también con apóstrofes dobles", () => {
       expect(personNameRule("o''brien", "Los apellidos")).toBe(
-        "Los apellidos no pueden tener un espacio, guion, apóstrofe o punto medio repetido.",
+        "Los apellidos no pueden tener un espacio, guion o apóstrofe repetido.",
       );
     });
 
     it("nombra la posición cuando el separador abre el nombre", () => {
       expect(personNameRule("-juan", "Los apellidos")).toBe(
-        "Los apellidos no pueden empezar ni terminar con un espacio, guion, apóstrofe o punto medio.",
+        "Los apellidos no pueden empezar ni terminar con un espacio, guion o apóstrofe.",
       );
     });
 
@@ -481,13 +543,13 @@ describe("nombre de persona", () => {
       expect(
         personNameRule("juan-", "El nombre del contacto de emergencia", { plural: false }),
       ).toBe(
-        "El nombre del contacto de emergencia no puede empezar ni terminar con un espacio, guion, apóstrofe o punto medio.",
+        "El nombre del contacto de emergencia no puede empezar ni terminar con un espacio, guion o apóstrofe.",
       );
     });
 
     it("sigue nombrando un carácter no permitido cuando esa es la causa real", () => {
       expect(personNameRule("juan_carlos", "Los apellidos")).toBe(
-        "Los apellidos tienen un carácter que no reconocemos en un nombre de persona.",
+        "Los apellidos no pueden contener “_”.",
       );
     });
   });
@@ -538,7 +600,6 @@ describe("nombre de persona", () => {
       "D'Angelo",
       "José Ñandú",
       "María",
-      "Juan·Carlos",
     ])("sigue aceptando %s", (value) => {
       expect(personNameRule(value, "Los apellidos")).toBeNull();
     });
@@ -552,13 +613,14 @@ describe("nombre de persona", () => {
       "juan carlos 3",
       "juan_carlos",
       "juan@carlos",
+      "Juan·Carlos", // REG-08: el punto medio ya no es válido
     ])("sigue rechazando %s", (value) => {
       expect(personNameRule(value, "Los apellidos")).not.toBeNull();
     });
   });
 });
 
-describe("edad del alumno", () => {
+describe("edad del jugador", () => {
   describe("calculatePersonAge", () => {
     it("computes age from a birth date component-wise, not via UTC parsing", () => {
       expect(calculatePersonAge("2024-01-01", FROZEN_TODAY)).toBe(5);
@@ -630,18 +692,18 @@ describe("edad del alumno", () => {
 
   describe("studentBirthDateRule — issue #224's five reproduction cases", () => {
     it("requires a value", () => {
-      expect(studentBirthDateRule("", FROZEN_TODAY)).toBe("Indique la fecha de nacimiento del alumno.");
+      expect(studentBirthDateRule("", FROZEN_TODAY)).toBe("Indica la fecha de nacimiento del jugador.");
     });
 
     it("rejects an invalid calendar date", () => {
       expect(studentBirthDateRule("2024-02-30", FROZEN_TODAY)).toBe(
-        "La fecha de nacimiento no existe. Revise el día, el mes y el año.",
+        "La fecha de nacimiento no existe. Revisa el día, el mes y el año.",
       );
     });
 
     it("rejects a future date by naming it future, never as a bogus negative age", () => {
       const message = studentBirthDateRule("2030-01-01", FROZEN_TODAY);
-      expect(message).toBe("La fecha de nacimiento no puede ser posterior a hoy. Revise el año.");
+      expect(message).toBe("La fecha de nacimiento no puede ser posterior a hoy. Revisa el año.");
       expect(message).not.toContain("menor");
     });
 
@@ -651,19 +713,19 @@ describe("edad del alumno", () => {
 
     it("rejects a birth date 2 years ago, naming the computed age", () => {
       expect(studentBirthDateRule("2027-01-01", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 2 años. Revise el año de nacimiento.`,
+        `La edad del jugador debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 2 años. Revisa el año de nacimiento.`,
       );
     });
 
     it("rejects a birth date 120 years ago, naming the computed age", () => {
       expect(studentBirthDateRule("1909-01-01", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 120 años. Revise el año de nacimiento.`,
+        `La edad del jugador debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 120 años. Revisa el año de nacimiento.`,
       );
     });
 
     it("rejects an implausible historical date (1750), naming the computed age", () => {
       expect(studentBirthDateRule("1750-03-15", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 278 años. Revise el año de nacimiento.`,
+        `La edad del jugador debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 278 años. Revisa el año de nacimiento.`,
       );
     });
 
@@ -677,13 +739,13 @@ describe("edad del alumno", () => {
 
     it("rejects one day past the maximum boundary (96 years old)", () => {
       expect(studentBirthDateRule("1933-01-01", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 96 años. Revise el año de nacimiento.`,
+        `La edad del jugador debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 96 años. Revisa el año de nacimiento.`,
       );
     });
 
     it("rejects one day short of the minimum boundary (2 years old)", () => {
       expect(studentBirthDateRule("2026-01-02", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 2 años. Revise el año de nacimiento.`,
+        `La edad del jugador debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a 2 años. Revisa el año de nacimiento.`,
       );
     });
   });
@@ -756,13 +818,13 @@ describe("contraseña", () => {
 
     it("rejects a common password that meets the length floor", () => {
       expect(passwordRule("12345678", "La contraseña")).toBe(
-        "La contraseña es una de las más usadas y fácil de adivinar; elija otra.",
+        "La contraseña es una de las más usadas y fácil de adivinar; elige otra.",
       );
       expect(passwordRule("password", "La contraseña")).toBe(
-        "La contraseña es una de las más usadas y fácil de adivinar; elija otra.",
+        "La contraseña es una de las más usadas y fácil de adivinar; elige otra.",
       );
       expect(passwordRule("aaaaaaaa", "La contraseña")).toBe(
-        "La contraseña es una de las más usadas y fácil de adivinar; elija otra.",
+        "La contraseña es una de las más usadas y fácil de adivinar; elige otra.",
       );
     });
 
@@ -785,7 +847,7 @@ describe("contraseña", () => {
 
     it("still flags a common password that arrives padded", () => {
       expect(passwordRule("  password  ", "La contraseña")).toBe(
-        "La contraseña es una de las más usadas y fácil de adivinar; elija otra.",
+        "La contraseña es una de las más usadas y fácil de adivinar; elige otra.",
       );
     });
 
@@ -913,7 +975,7 @@ describe("contraseña", () => {
 describe("PHONE_LOCAL_HINT (#1028, unified across every site by #1296)", (): void => {
   it("teaches the local digits after the field's fixed +593, with the example, no leading 0", (): void => {
     expect(PHONE_LOCAL_HINT).toBe(
-      "Escriba los 9 dígitos de su celular o los 8 de su fijo, sin el 0 inicial: por ejemplo, 991234567.",
+      "Escribe los 9 dígitos de tu celular o los 8 de tu fijo, sin el 0 inicial: por ejemplo, 991234567.",
     );
     // The +593 teaching lives INSIDE the field (`EcuadorPhonePrefix`); the
     // hint would only repeat it.
@@ -994,13 +1056,13 @@ describe("QA4 copy — REG-05, REG-07", (): void => {
   it("guided phone rule: wrong length speaks the same «sin el 0 inicial» as the hint", (): void => {
     const message = phoneFieldRule("99123456", "El teléfono", { guided: true });
     expect(message).toBe(
-      "El teléfono no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+      "El teléfono no es válido. Escribe 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
     );
     expect(message).not.toContain("09");
   });
 
   it("guided phone rule: letters-only input asks for numbers instead of «obligatorio»", (): void => {
-    expect(phoneFieldRule("abcdefghi", "El teléfono", { guided: true })).toBe("Escriba solo números.");
+    expect(phoneFieldRule("abcdefghi", "El teléfono", { guided: true })).toBe("Escribe solo números.");
     expect(phoneFieldRule("", "El teléfono", { guided: true })).toBe("El teléfono es obligatorio.");
   });
 
@@ -1011,7 +1073,7 @@ describe("QA4 copy — REG-05, REG-07", (): void => {
   it("long password error avoids «bytes»", (): void => {
     const message = passwordRule("a".repeat(PASSWORD_MAX_BYTES + 1), "La contraseña");
     expect(message).toBe(
-      "La contraseña es demasiado larga. Use menos de 70 caracteres (las tildes, la ñ y los emoji cuentan doble).",
+      "La contraseña es demasiado larga. Usa menos de 70 caracteres (las tildes, la ñ y los emoji cuentan doble).",
     );
   });
 });

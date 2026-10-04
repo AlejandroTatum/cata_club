@@ -62,7 +62,7 @@ const RANGE_PHRASE: Record<AvanzadasRange, string> = {
 };
 
 const ROLE_ROWS = [
-  { key: "estudiante", label: "Alumnos" },
+  { key: "estudiante", label: "Jugadores" },
   { key: "representante", label: "Representantes" },
   { key: "trainer", label: "Entrenadores" },
   { key: "admin", label: "Administradores" },

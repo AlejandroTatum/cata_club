@@ -18,6 +18,7 @@
 
 import { describe, it, expect } from "vitest";
 import { CLUB_PROFILE, FAQ_SECTIONS } from "../faq-content";
+import { buildUstedRegisterRegex } from "@/lib/__tests__/usted-register-lock";
 
 describe("CLUB_PROFILE", () => {
   it("quotes no price, because the club's plans are not written down here", () => {
@@ -47,9 +48,9 @@ describe("FAQ_SECTIONS", () => {
   it("covers every role that has a screen", () => {
     expect(FAQ_SECTIONS.map((s) => s.title)).toEqual([
       "Para empezar",
-      "Si es estudiante o representante",
-      "Si es entrenador",
-      "Si es administrador",
+      "Si eres jugador o representante",
+      "Si eres entrenador",
+      "Si eres administrador",
     ]);
   });
 
@@ -70,7 +71,7 @@ describe("FAQ_SECTIONS", () => {
     expect(entry).toBeDefined();
     // The approved copy opens with the condition and names both people who
     // can act — the old copy's lie (a flat "No") must not come back.
-    expect(entry!.answer).toMatch(/^Sí, si gestiona su propia cuenta o representa al estudiante\./);
+    expect(entry!.answer).toMatch(/^Sí, si gestionas tu propia cuenta o representas al jugador\./);
     expect(entry!.answer).toContain("su representante o un administrador");
     expect(entry!.answer.toLowerCase().trim().startsWith("no:")).toBe(false);
   });
@@ -84,7 +85,7 @@ describe("FAQ_SECTIONS", () => {
     );
     expect(entry).toBeDefined();
     expect(entry!.answer.trim().startsWith("Sí.")).toBe(false);
-    expect(entry!.answer.trim().startsWith("Sí, si gestiona")).toBe(true);
+    expect(entry!.answer.trim().startsWith("Sí, si gestionas")).toBe(true);
   });
 
   it("never teaches the batch-approval flow /payments does not have (#315 hallazgo #13)", () => {
@@ -124,7 +125,7 @@ describe("FAQ_SECTIONS", () => {
 describe("FAQ screen names (TXT-14, ENT-18)", () => {
   const everything = FAQ_SECTIONS.flatMap((s) => s.entries.flatMap((e) => [e.question, e.answer])).join("\n");
 
-  it.each(["Membresías y Pagos", "Historial Asistencia", "Abra Asistencia", "Mi Cuenta", "de a uno", "en Horarios"])(
+  it.each(["Membresías y Pagos", "Historial Asistencia", "Abre Asistencia", "Mi Cuenta", "de a uno", "en Horarios"])(
     "never says «%s», which is not what the menu or the club says",
     (phrase) => {
       expect(everything).not.toContain(phrase);
@@ -132,14 +133,82 @@ describe("FAQ screen names (TXT-14, ENT-18)", () => {
   );
 
   it("names the real screens", () => {
-    expect(everything).toContain("Abra Pagos");
+    expect(everything).toContain("Abre Pagos");
     expect(everything).toContain("Pasar lista → Historial");
-    expect(everything).toContain("Abra Pasar lista");
+    expect(everything).toContain("Abre Pasar lista");
     expect(everything).toContain("Grupos y horarios");
     expect(everything).toContain("uno por uno");
   });
 
   it("tells the trainer who corrects a saved list", () => {
     expect(everything).toMatch(/solo administración puede corregirla/);
+  });
+});
+
+describe("admin answers for the catalog, the public site and the activity screen (QA4 ADMB-18)", () => {
+  const admin = FAQ_SECTIONS.find((s) => s.title === "Si eres administrador")!;
+  const answerOf = (question: string): string => {
+    const entry = admin.entries.find((e) => e.question === question);
+    expect(entry, question).toBeDefined();
+    return entry!.answer;
+  };
+
+  it.each([
+    "¿Qué pasa si oculto una tarifa?",
+    "¿Por qué no puedo eliminar una tarifa?",
+    "¿Qué pasa si oculto un descuento?",
+    "¿Por qué no puedo eliminar un descuento?",
+    "¿Cómo oculto una categoría de la página pública?",
+    "¿Cómo cambio las fotos de la página pública?",
+    "¿Qué muestra «Actividad del club»?",
+  ])("answers «%s» in the administrator section", (question) => {
+    expect(answerOf(question).length).toBeGreaterThan(40);
+  });
+
+  it("says a hidden tariff keeps charging whoever already has it, and can come back", () => {
+    const answer = answerOf("¿Qué pasa si oculto una tarifa?");
+    expect(answer).toContain("siguen pagando igual");
+    expect(answer).toContain("Mostrar");
+  });
+
+  it("explains that only a tariff or discount nobody used can be deleted, and offers hiding instead", () => {
+    for (const question of ["¿Por qué no puedo eliminar una tarifa?", "¿Por qué no puedo eliminar un descuento?"]) {
+      const answer = answerOf(question);
+      expect(answer).toMatch(/nadie|nunca se usó/);
+      expect(answer).toContain("Ocultar");
+    }
+  });
+
+  it("says a hidden discount cannot go to anyone new but stays on whoever has it", () => {
+    const answer = answerOf("¿Qué pasa si oculto un descuento?");
+    expect(answer).toContain("a nadie nuevo");
+    expect(answer).toContain("ya lo tienen");
+  });
+
+  it("says a new category starts hidden and where to show or hide it", () => {
+    const answer = answerOf("¿Cómo oculto una categoría de la página pública?");
+    expect(answer).toContain("Grupos y horarios");
+    expect(answer).toContain("Ocultar del sitio");
+    expect(answer).toMatch(/nueva.*oculta/i);
+  });
+
+  it("names the gallery and sponsors screens, the file rule, and that a photo is replaced by deleting and uploading", () => {
+    const answer = answerOf("¿Cómo cambio las fotos de la página pública?");
+    expect(answer).toContain("Galería");
+    expect(answer).toContain("Patrocinadores");
+    expect(answer).toContain("JPG o PNG");
+    expect(answer).toContain("5 MB");
+  });
+
+  it("describes the activity screen's two views and its periods", () => {
+    const answer = answerOf("¿Qué muestra «Actividad del club»?");
+    expect(answer).toContain("Resumen");
+    expect(answer).toContain("Métricas avanzadas");
+    expect(answer).toContain("solo lectura");
+  });
+
+  it("keeps the new copy in «tú»", () => {
+    const text = admin.entries.map((e) => `${e.question} ${e.answer}`).join(" ");
+    expect(text).not.toMatch(buildUstedRegisterRegex());
   });
 });

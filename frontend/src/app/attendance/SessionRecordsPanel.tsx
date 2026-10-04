@@ -45,7 +45,7 @@ export default function SessionRecordsPanel({
           {record.requiereRevision && (
             // ENT-07: accepted although the student was not operative, or the date
             // is before their enrolment — the admin decides whether it stands.
-            <span title="Se registró con el alumno no operativo o antes de su inscripción.">
+            <span title="Se registró con el jugador no operativo o antes de su inscripción.">
               <Badge tone="warn">Requiere revisión</Badge>
             </span>
           )}

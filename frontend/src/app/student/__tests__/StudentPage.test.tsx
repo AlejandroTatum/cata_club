@@ -17,6 +17,7 @@ import { STAT_GRID } from "@/components/ui";
 import StudentPage from "@/app/student/page";
 import type { StudentPortalSummary } from "@/services/api";
 import type { PagoPersona } from "@/services/api";
+import { landingConfig, toWhatsAppLink } from "@/app/landing/landing-config";
 
 vi.mock("@/components/ProtectedRoute", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -233,7 +234,7 @@ describe("StudentPage — the dependent selection survives navigation", () => {
 
     render(<StudentPage />);
 
-    expect(await carnetName()).toBe("Carnet de socio de Martín Vera");
+    expect(await carnetName()).toBe("Carnet de jugador de Martín Vera");
   });
 
   it("restores the stored selection when the sidebar drops it, and puts it back in the URL", async () => {
@@ -243,7 +244,7 @@ describe("StudentPage — the dependent selection survives navigation", () => {
 
     render(<StudentPage />);
 
-    expect(await carnetName()).toBe("Carnet de socio de Martín Vera");
+    expect(await carnetName()).toBe("Carnet de jugador de Martín Vera");
     await waitFor(() => {
       expect(mockReplace).toHaveBeenCalledWith("/student?alumno=42", { scroll: false });
     });
@@ -252,12 +253,12 @@ describe("StudentPage — the dependent selection survives navigation", () => {
   it("writes an explicit switch to both the URL and the store", async () => {
     render(<StudentPage />);
 
-    await screen.findByRole("group", { name: "Estudiante" });
-    expect(await carnetName()).toBe("Carnet de socio de Sofía Vera");
+    await screen.findByRole("group", { name: "Jugador" });
+    expect(await carnetName()).toBe("Carnet de jugador de Sofía Vera");
 
     fireEvent.click(screen.getByRole("button", { name: /Martín/ }));
 
-    expect(await carnetName()).toBe("Carnet de socio de Martín Vera");
+    expect(await carnetName()).toBe("Carnet de jugador de Martín Vera");
     await waitFor(() => {
       expect(mockReplace).toHaveBeenCalledWith("/student?alumno=42", { scroll: false });
     });
@@ -269,7 +270,7 @@ describe("StudentPage — the dependent selection survives navigation", () => {
 
     render(<StudentPage />);
 
-    expect(await carnetName()).toBe("Carnet de socio de Sofía Vera");
+    expect(await carnetName()).toBe("Carnet de jugador de Sofía Vera");
   });
 });
 
@@ -385,7 +386,7 @@ describe("StudentPage — dual-role account (REPRESENTANTE + ALUMNO)", () => {
     // fell back to the first dependent as the subject.
     expect(await screen.findByTestId("student-carnet")).toHaveAttribute(
       "aria-label",
-      "Carnet de socio de Alumno Test",
+      "Carnet de jugador de Alumno Test",
     );
   });
 });
@@ -449,7 +450,7 @@ describe("StudentPage — a representative with an own active membership (#1132)
     // `hasAlumnoRole` was true — this account never holds that role.
     expect(await screen.findByTestId("student-carnet")).toHaveAttribute(
       "aria-label",
-      "Carnet de socio de Alumno Test",
+      "Carnet de jugador de Alumno Test",
     );
   });
 });
@@ -533,13 +534,13 @@ describe("StudentPage — the club membership card (carnet)", () => {
   /**
    * F4b — the credential's vigencia.
    *
-   * "Socio desde" answers when the person belongs; "Válido hasta" answers
+   * "Jugador desde" answers when the person belongs; "Válido hasta" answers
    * until when the club has been paid for them. Both are the same fact read
    * at its two ends, and the second is `MembershipSummary.cubiertoHasta` —
    * the backend's own combined anchor — not a new reading of the membership
    * row, whose `fechaFin` no adapter populates.
    */
-  it("states the real coverage end on the carnet, beside 'Socio desde'", async () => {
+  it("states the real coverage end on the carnet, beside 'Jugador desde'", async () => {
     mockFetchStudentPortal.mockResolvedValueOnce({
       ...PORTAL,
       self: {
@@ -570,7 +571,7 @@ describe("StudentPage — the club membership card (carnet)", () => {
     // the row's right edge like every other register value.
     const row = within(facts).getByText("Válido hasta").parentElement!;
     expect(row.lastElementChild?.textContent).toBe("31/07/2026");
-    expect(within(facts).getByText("Socio desde")).toBeInTheDocument();
+    expect(within(facts).getByText("Jugador desde")).toBeInTheDocument();
     // And it is on the credential — the object that prints at 54 × 85.6 mm.
     expect(carnet).toContainElement(facts);
   });
@@ -646,7 +647,7 @@ describe("StudentPage — the club membership card (carnet)", () => {
 
     const facts = await screen.findByTestId("carnet-facts");
     await waitFor(() => {
-      expect(within(facts).getByText("Socio desde")).toBeInTheDocument();
+      expect(within(facts).getByText("Jugador desde")).toBeInTheDocument();
     });
     expect(within(facts).queryByText("Válido hasta")).not.toBeInTheDocument();
     // No date from the refused rows leaked onto the credential.
@@ -684,7 +685,7 @@ describe("StudentPage — the club membership card (carnet)", () => {
 
     const facts = await screen.findByTestId("carnet-facts");
     await waitFor(() => {
-      expect(within(facts).getByText("Socio desde")).toBeInTheDocument();
+      expect(within(facts).getByText("Jugador desde")).toBeInTheDocument();
     });
     expect(within(facts).queryByText("Válido hasta")).not.toBeInTheDocument();
     // The approved payment's own `fechaFin` never leaks onto the credential.
@@ -743,7 +744,7 @@ describe("StudentPage — the club membership card (carnet)", () => {
     expect(rows.map((row) => row.firstElementChild?.textContent)).toEqual([
       "Plan",
       "Franja",
-      "Socio desde",
+      "Jugador desde",
       "Válido hasta",
     ]);
 
@@ -1045,7 +1046,7 @@ describe("StudentPage — the carnet prints as a standalone credential", () => {
 
     const panel = await screen.findByTestId("student-carnet-panel");
     expect(panel.className).toMatch(/\bcard\b/);
-    expect(within(panel).getByRole("heading", { name: "Carnet de socio" })).toBeInTheDocument();
+    expect(within(panel).getByRole("heading", { name: "Carnet de jugador" })).toBeInTheDocument();
 
     // The print action reads as a destination, not as a second CTA: the exact
     // text-link skin `CuotaCard`'s "Ver pagos" wears.
@@ -1570,7 +1571,7 @@ describe("StudentPage — próximos entrenamientos", () => {
     const panel = await screen.findByTestId("student-situation");
     await waitFor(() => {
       expect(
-        within(panel).getByText(/todavía no tiene un horario asignado/i),
+        within(panel).getByText(/todavía no tienes un horario asignado/i),
       ).toBeInTheDocument();
     });
     expect(within(panel).queryByText(/15:00/)).not.toBeInTheDocument();
@@ -1640,7 +1641,7 @@ describe("StudentPage — training panel", () => {
     // panel se quedó con el ALCANCE, que es lo que la tile no puede decir.
     // Estar en los dos lugares sería el recap duplicado que el panel del
     // entrenador ya borró una vez.
-    expect(await screen.findByText(/sobre sus últimas 3 sesiones registradas/i)).toBeInTheDocument();
+    expect(await screen.findByText(/sobre tus últimas 3 sesiones registradas/i)).toBeInTheDocument();
 
     const pulso = within(screen.getByTestId("student-pulse"));
     expect(pulso.getByText("Asistencia")).toBeInTheDocument();
@@ -1672,7 +1673,7 @@ describe("StudentPage — training panel", () => {
     render(<StudentPage />);
 
     expect(
-      await screen.findByText(/su asistencia aparecerá aquí en cuanto el entrenador tome lista/i),
+      await screen.findByText(/tu asistencia aparecerá aquí en cuanto el entrenador tome lista/i),
     ).toBeInTheDocument();
   });
 });
@@ -1718,10 +1719,12 @@ describe("StudentPage — the Cuota card carries the whole payment reading", () 
       );
     });
 
-    // "El carnet manda": the identity card leads, the Cuota card is the
-    // secondary rail item — the opposite order the old full-width band used.
+    // FAM-27: on `lg` the carnet column stays first and the Mensualidad card
+    // is the rail item; below `lg` the card's column is ordered first, so the
+    // phone shows Mensualidad above the carnet.
     const carnet = screen.getByTestId("student-carnet");
     expect(carnet.compareDocumentPosition(cuota) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(cuota.parentElement?.className).toMatch(/max-lg:order-first/);
   });
 
   it("reports coverage from MembershipSummary.cubiertoHasta, and says so plainly", async () => {
@@ -1753,10 +1756,10 @@ describe("StudentPage — the Cuota card carries the whole payment reading", () 
     // block — and appears nowhere on the identity card.
     const cuota = await screen.findByTestId("student-cuota-card");
     await waitFor(() => {
-      expect(within(cuota).getByText(/no tiene ningún pago aprobado/i)).toBeInTheDocument();
+      expect(within(cuota).getByText(/no tienes ningún pago aprobado/i)).toBeInTheDocument();
     });
     const carnet = screen.getByTestId("student-carnet");
-    expect(within(carnet).queryByText(/no tiene ningún pago aprobado/i)).toBeNull();
+    expect(within(carnet).queryByText(/no tienes ningún pago aprobado/i)).toBeNull();
   });
 
   it("states the plan's monthly price as a price, and never an amount owed", async () => {
@@ -1916,7 +1919,7 @@ describe("StudentPage — the Cuota card earns its space when the cuota is up to
     // carnet's pill ("no button — the carnet's own pill already said 'Al
     // día'"); with the pill gone, a compact card that only says "Cubierta
     // hasta 31/12/2026" leaves the reader to infer the verdict from a date.
-    await screen.findByText(/está al día con el club/i);
+    await screen.findByText(/estás al día con el club/i);
     const verdict = screen.getByTestId("cuota-verdict");
     expect(verdict).toHaveAttribute("data-urgent", "false");
     expect(verdict).toHaveAttribute("data-tone", "ok");
@@ -2061,7 +2064,7 @@ describe("StudentPage — the verdict reads the payment situation, not Membresia
     render(<StudentPage />);
 
     const cuota = await screen.findByTestId("student-cuota-card");
-    expect(within(cuota).getByText(/todavía no tiene una membresía/i)).toBeInTheDocument();
+    expect(within(cuota).getByText(/todavía no tienes una membresía/i)).toBeInTheDocument();
   });
 
   it("says no payment has been approved for an INACTIVA membership with nothing on file", async () => {
@@ -2074,7 +2077,7 @@ describe("StudentPage — the verdict reads the payment situation, not Membresia
 
     const cuota = await screen.findByTestId("student-cuota-card");
     await waitFor(() => {
-      expect(within(cuota).getByText(/no tiene ningún pago aprobado/i)).toBeInTheDocument();
+      expect(within(cuota).getByText(/no tienes ningún pago aprobado/i)).toBeInTheDocument();
     });
   });
 });
@@ -2181,7 +2184,7 @@ describe("StudentPage — the family strip has no help toggle", () => {
   it("does not show a help toggle on the dashboard", async () => {
     render(<StudentPage />);
 
-    await screen.findByRole("group", { name: "Estudiante" });
+    await screen.findByRole("group", { name: "Jugador" });
     expect(screen.queryByRole("button", { name: /ayuda/i })).toBeNull();
     expect(screen.queryByText(/Se mantiene en Mi cuenta/i)).toBeNull();
   });
@@ -2194,20 +2197,40 @@ describe("StudentPage — the family strip has no help toggle", () => {
  * canvas above and below it.
  */
 describe("StudentPage — the no-schedule state fills its box and offers a way out", () => {
-  it("gives the reader somewhere to go when the club has assigned no schedule", async () => {
+  // FAM-29: the text says «escriba a administración», so the button is the way
+  // to do it — the club's WhatsApp from the landing config, not the FAQ.
+  it("sends the reader to the club's WhatsApp when the club has assigned no schedule", async () => {
     mockFetchHorariosPorAlumno.mockResolvedValue([]);
 
     render(<StudentPage />);
 
     const panel = await screen.findByTestId("student-situation");
     await waitFor(() => {
-      expect(within(panel).getByText(/todavía no tiene un horario asignado/i)).toBeInTheDocument();
+      expect(within(panel).getByText(/todavía no tienes un horario asignado/i)).toBeInTheDocument();
     });
 
-    // The label is the destination's registered name (D12b), not a hand-written
-    // phrase: `/ayuda` is "Preguntas frecuentes" everywhere else in the shell.
-    const action = within(panel).getByRole("link", { name: /Preguntas frecuentes/i });
-    expect(action).toHaveAttribute("href", "/ayuda");
+    const action = within(panel).getByRole("link", { name: /escribir al club por whatsapp/i });
+    const href = new URL(action.getAttribute("href") ?? "");
+    expect(`${href.origin}${href.pathname}`).toBe(toWhatsAppLink(landingConfig.contact.whatsapp[0]));
+    expect(href.searchParams.get("text")).toMatch(/^Hola, quisiera que (me )?asignen un horario/);
+    expect(action).toHaveAttribute("target", "_blank");
+    expect(within(panel).queryByRole("link", { name: /Preguntas frecuentes/i })).not.toBeInTheDocument();
+  });
+
+  it("names the child in the WhatsApp message when a guardian looks at a dependent", async () => {
+    mockFetchHorariosPorAlumno.mockResolvedValue([]);
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      self: null,
+      representados: [{ ...PORTAL.self!, personaId: "41", nombres: "Valeria", apellidos: "Vera" }],
+      membershipPlans: [],
+    });
+
+    render(<StudentPage />);
+
+    const panel = await screen.findByTestId("student-situation");
+    const action = await within(panel).findByRole("link", { name: /escribir al club por whatsapp/i });
+    const text = new URL(action.getAttribute("href") ?? "").searchParams.get("text") ?? "";
+    expect(text).toMatch(/^Hola, quisiera que asignen un horario a Valeria\.$/);
   });
 
   it("stays one line instead of a tall empty card", async () => {
@@ -2216,7 +2239,7 @@ describe("StudentPage — the no-schedule state fills its box and offers a way o
     render(<StudentPage />);
 
     const panel = await screen.findByTestId("student-situation");
-    const title = await within(panel).findByText(/todavía no tiene un horario asignado/i);
+    const title = await within(panel).findByText(/todavía no tienes un horario asignado/i);
     expect(title.parentElement?.className ?? "").not.toMatch(/\bflex-1\b.*justify-center|justify-center.*\bflex-1\b/);
     expect(panel.querySelector('[data-testid="week-plan"]')).toBeNull();
   });
@@ -2458,13 +2481,13 @@ describe("StudentPage — the carnet as the club's identity object", () => {
     expect(carnet.className).not.toMatch(/print:text-coal\b/);
     expect(carnet.className).toMatch(/\bbg-coal\b/);
 
-    // The header is a ROW on both media — mark, wordmark, "Socio" — closed by
+    // The header is a ROW on both media — mark, wordmark, "Jugador" — closed by
     // the red rule it carries as its own bottom border.
     const wordmark = within(carnet).getByText("Cata Club");
     const header = wordmark.parentElement!;
     expect(header.className).toMatch(/\bitems-center\b/);
     expect(header.className).not.toMatch(/print:flex-col/);
-    expect(within(header).getByText("Socio").className).toMatch(/\btext-ball\b/);
+    expect(within(header).getByText("Jugador").className).toMatch(/\btext-ball\b/);
 
     // The identity block is a ROW on both: the document photo, then the name
     // and the number beside it.
@@ -2533,7 +2556,7 @@ describe("StudentPage — the credential inside the panel (Funda)", () => {
 
   // The header: the club signs the object before the object says whose it is —
   // one row, mark then wordmark then the word the card is FOR.
-  it("heads the credential with the mark, the wordmark and «Socio», over one red rule", async () => {
+  it("heads the credential with the mark, the wordmark and «Jugador», over one red rule", async () => {
     render(<StudentPage />);
 
     const carnet = await screen.findByTestId("student-carnet");
@@ -2545,14 +2568,14 @@ describe("StudentPage — the credential inside the panel (Funda)", () => {
     const header = wordmark.parentElement!;
     expect(header.className).toMatch(/\bborder-b-2\b/);
     expect(header.className).toMatch(/\bborder-cata-red\b/);
-    // A ROW, in reading order, with "Socio" pushed to the far edge.
+    // A ROW, in reading order, with "Jugador" pushed to the far edge.
     expect(header.className).not.toMatch(/\bflex-col\b/);
     expect([...header.children].map((child) => child.textContent)).toEqual([
       "",
       "Cata Club",
-      "Socio",
+      "Jugador",
     ]);
-    expect(within(header).getByText("Socio").className).toMatch(/\bml-auto\b/);
+    expect(within(header).getByText("Jugador").className).toMatch(/\bml-auto\b/);
 
     // DESIGN.md rations red. The credential spends its one FLAT appearance on
     // the line that divides the club from the person. The week strip at the
@@ -2698,7 +2721,7 @@ describe("StudentPage — the credential inside the panel (Funda)", () => {
 
     // The figures around it are unaffected — the exception is per row, driven
     // by an explicit boolean and never by inspecting the string.
-    const socioDesde = within(carnet).getByText("Socio desde").parentElement!;
+    const socioDesde = within(carnet).getByText("Jugador desde").parentElement!;
     expect(socioDesde.lastElementChild?.className).toMatch(/font-display/);
   });
 
@@ -2760,7 +2783,7 @@ describe("StudentPage — the credential inside the panel (Funda)", () => {
     });
 
     const graduate = [...carnet.querySelectorAll('[class*="font-display"]')];
-    // The wordmark plus the two numeric register values (Franja, Socio desde)
+    // The wordmark plus the two numeric register values (Franja, Jugador desde)
     // — if this ever finds nothing the assertion below would pass vacuously.
     expect(graduate.length).toBeGreaterThanOrEqual(3);
     for (const element of graduate) {
@@ -2847,7 +2870,7 @@ describe("StudentPage — la fila de pulso", () => {
     render(<StudentPage />);
     const pulso = within(await screen.findByTestId("student-pulse"));
 
-    expect(pulso.getByText("Pagos en revisión")).toBeInTheDocument();
+    expect(pulso.getByText("Pagos por validar")).toBeInTheDocument();
   });
 });
 
@@ -2878,7 +2901,7 @@ describe("StudentPage — a pure representative with no dependents and no member
 
     // Reaches the pending screen at all — the ancla this scenario needs
     // before the CTA assertion below means anything.
-    await screen.findByText(/todavía no tiene una matrícula activa/i);
+    await screen.findByText(/todavía no tienes una matrícula activa/i);
 
     expect(
       screen.getByRole("button", { name: /unirme como jugador/i }),
@@ -2894,7 +2917,7 @@ describe("StudentPage — a pure representative with no dependents and no member
   it("still offers the honest dependent-enrollment link untouched", async () => {
     render(<StudentPage />);
 
-    await screen.findByText(/todavía no tiene una matrícula activa/i);
+    await screen.findByText(/todavía no tienes una matrícula activa/i);
     const link = screen.getByRole("link", { name: /inscribir a un hijo o dependiente/i });
     expect(link).toHaveAttribute("href", "/student/enroll?type=child");
   });
@@ -2906,7 +2929,7 @@ describe("StudentPage — encabezado y pulso navegables", () => {
     await screen.findByTestId("student-pulse");
 
     expect(
-      screen.getByText(/^Hola, .+ · (Estudiante|Representante) · \p{L}+, \d{1,2} de \p{L}+ de \d{4}$/u),
+      screen.getByText(/^Hola, .+ · (Jugador|Representante) · \p{L}+, \d{1,2} de \p{L}+ de \d{4}$/u),
     ).toBeInTheDocument();
   });
 
@@ -2916,7 +2939,7 @@ describe("StudentPage — encabezado y pulso navegables", () => {
 
     expect(pulso.getByText("Cobertura").closest("a")?.getAttribute("href")).toMatch(/^\/student\/payments/);
     expect(pulso.getByText("Asistencia").closest("a")?.getAttribute("href")).toMatch(/^\/student\/attendance/);
-    expect(pulso.getByText("Pagos en revisión").closest("a")?.getAttribute("href")).toMatch(/^\/student\/payments/);
+    expect(pulso.getByText("Pagos por validar").closest("a")?.getAttribute("href")).toMatch(/^\/student\/payments/);
   });
 });
 
@@ -2951,7 +2974,7 @@ describe("StudentPage — second-pass organisation", () => {
     mockFetchStudentPortal.mockResolvedValue(GUARDIAN);
     render(<StudentPage />);
 
-    const group = await screen.findByRole("group", { name: "Estudiante" });
+    const group = await screen.findByRole("group", { name: "Jugador" });
     expect(within(group).getAllByRole("button")).toHaveLength(2);
     // No dropdown any more: the strip is the switcher.
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
@@ -2961,10 +2984,10 @@ describe("StudentPage — second-pass organisation", () => {
     render(<StudentPage />);
 
     await screen.findByTestId("student-carnet");
-    expect(screen.queryByRole("group", { name: "Estudiante" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Jugador" })).not.toBeInTheDocument();
   });
 
-  it("does not stretch the payment action across the whole card, and does not stack a red button on the red verdict", async () => {
+  it("does not stretch the payment action across the whole card, and makes it the red primary button when the coverage lapsed (FAM-27)", async () => {
     mockFetchStudentPortal.mockResolvedValue({
       ...PORTAL,
       self: {
@@ -2977,7 +3000,7 @@ describe("StudentPage — second-pass organisation", () => {
     const cuota = await screen.findByTestId("student-cuota-card");
     const link = within(cuota).getByText("Registrar un pago").closest("a")!;
     expect(link.className).not.toMatch(/\bw-full\b/);
-    expect(link.className).not.toMatch(/\bbg-cata-red\b/);
+    expect(link.className).toMatch(/\bbg-cata-red\b/);
     expect(within(cuota).getByTestId("cuota-verdict")).toHaveAttribute("data-urgent", "true");
   });
 
@@ -3034,7 +3057,7 @@ describe("StudentPage — QA4 family portal findings", () => {
     expect(within(cuota).getByText("Suspendida")).toBeInTheDocument();
     expect(within(cuota).queryByText("Al día")).not.toBeInTheDocument();
     expect(within(cuota).queryByText("Registrar un pago")).not.toBeInTheDocument();
-    const strip = screen.getByRole("group", { name: "Estudiante" });
+    const strip = screen.getByRole("group", { name: "Jugador" });
     expect(within(strip).getByText("Suspendida")).toBeInTheDocument();
   });
 
@@ -3049,8 +3072,28 @@ describe("StudentPage — QA4 family portal findings", () => {
     render(<StudentPage />);
 
     const cuota = await screen.findByTestId("student-cuota-card");
-    expect(await within(cuota).findByText(/fue rechazado: Comprobante ilegible\. Registre uno nuevo\./)).toBeInTheDocument();
+    expect(await within(cuota).findByText(/fue rechazado: Comprobante ilegible\. Registra uno nuevo\./)).toBeInTheDocument();
     expect(within(cuota).getByRole("link", { name: /registrar un pago/i })).toBeInTheDocument();
+  });
+
+  // FAM-11 — the notice speaks about the jugador when a representative views a dependent
+  it("words the rejected-payment notice about the dependent for a representative", async () => {
+    asGuardian();
+    mockFetchStudentPortal.mockResolvedValue({
+      self: null,
+      representados: [
+        { ...PORTAL.self!, personaId: "41", nombres: "Sofia", apellidos: "Vera", membership: membership({ personaId: 41, cubiertoHasta: "2020-01-01" }) },
+        { ...PORTAL.self!, personaId: "42", nombres: "Martín", apellidos: "Vera", membership: membership({ personaId: 42 }) },
+      ],
+      membershipPlans: [],
+    });
+    mockFetchPagosDePersona.mockResolvedValue([PAGO_RECHAZADO]);
+
+    render(<StudentPage />);
+
+    const cuota = await screen.findByTestId("student-cuota-card");
+    expect(await within(cuota).findByText(/El pago de Sofia de \$35,00 .* fue rechazado: Comprobante ilegible\./)).toBeInTheDocument();
+    expect(within(cuota).queryByText(/Tu pago/)).not.toBeInTheDocument();
   });
 
   // FAM-01
@@ -3064,7 +3107,7 @@ describe("StudentPage — QA4 family portal findings", () => {
 
     render(<StudentPage />);
 
-    const strip = await screen.findByRole("group", { name: "Estudiante" });
+    const strip = await screen.findByRole("group", { name: "Jugador" });
     expect(within(strip).getByText("Laura Vera")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /unirme como jugador/i })).not.toBeInTheDocument();
   });

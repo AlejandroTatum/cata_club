@@ -39,9 +39,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   fetchTrainingSchedules,
   fetchAttendanceRecords,
-  fetchRosterDeTodosLosHorarios,
+  fetchConteosPorHorario,
+  fetchAlumnosPorHorario,
   fetchRecentAttendanceSessions,
   type AlumnoHorario,
+  type ConteoHorario,
   type RecentAttendanceSession,
 } from "@/services/api";
 import {
@@ -79,11 +81,13 @@ import CompactEmpty from "@/components/dashboard/CompactEmpty";
 import DashboardSection from "@/components/dashboard/DashboardSection";
 import { buildContextLine } from "@/components/dashboard/context-line";
 import NextSessionHero from "./NextSessionHero";
+import EmergencyCardDialog, { type EmergencyCardStudent } from "@/app/trainer/attendance/EmergencyCardDialog";
 import RecentSessionsList from "./RecentSessionsList";
 import SessionsWithoutList from "./SessionsWithoutList";
 import TodaySessionList from "./TodaySessionList";
 import { buildWizardQuery } from "@/app/trainer/attendance/attendance-utils";
 import { findMissingSessions } from "@/app/trainer/attendance/history/history-utils";
+import { countsAsAttended } from "@/lib/attendance-rule";
 
 /** Weeks the attendance trend spans. */
 const TREND_WEEKS = 6;
@@ -95,7 +99,6 @@ const DOT_SESSIONS = 6;
 const STATE_TONE: Record<EstadoAsistencia, ChartTone> = {
   present: "ok",
   late: "warn",
-  justified: "neutral",
   sick: "neutral",
   competition: "neutral",
   absent: "bad",
@@ -118,8 +121,12 @@ export default function TrainerPage(): React.ReactElement {
 
   const [schedules, setSchedules] = useState<TrainingSchedule[]>([]);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
-  /** The club-wide roster, one row per enrolment; `null` until it loads (or if it fails). */
-  const [padron, setPadron] = useState<AlumnoHorario[] | null>(null);
+  /** Enrolled students per horario (counts only); `null` until it loads (or if it fails). */
+  const [conteos, setConteos] = useState<ConteoHorario[] | null>(null);
+  /** Students of the hero session only, by name; `null` until it loads (or if it fails). */
+  const [heroAlumnos, setHeroAlumnos] = useState<AlumnoHorario[] | null>(null);
+  /** QA4 ENT-27: the student whose emergency card is open from the hero. */
+  const [emergencyStudent, setEmergencyStudent] = useState<EmergencyCardStudent | null>(null);
   const [recentSessions, setRecentSessions] = useState<RecentAttendanceSession[]>([]);
   const [recentStatus, setRecentStatus] = useState<"loading" | "ready" | "error">("loading");
   const [loading, setLoading] = useState(true);
@@ -134,7 +141,7 @@ export default function TrainerPage(): React.ReactElement {
       setRecords(recordData);
     } catch (err) {
       console.error("[trainer] loadData failed", err);
-      setError("No se pudo cargar su día. Intente nuevamente.");
+      setError("No se pudo cargar tu día. Intenta nuevamente.");
     } finally {
       setLoading(false);
     }
@@ -200,36 +207,74 @@ export default function TrainerPage(): React.ReactElement {
   }));
 
   /**
-   * Who is enrolled: one club-wide roster call, not one per row. A garnish — a
-   * failure leaves the names unknown (the hero says so in a line, the timeline
-   * omits the counts, "Sesiones sin lista" cannot tell a partial list from a
-   * complete one) instead of blocking the day.
+   * How many are enrolled: the lightweight counts, not the ~500 KB club
+   * roster (QA4 PERF-01). A garnish — a failure leaves the counts unknown
+   * (the timeline omits them, "Sesiones sin lista" cannot tell a partial list
+   * from a complete one) instead of blocking the day.
    */
   useEffect((): (() => void) => {
     let cancelled = false;
     if (schedules.length === 0) {
-      setPadron(null);
+      setConteos(null);
       return (): void => {};
     }
-    fetchRosterDeTodosLosHorarios()
+    fetchConteosPorHorario()
       .then((all) => {
-        if (!cancelled) setPadron(all);
+        if (!cancelled) setConteos(all);
       })
       .catch((err: unknown) => {
-        console.error("[trainer] fetchRosterDeTodosLosHorarios failed", err);
-        if (!cancelled) setPadron(null);
+        console.error("[trainer] fetchConteosPorHorario failed", err);
+        if (!cancelled) setConteos(null);
       });
     return (): void => {
       cancelled = true;
     };
   }, [schedules]);
 
-  const roster = useMemo(() => (padron ? buildRosterNamesByHorario(todaySchedules, padron) : null), [padron, todaySchedules]);
-  const enrolledCounts = useMemo(() => {
-    if (!roster) return null;
-    return Object.fromEntries(Object.entries(roster).map(([id, names]) => [Number(id), names.length])) as Record<number, number>;
-  }, [roster]);
-  const enrolledBySchedule = useMemo(() => (padron ? buildEnrolledCountsByHorario(schedules, padron) : null), [padron, schedules]);
+  /**
+   * Who is enrolled, by name: only the hero session shows names, so only its
+   * roster is fetched (one horario, not the whole club). A failure leaves the
+   * names unknown and the hero says so in a line.
+   */
+  const heroScheduleId =
+    sessionCardState === null || sessionCardState.kind === "done" ? null : sessionCardState.schedule.id;
+  useEffect((): (() => void) => {
+    let cancelled = false;
+    setHeroAlumnos(null);
+    if (heroScheduleId === null) return (): void => {};
+    fetchAlumnosPorHorario(heroScheduleId)
+      .then((rows) => {
+        if (!cancelled) setHeroAlumnos(rows);
+      })
+      .catch((err: unknown) => {
+        console.error("[trainer] fetchAlumnosPorHorario failed", err);
+      });
+    return (): void => {
+      cancelled = true;
+    };
+  }, [heroScheduleId]);
+
+  const roster = useMemo(
+    () => (heroAlumnos ? buildRosterNamesByHorario(todaySchedules, heroAlumnos) : null),
+    [heroAlumnos, todaySchedules],
+  );
+  const heroStudents = useMemo(
+    () =>
+      heroAlumnos && heroScheduleId !== null
+        ? heroAlumnos
+            .filter((a) => a.horarioId === heroScheduleId)
+            .map((a) => ({ id: a.personaId, name: a.personaNombreCompleto }))
+        : null,
+    [heroAlumnos, heroScheduleId],
+  );
+  const enrolledCounts = useMemo(
+    () => (conteos ? buildEnrolledCountsByHorario(todaySchedules, conteos) : null),
+    [conteos, todaySchedules],
+  );
+  const enrolledBySchedule = useMemo(
+    () => (conteos ? buildEnrolledCountsByHorario(schedules, conteos) : null),
+    [conteos, schedules],
+  );
 
   /**
    * "Sesiones sin lista" — this month's weekly schedule minus the sessions
@@ -273,7 +318,7 @@ export default function TrainerPage(): React.ReactElement {
        * hero, named by the session's own hour.
        */}
       <AppShell title={`Hola, ${firstNameOf(session?.user?.name)}`} subtitle={buildContextLine("Entrenador")}>
-        {loading && <LoadingState label="Cargando su día…" />}
+        {loading && <LoadingState label="Cargando tu día…" />}
 
         {error && !loading && <ErrorState message={error} onRetry={() => loadData()} />}
 
@@ -285,6 +330,8 @@ export default function TrainerPage(): React.ReactElement {
                 roster={roster}
                 lastSummary={heroSummary}
                 nextSessionLabel={nextSessionLabel}
+                students={heroStudents}
+                onOpenEmergency={setEmergencyStudent}
               />
             ) : (
               <section data-testid="rest-day" className="card flex flex-wrap items-center gap-x-4 gap-y-field px-[18px] py-4">
@@ -292,7 +339,7 @@ export default function TrainerPage(): React.ReactElement {
                 <div className="flex min-w-0 flex-1 basis-72 flex-col gap-0.5">
                   <b className="text-sm font-bold text-ink">Hoy no hay entrenamientos</b>
                   <span className="text-sm text-ink-2">
-                    {`El club no tiene sesiones programadas para hoy, ${formatDay(todayDiaSemana()).toLowerCase()}. Puede pasar la lista de otro día si quedó pendiente.`}
+                    {`El club no tiene sesiones programadas para hoy, ${formatDay(todayDiaSemana()).toLowerCase()}. Puedes pasar la lista de otro día si quedó pendiente.`}
                   </span>
                 </div>
                 <Link href="/trainer/attendance" className={buttonClasses("secondary")}>
@@ -346,7 +393,7 @@ export default function TrainerPage(): React.ReactElement {
                   )}
                 </DashboardSection>
 
-                <DashboardSection title="Alumnos a seguir" testId="students-to-follow">
+                <DashboardSection title="Jugadores a seguir" testId="students-to-follow">
                   {studentsToFollow.length > 0 ? (
                     <ul className="m-0 grid list-none p-0 sm:grid-cols-2 lg:grid-cols-3">
                       {studentsToFollow.map((student) => {
@@ -354,7 +401,7 @@ export default function TrainerPage(): React.ReactElement {
                           key: entry.fecha,
                           label: `${formatDate(entry.fecha).slice(0, 5)} ${ATTENDANCE_LABELS[entry.estado].toLowerCase()}`,
                           tone: STATE_TONE[entry.estado],
-                          hollow: entry.estado !== "present" && entry.estado !== "late",
+                          hollow: !countsAsAttended(entry.estado),
                         }));
                         return (
                           <li
@@ -383,17 +430,18 @@ export default function TrainerPage(): React.ReactElement {
 
               <div data-testid="trainer-rail" className="flex min-w-0 flex-col gap-page max-lg:order-first">
                 <section className="card flex flex-col gap-4 p-[18px]">
-                  <SessionsWithoutList missing={missingSessions} coverageKnown={padron !== null} />
+                  <SessionsWithoutList missing={missingSessions} coverageKnown={conteos !== null} />
                 </section>
-                <InfoPanel title="Cómo funciona su día">
+                <InfoPanel title="Cómo funciona tu día">
                   <p>El botón principal abre la lista de la próxima sesión; la línea de «Hoy» muestra el estado de cada una.</p>
-                  <p>«Sesiones sin lista» reúne las del mes que nadie registró: use «Pasar lista» para completarlas.</p>
-                  <p>«Alumnos a seguir» marca a quienes faltaron dos veces o más este mes.</p>
+                  <p>«Sesiones sin lista» reúne las del mes que nadie registró: usa «Pasar lista» para completarlas.</p>
+                  <p>«Jugadores a seguir» marca a quienes faltaron dos veces o más este mes.</p>
                 </InfoPanel>
               </div>
             </div>
           </>
         )}
+        <EmergencyCardDialog student={emergencyStudent} onClose={() => setEmergencyStudent(null)} />
       </AppShell>
     </ProtectedRoute>
   );

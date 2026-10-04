@@ -23,6 +23,8 @@ import {
   rejectionReasonsFor,
   rejectionPayerNotice,
   uploadedAtLabel,
+  waitingAgeLabel,
+  matchesMethodFilter,
   REJECTION_NOTE_MAX_LENGTH,
 } from "../payments-utils";
 
@@ -324,5 +326,37 @@ describe("per-method rejection copy (ADM-16)", () => {
   it("labels the timestamp cell by method", () => {
     expect(uploadedAtLabel("efectivo")).toBe("Registrado el");
     expect(uploadedAtLabel("transferencia")).toBe("Subido el");
+  });
+});
+
+describe("waitingAgeLabel (ADMA-25)", () => {
+  const now = new Date("2026-07-04T12:00:00Z");
+
+  it("says how many days the payment has been waiting", () => {
+    expect(waitingAgeLabel("2026-07-01T10:00:00Z", now)).toBe("Hace 3 días");
+    expect(waitingAgeLabel("2026-07-03T10:00:00Z", now)).toBe("Hace 1 día");
+  });
+
+  it("reads «Hoy» within the same day and for a timestamp slightly in the future", () => {
+    expect(waitingAgeLabel("2026-07-04T08:00:00Z", now)).toBe("Hoy");
+    expect(waitingAgeLabel("2026-07-04T18:00:00Z", now)).toBe("Hoy");
+  });
+
+  it("is empty for an unusable timestamp instead of inventing an age", () => {
+    expect(waitingAgeLabel("", now)).toBe("");
+    expect(waitingAgeLabel("not a date", now)).toBe("");
+  });
+});
+
+describe("matchesMethodFilter (ADMA-25)", () => {
+  it("lets everything through on «all»", () => {
+    expect(matchesMethodFilter("Efectivo", "all")).toBe(true);
+    expect(matchesMethodFilter("Otro", "all")).toBe(true);
+  });
+
+  it("keeps only the chosen method", () => {
+    expect(matchesMethodFilter("Efectivo", "efectivo")).toBe(true);
+    expect(matchesMethodFilter("Transferencia bancaria", "efectivo")).toBe(false);
+    expect(matchesMethodFilter("Transferencia bancaria", "transferencia")).toBe(true);
   });
 });

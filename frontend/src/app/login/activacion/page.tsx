@@ -34,7 +34,7 @@ import { ICON } from "@/lib/icon-size";
  */
 function emailScreenSubtitle(activation: ActivationSession): string {
   const email = activation.user.email;
-  const greeting = email ? `Le enviamos un enlace a ${email}.` : "Le enviamos un enlace a su correo.";
+  const greeting = email ? `Te enviamos un enlace a ${email}.` : "Te enviamos un enlace a tu correo.";
   return `${greeting} ${EMAIL_DELAY_SPAM_NOTICE}`;
 }
 
@@ -48,17 +48,17 @@ function enrolmentScreenMessage(activation: ActivationSession): string {
   const primerPago = activation.primerPago;
   if (!primerPago) {
     return (
-      "Acérquese al club o escríbanos por WhatsApp para registrar la inscripción y el primer pago. El club lo " +
+      "Acércate al club o escríbenos por WhatsApp para registrar la inscripción y el primer pago. El club lo " +
       "valida y ahí se activa la membresía."
     );
   }
   if (primerPago.estado === "PENDIENTE_VALIDACION") {
-    return "Su primer pago está en revisión. El club lo valida y ahí se activa la membresía; no hace falta volver al club.";
+    return "Tu primer pago está en revisión. El club lo valida y ahí se activa la membresía; no hace falta volver al club.";
   }
   const motivo = primerPago.motivoRechazo;
   return motivo
-    ? `Su primer pago fue rechazado: ${motivo}. Acérquese al club o escríbanos por WhatsApp para registrarlo de nuevo.`
-    : "Su primer pago fue rechazado. Acérquese al club o escríbanos por WhatsApp para registrarlo de nuevo.";
+    ? `Tu primer pago fue rechazado: ${motivo}. Acércate al club o escríbenos por WhatsApp para registrarlo de nuevo.`
+    : "Tu primer pago fue rechazado. Acércate al club o escríbenos por WhatsApp para registrarlo de nuevo.";
 }
 
 function ActivationPageContent(): React.ReactElement {
@@ -161,9 +161,9 @@ function ActivationPageContent(): React.ReactElement {
       // The backend's `mensaje` is the anonymous-form sentence ("Si el correo
       // está registrado…"); this person is signed in, so say it plainly (REG-12).
       await reenviarVerificacionCorreo(activation.user.email);
-      setResendMessage("Le enviamos un enlace nuevo a su correo. Puede tardar unos minutos.");
+      setResendMessage("Te enviamos un enlace nuevo a tu correo. Puede tardar unos minutos.");
     } catch (error: unknown) {
-      setResendError(toUserMessage(error, "No se pudo reenviar el correo. Intente nuevamente."));
+      setResendError(toUserMessage(error, "No se pudo reenviar el correo. Intenta nuevamente."));
     } finally {
       setResending(false);
     }
@@ -185,7 +185,7 @@ function ActivationPageContent(): React.ReactElement {
       setEmailCorrectionOpen(false);
       setNewEmail("");
     } catch (error: unknown) {
-      const message = toUserMessage(error, "No se pudo corregir el correo. Intente nuevamente.");
+      const message = toUserMessage(error, "No se pudo corregir el correo. Intenta nuevamente.");
       setEmailCorrectionError(isDuplicateIdentityError(message) ? MENSAJE_CORREO_DE_OTRA_CUENTA : message);
     } finally {
       setEmailCorrectionSubmitting(false);
@@ -209,7 +209,7 @@ function ActivationPageContent(): React.ReactElement {
     const wasEnrolmentPending = correoVerificado && !altaCompletada;
     const result = await refreshSession();
     if (result.kind === "outage") {
-      setResendError("No se pudo consultar el estado. Intente nuevamente en unos minutos.");
+      setResendError("No se pudo consultar el estado. Intenta nuevamente en unos minutos.");
       return;
     }
     if (wasEmailPending && result.kind === "authenticated") {
@@ -260,7 +260,7 @@ function ActivationPageContent(): React.ReactElement {
   if (!correoVerificado) {
     return (
       <AuthShell
-        title="Verifique su correo"
+        title="Verifica tu correo"
         subtitle={emailScreenSubtitle(activation)}
         eyebrow="Acceso al club"
         hideBack
@@ -298,7 +298,7 @@ function ActivationPageContent(): React.ReactElement {
           </button>
           {stillUnverified && (
             <p role="status" className="text-sm leading-relaxed text-ink-2">
-              Todavía no encontramos la verificación. Abra el enlace del correo y vuelva a intentar.
+              Todavía no encontramos la verificación. Abre el enlace del correo y vuelve a intentar.
             </p>
           )}
 
@@ -373,7 +373,7 @@ function ActivationPageContent(): React.ReactElement {
   // It is completed at the club by staff — there is nothing to submit here,
   // only the status to re-check once it lands.
   return (
-    <AuthShell title="Complete su inscripción en el club" eyebrow="Acceso al club" hideBack>
+    <AuthShell title="Completa tu inscripción en el club" eyebrow="Acceso al club" hideBack>
       <div className="flex flex-col gap-4">
         {/*
          * `aria-live="polite"`: this screen replaces the email screen in
@@ -389,11 +389,11 @@ function ActivationPageContent(): React.ReactElement {
           </p>
           <p className="text-sm leading-relaxed text-ink-2">{enrolmentScreenMessage(activation)}</p>
           {emailJustVerified && (
-            <p role="status" className="text-sm leading-relaxed text-state-ok">Su correo quedó verificado.</p>
+            <p role="status" className="text-sm leading-relaxed text-state-ok">Tu correo quedó verificado.</p>
           )}
           {stillPending && (
             <p role="status" className="text-sm leading-relaxed text-ink-2">
-              Todavía no registramos su inscripción en el club. Vuelva a consultar más tarde.
+              Todavía no registramos tu inscripción en el club. Vuelve a consultar más tarde.
             </p>
           )}
         </div>

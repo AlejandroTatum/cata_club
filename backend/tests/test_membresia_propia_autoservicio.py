@@ -196,3 +196,45 @@ def test_endpoint_propia_rechaza_a_un_entrenador(client, db_session):
         "/api/v1/membresias/propia", json={"tipo_membresia_id": tipo.id},
     )
     assert respuesta.status_code == 403
+
+
+# --- 5. FAM-01 (QA4): la representante paga su PROPIA membresía -------------
+
+def test_representante_registra_el_pago_de_su_propia_membresia_y_no_puede_duplicarla(
+    client, db_session,
+):
+    """QA4 FAM-01 «a»: con solo el rol REPRESENTANTE, quien crea su membresía
+    con `POST /membresias/propia` puede registrar su primer pago con
+    `POST /membresias/pagos` (sin ser admin ni representante de nadie), el
+    pago queda a su nombre y en su historial, y repetir "Unirme como jugador"
+    no crea una segunda membresía: el error nombra la existente."""
+    representante = crear_persona_orm(db_session, cedula_valida(747), nombres="Marta", apellidos="Reyes")
+    tipo = crear_tipo_membresia_orm(db_session)
+    db_session.commit()
+
+    _autenticar_como(representante.id, ["REPRESENTANTE"])
+    creada = client.post("/api/v1/membresias/propia", json={"tipo_membresia_id": tipo.id})
+    assert creada.status_code == 201, creada.text
+    membresia_id = creada.json()["id"]
+
+    pago = client.post(
+        "/api/v1/membresias/pagos",
+        json={
+            "meses": 1, "tipo_pago": "TRANSFERENCIA",
+            "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
+            "persona_id": representante.id, "membresia_id": membresia_id,
+        },
+    )
+    assert pago.status_code == 201, pago.text
+    assert pago.json()["estadoPago"] == "PENDIENTE_VALIDACION"
+
+    historial = client.get(f"/api/v1/membresias/pagos/persona/{representante.id}")
+    assert historial.status_code == 200, historial.text
+    assert [p["id"] for p in historial.json()] == [pago.json()["id"]]
+
+    repetida = client.post("/api/v1/membresias/propia", json={"tipo_membresia_id": tipo.id})
+    assert repetida.status_code >= 400
+    assert db_session.query(Pago).filter(Pago.persona_id == representante.id).count() == 1
+    mias = client.get("/api/v1/membresias/mias")
+    assert mias.status_code == 200, mias.text
+    assert [m["id"] for m in mias.json()] == [membresia_id]

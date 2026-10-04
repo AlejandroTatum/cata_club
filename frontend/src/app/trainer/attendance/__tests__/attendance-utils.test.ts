@@ -59,15 +59,11 @@ describe("nextAttendanceState", () => {
     expect(nextAttendanceState("present")).toBe("late");
   });
 
-  it("cycles late → justified", () => {
-    expect(nextAttendanceState("late")).toBe("justified");
-  });
-
-  // Issue #1373: the authorized-absence states sit between justified and
+  // Issue #1373: the authorized-absence states sit between late and
   // absent in the tap cycle — a known reason is never a worse verdict than
   // an unexcused one.
-  it("cycles justified → sick", () => {
-    expect(nextAttendanceState("justified")).toBe("sick");
+  it("cycles late → sick", () => {
+    expect(nextAttendanceState("late")).toBe("sick");
   });
 
   it("cycles sick → competition", () => {
@@ -85,18 +81,17 @@ describe("nextAttendanceState", () => {
 });
 
 // #312 / hallazgo #26 — ArrowRight/ArrowLeft walk ATTENDANCE_STATES' own
-// display order (present, absent, late, justified), not the tap cycle's.
+// display order (present, absent, late, sick, competition), not the tap cycle's.
 describe("arrowAttendanceState", () => {
   it("moves forward through the display order with ArrowRight", () => {
     expect(arrowAttendanceState("present", "ArrowRight")).toBe("absent");
     expect(arrowAttendanceState("absent", "ArrowRight")).toBe("late");
-    expect(arrowAttendanceState("late", "ArrowRight")).toBe("justified");
+    expect(arrowAttendanceState("late", "ArrowRight")).toBe("sick");
   });
 
-  // Issue #1373: the display order gained sick/competition after justified —
-  // the arrow walk follows the row the eye sees, all six states.
+  // Issue #1373: the display order has sick/competition after late —
+  // the arrow walk follows the row the eye sees, all five states.
   it("walks into the authorized-absence states and wraps from competition (ArrowRight)", () => {
-    expect(arrowAttendanceState("justified", "ArrowRight")).toBe("sick");
     expect(arrowAttendanceState("sick", "ArrowRight")).toBe("competition");
     expect(arrowAttendanceState("competition", "ArrowRight")).toBe("present");
   });
@@ -118,7 +113,7 @@ describe("countByState", () => {
     { id: "b", name: "B", attendance: "present" },
     { id: "c", name: "C", attendance: "absent" },
     { id: "d", name: "D", attendance: "late" },
-    { id: "e", name: "E", attendance: "justified" },
+    { id: "e", name: "E", attendance: "sick" },
     { id: "f", name: "F", attendance: "present" },
   ];
 
@@ -134,31 +129,30 @@ describe("countByState", () => {
     expect(countByState(students, "late")).toBe(1);
   });
 
-  it("counts justified correctly", () => {
-    expect(countByState(students, "justified")).toBe(1);
+  it("counts sick correctly", () => {
+    expect(countByState(students, "sick")).toBe(1);
   });
 
   it("returns 0 when no student has the given state", () => {
-    expect(countByState(students, "justified")).toBe(1);
+    expect(countByState(students, "competition")).toBe(0);
     const empty: SessionStudent[] = [];
     expect(countByState(empty, "present")).toBe(0);
   });
 });
 
 describe("buildAttendanceReceipt", () => {
-  it("returns all six states, including a zero, in a plain count record", () => {
+  it("returns all five states, including a zero, in a plain count record", () => {
     const students: SessionStudent[] = [
       { id: "a", name: "A", attendance: "present" },
       { id: "b", name: "B", attendance: "present" },
       { id: "c", name: "C", attendance: "absent" },
-      { id: "d", name: "D", attendance: "justified" },
+      { id: "d", name: "D", attendance: "sick" },
     ];
     expect(buildAttendanceReceipt(students)).toEqual({
       present: 2,
       absent: 1,
       late: 0,
-      justified: 1,
-      sick: 0,
+      sick: 1,
       competition: 0,
     });
   });
@@ -175,7 +169,6 @@ describe("buildAttendanceReceipt", () => {
       present: 0,
       absent: 0,
       late: 0,
-      justified: 0,
       sick: 2,
       competition: 1,
     });
@@ -186,7 +179,6 @@ describe("buildAttendanceReceipt", () => {
       present: 0,
       absent: 0,
       late: 0,
-      justified: 0,
       sick: 0,
       competition: 0,
     });
@@ -206,7 +198,6 @@ describe("buildAttendanceReceipt", () => {
       present: 1,
       absent: 1,
       late: 0,
-      justified: 0,
       sick: 0,
       competition: 0,
     });
@@ -252,7 +243,7 @@ describe("buildRosterFromAlumnoHorarios", () => {
   // at them is the same defect pointing the other way. So the VALUE is not the
   // DECISION — every row starts NOT reviewed, and that is what the roll call
   // counts, flags and reports. See `countUnreviewed`.
-  it("maps each alumno-horario row to a SessionStudent defaulted to present but NOT reviewed", () => {
+  it("maps each jugador-horario row to a SessionStudent defaulted to present but NOT reviewed", () => {
     const roster = buildRosterFromAlumnoHorarios(alumnoHorarios);
     expect(roster).toEqual([
       {
@@ -539,7 +530,7 @@ describe("markRemainingPresent", () => {
 
   it("leaves a roster the trainer already went through untouched", () => {
     const students: SessionStudent[] = [
-      { id: "a", name: "A", attendance: "justified", reviewed: true },
+      { id: "a", name: "A", attendance: "sick", reviewed: true },
       { id: "b", name: "B", attendance: "absent", reviewed: true },
     ];
     expect(markRemainingPresent(students)).toEqual(students);
@@ -580,7 +571,7 @@ describe("tapWizardAttendance", () => {
       seen.add(next);
       student = { ...student, attendance: next, reviewed: true };
     }
-    expect(seen).toEqual(new Set(["present", "late", "justified", "sick", "competition", "absent"]));
+    expect(seen).toEqual(new Set(["present", "late", "sick", "competition", "absent"]));
   });
 });
 
@@ -588,11 +579,11 @@ describe("toAttendanceMarks", () => {
   it("maps marked students to the backend payload shape", () => {
     const students: SessionStudent[] = [
       { id: "3", name: "Sofia", attendance: "present" },
-      { id: "7", name: "Mateo", attendance: "justified" },
+      { id: "7", name: "Mateo", attendance: "sick" },
     ];
     expect(toAttendanceMarks(students)).toEqual([
       { personaId: 3, estado: "present" },
-      { personaId: 7, estado: "justified" },
+      { personaId: 7, estado: "sick" },
     ]);
   });
 
@@ -629,7 +620,6 @@ describe("countByState / buildAttendanceReceipt with unmarked students", () => {
       present: 1,
       absent: 0,
       late: 0,
-      justified: 0,
       sick: 0,
       competition: 0,
     });
@@ -648,10 +638,9 @@ describe("cycleWizardAttendance", () => {
   it("walks the prototype's order, starting at the common answer", () => {
     expect(cycleWizardAttendance(UNMARKED)).toBe("present");
     expect(cycleWizardAttendance("present")).toBe("late");
-    expect(cycleWizardAttendance("late")).toBe("justified");
     // Issue #1373: the tap cycle continues through the authorized-absence
     // states before wrapping at absent.
-    expect(cycleWizardAttendance("justified")).toBe("sick");
+    expect(cycleWizardAttendance("late")).toBe("sick");
     expect(cycleWizardAttendance("sick")).toBe("competition");
     expect(cycleWizardAttendance("competition")).toBe("absent");
   });
@@ -688,7 +677,7 @@ describe("resolveFailedStudentNames", () => {
 
   it("falls back to the id rather than dropping an unknown student", () => {
     // A partially named failure is still more actionable than a bare count.
-    expect(resolveFailedStudentNames([{ personaId: 404 }], roster)).toEqual(["Alumno #404"]);
+    expect(resolveFailedStudentNames([{ personaId: 404 }], roster)).toEqual(["Jugador #404"]);
   });
 
   it("returns an empty list when nothing failed", () => {
@@ -717,9 +706,9 @@ describe("toAttendanceDraft", () => {
       toAttendanceDraft([
         { id: "1", name: "A", attendance: "present", reviewed: true },
         { id: "2", name: "B", attendance: UNMARKED },
-        { id: "3", name: "C", attendance: "justified", reviewed: true },
+        { id: "3", name: "C", attendance: "sick", reviewed: true },
       ]),
-    ).toEqual({ "1": "present", "3": "justified" });
+    ).toEqual({ "1": "present", "3": "sick" });
   });
 
   // Persisting an untouched row would let a page refresh launder "nobody
@@ -983,7 +972,7 @@ describe("describeAttendanceSaveError", () => {
 
   it("says permission for 401/403, stale data for other 4xx, server for 5xx and connection for no status", () => {
     expect(describeAttendanceSaveError(withStatus(401))).toMatch(/permiso/);
-    expect(describeAttendanceSaveError(withStatus(422))).toMatch(/Actualice la página/);
+    expect(describeAttendanceSaveError(withStatus(422))).toMatch(/Actualiza la página/);
     expect(describeAttendanceSaveError(withStatus(500))).toMatch(/servidor tuvo un problema/);
     expect(describeAttendanceSaveError(new Error("timeout"))).toMatch(/No hay conexión/);
     expect(describeAttendanceSaveError("???")).toMatch(/No hay conexión/);
@@ -995,7 +984,7 @@ describe("partial sessions", () => {
   const roster = (filed: boolean[]): SessionStudent[] =>
     filed.map((isFiledRow, i) => ({
       id: String(i + 1),
-      name: `Alumno ${i + 1}`,
+      name: `Jugador ${i + 1}`,
       attendance: "present",
       reviewed: isFiledRow,
       asistenciaId: isFiledRow ? 500 + i : null,
@@ -1038,15 +1027,17 @@ describe("partial sessions", () => {
   it("lists as closed only the horarios whose whole roster has a record", () => {
     const record = (horarioId: number, personaId: number) =>
       ({ id: `${horarioId}-${personaId}`, horarioId, personaId }) as AttendanceRecord;
-    const rosterAll = [
-      { horarioId: 1, personaId: 10 },
-      { horarioId: 1, personaId: 11 },
-      { horarioId: 2, personaId: 20 },
-    ] as AlumnoHorario[];
+    const personasPorHorario = { 1: [10, 11], 2: [20] };
 
-    const closed = closedHorariosFromWeek([record(1, 10), record(2, 20)], rosterAll);
+    const closed = closedHorariosFromWeek([record(1, 10), record(2, 20)], personasPorHorario);
 
     expect([...closed]).toEqual([2]); // horario 1 is missing persona 11
+  });
+
+  it("treats a horario with records but nobody enrolled any more as closed", () => {
+    const record = { id: "3-10", horarioId: 3, personaId: 10 } as AttendanceRecord;
+
+    expect([...closedHorariosFromWeek([record], {})]).toEqual([3]);
   });
 });
 

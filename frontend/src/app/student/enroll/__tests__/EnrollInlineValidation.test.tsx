@@ -100,7 +100,7 @@ describe("EnrollPage — inline step validation", () => {
     expect(document.getElementById(enrollFieldId("fechaNacimiento"))).toHaveAttribute("aria-invalid", "true");
     // The step did not advance and the red paragraph is gone.
     expect(screen.getByLabelText(/^Nombres/)).toBeInTheDocument();
-    expect(screen.queryByText(/^Para continuar, revise:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Para continuar, revisa:/)).not.toBeInTheDocument();
   });
 
   it("focuses the first invalid field after the attempt", () => {

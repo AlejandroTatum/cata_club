@@ -26,13 +26,13 @@ export default function FilteredRosterEmptyState({
       icon={<Users size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
       title={
         nothingLeftUnreviewed
-          ? "Ya revisó a todos los alumnos de este horario."
-          : "No se encontraron alumnos con ese nombre."
+          ? "Ya revisaste a todos los jugadores de este horario."
+          : "No se encontraron jugadores con ese nombre."
       }
       description={
         nothingLeftUnreviewed
           ? "Quite el filtro para volver a ver la lista completa antes de continuar."
-          : "Revise el filtro o bórrelo para volver a ver la lista completa."
+          : "Revisa el filtro o bórralo para volver a ver la lista completa."
       }
       action={
         onlyUnreviewed ? (

@@ -56,7 +56,7 @@ describe("BirthDateField — emits the ISO value only for a real calendar date",
     expect(onChange).toHaveBeenLastCalledWith(expectedIso);
   });
 
-  it("REG-06: the emitted Feb 31 reaches the rule as «no existe», not «Indique la fecha»", () => {
+  it("REG-06: the emitted Feb 31 reaches the rule as «no existe», not «Indica la fecha»", () => {
     const { day, month, year, onChange } = renderField();
     fireEvent.change(day, { target: { value: "31" } });
     fireEvent.change(month, { target: { value: "02" } });

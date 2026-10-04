@@ -47,6 +47,19 @@ class EstadoSistema(BaseModel):
     level: Nivel
 
 
+class ComponenteDegradado(BaseModel):
+    key: Literal["workers", "email", "outbox"]
+    reason: Literal["heartbeat_missing", "heartbeat_stale", "outbox_stale"]
+
+
+class SaludSistema(BaseModel):
+    """Salud de los workers (latido de Celery) y de la cola de salida de correos."""
+    state: Literal["ok", "degraded"]
+    degraded: bool
+    heartbeatAgeSeconds: Optional[int]
+    components: list[ComponenteDegradado]
+
+
 class ResumenResponse(BaseModel):
     range: RangoResumen
     generatedAt: str
@@ -56,6 +69,7 @@ class ResumenResponse(BaseModel):
     status: list[EstadoSistema]
     # Correos de las colas de salida que esperan el reinicio del tope diario.
     queuedByQuota: int
+    health: Optional[SaludSistema] = None
 
 
 class Serie(BaseModel):
@@ -150,3 +164,4 @@ class AvanzadasResponse(BaseModel):
     host: Optional[HostAvanzado]
     runtime: Optional[RuntimeAvanzado]
     users: Optional[UsuariosAvanzado]
+    health: Optional[SaludSistema] = None

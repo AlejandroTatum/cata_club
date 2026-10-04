@@ -28,7 +28,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { furthestReachableIndex, useWizardHistory } from "@/lib/wizard-history";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -54,7 +54,8 @@ import {
 import { BackLink, InfoPanel, Select, Stepper, buttonClasses, cn, PAGE_RAIL } from "@/components/ui";
 import { BLOOD_TYPE_LABELS, SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
 import { institutionOptionLabel, planOptionLabel } from "@/app/student/enroll/enroll-utils";
-import { addMonthsIso, estimateTotal } from "@/app/student/payments/payments-utils";
+import { useLatestPick } from "@/lib/useLatestPick";
+import { addMonthsIso, estimateTotal, prepareVoucher } from "@/app/student/payments/payments-utils";
 import HowToPay from "@/components/payments/HowToPay";
 import { ProofPreview } from "@/app/student/payments/ProofPreview";
 import { formatCurrency, formatDateRange } from "@/lib/format-utils";
@@ -113,12 +114,15 @@ function AddDependentContent(): React.ReactElement {
   const [tipoEscuelaFilter, setTipoEscuelaFilter] = useState<string>("");
   const [payNow, setPayNow] = useState(false);
   const [createdDependentId, setCreatedDependentId] = useState<number | null>(null);
+  // REG-03: the person just added, kept to show them with their membership state.
+  const [addedName, setAddedName] = useState("");
   const [pendingPaymentId, setPendingPaymentId] = useState<number | null>(null);
   const [plans, setPlans] = useState<TipoMembresiaCatalogo[]>([]);
   const [planId, setPlanId] = useState("");
   const [months, setMonths] = useState(1);
   const [method, setMethod] = useState<"EFECTIVO" | "TRANSFERENCIA">("TRANSFERENCIA");
   const [voucher, setVoucher] = useState<File | null>(null);
+  const latestPick = useLatestPick();
   const voucherInputRef = useRef<HTMLInputElement>(null);
   const stepTitleRef = useRef<HTMLHeadingElement>(null);
 
@@ -139,6 +143,15 @@ function AddDependentContent(): React.ReactElement {
   // Paying right away goes through the membership endpoints, which stay
   // closed to an account whose activation is still pending.
   const canPayNow = session ? isActivationComplete(session) : false;
+  // FAM-12 «c»: `?pagar=<id>` (from Pagos, for a child with no membership)
+  // opens the FIRST payment of an existing dependent. Only for an activated
+  // account, like the "pay now" option; otherwise the param is ignored.
+  const pagarParam = useSearchParams().get("pagar");
+  const payForId = canPayNow && pagarParam && /^[1-9]\d{0,9}$/.test(pagarParam) ? Number(pagarParam) : null;
+  const paymentDependentId = createdDependentId ?? payForId;
+  // The payment step, vs. the REG-03 confirmation of a dependent added to pay later.
+  const showPayment = paymentDependentId !== null && (payNow || payForId !== null);
+  const showAdded = createdDependentId !== null && !showPayment;
 
   /**
    * A URL may address any step the guardian could have walked to on their own,
@@ -174,7 +187,7 @@ function AddDependentContent(): React.ReactElement {
   // FAM-30: when the step changes the button that was pressed unmounts and the
   // browser parks focus on the shell's skip link, which then shows over the
   // content. Hand focus to the step title instead. Not on first render.
-  const stepKey = createdDependentId !== null ? "payment" : step;
+  const stepKey = showPayment ? "payment" : showAdded ? "added" : step;
   const lastStepKey = useRef<string>(stepKey);
   useEffect(() => {
     if (lastStepKey.current === stepKey) return;
@@ -222,21 +235,35 @@ function AddDependentContent(): React.ReactElement {
     if (currentIndex > 0) goBack();
   }
 
+  /**
+   * FAM-26: a photo over 5 MB is shrunk before it is staged. A file that cannot
+   * be fixed stays as picked, so `validateDependentPayment` reports the size.
+   */
+  async function pickVoucher(file: File | null): Promise<void> {
+    if (!file) { latestPick.cancel(); setVoucher(null); return; }
+    // Nothing older may be uploaded while the new pick is still being shrunk.
+    setVoucher(null);
+    const prepared = await latestPick.run(prepareVoucher(file));
+    if (!prepared) return;
+    setVoucher("file" in prepared ? prepared.file : file);
+  }
+
   async function handleConfirm(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
-    if (submitting) return;
-    if (createdDependentId !== null) {
+    if (submitting || latestPick.pending) return;
+    if (showAdded) return;
+    if (paymentDependentId !== null) {
       const errors = validateDependentPayment(planId, months, method, voucher);
       if (errors.length) { setFormErrors(errors); return; }
       setSubmitting(true);
       try {
         const paymentId = pendingPaymentId ?? (await inscribirRepresentadoConPago({
-          personaId: createdDependentId, tipoMembresiaId: Number(planId),
+          personaId: paymentDependentId, tipoMembresiaId: Number(planId),
           tipoPago: method, meses: months,
         })).id;
         setPendingPaymentId(paymentId);
         if (method === "TRANSFERENCIA" && voucher) await subirVoucherPago(paymentId, voucher);
-        showSuccess("Pago registrado. Queda pendiente de validación por administración.");
+        showSuccess("Pago registrado. Queda por validar.");
         router.push("/student");
       } catch (error: unknown) {
         setFormErrors([getAddDependentErrorMessage(error)]);
@@ -250,7 +277,7 @@ function AddDependentContent(): React.ReactElement {
       return;
     }
     if (!summaryReviewed) {
-      setFormErrors(["Revise y confirme el resumen antes de agregar el dependiente."]);
+      setFormErrors(["Revisa y confirma el resumen antes de agregar el jugador."]);
       return;
     }
     const errors = validateAddDependentForm(formData);
@@ -262,6 +289,10 @@ function AddDependentContent(): React.ReactElement {
     try {
       const created = await crearRepresentadoPropio(buildRepresentadoPayload(formData));
       setCreatedDependentId(created.representado.id);
+      setAddedName(
+        `${created.representado.nombres} ${created.representado.apellidos}`.trim()
+          || `${formData.nombres} ${formData.apellidos}`.trim(),
+      );
     } catch (error: unknown) {
       setSubmitting(false);
       const message = getAddDependentErrorMessage(error);
@@ -287,10 +318,10 @@ function AddDependentContent(): React.ReactElement {
       // worth turning a completed alta into an error screen.
       console.error("[add-dependent] refreshSession failed", error);
     }
-    // Navigation-remount: /student refetches the portal summary on mount,
-    // so the new dependent appears without any optimistic client state.
-    if (!payNow) router.push("/student");
-    else setSubmitting(false);
+    // REG-03: no automatic redirect — the confirmation shows the new player
+    // and their membership state; "Ir a mi cuenta" navigates (and /student
+    // refetches the portal summary on mount, so no optimistic client state).
+    setSubmitting(false);
   }
 
   // ---- Render helpers ----
@@ -342,7 +373,7 @@ function AddDependentContent(): React.ReactElement {
     return (
       <div className="space-y-field">
         <p className="mb-4 text-sm leading-relaxed text-ink-2">
-          Ingrese los datos personales del hijo/dependiente a agregar:
+          Ingresa los datos personales del jugador a agregar:
         </p>
 
         <WizardInput
@@ -423,7 +454,7 @@ function AddDependentContent(): React.ReactElement {
           <div className="rounded-ctl bg-sunken p-3 text-xs text-ink-3-strong">
             Edad calculada: {" "}
             <span className="font-semibold text-ink">
-              {agePlausible ? `${age} años` : ageValid ? "Revise el año." : "—"}
+              {agePlausible ? `${age} años` : ageValid ? "Revisa el año." : "—"}
             </span>
           </div>
         )}
@@ -464,7 +495,7 @@ function AddDependentContent(): React.ReactElement {
               Escuela o institución
             </label>
             <p className="mb-2 text-xs text-ink-3">
-              Seleccione la institución educativa del estudiante (opcional).
+              Selecciona la institución educativa del jugador (opcional).
             </p>
             <Select
               id={addDependentFieldId("institucionId")}
@@ -527,7 +558,7 @@ function AddDependentContent(): React.ReactElement {
                are `WizardInput`'s, made one batch earlier. */
             className={`input-field ${shownError("tipoSangre") ? "border-state-bad" : ""}`}
           >
-            <option value="">Seleccione una opción</option>
+            <option value="">Selecciona una opción</option>
             {/* `SELECTABLE_BLOOD_TYPES`, not the whole enum (#643): "No lo sé"
                 is no longer on offer, because the record this wizard creates
                 has to be a complete one. */}
@@ -573,8 +604,8 @@ function AddDependentContent(): React.ReactElement {
          * actuales), no de un texto libre que haya que mantener acá.
          */}
         <div className="rounded-ctl border border-line-2 bg-canvas p-3 text-xs text-ink-2">
-          En caso de emergencia, el club lo contactará a usted con el nombre y
-          teléfono de su cuenta.
+          La ficha médica es obligatoria. En caso de emergencia, el club llamará
+          al teléfono de tu cuenta de representante: no tienes que escribir otro.
         </div>
 
         {/* `rounded-ctl`, and the ramp's own ink instead of `amber-700/80` —
@@ -643,7 +674,7 @@ function AddDependentContent(): React.ReactElement {
     return (
       <div className="space-y-section">
         <p className="text-sm leading-relaxed text-ink-2">
-          Esto es lo que vamos a crear. Corrija cualquier bloque antes de confirmar:
+          Esto es lo que vamos a crear. Corrige cualquier bloque antes de confirmar:
         </p>
 
         <div className="overflow-hidden rounded-card border border-line">
@@ -673,16 +704,16 @@ function AddDependentContent(): React.ReactElement {
             role switch server-side, so nothing here would be true for them. */}
         {!isRepresentative && (
           <div className="rounded-ctl border border-line-2 bg-canvas p-3 text-xs text-ink-2">
-            Al guardar, su cuenta pasa a ser de representante. Sigue jugando
-            con su membresía actual y podrá gestionar a este perfil.
+            Al guardar, tu cuenta pasa a ser de representante. Sigue jugando
+            con tu membresía actual y podrás gestionar a este perfil.
           </div>
         )}
 
         <div className="rounded-ctl border border-line-2 bg-canvas p-4 text-sm text-ink-2">
-          <label htmlFor="dependent-pay-choice">¿Cuándo desea pagar?</label>
+          <label htmlFor="dependent-pay-choice">¿Cuándo quieres pagar?</label>
           <Select id="dependent-pay-choice" wrapperClassName="mt-2" value={payNow ? "now" : "later"} onChange={(e) => setPayNow(e.target.value === "now")}>
-            <option value="later">Agregar dependiente y pagar más tarde</option>
-            {canPayNow && <option value="now">Agregar dependiente y registrar el pago ahora</option>}
+            <option value="later">Agregar jugador y pagar más tarde</option>
+            {canPayNow && <option value="now">Agregar jugador y registrar el pago ahora</option>}
           </Select>
         </div>
 
@@ -699,7 +730,7 @@ function AddDependentContent(): React.ReactElement {
           <span>
             Revisé el resumen y confirmo que la información está correcta.
             <span className="mt-1 block text-xs text-ink-3">
-              Esto evita agregar el dependiente por accidente al llegar al último paso.
+              Esto evita agregar el jugador por accidente al llegar al último paso.
             </span>
           </span>
         </label>
@@ -717,11 +748,11 @@ function AddDependentContent(): React.ReactElement {
     const fechaFin = addMonthsIso(fechaInicio, months);
     return (
       <div className="space-y-section">
-        <p className="text-sm text-ink-2">El dependiente ya fue agregado. Seleccione el plan y registre su primer pago. Administración lo validará antes de activar la membresía.</p>
+        <p className="text-sm text-ink-2">{payForId !== null && createdDependentId === null ? "Elige el plan y registra el primer pago. Con él se crea la membresía; el club lo revisa y la activa." : "El jugador ya fue agregado. Selecciona el plan y registra el primer pago. Administración lo validará antes de activar la membresía."}</p>
         {method === "TRANSFERENCIA" && <HowToPay />}
         <label className="block text-sm text-ink-2" htmlFor="dependent-plan">Plan de membresía</label>
         <Select id="dependent-plan" className="input-field" value={planId} onChange={(e) => setPlanId(e.target.value)} disabled={submitting}>
-          <option value="">Seleccione un plan</option>
+          <option value="">Selecciona un plan</option>
           {plans.map((p) => <option key={p.id} value={p.id}>{planOptionLabel(p.categoria, p.precio)}</option>)}
         </Select>
         <fieldset className="flex flex-col gap-1.5">
@@ -770,7 +801,7 @@ function AddDependentContent(): React.ReactElement {
             type="file"
             aria-labelledby="dependent-voucher-label"
             accept="image/jpeg,image/png,application/pdf"
-            onChange={(e) => setVoucher(e.target.files?.[0] ?? null)}
+            onChange={(e) => void pickVoucher(e.target.files?.[0] ?? null)}
             disabled={submitting}
             className="hidden"
           />
@@ -806,6 +837,39 @@ function AddDependentContent(): React.ReactElement {
     );
   }
 
+  /** REG-03: who was added, and where their membership stands. */
+  function renderAdded(): React.ReactElement {
+    return (
+      <div data-testid="dependent-added" className="space-y-section">
+        <div className="rounded-card border border-line">
+          <div className="flex min-h-drow items-center gap-4 border-b border-line px-5 py-2">
+            <span className="w-[150px] flex-none text-2xs font-bold uppercase text-ink-3">Jugador</span>
+            <span className="flex-1 text-sm font-semibold text-ink">{addedName}</span>
+          </div>
+          <div className="flex min-h-drow items-center gap-4 px-5 py-2">
+            <span className="w-[150px] flex-none text-2xs font-bold uppercase text-ink-3">Membresía</span>
+            <span className="flex-1 text-sm font-semibold text-ink">Sin membresía todavía</span>
+          </div>
+        </div>
+        <p className="text-sm text-ink-2">
+          {canPayNow
+            ? "La membresía se crea con el primer pago. Regístralo ahora o hazlo luego desde Pagos; el club lo revisa y la activa."
+            : "La membresía se crea con el primer pago. Acércate al club para registrarlo y activarla."}
+        </p>
+        <div className="flex flex-wrap gap-3">
+          {canPayNow && (
+            <button type="button" className={buttonClasses("primary", "md")} onClick={() => setPayNow(true)}>
+              Registrar el primer pago
+            </button>
+          )}
+          <button type="button" className={buttonClasses("secondary", "md")} onClick={() => router.push("/student")}>
+            Ir a mi cuenta
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // ---- Render ----
 
   // REG-12: nothing here waits for the club to activate the account — only
@@ -818,8 +882,8 @@ function AddDependentContent(): React.ReactElement {
     // page's own hero banner is gone: it repeated the title and
     // subtitle that `AppShell`'s header row now renders once, above `<main>`.
     <AppShell
-      title="Agregar dependiente"
-      subtitle="Complete los pasos para agregar un nuevo dependiente a su cuenta de representante."
+      title="Agregar jugador (menor de edad)"
+      subtitle="Completa los pasos para agregar un nuevo jugador a tu cuenta de representante."
       // Issue #1396: through the shell's `back` slot, so the control precedes
       // the title in document order — `PageHeader` is drawn above `<main>`,
       // so a back control among the children lands after the title by
@@ -834,15 +898,19 @@ function AddDependentContent(): React.ReactElement {
       {/* Named stepper — the same contract as the other two wizards. The
           counter's wrapper `<div>` is gone: it carried nothing and made the
           `gap-page` column count a block where there was only a line. */}
+      {/* No wizard chrome when only the first payment of an existing
+          dependent is being made (`?pagar=`). */}
+      {!(payForId !== null && createdDependentId === null) && (<>
       <p className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong max-sm:hidden">
-        Paso {createdDependentId !== null ? 4 : currentIndex + 1} de {payNow ? 4 : ADD_DEPENDENT_STEP_ORDER.length}
+        Paso {showPayment ? 4 : showAdded ? 3 : currentIndex + 1} de {payNow ? 4 : ADD_DEPENDENT_STEP_ORDER.length}
       </p>
 
       <Stepper
-        label="Pasos para agregar un dependiente"
-        current={createdDependentId !== null ? 4 : currentIndex + 1}
+        label="Pasos para agregar un jugador"
+        current={showPayment ? 4 : showAdded ? 3 : currentIndex + 1}
         steps={[...ADD_DEPENDENT_STEP_ORDER.map((s) => ADD_DEPENDENT_SHORT_LABELS[s]), ...(payNow ? ["Pago"] : [])]}
       />
+      </>)}
 
       {/* Form card */}
       <div className="card p-6 sm:p-8 lg:flex-1">
@@ -852,11 +920,11 @@ function AddDependentContent(): React.ReactElement {
             class: Graduate has one 400 cut, and a CSS bold on top of it asks
             the browser to synthesise a stroke the face cannot draw. */}
         <h2 ref={stepTitleRef} tabIndex={-1} className="mb-6 font-display focus:outline-none text-lg uppercase leading-tight tracking-flat text-ink">
-          {createdDependentId !== null ? "Primer pago" : ADD_DEPENDENT_STEP_LABELS[step]}
+          {showPayment ? "Primer pago" : showAdded ? "Dependiente agregado" : ADD_DEPENDENT_STEP_LABELS[step]}
         </h2>
 
         <form onSubmit={handleConfirm}>
-          {createdDependentId !== null ? renderPaymentStep() : <>
+          {showPayment ? renderPaymentStep() : showAdded ? renderAdded() : <>
           {/* Step content */}
           {step === "child" && renderChildStep()}
           {step === "health" && renderHealthStep()}
@@ -881,7 +949,7 @@ function AddDependentContent(): React.ReactElement {
                 ) : (
                   <>
                     <CheckCircle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                    Agregar dependiente
+                    Agregar jugador (menor de edad)
                   </>
                 )}
               </button>
@@ -892,20 +960,20 @@ function AddDependentContent(): React.ReactElement {
       </div>
       </div>
       {/* FAM-09: the wizard help no longer applies once the dependent exists. */}
-      {createdDependentId === null && <div className="flex min-w-0 flex-col gap-page lg:sticky lg:top-4 lg:self-start">
+      {paymentDependentId === null && <div className="flex min-w-0 flex-col gap-page lg:sticky lg:top-4 lg:self-start">
       <aside aria-label="Antes de empezar" className="card flex flex-col gap-3 p-5">
         <h2 className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">Antes de empezar</h2>
         <ul className="flex flex-col gap-2.5 text-sm leading-relaxed text-ink-2">
-          <li>Tenga a mano el nombre completo, la fecha de nacimiento y el documento del dependiente.</li>
-          <li>La ficha médica puede completarse ahora o más tarde desde “Ficha médica”.</li>
-          <li>Si el dependiente ya está registrado, el sistema se lo indicará sin duplicar datos.</li>
+          <li>Ten a mano el nombre completo, la fecha de nacimiento y el documento del jugador.</li>
+          <li>La ficha médica es obligatoria: indica al menos el tipo de sangre.</li>
+          <li>Si el jugador ya está registrado, el sistema te lo indicará sin duplicar datos.</li>
         </ul>
       </aside>
-      <InfoPanel title="Cómo se agrega un dependiente">
+      <InfoPanel title="Cómo se agrega un jugador">
         <ol className="flex list-decimal flex-col gap-2 pl-4">
           <li>Estudiante: nombres, apellidos, fecha de nacimiento y cédula.</li>
           <li>Salud: tipo de sangre (obligatorio), enfermedades y alergias.</li>
-          <li>Confirmar: revise el resumen y agregue; el dependiente aparecerá en su cuenta.</li>
+          <li>Confirmar: revisa el resumen y agrega; el jugador aparecerá en tu cuenta.</li>
         </ol>
       </InfoPanel>
       </div>}

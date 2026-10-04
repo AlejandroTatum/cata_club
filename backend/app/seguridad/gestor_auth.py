@@ -393,7 +393,7 @@ class GestorAutenticacion:
         )
         if not es_superficie_limitada and not GestorAutenticacion.puede_acceder_modulos(db, usuario):
             raise PermisosInsuficientes(
-                "Su cuenta aún no está habilitada para acceder a este módulo.",
+                "Tu cuenta aún no está habilitada para acceder a este módulo.",
                 seguro_mostrar=True,
             )
         # Issue #1314: presencia ("conectados ahora") y actividad por franja.

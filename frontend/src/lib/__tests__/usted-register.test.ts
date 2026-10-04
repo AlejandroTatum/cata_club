@@ -1,28 +1,21 @@
 /**
- * App-wide "usted" register lock — issue #340 follow-up.
+ * App-wide «tú» register lock — issue #340 follow-up, flipped by QA4 S6.
  *
- * ProfilePage.test.tsx's "usted register" describe block only ever renders
- * `/profile`, so it can only ever catch a regression there. The audit that
- * fixed `/profile` found the SAME defect (voseo/tuteo copy) already shipped
- * in five other files — ProtectedRoute's error banner, the age-up
- * confirmation dialog, the trainer's session card, the dashboard's
- * pending-payments banner, and a BFF route's fallback error message — none
- * of which `/profile`'s render-and-assert test could ever see.
+ * The product speaks «tú» ("Inscríbete", "tu cuenta"). This lock bans voseo
+ * ("Revisá", "vos") and "usted" shapes ("usted", "Inscríbase") in every
+ * shipped source string. Legal pages (terminos, privacidad) stay in "usted"
+ * until the lawyer replies, so they are allowlisted below.
  *
- * This is a static sweep instead of a render sweep on purpose: rendering
- * every screen in the app would mean rebuilding every screen's auth/data
- * mocks just to read its copy, which is what the per-role ProfilePage check
- * already pays for ONE screen. `readableText()` (shared with
- * ui-vocabulary.test.ts, the sibling lock for backend-vocabulary leaks) pulls
- * out what a reader could actually see — quoted literals and JSX text nodes,
- * comments filtered out — without needing to render anything.
+ * ProfilePage.test.tsx only renders `/profile`, so it can only catch a
+ * regression there; this is a static sweep instead of a render sweep on
+ * purpose: rendering every screen would mean rebuilding every screen's
+ * auth/data mocks just to read its copy. `readableText()` (shared with
+ * ui-vocabulary.test.ts) pulls out what a reader could actually see — quoted
+ * literals and JSX text nodes, comments filtered out.
  *
- * Deliberately NOT excluding `app/api/**` the way ui-vocabulary.test.ts
- * does: a BFF route's fallback message is a string the backend never wrote,
- * and it reaches the screen verbatim on failure (issue #340's own list
- * included `app/api/membresias/pagos/persona/[id]/route.ts`'s "No se
- * pudieron cargar tus pagos."). Vocabulary-leak reasoning ("this is server-
- * to-server") doesn't apply to a register defect authored in this repo.
+ * Deliberately NOT excluding `app/api/**`: a BFF route's fallback message is
+ * a string the backend never wrote, and it reaches the screen verbatim on
+ * failure.
  */
 
 import { describe, it, expect } from "vitest";
@@ -50,11 +43,29 @@ function templateLiterals(text: string): string[] {
   return lines.flatMap((line) => line.match(/`[^`\n]{4,}`/g) ?? []);
 }
 
+/**
+ * Blanks out module specifiers — `from "x"`, `import "x"`, `import("x")`,
+ * `require("x")` — which are code, not copy. Scoped to those positions so a
+ * string that merely LOOKS like a path ("Use/mezcle", "confirme") is still
+ * checked as copy.
+ */
+function withoutModuleSpecifiers(text: string): string {
+  return text.replace(
+    /\b(from\s+|import\s+|import\s*\(\s*|require\s*\(\s*)(["'])[^"'\n]*\2/g,
+    '$1""',
+  );
+}
+
+/** Legal pages stay in "usted" until the lawyer replies (QA4 S6). */
+const USTED_ALLOWLIST = ["app/terminos/", "app/privacidad/"];
+
 function findOffenders(): string[] {
-  return sourceFiles(SRC).flatMap((path) => {
-    const text = readFileSync(path, "utf8");
+  return sourceFiles(SRC, { exclude: USTED_ALLOWLIST }).flatMap((path) => {
+    const text = withoutModuleSpecifiers(readFileSync(path, "utf8"));
     return [...readableText(text), ...templateLiterals(text)]
       .filter((literal) => {
+        // The "use client"/"use server" directives are code, not copy.
+        if (/^"use (client|server)"$/.test(literal.trim())) return false;
         const regex = buildUstedRegisterRegex();
         return regex.test(literal);
       })
@@ -62,37 +73,89 @@ function findOffenders(): string[] {
   });
 }
 
-describe("usted register — app-wide copy sweep (issue #340 follow-up)", () => {
+describe("tú register — app-wide copy sweep (issue #340 follow-up, QA4 S6)", () => {
   it("finds source files to check at all", () => {
     // Guards the guard: a broken walk makes the assertion below vacuous.
     expect(sourceFiles(SRC).length).toBeGreaterThan(50);
   });
 
-  it("recognises the voseo/tuteo shapes this audit named", () => {
-    // A fresh regex per assertion: `buildUstedRegisterRegex()` returns a
-    // global-flagged instance, and `.test()` advances that instance's own
-    // `lastIndex` on every call — reusing one across several input strings
-    // makes later assertions search from the wrong offset and silently
-    // under-match. `findOffenders()` below already builds fresh per literal;
-    // this test has to follow the same rule to test the regex honestly.
-    expect(buildUstedRegisterRegex().test("Revisá el resumen")).toBe(true);
-    // The shape this sweep ran green past until the word list grew: the
-    // #666 cap message shipped "Reducí el monto ingresado." in #679.
-    expect(buildUstedRegisterRegex().test("Reducí el monto ingresado.")).toBe(true);
-    expect(buildUstedRegisterRegex().test("Reduzca el monto ingresado.")).toBe(false);
-    expect(buildUstedRegisterRegex().test("tu cuenta")).toBe(true);
-    expect(buildUstedRegisterRegex().test("vos podés")).toBe(true);
-    expect(buildUstedRegisterRegex().test("apenas te lo asignen, entras directo")).toBe(true);
-    expect(buildUstedRegisterRegex().test("Estás preguntando muy seguido")).toBe(true);
-    // "usted" forms of the exact same verbs must NOT trip the lock.
-    expect(buildUstedRegisterRegex().test("su cuenta")).toBe(false);
-    expect(buildUstedRegisterRegex().test("entra directamente")).toBe(false);
-    expect(buildUstedRegisterRegex().test("está disponible")).toBe(false);
-    // "estas"/"esta" (demonstratives, no accent) are not the verb "estás".
-    expect(buildUstedRegisterRegex().test("estas seis fichas")).toBe(false);
+  it("allowlists the legal pages and nothing else", () => {
+    const scanned = sourceFiles(SRC, { exclude: USTED_ALLOWLIST });
+    expect(scanned.some((p) => p.includes("app/terminos/"))).toBe(false);
+    expect(scanned.some((p) => p.includes("app/privacidad/"))).toBe(false);
+    expect(scanned.some((p) => p.includes("app/trainer/"))).toBe(true);
   });
 
-  it("leaves no voseo/tuteo shape in shipped copy anywhere in the app", () => {
+  it("recognises the voseo and usted shapes", () => {
+    // A fresh regex per assertion: `buildUstedRegisterRegex()` returns a
+    // global-flagged instance whose `.test()` advances its own `lastIndex`.
+    const banned = (text: string) => buildUstedRegisterRegex().test(text);
+    // Voseo stays banned.
+    expect(banned("Revisá el resumen")).toBe(true);
+    expect(banned("Reducí el monto ingresado.")).toBe(true);
+    expect(banned("vos podés")).toBe(true);
+    // Usted is banned: pronoun and imperatives.
+    expect(banned("Usted puede entrar")).toBe(true);
+    expect(banned("ustedes")).toBe(true);
+    expect(banned("Inscríbase aquí")).toBe(true);
+    expect(banned("Ingrese su correo")).toBe(true);
+    expect(banned("Inténtelo de nuevo")).toBe(true);
+    expect(banned("Reduzca el monto ingresado.")).toBe(true);
+    expect(banned("Comuníquese con el club")).toBe(true);
+    expect(banned("Para que sea segura, alárguela o mezcle números")).toBe(true);
+    expect(banned("Evite las contraseñas más usadas")).toBe(true);
+    expect(banned("Apruébelas desde Pagos")).toBe(true);
+    expect(banned("Gestione su cuenta")).toBe(true);
+    // Tú forms pass.
+    expect(banned("tu cuenta")).toBe(false);
+    expect(banned("Inscríbete aquí")).toBe(false);
+    expect(banned("Ingresa tu correo")).toBe(false);
+    expect(banned("apenas te lo asignen, entras directo")).toBe(false);
+    expect(banned("Estás preguntando muy seguido")).toBe(false);
+    expect(banned("Inténtalo de nuevo")).toBe(false);
+    expect(banned("Reduce el monto ingresado.")).toBe(false);
+    expect(banned("Alárgala o mezcla números")).toBe(false);
+    expect(banned("Evita las contraseñas más usadas")).toBe(false);
+    expect(banned("la escuela y la vela")).toBe(false);
+    // "su"/"sus" are ordinary possessives, not banned.
+    expect(banned("sus datos y su equipo")).toBe(false);
+    // "cree" (indicative "believes") and "estas" (demonstrative) are not flagged.
+    expect(banned("el club cree que")).toBe(false);
+    expect(banned("estas seis fichas")).toBe(false);
+  });
+
+  it("only exempts real module specifiers, not path-like copy", () => {
+    const banned = (text: string) => buildUstedRegisterRegex().test(text);
+    const stripped = withoutModuleSpecifiers(
+      'import { x } from "@/lib/use-numeric-field-masking";\nconst a = require("./revise");\nconst b = "Ingrese";',
+    );
+    expect(stripped).not.toContain("use-numeric");
+    expect(stripped).not.toContain("./revise");
+    // The unrelated string literal survives and is still flagged.
+    expect(stripped).toContain('"Ingrese"');
+    expect(banned(stripped)).toBe(true);
+    // A bare path-like word is copy when it is not a specifier.
+    expect(withoutModuleSpecifiers('const label = "Ingrese";')).toContain("Ingrese");
+    expect(banned('"Ingrese/cambie"')).toBe(true);
+  });
+
+  it("flags usted imperatives only in imperative position", () => {
+    const banned = (text: string) => buildUstedRegisterRegex().test(text);
+    // Third-person subjunctives in tú copy pass.
+    expect(banned("para que el club revise el pago")).toBe(false);
+    expect(banned("cuando se complete el registro")).toBe(false);
+    expect(banned("hasta que el club confirme tu pago")).toBe(false);
+    expect(banned("so you can use the app")).toBe(false);
+    // Real usted copy is still caught: sentence start, after «por favor»,
+    // after a comma, and in a coordinated instruction.
+    expect(banned("Revise el resumen")).toBe(true);
+    expect(banned("Por favor confirme su correo")).toBe(true);
+    expect(banned("Si no llega, use otro correo")).toBe(true);
+    expect(banned("Complete el formulario. Luego cancele")).toBe(true);
+    expect(banned("alárguela o mezcle números")).toBe(true);
+  });
+
+  it("leaves no voseo or usted shape in shipped copy anywhere in the app", () => {
     expect(findOffenders()).toEqual([]);
   });
 });

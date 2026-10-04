@@ -56,7 +56,7 @@ vi.mock("@/services/api", () => ({
 installAddDependentHarness();
 beforeEach(() => vi.mocked(crearRepresentadoPropio).mockReset());
 
-const NOTICE_TEXT = /al guardar, su cuenta pasa a ser de representante/i;
+const NOTICE_TEXT = /al guardar, tu cuenta pasa a ser de representante/i;
 
 function fillChildStep(): void {
   fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Mateo" } });
@@ -105,10 +105,10 @@ describe("the role-change notice only appears for a non-representative caller", 
     vi.mocked(inscribirRepresentadoConPago).mockResolvedValue({ id: 91 } as Awaited<ReturnType<typeof inscribirRepresentadoConPago>>);
     render(<AddDependentPage />);
     goToSummaryStep();
-    fireEvent.change(screen.getByLabelText(/cuándo desea pagar/i), { target: { value: "now" } });
+    fireEvent.change(screen.getByLabelText(/cuándo quieres pagar/i), { target: { value: "now" } });
     fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.click(screen.getByRole("button", { name: /agregar dependiente/i }));
-    await waitFor(() => expect(screen.getByText(/el dependiente ya fue agregado/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /agregar jugador/i }));
+    await waitFor(() => expect(screen.getByText(/el jugador ya fue agregado/i)).toBeInTheDocument());
     expect(inscribirRepresentadoConPago).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText(/plan de membresía/i), { target: { value: "3" } });
     fireEvent.change(screen.getByLabelText(/medio de pago/i), { target: { value: "EFECTIVO" } });
@@ -131,7 +131,7 @@ describe("the role-change notice only appears for a non-representative caller", 
     render(<AddDependentPage />);
     goToSummaryStep();
     fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.click(screen.getByRole("button", { name: /agregar dependiente/i }));
+    fireEvent.click(screen.getByRole("button", { name: /agregar jugador/i }));
 
     await waitFor(() => expect(crearRepresentadoPropio).toHaveBeenCalledTimes(1));
     expect(crearRepresentadoPropio).toHaveBeenCalledWith(
@@ -148,7 +148,7 @@ describe("the add-dependent rail guide", () => {
 
     expect(screen.getByRole("complementary", { name: "Antes de empezar" })).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Cómo se agrega un dependiente" }),
+      screen.getByRole("heading", { name: "Cómo se agrega un jugador" }),
     ).toBeInTheDocument();
   });
 });

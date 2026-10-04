@@ -22,7 +22,7 @@ function session(day: number, overrides: Partial<SessionSummary> = {}): SessionS
     fecha: `2026-06-${String(day).padStart(2, "0")}`,
     horario: "Lunes 15:00 — 16:00",
     horarioId: 1,
-    counts: { present: 3, absent: 1, late: 0, justified: 0, sick: 0, competition: 0 },
+    counts: { present: 3, absent: 1, late: 0, sick: 0, competition: 0 },
     total: 4,
     registradoPorNombre: "Carlos Mendoza",
     ...overrides,
@@ -81,7 +81,7 @@ describe("SessionHistoryList", () => {
     const { rerender } = render(
       <SessionHistoryList pageSize={10} sessions={[]} rangeInvalid={false} emptyAction={EMPTY_ACTION} />,
     );
-    expect(screen.getByText(/pase lista para que aparezca/i)).toBeInTheDocument();
+    expect(screen.getByText(/pasa lista para que aparezca/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Pasar lista" })).toBeInTheDocument();
 
     rerender(<SessionHistoryList pageSize={10} sessions={[]} rangeInvalid emptyAction={EMPTY_ACTION} />);

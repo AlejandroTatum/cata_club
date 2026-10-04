@@ -103,7 +103,7 @@ class RolServicio:
             return
         raise OperacionInvalida(
             f"No se puede {accion}: es el último administrador activo del "
-            "sistema y quedaría sin acceso de administración. Asigne ese rol "
+            "sistema y quedaría sin acceso de administración. Asigna ese rol "
             "a otra cuenta activa antes de continuar.",
             detalle_tecnico=(
                 f"contar_administradores_activos(excluir={usuario.id}) == 0"
@@ -118,8 +118,8 @@ class RolServicio:
         if usuario.persona_id != persona_id_solicitante:
             return
         raise OperacionInvalida(
-            "No puede quitarse a sí mismo el rol de administrador: perdería el "
-            "acceso de administración de inmediato. Pídale a otro "
+            "No puedes quitarte a ti mismo el rol de administrador: perderías el "
+            "acceso de administración de inmediato. Pídele a otro "
             "administrador que lo haga.",
             detalle_tecnico=f"solicitante persona_id={persona_id_solicitante} es el titular",
         )
@@ -132,8 +132,8 @@ class RolServicio:
         if persona_id_solicitante is None or persona_id != persona_id_solicitante:
             return
         raise OperacionInvalida(
-            "No puede desactivar su propia cuenta: perdería el acceso de "
-            "inmediato. Pídale a otro administrador que lo haga.",
+            "No puedes desactivar tu propia cuenta: perderías el acceso de "
+            "inmediato. Pídele a otro administrador que lo haga.",
             detalle_tecnico=f"solicitante persona_id={persona_id_solicitante} es el titular",
         )
 

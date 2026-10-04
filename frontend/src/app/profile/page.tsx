@@ -231,7 +231,7 @@ const STUDENT_SUMMARY_ROLES: ReadonlySet<UserRole> = new Set(["representante", "
 
 /** The one phone rule the profile states: the same local digits the field's own hint asks for. */
 const PHONE_PROFILE_MESSAGE =
-  "Escriba su celular de 9 dígitos que empieza con 9 (por ejemplo, 991234567) o su fijo con código de provincia (por ejemplo, 42345678). Es opcional.";
+  "Escribe tu celular de 9 dígitos que empieza con 9 (por ejemplo, 991234567) o tu fijo con código de provincia (por ejemplo, 42345678). Es opcional.";
 
 const ADMIN_SHORTCUTS: RoleShortcut[] = [
   { title: "Panel de Control", description: "Resumen del día del club", href: "/dashboard" },
@@ -241,24 +241,24 @@ const ADMIN_SHORTCUTS: RoleShortcut[] = [
 ];
 
 const TRAINER_SHORTCUTS: RoleShortcut[] = [
-  { title: "Mi día", description: "Sus próximas sesiones", href: "/trainer" },
+  { title: "Mi día", description: "Tus próximas sesiones", href: "/trainer" },
   { title: "Pasar lista", description: "Registrar la asistencia", href: "/trainer/attendance" },
-  { title: "Alumnos del club", description: "Consultar a sus alumnos", href: "/trainer/students" },
+  { title: "Jugadores del club", description: "Consultar a tus jugadores", href: "/trainer/students" },
 ];
 
 const STUDENT_SHORTCUTS: RoleShortcut[] = [
-  { title: "Mi cuenta", description: "Su resumen y próximas sesiones", href: "/student" },
-  { title: "Pagos", description: "Sus cuotas y comprobantes", href: "/student/payments" },
-  { title: "Asistencias", description: "Su historial de entrenamientos", href: "/student/attendance" },
-  { title: "Ficha médica", description: "Mantener sus datos de salud", href: "/student/medical-record" },
+  { title: "Mi cuenta", description: "Tu resumen y próximas sesiones", href: "/student" },
+  { title: "Pagos", description: "Tus cuotas y comprobantes", href: "/student/payments" },
+  { title: "Asistencias", description: "Tu historial de entrenamientos", href: "/student/attendance" },
+  { title: "Ficha médica", description: "Mantener tus datos de salud", href: "/student/medical-record" },
 ];
 
 const REPRESENTANTE_SHORTCUTS: RoleShortcut[] = [
-  { title: "Mi cuenta", description: "El resumen de su familia", href: "/student" },
+  { title: "Mi cuenta", description: "El resumen de tu familia", href: "/student" },
   { title: "Pagos", description: "Cuotas y comprobantes", href: "/student/payments" },
-  { title: "Asistencias", description: "Entrenamientos de sus representados", href: "/student/attendance" },
-  { title: "Ficha médica", description: "Datos de salud de sus representados", href: "/student/medical-record" },
-  { title: "Agregar estudiante", description: "Sumar a otra persona a su cargo", href: "/student/add-dependent" },
+  { title: "Asistencias", description: "Entrenamientos de tus representados", href: "/student/attendance" },
+  { title: "Ficha médica", description: "Datos de salud de tus representados", href: "/student/medical-record" },
+  { title: "Agregar jugador (menor de edad)", description: "Sumar a otra persona a tu cargo", href: "/student/add-dependent" },
 ];
 
 function shortcutsForRole(role: UserRole): RoleShortcut[] {
@@ -292,7 +292,7 @@ function describeMembership(
   };
 }
 
-const NO_MEMBERSHIP_FALLBACK = "No disponible — consulte con administración";
+const NO_MEMBERSHIP_FALLBACK = "No disponible — consulta con administración";
 
 /**
  * Per-role copy for the workspace lede and "Información de tu rol" —
@@ -317,28 +317,28 @@ const ROLE_COPY: Record<
   }
 > = {
   admin: {
-    lede: "Revise sus datos y mantenga segura su cuenta.",
+    lede: "Revisa tus datos y mantén segura tu cuenta.",
     roleCaption: "Rol asignado a esta cuenta",
     roleTitle: "Cuenta administrativa",
     roleText: () =>
       "Esta cuenta tiene el rol de Administrador. Los datos de los miembros se gestionan desde Miembros, en el menú.",
   },
   trainer: {
-    lede: "Revise su información de contacto y el acceso a su cuenta.",
-    roleCaption: "Información de su perfil",
+    lede: "Revisa tu información de contacto y el acceso a tu cuenta.",
+    roleCaption: "Información de tu perfil",
     roleTitle: "Perfil de entrenador",
     roleText: () =>
-      "Su cuenta está identificada con el rol de Entrenador. El resto de la información operativa aparece en sus pantallas correspondientes.",
+      "Tu cuenta está identificada con el rol de Entrenador. El resto de la información operativa aparece en tus pantallas correspondientes.",
   },
   estudiante: {
-    lede: "Consulte sus datos de cuenta y la información disponible de su portal.",
+    lede: "Consulta tus datos de cuenta y la información disponible de tu portal.",
     roleCaption: "Datos del portal estudiantil",
     roleTitle: "Perfil estudiantil",
-    roleText: () => "Estos datos describen la cuenta del estudiante.",
+    roleText: () => "Estos datos describen la cuenta del jugador.",
   },
   representante: {
-    lede: "Administre sus datos de cuenta y revise las personas representadas.",
-    roleCaption: "Datos disponibles para su cuenta",
+    lede: "Administra tus datos de cuenta y revisa las personas representadas.",
+    roleCaption: "Datos disponibles para tu cuenta",
     roleTitle: "Cuenta representante",
     roleText: (hasDependents) =>
       hasDependents
@@ -355,8 +355,8 @@ const ROLE_COPY: Record<
   // issue #762 closes for multi-role accounts. Their data is all here: the
   // staff branch reads `GET /api/auth/me`, which needs no role at all.
   unsupported: {
-    lede: "Revise sus datos y mantenga segura su cuenta.",
-    roleCaption: "Información de su cuenta",
+    lede: "Revisa tus datos y mantén segura tu cuenta.",
+    roleCaption: "Información de tu cuenta",
     roleTitle: "Cuenta",
     roleText: () => "Esta cuenta no tiene un rol reconocido asignado.",
   },
@@ -774,14 +774,14 @@ function MembershipCard({
   return (
     <section data-testid="profile-membership" className="card flex flex-none flex-col overflow-hidden">
       <SectionHead
-        title="Su membresía"
+        title="Tu membresía"
         icon={<BadgeCheck size={ICON.sm} strokeWidth={1.5} />}
         tone="ball"
       />
       {coverageEnd && <CoverageMeter daysLeft={daysUntil(coverageEnd, clubToday())} />}
       {plan && <PanelFact label="Plan">{plan}</PanelFact>}
       {!modalidadIsRedundant && <PanelFact label="Modalidad">{modalidadLabel}</PanelFact>}
-      {desde && <PanelFact label="Socio desde">{desde}</PanelFact>}
+      {desde && <PanelFact label="Jugador desde">{desde}</PanelFact>}
       {hasta && <PanelFact label="Vigente hasta">{hasta}</PanelFact>}
     </section>
   );
@@ -1038,7 +1038,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     try {
       const destino = props.kind === "staff" ? props.accountEmail : correoDisplay;
       await solicitarRecuperacion(destino);
-      const message = `Le enviamos un enlace a ${destino} para cambiar su contraseña. Es válido por ${RESET_LINK_VALID_MINUTES} minutos.`;
+      const message = `Te enviamos un enlace a ${destino} para cambiar tu contraseña. Es válido por ${RESET_LINK_VALID_MINUTES} minutos.`;
       setPasswordMessage(message);
       setResendSecondsLeft(RESET_RESEND_COOLDOWN_SECONDS);
       showSuccess(message);
@@ -1311,7 +1311,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
               #204 first pass" note). */}
           <CardSection
             title="Datos personales"
-            subtitle="Información de su cuenta"
+            subtitle="Información de tu cuenta"
             icon={<User size={ICON.sm} strokeWidth={1.5} />}
             tone="info"
             testId="profile-column-info"
@@ -1341,7 +1341,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             </DetailRow>
             {props.kind === "student" && (
               <p className="border-t border-line bg-sunken px-5 py-3 text-xs text-ink-3-strong">
-                Solo el teléfono se puede editar desde aquí. Para corregir otro dato, escriba al
+                Solo el teléfono se puede editar desde aquí. Para corregir otro dato, escribe al
                 club.
               </p>
             )}
@@ -1353,7 +1353,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
           </CardSection>
 
           <CardSection
-            title="Información de su rol"
+            title="Información de tu rol"
             subtitle={roleCopy.roleCaption}
             icon={<IdCard size={ICON.sm} strokeWidth={1.5} />}
             tone={roleTone}
@@ -1402,7 +1402,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
                   </DetailRow>
                 )}
                 {self.representante && (
-                  <DetailRow label="Su representante">
+                  <DetailRow label="Tu representante">
                     {`${self.representante.nombres} ${self.representante.apellidos}`.trim()}
                   </DetailRow>
                 )}
@@ -1429,14 +1429,14 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
           {/* Where this role's work happens — the same tiles for every role. */}
           {roleShortcuts.length > 0 && (
             <CardSection
-              title="Atajos de su rol"
-              subtitle="Ir directo a su trabajo"
+              title="Atajos de tu rol"
+              subtitle="Ir directo a tu trabajo"
               icon={<Zap size={ICON.sm} strokeWidth={1.5} />}
               tone="ball"
               testId="profile-shortcuts"
             >
               <div className="p-4">
-                <RoleShortcuts shortcuts={roleShortcuts} tone={roleTone} label="Atajos de su rol" />
+                <RoleShortcuts shortcuts={roleShortcuts} tone={roleTone} label="Atajos de tu rol" />
               </div>
             </CardSection>
           )}
@@ -1447,7 +1447,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
               representante this is the reason to open the page at all. */}
           {props.kind === "student" && props.role === "representante" && (
             <CardSection
-              title="Estudiantes a mi cargo"
+              title="Jugadores a mi cargo"
               icon={<Users size={ICON.sm} strokeWidth={1.5} />}
               tone="info"
               testId="profile-dependants"
@@ -1470,7 +1470,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
                 </>
               ) : (
                 <p className="px-5 py-4 text-sm text-ink-2">
-                  Todavía no hay estudiantes representados vinculados a esta cuenta.
+                  Todavía no hay jugadores representados vinculados a esta cuenta.
                 </p>
               )}
             </CardSection>
@@ -1494,7 +1494,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
                   icon={<Lock size={ICON.sm} strokeWidth={1.5} />}
                   tone="ball"
                   title={requestingPassword ? "Enviando…" : "Restablecer por correo"}
-                  description="Le enviamos un enlace para restablecer su contraseña"
+                  description="Te enviamos un enlace para restablecer tu contraseña"
                   onClick={() => void handleChangePassword()}
                   disabled={requestingPassword || resendSecondsLeft > 0}
                 />
@@ -1509,7 +1509,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
                   icon={<Monitor size={ICON.sm} strokeWidth={1.5} />}
                   tone="warn"
                   title={invalidatingSessions ? "Cerrando…" : "Cerrar otras sesiones"}
-                  description="Cierra su sesión en todos los demás dispositivos; este equipo sigue conectado"
+                  description="Cierra tu sesión en todos los demás dispositivos; este equipo sigue conectado"
                   onClick={() => setConfirmingInvalidation(true)}
                   disabled={invalidatingSessions}
                 />
@@ -1533,7 +1533,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
               open={confirmingInvalidation}
               variant="danger"
               title="Cerrar otras sesiones"
-              message="Se cerrará su sesión en todos los demás dispositivos y navegadores. Este equipo seguirá conectado. ¿Desea continuar?"
+              message="Se cerrará tu sesión en todos los demás dispositivos y navegadores. Este equipo seguirá conectado. ¿Quieres continuar?"
               confirmLabel="Cerrar otras sesiones"
               cancelLabel="Cancelar"
               onConfirm={() => void handleInvalidateOtherSessions()}
@@ -1593,7 +1593,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
       {/* The rail: who this account is at a glance, the club's side of it
           (membership) and how to keep it safe — always visible. */}
       <div className="grid min-w-0 content-start gap-5">
-        <RailCard title="Su cuenta" icon={<User size={ICON.sm} strokeWidth={1.5} />} tone="neutral">
+        <RailCard title="Tu cuenta" icon={<User size={ICON.sm} strokeWidth={1.5} />} tone="neutral">
           <AccountSummary
             memberSince={fechaCreacion ? formatDate(fechaCreacion) : null}
             active={props.kind === "staff"}
@@ -1602,18 +1602,18 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
         {selfMembership && (
           <MembershipCard membership={selfMembership} coverageEnd={coverageEnd} />
         )}
-        <RailCard title="Cómo proteger su cuenta" icon={<ShieldCheck size={ICON.sm} strokeWidth={1.5} />} tone="coal">
+        <RailCard title="Cómo proteger tu cuenta" icon={<ShieldCheck size={ICON.sm} strokeWidth={1.5} />} tone="coal">
           <ul className="grid list-disc gap-2 pl-4">
-            <li>Use una contraseña que no repita en otros sitios y cámbiela si sospecha de un acceso ajeno.</li>
-            <li>Si inició sesión en un equipo compartido, use «Cerrar sesión» al terminar.</li>
-            <li>Revise «Sus sesiones»: si ve un equipo que no reconoce, use «Cerrar otras sesiones».</li>
-            <li>No comparta su contraseña ni el enlace de cambio que le llega por correo.</li>
-            <li>El correo de acceso lo gestiona el club; para cambiarlo, escriba a administración.</li>
+            <li>Usa una contraseña que no repitas en otros sitios y cámbiala si sospechas de un acceso ajeno.</li>
+            <li>Si iniciaste sesión en un equipo compartido, usa «Cerrar sesión» al terminar.</li>
+            <li>Revisa «Tus sesiones»: si ves un equipo que no reconoces, usa «Cerrar otras sesiones».</li>
+            <li>No compartas tu contraseña ni el enlace de cambio que te llega por correo.</li>
+            <li>El correo de acceso lo gestiona el club; para cambiarlo, escribe a administración.</li>
           </ul>
         </RailCard>
         <RailCard title="Qué hacer si necesita ayuda" icon={<LifeBuoy size={ICON.sm} strokeWidth={1.5} />} tone="ball">
           <p>
-            Revise las respuestas en{" "}
+            Revisa las respuestas en{" "}
             <Link
               href="/ayuda"
               className="font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink"
@@ -1622,8 +1622,8 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             </Link>
             .
           </p>
-          <p>Si no la encuentra, use «Reportar un problema» en el menú lateral.</p>
-          <p>Para corregir su correo, nombres o rol, escriba a la administración del club.</p>
+          <p>Si no la encuentras, usa «Reportar un problema» en el menú lateral.</p>
+          <p>Para corregir tu correo, nombres o rol, escribe a la administración del club.</p>
         </RailCard>
       </div>
       </div>
@@ -1713,7 +1713,7 @@ function ProfileContent(): React.ReactElement | null {
         if (!cancelled) {
           setStaffState({
             status: "error",
-            message: toErrorMessage(error, "No se pudo cargar su perfil."),
+            message: toErrorMessage(error, "No se pudo cargar tu perfil."),
           });
         }
       });
@@ -1740,7 +1740,7 @@ function ProfileContent(): React.ReactElement | null {
         if (!cancelled) {
           setStudentState({
             status: "error",
-            message: toErrorMessage(error, "No se pudo cargar su cuenta."),
+            message: toErrorMessage(error, "No se pudo cargar tu cuenta."),
           });
         }
       });
@@ -1839,7 +1839,7 @@ function ProfileContent(): React.ReactElement | null {
       {pending.status === "loading" ? (
         <LoadingState
           className="min-h-[50vh] justify-center"
-          label={isStudentRole ? "Cargando su cuenta…" : "Cargando perfil…"}
+          label={isStudentRole ? "Cargando tu cuenta…" : "Cargando perfil…"}
         />
       ) : (
         <ErrorState

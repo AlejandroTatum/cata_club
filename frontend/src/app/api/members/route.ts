@@ -47,6 +47,7 @@ type MembershipMaps = {
 type BackendDeudaBulkItem = {
   membresiaId: number;
   mesesAdeudados: number;
+  ultimaCoberturaFin?: string | null;
   montoMensual: string;
 };
 
@@ -139,6 +140,7 @@ async function fetchDebtByMembership(
       debts.set(item.membresiaId, {
         mesesAdeudados: item.mesesAdeudados,
         montoMensual: Number(item.montoMensual),
+        ultimaCoberturaFin: item.ultimaCoberturaFin ?? null,
       });
     }
   }

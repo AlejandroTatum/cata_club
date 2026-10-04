@@ -52,9 +52,9 @@ import { ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import {
   fetchAttendanceRecords,
-  fetchRosterDeTodosLosHorarios,
+  fetchConteosPorHorario,
   fetchTrainingSchedules,
-  type AlumnoHorario,
+  type ConteoHorario,
 } from "@/services/api";
 import { buildEnrolledCountsByHorario } from "@/app/trainer/trainer-day-utils";
 import AttendanceFilters, {
@@ -188,23 +188,23 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
   // Enrolled students per horario let the rail tell a partial list from a
   // complete one (ENT-13). Best effort: without the roster the rail simply
   // keeps counting any list as taken.
-  const [padron, setPadron] = useState<AlumnoHorario[] | null>(null);
+  const [conteos, setConteos] = useState<ConteoHorario[] | null>(null);
   useEffect(() => {
     let cancelled = false;
-    fetchRosterDeTodosLosHorarios()
+    fetchConteosPorHorario()
       .then((all) => {
-        if (!cancelled) setPadron(all);
+        if (!cancelled) setConteos(all);
       })
       .catch((err: unknown) => {
-        console.error("[trainer/attendance/history] fetchRosterDeTodosLosHorarios failed", err);
+        console.error("[trainer/attendance/history] fetchConteosPorHorario failed", err);
       });
     return (): void => {
       cancelled = true;
     };
   }, []);
   const inscritosPorHorario = useMemo(
-    () => (padron ? buildEnrolledCountsByHorario(schedules, padron) : undefined),
-    [padron, schedules],
+    () => (conteos ? buildEnrolledCountsByHorario(schedules, conteos) : undefined),
+    [conteos, schedules],
   );
 
   const scopedRecords = useMemo(() => narrowToHorarios(records, query), [records, query]);

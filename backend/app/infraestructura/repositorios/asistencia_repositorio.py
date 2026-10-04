@@ -81,7 +81,7 @@ class HorarioRepositorio:
         eliminar_o_error_de_dominio(
             self.db, horario,
             "No se puede eliminar este horario porque tiene asistencias "
-            "registradas o alumnos asignados. Elimine esos registros primero.",
+            "registradas o jugadores asignados. Elimina esos registros primero.",
         )
 
 
@@ -484,6 +484,33 @@ class AlumnoHorarioRepositorio:
             .where(*_condiciones_persona_operativa())
         )
         return list(self.db.execute(stmt).scalars().unique().all())
+
+    def contar_inscritos_por_horario(self) -> List[tuple[int, int]]:
+        """Inscritos ACTIVOS de cada horario con al menos uno, en UNA consulta
+        agregada: el mismo filtro que `listar_activos_de_todos_los_horarios`
+        pero sin traer filas (QA4 PERF-01)."""
+        stmt = (
+            select(AlumnoHorario.horario_id, func.count())
+            .join(Persona, Persona.id == AlumnoHorario.persona_id)
+            .where(*_condiciones_persona_operativa())
+            .group_by(AlumnoHorario.horario_id)
+            .order_by(AlumnoHorario.horario_id)
+        )
+        return [(horario_id, total) for horario_id, total in self.db.execute(stmt).all()]
+
+    def listar_persona_ids_por_horario(self) -> dict[int, list[int]]:
+        """Ids de los inscritos ACTIVOS de cada horario (mismo filtro que
+        `contar_inscritos_por_horario`), sin cargar a las personas."""
+        stmt = (
+            select(AlumnoHorario.horario_id, AlumnoHorario.persona_id)
+            .join(Persona, Persona.id == AlumnoHorario.persona_id)
+            .where(*_condiciones_persona_operativa())
+            .order_by(AlumnoHorario.horario_id, AlumnoHorario.persona_id)
+        )
+        ids: dict[int, list[int]] = {}
+        for horario_id, persona_id in self.db.execute(stmt).all():
+            ids.setdefault(horario_id, []).append(persona_id)
+        return ids
 
     def contar_por_horario(self, horario_id: int) -> int:
         """Total de alumnos ACTIVOS del horario: el mismo filtro que

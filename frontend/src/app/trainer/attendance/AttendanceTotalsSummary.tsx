@@ -3,7 +3,7 @@ import { ATTENDANCE_STATUS_CHART_COLORS } from "@/app/dashboard/dashboard-utils"
 import { countByState, type SessionStudent } from "./attendance-utils";
 import type { EstadoAsistencia } from "@/types/domain";
 
-const TOTAL_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "sick", "competition", "absent"];
+const TOTAL_ORDER: EstadoAsistencia[] = ["present", "late", "sick", "competition", "absent"];
 
 interface AttendanceTotalsSummaryProps {
   students: SessionStudent[];
