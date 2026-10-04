@@ -35,7 +35,6 @@ import { useReportProblem } from "@/components/report-problem/useReportProblem";
 import { useAuth } from "@/contexts/AuthContext";
 import { backHrefForRole } from "@/lib/auth-utils";
 import type { UserRole } from "@/types/domain";
-import { cn } from "@/components/ui/cn";
 import HowToPay from "@/components/payments/HowToPay";
 import { faqSectionsFor } from "./faq-content";
 import { SECTION_ACCENT } from "./section-accent";
@@ -89,9 +88,6 @@ function AnswerWithLink({ question, answer }: { question: string; answer: string
   );
 }
 
-/** Rows share the viewport's height left under the page header (no dead band). */
-const FILL_SCREEN = "xl:min-h-[calc(100dvh-25rem)] xl:auto-rows-fr";
-
 /**
  * Where each audience most often goes next. Destinations only — every one is
  * a route the role's own navigation already reaches.
@@ -139,7 +135,6 @@ export default function AyudaPage(): React.ReactElement {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string | null>(null);
 
-  const filtering = query.trim() !== "" || category !== null;
   const role = session?.user.role;
   const quickLinks = (role && QUICK_LINKS_BY_ROLE[role]) || PUBLIC_QUICK_LINKS;
   // Each person only ever sees the questions of their own role (#1581): the
@@ -206,12 +201,9 @@ export default function AyudaPage(): React.ReactElement {
        */}
       <div
         data-testid="faq-grid"
-        className={cn(
-          "grid grid-cols-1 gap-page xl:grid-cols-2",
-          // Unfiltered, the whole FAQ fills the screen beside the rail; a
-          // filtered result keeps its natural height instead of stretching.
-          filtering ? "xl:items-start" : FILL_SCREEN,
-        )}
+        // Each card keeps its own content height: stretching the short one
+        // to match its neighbour left a dead band under its last question.
+        className="grid grid-cols-1 items-start gap-page xl:grid-cols-2"
       >
         {visibleSections.map((section) => {
           const slug = sectionSlug(section.title);
