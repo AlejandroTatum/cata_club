@@ -152,6 +152,15 @@ describe("public legal documents", () => {
     }
   });
 
+  it("refers to itself as one document: no chapter calls another «independiente» or a separate Términos (#1615)", () => {
+    const text = termsBlocks.map((block) => block.text).join("\n");
+    expect(text).not.toMatch(/es independiente de los Términos/);
+    expect(text).not.toMatch(/Capítulo VIII de los Términos/);
+    expect(text).toContain("Este capítulo forma parte de los presentes Términos y condiciones; su aceptación es específica para el tratamiento de datos de salud");
+    expect(text).toContain("Este capítulo forma parte de los presentes Términos y condiciones; su aceptación es específica para el uso de imagen");
+    expect(termsSummary.join("\n")).toContain("aceptar este documento, que incluye el consentimiento de datos de salud (Capítulo X) y el permiso de uso de imagen (Capítulo XI)");
+  });
+
   it.each([
     ["/consentimiento-salud", "/terminos#consentimiento-salud"],
     ["/permiso-imagen-fetm", "/terminos#permiso-imagen"],

@@ -7,7 +7,7 @@ import { heading, paragraph, type LegalBlock } from "./legal-content";
  */
 export const imageChapter: readonly LegalBlock[] = [
   heading("Propósito y alcance"),
-  paragraph("Este permiso es independiente de los Términos, condiciones y acuerdo de responsabilidad, pero su aceptación es obligatoria: se acepta junto con ellos y con el Consentimiento para el tratamiento de datos de salud, y sin él no se crea la cuenta. En este permiso, «usted» es el jugador de 15 años o más, o el representante legal del jugador menor de 15 años. Con él usted autoriza a Cata Club y a la Federación Ecuatoriana de Tenis de Mesa (FETM) a usar fotografías o videos del jugador en los usos que se indican a continuación."),
+  paragraph("Este capítulo forma parte de los presentes Términos y condiciones; su aceptación es específica para el uso de imagen y es obligatoria: se acepta junto con el resto de este documento, y sin ella no se crea la cuenta. En este permiso, «usted» es el jugador de 15 años o más, o el representante legal del jugador menor de 15 años. Con él usted autoriza a Cata Club y a la Federación Ecuatoriana de Tenis de Mesa (FETM) a usar fotografías o videos del jugador en los usos que se indican a continuación."),
   heading("Usos autorizados"),
   paragraph("1. Galería del club. Publicar imágenes del jugador en la galería de fotos de Cata Club en su plataforma, para mostrar sus actividades."),
   paragraph("2. Redes sociales del club. Publicar imágenes del jugador en las redes sociales de Cata Club."),

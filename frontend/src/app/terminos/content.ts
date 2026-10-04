@@ -143,7 +143,7 @@ export const legalBlocks: readonly LegalBlock[] = [
 export const summary: readonly string[] = [
   "La responsable es Lucía Catalina Cedillo Flor, propietaria de Cata Club; puede escribirle a cataclub.loja@proton.me.",
   "Solo el recibo del club prueba que un pago fue recibido y validado; el comprobante que usted sube no lo reemplaza.",
-  "Para crear una cuenta debe aceptar en conjunto estos términos, el consentimiento de datos de salud y el permiso de uso de imagen; puede retirarlos después, y el retiro vale hacia adelante.",
+  "Para crear una cuenta debe aceptar este documento, que incluye el consentimiento de datos de salud (Capítulo X) y el permiso de uso de imagen (Capítulo XI); puede retirarlos después, y el retiro vale hacia adelante.",
   "El aviso de privacidad es el Capítulo VIII: qué datos recogemos, para qué, quién los ve y cuánto tiempo se conservan.",
   "Cada aceptación guarda la versión, la fecha y su cuenta; nunca se acepta en su nombre.",
 ];
