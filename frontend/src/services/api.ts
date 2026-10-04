@@ -932,6 +932,113 @@ export async function fetchAttendanceCorrections(asistenciaId: number): Promise<
 }
 
 // ---------------------------------------------------------------------------
+// Correction requests (QA4 ENT-25)
+// ---------------------------------------------------------------------------
+
+export type CorrectionRequestStatus = "PENDIENTE" | "APROBADA" | "RECHAZADA";
+
+/** One trainer's request to correct a closed attendance row. A trainer lists
+ *  only their own; an administrator lists all (the backend decides). */
+export interface CorrectionRequest {
+  id: number;
+  asistenciaId: number;
+  personaId: number;
+  personaNombre: string;
+  horarioId: number;
+  /** "YYYY-MM-DD" of the session. */
+  fecha: string;
+  /** "Juvenil · lunes 15:00". */
+  horarioEtiqueta: string;
+  estadoActual: EstadoAsistencia;
+  estadoSolicitado: EstadoAsistencia;
+  motivo: string;
+  solicitadoPorId: number;
+  solicitadoPorNombre: string;
+  solicitadoEn: string;
+  estado: CorrectionRequestStatus;
+  resueltoPorNombre: string | null;
+  resueltoEn: string | null;
+  motivoResolucion: string | null;
+}
+
+const ESTADO_ASISTENCIA_FROM_BACKEND: Record<string, EstadoAsistencia> = {
+  PRESENTE: "present",
+  AUSENTE: "absent",
+  ATRASADO: "late",
+  ENFERMO: "sick",
+  COMPETENCIA: "competition",
+};
+
+interface RawCorrectionRequest
+  extends Omit<CorrectionRequest, "estadoActual" | "estadoSolicitado" | "resueltoPorNombre" | "resueltoEn" | "motivoResolucion"> {
+  estadoActual: string;
+  estadoSolicitado: string;
+  resueltoPorNombre?: string | null;
+  resueltoEn?: string | null;
+  motivoResolucion?: string | null;
+}
+
+function toCorrectionRequest(raw: RawCorrectionRequest): CorrectionRequest {
+  return {
+    ...raw,
+    estadoActual: ESTADO_ASISTENCIA_FROM_BACKEND[raw.estadoActual] ?? "present",
+    estadoSolicitado: ESTADO_ASISTENCIA_FROM_BACKEND[raw.estadoSolicitado] ?? "present",
+    resueltoPorNombre: raw.resueltoPorNombre ?? null,
+    resueltoEn: raw.resueltoEn ?? null,
+    motivoResolucion: raw.motivoResolucion ?? null,
+  };
+}
+
+export interface CorrectionRequestFilters {
+  estado?: CorrectionRequestStatus;
+  horarioId?: number;
+  fecha?: string;
+}
+
+/** List correction requests — `GET /api/attendance/correction-requests`. A
+ *  trainer gets only their own; an administrator gets all, oldest first. */
+export async function fetchCorrectionRequests(filters: CorrectionRequestFilters = {}): Promise<CorrectionRequest[]> {
+  const query = new URLSearchParams();
+  if (filters.estado) query.set("estado", filters.estado);
+  if (filters.horarioId !== undefined) query.set("horario_id", String(filters.horarioId));
+  if (filters.fecha) query.set("fecha", filters.fecha);
+  const suffix = query.size > 0 ? `?${query.toString()}` : "";
+  const rows = await request<RawCorrectionRequest[]>(apiEndpoint(`/attendance/correction-requests${suffix}`));
+  return rows.map(toCorrectionRequest);
+}
+
+/** The trainer asks administration to correct one filed row —
+ *  `POST /api/attendance/correction-requests`. */
+export async function createCorrectionRequest(data: {
+  asistenciaId: number;
+  estado: EstadoAsistencia;
+  motivo: string;
+}): Promise<CorrectionRequest> {
+  const raw = await request<RawCorrectionRequest>(apiEndpoint("/attendance/correction-requests"), {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return toCorrectionRequest(raw);
+}
+
+/** Administrator approves: the backend applies the audited correction. */
+export async function approveCorrectionRequest(id: number): Promise<CorrectionRequest> {
+  const raw = await request<RawCorrectionRequest>(apiEndpoint(`/attendance/correction-requests/${id}/approve`), {
+    method: "POST",
+  });
+  return toCorrectionRequest(raw);
+}
+
+/** Administrator rejects with a reason the trainer will read. */
+export async function rejectCorrectionRequest(id: number, motivo: string): Promise<CorrectionRequest> {
+  const raw = await request<RawCorrectionRequest>(apiEndpoint(`/attendance/correction-requests/${id}/reject`), {
+    method: "POST",
+    body: JSON.stringify({ motivo }),
+  });
+  return toCorrectionRequest(raw);
+}
+
+// ---------------------------------------------------------------------------
 // Horarios (Training Schedules) CRUD
 // ---------------------------------------------------------------------------
 

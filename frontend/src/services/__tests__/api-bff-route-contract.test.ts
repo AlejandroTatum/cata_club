@@ -75,6 +75,10 @@ import {
   fetchActividadResumen,
   fetchActividadAvanzadas,
   fetchClubPaymentInfo,
+  fetchCorrectionRequests,
+  createCorrectionRequest,
+  approveCorrectionRequest,
+  rejectCorrectionRequest,
 } from "../api";
 
 const API_ROOT = path.resolve(
@@ -230,6 +234,10 @@ describe("API client URLs resolve to a real BFF route handler", () => {
     ["marcarNotificacionLeida", () => marcarNotificacionLeida(7)],
     ["fetchAlumnosPorHorario", () => fetchAlumnosPorHorario(3)],
     ["fetchConteosPorHorario", () => fetchConteosPorHorario()],
+    ["fetchCorrectionRequests", () => fetchCorrectionRequests({ estado: "PENDIENTE", horarioId: 3, fecha: "2026-09-01" })],
+    ["createCorrectionRequest", () => createCorrectionRequest({ asistenciaId: 9, estado: "absent", motivo: "Faltó." })],
+    ["approveCorrectionRequest", () => approveCorrectionRequest(4)],
+    ["rejectCorrectionRequest", () => rejectCorrectionRequest(4, "No.")],
     ["fetchHorariosPorAlumno", () => fetchHorariosPorAlumno(2)],
     ["fetchRecentAttendanceSessions", () => fetchRecentAttendanceSessions()],
     ["fetchMembresiasPorPersona", () => fetchMembresiasPorPersona(2)],
