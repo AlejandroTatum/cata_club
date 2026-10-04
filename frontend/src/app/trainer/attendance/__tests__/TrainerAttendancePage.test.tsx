@@ -2483,27 +2483,19 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     expect(within(tiles).getByText("Presente").closest("li")).toHaveTextContent("2");
   });
 
-  /*
-   * Accessibility: the bar is decorative on its own, so its accessible name
-   * has to enunciate the four values a sighted reader gets from the bar
-   * itself. That requirement is unchanged — the SENTENCE is what moved.
-   *
-   * The receipt drew its own bar, with its own palette and its own wording,
-   * while "Últimas listas" and the history drew the same measurement with the
-   * panel's shared one. Both are gone into `SessionComposition`, so the four
-   * values now reach a screen reader in the same words wherever they are
-   * drawn, and the total comes with them.
-   */
-  it("gives the proportional bar an aria-label enunciating all four values", async () => {
+  // Issue #1579: the receipt's own ring is gone — the breakdown on the left
+  // already says the same numbers in text — so nothing image-like is left.
+  it("does not draw the session donut on the final receipt", async () => {
     mockRegisterAttendance.mockReset().mockResolvedValue({ createdCount: 3, failed: [] });
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await fileSession();
 
+    expect(screen.getByRole("complementary", { name: "Siguientes pasos" })).toBeInTheDocument();
     expect(
-      screen.getByRole("img", {
+      screen.queryByRole("img", {
         name: "3 presentes, 0 tardanzas, 0 enfermos, 0 competencias y 0 ausentes sobre 3 registros",
       }),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
   });
 
   // The issue's scoped fix: `page.tsx:1404`'s `!confirmed &&` guard hid the

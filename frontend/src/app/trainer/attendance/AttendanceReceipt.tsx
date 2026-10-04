@@ -6,7 +6,6 @@ import { formatDateTime } from "@/lib/format-utils";
 import type { RegisterAttendanceResult } from "@/services/api";
 import type { EstadoAsistencia } from "@/types/domain";
 import { formatSessionDateLabel, type SessionStudent } from "./attendance-utils";
-import SessionDonut from "./SessionDonut";
 import FailedRecordsNotice from "./FailedRecordsNotice";
 import SessionReceiptBreakdown from "./SessionReceiptBreakdown";
 
@@ -51,7 +50,7 @@ export default function AttendanceReceipt({
   attendanceHistoryHref,
   rosterError,
 }: AttendanceReceiptProps): React.ReactElement {
-  // The names under the ring are who got SAVED — a student whose record
+  // The names in the breakdown are who got SAVED — a student whose record
   // failed is named by the notice above, not filed under a state they do not
   // have on the server.
   const failedIds = new Set(result?.failed.map((f) => String(f.personaId)));
@@ -143,10 +142,10 @@ export default function AttendanceReceipt({
 
       <aside
         data-dash-col
-        className="flex flex-col gap-page lg:self-stretch"
+        className="flex flex-col gap-page lg:self-start"
         aria-label="Siguientes pasos"
       >
-        <div className="card flex flex-1 flex-col gap-4 p-5">
+        <div className="card flex flex-col gap-4 p-5">
           {selectedSchedule && (
             <div className="flex flex-col gap-0.5 border-b border-line pb-4">
               <p className="text-2xs font-bold uppercase tracking-wide text-ink-3">Sesión</p>
@@ -159,9 +158,6 @@ export default function AttendanceReceipt({
               )}
             </div>
           )}
-          <div className="flex flex-1 items-center justify-center border-b border-line pb-4">
-            <SessionDonut counts={receiptCounts} total={receiptTotal} />
-          </div>
           <p className="text-xs font-bold uppercase tracking-wide text-ink-3">Qué sigue</p>
           {/* One way back, not two — see the page's own note on why the
             frame's `BackLink` is the one that stays. */}
