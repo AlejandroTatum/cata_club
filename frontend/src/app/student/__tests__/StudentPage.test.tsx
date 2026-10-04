@@ -3076,6 +3076,26 @@ describe("StudentPage — QA4 family portal findings", () => {
     expect(within(cuota).getByRole("link", { name: /registrar un pago/i })).toBeInTheDocument();
   });
 
+  // FAM-11 — the notice speaks about the jugador when a representative views a dependent
+  it("words the rejected-payment notice about the dependent for a representative", async () => {
+    asGuardian();
+    mockFetchStudentPortal.mockResolvedValue({
+      self: null,
+      representados: [
+        { ...PORTAL.self!, personaId: "41", nombres: "Sofia", apellidos: "Vera", membership: membership({ personaId: 41, cubiertoHasta: "2020-01-01" }) },
+        { ...PORTAL.self!, personaId: "42", nombres: "Martín", apellidos: "Vera", membership: membership({ personaId: 42 }) },
+      ],
+      membershipPlans: [],
+    });
+    mockFetchPagosDePersona.mockResolvedValue([PAGO_RECHAZADO]);
+
+    render(<StudentPage />);
+
+    const cuota = await screen.findByTestId("student-cuota-card");
+    expect(await within(cuota).findByText(/El pago de Sofia de \$35,00 .* fue rechazado: Comprobante ilegible\./)).toBeInTheDocument();
+    expect(within(cuota).queryByText(/Tu pago/)).not.toBeInTheDocument();
+  });
+
   // FAM-01
   it("treats a representative with an INACTIVA own membership as having one: no join CTA, listed as a profile", async () => {
     asGuardian();

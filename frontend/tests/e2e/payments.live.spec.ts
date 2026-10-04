@@ -95,7 +95,7 @@ test("un socio registra un pago en efectivo y el historial lo conserva tras reca
   // tarjeta de resumen y en el texto de ayuda, y ahí siempre es visible.
   const pendingRow = page
     .getByTestId("student-payments-table")
-    .getByRole("listitem")
+    .locator(":scope > li")
     .filter({ hasText: "Por validar" })
     .filter({ hasText: /Efectivo/ });
   await expect(pendingRow.first()).toBeVisible({ timeout: 15_000 });

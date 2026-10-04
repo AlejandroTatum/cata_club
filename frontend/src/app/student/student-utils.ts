@@ -673,15 +673,22 @@ export function readCoverageStanding(
 
 import { formatCurrency, formatDate } from "@/lib/format-utils";
 
+/** Default subject of `describeRejectedPago`: the account holder's own view. */
+const OWN_PAGO_SUBJECT = { viewingOwnProfile: true, studentName: "" };
+
 /**
  * FAM-11: the sentence for a payment the club rejected, or `null`.
  *
  * Only the NEWEST payment counts: once the family registered another one (or it
  * was approved) the rejection is history, not something to act on.
+ *
+ * `subject` says whose payment it is. It defaults to the account holder's own
+ * view («Tu pago»); a representative viewing a dependent must pass
+ * `viewingOwnProfile: false` and the jugador's name («El pago de {name}»).
  */
 export function describeRejectedPago(
   pagos: Pick<PagoPersona, "estadoPago" | "fechaRegistro" | "monto" | "motivoRechazo">[],
-  subject: { viewingOwnProfile: boolean; studentName: string } = { viewingOwnProfile: true, studentName: "" },
+  subject: { viewingOwnProfile: boolean; studentName: string } = OWN_PAGO_SUBJECT,
 ): string | null {
   const latest = [...pagos].sort((a, b) => b.fechaRegistro.localeCompare(a.fechaRegistro))[0];
   if (!latest || latest.estadoPago !== "RECHAZADO") return null;
@@ -869,10 +876,11 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
   // suspended membership cannot be paid whatever the dates say — the club has
   // to reactivate it first. Paid coverage is not forfeited by a suspension.
   if (input.suspended) {
+    const coverageSubject = input.viewingOwnProfile ? "Tu cobertura" : `La cobertura de ${input.studentName}`;
     const coverage = coverageEnd
       ? (daysLeft ?? 0) < 0
-        ? ` ${input.viewingOwnProfile ? "Tu cobertura" : `La cobertura de ${input.studentName}`} venció el ${formatDate(coverageEnd)}.`
-        : ` ${input.viewingOwnProfile ? "Tu cobertura" : `La cobertura de ${input.studentName}`} sigue vigente hasta ${formatDate(coverageEnd)}.`
+        ? ` ${coverageSubject} venció el ${formatDate(coverageEnd)}.`
+        : ` ${coverageSubject} sigue vigente hasta ${formatDate(coverageEnd)}.`
       : "";
     const reason = input.motivoSuspension ? ` Motivo: ${input.motivoSuspension}.` : "";
     return {

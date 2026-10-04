@@ -1189,6 +1189,44 @@ describe("QA4 FAM-22 — the attendance breakdown covers every state", () => {
   });
 });
 
+describe("QA4 W3-4 — payment copy stays in «tú» and names the jugador", () => {
+  it("words the never-paid detail in tú", () => {
+    const result = describePaymentSituation(situation({ coverageEnd: null }), TODAY);
+
+    expect(result.kind).toBe("never-paid");
+    expect(result.detail).toContain("registras el pago del período que quieres cubrir");
+    expect(result.detail).not.toMatch(/tú registras|quiere cubrir/);
+  });
+
+  it("words the no-membership detail in tú", () => {
+    const result = describePaymentSituation(
+      situation({ hasMembership: false, coverageEnd: null, monthlyPrice: null, planName: null }),
+      TODAY,
+    );
+
+    expect(result.detail).toContain("después podrás renovarla desde aquí");
+    expect(result.detail).not.toContain("podrá renovarla");
+  });
+
+  it("names the jugador's lapsed coverage for a suspended dependent", () => {
+    const result = describePaymentSituation(
+      situation({ viewingOwnProfile: false, studentName: "Sofia", suspended: true, coverageEnd: "2026-07-01" }),
+      TODAY,
+    );
+
+    expect(result.detail).toContain("La cobertura de Sofia venció el 01/07/2026.");
+    expect(result.detail).not.toContain("Tu cobertura");
+  });
+
+  it("keeps «Tu cobertura» for the account holder's own suspended membership", () => {
+    const lapsed = describePaymentSituation(situation({ suspended: true, coverageEnd: "2026-07-01" }), TODAY);
+    const live = describePaymentSituation(situation({ suspended: true, coverageEnd: "2026-11-02" }), TODAY);
+
+    expect(lapsed.detail).toContain("Tu cobertura venció el 01/07/2026.");
+    expect(live.detail).toContain("Tu cobertura sigue vigente hasta 02/11/2026.");
+  });
+});
+
 describe("QA4 REG-26 — «el club», not «administración»", () => {
   it("sends a profile without membership to the club", () => {
     const result = describePaymentSituation(
