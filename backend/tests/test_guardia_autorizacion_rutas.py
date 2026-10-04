@@ -235,6 +235,8 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/asistencias/categorias"): frozenset({"ADMINISTRADOR"}),
     ("PUT", "/asistencias/categorias/{codigo}"): frozenset({"ADMINISTRADOR"}),
     ("DELETE", "/asistencias/categorias/{codigo}"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/asistencias/categorias/{codigo}/mover-y-eliminar"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/asistencias/categorias/{codigo}/mover-alumnos"): frozenset({"ADMINISTRADOR"}),
     # Publicación en la landing (`visible_en_landing`): mismo tier que el
     # resto de la escritura sobre el catálogo -- es una decisión editorial
     # del club, no operar la clase del día.
