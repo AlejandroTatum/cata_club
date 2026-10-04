@@ -164,6 +164,15 @@ describe("AttendancePeriodRail", () => {
     expect(rail).toHaveTextContent("Regla extra");
   });
 
+  it("omits the standing guide when showGuide is false", () => {
+    render(<AttendancePeriodRail {...baseProps} studentFiltered={false} showGuide={false} guideExtra={<p>Regla extra</p>} />);
+
+    const rail = screen.getByRole("complementary", { name: "Resumen del período" });
+    expect(within(rail).queryByRole("heading", { name: "Cómo leer el historial" })).not.toBeInTheDocument();
+    expect(rail).not.toHaveTextContent("Regla extra");
+    expect(rail).toHaveTextContent("Listas tomadas");
+  });
+
   it("replaces the schedule comparison with its explanation when a student is filtered", () => {
     render(<AttendancePeriodRail {...baseProps} studentFiltered />);
 

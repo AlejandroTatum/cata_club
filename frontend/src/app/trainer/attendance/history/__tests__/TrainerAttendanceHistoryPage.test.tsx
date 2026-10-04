@@ -728,11 +728,12 @@ describe("TrainerAttendanceHistoryPage — las tres cifras del período", () => 
     expect(link).toHaveAttribute("href", expect.stringContaining("fecha=2026-08-14"));
   });
 
-  it("lleva siempre una tarjeta de indicaciones «Cómo leer el historial» en el aside", async () => {
+  it("no lleva la tarjeta «Cómo leer el historial» en el aside", async () => {
     render(<TrainerAttendanceHistoryPage />);
 
     await screen.findAllByRole("row");
-    expect(screen.getByRole("heading", { name: "Cómo leer el historial" })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Resumen del período" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Cómo leer el historial" })).not.toBeInTheDocument();
   });
 
   it("rellena una lista corta con filas fantasma en vez de dejar el vacío bajo la tabla", async () => {
