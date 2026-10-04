@@ -19,6 +19,7 @@ import {
 import type { EstadoAsistencia } from "@/types/domain";
 import type { PaymentValidationRequest } from "@/services/api";
 import { formatCurrency } from "@/lib/format-utils";
+import { attendanceRatePercent, countsAsAttended } from "@/lib/attendance-rule";
 import { calendarIsoDate, clubIsoDate, clubTimeHHMM, clubToday } from "@/lib/club-date";
 import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
 import type { BadgeTone } from "@/components/ui/Badge";
@@ -167,8 +168,9 @@ export interface AttendanceWeekBar {
   /** "YYYY-MM-DD" of the first day in the window (inclusive). */
   startIso: string;
   total: number;
-  present: number;
-  /** Rounded 0-100 share of records marked present. 0 when the week is empty. */
+  /** Presente plus tardanza (`lib/attendance-rule`): the same rule as Asistencias. */
+  attended: number;
+  /** Rounded 0-100 share of records that count as attendance. 0 when the week is empty. */
   ratePercent: number;
 }
 
@@ -176,8 +178,8 @@ export interface FourWeekAttendance {
   /** Oldest window first, so the bars read left to right as time passes. */
   bars: AttendanceWeekBar[];
   total: number;
-  present: number;
-  /** Presence rate across the whole window. 0 when there are no records. */
+  attended: number;
+  /** Attendance rate across the whole window. 0 when there are no records. */
   ratePercent: number;
 }
 
@@ -214,7 +216,7 @@ export function buildFourWeekAttendance(
     return {
       startIso: calendarIsoDate(new Date(endOfToday - startOffsetDays * DAY_MS)),
       total: 0,
-      present: 0,
+      attended: 0,
       ratePercent: 0,
     };
   });
@@ -235,22 +237,22 @@ export function buildFourWeekAttendance(
     if (daysAgo < 0 || daysAgo >= weeks * 7) continue;
     const bar = bars[weeks - 1 - Math.floor(daysAgo / 7)];
     bar.total += 1;
-    if (record.estado === "present") bar.present += 1;
+    if (countsAsAttended(record.estado)) bar.attended += 1;
   }
 
   let total = 0;
-  let present = 0;
+  let attended = 0;
   for (const bar of bars) {
-    bar.ratePercent = bar.total > 0 ? Math.round((bar.present / bar.total) * 100) : 0;
+    bar.ratePercent = attendanceRatePercent(bar.attended, bar.total);
     total += bar.total;
-    present += bar.present;
+    attended += bar.attended;
   }
 
   return {
     bars,
     total,
-    present,
-    ratePercent: total > 0 ? Math.round((present / total) * 100) : 0,
+    attended,
+    ratePercent: attendanceRatePercent(attended, total),
   };
 }
 

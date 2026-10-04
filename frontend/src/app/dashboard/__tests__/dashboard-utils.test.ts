@@ -232,8 +232,40 @@ describe("buildFourWeekAttendance", () => {
       NOW,
     );
     expect(result.bars[3].ratePercent).toBe(50);
-    expect(result.ratePercent).toBe(50);
+    expect(result.ratePercent).toBe(75);
+    expect(result.attended).toBe(3);
     expect(result.total).toBe(4);
+  });
+
+  it("counts tardanza as attendance, like the Asistencias screen (ADMA-34)", () => {
+    const result = buildFourWeekAttendance(
+      [
+        buildRecord({ id: "1", fecha: "2026-07-23", estado: "present" }),
+        buildRecord({ id: "2", fecha: "2026-07-23", estado: "late" }),
+        buildRecord({ id: "3", fecha: "2026-07-23", estado: "absent" }),
+        buildRecord({ id: "4", fecha: "2026-07-23", estado: "absent" }),
+      ],
+      NOW,
+    );
+    expect(result.attended).toBe(2);
+    expect(result.bars[3].attended).toBe(2);
+    expect(result.bars[3].ratePercent).toBe(50);
+    expect(result.ratePercent).toBe(50);
+  });
+
+  it("keeps enfermo and competencia in the total but never as attendance (C1 semantics)", () => {
+    const result = buildFourWeekAttendance(
+      [
+        buildRecord({ id: "1", fecha: "2026-07-23", estado: "present" }),
+        buildRecord({ id: "2", fecha: "2026-07-23", estado: "sick" }),
+        buildRecord({ id: "3", fecha: "2026-07-23", estado: "competition" }),
+        buildRecord({ id: "4", fecha: "2026-07-23", estado: "late" }),
+      ],
+      NOW,
+    );
+    expect(result.total).toBe(4);
+    expect(result.attended).toBe(2);
+    expect(result.ratePercent).toBe(50);
   });
 
   it("never produces NaN for a week with no records", () => {
