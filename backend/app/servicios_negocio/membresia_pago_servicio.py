@@ -22,6 +22,7 @@ from app.dominio.excepciones import (
     EntidadNoEncontrada, MembresiaPendienteDePago, NombreDuplicado, OperacionInvalida, PermisosInsuficientes, RecursoEnUso, ServicioNoDisponible,
 )
 from app.dominio.nombre_propio import nombre_completo
+from app.infraestructura.correo_deuda_regularizada import enviar_deuda_regularizada
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.membresia_repositorio import (
@@ -1781,16 +1782,21 @@ class PagoServicio:
         si es un menor sin cuenta. Best-effort: la regularización ya está
         commiteada y ningún aviso fallido puede revertirla ni convertirla en
         error."""
+        vigente_hasta = self._fecha_fin_maxima_combinada(pago.membresia_id) or pago.fecha_fin
+        # Tipo PAGO_APROBADO a propósito: `Notificacion.tipo` es un enum de
+        # base de datos y agregar un valor exige migración. El encabezado
+        # "Deuda regularizada" abre el mensaje.
         self._crear_notificacion_pago(
             pago=pago,
             tipo=TipoNotificacion.PAGO_APROBADO,
             mensaje=(
-                f"Se regularizó tu deuda: registramos un pago de {formatear_monto_usd(pago.monto)} "
-                f"por el período {pago.fecha_inicio.strftime('%d/%m/%Y')} al "
-                f"{pago.fecha_fin.strftime('%d/%m/%Y')}."
+                f"Deuda regularizada: el club regularizó tu deuda por {formatear_monto_usd(pago.monto)}. "
+                f"Tu cobertura está al día hasta el {vigente_hasta.strftime('%d/%m/%Y')}."
             ),
         )
-        self._enviar_correo_de_validacion_pago(pago, TipoNotificacion.PAGO_APROBADO)
+        self._enviar_correo_de_validacion_pago(
+            pago, TipoNotificacion.PAGO_APROBADO, regularizacion=True,
+        )
 
     # --- Issue #400 (slice 5b): corrección financiera -------------------------
     # Seis campos financieros congelados de `Pago`. Un DTO puede traer
@@ -2844,7 +2850,9 @@ class PagoServicio:
             return representante
         return None
 
-    def _enviar_correo_de_validacion_pago(self, pago: Pago, tipo: TipoNotificacion) -> None:
+    def _enviar_correo_de_validacion_pago(
+        self, pago: Pago, tipo: TipoNotificacion, regularizacion: bool = False,
+    ) -> None:
         """Correo al titular por la aprobación o el rechazo de su pago.
 
         Best-effort y NUNCA levanta: cuando esto corre, la validación ya está
@@ -2885,7 +2893,18 @@ class PagoServicio:
         )
         try:
             servicio = ServicioNotificaciones()
-            if tipo == TipoNotificacion.PAGO_APROBADO:
+            if regularizacion:
+                enviar_deuda_regularizada(
+                    servicio,
+                    correo=destinatario.usuario.correo,
+                    nombre=destinatario.nombres,
+                    monto=pago.monto,
+                    vigente_hasta=(
+                        self._fecha_fin_maxima_combinada(pago.membresia_id) or pago.fecha_fin
+                    ),
+                    nombre_alumno=nombre_alumno,
+                )
+            elif tipo == TipoNotificacion.PAGO_APROBADO:
                 servicio.enviar_pago_aprobado(
                     correo=destinatario.usuario.correo,
                     nombre=destinatario.nombres,

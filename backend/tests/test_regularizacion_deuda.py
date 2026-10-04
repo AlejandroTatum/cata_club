@@ -653,7 +653,7 @@ def test_regularizar_notifica_al_socio_en_la_app_y_por_correo(client, db_session
     db_session.flush()
     correos = []
     monkeypatch.setattr(
-        ServicioNotificaciones, "enviar_pago_aprobado", lambda self, **kw: correos.append(kw),
+        ServicioNotificaciones, "enviar_correo", lambda self, **kw: correos.append(kw),
     )
 
     resp = _regularizar_monto(client, membresia.id, "60.00")
@@ -663,9 +663,14 @@ def test_regularizar_notifica_al_socio_en_la_app_y_por_correo(client, db_session
     assert len(avisos) == 1
     assert avisos[0].tipo == TipoNotificacion.PAGO_APROBADO
     assert avisos[0].entidad_relacionada_id == resp.json()["id"]
-    assert "regulariz" in avisos[0].mensaje.lower()
-    assert "$60,00" in avisos[0].mensaje
-    assert [c["correo"] for c in correos] == ["socio@cataclub.test"]
+    assert avisos[0].mensaje.startswith("Deuda regularizada")
+    assert "regularizó tu deuda por $60,00" in avisos[0].mensaje
+    assert "al día hasta el" in avisos[0].mensaje
+    assert "aprobado" not in avisos[0].mensaje.lower()
+    assert [c["destinatario"] for c in correos] == ["socio@cataclub.test"]
+    assert correos[0]["asunto"] == "Cata Club | Deuda regularizada"
+    assert "Deuda regularizada" in correos[0]["cuerpo_texto"]
+    assert "Pago aprobado" not in correos[0]["cuerpo_texto"]
 
 
 def test_regularizar_a_un_menor_avisa_al_representante(client, db_session, monkeypatch):
@@ -684,7 +689,7 @@ def test_regularizar_a_un_menor_avisa_al_representante(client, db_session, monke
     )
     correos = []
     monkeypatch.setattr(
-        ServicioNotificaciones, "enviar_pago_aprobado", lambda self, **kw: correos.append(kw),
+        ServicioNotificaciones, "enviar_correo", lambda self, **kw: correos.append(kw),
     )
 
     resp = _regularizar_monto(client, membresia.id, "60.00")
@@ -697,8 +702,10 @@ def test_regularizar_a_un_menor_avisa_al_representante(client, db_session, monke
     from app.servicios_negocio.notificacion_servicio import NotificacionServicio
     feed, _ = NotificacionServicio(db_session).listar_para_persona_y_hijos(representante.id)
     assert len(feed) == 1 and feed[0].mensaje.startswith("Para ")
-    assert [c["correo"] for c in correos] == ["madre@cataclub.test"]
-    assert correos[0]["nombre_alumno"] == "Hijo Menor"
+    assert "Deuda regularizada" in feed[0].mensaje
+    assert [c["destinatario"] for c in correos] == ["madre@cataclub.test"]
+    assert correos[0]["asunto"] == "Cata Club | Deuda regularizada"
+    assert "Hijo Menor" in correos[0]["cuerpo_texto"]
 
 
 def test_regularizar_no_falla_si_el_correo_no_se_puede_enviar(client, db_session, monkeypatch):
@@ -711,7 +718,32 @@ def test_regularizar_no_falla_si_el_correo_no_se_puede_enviar(client, db_session
     def _falla(self, **kw):
         raise ServicioNoDisponible("smtp caído")
 
-    monkeypatch.setattr(ServicioNotificaciones, "enviar_pago_aprobado", _falla)
+    monkeypatch.setattr(ServicioNotificaciones, "enviar_correo", _falla)
 
     assert _regularizar_monto(client, membresia.id, "60.00").status_code == 201
     assert len(_notificaciones_de(db_session, persona.id)) == 1
+
+
+def test_pago_normal_aprobado_conserva_el_texto_de_pago_aprobado(db_session, monkeypatch):
+    from app.servicios_negocio.dtos.membresia_pago_schemas import PagoValidarDTO
+    from tests.fabricas_pagos import crear_pago_orm
+    persona, membresia = _crear_persona_membresia(db_session)
+    admin = crear_persona_orm(db_session, "1710034081", nombres="Ada", apellidos="Admin")
+    db_session.add(Usuario(correo="socio@cataclub.test", contrasenia="hash", persona_id=persona.id))
+    pago = crear_pago_orm(db_session, persona, membresia, EstadoPago.PENDIENTE_VALIDACION)
+    db_session.flush()
+    asuntos = []
+    monkeypatch.setattr(
+        ServicioNotificaciones, "enviar_correo",
+        lambda self, destinatario, asunto, *a, **kw: asuntos.append(asunto),
+    )
+
+    PagoServicio(db_session).validar_pago(
+        pago.id, PagoValidarDTO(estado_pago=EstadoPago.APROBADO), actor_persona_id=admin.id,
+    )
+
+    avisos = _notificaciones_de(db_session, persona.id)
+    assert [a.mensaje for a in avisos if a.tipo == TipoNotificacion.PAGO_APROBADO] == [
+        "Tu pago de $30,00 fue aprobado. Tu membresía está activa."
+    ]
+    assert asuntos == ["Cata Club | Pago aprobado"]
