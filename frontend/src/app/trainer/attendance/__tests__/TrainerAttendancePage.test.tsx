@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import TrainerAttendancePage from "@/app/trainer/attendance/page";
 import { createAuthenticatedAuth } from "@/components/__tests__/test-utils";
 import { ToastProvider } from "@/contexts/ToastContext";
@@ -111,6 +111,8 @@ const mockFetchConteosPorHorario = vi.fn().mockResolvedValue([]);
 const mockRegisterAttendance = vi.fn();
 const mockCorrectAttendance = vi.fn();
 const mockFetchAttendanceCorrections = vi.fn().mockResolvedValue([]);
+const mockFetchCorrectionRequests = vi.fn().mockResolvedValue([]);
+const mockCreateCorrectionRequest = vi.fn();
 
 vi.mock("@/services/api", () => ({
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
@@ -120,6 +122,8 @@ vi.mock("@/services/api", () => ({
   registerAttendance: (request: unknown) => mockRegisterAttendance(request),
   correctAttendance: (asistenciaId: number, data: unknown) => mockCorrectAttendance(asistenciaId, data),
   fetchAttendanceCorrections: (asistenciaId: number) => mockFetchAttendanceCorrections(asistenciaId),
+  fetchCorrectionRequests: (filters?: unknown) => mockFetchCorrectionRequests(filters),
+  createCorrectionRequest: (data: unknown) => mockCreateCorrectionRequest(data),
   fetchNotificaciones: vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 }),
   marcarNotificacionLeida: vi.fn().mockResolvedValue(undefined),
 }));
@@ -3734,5 +3738,155 @@ describe("TrainerAttendancePage — el detalle de la sesión coincide con lo ya 
     // Los 15 inscriptos completos, ninguno perdido por pedir la fecha
     // equivocada -- el mismo número que reporta Admin para ese horario.
     expect(screen.getByText("Student 15")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// QA4 ENT-25 — a trainer cannot correct a closed list, so the row offers
+// «Pedir corrección»: a request to administration, with its outcome shown on
+// the same row.
+// ---------------------------------------------------------------------------
+
+describe("TrainerAttendancePage — pedir corrección a administración (QA4 ENT-25)", () => {
+  function filedRecords(fecha = "2026-07-21"): unknown[] {
+    return buildAlumnoHorarios(3).map((raw, i) => {
+      const s = raw as { personaId: number; personaNombreCompleto: string };
+      return {
+        id: String(9001 + i),
+        fecha,
+        horario: "Martes 18:00 — 19:00",
+        horarioId: 12,
+        personaId: s.personaId,
+        estudiante: s.personaNombreCompleto,
+        estado: "present",
+      };
+    });
+  }
+
+  function request(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      id: 5,
+      asistenciaId: 9001,
+      personaId: 100,
+      personaNombre: "Student 01",
+      horarioId: 12,
+      fecha: "2026-07-21",
+      horarioEtiqueta: "Juvenil · martes 18:00",
+      estadoActual: "present",
+      estadoSolicitado: "absent",
+      motivo: "Debía figurar como ausente.",
+      solicitadoPorId: 17,
+      solicitadoPorNombre: "Coach Torres",
+      solicitadoEn: "2026-07-21T20:00:00Z",
+      estado: "PENDIENTE",
+      resueltoPorNombre: null,
+      resueltoEn: null,
+      motivoResolucion: null,
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    mockReplace.mockReset();
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue([SCHEDULE]);
+    mockFetchAlumnosPorHorario.mockReset().mockResolvedValue(buildAlumnoHorarios(3));
+    mockFetchAttendanceRecords.mockReset();
+    mockFetchCorrectionRequests.mockReset().mockResolvedValue([]);
+    mockCreateCorrectionRequest.mockReset();
+  });
+
+  async function openClosedList(records: unknown[], fecha?: string): Promise<void> {
+    mockFetchAttendanceRecords.mockResolvedValue(records);
+    const fechaQuery = fecha ? `&fecha=${fecha}` : "";
+    window.history.replaceState(null, "", `/trainer/attendance?horario=12${fechaQuery}&paso=lista`);
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await screen.findByText("Student 01");
+  }
+
+  it("ofrece «Pedir corrección» al entrenador en cada fila registrada, y no al administrador", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    await openClosedList(filedRecords());
+    expect(screen.getAllByRole("button", { name: "Pedir corrección" })).toHaveLength(3);
+    cleanup();
+
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
+    await openClosedList(filedRecords());
+    expect(screen.queryByRole("button", { name: "Pedir corrección" })).not.toBeInTheDocument();
+    expect(mockFetchCorrectionRequests).toHaveBeenCalledTimes(1);
+  });
+
+  it("explica en la nota de lista cerrada cómo pedir la corrección, en «usted»", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    await openClosedList(filedRecords());
+
+    expect(screen.getByText(/pida la corrección a administración desde el alumno/)).toBeInTheDocument();
+    expect(screen.queryByText(/consulte con administración/)).not.toBeInTheDocument();
+  });
+
+  it("no ofrece pedir pasados los 30 días y dice por qué", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    await openClosedList(filedRecords("2026-05-01"), "2026-05-01");
+
+    expect(screen.queryByRole("button", { name: "Pedir corrección" })).not.toBeInTheDocument();
+    expect(screen.getAllByText("La ventana de corrección de 30 días ya cerró para esta sesión.")).toHaveLength(3);
+  });
+
+  it("pide la sesión de esta lista y manda alumno, estado y motivo", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    await openClosedList(filedRecords());
+    mockCreateCorrectionRequest.mockResolvedValue(request());
+
+    await waitFor(() =>
+      expect(mockFetchCorrectionRequests).toHaveBeenCalledWith({ horarioId: 12, fecha: "2026-07-21" }),
+    );
+
+    const row = screen.getByText("Student 01").closest("li") as HTMLElement;
+    fireEvent.click(within(row).getByRole("button", { name: "Pedir corrección" }));
+    const dialog = within(row).getByRole("dialog");
+    expect(within(dialog).getByRole("heading")).toHaveTextContent("Pedir corrección de Student 01");
+
+    // A blank reason is refused locally.
+    fireEvent.click(within(dialog).getByRole("button", { name: "Enviar solicitud" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("El motivo es obligatorio.");
+    expect(mockCreateCorrectionRequest).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("radio", { name: "Ausente" }));
+    fireEvent.change(within(dialog).getByPlaceholderText("Qué debía figurar y por qué"), {
+      target: { value: "Debía figurar como ausente." },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Enviar solicitud" }));
+
+    await waitFor(() =>
+      expect(mockCreateCorrectionRequest).toHaveBeenCalledWith({
+        asistenciaId: 9001,
+        estado: "absent",
+        motivo: "Debía figurar como ausente.",
+      }),
+    );
+    expect(within(row).queryByRole("dialog")).not.toBeInTheDocument();
+    expect(await within(row).findByText(/Corrección pedida: Ausente · pendiente de administración/)).toBeInTheDocument();
+    // One request pending per row: the door closes until it is answered.
+    expect(within(row).queryByRole("button", { name: "Pedir corrección" })).not.toBeInTheDocument();
+  });
+
+  it("muestra el resultado de las solicitudes: aprobada, y rechazada con el motivo de administración", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    mockFetchCorrectionRequests.mockResolvedValue([
+      request({ estado: "APROBADA", resueltoPorNombre: "Admin User" }),
+      request({
+        id: 6, asistenciaId: 9002, estado: "RECHAZADA", resueltoPorNombre: "Admin User",
+        motivoResolucion: "Vi el registro: estaba presente.",
+      }),
+    ]);
+    await openClosedList(filedRecords());
+
+    const aprobada = screen.getByText("Student 01").closest("li") as HTMLElement;
+    expect(await within(aprobada).findByText(/Corrección aprobada: Ausente/)).toBeInTheDocument();
+
+    const rechazada = screen.getByText("Student 02").closest("li") as HTMLElement;
+    expect(within(rechazada).getByText(/Corrección rechazada: Ausente/)).toBeInTheDocument();
+    expect(within(rechazada).getByText(/Vi el registro: estaba presente\./)).toBeInTheDocument();
+    // A rejected request does not block asking again.
+    expect(within(rechazada).getByRole("button", { name: "Pedir corrección" })).toBeInTheDocument();
   });
 });

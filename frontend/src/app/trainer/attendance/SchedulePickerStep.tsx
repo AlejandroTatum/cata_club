@@ -133,7 +133,7 @@ export default function SchedulePickerStep({
             <p className="font-semibold">Esta lista ya fue tomada.</p>
             <p>
               Puede continuar para consultarla, pero no para volver a tomarla: una vez registrada, la lista
-              queda cerrada. Ante un error, consulte con administración.
+              queda cerrada. Ante un error, podrá pedir la corrección a administración desde esa lista.
             </p>
           </div>
         )}

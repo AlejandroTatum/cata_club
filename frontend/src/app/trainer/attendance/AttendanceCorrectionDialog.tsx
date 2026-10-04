@@ -28,7 +28,29 @@ import type { EstadoAsistencia } from "@/types/domain";
 
 export const MOTIVO_MAX_LENGTH = 500;
 
+/** `request`: the trainer asking administration (QA4 ENT-25), not correcting. */
+export type CorrectionDialogVariant = "correct" | "request";
+
+const COPY: Record<
+  CorrectionDialogVariant,
+  { title: string; placeholder: string; submit: string; submitting: string }
+> = {
+  correct: {
+    title: "Corregir asistencia de",
+    placeholder: "Por qué se corrige este registro",
+    submit: "Guardar corrección",
+    submitting: "Guardando…",
+  },
+  request: {
+    title: "Pedir corrección de",
+    placeholder: "Qué debía figurar y por qué",
+    submit: "Enviar solicitud",
+    submitting: "Enviando…",
+  },
+};
+
 export interface AttendanceCorrectionDialogProps {
+  readonly variant?: CorrectionDialogVariant;
   readonly open: boolean;
   readonly studentName: string;
   readonly estado: EstadoAsistencia;
@@ -42,6 +64,7 @@ export interface AttendanceCorrectionDialogProps {
 }
 
 export default function AttendanceCorrectionDialog({
+  variant = "correct",
   open,
   studentName,
   estado,
@@ -55,6 +78,7 @@ export default function AttendanceCorrectionDialog({
 }: AttendanceCorrectionDialogProps): React.ReactElement | null {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = "attendance-correction-title";
+  const copy = COPY[variant];
 
   // Same trap as EmergencyCardDialog: Escape closes, Tab/Shift+Tab cycle
   // inside the panel, focus returns to whatever opened it. No fixed initial
@@ -86,7 +110,7 @@ export default function AttendanceCorrectionDialog({
         className="card relative flex w-full max-w-md flex-col gap-3 p-5"
       >
         <h2 id={titleId} className="text-base font-bold text-ink">
-          Corregir asistencia de {studentName}
+          {copy.title} {studentName}
         </h2>
 
         <div
@@ -122,7 +146,7 @@ export default function AttendanceCorrectionDialog({
             value={motivo}
             onChange={(e) => onMotivoChange(e.target.value.slice(0, MOTIVO_MAX_LENGTH))}
             maxLength={MOTIVO_MAX_LENGTH}
-            placeholder="Por qué se corrige este registro"
+            placeholder={copy.placeholder}
             className="resize-y rounded-ctl border border-line-2 bg-paper px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-3 focus:border-ink-3"
             disabled={submitting}
           />
@@ -139,7 +163,7 @@ export default function AttendanceCorrectionDialog({
             Cancelar
           </Button>
           <Button type="button" variant="primary" size="sm" disabled={submitting} onClick={onSubmit}>
-            {submitting ? "Guardando…" : "Guardar corrección"}
+            {submitting ? copy.submitting : copy.submit}
           </Button>
         </div>
       </div>

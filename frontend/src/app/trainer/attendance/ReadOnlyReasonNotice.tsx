@@ -7,7 +7,12 @@
  * `alert`: this is the state of the session the user just opened, not the
  * outcome of something they did.
  */
-export default function ReadOnlyReasonNotice(): React.ReactElement {
+export default function ReadOnlyReasonNotice({
+  canRequestCorrection = false,
+}: {
+  /** QA4 ENT-25: a trainer has the «Pedir corrección» door on each row. */
+  readonly canRequestCorrection?: boolean;
+}): React.ReactElement {
   return (
     <div
       role="status"
@@ -15,8 +20,10 @@ export default function ReadOnlyReasonNotice(): React.ReactElement {
     >
       <p className="font-semibold">Esta lista ya fue registrada.</p>
       <p>
-        Quedó cerrada de forma permanente — no se puede editar desde aquí. Ante un error, consulte
-        con administración.
+        Quedó cerrada de forma permanente — no se puede editar desde aquí.{" "}
+        {canRequestCorrection
+          ? "Ante un error, pida la corrección a administración desde el alumno que corresponda."
+          : "Ante un error, consulte con administración."}
       </p>
     </div>
   );

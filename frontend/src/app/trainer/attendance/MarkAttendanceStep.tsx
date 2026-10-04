@@ -9,6 +9,7 @@ import RosterProgressHeader from "./RosterProgressHeader";
 import AttendanceRosterList from "./AttendanceRosterList";
 import FilteredRosterEmptyState from "./FilteredRosterEmptyState";
 import { clubIsoDate } from "@/lib/club-date";
+import { useCorrectionRequests } from "./useCorrectionRequests";
 import { isFiled, type SessionStudent } from "./attendance-utils";
 
 interface MarkAttendanceStepProps {
@@ -67,6 +68,14 @@ export default function MarkAttendanceStep({
   commitBar,
   heading,
 }: MarkAttendanceStepProps): React.ReactElement | null {
+  // QA4 ENT-25: a trainer on a closed list sees the outcome of their requests.
+  const canRequestCorrection = readOnly && !isAdmin;
+  const { requests, addRequest } = useCorrectionRequests(
+    selectedSchedule?.id ?? null,
+    sessionDate ?? clubIsoDate(),
+    canRequestCorrection && selectedSchedule !== null,
+  );
+
   if (!selectedSchedule) return null;
 
   const headingEl = (
@@ -81,7 +90,7 @@ export default function MarkAttendanceStep({
       <div className={PAGE_RAIL}>
         <div className="card flex flex-col gap-4 p-5 sm:p-6">
           {headingEl}
-          <ReadOnlyReasonNotice />
+          <ReadOnlyReasonNotice canRequestCorrection={canRequestCorrection} />
           <ul className="flex flex-col gap-2" aria-label="Asistencia registrada (solo lectura)">
             {students.map((student) => (
               <AttendanceCorrectionRow
@@ -90,6 +99,9 @@ export default function MarkAttendanceStep({
                 sessionDate={sessionDate ?? clubIsoDate()}
                 canCorrect={isAdmin}
                 onCorrected={onRowCorrected}
+                canRequestCorrection={canRequestCorrection}
+                requests={requests}
+                onRequestCreated={addRequest}
               />
             ))}
           </ul>

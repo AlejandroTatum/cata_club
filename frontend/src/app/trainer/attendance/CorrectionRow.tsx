@@ -40,11 +40,13 @@ import {
   type SessionStudent,
 } from "./attendance-utils";
 import AttendanceCorrectionDialog from "./AttendanceCorrectionDialog";
+import RequestCorrectionControl from "./RequestCorrectionControl";
 import {
   correctAttendance,
   fetchAttendanceCorrections,
   type AttendanceCorrectionEntry,
   type CorrectAttendanceResult,
+  type CorrectionRequest,
 } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
 import { toUserMessage } from "@/lib/error-message";
@@ -69,6 +71,12 @@ interface AttendanceCorrectionRowProps {
    *  before this slice, with no door that would 403 the moment it's used. */
   canCorrect: boolean;
   onCorrected: (personaId: string, patch: CorrectionPatch) => void;
+  /** QA4 ENT-25: a trainer cannot correct, so the row offers «Pedir corrección»
+   *  and shows what became of this row's requests. Off for administrators. */
+  canRequestCorrection?: boolean;
+  /** This row's requests (any order); the others are ignored. */
+  requests?: readonly CorrectionRequest[];
+  onRequestCreated?: (request: CorrectionRequest) => void;
 }
 
 export default function AttendanceCorrectionRow({
@@ -76,6 +84,9 @@ export default function AttendanceCorrectionRow({
   sessionDate,
   canCorrect,
   onCorrected,
+  canRequestCorrection = false,
+  requests = [],
+  onRequestCreated,
 }: AttendanceCorrectionRowProps): React.ReactElement {
   const { showSuccess } = useToast();
   const asistenciaId = student.asistenciaId ?? null;
@@ -200,6 +211,16 @@ export default function AttendanceCorrectionRow({
         <p id={reasonId} className="text-xs text-ink-3">
           {CORRECTION_WINDOW_CLOSED_REASON}
         </p>
+      )}
+
+      {canRequestCorrection && asistenciaId !== null && onRequestCreated && (
+        <RequestCorrectionControl
+          student={student}
+          asistenciaId={asistenciaId}
+          withinWindow={withinWindow}
+          requests={requests.filter((r) => r.asistenciaId === asistenciaId)}
+          onCreated={onRequestCreated}
+        />
       )}
 
       {canCorrect && (
