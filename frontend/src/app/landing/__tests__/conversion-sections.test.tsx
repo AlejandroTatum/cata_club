@@ -85,9 +85,9 @@ describe("steps and enrollment entry points (LAN-14)", () => {
     expect(within(bar).getByRole("link", { name: "Escribir por WhatsApp" })).toHaveAttribute("href", toWhatsAppLink(landingConfig.contact.whatsapp[0]));
   });
 
-  it("captions the hero photo with its own description", () => {
+  it("shows no caption over the hero photo", () => {
     const { container } = render(<LandingPage />);
-    expect(container.querySelector(".landing-hero-caption")).toHaveTextContent("Deportistas, entrenadores y familias de Cata Club reunidos");
+    expect(container.querySelector(".landing-hero-caption")).toBeNull();
   });
 });
 
