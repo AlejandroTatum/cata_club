@@ -36,7 +36,6 @@ from app.dominio.modelos import (
     Usuario,
 )
 from app.infraestructura.asuntos_correo import (
-    ASUNTO_BIENVENIDA_INSCRIPCION,
     ASUNTO_PAGO_APROBADO,
     ASUNTO_PAGO_RECHAZADO,
     ASUNTO_RECUPERACION,
@@ -557,6 +556,11 @@ class ServicioNotificaciones:
     def enviar_verificacion_correo(self, correo: str, token: str, nombre: Optional[str] = None) -> None:
         """Envía el enlace que prueba el control de la dirección (issue #790).
 
+        QA4 REG-20: es TAMBIÉN la bienvenida. Antes salían dos correos casi
+        iguales (este y uno de "Bienvenida" que repetía los próximos pasos);
+        ahora es uno, con el saludo, la inscripción registrada, el botón de
+        verificación y los próximos pasos.
+
         El cuerpo cuenta la misma historia que el resto de las superficies de
         inscripción (issue #1196): verificar el correo, acercarse al club o
         escribir por WhatsApp para registrar la inscripción y el primer pago,
@@ -569,13 +573,13 @@ class ServicioNotificaciones:
         asunto = ASUNTO_VERIFICACION_CORREO
         saludo = f"Hola {nombre}," if nombre else "Hola,"
         texto, html = construir_correo(
-            titulo="Verificación de correo",
-            preheader="Confirme su dirección: el enlace es válido por 24 horas.",
+            titulo="Bienvenida y verificación de correo",
+            preheader="Su inscripción quedó registrada. Confirme su dirección: el enlace es válido por 24 horas.",
             saludo=saludo,
             parrafos=(
-                "Gracias por registrarse en Cata Club. Para confirmar que esta "
-                "dirección es suya, use el botón de abajo (el enlace es válido "
-                "por 24 horas).",
+                "Le damos la bienvenida a Cata Club. Su inscripción quedó registrada.",
+                "Para confirmar que esta dirección es suya, use el botón de abajo "
+                "(el enlace es válido por 24 horas).",
                 "Después, acérquese al club o escríbanos por WhatsApp para "
                 "registrar la inscripción y el primer pago: el club lo valida y "
                 "ahí se activa la membresía.",
@@ -735,30 +739,3 @@ class ServicioNotificaciones:
         )
         self.enviar_correo(correo, asunto, texto, html)
         logger.info("[PAGO_RECHAZADO] correo=%s", _enmascarar_correo(correo))
-
-    def enviar_bienvenida_inscripcion(self, correo: str, nombre: Optional[str] = None) -> None:
-        """Da la bienvenida al alumno recién inscripto (PR 1, mejoras de la
-        experiencia del alumno).
-
-        Corto y con los próximos pasos reales: el primer pago se hace en
-        persona en el club, el club lo registra, y recién entonces se activa
-        la membresía -- la misma historia que la verificación de correo
-        (issue #1196). Sin repetir el enlace de verificación ni pedir nada:
-        es un saludo, no una gestión.
-        """
-        asunto = ASUNTO_BIENVENIDA_INSCRIPCION
-        saludo = f"Hola {nombre}," if nombre else "Hola,"
-        texto, html = construir_correo(
-            titulo="Bienvenida",
-            preheader="Su inscripción quedó registrada: los próximos pasos.",
-            saludo=saludo,
-            parrafos=(
-                "Le damos la bienvenida a Cata Club. Su inscripción quedó registrada.",
-                "Próximos pasos:",
-                "1. El primer pago se hace en persona, en administración del club.",
-                "2. El club registra ese pago y activa su membresía.",
-                "Cuando la membresía esté activa, podrá verla en su cuenta.",
-            ),
-        )
-        self.enviar_correo(correo, asunto, texto, html)
-        logger.info("[BIENVENIDA_INSCRIPCION] correo=%s", _enmascarar_correo(correo))

@@ -22,9 +22,9 @@ ASUNTO_RECUPERACION = "Cata Club | Recuperación de contraseña"
 # los dos (ver la nota de arriba, issue #1010).
 ASUNTO_PAGO_APROBADO = "Cata Club | Pago aprobado"
 ASUNTO_PAGO_RECHAZADO = "Cata Club | Pago rechazado"
-ASUNTO_BIENVENIDA_INSCRIPCION = "Cata Club | Bienvenida"
 
 # Verificación de correo (issue #1375): era el único asunto que seguía
 # inline en `notificaciones_servicio.py`; se mueve acá por la misma razón
-# que los anteriores -- una sola fuente, sin copias.
-ASUNTO_VERIFICACION_CORREO = "Cata Club | Verificación de correo"
+# que los anteriores -- una sola fuente, sin copias. QA4 REG-20: es también
+# la bienvenida (antes eran dos correos casi iguales), y el asunto lo dice.
+ASUNTO_VERIFICACION_CORREO = "Cata Club | Bienvenida y verificación de correo"
