@@ -166,7 +166,7 @@ class PersonaServicio:
 
         Flujo:
         1. Crear Persona (vía `registrar_persona`, reusando reglas de edad/duplicado).
-        2. Crear FichaMedica si se proporcionó.
+        2. Crear FichaMedica (obligatoria, FAM-10).
 
         Issue #1137, invariante (B): este método NUNCA crea un `Usuario` para
         el representado -- solo crea la `Persona` (y su ficha médica). El
@@ -211,20 +211,20 @@ class PersonaServicio:
         try:
             representado = self._crear_persona_validada(persona_datos)
 
-            if datos.ficha_medica:
-                # Issue #1138: `EnrollmentFichaMedicaMenorDTO` no tiene
-                # `contacto_emergencia`/`telefono_emergencia` -- ese contacto
-                # se deriva del representante al leer (ver
-                # `FichaMedicaServicio.obtener_ficha_emergencia`), nunca se
-                # persiste acá.
-                ficha = FichaMedica(
-                    tipo_sangre=datos.ficha_medica.tipo_sangre,
-                    persona_id=representado.id,
-                    alergias=datos.ficha_medica.alergias,
-                )
-                for nombre in datos.ficha_medica.enfermedades:
-                    ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))
-                FichaMedicaRepositorio(self.db).crear(ficha)
+            # QA4 FAM-10: `ficha_medica` es obligatoria en el DTO.
+            # Issue #1138: `EnrollmentFichaMedicaMenorDTO` no tiene
+            # `contacto_emergencia`/`telefono_emergencia` -- ese contacto
+            # se deriva del representante al leer (ver
+            # `FichaMedicaServicio.obtener_ficha_emergencia`), nunca se
+            # persiste acá.
+            ficha = FichaMedica(
+                tipo_sangre=datos.ficha_medica.tipo_sangre,
+                persona_id=representado.id,
+                alergias=datos.ficha_medica.alergias,
+            )
+            for nombre in datos.ficha_medica.enfermedades:
+                ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))
+            FichaMedicaRepositorio(self.db).crear(ficha)
 
             # Issue #1133: el ledger completo -- alta inicial, no solo
             # reasignación. Sin `idempotency_key`: este comando no tiene

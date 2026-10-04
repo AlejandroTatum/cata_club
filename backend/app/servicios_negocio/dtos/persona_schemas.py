@@ -100,7 +100,10 @@ class RepresentadoCreateDTO(BaseModel):
     # validación. `TelefonoValidadoOpcional` tolera ausencia y "" explícito,
     # y normaliza ambos a `None`.
     telefono: TelefonoValidadoOpcional = Field(default=None, max_length=32)
-    ficha_medica: Optional[EnrollmentFichaMedicaMenorDTO] = None
+    # QA4 FAM-10: la ficha médica del dependiente es obligatoria (el tipo de
+    # sangre ya lo es dentro de la DTO); el teléfono de emergencia es el del
+    # representante y no se pide.
+    ficha_medica: EnrollmentFichaMedicaMenorDTO
     institucion_id: Optional[int] = None
 
     @model_validator(mode="after")

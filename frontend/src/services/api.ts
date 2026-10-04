@@ -2697,7 +2697,8 @@ export interface RepresentadoCreatePayload {
    *  how the caller says "no phone" — the BFF drops it from the backend body
    *  and `RepresentadoCreateDTO` defaults it to NULL. */
   telefono?: string;
-  fichaMedica?: RepresentadoFichaMedicaPayload;
+  /** Required (QA4 FAM-10): the backend rejects a dependent without a medical record. */
+  fichaMedica: RepresentadoFichaMedicaPayload;
   institucionId?: number;
 }
 

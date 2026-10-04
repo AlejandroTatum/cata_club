@@ -127,6 +127,7 @@ def test_link_requires_representative_valid_phone(db_session):
             RepresentadoCreateDTO(
                 nombres="Nuevo", apellidos="Dependiente", cedula=cedula_valida(9304),
                 fecha_nacimiento=date(2016, 1, 1), telefono="0991230009",
+                ficha_medica={"tipo_sangre": "O_POSITIVO"},
             ),
         )
     assert db_session.query(Persona).filter(Persona.cedula == cedula_valida(9304)).first() is None

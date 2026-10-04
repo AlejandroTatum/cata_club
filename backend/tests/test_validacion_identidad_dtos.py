@@ -163,6 +163,7 @@ class TestRepresentadoCreateDTO:
         datos = dict(
             nombres="Luis", apellidos="Gómez", cedula=CEDULA_VALIDA,
             fecha_nacimiento=FECHA_NACIMIENTO_MENOR, telefono=TELEFONO_VALIDO,
+            ficha_medica=dict(tipo_sangre="O_POSITIVO"),
         )
         datos.update(overrides)
         return datos
@@ -185,9 +186,12 @@ class TestRepresentadoCreateDTO:
         with pytest.raises(ValidationError):
             RepresentadoCreateDTO(**self._base(telefono=TELEFONO_INVALIDO))
 
-    def test_sin_ficha_medica_no_hay_nada_que_comparar(self):
-        # `ficha_medica` es opcional en este DTO.
-        RepresentadoCreateDTO(**self._base())
+    def test_la_ficha_medica_es_obligatoria(self):
+        # QA4 FAM-10: sin ficha médica el dependiente no se crea.
+        datos = self._base()
+        del datos["ficha_medica"]
+        with pytest.raises(ValidationError, match="ficha_medica"):
+            RepresentadoCreateDTO(**datos)
 
     # --- Issue #1138: el contacto de emergencia se deriva del representante,
     # y este camino ya no admite un contacto propio ---------------------------

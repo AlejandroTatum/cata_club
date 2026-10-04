@@ -91,6 +91,7 @@ class FichaMedicaServicio:
                 tipo_sangre=datos.tipo_sangre,
                 telefono_emergencia=datos.telefono_emergencia,
                 al_crear=True,
+                telefono_derivado=persona.representante_id is not None,
             )
             # Issue #860, mismo motivo que en `crear_ficha_medica`: el upsert
             # del PATCH tampoco recibe el teléfono personal en el payload.
@@ -136,6 +137,7 @@ class FichaMedicaServicio:
             tipo_sangre=ficha.tipo_sangre,
             telefono_emergencia=ficha.telefono_emergencia,
             al_crear=False,
+            telefono_derivado=persona.representante_id is not None,
         )
         # Issue #860: se mira el RESULTADO del parche (`ficha`, ya aplicado
         # arriba), no `datos` -- un PATCH que no toca `telefono_emergencia`
@@ -148,7 +150,9 @@ class FichaMedicaServicio:
         return resultado
 
     @staticmethod
-    def _exigir_ficha_completa(*, tipo_sangre, telefono_emergencia, al_crear: bool) -> None:
+    def _exigir_ficha_completa(
+        *, tipo_sangre, telefono_emergencia, al_crear: bool, telefono_derivado: bool = False,
+    ) -> None:
         """Las dos condiciones que hacen COMPLETA a una ficha médica (#643).
 
         Los mensajes nombran el dato como lo llama una persona ("tipo de
@@ -160,11 +164,15 @@ class FichaMedicaServicio:
         primera: una ficha legada suele carecer de ambas, y hacer que el
         usuario descubra la segunda recién después de arreglar la primera es
         dos viajes para un solo problema.
+
+        QA4 FAM-10: `telefono_derivado` (la persona es un menor representado)
+        quita la segunda condición: su teléfono de emergencia es el de la cuenta
+        del representante y se deriva al leer, así que no se le pide a nadie.
         """
         faltantes = []
         if tipo_sangre is None or tipo_sangre is TipoSangre.DESCONOCIDO:
             faltantes.append("el tipo de sangre")
-        if not telefono_emergencia:
+        if not telefono_emergencia and not telefono_derivado:
             faltantes.append("el teléfono de emergencia")
         if not faltantes:
             return

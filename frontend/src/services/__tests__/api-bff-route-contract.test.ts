@@ -217,6 +217,7 @@ describe("API client URLs resolve to a real BFF route handler", () => {
           cedula: "0102030405",
           fechaNacimiento: "2015-01-01",
           telefono: "0999999999",
+          fichaMedica: { tipoSangre: "O_POSITIVO", enfermedades: [] },
         }),
     ],
     [

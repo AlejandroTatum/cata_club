@@ -329,8 +329,8 @@ def _payload_representado(cedula=cedula_valida(520), ficha_medica=None):
         "fecha_nacimiento": "2015-05-14",
         "telefono": "0991230001",
     }
-    if ficha_medica is not None:
-        payload["ficha_medica"] = ficha_medica
+    # QA4 FAM-10: la ficha médica del dependiente es obligatoria.
+    payload["ficha_medica"] = ficha_medica if ficha_medica is not None else {"tipo_sangre": "O_POSITIVO"}
     return payload
 
 
