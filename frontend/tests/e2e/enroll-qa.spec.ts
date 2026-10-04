@@ -892,7 +892,7 @@ test.describe("S · Resumen, envío y errores del servidor", () => {
     await confirmar.click();
     await expect(
       page.getByText(
-        "Para confirmar la inscripción, marca la casilla de aceptación de los Términos de uso, el Aviso de privacidad y el Permiso de imagen FETM.",
+        "Para confirmar la inscripción, marca la casilla de aceptación de los Términos y condiciones (incluye privacidad), el Consentimiento de datos de salud y el Permiso de uso de imagen.",
       ),
     ).toBeVisible();
     await shot(page, "S01", "resumen-sin-confirmar");

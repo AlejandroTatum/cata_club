@@ -100,8 +100,10 @@ const CEILINGS: Record<(typeof VIEWPORTS)[number]["name"], Record<string, number
   desktop: { valores: 709, cta: 400, scrollHeight: 6592 },
   /* Mobile scrollHeight re-based 9177 -> 9300 for the FAQ card accordion
      (intro card stacked above three bordered cards) and the colored plan and
-     step cards; measured 9270px at 390x844 with the tariffs catalog absent. */
-  mobile: { valores: 1170, cta: 450, scrollHeight: 9300 },
+     step cards; measured 9270px at 390x844 with the tariffs catalog absent.
+     Re-based 9300 -> 9360 for the legal texts v2.2 footer, which lists a
+     fourth required document (health consent); measured 9318px. */
+  mobile: { valores: 1170, cta: 450, scrollHeight: 9360 },
 };
 
 test.describe("landing vertical space", () => {

@@ -152,14 +152,14 @@ test.describe("Revisión legal desde el asistente de inscripción (#1368)", () =
     await expect(page.getByTestId("enroll-wizard-card").getByText(`${REPRESENTATIVE.nombres} ${REPRESENTATIVE.apellidos}`)).toBeVisible();
 
     // --- Documento 1: abrir, contenido real, Escape devuelve al resumen.
-    await page.getByRole("button", { name: "Términos de uso" }).click();
-    const terminos = page.getByRole("dialog", { name: "Términos de uso de Cata Club" });
+    await page.getByRole("button", { name: "Términos y condiciones (incluye privacidad)" }).click();
+    const terminos = page.getByRole("dialog", { name: "Términos, condiciones y acuerdo de responsabilidad de Cata Club" });
     await expect(terminos).toBeVisible();
     // El texto revisado es el documento público, no una copia: una oración
     // transcrita de `src/app/terminos/content.ts`.
     await expect(
       terminos.getByText(
-        "La aceptación agrupada debe registrar por separado cada documento o versión cubierta, timestamp, cuenta y representante cuando aplique. No debe activarse por defecto ni permitir continuar sin una acción afirmativa.",
+        "Estos términos se rigen por las leyes de la República del Ecuador. Para consultas sobre ellos, escriba a cataclub.loja@proton.me.",
       ),
     ).toBeVisible();
     // El cuerpo largo se desplaza dentro del panel (contenido > ventana).
@@ -178,18 +178,18 @@ test.describe("Revisión legal desde el asistente de inscripción (#1368)", () =
     await page.keyboard.press("Escape");
     await expect(terminos).not.toBeVisible();
     // El foco vuelve al disparador que abrió la revisión.
-    await expect(page.getByRole("button", { name: "Términos de uso" })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Términos y condiciones (incluye privacidad)" })).toBeFocused();
 
     // --- Documento 2: cerrar con el botón Cerrar.
-    await page.getByRole("button", { name: "Aviso de privacidad" }).click();
-    const privacidad = page.getByRole("dialog", { name: "Aviso de privacidad de Cata Club" });
-    await expect(privacidad).toBeVisible();
-    await privacidad.getByRole("button", { name: "Cerrar" }).click();
-    await expect(privacidad).not.toBeVisible();
+    await page.getByRole("button", { name: "Consentimiento de datos de salud" }).click();
+    const salud = page.getByRole("dialog", { name: "Consentimiento para el tratamiento de datos de salud" });
+    await expect(salud).toBeVisible();
+    await salud.getByRole("button", { name: "Cerrar" }).click();
+    await expect(salud).not.toBeVisible();
 
     // --- Documento 3: cerrar tocando el fondo fuera del panel.
-    await page.getByRole("button", { name: "Permiso de imagen FETM" }).click();
-    const permiso = page.getByRole("dialog", { name: "Permiso público de difusión de imagen FETM" });
+    await page.getByRole("button", { name: "Permiso de uso de imagen" }).click();
+    const permiso = page.getByRole("dialog", { name: "Permiso de uso de imagen" });
     await expect(permiso).toBeVisible();
     await page.getByTestId("legal-review-backdrop").click({ position: { x: 10, y: 10 } });
     await expect(permiso).not.toBeVisible();

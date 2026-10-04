@@ -35,12 +35,16 @@ import { useEffect, useRef, type ReactElement } from "react";
 import Button from "@/components/ui/Button";
 import { useModalFocusTrap } from "@/lib/focus-trap";
 import { holdSmoothScroll } from "@/lib/smooth-scroll";
-import type { LegalBlock } from "@/app/terminos/legal-content";
-import { legalBlocks as terminosBlocks } from "@/app/terminos/content";
-import { legalBlocks as privacyBlocks } from "@/app/privacidad/content";
+import { blockAnchor, type LegalBlock } from "@/app/terminos/legal-content";
+import { legalBlocks as terminosBlocks, PRIVACY_CHAPTER_ID } from "@/app/terminos/content";
+import { legalBlocks as healthBlocks } from "@/app/consentimiento-salud/content";
 import { legalBlocks as fetmBlocks } from "@/app/permiso-imagen-fetm/content";
 
-export type LegalReviewDocumentId = "terminos" | "privacidad" | "permiso-imagen-fetm";
+/**
+ * `privacidad` is not a fourth document: the privacy notice is chapter VIII of
+ * the terms, so it opens the same text scrolled to that chapter.
+ */
+export type LegalReviewDocumentId = "terminos" | "privacidad" | "consentimiento-salud" | "permiso-imagen-fetm";
 
 interface LegalReviewDocument {
   /** The title the public page publishes, reused as the dialog's name. */
@@ -58,17 +62,22 @@ interface LegalReviewDocument {
  */
 export const LEGAL_REVIEW_DOCUMENTS: Record<LegalReviewDocumentId, LegalReviewDocument> = {
   terminos: {
-    title: "Términos de uso de Cata Club",
+    title: "Términos, condiciones y acuerdo de responsabilidad de Cata Club",
     href: "/terminos",
     blocks: terminosBlocks,
   },
   privacidad: {
-    title: "Aviso de privacidad de Cata Club",
-    href: "/privacidad",
-    blocks: privacyBlocks,
+    title: "Términos, condiciones y acuerdo de responsabilidad de Cata Club",
+    href: `/terminos#${PRIVACY_CHAPTER_ID}`,
+    blocks: terminosBlocks,
+  },
+  "consentimiento-salud": {
+    title: "Consentimiento para el tratamiento de datos de salud",
+    href: "/consentimiento-salud",
+    blocks: healthBlocks,
   },
   "permiso-imagen-fetm": {
-    title: "Permiso público de difusión de imagen FETM",
+    title: "Permiso de uso de imagen",
     href: "/permiso-imagen-fetm",
     blocks: fetmBlocks,
   },
@@ -100,6 +109,7 @@ export function LegalDocumentProse({
         block.kind === "heading" ? (
           <HeadingTag
             key={`${index}-${block.text.slice(0, 24)}`}
+            id={block.id === undefined ? undefined : blockAnchor(block, index)}
             className="pt-8 font-display text-lg uppercase leading-tight tracking-flat text-cata-text first:pt-0"
           >
             {block.text}
@@ -151,6 +161,12 @@ export default function LegalReviewDialog({
       body.style.overflow = previous;
     };
   }, [document_]);
+
+  // Opened from a privacy link: land on chapter VIII instead of the top.
+  useEffect((): void => {
+    if (documentId !== "privacidad") return;
+    globalThis.document.getElementById(PRIVACY_CHAPTER_ID)?.scrollIntoView?.();
+  }, [documentId]);
 
   if (document_ === null) return null;
 

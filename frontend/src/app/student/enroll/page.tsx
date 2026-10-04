@@ -1473,10 +1473,9 @@ function EnrollWizard(): React.ReactElement {
                     inside a label would steal the labeled-control identity
                     from the checkbox, so the label carries an explicit
                     `htmlFor` and the input its matching `id` above. */}
-                Acepto los <button type="button" className="underline" onClick={() => setLegalReviewDoc("terminos")}>Términos de uso</button>, el {" "}
-                <button type="button" className="underline" onClick={() => setLegalReviewDoc("privacidad")}>Aviso de privacidad</button>, el tratamiento
-                de datos médicos y la difusión pública de imagen conforme al {" "}
-                <button type="button" className="underline" onClick={() => setLegalReviewDoc("permiso-imagen-fetm")}>Permiso de imagen FETM</button>.
+                Acepto los <button type="button" className="underline" onClick={() => setLegalReviewDoc("terminos")}>Términos y condiciones (incluye privacidad)</button>, el {" "}
+                <button type="button" className="underline" onClick={() => setLegalReviewDoc("consentimiento-salud")}>Consentimiento de datos de salud</button> y el {" "}
+                <button type="button" className="underline" onClick={() => setLegalReviewDoc("permiso-imagen-fetm")}>Permiso de uso de imagen</button>.
               </span>
         </label>
         {/* The message sits under the box it is about (it used to render by the
@@ -1490,8 +1489,8 @@ function EnrollWizard(): React.ReactElement {
             className="-mt-2 flex items-start gap-1.5 text-sm font-semibold text-state-bad [text-wrap:pretty]"
           >
             <AlertTriangle size={ICON.sm} strokeWidth={2} className="mt-0.5 shrink-0" aria-hidden="true" />
-            Para confirmar la inscripción, marca la casilla de aceptación de los Términos de uso, el Aviso de
-            privacidad y el Permiso de imagen FETM.
+            Para confirmar la inscripción, marca la casilla de aceptación de los Términos y condiciones (incluye
+            privacidad), el Consentimiento de datos de salud y el Permiso de uso de imagen.
           </p>
         )}
       </div>

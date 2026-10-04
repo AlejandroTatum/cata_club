@@ -1151,9 +1151,9 @@ describe("EnrollPage — motivo del bloqueo en el paso 5 (#312 / #2, #9)", () =>
     // following one discarded the whole wizard. They are dialog triggers now,
     // so the consent sentence contains no link at all.
     const documents = [
-      ["Términos de uso", "Términos de uso de Cata Club"],
-      ["Aviso de privacidad", "Aviso de privacidad de Cata Club"],
-      ["Permiso de imagen FETM", "Permiso público de difusión de imagen FETM"],
+      ["Términos y condiciones (incluye privacidad)", "Términos, condiciones y acuerdo de responsabilidad de Cata Club"],
+      ["Consentimiento de datos de salud", "Consentimiento para el tratamiento de datos de salud"],
+      ["Permiso de uso de imagen", "Permiso de uso de imagen"],
     ] as const;
     for (const [triggerName, dialogName] of documents) {
       fireEvent.click(screen.getByRole("button", { name: triggerName }));
@@ -1228,9 +1228,9 @@ describe("EnrollPage — semántica nativa del consentimiento legal (#763)", () 
 
     expect(triggers).toHaveLength(3);
     expect(triggers.map((trigger) => trigger.textContent)).toEqual([
-      "Términos de uso",
-      "Aviso de privacidad",
-      "Permiso de imagen FETM",
+      "Términos y condiciones (incluye privacidad)",
+      "Consentimiento de datos de salud",
+      "Permiso de uso de imagen",
     ]);
     triggers.forEach((trigger) => expect(trigger).toHaveAccessibleName());
   });
@@ -1280,8 +1280,8 @@ describe("EnrollPage — revisión legal sin perder el estado (#1368)", () => {
     fireEvent.click(screen.getByRole("checkbox"));
     expect(screen.getByRole("checkbox")).toBeChecked();
 
-    fireEvent.click(screen.getByRole("button", { name: "Aviso de privacidad" }));
-    expect(screen.getByRole("dialog", { name: "Aviso de privacidad de Cata Club" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Consentimiento de datos de salud" }));
+    expect(screen.getByRole("dialog", { name: "Consentimiento para el tratamiento de datos de salud" })).toBeInTheDocument();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
@@ -1297,7 +1297,7 @@ describe("EnrollPage — revisión legal sin perder el estado (#1368)", () => {
     render(<EnrollPage />);
     reachSummaryStep();
 
-    const trigger = screen.getByRole("button", { name: "Términos de uso" });
+    const trigger = screen.getByRole("button", { name: "Términos y condiciones (incluye privacidad)" });
     // jsdom does not focus on click; a real browser does when the visitor
     // activates the trigger, and that is the element the trap restores.
     trigger.focus();
@@ -1313,23 +1313,23 @@ describe("EnrollPage — revisión legal sin perder el estado (#1368)", () => {
 
     // The triggers live inside the checkbox's <label>: opening a review must
     // never grant (or revoke) the consent on the visitor's behalf.
-    fireEvent.click(screen.getByRole("button", { name: "Permiso de imagen FETM" }));
+    fireEvent.click(screen.getByRole("button", { name: "Permiso de uso de imagen" }));
 
     expect(screen.getByRole("checkbox")).not.toBeChecked();
-    expect(screen.getByRole("dialog", { name: "Permiso público de difusión de imagen FETM" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Permiso de uso de imagen" })).toBeInTheDocument();
   });
 
   it("publishes the accepted document text inside the review, from the same public content", () => {
     render(<EnrollPage />);
     reachSummaryStep();
 
-    fireEvent.click(screen.getByRole("button", { name: "Términos de uso" }));
+    fireEvent.click(screen.getByRole("button", { name: "Términos y condiciones (incluye privacidad)" }));
 
     // Transcribed from `src/app/terminos/content.ts`: if the document text
     // drifts, this test breaks loudly instead of silently reviewing a copy.
     expect(
       screen.getByText(
-        "La aceptación agrupada debe registrar por separado cada documento o versión cubierta, timestamp, cuenta y representante cuando aplique. No debe activarse por defecto ni permitir continuar sin una acción afirmativa.",
+        "Estos términos se rigen por las leyes de la República del Ecuador. Para consultas sobre ellos, escriba a cataclub.loja@proton.me.",
       ),
     ).toBeInTheDocument();
   });
