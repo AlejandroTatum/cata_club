@@ -437,6 +437,42 @@ def test_resumen_admin_es_solo_in_app_sin_llamar_enviar_correo(
     assert [envio["destinatario"] for envio in llamadas] == ["alumno210@cataclub.test"]
 
 
+def test_resumen_de_mora_llega_a_la_bandeja_del_admin_activo_y_no_a_otros(
+    db_session, sesion_inyectada, monkeypatch,
+):
+    # S17 (QA ronda 2): el admin ve la mora en su campana. Solo los
+    # administradores ACTIVOS la reciben; un admin dado de baja y un
+    # entrenador/alumno no.
+    from app.servicios_negocio.notificacion_servicio import NotificacionServicio
+
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
+    admin_persona, _ = _crear_admin(db_session, cedula_valida(230), "admin230@cataclub.test")
+    baja_persona, baja_usuario = _crear_admin(db_session, cedula_valida(231), "admin231@cataclub.test")
+    baja_usuario.activo = False
+    entrenador = _crear_persona(db_session, cedula_valida(232))
+    db_session.add(Usuario(
+        correo="trainer232@cataclub.test", contrasenia="hash", persona_id=entrenador.id,
+        roles=[Rol(tipo_rol=TipoRol.ENTRENADOR, descripcion="Entrenador")],
+    ))
+    alumno = _crear_persona(db_session, cedula_valida(233), nombres="Mora", apellidos="Dos")
+    _crear_usuario(db_session, alumno, "alumno233@cataclub.test")
+    _crear_membresia_con_pago(db_session, alumno, HOY - timedelta(days=1))
+    db_session.flush()
+    _mock_envio(monkeypatch)
+
+    alertas_mod.alertar_mora_diaria()
+
+    items, total = NotificacionServicio(db_session).listar_propias(admin_persona.id, skip=0, limit=10)
+    assert total == 1
+    assert items[0].tipo == TipoNotificacion.RESUMEN_MORA_ADMIN
+    assert "Mora Dos" in items[0].mensaje
+    for ajena in (baja_persona, entrenador):
+        assert db_session.query(Notificacion).filter(
+            Notificacion.tipo == TipoNotificacion.RESUMEN_MORA_ADMIN,
+            Notificacion.persona_id == ajena.id,
+        ).count() == 0
+
+
 def test_resumen_admin_no_se_duplica_en_el_mismo_dia(
     db_session, sesion_inyectada, monkeypatch
 ):
