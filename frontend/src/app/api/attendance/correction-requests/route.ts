@@ -21,7 +21,6 @@ import {
 } from "@/lib/server/bff-helpers";
 import { ESTADO_ASISTENCIA_FRONTEND_TO_BACKEND } from "@/lib/server/attendance-adapter";
 
-const BACKEND_PATH = "/asistencias/solicitudes-correccion";
 const FORWARDED_FILTERS = ["estado", "horario_id", "fecha"] as const;
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -34,7 +33,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (value) query.set(name, value);
   }
   const suffix = query.size > 0 ? `?${query.toString()}` : "";
-  return proxyToBackend(`${BACKEND_PATH}${suffix}`, { method: "GET", accessToken });
+  return proxyToBackend(`/asistencias/solicitudes-correccion${suffix}`, { method: "GET", accessToken });
 }
 
 interface CreateBody {
@@ -61,7 +60,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return badRequestResponse("Indique el motivo de la corrección.");
   }
 
-  return proxyToBackend(BACKEND_PATH, {
+  return proxyToBackend("/asistencias/solicitudes-correccion", {
     method: "POST",
     accessToken,
     successStatus: 201,

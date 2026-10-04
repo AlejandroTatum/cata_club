@@ -472,6 +472,7 @@ PARES_DE_ENUM = (
     ParDeEnum("EstadoMembresia", "lib/membership-status.ts", "BackendEstadoMembresia"),
     ParDeEnum("DiaSemana", "lib/server/attendance-adapter.ts", "BackendDiaSemana"),
     ParDeEnum("EstadoAsistencia", "lib/server/attendance-adapter.ts", "BackendEstadoAsistencia"),
+    ParDeEnum("EstadoSolicitudCorreccion", "services/api.ts", "CorrectionRequestStatus"),
 )
 
 MAPAS_TRADUCIDOS = (
