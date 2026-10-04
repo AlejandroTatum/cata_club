@@ -172,7 +172,7 @@ async function prepararPagoEnColaDeAdmin(page: Page): Promise<{ pedroId: string;
   const pagoId = await registerTransferPaymentViaApi(page, pedroId, membresiaId);
 
   await page.goto("/payments");
-  await page.getByLabel("Buscar estudiante").fill(STUDENT_FULL_NAME);
+  await page.getByLabel("Buscar jugador").fill(STUDENT_FULL_NAME);
   const fila = page.getByTestId("payments-table").locator(`[data-payment-action="${pagoId}"]`);
   await expect(fila).toBeVisible({ timeout: 15_000 });
   await fila.click();
