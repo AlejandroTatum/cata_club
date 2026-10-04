@@ -337,7 +337,7 @@ def _payload_representado(cedula=cedula_valida(520), ficha_medica=None):
         "telefono": "0991230001",
     }
     # QA4 FAM-10: la ficha médica del dependiente es obligatoria.
-    payload["ficha_medica"] = ficha_medica if ficha_medica is not None else {"tipo_sangre": "O_POSITIVO"}
+    payload["ficha_medica"] = ficha_medica if ficha_medica is not None else {"tipo_sangre": "O_POSITIVO", "alergias": "Ninguna", "enfermedades": ["Ninguno"]}
     return payload
 
 
@@ -384,7 +384,7 @@ def test_crear_representado_rechaza_contacto_de_emergencia_propio(
     representante = _crear_persona_representante(db_session)
     _restaurar_override_token(persona_id=representante.id, roles=["REPRESENTANTE"])
 
-    ficha_medica = {"tipo_sangre": "O_POSITIVO", campo_retirado: "0991230000"}
+    ficha_medica = {"tipo_sangre": "O_POSITIVO", "alergias": "Ninguna", "enfermedades": ["Ninguno"], campo_retirado: "0991230000"}
     resp = client.post(
         f"/api/v1/personas/{representante.id}/representados",
         json=_payload_representado(ficha_medica=ficha_medica),
@@ -447,7 +447,7 @@ def test_crear_representado_ficha_medica_invalida_rechazada(client, db_session):
 
     resp = client.post(
         f"/api/v1/personas/{representante.id}/representados",
-        json=_payload_representado(ficha_medica={"tipo_sangre": "NO_ES_UN_TIPO_VALIDO"}),
+        json=_payload_representado(ficha_medica={"tipo_sangre": "NO_ES_UN_TIPO_VALIDO", "alergias": "Ninguna", "enfermedades": ["Ninguno"]}),
     )
     assert resp.status_code == 422
 
@@ -705,7 +705,7 @@ def test_buscar_rechaza_cuenta_autoinscripta(client_sin_token):
             # Sin ella el alta daría 422 y el test se volvería verde sin
             # haber probado nunca la guardia que custodia.
             "ficha_medica": {
-                "tipo_sangre": "O_POSITIVO", "enfermedades": [],
+                "tipo_sangre": "O_POSITIVO", "alergias": "Ninguna", "enfermedades": ["Ninguno"],
                 "contacto_emergencia": "María Torres",
                 "telefono_emergencia": "0991112233",
             },

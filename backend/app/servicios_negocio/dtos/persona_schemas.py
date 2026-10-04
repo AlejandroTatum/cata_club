@@ -13,7 +13,8 @@ from app.servicios_negocio.dtos.validadores import (
     ContactoEmergenciaValidado,
     ContraseniaValidada,
     CorreoValidado,
-    EnfermedadesValidadas,
+    AlergiasObligatorias,
+    EnfermedadesObligatorias,
     NombrePresentado,
     NombrePresentadoOpcional,
     NombreEditable,
@@ -351,8 +352,8 @@ class FichaMedicaCreateDTO(BaseModel):
     """
     tipo_sangre: TipoSangreValidado
     persona_id: int
-    enfermedades: EnfermedadesValidadas = Field(default_factory=list)  # nombres de enfermedades, opcional
-    alergias: Optional[str] = Field(default=None, max_length=255)
+    enfermedades: EnfermedadesObligatorias = Field(default=None, validate_default=True)  # nombres; «Ninguno» => []
+    alergias: AlergiasObligatorias = Field(default=None, max_length=255, validate_default=True)
     contacto_emergencia: Optional[ContactoEmergenciaValidado] = Field(default=None, max_length=150)
     telefono_emergencia: TelefonoValidado = Field(..., max_length=32)
 
@@ -383,8 +384,8 @@ class FichaMedicaUpdateDTO(BaseModel):
     sin poder borrarse acá, para CUALQUIER persona.
     """
     tipo_sangre: Optional[TipoSangreValidado] = None
-    enfermedades: Optional[EnfermedadesValidadas] = None
-    alergias: Optional[str] = Field(default=None, max_length=255)
+    enfermedades: EnfermedadesObligatorias = None
+    alergias: AlergiasObligatorias = Field(default=None, max_length=255)
     contacto_emergencia: Optional[ContactoEmergenciaValidado] = Field(default=None, max_length=150)
     telefono_emergencia: Optional[TelefonoValidado] = Field(default=None, max_length=32)
 

@@ -25,6 +25,8 @@ const FIELD_ID = {
   contrasenia: "enroll-contrasenia",
   contraseniaConfirmacion: "enroll-confirmar-contrasena",
   tipoSangre: "enroll-tipo-sangre",
+  condicionesSalud: "enroll-condiciones-salud",
+  alergias: "enroll-alergias",
   contactoEmergencia: "enroll-contacto-emergencia",
   telefonoEmergencia: "enroll-telefono-emergencia",
 } as const;
@@ -128,6 +130,8 @@ export async function enrollNewPlayerViaWizard(page: Page, player: NewPlayer): P
   // Paso "Salud y emergencia". El teléfono de emergencia debe DIFERIR del
   // propio (`emergencyPhoneDiffersRule`), de ahí el prefijo distinto.
   await page.locator(`#${FIELD_ID.tipoSangre}`).selectOption("O_POSITIVO");
+  await page.locator(`#${FIELD_ID.condicionesSalud}`).fill("Ninguno");
+  await page.locator(`#${FIELD_ID.alergias}`).fill("Ninguno");
   await page.locator(`#${FIELD_ID.contactoEmergencia}`).fill("Contacto QA");
   await page.locator(`#${FIELD_ID.telefonoEmergencia}`).fill("0987654321");
   await page.getByRole("button", { name: /siguiente/i }).click();
@@ -168,8 +172,8 @@ export async function enrollNewPlayerViaApi(
       },
       fichaMedica: {
         tipoSangre: "O_POSITIVO",
-        condicionesSalud: "",
-        alergias: "",
+        condicionesSalud: "Ninguno",
+        alergias: "Ninguno",
         contactoEmergencia: "Contacto QA",
         telefonoEmergencia: "0987654321",
       },
@@ -300,6 +304,8 @@ export async function enrollDependentViaWizard(
   // #1219, same root cause as the phone field on the student step).
   await page.getByRole("heading", { name: /salud y emergencia/i }).waitFor({ timeout: 20_000 });
   await page.locator(`#${FIELD_ID.tipoSangre}`).selectOption("O_POSITIVO");
+  await page.locator(`#${FIELD_ID.condicionesSalud}`).fill("Ninguno");
+  await page.locator(`#${FIELD_ID.alergias}`).fill("Ninguno");
   await page.getByRole("button", { name: /siguiente/i }).click();
 
   // Paso "Resumen y confirmación".
