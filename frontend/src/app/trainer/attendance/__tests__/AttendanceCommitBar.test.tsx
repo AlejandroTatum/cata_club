@@ -34,4 +34,13 @@ describe("AttendanceCommitBar", () => {
       expect(bar).not.toHaveClass("sticky");
     },
   );
+
+  // ENT-14: 44px targets and a bar that does not eat a quarter of the screen.
+  it("keeps every action at 44px and hides the zero-count states below lg", () => {
+    const bar = renderBar("mark-attendance");
+    for (const button of screen.getAllByRole("button")) {
+      expect(button.className).toContain("min-h-[44px]");
+    }
+    expect(bar.querySelector(".max-lg\\:hidden")).not.toBeNull();
+  });
 });

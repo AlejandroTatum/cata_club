@@ -124,7 +124,7 @@ describe("validateEnrollFields", () => {
     // sentence `phoneRule` gives everywhere else.
     expect(validateEnrollFields("personal", validForm({ telefono: "9912" })).telefono)
       .toBe(
-        "El teléfono debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
+        "El teléfono no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
       );
   });
 
@@ -143,7 +143,7 @@ describe("validateEnrollFields", () => {
       "personal",
       validForm({ enrollmentType: "self", fechaNacimiento: "2015-06-15" }),
     );
-    expect(errors.fechaNacimiento).toMatch(/el alumno es menor de edad y no puede inscribirse por su cuenta/);
+    expect(errors.fechaNacimiento).toMatch(/El alumno es menor de edad y necesita un representante/);
   });
 
   it("does not apply the minors rule to the student of a child enrollment", () => {
@@ -203,7 +203,7 @@ describe("validateEnrollFields", () => {
     );
     expect(errors.tipoSangre).toBe("Seleccione el tipo de sangre del alumno.");
     expect(errors.telefonoEmergencia).toBe(
-      "El teléfono de emergencia debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
+      "El teléfono de emergencia no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
     );
   });
 

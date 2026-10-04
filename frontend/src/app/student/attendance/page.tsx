@@ -60,7 +60,6 @@ import {
   BackLink,
   Badge,
   EmptyState,
-  ErrorState,
   InfoPanel,
   LoadingState,
   PAGE_RAIL,
@@ -72,6 +71,7 @@ import type { AttendanceBreakdown } from "../student-utils";
 import ManagedStudentPicker, { useManagedProfiles } from "../ManagedStudentPicker";
 import { CalendarCheck, User } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
+import StudentErrorState from "../StudentErrorState";
 import { toUserMessage } from "@/lib/error-message";
 
 /**
@@ -100,12 +100,15 @@ type LoadState =
 // The recap — one counted sentence, then the four states behind it
 // ---------------------------------------------------------------------------
 
-/** The four states, in the order a family reads them: best outcome first. */
+/** The six states, in the order a family reads them: best outcome first. */
 const BREAKDOWN_ROWS: { key: keyof Omit<AttendanceBreakdown, "total">; estado: string }[] = [
   { key: "present", estado: "present" },
   { key: "late", estado: "late" },
   { key: "justified", estado: "justified" },
   { key: "absent", estado: "absent" },
+  // FAM-22: left out, the tallies summed to less than the sessions listed.
+  { key: "sick", estado: "sick" },
+  { key: "competition", estado: "competition" },
 ];
 
 /** The state dot, in that state's own badge colour — the number itself stays ink. */
@@ -114,6 +117,8 @@ const DOT_CLASS: Record<string, string> = {
   late: "bg-state-warn",
   justified: "bg-state-neutral",
   absent: "bg-state-bad",
+  sick: "bg-state-neutral",
+  competition: "bg-state-neutral",
 };
 
 /** What each state a session can carry means, for a reader with no rows yet. */
@@ -144,7 +149,7 @@ function AttendanceRecap({
             below two profiles), so this kicker was the only place that could
             name whose record this is — and it said "Su asistencia" to a reader
             who does not train here. */}
-        <p className="mb-1 text-2xs font-bold uppercase text-ink-3">
+        <p className="mb-1 text-2xs font-bold uppercase text-ink-3-strong">
           {studentName ? `Asistencia de ${studentName}` : "Su asistencia"}
         </p>
         <h2 id="attendance-recap-title" className="text-base font-bold tracking-tight text-ink">
@@ -160,7 +165,7 @@ function AttendanceRecap({
             "Todavía no hay sesiones registradas"
           )}
         </h2>
-        <p className="mt-1.5 text-sm text-ink-3">
+        <p className="mt-1.5 text-sm text-ink-3-strong">
           {recap
             ? "Una tardanza cuenta como asistencia; una falta justificada, no."
             : studentName
@@ -188,7 +193,7 @@ function AttendanceRecap({
             data-testid={`breakdown-${getAttendanceLabel(estado).toLowerCase()}`}
             className={cn(
               "px-5 py-3.5",
-              index < 2 ? "border-b border-line" : null,
+              index < BREAKDOWN_ROWS.length - 2 ? "border-b border-line" : null,
               index % 2 === 0 ? "border-r border-line" : null,
             )}
           >
@@ -243,7 +248,7 @@ function SessionList({
           {studentName ? `Sesiones registradas de ${studentName}` : "Sesiones registradas"}
         </h2>
         {sessions.length > 0 && (
-          <span className="text-xs font-semibold tabular-nums text-ink-3">
+          <span className="text-xs font-semibold tabular-nums text-ink-3-strong">
             {sessions.length}
           </span>
         )}
@@ -256,7 +261,7 @@ function SessionList({
               size={ICON.lg}
               strokeWidth={1.5}
               aria-hidden="true"
-              className="mt-0.5 flex-none text-ink-3"
+              className="mt-0.5 flex-none text-ink-3-strong"
             />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-bold text-ink">
@@ -264,7 +269,7 @@ function SessionList({
                   ? `Aún no hay asistencias registradas de ${studentName}`
                   : "Aún no hay asistencias registradas"}
               </p>
-              <p className="mt-0.5 text-sm text-ink-3">
+              <p className="mt-0.5 text-sm text-ink-3-strong">
                 Cada vez que el entrenador tome lista, la sesión aparecerá aquí con el estado que
                 le haya asignado.
               </p>
@@ -278,7 +283,7 @@ function SessionList({
               key={`${session.fecha}-${session.horario}`}
               className="flex min-h-drow flex-wrap items-center gap-x-4 gap-y-field border-b border-line px-5 py-2 last:border-b-0"
             >
-              <span className="w-[92px] flex-none text-2xs font-bold uppercase tabular-nums text-ink-3">
+              <span className="w-[92px] flex-none text-2xs font-bold uppercase tabular-nums text-ink-3-strong">
                 {formatDate(session.fecha)}
               </span>
               <span className="min-w-0 flex-1 text-sm font-semibold text-ink">{session.horario}</span>
@@ -333,7 +338,7 @@ function AttendanceGuide(): React.ReactElement {
         {ATTENDANCE_LEGEND.map(({ estado, meaning }) => (
           <li key={estado} className="flex items-center gap-2.5">
             <Badge tone={getAttendanceBadgeTone(estado)}>{getAttendanceLabel(estado)}</Badge>
-            <span className="text-xs text-ink-3">{meaning}</span>
+            <span className="text-xs text-ink-3-strong">{meaning}</span>
           </li>
         ))}
       </ul>
@@ -411,7 +416,7 @@ function StudentAttendanceContent(): React.ReactElement {
         </div>
       )}
       {state.status === "error" && (
-        <ErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />
+        <StudentErrorState message={state.message} onRetry={() => setReloadToken((n) => n + 1)} />
       )}
       {state.status === "ready" && (
         <AttendanceView

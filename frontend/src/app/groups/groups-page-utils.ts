@@ -34,6 +34,23 @@ export function countUniqueAlumnos(
   return personaIds.size;
 }
 
+/** "1 alumno inscrito" / "3 alumnos inscritos" — never "alumno(s)" (ADMB-22). */
+export function alumnosInscritosLabel(n: number): string {
+  return n === 1 ? "1 alumno inscrito" : `${n} alumnos inscritos`;
+}
+
+/**
+ * ADMB-04: the server refuses to remove days from, or delete, a categoría that
+ * still has students (409), so the dialog says so instead of promising to
+ * unassign them. `dias` is the already-labelled day list for "quitar-dias".
+ */
+export function mensajeCategoriaConAlumnos(
+  input: { accion: "quitar-dias"; dias: string; alumnos: number } | { accion: "eliminar"; alumnos: number },
+): string {
+  const objeto = input.accion === "eliminar" ? "eliminar la categoría" : `quitar ${input.dias}`;
+  return `No puede ${objeto} mientras haya ${alumnosInscritosLabel(input.alumnos)}. Pase primero a esos alumnos a otra categoría.`;
+}
+
 // ---------------------------------------------------------------------------
 // Categoría cards — one card per training group, not per categoría × weekday
 // ---------------------------------------------------------------------------

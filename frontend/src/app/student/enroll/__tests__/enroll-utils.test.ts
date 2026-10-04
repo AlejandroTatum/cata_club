@@ -5,6 +5,8 @@ import {
   ENROLLMENT_TYPES,
   fieldsForStep,
   initialFormData,
+  institutionOptionLabel,
+  planOptionLabel,
   shouldFocusStepHeadingOnJump,
   validateEnrollFields,
   validateEnrollStep,
@@ -67,7 +69,7 @@ describe("telefono — step 2 validates the local digits after +593 (#1296)", ()
       contraseniaConfirmacion: "password8",
     });
     expect(errors.telefono).toBe(
-      "El teléfono debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
+      "El teléfono no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
     );
   });
 
@@ -190,5 +192,35 @@ describe("shouldFocusStepHeadingOnJump", (): void => {
 
   it("does not arm the flag when the destination is already the current step", (): void => {
     expect(shouldFocusStepHeadingOnJump("health", "health")).toBe(false);
+  });
+});
+
+describe("QA4 REG-04 — email format is checked at step 2", () => {
+  it.each(["a@b..com", "a@b.c", "a@.com", "a@b.com."])("rejects %s", (correo) => {
+    const errors = validateEnrollStep(
+      "personal",
+      { ...initialFormData, enrollmentType: "self", correo },
+    );
+    expect(errors).toContain(
+      "El correo electrónico no es válido. Revíselo; debe tener un formato como nombre@ejemplo.com.",
+    );
+  });
+
+  it("accepts a normal address", () => {
+    const errors = validateEnrollStep(
+      "personal",
+      { ...initialFormData, enrollmentType: "self", correo: "ana.perez@mail.ec" },
+    );
+    expect(errors.filter((e) => e.includes("correo electrónico no es válido"))).toEqual([]);
+  });
+});
+
+describe("QA4 FAM-08 — option labels without internal codes", () => {
+  it("plan label drops the code and says «al mes»", () => {
+    expect(planOptionLabel("Mensual Adultos", 40)).toBe("Mensual Adultos — $40,00 al mes");
+  });
+
+  it("institution label is just the name", () => {
+    expect(institutionOptionLabel("Colegio Municipal Sucre")).toBe("Colegio Municipal Sucre");
   });
 });

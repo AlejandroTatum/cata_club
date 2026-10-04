@@ -50,7 +50,7 @@ const SRC = join(__dirname, "..", "..");
  */
 const EXPECTED_PHRASES: Record<string, string> = {
   "/": "Volver al Inicio",
-  "/login": "Volver a Iniciar sesión",
+  "/login": "Volver a iniciar sesión",
   "/dashboard": "Volver al Panel de Control",
   "/members": "Volver a Miembros",
   "/groups": "Volver a Grupos y horarios",

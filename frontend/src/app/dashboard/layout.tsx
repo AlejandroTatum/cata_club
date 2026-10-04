@@ -9,13 +9,13 @@
  * whole app answered "Cata Club Admin": indistinguishable tabs, and a history
  * list where no entry says where it goes.
  *
- * An admin screen, so it keeps the root template `%s | Cata Club Admin`.
+ * The title goes through the root template `%s — Cata Club`.
  */
 
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Panel de Control",
+  title: "Panel de control",
 };
 
 export default function DashboardLayout({

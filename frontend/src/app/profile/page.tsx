@@ -207,6 +207,7 @@ import {
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { formatDate } from "@/lib/format-utils";
+import LinkifiedText from "@/components/LinkifiedText";
 import { toUserMessage } from "@/lib/error-message";
 
 /** Lifetime of the password-recovery link (backend `crear_token_recuperacion`, 30 min). */
@@ -217,7 +218,7 @@ const RESET_RESEND_COOLDOWN_SECONDS = 120;
 function formatCountdown(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
-import { toPhoneFieldDigits, toStoredPhone } from "@/lib/identity-validation";
+import { phoneFieldRule, toPhoneFieldDigits, toStoredPhone } from "@/lib/identity-validation";
 import { revisarFoto, subirFotoDeArchivo } from "@/lib/photo-upload";
 import { PhoneField } from "@/components/wizard-fields";
 
@@ -227,6 +228,10 @@ import { PhoneField } from "@/components/wizard-fields";
 
 /** Roles with no staff profile here — they see the student-branch content in the unified layout instead. */
 const STUDENT_SUMMARY_ROLES: ReadonlySet<UserRole> = new Set(["representante", "estudiante"]);
+
+/** The one phone rule the profile states: the same local digits the field's own hint asks for. */
+const PHONE_PROFILE_MESSAGE =
+  "Escriba su celular de 9 dígitos que empieza con 9 (por ejemplo, 991234567) o su fijo con código de provincia (por ejemplo, 42345678). Es opcional.";
 
 const ADMIN_SHORTCUTS: RoleShortcut[] = [
   { title: "Panel de Control", description: "Resumen del día del club", href: "/dashboard" },
@@ -316,7 +321,7 @@ const ROLE_COPY: Record<
     roleCaption: "Rol asignado a esta cuenta",
     roleTitle: "Cuenta administrativa",
     roleText: () =>
-      "Esta cuenta tiene el rol de Administrador. Los datos de miembros se gestionan desde las superficies administrativas.",
+      "Esta cuenta tiene el rol de Administrador. Los datos de los miembros se gestionan desde Miembros, en el menú.",
   },
   trainer: {
     lede: "Revise su información de contacto y el acceso a su cuenta.",
@@ -458,33 +463,18 @@ function ProfileShell({
 }
 
 function AccountSummary({
-  roleLabels,
-  correo,
   memberSince,
   active,
 }: {
-  roleLabels: string[];
-  correo: string;
   memberSince: string | null;
   /** Staff accounts are always active; students read their state from the membership card. */
   active: boolean;
-}): React.ReactElement {
+}): React.ReactElement | null {
+  // Role and correo are stated once, in the identity panel above — repeating
+  // them here is what made the profile read the same fact four times (ENT-21).
+  if (!active && !memberSince) return null;
   return (
     <dl data-testid="profile-account-summary" className="grid gap-3 text-sm">
-      <div className="grid gap-1">
-        <dt className="text-xs text-ink-3-strong">Rol</dt>
-        <dd className="flex flex-wrap gap-1.5">
-          {roleLabels.map((label) => (
-            <Badge key={label} tone="neutral">
-              {label}
-            </Badge>
-          ))}
-        </dd>
-      </div>
-      <div className="grid gap-1">
-        <dt className="text-xs text-ink-3-strong">Correo de acceso</dt>
-        <dd className="break-words font-semibold text-ink">{correo}</dd>
-      </div>
       {active && (
         <div className="grid gap-1">
           <dt className="text-xs text-ink-3-strong">Estado</dt>
@@ -692,7 +682,7 @@ function IdentityPanel({
 
       {fotoError && (
         <p role="alert" className="border-t border-white/10 bg-coal-2 px-6 py-3 text-xs text-white lg:px-8">
-          {fotoError}
+          <LinkifiedText text={fotoError} />
         </p>
       )}
     </section>
@@ -716,7 +706,7 @@ function IdentityPanel({
 function PanelFact({ label, children }: { label: string; children: React.ReactNode }): React.ReactElement {
   return (
     <div className="border-b border-line px-5 py-3 last:border-b-0">
-      <p className="text-2xs font-bold uppercase tracking-wide text-ink-3">{label}</p>
+      <p className="text-2xs font-bold uppercase tracking-wide text-ink-3-strong">{label}</p>
       <p className="mt-field break-words text-sm font-semibold text-ink">{children}</p>
     </div>
   );
@@ -903,6 +893,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   const [telefono, setTelefono] = useState(toPhoneFieldDigits(props.perfil?.telefono ?? null));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [telefonoError, setTelefonoError] = useState<string | null>(null);
 
   const [requestingPassword, setRequestingPassword] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
@@ -994,18 +985,27 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     // then (see `headerAction`), so this is unreachable with nothing to seed.
     setTelefono(toPhoneFieldDigits(perfil?.telefono ?? null));
     setSaveError(null);
+    setTelefonoError(null);
     setEditing(true);
   }
 
   function cancelEditing(): void {
     setTelefono(toPhoneFieldDigits(perfil?.telefono ?? null));
     setSaveError(null);
+    setTelefonoError(null);
     setEditing(false);
   }
 
   async function handleSave(): Promise<void> {
-    setSaving(true);
     setSaveError(null);
+    // The field is optional: an empty value clears the number, a filled one
+    // must be valid, and the message lands under the field before any request.
+    if (telefono && phoneFieldRule(telefono, "El teléfono")) {
+      setTelefonoError(PHONE_PROFILE_MESSAGE);
+      return;
+    }
+    setTelefonoError(null);
+    setSaving(true);
     try {
       // Correo is never sent here — it's the JWT `sub` claim, and self-service
       // editing was removed by design (see auth_servicio.py).
@@ -1317,7 +1317,6 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             testId="profile-column-info"
           >
             <DetailRow label="Nombres">{fullName}</DetailRow>
-            <DetailRow label="Correo de cuenta">{correoDisplay}</DetailRow>
             <DetailRow label="Teléfono">
               {editing ? (
                 // Issue #1296: the same `PhoneField` every other phone field
@@ -1329,14 +1328,17 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
                   label="Teléfono"
                   hideLabel
                   value={telefono}
-                  onChange={setTelefono}
+                  onChange={(value) => {
+                    setTelefono(value);
+                    setTelefonoError(null);
+                  }}
+                  error={telefonoError ?? undefined}
                   disabled={saving}
                 />
               ) : (
                 <DataBox>{telefonoDisplay || "—"}</DataBox>
               )}
             </DetailRow>
-            <DetailRow label="Rol">{roleLabel}</DetailRow>
             {props.kind === "student" && (
               <p className="border-t border-line bg-sunken px-5 py-3 text-xs text-ink-3-strong">
                 Solo el teléfono se puede editar desde aquí. Para corregir otro dato, escriba al
@@ -1345,7 +1347,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             )}
             {saveError && (
               <p role="alert" className="border-t border-line px-5 py-3 text-sm text-state-bad">
-                {saveError}
+                <LinkifiedText text={saveError} />
               </p>
             )}
           </CardSection>
@@ -1363,14 +1365,6 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
                 {roleCopy.roleText(representados.length > 0)}
               </p>
             </div>
-            {props.kind === "staff" && (
-              <>
-                <DetailRow label="Rol principal">{roleLabel}</DetailRow>
-                <DetailRow label="Estado">
-                  <Badge tone="ok">Activo</Badge>
-                </DetailRow>
-              </>
-            )}
             {showsMultiRoleBreakdown && (
               // EVERY assigned role, not just the session's. The session used
               // to collapse an account's backend roles to the single
@@ -1469,7 +1463,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
                     <DependantRow key={dependant.personaId} profile={dependant} />
                   ))}
                   {fallbackStatedByDependants && (
-                    <p className="px-5 py-3 text-xs text-ink-3">
+                    <p className="px-5 py-3 text-xs text-ink-3-strong">
                       «—» indica que no hay membresía visible. {NO_MEMBERSHIP_FALLBACK}.
                     </p>
                   )}
@@ -1531,7 +1525,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             )}
             {sessionsError && (
               <p role="alert" className="text-sm text-state-bad">
-                {sessionsError}
+                <LinkifiedText text={sessionsError} />
               </p>
             )}
 
@@ -1568,7 +1562,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             )}
             {passwordError && (
               <p role="alert" className="text-sm text-state-bad">
-                {passwordError}
+                <LinkifiedText text={passwordError} />
               </p>
             )}
           </div>
@@ -1601,12 +1595,6 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
       <div className="grid min-w-0 content-start gap-5">
         <RailCard title="Su cuenta" icon={<User size={ICON.sm} strokeWidth={1.5} />} tone="neutral">
           <AccountSummary
-            roleLabels={
-              assignedRoles.length > 0
-                ? assignedRoles.map((rol) => getBackendRoleLabel(rol))
-                : [roleLabel]
-            }
-            correo={correoDisplay}
             memberSince={fechaCreacion ? formatDate(fechaCreacion) : null}
             active={props.kind === "staff"}
           />

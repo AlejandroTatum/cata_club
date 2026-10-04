@@ -67,7 +67,7 @@ describe("EmergencyCardDialog", () => {
 
     render(<EmergencyCardDialog student={{ id: 5, name: "Iker Solís" }} onClose={vi.fn()} />);
 
-    expect(await screen.findByText("O_POSITIVO")).toBeInTheDocument();
+    expect(await screen.findByText("O+")).toBeInTheDocument();
     expect(screen.getByText("Polen")).toBeInTheDocument();
     expect(screen.getAllByText("Marta Solís")).not.toHaveLength(0);
     expect(screen.getAllByText("0987654321").length).toBeGreaterThan(0);
@@ -103,7 +103,7 @@ describe("EmergencyCardDialog", () => {
     await screen.findByRole("alert");
     fireEvent.click(screen.getByRole("button", { name: /reintentar/i }));
 
-    expect(await screen.findByText("O_POSITIVO")).toBeInTheDocument();
+    expect(await screen.findByText("O+")).toBeInTheDocument();
     expect(fetchFichaEmergencia).toHaveBeenCalledTimes(2);
   });
 
@@ -112,7 +112,7 @@ describe("EmergencyCardDialog", () => {
     const onClose = vi.fn();
 
     render(<EmergencyCardDialog student={{ id: 5, name: "Iker Solís" }} onClose={onClose} />);
-    await screen.findByText("O_POSITIVO");
+    await screen.findByText("O+");
 
     fireEvent.keyDown(document, { key: "Escape" });
 
@@ -124,7 +124,7 @@ describe("EmergencyCardDialog", () => {
     const onClose = vi.fn();
 
     render(<EmergencyCardDialog student={{ id: 5, name: "Iker Solís" }} onClose={onClose} />);
-    await screen.findByText("O_POSITIVO");
+    await screen.findByText("O+");
 
     fireEvent.click(screen.getByRole("button", { name: /cerrar/i }));
 
@@ -143,12 +143,12 @@ describe("EmergencyCardDialog", () => {
     const onClose = vi.fn();
 
     render(<EmergencyCardDialog student={{ id: 5, name: "Iker Solís" }} onClose={onClose} />);
-    await screen.findByText("O_POSITIVO");
+    await screen.findByText("O+");
 
     fireEvent.click(screen.getByRole("dialog"));
     expect(onClose).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByText("O_POSITIVO"));
+    fireEvent.click(screen.getByText("O+"));
     expect(onClose).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByTestId("emergency-card-backdrop"));
@@ -225,7 +225,7 @@ describe("EmergencyCardDialog", () => {
     vi.mocked(fetchFichaEmergencia).mockResolvedValue(fichaCompleta);
 
     render(<EmergencyCardDialog student={{ id: 5, name: "Iker Solís" }} onClose={vi.fn()} />);
-    await screen.findByText("O_POSITIVO");
+    await screen.findByText("O+");
 
     expect(screen.queryByText(/cédula/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/fecha de nacimiento/i)).not.toBeInTheDocument();
@@ -317,7 +317,7 @@ describe("EmergencyCardDialog — atrapado de foco", () => {
     expect(cerrar).toHaveFocus();
   });
 
-  it("enfoca Cerrar al abrir, lo mantiene con un solo enfocable, y devuelve el foco al cerrar", async () => {
+  it("enfoca Cerrar al abrir, mantiene el foco dentro del panel, y devuelve el foco al cerrar", async () => {
     vi.mocked(fetchFichaEmergencia).mockResolvedValue(fichaCompleta);
 
     render(<TrampaHarness />);
@@ -325,22 +325,64 @@ describe("EmergencyCardDialog — atrapado de foco", () => {
     disparador.focus();
     fireEvent.click(disparador);
 
-    await screen.findByText("O_POSITIVO");
+    await screen.findByText("O+");
     const cerrar = screen.getByRole("button", { name: /cerrar/i });
     expect(cerrar).toHaveFocus();
 
-    // Cargada, la tarjeta tiene un único enfocable. Que el foco "se quede" en
-    // Cerrar no probaría nada — jsdom tampoco lo mueve. Lo que muerde es
-    // soltarlo FUERA del panel y exigir que el Tab lo traiga de vuelta.
+    // Cargada, la tarjeta tiene el enlace de llamada (ENT-11) y Cerrar. Que el
+    // foco "se quede" en Cerrar no probaría nada — jsdom tampoco lo mueve. Lo
+    // que muerde es soltarlo FUERA del panel y exigir que el Tab lo traiga de vuelta.
     disparador.focus();
     expect(dentroDelDialogo()).toBe(false);
     fireEvent.keyDown(document, { key: "Tab" });
     expect(dentroDelDialogo()).toBe(true);
-    expect(cerrar).toHaveFocus();
 
     fireEvent.click(cerrar);
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(disparador).toHaveFocus();
+  });
+});
+
+// ENT-10 / ENT-11
+describe("EmergencyCardDialog — readable blood type and one-tap calls", () => {
+  it("shows the blood type as O+, never the wire enum", async () => {
+    vi.mocked(fetchFichaEmergencia).mockResolvedValue(fichaCompleta);
+    render(<EmergencyCardDialog student={{ id: 5, name: "Iker Solís" }} onClose={vi.fn()} />);
+
+    expect(await screen.findByText("O+")).toBeInTheDocument();
+    expect(screen.queryByText("O_POSITIVO")).not.toBeInTheDocument();
+  });
+
+  it("maps the negative and AB types too", async () => {
+    vi.mocked(fetchFichaEmergencia).mockResolvedValue({ ...fichaCompleta, tipoSangre: "AB_NEGATIVO" });
+    render(<EmergencyCardDialog student={{ id: 5, name: "Iker Solís" }} onClose={vi.fn()} />);
+
+    expect(await screen.findByText("AB-")).toBeInTheDocument();
+  });
+
+  it("offers one tel: link when contact and representative are the same person", async () => {
+    vi.mocked(fetchFichaEmergencia).mockResolvedValue(fichaCompleta);
+    render(<EmergencyCardDialog student={{ id: 5, name: "Iker Solís" }} onClose={vi.fn()} />);
+    await screen.findByText("O+");
+
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute("href", "tel:0987654321");
+    expect(links[0]).toHaveAccessibleName(/Llamar a Marta Solís/);
+    expect(screen.queryByText("Representante legal (respaldo)")).not.toBeInTheDocument();
+  });
+
+  it("offers a tel: link per distinct phone", async () => {
+    vi.mocked(fetchFichaEmergencia).mockResolvedValue({
+      ...fichaCompleta,
+      representanteNombreCompleto: "Pedro Solís",
+      representanteTelefono: "0911111111",
+    });
+    render(<EmergencyCardDialog student={{ id: 5, name: "Iker Solís" }} onClose={vi.fn()} />);
+    await screen.findByText("O+");
+
+    const hrefs = screen.getAllByRole("link").map((a) => a.getAttribute("href"));
+    expect(hrefs).toEqual(["tel:0987654321", "tel:0911111111"]);
   });
 });

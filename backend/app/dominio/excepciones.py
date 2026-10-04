@@ -69,7 +69,7 @@ class OperacionInvalida(ErrorDominio):
 
 
 class MembresiaPendienteDePago(OperacionInvalida):
-    """La persona ya tiene una membresía INACTIVA con un pago pendiente
+    """La persona ya tiene una membresía INACTIVA, con o sin pago pendiente
     (-> HTTP 400). Lleva el id de esa membresía para que la UI la enlace;
     el manejador global lo agrega al cuerpo como `membresia_id`."""
 

@@ -17,7 +17,7 @@ const RANGES: readonly string[] = ["24h", "7d", "30d"];
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const rango = request.nextUrl.searchParams.get("rango");
   if (rango !== null && !RANGES.includes(rango)) {
-    return NextResponse.json({ message: "El periodo solicitado no es válido." }, { status: 422 });
+    return NextResponse.json({ message: "El período solicitado no es válido." }, { status: 422 });
   }
 
   const query = rango === null ? "" : `?rango=${rango}`;

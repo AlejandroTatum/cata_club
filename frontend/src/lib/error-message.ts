@@ -300,7 +300,7 @@ const SERVER_FAILURE =
 const NETWORK_FAILURE = "No pudimos conectar. Revise su conexión a internet e intente nuevamente.";
 
 /** The caller aborted — a navigation, an unmount, a superseded request. */
-const CANCELLED = "La operación se canceló.";
+const CANCELLED = "La operación se canceló. Si todavía la necesita, vuelva a intentarlo.";
 
 /**
  * The client gave up waiting: `DEFAULT_TIMEOUT_MS` elapsed with no answer.

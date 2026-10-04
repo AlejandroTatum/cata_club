@@ -32,11 +32,12 @@ from app.servicios_negocio.rol_servicio import RolServicio
 from app.servicios_negocio.gestor_permisos import GestorPermisos
 from app.servicios_negocio.politica_acceso import SOLO_ADMINISTRADOR, PoliticaAccesoPersona
 from app.dominio.enums import TipoRol
+from app.dominio.reglas_negocio import calcular_edad
 from pydantic import BaseModel
 from app.servicios_negocio.dtos.base import ResponseBase
 
 _COLUMNAS_PERSONAS_PDF = [
-    "Nombres", "Apellidos", "Cédula", "Teléfono", "Fecha de Registro",
+    "Nombres", "Apellidos", "Cédula", "Edad", "Teléfono", "Fecha de Registro",
 ]
 
 
@@ -44,12 +45,14 @@ def _personas_a_filas(personas) -> list[list[str]]:
     """Convierte una lista de `Persona` (ORM) en filas de texto para el PDF
     de reporte, en el mismo orden que `_COLUMNAS_PERSONAS_PDF`."""
     filas: list[list[str]] = []
+    hoy = hoy_club()
     for p in personas:
         filas.append([
             p.nombres,
             p.apellidos,
             p.cedula,
-            p.telefono,
+            str(calcular_edad(p.fecha_nacimiento, hoy)),
+            p.telefono or "",
             p.fecha_registro.strftime("%d/%m/%Y") if p.fecha_registro else "-",
         ])
     return filas

@@ -43,7 +43,7 @@
 
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BookUser, SearchX, Stethoscope } from "lucide-react";
 
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -202,6 +202,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
   const [pagina, setPagina] = useState(1);
   /** The group filter: a categoría código from the roster, or `null` for everyone. */
   const [grupo, setGrupo] = useState<string | null>(null);
+  const listaRef = useRef<HTMLDivElement>(null);
   const esEscritorio = useIsDesktop();
   /** The student shown in the side panel (desktop). */
   const [seleccionadoId, setSeleccionadoId] = useState<number | null>(null);
@@ -236,16 +237,17 @@ export default function TrainerStudentsPage(): React.ReactElement {
   const grupos = useMemo(() => {
     const cuentas = new Map<string, { etiqueta: string; cuenta: number }>();
     for (const a of nomina) {
-      if (!a.grupo) continue;
-      const previa = cuentas.get(a.grupo);
-      cuentas.set(a.grupo, { etiqueta: a.grupoEtiqueta ?? a.grupo, cuenta: (previa?.cuenta ?? 0) + 1 });
+      for (const { codigo, etiqueta } of a.categorias) {
+        const previa = cuentas.get(codigo);
+        cuentas.set(codigo, { etiqueta, cuenta: (previa?.cuenta ?? 0) + 1 });
+      }
     }
     return [...cuentas.entries()]
       .map(([valor, { etiqueta, cuenta }]) => ({ valor, etiqueta, cuenta }))
       .sort((a, b) => a.etiqueta.localeCompare(b.etiqueta, "es"));
   }, [nomina]);
   const encontrados = useMemo(
-    () => filtrarPorNombre(nomina, busqueda).filter((a) => grupo === null || a.grupo === grupo),
+    () => filtrarPorNombre(nomina, busqueda).filter((a) => grupo === null || a.categorias.some((c) => c.codigo === grupo)),
     [nomina, busqueda, grupo],
   );
   const totalPaginas = getTotalPages(encontrados.length, PAGE_SIZE);
@@ -267,7 +269,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
     estadoVacio = {
       icon: <BookUser size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />,
       title: "Todavía no hay alumnos inscritos",
-      description: "Cuando la administración asigne alumnos a un horario, van a aparecer acá.",
+      description: "Cuando la administración asigne alumnos a un horario, van a aparecer aquí.",
     };
   } else if (encontrados.length === 0) {
     estadoVacio = {
@@ -293,6 +295,12 @@ export default function TrainerStudentsPage(): React.ReactElement {
   function elegirGrupo(valor: string | null): void {
     setGrupo(valor);
     setPagina(1);
+  }
+
+  /** A new page starts at its first row: the buttons sit at the bottom, so the view would stay there. */
+  function cambiarPagina(nueva: number): void {
+    setPagina(nueva);
+    listaRef.current?.scrollIntoView?.({ behavior: "auto", block: "start" });
   }
 
   function buscar(termino: string): void {
@@ -380,7 +388,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
         {!cargando && !fallo && (
           <div className={esEscritorio && !estadoVacio ? PAGE_RAIL : undefined}>
             <div className="flex min-w-0 flex-col gap-page">
-            <div className="card overflow-hidden">
+            <div ref={listaRef} className="card scroll-mt-4 overflow-hidden">
               {estadoVacio ? (
                 <EmptyState
                   surface="inset"
@@ -476,7 +484,11 @@ export default function TrainerStudentsPage(): React.ReactElement {
                          */}
                         <TableCell>
                           <div className="flex flex-wrap items-center gap-1.5">
-                            {alumno.grupoEtiqueta && <Badge tone="ok">Categoría {alumno.grupoEtiqueta}</Badge>}
+                            {alumno.categorias.map((c) => (
+                              <Badge key={c.codigo} tone="ok">
+                                Categoría {c.etiqueta}
+                              </Badge>
+                            ))}
                             <Badge>{alumno.horariosCompactos ?? "Sin horario"}</Badge>
                           </div>
                         </TableCell>
@@ -509,7 +521,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
                       <Pagination
                         page={pagina}
                         totalPages={totalPaginas}
-                        onPageChange={setPagina}
+                        onPageChange={cambiarPagina}
                         totalItems={encontrados.length}
                         pageSize={PAGE_SIZE}
                         itemNoun="alumno"

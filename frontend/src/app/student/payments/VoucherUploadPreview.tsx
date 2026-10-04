@@ -48,7 +48,7 @@ export function VoucherUploadPreview({
         )}
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-ink">{file.name}</p>
-          <p className="text-xs text-ink-3">{formatFileSize(file.size)}</p>
+          <p className="text-xs text-ink-3-strong">{formatFileSize(file.size)}</p>
         </div>
       </div>
       <div className="flex flex-wrap gap-2">

@@ -20,6 +20,7 @@
  *          deadline; see `PDF_DOWNLOAD_TIMEOUT_MS`.
  */
 
+import type { ClubPaymentInfo } from "@/lib/club-payment-info";
 import type {
   UserRole,
   EstadoAsistencia,
@@ -613,6 +614,24 @@ export async function fetchPaymentValidationsPage(params: {
   });
 }
 
+const inFlight = new Map<string, Promise<unknown>>();
+
+/**
+ * Lets simultaneous callers of the same read share one round trip (PERF-07):
+ * the sidebar badge and the dashboard page both ask for `/api/dashboard`, and
+ * `/payments` needs the pending list for two views at once. The entry is
+ * dropped as soon as the request settles, so nothing is ever served stale.
+ */
+function shareInFlight<T>(key: string, run: () => Promise<T>): Promise<T> {
+  const pending = inFlight.get(key);
+  if (pending) return pending as Promise<T>;
+  const promise = run().finally(() => {
+    inFlight.delete(key);
+  });
+  inFlight.set(key, promise);
+  return promise;
+}
+
 /**
  * Backend's own per-request ceiling on `GET /membresias/pagos`
  * (`limit: int = Query(..., le=200)`) — the largest page
@@ -652,7 +671,13 @@ const MAX_DRAIN_PAGES = 50;
  * client-guessed count. Bounded by `MAX_DRAIN_PAGES` so a backend that
  * never returns a short page cannot hang the caller forever.
  */
-export async function fetchAllPaymentValidations(
+export function fetchAllPaymentValidations(
+  estadoPago?: BackendEstadoPago,
+): Promise<PaymentValidationRequest[]> {
+  return shareInFlight(`payments-drain:${estadoPago ?? "all"}`, () => drainPaymentValidations(estadoPago));
+}
+
+async function drainPaymentValidations(
   estadoPago?: BackendEstadoPago,
 ): Promise<PaymentValidationRequest[]> {
   const items: PaymentValidationRequest[] = [];
@@ -1360,8 +1385,37 @@ export interface DashboardStats {
 }
 
 /** Fetch aggregate dashboard stats, composed server-side from `/personas`, `/membresias/pagos*` and `/asistencias/horarios` — `GET /api/dashboard`. */
-export async function fetchDashboardStats(): Promise<DashboardStats> {
-  return request<DashboardStats>(apiEndpoint("/dashboard"));
+export function fetchDashboardStats(): Promise<DashboardStats> {
+  return shareInFlight("dashboard", () => request<DashboardStats>(apiEndpoint("/dashboard")));
+}
+
+/**
+ * The club's transfer data — `GET /api/club/payment-info`. Signed-in users only
+ * (401 otherwise); `null` when unconfigured.
+ *
+ * Deliberately NOT routed through `request()`: this block is optional, and a
+ * 401 there runs refresh-and-retry and then `notifyAuthFailure()`, which clears
+ * the session app-wide. A failure of a side block must never log the user out,
+ * so a 401 is surfaced to the caller as an `ApiClientError` and nothing else.
+ */
+export async function fetchClubPaymentInfo(): Promise<ClubPaymentInfo | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${getBaseUrl()}${apiEndpoint("/club/payment-info")}`, {
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) {
+      throw new ApiClientError(GENERIC_FAILURE, response.status);
+    }
+    return (await response.json()) as ClubPaymentInfo | null;
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === "AbortError") throw new ApiTimeoutError(DEFAULT_TIMEOUT_MS);
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 /** Club usage figures for the admin activity screen — `GET /api/actividad/resumen?rango=`. Admin only. */

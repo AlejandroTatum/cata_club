@@ -58,3 +58,15 @@ describe("CreateMembershipForm — membresía pendiente de pago (ADM-08)", () =>
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 });
+
+describe("CreateMembershipForm — ADMA-05 membresía existente", () => {
+  it("shows the backend's domain message for a 409 and no pending-payment link", async () => {
+    const message = "Esta persona ya tiene una membresía inactiva; reactívela o renuévela en lugar de crear otra.";
+    mockCrearMembresia.mockRejectedValue(new ApiClientError(message, 409, true));
+
+    await submit();
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+});

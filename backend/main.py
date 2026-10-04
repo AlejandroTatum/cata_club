@@ -21,6 +21,10 @@ from app.infraestructura import latido_workers
 from app.infraestructura.db import TIMEOUT_POOL_SEGUNDOS
 from app.infraestructura.metricas import BUCKETS_LATENCIA_POR_RUTA, colector_outbox
 from app.servicios_negocio.gestor_permisos import GestorPermisos
+from app.servicios_negocio.mensajes_validacion import (
+    mensaje_con_tamano_en_mb,
+    traducir_error_validacion,
+)
 from app.soporte_transversal.circuito_breaker import resumen_circuitos
 from app.soporte_transversal.configuracion import settings, urls_documentacion
 from app.soporte_transversal.configuracion_logging import configurar_logging
@@ -200,7 +204,7 @@ for _excepcion, _codigo in _MAPA_EXCEPCIONES.items():
                 )
             membresia_id = getattr(exc, "membresia_id", None)
             return _respuesta_error(
-                codigo, exc.mensaje, mensaje_seguro=getattr(exc, "seguro_mostrar", False),
+                codigo, mensaje_con_tamano_en_mb(exc.mensaje), mensaje_seguro=getattr(exc, "seguro_mostrar", False),
                 extra={"membresia_id": membresia_id} if membresia_id is not None else None,
             )
         return _handler
@@ -323,10 +327,9 @@ async def _http_exception_handler(request: Request, exc: HTTPException):
 @app.exception_handler(RequestValidationError)
 async def _validation_exception_handler(request: Request, exc: RequestValidationError):
     errores = exc.errors()
-    mensaje = errores[0]["msg"] if errores else "Los datos enviados no son válidos."
-    prefijo_pydantic = "Value error, "
-    if mensaje.startswith(prefijo_pydantic):
-        mensaje = mensaje[len(prefijo_pydantic):]
+    mensaje = (
+        traducir_error_validacion(errores[0]) if errores else "Los datos enviados no son válidos."
+    )
     return _respuesta_error(status.HTTP_422_UNPROCESSABLE_ENTITY, mensaje)
 
 app.add_middleware(

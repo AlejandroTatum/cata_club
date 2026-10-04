@@ -26,6 +26,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 import { E2E_BASE_URL } from "./e2e-target";
+import { mockClubPaymentInfo } from "./helpers/club-payment-info";
 
 const MOCK_ACCESS_TOKEN = "mock-header.mock-payload.mock-signature";
 /** Resolved in ONE place — see `e2e-target.ts` for why it is not port 3000. */
@@ -106,6 +107,8 @@ async function mockGuardianPortal(page: Page): Promise<void> {
   // handling redirected to /login mid-navigation (the "Asistencias" click
   // then landed on a detached element instead of the next screen).
   await page.route("**/api/personas/*/beneficio", (route: Route) => fulfillJson(route, null));
+  // «Cómo pagar» on `/student/payments` reads the club transfer data.
+  await mockClubPaymentInfo(page);
 }
 
 /** The sidebar row a guardian actually clicks — not a scripted `goto`. */

@@ -11,6 +11,11 @@ class EntradaGaleriaResponseDTO(ResponseBase, BaseModel):
     imagen_url: str
 
 
+# ADMB-33: los mismos topes de palabras que aplica la pantalla (`galeria/page.tsx`).
+TITULO_MAX_PALABRAS = 8
+DESCRIPCION_MAX_PALABRAS = 45
+
+
 class EntradaGaleriaCreateDTO(BaseModel):
     titulo: str = Field(..., min_length=1, max_length=80)
     descripcion: str = Field(..., min_length=1, max_length=500)
@@ -20,6 +25,8 @@ class EntradaGaleriaCreateDTO(BaseModel):
     def validar_titulo_no_vacio(cls, valor: str) -> str:
         if not valor.strip():
             raise ValueError("El título es obligatorio.")
+        if len(valor.split()) > TITULO_MAX_PALABRAS:
+            raise ValueError(f"El título no puede superar las {TITULO_MAX_PALABRAS} palabras.")
         return valor
 
     @field_validator("descripcion")
@@ -27,4 +34,6 @@ class EntradaGaleriaCreateDTO(BaseModel):
     def validar_descripcion_no_vacia(cls, valor: str) -> str:
         if not valor.strip():
             raise ValueError("La descripción es obligatoria.")
+        if len(valor.split()) > DESCRIPCION_MAX_PALABRAS:
+            raise ValueError(f"La descripción no puede superar las {DESCRIPCION_MAX_PALABRAS} palabras.")
         return valor

@@ -99,6 +99,27 @@ export function firstNameOf(fullName: string): string {
   return fullName.trim().split(/\s+/)[0] || fullName;
 }
 
+/**
+ * FAM-23: how a message names a dependent. The first given name is enough
+ * until two managed profiles share it («María José» and «María Fernanda»);
+ * then both given names, or the first surname when there is no second given
+ * name, tell them apart.
+ */
+export function displayNameFor(
+  profile: { personaId: string; nombres: string; apellidos: string },
+  profiles: { personaId: string; nombres: string }[],
+): string {
+  const first = firstNameOf(profile.nombres);
+  const repeated = profiles.some(
+    (other) => other.personaId !== profile.personaId && firstNameOf(other.nombres) === first,
+  );
+  if (!repeated) return first;
+  const givenNames = profile.nombres.trim().split(/\s+/);
+  if (givenNames.length > 1) return givenNames.slice(0, 2).join(" ");
+  const surname = profile.apellidos.trim().split(/\s+/)[0];
+  return surname ? `${first} ${surname}` : first;
+}
+
 /** First letter of the first given name plus first letter of the first surname — the avatar disc. */
 export function personInitials(nombres: string, apellidos: string): string {
   const first = nombres.trim().split(/\s+/)[0]?.[0] ?? "";
@@ -145,7 +166,7 @@ export function summarizeRecentAttendance(
  * in the breakdown would hide the one state a parent most wants to verify.
  *
  * `total` counts every record, including an `estado` this build does not know
- * about, so the four categories never silently add up to less than the list
+ * about, so the categories never silently add up to less than the list
  * the reader is looking at.
  */
 export interface AttendanceBreakdown {
@@ -153,6 +174,9 @@ export interface AttendanceBreakdown {
   late: number;
   justified: number;
   absent: number;
+  /** FAM-22: «Enfermo» and «Competencia» used to be left out of the tally. */
+  sick: number;
+  competition: number;
   total: number;
 }
 
@@ -162,6 +186,8 @@ export function breakdownAttendance(sessions: StudentSessionSummary[]): Attendan
     late: sessions.filter((s) => s.estado === "late").length,
     justified: sessions.filter((s) => s.estado === "justified").length,
     absent: sessions.filter((s) => s.estado === "absent").length,
+    sick: sessions.filter((s) => s.estado === "sick").length,
+    competition: sessions.filter((s) => s.estado === "competition").length,
     total: sessions.length,
   };
 }
@@ -648,6 +674,23 @@ export function readCoverageStanding(
 import { formatCurrency, formatDate } from "@/lib/format-utils";
 
 /**
+ * FAM-11: the sentence for a payment the club rejected, or `null`.
+ *
+ * Only the NEWEST payment counts: once the family registered another one (or it
+ * was approved) the rejection is history, not something to act on.
+ */
+export function describeRejectedPago(
+  pagos: Pick<PagoPersona, "estadoPago" | "fechaRegistro" | "monto" | "motivoRechazo">[],
+): string | null {
+  const latest = [...pagos].sort((a, b) => b.fechaRegistro.localeCompare(a.fechaRegistro))[0];
+  if (!latest || latest.estadoPago !== "RECHAZADO") return null;
+  const reason = latest.motivoRechazo?.trim();
+  return `Su pago de ${formatCurrency(latest.monto)} del ${formatDate(latest.fechaRegistro)} fue rechazado${
+    reason ? `: ${reason}` : ""
+  }. Registre uno nuevo.`;
+}
+
+/**
  * How close to the end of paid coverage the portal starts asking for action.
  *
  * A week: long enough that a family paying by transfer has time for the club
@@ -659,6 +702,7 @@ export const COVERAGE_ENDING_SOON_DAYS = 7;
 export type PaymentSituationKind =
   | "minor-blocked"
   | "no-membership"
+  | "suspended"
   | "awaiting-validation"
   | "gratuitous"
   | "never-paid"
@@ -694,6 +738,14 @@ export interface PaymentSituationInput {
    * is the only correct source for that fact.
    */
   esGratuidadFamiliar?: boolean;
+  /**
+   * FAM-02: `Membresia.estado === "SUSPENDIDA"`. A suspension keeps the paid
+   * coverage but the family cannot pay until the club reactivates it, so the
+   * portal must say so instead of «Al día».
+   */
+  suspended?: boolean;
+  /** FAM-02: the reason the club recorded when it suspended the membership. */
+  motivoSuspension?: string | null;
 }
 
 export interface PaymentSituation {
@@ -812,7 +864,30 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
       figure: null,
       headline: sentence(`${subjectPrefix(input)}todavía no tiene una membresía`),
       detail:
-        "El club crea la membresía al registrar el primer pago. Acérquese a administración para activarla y después podrá renovarla desde aquí.",
+        "El club crea la membresía al registrar el primer pago. Acérquese al club para activarla y después podrá renovarla desde aquí.",
+      priceNote,
+      canRegister: false,
+      urgent: false,
+    };
+  }
+
+  // FAM-02/FAM-03: checked before pending payments and coverage, because a
+  // suspended membership cannot be paid whatever the dates say — the club has
+  // to reactivate it first. Paid coverage is not forfeited by a suspension.
+  if (input.suspended) {
+    const coverage = coverageEnd
+      ? (daysLeft ?? 0) < 0
+        ? ` Su cobertura venció el ${formatDate(coverageEnd)}.`
+        : ` Su cobertura sigue vigente hasta ${formatDate(coverageEnd)}.`
+      : "";
+    const reason = input.motivoSuspension ? ` Motivo: ${input.motivoSuspension}.` : "";
+    return {
+      kind: "suspended",
+      figure: null,
+      headline: input.viewingOwnProfile
+        ? "Su membresía está suspendida."
+        : `La membresía de ${input.studentName} está suspendida.`,
+      detail: `${coverage}${reason} Escriba al club para reactivarla.`.trim(),
       priceNote,
       canRegister: false,
       urgent: false,
@@ -979,6 +1054,8 @@ export function describeCuotaBadge(situation: PaymentSituation): { label: string
       return { label: "En revisión", tone: "neutral" };
     case "no-membership":
       return { label: "Sin membresía", tone: "neutral" };
+    case "suspended":
+      return { label: "Suspendida", tone: "warn" };
     case "gratuitous":
       return { label: "Sin costo", tone: "ok" };
     case "minor-blocked":
@@ -1049,10 +1126,13 @@ export interface FamilyCoverageStatus {
  * portal calls "por vencer".
  */
 export function describeFamilyCoverage(
-  membership: { cubiertoHasta?: string | null } | null | undefined,
+  membership: { estado?: string; cubiertoHasta?: string | null } | null | undefined,
   today: Date = new Date(),
 ): FamilyCoverageStatus {
   if (!membership) return { label: "Sin membresía", tone: "neutral" };
+  // FAM-02: a suspension outranks the coverage count — «30 días de cobertura»
+  // in green hid that the club had suspended the membership.
+  if (membership.estado === "SUSPENDIDA") return { label: "Suspendida", tone: "warn" };
   const days = daysUntil(membership.cubiertoHasta ?? null, today);
   if (days === null) return { label: "Sin pago aprobado", tone: "warn" };
   if (days < 0) return { label: "Vencida", tone: "bad" };

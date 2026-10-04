@@ -385,3 +385,39 @@ describe("StudentAttendancePage — the rail guide", () => {
     expect(screen.queryByText(/asistió a/i)).toBeNull();
   });
 });
+
+describe("StudentAttendancePage — QA4 findings", () => {
+  // FAM-22: «Enfermo» and «Competencia» were missing, so the tallies summed to less than the list.
+  it("tallies all six states so the counters add up to the sessions listed", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue(
+      portalWith([
+        ...FIVE_SESSIONS,
+        { fecha: "2026-07-07", horario: "Martes 15:00 — 16:00", estado: "sick" },
+        { fecha: "2026-07-02", horario: "Jueves 15:00 — 16:00", estado: "competition" },
+      ]),
+    );
+    render(<StudentAttendancePage />);
+
+    const recap = await screen.findByTestId("attendance-breakdown");
+    for (const [label, count] of [
+      ["Presente", "2"],
+      ["Tardanza", "1"],
+      ["Justificado", "1"],
+      ["Ausente", "1"],
+      ["Enfermo", "1"],
+      ["Competencia", "1"],
+    ]) {
+      const cell = within(recap).getByTestId(`breakdown-${label.toLowerCase()}`);
+      expect(within(cell).getByText(count)).toBeInTheDocument();
+    }
+  });
+
+  // FAM-21
+  it("renders the WhatsApp address of a failed load as a link", async () => {
+    mockFetchStudentPortal.mockReset().mockRejectedValue(Object.assign(new Error("boom"), { status: 500 }));
+    render(<StudentAttendancePage />);
+
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByRole("link")).toHaveAttribute("href", expect.stringContaining("wa.me"));
+  });
+});

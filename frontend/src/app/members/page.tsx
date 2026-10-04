@@ -14,6 +14,7 @@
 
 "use client";
 
+import LinkifiedText from "@/components/LinkifiedText";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import Link from "next/link";
@@ -134,18 +135,23 @@ type SaveMode = "instant" | "manual";
 
 const SAVE_MODE_LABEL: Record<SaveMode, string> = {
   instant: "Se guarda al instante",
-  manual: "Requiere guardar",
+  manual: "Sin cambios",
 };
+
+/** ADMA-12: a manual-save group only asks to be saved once something was edited. */
+const DIRTY_LABEL = "Cambios sin guardar";
 
 function ModalSection({
   title,
   icon,
   saveMode,
+  dirty = false,
   children,
 }: {
   title: string;
   icon?: React.ReactNode;
   saveMode: SaveMode;
+  dirty?: boolean;
   children: React.ReactNode;
 }): React.ReactElement {
   return (
@@ -155,7 +161,7 @@ function ModalSection({
           {icon}
           {title}
         </h3>
-        <Badge tone="neutral">{SAVE_MODE_LABEL[saveMode]}</Badge>
+        <Badge tone={dirty ? "warn" : "neutral"}>{dirty ? DIRTY_LABEL : SAVE_MODE_LABEL[saveMode]}</Badge>
       </header>
       <div className="p-4">{children}</div>
     </section>
@@ -238,7 +244,7 @@ function StudentEditPanel({ student }: StudentRowProps): React.ReactElement {
           side on larger screens instead of a cramped two-up layout. */}
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-section border-t border-line pt-3 text-xs sm:grid-cols-3">
         <div>
-          <dt className="text-ink-3">Estado</dt>
+          <dt className="text-ink-3">En el club</dt>
           <dd className="mt-1">
             <Badge tone={student.activo ? "ok" : "bad"}>
               {student.activo ? "Activo" : "Inactivo/Archivado"}
@@ -489,8 +495,12 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
           comment in `members-utils.ts`). */}
       <TableCell>
         <IdentityCell name={fullName} roles={accountDisplayRoles(account)} />
+        {/* ADMA-03: on a tablet the column below does not fit, so the name moves under the person. */}
+        {account.representadoPor ? (
+          <p className="mt-1 text-2xs text-ink-3 lg:hidden">Representado por {account.representadoPor}</p>
+        ) : null}
       </TableCell>
-      <TableCell>{account.representadoPor ?? "—"}</TableCell>
+      <TableCell className="hidden lg:table-cell">{account.representadoPor ?? "—"}</TableCell>
       <TableCell type="badge">
         <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
       </TableCell>
@@ -534,7 +544,9 @@ function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItem
               self-managed account has nothing to say here, so it says
               nothing rather than printing a placeholder. */}
           {account.representadoPor ? (
-            <DataBox>Representado por {account.representadoPor}</DataBox>
+            <DataBox className="h-auto max-w-full whitespace-normal break-words">
+              Representado por {account.representadoPor}
+            </DataBox>
           ) : null}
         </>
       }
@@ -579,9 +591,14 @@ function MemberEditDialog({
     stateLoading,
     roleError,
     stateError,
+    changed,
     toggleRole,
     toggleEstado,
   } = useAccountRolesAndStatus(Number(account.id));
+  // ADMA-08: switching the account off locks the person out, so it asks first.
+  const [deactivateConfirmOpen, setDeactivateConfirmOpen] = useState(false);
+  // ADMA-12: the identity section's own edits.
+  const [identityDirty, setIdentityDirty] = useState(false);
   const statusBadge = getAccountStatusBadge(account);
   // Issue #869: the header badge below reads `account.accountState` (from
   // the list's own bulk fetch), never `activo` from `useAccountRolesAndStatus`
@@ -639,6 +656,8 @@ function MemberEditDialog({
               purpose="Editar cuenta"
               closeButtonRef={closeButtonRef}
               onClose={onClose}
+              liveAccountState={changed ? (activo ? "active" : "inactive") : undefined}
+              liveRoles={changed ? roles : undefined}
             />
 
             {/* Scrollable body. Four groups, each declaring how it persists:
@@ -650,8 +669,8 @@ function MemberEditDialog({
                   header also reads as a position. Stacks on a phone. */}
               <div className="grid gap-section lg:grid-cols-2 lg:items-start">
               <div className="grid min-w-0 content-start gap-section">
-              <ModalSection title="Datos de la cuenta" saveMode="manual">
-                <AccountInfoSection account={account} />
+              <ModalSection title="Datos de la cuenta" saveMode="manual" dirty={identityDirty}>
+                <AccountInfoSection account={account} onDirtyChange={setIdentityDirty} />
               </ModalSection>
 
               {/* Issue #460: the only in-app way to assign a representante to
@@ -719,7 +738,7 @@ function MemberEditDialog({
                 <div className="flex flex-wrap items-center gap-3">
                   <button
                     type="button"
-                    onClick={() => void toggleEstado()}
+                    onClick={() => (activo ? setDeactivateConfirmOpen(true) : void toggleEstado())}
                     disabled={stateLoading || !rolesReady}
                     className={`h-badge inline-flex cursor-pointer items-center gap-1.5 rounded-full px-[11px] text-2xs tracking-flat font-bold disabled:opacity-50 ${
                       activo ? "bg-state-ok-bg text-state-ok" : "bg-state-bad-bg text-state-bad"
@@ -741,7 +760,7 @@ function MemberEditDialog({
                 </div>
                 {stateError && (
                   <p className="mt-2 text-xs text-state-bad" role="alert">
-                    {stateError}
+                    <LinkifiedText text={stateError} />
                   </p>
                 )}
               </ModalSection>
@@ -837,7 +856,7 @@ function MemberEditDialog({
                   </div>
                   {roleError && (
                     <p className="mt-2 text-xs text-state-bad" role="alert">
-                      {roleError}
+                      <LinkifiedText text={roleError} />
                     </p>
                   )}
                 </>
@@ -880,6 +899,19 @@ function MemberEditDialog({
             <div className="flex shrink-0 items-center justify-end gap-2 border-t border-line px-5 py-3.5">
               <Button onClick={onClose}>Cerrar</Button>
             </div>
+
+            <ConfirmDialog
+              open={deactivateConfirmOpen}
+              variant="danger"
+              title="Desactivar cuenta"
+              message={`¿Desactivar la cuenta de ${accountFullName}? No podrá iniciar sesión hasta que la active de nuevo.`}
+              confirmLabel="Desactivar"
+              onConfirm={() => {
+                setDeactivateConfirmOpen(false);
+                void toggleEstado();
+              }}
+              onCancel={() => setDeactivateConfirmOpen(false)}
+            />
 
             <ConfirmDialog
               open={adminConfirmOpen}
@@ -1151,7 +1183,7 @@ export default function MembersPage(): React.ReactElement {
           search={
             <SearchInput
               label="Buscar miembros"
-              placeholder="Buscar por nombre o correo…"
+              placeholder="Buscar por nombre o cédula…"
               value={searchTerm}
               onChange={setSearchTerm}
             />
@@ -1228,7 +1260,7 @@ export default function MembersPage(): React.ReactElement {
                       their representative's; who pays for them is the
                       adjacent "Representado por" column, not this one. */}
                   <TableHeaderCell>Miembro</TableHeaderCell>
-                  <TableHeaderCell>Representado por</TableHeaderCell>
+                  <TableHeaderCell className="hidden lg:table-cell">Representado por</TableHeaderCell>
                   <TableHeaderCell type="badge">Membresía</TableHeaderCell>
                   {/* Issue #869: account (login) state, separate from
                       Membresía to its left — never derived from it. */}

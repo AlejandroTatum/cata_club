@@ -46,11 +46,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
+import { Phone } from "lucide-react";
 import { fetchFichaEmergencia, type FichaEmergencia } from "@/services/api";
+import type { TipoSangre } from "@/types/domain";
 import { useModalFocusTrap } from "@/lib/focus-trap";
 import { ICON } from "@/lib/icon-size";
 import Button from "@/components/ui/Button";
-import DataBox from "@/components/ui/DataBox";
 import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
 import LoadingState from "@/components/ui/LoadingState";
@@ -70,6 +71,59 @@ type CargaEstado =
   | { tipo: "cargando" }
   | { tipo: "error" }
   | { tipo: "lista"; ficha: FichaEmergencia };
+
+/** ENT-10: the wire enum (`O_POSITIVO`) never reaches a paramedic's eyes. */
+const TIPO_SANGRE_LABEL: Record<TipoSangre, string> = {
+  A_POSITIVO: "A+",
+  A_NEGATIVO: "A-",
+  B_POSITIVO: "B+",
+  B_NEGATIVO: "B-",
+  AB_POSITIVO: "AB+",
+  AB_NEGATIVO: "AB-",
+  O_POSITIVO: "O+",
+  O_NEGATIVO: "O-",
+  DESCONOCIDO: "Desconocido",
+};
+
+function describeTipoSangre(tipo: TipoSangre | null): string | null {
+  return tipo ? (TIPO_SANGRE_LABEL[tipo] ?? tipo) : null;
+}
+
+const digitsOf = (phone: string | null): string => (phone ?? "").replace(/\D/g, "");
+
+/**
+ * ENT-11: the same person listed twice (contact and legal representative with
+ * one name and one number) is one line, not a repeated block.
+ */
+function isSamePerson(ficha: FichaEmergencia): boolean {
+  const phone = digitsOf(ficha.telefonoEmergencia);
+  return (
+    phone !== "" &&
+    phone === digitsOf(ficha.representanteTelefono) &&
+    (ficha.contactoEmergencia ?? "").trim().toLowerCase() ===
+      (ficha.representanteNombreCompleto ?? "").trim().toLowerCase()
+  );
+}
+
+/** A phone as a one-tap call (ENT-11), 44px tall: it is pressed in a hurry. */
+function CallLink({
+  name,
+  phone,
+}: {
+  readonly name: string | null;
+  readonly phone: string;
+}): React.ReactElement {
+  return (
+    <a
+      href={`tel:${phone.replace(/[^\d+]/g, "")}`}
+      aria-label={`Llamar a ${name ?? "este contacto"}: ${phone}`}
+      className="inline-flex min-h-[44px] items-center gap-2 rounded-ctl border border-line-2 bg-paper px-3 text-sm font-bold text-ink hover:border-ink-3"
+    >
+      <Phone size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+      {phone}
+    </a>
+  );
+}
 
 function Campo({
   etiqueta,
@@ -241,7 +295,7 @@ export default function EmergencyCardDialog({
 
           {estado.tipo === "lista" && !estaCompletamenteVacia(estado.ficha) && (
             <div className="flex flex-col">
-              <Campo etiqueta="Tipo de sangre" valor={estado.ficha.tipoSangre} />
+              <Campo etiqueta="Tipo de sangre" valor={describeTipoSangre(estado.ficha.tipoSangre)} />
               <Campo etiqueta="Alergias" valor={estado.ficha.alergias} />
               <div className="flex flex-col gap-1 border-b border-line px-5 py-3">
                 <span className="text-2xs font-bold uppercase tracking-flat text-ink-3">
@@ -253,13 +307,14 @@ export default function EmergencyCardDialog({
                       {estado.ficha.contactoEmergencia ?? "No registra"}
                     </span>
                     {estado.ficha.telefonoEmergencia && (
-                      <DataBox>{estado.ficha.telefonoEmergencia}</DataBox>
+                      <CallLink name={estado.ficha.contactoEmergencia} phone={estado.ficha.telefonoEmergencia} />
                     )}
                   </div>
                 ) : (
                   <span className="text-sm text-ink-3">No registra</span>
                 )}
               </div>
+              {!isSamePerson(estado.ficha) && (
               <div className="flex flex-col gap-1 px-5 py-3">
                 <span className="text-2xs font-bold uppercase tracking-flat text-ink-3">
                   Representante legal (respaldo)
@@ -270,13 +325,17 @@ export default function EmergencyCardDialog({
                       {estado.ficha.representanteNombreCompleto ?? "No registra"}
                     </span>
                     {estado.ficha.representanteTelefono && (
-                      <DataBox>{estado.ficha.representanteTelefono}</DataBox>
+                      <CallLink
+                        name={estado.ficha.representanteNombreCompleto}
+                        phone={estado.ficha.representanteTelefono}
+                      />
                     )}
                   </div>
                 ) : (
                   <span className="text-sm text-ink-3">No registra</span>
                 )}
               </div>
+              )}
             </div>
           )}
         </div>

@@ -572,7 +572,7 @@ def test_subir_foto_perfil_firma_no_coincide_con_content_type_da_400(_mock_cloud
         files={"archivo": ("foto.jpg", contenido, "image/jpeg")},
     )
     assert resp.status_code == 400
-    assert "no coincide" in resp.json()["detail"].lower()
+    assert "no es una imagen válida" in resp.json()["detail"].lower()
     _mock_cloudinary.assert_not_called()
 
 
@@ -588,7 +588,7 @@ def test_subir_foto_perfil_excede_tamano_maximo_da_400(client, db_session):
         files={"archivo": ("foto.jpg", contenido_grande, "image/jpeg")},
     )
     assert resp.status_code == 400
-    assert "tamaño" in resp.json()["detail"].lower()
+    assert "pesa más de 5 mb" in resp.json()["detail"].lower()
 
 
 def test_subir_foto_perfil_requiere_autenticacion(client_sin_token):

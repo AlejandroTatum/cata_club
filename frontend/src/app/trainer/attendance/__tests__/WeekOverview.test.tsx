@@ -53,3 +53,18 @@ describe("WeekOverview", () => {
     expect(container).toBeEmptyDOMElement();
   });
 });
+
+// ENT-22: the hours wrap instead of ending in an ellipsis, and the count and
+// the pending figure each get their own line.
+describe("WeekOverview — day rows stay readable at 390 px (ENT-22)", () => {
+  it("never truncates the hours and splits the counts into two lines", () => {
+    render(<WeekOverview dayGroups={GROUPS} today="mar" closedHorarios={new Set()} onSelectDay={vi.fn()} />);
+
+    const hours = screen.getByText("15:00 · 16:00");
+    expect(hours.className).not.toContain("truncate");
+    const total = screen.getByText("2 horarios");
+    const pending = screen.getByText("2 por tomar");
+    expect(total.parentElement).toBe(pending.parentElement);
+    expect(total.parentElement?.className).toContain("flex-col");
+  });
+});

@@ -23,6 +23,8 @@ interface PaymentHistorySectionProps {
    */
   minRows?: number;
   personaId: number;
+  /** Bump to fetch the history again (ADMA-04: after a payment is registered). */
+  refreshKey?: number;
 }
 
 type LoadState =
@@ -57,11 +59,13 @@ type LoadState =
 export default function PaymentHistorySection({
   personaId,
   minRows = 0,
+  refreshKey = 0,
 }: PaymentHistorySectionProps): React.ReactElement {
   const [state, setState] = useState<LoadState>({ status: "loading" });
 
   function load(): void {
-    setState({ status: "loading" });
+    // A refetch keeps the rows already on screen instead of flashing a spinner.
+    setState((current) => (current.status === "ready" ? current : { status: "loading" }));
     fetchPagosDePersona(String(personaId))
       .then((pagos) => setState({ status: "ready", pagos: sortPagosByDate(pagos) }))
       .catch((err: unknown) => {
@@ -74,9 +78,9 @@ export default function PaymentHistorySection({
 
   useEffect(() => {
     load();
-    // `load` only reads `personaId`, which is the dependency.
+    // `load` only reads `personaId`; `refreshKey` asks for a new fetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [personaId]);
+  }, [personaId, refreshKey]);
 
   const titleId = `payment-history-${personaId}`;
 
@@ -96,7 +100,7 @@ export default function PaymentHistorySection({
         <div className="overflow-hidden rounded-ctl border border-line">
           <div
             aria-hidden="true"
-            className="hidden grid-cols-[1fr_1.4fr_auto] gap-3 bg-sunken px-3 py-2 text-2xs font-semibold text-ink-3 sm:grid"
+            className="hidden grid-cols-[1fr_1.4fr_auto] gap-3 bg-sunken px-3 py-2 text-2xs font-semibold text-ink-3-strong sm:grid"
           >
             <span>Monto</span>
             <span>Cobertura</span>

@@ -1463,7 +1463,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
 
     expect(screen.getByText("Esta lista ya fue registrada.")).toBeInTheDocument();
     expect(
-      screen.getByText(/Quedó cerrada de forma permanente — no se puede editar desde acá/),
+      screen.getByText(/Quedó cerrada de forma permanente — no se puede editar desde aquí/),
     ).toBeInTheDocument();
     // Nothing left that promises an edit the backend was always going to
     // refuse — no radios, and "Revisar y confirmar" is disabled rather than
@@ -1486,7 +1486,7 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
 
     expect(screen.getByText("Esta lista ya fue registrada.")).toBeInTheDocument();
     expect(
-      screen.getByText(/Quedó cerrada de forma permanente — no se puede editar desde acá/),
+      screen.getByText(/Quedó cerrada de forma permanente — no se puede editar desde aquí/),
     ).toBeInTheDocument();
     expect(screen.queryAllByRole("radio")).toHaveLength(0);
     expect(screen.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
@@ -1595,6 +1595,26 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     // …the draft is still there, and the trainer can retry from the same step.
     expect(window.sessionStorage.getItem("cata_attendance_draft:12:2026-07-21")).not.toBeNull();
     expect(await screen.findByRole("button", { name: /Confirmar asistencia/ })).toBeEnabled();
+  });
+
+  // ENT-05: the response was lost but the save LANDED. The re-query finds the
+  // session closed, so only "ya fue registrada" may show — never «No hay conexión».
+  it("no dice «No hay conexión» cuando la recarga muestra que la lista sí se guardó (ENT-05)", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    mockFetchAttendanceRecords.mockResolvedValue([]);
+    mockRegisterAttendance.mockReset().mockRejectedValue(new Error("Failed to fetch"));
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await openRoster();
+    await screen.findByText("Student 01");
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
+    // After the failure the server answers: every student already has a row.
+    mockFetchAttendanceRecords.mockResolvedValue(existingRecordsForAllStudents());
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
+
+    expect(await screen.findByText("Esta lista ya fue registrada.")).toBeInTheDocument();
+    await waitFor(() => expect(mockRegisterAttendance).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/No hay conexión/)).not.toBeInTheDocument();
   });
 
   it("reintenta recargar la lista antes de volver a enviar si la recarga también falló (ENT-05)", async () => {

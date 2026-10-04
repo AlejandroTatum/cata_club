@@ -21,6 +21,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
     HRFlowable,
@@ -53,6 +54,27 @@ FORMATO_SELLO_REPORTE = "%d/%m/%Y %H:%M"
 # si los dos lados se desincronizan, la tabla vuelve a desbordar la hoja.
 _TAM_FUENTE_REPORTE = 9
 _RELLENO_REPORTE = 5
+
+
+# Etiquetas que el PDF imprime en lugar del código interno del enum. El estado
+# del reporte usa el vocabulario de la pantalla `/reports` («Validado»); el del
+# comprobante, que lee la familia, dice «Aprobado».
+ETIQUETAS_TIPO_PAGO = {
+    "EFECTIVO": "Efectivo",
+    "TRANSFERENCIA": "Transferencia",
+    "REGULARIZACION": "Regularización",
+}
+ETIQUETAS_ESTADO_PAGO_REPORTE = {
+    "PENDIENTE_VALIDACION": "Pendiente",
+    "APROBADO": "Validado",
+    "RECHAZADO": "Rechazado",
+}
+_ETIQUETAS_ESTADO_PAGO_COMPROBANTE = {
+    "PENDIENTE_VALIDACION": "Pendiente de validación",
+    "APROBADO": "Aprobado",
+    "RECHAZADO": "Rechazado",
+}
+_CELDA_VACIA = "—"
 
 
 def sello_de_tiempo(formato: str) -> str:
@@ -160,7 +182,6 @@ def generar_comprobante_pago_pdf(
 
         Paragraph("<b>Detalle de la membresía</b>", estilos["Heading3"]),
         Paragraph(f"Categoría: {escape(membresia_categoria)}", cuerpo),
-        Paragraph(f"Membresía Nº: {membresia_id}", cuerpo),
         Spacer(1, 10),
 
         Paragraph("<b>Detalle del pago</b>", estilos["Heading3"]),
@@ -169,9 +190,12 @@ def generar_comprobante_pago_pdf(
     tabla_datos: list[list[str]] = [
         ["Concepto", "Valor"],
         ["Monto pagado", formatear_monto_usd(monto)],
-        ["Monto aplicado", formatear_monto_usd(monto_aplicado)],
-        ["Tipo de pago", tipo_pago],
-        ["Estado", estado_pago],
+    ]
+    if monto_aplicado != monto:
+        tabla_datos.append(["Monto aplicado", formatear_monto_usd(monto_aplicado)])
+    tabla_datos += [
+        ["Forma de pago", ETIQUETAS_TIPO_PAGO.get(tipo_pago, tipo_pago)],
+        ["Estado", _ETIQUETAS_ESTADO_PAGO_COMPROBANTE.get(estado_pago, estado_pago)],
         ["Vigencia desde", fecha_inicio.strftime("%d/%m/%Y")],
         ["Vigencia hasta", fecha_fin.strftime("%d/%m/%Y")],
     ]
@@ -198,7 +222,7 @@ def generar_comprobante_pago_pdf(
     elementos.append(Paragraph(
         f"Documento generado electrónicamente el "
         f"{sello_de_tiempo(FORMATO_SELLO_COMPROBANTE)}."
-        f" Valor sin firma física tiene plena validez interna.",
+        f" Este comprobante se genera electrónicamente y no requiere firma.",
         ParagraphStyle("Pie", parent=cuerpo, fontSize=8, textColor=colors.grey),
     ))
 
@@ -263,6 +287,7 @@ def generar_reporte_pdf(
     columnas: list[str],
     filas: list[list[str]],
     generado_por: str | None = None,
+    resumen: str | None = None,
 ) -> bytes:
     """
     Construye un PDF de reporte tabular genérico en memoria y devuelve bytes.
@@ -280,6 +305,10 @@ def generar_reporte_pdf(
         fuera del papel lo que no entra.
       - El logo institucional y una barra roja `#D92128` se dibujan en cada
         página vía callback `onFirstPage`/`onLaterPages` de `doc.build`.
+      - `resumen` es la línea que identifica el documento impreso (rango de
+        fechas, filtro y total); sin ella el PDF no dice de qué es.
+      - El pie dice «Página X de N»: para saber N hay que haber paginado todo,
+        por eso el documento se construye con `_LienzoNumerado`.
       - Si `filas` está vacío se emite un `Paragraph` centrado indicando que
         no hay resultados, en vez de una tabla vacía. Siempre devuelve un PDF
         válido (nunca lanza excepción por falta de datos).
@@ -319,8 +348,10 @@ def generar_reporte_pdf(
             + (f" por {escape(generado_por)}" if generado_por else ""),
             subtitulo_estilo,
         ),
-        Spacer(1, 6),
     ]
+    if resumen:
+        elementos.append(Paragraph(escape(resumen), subtitulo_estilo))
+    elementos.append(Spacer(1, 6))
 
     if not filas:
         elementos.append(Paragraph(
@@ -334,6 +365,7 @@ def generar_reporte_pdf(
         elementos,
         onFirstPage=_dibujar_encabezado_pagina,
         onLaterPages=_dibujar_encabezado_pagina,
+        canvasmaker=_LienzoNumerado,
     )
     pdf_bytes = buffer.getvalue()
     buffer.close()
@@ -404,8 +436,10 @@ def _anchos_de_columna_reporte(
     # puede pasarse por una millonésima de punto: invisible en el papel y
     # suficiente para que la tabla vuelva a medir más que el frame. El
     # excedente se lo come la columna más ancha, que es la que menos lo nota.
+    # Un reparto que cierra EXACTO también cuenta: ReportLab suma los anchos
+    # en otro orden y puede medir una unidad de punto flotante de más.
     exceso = sum(anchos) - ancho_disponible
-    if exceso > 0:
+    if exceso > -1e-9:
         mas_ancha = max(range(len(anchos)), key=anchos.__getitem__)
         anchos[mas_ancha] -= exceso + 1e-9
     return anchos
@@ -437,9 +471,13 @@ def _tabla_de_reporte(
         fontName="Helvetica-Bold", textColor=colors.white,
     )
 
+    filas = [
+        [_CELDA_VACIA if c is None or str(c).strip() == "" else str(c) for c in fila]
+        for fila in filas
+    ]
     anchos = _anchos_de_columna_reporte([columnas] + filas, ancho_disponible)
     contenido = [[Paragraph(escape(str(c)), encabezado_estilo) for c in columnas]]
-    contenido += [[Paragraph(escape(str(c)), celda_estilo) for c in fila] for fila in filas]
+    contenido += [[Paragraph(escape(c), celda_estilo) for c in fila] for fila in filas]
 
     tabla = Table(contenido, colWidths=anchos, hAlign="LEFT", repeatRows=1)
     tabla.setStyle(_estilo_tabla_reporte())
@@ -467,12 +505,38 @@ def _dibujar_encabezado_pagina(canvas, doc) -> None:
     canvas.setFillColor(colors.HexColor(_ROJO_INSTITUCIONAL))
     canvas.rect(0, alto_pagina - 26 * mm, ancho_pagina, 2 * mm, stroke=0, fill=1)
 
-    canvas.setFont("Helvetica", 7)
-    canvas.setFillColor(colors.grey)
-    canvas.drawString(
-        ancho_pagina - 30 * mm, 10 * mm, f"Página {doc.page}",
-    )
     canvas.restoreState()
+
+
+class _LienzoNumerado(Canvas):
+    """Lienzo que imprime «Página X de N» en el pie de cada hoja.
+
+    El total solo se conoce cuando termina la paginación, así que cada página
+    se guarda en lugar de cerrarse y el número se dibuja en `save()`, ya con
+    N a mano. Es el patrón de dos pasadas que documenta ReportLab."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._estados_de_pagina: list[dict] = []
+
+    def showPage(self):
+        self._estados_de_pagina.append(dict(self.__dict__))
+        self._startPage()
+
+    def save(self):
+        total = len(self._estados_de_pagina)
+        for estado in self._estados_de_pagina:
+            self.__dict__.update(estado)
+            self._dibujar_pie(total)
+            super().showPage()
+        super().save()
+
+    def _dibujar_pie(self, total: int) -> None:
+        self.setFont("Helvetica", 7)
+        self.setFillColor(colors.grey)
+        self.drawString(
+            A4[0] - 34 * mm, 10 * mm, f"Página {self._pageNumber} de {total}",
+        )
 
 
 def construir_respuesta_pdf(pdf_bytes: bytes, nombre_archivo: str) -> Response:

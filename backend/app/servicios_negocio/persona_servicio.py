@@ -123,7 +123,7 @@ class PersonaServicio:
         if edad < EDAD_MINIMA_ALUMNO or edad > EDAD_MAXIMA_ALUMNO:
             raise OperacionInvalida(
                 f"La edad del alumno debe estar entre {EDAD_MINIMA_ALUMNO} y "
-                f"{EDAD_MAXIMA_ALUMNO} años (calculado: {edad})."
+                f"{EDAD_MAXIMA_ALUMNO} años; según la fecha de nacimiento, tiene {edad} años."
             )
         if EDAD_MINIMA_ALUMNO <= edad < EDAD_MAYORIA_EDAD and not datos.representante_id:
             raise OperacionInvalida(
@@ -643,13 +643,15 @@ class PersonaServicio:
         # Content-Type que manda el cliente no prueba nada sobre el
         # contenido real (mismo criterio que `actualizar_foto_perfil`).
         if not es_firma_valida(contenido, content_type):
+            if not contenido:
+                raise OperacionInvalida("La imagen está vacía o dañada. Elija otra foto JPG o PNG.")
             raise OperacionInvalida(
-                "El contenido del archivo no coincide con el formato declarado"
+                "Ese archivo no es una imagen válida. Elija una foto JPG o PNG."
             )
         # Defensa en profundidad: el router ya acota la lectura vía
         # `leer_con_limite` antes de llegar acá.
         if len(contenido) > AuthServicio.TAMANO_MAXIMO_FOTO_PERFIL_BYTES:
-            raise OperacionInvalida("El archivo excede el tamaño máximo de 5MB")
+            raise OperacionInvalida("La imagen pesa más de 5 MB. Elija una más liviana.")
 
         from app.infraestructura.cloudinary_cliente import (
             componer_valor_foto_perfil,

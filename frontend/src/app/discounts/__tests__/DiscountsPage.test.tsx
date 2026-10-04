@@ -449,7 +449,7 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
     renderPage();
 
     const becaRow = await findDescuentoRow("Beca municipal");
-    fireEvent.click(within(becaRow).getByRole("button", { name: /^ocultar$/i }));
+    fireEvent.click(within(becaRow).getByRole("button", { name: /^ocultar el descuento/i }));
 
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText(/beca municipal/i)).toBeInTheDocument();
@@ -462,7 +462,7 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
     renderPage();
 
     const becaRow = await findDescuentoRow("Beca municipal");
-    fireEvent.click(within(becaRow).getByRole("button", { name: /^ocultar$/i }));
+    fireEvent.click(within(becaRow).getByRole("button", { name: /^ocultar el descuento/i }));
 
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText(/volver a mostrarlo/i)).toBeInTheDocument();
@@ -473,7 +473,7 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
     renderPage();
 
     const becaRow = await findDescuentoRow("Beca municipal");
-    fireEvent.click(within(becaRow).getByRole("button", { name: /^ocultar$/i }));
+    fireEvent.click(within(becaRow).getByRole("button", { name: /^ocultar el descuento/i }));
     const dialog = screen.getByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: /^ocultar$/i }));
 
@@ -486,7 +486,7 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
     renderPage();
 
     const becaRow = await findDescuentoRow("Beca municipal");
-    fireEvent.click(within(becaRow).getByRole("button", { name: /^ocultar$/i }));
+    fireEvent.click(within(becaRow).getByRole("button", { name: /^ocultar el descuento/i }));
     fireEvent.click(screen.getByRole("button", { name: /^cancelar$/i }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -498,7 +498,7 @@ describe("DiscountsPage — baja y reactivación suaves", () => {
     renderPage();
 
     const convenioRow = await findDescuentoRow("Convenio empresa");
-    fireEvent.click(within(convenioRow).getByRole("button", { name: /^mostrar$/i }));
+    fireEvent.click(within(convenioRow).getByRole("button", { name: /^mostrar el descuento/i }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await waitFor(() => {
@@ -708,10 +708,10 @@ describe("DiscountsPage — responsive cards (issue #339)", () => {
 
     const becaCard = within(cards).getByText("Beca municipal").closest("li") as HTMLElement;
     expect(within(becaCard).getByRole("button", { name: /^editar/i })).toBeInTheDocument();
-    expect(within(becaCard).getByRole("button", { name: /^ocultar$/i })).toBeInTheDocument();
+    expect(within(becaCard).getByRole("button", { name: /^ocultar el descuento/i })).toBeInTheDocument();
 
     const convenioCard = within(cards).getByText("Convenio empresa").closest("li") as HTMLElement;
-    expect(within(convenioCard).getByRole("button", { name: /^mostrar$/i })).toBeInTheDocument();
+    expect(within(convenioCard).getByRole("button", { name: /^mostrar el descuento/i })).toBeInTheDocument();
   });
 });
 
@@ -726,6 +726,73 @@ describe("DiscountsPage — mobile form reveal", () => {
   });
 });
 
+describe("DiscountsPage — accessible names and required marks (ADMB-26, ADMB-28)", () => {
+  it("names each Ocultar/Mostrar/Eliminar button after its discount", async () => {
+    mockFetchDescuentos.mockResolvedValue([BECA, CONVENIO, PROMO]);
+    renderPage();
+    await screen.findByTestId("discounts-cards");
+
+    expect(screen.getByRole("button", { name: "Ocultar el descuento Beca municipal" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mostrar el descuento Convenio empresa" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar el descuento Promo por error" })).toBeInTheDocument();
+  });
+
+  it("keeps the required mark on the same line as its label text", async () => {
+    renderPage();
+    await screen.findByTestId("discounts-cards");
+    fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
+
+    for (const name of [/^Nombre/, /^Tipo\b(?!s)/, /^Valor/]) {
+      const label = screen.getByLabelText(name).closest("label") as HTMLElement;
+      const caption = label.querySelector("[data-field-caption]");
+      expect(caption).not.toBeNull();
+      expect(caption?.querySelector("[aria-hidden='true']")?.textContent).toBe("*");
+    }
+  });
+});
+
+describe("DiscountsPage — 100 % confirmation (ADMB-10)", () => {
+  async function fillPercent(valor: string): Promise<void> {
+    renderPage();
+    await screen.findByTestId("discounts-cards");
+    fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
+    fireEvent.change(screen.getByLabelText(/nombre/i), { target: { value: "Beca total" } });
+    fireEvent.change(screen.getByLabelText(/valor/i), { target: { value: valor } });
+    fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
+  }
+
+  it("asks before saving a 100 % discount, and saves only after confirming", async () => {
+    mockCrearDescuento.mockResolvedValueOnce({ ...BECA, id: 9, nombre: "Beca total" });
+    await fillPercent("100");
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/beca completa/i)).toBeInTheDocument();
+    expect(mockCrearDescuento).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /guardar al 100 %/i }));
+    await waitFor(() => {
+      expect(mockCrearDescuento).toHaveBeenCalledWith({ nombre: "Beca total", porcentaje: 100, monto: null });
+    });
+  });
+
+  it("saves nothing when the 100 % confirmation is cancelled", async () => {
+    await fillPercent("100");
+
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: /^cancelar$/i }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(mockCrearDescuento).not.toHaveBeenCalled();
+  });
+
+  it("does not ask for anything below 100 %", async () => {
+    mockCrearDescuento.mockResolvedValueOnce({ ...BECA, id: 9, nombre: "Beca total", porcentaje: "99" });
+    await fillPercent("99");
+
+    await waitFor(() => expect(mockCrearDescuento).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
 describe("DiscountsPage — ocultar, mostrar y eliminar", () => {
   it("dresses a hidden card like a hidden tariff: sunken background, no opacity fade", async () => {
     renderPage();
@@ -734,7 +801,7 @@ describe("DiscountsPage — ocultar, mostrar y eliminar", () => {
     expect(convenioRow.className).toContain("bg-sunken");
     expect(convenioRow.className).not.toContain("opacity-60");
     expect(
-      within(convenioRow).getByText(/no aparece.*las aplicaciones existentes se conservan/i),
+      within(convenioRow).getByText(/no aparece al asignar beneficios\. los descuentos ya aplicados se mantienen\./i),
     ).toBeInTheDocument();
   });
 

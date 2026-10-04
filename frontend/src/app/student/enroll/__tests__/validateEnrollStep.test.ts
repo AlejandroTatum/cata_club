@@ -123,7 +123,7 @@ describe("validateEnrollStep — personal step", () => {
       }),
     );
     expect(errors).toContain(
-      "Por la fecha indicada, el alumno es menor de edad y no puede inscribirse por su cuenta. Vuelva al primer paso y elija «Inscribo a un hijo / dependiente», o pida a su representante que complete la inscripción.",
+      "El alumno es menor de edad y necesita un representante. Vuelva al primer paso y elija «Representante».",
     );
   });
 
@@ -177,7 +177,7 @@ describe("validateEnrollStep — personal step", () => {
       }),
     );
     expect(errors).toContain(
-      "Por la fecha indicada, el alumno ya es mayor de edad y gestiona su propia cuenta. Vuelva al primer paso y elija «Me inscribo yo».",
+      "El alumno ya es mayor de edad y gestiona su propia cuenta. Vuelva al primer paso y elija «Jugador».",
     );
   });
 
@@ -192,7 +192,7 @@ describe("validateEnrollStep — personal step", () => {
       }),
     );
     expect(errors).toContain(
-      "Por la fecha indicada, el alumno ya es mayor de edad y gestiona su propia cuenta. Vuelva al primer paso y elija «Me inscribo yo».",
+      "El alumno ya es mayor de edad y gestiona su propia cuenta. Vuelva al primer paso y elija «Jugador».",
     );
   });
 
@@ -207,7 +207,7 @@ describe("validateEnrollStep — personal step", () => {
       }),
     );
     expect(errors).not.toContain(
-      "Por la fecha indicada, el alumno ya es mayor de edad y gestiona su propia cuenta. Vuelva al primer paso y elija «Me inscribo yo».",
+      "El alumno ya es mayor de edad y gestiona su propia cuenta. Vuelva al primer paso y elija «Jugador».",
     );
   });
 
@@ -220,7 +220,7 @@ describe("validateEnrollStep — personal step", () => {
       }),
     );
     expect(errors).not.toContain(
-      "Por la fecha indicada, el alumno ya es mayor de edad y gestiona su propia cuenta. Vuelva al primer paso y elija «Me inscribo yo».",
+      "El alumno ya es mayor de edad y gestiona su propia cuenta. Vuelva al primer paso y elija «Jugador».",
     );
   });
 

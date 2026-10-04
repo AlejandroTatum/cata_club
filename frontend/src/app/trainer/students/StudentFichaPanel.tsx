@@ -101,7 +101,7 @@ export default function StudentFichaPanel({
           <UserRound size={ICON.lg} strokeWidth={1.5} aria-hidden="true" className="flex-none" />
           <div>
             <h2 className="text-base font-bold text-ink">Elija un alumno</h2>
-            <p className="text-sm">Su ficha médica y a quién llamar aparecen acá.</p>
+            <p className="text-sm">Su ficha médica y a quién llamar aparecen aquí.</p>
           </div>
         </div>
         <dl aria-hidden="true" className="flex flex-col border-t border-dashed border-line">

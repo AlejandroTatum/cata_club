@@ -44,6 +44,22 @@ describe("SessionHistoryList", () => {
     expect(screen.queryByRole("columnheader", { name: "Acciones" })).not.toBeInTheDocument();
   });
 
+  // ENT-19 / ADMA-29: «No registrado» read as «the attendance was not recorded».
+  it("shows a dash, never «No registrado», when a session has no author", async () => {
+    render(
+      <SessionHistoryList
+        pageSize={10}
+        sessions={[session(1, { registradoPorNombre: null })]}
+        rangeInvalid={false}
+        emptyAction={EMPTY_ACTION}
+      />,
+    );
+
+    const rows = (await screen.findAllByRole("row")).slice(1);
+    expect(rows[0]).toHaveTextContent("—");
+    expect(screen.queryByText(/No registrado/)).not.toBeInTheDocument();
+  });
+
   // ENT-07: a session holding records flagged for review says so in the list, so
   // the admin does not have to open every session to find them.
   it("flags the sessions that hold records to review, and only those", async () => {
@@ -155,5 +171,30 @@ describe("AttendancePeriodRail", () => {
     expect(screen.queryByRole("heading", { name: "Distribución del período" })).not.toBeInTheDocument();
     expect(screen.getByText(/no se compara contra el horario semanal al filtrar por alumno/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Cómo leer el historial" })).toBeInTheDocument();
+  });
+
+  // ENT-13 / ENT-20 / ADMA-21
+  it("lists a partly-filled list as «N de M registrados» with «Completar lista»", () => {
+    render(
+      <AttendancePeriodRail
+        {...baseProps}
+        sessions={[session(1, { total: 5 })]}
+        schedules={[{ id: 1, diaSemana: "lun", horaInicio: "15:00", horaFin: "16:00" }]}
+        fechaFin="2026-06-01"
+        inscritosPorHorario={{ 1: 62 }}
+        studentFiltered={false}
+      />,
+    );
+
+    const missing = screen.getByRole("region", { name: "Sin lista en el período" });
+    expect(missing).toHaveTextContent("5 de 62 registrados");
+    expect(within(missing).getByRole("link", { name: /Completar lista del/ })).toHaveTextContent("Completar lista");
+    expect(screen.queryByText("Todas las sesiones del período tienen lista.")).not.toBeInTheDocument();
+  });
+
+  it("paints the «Estimación» note in the AA-contrast ink", () => {
+    render(<AttendancePeriodRail {...baseProps} studentFiltered={false} />);
+
+    expect(screen.getByRole("note")).toHaveClass("text-ink-3-strong");
   });
 });

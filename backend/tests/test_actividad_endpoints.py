@@ -363,6 +363,21 @@ def test_avanzadas_ignora_buckets_json_nulos_o_que_no_son_arreglo(client, db_ses
         assert client.get(ruta).status_code == 200
 
 
+@pytest.mark.parametrize("malo", [JSONB.NULL, {"x": 1}, 7, [None, 3], [{"m": "GET"}], [{"m": "GET", "r": "/x", "b": "no"}]])
+def test_avanzadas_ignora_rutas_json_nulas_o_malformadas(client, db_session, malo):
+    """ADMB-01: `rutas` JSON `null` pasa `isnot(None)` y `for item in None` daba 500."""
+    _instantanea(db_session, hace_min=2, intervalo_s=60, peticiones=10, latencia_buckets=[10] * 12, rutas=malo)
+    _instantanea(
+        db_session, hace_min=1, intervalo_s=60, peticiones=10, latencia_buckets=[10] * 12,
+        rutas=[{"m": "GET", "r": "/api/v1/pagos", "b": [0, 0, 0, 0, 0, 0, 50, 50, 50, 50, 50, 50]}],
+    )
+
+    respuesta = client.get(RUTA_AVANZADAS + "?rango=1h")
+
+    assert respuesta.status_code == 200
+    assert [e["route"] for e in respuesta.json()["service"]["slowEndpoints"]] == ["/api/v1/pagos"]
+
+
 def test_avanzadas_tolera_buckets_de_distinta_longitud(client, db_session):
     _instantanea(db_session, hace_min=2, intervalo_s=60, peticiones=10, latencia_buckets=[10] * 12)
     _instantanea(db_session, hace_min=1, intervalo_s=60, peticiones=10, latencia_buckets=[10] * 8)

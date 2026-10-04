@@ -354,6 +354,11 @@ class PagoListItemDTO(ResponseBase, BaseModel):
     fecha_fin: date = Field(..., examples=["2024-12-31"])
     persona_id: int = Field(..., examples=[1])
     persona_nombre_completo: NombrePresentado = Field(..., examples=["Juan Carlos Pérez López"])
+    # QA4 ADMB-06: quien paga por la persona (su representante); `None` cuando
+    # paga ella misma. Lo necesita el PDF para igualar pantalla y Excel.
+    responsable_pago_nombre_completo: Optional[NombrePresentado] = Field(
+        default=None, examples=["María Pérez"],
+    )
     membresia_id: int = Field(..., examples=[1])
     voucher_url: Optional[str] = Field(default=None, examples=["https://res.cloudinary.com/..."])
     voucher_formato: Optional[str] = Field(default=None, examples=["image/jpeg"])

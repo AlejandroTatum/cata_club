@@ -38,6 +38,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { backHrefForRole } from "@/lib/auth-utils";
 import type { UserRole } from "@/types/domain";
 import { cn } from "@/components/ui/cn";
+import HowToPay from "@/components/payments/HowToPay";
 import { FAQ_SECTIONS } from "./faq-content";
 
 /**
@@ -146,7 +147,7 @@ const QUICK_LINKS_BY_ROLE: Partial<Record<UserRole, RoleShortcut[]>> = {
   ],
   trainer: [
     { title: "Mi día", description: "Sus próximas sesiones", href: "/trainer" },
-    { title: "Asistencias", description: "Registrar la asistencia", href: "/trainer/attendance" },
+    { title: "Pasar lista", description: "Registrar la asistencia", href: "/trainer/attendance" },
     { title: "Mi perfil", description: "Sus datos y su cuenta", href: "/profile" },
   ],
   estudiante: [
@@ -299,6 +300,7 @@ export default function AyudaPage(): React.ReactElement {
           <p>Toque una pregunta para ver su respuesta; se abre una a la vez por categoría.</p>
           <p>Los horarios y precios vigentes se consultan en la página principal del club.</p>
         </InfoPanel>
+        <HowToPay />
         <InfoPanel title="¿No encontró su respuesta?">
           <p>Cuéntenos qué pasó y lo revisamos: se envía junto con una captura de esta pantalla.</p>
           <Button variant="secondary" onClick={() => report.open()} disabled={report.busy}>

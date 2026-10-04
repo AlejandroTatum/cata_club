@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { E2E_BASE_URL } from "./e2e-target";
+import { mockClubPaymentInfo } from "./helpers/club-payment-info";
 
 const SESSION = {
   user: { id: "7", name: "Laura Vera", email: "laura@cataclub.test", role: "representante", representanteId: null },
@@ -22,6 +23,8 @@ test("a representative adds a minor and registers the first pending payment", as
     if (path === "/api/student") return respond({ self: null, representados: [], membershipPlans: [] });
     return respond({ items: [], total: 0, skip: 0, limit: 20 });
   });
+  // After the catch-all: Playwright tries the most recently registered route first.
+  await mockClubPaymentInfo(page);
 
   await page.goto("/student/add-dependent");
   await page.getByLabel(/^Nombres/).fill("Mateo");

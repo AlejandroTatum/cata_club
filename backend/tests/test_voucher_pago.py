@@ -526,7 +526,37 @@ def test_subir_voucher_excede_tamano_maximo_da_400_antes_de_cloudinary(_mock_clo
         files={"archivo": ("voucher.jpg", contenido_grande, "image/jpeg")},
     )
     assert resp.status_code == 400
-    assert "tamaño" in resp.json()["detail"].lower()
+    assert "pesa más de 5 mb" in resp.json()["detail"].lower()
+    _mock_cloudinary.assert_not_called()
+
+
+@patch("app.infraestructura.cloudinary_cliente.subir_voucher_pago")
+def test_chequeo_de_tamano_del_servicio_tambien_habla_en_megabytes(_mock_cloudinary, client, monkeypatch):
+    """FAM-20: la defensa en profundidad del servicio (que alcanza a quien no
+    pase por `leer_con_limite`) no debe mostrar «5MB» pegado ni «excede el
+    tamaño máximo»: dice lo mismo que el router."""
+    from app.servicios_negocio import membresia_pago_servicio
+
+    monkeypatch.setattr(membresia_pago_servicio, "TAMANO_MAXIMO_VOUCHER_BYTES", 5 * 1024 * 1024)
+    persona = _crear_persona(client, cedula="1710034123")
+    tipo = _crear_tipo_membresia(client)
+    membresia = _crear_membresia(client, persona["id"], tipo["id"])
+    pago = _crear_pago(client, persona["id"], membresia["id"])
+    _autenticar_como_duenio(client, persona["id"])
+
+    # El router acota a 5 MB; subimos su tope para llegar al chequeo del servicio.
+    monkeypatch.setattr(
+        "app.presentacion.routers.membresias_pagos_router.TAMANO_MAXIMO_VOUCHER_BYTES",
+        50 * 1024 * 1024,
+    )
+    contenido = jpeg_valido()
+    contenido_grande = contenido + b"\x00" * (5 * 1024 * 1024 + 1)
+    resp = client.post(
+        f"/api/v1/membresias/pagos/{pago['id']}/voucher",
+        files={"archivo": ("voucher.jpg", contenido_grande, "image/jpeg")},
+    )
+    assert resp.status_code == 400, resp.text
+    assert "pesa más de 5 mb" in resp.json()["detail"].lower()
     _mock_cloudinary.assert_not_called()
 
 

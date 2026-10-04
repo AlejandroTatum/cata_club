@@ -180,7 +180,7 @@ class EnrollmentServicio:
         if edad < EDAD_MINIMA_ALUMNO or edad > EDAD_MAXIMA_ALUMNO:
             raise OperacionInvalida(
                 f"La edad del alumno debe estar entre {EDAD_MINIMA_ALUMNO} "
-                f"y {EDAD_MAXIMA_ALUMNO} años (calculado: {edad})."
+                f"y {EDAD_MAXIMA_ALUMNO} años; según la fecha de nacimiento, tiene {edad} años."
             )
 
         hay_representante = datos.representante is not None
@@ -211,13 +211,13 @@ class EnrollmentServicio:
             if edad_rep < EDAD_MAYORIA_EDAD:
                 raise OperacionInvalida(
                     f"El representante legal debe ser mayor de edad "
-                    f"({EDAD_MAYORIA_EDAD} años o más); la edad calculada "
-                    f"es {edad_rep} años."
+                    f"({EDAD_MAYORIA_EDAD} años o más); según su fecha de nacimiento, "
+                    f"tiene {edad_rep} años."
                 )
             if edad_rep > EDAD_MAXIMA_ALUMNO:
                 raise OperacionInvalida(
                     f"El representante legal debe tener como máximo "
-                    f"{EDAD_MAXIMA_ALUMNO} años (calculado: {edad_rep})."
+                    f"{EDAD_MAXIMA_ALUMNO} años; según su fecha de nacimiento, tiene {edad_rep} años."
                 )
 
         # Validar cédula única del alumno. Antes corría DESPUÉS de crear la
@@ -554,12 +554,14 @@ class EnrollmentServicio:
         rol_admin = self.repo_rol.obtener_por_tipo_con_usuarios(TipoRol.ADMINISTRADOR)
         admins = [u.persona for u in rol_admin.usuarios if u.persona] if rol_admin else []
         nombre_alumno = acortar_nombre_para_notificacion(nombre_completo(alumno.nombres, alumno.apellidos))
-        destinatarios = {admin.id: admin.id for admin in admins}
-        if alumno.representante_id:
-            destinatarios[alumno.representante_id] = alumno.representante_id
-        for destinatario_id in destinatarios:
-            repo_outbox.crear(
-                destinatario_id,
-                alumno.id,
-                f"Nuevo alumno inscrito: {nombre_alumno} (cédula: {alumno.cedula}).",
+        mensaje_del_club = f"Nuevo alumno inscrito: {nombre_alumno} (cédula: {alumno.cedula})."
+        mensajes = {admin.id: mensaje_del_club for admin in admins}
+        if alumno.representante_id and alumno.representante_id not in mensajes:
+            # QA4 FAM-06: la familia no necesita la cédula del menor ni un texto
+            # escrito para el club; solo qué sigue.
+            primer_nombre = alumno.nombres.split()[0]
+            mensajes[alumno.representante_id] = (
+                f"Inscribimos a {primer_nombre}. Falta el primer pago para activar la membresía."
             )
+        for destinatario_id, mensaje in mensajes.items():
+            repo_outbox.crear(destinatario_id, alumno.id, mensaje)

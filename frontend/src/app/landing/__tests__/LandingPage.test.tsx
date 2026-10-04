@@ -541,6 +541,14 @@ describe("LandingPage", (): void => {
   });
 
   // Progressive enhancement like the gallery: never assert GSAP internals.
+  describe("phone links", (): void => {
+    it("LAN-15: offers a tel: link for every contact number next to the WhatsApp ones", (): void => {
+      render(<LandingPage />);
+      expect(document.querySelector('a[href="tel:+593994219619"]')).not.toBeNull();
+      expect(document.querySelector('a[href="tel:+593990288152"]')).not.toBeNull();
+    });
+  });
+
   describe("hero photo carousel", (): void => {
     it("renders its slides from HERO_PHOTOS behind previous/next navigation", (): void => {
       render(<LandingPage />);

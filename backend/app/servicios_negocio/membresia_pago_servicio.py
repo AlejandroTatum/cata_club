@@ -38,6 +38,7 @@ from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
+from app.soporte_transversal.formato import formatear_monto_usd
 from app.soporte_transversal.firma_archivos import es_contenido_legible, es_firma_valida
 from app.soporte_transversal.tiempo import hoy_club
 from app.servicios_negocio.dtos.membresia_pago_schemas import (
@@ -137,6 +138,10 @@ MENSAJE_PAGO_PENDIENTE_DUPLICADO = (
     "Espere a que sea validado antes de registrar uno nuevo."
 )
 MENSAJE_MEMBRESIA_PENDIENTE_DE_PAGO = "Ya tiene una membresía pendiente de pago."
+MENSAJE_MEMBRESIA_INACTIVA_EXISTENTE = (
+    "Esta persona ya tiene una membresía inactiva. Registre el pago en esa "
+    "membresía para activarla."
+)
 
 MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA = (
     "La persona ya tiene una membresía activa o suspendida. "
@@ -376,6 +381,13 @@ class MembresiaServicio:
                 and PagoRepositorio(self.db).existe_pendiente_para_membresia(m.id)
             ):
                 raise MembresiaPendienteDePago(MENSAJE_MEMBRESIA_PENDIENTE_DE_PAGO, m.id)
+        # QA4 ADMA-05/FAM-01: una INACTIVA sin pago pendiente tampoco admite
+        # otra; la salida es registrar el pago en la existente, no duplicarla.
+        inactiva = next(
+            (m for m in existentes if m.estado == EstadoMembresia.INACTIVA), None
+        )
+        if inactiva is not None:
+            raise MembresiaPendienteDePago(MENSAJE_MEMBRESIA_INACTIVA_EXISTENTE, inactiva.id)
         # Issue #1132: matricularse ya NO otorga (ni exige) ningún rol. "Ser
         # jugador" se deriva exclusivamente de la membresía ACTIVA (ver
         # `app.dominio.jugador.es_jugador`), nunca del rol -- un
@@ -623,7 +635,7 @@ class PagoServicio:
             if persona is not None and persona.representante_id:
                 self._crear_notificacion_pago(
                     pago, TipoNotificacion.PAGO_REGISTRADO,
-                    f"Su pago de ${pago.monto} fue registrado y está pendiente de validación.",
+                    f"Su pago de {formatear_monto_usd(pago.monto)} fue registrado y está pendiente de validación.",
                 )
         except Exception:
             self.db.rollback()
@@ -1113,7 +1125,7 @@ class PagoServicio:
         if valor > monto_base:
             raise OperacionInvalida(
                 "El beneficio asignado no puede superar el 100% del monto "
-                f"del pago (monto base ${monto_base}, descuento ${valor})"
+                f"del pago (monto base {formatear_monto_usd(monto_base)}, descuento {formatear_monto_usd(valor)})"
             )
         return (
             _DescuentoCongelado(
@@ -1700,14 +1712,14 @@ class PagoServicio:
         if datos.monto != cotizacion.monto_esperado:
             unidad_meses = "mes" if cotizacion.meses == 1 else "meses"
             detalle_beneficio = (
-                f", menos el beneficio de ${cotizacion.descuento_aplicado}"
+                f", menos el beneficio de {formatear_monto_usd(cotizacion.descuento_aplicado)}"
                 if cotizacion.descuento is not None else ""
             )
             raise OperacionInvalida(
-                f"El monto (${datos.monto}) no coincide con el esperado para el "
-                f"período: ${cotizacion.monto_esperado} "
+                f"El monto ({formatear_monto_usd(datos.monto)}) no coincide con el esperado para el "
+                f"período: {formatear_monto_usd(cotizacion.monto_esperado)} "
                 f"({cotizacion.meses} {unidad_meses} "
-                f"x ${membresia.monto_aplicado}{detalle_beneficio})."
+                f"x {formatear_monto_usd(membresia.monto_aplicado)}{detalle_beneficio})."
             )
 
         pago = Pago(
@@ -2411,6 +2423,10 @@ class PagoServicio:
                 fecha_fin=p.fecha_fin,
                 persona_id=p.persona_id,
                 persona_nombre_completo=nombre_completo(p.persona.nombres, p.persona.apellidos),
+                responsable_pago_nombre_completo=(
+                    nombre_completo(p.persona.representante.nombres, p.persona.representante.apellidos)
+                    if p.persona.representante is not None else None
+                ),
                 membresia_id=p.membresia_id,
                 voucher_url=self._url_entrega_voucher(p),
                 voucher_formato=p.voucher_formato,
@@ -2566,7 +2582,7 @@ class PagoServicio:
             aviso_ok = self._crear_notificacion_pago(
                 pago=pago,
                 tipo=TipoNotificacion.PAGO_APROBADO,
-                mensaje=f"Su pago de ${pago.monto} fue aprobado. Su membresía está activa.",
+                mensaje=f"Su pago de {formatear_monto_usd(pago.monto)} fue aprobado. Su membresía está activa.",
             )
             self._enviar_correo_de_validacion_pago(pago, TipoNotificacion.PAGO_APROBADO)
             # Último paso, ya con la aprobación commiteada: si el broker está
@@ -3108,7 +3124,7 @@ class PagoServicio:
         # con cabecera válida la pasa. Se decodifica de verdad (FAM-03).
         if not es_contenido_legible(contenido, content_type):
             raise OperacionInvalida(
-                "El archivo está dañado o no se puede leer. Genere el comprobante de nuevo e intente otra vez"
+                "El archivo está dañado o no se puede leer. Genere el comprobante de nuevo e intente otra vez."
             )
 
         # 5. Tamaño máximo. Defensa en profundidad: el router ya acota la
@@ -3116,7 +3132,7 @@ class PagoServicio:
         # chequeo protege a cualquier otro llamador futuro de este método
         # que no pase por esa ruta.
         if len(contenido) > TAMANO_MAXIMO_VOUCHER_BYTES:
-            raise OperacionInvalida("El archivo excede el tamaño máximo de 5MB")
+            raise OperacionInvalida("El archivo pesa más de 5 MB. Elija uno más liviano.")
 
         # 6. Subida a Cloudinary, con la transacción ya SOLTADA (issue #813).
         #

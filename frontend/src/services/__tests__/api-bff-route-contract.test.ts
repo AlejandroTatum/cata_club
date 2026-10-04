@@ -73,6 +73,7 @@ import {
   aplicarBeneficio,
   fetchActividadResumen,
   fetchActividadAvanzadas,
+  fetchClubPaymentInfo,
 } from "../api";
 
 const API_ROOT = path.resolve(
@@ -278,6 +279,7 @@ describe("API client URLs resolve to a real BFF route handler", () => {
     // Issue #1314: the admin activity screen reads two NEW route directories.
     ["fetchActividadResumen", () => fetchActividadResumen("7d")],
     ["fetchActividadAvanzadas", () => fetchActividadAvanzadas("1h")],
+    ["fetchClubPaymentInfo", () => fetchClubPaymentInfo()],
   ];
 
   it.each(CASES)("%s targets an existing route handler", async (_name, call) => {

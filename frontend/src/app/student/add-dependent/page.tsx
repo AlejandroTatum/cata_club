@@ -27,7 +27,7 @@
 
 "use client";
 
-import { Suspense, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { furthestReachableIndex, useWizardHistory } from "@/lib/wizard-history";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -52,7 +52,13 @@ import {
   CEDULA_HINT,
 } from "@/components/wizard-fields";
 import { BackLink, InfoPanel, Select, Stepper, buttonClasses, cn, PAGE_RAIL } from "@/components/ui";
-import { SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
+import { BLOOD_TYPE_LABELS, SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
+import { institutionOptionLabel, planOptionLabel } from "@/app/student/enroll/enroll-utils";
+import { addMonthsIso, estimateTotal } from "@/app/student/payments/payments-utils";
+import HowToPay from "@/components/payments/HowToPay";
+import { ProofPreview } from "@/app/student/payments/ProofPreview";
+import { formatCurrency, formatDateRange } from "@/lib/format-utils";
+import { calendarIsoDate, clubToday } from "@/lib/club-date";
 import type { TipoSangre } from "@/types/domain";
 import {
   Calendar,
@@ -60,6 +66,9 @@ import {
   Heart,
   CheckCircle,
   AlertTriangle,
+  Minus,
+  Plus,
+  Upload,
   User,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -72,9 +81,10 @@ import {
   isAddDependentStepComplete,
   ADD_DEPENDENT_STEP_LABELS,
   ADD_DEPENDENT_SHORT_LABELS,
-  describeAddDependentBlocker,
+  fieldsForAddDependentStep,
   initialAddDependentFormData,
   validateAddDependentFields,
+  ADD_DEPENDENT_STEP_BLOCKED_MESSAGE,
   validateAddDependentStep,
   validateAddDependentForm,
   buildRepresentadoPayload,
@@ -109,6 +119,8 @@ function AddDependentContent(): React.ReactElement {
   const [months, setMonths] = useState(1);
   const [method, setMethod] = useState<"EFECTIVO" | "TRANSFERENCIA">("TRANSFERENCIA");
   const [voucher, setVoucher] = useState<File | null>(null);
+  const voucherInputRef = useRef<HTMLInputElement>(null);
+  const stepTitleRef = useRef<HTMLHeadingElement>(null);
 
   // Issue #1318: read straight from the session's own backend-role list —
   // no portal fetch needed just to know whether saving will also switch the
@@ -146,15 +158,10 @@ function AddDependentContent(): React.ReactElement {
   const isLast = currentIndex === ADD_DEPENDENT_STEP_ORDER.length - 1;
 
   // Same live-validation contract as the public wizard: recomputed on every
-  // keystroke, shown only for fields the visitor has already left.
+  // keystroke, shown only for fields the visitor has already left. FAM-17:
+  // "Siguiente" is never disabled; pressing it on an incomplete step touches
+  // every field of that step so the pending ones are marked.
   const fieldErrors = useMemo(() => validateAddDependentFields(step, formData), [step, formData]);
-  const stepComplete = Object.keys(fieldErrors).length === 0;
-  // VIS-17: an empty form is not an error yet. The reason line stays quiet
-  // until the guardian has touched at least one field it names.
-  const blockerTouched = (Object.keys(fieldErrors) as AddDependentField[]).some((field) =>
-    touched.has(field),
-  );
-  const blockedReason = blockerTouched ? describeAddDependentBlocker(fieldErrors) : null;
 
   function shownError(field: AddDependentField): string | undefined {
     return touched.has(field) ? fieldErrors[field] : undefined;
@@ -163,6 +170,17 @@ function AddDependentContent(): React.ReactElement {
   function markTouched(field: AddDependentField): void {
     setTouched((prev) => (prev.has(field) ? prev : new Set(prev).add(field)));
   }
+
+  // FAM-30: when the step changes the button that was pressed unmounts and the
+  // browser parks focus on the shell's skip link, which then shows over the
+  // content. Hand focus to the step title instead. Not on first render.
+  const stepKey = createdDependentId !== null ? "payment" : step;
+  const lastStepKey = useRef<string>(stepKey);
+  useEffect(() => {
+    if (lastStepKey.current === stepKey) return;
+    lastStepKey.current = stepKey;
+    stepTitleRef.current?.focus();
+  }, [stepKey]);
 
   useEffect(() => {
     fetchInstituciones().then(setInstituciones).catch(() => {});
@@ -182,7 +200,11 @@ function AddDependentContent(): React.ReactElement {
   function handleNext(): void {
     const errors = validateAddDependentStep(step, formData);
     if (errors.length > 0) {
-      setFormErrors(errors);
+      const pending = fieldsForAddDependentStep(step);
+      setTouched((prev) => new Set([...prev, ...pending]));
+      setFormErrors([ADD_DEPENDENT_STEP_BLOCKED_MESSAGE[step]]);
+      const firstPending = pending.find((field) => fieldErrors[field] !== undefined);
+      if (firstPending) document.getElementById(addDependentFieldId(firstPending))?.focus();
       return;
     }
     setFormErrors([]);
@@ -456,7 +478,7 @@ function AddDependentContent(): React.ReactElement {
                 .filter((inst) => !tipoEscuelaFilter || inst.tipoEscuela === tipoEscuelaFilter)
                 .map((inst) => (
                   <option key={inst.id} value={String(inst.id)}>
-                    {inst.nombre} ({inst.tipoEscuela})
+                    {institutionOptionLabel(inst.nombre)}
                   </option>
                 ))}
             </Select>
@@ -511,7 +533,7 @@ function AddDependentContent(): React.ReactElement {
                 has to be a complete one. */}
             {SELECTABLE_BLOOD_TYPES.map((bloodType) => (
               <option key={bloodType} value={bloodType}>
-                {bloodType.replace("_", " ")}
+                {BLOOD_TYPE_LABELS[bloodType]}
               </option>
             ))}
           </Select>
@@ -639,7 +661,7 @@ function AddDependentContent(): React.ReactElement {
           )}
           {summaryRow(
             "Tipo de sangre",
-            formData.tipoSangre ? formData.tipoSangre.replace("_", " ") : "—",
+            formData.tipoSangre ? BLOOD_TYPE_LABELS[formData.tipoSangre] : "—",
             "health",
           )}
           {summaryRow("Enfermedades", formData.enfermedades || "Ninguna reportada", "health")}
@@ -686,25 +708,93 @@ function AddDependentContent(): React.ReactElement {
   }
 
   function renderPaymentStep(): React.ReactElement {
+    // FAM-09: same consequence-before-commit block as the Pagos form — the
+    // period and the estimated total, from the same helpers. Client preview
+    // only; the backend resolves the real total.
+    const plan = plans.find((p) => String(p.id) === planId);
+    const monthlyPrice = plan ? Number(plan.precio) : 0;
+    const fechaInicio = calendarIsoDate(clubToday());
+    const fechaFin = addMonthsIso(fechaInicio, months);
     return (
       <div className="space-y-section">
         <p className="text-sm text-ink-2">El dependiente ya fue agregado. Seleccione el plan y registre su primer pago. Administración lo validará antes de activar la membresía.</p>
+        {method === "TRANSFERENCIA" && <HowToPay />}
         <label className="block text-sm text-ink-2" htmlFor="dependent-plan">Plan de membresía</label>
         <Select id="dependent-plan" className="input-field" value={planId} onChange={(e) => setPlanId(e.target.value)} disabled={submitting}>
           <option value="">Seleccione un plan</option>
-          {plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.categoria} — ${plan.precio}</option>)}
+          {plans.map((p) => <option key={p.id} value={p.id}>{planOptionLabel(p.categoria, p.precio)}</option>)}
         </Select>
-        <label className="block text-sm text-ink-2" htmlFor="dependent-months">Meses a pagar</label>
-        <input id="dependent-months" type="number" className="input-field" min={1} max={12} value={months} onChange={(e) => setMonths(Number(e.target.value))} disabled={submitting} />
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="text-sm text-ink-2">Meses a pagar</legend>
+          <div className="inline-flex h-ctl w-fit items-center gap-1 rounded-ctl border border-line-2 bg-paper px-1.5">
+            <button
+              type="button"
+              onClick={() => setMonths((m) => Math.max(1, m - 1))}
+              disabled={submitting || months <= 1}
+              aria-label="Un mes menos"
+              className="flex h-7 w-7 flex-none items-center justify-center rounded text-ink-2 hover:bg-sunken disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Minus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+            </button>
+            <span aria-live="polite" className="w-8 flex-none text-center text-sm font-bold tabular-nums text-ink">{months}</span>
+            <button
+              type="button"
+              onClick={() => setMonths((m) => Math.min(12, m + 1))}
+              disabled={submitting || months >= 12}
+              aria-label="Un mes más"
+              className="flex h-7 w-7 flex-none items-center justify-center rounded text-ink-2 hover:bg-sunken disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+            </button>
+          </div>
+        </fieldset>
         <label className="block text-sm text-ink-2" htmlFor="dependent-method">Medio de pago</label>
         <Select id="dependent-method" className="input-field" value={method} onChange={(e) => { setMethod(e.target.value as typeof method); setPendingPaymentId(null); }} disabled={submitting || pendingPaymentId !== null}>
           <option value="TRANSFERENCIA">Transferencia</option>
           <option value="EFECTIVO">Efectivo</option>
         </Select>
-        {method === "TRANSFERENCIA" && <>
-          <label className="block text-sm text-ink-2" htmlFor="dependent-voucher">Comprobante de transferencia (JPG, PNG o PDF; máximo 5 MB)</label>
-          <input id="dependent-voucher" type="file" accept="image/jpeg,image/png,application/pdf" onChange={(e) => setVoucher(e.target.files?.[0] ?? null)} disabled={submitting} />
-        </>}
+        <div className="rounded-ctl bg-sunken px-3.5 py-3">
+          <p className="text-2xs font-bold uppercase text-ink-3-strong">Período que cubre</p>
+          <p className="mt-1 text-sm font-bold tabular-nums text-ink">
+            {plan && fechaFin ? formatDateRange(fechaInicio, fechaFin) : "—"}
+          </p>
+          <p className="mt-1.5 text-sm font-bold tabular-nums text-ink">
+            Total estimado: {formatCurrency(estimateTotal(monthlyPrice, months, null))}
+          </p>
+        </div>
+        {method === "TRANSFERENCIA" && <div className="flex flex-col gap-1.5">
+          <span className="text-sm text-ink-2" id="dependent-voucher-label">Comprobante de transferencia (JPG, PNG o PDF; máximo 5 MB)</span>
+          <input
+            ref={voucherInputRef}
+            id="dependent-voucher"
+            type="file"
+            aria-labelledby="dependent-voucher-label"
+            accept="image/jpeg,image/png,application/pdf"
+            onChange={(e) => setVoucher(e.target.files?.[0] ?? null)}
+            disabled={submitting}
+            className="hidden"
+          />
+          {voucher ? (
+            <ProofPreview
+              file={voucher}
+              onReplace={() => voucherInputRef.current?.click()}
+              onRemove={() => {
+                setVoucher(null);
+                if (voucherInputRef.current) voucherInputRef.current.value = "";
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => voucherInputRef.current?.click()}
+              className="flex items-center justify-center gap-2 rounded-ctl border border-dashed border-line-2 bg-sunken px-3 py-4 text-sm font-semibold text-ink-2 hover:border-ink-3 hover:text-ink"
+            >
+              <Upload size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+              Seleccionar archivo
+            </button>
+          )}
+        </div>}
         {formErrors.length > 0 && <div role="alert" className="text-sm text-state-bad">{formErrors.join(" ")}</div>}
         <div className="flex flex-wrap gap-3">
           <button type="submit" disabled={submitting} className={buttonClasses("primary", "md")}>
@@ -761,7 +851,7 @@ function AddDependentContent(): React.ReactElement {
             14px labels of the fields inside the card it names. No weight
             class: Graduate has one 400 cut, and a CSS bold on top of it asks
             the browser to synthesise a stroke the face cannot draw. */}
-        <h2 className="mb-6 font-display text-lg uppercase leading-tight tracking-flat text-ink">
+        <h2 ref={stepTitleRef} tabIndex={-1} className="mb-6 font-display focus:outline-none text-lg uppercase leading-tight tracking-flat text-ink">
           {createdDependentId !== null ? "Primer pago" : ADD_DEPENDENT_STEP_LABELS[step]}
         </h2>
 
@@ -780,8 +870,6 @@ function AddDependentContent(): React.ReactElement {
             submitting={submitting}
             onBack={handleBack}
             onNext={handleNext}
-            nextDisabled={!stepComplete}
-            nextBlockedReason={blockedReason ?? undefined}
             submitButton={
               <button
                 type="submit"
@@ -803,7 +891,8 @@ function AddDependentContent(): React.ReactElement {
         </form>
       </div>
       </div>
-      <div className="flex min-w-0 flex-col gap-page lg:sticky lg:top-4 lg:self-start">
+      {/* FAM-09: the wizard help no longer applies once the dependent exists. */}
+      {createdDependentId === null && <div className="flex min-w-0 flex-col gap-page lg:sticky lg:top-4 lg:self-start">
       <aside aria-label="Antes de empezar" className="card flex flex-col gap-3 p-5">
         <h2 className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">Antes de empezar</h2>
         <ul className="flex flex-col gap-2.5 text-sm leading-relaxed text-ink-2">
@@ -815,11 +904,11 @@ function AddDependentContent(): React.ReactElement {
       <InfoPanel title="Cómo se agrega un dependiente">
         <ol className="flex list-decimal flex-col gap-2 pl-4">
           <li>Estudiante: nombres, apellidos, fecha de nacimiento y cédula.</li>
-          <li>Salud: tipo de sangre y contacto de emergencia (puede dejarlo para después).</li>
+          <li>Salud: tipo de sangre (obligatorio), enfermedades y alergias.</li>
           <li>Confirmar: revise el resumen y agregue; el dependiente aparecerá en su cuenta.</li>
         </ol>
       </InfoPanel>
-      </div>
+      </div>}
       </div>
     </AppShell>
   );

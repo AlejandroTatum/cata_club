@@ -52,7 +52,7 @@
         },
         {
           "pregunta": "¿Cuánto cuesta la mensualidad?",
-          "respuesta": "Consulte el valor de su plan en Mi Cuenta. Para conocer los planes disponibles, escriba al club por WhatsApp."
+          "respuesta": "Consulte el valor de su plan en Mi cuenta. Para conocer los planes disponibles, escriba al club por WhatsApp."
         },
         {
           "pregunta": "¿Por qué mi pantalla no se parece a la de otra persona del club?",
@@ -65,19 +65,19 @@
       "entradas": [
         {
           "pregunta": "¿Dónde veo si mi pago fue aprobado?",
-          "respuesta": "En Mi Cuenta puede consultar el estado de sus pagos y de su membresía. Si un pago fue rechazado, verá el motivo y podrá enviar otro comprobante."
+          "respuesta": "En Mi cuenta puede consultar el estado de sus pagos y de su membresía. Si un pago fue rechazado, verá el motivo y podrá enviar otro comprobante."
         },
         {
           "pregunta": "¿Dónde veo la asistencia?",
-          "respuesta": "En Mi Cuenta puede consultar las clases y asistencias registradas."
+          "respuesta": "En Mi cuenta puede consultar las clases y asistencias registradas."
         },
         {
           "pregunta": "Necesito corregir la ficha médica. ¿Puedo hacerlo yo?",
-          "respuesta": "Sí, si gestiona su propia cuenta o representa al estudiante. Abra Ficha médica en Mi Cuenta. La ficha de un menor con cuenta propia la corrige su representante o un administrador."
+          "respuesta": "Sí, si gestiona su propia cuenta o representa al estudiante. Abra Ficha médica en Mi cuenta. La ficha de un menor con cuenta propia la corrige su representante o un administrador."
         },
         {
           "pregunta": "Represento a más de un hijo. ¿Cómo cambio entre ellos?",
-          "respuesta": "Use el selector de estudiante en Mi Cuenta para elegir a quién desea consultar."
+          "respuesta": "Use el selector de estudiante en Mi cuenta para elegir a quién desea consultar."
         }
       ]
     },
@@ -86,15 +86,15 @@
       "entradas": [
         {
           "pregunta": "¿Cómo tomo asistencia?",
-          "respuesta": "Abra Asistencia, elija el horario, pase lista y confirme."
+          "respuesta": "Abra Pasar lista, elija el día y el horario, marque a cada alumno y confirme."
         },
         {
           "pregunta": "Me equivoqué al marcar. ¿Puedo deshacerlo?",
-          "respuesta": "Sí. Use Deshacer en la barra inferior para revertir la última acción."
+          "respuesta": "Antes de confirmar puede usar Deshacer. Una vez registrada la lista, solo administración puede corregirla: escriba a administración con el día, el horario y el alumno."
         },
         {
           "pregunta": "¿Dónde veo lo que ya cargué?",
-          "respuesta": "En Historial Asistencia puede consultar las listas registradas."
+          "respuesta": "En Pasar lista → Historial puede consultar las listas registradas."
         }
       ]
     },
@@ -103,10 +103,10 @@
       "entradas": [
         {
           "pregunta": "¿Cómo valido un pago?",
-          "respuesta": "Abra Membresías y Pagos, revise la solicitud y confirme su decisión."
+          "respuesta": "Abra Pagos, revise la solicitud y confirme su decisión."
         },
         {
-          "pregunta": "Tengo muchos pagos iguales. ¿Debo aprobarlos de a uno?",
+          "pregunta": "Tengo muchos pagos iguales. ¿Debo aprobarlos uno por uno?",
           "respuesta": "Sí. Cada solicitud se revisa y aprueba por separado."
         },
         {
@@ -115,7 +115,7 @@
         },
         {
           "pregunta": "¿Quién define los horarios?",
-          "respuesta": "El administrador los configura en Horarios."
+          "respuesta": "El administrador los configura en Grupos y horarios."
         },
         {
           "pregunta": "¿Dónde genero los reportes del club?",

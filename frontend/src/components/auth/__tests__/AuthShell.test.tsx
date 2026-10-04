@@ -29,7 +29,7 @@
  *     call returns one, and a fabricated figure is worse than no figure.
  */
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
 import AuthShell, { AUTH_INPUT_CLASSES } from "@/components/auth/AuthShell";
 import { yearsSinceFounding } from "@/app/landing/landing-config";
@@ -530,5 +530,20 @@ describe("AuthShell — QA registro layout", () => {
     expect(logo?.getAttribute("src") ?? "").toMatch(/cata-club-logo/);
     expect(lockup).toHaveTextContent(/cata club/i);
     expect(screen.getAllByRole("img", { name: "Cata Club" })).toHaveLength(1);
+  });
+});
+
+describe("AuthShell — phone brand header (REG-28)", () => {
+  it("keeps the «Cata Club» wordmark on one line", () => {
+    renderShell();
+    const word = within(screen.getByTestId("auth-lockup")).getByText("Cata Club");
+    expect(word.className).toContain("whitespace-nowrap");
+  });
+
+  it("does not pad the phone header with a tall empty gap", () => {
+    renderShell();
+    const banner = screen.getByRole("banner", { name: "Marca de Cata Club" });
+    expect(banner.className).toContain("gap-4");
+    expect(banner.className).not.toMatch(/(^|\s)gap-8(\s|$)/);
   });
 });

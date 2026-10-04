@@ -67,6 +67,7 @@ import KpiTile from "@/components/dashboard/KpiTile";
 import PaymentsAction from "@/components/dashboard/PaymentsAction";
 import TimelineDayList from "@/components/dashboard/TimelineDayList";
 import SectionNotice from "@/components/dashboard/SectionNotice";
+import SectionSkeleton from "@/components/dashboard/SectionSkeleton";
 import { buildContextLine } from "@/components/dashboard/context-line";
 import {
   fetchDashboardStats,
@@ -89,6 +90,7 @@ import { ICON } from "@/lib/icon-size";
 import { todayDiaSemana } from "@/lib/club-date";
 import {
   attendanceChartSeries,
+  attendanceWindowStartIso,
   buildActivityFeed,
   buildFourWeekAttendance,
   buildPaymentAgeBuckets,
@@ -185,7 +187,12 @@ export default function DashboardPage(): React.ReactElement {
   const loadRecords = useCallback(async (): Promise<void> => {
     setRecordsStatus("loading");
     try {
-      setRecords(await fetchAttendanceRecords());
+      // Only the weeks the page draws, not the whole history (PERF-03).
+      setRecords(
+        await fetchAttendanceRecords({
+          fechaInicio: attendanceWindowStartIso(CHART_WEEKS),
+        }),
+      );
       setRecordsStatus("ready");
     } catch {
       setRecords([]);
@@ -324,8 +331,8 @@ export default function DashboardPage(): React.ReactElement {
     },
     {
       key: "members",
-      label: "Miembros sin datos",
-      hint: "Personas sin membresía: complete su ficha.",
+      label: "Alumnos sin membresía activa",
+      hint: "Asígneles un plan o regularice su deuda.",
       href: "/members",
       count: stats?.personasSinMembresia ?? 0,
       tone: "warn",
@@ -413,7 +420,7 @@ export default function DashboardPage(): React.ReactElement {
               <div className="flex flex-col gap-4 px-[18px] py-4">
                 {schedulesStatus === "loading" ||
                 recordsStatus === "loading" ? (
-                  <LoadingState label="Cargando clases…" />
+                  <SectionSkeleton label="Cargando clases…" rows={3} />
                 ) : schedulesStatus === "error" ? (
                   <SectionNotice
                     message="No se pudieron cargar las clases de hoy."
@@ -498,7 +505,7 @@ export default function DashboardPage(): React.ReactElement {
                 visualPlacement="below"
                 visual={
                   <SegmentBar
-                    ariaLabel={`Miembros: ${totalAlumnos} alumnos y ${staff} de staff`}
+                    ariaLabel={`Miembros: ${totalAlumnos} alumnos y ${staff} representantes y personal`}
                     hideLegend
                     segments={[
                       {
@@ -509,14 +516,14 @@ export default function DashboardPage(): React.ReactElement {
                       },
                       {
                         key: "staff",
-                        label: "Staff",
+                        label: "Representantes y personal",
                         value: staff,
                         tone: "muted",
                       },
                     ]}
                   />
                 }
-                caption={`${totalAlumnos} alumnos · ${staff} staff`}
+                caption={`${totalAlumnos} alumnos · ${staff} representantes y personal`}
                 captionClassName="max-lg:min-h-[44px]"
                 href="/members"
               />
@@ -555,8 +562,8 @@ export default function DashboardPage(): React.ReactElement {
               />
               <KpiTile
                 label="Asistencia · 4 semanas"
-                value={fourWeeks.ratePercent}
-                unit="%"
+                value={recordsStatus === "loading" ? "—" : fourWeeks.ratePercent}
+                unit={recordsStatus === "loading" ? undefined : "%"}
                 visual={
                   <Bars
                     data={weekData}
@@ -565,7 +572,11 @@ export default function DashboardPage(): React.ReactElement {
                     heightClass="h-10"
                   />
                 }
-                caption={`${fourWeeks.present} de ${fourWeeks.total} presentes`}
+                caption={
+                  recordsStatus === "loading"
+                    ? "Calculando…"
+                    : `${fourWeeks.present} de ${fourWeeks.total} presentes`
+                }
                 href="/attendance"
               />
             </div>
@@ -597,7 +608,7 @@ export default function DashboardPage(): React.ReactElement {
               }
             >
               {recordsStatus === "loading" || paymentsStatus === "loading" ? (
-                <LoadingState label="Cargando actividad…" />
+                <SectionSkeleton label="Cargando actividad…" rows={ACTIVITY_LIMIT + 1} />
               ) : recordsStatus === "error" || paymentsStatus === "error" ? (
                 <SectionNotice
                   message={
@@ -712,7 +723,7 @@ export default function DashboardPage(): React.ReactElement {
               }
             >
               {recordsStatus === "loading" ? (
-                <LoadingState label="Cargando asistencias…" />
+                <SectionSkeleton label="Cargando asistencias…" rows={5} />
               ) : recordsStatus === "error" ? (
                 <SectionNotice
                   message="No se pudo cargar la asistencia."
@@ -759,7 +770,7 @@ export default function DashboardPage(): React.ReactElement {
               }
             >
               {paymentsStatus === "loading" ? (
-                <LoadingState label="Cargando pagos…" />
+                <SectionSkeleton label="Cargando pagos…" rows={QUEUE_LIMIT + 1} />
               ) : paymentsStatus === "error" ? (
                 <SectionNotice
                   message="No se pudieron cargar los pagos por validar."

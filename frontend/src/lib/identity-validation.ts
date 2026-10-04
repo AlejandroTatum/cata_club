@@ -245,7 +245,22 @@ export function toStoredPhone(digits: string): string {
  * rule stay the ONE `phoneRule` every phone field shares — no second,
  * possibly-drifting copy scoped to the digits-only shape.
  */
-export function phoneFieldRule(digits: string, subject: string): string | null {
+export function phoneFieldRule(
+  digits: string,
+  subject: string,
+  { guided = false }: { guided?: boolean } = {},
+): string | null {
+  if (guided) {
+    // REG-05: the field's own hint says «sin el 0 inicial», so the error must
+    // not talk about the «09» the person was told not to type, and a value
+    // with no digits at all is not «obligatorio» — something was typed.
+    if (digits.trim() && !/\d/.test(digits)) return "Escriba solo números.";
+    const stored = toStoredPhone(digits);
+    if (stored && phoneError(stored) === "invalid-number") {
+      return `${subject} no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.`;
+    }
+    return phoneRule(stored, subject);
+  }
   return phoneRule(toStoredPhone(digits), subject);
 }
 
@@ -691,7 +706,7 @@ export function passwordRule(value: string, subject: string): string | null {
     return `${subject} debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`;
   }
   if (passwordByteLength(password) > PASSWORD_MAX_BYTES) {
-    return `${subject} es demasiado larga: no puede superar ${PASSWORD_MAX_BYTES} bytes de datos (los acentos y emoji ocupan más de un byte cada uno, así que puede ser menos caracteres de los que parece).`;
+    return `${subject} es demasiado larga. Use menos de 70 caracteres (las tildes, la ñ y los emoji cuentan doble).`;
   }
   return isCommonPassword(password)
     ? `${subject} es una de las más usadas y fácil de adivinar; elija otra.`

@@ -27,11 +27,13 @@ export interface FileDropZoneProps {
   onFile: (file: File | null) => void;
   /** Text of the empty-state action, e.g. "Elegir logo". */
   chooseLabel?: string;
+  /** The drag invitation; it must agree in gender with the noun in `chooseLabel`. */
+  dropHint?: string;
   required?: boolean;
   className?: string;
 }
 
-export default function FileDropZone({ id, label, hint, accept, file, onFile, chooseLabel = "Elegir foto", required, className }: FileDropZoneProps): ReactElement {
+export default function FileDropZone({ id, label, hint, accept, file, onFile, chooseLabel = "Elegir foto", dropHint = "o arrástrela aquí", required, className }: FileDropZoneProps): ReactElement {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -75,7 +77,7 @@ export default function FileDropZone({ id, label, hint, accept, file, onFile, ch
           <>
             <ImagePlus size={ICON.lg} aria-hidden="true" className="text-ink-2" />
             <span className="text-sm font-semibold text-ink">{chooseLabel}</span>
-            <span className="text-xs text-ink-2">o arrástrela aquí</span>
+            <span className="text-xs text-ink-2">{dropHint}</span>
           </>
         )}
       </button>

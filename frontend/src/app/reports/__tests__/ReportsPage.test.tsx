@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import ReportsPage from "@/app/reports/page";
 import type { PersonaBusqueda, PersonaReporte } from "@/types/domain";
 import type { PaymentValidationRequest } from "@/services/api";
@@ -209,6 +209,15 @@ describe("ReportsPage — preset cards (18-reportes.html)", () => {
     expect(screen.queryByText(/etiquetas/i)).not.toBeInTheDocument();
   });
 
+  it("paints the preset descriptions in the AA-contrast ink, not the shared ink-3 (ADMB-27)", async () => {
+    render(<ReportsPage />);
+    const radios = await screen.findAllByRole("radio");
+    for (const radio of radios) {
+      const description = radio.querySelector("span.text-xs");
+      expect(description).toHaveClass("text-ink-3-strong");
+    }
+  });
+
   it("marks the selected preset with the coal + ball-dot treatment, never red", async () => {
     render(<ReportsPage />);
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
@@ -271,6 +280,23 @@ describe("ReportsPage — preview area", () => {
     expect(screen.getByRole("heading", { name: /vista previa — reporte de período/i })).toBeInTheDocument();
     expect(screen.getByText("Elija un rango de fechas")).toBeInTheDocument();
     expect(mockFetchNuevosPorPeriodo).not.toHaveBeenCalled();
+  });
+
+  it("asks for both dates and keeps downloads off on an empty custom range, for pagos too (ADMB-31)", async () => {
+    mockFetchPagosReporte.mockResolvedValue([PAGO]);
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+
+    choosePreset(/reporte de pagos/i);
+    chooseRangePreset("Personalizado");
+    mockFetchPagosReporte.mockClear();
+
+    expect(screen.getAllByText(/Elija Desde y Hasta para continuar/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Rango sin definir/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Listo: descargue/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Generar PDF/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Exportar a Excel/ })).toBeDisabled();
+    expect(mockFetchPagosReporte).not.toHaveBeenCalled();
   });
 
   it("defaults to 'Este mes' and previews it immediately, with no manual entry", async () => {
@@ -480,9 +506,14 @@ describe("ReportsPage — preview area", () => {
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
 
     setRange("2026-01-01", "2026-12-31");
-    expect(
-      await screen.findByText("Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: https://wa.me/593994219619"),
-    ).toBeInTheDocument();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Tuvimos un problema de nuestro lado y no pudimos completar esto. Escríbanos por WhatsApp y lo ayudamos: WhatsApp",
+    );
+    expect(within(alert).getByRole("link", { name: "WhatsApp" })).toHaveAttribute(
+      "href",
+      "https://wa.me/593994219619",
+    );
   });
 });
 
@@ -844,10 +875,11 @@ describe("ReportsPage — Exportar a Excel", () => {
     expect(columns.map((c) => c.header)).toEqual([
       "Estudiante",
       "Responsable de pago",
-      "Período",
+      "Desde",
+      "Hasta",
       "Monto",
       "Método",
-      "Subido",
+      "Fecha de registro",
       "Estado",
     ]);
     await waitFor(() =>
@@ -962,12 +994,13 @@ describe("ReportsPage — three-step flow, grouped exports and rail", () => {
     expect(screen.queryByText(/ver ayuda/i)).not.toBeInTheDocument();
   });
 
-  it("bounds the preview and keeps its header sticky", async () => {
+  it("never clips a row of the preview page and keeps its header sticky", async () => {
     mockFetchNuevosPorPeriodo.mockResolvedValue([PERSONA]);
     render(<ReportsPage />);
 
     const region = await screen.findByRole("region", { name: /tabla desplazable/i });
-    expect(region.className).toContain("max-h-96");
+    // ADMB-29: a fixed max height cut the last visible row in half.
+    expect(region.className).not.toMatch(/max-h-/);
     expect(screen.getByRole("columnheader", { name: "Nombre" }).className).toContain("sticky");
   });
 });

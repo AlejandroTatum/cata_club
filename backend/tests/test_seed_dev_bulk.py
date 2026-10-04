@@ -511,6 +511,34 @@ def test_cobertura_bonificada_no_se_solapa_para_la_misma_membresia(bulk_sembrado
     assert not solapadas, f"membresías con cobertura bonificada solapada: {solapadas}"
 
 
+def test_cobertura_bonificada_arranca_donde_termina_el_ultimo_pago_y_dura_un_mes(bulk_sembrado):
+    """ADMA-32: el flujo real (`aplicar_beneficio_bonificado`) ancla la
+    cobertura al fin de la última cobertura aprobada y otorga exactamente un
+    mes calendario. El seed no puede pisar un período pagado ni regalar días."""
+    from app.dominio.enums import EstadoPago
+    from app.dominio.modelos import Pago
+    from app.servicios_negocio.membresia_pago_servicio import _sumar_meses
+
+    with bulk_sembrado() as verificacion:
+        coberturas = list(verificacion.execute(select(CoberturaBonificada)).scalars().all())
+        pagos = list(
+            verificacion.execute(select(Pago).where(Pago.estado_pago == EstadoPago.APROBADO)).scalars().all()
+        )
+
+    assert coberturas, "el seed no creó ninguna cobertura bonificada"
+    fin_pagado: dict[int, object] = {}
+    for pago in pagos:
+        fin_pagado[pago.membresia_id] = max(fin_pagado.get(pago.membresia_id, pago.fecha_fin), pago.fecha_fin)
+    defectuosas = []
+    for c in coberturas:
+        fin_previo = fin_pagado.get(c.membresia_id)
+        if fin_previo is not None and c.fecha_inicio != fin_previo:
+            defectuosas.append((c.membresia_id, "inicio", c.fecha_inicio, fin_previo))
+        if c.fecha_fin != _sumar_meses(c.fecha_inicio, 1):
+            defectuosas.append((c.membresia_id, "duración", c.fecha_inicio, c.fecha_fin))
+    assert not defectuosas, f"cobertura bonificada fuera de las reglas del flujo real: {defectuosas}"
+
+
 def test_correccion_pago_siempre_cambia_algun_campo(bulk_sembrado):
     """CHECK `ck_correccion_pago_algun_campo_cambia`: una "corrección" que no
     cambia ningún valor es ruido en la auditoría."""

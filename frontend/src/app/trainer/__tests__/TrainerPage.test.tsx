@@ -343,6 +343,17 @@ describe("TrainerPage — Mi día", () => {
     expect(today.getByTestId("timeline-summary")).toHaveTextContent("1 de 3 listas tomadas");
   });
 
+  it("offers the same day as a vertical list for a phone, where the track is cut off (ENT-12)", async () => {
+    render(<TrainerPage />);
+
+    const today = within(await screen.findByTestId("trainer-today"));
+    const rows = today.getAllByTestId("today-list-row");
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toHaveTextContent("Lista tomada");
+    expect(rows[0].getAttribute("href")).toBe("/trainer/attendance?horario=1&paso=lista");
+    expect(today.getByTestId("today-list")).toHaveClass("sm:hidden");
+  });
+
   it("colours the blocks by group and marks the clock with the 'ahora' line", async () => {
     render(<TrainerPage />);
 
@@ -436,21 +447,45 @@ describe("TrainerPage — Mi día", () => {
     // Scoped to the rail: the sidebar carries its own bare "Pasar lista" nav
     // row, sharing this exact accessible name but pointing at no session.
     const rail = within(screen.getByTestId("trainer-lower"));
-    const links = rail.getAllByRole("link", { name: "Pasar lista" });
+    const links = rail.getAllByRole("link", { name: /^(Pasar|Completar) lista$/ });
     // The 6th's schedule 2 (the oldest of the six) falls off the cap.
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
       "/trainer/attendance?horario=4&fecha=2026-07-14&paso=lista",
       "/trainer/attendance?horario=3&fecha=2026-07-13&paso=lista",
       "/trainer/attendance?horario=2&fecha=2026-07-13&paso=lista",
+      // Schedule 1 was filed on the 13th, but with 1 record of 12 enrolled:
+      // an incomplete list is pending too (ENT-13).
+      "/trainer/attendance?horario=1&fecha=2026-07-13&paso=lista",
       "/trainer/attendance?horario=4&fecha=2026-07-07&paso=lista",
-      "/trainer/attendance?horario=3&fecha=2026-07-06&paso=lista",
     ]);
-    // The full count (six) reaches the footer even though only five rows show.
-    expect(screen.getByText("6")).toBeInTheDocument();
-    expect(screen.getByText(/sesiones sin lista este mes/)).toBeInTheDocument();
+    expect(rail.getByText("1 de 12 registrados")).toBeInTheDocument();
+    expect(rail.getByRole("link", { name: "Completar lista" })).toBeInTheDocument();
+    // The full count reaches the footer even though only five rows show.
+    expect(screen.getByText(/sesiones sin lista o incompletas este mes/)).toHaveTextContent(/^8 sesiones/);
     expect(
       screen.getByText(/Estimación: se compara contra el horario semanal/),
     ).toBeInTheDocument();
+  });
+
+  it("does not claim every list is complete when enrolment could not be read (ENT-13)", async () => {
+    mockFetchRosterDeTodosLosHorarios.mockRejectedValue(new Error("boom"));
+    mockFetchTrainingSchedules.mockResolvedValue([{ id: 9, diaSemana: "vie" as const, horaInicio: "17:00", horaFin: "18:30" }]);
+    mockFetchAttendanceRecords.mockResolvedValue(
+      ["2026-07-03", "2026-07-10", "2026-07-17"].map((fecha, i) => ({
+        id: `v-${i}`,
+        fecha,
+        horario: "Viernes 17:00 — 18:30",
+        horarioId: 9,
+        personaId: 1,
+        estudiante: "Sofia Vera",
+        estado: "present" as const,
+      })),
+    );
+
+    render(<TrainerPage />);
+
+    expect(await screen.findByText(/No se pudo comprobar si las listas están completas/)).toBeInTheDocument();
+    expect(screen.queryByText(/Todas las sesiones del mes tienen lista/)).not.toBeInTheDocument();
   });
 
   it("shows a positive empty state when every scheduled session already has a list", async () => {

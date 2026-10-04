@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import BeneficioSection from "./BeneficioSection";
 import PaymentHistorySection from "./PaymentHistorySection";
 import CreateMembershipForm from "./CreateMembershipForm";
@@ -8,6 +9,7 @@ import RegularizarDeudaForm from "./RegularizarDeudaForm";
 import SuspenderReactivarForm from "./SuspenderReactivarForm";
 import CambiarPlanForm from "./CambiarPlanForm";
 import { Badge, DataBox, PAGE_RAIL } from "@/components/ui";
+import { ACTION_TRIGGER } from "./payment-action-styles";
 import { formatCurrency } from "@/lib/format-utils";
 import {
   formatMembershipCoverage,
@@ -38,25 +40,25 @@ function MembershipSummary({ student }: { student: MemberStudentSummary }): Reac
       className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-ctl border border-line bg-sunken px-4 py-3 text-xs"
     >
       <div>
-        <dt className="text-ink-3">Estado</dt>
+        <dt className="text-ink-3-strong">Estado</dt>
         <dd className="mt-1">
           <Badge tone={tone}>{label}</Badge>
         </dd>
       </div>
       <div>
-        <dt className="text-ink-3">Plan</dt>
+        <dt className="text-ink-3-strong">Plan</dt>
         <dd className="mt-1">
           <DataBox>{membresia.tipo}</DataBox>
         </dd>
       </div>
       <div>
-        <dt className="text-ink-3">Tarifa mensual</dt>
+        <dt className="text-ink-3-strong">Tarifa mensual</dt>
         <dd className="mt-1">
           <DataBox>{membresia.esGratuidadFamiliar ? "Gratuidad familiar" : formatCurrency(membresia.monto)}</DataBox>
         </dd>
       </div>
       <div>
-        <dt className="text-ink-3">Vigencia</dt>
+        <dt className="text-ink-3-strong">Vigencia</dt>
         <dd className="mt-1">{period ? <DataBox>{period}</DataBox> : <span className="text-ink-3">—</span>}</dd>
       </div>
     </dl>
@@ -88,6 +90,7 @@ const HISTORY_MIN_ROWS = 7;
 const ACTION_DESCRIPTION = {
   "registrar-pago": "Efectivo o transferencia, por período.",
   "regularizar-deuda": "Pagos atrasados de meses ya vencidos.",
+  reactivar: "Vuelve a activar la membresía.",
 } as const;
 
 /**
@@ -142,15 +145,21 @@ export default function StudentMembershipActions({
   onMembershipCreated,
   onDebtRegularized,
   onMembresiaChanged,
-  onPaymentRegistered,
+  onPaymentRegistered: onPaymentRegisteredProp,
 }: StudentMembershipActionsProps): React.ReactElement {
   const membresia = student.membresia;
+  // ADMA-04: the history fetches once on open, so a write has to ask for a refetch.
+  const [historyVersion, setHistoryVersion] = useState(0);
+  const onPaymentRegistered = (): void => {
+    setHistoryVersion((version) => version + 1);
+    onPaymentRegisteredProp();
+  };
   if (!student.activo) {
     return (
       <>
         <output className="text-xs text-ink-3">Inactivo/Archivado: historial disponible, acciones deshabilitadas.</output>
         <div className="mt-3">
-          <PaymentHistorySection personaId={personaId} />
+          <PaymentHistorySection personaId={personaId} refreshKey={historyVersion} />
         </div>
       </>
     );
@@ -192,10 +201,29 @@ export default function StudentMembershipActions({
       primary={!hasDebt}
     />
   );
-  const primaryAction = hasDebt
+  // ADMA-17: a suspended membership rejects payments, so the way out leads.
+  const suspended = membresia?.estado === "suspendida";
+  const reactivar = membresia && (
+    <SuspenderReactivarForm
+      membresiaId={Number(membresia.id)}
+      estado={membresia.estado}
+      onChanged={onMembresiaChanged}
+      primary
+    />
+  );
+  const registerPaymentBlocked = (
+    <button type="button" disabled className={`${ACTION_TRIGGER} opacity-50`}>
+      Registrar pago
+    </button>
+  );
+  const primaryAction = suspended
+    ? { name: "reactivar" as const, content: reactivar }
+    : hasDebt
     ? { name: "regularizar-deuda" as const, content: regularizeDebt }
     : { name: "registrar-pago" as const, content: registerPayment };
-  const secondaryAction = hasDebt
+  const secondaryAction = suspended
+    ? { name: "registrar-pago" as const, content: registerPaymentBlocked }
+    : hasDebt
     ? { name: "registrar-pago" as const, content: registerPayment }
     : { name: "regularizar-deuda" as const, content: regularizeDebt };
 
@@ -229,10 +257,17 @@ export default function StudentMembershipActions({
               </ActionTile>
               <ActionTile
                 data-secondary-action={secondaryAction.name}
-                description={ACTION_DESCRIPTION[secondaryAction.name]}
+                description={
+                  suspended
+                    ? "Reactive la membresía para registrar pagos."
+                    : ACTION_DESCRIPTION[secondaryAction.name]
+                }
               >
                 {secondaryAction.content}
               </ActionTile>
+              {suspended && regularizeDebt && (
+                <ActionTile description={ACTION_DESCRIPTION["regularizar-deuda"]}>{regularizeDebt}</ActionTile>
+              )}
             </>
           )}
 
@@ -246,14 +281,8 @@ export default function StudentMembershipActions({
           </div>
 
           {/* Suspension/reactivation and plan changes remain revealed secondary actions. */}
-          {membresia && (membresia.estado === "activa" || membresia.estado === "suspendida") && (
-            <ActionTile
-              description={
-                membresia.estado === "activa"
-                  ? "Pausa los cobros hasta que se reactive."
-                  : "Vuelve a activar la membresía."
-              }
-            >
+          {membresia && membresia.estado === "activa" && (
+            <ActionTile description="Pausa los cobros hasta que se reactive.">
               <SuspenderReactivarForm
                 membresiaId={Number(membresia.id)}
                 estado={membresia.estado}
@@ -263,7 +292,7 @@ export default function StudentMembershipActions({
           )}
           {membresia && (
             <ActionTile description="La nueva tarifa rige desde el próximo pago.">
-              <CambiarPlanForm membresiaId={Number(membresia.id)} onChanged={onMembresiaChanged} />
+              <CambiarPlanForm membresiaId={Number(membresia.id)} tipoActual={membresia.tipo} onChanged={onMembresiaChanged} />
             </ActionTile>
           )}
         </section>
@@ -273,7 +302,7 @@ export default function StudentMembershipActions({
             tokens `student/payments/page.tsx` already established. */}
         <div className="grid min-w-0 content-start gap-section lg:order-1">
           <MembershipSummary student={student} />
-          <PaymentHistorySection personaId={personaId} minRows={HISTORY_MIN_ROWS} />
+          <PaymentHistorySection personaId={personaId} minRows={HISTORY_MIN_ROWS} refreshKey={historyVersion} />
         </div>
       </div>
     </div>

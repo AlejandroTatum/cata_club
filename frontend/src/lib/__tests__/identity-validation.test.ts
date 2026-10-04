@@ -800,10 +800,10 @@ describe("contraseña", () => {
       expect(passwordRule("x".repeat(72), "La contraseña")).toBeNull();
     });
 
-    it("rejects a password one byte over the boundary, in bytes not characters", () => {
+    it("rejects a password one byte over the boundary, without the word «bytes»", () => {
       const message = passwordRule("x".repeat(73), "La contraseña");
-      expect(message).toContain(`${PASSWORD_MAX_BYTES} bytes`);
-      expect(message).not.toContain("72 caracteres");
+      expect(message).toContain("demasiado larga");
+      expect(message).not.toContain("bytes");
     });
 
     it("measures multibyte characters in bytes, where the truncation actually surprises", () => {
@@ -811,9 +811,7 @@ describe("contraseña", () => {
       // 19 = 76 bytes (already over it). Measuring `.length` (UTF-16 code
       // units) would let far more than 18 through.
       expect(passwordRule("😀".repeat(18), "La contraseña")).toBeNull();
-      expect(passwordRule("😀".repeat(19), "La contraseña")).toContain(
-        `${PASSWORD_MAX_BYTES} bytes`,
-      );
+      expect(passwordRule("😀".repeat(19), "La contraseña")).toContain("demasiado larga");
     });
   });
 
@@ -988,6 +986,32 @@ describe("phoneFieldRule", (): void => {
   it("rejects a length that fits neither shape, quoting the shared phoneRule message", (): void => {
     expect(phoneFieldRule("1234", "El teléfono")).toBe(
       "El teléfono debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
+    );
+  });
+});
+
+describe("QA4 copy — REG-05, REG-07", (): void => {
+  it("guided phone rule: wrong length speaks the same «sin el 0 inicial» as the hint", (): void => {
+    const message = phoneFieldRule("99123456", "El teléfono", { guided: true });
+    expect(message).toBe(
+      "El teléfono no es válido. Escriba 9 dígitos si es celular (por ejemplo, 991234567) u 8 si es fijo, sin el 0 inicial.",
+    );
+    expect(message).not.toContain("09");
+  });
+
+  it("guided phone rule: letters-only input asks for numbers instead of «obligatorio»", (): void => {
+    expect(phoneFieldRule("abcdefghi", "El teléfono", { guided: true })).toBe("Escriba solo números.");
+    expect(phoneFieldRule("", "El teléfono", { guided: true })).toBe("El teléfono es obligatorio.");
+  });
+
+  it("unguided phone rule keeps the full-local-number wording", (): void => {
+    expect(phoneFieldRule("1234", "El teléfono")).toContain("09 y 8 dígitos más");
+  });
+
+  it("long password error avoids «bytes»", (): void => {
+    const message = passwordRule("a".repeat(PASSWORD_MAX_BYTES + 1), "La contraseña");
+    expect(message).toBe(
+      "La contraseña es demasiado larga. Use menos de 70 caracteres (las tildes, la ñ y los emoji cuentan doble).",
     );
   });
 });

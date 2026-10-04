@@ -60,7 +60,7 @@ export function ProofPreview({
       )}
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-ink">{file.name}</p>
-        <p className="text-xs tabular-nums text-ink-3">{formatFileSize(file.size)}</p>
+        <p className="text-xs tabular-nums text-ink-3-strong">{formatFileSize(file.size)}</p>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           <Button size="sm" onClick={onReplace}>
             <RefreshCw size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />

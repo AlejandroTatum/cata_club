@@ -118,7 +118,8 @@ describe("ActividadPage — Resumen", () => {
     await screen.findByTestId("activity-kpis");
     expect(mockResumen).toHaveBeenCalledTimes(1);
     expect(mockResumen).toHaveBeenCalledWith("7d");
-    expect(mockAvanzadas).not.toHaveBeenCalled();
+    // Only the one-off health probe for «Estado del sistema» (ADMB-01), never the full view.
+    expect(mockAvanzadas.mock.calls).toEqual([["1h"]]);
     expect(screen.getByRole("button", { name: "Resumen" })).toHaveAttribute("aria-pressed", "true");
     for (const label of ["Personas que ingresaron", "Asistencias registradas", "Pagos registrados", "Inscripciones nuevas"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
@@ -153,6 +154,14 @@ describe("ActividadPage — Resumen", () => {
     expect(within(card).getByText(/Hay correos o avisos/)).toBeInTheDocument();
     expect(within(card).getByText(/técnico/)).toBeInTheDocument();
     expect(within(card).getAllByRole("listitem")).toHaveLength(3);
+  });
+
+  it("switches the system status to «Atención» when the advanced metrics cannot be read (ADMB-01)", async () => {
+    mockAvanzadas.mockRejectedValue(new Error("boom"));
+    await renderResumen();
+    const card = screen.getByTestId("system-status");
+    await waitFor(() => expect(within(card).getByText(/No se pudieron leer las métricas/)).toBeInTheDocument());
+    expect(within(card).getAllByText("Atención").length).toBeGreaterThan(0);
   });
 
   it("does not mention the daily email limit when nothing is waiting for it", async () => {
@@ -211,6 +220,15 @@ describe("ActividadPage — Resumen", () => {
     expect(screen.getByRole("complementary", { name: "Qué muestra esta pantalla" })).toHaveTextContent(/Métricas avanzadas/);
   });
 
+  it("words the payments caption and the side panel without receipts or jargon (ADMB-32)", async () => {
+    await renderResumen();
+    expect(screen.getByText(/^Registrados en /)).toBeInTheDocument();
+    expect(screen.queryByText(/Comprobantes recibidos/)).toBeNull();
+    const panel = screen.getByRole("complementary", { name: "Qué muestra esta pantalla" });
+    expect(panel).toHaveTextContent(/Cambie el período/);
+    expect(panel).not.toHaveTextContent(/del servidor/);
+  });
+
   it("turns a 403 into a notice that names the permission and offers a retry", async () => {
     mockResumen.mockRejectedValueOnce(Object.assign(new Error("forbidden"), { status: 403 }));
     render(<ActividadPage />);
@@ -267,6 +285,13 @@ describe("ActividadPage — Métricas avanzadas", () => {
     expect(screen.getAllByTestId("sparkline").length).toBeGreaterThanOrEqual(5);
     const service = within(screen.getByTestId("service-metrics"));
     for (const p of ["p50", "p95", "p99"]) expect(service.getAllByText(p).length).toBeGreaterThan(0);
+  });
+
+  it("names the error rates in plain Spanish, without 5xx or 4xx (TXT-12)", async () => {
+    await renderAvanzadas();
+    expect(screen.queryByText(/[45]xx/)).toBeNull();
+    expect(screen.getByText("Errores del servidor")).toBeInTheDocument();
+    expect(screen.getByText("Solicitudes rechazadas")).toBeInTheDocument();
   });
 
   it("lists the slowest endpoints by route template, flags the slow one, and accepts any HTTP verb", async () => {
@@ -420,7 +445,8 @@ describe("ActividadPage — Métricas avanzadas polling", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(POLL_MS * 2);
     });
-    expect(mockAvanzadas).toHaveBeenCalledTimes(1);
+    // 1 from the advanced view + 1 health probe from the summary; no polling after leaving.
+    expect(mockAvanzadas).toHaveBeenCalledTimes(2);
   });
 });
 

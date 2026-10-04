@@ -37,6 +37,11 @@ export interface TakenSession {
   /** `"YYYY-MM-DD"`. */
   fecha: string;
   horarioId: number;
+  /**
+   * Cuántos registros trae esta fila. Si se informa, las filas de una misma
+   * sesión se suman y se comparan con los inscritos del horario.
+   */
+  registrados?: number;
 }
 
 /** Una sesión programada que el cruce no encontró entre las tomadas. */
@@ -44,6 +49,10 @@ export interface MissingSession {
   /** `"YYYY-MM-DD"`. */
   fecha: string;
   schedule: TrainingSchedule;
+  /** Solo en una lista incompleta: cuántos alumnos quedaron registrados… */
+  registrados?: number;
+  /** …de cuántos inscritos tiene el horario. */
+  inscritos?: number;
 }
 
 /** Las tres cifras del período, en el orden en que se leen. */
@@ -72,6 +81,12 @@ export interface PeriodCoverageInput {
   horaActual?: string;
   /** El filtro de horario, cuando hay uno: expande solo ese. */
   horarioId?: number | null;
+  /**
+   * Inscritos por horario. Con esto, una sesión con menos registros que
+   * inscritos es un pendiente («5 de 62 registrados»), no una lista tomada.
+   * Sin esto, cualquier lista cuenta como completa.
+   */
+  inscritosPorHorario?: Record<number, number>;
 }
 
 /**
@@ -116,6 +131,13 @@ function expandScheduledSessions(input: PeriodCoverageInput): ScheduledSessionsE
   const { sessions, schedules, desde, hasta, hoy, horaActual, horarioId } = input;
 
   const tomadas = new Set(sessions.map((s) => sessionKey(s.fecha, s.horarioId)));
+  const registradosPorSesion = new Map<string, number>();
+  for (const s of sessions) {
+    if (s.registrados === undefined) continue;
+    const clave = sessionKey(s.fecha, s.horarioId);
+    registradosPorSesion.set(clave, (registradosPorSesion.get(clave) ?? 0) + s.registrados);
+  }
+  const { inscritosPorHorario } = input;
 
   // El filtro de horario tiene que aplicarse a AMBOS lados del cruce: la
   // pantalla ya recibe solo las listas de ese horario, así que expandir los
@@ -146,7 +168,16 @@ function expandScheduledSessions(input: PeriodCoverageInput): ScheduledSessionsE
             continue;
           }
           sesionesProgramadas += 1;
-          if (!tomadas.has(sessionKey(fecha, schedule.id))) faltantes.push({ fecha, schedule });
+          const clave = sessionKey(fecha, schedule.id);
+          if (!tomadas.has(clave)) {
+            faltantes.push({ fecha, schedule });
+            continue;
+          }
+          const registrados = registradosPorSesion.get(clave);
+          const inscritos = inscritosPorHorario?.[schedule.id];
+          if (registrados !== undefined && inscritos !== undefined && registrados < inscritos) {
+            faltantes.push({ fecha, schedule, registrados, inscritos });
+          }
         }
       }
 

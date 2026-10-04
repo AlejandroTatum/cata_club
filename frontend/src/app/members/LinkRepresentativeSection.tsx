@@ -24,6 +24,7 @@
 
 "use client";
 
+import LinkifiedText from "@/components/LinkifiedText";
 import { useState } from "react";
 import { CheckCircle2, Link2, Loader2 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -116,7 +117,7 @@ export default function LinkRepresentativeSection({
       )}
       {error && (
         <p className="text-xs text-state-bad" role="alert">
-          {error}
+          <LinkifiedText text={error} />
         </p>
       )}
     </div>

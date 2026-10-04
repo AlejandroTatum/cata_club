@@ -205,7 +205,7 @@ def test_subir_imagen_un_byte_sobre_el_tope_da_400_antes_de_cloudinary(client, m
     )
 
     assert response.status_code == 400
-    assert "tamaño" in response.json()["detail"].lower()
+    assert "pesa más de 5 mb" in response.json()["detail"].lower()
     assert subidas == []
 
 
@@ -270,7 +270,7 @@ def test_subir_imagen_con_firma_que_no_coincide_da_400_antes_de_cloudinary(clien
 
     assert response.status_code == 400
     assert response.json()["detail"] == (
-        "El contenido del archivo no coincide con el formato declarado"
+        "Ese archivo no es una imagen válida. Elija una foto JPG o PNG."
     )
     assert subidas == []
 
@@ -288,7 +288,7 @@ def test_subir_imagen_png_declarado_con_bytes_jpeg_da_400(client, monkeypatch):
     )
 
     assert response.status_code == 400
-    assert "no coincide" in response.json()["detail"].lower()
+    assert "no es una imagen válida" in response.json()["detail"].lower()
     assert subidas == []
 
 
@@ -309,3 +309,14 @@ def test_subir_imagen_vacia_da_400_sin_hablar_del_formato(client, monkeypatch):
     assert "obligatori" in detalle
     assert "no coincide" not in detalle
     assert subidas == []
+
+
+def test_admb33_descripcion_de_mas_de_45_palabras_se_rechaza_en_el_servidor():
+    with pytest.raises(ValidationError, match="45 palabras"):
+        EntradaGaleriaCreateDTO(titulo="Torneo", descripcion=" ".join(["palabra"] * 46))
+    assert EntradaGaleriaCreateDTO(titulo="Torneo", descripcion=" ".join(["palabra"] * 45))
+
+
+def test_admb33_titulo_de_mas_de_8_palabras_se_rechaza_en_el_servidor():
+    with pytest.raises(ValidationError, match="8 palabras"):
+        EntradaGaleriaCreateDTO(titulo=" ".join(["palabra"] * 9), descripcion="Cierre anual")

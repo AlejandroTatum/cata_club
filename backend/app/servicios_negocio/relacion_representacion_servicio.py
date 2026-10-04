@@ -180,7 +180,7 @@ class RelacionRepresentacionServicio:
         if edad < EDAD_MAYORIA_EDAD:
             raise OperacionInvalida(
                 f"La persona debe ser mayor de edad ({EDAD_MAYORIA_EDAD}+ años) "
-                f"para independizarse (calculado: {edad}). Un menor no se "
+                f"para independizarse; según su fecha de nacimiento, tiene {edad}. Un menor no se "
                 "desvincula: corresponde una reasignación administrativa."
             )
         representante_anterior_id = persona.representante_id

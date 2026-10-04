@@ -20,6 +20,17 @@ describe("SponsorsPage", () => {
     crearSponsor.mockResolvedValue({}); eliminarSponsor.mockResolvedValue(undefined);
     vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:preview"), revokeObjectURL: vi.fn() }));
   });
+  it("lets a long sponsor name wrap to two lines instead of cutting it off (ADMB-30)", async () => {
+    fetchSponsors.mockResolvedValue([{ id: 2, nombre: "Ferretería Machala Construcciones", logoUrl: "https://cdn/l.png" }]);
+    render(<SponsorsPage />);
+    const name = await screen.findByText("Ferretería Machala Construcciones");
+    expect(name).toHaveClass("line-clamp-2");
+    expect(name).not.toHaveClass("truncate");
+  });
+  it("invites to drag a «logo» with «arrástrelo», not «arrástrela» (ADMB-23)", async () => {
+    render(<SponsorsPage />);
+    expect(await screen.findByText("o arrástrelo aquí")).toBeInTheDocument();
+  });
   it("puts the upload form before the list and the guide below lg", async () => {
     render(<SponsorsPage />); await screen.findByText("Municipio");
     const form = screen.getByRole("heading", { name: "Agregar patrocinador" }).closest("form")!;

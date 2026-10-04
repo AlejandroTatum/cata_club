@@ -214,11 +214,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // every student as failed with the backend's message.
   if (!result.ok || !result.response.ok) {
     const status = result.ok ? result.response.status : result.status;
-    const message = result.ok
+    const { message, safe } = result.ok
       ? await readBackendMessage(result.response, "No se pudo registrar la asistencia.")
-      : "No se pudo contactar al servidor.";
+      : { message: "No se pudo contactar al servidor.", safe: false };
     const failed = parsed.students.map((student) => ({ personaId: student.personaId, message }));
-    const response = NextResponse.json({ createdCount: 0, failed, registradoPorNombre: null }, { status });
+    // ENT-02: the rejection's reason also travels at the top level, where the
+    // client's error reader looks, flagged safe only when the backend said so.
+    const response = NextResponse.json(
+      {
+        createdCount: 0,
+        failed,
+        registradoPorNombre: null,
+        message,
+        ...(safe ? { mensaje_seguro: true } : {}),
+      },
+      { status },
+    );
     if (result.ok && result.refreshedAccessToken) {
       setAuthCookies(response, { accessToken: result.refreshedAccessToken });
     }
@@ -259,15 +270,19 @@ interface BackendBatchOutcome {
   registradoPorNombre?: string | null;
 }
 
-async function readBackendMessage(response: Response, fallback: string): Promise<string> {
+async function readBackendMessage(
+  response: Response,
+  fallback: string,
+): Promise<{ message: string; safe: boolean }> {
   try {
     const errorBody: unknown = await response.json();
     if (typeof errorBody === "object" && errorBody !== null) {
       const b = errorBody as Record<string, unknown>;
-      return (typeof b.message === "string" && b.message) || (typeof b.detail === "string" && b.detail) || fallback;
+      const message = (typeof b.message === "string" && b.message) || (typeof b.detail === "string" && b.detail);
+      if (message) return { message, safe: b.mensaje_seguro === true };
     }
   } catch {
     // ignore parse errors — use fallback
   }
-  return fallback;
+  return { message: fallback, safe: false };
 }

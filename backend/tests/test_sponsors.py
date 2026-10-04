@@ -173,7 +173,7 @@ def test_subir_logo_un_byte_sobre_el_tope_da_400_antes_de_cloudinary(client, mon
     )
 
     assert response.status_code == 400
-    assert "tamaño" in response.json()["detail"].lower()
+    assert "pesa más de 5 mb" in response.json()["detail"].lower()
     assert subidas == []
 
 
@@ -242,7 +242,7 @@ def test_subir_logo_con_firma_que_no_coincide_da_400_antes_de_cloudinary(client,
 
     assert response.status_code == 400
     assert response.json()["detail"] == (
-        "El contenido del archivo no coincide con el formato declarado"
+        "Ese archivo no es una imagen válida. Elija una foto JPG o PNG."
     )
     assert subidas == []
 
@@ -259,7 +259,7 @@ def test_subir_logo_png_declarado_con_bytes_jpeg_da_400(client, monkeypatch):
     )
 
     assert response.status_code == 400
-    assert "no coincide" in response.json()["detail"].lower()
+    assert "no es una imagen válida" in response.json()["detail"].lower()
     assert subidas == []
 
 
@@ -281,3 +281,14 @@ def test_subir_logo_vacio_da_400_sin_hablar_del_formato(client, monkeypatch):
     assert "obligatorio" in detalle
     assert "no coincide" not in detalle
     assert subidas == []
+
+
+def test_admb33_nombre_de_patrocinador_repetido_se_rechaza_en_el_servidor(client, monkeypatch):
+    _registrar_subidas(monkeypatch)
+    archivo = {"archivo": ("logo.jpg", JPEG_VALIDO, "image/jpeg")}
+    assert client.post(RUTA, data={"nombre": "Municipio"}, files=archivo).status_code == 201
+
+    repetido = client.post(RUTA, data={"nombre": "  municipio "}, files=archivo)
+
+    assert repetido.status_code == 400
+    assert repetido.json()["detail"] == "Ya existe un patrocinador con ese nombre."

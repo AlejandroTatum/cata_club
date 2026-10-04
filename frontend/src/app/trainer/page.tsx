@@ -41,6 +41,7 @@ import {
   fetchAttendanceRecords,
   fetchRosterDeTodosLosHorarios,
   fetchRecentAttendanceSessions,
+  type AlumnoHorario,
   type RecentAttendanceSession,
 } from "@/services/api";
 import {
@@ -61,6 +62,7 @@ import { clubIsoDate, clubTimeHHMM, todayDiaSemana } from "@/lib/club-date";
 import { buildTimelineItems, buildTodayClasses, clubNowMinutes } from "@/app/dashboard/dashboard-utils";
 import { formatDate } from "@/lib/format-utils";
 import {
+  buildEnrolledCountsByHorario,
   buildLastSessionSummary,
   buildRosterNamesByHorario,
   buildSessionCardState,
@@ -79,6 +81,7 @@ import { buildContextLine } from "@/components/dashboard/context-line";
 import NextSessionHero from "./NextSessionHero";
 import RecentSessionsList from "./RecentSessionsList";
 import SessionsWithoutList from "./SessionsWithoutList";
+import TodaySessionList from "./TodaySessionList";
 import { buildWizardQuery } from "@/app/trainer/attendance/attendance-utils";
 import { findMissingSessions } from "@/app/trainer/attendance/history/history-utils";
 
@@ -115,7 +118,8 @@ export default function TrainerPage(): React.ReactElement {
 
   const [schedules, setSchedules] = useState<TrainingSchedule[]>([]);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
-  const [roster, setRoster] = useState<Record<number, string[]> | null>(null);
+  /** The club-wide roster, one row per enrolment; `null` until it loads (or if it fails). */
+  const [padron, setPadron] = useState<AlumnoHorario[] | null>(null);
   const [recentSessions, setRecentSessions] = useState<RecentAttendanceSession[]>([]);
   const [recentStatus, setRecentStatus] = useState<"loading" | "ready" | "error">("loading");
   const [loading, setLoading] = useState(true);
@@ -196,6 +200,38 @@ export default function TrainerPage(): React.ReactElement {
   }));
 
   /**
+   * Who is enrolled: one club-wide roster call, not one per row. A garnish — a
+   * failure leaves the names unknown (the hero says so in a line, the timeline
+   * omits the counts, "Sesiones sin lista" cannot tell a partial list from a
+   * complete one) instead of blocking the day.
+   */
+  useEffect((): (() => void) => {
+    let cancelled = false;
+    if (schedules.length === 0) {
+      setPadron(null);
+      return (): void => {};
+    }
+    fetchRosterDeTodosLosHorarios()
+      .then((all) => {
+        if (!cancelled) setPadron(all);
+      })
+      .catch((err: unknown) => {
+        console.error("[trainer] fetchRosterDeTodosLosHorarios failed", err);
+        if (!cancelled) setPadron(null);
+      });
+    return (): void => {
+      cancelled = true;
+    };
+  }, [schedules]);
+
+  const roster = useMemo(() => (padron ? buildRosterNamesByHorario(todaySchedules, padron) : null), [padron, todaySchedules]);
+  const enrolledCounts = useMemo(() => {
+    if (!roster) return null;
+    return Object.fromEntries(Object.entries(roster).map(([id, names]) => [Number(id), names.length])) as Record<number, number>;
+  }, [roster]);
+  const enrolledBySchedule = useMemo(() => (padron ? buildEnrolledCountsByHorario(schedules, padron) : null), [padron, schedules]);
+
+  /**
    * "Sesiones sin lista" — this month's weekly schedule minus the sessions
    * that already have a list, newest first. Same cross the history screen
    * counts (`findMissingSessions`), with the same ESTIMATE caveat.
@@ -203,43 +239,16 @@ export default function TrainerPage(): React.ReactElement {
   const missingSessions = useMemo(() => {
     const { fechaInicio, fechaFin } = monthToDateRange();
     return findMissingSessions({
-      sessions: monthRecords.map((r) => ({ fecha: r.fecha, horarioId: r.horarioId })),
+      sessions: monthRecords.map((r) => ({ fecha: r.fecha, horarioId: r.horarioId, registrados: 1 })),
+      inscritosPorHorario: enrolledBySchedule ?? undefined,
       schedules,
       desde: fechaInicio,
       hasta: fechaFin,
       hoy: clubIsoDate(),
       horaActual: clubTimeHHMM(),
     });
-  }, [monthRecords, schedules]);
+  }, [monthRecords, schedules, enrolledBySchedule]);
 
-  /**
-   * Who is enrolled in today's sessions: one club-wide roster call, not one
-   * per row. A garnish — a failure leaves the names unknown (the hero says so
-   * in a line, the timeline omits the counts) instead of blocking the day.
-   */
-  useEffect((): (() => void) => {
-    let cancelled = false;
-    if (todaySchedules.length === 0) {
-      setRoster(null);
-      return (): void => {};
-    }
-    fetchRosterDeTodosLosHorarios()
-      .then((all) => {
-        if (!cancelled) setRoster(buildRosterNamesByHorario(todaySchedules, all));
-      })
-      .catch((err: unknown) => {
-        console.error("[trainer] fetchRosterDeTodosLosHorarios failed", err);
-        if (!cancelled) setRoster(null);
-      });
-    return (): void => {
-      cancelled = true;
-    };
-  }, [todaySchedules]);
-
-  const enrolledCounts = useMemo(() => {
-    if (!roster) return null;
-    return Object.fromEntries(Object.entries(roster).map(([id, names]) => [Number(id), names.length])) as Record<number, number>;
-  }, [roster]);
   const todayClasses = useMemo(() => buildTodayClasses(todaySchedules, records), [todaySchedules, records]);
   const timelineItems = useMemo(
     () =>
@@ -299,7 +308,9 @@ export default function TrainerPage(): React.ReactElement {
                     items={timelineItems}
                     nowMinutes={clubNowMinutes()}
                     ariaLabel={`Sesiones de hoy: ${timelineItems.length}, ${listsTaken} con lista tomada`}
+                    className="max-sm:hidden"
                   />
+                  <TodaySessionList items={timelineItems} />
                 </div>
               </DashboardSection>
             )}
@@ -372,7 +383,7 @@ export default function TrainerPage(): React.ReactElement {
 
               <div data-testid="trainer-rail" className="flex min-w-0 flex-col gap-page max-lg:order-first">
                 <section className="card flex flex-col gap-4 p-[18px]">
-                  <SessionsWithoutList missing={missingSessions} />
+                  <SessionsWithoutList missing={missingSessions} coverageKnown={padron !== null} />
                 </section>
                 <InfoPanel title="Cómo funciona su día">
                   <p>El botón principal abre la lista de la próxima sesión; la línea de «Hoy» muestra el estado de cada una.</p>

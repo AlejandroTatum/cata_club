@@ -128,7 +128,7 @@ export function CoverageMeter({ daysLeft }: { daysLeft: number }): React.ReactEl
   return (
     <div data-testid="profile-coverage" className="border-b border-line px-5 py-3">
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-2xs font-bold uppercase tracking-wide text-ink-3">Cobertura</p>
+        <p className="text-2xs font-bold uppercase tracking-wide text-ink-3-strong">Cobertura</p>
         <p className="text-sm font-bold tabular-nums text-ink">{label}</p>
       </div>
       <div

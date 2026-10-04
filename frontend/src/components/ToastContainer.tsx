@@ -26,7 +26,8 @@
  *    `role="alert"` or `role="status"`, which ARE live regions — a live
  *    container wrapping live children makes assistive technology announce the
  *    same message twice.
- * 2. It docks to the BOTTOM below `sm`. At `top-4 right-4 w-full max-w-sm` it
+ * 2. It docks to the BOTTOM below `sm`, 96px up so it clears a fixed commit
+ *    bar (the attendance «Confirmar» button, ENT-04). At `top-4 right-4 w-full max-w-sm` it
  *    spanned a 360px phone edge to edge and covered the shell topbar's "Menú"
  *    button and notification bell — the toast auto-dismisses, the blocked
  *    navigation did not.
@@ -45,6 +46,7 @@
 "use client";
 
 import { AlertTriangle, CheckCircle2, Info, X, XCircle, type LucideIcon } from "lucide-react";
+import LinkifiedText from "@/components/LinkifiedText";
 import { ICON } from "@/lib/icon-size";
 import { useToastState, type ToastItem } from "@/contexts/ToastContext";
 
@@ -80,7 +82,7 @@ export default function ToastContainer(): React.ReactElement | null {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="pointer-events-none fixed inset-x-4 bottom-4 z-[60] flex flex-col gap-2 sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-[72px] sm:w-full sm:max-w-sm">
+    <div className="pointer-events-none fixed inset-x-4 bottom-24 z-[60] flex flex-col gap-2 sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-[72px] sm:w-full sm:max-w-sm">
       {toasts.map((toast) => {
         const Icon = VARIANT_ICONS[toast.variant];
 
@@ -98,9 +100,9 @@ export default function ToastContainer(): React.ReactElement | null {
             />
 
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">{toast.message}</p>
+              <p className="text-sm font-semibold"><LinkifiedText text={toast.message} /></p>
               {toast.description && (
-                <p className="mt-1 text-xs font-normal">{toast.description}</p>
+                <p className="mt-1 text-xs font-normal"><LinkifiedText text={toast.description} /></p>
               )}
             </div>
 

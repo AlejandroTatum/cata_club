@@ -45,6 +45,7 @@ export default function AttendanceCommitPrimaryAction({
         key="open-roster"
         type="button"
         variant="primary"
+        className="min-h-[44px]"
         onClick={onContinueToRoster}
         disabled={!selectedScheduleId || rosterLoading}
       >
@@ -60,6 +61,7 @@ export default function AttendanceCommitPrimaryAction({
         key="advance"
         type="button"
         variant="primary"
+        className="min-h-[44px]"
         onClick={onNext}
         disabled={studentsCount === 0 || unmarkedCount > 0 || readOnly}
         aria-describedby={describedBy}
@@ -75,6 +77,7 @@ export default function AttendanceCommitPrimaryAction({
       key="file-session"
       type="submit"
       variant="primary"
+      className="min-h-[44px]"
       disabled={submitting || studentsCount === 0 || unmarkedCount > 0 || readOnly}
       aria-describedby={describedBy}
     >
