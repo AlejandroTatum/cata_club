@@ -15,8 +15,8 @@ const mockFetchCotizacion = vi.fn();
 vi.mock("@/services/api", () => ({
   fetchMembresiaDeuda: (membresiaId: number) => mockFetchMembresiaDeuda(membresiaId),
   regularizarDeuda: (membresiaId: number, data: unknown) => mockRegularizarDeuda(membresiaId, data),
-  fetchCotizacionRegularizacion: (id: number, inicio: string, fin: string) =>
-    mockFetchCotizacion(id, inicio, fin),
+  fetchCotizacionRegularizacion: (id: number, inicio: string, fin: string, aplicar?: boolean) =>
+    mockFetchCotizacion(id, inicio, fin, aplicar),
 }));
 
 vi.mock("@/contexts/ToastContext", () => ({
@@ -93,7 +93,7 @@ describe("RegularizarDeudaForm — monto cotizado por el backend (ADM-09)", () =
     await open();
     fillRequiredFields();
 
-    await waitFor(() => expect(mockFetchCotizacion).toHaveBeenCalledWith(42, "2026-01-01", "2026-01-31"));
+    await waitFor(() => expect(mockFetchCotizacion).toHaveBeenCalledWith(42, "2026-01-01", "2026-01-31", true));
     expect(await screen.findByText("$25,00")).toBeInTheDocument();
     expect(screen.getByText(/2 meses/)).toBeInTheDocument();
     expect(screen.getByText(/beneficio de \$25,00/)).toBeInTheDocument();
@@ -177,6 +177,54 @@ describe("RegularizarDeudaForm — monto cotizado por el backend (ADM-09)", () =
     await waitFor(() => expect(mockFetchCotizacion).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: /^Regularizar$/ }));
     expect(mockRegularizarDeuda).not.toHaveBeenCalled();
+  });
+});
+
+describe("RegularizarDeudaForm — valor normal o descuento (S12)", () => {
+  const conBeneficio = {
+    meses: 1, montoBase: "25.00", descuentoAplicado: "12.50", montoEsperado: "12.50",
+    tieneBeneficio: true, beneficioPorcentaje: "50", descuentoDisponible: "12.50",
+  };
+
+  it("hides the choice when the member has no benefit", async () => {
+    await open();
+    fillRequiredFields();
+    await screen.findByText("$25,00");
+    expect(screen.queryByRole("radio", { name: "Valor normal" })).not.toBeInTheDocument();
+  });
+
+  it("defaults to the discount and sends aplicarDescuento true", async () => {
+    mockFetchCotizacion.mockResolvedValue(conBeneficio);
+    mockRegularizarDeuda.mockResolvedValue({ id: 1 });
+    await open();
+    fillRequiredFields();
+    expect(await screen.findByRole("radio", { name: "Aplicar descuento (50%)" })).toBeChecked();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Regularizar$/ }));
+
+    await waitFor(() =>
+      expect(mockRegularizarDeuda).toHaveBeenCalledWith(42, expect.objectContaining({ monto: 12.5, aplicarDescuento: true })),
+    );
+  });
+
+  it("re-quotes at the normal price and submits aplicarDescuento false", async () => {
+    mockFetchCotizacion.mockImplementation(async (_i, _a, _b, aplicar) =>
+      aplicar === false
+        ? { ...conBeneficio, descuentoAplicado: "0.00", montoEsperado: "25.00" }
+        : conBeneficio,
+    );
+    mockRegularizarDeuda.mockResolvedValue({ id: 1 });
+    await open();
+    fillRequiredFields();
+    fireEvent.click(await screen.findByRole("radio", { name: "Valor normal" }));
+    await waitFor(() => expect(mockFetchCotizacion).toHaveBeenLastCalledWith(42, "2026-01-01", "2026-01-31", false));
+    await screen.findByText("$25,00");
+
+    fireEvent.click(screen.getByRole("button", { name: /^Regularizar$/ }));
+
+    await waitFor(() =>
+      expect(mockRegularizarDeuda).toHaveBeenCalledWith(42, expect.objectContaining({ monto: 25, aplicarDescuento: false })),
+    );
   });
 });
 
