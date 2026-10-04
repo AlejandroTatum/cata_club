@@ -1,27 +1,24 @@
 /**
- * Issue #1368 — reviewing the grouped legal documents from the enrolment
- * wizard must never navigate away and must never lose state.
+ * Issues #1368 and #1615 — the enrolment wizard's legal review must never
+ * navigate away and must never lose state.
  *
- * Until #1368 the consent sentence carried three links to the public pages.
- * Following one unmounted the wizard: every entered field AND the consent
- * decision itself were gone. The journey below walks a REPRESENTATIVE
- * enrolment (dependent + representative — the longest data path the wizard
- * has) to the summary step, agrees, and then opens all three documents the
- * way a visitor would: Escape, the Cerrar button, and a backdrop tap.
+ * Until #1368 the consent sentence carried three links to the public pages;
+ * following one unmounted the wizard, and every entered field AND the consent
+ * decision were gone. Since #1615 /terminos is the single legal document: the
+ * checkbox reads exactly «Acepto los Términos y condiciones» with ONE link
+ * that opens /terminos in a new tab, so the wizard is never left.
  *
- * After each close it proves the summary is the SAME summary: same URL, the
- * dependent's and representative's data still on screen, the consent box
- * still checked, and "Confirmar inscripción" still enabled.
+ * The journey below walks a REPRESENTATIVE enrolment (dependent +
+ * representative — the longest data path the wizard has) to the summary step,
+ * agrees, follows the link, and proves the summary is the SAME summary: same
+ * URL, the dependent's and representative's data still on screen, the consent
+ * box still checked, and "Confirmar inscripción" still enabled.
  *
  * ## Qué NO prueba
  *
  * El backend. Todo `/api/*` está interceptado (mismo criterio que
  * `enroll-qa.spec.ts`): el sujeto es la ronda revisar-volver del asistente,
  * no el alta real — esa vive en los `*.live.spec.ts` contra `make qa-up`.
- *
- * The dialog's own mechanics (focus trap, Escape, scroll lock) are unit
- * tested in `src/components/legal/__tests__/LegalReviewDialog.test.tsx`;
- * this journey checks them once through the REAL built app.
  */
 
 import { test, expect, type Page, type Route } from "@playwright/test";

@@ -347,14 +347,15 @@ function ResetPasswordContent(): React.ReactElement {
             />
             <span>
               Acepto los{" "}
-              <Link href="/terminos" target="_blank" rel="noopener noreferrer" className={AUTH_LINK_CLASSES}>
-                términos y condiciones
-              </Link>{" "}
-              y el{" "}
-              <Link href="/terminos#privacidad" target="_blank" rel="noopener noreferrer" className={AUTH_LINK_CLASSES}>
-                aviso de privacidad
-              </Link>{" "}
-              vigentes de Cata Club.
+              <Link
+                href="/terminos"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => event.stopPropagation()}
+                className={AUTH_LINK_CLASSES}
+              >
+                Términos y condiciones
+              </Link>
             </span>
           </label>
         )}
