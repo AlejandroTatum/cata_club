@@ -110,6 +110,36 @@ def test_pago_de_persona_sin_beneficio_no_congela_descuento(client):
     assert Decimal(str(pago["monto"])) == Decimal("35.00")
 
 
+# --- 1b. Con beneficio vigente el pago es mes a mes (QA owner R2, S12) -------
+
+def test_beneficio_vigente_rechaza_pagar_mas_de_un_mes_y_no_deja_pago(client, db_session):
+    persona, membresia = escenario_membresia_sin_pago_api(client)
+    descuento = _crear_descuento_api(client, "Media beca", porcentaje="50")
+    assert asignar_beneficio_api(client, persona["id"], descuento["id"]).status_code == 201
+
+    respuesta = registrar_pago_api(client, persona["id"], membresia["id"], meses=2)
+
+    assert respuesta.status_code == 400
+    assert respuesta.json()["detail"] == "Con beneficio activo solo puedes pagar un mes a la vez."
+    assert db_session.query(Pago).filter(Pago.persona_id == persona["id"]).count() == 0
+
+
+def test_beneficio_vigente_acepta_un_mes(client):
+    persona, membresia = escenario_membresia_sin_pago_api(client)
+    descuento = _crear_descuento_api(client, "Media beca", porcentaje="50")
+    assert asignar_beneficio_api(client, persona["id"], descuento["id"]).status_code == 201
+
+    assert registrar_pago_api(client, persona["id"], membresia["id"], meses=1).status_code == 201
+
+
+def test_sin_beneficio_sigue_permitiendo_varios_meses(client):
+    persona, membresia = escenario_membresia_sin_pago_api(client)
+
+    respuesta = registrar_pago_api(client, persona["id"], membresia["id"], meses=3)
+
+    assert respuesta.status_code == 201, respuesta.text
+
+
 # --- 2. Manipulación de payload: `descuento_ids` no sustituye el beneficio ---
 
 def test_enviar_descuento_ids_no_sustituye_el_beneficio_vigente(client, db_session):

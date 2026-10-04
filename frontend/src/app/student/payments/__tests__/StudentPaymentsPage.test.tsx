@@ -647,7 +647,7 @@ describe("StudentPaymentsPage — the club's benefit, read before paying", () =>
     expect(await screen.findByText(/total estimado: \$12,50/i)).toBeInTheDocument();
   });
 
-  it("applies a fixed benefit once across one- and two-month estimates", async () => {
+  it("locks the month count to one with a helper line when a benefit applies", async () => {
     mockFetchStudentPortal.mockReset().mockResolvedValue({
       ...PORTAL,
       self: { ...SELF, membership: { ...SELF.membership!, montoAplicado: "80.00" } },
@@ -658,9 +658,17 @@ describe("StudentPaymentsPage — the club's benefit, read before paying", () =>
 
     fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
     expect(await screen.findByText(/total estimado: \$70,00/i)).toBeInTheDocument();
+    expect(screen.getByText("Con tu beneficio pagas mes a mes.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /un mes más/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /un mes menos/i })).toBeDisabled();
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: /un mes más/i }));
-    expect(await screen.findByText(/total estimado: \$150,00/i)).toBeInTheDocument();
+  it("keeps the month selector unlocked without a benefit", async () => {
+    render(<StudentPaymentsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
+    expect(await screen.findByRole("button", { name: /un mes más/i })).toBeEnabled();
+    expect(screen.queryByText("Con tu beneficio pagas mes a mes.")).not.toBeInTheDocument();
   });
 
   it("applies a fixed benefit in the representative flow", async () => {

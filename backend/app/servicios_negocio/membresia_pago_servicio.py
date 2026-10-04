@@ -212,6 +212,10 @@ MENSAJE_MEMBRESIA_YA_GRATUITA = (
 # anterior, sin pisarla: `_hay_cobertura_en_rango`). Un descuento de monto
 # FIJO califica como "100%" solo si iguala exactamente la tarifa de ESE mes.
 MESES_POR_ACTIVACION_BENEFICIO = 1
+# QA owner R2 (S12): un pago con beneficio vigente se paga mes a mes.
+MENSAJE_BENEFICIO_SOLO_MES_A_MES = (
+    "Con beneficio activo solo puedes pagar un mes a la vez."
+)
 
 logger = logging.getLogger("cataclub.servicios.pagos")
 
@@ -884,6 +888,8 @@ class PagoServicio:
             descuento_congelado, monto_final = self._congelar_beneficio_activo(
                 datos.persona_id, monto_base,
             )
+            if descuento_congelado is not None and meses > 1:
+                raise OperacionInvalida(MENSAJE_BENEFICIO_SOLO_MES_A_MES)
 
         # `Pago(**datos.model_dump(), ...)` ya no alcanza: `PagoCreateDTO`
         # perdió `monto` (la columna) y ganó `meses` (que NO es columna de

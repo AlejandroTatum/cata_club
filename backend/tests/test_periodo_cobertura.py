@@ -248,13 +248,16 @@ def test_cobertura_se_calcula_sobre_el_monto_base_no_el_descontado(client, monke
     # resuelve solo.
     _asignar_beneficio(client, persona["id"], descuento["id"])
 
-    resp = _registrar_pago(client, persona["id"], membresia["id"], 12)
+    # QA owner R2 (S12): con beneficio vigente el pago es mes a mes, así que
+    # doce meses se rechazan y el snapshot se prueba sobre un mes.
+    assert _registrar_pago(client, persona["id"], membresia["id"], 12).status_code == 400
+    resp = _registrar_pago(client, persona["id"], membresia["id"], 1)
     assert resp.status_code == 201, resp.text
     pago = resp.json()
 
-    assert Decimal(str(pago["monto"])) == Decimal("270.00")
+    assert Decimal(str(pago["monto"])) == Decimal("22.50")
     assert pago["fechaInicio"] == FECHA_CONGELADA_HOY.isoformat()
-    assert pago["fechaFin"] == date(2030, 1, 1).isoformat()  # doce meses, no diez
+    assert pago["fechaFin"] == date(2029, 2, 1).isoformat()
 
 
 # --- Issue #400 (slice 4c-c): Administración no puede editar la cobertura ---
