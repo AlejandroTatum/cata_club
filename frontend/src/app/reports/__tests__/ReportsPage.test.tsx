@@ -397,16 +397,43 @@ describe("ReportsPage — preview area", () => {
     expect(await screen.findByText("No se encontraron personas")).toBeInTheDocument();
   });
 
-  it("previews attendance with an open range, when 'Personalizado' is chosen with nothing typed", async () => {
+  it("asks for both dates and keeps downloads off on an empty custom range in asistencia (ADMB-31)", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([ATTENDANCE_RECORD]);
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+
+    choosePreset(/asistencia/i);
+    await waitFor(() => expect(mockFetchAttendanceRecords).toHaveBeenCalled());
+    mockFetchAttendanceRecords.mockClear();
+    chooseRangePreset("Personalizado");
+
+    expect(screen.getAllByText("Elija la fecha de inicio y de fin.").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Rango sin definir/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Listo: descargue/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Generar PDF/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Exportar a Excel/ })).toBeDisabled();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(mockFetchAttendanceRecords).not.toHaveBeenCalled();
+  });
+
+  it("keeps the asistencia custom range disabled while only one date is chosen (ADMB-31)", async () => {
     mockFetchAttendanceRecords.mockResolvedValue([ATTENDANCE_RECORD]);
     render(<ReportsPage />);
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
 
     choosePreset(/asistencia/i);
     chooseRangePreset("Personalizado");
+    mockFetchAttendanceRecords.mockClear();
+    fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2026-01-01" } });
 
-    await waitFor(() => expect(mockFetchAttendanceRecords).toHaveBeenCalledWith({}));
-    expect(await screen.findByText("Ana Pérez")).toBeInTheDocument();
+    expect(screen.getAllByText("Elija la fecha de inicio y de fin.").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /Generar PDF/ })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Hasta"), { target: { value: "2026-01-31" } });
+    await waitFor(() =>
+      expect(mockFetchAttendanceRecords).toHaveBeenCalledWith({ fechaInicio: "2026-01-01", fechaFin: "2026-01-31" }),
+    );
+    expect(screen.queryByText("Elija la fecha de inicio y de fin.")).not.toBeInTheDocument();
   });
 
   it("narrows the asistencia preview to one alumno through the shared student search (ASI-7)", async () => {
@@ -649,10 +676,13 @@ describe("ReportsPage — Generar PDF", () => {
 
     choosePreset(/asistencia/i);
     chooseRangePreset("Personalizado");
+    setRange("2026-01-01", "2026-12-31");
     await waitFor(() => expect(generateButton()).toBeEnabled());
     fireEvent.click(generateButton());
 
-    await waitFor(() => expect(mockExportAsistenciaReportePdf).toHaveBeenCalledWith({}));
+    await waitFor(() =>
+      expect(mockExportAsistenciaReportePdf).toHaveBeenCalledWith({ fechaInicio: "2026-01-01", fechaFin: "2026-12-31" }),
+    );
   });
 
   describe("horario → día filter", () => {

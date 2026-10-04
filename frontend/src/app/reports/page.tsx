@@ -181,6 +181,9 @@ const PRESETS: PresetDef[] = [
 
 /** Sticky head for the bounded preview tables — the scroll region is the table's own. */
 const STICKY_TH = "sticky top-0 z-10";
+/** ADMB-31: what the asistencia report says while its custom range is missing a date. */
+const ASISTENCIA_RANGE_PROMPT = "Elija la fecha de inicio y de fin.";
+
 /** The preview lists one page (10 rows) at a time, so no max height: a bound used to cut the last row in half (ADMB-29). */
 const PREVIEW_SCROLL = "overflow-y-auto";
 
@@ -326,7 +329,11 @@ function ReportsContent(): React.ReactElement {
   // ADMB-31 (pagos): an empty "Personalizado" range is not "everything" — the user has
   // not chosen a range yet, so nothing is previewed or downloadable.
   const customRangeEmpty = preset === "pagos" && rangePreset === "custom" && fechaInicio === "" && fechaFin === "";
-  const canQuery = !rangeInverted && !periodoRangeIncomplete && !customRangeEmpty;
+  // ADMB-31 (asistencia): same rule, stricter — a "Personalizado" range needs BOTH dates,
+  // so one empty end no longer means "everything" either.
+  const asistenciaRangeIncomplete =
+    preset === "asistencia" && rangePreset === "custom" && (fechaInicio === "" || fechaFin === "");
+  const canQuery = !rangeInverted && !periodoRangeIncomplete && !customRangeEmpty && !asistenciaRangeIncomplete;
 
   // Horarios feed the asistencia filter's dropdown (once, on mount).
   useEffect(() => {
@@ -550,7 +557,11 @@ function ReportsContent(): React.ReactElement {
     summaryParts.push(`${resultCount} ${pluralize(activePreset.noun, resultCount)}`);
     if (resultCount > 0) summaryParts.push(`${totalPages} ${totalPages === 1 ? "página" : "páginas"}`);
   }
-  const summary = customRangeEmpty ? "Elija Desde y Hasta para continuar" : summaryParts.join(" · ");
+  const summary = asistenciaRangeIncomplete
+    ? ASISTENCIA_RANGE_PROMPT
+    : customRangeEmpty
+      ? "Elija Desde y Hasta para continuar"
+      : summaryParts.join(" · ");
   const downloadHint =
     canQuery && !loading && resultCount > 0
       ? "Listo: descargue con «Generar PDF» o «Exportar a Excel», arriba."
@@ -812,7 +823,9 @@ function ReportsContent(): React.ReactElement {
             icon={<FileText size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
             title="Elija un rango de fechas"
             description={
-              customRangeEmpty
+              asistenciaRangeIncomplete
+                ? ASISTENCIA_RANGE_PROMPT
+                : customRangeEmpty
                 ? "Elija Desde y Hasta (dd/mm/aaaa) para ver la vista previa y habilitar la descarga."
                 : preset === "periodo"
                 ? "El reporte de período necesita una fecha de inicio y una de fin (dd/mm/aaaa) para generarse."
