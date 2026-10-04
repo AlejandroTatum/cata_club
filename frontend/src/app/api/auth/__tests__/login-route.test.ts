@@ -121,7 +121,7 @@ describe("POST /api/auth/login", () => {
   });
 
   it("returns 403 with account_inactive when the backend says the account is deactivated (REG-10)", async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ message: "Su cuenta está inactiva." }, 403));
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ message: "Tu cuenta está inactiva." }, 403));
 
     const response = await POST(loginRequest({ email: "ex@cataclub.com", password: "Secreta123" }));
     const json = await response.json();
@@ -206,7 +206,7 @@ describe("POST /api/auth/login", () => {
     expect(json.message).toMatch(/rol/i);
     // Issue #865: the club ASSIGNS which role stays, it does not "let" the
     // account keep one — "dejen" understated who does the work.
-    expect(json.message).toContain("para que le asignen uno solo");
+    expect(json.message).toContain("para que te asignen uno solo");
   });
 
   it("sets no cookies for a multi-role account, so no half-session survives", async () => {

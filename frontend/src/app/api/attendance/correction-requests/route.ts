@@ -57,7 +57,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return badRequestResponse("El estado de asistencia no es válido.");
   }
   if (typeof body.motivo !== "string" || body.motivo.trim().length === 0) {
-    return badRequestResponse("Indique el motivo de la corrección.");
+    return badRequestResponse("Indica el motivo de la corrección.");
   }
 
   return proxyToBackend("/asistencias/solicitudes-correccion", {

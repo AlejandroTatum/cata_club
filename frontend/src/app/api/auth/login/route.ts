@@ -89,8 +89,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       {
         error: "role_conflict",
         message:
-          "Su cuenta tiene más de un rol activo y no podemos saber con cuál entrar. " +
-          "Comuníquese con el club para que le asignen uno solo.",
+          "Tu cuenta tiene más de un rol activo y no podemos saber con cuál entrar. " +
+          "Comunícate con el club para que te asignen uno solo.",
       },
       { status: 409 },
     );

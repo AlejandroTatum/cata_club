@@ -30,7 +30,7 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
   if (bodyError) return bodyError;
   const motivo = (rawBody as { motivo?: unknown }).motivo;
   if (typeof motivo !== "string" || motivo.trim().length === 0) {
-    return badRequestResponse("Indique por qué se rechaza la solicitud.");
+    return badRequestResponse("Indica por qué se rechaza la solicitud.");
   }
 
   return proxyToBackend(`/asistencias/solicitudes-correccion/${id}/rechazar`, {

@@ -19,12 +19,12 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
   const result = await backendFetchAuthed(request, `/membresias/pagos/persona/${encodeURIComponent(params.id)}`);
   if (!result.ok) {
     return NextResponse.json(
-      { message: "No se pudieron cargar sus pagos." },
+      { message: "No se pudieron cargar tus pagos." },
       { status: result.status },
     );
   }
   if (!result.response.ok) {
-    return passthroughBackendError(result.response, "No se pudieron cargar sus pagos.");
+    return passthroughBackendError(result.response, "No se pudieron cargar tus pagos.");
   }
 
   const body = await result.response.json();

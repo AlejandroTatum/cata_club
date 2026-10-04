@@ -11,7 +11,7 @@ import {
   readRequiredStringFields,
 } from "@/lib/server/bff-helpers";
 
-const MENSAJE_CAMPOS_OBLIGATORIOS = "Ingrese su contraseña actual y la nueva contraseña.";
+const MENSAJE_CAMPOS_OBLIGATORIOS = "Ingresa tu contraseña actual y la nueva contraseña.";
 
 /**
  * POST /api/auth/contrasenia/cambiar — change the signed-in user's password
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const nextResponse = NextResponse.json(
-      { mensaje: "Contraseña actualizada. Se cerraron sus otras sesiones; este dispositivo sigue conectado." },
+      { mensaje: "Contraseña actualizada. Se cerraron tus otras sesiones; este dispositivo sigue conectado." },
       { status: 200 },
     );
     setAuthCookies(nextResponse, { accessToken: data.access_token, refreshToken: data.refresh_token });

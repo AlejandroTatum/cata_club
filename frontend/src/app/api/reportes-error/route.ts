@@ -8,11 +8,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const form = await request.formData();
   const description = form.get("descripcion");
   if (typeof description !== "string" || !description.trim() || description.length > 2000) {
-    return NextResponse.json({ message: "Escriba una descripción del problema." }, { status: 400 });
+    return NextResponse.json({ message: "Escribe una descripción del problema." }, { status: 400 });
   }
   const screenshot = form.get("captura");
   if (screenshot !== null && (!(screenshot instanceof File) || screenshot.size > 2 * 1024 * 1024 || !["image/png", "image/jpeg", "image/webp"].includes(screenshot.type))) {
-    return NextResponse.json({ message: "Adjunte una imagen PNG, JPEG o WebP de hasta 2 MB." }, { status: 400 });
+    return NextResponse.json({ message: "Adjunta una imagen PNG, JPEG o WebP de hasta 2 MB." }, { status: 400 });
   }
   if (screenshot !== null && form.get("consentimiento_captura") !== "true") {
     return NextResponse.json({ message: "Debe aceptar el envío de la captura." }, { status: 400 });

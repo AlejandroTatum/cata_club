@@ -185,7 +185,7 @@ describe("POST /api/personas/[id]/reasignar-representante", () => {
 
   it("propagates the backend's 409 verbatim (stale observed link)", async () => {
     const MENSAJE =
-      "El vínculo de representación cambió desde que se abrió el trámite: recargue la ficha y reintente.";
+      "El vínculo de representación cambió desde que se abrió el trámite: recargue la ficha y reintenta.";
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: MENSAJE }, 409));
 
     const access = makeJwt(3600);

@@ -40,7 +40,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     typeof body.hora_fin !== "string" ||
     !Array.isArray(body.dias)
   ) {
-    return badRequestResponse("Complete el nombre, la franja y al menos un día.");
+    return badRequestResponse("Completa el nombre, la franja y al menos un día.");
   }
 
   // `edades` (#789) is the only optional field of the create DTO: a categoría

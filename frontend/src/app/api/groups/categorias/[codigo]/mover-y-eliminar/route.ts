@@ -29,7 +29,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ codi
 
   const body = rawBody as MoverYEliminarBody;
   if (typeof body.categoria_destino !== "string" || body.categoria_destino.length === 0) {
-    return badRequestResponse("Elija la categoría a la que pasarán los alumnos.");
+    return badRequestResponse("Elige la categoría a la que pasarán los alumnos.");
   }
 
   return proxyToBackend(`/asistencias/categorias/${encodeURIComponent(params.codigo)}/mover-y-eliminar`, {

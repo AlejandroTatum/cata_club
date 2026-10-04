@@ -118,7 +118,7 @@ describe("POST /api/personas/[id]/foto", () => {
 
   it("propagates the backend's error status (e.g. unsupported file type)", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(
-      jsonResponse({ detail: "Formato de archivo no permitido. Use JPG o PNG" }, 400),
+      jsonResponse({ detail: "Formato de archivo no permitido. Usa JPG o PNG" }, 400),
     );
 
     const access = makeJwt(3600);
@@ -138,7 +138,7 @@ describe("POST /api/personas/[id]/foto", () => {
   // instead of falling back to the generic "Tuvimos un problema..." copy.
   it("forwards `mensaje_seguro` on a 503 so the specific backend message survives", async () => {
     const mensaje =
-      "No se pudo subir el archivo en este momento. Vuelva a intentarlo más tarde o acérquese al club / escríbanos por WhatsApp.";
+      "No se pudo subir el archivo en este momento. Vuelve a intentarlo más tarde o acércate al club / escríbenos por WhatsApp.";
     vi.mocked(global.fetch).mockResolvedValueOnce(
       jsonResponse({ detail: mensaje, message: mensaje, mensaje_seguro: true }, 503),
     );
