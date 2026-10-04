@@ -60,7 +60,7 @@ describe("POST /api/groups/categorias/[codigo]/mover-y-eliminar", () => {
   });
 
   it("forwards only the allowlisted fields to the backend with the bearer token", async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ movidos: 2, categoriaDestino: "INFANTIL", categoriaDestinoLabel: "Infantil" }));
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ movidos: 2, categoriaDestino: "INFANTIL", categoriaDestinoLabel: "Infantil", eliminada: true, motivo: null }));
     const access = makeJwt(3600);
 
     const response = await POST(
@@ -78,7 +78,7 @@ describe("POST /api/groups/categorias/[codigo]/mover-y-eliminar", () => {
     const init = vi.mocked(global.fetch).mock.calls[0]?.[1];
     expect(JSON.parse(String(init?.body))).toEqual({ categoria_destino: "INFANTIL" });
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ movidos: 2, categoriaDestino: "INFANTIL", categoriaDestinoLabel: "Infantil" });
+    expect(await response.json()).toEqual({ movidos: 2, categoriaDestino: "INFANTIL", categoriaDestinoLabel: "Infantil", eliminada: true, motivo: null });
   });
 
   it("passes the backend's refusal through", async () => {

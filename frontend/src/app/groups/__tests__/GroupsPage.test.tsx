@@ -2686,8 +2686,8 @@ describe("GroupsPage — move players before deleting (QA4 ADMB-04)", () => {
     mockFetchHorarios.mockResolvedValue(GROUP_ROWS);
     mockActualizarCategoria.mockResolvedValue({});
     mockEliminarCategoria.mockResolvedValue(undefined);
-    mockMoverYEliminarCategoria.mockResolvedValue({ movidos: 2, categoriaDestino: "INFANTIL", categoriaDestinoLabel: "Infantil" });
-    mockMoverAlumnosDeCategoria.mockResolvedValue({ movidos: 1, categoriaDestino: "INFANTIL", categoriaDestinoLabel: "Infantil" });
+    mockMoverYEliminarCategoria.mockResolvedValue({ movidos: 2, categoriaDestino: "INFANTIL", categoriaDestinoLabel: "Infantil", eliminada: true, motivo: null });
+    mockMoverAlumnosDeCategoria.mockResolvedValue({ movidos: 1, categoriaDestino: "INFANTIL", categoriaDestinoLabel: "Infantil", eliminada: true, motivo: null });
     // Ana is in both días (one roster row each); Bruno only shows in the first.
     mockFetchAlumnosPorHorario.mockImplementation((horarioId: number) =>
       Promise.resolve(
@@ -2737,6 +2737,25 @@ describe("GroupsPage — move players before deleting (QA4 ADMB-04)", () => {
 
     expect(await within(dialog).findByText("La categoría Infantil no tiene días para recibir alumnos.")).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("when history keeps the categoría, says why and offers to hide it instead of a dead end", async () => {
+    mockMoverYEliminarCategoria.mockResolvedValue({
+      movidos: 2, categoriaDestino: "INFANTIL", categoriaDestinoLabel: "Infantil", eliminada: false,
+      motivo: "Los alumnos ya pasaron a Infantil, pero la categoría Competitivo no se puede eliminar: tiene asistencias registradas y el historial no se borra.",
+    });
+    const dialog = await openBlockedDelete();
+
+    fireEvent.change(within(dialog).getByLabelText("Categoría de destino"), { target: { value: "INFANTIL" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Pasar a todos y eliminar la categoría" }));
+
+    expect(await within(dialog).findByText(/ya pasaron a Infantil.*no se puede eliminar/)).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("Categoría de destino")).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Ocultar de la página pública" }));
+    await waitFor(() => expect(mockCambiarPublicacion).toHaveBeenCalledWith("COMPETITIVO", false));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(mockEliminarCategoria).not.toHaveBeenCalled();
   });
 
   it("lists each player once and moves them one by one; the delete unlocks only when none remain", async () => {

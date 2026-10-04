@@ -38,8 +38,12 @@ interface MoverAlumnosDialogProps {
   moveAllLabel: string;
   /** Label of the button offered once no player remains. */
   emptyConfirmLabel: string;
-  /** Moves everyone and applies the delete/edit atomically; rejects on failure. */
-  onMoveAll: (destino: string) => Promise<void>;
+  /** Moves everyone and applies the delete/edit atomically; rejects on failure.
+   *  Resolves with `noEliminada` when the players moved but the categoría could
+   *  not be deleted (attendance history) — the dialog then offers to hide it. */
+  onMoveAll: (destino: string) => Promise<{ noEliminada?: string } | void>;
+  /** Hides the categoría from the public page; rejects on failure. */
+  onHide: () => Promise<void>;
   /** Moves one player; rejects on failure. */
   onMoveOne: (personaId: number, destino: string) => Promise<void>;
   /** Nothing is left to move: run the plain delete / save. */
@@ -91,6 +95,7 @@ export default function MoverAlumnosDialog({
   moveAllLabel,
   emptyConfirmLabel,
   onMoveAll,
+  onHide,
   onMoveOne,
   onConfirmEmpty,
   onClose,
@@ -100,6 +105,8 @@ export default function MoverAlumnosDialog({
   const [destinoPorAlumno, setDestinoPorAlumno] = useState<Record<number, string>>({});
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Set when everyone moved but the delete is impossible (history). */
+  const [noEliminada, setNoEliminada] = useState<string | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   // The listener below must not re-subscribe (and re-focus) on every render,
   // yet it needs the latest `onClose` and count: read both through refs.
@@ -126,9 +133,22 @@ export default function MoverAlumnosDialog({
     setOcupado(true);
     setError(null);
     try {
-      await onMoveAll(destinoTodos);
+      const resultado = await onMoveAll(destinoTodos);
+      if (resultado?.noEliminada) setNoEliminada(resultado.noEliminada);
     } catch (err) {
       setError(toUserMessage(err, "No se pudo pasar a los alumnos. No se cambió nada."));
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function ocultar(): Promise<void> {
+    setOcupado(true);
+    setError(null);
+    try {
+      await onHide();
+    } catch (err) {
+      setError(toUserMessage(err, "No se pudo ocultar la categoría."));
     } finally {
       setOcupado(false);
     }
@@ -167,7 +187,14 @@ export default function MoverAlumnosDialog({
 
         {error && <div className="alert-error" role="alert">{error}</div>}
 
-        {restantes.length === 0 ? (
+        {noEliminada ? (
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-ink">{noEliminada}</p>
+            <Button variant="primary" disabled={ocupado} onClick={() => void ocultar()}>
+              Ocultar de la página pública
+            </Button>
+          </div>
+        ) : restantes.length === 0 ? (
           <div className="flex flex-col gap-3">
             <p className="text-sm text-ink">Ya no quedan alumnos aquí. Puede continuar.</p>
             <Button variant="primary" onClick={onConfirmEmpty}>{emptyConfirmLabel}</Button>
@@ -235,7 +262,9 @@ export default function MoverAlumnosDialog({
         )}
 
         <div className="flex justify-end">
-          <Button ref={closeRef} onClick={() => onClose(movidos.size > 0)} disabled={ocupado}>Cancelar</Button>
+          <Button ref={closeRef} onClick={() => onClose(movidos.size > 0 || noEliminada !== null)} disabled={ocupado}>
+            {noEliminada ? "Cerrar" : "Cancelar"}
+          </Button>
         </div>
       </div>
     </div>

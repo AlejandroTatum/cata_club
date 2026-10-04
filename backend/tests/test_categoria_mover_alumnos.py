@@ -87,6 +87,7 @@ def test_mover_y_eliminar_pasa_a_todos_y_borra_en_una_operacion(client, db_sessi
     assert r.status_code == 200, r.text
     assert r.json() == {
         "movidos": 2, "categoriaDestino": destino.codigo, "categoriaDestinoLabel": "Destino",
+        "eliminada": True, "motivo": None,
     }
     assert db_session.get(CategoriaHorario, origen.codigo) is None
     esperado = [(destino.codigo, d) for d in ("LUNES", "MIERCOLES", "VIERNES")]
@@ -143,23 +144,61 @@ def test_mover_y_eliminar_con_destino_invalido_no_cambia_nada(
     assert _categorias_de(db_session, luis) == antes
 
 
-def test_mover_y_eliminar_con_asistencias_en_el_origen_rechaza_sin_mover(client, db_session, escenario):
-    servicio, origen, destino, ana, luis = escenario
+def _registrar_asistencia(servicio, origen, persona_id):
     servicio.registrar_asistencia(AsistenciaCreateDTO(
         fecha_entrenamiento="2026-08-10", estado=EstadoAsistencia.PRESENTE,
-        persona_id=ana, horario_id=servicio.listar_horarios(origen.codigo)[0].id,
-    ), ["ADMINISTRADOR"], ana)
+        persona_id=persona_id, horario_id=servicio.listar_horarios(origen.codigo)[0].id,
+    ), ["ADMINISTRADOR"], persona_id)
+
+
+def test_mover_y_eliminar_con_historial_mueve_y_explica_que_no_pudo_eliminar(client, db_session, escenario):
+    """El historial no se borra: la categoría se queda, pero los alumnos SÍ
+    pasan (el historial sigue colgado de los horarios viejos)."""
+    servicio, origen, destino, ana, luis = escenario
+    _registrar_asistencia(servicio, origen, ana)
 
     r = client.post(
         f"{BASE}/categorias/{origen.codigo}/mover-y-eliminar",
         json={"categoria_destino": destino.codigo},
     )
 
+    assert r.status_code == 200, r.text
+    cuerpo = r.json()
+    assert cuerpo["movidos"] == 2
+    assert cuerpo["eliminada"] is False
+    assert "historial" in cuerpo["motivo"]
+    assert db_session.get(CategoriaHorario, origen.codigo) is not None
+    esperado = sorted((destino.codigo, d) for d in ("LUNES", "MIERCOLES", "VIERNES"))
+    assert _categorias_de(db_session, ana) == esperado
+    assert _categorias_de(db_session, luis) == esperado
+
+
+def test_mover_alumnos_funciona_con_historial_de_asistencias(client, db_session, escenario):
+    servicio, origen, destino, ana, luis = escenario
+    _registrar_asistencia(servicio, origen, ana)
+
+    r = client.post(
+        f"{BASE}/categorias/{origen.codigo}/mover-alumnos",
+        json={"categoria_destino": destino.codigo, "persona_ids": [ana]},
+    )
+
+    assert r.status_code == 200, r.text
+    assert r.json()["movidos"] == 1
+    assert all(c == destino.codigo for c, _ in _categorias_de(db_session, ana))
+
+
+def test_quitar_un_dia_con_historial_sigue_bloqueado_y_no_mueve_a_nadie(client, db_session, escenario):
+    servicio, origen, destino, ana, luis = escenario
+    _registrar_asistencia(servicio, origen, ana)  # historial en el primer horario (lunes)
+
+    r = client.put(
+        f"{BASE}/categorias/{origen.codigo}",
+        json={"dias": ["MIERCOLES"], "mover_alumnos_a": destino.codigo},
+    )
+
     assert r.status_code == 400
     assert "historial" in r.json()["detail"]
-    assert db_session.get(CategoriaHorario, origen.codigo) is not None
     assert all(c == origen.codigo for c, _ in _categorias_de(db_session, ana))
-    assert all(c == origen.codigo for c, _ in _categorias_de(db_session, luis))
 
 
 def test_mover_y_eliminar_si_el_borrado_falla_nada_se_confirma(db_session, client, escenario, monkeypatch):

@@ -1175,6 +1175,10 @@ export interface MoverAlumnosResultado {
   movidos: number;
   categoriaDestino: string;
   categoriaDestinoLabel: string;
+  /** `false` when the players moved but the categoría stayed because it has
+   *  attendance history; `motivo` says why. Always `true` for `mover-alumnos`. */
+  eliminada: boolean;
+  motivo: string | null;
 }
 
 /** Create a categoria AND a horario per día marked, in one atomic operation

@@ -960,7 +960,7 @@ describe("eliminarHorario", () => {
 describe("moverYEliminarCategoria (ADMB-04)", () => {
   it("POSTs /api/groups/categorias/:codigo/mover-y-eliminar with the target", async () => {
     vi.mocked(global.fetch).mockResolvedValue(
-      okResponse({ movidos: 3, categoriaDestino: "INFANTIL", categoriaDestinoLabel: "Infantil" }),
+      okResponse({ movidos: 3, categoriaDestino: "INFANTIL", categoriaDestinoLabel: "Infantil", eliminada: true, motivo: null }),
     );
 
     const result = await moverYEliminarCategoria("FORMATIVO", "INFANTIL");
@@ -976,7 +976,7 @@ describe("moverYEliminarCategoria (ADMB-04)", () => {
 describe("moverAlumnosDeCategoria (ADMB-04)", () => {
   it("POSTs /api/groups/categorias/:codigo/mover-alumnos with the target and the chosen players", async () => {
     vi.mocked(global.fetch).mockResolvedValue(
-      okResponse({ movidos: 1, categoriaDestino: "INFANTIL", categoriaDestinoLabel: "Infantil" }),
+      okResponse({ movidos: 1, categoriaDestino: "INFANTIL", categoriaDestinoLabel: "Infantil", eliminada: true, motivo: null }),
     );
 
     await moverAlumnosDeCategoria("FORMATIVO", "INFANTIL", [10]);

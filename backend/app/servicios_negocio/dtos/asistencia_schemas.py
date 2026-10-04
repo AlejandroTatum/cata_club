@@ -151,6 +151,11 @@ class MoverAlumnosResponseDTO(ResponseBase, BaseModel):
     movidos: int
     categoria_destino: str
     categoria_destino_label: str
+    # `mover-y-eliminar`: False cuando los alumnos pasaron pero la categoría
+    # se queda (historial de asistencias); `motivo` dice por qué. Siempre
+    # True/None en `mover-alumnos`, que nunca elimina.
+    eliminada: bool = True
+    motivo: Optional[str] = None
 
 
 class CategoriaPublicacionDTO(BaseModel):

@@ -1173,11 +1173,17 @@ export default function GroupsPage(): React.ReactElement {
   /** ADMB-04 (a): everyone to ONE target. "group" is one atomic move+delete
    *  call; "days" saves the edit with `mover_alumnos_a`. A rejection reaches
    *  the dialog, which stays open — the server changed nothing. */
-  async function handleMoveAll(destino: string): Promise<void> {
+  async function handleMoveAll(destino: string): Promise<{ noEliminada?: string } | void> {
     if (pendingDeletionScope === "group") {
       const codigo = deletingCategoriaCodigo;
       if (!codigo) return;
       const resultado = await moverYEliminarCategoria(codigo, destino);
+      if (!resultado.eliminada) {
+        // The players moved but the history keeps the categoría: say so and
+        // offer to hide it instead of a dead end. Reload behind the dialog.
+        void loadData();
+        return { noEliminada: resultado.motivo ?? "Los alumnos pasaron, pero la categoría no se pudo eliminar." };
+      }
       const quienes = resultado.movidos === 1 ? "1 alumno" : `${resultado.movidos} alumnos`;
       const message = `Se pasó a ${quienes} a ${resultado.categoriaDestinoLabel} y se eliminó la categoría.`;
       handleCancelPendingDeletions();
@@ -1189,6 +1195,19 @@ export default function GroupsPage(): React.ReactElement {
     }
     setPendingDeletions(null);
     await submitCategoria(destino);
+  }
+
+  /** The categoría cannot be deleted (history): hide it from the public page. */
+  async function handleHideInstead(): Promise<void> {
+    const codigo = deletingCategoriaCodigo;
+    if (!codigo) return;
+    await cambiarPublicacionCategoria(codigo, false);
+    const message = "La categoría no se publica en el sitio.";
+    handleCancelPendingDeletions();
+    showNotification("success", message);
+    showSuccess(message);
+    closeExpanded();
+    await loadData();
   }
 
   /** ADMB-04 (b): one player to the target the admin picked for them. */
@@ -2164,6 +2183,7 @@ export default function GroupsPage(): React.ReactElement {
             }
             emptyConfirmLabel={pendingDeletionScope === "group" ? "Eliminar categoría" : "Guardar cambios"}
             onMoveAll={handleMoveAll}
+            onHide={handleHideInstead}
             onMoveOne={handleMoveOne}
             onConfirmEmpty={() => void handleConfirmPendingDeletions()}
             onClose={handleCloseMover}
