@@ -70,6 +70,8 @@ const mockFetchHorarios = vi.fn().mockResolvedValue([]);
 const mockCrearCategoria = vi.fn();
 const mockActualizarCategoria = vi.fn();
 const mockEliminarCategoria = vi.fn();
+const mockMoverYEliminarCategoria = vi.fn();
+const mockMoverAlumnosDeCategoria = vi.fn();
 const mockCambiarPublicacion = vi.fn().mockResolvedValue(undefined);
 const mockFetchAlumnosPorHorario = vi.fn().mockResolvedValue([]);
 const mockFetchConteosPorHorario = vi.fn().mockResolvedValue([]);
@@ -113,6 +115,9 @@ vi.mock("@/services/api", () => {
     crearCategoria: (dto: unknown) => mockCrearCategoria(dto),
     actualizarCategoria: (codigo: string, dto: unknown) => mockActualizarCategoria(codigo, dto),
     eliminarCategoria: (codigo: string) => mockEliminarCategoria(codigo),
+    moverYEliminarCategoria: (codigo: string, destino: string) => mockMoverYEliminarCategoria(codigo, destino),
+    moverAlumnosDeCategoria: (codigo: string, destino: string, ids: number[]) =>
+      mockMoverAlumnosDeCategoria(codigo, destino, ids),
     cambiarPublicacionCategoria: (codigo: string, visible: boolean) => mockCambiarPublicacion(codigo, visible),
     fetchAlumnosPorHorario: (horarioId: number) => mockFetchAlumnosPorHorario(horarioId),
     // QA4 PERF-01: the screen asks for counts + ids; the full roster endpoint
@@ -1036,7 +1041,7 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
     expect(within(dialog).queryByRole("button", { name: /de todos modos/i })).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: /confirmar/i })).not.toBeInTheDocument();
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Entendido" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancelar" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(mockActualizarCategoria).not.toHaveBeenCalled();
     expect(mockDesasignarAlumnoDeHorario).not.toHaveBeenCalled();
@@ -1052,7 +1057,7 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
     fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Entendido" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancelar" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(mockActualizarCategoria).not.toHaveBeenCalled();
@@ -1867,7 +1872,7 @@ describe("GroupsPage — deleting removes la categoría entera atomically (docs/
     expect(mockEliminarCategoria).not.toHaveBeenCalled();
   });
 
-  it("with students enrolled, the delete dialog only offers to close and never calls the API (ADMB-04)", async () => {
+  it("with students enrolled, the delete dialog offers no direct delete and never calls the delete API (ADMB-04)", async () => {
     mockFetchAlumnosPorHorario.mockImplementation((horarioId: number) =>
       Promise.resolve(
         horarioId === 701
@@ -1880,11 +1885,13 @@ describe("GroupsPage — deleting removes la categoría entera atomically (docs/
 
     await openDeleteFromEditPanel();
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).queryByRole("button", { name: /eliminar|confirmar|de todos modos/i })).not.toBeInTheDocument();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Entendido" }));
+    expect(within(dialog).queryByRole("button", { name: "Eliminar categoría" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /de todos modos/i })).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancelar" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(mockEliminarCategoria).not.toHaveBeenCalled();
+    expect(mockMoverYEliminarCategoria).not.toHaveBeenCalled();
   });
 
   it("with no students, confirming deletes the categoría with ONE eliminarCategoria call", async () => {
@@ -2643,5 +2650,224 @@ describe("GroupsPage — rail", () => {
     expect(within(screen.getByTestId("sin-grupo-list")).getAllByRole("listitem")).toHaveLength(2);
     expect(screen.getByText("6–7 de 7")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /siguiente/i })).toBeDisabled();
+  });
+});
+
+describe("GroupsPage — move players before deleting (QA4 ADMB-04)", () => {
+  const GROUP_ROWS = [
+    { id: 701, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
+    { id: 703, diaSemana: "VIERNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
+  ];
+  const fila = (id: number, personaId: number, nombre: string, horarioId: number) => ({
+    id, personaId, personaNombreCompleto: nombre, horarioId, horarioDia: "LUNES",
+    horarioHoraInicio: "18:00", horarioHoraFin: "20:00", fechaAsignacion: "2026-01-01",
+  });
+
+  async function openBlockedDelete(): Promise<HTMLElement> {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    fireEvent.click(screen.getAllByRole("button", { name: /^editar /i })[0]);
+    await screen.findByRole("heading", { name: "Editar categoría" });
+    fireEvent.click(screen.getByRole("button", { name: /^eliminar/i }));
+    return screen.findByRole("dialog");
+  }
+
+  beforeEach(() => {
+    mockFetchMembers.mockReset();
+    mockFetchHorarios.mockReset();
+    mockEliminarCategoria.mockReset();
+    mockActualizarCategoria.mockReset();
+    mockMoverYEliminarCategoria.mockReset();
+    mockMoverAlumnosDeCategoria.mockReset();
+    mockFetchAlumnosPorHorario.mockReset();
+    mockFetchCategoriasCatalogo.mockReset();
+    mockFetchCategoriasCatalogo.mockResolvedValue(DEFAULT_CATEGORIA_CATALOG);
+    mockFetchMembers.mockResolvedValue({ accounts: [] });
+    mockFetchHorarios.mockResolvedValue(GROUP_ROWS);
+    mockActualizarCategoria.mockResolvedValue({});
+    mockEliminarCategoria.mockResolvedValue(undefined);
+    mockMoverYEliminarCategoria.mockResolvedValue({ movidos: 2, categoriaDestino: "INFANTIL", categoriaDestinoLabel: "Infantil" });
+    mockMoverAlumnosDeCategoria.mockResolvedValue({ movidos: 1, categoriaDestino: "INFANTIL", categoriaDestinoLabel: "Infantil" });
+    // Ana is in both días (one roster row each); Bruno only shows in the first.
+    mockFetchAlumnosPorHorario.mockImplementation((horarioId: number) =>
+      Promise.resolve(
+        horarioId === 701
+          ? [fila(1, 10, "Ana Pérez", 701), fila(2, 11, "Bruno Díaz", 701)]
+          : [fila(3, 10, "Ana Pérez", 703)],
+      ),
+    );
+  });
+
+  it("offers a single target for everyone, disabled until one is chosen, and never lists the categoría itself", async () => {
+    const dialog = await openBlockedDelete();
+
+    const select = within(dialog).getByLabelText("Categoría de destino");
+    const options = within(select).getAllByRole("option").map((o) => o.textContent);
+    expect(options).toContain("Infantil");
+    expect(options).not.toContain("Competitivo");
+    const boton = within(dialog).getByRole("button", { name: "Pasar a todos y eliminar la categoría" });
+    expect(boton).toBeDisabled();
+
+    fireEvent.change(select, { target: { value: "INFANTIL" } });
+    expect(boton).toBeEnabled();
+  });
+
+  it("move-all calls the atomic endpoint once with the chosen target and never the plain delete", async () => {
+    const dialog = await openBlockedDelete();
+
+    fireEvent.change(within(dialog).getByLabelText("Categoría de destino"), { target: { value: "INFANTIL" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Pasar a todos y eliminar la categoría" }));
+
+    await waitFor(() => expect(mockMoverYEliminarCategoria).toHaveBeenCalledWith("COMPETITIVO", "INFANTIL"));
+    expect(mockMoverYEliminarCategoria).toHaveBeenCalledTimes(1);
+    expect(mockEliminarCategoria).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    // Data is reloaded after the change.
+    await waitFor(() => expect(mockFetchHorarios.mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it("keeps the dialog open and shows the server's message when move-all fails (nothing changed)", async () => {
+    mockMoverYEliminarCategoria.mockRejectedValue(
+      new ApiClientError("La categoría Infantil no tiene días para recibir alumnos.", 400),
+    );
+    const dialog = await openBlockedDelete();
+
+    fireEvent.change(within(dialog).getByLabelText("Categoría de destino"), { target: { value: "INFANTIL" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Pasar a todos y eliminar la categoría" }));
+
+    expect(await within(dialog).findByText("La categoría Infantil no tiene días para recibir alumnos.")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("lists each player once and moves them one by one; the delete unlocks only when none remain", async () => {
+    const dialog = await openBlockedDelete();
+
+    // Ana appears once even though she is enrolled in both días.
+    expect(within(dialog).getAllByText("Ana Pérez")).toHaveLength(1);
+    expect(within(dialog).queryByRole("button", { name: "Eliminar categoría" })).not.toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByLabelText("Categoría de destino para Ana Pérez"), { target: { value: "INFANTIL" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Pasar a Ana Pérez" }));
+    await waitFor(() => expect(mockMoverAlumnosDeCategoria).toHaveBeenCalledWith("COMPETITIVO", "INFANTIL", [10]));
+    await waitFor(() => expect(within(dialog).queryByText("Ana Pérez")).not.toBeInTheDocument());
+    expect(within(dialog).getByText("Bruno Díaz")).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Eliminar categoría" })).not.toBeInTheDocument();
+
+    // A different player may go somewhere else.
+    fireEvent.change(within(dialog).getByLabelText("Categoría de destino para Bruno Díaz"), { target: { value: "JUVENIL" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Pasar a Bruno Díaz" }));
+    await waitFor(() => expect(mockMoverAlumnosDeCategoria).toHaveBeenCalledWith("COMPETITIVO", "JUVENIL", [11]));
+
+    const eliminar = await within(dialog).findByRole("button", { name: "Eliminar categoría" });
+    expect(mockEliminarCategoria).not.toHaveBeenCalled();
+    fireEvent.click(eliminar);
+    await waitFor(() => expect(mockEliminarCategoria).toHaveBeenCalledWith("COMPETITIVO"));
+    expect(mockMoverYEliminarCategoria).not.toHaveBeenCalled();
+  });
+
+  it("a failed one-by-one move keeps that player in the list and says why", async () => {
+    mockMoverAlumnosDeCategoria.mockRejectedValue(new ApiClientError("No se pudo pasar al alumno.", 400));
+    const dialog = await openBlockedDelete();
+
+    fireEvent.change(within(dialog).getByLabelText("Categoría de destino para Ana Pérez"), { target: { value: "INFANTIL" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Pasar a Ana Pérez" }));
+
+    expect(await within(dialog).findByText("No se pudo pasar al alumno.")).toBeInTheDocument();
+    expect(within(dialog).getByText("Ana Pérez")).toBeInTheDocument();
+  });
+
+  it("removing a día with players: move-all saves the edit with mover_alumnos_a in ONE call", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    fireEvent.click(screen.getAllByRole("button", { name: /^editar /i })[0]);
+    await screen.findByRole("heading", { name: "Editar categoría" });
+    fireEvent.click(screen.getByRole("button", { name: "Viernes" }));
+    fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(mockActualizarCategoria).not.toHaveBeenCalled();
+    fireEvent.change(within(dialog).getByLabelText("Categoría de destino"), { target: { value: "INFANTIL" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Pasar a todos y quitar el día" }));
+
+    await waitFor(() => {
+      expect(mockActualizarCategoria).toHaveBeenCalledWith(
+        "COMPETITIVO",
+        expect.objectContaining({ dias: ["LUNES"], mover_alumnos_a: "INFANTIL" }),
+      );
+    });
+    expect(mockActualizarCategoria).toHaveBeenCalledTimes(1);
+  });
+
+  it("explains that there is nowhere to move players when no other categoría exists", async () => {
+    mockFetchCategoriasCatalogo.mockResolvedValue(DEFAULT_CATEGORIA_CATALOG.filter((c) => c.codigo === "COMPETITIVO"));
+    const dialog = await openBlockedDelete();
+
+    expect(within(dialog).getByText(/no hay otra categoría/i)).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("Categoría de destino")).not.toBeInTheDocument();
+  });
+});
+
+describe("GroupsPage — new categoría starts hidden and warns about overlaps (QA4 ADMB-13, ADMB-14)", () => {
+  beforeEach(() => {
+    mockFetchMembers.mockReset();
+    mockFetchHorarios.mockReset();
+    mockCrearCategoria.mockReset();
+    mockFetchMembers.mockResolvedValue({ accounts: [] });
+    mockFetchHorarios.mockResolvedValue([]);
+    mockFetchCategoriasCatalogo.mockReset();
+    mockFetchCategoriasCatalogo.mockResolvedValue(DEFAULT_CATEGORIA_CATALOG);
+  });
+
+  const NOTA_OCULTA = "Se creará oculta en la página pública; podrá mostrarla cuando quiera.";
+
+  async function crearPreinfantil(): Promise<void> {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
+    fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "Preinfantil" } });
+    elegirHora("Hora de inicio", "15:00");
+    elegirHora("Hora de fin", "16:00");
+    fireEvent.click(screen.getByRole("button", { name: "Lunes" }));
+    fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
+  }
+
+  it("tells the admin, in the create form, that the categoría starts hidden", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
+
+    expect(await screen.findByText(NOTA_OCULTA)).toBeInTheDocument();
+  });
+
+  it("does not show that note when editing an existing categoría", async () => {
+    mockFetchHorarios.mockResolvedValue([
+      { id: 1, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
+    ]);
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    fireEvent.click(screen.getAllByRole("button", { name: /^editar /i })[0]);
+    await screen.findByRole("heading", { name: "Editar categoría" });
+
+    expect(screen.queryByText(NOTA_OCULTA)).not.toBeInTheDocument();
+  });
+
+  it("shows the server's overlap warnings after saving, without blocking the save", async () => {
+    mockCrearCategoria.mockResolvedValue({
+      codigo: "PREINFANTIL",
+      advertencias: ["Este horario se cruza con Formativo (lunes 15:00–16:00). Puede continuar si es intencional."],
+    });
+    await crearPreinfantil();
+
+    expect(await screen.findByText(/este horario se cruza con formativo/i)).toBeInTheDocument();
+    expect(screen.getByText("Categoría creada correctamente.")).toBeInTheDocument();
+    expect(mockCrearCategoria).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows no warning block when the server sends none", async () => {
+    mockCrearCategoria.mockResolvedValue({ codigo: "PREINFANTIL", advertencias: [] });
+    await crearPreinfantil();
+
+    await screen.findByText("Categoría creada correctamente.");
+    expect(screen.queryByTestId("categoria-advertencias")).not.toBeInTheDocument();
   });
 });

@@ -101,11 +101,14 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import { Button, Badge, EmptyState, ErrorState, InfoPanel, LoadingState, PAGE_RAIL, Pagination, STAT_GRID, StatCard, TimePicker24 } from "@/components/ui";
 import { DIA_SEMANA_LABELS, getTotalPages, paginateRecords } from "@/app/attendance/attendance-utils";
 import { useGroupRoster } from "./useGroupRoster";
+import MoverAlumnosDialog from "./MoverAlumnosDialog";
 import {
   fetchHorarios,
   crearCategoria,
   actualizarCategoria,
   eliminarCategoria,
+  moverYEliminarCategoria,
+  moverAlumnosDeCategoria,
   cambiarPublicacionCategoria,
   fetchMembers,
   fetchAlumnosPorHorario,
@@ -123,6 +126,7 @@ import {
   alumnosInscritosLabel,
   mensajeCategoriaConAlumnos,
   countUniqueAlumnos,
+  uniqueAlumnos,
   buildCategoriaCards,
   buildCatalogoSinHorarios,
   findCategoriaDuplicada,
@@ -165,8 +169,8 @@ function diaListLabel(dias: readonly string[]): string {
 }
 
 /** The dialog's body. With students enrolled the server will refuse (409), so
- *  the copy says what to do first (ADMB-04); without them it is the plain
- *  irreversible-delete warning. */
+ *  the copy says what to do first (ADMB-04) and the dialog offers to move them;
+ *  without them it is the plain irreversible-delete warning. */
 function pendingDeletionsMessage(
   pending: { diaSemana: string; alumnos: AlumnoHorario[] }[],
   scope: "days" | "group",
@@ -181,45 +185,9 @@ function pendingDeletionsMessage(
   return `Se eliminará la categoría completa (todos sus días: ${dias}). Esta acción no se puede deshacer.`;
 }
 
-/** Info-only dialog: the server refuses this action while students are
- *  enrolled (409), so there is nothing to confirm — only to close (ADMB-04). */
-function BlockedDialog({
-  title,
-  message,
-  onClose,
-}: {
-  title: string;
-  message: string;
-  onClose: () => void;
-}): React.ReactElement {
-  const closeRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    closeRef.current?.focus();
-    function onKeyDown(event: KeyboardEvent): void {
-      if (event.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-cata-black/40 px-4" onClick={onClose}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="blocked-dialog-title"
-        aria-describedby="blocked-dialog-message"
-        onClick={(event) => event.stopPropagation()}
-        className="card w-full max-w-sm p-6"
-      >
-        <h2 id="blocked-dialog-title" className="text-base font-semibold text-cata-red">{title}</h2>
-        <p id="blocked-dialog-message" className="mt-2 text-sm text-cata-text/65">{message}</p>
-        <div className="mt-6 flex justify-end">
-          <Button ref={closeRef} onClick={onClose}>Entendido</Button>
-        </div>
-      </div>
-    </div>
-  );
-}
+/** ADMB-13: a new categoría starts hidden; the form says so up front. */
+const NUEVA_CATEGORIA_OCULTA_NOTA =
+  "Se creará oculta en la página pública; podrá mostrarla cuando quiera.";
 
 function extractErrorMessage(err: unknown, fallback: string): string {
   return toUserMessage(err, fallback);
@@ -619,6 +587,10 @@ export default function GroupsPage(): React.ReactElement {
   // trash icon deleting every día at once (cancel is a pure no-op, nothing
   // was mutated yet).
   const [pendingDeletionScope, setPendingDeletionScope] = useState<"days" | "group">("days");
+
+  /** ADMB-14: non-blocking warnings (schedule overlap) the server attached to
+   *  the last create/edit. Shown after the save, never in its way. */
+  const [advertencias, setAdvertencias] = useState<string[]>([]);
 
   const [deletingId, setDeletingId] = useState<number | null>(null);
   /** `codigo` of the categoría a pending "group"-scope deletion targets —
@@ -1056,9 +1028,10 @@ export default function GroupsPage(): React.ReactElement {
    * written — so on failure the form stays open with the server's message
    * instead of closing and resyncing against a partially-applied save.
    */
-  async function submitCategoria(): Promise<void> {
+  async function submitCategoria(moverAlumnosA?: string): Promise<void> {
     setFormSubmitting(true);
     setFormError(null);
+    setAdvertencias([]);
     setDuplicateCategoriaCodigo(null);
     const nombre = formData.nombre.trim();
     const dias = Array.from(selectedDias);
@@ -1069,15 +1042,17 @@ export default function GroupsPage(): React.ReactElement {
     // backend's `AsistenciaServicio._normalizar_edades`.
     const edades = formData.edades;
     try {
-      if (editingGroup) {
-        await actualizarCategoria(editingGroup.categoria, {
-          nombre, edades, hora_inicio: formData.horaInicio, hora_fin: formData.horaFin, dias,
-        });
-      } else {
-        await crearCategoria({
-          nombre, edades, hora_inicio: formData.horaInicio, hora_fin: formData.horaFin, dias,
-        });
-      }
+      // ADMB-14: the overlap warnings ride on the save's own response.
+      const guardada = editingGroup
+        ? await actualizarCategoria(editingGroup.categoria, {
+            nombre, edades, hora_inicio: formData.horaInicio, hora_fin: formData.horaFin, dias,
+            // ADMB-04: players of a removed día move in the same transaction.
+            ...(moverAlumnosA ? { mover_alumnos_a: moverAlumnosA } : {}),
+          })
+        : await crearCategoria({
+            nombre, edades, hora_inicio: formData.horaInicio, hora_fin: formData.horaFin, dias,
+          });
+      setAdvertencias(guardada?.advertencias ?? []);
       const message = editingGroup ? "Categoría actualizada correctamente." : "Categoría creada correctamente.";
       showNotification("success", message);
       showSuccess(message);
@@ -1190,6 +1165,49 @@ export default function GroupsPage(): React.ReactElement {
     setDeletingCategoriaCodigo(null);
   }
 
+  /** The categoría the open "move players" dialog empties. */
+  function categoriaAVaciar(): string | null {
+    return pendingDeletionScope === "group" ? deletingCategoriaCodigo : editingGroup?.categoria ?? null;
+  }
+
+  /** ADMB-04 (a): everyone to ONE target. "group" is one atomic move+delete
+   *  call; "days" saves the edit with `mover_alumnos_a`. A rejection reaches
+   *  the dialog, which stays open — the server changed nothing. */
+  async function handleMoveAll(destino: string): Promise<void> {
+    if (pendingDeletionScope === "group") {
+      const codigo = deletingCategoriaCodigo;
+      if (!codigo) return;
+      const resultado = await moverYEliminarCategoria(codigo, destino);
+      const quienes = resultado.movidos === 1 ? "1 alumno" : `${resultado.movidos} alumnos`;
+      const message = `Se pasó a ${quienes} a ${resultado.categoriaDestinoLabel} y se eliminó la categoría.`;
+      handleCancelPendingDeletions();
+      showNotification("success", message);
+      showSuccess(message);
+      closeExpanded();
+      await loadData();
+      return;
+    }
+    setPendingDeletions(null);
+    await submitCategoria(destino);
+  }
+
+  /** ADMB-04 (b): one player to the target the admin picked for them. */
+  async function handleMoveOne(personaId: number, destino: string): Promise<void> {
+    const codigo = categoriaAVaciar();
+    if (!codigo) return;
+    await moverAlumnosDeCategoria(codigo, destino, [personaId]);
+  }
+
+  /** Closing the "move players" dialog. Players already moved one by one are
+   *  real changes, so the screen is reloaded and the stale form closed. */
+  function handleCloseMover(huboCambios: boolean): void {
+    handleCancelPendingDeletions();
+    if (huboCambios) {
+      closeExpanded();
+      void loadData();
+    }
+  }
+
   /**
    * Trash-icon entry point: deletes the categoría entirely (every día row),
    * gated behind the same student-safety confirmation as unticking días
@@ -1231,6 +1249,12 @@ export default function GroupsPage(): React.ReactElement {
         <h3 className="mb-4 font-display text-lg uppercase leading-tight tracking-flat text-ink">
           {editingGroup !== null ? "Editar categoría" : "Nueva categoría"}
         </h3>
+        {editingGroup === null && (
+          <p className="mb-4 flex items-center gap-2 text-sm text-ink-3">
+            <EyeOff size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+            {NUEVA_CATEGORIA_OCULTA_NOTA}
+          </p>
+        )}
         {formError && (
           <div className="mb-4">
             <div className="alert-error" role="alert"><LinkifiedText text={formError} /></div>
@@ -1816,6 +1840,22 @@ export default function GroupsPage(): React.ReactElement {
           </div>
         )}
 
+        {advertencias.length > 0 && (
+          <div
+            data-testid="categoria-advertencias"
+            role="status"
+            className="flex items-start gap-2 rounded-card border border-state-warn/30 bg-state-warn-bg px-4 py-3 text-sm text-state-warn"
+          >
+            <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" className="mt-0.5 shrink-0" />
+            <ul className="min-w-0 flex-1">
+              {advertencias.map((aviso) => (
+                <li key={aviso}>{aviso}</li>
+              ))}
+            </ul>
+            <Button size="sm" onClick={() => setAdvertencias([])}>Cerrar</Button>
+          </div>
+        )}
+
         {expandedGroup?.key === NEW_GROUP_KEY && (
           <div className="card p-5">
             {renderHorarioForm()}
@@ -2109,14 +2149,25 @@ export default function GroupsPage(): React.ReactElement {
         {renderRail()}
         </div>
 
-        {pendingDeletions !== null && pendingDeletions.length > 0 && (
-          countUniqueAlumnos(pendingDeletions) > 0 ? (
-            <BlockedDialog
-              title="Categoría con alumnos inscritos"
-              message={pendingDeletionsMessage(pendingDeletions, pendingDeletionScope)}
-              onClose={handleCancelPendingDeletions}
-            />
-          ) : null
+        {pendingDeletions !== null && pendingDeletions.length > 0 && countUniqueAlumnos(pendingDeletions) > 0 && (
+          <MoverAlumnosDialog
+            title="Categoría con alumnos inscritos"
+            message={pendingDeletionsMessage(pendingDeletions, pendingDeletionScope)}
+            alumnos={uniqueAlumnos(pendingDeletions)}
+            destinos={Object.entries(categorias)
+              .filter(([codigo]) => codigo !== categoriaAVaciar())
+              .map(([codigo, info]) => ({ codigo, label: info?.label ?? codigo }))}
+            moveAllLabel={
+              pendingDeletionScope === "group"
+                ? "Pasar a todos y eliminar la categoría"
+                : "Pasar a todos y quitar el día"
+            }
+            emptyConfirmLabel={pendingDeletionScope === "group" ? "Eliminar categoría" : "Guardar cambios"}
+            onMoveAll={handleMoveAll}
+            onMoveOne={handleMoveOne}
+            onConfirmEmpty={() => void handleConfirmPendingDeletions()}
+            onClose={handleCloseMover}
+          />
         )}
         <ConfirmDialog
           open={

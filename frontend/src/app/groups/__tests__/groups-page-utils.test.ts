@@ -9,6 +9,7 @@ import { describe, it, expect } from "vitest";
 import {
   alumnosInscritosLabel,
   mensajeCategoriaConAlumnos,
+  uniqueAlumnos,
   countUniqueAlumnos,
   buildCategoriaCards,
   formatDiaSet,
@@ -285,25 +286,25 @@ describe("DIA_ORDER", () => {
 describe("formatMembresiaVencidaWarning", () => {
   it("names the student and the number of overdue days", () => {
     expect(formatMembresiaVencidaWarning("Ariana Ruiz", 14)).toBe(
-      "Ariana Ruiz tiene la cuota vencida hace 14 días.",
+      "Ariana Ruiz tiene la mensualidad vencida hace 14 días.",
     );
   });
 
   it("uses the singular día for exactly one overdue day", () => {
     expect(formatMembresiaVencidaWarning("Ariana Ruiz", 1)).toBe(
-      "Ariana Ruiz tiene la cuota vencida hace 1 día.",
+      "Ariana Ruiz tiene la mensualidad vencida hace 1 día.",
     );
   });
 
   it("says 'desde hoy' when the membership expired today (0 días)", () => {
     expect(formatMembresiaVencidaWarning("Ariana Ruiz", 0)).toBe(
-      "Ariana Ruiz tiene la cuota vencida desde hoy.",
+      "Ariana Ruiz tiene la mensualidad vencida desde hoy.",
     );
   });
 
   it("falls back to a dateless sentence when diasVencida is unknown", () => {
     expect(formatMembresiaVencidaWarning("Ariana Ruiz", null)).toBe(
-      "Ariana Ruiz tiene la cuota vencida.",
+      "Ariana Ruiz tiene la mensualidad vencida.",
     );
   });
 });
@@ -547,21 +548,21 @@ describe("puedeEliminarCategoria", () => {
 
 describe("alumnosInscritosLabel (ADMB-22)", () => {
   it("uses the singular for one and the plural otherwise, never «alumno(s)»", () => {
-    expect(alumnosInscritosLabel(1)).toBe("1 alumno inscrito");
-    expect(alumnosInscritosLabel(3)).toBe("3 alumnos inscritos");
+    expect(alumnosInscritosLabel(1)).toBe("1 jugador inscrito");
+    expect(alumnosInscritosLabel(3)).toBe("3 jugadores inscritos");
   });
 });
 
 describe("mensajeCategoriaConAlumnos (ADMB-04)", () => {
   it("tells admin to reassign first when days are removed", () => {
     expect(mensajeCategoriaConAlumnos({ accion: "quitar-dias", dias: "Domingo", alumnos: 1 })).toBe(
-      "No puede quitar Domingo mientras haya 1 alumno inscrito. Pase primero a esos alumnos a otra categoría.",
+      "No puedes quitar Domingo mientras haya 1 jugador inscrito. Pasa primero a esos jugadores a otra categoría.",
     );
   });
 
   it("tells admin to reassign first when the categoría is deleted", () => {
     expect(mensajeCategoriaConAlumnos({ accion: "eliminar", alumnos: 3 })).toBe(
-      "No puede eliminar la categoría mientras haya 3 alumnos inscritos. Pase primero a esos alumnos a otra categoría.",
+      "No puedes eliminar la categoría mientras haya 3 jugadores inscritos. Pasa primero a esos jugadores a otra categoría.",
     );
   });
 });
@@ -577,5 +578,25 @@ describe("personasPorHorarioFromConteos", () => {
     const conteos = [{ horarioId: 9, inscritos: 1, personaIds: [5] }];
 
     expect(personasPorHorarioFromConteos([{ id: 1 }], conteos)).toEqual({ 1: [] });
+  });
+});
+
+describe("uniqueAlumnos (ADMB-04)", () => {
+  const alumno = (personaId: number, nombre: string) =>
+    ({ personaId, personaNombreCompleto: nombre }) as AlumnoHorario;
+
+  it("lists each player once even when every día row repeats them", () => {
+    const result = uniqueAlumnos([
+      { alumnos: [alumno(10, "Ana Pérez"), alumno(11, "Bruno Díaz")] },
+      { alumnos: [alumno(10, "Ana Pérez")] },
+    ]);
+    expect(result).toEqual([
+      { personaId: 10, nombre: "Ana Pérez" },
+      { personaId: 11, nombre: "Bruno Díaz" },
+    ]);
+  });
+
+  it("is empty when no día has players", () => {
+    expect(uniqueAlumnos([{ alumnos: [] }])).toEqual([]);
   });
 });

@@ -34,6 +34,23 @@ export function countUniqueAlumnos(
   return personaIds.size;
 }
 
+/**
+ * The distinct players across the día rows pending deletion, in roster order,
+ * for the ADMB-04 "move them" dialog. Same reasoning as `countUniqueAlumnos`:
+ * a player is enrolled in every día of the categoría, so the rows repeat them.
+ */
+export function uniqueAlumnos(
+  pendingDeletions: { alumnos: AlumnoHorario[] }[],
+): { personaId: number; nombre: string }[] {
+  const seen = new Map<number, string>();
+  for (const pending of pendingDeletions) {
+    for (const alumno of pending.alumnos) {
+      if (!seen.has(alumno.personaId)) seen.set(alumno.personaId, alumno.personaNombreCompleto);
+    }
+  }
+  return Array.from(seen, ([personaId, nombre]) => ({ personaId, nombre }));
+}
+
 /** "1 alumno inscrito" / "3 alumnos inscritos" — never "alumno(s)" (ADMB-22). */
 export function alumnosInscritosLabel(n: number): string {
   return n === 1 ? "1 alumno inscrito" : `${n} alumnos inscritos`;
