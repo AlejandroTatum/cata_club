@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { publicPageMetadata, socialMetadata } from "@/lib/seo";
+import { publicPageMetadata, resolveSiteUrl, socialMetadata } from "@/lib/seo";
 import StructuredData from "@/components/landing/StructuredData";
 import LandingPage from "./landing/LandingPage";
 import "./landing/landing.css";
@@ -36,10 +36,10 @@ export const metadata: Metadata = {
     url: "/",
     title: "Cata Club — Tenis de Mesa en Loja",
     description:
-      "Formando campeones para la vida desde 2013. Entrenamientos formativos, infantiles, juveniles, competitivos y para adultos en Loja, Ecuador.",
+      "Formando campeones para la vida desde 2013. Entrenamientos de tenis de mesa para niños, jóvenes y adultos en Loja, Ecuador.",
   },
 };
 
 export default function HomePage(): React.ReactElement {
-  return <div className={`${barlow.variable} ${graduate.variable} ${playfair.variable}`}><StructuredData /><LandingPage /></div>;
+  return <div className={`${barlow.variable} ${graduate.variable} ${playfair.variable}`}><StructuredData /><LandingPage siteUrl={resolveSiteUrl()} /></div>;
 }

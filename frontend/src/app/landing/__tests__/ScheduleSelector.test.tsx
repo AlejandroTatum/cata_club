@@ -83,7 +83,7 @@ describe("ScheduleSelector (cards side by side)", (): void => {
   it("links every card to the club's first WhatsApp number with a message naming its category", (): void => {
     renderCards();
     SCHEDULES.forEach((schedule): void => {
-      const link = within(card(schedule.category)).getByRole("link", { name: `Consultar cupo en ${schedule.category} por WhatsApp` });
+      const link = within(card(schedule.category)).getByRole("link", { name: `Preguntar por cupos en ${schedule.category} por WhatsApp` });
       expect(link).toHaveAttribute("href", `${WA}?text=${encodeURIComponent(`Hola, quiero consultar cupo en ${schedule.category}.`)}`);
       expect(link).toHaveAttribute("target", "_blank");
       expect(link).toHaveAttribute("rel", "noreferrer");

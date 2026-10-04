@@ -445,7 +445,7 @@ describe("LandingPage", (): void => {
     });
   });
 
-  it("orders the main content Hero → Ticker → Nosotros → Valores → Stats → Galería → Horarios → CTA → Visítenos", async (): Promise<void> => {
+  it("orders the main content Hero → Ticker → Nosotros → Valores → Stats → Galería → Horarios → Mensualidad → Pasos → Preguntas → CTA → Visítenos", async (): Promise<void> => {
     // The gallery only has a place in the order once it has photos (VIS-03).
     publishGallery([
       { id: 1, titulo: "En juego", descripcion: "Una jugada frente al público de la sala.", imagenUrl: "https://res.cloudinary.com/club/en-juego.jpg" },
@@ -466,6 +466,9 @@ describe("LandingPage", (): void => {
       "stats",
       "galeria",
       "horarios",
+      "mensualidad",
+      "como-empezar",
+      "preguntas",
       "motto",
       "contacto",
     ]);
@@ -688,7 +691,8 @@ describe("LandingPage", (): void => {
     const enrollLinks = screen.getAllByRole("link", { name: /inscr/i });
     expect(enrollLinks.length).toBeGreaterThanOrEqual(3);
     enrollLinks.forEach((link): void => {
-      expect(link).toHaveAttribute("href", "/student/enroll");
+      // The two entry points of LAN-14 add a `?type=` the wizard preselects from.
+      expect(link.getAttribute("href")?.split("?")[0]).toBe("/student/enroll");
     });
     expect(document.querySelectorAll('a[href="/register"]')).toHaveLength(0);
   });

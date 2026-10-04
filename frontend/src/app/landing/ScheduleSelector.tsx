@@ -96,9 +96,9 @@ export default function ScheduleSelector({ schedules, header }: ScheduleSelector
             <a
               className="landing-schedule-cta" target="_blank" rel="noreferrer"
               href={whatsAppHref(`Hola, quiero consultar cupo en ${schedule.category}.`)}
-              aria-label={`Consultar cupo en ${schedule.category} por WhatsApp`}
+              aria-label={`Preguntar por cupos en ${schedule.category} por WhatsApp`}
             >
-              Consultar cupo <ArrowRight aria-hidden="true" />
+              Preguntar por cupos <ArrowRight aria-hidden="true" />
             </a>
           </div>
         </li>;

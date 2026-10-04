@@ -20,6 +20,14 @@ export interface LandingStat {
 
 export interface LandingContact {
   whatsapp: string[];
+  /**
+   * Who answers each number in `whatsapp`, keyed by the number as written
+   * there ("Administración", "Entrenadores"). A number with no entry is shown
+   * unlabeled: the club has not yet confirmed which number belongs to whom
+   * (QA4 LAN-15), and a guessed label would send families to the wrong person.
+   */
+  phoneLabels: Partial<Record<string, string>>;
+  email: string;
   facebook: string;
   instagram: string;
 }
@@ -76,7 +84,7 @@ export function buildLandingStats(now: Date = new Date()): LandingStat[] {
     // Every figure is rendered statically. An odometer counting 0 → 2013 reads
     // as a bug, and a count-up on a two-digit number adds nothing while it can
     // still strand the band at 0 whenever its trigger does not fire.
-    { value: String(FOUNDING_DATE.year), label: "Desde el 10 de octubre" },
+    { value: String(FOUNDING_DATE.year), label: "Desde el 10 de octubre de 2013" },
     { value: String(years), label: "Años formando deportistas" },
     { value: "Loja", label: "Junto al Coliseo Ciudad de Loja" },
   ];
@@ -131,6 +139,8 @@ export function deriveContactHours(schedules: LandingSchedule[]): string {
 export const landingConfig: LandingConfig = {
   contact: {
     whatsapp: ["0994219619", "0990288152"],
+    phoneLabels: {},
+    email: "cataclub.loja@proton.me",
     facebook: "https://www.facebook.com/share/1FN5DkgzXG/",
     instagram: "https://www.instagram.com/cataclub_tenis_de_mesa",
     // No `hours` here on purpose (#789). It used to be

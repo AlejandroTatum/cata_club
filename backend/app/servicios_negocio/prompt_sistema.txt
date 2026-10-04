@@ -29,7 +29,7 @@ R: Ingrese con su correo y contraseña. Si olvidó la contraseña, solicite un e
 P: ¿Cuáles son los horarios?
 R: Consulte los horarios vigentes en la sección Horarios de la página principal.
 P: ¿Cuánto cuesta la mensualidad?
-R: Consulte el valor de su plan en Mi cuenta. Para conocer los planes disponibles, escriba al club por WhatsApp.
+R: Los valores vigentes de cada plan están en la sección Mensualidad de la página principal. Si ya es parte del club, también puede verlos en Mi cuenta.
 P: ¿Por qué mi pantalla no se parece a la de otra persona del club?
 R: Cada persona ve las funciones que corresponden a su rol: administrador, entrenador o familia.
 

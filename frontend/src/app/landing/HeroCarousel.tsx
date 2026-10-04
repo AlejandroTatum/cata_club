@@ -202,6 +202,9 @@ export default function HeroCarousel(): React.ReactElement {
           {paused ? <Play size={ICON.sm} aria-hidden="true" /> : <Pause size={ICON.sm} aria-hidden="true" />}
         </button>
       </div>
+      {/* A visible caption from the photo's own description (LAN-14): decorative
+          for assistive tech, which already reads the same text as the image alt. */}
+      <p className="landing-hero-caption" aria-hidden="true">{HERO_PHOTOS[current].alt}</p>
       <div
         className="landing-hero-frame"
         data-media-reveal
