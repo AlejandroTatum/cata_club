@@ -1235,6 +1235,42 @@ describe("EnrollPage — semántica nativa del consentimiento legal (#763)", () 
     triggers.forEach((trigger) => expect(trigger).toHaveAccessibleName());
   });
 
+  it("flows the consent sentence inline and left-aligned, with no atomic triggers (owner QA r2, S3)", () => {
+    render(<EnrollPage />);
+    reachSummaryStep();
+
+    // A native <button> is an atomic inline box: it can never break across
+    // lines with the sentence, so on a 360px screen each document name jumped
+    // to its own centred line and stranded the comma. The triggers must be
+    // plain inline text, in a label that does not centre anything.
+    const consent = screen.getByRole("checkbox").closest("label") as HTMLLabelElement;
+    expect(consent.textContent).toBe(
+      "Acepto los Términos y condiciones (incluye privacidad), el Consentimiento de datos de salud y el Permiso de uso de imagen.",
+    );
+    expect(consent.querySelector("button")).toBeNull();
+    const triggers = within(consent).getAllByRole("button");
+    expect(triggers).toHaveLength(3);
+    triggers.forEach((trigger) => {
+      expect(trigger.tagName).toBe("SPAN");
+      expect(trigger).toHaveAttribute("tabindex", "0");
+      expect(trigger.className).not.toMatch(/\b(block|flex|inline-block|inline-flex|text-center)\b/);
+    });
+    expect(consent.className).not.toMatch(/text-center/);
+  });
+
+  it("opens a document from the keyboard (Enter and Space) without toggling the consent", () => {
+    render(<EnrollPage />);
+    reachSummaryStep();
+
+    const trigger = screen.getByRole("button", { name: "Permiso de uso de imagen" });
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    expect(screen.getByRole("dialog", { name: "Permiso de uso de imagen" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: "Permiso de uso de imagen" }), { key: " " });
+    expect(screen.getByRole("dialog", { name: "Permiso de uso de imagen" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+  });
+
   it("still blocks the submit through the business rule, not through the browser's bubble", () => {
     vi.mocked(enrollStudent).mockClear();
     render(<EnrollPage />);

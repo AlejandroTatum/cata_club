@@ -1426,7 +1426,7 @@ function EnrollWizard(): React.ReactElement {
             surface the page itself stands on. */}
         <label
           htmlFor="enroll-consentimiento"
-          className="flex cursor-pointer items-start gap-3 rounded-ctl border border-line-2 bg-sunken p-page text-sm text-ink-2"
+          className="flex cursor-pointer items-start gap-3 rounded-ctl border border-line-2 bg-sunken p-page text-left text-sm text-ink-2"
         >
           <input
             id="enroll-consentimiento"
@@ -1469,13 +1469,18 @@ function EnrollWizard(): React.ReactElement {
           <span>
                 {/* #1368: the three grouped documents are triggers for the
                     in-flow review dialog below, NOT links — a link navigated
-                    away and discarded everything the visitor entered. Buttons
-                    inside a label would steal the labeled-control identity
-                    from the checkbox, so the label carries an explicit
-                    `htmlFor` and the input its matching `id` above. */}
-                Acepto los <button type="button" className="underline" onClick={() => setLegalReviewDoc("terminos")}>Términos y condiciones (incluye privacidad)</button>, el {" "}
-                <button type="button" className="underline" onClick={() => setLegalReviewDoc("consentimiento-salud")}>Consentimiento de datos de salud</button> y el {" "}
-                <button type="button" className="underline" onClick={() => setLegalReviewDoc("permiso-imagen-fetm")}>Permiso de uso de imagen</button>.
+                    away and discarded everything the visitor entered.
+                    They are `span role="button"`, not `<button>`: a native
+                    button is an atomic inline box, so it never breaks across
+                    lines with the sentence — on a phone each name jumped to
+                    its own centred line and stranded the comma (QA r2, S3).
+                    A span flows as text. `ConsentDocTrigger` restores what
+                    the button gave for free (Enter/Space, focus) and stops
+                    the click from reaching the label, which would toggle the
+                    checkbox. */}
+                Acepto los <ConsentDocTrigger onOpen={() => setLegalReviewDoc("terminos")}>Términos y condiciones (incluye privacidad)</ConsentDocTrigger>, el{" "}
+                <ConsentDocTrigger onOpen={() => setLegalReviewDoc("consentimiento-salud")}>Consentimiento de datos de salud</ConsentDocTrigger> y el{" "}
+                <ConsentDocTrigger onOpen={() => setLegalReviewDoc("permiso-imagen-fetm")}>Permiso de uso de imagen</ConsentDocTrigger>.
               </span>
         </label>
         {/* The message sits under the box it is about (it used to render by the
@@ -1785,6 +1790,32 @@ function EnrollWizard(): React.ReactElement {
         </>
       )}
     </main>
+  );
+}
+
+/**
+ * An inline, text-flowing trigger for the legal review dialog. See the note in
+ * the consent label for why this is not a native `<button>`.
+ */
+function ConsentDocTrigger({ onOpen, children }: { onOpen: () => void; children: React.ReactNode }): React.ReactElement {
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      className="cursor-pointer underline"
+      onClick={(event) => {
+        event.preventDefault();
+        onOpen();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+    >
+      {children}
+    </span>
   );
 }
 
