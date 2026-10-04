@@ -130,9 +130,14 @@ function PaymentsContent({
   onRegistered: () => void;
 }): React.ReactElement {
   const { session } = useAuth();
+  // FAM-01: ANY own membership (INACTIVA, waiting on its first payment,
+  // included) makes her a profile she can pay for. She keeps the single role
+  // REPRESENTANTE after "Unirme como jugador", so the role alone would leave
+  // her out of the selector and show only her children's forms.
+  const hasOwnMembership = data.self?.membership != null;
   const { managedProfiles, selectedId, setSelectedId, selectedProfile } = useManagedProfiles(
     data,
-    hasAlumnoRole,
+    hasAlumnoRole || hasOwnMembership,
     accountPersonaId,
   );
 
@@ -826,6 +831,8 @@ function PaymentsPageContent(): React.ReactElement {
    * still lives in `PaymentsContent` (it depends on which profile is
    * selected); this is only the page's own promise to its reader.
    */
+  // FAM-01: a representative's own membership (even INACTIVA) is a payment she can register.
+  const hasOwnMembership = state.status === "ready" && state.data.self?.membership != null;
   const accountCannotRegister =
     state.status === "ready" &&
     state.data.representados.length === 0 &&
@@ -846,7 +853,7 @@ function PaymentsPageContent(): React.ReactElement {
       subtitle={
         accountCannotRegister
           ? "Consulte su membresía, vea cómo se paga y siga el historial de sus pagos."
-          : hasAlumnoRole
+          : hasAlumnoRole || hasOwnMembership
             ? "Registre un pago, siga su validación y consulte lo que ya pagó."
             : "Registre el pago de un dependiente, siga su validación y consulte lo que ya pagó."
       }

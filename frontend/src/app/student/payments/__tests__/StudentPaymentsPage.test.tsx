@@ -1816,6 +1816,59 @@ describe("StudentPaymentsPage — the dependent selection survives navigation", 
 });
 
 /**
+ * QA4 FAM-01 «a»: a representative who joined as a player has an own
+ * membership, born INACTIVA, that waits on its first payment. She keeps the
+ * single technical role REPRESENTANTE, so "is a player" cannot come from the
+ * role: the membership itself puts her in the selector and lets her pay it.
+ */
+describe("StudentPaymentsPage — the representative pays her own membership (FAM-01)", () => {
+  const OWN_PENDING: StudentProfileSummary = {
+    ...SELF,
+    personaId: "9",
+    nombres: "Marta",
+    apellidos: "Reyes",
+    membership: { ...SELF.membership!, id: 11, estado: "INACTIVA", montoAplicado: "40.00", categoria: "Mensual Adultos", cubiertoHasta: null },
+  };
+  const CHILD: StudentProfileSummary = { ...SELF, personaId: "41", nombres: "Sofía", apellidos: "Vera" };
+
+  beforeEach(() => {
+    mockUseAuth.mockReturnValue(authSession("representante"));
+    mockFetchPagosDePersona.mockResolvedValue([]);
+  });
+
+  it("lists her in the selector and opens on her own membership for ?alumno=", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      self: OWN_PENDING, representados: [CHILD], membershipPlans: [],
+    });
+    searchParams = new URLSearchParams("registrar=1&alumno=9");
+
+    render(<StudentPaymentsPage />);
+
+    const card = await screen.findByTestId("membership-status");
+    expect(within(card).getByText("$40,00")).toBeInTheDocument();
+    const selector = screen.getByLabelText("Estudiante");
+    expect(within(selector).getByRole("option", { name: "Marta Reyes" })).toBeInTheDocument();
+    expect(within(selector).getByRole("option", { name: "Sofía Vera" })).toBeInTheDocument();
+    expect(mockFetchPagosDePersona).toHaveBeenCalledWith("9");
+    expect(screen.queryByText(/a nombre de Sofía/)).not.toBeInTheDocument();
+  });
+
+  it("registers the payment of her own membership when she has no dependents", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      self: OWN_PENDING, representados: [], membershipPlans: [],
+    });
+    mockRegistrarPago.mockResolvedValue({ id: 70 });
+    searchParams = new URLSearchParams("registrar=1");
+
+    render(<StudentPaymentsPage />);
+
+    await screen.findByTestId("membership-status");
+    expect(mockFetchPagosDePersona).toHaveBeenCalledWith("9");
+    expect(await screen.findByRole("button", { name: /^registrar pago$/i })).toBeInTheDocument();
+  });
+});
+
+/**
  * D11b — the history is the block that grows with the family's real record, so
  * it is the one that claims the height `main` already reserved. Everything
  * else on this screen is a fixed summary.
