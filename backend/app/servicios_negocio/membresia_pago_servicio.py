@@ -239,6 +239,9 @@ class _CotizacionRegularizacion:
     monto_base: Decimal
     descuento: _DescuentoCongelado | None
     monto_esperado: Decimal
+    # Beneficio vigente del período aunque el admin elija el valor normal
+    # (`descuento` queda en `None` en ese caso).
+    beneficio_disponible: _DescuentoCongelado | None = None
 
     @property
     def descuento_aplicado(self) -> Decimal:
@@ -1622,21 +1625,30 @@ class PagoServicio:
 
     def _cotizar_regularizacion(
         self, membresia: Membresia, fecha_inicio: date, fecha_fin: date,
+        aplicar_descuento: bool = True,
     ) -> "_CotizacionRegularizacion":
         meses = _meses_del_periodo(fecha_inicio, fecha_fin)
         monto_base = membresia.monto_aplicado * meses
-        descuento, monto_esperado = self._congelar_beneficio_activo(
+        beneficio, monto_con_beneficio = self._congelar_beneficio_activo(
             membresia.persona_id, monto_base,
         )
+        # QA owner R2 (S12): el admin elige entre el valor normal y el
+        # descuento; el monto siempre se deriva acá, nunca del cliente.
+        if aplicar_descuento:
+            descuento, monto_esperado = beneficio, monto_con_beneficio
+        else:
+            descuento, monto_esperado = None, monto_base
         return _CotizacionRegularizacion(
             meses=meses,
             monto_base=monto_base,
             descuento=descuento,
             monto_esperado=monto_esperado,
+            beneficio_disponible=beneficio,
         )
 
     def cotizar_regularizacion(
         self, membresia_id: int, fecha_inicio: date, fecha_fin: date,
+        aplicar_descuento: bool = True,
     ) -> "_CotizacionRegularizacion":
         """Vista previa (solo lectura) del monto que `regularizar_deuda`
         exigirá para el período; el formulario del admin la usa para no
@@ -1646,7 +1658,9 @@ class PagoServicio:
             raise EntidadNoEncontrada(f"Membresía con id {membresia_id} no encontrada")
         if fecha_inicio >= fecha_fin:
             raise OperacionInvalida("La fecha de inicio debe ser anterior a la de fin.")
-        return self._cotizar_regularizacion(membresia, fecha_inicio, fecha_fin)
+        return self._cotizar_regularizacion(
+            membresia, fecha_inicio, fecha_fin, aplicar_descuento,
+        )
 
     def regularizar_deuda(self, membresia_id: int, datos: RegularizacionDeudaDTO, persona_id_admin: int) -> Pago:
         """Regulariza deuda de una membresía (issue #284), operación SOLO de admin.
@@ -1670,7 +1684,10 @@ class PagoServicio:
             recibe el aviso de 5 días y entra en la transición a VENCIDA. Una
             regularización puramente retroactiva (`fecha_fin < hoy`) no toca
             el estado: la deuda parcial debe seguir visible.
-          * NO dispara notificaciones, PDF ni la regla familiar.
+          * Avisa al socio (campana + correo, ver `_notificar_regularizacion`);
+            NO dispara PDF ni la regla familiar.
+          * `aplicar_descuento` (S12): `False` cobra el valor normal; ausente
+            o `True` aplica el beneficio vigente.
           * Lockea la `Membresia` con `FOR UPDATE` antes de escribir, mismo
             orden (Membresia primero) que el resto de la clase.
           * `motivo` es OBLIGATORIO (ya validado por el DTO; se doble-chequea acá).
@@ -1708,6 +1725,7 @@ class PagoServicio:
         # de la persona) y cualquier otro valor se rechaza con el esperado.
         cotizacion = self._cotizar_regularizacion(
             membresia, datos.fecha_inicio, datos.fecha_fin,
+            aplicar_descuento=datos.aplicar_descuento is not False,
         )
         if datos.monto != cotizacion.monto_esperado:
             unidad_meses = "mes" if cotizacion.meses == 1 else "meses"
@@ -1745,7 +1763,28 @@ class PagoServicio:
         self.db.commit()
         if inspeccionar_orm(resultado).expired:
             self.db.refresh(resultado)
+        self._notificar_regularizacion(resultado)
         return resultado
+
+    def _notificar_regularizacion(self, pago: Pago) -> None:
+        """Avisa al socio que su deuda fue regularizada (QA owner R2, S13).
+
+        Mismo mecanismo que la aprobación de un pago: fila in-app a nombre de
+        la persona (el feed del representante la incluye por el #859, así que
+        no se escribe una segunda) y correo al titular, o a su representante
+        si es un menor sin cuenta. Best-effort: la regularización ya está
+        commiteada y ningún aviso fallido puede revertirla ni convertirla en
+        error."""
+        self._crear_notificacion_pago(
+            pago=pago,
+            tipo=TipoNotificacion.PAGO_APROBADO,
+            mensaje=(
+                f"Se regularizó tu deuda: registramos un pago de {formatear_monto_usd(pago.monto)} "
+                f"por el período {pago.fecha_inicio.strftime('%d/%m/%Y')} al "
+                f"{pago.fecha_fin.strftime('%d/%m/%Y')}."
+            ),
+        )
+        self._enviar_correo_de_validacion_pago(pago, TipoNotificacion.PAGO_APROBADO)
 
     # --- Issue #400 (slice 5b): corrección financiera -------------------------
     # Seis campos financieros congelados de `Pago`. Un DTO puede traer

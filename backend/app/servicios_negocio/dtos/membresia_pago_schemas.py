@@ -403,6 +403,10 @@ class RegularizacionDeudaDTO(BaseModel):
     fecha_inicio: date
     fecha_fin: date
     motivo: str = Field(..., min_length=1, max_length=255)
+    # Elección del admin (QA owner R2, S12): `True`/ausente aplica el
+    # beneficio vigente (comportamiento histórico); `False` cobra el valor
+    # normal. El monto sigue calculándose en el servidor.
+    aplicar_descuento: Optional[bool] = None
 
     @model_validator(mode="after")
     def _validar(self) -> "RegularizacionDeudaDTO":
@@ -419,6 +423,11 @@ class CotizacionRegularizacionResponseDTO(ResponseBase, BaseModel):
     monto_base: Decimal = Field(..., examples=["60.00"])
     descuento_aplicado: Decimal = Field(..., examples=["30.00"])
     monto_esperado: Decimal = Field(..., examples=["30.00"])
+    # El beneficio vigente de la persona, aunque el admin elija el valor
+    # normal: el formulario lo usa para ofrecer la elección (QA owner R2, S12).
+    tiene_beneficio: bool = Field(False, examples=[True])
+    beneficio_porcentaje: Optional[Decimal] = Field(None, examples=["50"])
+    descuento_disponible: Decimal = Field(Decimal("0.00"), examples=["30.00"])
 
 
 # --- Suspensión y reactivación (issue #400, slice 5a) ------------------------
