@@ -28,8 +28,14 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
   }
 
   // The UI speaks camelCase; `RegularizacionDeudaDTO` expects snake_case dates.
-  const { fechaInicio, fechaFin, ...rest } = (body ?? {}) as Record<string, unknown>;
-  const backendBody = { ...rest, fecha_inicio: fechaInicio, fecha_fin: fechaFin };
+  // `aplicarDescuento` is the admin's optional choice (absent = apply the benefit).
+  const { fechaInicio, fechaFin, aplicarDescuento, ...rest } = (body ?? {}) as Record<string, unknown>;
+  const backendBody = {
+    ...rest,
+    fecha_inicio: fechaInicio,
+    fecha_fin: fechaFin,
+    ...(aplicarDescuento === undefined ? {} : { aplicar_descuento: aplicarDescuento }),
+  };
 
   const result = await backendFetchAuthed(request, `/membresias/${membresiaId}/regularizar-deuda`, {
     method: "POST",

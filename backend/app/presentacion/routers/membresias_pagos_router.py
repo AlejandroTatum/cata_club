@@ -3,6 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, Query, status
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
+from decimal import Decimal
 from typing import List, Optional
 from datetime import date
 
@@ -525,10 +526,18 @@ def cotizar_regularizacion_membresia(
     membresia_id: int,
     fecha_inicio: date,
     fecha_fin: date,
+    aplicar_descuento: Optional[bool] = None,
     db: Session = Depends(obtener_sesion),
 ):
-    cotizacion = PagoServicio(db).cotizar_regularizacion(membresia_id, fecha_inicio, fecha_fin)
+    cotizacion = PagoServicio(db).cotizar_regularizacion(
+        membresia_id, fecha_inicio, fecha_fin,
+        aplicar_descuento=aplicar_descuento is not False,
+    )
+    beneficio = cotizacion.beneficio_disponible
     return {
+        "tiene_beneficio": beneficio is not None,
+        "beneficio_porcentaje": beneficio.porcentaje_aplicado if beneficio is not None else None,
+        "descuento_disponible": beneficio.valor_aplicado if beneficio is not None else Decimal("0.00"),
         "meses": cotizacion.meses,
         "monto_base": cotizacion.monto_base,
         "descuento_aplicado": cotizacion.descuento_aplicado,

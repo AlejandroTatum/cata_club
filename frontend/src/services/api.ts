@@ -2325,6 +2325,8 @@ export interface RegularizarDeudaInput {
   fechaInicio: string;
   fechaFin: string;
   motivo: string;
+  /** Admin's choice (S12): `false` charges the normal price; absent applies the benefit. */
+  aplicarDescuento?: boolean;
 }
 
 /** Fetch a membership's derived owed months — `GET /api/membresias/{id}/deuda` (admin only). */
@@ -2343,6 +2345,10 @@ export interface CotizacionRegularizacion {
   montoBase: string;
   descuentoAplicado: string;
   montoEsperado: string;
+  /** The member has an active benefit (even when the quote ignores it). */
+  tieneBeneficio?: boolean;
+  beneficioPorcentaje?: string | null;
+  descuentoDisponible?: string;
 }
 
 /** Quote a regularization — `GET /api/membresias/{id}/regularizar-deuda/cotizacion`
@@ -2352,9 +2358,11 @@ export async function fetchCotizacionRegularizacion(
   membresiaId: number,
   fechaInicio: string,
   fechaFin: string,
+  aplicarDescuento?: boolean,
 ): Promise<CotizacionRegularizacion> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
   const query = new URLSearchParams({ fechaInicio, fechaFin });
+  if (aplicarDescuento !== undefined) query.set("aplicarDescuento", String(aplicarDescuento));
   return request<CotizacionRegularizacion>(
     apiEndpoint(`/membresias/${membresiaId}/regularizar-deuda/cotizacion?${query.toString()}`),
     { headers: mockHeaders },

@@ -86,6 +86,8 @@ export default function RegularizarDeudaForm({
   const [cotizacion, setCotizacion] = useState<CotizacionRegularizacion | null>(null);
   const [cotizando, setCotizando] = useState(false);
   const [cotizacionError, setCotizacionError] = useState<string | null>(null);
+  // S12: the admin picks the normal price or the member's discount (default: discount).
+  const [aplicarDescuento, setAplicarDescuento] = useState(true);
   const [motivo, setMotivo] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,6 +114,7 @@ export default function RegularizarDeudaForm({
     setFechaFin("");
     setCotizacion(null);
     setCotizacionError(null);
+    setAplicarDescuento(true);
     setMotivo("");
     void loadDeuda();
   }
@@ -137,7 +140,7 @@ export default function RegularizarDeudaForm({
     if (!open || !fechaInicio || !fechaFin || fechaInicio >= fechaFin) return;
     let cancelado = false;
     setCotizando(true);
-    fetchCotizacionRegularizacion(membresiaId, fechaInicio, fechaFin)
+    fetchCotizacionRegularizacion(membresiaId, fechaInicio, fechaFin, aplicarDescuento)
       .then((resultado) => {
         if (!cancelado) setCotizacion(resultado);
       })
@@ -152,7 +155,7 @@ export default function RegularizarDeudaForm({
     return () => {
       cancelado = true;
     };
-  }, [open, membresiaId, fechaInicio, fechaFin]);
+  }, [open, membresiaId, fechaInicio, fechaFin, aplicarDescuento]);
 
   // Issue #400 (slice 4c-b): after every hook above, so this stays a
   // conditional RENDER, not a conditional HOOK CALL (React's rules of
@@ -197,6 +200,7 @@ export default function RegularizarDeudaForm({
         fechaInicio,
         fechaFin,
         motivo: motivo.trim(),
+        ...(cotizacion.tieneBeneficio ? { aplicarDescuento } : {}),
       });
       setRegularized(true);
       showSuccess("Deuda regularizada correctamente.");
@@ -285,6 +289,32 @@ export default function RegularizarDeudaForm({
               required
             />
           </div>
+
+          {cotizacion?.tieneBeneficio && (
+            <fieldset className="mt-2">
+              <legend className="text-2xs text-ink-3">Valor a cobrar</legend>
+              <label className="mt-1 flex items-center gap-2 text-xs text-ink">
+                <input
+                  type="radio"
+                  name="valor-regularizacion"
+                  checked={!aplicarDescuento}
+                  onChange={() => setAplicarDescuento(false)}
+                />
+                Valor normal
+              </label>
+              <label className="flex items-center gap-2 text-xs text-ink">
+                <input
+                  type="radio"
+                  name="valor-regularizacion"
+                  checked={aplicarDescuento}
+                  onChange={() => setAplicarDescuento(true)}
+                />
+                {cotizacion.beneficioPorcentaje
+                  ? `Aplicar descuento (${Number(cotizacion.beneficioPorcentaje)}%)`
+                  : "Aplicar descuento"}
+              </label>
+            </fieldset>
+          )}
 
           <div className="mt-2" aria-live="polite">
             <p className="text-2xs text-ink-3">Monto a regularizar</p>
