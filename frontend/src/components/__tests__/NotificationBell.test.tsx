@@ -45,6 +45,61 @@ describe("NotificationBell", () => {
     expect(screen.queryByText(/sin leer/i)).not.toBeInTheDocument();
   });
 
+  // --- Regularized debt reuses PAGO_APROBADO (no DB enum migration) ---
+
+  it("shows 'Deuda regularizada' and the stripped body for a regularization notice", () => {
+    renderBell({
+      notificaciones: [
+        makeNotificacion({
+          tipo: "PAGO_APROBADO",
+          mensaje: "Deuda regularizada: el club regularizó tu deuda por $60,00.",
+        }),
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /notificaciones/i }));
+
+    expect(screen.getByText("Deuda regularizada")).toBeInTheDocument();
+    expect(screen.getByText("El club regularizó tu deuda por $60,00.")).toBeInTheDocument();
+    expect(screen.queryByText("Pago aprobado")).not.toBeInTheDocument();
+  });
+
+  it("keeps the 'Para <name>:' prefix of a representative feed row", () => {
+    renderBell({
+      notificaciones: [
+        makeNotificacion({
+          tipo: "PAGO_APROBADO",
+          mensaje: "Para Ana: Deuda regularizada: el club regularizó tu deuda por $60,00.",
+        }),
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /notificaciones/i }));
+
+    expect(screen.getByText("Deuda regularizada")).toBeInTheDocument();
+    expect(
+      screen.getByText("Para Ana: El club regularizó tu deuda por $60,00."),
+    ).toBeInTheDocument();
+  });
+
+  it("leaves a normal PAGO_APROBADO notification unchanged", () => {
+    renderBell({
+      notificaciones: [
+        makeNotificacion({
+          tipo: "PAGO_APROBADO",
+          mensaje: "Tu pago de $30,00 fue aprobado. Tu membresía está activa.",
+        }),
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /notificaciones/i }));
+
+    expect(screen.getByText("Pago aprobado")).toBeInTheDocument();
+    expect(
+      screen.getByText("Tu pago de $30,00 fue aprobado. Tu membresía está activa."),
+    ).toBeInTheDocument();
+  });
+
   // --- "Marcar todas como leídas" (issue #859) ---
 
   it("does not render the mark-all button when there are no unread notifications", () => {
