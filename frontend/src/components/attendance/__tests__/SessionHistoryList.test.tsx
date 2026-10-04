@@ -44,6 +44,21 @@ describe("SessionHistoryList", () => {
     expect(screen.queryByRole("columnheader", { name: "Acciones" })).not.toBeInTheDocument();
   });
 
+  it("keeps the result bar short and fixed on desktop with the counts beside it", () => {
+    render(<SessionHistoryList pageSize={10} sessions={[session(1, { reviewCount: 2 })]} rangeInvalid={false} emptyAction={EMPTY_ACTION} />);
+
+    const bar = screen.getAllByRole("img", { name: /3 presentes/i })[0];
+    expect(bar).toHaveClass("lg:w-40", "lg:flex-none");
+    expect(bar).not.toHaveClass("lg:w-full");
+    // Bar and counts share one line from `lg`, and the row never stretches with the window.
+    const line = bar.parentElement as HTMLElement;
+    expect(line).toHaveClass("lg:flex-row", "lg:items-center");
+    expect(line).toHaveTextContent("3 presentes");
+    const group = line.parentElement as HTMLElement;
+    expect(group.className).not.toMatch(/min-w-\[240px\]/);
+    expect(group).toHaveTextContent("2 por revisar");
+  });
+
   // ENT-19 / ADMA-29: «No registrado» read as «the attendance was not recorded».
   it("shows a dash, never «No registrado», when a session has no author", async () => {
     render(

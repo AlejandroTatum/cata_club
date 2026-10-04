@@ -120,19 +120,26 @@ export default function SessionHistoryList({
   const hasActions = renderAction !== undefined || renderDetail !== undefined;
 
   const renderComposition = (session: SessionSummary): React.ReactElement => (
-    <div className="flex w-full min-w-0 flex-col gap-2 sm:min-w-[240px]">
+    <div className="flex w-full min-w-0 flex-col gap-2">
       {(session.reviewCount ?? 0) > 0 && (
         // ENT-07: records accepted for a not-operative student or before their enrolment.
         <Badge tone="warn" className="self-start">
           {session.reviewCount} por revisar
         </Badge>
       )}
-      <SessionCompositionBar counts={session.counts} total={session.total} />
-      <SessionCompositionCounts
-        counts={session.counts}
-        total={session.total}
-        hideZero
-      />
+      {/* Cards stack bar over counts; from `lg` the bar keeps a short fixed width with the counts beside it. */}
+      <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
+        <SessionCompositionBar
+          counts={session.counts}
+          total={session.total}
+          className="lg:w-40 lg:flex-none"
+        />
+        <SessionCompositionCounts
+          counts={session.counts}
+          total={session.total}
+          hideZero
+        />
+      </div>
     </div>
   );
 
