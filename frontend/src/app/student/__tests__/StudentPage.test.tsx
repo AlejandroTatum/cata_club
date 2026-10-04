@@ -1718,10 +1718,12 @@ describe("StudentPage — the Cuota card carries the whole payment reading", () 
       );
     });
 
-    // "El carnet manda": the identity card leads, the Cuota card is the
-    // secondary rail item — the opposite order the old full-width band used.
+    // FAM-27: on `lg` the carnet column stays first and the Mensualidad card
+    // is the rail item; below `lg` the card's column is ordered first, so the
+    // phone shows Mensualidad above the carnet.
     const carnet = screen.getByTestId("student-carnet");
     expect(carnet.compareDocumentPosition(cuota) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(cuota.parentElement?.className).toMatch(/max-lg:order-first/);
   });
 
   it("reports coverage from MembershipSummary.cubiertoHasta, and says so plainly", async () => {
@@ -2964,7 +2966,7 @@ describe("StudentPage — second-pass organisation", () => {
     expect(screen.queryByRole("group", { name: "Estudiante" })).not.toBeInTheDocument();
   });
 
-  it("does not stretch the payment action across the whole card, and does not stack a red button on the red verdict", async () => {
+  it("does not stretch the payment action across the whole card, and makes it the red primary button when the coverage lapsed (FAM-27)", async () => {
     mockFetchStudentPortal.mockResolvedValue({
       ...PORTAL,
       self: {
@@ -2977,7 +2979,7 @@ describe("StudentPage — second-pass organisation", () => {
     const cuota = await screen.findByTestId("student-cuota-card");
     const link = within(cuota).getByText("Registrar un pago").closest("a")!;
     expect(link.className).not.toMatch(/\bw-full\b/);
-    expect(link.className).not.toMatch(/\bbg-cata-red\b/);
+    expect(link.className).toMatch(/\bbg-cata-red\b/);
     expect(within(cuota).getByTestId("cuota-verdict")).toHaveAttribute("data-urgent", "true");
   });
 

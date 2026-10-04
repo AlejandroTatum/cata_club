@@ -108,4 +108,56 @@ describe("CuotaCard", () => {
     renderCard(situation({}));
     expect(screen.getByRole("link", { name: "Ver pagos" })).toHaveAttribute("href", "/student/payments");
   });
+
+  // FAM-27: the card is «Mensualidad» and says how much, until when and what is next.
+  describe("Mensualidad (FAM-27)", () => {
+    const TODAY = new Date(2026, 9, 22); // 22/10/2026
+
+    it("is titled «Mensualidad», not «Cuota»", () => {
+      renderCard(situation({}));
+      const card = screen.getByTestId("student-cuota-card");
+      expect(within(card).getByRole("heading", { name: "Mensualidad" })).toBeInTheDocument();
+      expect(within(card).queryByRole("heading", { name: "Cuota" })).toBeNull();
+    });
+
+    it("spells out the days left, the date, the amount and what happens after paying", () => {
+      renderCard(
+        situation({ kind: "covered", urgent: false, figure: { value: 12, unit: "días de cobertura" }, headline: "Está al día con el club" }),
+        { coverageEnd: "2026-11-03", monthlyPrice: "25.00", today: TODAY },
+      );
+      expect(screen.getByTestId("cuota-next-step")).toHaveTextContent(
+        "Vence en 12 días (03/11/2026). Pague $25,00 y suba el comprobante; el club lo revisa y le avisamos aquí.",
+      );
+    });
+
+    it("keeps the primary button neutral while more than 7 days remain", () => {
+      renderCard(
+        situation({ kind: "covered", urgent: false, figure: { value: 8, unit: "días de cobertura" } }),
+        { coverageEnd: "2026-10-30", today: TODAY },
+      );
+      const cta = screen.getByRole("link", { name: /Registrar un pago/ });
+      expect(cta.className).not.toMatch(/bg-cata-red/);
+    });
+
+    it("turns the primary button red at 7 days or fewer", () => {
+      renderCard(
+        situation({ kind: "ending-soon", figure: { value: 7, unit: "días de cobertura" } }),
+        { coverageEnd: "2026-10-29", today: TODAY },
+      );
+      expect(screen.getByRole("link", { name: /Registrar un pago/ }).className).toMatch(/bg-cata-red/);
+    });
+
+    it("stays red and says how long ago it expired", () => {
+      renderCard(situation({}), { coverageEnd: "2026-10-19", monthlyPrice: "25.00", today: TODAY });
+      expect(screen.getByRole("link", { name: /Registrar un pago/ }).className).toMatch(/bg-cata-red/);
+      expect(screen.getByTestId("cuota-next-step")).toHaveTextContent(
+        "Venció hace 3 días (19/10/2026). Pague $25,00 y suba el comprobante",
+      );
+    });
+
+    it("has no next-step line when there is no date or nothing to pay", () => {
+      renderCard(situation({ kind: "never-paid", figure: null }), { coverageEnd: null, today: TODAY });
+      expect(screen.queryByTestId("cuota-next-step")).toBeNull();
+    });
+  });
 });

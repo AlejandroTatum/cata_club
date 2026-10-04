@@ -1465,7 +1465,10 @@ function ActivePortalView({
               under its fact grid, which is the same emptiness moved rather
               than closed. A carnet has a carnet's proportions; a panel of
               rows does not. */}
-          <div className="flex flex-col gap-5 lg:self-stretch">
+          {/* FAM-27: below `lg` the Mensualidad card leads the page, above the
+              carnet (`order-first`; the DOM keeps the carnet column first so
+              `lg` still reads carnet | rail). */}
+          <div className="flex flex-col gap-5 max-lg:order-first lg:self-stretch">
             <CuotaCard
               situation={paymentSituation}
               coverageEnd={coverageEnd}
