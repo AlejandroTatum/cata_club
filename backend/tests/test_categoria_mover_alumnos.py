@@ -86,7 +86,7 @@ def test_mover_y_eliminar_pasa_a_todos_y_borra_en_una_operacion(client, db_sessi
 
     assert r.status_code == 200, r.text
     assert r.json() == {
-        "movidos": 2, "categoria_destino": destino.codigo, "categoria_destino_label": "Destino",
+        "movidos": 2, "categoriaDestino": destino.codigo, "categoriaDestinoLabel": "Destino",
     }
     assert db_session.get(CategoriaHorario, origen.codigo) is None
     esperado = [(destino.codigo, d) for d in ("LUNES", "MIERCOLES", "VIERNES")]

@@ -147,7 +147,7 @@ class MoverAlumnosSeleccionDTO(MoverAlumnosDTO):
     persona_ids: list[int] = Field(min_length=1, max_length=500)
 
 
-class MoverAlumnosResponseDTO(BaseModel):
+class MoverAlumnosResponseDTO(ResponseBase, BaseModel):
     movidos: int
     categoria_destino: str
     categoria_destino_label: str
