@@ -22,6 +22,8 @@ from app.servicios_negocio.dtos.asistencia_schemas import (
 )
 from app.soporte_transversal.tiempo import hoy_club
 
+INDICE_PENDIENTE_UNICA = "uq_solicitud_correccion_pendiente_por_asistencia"
+
 
 class SolicitudCorreccionServicio:
     """QA4 ENT-25: el entrenador PIDE corregir una lista cerrada; solo el
@@ -74,8 +76,13 @@ class SolicitudCorreccionServicio:
         )
         try:
             self.repo.crear(solicitud)
-        except IntegrityError:
+        except IntegrityError as exc:
             self.db.rollback()
+            if not self._es_pendiente_duplicada(exc):
+                # Otra restricción: no es un duplicado, no se le miente al
+                # usuario. Sube tal cual y el manejador global la responde
+                # como conflicto genérico (con traza en el log).
+                raise
             raise EntidadDuplicada(
                 "Ya hay una solicitud pendiente para este alumno en esa sesión.",
                 detalle_tecnico=f"pendiente duplicada (carrera): asistencia_id={asistencia.id}",
@@ -89,10 +96,17 @@ class SolicitudCorreccionServicio:
         estado: Optional[EstadoSolicitudCorreccion] = None,
         horario_id: Optional[int] = None, fecha: Optional[date] = None,
     ) -> list[SolicitudCorreccionResponseDTO]:
-        es_admin = "ADMINISTRADOR" in roles
+        # Fail-closed: solo el administrador ve todas; el entrenador, solo las
+        # suyas, y sin dueño conocido (o con otro rol) no se devuelve nada.
+        if "ADMINISTRADOR" in roles:
+            dueno_id = None
+        elif "ENTRENADOR" in roles and persona_id is not None:
+            dueno_id = persona_id
+        else:
+            raise PermisosInsuficientes("No tiene permiso para ver estas solicitudes.")
         solicitudes = self.repo.listar(
             estado=estado,
-            solicitado_por_id=None if es_admin else persona_id,
+            solicitado_por_id=dueno_id,
             horario_id=horario_id,
             fecha=fecha,
         )
@@ -146,6 +160,13 @@ class SolicitudCorreccionServicio:
         return self._a_dto(solicitud, self.repo.etiquetas_de_categorias())
 
     # -- internos -----------------------------------------------------------
+    @staticmethod
+    def _es_pendiente_duplicada(exc: IntegrityError) -> bool:
+        """Solo la violación del índice único parcial de pendientes."""
+        orig = exc.orig
+        nombre = getattr(getattr(orig, "diag", None), "constraint_name", None)
+        return INDICE_PENDIENTE_UNICA in (nombre or str(orig))
+
     @staticmethod
     def _exigir_admin(roles: list[str]) -> None:
         if "ADMINISTRADOR" not in roles:

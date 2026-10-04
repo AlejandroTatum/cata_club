@@ -9,6 +9,7 @@ from datetime import timedelta
 import pytest
 
 import app.servicios_negocio.solicitud_correccion_servicio as servicio_solicitud
+from app.dominio.enums import EstadoAsistencia
 from app.dominio.modelos import AsistenciaCorreccion
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.dominio.cedula import cedula_valida
@@ -226,3 +227,114 @@ def test_rechazar_exige_motivo_y_deja_la_asistencia_intacta(
 
 def test_aprobar_una_solicitud_inexistente_es_404(client, lista_cerrada):
     assert client.post(f"{BASE}/9999/aprobar").status_code == 404
+
+
+# -- H2: hardening del review de C3 --------------------------------------------
+def test_listar_sin_dueno_conocido_no_devuelve_nada_ajeno(
+    client_entrenador, client, lista_cerrada, db_session,
+):
+    from app.dominio.excepciones import PermisosInsuficientes
+    from app.servicios_negocio.solicitud_correccion_servicio import SolicitudCorreccionServicio
+
+    uno, _ = _dos_entrenadores(client)
+    _como_entrenador(uno)
+    assert _pedir(client_entrenador, lista_cerrada).status_code == 201
+
+    servicio = SolicitudCorreccionServicio(db_session)
+    # Fail-closed: sin `persona_id` un entrenador jamás ve «todas».
+    with pytest.raises(PermisosInsuficientes):
+        servicio.listar(["ENTRENADOR"], None)
+    # Un rol que no es administrador ni entrenador tampoco ve nada.
+    with pytest.raises(PermisosInsuficientes):
+        servicio.listar(["ALUMNO"], uno)
+
+
+def test_api_listar_con_token_sin_persona_id_es_403(client_entrenador, client, lista_cerrada):
+    from main import app
+    uno, _ = _dos_entrenadores(client)
+    _como_entrenador(uno)
+    assert _pedir(client_entrenador, lista_cerrada).status_code == 201
+
+    app.dependency_overrides[GestorAutenticacion.decodificar_token] = lambda: {
+        "sub": "sin-persona@cataclub.test", "roles": ["ENTRENADOR"],
+    }
+    assert client_entrenador.get(BASE).status_code == 403
+
+
+def test_integrity_error_ajeno_al_duplicado_no_se_reporta_como_duplicado(
+    client_entrenador, client, lista_cerrada, db_session, monkeypatch,
+):
+    from sqlalchemy.exc import IntegrityError
+    from app.dominio.excepciones import EntidadDuplicada
+    from app.dominio.modelos import SolicitudCorreccionAsistencia as Solicitud
+    from app.servicios_negocio.dtos.asistencia_schemas import SolicitudCorreccionCreateDTO
+    from app.servicios_negocio.solicitud_correccion_servicio import SolicitudCorreccionServicio
+
+    uno, _ = _dos_entrenadores(client)
+    datos = SolicitudCorreccionCreateDTO(
+        asistencia_id=lista_cerrada, estado_solicitado="AUSENTE", motivo="Era ausente.",
+    )
+    servicio = SolicitudCorreccionServicio(db_session)
+
+    class _Orig(Exception):
+        pass
+
+    def _otra_violacion(_solicitud):
+        raise IntegrityError("INSERT", {}, _Orig("fk_otra_restriccion"))
+
+    monkeypatch.setattr(servicio.repo, "crear", _otra_violacion)
+    with pytest.raises(IntegrityError) as info:
+        servicio.crear(datos, ["ENTRENADOR"], uno)
+    assert not isinstance(info.value, EntidadDuplicada)
+    assert db_session.query(Solicitud).count() == 0
+
+
+def test_la_carrera_de_pendiente_duplicada_si_se_reporta_como_duplicado(
+    client_entrenador, client, lista_cerrada, db_session, monkeypatch,
+):
+    from app.dominio.excepciones import EntidadDuplicada
+    from app.servicios_negocio.dtos.asistencia_schemas import SolicitudCorreccionCreateDTO
+    from app.servicios_negocio.solicitud_correccion_servicio import SolicitudCorreccionServicio
+
+    uno, _ = _dos_entrenadores(client)
+    _como_entrenador(uno)
+    assert _pedir(client_entrenador, lista_cerrada).status_code == 201
+    datos = SolicitudCorreccionCreateDTO(
+        asistencia_id=lista_cerrada, estado_solicitado="ATRASADO", motivo="Llegó tarde.",
+    )
+    servicio = SolicitudCorreccionServicio(db_session)
+    # Simula la carrera: la verificación previa no ve la pendiente, el índice único sí.
+    monkeypatch.setattr(servicio.repo, "hay_pendiente", lambda _id: False)
+    with pytest.raises(EntidadDuplicada):
+        servicio.crear(datos, ["ENTRENADOR"], uno)
+
+
+def test_aprobar_es_atomico_si_falla_aplicar_la_correccion(
+    client_entrenador, client, lista_cerrada, db_session, monkeypatch,
+):
+    from app.dominio.enums import EstadoSolicitudCorreccion
+    from app.dominio.modelos import Asistencia, SolicitudCorreccionAsistencia as Solicitud
+    from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
+    from app.servicios_negocio.solicitud_correccion_servicio import SolicitudCorreccionServicio
+
+    uno, _ = _dos_entrenadores(client)
+    _como_entrenador(uno)
+    solicitud_id = _pedir(client_entrenador, lista_cerrada).json()["id"]
+
+    def _falla_a_medias(self, asistencia_id, *_args, **_kwargs):
+        # Muta y vacía a la base, y recién entonces falla: nada de esto debe quedar.
+        fila = self.db.get(Asistencia, asistencia_id)
+        fila.estado = EstadoAsistencia.AUSENTE
+        self.db.flush()
+        raise RuntimeError("falla al aplicar la corrección")
+
+    monkeypatch.setattr(AsistenciaServicio, "corregir_asistencia", _falla_a_medias)
+    with pytest.raises(RuntimeError):
+        SolicitudCorreccionServicio(db_session).aprobar(solicitud_id, ["ADMINISTRADOR"], 1)
+
+    db_session.expire_all()
+    solicitud = db_session.get(Solicitud, solicitud_id)
+    assert solicitud.estado == EstadoSolicitudCorreccion.PENDIENTE
+    assert solicitud.resuelto_por_id is None and solicitud.resuelto_en is None
+    assert db_session.get(Asistencia, lista_cerrada).estado == EstadoAsistencia.PRESENTE
+    assert db_session.query(AsistenciaCorreccion).filter_by(asistencia_id=lista_cerrada).count() == 0
