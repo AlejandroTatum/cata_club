@@ -534,6 +534,7 @@
 .landing-contact-numbers, .landing-contact-social { display: flex; flex-wrap: wrap; gap: 6px 28px; }
 .landing-contact-numbers a { white-space: nowrap; }
 .landing-contact-social a { display: inline-flex; align-items: center; gap: 8px; }
+@media (pointer: coarse) { .landing-contact-numbers a, .landing-contact-social a { display: inline-flex; align-items: center; min-height: 44px; } }
 .landing-contact-social svg { width: 20px; height: 20px; flex: none; }
 .landing-contact .landing-icon-facebook { color: var(--landing-third-party-facebook); }
 .landing-contact .landing-icon-instagram { color: var(--landing-third-party-instagram); }

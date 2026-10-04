@@ -88,7 +88,7 @@ function PasswordField({
           onClick={() => setVisible((v) => !v)}
           aria-pressed={visible}
           aria-label={`${visible ? "Ocultar" : "Mostrar"} ${label.toLowerCase()}`}
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-3-strong transition-colors hover:text-ink"
+          className="touch-target-reach absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-3-strong transition-colors hover:text-ink"
         >
           {visible ? (
             <EyeOff size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />

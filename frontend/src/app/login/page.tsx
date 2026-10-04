@@ -504,7 +504,7 @@ function LoginPageContent(): React.ReactElement {
             <button
               type="button"
               onClick={(): void => setShowPassword(!showPassword)}
-              className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center text-ink-3 transition-colors hover:text-ink"
+              className="touch-target-reach absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center text-ink-3 transition-colors hover:text-ink"
               aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
             >
               {showPassword ? (

@@ -237,9 +237,10 @@ export default function AyudaPage(): React.ReactElement {
               <Accordion
                 idPrefix={`faq-${slug}`}
                 label={section.title}
-                // The category chips are already 40px; the sub-40px targets on a
-                // phone are the question triggers (24px), so lift them here.
-                className="max-md:[&_h3>button]:min-h-10"
+                // The question triggers are 24px by default; lift them to the 44px
+                // a thumb needs. This rule outranks the Accordion's own coarse-
+                // pointer floor, so it has to name the same 44px itself.
+                className="max-md:[&_h3>button]:min-h-11"
                 items={section.entries.map((entry) => ({
                   id: sectionSlug(entry.question),
                   question: entry.question,

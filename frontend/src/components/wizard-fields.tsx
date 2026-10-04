@@ -301,7 +301,7 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
           <button
             type="button"
             onClick={() => setShowPassword((prev) => !prev)}
-            className="absolute right-0 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center text-ink-3 transition-colors hover:text-ink"
+            className="touch-target absolute right-0 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center text-ink-3 transition-colors hover:text-ink"
             aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
           >
             {showPassword ? (
