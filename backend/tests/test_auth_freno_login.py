@@ -350,6 +350,6 @@ def test_el_endpoint_responde_429_con_codigo_y_retry_after_durante_el_enfriamien
         assert respuesta.status_code == 429
         assert respuesta.json()["codigo"] == "login_enfriamiento"
         assert respuesta.json()["message"] == (
-            "Demasiados intentos fallidos. Por seguridad, espere 15 minutos o restablezca su contraseña."
+            "Demasiados intentos fallidos. Por seguridad, espera 15 minutos o restablece tu contraseña."
         )
         assert 0 < int(respuesta.headers["Retry-After"]) <= 15 * 60

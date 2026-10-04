@@ -108,7 +108,7 @@ def _validar_tipo_sangre(valor: TipoSangre) -> TipoSangre:
     """
     if valor is TipoSangre.DESCONOCIDO:
         raise ValueError(
-            "Debe indicar el tipo de sangre: «No lo sé» no es una opción "
+            "Debes indicar el tipo de sangre: «No lo sé» no es una opción "
             "válida para una ficha médica."
         )
     return valor

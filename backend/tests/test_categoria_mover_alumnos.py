@@ -262,7 +262,7 @@ def test_quitar_un_dia_sin_mover_alumnos_a_sigue_dando_409(client, db_session, e
     _, origen, _, ana, _ = escenario
     r = client.put(f"{BASE}/categorias/{origen.codigo}", json={"dias": ["LUNES"]})
     assert r.status_code == 409
-    assert "Reasigne primero" in r.json()["detail"]
+    assert "Reasigna primero" in r.json()["detail"]
 
 
 def test_mover_alumnos_a_se_ignora_si_el_dia_quitado_no_tiene_alumnos(client, db_session, escenario):

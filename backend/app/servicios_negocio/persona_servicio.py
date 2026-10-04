@@ -123,12 +123,12 @@ class PersonaServicio:
         edad = _calcular_edad(datos.fecha_nacimiento)
         if edad < EDAD_MINIMA_ALUMNO or edad > EDAD_MAXIMA_ALUMNO:
             raise OperacionInvalida(
-                f"La edad del alumno debe estar entre {EDAD_MINIMA_ALUMNO} y "
+                f"La edad del jugador debe estar entre {EDAD_MINIMA_ALUMNO} y "
                 f"{EDAD_MAXIMA_ALUMNO} años; según la fecha de nacimiento, tiene {edad} años."
             )
         if EDAD_MINIMA_ALUMNO <= edad < EDAD_MAYORIA_EDAD and not datos.representante_id:
             raise OperacionInvalida(
-                "El alumno es menor de edad (3 a 17 años): debe indicar los datos "
+                "El jugador es menor de edad (3 a 17 años): debe indicar los datos "
                 "del representante o tutor legal.",
                 detalle_tecnico="falta representante_id en un alta de alumno menor",
             )
@@ -577,7 +577,7 @@ class PersonaServicio:
                 tipo=TipoNotificacion.VINCULACION_REPRESENTANTE,
                 mensaje=(
                     f"{nombre} (cédula {representado.cedula}) fue vinculado a otra cuenta "
-                    f"de representante. Si fue un error, complete \"Agregar dependiente\" "
+                    f"de representante. Si fue un error, completa \"Agregar jugador (menor de edad)\" "
                     f"con la misma cédula para deshacerlo."
                 ),
                 persona_id=representante_anterior_id,
@@ -642,20 +642,20 @@ class PersonaServicio:
         persona = self.obtener_persona(persona_id)
 
         if content_type not in AuthServicio.TIPOS_MIME_PERMITIDOS_FOTO_PERFIL:
-            raise OperacionInvalida("Formato de archivo no permitido. Use JPG o PNG")
+            raise OperacionInvalida("Formato de archivo no permitido. Usa JPG o PNG")
         # La firma binaria real debe coincidir con el tipo declarado: el
         # Content-Type que manda el cliente no prueba nada sobre el
         # contenido real (mismo criterio que `actualizar_foto_perfil`).
         if not es_firma_valida(contenido, content_type):
             if not contenido:
-                raise OperacionInvalida("La imagen está vacía o dañada. Elija otra foto JPG o PNG.")
+                raise OperacionInvalida("La imagen está vacía o dañada. Elige otra foto JPG o PNG.")
             raise OperacionInvalida(
-                "Ese archivo no es una imagen válida. Elija una foto JPG o PNG."
+                "Ese archivo no es una imagen válida. Elige una foto JPG o PNG."
             )
         # Defensa en profundidad: el router ya acota la lectura vía
         # `leer_con_limite` antes de llegar acá.
         if len(contenido) > AuthServicio.TAMANO_MAXIMO_FOTO_PERFIL_BYTES:
-            raise OperacionInvalida("La imagen pesa más de 5 MB. Elija una más liviana.")
+            raise OperacionInvalida("La imagen pesa más de 5 MB. Elige una más liviana.")
 
         from app.infraestructura.cloudinary_cliente import (
             componer_valor_foto_perfil,

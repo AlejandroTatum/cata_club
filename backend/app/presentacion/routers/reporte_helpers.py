@@ -27,6 +27,6 @@ def exigir_tope_reporte(total: int, limite: int, unidad: str) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(
                 f"El reporte tiene {total} {unidad} y el límite máximo es "
-                f"{limite}. Reduzca el rango de fechas para continuar."
+                f"{limite}. Reduce el rango de fechas para continuar."
             ),
         )

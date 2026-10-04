@@ -45,7 +45,7 @@ class SolicitudCorreccionServicio:
         motivo = datos.motivo.strip()
         if not motivo:
             raise OperacionInvalida(
-                "Indique el motivo de la corrección.",
+                "Indica el motivo de la corrección.",
                 detalle_tecnico=f"motivo en blanco: asistencia_id={datos.asistencia_id}",
             )
         asistencia = self.asistencias.obtener_por_id(datos.asistencia_id)
@@ -53,7 +53,7 @@ class SolicitudCorreccionServicio:
             raise EntidadNoEncontrada(f"Asistencia con id {datos.asistencia_id} no encontrada")
         if datos.estado_solicitado == asistencia.estado:
             raise OperacionInvalida(
-                "Ese alumno ya figura con ese estado: no hay nada que corregir.",
+                "Ese jugador ya figura con ese estado: no hay nada que corregir.",
                 detalle_tecnico=f"solicitud sin cambio: asistencia_id={asistencia.id}",
             )
         antiguedad_dias = (hoy_club() - asistencia.fecha_entrenamiento).days
@@ -65,7 +65,7 @@ class SolicitudCorreccionServicio:
             )
         if self.repo.hay_pendiente(asistencia.id):
             raise EntidadDuplicada(
-                "Ya hay una solicitud pendiente para este alumno en esa sesión.",
+                "Ya hay una solicitud pendiente para este jugador en esa sesión.",
                 detalle_tecnico=f"pendiente duplicada: asistencia_id={asistencia.id}",
             )
         solicitud = Solicitud(
@@ -84,7 +84,7 @@ class SolicitudCorreccionServicio:
                 # como conflicto genérico (con traza en el log).
                 raise
             raise EntidadDuplicada(
-                "Ya hay una solicitud pendiente para este alumno en esa sesión.",
+                "Ya hay una solicitud pendiente para este jugador en esa sesión.",
                 detalle_tecnico=f"pendiente duplicada (carrera): asistencia_id={asistencia.id}",
             ) from None
         self.db.commit()
@@ -103,7 +103,7 @@ class SolicitudCorreccionServicio:
         elif "ENTRENADOR" in roles and persona_id is not None:
             dueno_id = persona_id
         else:
-            raise PermisosInsuficientes("No tiene permiso para ver estas solicitudes.")
+            raise PermisosInsuficientes("No tienes permiso para ver estas solicitudes.")
         solicitudes = self.repo.listar(
             estado=estado,
             solicitado_por_id=dueno_id,
@@ -150,7 +150,7 @@ class SolicitudCorreccionServicio:
         motivo = motivo.strip()
         if not motivo:
             raise OperacionInvalida(
-                "Indique por qué se rechaza la solicitud.",
+                "Indica por qué se rechaza la solicitud.",
                 detalle_tecnico=f"rechazo sin motivo: solicitud_id={solicitud_id}",
             )
         solicitud = self._pendiente(solicitud_id)

@@ -40,7 +40,7 @@ router = APIRouter(prefix="/asistencias", tags=["Asistencias"])
 # `_COLUMNAS_PERSONAS_PDF` y `_COLUMNAS_PAGOS_PDF`, para que el candado de
 # ancho de página pueda medir las columnas REALES del reporte y no una copia
 # escrita a mano en el test, que envejecería sin que nadie se entere.
-_COLUMNAS_ASISTENCIA_PDF = ["Fecha", "Horario", "Estudiante", "Estado"]
+_COLUMNAS_ASISTENCIA_PDF = ["Fecha", "Horario", "Jugador", "Estado"]
 
 # Issue #1240: el PDF imprimía `r.estado.value`, el miembro crudo del enum
 # (p.ej. "ATRASADO"), mientras la tabla de la misma pantalla, el export a
@@ -356,7 +356,7 @@ async def historial_asistencia_persona(
         persona_id_solicitante=token_payload.get("persona_id"),
         roles_solicitante=token_payload.get("roles", []),
         roles_privilegiados=ADMINISTRADOR_O_ENTRENADOR,
-        mensaje="No puede consultar el historial de asistencia de otra persona",
+        mensaje="No puedes consultar el historial de asistencia de otra persona",
     )
     items, total = AsistenciaServicio(db).historial_por_persona(persona_id, skip=skip, limit=limit)
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
@@ -449,7 +449,7 @@ async def reporte_asistencia_pdf(
     ]
     pdf_bytes = await run_in_threadpool(
         generar_reporte_pdf,
-        titulo="Reporte de Asistencia",
+        titulo="Informe de Asistencia",
         columnas=_COLUMNAS_ASISTENCIA_PDF,
         filas=filas,
     )
@@ -591,6 +591,6 @@ async def listar_horarios_por_alumno(
         persona_id_solicitante=token_payload.get("persona_id"),
         roles_solicitante=token_payload.get("roles", []),
         roles_privilegiados=ADMINISTRADOR_O_ENTRENADOR,
-        mensaje="No puede consultar los horarios de otro alumno",
+        mensaje="No puedes consultar los horarios de otro jugador",
     )
     return AsistenciaServicio(db).listar_horarios_por_alumno(persona_id)

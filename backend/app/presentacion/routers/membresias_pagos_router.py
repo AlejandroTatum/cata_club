@@ -48,7 +48,7 @@ logger = logging.getLogger("cataclub.membresias_pagos")
 # Mismos nombres que la pantalla `/reports` y el Excel (QA4 ADMB-06): quien
 # compara el PDF con el Excel no debe creer que son datos distintos.
 _COLUMNAS_PAGOS_PDF = [
-    "Estudiante", "Responsable de pago", "Desde", "Hasta", "Monto", "Método",
+    "Jugador", "Responsable de pago", "Desde", "Hasta", "Monto", "Método",
     "Fecha de registro", "Estado",
 ]
 
@@ -426,7 +426,7 @@ async def reporte_pagos_pdf(
     items = _reporte_pagos_items(db, estado_pago, fecha_inicio, fecha_fin)
     pdf_bytes = await run_in_threadpool(
         generar_reporte_pdf,
-        titulo="Reporte de Pagos",
+        titulo="Informe de Pagos",
         columnas=_COLUMNAS_PAGOS_PDF,
         filas=_pagos_a_filas(items),
         resumen=_resumen_de_pagos(fecha_inicio, fecha_fin, estado_pago, len(items)),
@@ -498,7 +498,7 @@ def obtener_deuda_membresias_bulk(
     db: Session = Depends(obtener_sesion),
 ):
     if not membresia_ids:
-        raise HTTPException(status_code=422, detail="Debe indicar al menos una membresía.")
+        raise HTTPException(status_code=422, detail="Debes indicar al menos una membresía.")
     if len(membresia_ids) > _MAX_BULK_DEUDA_IDS:
         raise HTTPException(
             status_code=422,

@@ -35,7 +35,7 @@ from app.servicios_negocio.dtos.beneficio_schemas import AsignacionDescuentoResp
 from app.servicios_negocio.dtos.descuento_schemas import DescuentoResponseDTO
 
 MENSAJE_BENEFICIO_ACTIVO_DUPLICADO = (
-    "Esta persona ya tiene un beneficio activo. Retírelo antes de "
+    "Esta persona ya tiene un beneficio activo. Retíralo antes de "
     "asignar uno nuevo."
 )
 
@@ -102,7 +102,7 @@ class BeneficioServicio:
                 raise OperacionInvalida(
                     f"El beneficio '{descuento.nombre}' ({formatear_monto_usd(valor)}) supera la "
                     f"tarifa mensual de la persona ({formatear_monto_usd(membresia_operativa.monto_aplicado)}). "
-                    "Asigne un descuento de menor valor o edítelo antes de concederlo."
+                    "Asigna un descuento de menor valor o edítalo antes de concederlo."
                 )
 
         asignacion = AsignacionDescuento(

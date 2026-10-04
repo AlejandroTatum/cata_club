@@ -134,18 +134,18 @@ TAMANO_MAXIMO_VOUCHER_BYTES = 5 * 1024 * 1024  # 5 MB
 # responder EL MISMO error de dominio que el chequeo -- por eso los mensajes
 # viven en constantes compartidas entre ambos caminos.
 MENSAJE_PAGO_PENDIENTE_DUPLICADO = (
-    "Esta membresía ya tiene un pago pendiente de validación. "
-    "Espere a que sea validado antes de registrar uno nuevo."
+    "Esta membresía ya tiene un pago por validar. "
+    "Espera a que sea validado antes de registrar uno nuevo."
 )
 MENSAJE_MEMBRESIA_PENDIENTE_DE_PAGO = "Ya tiene una membresía pendiente de pago."
 MENSAJE_MEMBRESIA_INACTIVA_EXISTENTE = (
-    "Esta persona ya tiene una membresía inactiva. Registre el pago en esa "
+    "Esta persona ya tiene una membresía inactiva. Registra el pago en esa "
     "membresía para activarla."
 )
 
 MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA = (
     "La persona ya tiene una membresía activa o suspendida. "
-    "Cancele, deje vencer, o reactive la actual antes de crear una nueva."
+    "Cancela, deja vencer, o reactiva la actual antes de crear una nueva."
 )
 
 # --- Issue #400 (criterio 1): cambio de plan ---------------------------------
@@ -166,7 +166,7 @@ MENSAJE_REACTIVACION_ORIGEN_INVALIDO = (
     "Solo una membresía suspendida puede reactivarse."
 )
 MENSAJE_MEMBRESIA_SUSPENDIDA = (
-    "Esta membresía está suspendida; reactívela antes de registrar un pago "
+    "Esta membresía está suspendida; reactívala antes de registrar un pago "
     "o aplicar un beneficio."
 )
 MENSAJE_PERSONA_RETIRO = "Esta persona fue retirada y no puede recibir operaciones financieras."
@@ -184,12 +184,12 @@ MENSAJE_FECHA_EFECTIVA_RETROCEDE = (
 # ruta no puede resolver sola (necesitan leer el payload y la base).
 MENSAJE_PAGO_PRESENCIAL_PROPIO = (
     "El pago presencial de primera inscripción se registra para el socio "
-    "presente en el club; para un pago propio use el flujo regular, que "
-    "queda pendiente de validación."
+    "presente en el club; para un pago propio usa el flujo regular, que "
+    "queda por validar."
 )
 MENSAJE_PAGO_PRESENCIAL_NO_PRIMERA_INSCRIPCION = (
     "La aprobación inmediata presencial solo aplica a la primera inscripción: "
-    "una membresía inactiva sin ningún pago aprobado. Registre renovaciones "
+    "una membresía inactiva sin ningún pago aprobado. Registra renovaciones "
     "por el flujo regular y apruébelas desde la cola de validación."
 )
 
@@ -200,7 +200,7 @@ MENSAJE_COBERTURA_YA_APLICADA = (
 )
 MENSAJE_BENEFICIO_NO_ES_TOTAL = (
     "El beneficio vigente no cubre el 100% de este período; "
-    "regístrelo como un pago normal."
+    "regístralo como un pago normal."
 )
 MENSAJE_MEMBRESIA_YA_GRATUITA = (
     "Esta membresía ya tiene cobertura gratuita por regla familiar; "
@@ -297,7 +297,7 @@ class MembresiaServicio:
             raise EntidadNoEncontrada(f"Tipo de membresía con id {tipo_id} no encontrado")
         mensaje_en_uso = (
             f"No se puede eliminar la tarifa '{tipo.categoria}' porque ya se usó "
-            "en membresías. Puede ocultarla para que deje de ofrecerse."
+            "en membresías. Puedes ocultarla para que deje de ofrecerse."
         )
         if self.repo_tipo.ids_en_uso([tipo.id]):
             raise TarifaEnUso(mensaje_en_uso)
@@ -359,7 +359,7 @@ class MembresiaServicio:
         if not tipo.activo:
             raise OperacionInvalida(
                 f"La tarifa '{tipo.categoria}' está oculta y no admite nuevas "
-                "membresías. Muéstrela de nuevo o elija otra tarifa."
+                "membresías. Muéstrala de nuevo o elige otra tarifa."
             )
         existentes = self.repo.listar_por_persona(datos.persona_id)
         # Issue #400 (slice 5a): SUSPENDIDA cuenta como operativa, igual que
@@ -478,7 +478,7 @@ class MembresiaServicio:
         if not tipo_nuevo.activo:
             raise OperacionInvalida(
                 f"La tarifa '{tipo_nuevo.categoria}' está oculta y no admite nuevas "
-                "membresías. Muéstrela de nuevo o elija otra tarifa."
+                "membresías. Muéstrala de nuevo o elige otra tarifa."
             )
 
         tipo_anterior_id = membresia.tipo_membresia_id
@@ -635,7 +635,7 @@ class PagoServicio:
             if persona is not None and persona.representante_id:
                 self._crear_notificacion_pago(
                     pago, TipoNotificacion.PAGO_REGISTRADO,
-                    f"Su pago de {formatear_monto_usd(pago.monto)} fue registrado y está pendiente de validación.",
+                    f"Tu pago de {formatear_monto_usd(pago.monto)} fue registrado y está por validar.",
                 )
         except Exception:
             self.db.rollback()
@@ -771,7 +771,7 @@ class PagoServicio:
             edad = _calcular_edad(persona_objetivo.fecha_nacimiento)
             if edad < 18:
                 raise PermisosInsuficientes(
-                    "Los alumnos menores de edad tienen acceso de solo lectura "
+                    "Los jugadores menores de edad tienen acceso de solo lectura "
                     "al módulo financiero; un representante o el Administrador "
                     "deben registrar este pago"
                 )
@@ -1511,7 +1511,7 @@ class PagoServicio:
             raise EntidadNoEncontrada(f"Membresía con id {membresia_id} no encontrada")
 
         if not motivo or not motivo.strip():
-            raise OperacionInvalida("Debe indicar el motivo de la suspensión.")
+            raise OperacionInvalida("Debes indicar el motivo de la suspensión.")
 
         if membresia.estado != EstadoMembresia.ACTIVA:
             raise OperacionInvalida(MENSAJE_SUSPENSION_ORIGEN_INVALIDO)
@@ -1584,7 +1584,7 @@ class PagoServicio:
             raise EntidadNoEncontrada(f"Membresía con id {membresia_id} no encontrada")
 
         if not motivo or not motivo.strip():
-            raise OperacionInvalida("Debe indicar el motivo de la reactivación.")
+            raise OperacionInvalida("Debes indicar el motivo de la reactivación.")
 
         if membresia.estado != EstadoMembresia.SUSPENDIDA:
             raise OperacionInvalida(MENSAJE_REACTIVACION_ORIGEN_INVALIDO)
@@ -1680,7 +1680,7 @@ class PagoServicio:
             raise EntidadNoEncontrada(f"Membresía con id {membresia_id} no encontrada")
 
         if not datos.motivo.strip():
-            raise OperacionInvalida("Debe indicar el motivo de la regularización.")
+            raise OperacionInvalida("Debes indicar el motivo de la regularización.")
 
         self._exigir_membresia_financieramente_operativa(membresia)
 
@@ -1861,7 +1861,7 @@ class PagoServicio:
             raise EntidadNoEncontrada(f"Pago con id {pago_id} no encontrado")
 
         if not datos.motivo.strip():
-            raise OperacionInvalida("Debe indicar el motivo de la corrección.")
+            raise OperacionInvalida("Debes indicar el motivo de la corrección.")
 
         if pago.estado_pago != EstadoPago.APROBADO:
             raise OperacionInvalida(
@@ -2185,7 +2185,7 @@ class PagoServicio:
             tipo=TipoNotificacion.COBERTURA_BONIFICADA_OTORGADA,
             # Issue #1369: la activación otorga siempre exactamente un mes.
             mensaje=(
-                "Se le otorgó cobertura bonificada de 1 mes para su membresía."
+                "Se te otorgó cobertura bonificada de 1 mes para tu membresía."
             ),
             id_para_log=f"cobertura bonificada {cobertura.id}",
         )
@@ -2519,7 +2519,7 @@ class PagoServicio:
 
         if pago.estado_pago != EstadoPago.PENDIENTE_VALIDACION:
             raise OperacionInvalida(
-                "Solo un pago pendiente de validación puede aprobarse o "
+                "Solo un pago por validar puede aprobarse o "
                 f"rechazarse; este pago ya está "
                 f"{estado_de_pago_en_castellano(pago.estado_pago)}.",
                 detalle_tecnico=f"pago_id={pago_id} estado_pago={pago.estado_pago.value}",
@@ -2545,7 +2545,7 @@ class PagoServicio:
             or not datos.motivo_excepcion_sin_comprobante.strip()
         ):
             raise OperacionInvalida(
-                "Debe indicar el motivo de la excepción para aprobar una "
+                "Debes indicar el motivo de la excepción para aprobar una "
                 "transferencia sin comprobante adjunto.",
                 detalle_tecnico=f"pago_id={pago_id} tipo_pago=TRANSFERENCIA voucher_url=None",
             )
@@ -2600,7 +2600,7 @@ class PagoServicio:
             aviso_ok = self._crear_notificacion_pago(
                 pago=pago,
                 tipo=TipoNotificacion.PAGO_APROBADO,
-                mensaje=f"Su pago de {formatear_monto_usd(pago.monto)} fue aprobado. Su membresía está activa.",
+                mensaje=f"Tu pago de {formatear_monto_usd(pago.monto)} fue aprobado. Tu membresía está activa.",
             )
             self._enviar_correo_de_validacion_pago(pago, TipoNotificacion.PAGO_APROBADO)
             # Último paso, ya con la aprobación commiteada: si el broker está
@@ -2615,7 +2615,7 @@ class PagoServicio:
             aviso_ok = self._crear_notificacion_pago(
                 pago=pago,
                 tipo=TipoNotificacion.PAGO_RECHAZADO,
-                mensaje=f"Su pago fue rechazado{motivo}.",
+                mensaje=f"Tu pago fue rechazado{motivo}.",
             )
             self._enviar_correo_de_validacion_pago(pago, TipoNotificacion.PAGO_RECHAZADO)
         # Issue #826/#451 (ver el comentario de `PersonaServicio.
@@ -3009,10 +3009,10 @@ class PagoServicio:
         pago = self.obtener_pago(pago_id)
         if pago.estado_pago != EstadoPago.APROBADO:
             raise OperacionInvalida(
-                "Solo se puede adjuntar el comprobante a un pago aprobado."
+                "Solo se puede adjuntar el recibo a un pago aprobado."
             )
         if pago.comprobante:
-            raise OperacionInvalida("Este pago ya tiene un comprobante adjunto")
+            raise OperacionInvalida("Este pago ya tiene un recibo adjunto")
         comprobante = ComprobantePago(**datos.model_dump(), pago_id=pago_id)
         resultado = self.repo_comprobante.crear(comprobante)
         self.db.commit()
@@ -3092,7 +3092,7 @@ class PagoServicio:
         if not autorizado:
             raise PermisosInsuficientes(
                 "Solo el titular del pago, su representante, o un administrador "
-                "pueden adjuntar el voucher"
+                "pueden adjuntar el comprobante"
             )
 
         # 2. Pago existe (lanza EntidadNoEncontrada si no) -- ya autorizado.
@@ -3102,7 +3102,7 @@ class PagoServicio:
         # 3. Estado válido para adjuntar voucher.
         if pago.estado_pago != EstadoPago.PENDIENTE_VALIDACION:
             raise OperacionInvalida(
-                "Solo se puede adjuntar voucher a un pago pendiente de validación"
+                "Solo se puede adjuntar el comprobante a un pago por validar"
             )
 
         # E01-RF006/RF007: mismo criterio de solo-lectura financiera para
@@ -3113,14 +3113,14 @@ class PagoServicio:
             edad = _calcular_edad(pago.persona.fecha_nacimiento)
             if edad < 18:
                 raise PermisosInsuficientes(
-                    "Los alumnos menores de edad tienen acceso de solo lectura "
+                    "Los jugadores menores de edad tienen acceso de solo lectura "
                     "al módulo financiero; un representante o el Administrador "
-                    "deben adjuntar este voucher"
+                    "deben adjuntar este comprobante"
                 )
 
         # 4. Tipo MIME permitido.
         if not content_type or content_type not in TIPOS_MIME_PERMITIDOS_VOUCHER:
-            raise OperacionInvalida("Formato de archivo no permitido. Use JPG, PNG o PDF")
+            raise OperacionInvalida("Formato de archivo no permitido. Usa JPG, PNG o PDF")
 
         # 4a. Un archivo de 0 bytes no tiene ninguna firma binaria que
         # coincida con NINGÚN tipo MIME soportado -- sin este check caía en
@@ -3142,7 +3142,7 @@ class PagoServicio:
         # con cabecera válida la pasa. Se decodifica de verdad (FAM-03).
         if not es_contenido_legible(contenido, content_type):
             raise OperacionInvalida(
-                "El archivo está dañado o no se puede leer. Genere el comprobante de nuevo e intente otra vez."
+                "El archivo está dañado o no se puede leer. Genera el comprobante de nuevo e intenta otra vez."
             )
 
         # 5. Tamaño máximo. Defensa en profundidad: el router ya acota la
@@ -3150,7 +3150,7 @@ class PagoServicio:
         # chequeo protege a cualquier otro llamador futuro de este método
         # que no pase por esa ruta.
         if len(contenido) > TAMANO_MAXIMO_VOUCHER_BYTES:
-            raise OperacionInvalida("El archivo pesa más de 5 MB. Elija uno más liviano.")
+            raise OperacionInvalida("El archivo pesa más de 5 MB. Elige uno más liviano.")
 
         # 6. Subida a Cloudinary, con la transacción ya SOLTADA (issue #813).
         #
@@ -3244,7 +3244,7 @@ class PagoServicio:
             self.db.rollback()
             self._limpiar_voucher_huerfano(public_id, content_type)
             raise OperacionInvalida(
-                "Solo se puede adjuntar voucher a un pago pendiente de validación"
+                "Solo se puede adjuntar el comprobante a un pago por validar"
             )
 
         voucher_anterior = pago.voucher_url

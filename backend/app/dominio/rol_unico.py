@@ -65,7 +65,7 @@ def exigir_rol_unico(usuario, tipo_rol: TipoRol) -> bool:
 
     raise OperacionInvalida(
         f"Esta persona ya figura como {rol_en_castellano(otro)} y una cuenta "
-        f"puede tener un solo rol activo. Quítele ese rol antes de asignarle "
+        f"puede tener un solo rol activo. Quítale ese rol antes de asignarle "
         f"el de {rol_en_castellano(tipo_rol)}.",
         detalle_tecnico=(
             f"usuario_id={getattr(usuario, 'id', None)} tiene "

@@ -127,8 +127,8 @@ _TECHO_RETRASO_SEGUNDOS = 8
 _UMBRAL_ENFRIAMIENTO_INTENTOS = 10
 _ENFRIAMIENTO_LOGIN_SEGUNDOS = 15 * 60
 MENSAJE_LOGIN_ENFRIAMIENTO = (
-    "Demasiados intentos fallidos. Por seguridad, espere 15 minutos o "
-    "restablezca su contraseña."
+    "Demasiados intentos fallidos. Por seguridad, espera 15 minutos o "
+    "restablece tu contraseña."
 )
 
 
@@ -149,7 +149,7 @@ class LoginEnEnfriamiento(Exception):
 # suspendida. Espejo verbatim del texto que el frontend muestra para
 # `account_inactive` (`frontend/src/app/login/page.tsx`).
 MENSAJE_CUENTA_INACTIVA = (
-    "Su cuenta está inactiva. Comuníquese con el club para reactivarla."
+    "Tu cuenta está inactiva. Comunícate con el club para reactivarla."
 )
 
 
@@ -397,7 +397,7 @@ class AuthServicio:
         if not persona:
             raise EntidadNoEncontrada(
                 "No existe una persona registrada con esa cédula. "
-                "Contacte al administrador del club."
+                "Contacta al administrador del club."
             )
 
         # Issue #1137, invariante (B): una Persona con `representante_id`
@@ -485,8 +485,8 @@ class AuthServicio:
         cuenta_con_ese_correo = self.repo.obtener_por_correo(correo_normalizado)
         if cuenta_con_ese_correo is not None and cuenta_con_ese_correo.persona_id != persona.id:
             raise EntidadDuplicada(
-                "Ese correo ya pertenece a otra persona. Pídale al titular "
-                "otra dirección actual y vuelva a intentarlo.",
+                "Ese correo ya pertenece a otra persona. Pídele al titular "
+                "otra dirección actual y vuelve a intentarlo.",
                 detalle_tecnico=(
                     f"correo normalizado ya usado por persona_id="
                     f"{cuenta_con_ese_correo.persona_id}; pedido para "
@@ -583,20 +583,20 @@ class AuthServicio:
             raise CredencialesInvalidas("La cuenta está desactivada")
 
         if content_type not in self.TIPOS_MIME_PERMITIDOS_FOTO_PERFIL:
-            raise OperacionInvalida("Formato de archivo no permitido. Use JPG o PNG")
+            raise OperacionInvalida("Formato de archivo no permitido. Usa JPG o PNG")
         # La firma binaria real debe coincidir con el tipo declarado: el
         # Content-Type que manda el cliente no prueba nada sobre el
         # contenido real (decisión de diseño 2.3, sdd/production-readiness).
         if not es_firma_valida(contenido, content_type):
             if not contenido:
-                raise OperacionInvalida("La imagen está vacía o dañada. Elija otra foto JPG o PNG.")
+                raise OperacionInvalida("La imagen está vacía o dañada. Elige otra foto JPG o PNG.")
             raise OperacionInvalida(
-                "Ese archivo no es una imagen válida. Elija una foto JPG o PNG."
+                "Ese archivo no es una imagen válida. Elige una foto JPG o PNG."
             )
         # Defensa en profundidad: el router ya acota la lectura vía
         # `leer_con_limite` antes de llegar acá.
         if len(contenido) > self.TAMANO_MAXIMO_FOTO_PERFIL_BYTES:
-            raise OperacionInvalida("La imagen pesa más de 5 MB. Elija una más liviana.")
+            raise OperacionInvalida("La imagen pesa más de 5 MB. Elige una más liviana.")
 
         from app.infraestructura.cloudinary_cliente import (
             componer_valor_foto_perfil,
@@ -942,7 +942,7 @@ class AuthServicio:
                 self.db.rollback()
                 _log.exception("No se pudo registrar la recuperación de contraseña")
                 raise ServicioNoDisponible(
-                    "No se pudo procesar la solicitud. Intente nuevamente más tarde"
+                    "No se pudo procesar la solicitud. Intenta nuevamente más tarde"
                 )
         return {"mensaje": MENSAJE_RECUPERACION_ENVIADA}
 
@@ -1060,7 +1060,7 @@ class AuthServicio:
                 self.db.rollback()
                 _log.exception("No se pudo registrar la verificación de correo")
                 raise ServicioNoDisponible(
-                    "No se pudo procesar la solicitud. Intente nuevamente más tarde"
+                    "No se pudo procesar la solicitud. Intenta nuevamente más tarde"
                 )
         return {"mensaje": MENSAJE_VERIFICACION_ENVIADA}
 

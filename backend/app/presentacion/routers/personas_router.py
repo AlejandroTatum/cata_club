@@ -201,7 +201,7 @@ async def reporte_nuevos_por_periodo_pdf(
     personas = servicio.reporte_nuevos_por_periodo(inicio, fin)
     pdf_bytes = await run_in_threadpool(
         generar_reporte_pdf,
-        titulo="Reporte de Nuevos Miembros por Período",
+        titulo="Informe de Nuevos Miembros por Período",
         columnas=_COLUMNAS_PERSONAS_PDF,
         filas=_personas_a_filas(personas),
     )
@@ -337,7 +337,7 @@ async def obtener_persona(
         # `frontend/src/app/api/student/route.ts`). Sin esta rama el nombre
         # del tutor desaparecía en silencio de la tarjeta de perfil.
         incluir_representante_propio=True,
-        mensaje="No puede consultar los datos personales de otra persona",
+        mensaje="No puedes consultar los datos personales de otra persona",
     )
     return PersonaServicio(db).obtener_persona(persona_id)
 
@@ -750,7 +750,7 @@ async def obtener_antecedentes_club(
         persona_id_solicitante=token_payload.get("persona_id"),
         roles_solicitante=token_payload.get("roles", []),
         roles_privilegiados=SOLO_ADMINISTRADOR,
-        mensaje="No puede consultar los antecedentes de club de otra persona",
+        mensaje="No puedes consultar los antecedentes de club de otra persona",
     )
     return AntecedentesClubServicio(db).obtener_por_persona(persona_id)
 

@@ -137,5 +137,5 @@ def validar_contrasenia(contrasenia: str) -> None:
     if normalizada.lower() in CONTRASENIAS_COMUNES:
         raise ValueError(
             "Esa contraseña es una de las más usadas y fácil de adivinar; "
-            "elija otra."
+            "elige otra."
         )

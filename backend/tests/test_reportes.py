@@ -997,7 +997,7 @@ def test_el_tope_de_filas_es_uno_solo_para_los_tres_reportes():
     assert personas_router.LIMITE_MAXIMO_REPORTE_PERSONAS == 5000
 
 
-def test_el_422_del_tope_dice_cuantas_filas_hay_y_trata_de_usted():
+def test_el_422_del_tope_dice_cuantas_filas_hay_y_trata_de_tu():
     from fastapi import HTTPException
 
     from app.presentacion.routers.reporte_helpers import exigir_tope_reporte
@@ -1007,7 +1007,7 @@ def test_el_422_del_tope_dice_cuantas_filas_hay_y_trata_de_usted():
     assert exc.value.status_code == 422
     detalle = exc.value.detail
     assert "7312" in detalle and "5000" in detalle
-    assert "Reduzca el rango de fechas" in detalle
+    assert "Reduce el rango de fechas" in detalle
 
 
 def _horario_con_asistencias(client, db_session, cedula, dia, fechas):
@@ -1043,7 +1043,7 @@ def test_reporte_asistencia_json_supera_el_limite_maximo_da_422(client, monkeypa
 
     resp = client.get("/api/v1/asistencias/reportes", params={"horario_id": horario["id"]})
     assert resp.status_code == 422
-    assert "Reduzca el rango de fechas" in resp.json()["detail"]
+    assert "Reduce el rango de fechas" in resp.json()["detail"]
 
 
 def test_reporte_asistencia_json_exactamente_en_el_limite_da_200(client, monkeypatch, db_session):
@@ -1073,7 +1073,7 @@ _REPORTES_PEOR_CASO = [
         _COLUMNAS_PAGOS_PDF,
         [[
             _ESTUDIANTE_LARGO, _ESTUDIANTE_LARGO, "01/03/2026", "31/03/2026", "$1.200,00",
-            "Regularización", "17/08/2026", "Pendiente",
+            "Regularización", "17/08/2026", "Por validar",
         ]],
     ),
     (

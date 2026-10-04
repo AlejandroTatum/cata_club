@@ -211,7 +211,7 @@ class FichaMedicaServicio:
         """
         persona = self.repo_persona.obtener_por_id(persona_id)
         if not persona:
-            raise EntidadNoEncontrada("No se encontró un alumno con ese identificador")
+            raise EntidadNoEncontrada("No se encontró un jugador con ese identificador")
 
         ficha = persona.ficha_medica
         representante = persona.representante

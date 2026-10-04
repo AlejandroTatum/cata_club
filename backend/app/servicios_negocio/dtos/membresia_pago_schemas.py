@@ -283,7 +283,7 @@ class PagoValidarDTO(BaseModel):
     def _validar_campos(self) -> "PagoValidarDTO":
         if self.estado_pago == EstadoPago.RECHAZADO:
             if self.motivo_rechazo is None or not self.motivo_rechazo.strip():
-                raise ValueError("Debe indicar el motivo del rechazo.")
+                raise ValueError("Debes indicar el motivo del rechazo.")
         if (
             self.motivo_excepcion_sin_comprobante is not None
             and not self.motivo_excepcion_sin_comprobante.strip()
@@ -407,7 +407,7 @@ class RegularizacionDeudaDTO(BaseModel):
     @model_validator(mode="after")
     def _validar(self) -> "RegularizacionDeudaDTO":
         if not self.motivo.strip():
-            raise ValueError("Debe indicar el motivo de la regularización.")
+            raise ValueError("Debes indicar el motivo de la regularización.")
         if self.fecha_inicio >= self.fecha_fin:
             raise ValueError("La fecha de inicio debe ser anterior a la de fin.")
         return self
@@ -455,7 +455,7 @@ class SuspensionReactivacionDTO(BaseModel):
     @model_validator(mode="after")
     def _validar_motivo(self) -> "SuspensionReactivacionDTO":
         if not self.motivo.strip():
-            raise ValueError("Debe indicar el motivo.")
+            raise ValueError("Debes indicar el motivo.")
         return self
 
 
@@ -490,7 +490,7 @@ class CorreccionPagoDTO(BaseModel):
     @model_validator(mode="after")
     def _validar(self) -> "CorreccionPagoDTO":
         if not self.motivo.strip():
-            raise ValueError("Debe indicar el motivo de la corrección.")
+            raise ValueError("Debes indicar el motivo de la corrección.")
         if (
             self.fecha_inicio is not None
             and self.fecha_fin is not None

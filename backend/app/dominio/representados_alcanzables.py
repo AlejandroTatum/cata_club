@@ -76,7 +76,7 @@ def exigir_sin_representados_menores_activos(
     raise OperacionInvalida(
         f"No se puede {accion}: representa a {len(menores)} representado(s) menor(es) "
         f"de edad ({nombres}) que quedarían sin nadie que pueda acceder a su ficha. "
-        f"Vincule a cada uno a otra cuenta de representante "
+        f"Vincula a cada uno a otra cuenta de representante "
         f"(POST /personas/{{id}}/vincular-representado) antes de continuar.",
         detalle_tecnico=(
             f"representante_id={representante_id} tiene {len(menores)} representados "
@@ -96,7 +96,7 @@ def exigir_representante_destino_alcanzable(representante_id: int, cuenta_repres
         return
     raise OperacionInvalida(
         "Esta cuenta está desactivada y no puede recibir representados nuevos: "
-        "un menor quedaría sin nadie que pueda acceder a su ficha. Reactive la "
+        "un menor quedaría sin nadie que pueda acceder a su ficha. Reactiva la "
         "cuenta (PATCH /personas/{id}/cuenta/estado) antes de vincular a este "
         "representado.",
         detalle_tecnico=f"representante_id={representante_id} tiene usuario.activo=False",

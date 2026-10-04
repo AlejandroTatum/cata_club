@@ -277,8 +277,8 @@ def test_actualizar_categoria_quitar_dia_con_alumnos_asignados_bloquea_con_confl
             nombre="Otro nombre", dias=[DiaSemana.MIERCOLES],
         ))
     assert str(exc_info.value) == (
-        "No puede quitar el día lunes de Preinfantil mientras tenga alumnos. "
-        "Reasigne primero al alumno de Preinfantil a otra categoría."
+        "No puedes quitar el día lunes de Preinfantil mientras tenga alumnos. "
+        "Reasigna primero al jugador de Preinfantil a otra categoría."
     )
 
     assert db_session.get(CategoriaHorario, categoria.codigo).label == "Preinfantil"
@@ -317,8 +317,8 @@ def test_eliminar_categoria_con_alumnos_bloquea_con_mensaje_accionable(db_sessio
         servicio.eliminar_categoria(categoria.codigo)
 
     assert str(exc_info.value) == (
-        "No puede eliminar la categoría Preinfantil mientras tenga alumnos. "
-        "Reasigne primero al alumno de Preinfantil a otra categoría."
+        "No puedes eliminar la categoría Preinfantil mientras tenga alumnos. "
+        "Reasigna primero al jugador de Preinfantil a otra categoría."
     )
     assert db_session.get(CategoriaHorario, categoria.codigo) is not None
     assert len(servicio.listar_horarios(categoria.codigo)) == 2

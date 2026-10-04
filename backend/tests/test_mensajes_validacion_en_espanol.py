@@ -38,7 +38,7 @@ def test_modalidad_invalida_pide_elegir_una_opcion(client):
     respuesta = client.post(RUTA_TARIFAS, json={"categoria": "X", "precio": 5, "modalidad": "NADA"})
 
     assert respuesta.status_code == 422
-    assert respuesta.json()["detail"] == "Elija una opción válida de la lista."
+    assert respuesta.json()["detail"] == "Elige una opción válida de la lista."
 
 
 def test_un_valor_error_propio_conserva_su_texto_sin_prefijo(client):
@@ -51,7 +51,7 @@ def test_un_valor_error_propio_conserva_su_texto_sin_prefijo(client):
 def test_el_limite_de_tamano_se_informa_en_megabytes():
     assert mensaje_con_tamano_en_mb(
         "El archivo excede el tamaño máximo permitido de 5242880 bytes"
-    ) == "El archivo pesa más de 5 MB. Elija uno más liviano."
+    ) == "El archivo pesa más de 5 MB. Elige uno más liviano."
     assert mensaje_con_tamano_en_mb("Otro mensaje") == "Otro mensaje"
 
 
@@ -62,4 +62,4 @@ def test_lote_de_asistencias_vacio_pide_al_menos_un_alumno(client):
     )
 
     assert respuesta.status_code == 422
-    assert respuesta.json()["detail"] == "Debe enviar al menos un alumno."
+    assert respuesta.json()["detail"] == "Debes enviar al menos un jugador."

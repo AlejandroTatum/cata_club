@@ -33,7 +33,7 @@ class GaleriaServicio:
         # `leer_con_limite` antes de llegar acá, pero este chequeo protege a
         # cualquier llamador directo del servicio que no pase por esa ruta.
         if len(contenido) > self.TAMANO_MAXIMO_IMAGEN_BYTES:
-            raise OperacionInvalida("La imagen pesa más de 5 MB. Elija una más liviana.")
+            raise OperacionInvalida("La imagen pesa más de 5 MB. Elige una más liviana.")
         if content_type not in ("image/jpeg", "image/png"):
             raise OperacionInvalida("La imagen debe ser un archivo JPG o PNG.")
         # La firma binaria real debe coincidir con el tipo declarado: el
@@ -42,7 +42,7 @@ class GaleriaServicio:
         # y la subida de voucher).
         if not es_firma_valida(contenido, content_type):
             raise OperacionInvalida(
-                "Ese archivo no es una imagen válida. Elija una foto JPG o PNG."
+                "Ese archivo no es una imagen válida. Elige una foto JPG o PNG."
             )
 
     def crear(self, datos: EntradaGaleriaCreateDTO, contenido: bytes, content_type: str | None) -> EntradaGaleria:

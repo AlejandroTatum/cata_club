@@ -1,5 +1,5 @@
 """
-Ningún mensaje que un socio puede llegar a leer nombra algo que solo existe
+Ningún mensaje que un jugador puede llegar a leer nombra algo que solo existe
 adentro del sistema.
 
 ## Por qué esta prueba y no una lista de mensajes
@@ -122,7 +122,7 @@ MIEMBROS_DE_ENUMS = _miembros_de_enums()
 
 # --- Vocabulario de implementación ------------------------------------------
 # Cada patrón nombra una familia que apareció de verdad en este backend.
-# Ninguno puede dispararse con castellano común escrito para un socio.
+# Ninguno puede dispararse con castellano común escrito para un jugador.
 VOCABULARIO_DE_IMPLEMENTACION: tuple[tuple[str, re.Pattern[str]], ...] = (
     # `tipo_cuenta`, `representante_id`, `motivo_rechazo`: nombres de columna
     # y de campo, la familia más numerosa por lejos.
@@ -590,7 +590,7 @@ class TestElDetectorNoMarcaProsaLegitima:
         "El horario va de 16:00 a 18:00, señor/a.",
         "Esta persona todavía no creó su usuario y contraseña.",
     ])
-    def test_deja_pasar_castellano_escrito_para_un_socio(self, texto):
+    def test_deja_pasar_castellano_escrito_para_un_jugador(self, texto):
         assert vocabulario_en(texto) == []
 
     def test_un_token_suelto_no_es_prosa(self):

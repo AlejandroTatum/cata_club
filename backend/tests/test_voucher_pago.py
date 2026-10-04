@@ -442,7 +442,7 @@ def test_subir_voucher_a_pago_no_pendiente_da_400(client):
         files={"archivo": ("voucher.jpg", contenido, "image/jpeg")},
     )
     assert resp.status_code == 400
-    assert "pendiente" in resp.json()["detail"].lower()
+    assert "por validar" in resp.json()["detail"].lower()
 
 
 def test_subir_voucher_tipo_no_permitido_da_400(client):

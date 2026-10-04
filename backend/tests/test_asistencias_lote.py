@@ -60,7 +60,7 @@ def test_lote_es_parcial_por_alumno_con_reporte_de_fallidos(client, db_session):
     cuerpo = resp.json()
     assert cuerpo["creados"] == 3
     assert [f["personaId"] for f in cuerpo["fallidos"]] == [ajeno["id"]]
-    assert "lista de alumnos" in cuerpo["fallidos"][0]["motivo"]
+    assert "lista de jugadores" in cuerpo["fallidos"][0]["motivo"]
     assert cuerpo["fallidos"][0]["yaRegistrada"] is False
     assert db_session.query(Asistencia).count() == 3
 
