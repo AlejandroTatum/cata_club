@@ -652,7 +652,7 @@
   .landing-schedule-help:nth-child(n):last-child { grid-column: auto; }
 }
 
-/* Eight links (issue #1587) no longer fit the 18px-padded pills at laptop widths:
+/* Nine links (issues #1587, #1622) no longer fit the 18px-padded pills at laptop widths:
    the labels wrapped inside their own pill. Tighter pills, one line each, from
    the tablet-landscape width up to where the roomy layout fits again. */
 @media (min-width: 769px) and (max-width: 1366px) {
