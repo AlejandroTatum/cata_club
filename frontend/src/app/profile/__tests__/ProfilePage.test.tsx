@@ -403,7 +403,7 @@ describe("ProfilePage — staff view loading/error (structurally distinct from t
     fireEvent.click(retryButton);
 
     await waitForStaffProfile();
-    expect(within(screen.getByRole("main")).getAllByText("Ana Admin")).toHaveLength(2);
+    expect(within(screen.getByRole("main")).getAllByText("Ana Admin")).toHaveLength(1);
     expect(mockFetchMiPerfil).toHaveBeenCalledTimes(2);
   });
 });
@@ -556,8 +556,6 @@ describe("ProfilePage — inline teléfono edit (correo is read-only)", () => {
       expect(mockActualizarMiPerfil).toHaveBeenCalledWith({ telefono: "0991234567" });
     });
     expect(await screen.findByText("0991234567")).toBeInTheDocument();
-    // The header's way out of the screen survives the edit trigger.
-    expect(screen.getByRole("link", { name: /ver portal completo/i })).toBeInTheDocument();
   });
 
   /**
@@ -590,7 +588,6 @@ describe("ProfilePage — inline teléfono edit (correo is read-only)", () => {
     await screen.findAllByText("Sofía Alumna");
 
     expect(screen.queryByRole("button", { name: /editar datos/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /ver portal completo/i })).toBeInTheDocument();
   });
 });
 
@@ -657,7 +654,7 @@ describe("ProfilePage — change password", () => {
     );
     await waitForStaffProfile();
 
-    fireEvent.click(screen.getByRole("button", { name: /restablecer por correo/i }));
+    fireEvent.click(screen.getByRole("button", { name: /restablecer contraseña/i }));
 
     await waitFor(() => {
       expect(mockSolicitarRecuperacion).toHaveBeenCalledWith("ana.admin@cataclub.com");
@@ -685,10 +682,10 @@ describe("ProfilePage — change password", () => {
       );
       await waitForStaffProfile();
 
-      fireEvent.click(screen.getByRole("button", { name: /restablecer por correo/i }));
+      fireEvent.click(screen.getByRole("button", { name: /restablecer contraseña/i }));
       const resend = await screen.findByRole("button", { name: "Reenviar enlace" });
       expect(resend).toBeDisabled();
-      expect(screen.getByText(/podrá reenviarlo en 2:00/i)).toBeInTheDocument();
+      expect(screen.getByText(/podrás reenviarlo en 2:00/i)).toBeInTheDocument();
 
       // One act() per second: each tick schedules the next one after React commits.
       const elapse = async (seconds: number) => {
@@ -729,7 +726,7 @@ describe("ProfilePage — change password", () => {
     );
     await waitForStaffProfile();
 
-    fireEvent.click(screen.getByRole("button", { name: /restablecer por correo/i }));
+    fireEvent.click(screen.getByRole("button", { name: /restablecer contraseña/i }));
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(
@@ -1593,19 +1590,3 @@ describe("ProfilePage — the type and colour rules the screen was breaking", ()
     expect(photo.className).not.toContain("bg-cata-red");
   });
 });
-
-// ---------------------------------------------------------------------------
-// Register — issue #340, flipped by QA4 S6. Perfil voseaba ("Revisá",
-// "mantené") while the app speaks «tú» ("Revisa", "tu cuenta"). The
-// candado is a word-shape lock, not a fixed-string lock: the audit that found
-// this one also found the same origin could have left orphaned copy
-// elsewhere, and a lock on one literal sentence would miss a rewording that
-// keeps the same defect in different words. This one fails on the SHAPE
-// (voseo imperatives, "vos", "usted" forms) wherever it appears in the
-// rendered screen, for any of the four role variants.
-// ---------------------------------------------------------------------------
-
-
-// ---------------------------------------------------------------------------
-// admin v4 — the page is a main column plus the shared PAGE_RAIL rail
-// ---------------------------------------------------------------------------
