@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Camera, X } from "lucide-react";
+import { Camera, CheckCircle2, X } from "lucide-react";
 import { Button, FileDropZone } from "@/components/ui";
 import { ICON } from "@/lib/icon-size";
 import { CAPTURE_TYPES, MAX_CAPTURE_BYTES } from "./report-problem/capture";
@@ -42,9 +42,18 @@ export default function ReportProblemDialog({ onClose, requestId, capture }: Rep
   const [browser] = useState(() => (typeof navigator === "undefined" ? "" : navigator.userAgent));
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const doneRef = useRef<HTMLButtonElement>(null);
   const isAuto = Boolean(screenshot && screenshot === capture?.file);
   const previewUrl = useMemo(() => (screenshot ? URL.createObjectURL(screenshot) : null), [screenshot]);
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  useEffect(() => {
+    if (!sent) return;
+    doneRef.current?.focus();
+    const onKey = (event: KeyboardEvent): void => { if (event.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [sent, onClose]);
 
   function pickFile(file: File | null): void {
     setConsent(false);
@@ -87,16 +96,25 @@ export default function ReportProblemDialog({ onClose, requestId, capture }: Rep
 
   return (
     <div role="presentation" data-report-ignore className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/60 sm:items-center sm:p-4">
-      <section role="dialog" aria-modal="true" aria-label="Reportar un problema" className="flex h-full w-full max-w-5xl flex-col overflow-hidden bg-cata-surface text-cata-text shadow-elevated sm:h-auto sm:max-h-[92vh] sm:rounded-xl">
+      <section role="dialog" aria-modal="true" aria-label="Reportar un problema" className={`flex h-full w-full ${sent ? "max-w-md" : "max-w-5xl"} flex-col overflow-hidden bg-cata-surface text-cata-text shadow-elevated sm:h-auto sm:max-h-[92vh] sm:rounded-xl`}>
         <header className="flex items-center justify-between border-b border-cata-border px-5 py-3">
           <h2 className="text-xl font-semibold">Reportar un problema</h2>
           <button type="button" onClick={onClose} aria-label="Cerrar" className="rounded-lg p-2 hover:bg-sunken"><X size={ICON.base} aria-hidden="true" /></button>
         </header>
         {sent ? (
-          <div className="flex flex-col items-start gap-3 p-6">
-            <p>Gracias. El club recibió tu reporte.</p>
-            {trackingId !== null && <p>Código de seguimiento: <strong>#{trackingId}</strong></p>}
-            <Button type="button" variant="primary" onClick={onClose}>Cerrar</Button>
+          <div className="flex flex-col items-center gap-4 p-8 text-center">
+            <div role="status" className="flex flex-col items-center gap-2">
+              <CheckCircle2 size={ICON.lg} className="text-state-ok" aria-hidden="true" />
+              <h3 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Reporte enviado</h3>
+              <p>El club ya lo recibió y lo va a revisar.</p>
+            </div>
+            {trackingId !== null && (
+              <div className="flex flex-col items-center gap-1">
+                <span className="rounded-full bg-sunken px-4 py-1 text-lg font-bold">#{trackingId}</span>
+                <p className="text-sm text-ink-2">Guarda este código si necesitas consultarlo</p>
+              </div>
+            )}
+            <Button ref={doneRef} type="button" variant="primary" onClick={onClose}>Cerrar</Button>
           </div>
         ) : (
           <form onSubmit={(event) => { void submit(event); }} className="flex min-h-0 flex-1 flex-col">

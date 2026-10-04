@@ -239,7 +239,7 @@ describe("Sponsors", (): void => {
   it("shows an honest empty message when the backend returns no sponsors", async (): Promise<void> => {
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(jsonResponse([]));
     render(<Sponsors />);
-    expect(await screen.findByText(/aún no hay patrocinadores/i)).toBeInTheDocument();
+    expect(await screen.findByText("Pronto anunciaremos a nuestros patrocinadores")).toBeInTheDocument();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 
