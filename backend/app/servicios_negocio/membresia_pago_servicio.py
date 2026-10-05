@@ -827,6 +827,10 @@ class PagoServicio:
         if self.repo.existe_pendiente_para_membresia(datos.membresia_id):
             raise OperacionInvalida(MENSAJE_PAGO_PENDIENTE_DUPLICADO)
 
+        # T5/S5 (L5): un pago iniciado por el socio no se acepta mientras su
+        # cobertura vigente se pagó con descuento; el admin no queda bloqueado.
+        self._exigir_cobertura_vigente_sin_descuento(datos.membresia_id, es_admin)
+
         # El usuario elige una cantidad ENTERA de meses, nunca un monto libre
         # (issue #400): `datos.meses` ya viene validado por el DTO (`gt=0`,
         # `le=12`), así que no hay ningún "múltiplo de la cuota" que
@@ -1166,6 +1170,33 @@ class PagoServicio:
     # `aplicar_beneficio_bonificado` los llaman en vez de reimplementar la
     # combinación cada uno por su cuenta (así fue exactamente como se
     # introdujo el bug: dos implementaciones que fueron divergiendo).
+    def _exigir_cobertura_vigente_sin_descuento(
+        self, membresia_id: int, es_admin: bool = False,
+    ) -> None:
+        """T5/S5 (L5): si la cobertura vigente más lejana (pago aprobado o
+        pendiente, o cobertura bonificada, que termine después de hoy) se
+        obtuvo con descuento, el socio no puede pagar otra hasta que termine.
+        Solo para flujos iniciados por el socio; el administrador no pasa
+        por acá (`es_admin`)."""
+        if es_admin:
+            return
+        hoy = hoy_club()
+        pago = self.repo.ultima_cobertura_vigente(membresia_id, hoy)
+        fin_bonificada = self.repo_cobertura_bonificada.fecha_fin_maxima_posterior_a(
+            membresia_id, hoy,
+        )
+        candidatos = [(fin_bonificada, True)] if fin_bonificada is not None else []
+        if pago is not None:
+            candidatos.append(pago)
+        if not candidatos:
+            return
+        fin, con_descuento = max(candidatos, key=lambda c: (c[0], c[1]))
+        if con_descuento:
+            raise OperacionInvalida(
+                "Tu mes actual se pagó con descuento. Podrás renovar cuando "
+                f"termine, el {fin.strftime('%d/%m/%Y')}."
+            )
+
     def _fecha_fin_maxima_combinada(self, membresia_id: int) -> date | None:
         """`fecha_fin` más lejana entre AMBAS fuentes de cobertura de una
         membresía, o `None` si no tiene ninguna. El ancla real de "hasta
@@ -2185,6 +2216,9 @@ class PagoServicio:
         # bloquear el único otro camino que produce cobertura sin pago, o el
         # gate de `registrar_pago` sería un agujero con nombre distinto.
         self._exigir_membresia_financieramente_operativa(membresia)
+
+        # T5/S5 (L5): solo autoservicio, así que aplica siempre.
+        self._exigir_cobertura_vigente_sin_descuento(membresia_id)
 
         precio_mensual = membresia.monto_aplicado
         # Issue #1369: el cuerpo (`CoberturaBonificadaCreateDTO`) ya no lleva

@@ -16,6 +16,7 @@ import {
   summarizeRecentAttendance,
   resolveCoverageEnd,
   describePaymentSituation,
+  resolveDiscountedCoverageEnd,
   buildWeeklyTrainingSchedule,
   contarEntrenamientosSemanales,
   findNextTrainingSessions,
@@ -1313,5 +1314,61 @@ describe("describePendingStat — the «Pagos por validar» tile copy (#QA-R2 S5
   it("stays «Por validar» when payments wait", () => {
     expect(describePendingStat(2)).toEqual({ tone: "warn", status: "Por validar", hint: "esperan validación del club" });
     expect(describePendingStat(1)).toMatchObject({ hint: "espera validación del club" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T5/S5 — a discounted current month blocks the next payment until it ends
+// ---------------------------------------------------------------------------
+
+describe("discounted current coverage (T5/S5)", () => {
+  const NOW_LOCAL = new Date(2026, 9, 4);
+  const pago = (overrides: Record<string, unknown> = {}) => ({
+    estadoPago: "APROBADO" as const,
+    fechaFin: "2026-10-31",
+    descuentoValorAplicado: null,
+    descuentoPorcentajeAplicado: null,
+    ...overrides,
+  });
+
+  it("returns the end date when the furthest current payment carried a discount", () => {
+    expect(
+      resolveDiscountedCoverageEnd([pago({ descuentoPorcentajeAplicado: "50.00" })], [], NOW_LOCAL),
+    ).toBe("2026-10-31");
+  });
+
+  it("treats a 100% coverage activation as discounted", () => {
+    expect(resolveDiscountedCoverageEnd([], [{ fechaFin: "2026-11-04" }], NOW_LOCAL)).toBe("2026-11-04");
+  });
+
+  it("returns null for a full-price month, an ended coverage, or a rejected payment", () => {
+    expect(resolveDiscountedCoverageEnd([pago()], [], NOW_LOCAL)).toBeNull();
+    expect(
+      resolveDiscountedCoverageEnd([pago({ descuentoPorcentajeAplicado: "50.00", fechaFin: "2026-10-04" })], [], NOW_LOCAL),
+    ).toBeNull();
+    expect(
+      resolveDiscountedCoverageEnd([pago({ estadoPago: "RECHAZADO", descuentoPorcentajeAplicado: "50.00" })], [], NOW_LOCAL),
+    ).toBeNull();
+  });
+
+  it("lets the latest coverage decide: a full-price month after a discounted one is not blocked", () => {
+    expect(
+      resolveDiscountedCoverageEnd(
+        [pago({ descuentoPorcentajeAplicado: "50.00" }), pago({ fechaFin: "2026-11-30" })],
+        [],
+        NOW_LOCAL,
+      ),
+    ).toBeNull();
+  });
+
+  it("describePaymentSituation says why it cannot register, with the end date", () => {
+    const result = describePaymentSituation(
+      situation({ coverageEnd: "2026-10-31", discountedCoverageEnd: "2026-10-31" }),
+      NOW_LOCAL,
+    );
+    expect(result.canRegister).toBe(false);
+    expect(result.detail).toBe(
+      "Tu mes actual se pagó con descuento. Podrás renovar cuando termine, el 31/10/2026.",
+    );
   });
 });
