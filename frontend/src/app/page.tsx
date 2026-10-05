@@ -3,6 +3,8 @@ import localFont from "next/font/local";
 import { publicPageMetadata, resolveSiteUrl, socialMetadata } from "@/lib/seo";
 import StructuredData from "@/components/landing/StructuredData";
 import LandingPage from "./landing/LandingPage";
+import { resolveLaunchAt } from "@/lib/launch";
+import LaunchCurtain from "./landing/LaunchCurtain";
 import "./landing/landing.css";
 
 const barlow = localFont({
@@ -41,5 +43,11 @@ export const metadata: Metadata = {
 };
 
 export default function HomePage(): React.ReactElement {
-  return <div className={`${barlow.variable} ${graduate.variable} ${playfair.variable}`}><StructuredData /><LandingPage siteUrl={resolveSiteUrl()} /></div>;
+  // The route is dynamic (root layout), so the launch curtain is decided per request.
+  return (
+    <div className={`${barlow.variable} ${graduate.variable} ${playfair.variable}`}>
+      <LaunchCurtain launchAt={resolveLaunchAt()} serverNow={Date.now()} />
+      <div data-launch-content><StructuredData /><LandingPage siteUrl={resolveSiteUrl()} /></div>
+    </div>
+  );
 }

@@ -64,3 +64,12 @@ if (!Number.isInteger(E2E_PORT) || E2E_PORT < 1 || E2E_PORT > 65535) {
     `PLAYWRIGHT_E2E_PORT must be a port number, got "${process.env.PLAYWRIGHT_E2E_PORT}".`,
   );
 }
+
+/**
+ * The landing's launch curtain (`LaunchCurtain`) covers the home until the
+ * launch instant, which would hide it from every landing spec. The managed
+ * server inherits this process's environment, so pin the launch to the past
+ * unless the operator chose a value; a spec that wants the curtain can still
+ * set its own.
+ */
+process.env.LAUNCH_AT_OVERRIDE ??= "2000-01-01T00:00:00Z";
