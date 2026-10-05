@@ -59,3 +59,17 @@ class CoberturaBonificadaResponseDTO(ResponseBase, BaseModel):
     fecha_fin: date
     otorgada_por_persona_id: int
     otorgada_en: datetime
+
+
+class CoberturaBonificadaListItemDTO(ResponseBase, BaseModel):
+    """Fila de solo lectura de la revisión del admin (issue #1609): lo mínimo
+    para ver quién tiene una cobertura 100% y bajar su recibo. `monto` es el
+    cobrado: siempre cero."""
+    id: int
+    persona_id: int
+    persona_nombre_completo: str
+    membresia_id: int
+    monto: Decimal
+    fecha_inicio: date
+    fecha_fin: date
+    otorgada_en: datetime

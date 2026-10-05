@@ -55,6 +55,7 @@ AYUDANTES = (
     "proxyToBackend",
     "proxyBackendGet",
     "proxyBackendPdfGet",
+    "proxyBackendJsonGet",
     "publicCatalogGet",
     "backendUrl",
     "fetchAllPages",

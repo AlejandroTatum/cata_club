@@ -206,6 +206,27 @@ export async function proxyBackendGet(request: NextRequest, path: string, errorM
 }
 
 /**
+ * Authenticated JSON GET proxy: forwards `path` to the backend, passes a
+ * successful body through untouched and maps failures to `errorMessage`.
+ * Rotates the access-token cookie when the backend client refreshed it.
+ */
+export async function proxyBackendJsonGet(request: NextRequest, path: string, errorMessage: string): Promise<NextResponse> {
+  const result = await backendFetchAuthed(request, path);
+  if (!result.ok) {
+    return NextResponse.json({ message: errorMessage }, { status: result.status });
+  }
+  if (!result.response.ok) {
+    return passthroughBackendError(result.response, errorMessage);
+  }
+
+  const response = NextResponse.json(await result.response.json());
+  if (result.refreshedAccessToken) {
+    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+  }
+  return response;
+}
+
+/**
  * Shared `GET` proxy for binary PDF report exports: authenticate, relay
  * backend/HTTP errors the same way `proxyBackendGet` does, then stream the
  * raw PDF bytes back with `Content-Type: application/pdf` and whatever

@@ -53,7 +53,7 @@ export function BeneficioNote({ beneficio }: { beneficio: BeneficioAsignado | nu
   if (!etiqueta) return null;
 
   return (
-    <p className="flex flex-wrap items-center gap-2 text-sm text-ink-2">
+    <p className="mb-3 flex flex-wrap items-center gap-2 text-sm text-ink-2">
       Tu beneficio: <DataBox>{etiqueta}</DataBox>
       <span className="text-ink-3-strong">{descuento.nombre}</span>
     </p>

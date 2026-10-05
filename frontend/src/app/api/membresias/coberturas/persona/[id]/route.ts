@@ -12,26 +12,13 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookies } from "@/lib/server/auth";
-import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
+import { proxyBackendJsonGet } from "@/lib/server/backend-client";
 
 export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const params = await props.params;
-  const result = await backendFetchAuthed(request, `/membresias/coberturas/persona/${encodeURIComponent(params.id)}`);
-  if (!result.ok) {
-    return NextResponse.json(
-      { message: "No se pudo cargar tu historial de coberturas." },
-      { status: result.status },
-    );
-  }
-  if (!result.response.ok) {
-    return passthroughBackendError(result.response, "No se pudo cargar tu historial de coberturas.");
-  }
-
-  const body = await result.response.json();
-  const response = NextResponse.json(body);
-  if (result.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
-  }
-  return response;
+  return proxyBackendJsonGet(
+    request,
+    `/membresias/coberturas/persona/${encodeURIComponent(params.id)}`,
+    "No se pudo cargar tu historial de coberturas.",
+  );
 }
