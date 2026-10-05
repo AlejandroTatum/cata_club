@@ -71,6 +71,12 @@ function trainingDaysSentence(days: readonly DiaSemana[]): string {
  * The seven chips, L M M J V S D. One `role="img"` carrying the sentence;
  * the chips are hidden from the accessibility tree and expose their state as
  * `data-state` for tests and styling.
+ *
+ * A day that trains is `state-ok` green (#137739), the colour the product
+ * already spends on "all good". Measured: white letter on it 5.64:1; the fill
+ * against the coal ground 3.29:1 and against the idle chip (`white/[0.03]`,
+ * ~#1A1A1D) 3.09:1, both over WCAG 1.4.11's 3:1. The idle fill is 3% rather
+ * than 5% because at 5% the pair drops to 2.92:1.
  */
 function TrainingDayChips({ days }: { days: readonly DiaSemana[] }): React.ReactElement {
   return (
@@ -91,7 +97,7 @@ function TrainingDayChips({ days }: { days: readonly DiaSemana[] }): React.React
             aria-hidden="true"
             className={cn(
               "flex h-7 min-w-0 flex-1 items-center justify-center rounded-[5px] text-2xs font-extrabold print:h-5",
-              active ? "bg-cata-red text-white" : "bg-white/5 text-white/70",
+              active ? "bg-state-ok text-white" : "bg-white/[0.03] text-white/70",
             )}
           >
             {DIA_SEMANA_LABELS[day].charAt(0)}
@@ -409,7 +415,7 @@ export default function MemberCard({
           neither is on the credential, so neither reaches the sheet. */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3">
         <span className="text-2xs font-extrabold uppercase tracking-caps text-ink-3-strong">
-          Se imprime a 54 × 85,6 mm
+          Se imprime a 72 mm de ancho
         </span>
         {canManagePhoto && (
           <>
