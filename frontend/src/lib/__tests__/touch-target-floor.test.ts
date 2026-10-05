@@ -44,7 +44,13 @@ describe("coarse-pointer touch floor", () => {
 
   it("offers a square for icon-only controls and an invisible hit area for fixed ones", () => {
     expect(floor).toMatch(/\.touch-target\s*\{\s*min-width: 44px;\s*min-height: 44px;/);
+    expect(floor).toMatch(/\.touch-target-chip\s*\{\s*min-height: 44px;/);
     expect(floor).toMatch(/\.touch-target-reach::after\s*\{[^}]*width: 44px;[^}]*height: 44px;/);
+  });
+
+  it("offers row classes for the text controls under the floor (#1567)", () => {
+    expect(floor).toMatch(/\.touch-target-row\s*\{\s*min-height: 44px;\s*\}/);
+    expect(floor).toMatch(/\.touch-target-pad\s*\{\s*min-height: 44px;\s*padding-block: 0\.75rem;/);
   });
 
   it("never reaches for links or a universal selector", () => {

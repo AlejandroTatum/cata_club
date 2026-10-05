@@ -198,6 +198,19 @@ describe("el nombre no se superpone con las acciones del renglón (issue #664)",
   });
 });
 
+describe("los botones del renglón van lado a lado (pre-deploy S4)", () => {
+  it("pone Ficha médica y Horario en un mismo contenedor flex-row sin saltar de línea", async () => {
+    render(<TrainerStudentsPage />);
+    const melany = await screen.findByTestId("student-row-7");
+    const ficha = within(melany).getByRole("button", { name: "Ficha médica de Melany Quimis" });
+    const horario = within(melany).getByRole("button", { name: "Horario de Melany Quimis" });
+    expect(ficha.parentElement).toBe(horario.parentElement);
+    expect(ficha.parentElement).toHaveClass("flex", "flex-row", "flex-nowrap");
+    expect(ficha).toHaveClass("flex-none");
+    expect(horario).toHaveClass("flex-none");
+  });
+});
+
 describe("un jugador es una persona, no una asignación", () => {
   it("junta las tres inscripciones de Melany en un solo renglón", async () => {
     render(<TrainerStudentsPage />);

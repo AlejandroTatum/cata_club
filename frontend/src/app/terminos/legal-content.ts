@@ -34,7 +34,7 @@ export function heading(text: string, id?: string): LegalBlock {
 }
 
 /** The version and effective date every public legal document publishes. */
-export const LEGAL_VERSION = "2.2";
+export const LEGAL_VERSION = "2.3";
 export const LEGAL_EFFECTIVE_DATE = "4 de octubre de 2026";
 
 /** The anchor of a heading block: its pinned id, or the one derived from its text. */

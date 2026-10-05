@@ -2185,3 +2185,48 @@ describe("StudentPaymentsPage — QA4 findings", () => {
     });
   });
 });
+
+describe("StudentPaymentsPage — a discounted current month blocks the next payment (T5/S5)", () => {
+  const MENSAJE = "Tu mes actual se pagó con descuento. Podrás renovar cuando termine, el 31/07/2026.";
+
+  it("hides the payment form and states the end date while the paid month had a discount", async () => {
+    mockFetchPagosDePersona
+      .mockReset()
+      .mockResolvedValue([makePago({ descuentoPorcentajeAplicado: "50.00", descuentoValorAplicado: "12.50" })]);
+
+    render(<StudentPaymentsPage />);
+
+    expect(await screen.findByTestId("discount-block-message")).toHaveTextContent(MENSAJE);
+    expect(screen.queryByRole("button", { name: /registrar un pago/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /aplicar mi beneficio/i })).not.toBeInTheDocument();
+  });
+
+  it("hides «Aplicar mi beneficio» after a 100% activation still running", async () => {
+    mockFetchBeneficio.mockReset().mockResolvedValue({
+      id: 2,
+      personaId: 9,
+      descuento: { id: 3, nombre: "Beca 100%", porcentaje: "100.00", monto: null, activo: true },
+      asignadoPorPersonaId: 1,
+      asignadoPorNombre: "Admin Dev",
+      asignadoEn: "2026-07-01T00:00:00Z",
+      retiradoPorPersonaId: null,
+      retiradoEn: null,
+    });
+    mockFetchPagosDePersona.mockReset().mockResolvedValue([]);
+    mockFetchCoberturasDePersona.mockReset().mockResolvedValue([
+      { id: 7, fechaInicio: "2026-07-01", fechaFin: "2026-07-31", descuentoPorcentajeAplicado: "100.00" },
+    ]);
+
+    render(<StudentPaymentsPage />);
+
+    expect(await screen.findByTestId("discount-block-message")).toHaveTextContent(MENSAJE);
+    expect(screen.queryByRole("button", { name: /aplicar mi beneficio/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps the form for a full-price month", async () => {
+    render(<StudentPaymentsPage />);
+
+    expect(await screen.findByRole("button", { name: /registrar un pago/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("discount-block-message")).not.toBeInTheDocument();
+  });
+});

@@ -29,7 +29,7 @@ colección (imports inexistentes). La migración y el modelo se ejercitaron
 primero por separado (riesgo estructural: la restricción de exclusión), y
 este archivo confirmó GREEN una vez armados el servicio y el router.
 """
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
@@ -49,6 +49,7 @@ from app.servicios_negocio.dtos.cobertura_bonificada_schemas import CoberturaBon
 from app.servicios_negocio.dtos.membresia_pago_schemas import CorreccionPagoDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.membresia_pago_servicio import PagoServicio
+from app.soporte_transversal.tiempo import hoy_club
 from tests.fabricas_pagos import (
     crear_membresia_orm, crear_persona_orm, crear_tipo_membresia_orm,
     asignar_beneficio_api, crear_membresia_api, crear_persona_api,
@@ -216,12 +217,11 @@ def test_beneficio_monto_fijo_que_no_iguala_la_base_es_rechazado(client):
     assert "100%" in resp.json()["detail"]
 
 
-def test_una_activacion_otorga_exactamente_un_mes_y_la_siguiente_cubre_el_mes_posterior(client):
+def test_una_activacion_otorga_exactamente_un_mes_y_la_siguiente_espera_a_que_termine(client):
     """Issue #1369: una activación otorga EXACTAMENTE un mes, sin importar lo
     que el cliente mande -- el cuerpo ya no decide nada (un `meses: 3` que se
-    cuela se ignora, nunca se honra). Cubrir el mes siguiente exige una
-    SEGUNDA activación, y esa arranca recién donde terminó la primera:
-    `_hay_cobertura_en_rango` queda intacto, ningún mes ya cubierto se pisa."""
+    cuela se ignora, nunca se honra). T5/S5: el mes siguiente solo se puede
+    activar cuando termine ese mes bonificado."""
     persona, membresia, _ = _escenario_con_beneficio_total(client, porcentaje=Decimal("100.00"))
     _autenticar_como(persona["id"], ["ALUMNO"])
 
@@ -236,12 +236,8 @@ def test_una_activacion_otorga_exactamente_un_mes_y_la_siguiente_cubre_el_mes_po
     ).isoformat()
 
     segunda_resp = client.post(RUTA_APLICAR.format(membresia_id=membresia["id"]), json={})
-    assert segunda_resp.status_code == 201, segunda_resp.text
-    segunda = segunda_resp.json()
-    # Solo DESPUÉS del vencimiento de la primera hay cobertura nueva: el mes
-    # corrido ya estaba cubierto y la segunda activación no lo extiende.
-    assert segunda["fechaInicio"] == primera["fechaFin"]
-    assert segunda["mesesComprados"] == 1
+    assert segunda_resp.status_code == 400, segunda_resp.text
+    assert "Tu mes actual se pagó con descuento" in segunda_resp.text
 
 
 # --- 3. Estructuralmente invisible para PDF y reconciliación ------------------
@@ -262,21 +258,26 @@ def test_beneficio_100_no_dispara_generacion_de_pdf(client, monkeypatch):
 
 # --- 4. Período: ancla sobre AMBAS tablas -------------------------------------
 
-def test_segunda_aplicacion_ancla_sobre_la_cobertura_bonificada_previa(client):
-    """Renovación: la SEGUNDA aplicación debe empezar exactamente donde
-    terminó la primera -- sin esto, `hoy_club()` por defecto pisaría el
-    período ya otorgado (que `Pago.fecha_fin_maxima_aprobada` no ve, porque
-    no hay ningún Pago)."""
+def test_segunda_aplicacion_ancla_sobre_la_cobertura_bonificada_previa(client, db_session):
+    """Renovación: la SEGUNDA aplicación (permitida solo cuando la primera
+    termina, T5/S5) debe empezar exactamente donde terminó la primera -- sin
+    esto, `hoy_club()` pisaría el período ya otorgado (que
+    `Pago.fecha_fin_maxima_aprobada` no ve, porque no hay ningún Pago)."""
     persona, membresia, _ = _escenario_con_beneficio_total(client, porcentaje=Decimal("100.00"))
     _autenticar_como(persona["id"], ["ALUMNO"])
 
     r1 = _aplicar(client, membresia["id"])
+    hoy = hoy_club()
+    fila = db_session.get(CoberturaBonificada, r1.json()["id"])
+    fila.fecha_inicio = hoy - timedelta(days=30)
+    fila.fecha_fin = hoy
+    db_session.flush()
     r2 = _aplicar(client, membresia["id"])
     assert r1.status_code == 201, r1.text
     assert r2.status_code == 201, r2.text
-    primera, segunda = r1.json(), r2.json()
+    segunda = r2.json()
 
-    assert segunda["fechaInicio"] == primera["fechaFin"]
+    assert segunda["fechaInicio"] == hoy.isoformat()
 
 
 def test_aplicacion_ancla_sobre_el_ultimo_pago_aprobado(client, db_session):
@@ -482,11 +483,14 @@ def test_dos_aplicaciones_concurrentes_se_serializan_sin_perder_ni_solapar_cober
     for hilo in hilos:
         hilo.join(timeout=30)
 
+    # T5/S5: las dos se serializan por el lock; la que gana otorga el mes y la
+    # otra ve ese mes con descuento vigente y se rechaza (nada se pierde ni
+    # se solapa).
     errores = [r for r in resultados if isinstance(r, BaseException)]
-    assert errores == [], f"ninguna de las dos aplicaciones debía fallar: {errores}"
-
     exitos = [r for r in resultados if isinstance(r, CoberturaBonificada)]
-    assert len(exitos) == 2, f"esperaba que las dos aplicaciones tuvieran éxito: {resultados}"
+    assert len(exitos) == 1, f"esperaba exactamente una aplicación exitosa: {resultados}"
+    assert len(errores) == 1 and isinstance(errores[0], OperacionInvalida), resultados
+    assert "Tu mes actual se pagó con descuento" in str(errores[0])
 
     verificacion = Session(bind=motor_test)
     try:
@@ -496,12 +500,7 @@ def test_dos_aplicaciones_concurrentes_se_serializan_sin_perder_ni_solapar_cober
             .order_by(CoberturaBonificada.fecha_inicio)
             .all()
         )
-        assert len(coberturas) == 2, "ninguna de las dos filas debía perderse"
-        primera, segunda = coberturas
-        # Medio-abierto, contigua: la segunda arranca exactamente donde
-        # termina la primera -- ni hueco ni solape.
-        assert primera.fecha_fin == segunda.fecha_inicio
-        assert primera.fecha_inicio < primera.fecha_fin <= segunda.fecha_inicio
+        assert len(coberturas) == 1, "solo la aplicación ganadora debía otorgar cobertura"
     finally:
         verificacion.close()
 
@@ -899,6 +898,9 @@ def test_pago_normal_ancla_despues_de_cobertura_bonificada_existente(client, db_
     _autenticar_como(persona["id"], ["ALUMNO"])
     cobertura = _aplicar(client, membresia["id"]).json()
 
+    # T5/S5: el socio no puede pagar sobre un mes bonificado vigente; el
+    # administrador sí (registra lo que presenció) y el período ancla igual.
+    _autenticar_como_admin()
     resp = registrar_pago_api(client, persona["id"], membresia["id"], tipo_pago="TRANSFERENCIA")
     assert resp.status_code == 201, resp.text
     pago = resp.json()

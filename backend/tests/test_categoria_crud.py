@@ -286,7 +286,7 @@ def test_actualizar_categoria_quitar_dia_con_alumnos_asignados_bloquea_con_confl
     assert len(servicio.listar_horarios(categoria.codigo)) == 2
 
 
-# --- Baja de la categoría entera ------------------------------------------
+# --- Mover jugadores a otra categoría --------------------------------------
 def test_mover_alumnos_a_la_misma_categoria_pide_una_distinta_en_tu(db_session):
     """Pina el mensaje exacto en «tú»: el candado de registro solo vigila
     voseo y usted, no que la frase siga diciendo esto."""
@@ -304,6 +304,7 @@ def test_mover_alumnos_a_la_misma_categoria_pide_una_distinta_en_tu(db_session):
     assert str(exc_info.value) == "Elige una categoría distinta de la que vas a dejar."
 
 
+# --- Baja de la categoría entera ------------------------------------------
 def test_eliminar_categoria_sin_historial_borra_categoria_dias_y_horarios(db_session):
     servicio = AsistenciaServicio(db_session)
     categoria = servicio.crear_categoria(CategoriaCreateDTO(

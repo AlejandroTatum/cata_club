@@ -22,6 +22,19 @@ if TYPE_CHECKING:
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
+# Rutas de autoservicio que una cuenta aún no habilitada sí puede usar (ver el
+# comentario de `decodificar_token`).
+_SUPERFICIES_LIMITADAS = (
+    "/auth/me",
+    "/auth/logout",
+    "/auth/me/sesiones",
+    "/auth/sesiones/invalidar",
+    "/auth/correo",
+    "/auth/contrasenia/cambiar",
+    "/auth/consentimiento-legal",
+    "/auth/consentimiento-legal/aceptar",
+)
+
 
 class GestorAutenticacion:
     """Encapsula el hashing de contraseñas y la emisión/validación de JWT."""
@@ -391,16 +404,14 @@ class GestorAutenticacion:
         # rechaza a las verificadas), así que sin esta excepción el gate la
         # bloqueaba SIEMPRE: la única puerta para corregir un correo mal
         # tipeado quedaba cerrada para quien la necesita.
+        # Carve-out de re-aceptación legal (S8): la cuenta pendiente de
+        # activación también debe poder aceptar los términos vigentes; opera
+        # solo sobre el `sub` del JWT y no recibe ids.
         # Carve-out de cambio de contraseña (FAM-17): autoservicio propio vía
         # `sub`, sin ids de path ni módulos del club; verifica la clave actual.
         ruta = request.url.path.rstrip("/")
         es_superficie_limitada = (
-            ruta.endswith("/auth/me")
-            or ruta.endswith("/auth/logout")
-            or ruta.endswith("/auth/me/sesiones")
-            or ruta.endswith("/auth/sesiones/invalidar")
-            or ruta.endswith("/auth/correo")
-            or ruta.endswith("/auth/contrasenia/cambiar")
+            ruta.endswith(_SUPERFICIES_LIMITADAS)
             or ruta.startswith("/api/v1/personas")
         )
         if not es_superficie_limitada and not GestorAutenticacion.puede_acceder_modulos(db, usuario):

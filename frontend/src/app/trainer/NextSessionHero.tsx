@@ -132,7 +132,7 @@ export default function NextSessionHero({
                             type="button"
                             aria-label={`Ficha de emergencia de ${name}`}
                             onClick={() => onOpenEmergency(student)}
-                            className={`${chipClasses} w-full text-left hover:bg-line focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink`}
+                            className={`${chipClasses} touch-target-chip w-full text-left hover:bg-line focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink`}
                           >
                             {chip}
                           </button>

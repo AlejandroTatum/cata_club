@@ -31,7 +31,22 @@ from reportlab.platypus import (
 from app.soporte_transversal.formato import formatear_monto_usd
 from app.soporte_transversal.tiempo import ZONA_HORARIA_CLUB, ahora_club
 
-_LOGO_PATH = Path(__file__).parent / "assets" / "cata-club-logo.jpeg"
+_MEMBRETE_PATH = Path(__file__).parent / "assets" / "cata-club-membrete.png"
+# El PNG del cliente mide 1166x253 px; el alto sale de esa proporción.
+_MEMBRETE_PROPORCION = 253 / 1166
+# Calibri (la fuente de la plantilla del cliente) no viene empaquetada ni hay un
+# Carlito en el repo: se usa Helvetica, la fuente incorporada de ReportLab.
+_FUENTE_MEMBRETE = "Helvetica"
+_FUENTE_MEMBRETE_NEGRITA = "Helvetica-Bold"
+_LINEAS_MEMBRETE = (
+    "CLUB DEPORTIVO ESPECIALIZADO FORMATIVO \u201cCATA CLUB\u201d",
+    "FUNDADO EL 10 DE OCTUBRE DEL 2013",
+    "ACUERDO MINISTERIAL 1810",
+)
+_PIE_TELEFONOS = "Tel\u00e9fonos: 0994219619 \u2013 0990288152"
+_TAM_LINEA_MEMBRETE = 10
+_INTERLINEADO_MEMBRETE = 4.6 * mm
+_MARGEN_PAPEL_MEMBRETE = 8 * mm
 _ROJO_INSTITUCIONAL = "#D92128"
 _NEGRO_INSTITUCIONAL = "#111111"
 # Gris de las filas pares: el rojo institucional lavado hasta el punto en que
@@ -40,11 +55,21 @@ _NEGRO_INSTITUCIONAL = "#111111"
 _GRIS_FILAS_ALTERNAS = "#F3F0F0"
 _NOMBRE_CLUB = "Cata Club - Tenis de Mesa"
 
-# Alto que la cabecera institucional se reserva arriba de la hoja: el logo baja
-# hasta 24mm del borde y la barra roja se dibuja a 26mm. Ninguno de los dos es
-# un flowable, así que no empujan el contenido: si el margen superior no los
-# deja pasar, el texto les cae encima.
-_MARGEN_SUPERIOR_CON_CABECERA = 30 * mm
+# Alto que se reserva arriba de la hoja: el banner (escalado al ancho del
+# contenido), las tres líneas del membrete y un respiro. Ni el banner ni las
+# líneas son flowables, así que no empujan el contenido: si el margen superior
+# no los deja pasar, el texto les cae encima.
+def _margen_superior(ancho_contenido: float) -> float:
+    alto_banner = ancho_contenido * _MEMBRETE_PROPORCION
+    return (
+        _MARGEN_PAPEL_MEMBRETE + alto_banner + 3 * mm
+        + len(_LINEAS_MEMBRETE) * _INTERLINEADO_MEMBRETE + 5 * mm
+    )
+
+
+# Pie en cada hoja: teléfonos centrados a 10mm y, en reportes, «Página X de N»
+# a 6mm; el contenido se detiene por encima de los dos.
+_MARGEN_INFERIOR_CON_PIE = 20 * mm
 
 FORMATO_SELLO_COMPROBANTE = "%d/%m/%Y %H:%M:%S"
 FORMATO_SELLO_REPORTE = "%d/%m/%Y %H:%M"
@@ -117,8 +142,8 @@ def _renderizar_recibo(
         pagesize=A4,
         leftMargin=18 * mm,
         rightMargin=18 * mm,
-        topMargin=_MARGEN_SUPERIOR_CON_CABECERA,
-        bottomMargin=16 * mm,
+        topMargin=_margen_superior(A4[0] - 36 * mm),
+        bottomMargin=_MARGEN_INFERIOR_CON_PIE,
         title=titulo_pdf,
         author=_NOMBRE_CLUB,
     )
@@ -393,8 +418,8 @@ def generar_reporte_pdf(
         pagesize=A4,
         leftMargin=14 * mm,
         rightMargin=14 * mm,
-        topMargin=_MARGEN_SUPERIOR_CON_CABECERA,
-        bottomMargin=16 * mm,
+        topMargin=_margen_superior(A4[0] - 28 * mm),
+        bottomMargin=_MARGEN_INFERIOR_CON_PIE,
         title=titulo,
         author=_NOMBRE_CLUB,
     )
@@ -558,25 +583,37 @@ def _tabla_de_reporte(
 
 
 def _dibujar_encabezado_pagina(canvas, doc) -> None:
-    """Callback de página: logo institucional + barra roja en cada página."""
+    """Callback de página: membrete del cliente (banner + tres líneas) arriba y
+    teléfonos abajo, en cada página de cualquier PDF del club."""
     canvas.saveState()
     ancho_pagina, alto_pagina = A4
+    ancho_contenido = ancho_pagina - doc.leftMargin - doc.rightMargin
+    y = alto_pagina - _MARGEN_PAPEL_MEMBRETE
 
-    if _LOGO_PATH.exists():
-        alto_logo = 14 * mm
-        ancho_logo = 14 * mm
+    if _MEMBRETE_PATH.exists():
+        alto_banner = ancho_contenido * _MEMBRETE_PROPORCION
+        y -= alto_banner
         canvas.drawImage(
-            str(_LOGO_PATH),
-            14 * mm,
-            alto_pagina - 24 * mm,
-            width=ancho_logo,
-            height=alto_logo,
-            preserveAspectRatio=True,
+            str(_MEMBRETE_PATH),
+            doc.leftMargin,
+            y,
+            width=ancho_contenido,
+            height=alto_banner,
             mask="auto",
         )
 
-    canvas.setFillColor(colors.HexColor(_ROJO_INSTITUCIONAL))
-    canvas.rect(0, alto_pagina - 26 * mm, ancho_pagina, 2 * mm, stroke=0, fill=1)
+    canvas.setFillColor(colors.HexColor(_NEGRO_INSTITUCIONAL))
+    y -= 3 * mm
+    for indice, linea in enumerate(_LINEAS_MEMBRETE):
+        y -= _INTERLINEADO_MEMBRETE
+        canvas.setFont(
+            _FUENTE_MEMBRETE_NEGRITA if indice == 0 else _FUENTE_MEMBRETE,
+            _TAM_LINEA_MEMBRETE,
+        )
+        canvas.drawCentredString(ancho_pagina / 2, y + 1.2 * mm, linea)
+
+    canvas.setFont(_FUENTE_MEMBRETE, 9)
+    canvas.drawCentredString(ancho_pagina / 2, 10 * mm, _PIE_TELEFONOS)
 
     canvas.restoreState()
 
@@ -608,7 +645,7 @@ class _LienzoNumerado(Canvas):
         self.setFont("Helvetica", 7)
         self.setFillColor(colors.grey)
         self.drawString(
-            A4[0] - 34 * mm, 10 * mm, f"Página {self._pageNumber} de {total}",
+            A4[0] - 34 * mm, 6 * mm, f"Página {self._pageNumber} de {total}",
         )
 
 

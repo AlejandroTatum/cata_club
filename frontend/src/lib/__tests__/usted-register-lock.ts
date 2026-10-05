@@ -68,7 +68,7 @@ export const USTED_PRONOMBRES = ["usted", "ustedes"];
  * These same shapes are ordinary third-person subjunctives in tú copy
  * ("para que el club revise", "cuando se complete"), and a few collide with
  * English code ("use", "complete"). So they only count in an IMPERATIVE
- * POSITION — see `IMPERATIVE_POSITION` — never mid-clause.
+ * POSITION — see `buildUstedRegisterRegex` — never mid-clause.
  */
 export const USTED_IMPERATIVOS = [
   "inscríbase", "ingrese", "revise", "intente", "inténtelo", "elija",
@@ -114,7 +114,7 @@ export function buildUstedRegisterRegex(): RegExp {
   // «por favor», or continues a coordinated instruction («alárguela o mezcle»).
   // "para que el club revise" / "cuando se complete" have a subject or
   // «se» in front and so stay out.
-  const imperative = `(?<=(?:^|[.!?¿¡:;,"'\`>()\\n]|\\b(?:y|o|u|e|favor|luego|después|también))\\s*)(?:${USTED_IMPERATIVOS.join("|")})`;
+  const imperative = `(?<=(?:^|[.!?¿¡:;,"'\`>()\\n]|(?<![${LETTER}])(?:y|o|u|e|favor|luego|después|también))\\s*)(?:${USTED_IMPERATIVOS.join("|")})`;
   return new RegExp(
     `(?<![${LETTER}])(${always.join("|")}|${imperative})(?![${LETTER}])`,
     "giu",

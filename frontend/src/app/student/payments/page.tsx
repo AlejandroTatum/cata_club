@@ -56,7 +56,7 @@ import { fetchStudentPortal, fetchPagosDePersona, fetchCoberturasDePersona, fetc
 import type { StudentPortalSummary, PagoPersona, MembershipSummary, BeneficioAsignado, CoberturaBonificada } from "@/services/api";
 import { BackLink, Badge, Button, EmptyState, FilterPanel, FilterPill, InfoPanel, LoadingState, PAGE_RAIL, StatCard, buttonClasses, cn } from "@/components/ui";
 
-import { describePaymentSituation, firstNameOf, hasOwnMembership, isMinor } from "../student-utils";
+import { describeDiscountBlock, describePaymentSituation, firstNameOf, resolveDiscountedCoverageEnd, hasOwnMembership, isMinor } from "../student-utils";
 import { useManagedProfiles, withSelectedStudent } from "../ManagedStudentPicker";
 import FamilyStrip from "../FamilyStrip";
 import { getEmptyStateMessage, countPagosByStatus, formatPagoMonto, PAGO_FILTER_LABELS, prepareVoucher, type PagoStatusFilter } from "./payments-utils";
@@ -287,6 +287,13 @@ function PaymentsContent({
   // `null`, so there is no real payload where it is `undefined`.
   const coverageEnd = selectedProfile?.membership?.cubiertoHasta ?? null;
   const counts = useMemo(() => countPagosByStatus(pagos), [pagos]);
+  // T5/S5: while the current month was paid with a discount the member cannot
+  // pay or apply the benefit again; the backend enforces it, this only hides
+  // the form and says why.
+  const discountedCoverageEnd = useMemo(
+    () => resolveDiscountedCoverageEnd(pagos, coberturas),
+    [pagos, coberturas],
+  );
   /**
    * The merged history (issue #1369, slice 3): pagos AND 100%-coverage
    * activations, newest-first by their own date (`fechaRegistro` vs
@@ -349,6 +356,7 @@ function PaymentsContent({
     planName: selectedProfile?.membership?.categoria ?? null,
     monthlyPrice: selectedProfile?.membership?.montoAplicado ?? null,
     coverageEnd,
+    discountedCoverageEnd,
     pendingCount: pagos.filter((pago) => pago.estadoPago === "PENDIENTE_VALIDACION").length,
     esGratuidadFamiliar: selectedProfile?.membership?.esGratuidadFamiliar ?? false,
     suspended: selectedProfile?.membership?.estado === "SUSPENDIDA",
@@ -398,6 +406,7 @@ function PaymentsContent({
     selectedProfile?.membership != null &&
     !isGratuitous &&
     !isSuspended &&
+    discountedCoverageEnd === null &&
     !hasPendingPago;
 
   /**
@@ -575,6 +584,10 @@ function PaymentsContent({
           // kind) — same source `blockedAsMinor` reads above, so the two
           // blocked states read from one place and cannot disagree.
           <p className="text-sm text-ink-2">{situation.detail}</p>
+        ) : selectedProfile.membership && discountedCoverageEnd !== null ? (
+          <p className="text-sm text-ink-2" data-testid="discount-block-message">
+            {describeDiscountBlock(discountedCoverageEnd)}
+          </p>
         ) : selectedProfile.membership ? (
           <PaymentOrBenefitForm
             membership={selectedProfile.membership}

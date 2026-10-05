@@ -4,6 +4,9 @@
  * Mocks the backend via vi.spyOn(global, "fetch") — no live FastAPI needed
  * (same pattern as src/app/api/members/__tests__/route.test.ts).
  *
+ * Issue #1592: the route makes ONE upstream call (`/portal/alumno/{id}`); the
+ * response shape sent to the browser is unchanged.
+ *
  * @vitest-environment node
  */
 
@@ -59,6 +62,15 @@ afterEach(() => {
   delete process.env.BACKEND_API_URL;
 });
 
+const access = () => makeJwt(3600);
+const cookie = () => `${ACCESS_TOKEN_COOKIE}=${access()}`;
+
+const tipo = { id: 1, categoria: "Mensual", precio: "85.00", modalidad: "MENSUAL" };
+
+function perfil(persona: Record<string, unknown>, extra: Record<string, unknown> = {}) {
+  return { persona, representante: null, historial: [], membresias: [], ...extra };
+}
+
 describe("GET /api/student", () => {
   it("returns 400 when personaId is missing or invalid", async () => {
     const response = await GET(getRequest("http://localhost/api/student"));
@@ -72,71 +84,75 @@ describe("GET /api/student", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("builds a self-only portal (no representados) with attendance", async () => {
-    vi.mocked(global.fetch)
-      .mockResolvedValueOnce(jsonResponse([])) // /personas/5/representados
-      .mockResolvedValueOnce(jsonResponse([])) // /asistencias/horarios
-      .mockResolvedValueOnce(jsonResponse([{ id: 1, categoria: "Mensual", precio: "85.00", modalidad: "MENSUAL" }])) // /membresias/tipos
-      .mockResolvedValueOnce(jsonResponse(self)) // /personas/5
-      .mockResolvedValueOnce(jsonResponse({ items: [], total: 0, skip: 0, limit: 200 })) // /asistencias/persona/5
-      .mockResolvedValueOnce(jsonResponse([{ id: 4, estado: "ACTIVA", personaId: 5, montoAplicado: "85.00", tipoMembresiaId: 1 }])); // /membresias/mias?persona_id=5
+  it("builds a self-only portal with ONE upstream call", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({
+        titular: perfil(self, {
+          membresias: [{ id: 4, estado: "ACTIVA", personaId: 5, montoAplicado: "85.00", tipoMembresiaId: 1 }],
+        }),
+        representados: [],
+        horarios: [],
+        tipos: [tipo],
+      }),
+    );
 
-    const access = makeJwt(3600);
-    const response = await GET(getRequest("http://localhost/api/student?personaId=5", `${ACCESS_TOKEN_COOKIE}=${access}`));
+    const response = await GET(getRequest("http://localhost/api/student?personaId=5", cookie()));
     const body = await response.json();
 
     expect(response.status).toBe(200);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const url = String(vi.mocked(global.fetch).mock.calls[0][0]);
+    expect(url).toContain("/portal/alumno/5");
+    expect(Number(url.match(/historial_limite=(\d+)/)![1])).toBeGreaterThanOrEqual(30); // RECENT_SESSIONS_LIMIT
     expect(body.representados).toHaveLength(0);
-    expect(body.self).toMatchObject({
-      personaId: "5",
-      nombres: "Sofia",
-    });
+    expect(body.self).toMatchObject({ personaId: "5", nombres: "Sofia" });
     expect(body.self.membership).toMatchObject({ estado: "ACTIVA", categoria: "Mensual", modalidad: "MENSUAL" });
     expect(body.membershipPlans).toEqual([{ id: "1", nombre: "Mensual", precio: 85, modalidad: "MENSUAL" }]);
+    expect(Object.keys(body).sort()).toEqual(["membershipPlans", "representados", "self"]);
   });
 
-  it("fetches memberships per persona (self + each representado), each getting its own", async () => {
-    vi.mocked(global.fetch)
-      .mockResolvedValueOnce(jsonResponse([child])) // /personas/5/representados
-      .mockResolvedValueOnce(jsonResponse([])) // /asistencias/horarios
-      .mockResolvedValueOnce(jsonResponse([])) // /membresias/tipos
-      .mockResolvedValueOnce(jsonResponse(self)) // /personas/5
-      .mockResolvedValueOnce(jsonResponse({ items: [], total: 0, skip: 0, limit: 200 })) // /asistencias/persona/5
-      .mockResolvedValueOnce(jsonResponse([{ id: 4, estado: "ACTIVA", personaId: 5, montoAplicado: "40.00", tipoMembresiaId: 1 }])) // /membresias/mias?persona_id=5
-      .mockResolvedValueOnce(jsonResponse(child)) // /personas/6
-      .mockResolvedValueOnce(jsonResponse({ items: [], total: 0, skip: 0, limit: 200 })) // /asistencias/persona/6
-      .mockResolvedValueOnce(jsonResponse([{ id: 7, estado: "ACTIVA", personaId: 6, montoAplicado: "25.00", tipoMembresiaId: 1 }])); // /membresias/mias?persona_id=6
+  it("gives self and each representado its own membership and representante from the single payload", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({
+        titular: perfil(self, {
+          membresias: [{ id: 4, estado: "ACTIVA", personaId: 5, montoAplicado: "40.00", tipoMembresiaId: 1 }],
+        }),
+        representados: [
+          perfil(child, {
+            representante: { nombres: "Sofia", apellidos: "Alumna" },
+            membresias: [{ id: 7, estado: "ACTIVA", personaId: 6, montoAplicado: "25.00", tipoMembresiaId: 1 }],
+          }),
+        ],
+        horarios: [],
+        tipos: [tipo],
+      }),
+    );
 
-    const access = makeJwt(3600);
-    const response = await GET(getRequest("http://localhost/api/student?personaId=5", `${ACCESS_TOKEN_COOKIE}=${access}`));
+    const response = await GET(getRequest("http://localhost/api/student?personaId=5", cookie()));
     const body = await response.json();
 
-    expect(response.status).toBe(200);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(body.self.membership).toMatchObject({ estado: "ACTIVA" });
+    expect(body.representados).toHaveLength(1);
+    expect(body.representados[0]).toMatchObject({
+      personaId: "6",
+      representante: { nombres: "Sofia", apellidos: "Alumna" },
+      representanteId: 5,
+    });
     expect(body.representados[0].membership).toMatchObject({ estado: "ACTIVA" });
-    expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining("/membresias/mias?persona_id=6"),
-      expect.anything(),
-    );
   });
 
-  it("propagates the backend's status and message when /personas/{id}/representados fails", async () => {
+  it("propagates the backend's status and message when the aggregate call fails", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "No autorizado" }, 401));
 
-    const access = makeJwt(3600);
-    const response = await GET(getRequest("http://localhost/api/student?personaId=5", `${ACCESS_TOKEN_COOKIE}=${access}`));
+    const response = await GET(getRequest("http://localhost/api/student?personaId=5", cookie()));
     const body = await response.json();
 
     expect(response.status).toBe(401);
     expect(body.message).toBe("No autorizado");
   });
 
-  it("reads the attendance history from the paginated envelope's items, requesting enough rows to cover the portal's window", async () => {
-    // GET /asistencias/persona/{id} now answers {items, total, skip, limit}
-    // instead of a raw array (TRA-6). The portal's own "most recent 30"
-    // window (RECENT_SESSIONS_LIMIT in student-adapter.ts) needs page 1 to
-    // actually contain the most recent sessions, so the request must ask for
-    // a limit comfortably above that, not rely on the backend's default.
+  it("builds recentSessions from the historial using the horarios in the same payload", async () => {
     const asistencia = {
       id: 1,
       fechaEntrenamiento: "2026-07-01",
@@ -146,42 +162,20 @@ describe("GET /api/student", () => {
       personaId: 5,
       horarioId: 1,
     };
-    vi.mocked(global.fetch)
-      .mockResolvedValueOnce(jsonResponse([])) // /personas/5/representados
-      .mockResolvedValueOnce(jsonResponse([])) // /asistencias/horarios
-      .mockResolvedValueOnce(jsonResponse([])) // /membresias/tipos
-      .mockResolvedValueOnce(jsonResponse(self)) // /personas/5
-      .mockResolvedValueOnce(jsonResponse({ items: [asistencia], total: 1, skip: 0, limit: 200 })) // /asistencias/persona/5
-      .mockResolvedValueOnce(jsonResponse([])); // /membresias/mias?persona_id=5
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({
+        titular: perfil(self, { historial: [asistencia] }),
+        representados: [],
+        horarios: [],
+        tipos: [],
+      }),
+    );
 
-    const access = makeJwt(3600);
-    const response = await GET(getRequest("http://localhost/api/student?personaId=5", `${ACCESS_TOKEN_COOKIE}=${access}`));
+    const response = await GET(getRequest("http://localhost/api/student?personaId=5", cookie()));
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(body.self.recentSessions).toHaveLength(1);
-    expect(body.self.recentSessions[0]).toMatchObject({ fecha: "2026-07-01" });
-    const urls = vi.mocked(global.fetch).mock.calls.map((call) => String(call[0]));
-    const historialUrl = urls.find((url) => url.includes("/asistencias/persona/5"));
-    expect(historialUrl).toMatch(/limit=(\d+)/);
-    const limit = Number(historialUrl!.match(/limit=(\d+)/)![1]);
-    expect(limit).toBeGreaterThanOrEqual(30); // RECENT_SESSIONS_LIMIT
-  });
-
-  it("returns self: null when the self persona lookup itself fails", async () => {
-    vi.mocked(global.fetch)
-      .mockResolvedValueOnce(jsonResponse([])) // /personas/5/representados
-      .mockResolvedValueOnce(jsonResponse([])) // /asistencias/horarios
-      .mockResolvedValueOnce(jsonResponse([])) // /membresias/tipos
-      .mockResolvedValueOnce(jsonResponse({ detail: "No encontrado" }, 404)) // /personas/5
-      .mockResolvedValueOnce(jsonResponse({ items: [], total: 0, skip: 0, limit: 200 })) // /asistencias/persona/5
-      .mockResolvedValueOnce(jsonResponse([])); // /membresias/mias?persona_id=5 (called but persona fetch failed first)
-
-    const access = makeJwt(3600);
-    const response = await GET(getRequest("http://localhost/api/student?personaId=5", `${ACCESS_TOKEN_COOKIE}=${access}`));
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body.self).toBeNull();
+    expect(body.self.recentSessions[0]).toMatchObject({ fecha: "2026-07-01", estado: "present" });
   });
 });

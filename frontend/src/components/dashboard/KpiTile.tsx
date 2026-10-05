@@ -104,7 +104,7 @@ export default function KpiTile({
         <Link
           href={href}
           className={cn(
-            "inline-flex items-center gap-1.5 text-xs font-semibold underline-offset-2 hover:underline",
+            "touch-target-row inline-flex items-center gap-1.5 text-xs font-semibold underline-offset-2 hover:underline",
             hot ? "text-white/80 hover:text-white" : "text-ink-2 hover:text-ink",
             captionClassName,
           )}
