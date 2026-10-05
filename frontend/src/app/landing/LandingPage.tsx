@@ -5,9 +5,12 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
+  AtSign,
   CalendarDays,
+  Clock,
   Facebook,
   Instagram,
+  Mail,
   MapPin,
   MessageCircle,
   Navigation,
@@ -26,7 +29,7 @@ import { CLUB_NEIGHBORHOOD, CLUB_PLUS_CODE, CLUB_STREET_ADDRESS, clubOpenStreetM
 import { ENROLL_HREF, Faq, MobileBar, Prices, Steps } from "./ConversionSections";
 import { PublicTarifas } from "./tarifas-context";
 import { buildLandingStats, deriveContactHours, landingConfig, toWhatsAppLink, toWhatsAppNumber } from "./landing-config";
-import { ARRIVAL_PHOTO_SIZES, FOOTER_PHOTO_SIZES, MISSION_VISION_PHOTO_SIZES } from "./landing-image-sizes";
+import { ARRIVAL_PHOTO_SIZES, MISSION_VISION_PHOTO_SIZES } from "./landing-image-sizes";
 import { mapPublicSchedules, type LandingSchedule } from "./schedule-data";
 import { SITE_NAV_SECTIONS, landingSectionHref } from "@/lib/site-navigation";
 import { buildOpeningHoursJsonLd, serializeJsonLd } from "@/lib/seo-structured-data";
@@ -216,6 +219,8 @@ function Hero(): React.ReactElement {
       {/* 01/02/03 photo tab-carousel: a plain React state machine that stays
           fully usable without the GSAP motion layer. */}
       <HeroCarousel />
+      {/* Decorative seal; the note above already says "Desde 2013" in text. */}
+      <span className="landing-hero-badge" aria-hidden="true">Desde<b>2013</b>Loja</span>
     </header>
   );
 }
@@ -402,8 +407,8 @@ function Location(): React.ReactElement {
             reference the product owner gives, and #641 resolved to the club
             being beside it, not near a plaza. The Plus Code closes the last
             gap, since the street here carries no number. */}
-        <div className="landing-contact-row">
-          <dt>Dirección</dt>
+        <div className="landing-contact-row" data-kind="address">
+          <dt><span className="landing-contact-icon" aria-hidden="true"><MapPin /></span>Dirección</dt>
           <dd>{CLUB_STREET_ADDRESS}, {CLUB_NEIGHBORHOOD}, Loja, Ecuador — junto al Coliseo Ciudad de Loja ({CLUB_PLUS_CODE})</dd>
           <dd>
             <a className="landing-contact-action" href={clubOpenStreetMapUrl()} target="_blank" rel="noreferrer">
@@ -413,8 +418,8 @@ function Location(): React.ReactElement {
         </div>
         {/* A live region only while it is unsettled, so the visitor hears
             what happened; once it states real hours it is ordinary copy. */}
-        <div className="landing-contact-row">
-          <dt>Horario</dt>
+        <div className="landing-contact-row" data-kind="hours">
+          <dt><span className="landing-contact-icon" aria-hidden="true"><Clock /></span>Horario</dt>
           <dd role={settled ? undefined : "status"}>{hours}</dd>
           <dd>
             <a className="landing-contact-action" href="#horarios">
@@ -422,8 +427,8 @@ function Location(): React.ReactElement {
             </a>
           </dd>
         </div>
-        <div className="landing-contact-row">
-          <dt>WhatsApp</dt>
+        <div className="landing-contact-row" data-kind="whatsapp">
+          <dt><span className="landing-contact-icon" aria-hidden="true"><MessageCircle /></span>WhatsApp</dt>
           <dd className="landing-contact-numbers">
             {contact.whatsapp.map((number): React.ReactElement => (
               <a key={number} href={toWhatsAppLink(number)} target="_blank" rel="noreferrer">{phoneText(number)}</a>
@@ -435,8 +440,8 @@ function Location(): React.ReactElement {
             </a>
           </dd>
         </div>
-        <div className="landing-contact-row">
-          <dt>Llamadas</dt>
+        <div className="landing-contact-row" data-kind="phone">
+          <dt><span className="landing-contact-icon" aria-hidden="true"><Phone /></span>Llamadas</dt>
           <dd className="landing-contact-numbers">
             {contact.whatsapp.map((number): React.ReactElement => (
               <a key={number} href={`tel:+${toWhatsAppNumber(number)}`} aria-label={`Llamar a ${phoneText(number)}`}>{phoneText(number)}</a>
@@ -444,13 +449,13 @@ function Location(): React.ReactElement {
           </dd>
           <dd aria-hidden="true" />
         </div>
-        <div className="landing-contact-row">
-          <dt>Correo</dt>
+        <div className="landing-contact-row" data-kind="mail">
+          <dt><span className="landing-contact-icon" aria-hidden="true"><Mail /></span>Correo</dt>
           <dd className="landing-contact-numbers"><a href={`mailto:${contact.email}`}>{contact.email}</a></dd>
           <dd aria-hidden="true" />
         </div>
-        <div className="landing-contact-row">
-          <dt>Redes</dt>
+        <div className="landing-contact-row" data-kind="social">
+          <dt><span className="landing-contact-icon" aria-hidden="true"><AtSign /></span>Redes</dt>
           <dd className="landing-contact-social">
             <a href={contact.facebook} target="_blank" rel="noreferrer"><Facebook className="landing-icon-facebook" aria-hidden="true" />Cata Club Loja</a>
             <a href={contact.instagram} target="_blank" rel="noreferrer"><Instagram className="landing-icon-instagram" aria-hidden="true" />@cataclub_tenis_de_mesa</a>
@@ -495,16 +500,6 @@ function Footer(): React.ReactElement {
         <nav aria-label="Servicios"><h2>Servicios</h2><a href="#horarios">Horarios y categorías</a><a href="#mensualidad">Mensualidad</a><a href="#como-empezar">Cómo empezar</a><a href="#preguntas">Preguntas</a><Link href={ENROLL_HREF}>Inscripciones</Link><a href="#contacto">Contacto</a></nav>
         <nav aria-label="Nosotros"><h2>Nosotros</h2><a href="#nosotros">Misión y Visión</a><a href="#valores">Valores</a><a href="#galeria">Galería</a><a href="#contacto">Ubicación</a><a href="#patrocinadores">Patrocinadores</a></nav>
         <nav aria-label="Información legal"><h2>Información legal</h2><Link href="/terminos">Términos y condiciones</Link></nav>
-        <figure className="landing-footer-photo">
-          <Image
-            src="/landing/vision-team-1329.jpg"
-            alt="Alumnos y entrenadores de Cata Club reunidos en la sala de entrenamiento."
-            width={1600}
-            height={1200}
-            loading="lazy"
-            sizes={FOOTER_PHOTO_SIZES}
-          />
-        </figure>
       </div>
       <div className="landing-footer-bottom"><span>© {new Date().getFullYear()} Cata Club · Tenis de Mesa. Todos los derechos reservados.</span><span>Loja, Ecuador</span></div>
     </footer>
