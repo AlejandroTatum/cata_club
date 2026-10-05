@@ -407,6 +407,18 @@
     min-height: 44px;
   }
 
+  /* Text controls (links, chips, disclosures) under the floor (#1567). `-row`
+     suits controls already flex-centred; `-pad` suits blocks of text such as
+     summaries, which have no box to centre in and so pad to 44px instead. */
+  .touch-target-row {
+    min-height: 44px;
+  }
+
+  .touch-target-pad {
+    min-height: 44px;
+    padding-block: 0.75rem;
+  }
+
   /* An icon-only control whose box may grow: the header's search and bell. */
   .touch-target {
     min-width: 44px;

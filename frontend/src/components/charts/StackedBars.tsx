@@ -177,7 +177,7 @@ export default function StackedBars({
                 aria-pressed={on}
                 onClick={() => toggle(s.key)}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold motion-safe:transition-colors",
+                  "touch-target-row inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold motion-safe:transition-colors",
                   on ? "border-line-2 bg-paper text-ink hover:bg-sunken" : "border-line bg-sunken text-ink-3-strong line-through",
                 )}
               >
@@ -195,7 +195,7 @@ export default function StackedBars({
       </ul>
 
       <details className="text-xs text-ink-2">
-        <summary className="cursor-pointer font-semibold text-ink-2">Ver como tabla</summary>
+        <summary className="touch-target-pad cursor-pointer font-semibold text-ink-2">Ver como tabla</summary>
         <div className="mt-2 overflow-x-auto">
           <table className="w-full text-left text-xs tabular-nums">
             <caption className="sr-only">{tableCaption}</caption>
