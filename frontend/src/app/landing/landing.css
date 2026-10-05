@@ -1043,7 +1043,25 @@
 
 /* Motto and brand lockup in the same heavy voice as every heading. */
 .landing-motto .landing-motto-lead { font-family: var(--font-landing-barlow), sans-serif; font-weight: 800; line-height: 1.15; letter-spacing: -0.01em; text-transform: uppercase; text-shadow: 4px 4px 0 var(--landing-ink); }
-.landing-logo .landing-display { font-weight: 800; }
+.landing-logo .landing-display { font-weight: 800; white-space: nowrap; }
+/* The heavier lockup costs the nine-link row the room it had up to 1440px, so
+   the compact pills main applies below 1366px reach a little further. */
+@media (min-width: 1367px) and (max-width: 1536px) {
+  .landing-navbar { padding-inline: 28px; }
+  .landing-nav-links { gap: 2px; }
+  .landing-nav-links a { padding: 10px 10px; font-size: 14px; }
+}
+@media (min-width: 769px) and (max-width: 1100px) {
+  .landing-logo { gap: 10px; font-size: 16px; }
+  .landing-logo img { height: 54px; padding: 5px; }
+  .landing-logo small { font-size: 10px; letter-spacing: 2px; }
+  .landing-nav-cta { padding-inline: 14px; }
+}
+/* Below 1000px the nine links need the lockup's width: the crest alone stays,
+   and the link keeps its accessible name from its own aria-label. */
+@media (min-width: 769px) and (max-width: 1000px) {
+  .landing-logo .landing-display { display: none; }
+}
 
 /* Sponsors and footer. */
 .landing-sponsors { border-top: var(--landing-sticker-edge); }
