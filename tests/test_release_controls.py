@@ -312,6 +312,9 @@ def _entorno_install_cron(tmp_path, bin_dir: Path, **extra: str) -> dict[str, st
         "CRON_FILE": str(tmp_path / "crontab"),
         "BACKUP_AGE_RECIPIENTS_FILE": str(destinatarios),
         "BACKUP_CRON_LOG": str(tmp_path / "cataclub-backup.log"),
+        # Hermético: el snapshot del host (issue #1614) no toca /var del host.
+        "HOST_METRICS_DIR": str(tmp_path / "metricas"),
+        "HOST_SNAPSHOT_LOG": str(tmp_path / "host-snapshot.log"),
         "HEARTBEAT_URL_FILE": str(heartbeat),
         # Hermético también para la réplica fuera del host: sin esto, la
         # compuerta de `install-cron` leería el /etc real de la máquina que
@@ -446,6 +449,35 @@ def test_install_cron_requires_confirmation_before_modifying_crontab(tmp_path):
     installed_cron = cron_file.read_text()
     assert "backup-db.sh" in installed_cron
     assert "check-backup-freshness.sh" in installed_cron
+
+
+def test_install_cron_instala_el_snapshot_del_host_de_forma_idempotente(tmp_path):
+    """Issue #1614: sin `host-snapshot.sh` en el crontab, «Servidor y memoria» queda vacío."""
+    cron_file = tmp_path / "crontab"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _stub_crontab(bin_dir)
+    _stub_age(bin_dir)
+    metricas = tmp_path / "var" / "metricas"
+    entorno = _entorno_install_cron(
+        tmp_path,
+        bin_dir,
+        HOST_METRICS_DIR=str(metricas),
+        HOST_SNAPSHOT_LOG=str(tmp_path / "host-snapshot.log"),
+    )
+    args = ("scripts/deploy/deploy.sh", "install-cron", "--confirm-install-cron")
+
+    for _ in range(2):
+        resultado = run_script(*args, env=entorno)
+        assert resultado.returncode == 0, resultado.stderr
+
+    assert metricas.is_dir()
+    entradas = [
+        linea for linea in cron_file.read_text().splitlines() if "host-snapshot.sh" in linea
+    ]
+    assert len(entradas) == 1
+    assert entradas[0].startswith("* * * * * ")
+    assert f"METRICS_DIR={metricas}" in entradas[0]
 
 
 def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]:
