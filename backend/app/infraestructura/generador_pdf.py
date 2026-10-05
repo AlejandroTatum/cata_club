@@ -10,6 +10,7 @@ Reglas del servicio:
 from __future__ import annotations
 
 import io
+from collections.abc import Callable
 from datetime import datetime, date, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -87,6 +88,102 @@ def sello_de_tiempo(formato: str) -> str:
     return ahora_club().strftime(formato)
 
 
+def _renderizar_recibo(
+    *,
+    titulo_pdf: str,
+    subtitulo: str,
+    prefijo_numero: str,
+    numero: int,
+    etiqueta_fecha: str,
+    fecha: datetime,
+    persona_nombre: str,
+    persona_cedula: str,
+    persona_telefono: str | None,
+    membresia_categoria: str,
+    titulo_detalle: str,
+    tabla_datos: list[list[str]],
+    sello_de_estado: Callable[[ParagraphStyle, ParagraphStyle], list[Paragraph]],
+) -> bytes:
+    """Dibuja el recibo oficial del club; los recibos de pago y de cobertura
+    solo difieren en los parámetros. Un valor sin zona se toma como UTC, que
+    es el contrato de almacenamiento."""
+    buffer = io.BytesIO()
+    if fecha.tzinfo is None:
+        fecha = fecha.replace(tzinfo=timezone.utc)
+    fecha = fecha.astimezone(ZONA_HORARIA_CLUB)
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=18 * mm,
+        rightMargin=18 * mm,
+        topMargin=_MARGEN_SUPERIOR_CON_CABECERA,
+        bottomMargin=16 * mm,
+        title=titulo_pdf,
+        author=_NOMBRE_CLUB,
+    )
+
+    estilos = getSampleStyleSheet()
+    titulo = ParagraphStyle(
+        "TituloComprobante", parent=estilos["Title"],
+        fontSize=18, textColor=colors.HexColor(_NEGRO_INSTITUCIONAL), spaceAfter=4,
+    )
+    estilo_subtitulo = ParagraphStyle(
+        "Sub", parent=estilos["Normal"],
+        fontSize=10, textColor=colors.grey, spaceAfter=10,
+    )
+    cuerpo = ParagraphStyle("Cuerpo", parent=estilos["Normal"], fontSize=10, leading=14)
+    sello = ParagraphStyle(
+        "Sello", parent=estilos["Normal"],
+        fontSize=14, textColor=colors.HexColor("#1B8F2E"),
+        alignment=1, spaceBefore=12, spaceAfter=12,
+    )
+
+    tabla = Table(tabla_datos, colWidths=[60 * mm, 90 * mm], hAlign="LEFT")
+    tabla.setStyle(_estilo_tabla())
+
+    elementos = [
+        Paragraph(_NOMBRE_CLUB, titulo),
+        Paragraph(subtitulo, estilo_subtitulo),
+        HRFlowable(width="100%", thickness=1, color=colors.HexColor(_ROJO_INSTITUCIONAL)),
+        Spacer(1, 8),
+        Paragraph(f"<b>Nº de recibo:</b> {prefijo_numero}-{fecha.year}-{numero:06d}", cuerpo),
+        Paragraph(
+            f"<b>{etiqueta_fecha}:</b> {fecha.strftime('%d/%m/%Y %H:%M')} (hora de Ecuador)",
+            cuerpo,
+        ),
+        Spacer(1, 10),
+        Paragraph("<b>Datos del jugador</b>", estilos["Heading3"]),
+        Paragraph(f"Nombre: {escape(persona_nombre)}", cuerpo),
+        Paragraph(f"Cédula: {escape(persona_cedula)}", cuerpo),
+        Paragraph(f"Teléfono: {escape(persona_telefono or 'No registrado')}", cuerpo),
+        Spacer(1, 10),
+        Paragraph("<b>Detalle de la membresía</b>", estilos["Heading3"]),
+        Paragraph(f"Categoría: {escape(membresia_categoria)}", cuerpo),
+        Spacer(1, 10),
+        Paragraph(f"<b>{titulo_detalle}</b>", estilos["Heading3"]),
+        tabla,
+        Spacer(1, 18),
+        *sello_de_estado(sello, cuerpo),
+        Spacer(1, 24),
+        HRFlowable(width="50%", thickness=0.5, color=colors.grey),
+        Paragraph(
+            f"Documento generado electrónicamente el "
+            f"{sello_de_tiempo(FORMATO_SELLO_COMPROBANTE)}."
+            f" Este recibo se genera electrónicamente y no requiere firma.",
+            ParagraphStyle("Pie", parent=cuerpo, fontSize=8, textColor=colors.grey),
+        ),
+    ]
+    doc.build(
+        elementos,
+        onFirstPage=_dibujar_encabezado_pagina,
+        onLaterPages=_dibujar_encabezado_pagina,
+    )
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+    return pdf_bytes
+
+
 def generar_comprobante_pago_pdf(
     *,
     pago_id: int,
@@ -123,70 +220,8 @@ def generar_comprobante_pago_pdf(
 
     El buffer se cierra internamente para liberar conexiones de ReportLab.
     """
-    buffer = io.BytesIO()
     # La fecha impresa es una hora que una familia lee en papel: se muestra en
-    # la zona del club, no en la UTC con que se guarda. Un valor sin zona se
-    # toma como UTC, que es el contrato de almacenamiento.
-    if fecha_aprobacion.tzinfo is None:
-        fecha_aprobacion = fecha_aprobacion.replace(tzinfo=timezone.utc)
-    fecha_aprobacion = fecha_aprobacion.astimezone(ZONA_HORARIA_CLUB)
-
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        leftMargin=18 * mm,
-        rightMargin=18 * mm,
-        topMargin=_MARGEN_SUPERIOR_CON_CABECERA,
-        bottomMargin=16 * mm,
-        title=f"Recibo de Pago #{pago_id}",
-        author=_NOMBRE_CLUB,
-    )
-
-    estilos = getSampleStyleSheet()
-    titulo = ParagraphStyle(
-        "TituloComprobante", parent=estilos["Title"],
-        fontSize=18, textColor=colors.HexColor(_NEGRO_INSTITUCIONAL), spaceAfter=4,
-    )
-    subtitulo = ParagraphStyle(
-        "Sub", parent=estilos["Normal"],
-        fontSize=10, textColor=colors.grey, spaceAfter=10,
-    )
-    cuerpo = ParagraphStyle(
-        "Cuerpo", parent=estilos["Normal"], fontSize=10, leading=14,
-    )
-    sello = ParagraphStyle(
-        "Sello", parent=estilos["Normal"],
-        fontSize=14, textColor=colors.HexColor("#1B8F2E"),
-        alignment=1, spaceBefore=12, spaceAfter=12,
-    )
-
-    elementos = [
-        Paragraph(_NOMBRE_CLUB, titulo),
-        Paragraph("Recibo digital de pago de membresía", subtitulo),
-        HRFlowable(width="100%", thickness=1, color=colors.HexColor(_ROJO_INSTITUCIONAL)),
-        Spacer(1, 8),
-
-        Paragraph(f"<b>Nº de recibo:</b> P-{fecha_aprobacion.year}-{pago_id:06d}", cuerpo),
-        Paragraph(
-            f"<b>Fecha de aprobación:</b> "
-            f"{fecha_aprobacion.strftime('%d/%m/%Y %H:%M')} (hora de Ecuador)",
-            cuerpo,
-        ),
-        Spacer(1, 10),
-
-        Paragraph("<b>Datos del jugador</b>", estilos["Heading3"]),
-        Paragraph(f"Nombre: {escape(persona_nombre)}", cuerpo),
-        Paragraph(f"Cédula: {escape(persona_cedula)}", cuerpo),
-        Paragraph(f"Teléfono: {escape(persona_telefono or 'No registrado')}", cuerpo),
-        Spacer(1, 10),
-
-        Paragraph("<b>Detalle de la membresía</b>", estilos["Heading3"]),
-        Paragraph(f"Categoría: {escape(membresia_categoria)}", cuerpo),
-        Spacer(1, 10),
-
-        Paragraph("<b>Detalle del pago</b>", estilos["Heading3"]),
-    ]
-
+    # la zona del club, no en la UTC con que se guarda.
     tabla_datos: list[list[str]] = [
         ["Concepto", "Valor"],
         ["Monto pagado", formatear_monto_usd(monto)],
@@ -202,38 +237,31 @@ def generar_comprobante_pago_pdf(
     if motivo_rechazo:
         tabla_datos.append(["Motivo de rechazo", motivo_rechazo])
 
-    tabla = Table(tabla_datos, colWidths=[60 * mm, 90 * mm], hAlign="LEFT")
-    tabla.setStyle(_estilo_tabla())
-    elementos.append(tabla)
-    elementos.append(Spacer(1, 18))
+    def sello_de_estado(sello: ParagraphStyle, cuerpo: ParagraphStyle) -> list[Paragraph]:
+        if estado_pago.upper() == "APROBADO":
+            return [Paragraph("PAGO APROBADO - MEMBRESÍA ACTIVA", sello)]
+        if estado_pago.upper() == "RECHAZADO":
+            sello_rechazo = ParagraphStyle(
+                "SelloRechazo", parent=sello, textColor=colors.HexColor("#B22222"),
+            )
+            return [Paragraph("PAGO RECHAZADO", sello_rechazo)]
+        return [Paragraph(f"Estado: {escape(estado_pago)}", cuerpo)]
 
-    if estado_pago.upper() == "APROBADO":
-        elementos.append(Paragraph("PAGO APROBADO - MEMBRESÍA ACTIVA", sello))
-    elif estado_pago.upper() == "RECHAZADO":
-        sello_rechazo = ParagraphStyle(
-            "SelloRechazo", parent=sello, textColor=colors.HexColor("#B22222"),
-        )
-        elementos.append(Paragraph("PAGO RECHAZADO", sello_rechazo))
-    else:
-        elementos.append(Paragraph(f"Estado: {escape(estado_pago)}", cuerpo))
-
-    elementos.append(Spacer(1, 24))
-    elementos.append(HRFlowable(width="50%", thickness=0.5, color=colors.grey))
-    elementos.append(Paragraph(
-        f"Documento generado electrónicamente el "
-        f"{sello_de_tiempo(FORMATO_SELLO_COMPROBANTE)}."
-        f" Este recibo se genera electrónicamente y no requiere firma.",
-        ParagraphStyle("Pie", parent=cuerpo, fontSize=8, textColor=colors.grey),
-    ))
-
-    doc.build(
-        elementos,
-        onFirstPage=_dibujar_encabezado_pagina,
-        onLaterPages=_dibujar_encabezado_pagina,
+    return _renderizar_recibo(
+        titulo_pdf=f"Recibo de Pago #{pago_id}",
+        subtitulo="Recibo digital de pago de membresía",
+        prefijo_numero="P",
+        numero=pago_id,
+        etiqueta_fecha="Fecha de aprobación",
+        fecha=fecha_aprobacion,
+        persona_nombre=persona_nombre,
+        persona_cedula=persona_cedula,
+        persona_telefono=persona_telefono,
+        membresia_categoria=membresia_categoria,
+        titulo_detalle="Detalle del pago",
+        tabla_datos=tabla_datos,
+        sello_de_estado=sello_de_estado,
     )
-    pdf_bytes = buffer.getvalue()
-    buffer.close()
-    return pdf_bytes
 
 
 def generar_comprobante_cobertura_pdf(
@@ -255,38 +283,6 @@ def generar_comprobante_cobertura_pdf(
     recibo se genera al pedirlo y no se guarda: el número es `C-<año>-<id>`
     (secuencia propia, no toca la de `P-<año>-<pago_id>`) y el monto es el
     cobrado, cero."""
-    buffer = io.BytesIO()
-    if fecha_otorgamiento.tzinfo is None:
-        fecha_otorgamiento = fecha_otorgamiento.replace(tzinfo=timezone.utc)
-    fecha_otorgamiento = fecha_otorgamiento.astimezone(ZONA_HORARIA_CLUB)
-
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        leftMargin=18 * mm,
-        rightMargin=18 * mm,
-        topMargin=_MARGEN_SUPERIOR_CON_CABECERA,
-        bottomMargin=16 * mm,
-        title=f"Recibo de cobertura bonificada #{cobertura_id}",
-        author=_NOMBRE_CLUB,
-    )
-
-    estilos = getSampleStyleSheet()
-    titulo = ParagraphStyle(
-        "TituloCobertura", parent=estilos["Title"],
-        fontSize=18, textColor=colors.HexColor(_NEGRO_INSTITUCIONAL), spaceAfter=4,
-    )
-    subtitulo = ParagraphStyle(
-        "SubCobertura", parent=estilos["Normal"],
-        fontSize=10, textColor=colors.grey, spaceAfter=10,
-    )
-    cuerpo = ParagraphStyle("CuerpoCobertura", parent=estilos["Normal"], fontSize=10, leading=14)
-    sello = ParagraphStyle(
-        "SelloCobertura", parent=estilos["Normal"],
-        fontSize=14, textColor=colors.HexColor("#1B8F2E"),
-        alignment=1, spaceBefore=12, spaceAfter=12,
-    )
-
     tabla_datos = [
         ["Concepto", "Valor"],
         ["Concepto del recibo", "Cobertura bonificada — 100%"],
@@ -294,50 +290,23 @@ def generar_comprobante_cobertura_pdf(
         ["Vigencia desde", fecha_inicio.strftime("%d/%m/%Y")],
         ["Vigencia hasta", fecha_fin.strftime("%d/%m/%Y")],
     ]
-    tabla = Table(tabla_datos, colWidths=[60 * mm, 90 * mm], hAlign="LEFT")
-    tabla.setStyle(_estilo_tabla())
-
-    elementos = [
-        Paragraph(_NOMBRE_CLUB, titulo),
-        Paragraph("Recibo digital de cobertura bonificada", subtitulo),
-        HRFlowable(width="100%", thickness=1, color=colors.HexColor(_ROJO_INSTITUCIONAL)),
-        Spacer(1, 8),
-        Paragraph(f"<b>Nº de recibo:</b> C-{fecha_otorgamiento.year}-{cobertura_id:06d}", cuerpo),
-        Paragraph(
-            f"<b>Fecha de otorgamiento:</b> "
-            f"{fecha_otorgamiento.strftime('%d/%m/%Y %H:%M')} (hora de Ecuador)",
-            cuerpo,
-        ),
-        Spacer(1, 10),
-        Paragraph("<b>Datos del jugador</b>", estilos["Heading3"]),
-        Paragraph(f"Nombre: {escape(persona_nombre)}", cuerpo),
-        Paragraph(f"Cédula: {escape(persona_cedula)}", cuerpo),
-        Paragraph(f"Teléfono: {escape(persona_telefono or 'No registrado')}", cuerpo),
-        Spacer(1, 10),
-        Paragraph("<b>Detalle de la membresía</b>", estilos["Heading3"]),
-        Paragraph(f"Categoría: {escape(membresia_categoria)}", cuerpo),
-        Spacer(1, 10),
-        Paragraph("<b>Detalle de la cobertura</b>", estilos["Heading3"]),
-        tabla,
-        Spacer(1, 18),
-        Paragraph("COBERTURA BONIFICADA - MEMBRESÍA ACTIVA", sello),
-        Spacer(1, 24),
-        HRFlowable(width="50%", thickness=0.5, color=colors.grey),
-        Paragraph(
-            f"Documento generado electrónicamente el "
-            f"{sello_de_tiempo(FORMATO_SELLO_COMPROBANTE)}."
-            f" Este recibo se genera electrónicamente y no requiere firma.",
-            ParagraphStyle("PieCobertura", parent=cuerpo, fontSize=8, textColor=colors.grey),
-        ),
-    ]
-    doc.build(
-        elementos,
-        onFirstPage=_dibujar_encabezado_pagina,
-        onLaterPages=_dibujar_encabezado_pagina,
+    return _renderizar_recibo(
+        titulo_pdf=f"Recibo de cobertura bonificada #{cobertura_id}",
+        subtitulo="Recibo digital de cobertura bonificada",
+        prefijo_numero="C",
+        numero=cobertura_id,
+        etiqueta_fecha="Fecha de otorgamiento",
+        fecha=fecha_otorgamiento,
+        persona_nombre=persona_nombre,
+        persona_cedula=persona_cedula,
+        persona_telefono=persona_telefono,
+        membresia_categoria=membresia_categoria,
+        titulo_detalle="Detalle de la cobertura",
+        tabla_datos=tabla_datos,
+        sello_de_estado=lambda sello, _cuerpo: [
+            Paragraph("COBERTURA BONIFICADA - MEMBRESÍA ACTIVA", sello)
+        ],
     )
-    pdf_bytes = buffer.getvalue()
-    buffer.close()
-    return pdf_bytes
 
 
 def _construir_estilo_tabla(
