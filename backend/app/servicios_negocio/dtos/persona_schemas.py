@@ -1,11 +1,10 @@
-from pydantic import BaseModel, Field, field_serializer, field_validator, model_validator
+from pydantic import BaseModel, Field, field_serializer, model_validator
 from datetime import date, datetime
 from typing import Optional, List
 
 from app.dominio.enums import TipoEscuela, NivelTecnicoAlumno, TipoSangre, TipoManoDominante
 from app.infraestructura.cloudinary_cliente import resolver_url_foto_perfil
 from app.servicios_negocio.dtos.base import ResponseBase
-from app.soporte_transversal.tiempo import hoy_club
 from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentFichaMedicaMenorDTO
 from app.servicios_negocio.dtos.validadores import (
     ApellidoEditable,
@@ -314,19 +313,6 @@ class AntecedentesClubCreateDTO(BaseModel):
 class AntecedentesClubUpdateDTO(BaseModel):
     nivel_tecnico_alumno: Optional[NivelTecnicoAlumno] = None
     mano_dominante: Optional[TipoManoDominante] = None
-
-
-class SocioDesdeUpdateDTO(BaseModel):
-    """«Socio desde»: el día real en que la persona entró al club, que puede
-    ser anterior a su inscripción en la plataforma (miembros migrados)."""
-    fecha_inicio_club: date
-
-    @field_validator("fecha_inicio_club")
-    @classmethod
-    def _no_futura(cls, valor: date) -> date:
-        if valor > hoy_club():
-            raise ValueError("La fecha de socio no puede ser futura.")
-        return valor
 
 
 class AntecedentesClubResponseDTO(ResponseBase, AntecedentesClubCreateDTO):

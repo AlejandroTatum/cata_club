@@ -241,11 +241,10 @@ export default function MemberCard({
       isFigure: horariosState.status === "ready",
     });
   }
-  const playerSince = profile.membership?.socioDesde ?? profile.membership?.fechaActivacion;
-  if (playerSince) {
+  if (profile.membership?.fechaActivacion) {
     register.push({
       label: "Jugador desde",
-      value: formatDate(playerSince),
+      value: formatDate(profile.membership.fechaActivacion),
       icon: CalendarDays,
       isFigure: true,
     });

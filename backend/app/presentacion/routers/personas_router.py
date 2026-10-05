@@ -16,7 +16,6 @@ from app.servicios_negocio.dtos.persona_schemas import (
     IndependenciaResponseDTO, ReasignarRepresentacionDTO, ReasignacionResponseDTO,
     EstadoPersonaDTO, EntrenadorCreateDTO,
     AntecedentesClubCreateDTO, AntecedentesClubUpdateDTO, AntecedentesClubResponseDTO,
-    SocioDesdeUpdateDTO,
 )
 from app.servicios_negocio.dtos.base import PaginatedResponse
 from app.presentacion.routers.reporte_helpers import (
@@ -785,24 +784,6 @@ async def actualizar_antecedentes_club(
     persona_id: int, datos: AntecedentesClubUpdateDTO, db: Session = Depends(obtener_sesion)
 ):
     return AntecedentesClubServicio(db).actualizar(persona_id, datos)
-
-
-# «Socio desde» (QA ronda 2, L15): solo administración. Un miembro migrado se
-# inscribe el día del lanzamiento pero lleva años en el club; esta fecha es la
-# que el alumno ve como «Jugador desde». No toca cobertura ni deuda. 422 si la
-# fecha es futura (lo valida `SocioDesdeUpdateDTO`).
-@router.put(
-    "/{persona_id}/socio-desde", response_model=AntecedentesClubResponseDTO,
-)
-async def establecer_socio_desde(
-    persona_id: int,
-    datos: SocioDesdeUpdateDTO,
-    db: Session = Depends(obtener_sesion),
-    token_payload: dict = Depends(GestorPermisos(["ADMINISTRADOR"])),
-):
-    return AntecedentesClubServicio(db).establecer_socio_desde(
-        persona_id, datos.fecha_inicio_club, actor_persona_id=token_payload.get("persona_id"),
-    )
 
 
 # --- Roles (E01-RF004/005/006/007): gap real que no existía en ningún lado --

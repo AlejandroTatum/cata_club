@@ -1467,8 +1467,6 @@ export interface MembershipSummary {
   modalidad: string | null;
   /** Activation date, i.e. "socio desde". Null when the backend omits it. */
   fechaActivacion: string | null;
-  /** Real club join date (admin-editable); wins over `fechaActivacion` for «Jugador desde». */
-  socioDesde?: string | null;
   /** End of the paid period — drives the "Vigente hasta"/"Venció" state. */
   fechaFin: string | null;
   /**
@@ -1849,8 +1847,6 @@ export interface MembresiaPorPersona {
   estado: "INACTIVA" | "ACTIVA" | "VENCIDA" | "SUSPENDIDA";
   montoAplicado: string;
   fechaActivacion: string;
-  /** Real club join date (admin-editable); `null` until the person has club records. */
-  socioDesde?: string | null;
   personaId: number;
   tipoMembresiaId: number;
   tipo?: {
@@ -2137,18 +2133,6 @@ export async function cambiarPlanMembresia(
   return request<MembresiaPorPersona>(apiEndpoint(`/membresias/${membresiaId}/cambiar-plan`), {
     method: "POST",
     body: JSON.stringify({ nuevoTipoMembresiaId }),
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-/**
- * Sets the person's real «Socio desde» date — `PUT /api/personas/:id/socio-desde`
- * (admin-only). Never touches coverage or debt; a future date is a 422.
- */
-export async function establecerSocioDesde(personaId: number, fechaInicioClub: string): Promise<void> {
-  await request<unknown>(apiEndpoint(`/personas/${personaId}/socio-desde`), {
-    method: "PUT",
-    body: JSON.stringify({ fechaInicioClub }),
     headers: { "Content-Type": "application/json" },
   });
 }

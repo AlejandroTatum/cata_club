@@ -56,7 +56,7 @@ export function parseSuspensionReactivacionBody(body: unknown): { motivo: string
 
 /**
  * The fetch/error/response tail every `membresias` action route repeats:
- * authenticated POST (or PUT, `opts.method`) to `backendPath`, translate a proxy failure or a
+ * authenticated POST to `backendPath`, translate a proxy failure or a
  * non-OK backend response into `opts.failureMessage`, otherwise relay the
  * backend JSON body with `opts.successStatus` (default 200) and forward a
  * refreshed access-token cookie.
@@ -65,10 +65,10 @@ export async function proxyMembresiaAction(
   request: NextRequest,
   backendPath: string,
   backendBody: Record<string, unknown>,
-  opts: { failureMessage: string; successStatus?: number; method?: "POST" | "PUT" },
+  opts: { failureMessage: string; successStatus?: number },
 ): Promise<NextResponse> {
   const result = await backendFetchAuthed(request, backendPath, {
-    method: opts.method ?? "POST",
+    method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(backendBody),
   });

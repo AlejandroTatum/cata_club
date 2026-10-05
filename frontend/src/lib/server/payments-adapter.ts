@@ -100,13 +100,6 @@ export interface BackendMembresia {
    */
   esGratuidadFamiliar?: boolean;
   /**
-   * «Socio desde» (QA round 2, L15): `MembresiaResponseDTO.socio_desde`, the
-   * person's real club join date, which an admin can correct. The admin panel
-   * shows it, falling back to `fechaActivacion` when it is `null`.
-   */
-  socioDesde?: string | null;
-  fechaActivacion?: string | null;
-  /**
    * `MembresiaResponseDTO.cubierto_hasta` — the real coverage end (latest end
    * across approved payments and bonified coverage). Present on
    * `GET /membresias/` list items; optional like the other late additions.

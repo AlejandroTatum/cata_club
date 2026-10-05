@@ -182,11 +182,6 @@ class MembresiaResponseDTO(ResponseBase, BaseModel):
     # SUSPENDIDA y solo lo pueblan los endpoints de lectura que pasan por
     # `_con_cubierto_hasta`; `None` en cualquier otro caso.
     motivo_suspension: str | None = None
-    # «Socio desde» (QA ronda 2, L15): `AntecedentesClub.fecha_inicio_club` de
-    # la persona, que el admin puede corregir para miembros migrados. Lo
-    # pueblan los endpoints de lectura vía `_con_cubierto_hasta`; `None` si la
-    # persona no tiene antecedentes y la UI cae a `fecha_activacion`.
-    socio_desde: date | None = None
 
 
 class MembresiaEstadisticasResponseDTO(ResponseBase, BaseModel):

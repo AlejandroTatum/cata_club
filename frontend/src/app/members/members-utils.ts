@@ -105,8 +105,6 @@ export interface MemberStudentSummary {
      * the backend omits it.
      */
     esGratuidadFamiliar?: boolean;
-    /** Real club join date shown as «Socio desde» (falls back to the activation date). */
-    socioDesde?: string | null;
     /**
      * Issue #326: derived overdue months for a VENCIDA membership, from the
      * bulk debt endpoint (`GET /membresias/deuda/bulk`, admin-only) resolved

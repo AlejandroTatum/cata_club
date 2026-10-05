@@ -8,7 +8,6 @@ import RegisterPaymentForm from "./RegisterPaymentForm";
 import RegularizarDeudaForm from "./RegularizarDeudaForm";
 import SuspenderReactivarForm from "./SuspenderReactivarForm";
 import CambiarPlanForm from "./CambiarPlanForm";
-import SocioDesdeForm from "./SocioDesdeForm";
 import { Badge, DataBox, PAGE_RAIL } from "@/components/ui";
 import { ACTION_TRIGGER } from "./payment-action-styles";
 import { formatCurrency } from "@/lib/format-utils";
@@ -289,11 +288,6 @@ export default function StudentMembershipActions({
                 estado={membresia.estado}
                 onChanged={onMembresiaChanged}
               />
-            </ActionTile>
-          )}
-          {membresia && (
-            <ActionTile description="Fecha real de ingreso al club; es la que ve el alumno como «Jugador desde». No cambia cobros ni deuda.">
-              <SocioDesdeForm personaId={personaId} actual={membresia.socioDesde} onChanged={onMembresiaChanged} />
             </ActionTile>
           )}
           {membresia && (
