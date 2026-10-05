@@ -41,6 +41,7 @@ autenticación. El gate lee:
 
 Los ayudantes a los que se ancla la búsqueda son `backendFetch`,
 `backendFetchAuthed`, `proxyToBackend`, `proxyBackendGet`, `proxyBackendPdfGet`,
+`proxyBackendJsonGet`,
 `publicCatalogGet`, `backendUrl`, `fetchAllPages`, `proxyMembresiaAction` y
 `anonymousAuthPost`. Dos más —`postCatalogResource` y `patchCatalogResource`—
 no reciben la ruta como argumento posicional sino dentro de un objeto de
