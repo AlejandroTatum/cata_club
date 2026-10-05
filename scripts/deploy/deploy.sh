@@ -384,7 +384,28 @@ case "$cmd" in
     # La URL del heartbeat NO aparece acá: `notify-heartbeat.sh` la lee de un
     # archivo de root. `crontab -l` no pide privilegios, y quien lea esa URL
     # puede pingear a mano y dejar la alarma en verde con el backup muerto.
-    (crontab -l 2>/dev/null | grep -v -e 'backup-db.sh' -e 'check-backup-freshness.sh' || true
+    #
+    # `host-snapshot.sh` (issue #1614) alimenta «Servidor y memoria» del admin:
+    # escribe `host.json` cada minuto y `celery-worker` lo monta de solo lectura.
+    # Si nadie lo instala la pantalla queda en «Aún no hay mediciones». El
+    # directorio se crea acá porque, si no existe, Compose lo crea como root y
+    # el cron (usuario del operador) no podría escribir. Su log va aparte: es
+    # una línea por minuto y no debe ensuciar el log diario del backup.
+    HOST_METRICS_DIR="${HOST_METRICS_DIR:-/var/lib/cata-club/metricas}"
+    HOST_SNAPSHOT_LOG="${HOST_SNAPSHOT_LOG:-/var/log/cata-club-host-snapshot.log}"
+    if [ ! -d "$HOST_METRICS_DIR" ] || [ ! -w "$HOST_METRICS_DIR" ]; then
+      install -d -m 755 "$HOST_METRICS_DIR" 2>/dev/null \
+        || sudo install -d -m 755 -o "$(id -un)" -g "$(id -gn)" "$HOST_METRICS_DIR" \
+        || die "no se pudo crear ${HOST_METRICS_DIR} (sudo install -d -m 755 -o \$(id -un) -g \$(id -gn) ${HOST_METRICS_DIR})"
+    fi
+    # Mismo criterio que `BACKUP_CRON_LOG`: una redirección que falla aborta el
+    # comando antes de ejecutarlo, y el snapshot moriría sin rastro.
+    if ! { [ -w "$HOST_SNAPSHOT_LOG" ] || { [ ! -e "$HOST_SNAPSHOT_LOG" ] && [ -w "$(dirname "$HOST_SNAPSHOT_LOG")" ]; }; }; then
+      sudo install -o "$(id -un)" -g "$(id -gn)" -m 640 /dev/null "$HOST_SNAPSHOT_LOG" \
+        || die "no se pudo preparar ${HOST_SNAPSHOT_LOG} (sudo install -o \$(id -un) -g \$(id -gn) -m 640 /dev/null ${HOST_SNAPSHOT_LOG})"
+    fi
+    (crontab -l 2>/dev/null | grep -v -e 'backup-db.sh' -e 'check-backup-freshness.sh' -e 'host-snapshot.sh' || true
+     printf '* * * * * cd %s && METRICS_DIR=%s ./scripts/metrics/host-snapshot.sh >> %s 2>&1\n' "$STACK_DIR" "$HOST_METRICS_DIR" "$HOST_SNAPSHOT_LOG"
      printf '30 3 * * * cd %s && ./scripts/backup/backup-db.sh >> %s 2>&1\n' "$STACK_DIR" "$BACKUP_CRON_LOG"
      printf '0 7 * * * cd %s && ./scripts/ops/check-backup-freshness.sh --max-age-hours %s >> %s 2>&1 && ./scripts/ops/check-celery-health.sh >> %s 2>&1 && ./scripts/ops/check-memory.sh >> %s 2>&1 && ./scripts/ops/notify-heartbeat.sh >> %s 2>&1\n' \
        "$STACK_DIR" "${BACKUP_MAX_AGE_HOURS:-26}" "$BACKUP_CRON_LOG" "$BACKUP_CRON_LOG" "$BACKUP_CRON_LOG" "$BACKUP_CRON_LOG"
@@ -394,5 +415,6 @@ case "$cmd" in
     crontab -l | grep 'check-celery-health.sh' >/dev/null || die "el cron no quedó con la verificación de salud de Celery"
     crontab -l | grep 'check-memory.sh' >/dev/null || die "el cron de memoria no quedó instalado"
     crontab -l | grep 'notify-heartbeat.sh' >/dev/null || die "el cron no quedó con el ping de heartbeat"
+    crontab -l | grep 'host-snapshot.sh' >/dev/null || die "el cron de métricas del host no quedó instalado"
     ;;
 esac

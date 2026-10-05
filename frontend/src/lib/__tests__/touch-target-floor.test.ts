@@ -44,6 +44,7 @@ describe("coarse-pointer touch floor", () => {
 
   it("offers a square for icon-only controls and an invisible hit area for fixed ones", () => {
     expect(floor).toMatch(/\.touch-target\s*\{\s*min-width: 44px;\s*min-height: 44px;/);
+    expect(floor).toMatch(/\.touch-target-chip\s*\{\s*min-height: 44px;/);
     expect(floor).toMatch(/\.touch-target-reach::after\s*\{[^}]*width: 44px;[^}]*height: 44px;/);
   });
 
