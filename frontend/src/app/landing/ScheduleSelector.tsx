@@ -15,11 +15,10 @@ import ScheduleReveal from "./ScheduleReveal";
 
 /** Card ground per position, with the ink that stays legible on it and the CTA colours that stand out from it. */
 const CARD_PALETTE = [
+  { ground: "var(--landing-brand-red)", ink: "var(--landing-surface)", ctaGround: "var(--landing-brand-yellow)", ctaInk: "var(--landing-brand-black)" },
   { ground: "var(--landing-brand-yellow)", ink: "var(--landing-brand-black)", ctaGround: "var(--landing-brand-black)", ctaInk: "var(--landing-surface)" },
-  { ground: "var(--landing-brand-fuchsia-strong)", ink: "var(--landing-surface)", ctaGround: "var(--landing-surface)", ctaInk: "var(--landing-brand-fuchsia-strong)" },
-  { ground: "var(--landing-brand-red)", ink: "var(--landing-surface)", ctaGround: "var(--landing-surface)", ctaInk: "var(--landing-brand-red-strong)" },
-  { ground: "var(--landing-ball)", ink: "var(--landing-brand-black)", ctaGround: "var(--landing-brand-black)", ctaInk: "var(--landing-surface)" },
-  { ground: "var(--landing-brand-black)", ink: "var(--landing-surface)", ctaGround: "var(--landing-surface)", ctaInk: "var(--landing-brand-black)" },
+  { ground: "var(--landing-surface)", ink: "var(--landing-brand-black)", ctaGround: "var(--landing-brand-red)", ctaInk: "var(--landing-surface)" },
+  { ground: "var(--landing-brand-yellow)", ink: "var(--landing-brand-black)", ctaGround: "var(--landing-brand-black)", ctaInk: "var(--landing-surface)" },
 ] as const;
 
 interface ScheduleSelectorProps {

@@ -605,8 +605,6 @@
    column reads as a list that fills its width and a link is a 48px target. */
 .landing-footer nav a { display: flex; flex: 1 1 auto; align-items: center; min-height: 48px; border-top: 1px solid color-mix(in srgb, var(--landing-surface) 16%, transparent); color: var(--landing-surface); font-size: 16px; font-weight: 500; }
 .landing-footer nav a:hover { color: var(--landing-highlight); }
-.landing-footer-photo { position: relative; min-height: 100%; margin: 0; overflow: hidden; border-radius: 14px; background: var(--landing-vitrina-photo-bg); }
-.landing-footer-photo img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 40%; }
 .landing-footer-bottom { position: relative; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; padding-top: 12px; border-top: 1px solid var(--landing-border); color: var(--landing-surface); font-size: 14px; }
 
 /* Section rhythm — the page does not use one padding. Chapters (see the order
@@ -640,7 +638,6 @@
   .landing-footer-top { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .landing-footer-brand { grid-column: 1 / -1; }
   .landing-footer-social { margin-top: 4px; }
-  .landing-footer-photo { grid-column: 1 / -1; min-height: 220px; }
   .landing-sponsors-copy { --landing-sponsor-gap: 14px; }
 }
 
@@ -788,7 +785,6 @@
       .landing-sponsors-item { width: 300px; }
   .landing-sponsor { height: 168px; }
   .landing-footer-top { grid-template-columns: minmax(0, 1fr); gap: 32px; }
-  .landing-footer-photo { min-height: 200px; }
   /* Labelled pills across the full width: three bare circles would leave the
      right half of the brand block empty on a phone. */
   .landing-footer-social { gap: 8px; }
@@ -903,4 +899,228 @@
   .landing-page { padding-bottom: 72px; }
   .landing-steps-list { grid-template-columns: 1fr; }
   .landing-steps-actions .landing-button { flex: 1 1 100%; }
+}
+
+/* One visual language for the whole page: the "sticker" edge the prices, steps
+   and FAQ introduced (2px ink border, generous radius, hard offset shadow, red /
+   yellow / coal cycling) now carries every section. This layer only restyles
+   boxes — layout, motion hooks and markup stay as the rules above define them —
+   and it sits last so it wins at equal specificity; its own breakpoints at the
+   end of the block restate what the earlier responsive rules would otherwise
+   have overridden. */
+.landing-page {
+  --landing-ink: var(--landing-brand-black);
+  --landing-sticker-edge: 2px solid var(--landing-ink);
+  --landing-sticker-lift: 6px 6px 0 var(--landing-ink);
+  --landing-sticker-lift-sm: 4px 4px 0 var(--landing-ink);
+  --landing-sticker-lift-red: 6px 6px 0 var(--landing-brand-red);
+}
+
+/* Buttons: every CTA is a sticker that lifts towards its shadow. */
+.landing-button { border: var(--landing-sticker-edge); border-radius: 12px; box-shadow: var(--landing-sticker-lift-sm); }
+.landing-button:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--landing-ink); }
+.landing-button-outline { border: var(--landing-sticker-edge); box-shadow: var(--landing-sticker-lift-sm); }
+.landing-hero .landing-button-outline { border-color: var(--landing-on-action); box-shadow: 4px 4px 0 var(--landing-ink); }
+.landing-button-quiet { border: var(--landing-sticker-edge); border-radius: 12px; color: var(--landing-text-strong); box-shadow: 3px 3px 0 var(--landing-ink); transition: transform 160ms ease, box-shadow 160ms ease, color 160ms ease; }
+.landing-button-quiet:hover { border-color: var(--landing-ink); color: var(--landing-action); transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--landing-brand-red); }
+
+/* Navbar: ink rule, stickered crest, active pill with an ink edge. */
+.landing-navbar { border-bottom: var(--landing-sticker-edge); }
+.landing-logo img { border: var(--landing-sticker-edge); border-radius: 14px; box-shadow: 4px 4px 0 var(--landing-brand-red); }
+.landing-nav-links a.active { border: var(--landing-sticker-edge); box-shadow: 3px 3px 0 var(--landing-ink); }
+.landing-nav-links a.active:hover { border-color: var(--landing-ink); }
+
+/* Hero: heavy display type with a hard ink drop, the accent word as a tilted
+   yellow sticker, a yellow-and-ink tape along the photo's diagonal seam and a
+   "since 2013" seal on the photo. The tape is two copies of the carousel's own
+   polygon slid out from under it, so it follows the seam at every breakpoint. */
+.landing-hero h1 { font-weight: 800; font-size: clamp(50px, 5vw, 96px); letter-spacing: -0.03em; line-height: 0.98; text-shadow: 5px 5px 0 var(--landing-ink); }
+.landing-hero-accent { display: inline-block; margin: 0.08em 0 0.1em -0.06em; padding: 0.02em 0.14em 0; border: 3px solid var(--landing-ink); border-radius: 12px; background: var(--landing-highlight); color: var(--landing-ink); text-shadow: none; box-shadow: 6px 6px 0 var(--landing-ink); transform: rotate(-2.5deg); }
+.landing-hero-copy > p { font-weight: 500; }
+.landing-hero::before, .landing-hero::after { content: ""; position: absolute; inset: 0 0 0 44%; z-index: 2; clip-path: polygon(0 0, 100% 0, 100% 100%, 14% 100%); pointer-events: none; }
+.landing-hero::before { background: var(--landing-ink); transform: translateX(-30px); }
+.landing-hero::after { background: var(--landing-highlight); transform: translateX(-24px); }
+.landing-hero-badge { position: absolute; right: calc(var(--landing-gutter) - 12px); bottom: 44px; z-index: 15; display: grid; place-items: center; align-content: center; width: 128px; height: 128px; border: 3px solid var(--landing-ink); border-radius: 50%; background: var(--landing-highlight); color: var(--landing-ink); box-shadow: 6px 6px 0 var(--landing-ink); font-size: 12px; font-weight: 800; letter-spacing: 2.4px; line-height: 1; text-transform: uppercase; transform: rotate(10deg); pointer-events: none; }
+.landing-hero-badge b { font-size: 40px; letter-spacing: -0.02em; }
+.landing-hero-counter { padding: 0 14px; border: var(--landing-sticker-edge); border-radius: 999px; background: var(--landing-ink); color: var(--landing-highlight); }
+.landing-hero-nav { border: var(--landing-sticker-edge); background: var(--landing-surface); color: var(--landing-ink); box-shadow: 3px 3px 0 var(--landing-ink); }
+.landing-hero-nav:hover { border-color: var(--landing-ink); }
+.landing-credentials-ticker { border-bottom: var(--landing-sticker-edge); }
+
+/* Mission / Vision: each pillar is a white card; the photo is a framed print. */
+.landing-pillars { gap: 40px; }
+.landing-pillar { padding: 28px; border: var(--landing-sticker-edge); border-radius: 22px; background: var(--landing-surface); box-shadow: var(--landing-sticker-lift-red); }
+.landing-pillar + .landing-pillar { box-shadow: var(--landing-sticker-lift); }
+.landing-pillars .landing-index { display: inline-grid; place-items: center; min-width: 76px; height: 76px; padding-inline: 10px; border: var(--landing-sticker-edge); border-radius: 50%; background: var(--landing-brand-red); color: var(--landing-highlight); font-size: 38px; }
+.landing-pillar + .landing-pillar .landing-index { background: var(--landing-highlight); color: var(--landing-ink); }
+.landing-pillar-photo { border: var(--landing-sticker-edge); border-radius: 16px; }
+
+/* Values: the numeral tiles become stickers and each value sits on its own card. */
+.landing-tablero { column-gap: 22px; }
+.landing-tablero-tile { border: var(--landing-sticker-edge); border-radius: 18px; box-shadow: var(--landing-sticker-lift-red); transition: transform 180ms ease; }
+.landing-tablero-item { align-self: stretch; padding: 20px 22px; border: var(--landing-sticker-edge); border-radius: 18px; background: var(--landing-surface); box-shadow: var(--landing-sticker-lift-sm); }
+.landing-tablero-item p { color: var(--landing-text); }
+
+/* Stats: three cards in the prices' red / yellow / coal rotation. */
+.landing-stats { gap: 24px; padding-block: 56px; border-bottom: var(--landing-sticker-edge); }
+.landing-stat { --stat-bg: var(--landing-brand-red); --stat-fg: var(--landing-on-action); --stat-accent: var(--landing-highlight); --stat-shadow: var(--landing-ink); padding: 24px 26px; border: var(--landing-sticker-edge); border-radius: 20px; background: var(--stat-bg); box-shadow: 6px 6px 0 var(--stat-shadow); }
+.landing-stat:first-child { padding-left: 26px; }
+.landing-stat + .landing-stat { border-left: var(--landing-sticker-edge); }
+.landing-stat:nth-child(3n + 2) { --stat-bg: var(--landing-highlight); --stat-fg: var(--landing-ink); --stat-accent: var(--landing-brand-red); }
+.landing-stat:nth-child(3n) { --stat-bg: var(--landing-ink); --stat-fg: var(--landing-on-action); --stat-accent: var(--landing-highlight); --stat-shadow: var(--landing-brand-red); }
+.landing-stats .landing-stat strong { color: var(--stat-fg); font-size: clamp(48px, 4.4vw, 76px); }
+.landing-stats .landing-stat:nth-child(3n + 1) strong, .landing-stats .landing-stat:nth-child(3n) strong { color: var(--stat-accent); }
+.landing-stat span { border-left-color: var(--stat-accent); color: var(--stat-fg); }
+
+/* Gallery: a photo wall on a light dotted ground. Each print wears an ink
+   frame and casts a yellow or red shadow, alternating; the caption title
+   becomes a yellow chip. */
+.landing-gallery { background: var(--landing-surface); }
+.landing-gallery::before, .landing-schedule::before { background-image: radial-gradient(circle, color-mix(in srgb, var(--landing-ink) 9%, transparent) 1.4px, transparent 1.4px); background-size: 18px 18px; }
+.landing-gallery .landing-section-header h2, .landing-schedule .landing-section-header h2 { text-shadow: 3px 3px 0 var(--landing-highlight); }
+.landing-gallery .landing-carousel-wrap::before { background: linear-gradient(90deg, var(--landing-surface), transparent); }
+.landing-gallery .landing-carousel-wrap::after { background: linear-gradient(270deg, var(--landing-surface), transparent); }
+.landing-slide { border: 3px solid var(--landing-ink); border-radius: 18px; box-shadow: 8px 8px 0 var(--landing-highlight); }
+.landing-gallery .landing-sponsors-item:nth-child(even) > .landing-slide { box-shadow: 8px 8px 0 var(--landing-brand-red); }
+.landing-slide-title { align-self: flex-start; padding: 4px 10px; border: var(--landing-sticker-edge); border-radius: 8px; background: var(--landing-highlight); color: var(--landing-ink); box-shadow: 3px 3px 0 var(--landing-ink); }
+.landing-slide-description { color: var(--landing-surface); }
+.landing-gallery-nav button { border: var(--landing-sticker-edge); background: var(--landing-highlight); color: var(--landing-ink); box-shadow: 4px 4px 0 var(--landing-brand-red); }
+.landing-gallery-nav button:hover { border-color: var(--landing-ink); color: var(--landing-ink); transform: translate(-2px, -2px); }
+
+/* Schedule: a light warm band where the category tiles — red, yellow, white,
+   yellow from `CARD_PALETTE`, a four-step cycle so no column of the three-up
+   grid repeats a colour — sit as stickers, each leaning a degree (the
+   independent `rotate` property, so the reveal and hover `transform`s stay
+   untouched) and straightening as it lifts. */
+.landing-schedule { background: var(--landing-stats-bg); }
+.landing-schedule-grid { gap: 28px; }
+.landing-schedule-tile { border: var(--landing-sticker-edge); border-radius: 22px; box-shadow: var(--landing-sticker-lift); rotate: -0.8deg; transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 260ms cubic-bezier(0.22, 1, 0.36, 1), rotate 260ms ease; }
+.landing-schedule-tile:nth-child(even) { rotate: 0.8deg; }
+.landing-schedule-tile:focus-within { transform: translate(-3px, -3px); box-shadow: 10px 10px 0 var(--landing-ink); rotate: 0deg; }
+@media (hover: hover) {
+  .landing-schedule-tile:hover { transform: translate(-3px, -3px); box-shadow: 10px 10px 0 var(--landing-ink); rotate: 0deg; }
+}
+.landing-schedule-tile h3 { align-self: flex-start; padding: 6px 12px 4px; border: var(--landing-sticker-edge); border-radius: 10px; background: var(--landing-tile-ink); color: var(--landing-tile); font-size: 22px; font-weight: 800; letter-spacing: 1.4px; box-shadow: 3px 3px 0 var(--landing-ink); }
+.landing-schedule-ages { margin-top: 14px; font-weight: 800; }
+.landing-schedule-time { font-weight: 800; }
+.landing-schedule-cta { border: var(--landing-sticker-edge); box-shadow: 3px 3px 0 var(--landing-ink); }
+.landing-schedule-cta:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--landing-ink); }
+.landing-schedule-tile.landing-schedule-help { border: var(--landing-sticker-edge); background: var(--landing-brand-yellow-pale); box-shadow: var(--landing-sticker-lift); }
+.landing-schedule-help h3 { padding: 0; border: 0; background: none; color: var(--landing-text-strong); box-shadow: none; font-size: 28px; }
+.landing-schedule-help a { border: var(--landing-sticker-edge); background: var(--landing-third-party-whatsapp); color: var(--landing-ink); box-shadow: 3px 3px 0 var(--landing-ink); }
+
+/* Visit: framed arrival photo and map, contact sheet on a white card. */
+.landing-arrival { border: var(--landing-sticker-edge); border-radius: 20px; box-shadow: var(--landing-sticker-lift); }
+.landing-map { border: var(--landing-sticker-edge); border-radius: 20px; box-shadow: var(--landing-sticker-lift-red); }
+/* The contact sheet is a grid of sticker cards, one fact per card. Each card
+   leads with its channel's icon on a coloured tile (address red, hours yellow,
+   WhatsApp green, phone coal, mail fuchsia, socials an Instagram sweep); the
+   card's shadow and its action button take that same colour, and every number,
+   address and handle is a tappable pill. */
+.landing-contact { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 26px; border-top: 0; }
+.landing-contact-row { --kind-bg: var(--landing-brand-red); --kind-ink: var(--landing-on-action); --kind-shadow: var(--landing-brand-red); display: flex; flex-direction: column; align-items: flex-start; gap: 16px; padding: 24px; border: var(--landing-sticker-edge); border-radius: 22px; background: var(--landing-surface); box-shadow: 6px 6px 0 var(--kind-shadow); transition: transform 180ms ease, box-shadow 180ms ease; }
+@media (hover: hover) {
+  .landing-contact-row:hover { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 var(--kind-shadow); }
+}
+.landing-contact-row[data-kind="hours"] { --kind-bg: var(--landing-brand-yellow); --kind-ink: var(--landing-ink); --kind-shadow: var(--landing-ink); }
+.landing-contact-row[data-kind="whatsapp"] { --kind-bg: var(--landing-third-party-whatsapp); --kind-ink: var(--landing-ink); --kind-shadow: var(--landing-third-party-whatsapp); }
+.landing-contact-row[data-kind="phone"] { --kind-bg: var(--landing-ink); --kind-ink: var(--landing-highlight); --kind-shadow: var(--landing-ink); }
+.landing-contact-row[data-kind="mail"] { --kind-bg: var(--landing-brand-fuchsia); --kind-ink: var(--landing-surface); --kind-shadow: var(--landing-brand-fuchsia); }
+.landing-contact-row[data-kind="social"] { --kind-bg: linear-gradient(135deg, var(--landing-brand-amber), var(--landing-third-party-instagram) 55%, var(--landing-brand-fuchsia-strong)); --kind-ink: var(--landing-surface); --kind-shadow: var(--landing-ink); }
+.landing-contact dt { display: flex; align-items: center; gap: 14px; color: var(--landing-ink); font-size: 15px; letter-spacing: 2.4px; }
+.landing-contact-icon { display: grid; flex: none; place-items: center; width: 56px; height: 56px; border: var(--landing-sticker-edge); border-radius: 16px; background: var(--kind-bg); color: var(--kind-ink); box-shadow: 3px 3px 0 var(--landing-ink); transform: rotate(-4deg); }
+.landing-contact-icon svg { width: 28px; height: 28px; stroke-width: 2.4; }
+.landing-contact dd { font-size: 18px; font-weight: 700; line-height: 1.45; }
+.landing-contact dd[aria-hidden="true"] { display: none; }
+.landing-contact dd:nth-of-type(2) { margin-top: auto; padding-top: 4px; }
+.landing-contact-numbers, .landing-contact-social { flex-direction: column; align-items: flex-start; gap: 10px; }
+.landing-contact a { text-decoration: none; }
+.landing-contact-numbers a, .landing-contact-social a { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: var(--landing-sticker-edge); border-radius: 12px; background: var(--landing-surface); font-size: 16px; box-shadow: 3px 3px 0 var(--landing-ink); transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease; }
+.landing-contact-numbers a:hover, .landing-contact-social a:hover { color: var(--landing-ink); background: var(--landing-brand-yellow-pale); transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--landing-ink); }
+.landing-contact a.landing-contact-action { min-height: 48px; padding: 0 20px; border: var(--landing-sticker-edge); border-radius: 999px; background: var(--kind-bg); color: var(--kind-ink); font-size: 13px; box-shadow: 4px 4px 0 var(--landing-ink); transition: transform 160ms ease, box-shadow 160ms ease; }
+.landing-contact a.landing-contact-action svg { width: 19px; height: 19px; }
+.landing-contact a.landing-contact-action:hover { color: var(--kind-ink); transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--landing-ink); }
+
+/* Motto and brand lockup in the same heavy voice as every heading. */
+.landing-motto .landing-motto-lead { font-family: var(--font-landing-barlow), sans-serif; font-weight: 800; line-height: 1.15; letter-spacing: -0.01em; text-transform: uppercase; text-shadow: 4px 4px 0 var(--landing-ink); }
+.landing-logo .landing-display { font-weight: 800; white-space: nowrap; }
+/* The heavier lockup costs the nine-link row the room it had up to 1440px, so
+   the compact pills main applies below 1366px reach a little further. */
+@media (min-width: 1367px) and (max-width: 1536px) {
+  .landing-navbar { padding-inline: 28px; }
+  .landing-nav-links { gap: 2px; }
+  .landing-nav-links a { padding: 10px 10px; font-size: 14px; }
+}
+@media (min-width: 769px) and (max-width: 1100px) {
+  .landing-logo { gap: 10px; font-size: 16px; }
+  .landing-logo img { height: 54px; padding: 5px; }
+  .landing-logo small { font-size: 10px; letter-spacing: 2px; }
+  .landing-nav-cta { padding-inline: 14px; }
+}
+/* Below 1000px the nine links need the lockup's width: the crest alone stays,
+   and the link keeps its accessible name from its own aria-label. */
+@media (min-width: 769px) and (max-width: 1000px) {
+  .landing-logo .landing-display { display: none; }
+}
+
+/* Sponsors and footer. */
+.landing-sponsors { border-top: var(--landing-sticker-edge); }
+.landing-sponsor { border: var(--landing-sticker-edge); border-radius: 20px; box-shadow: var(--landing-sticker-lift); }
+.landing-sponsors-viewport { padding-block: 6px 26px; }
+/* Footer: a brand strip (lockup, socials, line, address) over three link
+   cards, then the club's name set huge in
+   outline before the legal line. The wordmark is generated content with an
+   empty alternative, so it never reaches the accessibility tree. */
+.landing-footer { gap: 28px; border-top: var(--landing-sticker-edge); }
+.landing-footer-top { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.landing-footer-brand { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px 32px; padding-bottom: 28px; border-bottom: 2px solid color-mix(in srgb, var(--landing-surface) 16%, transparent); }
+.landing-footer-brand > div:first-child { gap: 16px; }
+.landing-footer-brand .landing-stars { margin-left: 8px; padding: 0; background: none; }
+.landing-footer-brand > div > span:first-child { border: 2px solid var(--landing-ink); box-shadow: 4px 4px 0 var(--landing-brand-red); }
+.landing-footer-brand b { font-size: 22px; font-weight: 800; }
+.landing-footer-brand p { margin: 0; font-size: 15px; }
+.landing-footer-brand > p:not(.landing-footer-place) { grid-column: 1; font-size: 17px; font-weight: 600; }
+.landing-footer-place { grid-column: 2; grid-row: 2; justify-self: end; }
+.landing-footer-social { grid-column: 2; grid-row: 1; gap: 12px; margin-top: 0; }
+.landing-footer-social a { flex: none; width: 52px; height: 52px; border: var(--landing-sticker-edge); background: var(--landing-highlight); color: var(--landing-ink); box-shadow: 4px 4px 0 var(--landing-brand-red); transition: transform 160ms ease, box-shadow 160ms ease; }
+.landing-footer-social a:hover { border-color: var(--landing-ink); background: var(--landing-surface); transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--landing-brand-red); }
+.landing-footer nav { padding: 20px 22px 14px; border: 2px solid color-mix(in srgb, var(--landing-surface) 22%, transparent); border-radius: 20px; background: color-mix(in srgb, var(--landing-surface) 5%, var(--landing-ink)); }
+.landing-footer nav h2 { align-self: flex-start; margin-bottom: 12px; padding: 5px 12px; border-radius: 999px; background: var(--landing-highlight); color: var(--landing-ink); font-size: 11.5px; font-weight: 800; letter-spacing: 2px; }
+.landing-footer nav a { flex: none; justify-content: space-between; gap: 12px; min-height: 44px; border-top: 0; font-weight: 600; line-height: 1.3; transition: color 160ms ease, transform 160ms ease; }
+.landing-footer nav a::after { content: "→" / ""; color: var(--landing-highlight); opacity: 0; transition: opacity 160ms ease; }
+.landing-footer nav a:hover { transform: translateX(4px); }
+.landing-footer nav a:hover::after { opacity: 1; }
+.landing-footer::after { content: "Cata Club" / ""; position: relative; order: 1; display: block; margin-top: 8px; color: transparent; font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(64px, 13.6vw, 228px); font-weight: 800; line-height: 0.82; letter-spacing: -0.04em; text-align: center; text-transform: uppercase; white-space: nowrap; -webkit-text-stroke: 2px color-mix(in srgb, var(--landing-highlight) 70%, transparent); pointer-events: none; }
+.landing-footer-bottom { order: 2; border-top: 2px solid color-mix(in srgb, var(--landing-surface) 16%, transparent); color: color-mix(in srgb, var(--landing-surface) 72%, transparent); }
+
+@media (max-width: 1024px) {
+  .landing-pillar { gap: 0; }
+  .landing-contact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .landing-footer-top { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .landing-footer-brand { grid-column: 1 / -1; }
+}
+@media (max-width: 768px) {
+  .landing-stats { gap: 16px; padding: 40px 24px; }
+  .landing-stat { padding: 18px 20px; }
+  .landing-stat:first-child { padding-left: 20px; }
+  .landing-stat + .landing-stat { border-top: var(--landing-sticker-edge); border-left: var(--landing-sticker-edge); }
+  .landing-stats .landing-stat strong { font-size: 44px; }
+  .landing-pillar { padding: 22px; }
+  .landing-tablero { column-gap: 14px; }
+  .landing-schedule-tile, .landing-schedule-tile:nth-child(even) { rotate: 0deg; }
+  .landing-tablero-item { padding: 16px; }
+  .landing-contact { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .landing-contact-row { padding: 20px; }
+  .landing-hero::before, .landing-hero::after { inset: 0 0 auto 0; height: 360px; clip-path: polygon(0 0, 100% 0, 100% 100%, 0 86%); }
+  .landing-hero::before { transform: translateY(20px); }
+  .landing-hero::after { transform: translateY(15px); }
+  .landing-hero-badge { top: 250px; right: 18px; bottom: auto; width: 96px; height: 96px; font-size: 10px; }
+  .landing-hero-badge b { font-size: 30px; }
+  .landing-footer-top { grid-template-columns: minmax(0, 1fr); }
+  .landing-footer-brand { grid-template-columns: minmax(0, 1fr); }
+  .landing-footer-brand > *, .landing-footer-place, .landing-footer-social { grid-column: 1; grid-row: auto; justify-self: start; }
+  .landing-footer-social { justify-self: stretch; }
+  .landing-footer-social a { flex: 1; width: auto; padding-inline: 10px; border-radius: 999px; }
+  .landing-footer::after { -webkit-text-stroke-width: 1.5px; }
+  .landing-mobile-bar { border-top: var(--landing-sticker-edge); }
 }

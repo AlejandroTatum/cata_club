@@ -97,7 +97,12 @@ const VIEWPORTS = [
  *  The `logros` ceiling and its scrollHeight share of #1154's rhythm left
  *  with the section in #1372 (see the file header). */
 const CEILINGS: Record<(typeof VIEWPORTS)[number]["name"], Record<string, number>> = {
-  desktop: { valores: 709, cta: 400, scrollHeight: 6592 },
+  /* Desktop scrollHeight re-based 6592 -> 7110 for the single sticker style:
+     the contact sheet became a grid of icon-led cards with tappable pills and
+     the footer traded its photo for link cards (now carrying #1587's and
+     #1622's links) and an outline wordmark; measured 7072px with every
+     catalog absent. */
+  desktop: { valores: 709, cta: 400, scrollHeight: 7110 },
   /* Mobile scrollHeight re-based 9177 -> 9300 for the FAQ card accordion
      (intro card stacked above three bordered cards) and the colored plan and
      step cards; measured 9270px at 390x844 with the tariffs catalog absent.
@@ -106,8 +111,13 @@ const CEILINGS: Record<(typeof VIEWPORTS)[number]["name"], Record<string, number
      Re-based 9360 -> 9480 for the footer's Mensualidad, Cómo empezar and
      Preguntas links (#1587); measured 9462px.
      Re-based 9480 -> 9540 for the always-present Galería empty state and the
-     footer's Patrocinadores link (#1622); measured 9510px. */
-  mobile: { valores: 1170, cta: 450, scrollHeight: 9540 },
+     footer's Patrocinadores link (#1622); measured 9510px.
+     Re-based 9540 -> 10310 for the single sticker style: Mission/Vision,
+     the values, the stats, the icon-led contact cards and the footer's link
+     cards became bordered cards with inner padding, and the footer swapped
+     its photo for an outline wordmark; measured 10272px with every catalog
+     absent. */
+  mobile: { valores: 1170, cta: 450, scrollHeight: 10310 },
 };
 
 test.describe("landing vertical space", () => {

@@ -19,9 +19,6 @@
  */
 export const ARRIVAL_PHOTO_SIZES = "(max-width: 768px) 768px, 540px";
 
-/** `.landing-footer-photo`, the footer's closing column. */
-export const FOOTER_PHOTO_SIZES = "(max-width: 768px) 420px, 360px";
-
 /**
  * `.landing-pillar-photo`, the Mission/Vision photograph beside each
  * pillar's body copy.

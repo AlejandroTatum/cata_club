@@ -1173,8 +1173,9 @@ describe("LandingPage", (): void => {
        * fetched. The label and the status sit adjacent in the markup, so
        * neither can be satisfied without the other.
        */
-      expect(html).toContain("<dt>Horario</dt><dd role=\"status\">Cargando horarios…</dd>");
-      expect(html).not.toMatch(/<dt>Horario<\/dt><dd[^>]*>\s*<\/dd>/);
+      // The label may lead with its decorative channel icon (aria-hidden span).
+      expect(html).toMatch(/<dt>(?:<span class="landing-contact-icon" aria-hidden="true">.*?<\/span>)?Horario<\/dt><dd role="status">Cargando horarios…<\/dd>/);
+      expect(html).not.toMatch(/Horario<\/dt><dd[^>]*>\s*<\/dd>/);
       /*
        * The gallery's entries live behind GET /api/galeria, and that fetch is
        * an effect — server rendering never runs it. The static output carries
