@@ -747,3 +747,71 @@ def test_pago_normal_aprobado_conserva_el_texto_de_pago_aprobado(db_session, mon
         "Tu pago de $30,00 fue aprobado. Tu membresía está activa."
     ]
     assert asuntos == ["Cata Club | Pago aprobado"]
+
+
+# --- Comprobante oficial al regularizar (QA owner R2, T12) --------------------
+
+def _registrar_despachos(monkeypatch):
+    despachos: list[int] = []
+    monkeypatch.setattr(
+        mps.PagoServicio, "_disparar_generacion_comprobante_pdf",
+        lambda self, pago_id: despachos.append(pago_id),
+    )
+    return despachos
+
+
+def test_regularizar_despacha_el_comprobante_una_sola_vez(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    _, membresia = _crear_persona_membresia(db_session)
+    despachos = _registrar_despachos(monkeypatch)
+
+    resp = _regularizar_monto(client, membresia.id, "60.00")
+
+    assert resp.status_code == 201, resp.text
+    assert despachos == [resp.json()["id"]]
+
+
+def test_regularizar_despacha_el_comprobante_con_el_pago_ya_commiteado(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    _, membresia = _crear_persona_membresia(db_session)
+    estados: list[bool] = []
+
+    def _despachar(self, pago_id):
+        estados.append(self.db.in_transaction() and bool(self.db.new))
+
+    monkeypatch.setattr(mps.PagoServicio, "_disparar_generacion_comprobante_pdf", _despachar)
+
+    assert _regularizar_monto(client, membresia.id, "60.00").status_code == 201
+    assert estados == [False]  # sin cambios pendientes: ya se hizo commit
+
+
+def test_regularizar_rechazada_no_despacha_el_comprobante(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    _, membresia = _crear_persona_membresia(db_session)
+    despachos = _registrar_despachos(monkeypatch)
+
+    resp = _regularizar_monto(client, membresia.id, "30.00")  # esperado: $60.00
+
+    assert resp.status_code == 400
+    assert despachos == []
+
+
+def test_regularizar_no_falla_si_el_broker_esta_caido(client, db_session, monkeypatch):
+    """Con el despachador REAL y `.delay` explotando, la regularización queda
+    commiteada y responde 201 (la reconciliación beat recupera el PDF)."""
+    from app.infraestructura.tareas.comprobante_tareas import generar_comprobante_pdf_tarea
+    from tests.test_pago_comprobante_atomico import _DISPARO_ORIGINAL
+
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    _, membresia = _crear_persona_membresia(db_session)
+    monkeypatch.setattr(mps.PagoServicio, "_disparar_generacion_comprobante_pdf", _DISPARO_ORIGINAL)
+
+    def _broker_caido(*args, **kwargs):
+        raise ConnectionError("redis caído")
+
+    monkeypatch.setattr(generar_comprobante_pdf_tarea, "delay", _broker_caido)
+
+    resp = _regularizar_monto(client, membresia.id, "60.00")
+
+    assert resp.status_code == 201, resp.text
+    assert db_session.get(Pago, resp.json()["id"]).estado_pago == EstadoPago.APROBADO
