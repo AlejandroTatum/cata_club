@@ -368,6 +368,11 @@ for (const vp of VIEWPORTS) {
         });
         page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
 
+        // The trainer day reads the real clock and the mock has a single Monday
+        // schedule, so on any other weekday the next-session hero (and its
+        // emergency chips) never rendered. Pin a Monday so that path is always audited.
+        await page.clock.setFixedTime(new Date(2026, 9, 5, 9, 0, 0));
+
         await mockBackend(page, screen.role);
 
         /** One full load: navigate, then wait for the network and for a rendered, font-ready, painted page. */
