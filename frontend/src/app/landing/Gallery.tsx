@@ -2,92 +2,53 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  DEFAULT_SLIDE_ASPECT,
-  clampSlideAspect,
-  galleryImageSizes,
   galleryImageSrc,
   galleryImageSrcSet,
-  GALLERY_BROWSE_HOLD_MS,
-  GALLERY_HOLD_EVENT,
-  GALLERY_READY_EVENT,
-  GALLERY_SEEK_EVENT,
-  SLIDE_HEIGHT_BREAKPOINT,
   mapGallery,
-  planSlideRun,
   type GalleryEntry,
-  type GallerySeekDetail,
-  type GallerySeekDirection,
-  type PlannedSlide,
 } from "./landing-gallery";
+import { repetitionsFor } from "./Sponsors";
 
 type GalleryState =
   | { kind: "loading" }
-  | { kind: "ready"; entries: GalleryEntry[]; run: PlannedSlide[]; aspects: Map<number, number> }
+  | { kind: "ready"; entries: GalleryEntry[] }
   | { kind: "empty" }
   | { kind: "error" };
 
-/**
- * How long a photograph gets to declare its native ratio before the strip
- * gives up waiting and starts with the shared fallback ratio. Motion must
- * start reliably even when one photo hangs; the slide's own frame keeps the
- * layout stable either way.
- */
-const MEASURE_TIMEOUT_MS = 4000;
+type BrowseDirection = "next" | "prev";
 
-/**
- * Measures each photo's native aspect ratio off the render pass, so the
- * strip can size every slide before the motion runtime measures it — the
- * bundled gallery had this geometry for free from `next/image`'s declared
- * dimensions, and managed photos carry none in their payload. The probe is
- * a throwaway `Image` per entry; the rendered slide then reuses the cached
- * bytes through its own `loading="lazy"` request. Every failure path
- * (network error, timeout) resolves with the shared fallback ratio, so
- * async data always reaches a ready, moving strip.
- */
-function measureRatios(entries: GalleryEntry[]): Promise<Map<number, number>> {
-  const measure = (entry: GalleryEntry): Promise<[number, number]> =>
-    new Promise((resolve): void => {
-      const img = new Image();
-      let settled = false;
-      const finish = (aspect: number): void => {
-        if (settled) return;
-        settled = true;
-        window.clearTimeout(timer);
-        resolve([entry.id, aspect]);
-      };
-      const timer = window.setTimeout((): void => finish(DEFAULT_SLIDE_ASPECT), MEASURE_TIMEOUT_MS);
-      img.onload = (): void => {
-        finish(img.naturalWidth > 0 && img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : DEFAULT_SLIDE_ASPECT);
-      };
-      img.onerror = (): void => finish(DEFAULT_SLIDE_ASPECT);
-      img.src = galleryImageSrc(entry.imageSrc, 800);
-    });
-  return Promise.all(entries.map(measure)).then((pairs): Map<number, number> => new Map(pairs));
+/** Tile widths mirror `.landing-sponsors-item` (clamp(300px, 30vw, 416px)) at the two ends of the range. */
+const IMAGE_SIZES = "(max-width: 768px) 300px, 416px";
+/** The tile's frame; photos are cropped to it with `object-fit: cover`, so no ratio has to be measured first. */
+const SLIDE_ASPECT = "4 / 3";
+/** How long an arrow takes to carry the strip one photo along. */
+const STEP_DURATION_MS = 380;
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
+/** Wraps a playback time into [0, duration) so a backward step crosses the loop seam. */
+export function wrapTime(time: number, duration: number): number {
+  return ((time % duration) + duration) % duration;
 }
 
 /**
- * The landing's gallery — the pre-#1372 full-bleed moving strip, now fed by
- * managed entries from `GET /api/galeria` (issue #1372).
+ * The landing's gallery: the same CSS marquee as the sponsors strip (issue
+ * #1372 fed it from `GET /api/galeria`; the QA round of 2026-10-04 moved its
+ * motion out of JavaScript).
  *
- * The motion contract is deliberately inverted from the bundled-photo days:
- * instead of `LandingMotion` measuring the strip once at its own mount and
- * every slide having to exist by then, this component declares the track
- * `[data-ready]` and fires `landing:gallery-ready` only after the fetch has
- * settled AND every photo's ratio has been measured AND the slide run
- * (repeats included, see `planSlideRun`) has been committed. The runtime
- * enhances a ready track in either mount order, so asynchronous data can
- * start the loop but can never race it.
+ * The earlier strip was positioned by a GSAP loop that measured every slide at
+ * build time, and it only rendered once EVERY photo had been downloaded in a
+ * throwaway `Image` probe (up to four seconds) — so the section sat blank
+ * first, and on a phone the loop's measured geometry left the track with one
+ * sliver of a slide and an empty stretch until the pattern wrapped. Here each
+ * tile has a fixed CSS frame, the strip is an identical pair of copies
+ * translated by a keyframe (`landing-sponsors-marquee`, the sponsors' own
+ * rule), and nothing waits on the photos: a slow image only fills its own tile.
  *
- * Reading holds the loop still: hover, keyboard focus and a touch tap (the
- * `.is-open` pin) each raise `landing:gallery-hold`, which the runtime
- * answers by pausing. The previous/next controls browse by UNIQUE photo —
- * clones never count — pinning the requested caption through a short
- * reading window (`GALLERY_BROWSE_HOLD_MS`) before the loop resumes on its
- * own; hover or focus inside the strip extends the hold past the window.
- * Reduced motion never loads the runtime at all and the stylesheet drops
- * the controls with the clones; the same markup presents as a complete
- * wrapped strip where every photo and caption stays reachable without one
- * pixel of motion.
+ * Previous/next arrows nudge that same animation's clock by one tile (Web
+ * Animations API), so the arrows and the autoplay share one authority and can
+ * never fight over the transform. Under `prefers-reduced-motion` the keyframe
+ * is off (sponsors' stylesheet rule): the strip is a plain horizontally
+ * scrollable row and the arrows scroll it by one tile.
  *
  * Empty is the gallery's real initial state — the club publishes entries
  * from `/galeria`. The section (and its nav entries) stays on the page with a
@@ -95,18 +56,14 @@ function measureRatios(entries: GalleryEntry[]): Promise<Map<number, number>> {
  */
 export default function Gallery(): React.ReactElement {
   const [state, setState] = useState<GalleryState>({ kind: "loading" });
-  const trackRef = useRef<HTMLUListElement | null>(null);
-  const navRef = useRef<HTMLDivElement | null>(null);
-  const hoverRef = useRef(false);
-  const focusRef = useRef(false);
-  const openRef = useRef<number | null>(null);
-  const heldRef = useRef(false);
-  /** True from a pointer press until the next key press: focus gained meanwhile is the pointer's, not a reader's. */
-  const pointerFocusRef = useRef(false);
-  const browseIndexRef = useRef(0);
-  const browseTimerRef = useRef<number | null>(null);
-  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const [openKey, setOpenKey] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const navRef = useRef<HTMLDivElement | null>(null);
+  const browseIndexRef = useRef(0);
+  const frameRef = useRef<number | null>(null);
 
   useEffect((): (() => void) => {
     let cancelled = false;
@@ -115,24 +72,10 @@ export default function Gallery(): React.ReactElement {
         if (!response.ok) throw new Error(`galeria ${response.status}`);
         return response.json();
       })
-      .then((payload: unknown): Promise<void> => {
-        if (cancelled) return Promise.resolve();
+      .then((payload: unknown): void => {
+        if (cancelled) return;
         const entries = mapGallery(payload);
-        if (entries.length === 0) {
-          setState({ kind: "empty" });
-          return Promise.resolve();
-        }
-        return measureRatios(entries).then((aspects): void => {
-          if (cancelled) return;
-          const viewport = window.innerWidth;
-          const run = planSlideRun(
-            entries,
-            (entry): number => aspects.get(entry.id) ?? DEFAULT_SLIDE_ASPECT,
-            viewport,
-            viewport <= SLIDE_HEIGHT_BREAKPOINT,
-          );
-          setState({ kind: "ready", entries, run, aspects });
-        });
+        setState(entries.length > 0 ? { kind: "ready", entries } : { kind: "empty" });
       })
       .catch((): void => {
         if (!cancelled) setState({ kind: "error" });
@@ -140,112 +83,75 @@ export default function Gallery(): React.ReactElement {
     return (): void => { cancelled = true; };
   }, []);
 
-  // Fired after the ready commit, so the track already holds its full run.
-  // A runtime mounted later still finds it via the `data-ready` attribute.
-  useEffect((): void => {
-    if (state.kind !== "ready") return;
-    document.dispatchEvent(new CustomEvent(GALLERY_READY_EVENT));
-  }, [state.kind]);
+  useEffect((): (() => void) => {
+    const query = window.matchMedia?.(REDUCED_MOTION_QUERY);
+    if (!query) return (): void => {};
+    const sync = (): void => setReducedMotion(query.matches);
+    sync();
+    query.addEventListener?.("change", sync);
+    return (): void => { query.removeEventListener?.("change", sync); };
+  }, []);
 
-  /** Hover, focus and the tap pin each count as "someone is reading". */
-  const syncHold = (): void => {
-    const held = hoverRef.current || focusRef.current || openRef.current !== null;
-    if (heldRef.current === held) return;
-    heldRef.current = held;
-    document.dispatchEvent(new CustomEvent(GALLERY_HOLD_EVENT, { detail: { held } }));
+  const cancelStep = (): void => {
+    if (frameRef.current === null) return;
+    window.cancelAnimationFrame(frameRef.current);
+    frameRef.current = null;
+  };
+  useEffect((): (() => void) => cancelStep, []);
+
+  // A tap pins a caption open; a tap anywhere outside the strip releases it.
+  useEffect((): (() => void) => {
+    if (openKey === null) return (): void => {};
+    const onDocumentClick = (event: MouseEvent): void => {
+      const target = event.target as Node;
+      if (viewportRef.current?.contains(target) || navRef.current?.contains(target)) return;
+      setOpenKey(null);
+    };
+    document.addEventListener("click", onDocumentClick);
+    return (): void => { document.removeEventListener("click", onDocumentClick); };
+  }, [openKey]);
+
+  /** Carries the strip one tile along: the marquee's clock moves, or the row scrolls when motion is off. */
+  const step = (direction: BrowseDirection): void => {
+    const viewport = viewportRef.current;
+    const track = trackRef.current;
+    const tile = track?.querySelector<HTMLElement>(".landing-sponsors-item");
+    const copy = track?.querySelector<HTMLElement>(".landing-sponsors-copy");
+    if (!viewport || !track || !tile || !copy) return;
+    const gap = parseFloat(getComputedStyle(copy).columnGap) || 0;
+    const span = tile.offsetWidth + gap;
+    const sign = direction === "next" ? 1 : -1;
+
+    const animation = reducedMotion ? undefined : track.getAnimations?.()[0];
+    const duration = Number(animation?.effect?.getComputedTiming().duration);
+    if (!animation || !Number.isFinite(duration) || duration <= 0 || copy.offsetWidth <= 0) {
+      viewport.scrollBy({ left: sign * span, behavior: reducedMotion ? "auto" : "smooth" });
+      return;
+    }
+    // One copy is the marquee's whole -50% travel, so a tile is this share of the clock.
+    const delta = (duration * span) / copy.offsetWidth;
+    cancelStep();
+    const from = Number(animation.currentTime ?? 0);
+    const started = performance.now();
+    const tick = (now: number): void => {
+      const progress = Math.min(1, (now - started) / STEP_DURATION_MS);
+      const eased = 1 - (1 - progress) ** 3;
+      animation.currentTime = wrapTime(from + sign * delta * eased, duration);
+      frameRef.current = progress < 1 ? window.requestAnimationFrame(tick) : null;
+    };
+    frameRef.current = window.requestAnimationFrame(tick);
   };
 
-  const clearBrowseWindow = (): void => {
-    if (browseTimerRef.current === null) return;
-    window.clearTimeout(browseTimerRef.current);
-    browseTimerRef.current = null;
-  };
-
-  /**
-   * Lets a pin lapse on its own after the reading window. Touch has no
-   * "leave" and a pointer click leaves nothing to blur, so without this a pin
-   * outlived the visitor's attention and the strip stayed parked until they
-   * clicked somewhere else. Hover or keyboard focus still outlive the window.
-   */
-  const releasePinAfterWindow = (index: number): void => {
-    clearBrowseWindow();
-    browseTimerRef.current = window.setTimeout((): void => {
-      browseTimerRef.current = null;
-      // Superseded by another interaction (a tap elsewhere on the strip, a
-      // newer browse): that interaction now owns the pin, not this window.
-      if (openRef.current !== index) return;
-      openRef.current = null;
-      setOpenIndex(null);
-      syncHold();
-    }, GALLERY_BROWSE_HOLD_MS);
-  };
-
-  const toggleOpen = (index: number): void => {
-    const next = openRef.current === index ? null : index;
-    openRef.current = next;
-    setOpenIndex(next);
-    if (next === null) clearBrowseWindow();
-    else releasePinAfterWindow(next);
-    syncHold();
-  };
-
-  // A pending browse window must not outlive the section.
-  useEffect((): (() => void) => clearBrowseWindow, []);
-
-  /**
-   * Brings the previous/next UNIQUE photo to the strip's edge: pin its
-   * caption, announce it, and ask the runtime to align it. The pin lasts
-   * through a reading window, then the loop resumes exactly where the seek
-   * left it — the marquee never restarts from zero. Hover or focus inside
-   * the strip outlives the window; a click elsewhere on the page ends it
-   * early; browsing again re-anchors pin and window to the new photo.
-   */
-  const browse = (direction: GallerySeekDirection): void => {
+  const browse = (direction: BrowseDirection): void => {
     if (state.kind !== "ready" || state.entries.length < 2) return;
     const count = state.entries.length;
     const target = direction === "next"
       ? (browseIndexRef.current + 1) % count
       : (browseIndexRef.current - 1 + count) % count;
     browseIndexRef.current = target;
-
-    openRef.current = target;
-    setOpenIndex(target);
-    syncHold();
-    document.dispatchEvent(new CustomEvent<GallerySeekDetail>(GALLERY_SEEK_EVENT, {
-      detail: { index: target, direction },
-    }));
+    step(direction);
     setAnnouncement(`Foto ${target + 1} de ${count}: ${state.entries[target].title}`);
-
-    releasePinAfterWindow(target);
   };
-
-  // Input modality: a pointer press marks focus as the pointer's until the
-  // next key press. It must outlive pointerup — a touch tap fires pointerup
-  // and lostpointercapture BEFORE the compatibility mousedown that moves
-  // focus. Keyboard focus always follows a keydown (Tab), so that clears it.
-  useEffect((): (() => void) => {
-    const onKey = (): void => { pointerFocusRef.current = false; };
-    document.addEventListener("keydown", onKey, true);
-    return (): void => { document.removeEventListener("keydown", onKey, true); };
-  }, []);
-
-  // A tap anywhere outside the strip releases the pin (touch has no leave).
-  // The browse controls are part of the strip's surface: activating one must
-  // not be mistaken for the outside click it physically is.
-  useEffect((): (() => void) => {
-    if (openIndex === null) return (): void => {};
-    const onDocumentClick = (event: MouseEvent): void => {
-      const target = event.target as Node;
-      if (trackRef.current?.contains(target)) return;
-      if (navRef.current?.contains(target)) return;
-      clearBrowseWindow();
-      openRef.current = null;
-      setOpenIndex(null);
-      syncHold();
-    };
-    document.addEventListener("click", onDocumentClick);
-    return (): void => { document.removeEventListener("click", onDocumentClick); };
-  }, [openIndex]);
 
   let accessibleStatus: string;
   if (state.kind === "ready") {
@@ -258,6 +164,46 @@ export default function Gallery(): React.ReactElement {
     accessibleStatus = "Cargando la galería…";
   }
 
+  // Only the first pass of the first copy is exposed (focusable, announced);
+  // every repeat is decoration, exactly like the sponsors strip.
+  const renderCopy = (duplicate: boolean): React.ReactElement[] => {
+    if (state.kind !== "ready") return [];
+    const { entries } = state;
+    return Array.from({ length: repetitionsFor(entries.length) }, (_, pass): React.ReactElement[] =>
+      entries.map((entry): React.ReactElement => {
+        const decorative = duplicate || pass > 0;
+        const key = `${entry.id}-${duplicate ? "duplicate" : "primary"}-${pass}`;
+        const srcSet = galleryImageSrcSet(entry.imageSrc);
+        return (
+          <div className="landing-sponsors-item" key={key} aria-hidden={decorative || undefined}>
+            <figure
+              className={openKey === key ? "landing-slide is-open" : "landing-slide"}
+              style={{ height: "auto", aspectRatio: SLIDE_ASPECT }}
+              tabIndex={decorative ? undefined : 0}
+              onClick={(): void => setOpenKey(openKey === key ? null : key)}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset (same pattern as the landing's sponsor logos) */}
+              <img
+                src={galleryImageSrc(entry.imageSrc, 800)}
+                srcSet={srcSet}
+                sizes={srcSet ? IMAGE_SIZES : undefined}
+                alt={entry.description}
+                loading="lazy"
+                decoding="async"
+                draggable={false}
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
+              <figcaption className="landing-slide-caption">
+                <span className="landing-slide-title">{entry.title}</span>
+                <span className="landing-slide-description">{entry.description}</span>
+              </figcaption>
+            </figure>
+          </div>
+        );
+      }),
+    ).flat();
+  };
+
   return (
     <section className="landing-section landing-gallery" id="galeria" data-motion-section data-testid="motion-section">
       <header className="landing-section-header" data-reveal>
@@ -267,30 +213,14 @@ export default function Gallery(): React.ReactElement {
       {state.kind === "loading" || state.kind === "ready" ? <p className="sr-only">{accessibleStatus}</p> : null}
       {state.kind === "ready" ? (
         <div className="landing-carousel-wrap">
-          <ul
-            className="landing-carousel"
-            id="galeria-track"
-            data-carousel
-            data-ready="true"
+          <div
+            className="landing-sponsors-viewport"
             role="group"
             aria-label="Galería de fotos del club"
-            ref={trackRef}
-            onMouseEnter={(): void => { hoverRef.current = true; syncHold(); }}
-            onMouseLeave={(): void => { hoverRef.current = false; syncHold(); }}
-            onPointerDown={(): void => { pointerFocusRef.current = true; }}
-            // Only keyboard focus counts as a read. A click or tap also
-            // focuses the slide, and that focus lingers until a blur the
-            // visitor never makes — the "bar stays stopped" bug.
-            onFocus={(): void => {
-              if (pointerFocusRef.current) return;
-              focusRef.current = true;
-              syncHold();
-            }}
-            onBlur={(): void => { focusRef.current = false; syncHold(); }}
+            ref={viewportRef}
+            // Without the keyframe the row has to scroll by hand.
+            style={reducedMotion ? { overflowX: "auto" } : undefined}
             onKeyDown={(event): void => {
-              pointerFocusRef.current = false;
-              // Arrow keys browse on the same terms as the buttons, from
-              // wherever inside the strip keyboard focus happens to sit.
               if (event.key === "ArrowRight") {
                 event.preventDefault();
                 browse("next");
@@ -300,39 +230,29 @@ export default function Gallery(): React.ReactElement {
               }
             }}
           >
-            {state.run.map(({ entry, clone }, index): React.ReactElement => (
-              <li
-                key={`${entry.id}:${index}`}
-                className={clone ? "landing-slide-clone" : undefined}
-                aria-hidden={clone || undefined}
-              >
-                <figure
-                  className={openIndex === index ? "landing-slide is-open" : "landing-slide"}
-                  style={{ aspectRatio: `${clampSlideAspect(state.aspects.get(entry.id) ?? DEFAULT_SLIDE_ASPECT).toFixed(4)}` }}
-                  tabIndex={clone ? undefined : 0}
-                  onClick={(): void => toggleOpen(index)}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset (same pattern as the landing's sponsor logos) */}
-                  <img
-                    src={galleryImageSrc(entry.imageSrc, 800)}
-                    srcSet={galleryImageSrcSet(entry.imageSrc)}
-                    sizes={galleryImageSrcSet(entry.imageSrc) ? galleryImageSizes() : undefined}
-                    alt={entry.description}
-                    loading="lazy"
-                    draggable={false}
-                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                  />
-                  <figcaption className="landing-slide-caption">
-                    <span className="landing-slide-title">{entry.title}</span>
-                    <span className="landing-slide-description">{entry.description}</span>
-                  </figcaption>
-                </figure>
-              </li>
-            ))}
-          </ul>
+            <div
+              className="landing-sponsors-track"
+              id="galeria-track"
+              ref={trackRef}
+              style={openKey !== null ? { animationPlayState: "paused" } : undefined}
+            >
+              <div className="landing-sponsors-copy">{renderCopy(false)}</div>
+              <div className="landing-sponsors-copy" aria-hidden="true" style={reducedMotion ? { display: "none" } : undefined}>
+                {renderCopy(true)}
+              </div>
+            </div>
+          </div>
           {state.entries.length > 1 ? (
             <>
-              <div className="landing-gallery-nav" role="group" aria-label="Navegar por la galería" ref={navRef}>
+              <div
+                className="landing-gallery-nav"
+                role="group"
+                aria-label="Navegar por la galería"
+                ref={navRef}
+                // The stylesheet hides the arrows under reduced motion; the
+                // scrollable row still needs them, so they stay.
+                style={reducedMotion ? { display: "flex" } : undefined}
+              >
                 <button
                   type="button"
                   className="landing-gallery-nav-button"
