@@ -269,6 +269,24 @@ class MembresiaRepositorio:
         )
         return list(self.db.execute(stmt).scalars().unique().all())
 
+    def listar_por_personas(self, persona_ids: List[int]) -> dict[int, List[Membresia]]:
+        """Membresías de varias personas en UNA consulta IN (portal del
+        alumno, issue #1592), mismo eager-load que `listar_por_persona`."""
+        agrupadas: dict[int, List[Membresia]] = {pid: [] for pid in persona_ids}
+        if not persona_ids:
+            return agrupadas
+        stmt = (
+            select(Membresia)
+            .options(
+                joinedload(Membresia.persona),
+                joinedload(Membresia.tipo_membresia),
+            )
+            .where(Membresia.persona_id.in_(persona_ids))
+        )
+        for membresia in self.db.execute(stmt).scalars().unique().all():
+            agrupadas[membresia.persona_id].append(membresia)
+        return agrupadas
+
     def obtener_operativa_por_persona(self, persona_id: int) -> Optional[Membresia]:
         """La membresía OPERATIVA (ACTIVA o SUSPENDIDA) de la persona, si
         tiene una -- a lo sumo una, por el mismo índice único parcial
