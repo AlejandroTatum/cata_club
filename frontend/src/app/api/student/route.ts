@@ -1,23 +1,16 @@
 /**
  * GET /api/student?personaId=<id> — aggregated portal for the logged-in persona.
+ *
+ * One upstream call (`GET /portal/alumno/{id}`, issue #1592): the backend
+ * returns the self profile, each representado's profile and the horarios /
+ * membership-type catalogs in a single response, so this handler only maps it
+ * to the `StudentPortalView` the browser has always received.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 import type { BackendPersonaFull } from "@/lib/server/members-adapter";
 import type { BackendAsistencia, BackendHorario } from "@/lib/server/attendance-adapter";
-
-/**
- * `GET /asistencias/persona/{id}` is now paginated (TRA-6). `RECENT_SESSIONS_LIMIT`
- * (student-adapter.ts) slices to the 30 most recent sessions after a
- * client-side sort, so page 1 must actually contain those 30 — this stays
- * comfortably above that, same margin as `PERSONAS_PAGE_LIMIT` elsewhere.
- */
-const HISTORIAL_PAGE_LIMIT = 200;
-
-interface PaginatedAsistencias {
-  items: BackendAsistencia[];
-}
 import {
   buildMembershipPlans,
   buildMembershipView,
@@ -25,54 +18,46 @@ import {
   buildStudentProfileView,
   type BackendMembresiaPropia,
   type BackendTipoMembresiaCatalogo,
-  type MembershipView,
   type StudentPortalView,
   type StudentProfileView,
 } from "@/lib/server/student-adapter";
 
-async function fetchMemberships(
-  request: NextRequest,
-  personaId: number,
-): Promise<BackendMembresiaPropia[]> {
-  const result = await backendFetchAuthed(request, `/membresias/mias?persona_id=${personaId}`);
-  if (!result.ok || !result.response.ok) return [];
-  return result.response.json() as Promise<BackendMembresiaPropia[]>;
+/**
+ * `GET /asistencias/persona/{id}` is paginated (TRA-6). `RECENT_SESSIONS_LIMIT`
+ * (student-adapter.ts) slices to the 30 most recent sessions after a
+ * client-side sort, so the history the backend returns per profile must
+ * actually contain those 30 — this stays comfortably above that.
+ */
+const HISTORIAL_PAGE_LIMIT = 200;
+
+interface BackendPortalPerfil {
+  persona: BackendPersonaFull;
+  representante: { nombres: string; apellidos: string } | null;
+  historial: BackendAsistencia[];
+  membresias: BackendMembresiaPropia[];
 }
 
-async function fetchProfile(
-  request: NextRequest,
-  personaId: number,
+interface BackendPortalAlumno {
+  titular: BackendPortalPerfil;
+  representados: BackendPortalPerfil[];
+  horarios: BackendHorario[];
+  tipos: BackendTipoMembresiaCatalogo[];
+}
+
+function buildProfile(
+  perfil: BackendPortalPerfil,
   horariosById: Map<number, BackendHorario>,
   tiposById: Map<number, BackendTipoMembresiaCatalogo>,
-): Promise<StudentProfileView | null> {
-  const [personaResult, historialResult, memberships] = await Promise.all([
-    backendFetchAuthed(request, `/personas/${personaId}`),
-    backendFetchAuthed(request, `/asistencias/persona/${personaId}?limit=${HISTORIAL_PAGE_LIMIT}`),
-    fetchMemberships(request, personaId),
-  ]);
-
-  if (!personaResult.ok || !personaResult.response.ok) return null;
-  const persona = (await personaResult.response.json()) as BackendPersonaFull;
-
-  let representante: { nombres: string; apellidos: string } | null = null;
-  if (persona.representanteId) {
-    const repResult = await backendFetchAuthed(request, `/personas/${persona.representanteId}`);
-    if (repResult.ok && repResult.response.ok) {
-      const repPersona = (await repResult.response.json()) as BackendPersonaFull;
-      representante = { nombres: repPersona.nombres, apellidos: repPersona.apellidos };
-    }
-  }
-
-  const historial: BackendAsistencia[] =
-    historialResult.ok && historialResult.response.ok
-      ? ((await historialResult.response.json()) as PaginatedAsistencias).items
-      : [];
-  const recentSessions = buildRecentSessions(historial, horariosById);
-
-  const activeMembership = memberships.find((m) => m.estado === "ACTIVA" || m.estado === "VENCIDA") ?? memberships[0] ?? null;
+): StudentProfileView {
+  const recentSessions = buildRecentSessions(perfil.historial, horariosById);
+  const { membresias } = perfil;
+  const activeMembership =
+    membresias.find((m) => m.estado === "ACTIVA" || m.estado === "VENCIDA") ?? membresias[0] ?? null;
   const membership = activeMembership ? buildMembershipView(activeMembership, tiposById) : null;
-
-  return buildStudentProfileView(persona, recentSessions, membership, representante);
+  const representante = perfil.representante
+    ? { nombres: perfil.representante.nombres, apellidos: perfil.representante.apellidos }
+    : null;
+  return buildStudentProfileView(perfil.persona, recentSessions, membership, representante);
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -82,42 +67,27 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ message: "personaId inválido." }, { status: 400 });
   }
 
-  const [representadosResult, horariosResult, tiposResult] = await Promise.all([
-    backendFetchAuthed(request, `/personas/${personaId}/representados`),
-    backendFetchAuthed(request, "/asistencias/horarios"),
-    backendFetchAuthed(request, "/membresias/tipos"),
-  ]);
-
-  if (!representadosResult.ok) {
-    return NextResponse.json({ message: "No autorizado" }, { status: representadosResult.status });
+  const result = await backendFetchAuthed(request, `/portal/alumno/${personaId}?historial_limite=${HISTORIAL_PAGE_LIMIT}`);
+  if (!result.ok) {
+    return NextResponse.json({ message: "No autorizado" }, { status: result.status });
   }
-  if (!representadosResult.response.ok) {
-    return passthroughBackendError(representadosResult.response, "No se pudo cargar la cuenta.");
+  if (!result.response.ok) {
+    return passthroughBackendError(result.response, "No se pudo cargar la cuenta.");
   }
-  const representadosPersonas = (await representadosResult.response.json()) as BackendPersonaFull[];
+  const aggregate = (await result.response.json()) as BackendPortalAlumno;
 
-  const horarios: BackendHorario[] =
-    horariosResult.ok && horariosResult.response.ok ? await horariosResult.response.json() : [];
-  const horariosById = new Map(horarios.map((horario) => [horario.id, horario]));
-
-  const tipos: BackendTipoMembresiaCatalogo[] =
-    tiposResult.ok && tiposResult.response.ok ? await tiposResult.response.json() : [];
-  const tiposById = new Map(tipos.map((tipo) => [tipo.id, tipo]));
-
-  const [self, ...representados] = await Promise.all([
-    fetchProfile(request, personaId, horariosById, tiposById),
-    ...representadosPersonas.map((persona) => fetchProfile(request, persona.id, horariosById, tiposById)),
-  ]);
+  const horariosById = new Map(aggregate.horarios.map((horario) => [horario.id, horario]));
+  const tiposById = new Map(aggregate.tipos.map((tipo) => [tipo.id, tipo]));
 
   const portal: StudentPortalView = {
-    self,
-    representados: representados.filter((profile): profile is StudentProfileView => profile !== null),
-    membershipPlans: buildMembershipPlans(tipos),
+    self: buildProfile(aggregate.titular, horariosById, tiposById),
+    representados: aggregate.representados.map((perfil) => buildProfile(perfil, horariosById, tiposById)),
+    membershipPlans: buildMembershipPlans(aggregate.tipos),
   };
 
   const response = NextResponse.json(portal);
-  if (representadosResult.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: representadosResult.refreshedAccessToken });
+  if (result.refreshedAccessToken) {
+    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
   }
   return response;
 }
