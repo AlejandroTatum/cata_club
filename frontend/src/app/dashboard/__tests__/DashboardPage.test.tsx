@@ -151,7 +151,9 @@ describe("DashboardPage — the attention strip carries the count and its action
   it("points the row's action at the payment queue", async () => {
     render(<DashboardPage />);
 
-    expect(await screen.findByRole("link", { name: /^revisar ahora/i })).toHaveAttribute(
+    // The dashboard resolves several mocked fetches first; the default 1s
+    // wait loses the race on a loaded runner (seen in `make pre-pr`).
+    expect(await screen.findByRole("link", { name: /^revisar ahora/i }, { timeout: 5000 })).toHaveAttribute(
       "href",
       "/payments",
     );
