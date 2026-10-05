@@ -10,6 +10,7 @@
 
 import { AuthProvider } from "@/contexts/AuthContext";
 import ConnectivityBanner from "@/components/ConnectivityBanner";
+import LegalReacceptGate from "@/components/legal/LegalReacceptGate";
 
 export default function AuthProviderWrapper({
   children,
@@ -21,6 +22,8 @@ export default function AuthProviderWrapper({
       {/* Issue #454 — needs to be INSIDE AuthProvider (reads useAuth()) and
           ABOVE every route, since it is not tied to any one shell. */}
       <ConnectivityBanner />
+      {/* S8 — blocks the app until the current terms are accepted. */}
+      <LegalReacceptGate />
       {children}
     </AuthProvider>
   );
