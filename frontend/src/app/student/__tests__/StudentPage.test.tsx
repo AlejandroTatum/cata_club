@@ -572,7 +572,7 @@ describe("StudentPage — the club membership card (carnet)", () => {
     const row = within(facts).getByText("Válido hasta").parentElement!;
     expect(row.lastElementChild?.textContent).toBe("31/07/2026");
     expect(within(facts).getByText("Jugador desde")).toBeInTheDocument();
-    // And it is on the credential — the object that prints at 54 × 85.6 mm.
+    // And it is on the credential — the object that prints at 72 mm wide.
     expect(carnet).toContainElement(facts);
   });
 
@@ -966,7 +966,7 @@ describe("StudentPage — the carnet shows the student's photo", () => {
  * #286 slice 2 — el carnet imprime como credencial independiente.
  *
  * La hoja `@media print` de globals.css oculta todo el layout y deja solo
- * `#carnet-print-area` visible (tamaño 54×85.6mm, sobre blanco). Estos tests
+ * `#carnet-print-area` visible (72mm de ancho, sobre blanco). Estos tests
  * fijan el CONTRATO del DOM que esa hoja presupone: el área de impresión en
  * el carnet, el botón que dispara `window.print`, y que la banda de estado y
  * los botones no viajan al impreso (`print:hidden`).
@@ -1036,7 +1036,7 @@ describe("StudentPage — the carnet prints as a standalone credential", () => {
       expect(credential.contains(screen.getByRole("button", { name }))).toBe(false);
     }
     // The print-size note is chrome too — it describes the object, it is not on it.
-    expect(within(credential).queryByText(/54 × 85,6 mm/)).not.toBeInTheDocument();
+    expect(within(credential).queryByText(/72 mm de ancho/)).not.toBeInTheDocument();
   });
 
   // The panel is a citizen of the dashboard: it carries the same header row as
@@ -1057,7 +1057,7 @@ describe("StudentPage — the carnet prints as a standalone credential", () => {
     expect(imprimir.className).not.toMatch(/\bh-ctl(-sm)?\b/);
 
     // The size note, so the reader knows what the object on screen becomes.
-    expect(within(panel).getByText("Se imprime a 54 × 85,6 mm")).toBeInTheDocument();
+    expect(within(panel).getByText("Se imprime a 72 mm de ancho")).toBeInTheDocument();
 
     // The credential rests on a SUNKEN ground inside the panel — an inset area
     // inside paper, which is what makes the dark object read as held rather
@@ -1138,15 +1138,18 @@ describe("globals.css — the carnet's print sheet", () => {
     expect(printBlock).toMatch(/@page\s*\{[^}]*margin:\s*\d/);
   });
 
-  it("centres the card on the sheet at credential size", () => {
+  it("centres the card on the sheet, sized to its content so nothing clips (S7)", () => {
     const area = printBlock.slice(printBlock.indexOf("#carnet-print-area {"));
-    // `position: fixed` + `inset: 0` + `margin: auto` centres against the page
-    // box; `position: absolute` was what pinned it to 0,0.
+    // Fixed + 50%/50% + translate centres against the page box without needing
+    // a fixed height; the old 54×85.6mm box clipped dates and the day chips.
     expect(area).toMatch(/position:\s*fixed/);
-    expect(area).toMatch(/inset:\s*0/);
-    expect(area).toMatch(/margin:\s*auto/);
-    expect(area).toMatch(/width:\s*54mm/);
-    expect(area).toMatch(/height:\s*85\.6mm/);
+    expect(area).toMatch(/top:\s*50%/);
+    expect(area).toMatch(/left:\s*50%/);
+    expect(area).toMatch(/translate\(-50%,\s*-50%\)/);
+    expect(area).toMatch(/width:\s*72mm/);
+    expect(area).toMatch(/height:\s*auto/);
+    expect(area).toMatch(/overflow:\s*visible/);
+    expect(area).not.toMatch(/height:\s*85\.6mm/);
   });
 
   it("draws the cut line as a real border, not as a shadow Chrome drops", () => {
@@ -2113,7 +2116,7 @@ describe("StudentPage — the page's leftover height is claimed, not abandoned",
     // The air that makes it read as HELD rather than as a fill: one `section`
     // step above and below, on top of the sunken band's own `page` padding.
     expect(credential.className).toMatch(/\bmy-section\b/);
-    expect(within(panel).getByText("Se imprime a 54 × 85,6 mm")).toBeInTheDocument();
+    expect(within(panel).getByText("Se imprime a 72 mm de ancho")).toBeInTheDocument();
   });
 });
 
@@ -2532,12 +2535,9 @@ describe("StudentPage — the credential inside the panel (Funda)", () => {
     expect(bar).toHaveAttribute("aria-hidden", "true");
     expect(bar.children[0].className).toMatch(/\bbg-cata-red\b/);
 
-    // Red outside the bar is only ever DATUM: the training-day chips.
+    // Red is only the accent bar: training days are green, never red.
     const reds = [...carnet.querySelectorAll('[class*="cata-red"]')];
-    const days = within(carnet).getByTestId("carnet-training-days");
-    expect(
-      reds.filter((element) => !days.contains(element) && !bar.contains(element)),
-    ).toEqual([]);
+    expect(reds.filter((element) => !bar.contains(element))).toEqual([]);
   });
 
   // The cédula is the fact this pass had to plumb through three layers to get
@@ -2623,9 +2623,10 @@ describe("StudentPage — the credential inside the panel (Funda)", () => {
       "inactivo",
       "inactivo",
     ]);
-    // Training days wear the club's red; the rest are muted on the coal ground.
-    expect(boxes[1].className).toMatch(/\bbg-cata-red\b/);
-    expect(boxes[0].className).toMatch(/bg-white\/5\b/);
+    // Training days are green (S3); the rest are muted on the coal ground.
+    expect(boxes[1].className).toMatch(/\bbg-state-ok\b/);
+    expect(boxes[1].className).not.toMatch(/cata-red/);
+    expect(boxes[0].className).toMatch(/bg-white\/\[0\.03\]/);
     expect(boxes[0].className).not.toMatch(/\bbg-sunken\b/);
   });
 

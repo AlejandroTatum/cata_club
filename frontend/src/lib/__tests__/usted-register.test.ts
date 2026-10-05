@@ -51,7 +51,7 @@ function templateLiterals(text: string): string[] {
  */
 function withoutModuleSpecifiers(text: string): string {
   return text.replace(
-    /\b(from\s+|import\s+|import\s*\(\s*|require\s*\(\s*)(["'])[^"'\n]*\2/g,
+    /\b(from\s+|import\s+|import\s*\(\s*|require\s*\(\s*)(["'])(?:(?:\.{1,2}\/|@[\w-]*\/|node:)[^"'\n]*|[a-z][\w.-]*(?:\/[\w.-]+)*)\2/g,
     '$1""',
   );
 }

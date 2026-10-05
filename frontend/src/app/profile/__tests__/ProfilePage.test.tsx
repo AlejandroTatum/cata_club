@@ -1435,6 +1435,16 @@ describe("ProfilePage — the club on the screen (faro: perfil y login)", () => 
     expect(within(membership).getByText("13/08/2026")).toBeInTheDocument();
   });
 
+  it("keeps the plan label and value apart even when flex collapses the whitespace", async () => {
+    await renderStudent();
+
+    const membership = await screen.findByTestId("profile-membership");
+    const label = within(membership).getByText("Plan");
+    // The label+value pair is an inline-flex with a gap, not a bare text space.
+    expect(label).toHaveClass("inline-flex", "gap-1");
+    expect(label).toContainElement(within(membership).getByText("Mensual Infantil"));
+  });
+
   it("asks for nothing new about the membership — plan, modalidad and joining date are all in the payload", async () => {
     // D14: this pass changes how the screen looks, not what it does. If the
     // club facts had needed a second request, they would not have been in

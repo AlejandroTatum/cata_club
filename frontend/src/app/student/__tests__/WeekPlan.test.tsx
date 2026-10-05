@@ -135,13 +135,14 @@ describe("WeekPlan — the strip is one calendar week", () => {
 });
 
 describe("WeekPlan — colour carries the training days (QA R2 S6)", () => {
-  it("fills upcoming training days with the brand red, mutes rest days and marks only today", () => {
+  it("fills upcoming training days with green, mutes rest days and marks only today", () => {
     const { cells } = renderAt("2026-09-30T12:00:00-05:00");
     const [mon, , wed, thu, fri, sat] = cells;
-    expect(thu).toHaveClass("bg-cata-red", "text-white");
-    expect(fri).toHaveClass("bg-cata-red");
+    expect(thu).toHaveClass("bg-state-ok", "text-white");
+    expect(thu).not.toHaveClass("bg-cata-red");
+    expect(fri).toHaveClass("bg-state-ok");
     // A training day already gone is tinted, not faded, so its text keeps AA contrast.
-    expect(mon).toHaveClass("bg-state-bad-bg", "text-state-bad");
+    expect(mon).toHaveClass("bg-state-ok-bg", "text-state-ok");
     expect(mon).not.toHaveClass("opacity-55");
     expect(sat).toHaveClass("bg-sunken", "text-ink-3-strong");
     // Today is ringed and dotted — even when it is the `next` coal cell.
