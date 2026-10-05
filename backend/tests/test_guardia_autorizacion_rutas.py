@@ -194,6 +194,7 @@ RUTAS_SOLO_AUTENTICADAS = {
     # cambios; solo esta lectura se movió.
     ("GET", "/personas/{persona_id}/beneficio"),                 # (b)
     ("GET", "/personas/{persona_id}/representados"),             # (b)
+    ("GET", "/portal/alumno/{persona_id}"),                      # (b) - titular o admin via PoliticaAccesoPersona
     ("GET", "/ranking/notificaciones/mias"),                     # (b) - propio via `persona_id` del token
     ("PATCH", "/auth/correo"),                                   # (b) - propio via `sub`, solo mientras no verificado
     ("PATCH", "/auth/me"),                                       # (b) - propio via `sub`

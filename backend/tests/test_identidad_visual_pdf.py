@@ -145,13 +145,16 @@ def test_el_comprobante_lleva_la_cabecera_institucional(monkeypatch):
     assert capturado["build"].get("onLaterPages") is generador_pdf._dibujar_encabezado_pagina
 
 
-def test_el_comprobante_deja_aire_para_la_barra_roja(monkeypatch):
-    """La barra se dibuja a 26mm del borde superior, por fuera del flujo. Con
-    el margen viejo de 18mm el título del comprobante quedaría por debajo del
-    logo pero encima de la barra: el texto y la barra se pisan."""
+def test_el_comprobante_deja_aire_para_el_membrete(monkeypatch):
+    """El banner y las tres líneas del membrete se dibujan por fuera del flujo:
+    el margen superior tiene que cubrir el banner escalado al ancho del
+    contenido más las líneas, o el título del comprobante se les encima."""
     capturado = _comprobante_construido(monkeypatch)
 
-    assert capturado["doc"].topMargin >= 26 * mm
+    doc = capturado["doc"]
+    alto_banner = doc.width * generador_pdf._MEMBRETE_PROPORCION
+    assert doc.topMargin >= alto_banner + 3 * generador_pdf._INTERLINEADO_MEMBRETE
+    assert doc.bottomMargin >= 16 * mm
 
 
 def test_el_encabezado_de_la_tabla_del_comprobante_es_rojo(monkeypatch):
@@ -314,3 +317,89 @@ def test_comprobante_nombra_el_deporte_del_club_y_el_pie_sin_firma(monkeypatch):
 
 def test_el_nombre_del_club_es_tenis_de_mesa_en_todo_el_generador():
     assert generador_pdf._NOMBRE_CLUB == "Cata Club - Tenis de Mesa"
+
+
+# --- Membrete del cliente (HOJA DE MUESTRA) ---------------------------------
+
+_LINEAS_MEMBRETE = [
+    "CLUB DEPORTIVO ESPECIALIZADO FORMATIVO \u201cCATA CLUB\u201d",
+    "FUNDADO EL 10 DE OCTUBRE DEL 2013",
+    "ACUERDO MINISTERIAL 1810",
+]
+_PIE_TELEFONOS = "Tel\u00e9fonos: 0994219619 \u2013 0990288152"
+
+
+def _textos_dibujados_en_el_lienzo(monkeypatch, generar) -> list[str]:
+    """Espía lo que se dibuja en el lienzo (el membrete y el pie no son
+    flowables, así que no pasan por `build`) y devuelve cada cadena impresa."""
+    from reportlab.pdfgen.canvas import Canvas
+
+    dibujados: list[str] = []
+    for nombre in ("drawString", "drawCentredString", "drawRightString"):
+        original = getattr(Canvas, nombre)
+
+        def _espia(self, x, y, texto, *a, _original=original, **k):
+            dibujados.append(texto)
+            return _original(self, x, y, texto, *a, **k)
+
+        monkeypatch.setattr(Canvas, nombre, _espia)
+    generar()
+    return dibujados
+
+
+def _generar_comprobante():
+    return generar_comprobante_pago_pdf(**_DATOS_COMPROBANTE)
+
+
+def _generar_reporte():
+    return generador_pdf.generar_reporte_pdf(
+        titulo="Pagos", columnas=["Nombre"], filas=[["Ana"]],
+    )
+
+
+@pytest.mark.parametrize("generar", [_generar_comprobante, _generar_reporte])
+def test_todo_pdf_lleva_el_membrete_y_el_pie_de_telefonos(monkeypatch, generar):
+    textos = _textos_dibujados_en_el_lienzo(monkeypatch, generar)
+
+    for linea in _LINEAS_MEMBRETE:
+        assert linea in textos
+    assert _PIE_TELEFONOS in textos
+
+
+def test_el_reporte_conserva_pagina_x_de_n_junto_al_pie_de_telefonos(monkeypatch):
+    textos = _textos_dibujados_en_el_lienzo(monkeypatch, _generar_reporte)
+
+    assert "Página 1 de 1" in textos
+    assert _PIE_TELEFONOS in textos
+
+
+@pytest.mark.parametrize("generar", [_generar_comprobante, _generar_reporte])
+def test_el_membrete_es_texto_extraible_del_pdf(generar):
+    """Lectura real del PDF: confirma que las líneas no solo se piden al
+    lienzo sino que quedan en el documento. Requiere `pdftotext`."""
+    import shutil
+    import subprocess
+
+    if shutil.which("pdftotext") is None:
+        pytest.skip("pdftotext no está instalado")
+    texto = subprocess.run(
+        ["pdftotext", "-", "-"], input=generar(), capture_output=True, check=True,
+    ).stdout.decode("utf-8")
+
+    for linea in _LINEAS_MEMBRETE:
+        assert linea in texto
+    assert _PIE_TELEFONOS in texto
+
+
+def test_el_comprobante_sigue_en_una_sola_pagina():
+    assert _generar_comprobante().count(b"/Type /Page\n") == 1
+
+
+def test_el_banner_del_membrete_existe_y_conserva_la_proporcion_del_cliente():
+    from PIL import Image
+
+    ruta = generador_pdf._MEMBRETE_PATH
+    assert ruta.exists()
+    ancho, alto = Image.open(ruta).size
+    assert (ancho, alto) == (1166, 253)
+    assert generador_pdf._MEMBRETE_PROPORCION == pytest.approx(alto / ancho)

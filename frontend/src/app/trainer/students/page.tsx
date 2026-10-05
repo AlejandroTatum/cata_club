@@ -493,7 +493,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
                           </div>
                         </TableCell>
                         <TableCell type="action">
-                          <div className="flex flex-wrap items-center justify-end gap-1.5">
+                          <div className="flex flex-row flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
                             <BotonFichaMedica
                               alumno={alumno}
                               onAbrir={() => abrirFicha(alumno)}

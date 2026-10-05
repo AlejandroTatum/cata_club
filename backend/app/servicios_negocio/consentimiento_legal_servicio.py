@@ -8,7 +8,7 @@ from app.infraestructura.repositorios.consentimiento_legal_repositorio import (
 )
 
 DOCUMENTOS_LEGALES = ("TERMINOS", "PRIVACIDAD", "DATOS_MEDICOS", "FETM")
-VERSION_LEGAL_VIGENTE = "2.2"
+VERSION_LEGAL_VIGENTE = "2.3"
 TEXTOS_LEGALES_VIGENTES = {
     "TERMINOS": "Términos de uso vigentes de Cata Club.",
     "PRIVACIDAD": "Aviso de privacidad vigente de Cata Club.",

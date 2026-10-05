@@ -112,8 +112,9 @@ JSON cada minuto y el `celery-worker` lo lee por un bind mount de solo lectura
 (ver [`metricas.md`](metricas.md#actividad-del-club-colector-endpoints-y-retención-issue-1314)).
 No requiere ningún contenedor nuevo ni montar el socket de Docker.
 
-Instalación única en el host (no la hace `deploy.sh install-cron`, que no toca
-estas líneas pero tampoco las agrega):
+`deploy.sh install-cron` (issue #1614) crea el directorio e instala esta entrada
+de forma idempotente, así que normalmente no hace falta nada más. Es el
+equivalente manual:
 
 ```
 sudo install -d -m 755 -o "$(id -un)" -g "$(id -gn)" /var/lib/cata-club/metricas
