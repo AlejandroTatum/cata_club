@@ -25,6 +25,18 @@ class ConsentimientoLegalRepositorio:
             )
         )
 
+    def claves_de_cuenta(
+        self, cuenta_id: int, version: Optional[str] = None
+    ) -> set[tuple[str, Optional[int]]]:
+        """Los pares (documento, representado) que la cuenta aceptó, en
+        cualquier versión o solo en `version`."""
+        consulta = select(
+            ConsentimientoLegal.documento, ConsentimientoLegal.representado_persona_id
+        ).where(ConsentimientoLegal.cuenta_id == cuenta_id)
+        if version is not None:
+            consulta = consulta.where(ConsentimientoLegal.version_documento == version)
+        return {(documento, representado) for documento, representado in self.db.execute(consulta)}
+
     def guardar(self, registro: ConsentimientoLegal) -> ConsentimientoLegal:
         self.db.add(registro)
         self.db.flush()

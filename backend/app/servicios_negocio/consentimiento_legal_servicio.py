@@ -88,6 +88,32 @@ class ConsentimientoLegalServicio:
             )))
         return registros
 
+    def _claves_pendientes(self, cuenta_id: int) -> set[tuple[str, Optional[int]]]:
+        """Lo que la cuenta aceptó alguna vez pero no en la versión vigente.
+        Una cuenta sin ninguna aceptación previa no tiene nada que renovar."""
+        return self.repo.claves_de_cuenta(cuenta_id) - self.repo.claves_de_cuenta(
+            cuenta_id, VERSION_LEGAL_VIGENTE
+        )
+
+    def reaceptacion_pendiente(self, cuenta_id: int) -> bool:
+        return bool(self._claves_pendientes(cuenta_id))
+
+    def aceptar_version_vigente(self, cuenta_id: int) -> None:
+        """Re-registra, en la versión vigente, exactamente los documentos (y el
+        alcance de representado) que la cuenta ya había aceptado: así el rol
+        decide el conjunto, igual que en la inscripción. Idempotente."""
+        for documento, representado in sorted(
+            self._claves_pendientes(cuenta_id), key=lambda clave: (clave[0], clave[1] or 0)
+        ):
+            self._registrar_aceptacion_grupal_nucleo(
+                cuenta_id=cuenta_id,
+                documentos=(documento,),
+                version=VERSION_LEGAL_VIGENTE,
+                texto_por_documento=TEXTOS_LEGALES_VIGENTES,
+                representado_persona_id=representado,
+            )
+        self.db.commit()
+
     def revocar(self, consentimiento_id: int, *, cuenta_id: int, motivo: str) -> RevocacionConsentimientoLegal:
         registro = self.repo.obtener(consentimiento_id)
         if registro is None or registro.cuenta_id != cuenta_id:

@@ -14,7 +14,10 @@ from app.servicios_negocio.dtos.auth_schemas import (
     ConfirmarVerificacionCorreoDTO,
     CambiarCorreoNoVerificadoDTO, CambiarCorreoNoVerificadoResponseDTO,
     ActualizarPerfilPropioDTO, ActualizarPerfilPropioResponseDTO, ActualizarFotoPerfilResponseDTO,
-    SesionResponseDTO,
+    SesionResponseDTO, ConsentimientoLegalEstadoDTO,
+)
+from app.servicios_negocio.consentimiento_legal_servicio import (
+    ConsentimientoLegalServicio, VERSION_LEGAL_VIGENTE,
 )
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.auth_servicio import AuthServicio, LoginEnEnfriamiento
@@ -143,6 +146,34 @@ async def obtener_perfil(
             else GestorAutenticacion.primer_pago_gate(db, usuario.persona_id)
         ),
     }
+
+
+# --- S8: re-aceptación de los términos vigentes (cualquier rol autenticado) --
+def _estado_consentimiento(db: Session, usuario_id: int) -> dict:
+    return {
+        "pendiente": ConsentimientoLegalServicio(db).reaceptacion_pendiente(usuario_id),
+        "version": VERSION_LEGAL_VIGENTE,
+    }
+
+
+@router.get("/consentimiento-legal", response_model=ConsentimientoLegalEstadoDTO)
+async def estado_consentimiento_legal(
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    db: Session = Depends(obtener_sesion),
+):
+    usuario = AuthServicio(db).obtener_usuario_actual(token_payload["sub"])
+    return _estado_consentimiento(db, usuario.id)
+
+
+@router.post("/consentimiento-legal/aceptar", response_model=ConsentimientoLegalEstadoDTO)
+async def aceptar_consentimiento_legal(
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    db: Session = Depends(obtener_sesion),
+):
+    """Solo la cuenta del token: el endpoint no recibe ningún identificador."""
+    usuario = AuthServicio(db).obtener_usuario_actual(token_payload["sub"])
+    ConsentimientoLegalServicio(db).aceptar_version_vigente(usuario.id)
+    return _estado_consentimiento(db, usuario.id)
 
 
 # --- Issue #36: perfil propio (self-service, cualquier rol autenticado) -----

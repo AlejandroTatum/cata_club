@@ -96,6 +96,13 @@ class UsuarioMeResponseDTO(ResponseBase, BaseModel):
         return resolver_url_foto_perfil(valor)
 
 
+class ConsentimientoLegalEstadoDTO(ResponseBase, BaseModel):
+    """Si la cuenta debe aceptar la versión vigente de los términos."""
+
+    pendiente: bool
+    version: str
+
+
 class LogoutResponseDTO(ResponseBase, BaseModel):
     mensaje: str
 
