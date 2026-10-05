@@ -381,7 +381,7 @@ export default function AuthShell({
             href={toWhatsAppLink(landingConfig.contact.whatsapp[0])}
             target="_blank"
             rel="noopener noreferrer"
-            className={AUTH_LINK_CLASSES}
+            className={`${AUTH_LINK_CLASSES} touch-target-row`}
           >
             Escríbenos por WhatsApp
           </a>

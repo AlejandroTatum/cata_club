@@ -564,7 +564,7 @@ function LoginPageContent(): React.ReactElement {
             the last field and the CTA, so the exemption the enrolment link
             below relies on does not cover it. The arrow says it leaves the
             screen. */}
-        <Link href="/forgot-password" className={`${AUTH_LINK_CLASSES} min-h-[24px] self-end`}>
+        <Link href="/forgot-password" className={`${AUTH_LINK_CLASSES} touch-target-row min-h-[24px] self-end`}>
           ¿Olvidaste tu contraseña?
           <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         </Link>
@@ -578,7 +578,7 @@ function LoginPageContent(): React.ReactElement {
           link rather than as a second red phrase. */}
       <p className="text-center text-xs text-ink-3">
         ¿No tienes una cuenta?{" "}
-        <Link href="/student/enroll" className={AUTH_LINK_CLASSES}>
+        <Link href="/student/enroll" className={`${AUTH_LINK_CLASSES} touch-target-row`}>
           Inscríbete
           <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         </Link>

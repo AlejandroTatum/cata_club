@@ -132,14 +132,6 @@ const VIEWPORTS = [
 const ALLOWED_KINDS = new Set(["inline-link"]);
 /** `screen|label` pairs reviewed by the owner or documented in the report. */
 const ALLOW_LIST: { key: RegExp; reason: string }[] = [
-  // Minors from odd/qa4/mobile-audit/report.md. Each one is a secondary text
-  // link or disclosure, not a primary action; delete the entry when it is fixed.
-  { key: /^public-login\|(Inscríbete|Escríbenos por WhatsApp|¿Olvidaste tu contraseña\?)/, reason: "text links under the login form (report: minor)" },
-  { key: /^public-terminos\|(cataclub\.loja@proton\.me|WhatsApp 09)/, reason: "contact links inside the legal text (report: minor)" },
-  { key: /^(estudiante|representante)-portal\|(Imprimir carnet|Ver pagos|Ver mis asistencias|Ver las asistencias de)/, reason: "secondary card links on the portal (report: minor)" },
-  { key: /^admin-dashboard\|(82% del total|Revisar pagos|0 de 0 registros)/, reason: "stat-tile footer links on the dashboard (report: minor)" },
-  { key: /^admin-actividad\|(Jugadores|Entrenadores|Representantes|Ver como tabla)/, reason: "legend chips and a disclosure on Actividad (report: minor)" },
-  { key: /^entrenador-day\|Es una estimación/, reason: "a disclosure summary on the trainer day (report: minor)" },
 ];
 
 /** Voseo forms only: the unaccented forms (`hace`, `usa`…) are plain third person, so they are not listed. */
@@ -367,6 +359,11 @@ for (const vp of VIEWPORTS) {
           (isIgnorableConsoleError(text, m.location().url) ? ignoredErrors : consoleErrors).push(text);
         });
         page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
+
+        // The trainer day reads the real clock and the mock has a single Monday
+        // schedule, so on any other weekday the next-session hero (and its
+        // emergency chips) never rendered. Pin a Monday so that path is always audited.
+        await page.clock.setFixedTime(new Date(2026, 9, 5, 9, 0, 0));
 
         await mockBackend(page, screen.role);
 

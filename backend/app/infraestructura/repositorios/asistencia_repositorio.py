@@ -183,6 +183,44 @@ class AsistenciaRepositorio:
             stmt = stmt.limit(limit)
         return list(self.db.execute(stmt).scalars().all())
 
+    def listar_recientes_por_personas(
+        self, persona_ids: List[int], limite_por_persona: int
+    ) -> dict[int, List[Asistencia]]:
+        """Las `limite_por_persona` asistencias más recientes de CADA persona
+        en UNA consulta (ventana `row_number` por persona, mismo orden total
+        que `listar_por_persona`), con el mismo eager-load. Issue #1592: el
+        portal arma el perfil de toda la familia sin una consulta por hijo."""
+        agrupadas: dict[int, List[Asistencia]] = {pid: [] for pid in persona_ids}
+        if not persona_ids:
+            return agrupadas
+        posicion = (
+            func.row_number()
+            .over(
+                partition_by=Asistencia.persona_id,
+                order_by=(Asistencia.fecha_entrenamiento.desc(), Asistencia.id.desc()),
+            )
+            .label("posicion")
+        )
+        recientes = (
+            select(Asistencia.id.label("id"), posicion)
+            .where(Asistencia.persona_id.in_(persona_ids))
+            .subquery()
+        )
+        stmt = (
+            select(Asistencia)
+            .join(recientes, recientes.c.id == Asistencia.id)
+            .options(
+                joinedload(Asistencia.persona),
+                joinedload(Asistencia.horario),
+                joinedload(Asistencia.registrado_por),
+            )
+            .where(recientes.c.posicion <= limite_por_persona)
+            .order_by(Asistencia.fecha_entrenamiento.desc(), Asistencia.id.desc())
+        )
+        for asistencia in self.db.execute(stmt).scalars().unique().all():
+            agrupadas[asistencia.persona_id].append(asistencia)
+        return agrupadas
+
     def contar_por_persona(self, persona_id: int) -> int:
         """Total del historial de ESA persona -- mismo filtro que
         `listar_por_persona`, para que el `total` del envelope paginado

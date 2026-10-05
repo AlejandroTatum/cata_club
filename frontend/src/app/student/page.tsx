@@ -126,7 +126,7 @@ function SituationLink({ href, children }: { href: string; children: React.React
   return (
     <Link
       href={href}
-      className="inline-flex min-h-[24px] items-center gap-1.5 rounded text-sm font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 transition-colors hover:decoration-ink"
+      className="touch-target-row inline-flex min-h-[24px] items-center gap-1.5 rounded text-sm font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 transition-colors hover:decoration-ink"
     >
       {children}
       <ArrowRight size={ICON.sm} strokeWidth={1.75} aria-hidden="true" />

@@ -405,18 +405,18 @@ export function MembershipTicket({
       {(plan || since || modalidad) && (
         <p className="flex flex-wrap justify-between gap-x-4 gap-y-1 border-t border-line-2/60 pt-2.5 text-xs text-ink-2 sm:col-span-2">
           {plan && (
-            <span>
-              Plan <b className="text-ink">{plan}</b>
+            <span className="inline-flex gap-1">
+              Plan{" "}<b className="text-ink">{plan}</b>
             </span>
           )}
           {modalidad && (
-            <span>
-              Modalidad <b className="text-ink">{modalidad}</b>
+            <span className="inline-flex gap-1">
+              Modalidad{" "}<b className="text-ink">{modalidad}</b>
             </span>
           )}
           {since && (
-            <span>
-              Jugador desde <b className="text-ink">{since}</b>
+            <span className="inline-flex gap-1">
+              Jugador desde{" "}<b className="text-ink">{since}</b>
             </span>
           )}
         </p>
