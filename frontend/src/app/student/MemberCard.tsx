@@ -286,7 +286,7 @@ export default function MemberCard({
         <button
           type="button"
           onClick={() => window.print()}
-          className={`inline-flex items-center text-xs font-semibold text-ink-2 underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink ${MIN_TARGET_CLASS}`}
+          className={`inline-flex items-center text-xs font-semibold text-ink-2 underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink touch-target-row ${MIN_TARGET_CLASS}`}
         >
           Imprimir carnet
         </button>

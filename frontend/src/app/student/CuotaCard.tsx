@@ -133,7 +133,7 @@ export default function CuotaCard({
           href={viewPagosHref}
           // `MIN_TARGET_CLASS` (issue #818, WCAG 2.5.8 AA): the link used to
           // be exactly its text, 56 × 18.8px.
-          className={`inline-flex items-center text-xs font-semibold text-ink-2 underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink ${MIN_TARGET_CLASS}`}
+          className={`inline-flex items-center text-xs font-semibold text-ink-2 underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink touch-target-row ${MIN_TARGET_CLASS}`}
         >
           Ver pagos
         </Link>

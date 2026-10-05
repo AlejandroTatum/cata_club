@@ -144,4 +144,4 @@ def test_documento_y_version_son_requeridos_y_unicos(db_session):
 def test_la_version_legal_vigente_es_la_2_2():
     from app.servicios_negocio.consentimiento_legal_servicio import VERSION_LEGAL_VIGENTE
 
-    assert VERSION_LEGAL_VIGENTE == "2.2"
+    assert VERSION_LEGAL_VIGENTE == "2.3"

@@ -54,13 +54,13 @@ describe("terms wording (owner QA r2, S2)", () => {
 
   it("keeps the defined term «el club» without the 'nombre comercial' aside", () => {
     expect(texts.join("\n")).not.toMatch(/nombre comercial/i);
-    expect(texts.some((text) => text.includes("propietaria de Cata Club (en adelante, «el club»)"))).toBe(true);
+    expect(texts.some((text) => text.includes("con cédula de ciudadanía 0102724358 (en adelante, «el club»)"))).toBe(true);
   });
 
   it("publishes Chapter II exactly as the owner approved it", () => {
     expect(chapter("Capítulo II.")).toEqual([
       "El club se compromete a:",
-      "• Hacer lo posible para que la plataforma funcione de forma segura y continua.",
+      "• Hacer lo posible para que el sistema funcione de forma segura y continua.",
       "• Mostrar a cada cuenta únicamente la información que su rol necesita.",
       "• Tratar los datos personales conforme a la Ley Orgánica de Protección de Datos Personales y a lo descrito en el Capítulo VIII.",
       "• Revisar los pagos que se registren, emitir el recibo cuando los valide y responder por sus canales de contacto las consultas, los errores de pago y las solicitudes de devolución.",
@@ -88,10 +88,21 @@ describe("terms wording (owner QA r2, S2)", () => {
   });
 });
 
+describe("legal entity and system naming", () => {
+  it("names the club entity and the system in the terms", () => {
+    const html = renderToStaticMarkup(<TermsPage />);
+    expect(html).toContain(
+      "CLUB DEPORTIVO ESPECIALIZADO FORMATIVO “CATA CLUB”, con Acuerdo Ministerial 1810, representado legalmente por Lucía Catalina Cedillo Flor, con cédula de ciudadanía 0102724358",
+    );
+    expect(html).toContain("SISTEMA DE GESTIÓN Y PÁGINA WEB COMERCIAL");
+    expect(html).not.toContain("propietaria de Cata Club");
+  });
+});
+
 describe("public legal documents", () => {
   it.each(pages)("%s publishes version and effective date", (_name, Page) => {
     const html = renderToStaticMarkup(<Page />);
-    expect(html).toContain("2.2");
+    expect(html).toContain("2.3");
     expect(html).toContain("4 de octubre de 2026");
     expect(html).not.toContain("27 de agosto de 2026");
     expect(html).toContain('id="contenido"');
@@ -134,7 +145,7 @@ describe("public legal documents", () => {
   it("carries the former health and image documents verbatim, key sentences included (#1615)", () => {
     const html = decode(renderToStaticMarkup(<TermsPage />));
     for (const sentence of [
-      "Con él usted autoriza expresamente que Cata Club trate datos de salud, que la ley considera datos sensibles.",
+      "Con él usted autoriza expresamente que el club trate datos de salud, que la ley considera datos sensibles.",
       "La ficha médica del jugador: tipo de sangre, alergias, enfermedades que debamos conocer, y el nombre y teléfono de una persona de contacto en caso de emergencia.",
       "• No usamos imágenes de jugadores menores de 18 años en mensajes publicitarios.",
       "3. FETM. Autorizar a la Federación Ecuatoriana de Tenis de Mesa la difusión de la imagen del jugador",

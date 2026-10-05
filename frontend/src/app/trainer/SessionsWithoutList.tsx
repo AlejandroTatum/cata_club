@@ -81,7 +81,7 @@ export default function SessionsWithoutList({ missing, coverageKnown }: Sessions
         {/* Short by default: the caveat matters, but four lines of it under
             every card made the estimate louder than the list. */}
         <details className="text-xs text-ink-3">
-          <summary className="cursor-pointer">Es una estimación</summary>
+          <summary className="touch-target-pad cursor-pointer">Es una estimación</summary>
           <p className="m-0 mt-1" role="note">
             {AVISO_ESTIMACION}
           </p>
