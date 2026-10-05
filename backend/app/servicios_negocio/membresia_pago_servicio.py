@@ -1697,8 +1697,10 @@ class PagoServicio:
             recibe el aviso de 5 días y entra en la transición a VENCIDA. Una
             regularización puramente retroactiva (`fecha_fin < hoy`) no toca
             el estado: la deuda parcial debe seguir visible.
-          * Avisa al socio (campana + correo, ver `_notificar_regularizacion`);
-            NO dispara PDF ni la regla familiar.
+          * Avisa al socio (campana + correo, ver `_notificar_regularizacion`)
+            y, ya commiteado, encola el comprobante PDF oficial igual que
+            `validar_pago` (un fallo al encolar no revierte nada); NO dispara
+            la regla familiar.
           * `aplicar_descuento` (S12): `False` cobra el valor normal; ausente
             o `True` aplica el beneficio vigente.
           * Lockea la `Membresia` con `FOR UPDATE` antes de escribir, mismo
@@ -1777,6 +1779,8 @@ class PagoServicio:
         if inspeccionar_orm(resultado).expired:
             self.db.refresh(resultado)
         self._notificar_regularizacion(resultado)
+        # Último paso, ya commiteado: no propaga si el broker está caído.
+        self._disparar_generacion_comprobante_pdf(resultado.id)
         return resultado
 
     def _notificar_regularizacion(self, pago: Pago) -> None:
