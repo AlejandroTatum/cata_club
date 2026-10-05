@@ -755,6 +755,12 @@ export interface PaymentSituationInput {
   suspended?: boolean;
   /** FAM-02: the reason the club recorded when it suspended the membership. */
   motivoSuspension?: string | null;
+  /**
+   * T5/S5: the end date of the current/future coverage when it was paid with a
+   * discount (see `resolveDiscountedCoverageEnd`), else `null`. While it is
+   * still in the future the member cannot register another payment.
+   */
+  discountedCoverageEnd?: string | null;
 }
 
 export interface PaymentSituation {
@@ -795,6 +801,39 @@ function describePrice(input: PaymentSituationInput): string | null {
   if (!input.monthlyPrice) return null;
   const price = `${formatCurrency(input.monthlyPrice)} al mes`;
   return input.planName ? `Plan ${input.planName} · ${price}` : price;
+}
+
+/** The member-facing sentence for a payment blocked by a discounted current month. */
+export function describeDiscountBlock(coverageEnd: string): string {
+  return `Tu mes actual se pagó con descuento. Podrás renovar cuando termine, el ${formatDate(coverageEnd)}.`;
+}
+
+/**
+ * T5/S5: the end of the furthest coverage (approved or pending payment, or a
+ * 100% benefit activation) that ends after today, when it was obtained with a
+ * discount; `null` otherwise. Mirrors the backend rule, which stays the
+ * authority — this only decides what the screen offers.
+ */
+export function resolveDiscountedCoverageEnd(
+  pagos: Pick<PagoPersona, "estadoPago" | "fechaFin" | "descuentoValorAplicado" | "descuentoPorcentajeAplicado">[],
+  coberturas: { fechaFin: string }[],
+  today: Date = new Date(),
+): string | null {
+  const candidates: { end: string; discounted: boolean }[] = [];
+  for (const pago of pagos) {
+    if (pago.estadoPago === "RECHAZADO") continue;
+    candidates.push({
+      end: pago.fechaFin,
+      discounted: pago.descuentoValorAplicado != null || pago.descuentoPorcentajeAplicado != null,
+    });
+  }
+  for (const cobertura of coberturas) candidates.push({ end: cobertura.fechaFin, discounted: true });
+  const current = candidates.filter(({ end }) => (daysUntil(end, today) ?? 0) > 0);
+  if (current.length === 0) return null;
+  const latest = current.reduce((a, b) =>
+    b.end > a.end || (b.end === a.end && b.discounted) ? b : a,
+  );
+  return latest.discounted ? latest.end : null;
 }
 
 export function describePaymentSituation(
@@ -969,6 +1008,12 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
     };
   }
 
+  // T5/S5: a discounted current month cannot be followed by another payment
+  // until it ends; the wording is the backend's own.
+  const discountBlocked =
+    input.discountedCoverageEnd != null && (daysUntil(input.discountedCoverageEnd, today) ?? 0) > 0;
+  const discountDetail = discountBlocked ? describeDiscountBlock(input.discountedCoverageEnd as string) : null;
+
   if (daysLeft <= COVERAGE_ENDING_SOON_DAYS) {
     return {
       kind: "ending-soon",
@@ -988,10 +1033,10 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
                 daysLeft === 1 ? "queda 1 día" : `quedan ${daysLeft} días`
               } de cobertura`,
             ),
-      detail: sentence(`${coverageClause(coverageEnd, false)}.`),
+      detail: discountDetail ?? sentence(`${coverageClause(coverageEnd, false)}.`),
       priceNote,
-      canRegister: true,
-      urgent: true,
+      canRegister: !discountBlocked,
+      urgent: !discountBlocked,
     };
   }
 
@@ -1001,9 +1046,9 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
     headline: input.viewingOwnProfile
       ? "Estás al día con el club"
       : `${input.studentName} está al día con el club`,
-    detail: sentence(`${coverageClause(coverageEnd, false)}.`),
+    detail: discountDetail ?? sentence(`${coverageClause(coverageEnd, false)}.`),
     priceNote,
-    canRegister: true,
+    canRegister: !discountBlocked,
     urgent: false,
   };
 }

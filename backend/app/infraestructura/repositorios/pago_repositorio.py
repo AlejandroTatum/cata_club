@@ -171,6 +171,23 @@ class PagoRepositorio:
         )
         return self.db.execute(stmt).scalar_one_or_none()
 
+    def ultima_cobertura_vigente(self, membresia_id: int, hoy: date) -> Optional[tuple[date, bool]]:
+        """`(fecha_fin, con_descuento)` del pago aprobado o pendiente cuya
+        cobertura termina después de `hoy` y es la más lejana, o `None`. Un
+        pago "con descuento" es el que congeló un descuento (`descuento_id`)."""
+        stmt = (
+            select(Pago.fecha_fin, Pago.descuento_id.is_not(None))
+            .where(
+                Pago.membresia_id == membresia_id,
+                Pago.estado_pago.in_((EstadoPago.APROBADO, EstadoPago.PENDIENTE_VALIDACION)),
+                Pago.fecha_fin > hoy,
+            )
+            .order_by(Pago.fecha_fin.desc(), Pago.descuento_id.is_not(None).desc())
+            .limit(1)
+        )
+        fila = self.db.execute(stmt).first()
+        return (fila[0], bool(fila[1])) if fila else None
+
     def fecha_fin_maxima_aprobada_bulk(self, membresia_ids: list[int]) -> dict[int, date]:
         """Versión agrupada de `fecha_fin_maxima_aprobada`: UNA consulta con
         `GROUP BY membresia_id` para N membresías, en vez de N consultas
@@ -330,6 +347,15 @@ class CoberturaBonificadaRepositorio:
         por cualquiera de los dos caminos."""
         stmt = select(func.max(CoberturaBonificada.fecha_fin)).where(
             CoberturaBonificada.membresia_id == membresia_id,
+        )
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def fecha_fin_maxima_posterior_a(self, membresia_id: int, hoy: date) -> Optional[date]:
+        """`fecha_fin` más lejana de las coberturas bonificadas que terminan
+        después de `hoy` (toda cobertura bonificada es con descuento)."""
+        stmt = select(func.max(CoberturaBonificada.fecha_fin)).where(
+            CoberturaBonificada.membresia_id == membresia_id,
+            CoberturaBonificada.fecha_fin > hoy,
         )
         return self.db.execute(stmt).scalar_one_or_none()
 
