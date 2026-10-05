@@ -89,9 +89,11 @@ class ConsentimientoLegalServicio:
         return registros
 
     def _claves_pendientes(self, cuenta_id: int) -> set[tuple[str, Optional[int]]]:
-        """Lo que la cuenta aceptó alguna vez pero no en la versión vigente.
-        Una cuenta sin ninguna aceptación previa no tiene nada que renovar."""
-        return self.repo.claves_de_cuenta(cuenta_id) - self.repo.claves_de_cuenta(
+        """Lo que la cuenta aceptó alguna vez pero no en la versión vigente,
+        sin contar consentimientos revocados ni representados que la cuenta
+        ya no representa. Una cuenta sin aceptación previa no tiene nada que
+        renovar."""
+        return self.repo.claves_activas_de_cuenta(cuenta_id) - self.repo.claves_de_cuenta(
             cuenta_id, VERSION_LEGAL_VIGENTE
         )
 
