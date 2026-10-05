@@ -11,6 +11,7 @@ está escrito junto a cada una (`# Espejo verbatim de ...`).
 `dominio/mensajes.py::MENSAJE_IDENTIDAD_DUPLICADA` ya lo fija
 `test_mensajes_identidad_duplicada.py`.
 """
+import os
 from pathlib import Path
 
 import pytest
@@ -26,13 +27,26 @@ from app.servicios_negocio.enrollment_servicio import (
 
 FRONTEND = Path(__file__).resolve().parents[2] / "frontend" / "src"
 
-# La imagen Docker del backend y el job de CI solo del backend no traen el
-# árbol del frontend: sin él no hay nada que comparar. Con el árbol presente,
-# la suite sigue siendo obligatoria.
-pytestmark = pytest.mark.skipif(
-    not FRONTEND.is_dir(),
-    reason="el árbol del frontend no está presente (imagen o job solo de backend)",
-)
+# Sin el árbol del frontend no hay nada que comparar, y un candado que se
+# saltea en silencio no es un candado. Por eso su ausencia FALLA, salvo que se
+# opte explícitamente por saltear la suite (imagen Docker o job solo de
+# backend) con `SALTEAR_ESPEJO_FRONTEND=1`; ese salto dice por qué en el reporte.
+SALTEAR_ENV = "SALTEAR_ESPEJO_FRONTEND"
+
+
+@pytest.fixture(autouse=True)
+def _exigir_arbol_del_frontend():
+    if FRONTEND.is_dir():
+        return
+    if os.environ.get(SALTEAR_ENV) == "1":
+        pytest.skip(
+            f"{SALTEAR_ENV}=1: el árbol del frontend no está presente en {FRONTEND}; "
+            "los mensajes espejo NO se verificaron"
+        )
+    pytest.fail(
+        f"No existe el árbol del frontend en {FRONTEND}, así que los mensajes espejo "
+        f"no se pueden verificar. Si es un entorno solo de backend, exporta {SALTEAR_ENV}=1."
+    )
 
 
 def _fuente(ruta: str) -> str:
