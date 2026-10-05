@@ -599,13 +599,22 @@
   }
 
   #carnet-print-area {
-    /* `fixed` + `inset: 0` + `margin: auto` = centrado contra la caja de
-       página. El tamaño es el de una credencial ID-1. */
+    /* Centrada contra la caja de página con `top/left: 50%` + `translate`, no
+       con `inset: 0` + `margin: auto`: ese truco exige una altura fija, y la
+       altura fija era justo lo que recortaba. 54×85.6mm (CR80) no alcanza
+       para el contenido que la pantalla compone a ~75mm: la fecha salía
+       «04/10/2», la banda de días caía fuera de la caja. Se imprime a 72mm de
+       ancho y con la altura que el contenido pida —proporción de credencial
+       vertical, sin recorte—. */
     position: fixed;
-    inset: 0;
-    width: 54mm;
-    height: 85.6mm;
-    margin: auto;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 72mm;
+    height: auto;
+    max-width: calc(100vw - 20mm);
+    overflow: visible;
+    box-sizing: border-box;
     /* EL RITMO, EN MILÍMETROS DE CREDENCIAL.
      *
      * Los mismos tres pasos que `.carnet-credential` declara en píxeles de
