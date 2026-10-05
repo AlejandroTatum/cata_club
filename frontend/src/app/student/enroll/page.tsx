@@ -1436,7 +1436,7 @@ function EnrollWizard(): React.ReactElement {
             surface the page itself stands on. */}
         <label
           htmlFor="enroll-consentimiento"
-          className="flex cursor-pointer items-start gap-3 rounded-ctl border border-line-2 bg-sunken p-page text-sm text-ink-2"
+          className="flex cursor-pointer items-start gap-3 rounded-ctl border border-line-2 bg-sunken p-page text-left text-sm text-ink-2"
         >
           <input
             id="enroll-consentimiento"
@@ -1477,15 +1477,22 @@ function EnrollWizard(): React.ReactElement {
               it. The sentence above already says what to do and what it means;
               D11c's rule is that no help repeats the thing it explains. */}
           <span>
-                {/* #1368: the three grouped documents are triggers for the
-                    in-flow review dialog below, NOT links — a link navigated
-                    away and discarded everything the visitor entered. Buttons
-                    inside a label would steal the labeled-control identity
-                    from the checkbox, so the label carries an explicit
-                    `htmlFor` and the input its matching `id` above. */}
-                Acepto los <button type="button" className="underline" onClick={() => setLegalReviewDoc("terminos")}>Términos y condiciones (incluye privacidad)</button>, el {" "}
-                <button type="button" className="underline" onClick={() => setLegalReviewDoc("consentimiento-salud")}>Consentimiento de datos de salud</button> y el {" "}
-                <button type="button" className="underline" onClick={() => setLegalReviewDoc("permiso-imagen-fetm")}>Permiso de uso de imagen</button>.
+                {/* One document, one link (#1615). A real link, not the #1368
+                    dialog trigger: it opens /terminos in a new tab, so the
+                    wizard keeps its state, and an inline <a> flows with the
+                    sentence on a phone (QA r2, S3). The click is stopped
+                    before it reaches the label, which would toggle the
+                    checkbox. */}
+                Acepto los{" "}
+                <a
+                  href="/terminos"
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(event) => event.stopPropagation()}
+                  className="font-semibold text-cata-red-dark underline underline-offset-4 hover:text-cata-red"
+                >
+                  Términos y condiciones
+                </a>
               </span>
         </label>
         {/* The message sits under the box it is about (it used to render by the
@@ -1499,8 +1506,7 @@ function EnrollWizard(): React.ReactElement {
             className="-mt-2 flex items-start gap-1.5 text-sm font-semibold text-state-bad [text-wrap:pretty]"
           >
             <AlertTriangle size={ICON.sm} strokeWidth={2} className="mt-0.5 shrink-0" aria-hidden="true" />
-            Para confirmar la inscripción, marca la casilla de aceptación de los Términos y condiciones (incluye
-            privacidad), el Consentimiento de datos de salud y el Permiso de uso de imagen.
+            Para confirmar la inscripción, marca la casilla de aceptación de los Términos y condiciones.
           </p>
         )}
       </div>

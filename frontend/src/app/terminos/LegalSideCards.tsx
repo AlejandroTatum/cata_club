@@ -7,13 +7,9 @@ import { landingConfig, toWhatsAppLink } from "../landing/landing-config";
 export const CONTACT_EMAIL = "cataclub.loja@proton.me";
 export const SIDE_TITLE = "font-display text-lg uppercase leading-tight tracking-flat text-ink";
 
-const DOCUMENTS = [
-  { href: "/terminos", label: "Términos y condiciones (incluye privacidad)" },
-  { href: "/consentimiento-salud", label: "Consentimiento de datos de salud" },
-  { href: "/permiso-imagen-fetm", label: "Permiso de uso de imagen" },
-] as const;
+const DOCUMENTS = [{ href: "/terminos", label: "Términos y condiciones" }] as const;
 
-/** The three public documents, the current one marked. */
+/** The public legal documents (one since #1615), the current one marked. */
 export function LegalRelated({ path, className }: { path?: string; className?: string }): React.ReactElement {
   return (
     <nav aria-label="Otros documentos públicos" className={cn("card p-5", className)}>

@@ -39,8 +39,6 @@ describe("sitemap", () => {
     expect(buildSitemap(ENV).map((entry) => entry.url)).toEqual([
       "https://cataclub.com",
       "https://cataclub.com/terminos",
-      "https://cataclub.com/consentimiento-salud",
-      "https://cataclub.com/permiso-imagen-fetm",
     ]);
   });
 

@@ -624,12 +624,12 @@ describe("ResetPasswordPage — trainer invitation link (#1575)", () => {
   it("asks to accept the current terms, linking to them", () => {
     render(<ResetPasswordPage />);
 
-    const checkbox = screen.getByRole("checkbox", { name: /Acepto los términos y condiciones/ });
+    const checkbox = screen.getByRole("checkbox", { name: "Acepto los Términos y condiciones" });
     expect((checkbox as HTMLInputElement).checked).toBe(false);
-    expect(screen.getByRole("link", { name: "términos y condiciones" }).getAttribute("href")).toBe("/terminos");
-    expect(screen.getByRole("link", { name: "aviso de privacidad" }).getAttribute("href")).toBe(
-      "/terminos#privacidad",
-    );
+    expect(screen.getAllByRole("link", { name: "Términos y condiciones" })).toHaveLength(1);
+    const link = screen.getByRole("link", { name: "Términos y condiciones" });
+    expect(link.getAttribute("href")).toBe("/terminos");
+    expect(link.getAttribute("target")).toBe("_blank");
   });
 
   it("keeps submit disabled until the terms are accepted, even with a valid password", () => {
@@ -638,7 +638,7 @@ describe("ResetPasswordPage — trainer invitation link (#1575)", () => {
 
     expect((screen.getByRole("button", { name: "Guardar contraseña" }) as HTMLButtonElement).disabled).toBe(true);
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /Acepto los términos y condiciones/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Acepto los Términos y condiciones" }));
 
     expect((screen.getByRole("button", { name: "Guardar contraseña" }) as HTMLButtonElement).disabled).toBe(false);
   });
@@ -647,7 +647,7 @@ describe("ResetPasswordPage — trainer invitation link (#1575)", () => {
     mockRestablecerContrasenia.mockResolvedValueOnce(undefined);
     render(<ResetPasswordPage />);
     fillMatchingPasswords("unaClaveSegura1");
-    fireEvent.click(screen.getByRole("checkbox", { name: /Acepto los términos y condiciones/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Acepto los Términos y condiciones" }));
 
     submitResetForm();
 

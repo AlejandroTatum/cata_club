@@ -83,7 +83,7 @@ test("el administrador crea un entrenador, que acepta los términos, crea su con
     await page.locator("#password").fill(CONTRASENIA);
     await page.locator("#confirmPassword").fill(CONTRASENIA);
     await expect(page.getByRole("button", { name: "Guardar contraseña" })).toBeDisabled();
-    await page.getByRole("checkbox", { name: /Acepto los términos y condiciones/ }).check();
+    await page.getByRole("checkbox", { name: "Acepto los Términos y condiciones" }).check();
     await page.getByRole("button", { name: "Guardar contraseña" }).click();
     await expect(page.getByRole("heading", { name: "Tu cuenta está lista" })).toBeVisible({ timeout: 15_000 });
 
@@ -91,7 +91,7 @@ test("el administrador crea un entrenador, que acepta los términos, crea su con
     await page.goto(`/reset-password?token=${token}&invitacion=1`);
     await page.locator("#password").fill("otra-clave-entrenador-7");
     await page.locator("#confirmPassword").fill("otra-clave-entrenador-7");
-    await page.getByRole("checkbox", { name: /Acepto los términos y condiciones/ }).check();
+    await page.getByRole("checkbox", { name: "Acepto los Términos y condiciones" }).check();
     await page.getByRole("button", { name: "Guardar contraseña" }).click();
     await expect(page.getByRole("heading", { name: "Enlace no válido" })).toBeVisible({ timeout: 15_000 });
 

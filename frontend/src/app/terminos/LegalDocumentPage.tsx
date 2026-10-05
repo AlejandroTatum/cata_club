@@ -39,7 +39,7 @@ interface LegalDocumentPageProps {
 }
 
 /**
- * The one surface behind `/terminos`, `/consentimiento-salud` and `/permiso-imagen-fetm`.
+ * The surface behind `/terminos`, the single public legal document.
  *
  * ## Mode: this is a Read surface
  *
@@ -128,7 +128,7 @@ export default function LegalDocumentPage({ title, blocks, aside, summary, path,
    * dialog's and has no ids to give.
    */
   const article = (
-    <article className={cn("space-y-6 leading-prose text-cata-text", hasToc ? "order-3 mt-8 max-lg:card max-lg:mt-0 max-lg:p-6" : "mt-6 text-lg sm:text-xl xl:text-2xl 2xl:text-5xl")}>
+    <article className={cn("space-y-4 leading-snug text-cata-text", hasToc ? "order-3 mt-8 max-lg:card max-lg:mt-0 max-lg:p-6" : "mt-6 text-lg sm:text-xl xl:text-2xl 2xl:text-5xl")}>
       {blocks.map((block, index) =>
         block.kind === "heading" ? (
           <h2

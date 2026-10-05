@@ -54,8 +54,7 @@ const SHELLS: readonly string[] = [
   "components/shell/PublicShell.tsx",
   // The public landing.
   "app/landing/LandingPage.tsx",
-  // The three public legal documents (/terminos, /consentimiento-salud,
-  // /permiso-imagen-fetm). They also reach the user through no shell — the
+  // The public legal document (/terminos). It also reaches the user through no shell — the
   // institutional bar above them is a banner, not a shell — so the document
   // page draws the landmark its own column sets in (#820).
   "app/terminos/LegalDocumentPage.tsx",

@@ -67,10 +67,8 @@ describe("LegalReviewDialog — apertura y nombres accesibles", () => {
   });
 
   it.each([
-    ["terminos", "Términos, condiciones y acuerdo de responsabilidad de Cata Club"] as const,
-    ["privacidad", "Términos, condiciones y acuerdo de responsabilidad de Cata Club"] as const,
-    ["consentimiento-salud", "Consentimiento para el tratamiento de datos de salud"] as const,
-    ["permiso-imagen-fetm", "Permiso de uso de imagen"] as const,
+    ["terminos", "Términos y condiciones de Cata Club"] as const,
+    ["privacidad", "Términos y condiciones de Cata Club"] as const,
   ])("opens %s as a modal dialog named after the public document", (documentId, title) => {
     const { container } = render(<Harness initialDocument={documentId} />);
 
@@ -89,14 +87,14 @@ describe("LegalReviewDialog — apertura y nombres accesibles", () => {
       screen.getByText("Al aceptar estos términos, usted se compromete a usar la plataforma conforme a ellos."),
     ).toBeInTheDocument();
     // Section headings render below the dialog title's level.
-    const dialog = screen.getByRole("dialog", { name: "Términos, condiciones y acuerdo de responsabilidad de Cata Club" });
+    const dialog = screen.getByRole("dialog", { name: "Términos y condiciones de Cata Club" });
     expect(screen.getAllByRole("heading", { level: 3, hidden: false }).length).toBeGreaterThan(0);
     // The blocks carry no links: the only navigation out is the dialog footer.
     expect(dialog.querySelectorAll("article a")).toHaveLength(0);
   });
 
   it("renders the image permission's three uses as text, with no opt-out and no controls", () => {
-    render(<Harness initialDocument="permiso-imagen-fetm" />);
+    render(<Harness initialDocument="terminos" />);
 
     expect(screen.getByText(/^2\. Redes sociales del club\./)).toBeInTheDocument();
     expect(screen.queryByText(/No autorizo ninguna/)).not.toBeInTheDocument();
@@ -146,7 +144,7 @@ describe("LegalReviewDialog — cierra y foco", () => {
   it("keeps Tab cycling inside the panel (footer link and Cerrar)", () => {
     render(<Harness initialDocument="terminos" />);
 
-    const panel = screen.getByRole("dialog", { name: "Términos, condiciones y acuerdo de responsabilidad de Cata Club" });
+    const panel = screen.getByRole("dialog", { name: "Términos y condiciones de Cata Club" });
     const link = screen.getByRole("link", { name: /ver documento completo/i });
     const close = screen.getByRole("button", { name: "Cerrar" });
 
@@ -180,15 +178,8 @@ describe("LegalReviewDialog — el contenido queda consultable", () => {
   });
 
   it("keeps the documents registered with their public routes", () => {
-    expect(Object.keys(LEGAL_REVIEW_DOCUMENTS)).toEqual([
-      "terminos",
-      "privacidad",
-      "consentimiento-salud",
-      "permiso-imagen-fetm",
-    ]);
+    expect(Object.keys(LEGAL_REVIEW_DOCUMENTS)).toEqual(["terminos", "privacidad"]);
     expect(LEGAL_REVIEW_DOCUMENTS.terminos.href).toBe("/terminos");
     expect(LEGAL_REVIEW_DOCUMENTS.privacidad.href).toBe("/terminos#privacidad");
-    expect(LEGAL_REVIEW_DOCUMENTS["consentimiento-salud"].href).toBe("/consentimiento-salud");
-    expect(LEGAL_REVIEW_DOCUMENTS["permiso-imagen-fetm"].href).toBe("/permiso-imagen-fetm");
   });
 });
