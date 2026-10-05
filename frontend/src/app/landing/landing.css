@@ -911,15 +911,15 @@
 .landing-page {
   --landing-ink: var(--landing-brand-black);
   --landing-sticker-edge: 2px solid var(--landing-ink);
-  --landing-sticker-shadow: 6px 6px 0 var(--landing-ink);
-  --landing-sticker-shadow-small: 4px 4px 0 var(--landing-ink);
-  --landing-sticker-shadow-red: 6px 6px 0 var(--landing-brand-red);
+  --landing-sticker-lift: 6px 6px 0 var(--landing-ink);
+  --landing-sticker-lift-sm: 4px 4px 0 var(--landing-ink);
+  --landing-sticker-lift-red: 6px 6px 0 var(--landing-brand-red);
 }
 
 /* Buttons: every CTA is a sticker that lifts towards its shadow. */
-.landing-button { border: var(--landing-sticker-edge); border-radius: 12px; box-shadow: var(--landing-sticker-shadow-small); }
+.landing-button { border: var(--landing-sticker-edge); border-radius: 12px; box-shadow: var(--landing-sticker-lift-sm); }
 .landing-button:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--landing-ink); }
-.landing-button-outline { border: var(--landing-sticker-edge); box-shadow: var(--landing-sticker-shadow-small); }
+.landing-button-outline { border: var(--landing-sticker-edge); box-shadow: var(--landing-sticker-lift-sm); }
 .landing-hero .landing-button-outline { border-color: var(--landing-on-action); box-shadow: 4px 4px 0 var(--landing-ink); }
 .landing-button-quiet { border: var(--landing-sticker-edge); border-radius: 12px; color: var(--landing-text-strong); box-shadow: 3px 3px 0 var(--landing-ink); transition: transform 160ms ease, box-shadow 160ms ease, color 160ms ease; }
 .landing-button-quiet:hover { border-color: var(--landing-ink); color: var(--landing-action); transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--landing-brand-red); }
@@ -949,16 +949,16 @@
 
 /* Mission / Vision: each pillar is a white card; the photo is a framed print. */
 .landing-pillars { gap: 40px; }
-.landing-pillar { padding: 28px; border: var(--landing-sticker-edge); border-radius: 22px; background: var(--landing-surface); box-shadow: var(--landing-sticker-shadow-red); }
-.landing-pillar + .landing-pillar { box-shadow: var(--landing-sticker-shadow); }
+.landing-pillar { padding: 28px; border: var(--landing-sticker-edge); border-radius: 22px; background: var(--landing-surface); box-shadow: var(--landing-sticker-lift-red); }
+.landing-pillar + .landing-pillar { box-shadow: var(--landing-sticker-lift); }
 .landing-pillars .landing-index { display: inline-grid; place-items: center; min-width: 76px; height: 76px; padding-inline: 10px; border: var(--landing-sticker-edge); border-radius: 50%; background: var(--landing-brand-red); color: var(--landing-highlight); font-size: 38px; }
 .landing-pillar + .landing-pillar .landing-index { background: var(--landing-highlight); color: var(--landing-ink); }
 .landing-pillar-photo { border: var(--landing-sticker-edge); border-radius: 16px; }
 
 /* Values: the numeral tiles become stickers and each value sits on its own card. */
 .landing-tablero { column-gap: 22px; }
-.landing-tablero-tile { border: var(--landing-sticker-edge); border-radius: 18px; box-shadow: var(--landing-sticker-shadow-red); transition: transform 180ms ease; }
-.landing-tablero-item { align-self: stretch; padding: 20px 22px; border: var(--landing-sticker-edge); border-radius: 18px; background: var(--landing-surface); box-shadow: var(--landing-sticker-shadow-small); }
+.landing-tablero-tile { border: var(--landing-sticker-edge); border-radius: 18px; box-shadow: var(--landing-sticker-lift-red); transition: transform 180ms ease; }
+.landing-tablero-item { align-self: stretch; padding: 20px 22px; border: var(--landing-sticker-edge); border-radius: 18px; background: var(--landing-surface); box-shadow: var(--landing-sticker-lift-sm); }
 .landing-tablero-item p { color: var(--landing-text); }
 
 /* Stats: three cards in the prices' red / yellow / coal rotation. */
@@ -994,7 +994,7 @@
    untouched) and straightening as it lifts. */
 .landing-schedule { background: var(--landing-stats-bg); }
 .landing-schedule-grid { gap: 28px; }
-.landing-schedule-tile { border: var(--landing-sticker-edge); border-radius: 22px; box-shadow: var(--landing-sticker-shadow); rotate: -0.8deg; transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 260ms cubic-bezier(0.22, 1, 0.36, 1), rotate 260ms ease; }
+.landing-schedule-tile { border: var(--landing-sticker-edge); border-radius: 22px; box-shadow: var(--landing-sticker-lift); rotate: -0.8deg; transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 260ms cubic-bezier(0.22, 1, 0.36, 1), rotate 260ms ease; }
 .landing-schedule-tile:nth-child(even) { rotate: 0.8deg; }
 .landing-schedule-tile:focus-within { transform: translate(-3px, -3px); box-shadow: 10px 10px 0 var(--landing-ink); rotate: 0deg; }
 @media (hover: hover) {
@@ -1005,13 +1005,13 @@
 .landing-schedule-time { font-weight: 800; }
 .landing-schedule-cta { border: var(--landing-sticker-edge); box-shadow: 3px 3px 0 var(--landing-ink); }
 .landing-schedule-cta:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--landing-ink); }
-.landing-schedule-tile.landing-schedule-help { border: var(--landing-sticker-edge); background: var(--landing-brand-yellow-pale); box-shadow: var(--landing-sticker-shadow); }
+.landing-schedule-tile.landing-schedule-help { border: var(--landing-sticker-edge); background: var(--landing-brand-yellow-pale); box-shadow: var(--landing-sticker-lift); }
 .landing-schedule-help h3 { padding: 0; border: 0; background: none; color: var(--landing-text-strong); box-shadow: none; font-size: 28px; }
 .landing-schedule-help a { border: var(--landing-sticker-edge); background: var(--landing-third-party-whatsapp); color: var(--landing-ink); box-shadow: 3px 3px 0 var(--landing-ink); }
 
 /* Visit: framed arrival photo and map, contact sheet on a white card. */
-.landing-arrival { border: var(--landing-sticker-edge); border-radius: 20px; box-shadow: var(--landing-sticker-shadow); }
-.landing-map { border: var(--landing-sticker-edge); border-radius: 20px; box-shadow: var(--landing-sticker-shadow-red); }
+.landing-arrival { border: var(--landing-sticker-edge); border-radius: 20px; box-shadow: var(--landing-sticker-lift); }
+.landing-map { border: var(--landing-sticker-edge); border-radius: 20px; box-shadow: var(--landing-sticker-lift-red); }
 /* The contact sheet is a grid of sticker cards, one fact per card. Each card
    leads with its channel's icon on a coloured tile (address red, hours yellow,
    WhatsApp green, phone coal, mail fuchsia, socials an Instagram sweep); the
@@ -1065,7 +1065,7 @@
 
 /* Sponsors and footer. */
 .landing-sponsors { border-top: var(--landing-sticker-edge); }
-.landing-sponsor { border: var(--landing-sticker-edge); border-radius: 20px; box-shadow: var(--landing-sticker-shadow); }
+.landing-sponsor { border: var(--landing-sticker-edge); border-radius: 20px; box-shadow: var(--landing-sticker-lift); }
 .landing-sponsors-viewport { padding-block: 6px 26px; }
 /* Footer: a brand strip (lockup, socials, line, address) over three link
    cards, then the club's name set huge in
