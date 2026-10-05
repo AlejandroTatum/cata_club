@@ -84,7 +84,7 @@ describe("LegalReviewDialog — apertura y nombres accesibles", () => {
     // Transcribed from `src/app/terminos/content.ts` on purpose: a copied
     // rendering would drift with the document and still pass these tests.
     expect(
-      screen.getByText("Al aceptar estos términos, usted se compromete a usar la plataforma conforme a ellos."),
+      screen.getByText("Al aceptar estos términos, usted se compromete a usar el SISTEMA DE GESTIÓN Y PÁGINA WEB COMERCIAL (en adelante, «el sistema») conforme a ellos."),
     ).toBeInTheDocument();
     // Section headings render below the dialog title's level.
     const dialog = screen.getByRole("dialog", { name: "Términos y condiciones de Cata Club" });
