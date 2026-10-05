@@ -128,6 +128,15 @@ function PagoDetailPanel({ pago }: { pago: PagoPersona }): React.ReactElement {
   );
 }
 
+const ACTION_BASE =
+  "inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-ctl px-3 text-xs font-semibold";
+const ACTION_PRIMARY = cn(ACTION_BASE, "bg-coal text-white hover:bg-ink");
+const ACTION_SECONDARY = cn(ACTION_BASE, "border border-line-2 bg-paper text-ink hover:bg-sunken");
+const ACTION_DISABLED = cn(
+  ACTION_BASE,
+  "cursor-not-allowed border border-dashed border-line-2 bg-sunken text-ink-3-strong",
+);
+
 /**
  * The accordion trigger for one row's detail — same accessibility contract
  * `components/ui/Accordion.tsx` already establishes for this product (a
@@ -155,7 +164,7 @@ function PagoDetailToggle({
       aria-expanded={isOpen}
       aria-controls={panelId}
       onClick={onToggle}
-      className="inline-flex h-8 items-center gap-1 rounded-ctl px-2 text-xs font-semibold text-ink-2 hover:bg-sunken"
+      className={ACTION_SECONDARY}
     >
       Detalle
       <ChevronDown
@@ -167,15 +176,6 @@ function PagoDetailToggle({
     </button>
   );
 }
-
-const ACTION_BASE =
-  "inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-ctl px-3 text-xs font-semibold";
-const ACTION_PRIMARY = cn(ACTION_BASE, "bg-coal text-white hover:bg-ink");
-const ACTION_SECONDARY = cn(ACTION_BASE, "border border-line-2 bg-paper text-ink hover:bg-sunken");
-const ACTION_DISABLED = cn(
-  ACTION_BASE,
-  "cursor-not-allowed border border-dashed border-line-2 bg-sunken text-ink-3-strong",
-);
 
 /**
  * The documents a payment can carry, as an action group that is ALWAYS drawn:
@@ -368,9 +368,8 @@ export function PagoRow({
 
 /**
  * The cobertura row's fixed facts (issue #1369, slice 3). The amount cell is
- * `—` on purpose: a coverage never charged anything (#400), and a printed
- * "$0,00" would describe a charge of zero that never happened. The status
- * badge is the fact the backend can prove — it was otorgada — with no
+ * "$0,00" (owner decision, QA round 2): a 100% coverage charged zero, and
+ * the history says so instead of leaving a dash. The status badge is the fact the backend can prove — it was otorgada — with no
  * client-side date math about whether it is still current.
  */
 function buildCoberturaRowFields(cobertura: CoberturaBonificada): {
@@ -398,8 +397,22 @@ export function CoberturaRow({ cobertura }: { cobertura: CoberturaBonificada }):
           {fields.concept} · Otorgada el <span className="tabular-nums">{fields.grantedOn}</span>
         </p>
       </div>
-      <p className="flex-none text-xl font-extrabold text-ink md:w-24 md:text-right">—</p>
-      <div className="hidden md:block md:w-48 md:flex-none" />
+      <p className="flex-none text-xl font-extrabold tabular-nums text-ink md:w-24 md:text-right">
+        {formatPagoMonto("0")}
+      </p>
+      <div className="flex flex-col gap-1.5 md:w-48 md:flex-none">
+        {/* The coverage's own receipt, generated on demand (issue #1609). */}
+        <a
+          href={`/api/membresias/coberturas/${cobertura.id}/comprobante`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Descargar comprobante oficial"
+          className={ACTION_PRIMARY}
+        >
+          <Download size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+          Recibo oficial
+        </a>
+      </div>
     </li>
   );
 }

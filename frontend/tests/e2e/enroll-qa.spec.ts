@@ -359,6 +359,9 @@ async function fillValidCredentials(page: Page): Promise<void> {
 
 async function fillValidHealth(page: Page): Promise<void> {
   await field(page, F.tipoSangre).selectOption(VALID_HEALTH.tipoSangre);
+  // Issue #1574: alergias and condiciones are required; «Ninguno» is the answer for none.
+  await field(page, F.condicionesSalud).fill("Ninguno");
+  await field(page, F.alergias).fill("Ninguno");
   await field(page, F.contactoEmergencia).fill(VALID_HEALTH.contacto);
   await field(page, F.telefonoEmergencia).fill(VALID_HEALTH.telefono);
 }
@@ -822,7 +825,14 @@ test.describe("H · Salud y emergencia", () => {
     await shot(page, "H04", "telefono-emergencia-corto");
   });
 
-  test("H05 · condiciones, alergias y observaciones sí son opcionales", async ({ page }) => {
+  test("H05 · alergias y condiciones son obligatorias; «Ninguno» las completa", async ({ page }) => {
+    await field(page, F.tipoSangre).selectOption(VALID_HEALTH.tipoSangre);
+    await field(page, F.contactoEmergencia).fill(VALID_HEALTH.contacto);
+    await field(page, F.telefonoEmergencia).fill(VALID_HEALTH.telefono);
+    await fillAndBlur(page, F.alergias, "");
+    await expect(page.getByText('Escribe tus alergias o "Ninguno" si no tienes.')).toBeVisible();
+    await expect(page.getByText("Si no tiene, escribe Ninguno.")).toHaveCount(1);
+    await expectStepBlocked(page);
     await fillValidHealth(page);
     await expect(nextButton(page)).toBeEnabled();
     await nextButton(page).click();
@@ -850,9 +860,11 @@ test.describe("H · Salud y emergencia (camino representado)", () => {
     await shot(page, "H06", "salud-representado-sin-contacto-propio");
   });
 
-  test("H07 · solo el tipo de sangre habilita Siguiente en el camino representado", async ({ page }) => {
+  test("H07 · tipo de sangre, condiciones y alergias habilitan Siguiente en el camino representado", async ({ page }) => {
     await expectStepBlocked(page);
     await field(page, F.tipoSangre).selectOption(VALID_HEALTH.tipoSangre);
+    await field(page, F.condicionesSalud).fill("Ninguno");
+    await field(page, F.alergias).fill("Ninguno");
     await expect(nextButton(page)).toBeEnabled();
     await nextButton(page).click();
     await expect(page.getByRole("heading", { name: /resumen y confirmación/i })).toBeVisible();
@@ -892,7 +904,7 @@ test.describe("S · Resumen, envío y errores del servidor", () => {
     await confirmar.click();
     await expect(
       page.getByText(
-        "Para confirmar la inscripción, marca la casilla de aceptación de los Términos y condiciones (incluye privacidad), el Consentimiento de datos de salud y el Permiso de uso de imagen.",
+        "Para confirmar la inscripción, marca la casilla de aceptación de los Términos y condiciones.",
       ),
     ).toBeVisible();
     await shot(page, "S01", "resumen-sin-confirmar");

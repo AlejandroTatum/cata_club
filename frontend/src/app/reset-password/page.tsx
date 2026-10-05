@@ -115,12 +115,20 @@ function ResetPasswordContent(): React.ReactElement {
   const toast = useToast();
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
+  /**
+   * Issue #1575: the link a trainer gets from the admin's invitation. It is
+   * the trainer's first entry, so it also asks to accept the current terms —
+   * the backend refuses an invitation password-set without it. An ordinary
+   * recovery link never carries the flag and behaves exactly as before.
+   */
+  const isInvitation = searchParams.get("invitacion") === "1";
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [acceptsTerms, setAcceptsTerms] = useState(false);
   /** Set when the backend refuses the token on submit (expired or already used). */
   const [rejectedLinkMessage, setRejectedLinkMessage] = useState<string | null>(null);
 
@@ -139,12 +147,16 @@ function ResetPasswordContent(): React.ReactElement {
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
-    if (!allRulesMet) return;
+    if (!allRulesMet || (isInvitation && !acceptsTerms)) return;
 
     setSubmitting(true);
     try {
       // token is guaranteed non-null here by the early return above.
-      await restablecerContrasenia(token as string, password);
+      if (isInvitation) {
+        await restablecerContrasenia(token as string, password, true);
+      } else {
+        await restablecerContrasenia(token as string, password);
+      }
       setSuccess(true);
       toast.showSuccess("Contraseña actualizada correctamente");
     } catch (err: unknown) {
@@ -166,7 +178,7 @@ function ResetPasswordContent(): React.ReactElement {
   if (success) {
     return (
       <AuthShell
-        title="Contraseña actualizada"
+        title={isInvitation ? "Tu cuenta está lista" : "Contraseña actualizada"}
         backHref="/login"
         eyebrow="Acceso al club"
       >
@@ -175,8 +187,9 @@ function ResetPasswordContent(): React.ReactElement {
             <CheckCircle2 size={ICON.lg} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
           </span>
           <p className="text-sm leading-relaxed text-ink-2">
-            Tu contraseña ha sido restablecida correctamente. Ya puedes iniciar sesión con
-            tu nueva contraseña.
+            {isInvitation
+              ? "Creaste tu contraseña y aceptaste los términos. Ya puedes iniciar sesión como entrenador."
+              : "Tu contraseña ha sido restablecida correctamente. Ya puedes iniciar sesión con tu nueva contraseña."}
           </p>
         </div>
         {/* Same recipe as the dead-link exit, and sentence case: the interface
@@ -190,8 +203,12 @@ function ResetPasswordContent(): React.ReactElement {
 
   return (
     <AuthShell
-      title="Elige una contraseña nueva"
-      subtitle="Debe cumplir las condiciones de abajo"
+      title={isInvitation ? "Crea tu contraseña" : "Elige una contraseña nueva"}
+      subtitle={
+        isInvitation
+          ? "El club creó tu cuenta de entrenador. Elige una contraseña que cumpla las condiciones de abajo"
+          : "Debe cumplir las condiciones de abajo"
+      }
       note={EXPIRED_LINK_NOTE}
       // Every state of this screen ends at the login form: the link is dead,
       // or the password is set, or the user gave up — all three want /login,
@@ -314,10 +331,39 @@ function ResetPasswordContent(): React.ReactElement {
           )}
         </div>
 
+        {isInvitation && (
+          <label
+            htmlFor="accept-terms"
+            className="flex cursor-pointer items-start gap-3 rounded-ctl border border-line-2 bg-sunken p-3 text-sm text-ink-2"
+          >
+            <input
+              id="accept-terms"
+              type="checkbox"
+              checked={acceptsTerms}
+              onChange={(e) => setAcceptsTerms(e.target.checked)}
+              disabled={submitting}
+              required
+              className="mt-0.5 h-6 w-6 rounded border-line-2 text-coal"
+            />
+            <span>
+              Acepto los{" "}
+              <Link
+                href="/terminos"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => event.stopPropagation()}
+                className={AUTH_LINK_CLASSES}
+              >
+                Términos y condiciones
+              </Link>
+            </span>
+          </label>
+        )}
+
         <Button
           type="submit"
           variant="primary"
-          disabled={submitting || !allRulesMet}
+          disabled={submitting || !allRulesMet || (isInvitation && !acceptsTerms)}
           className="w-full"
         >
           {submitting ? "Guardando…" : "Guardar contraseña"}

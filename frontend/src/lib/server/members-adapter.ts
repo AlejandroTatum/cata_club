@@ -101,6 +101,11 @@ export interface BackendPersonaFull {
    * (`activo` above): those are two independent planes.
    */
   cuentaActiva?: boolean | null;
+  /**
+   * Issue #1575: a trainer created by the admin who has not set a password
+   * yet (`ENTRENADOR` role + email not verified). Derived by the backend.
+   */
+  invitacionPendiente?: boolean;
   /** Profile photo URL (Cloudinary). Absent/null until someone uploads one. */
   fotoUrl?: string | null;
 }
@@ -133,9 +138,14 @@ function buildMembershipTypeLabel(tipo: BackendTipoMembresia | undefined): strin
  * ("sin cuenta") otherwise — never inferred from `Persona.activo` or from
  * any `Membresia`.
  */
-function resolveAccountState(cuentaActiva: boolean | null | undefined): AccountState {
-  if (cuentaActiva === true) return "active";
+function resolveAccountState(
+  cuentaActiva: boolean | null | undefined,
+  invitacionPendiente: boolean | undefined,
+): AccountState {
+  // A switched-off login reads as such even if the invitation never got used.
   if (cuentaActiva === false) return "inactive";
+  if (cuentaActiva === true && invitacionPendiente === true) return "invitation";
+  if (cuentaActiva === true) return "active";
   return "none";
 }
 
@@ -390,7 +400,7 @@ export function buildMemberAccounts(
       // question `EmergencyCardDialog.tsx`'s `estaCompletamenteVacia` asks,
       // not this one).
       sinDatosEmergencia: persona.representanteId == null && !personaIdsConFicha.has(persona.id),
-      accountState: resolveAccountState(persona.cuentaActiva),
+      accountState: resolveAccountState(persona.cuentaActiva, persona.invitacionPendiente),
       estudiantes: [studentSummaryByPersonaId.get(persona.id)!],
       // Issue #1221: the personas represented BY this persona — empty for a
       // represented minor and for a self-managed adult with no representados,

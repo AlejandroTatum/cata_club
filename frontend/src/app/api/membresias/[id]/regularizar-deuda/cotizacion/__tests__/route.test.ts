@@ -46,6 +46,18 @@ describe("GET /api/membresias/[id]/regularizar-deuda/cotizacion", () => {
     );
   });
 
+  it("forwards the admin's discount choice as aplicar_descuento and omits it when absent", async () => {
+    const fetchMock = vi.mocked(global.fetch);
+    fetchMock.mockImplementation(async () => jsonResponse({ meses: 2 }));
+    const params = { params: Promise.resolve({ id: "3" }) };
+
+    await GET(getRequest("?fechaInicio=2026-04-01&fechaFin=2026-05-31&aplicarDescuento=false"), params);
+    await GET(getRequest("?fechaInicio=2026-04-01&fechaFin=2026-05-31"), params);
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("&aplicar_descuento=false");
+    expect(String(fetchMock.mock.calls[1]?.[0])).not.toContain("aplicar_descuento");
+  });
+
   it("rejects missing dates with 400 without calling the backend", async () => {
     const response = await GET(getRequest("?fechaInicio=2026-04-01"), {
       params: Promise.resolve({ id: "3" }),

@@ -1,12 +1,13 @@
-import { heading, paragraph, type LegalBlock } from "../terminos/legal-content";
+import { heading, paragraph, type LegalBlock } from "./legal-content";
 
 /**
- * Document 3, version 2.2: permission to use the player's image, with its
- * three authorised uses. Mandatory and accepted together with the other two.
+ * Chapter XI of the terms (document 3 until #1615), version 2.2: permission
+ * to use the player's image, with its three authorised uses. Moved verbatim
+ * from its former page.
  */
-export const legalBlocks: readonly LegalBlock[] = [
+export const imageChapter: readonly LegalBlock[] = [
   heading("Propósito y alcance"),
-  paragraph("Este permiso es independiente de los Términos, condiciones y acuerdo de responsabilidad, pero su aceptación es obligatoria: se acepta junto con ellos y con el Consentimiento para el tratamiento de datos de salud, y sin él no se crea la cuenta. En este permiso, «usted» es el jugador de 15 años o más, o el representante legal del jugador menor de 15 años. Con él usted autoriza a Cata Club y a la Federación Ecuatoriana de Tenis de Mesa (FETM) a usar fotografías o videos del jugador en los usos que se indican a continuación."),
+  paragraph("Este capítulo forma parte de los presentes Términos y condiciones; su aceptación es específica para el uso de imagen y es obligatoria: se acepta junto con el resto de este documento, y sin ella no se crea la cuenta. En este permiso, «usted» es el jugador de 15 años o más, o el representante legal del jugador menor de 15 años. Con él usted autoriza a Cata Club y a la Federación Ecuatoriana de Tenis de Mesa (FETM) a usar fotografías o videos del jugador en los usos que se indican a continuación."),
   heading("Usos autorizados"),
   paragraph("1. Galería del club. Publicar imágenes del jugador en la galería de fotos de Cata Club en su plataforma, para mostrar sus actividades."),
   paragraph("2. Redes sociales del club. Publicar imágenes del jugador en las redes sociales de Cata Club."),
@@ -27,13 +28,4 @@ export const legalBlocks: readonly LegalBlock[] = [
   paragraph("Usted puede retirar este permiso en cualquier momento, desde la plataforma o escribiendo a cataclub.loja@proton.me; puede indicar el motivo si lo desea. El retiro vale desde ese momento hacia adelante: el club dejará de publicar nuevas imágenes y retirará de su galería y de sus redes las que ya haya publicado, en un plazo máximo de 15 días. No podemos garantizar el retiro de copias que otras personas o entidades (como la FETM) ya hayan descargado o impreso antes del retiro, pero les pediremos que dejen de usarlas. Como este permiso es condición para usar el servicio, mientras esté retirado la cuenta quedará limitada a revisar los documentos y cerrar sesión. En el caso de un adolescente de 15 a 17 años, su representante no puede retirar el permiso que dio el propio adolescente."),
   heading("Cómo queda registrado"),
   paragraph("La plataforma guarda qué versión aceptó, la fecha y su cuenta; y, si retira el permiso, la fecha y el motivo. No se acepta nunca de forma automática."),
-];
-
-/** Key points of the document above, for the side summary. Nothing here goes beyond the text. */
-export const summary: readonly string[] = [
-  "Su aceptación es obligatoria: se acepta junto con los Términos y el Consentimiento de datos de salud, y sin él no se crea la cuenta.",
-  "Tres usos autorizados: galería del club, redes sociales del club y FETM.",
-  "Desde los 15 años decide el propio jugador; por debajo, su representante legal.",
-  "No se usan imágenes de menores de 18 años en mensajes publicitarios.",
-  "Puede retirar el permiso en cualquier momento; el club retira lo publicado en un máximo de 15 días.",
 ];

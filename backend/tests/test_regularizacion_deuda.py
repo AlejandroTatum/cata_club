@@ -18,7 +18,8 @@ from decimal import Decimal
 import app.infraestructura.tareas.alertas_tareas as alertas_mod
 import app.servicios_negocio.membresia_pago_servicio as mps
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoPago
-from app.dominio.modelos import Pago, Persona, Usuario
+from app.dominio.enums import TipoNotificacion
+from app.dominio.modelos import Notificacion, Pago, Persona, Usuario
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
 from app.servicios_negocio.membresia_pago_servicio import PagoServicio
@@ -540,3 +541,277 @@ def test_alerta_de_5_dias_incluye_la_membresia_migrada(client, db_session, monke
     resultado = alertas_mod.alertar_vencimientos_hoy_mas_5()
 
     assert resultado["total_alertas"] == 1
+
+
+# --- Elección del admin: valor normal o descuento (QA owner R2, S12) ---------
+
+def _asignar_media_beca(client, persona_id):
+    descuento = client.post(
+        "/api/v1/descuentos/", json={"nombre": "Media beca", "porcentaje": "50", "activo": True},
+    ).json()
+    assert client.post(
+        f"/api/v1/personas/{persona_id}/beneficio", json={"descuento_id": descuento["id"]},
+    ).status_code == 201
+    return descuento
+
+
+def _regularizar_eligiendo(client, membresia_id, monto, aplicar_descuento):
+    return client.post(
+        f"/api/v1/membresias/{membresia_id}/regularizar-deuda",
+        json={
+            "monto": monto, "fecha_inicio": "2026-04-01", "fecha_fin": "2026-05-31",
+            "motivo": "Cuaderno", "aplicar_descuento": aplicar_descuento,
+        },
+    )
+
+
+def test_regularizacion_valor_normal_cobra_el_precio_completo_y_no_congela_descuento(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    persona, membresia = _crear_persona_membresia(db_session)
+    _asignar_media_beca(client, persona.id)
+
+    resp = _regularizar_eligiendo(client, membresia.id, "60.00", False)
+
+    assert resp.status_code == 201, resp.text
+    fila = db_session.get(Pago, resp.json()["id"])
+    assert fila.monto == Decimal("60.00")
+    assert fila.descuento_id is None
+    assert fila.descuento_valor_aplicado is None
+
+
+def test_regularizacion_valor_normal_rechaza_el_monto_con_descuento(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    persona, membresia = _crear_persona_membresia(db_session)
+    _asignar_media_beca(client, persona.id)
+
+    resp = _regularizar_eligiendo(client, membresia.id, "30.00", False)
+
+    assert resp.status_code == 400
+    assert "$60,00" in resp.json()["detail"]
+
+
+def test_regularizacion_aplicar_descuento_explicito_congela_el_beneficio(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    persona, membresia = _crear_persona_membresia(db_session)
+    descuento = _asignar_media_beca(client, persona.id)
+
+    resp = _regularizar_eligiendo(client, membresia.id, "30.00", True)
+
+    assert resp.status_code == 201, resp.text
+    fila = db_session.get(Pago, resp.json()["id"])
+    assert fila.monto == Decimal("30.00")
+    assert fila.descuento_id == descuento["id"]
+
+
+def test_regularizacion_sin_la_eleccion_aplica_el_descuento_como_siempre(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    persona, membresia = _crear_persona_membresia(db_session)
+    _asignar_media_beca(client, persona.id)
+
+    assert _regularizar_monto(client, membresia.id, "30.00").status_code == 201
+
+
+def test_regularizacion_valor_normal_sin_beneficio_no_cambia_nada(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    _, membresia = _crear_persona_membresia(db_session)
+
+    assert _regularizar_eligiendo(client, membresia.id, "60.00", False).status_code == 201
+
+
+def test_cotizacion_respeta_la_eleccion_y_expone_el_beneficio_disponible(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    persona, membresia = _crear_persona_membresia(db_session)
+    url = f"/api/v1/membresias/{membresia.id}/regularizar-deuda/cotizacion"
+    periodo = {"fecha_inicio": "2026-04-01", "fecha_fin": "2026-05-31"}
+
+    sin = client.get(url, params=periodo).json()
+    assert sin["tieneBeneficio"] is False
+
+    _asignar_media_beca(client, persona.id)
+    por_defecto = client.get(url, params=periodo).json()
+    assert por_defecto["tieneBeneficio"] is True
+    assert Decimal(str(por_defecto["beneficioPorcentaje"])) == Decimal("50")
+    assert Decimal(str(por_defecto["montoEsperado"])) == Decimal("30.00")
+
+    normal = client.get(url, params={**periodo, "aplicar_descuento": "false"}).json()
+    assert Decimal(str(normal["montoEsperado"])) == Decimal("60.00")
+    assert Decimal(str(normal["descuentoAplicado"])) == Decimal("0.00")
+    assert normal["tieneBeneficio"] is True
+    assert Decimal(str(normal["descuentoDisponible"])) == Decimal("30.00")
+
+
+# --- Aviso al socio al regularizar (QA owner R2, S13) -------------------------
+
+def _notificaciones_de(db_session, persona_id):
+    return db_session.query(Notificacion).filter(Notificacion.persona_id == persona_id).all()
+
+
+def test_regularizar_notifica_al_socio_en_la_app_y_por_correo(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    persona, membresia = _crear_persona_membresia(db_session)
+    db_session.add(Usuario(correo="socio@cataclub.test", contrasenia="hash", persona_id=persona.id))
+    db_session.flush()
+    correos = []
+    monkeypatch.setattr(
+        ServicioNotificaciones, "enviar_correo", lambda self, **kw: correos.append(kw),
+    )
+
+    resp = _regularizar_monto(client, membresia.id, "60.00")
+
+    assert resp.status_code == 201, resp.text
+    avisos = _notificaciones_de(db_session, persona.id)
+    assert len(avisos) == 1
+    assert avisos[0].tipo == TipoNotificacion.PAGO_APROBADO
+    assert avisos[0].entidad_relacionada_id == resp.json()["id"]
+    assert avisos[0].mensaje.startswith("Deuda regularizada")
+    assert "regularizó tu deuda por $60,00" in avisos[0].mensaje
+    assert "al día hasta el" in avisos[0].mensaje
+    assert "aprobado" not in avisos[0].mensaje.lower()
+    assert [c["destinatario"] for c in correos] == ["socio@cataclub.test"]
+    assert correos[0]["asunto"] == "Cata Club | Deuda regularizada"
+    assert "Deuda regularizada" in correos[0]["cuerpo_texto"]
+    assert "Pago aprobado" not in correos[0]["cuerpo_texto"]
+
+
+def test_regularizar_a_un_menor_avisa_al_representante(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    representante = crear_persona_orm(db_session, "1710034065", nombres="Rita", apellidos="Madre")
+    menor = Persona(
+        nombres="Hijo", apellidos="Menor", cedula="1710034073", telefono="0990001111",
+        fecha_nacimiento=date(2015, 5, 14), representante_id=representante.id,
+    )
+    db_session.add(menor)
+    db_session.flush()
+    db_session.add(Usuario(correo="madre@cataclub.test", contrasenia="hash", persona_id=representante.id))
+    tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("30.00"))
+    membresia = crear_membresia_orm(
+        db_session, menor, tipo, EstadoMembresia.ACTIVA, monto_aplicado=Decimal("30.00"),
+    )
+    correos = []
+    monkeypatch.setattr(
+        ServicioNotificaciones, "enviar_correo", lambda self, **kw: correos.append(kw),
+    )
+
+    resp = _regularizar_monto(client, membresia.id, "60.00")
+
+    assert resp.status_code == 201, resp.text
+    # Una sola fila, a nombre del menor: el feed del representante la incluye
+    # con el prefijo "Para <nombre>" (no se duplica, issue #1227).
+    assert len(_notificaciones_de(db_session, menor.id)) == 1
+    assert len(_notificaciones_de(db_session, representante.id)) == 0
+    from app.servicios_negocio.notificacion_servicio import NotificacionServicio
+    feed, _ = NotificacionServicio(db_session).listar_para_persona_y_hijos(representante.id)
+    assert len(feed) == 1 and feed[0].mensaje.startswith("Para ")
+    assert "Deuda regularizada" in feed[0].mensaje
+    assert [c["destinatario"] for c in correos] == ["madre@cataclub.test"]
+    assert correos[0]["asunto"] == "Cata Club | Deuda regularizada"
+    assert "Hijo Menor" in correos[0]["cuerpo_texto"]
+
+
+def test_regularizar_no_falla_si_el_correo_no_se_puede_enviar(client, db_session, monkeypatch):
+    from app.dominio.excepciones import ServicioNoDisponible
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    persona, membresia = _crear_persona_membresia(db_session)
+    db_session.add(Usuario(correo="socio@cataclub.test", contrasenia="hash", persona_id=persona.id))
+    db_session.flush()
+
+    def _falla(self, **kw):
+        raise ServicioNoDisponible("smtp caído")
+
+    monkeypatch.setattr(ServicioNotificaciones, "enviar_correo", _falla)
+
+    assert _regularizar_monto(client, membresia.id, "60.00").status_code == 201
+    assert len(_notificaciones_de(db_session, persona.id)) == 1
+
+
+def test_pago_normal_aprobado_conserva_el_texto_de_pago_aprobado(db_session, monkeypatch):
+    from app.servicios_negocio.dtos.membresia_pago_schemas import PagoValidarDTO
+    from tests.fabricas_pagos import crear_pago_orm
+    persona, membresia = _crear_persona_membresia(db_session)
+    admin = crear_persona_orm(db_session, "1710034081", nombres="Ada", apellidos="Admin")
+    db_session.add(Usuario(correo="socio@cataclub.test", contrasenia="hash", persona_id=persona.id))
+    pago = crear_pago_orm(db_session, persona, membresia, EstadoPago.PENDIENTE_VALIDACION)
+    db_session.flush()
+    asuntos = []
+    monkeypatch.setattr(
+        ServicioNotificaciones, "enviar_correo",
+        lambda self, destinatario, asunto, *a, **kw: asuntos.append(asunto),
+    )
+
+    PagoServicio(db_session).validar_pago(
+        pago.id, PagoValidarDTO(estado_pago=EstadoPago.APROBADO), actor_persona_id=admin.id,
+    )
+
+    avisos = _notificaciones_de(db_session, persona.id)
+    assert [a.mensaje for a in avisos if a.tipo == TipoNotificacion.PAGO_APROBADO] == [
+        "Tu pago de $30,00 fue aprobado. Tu membresía está activa."
+    ]
+    assert asuntos == ["Cata Club | Pago aprobado"]
+
+
+# --- Comprobante oficial al regularizar (QA owner R2, T12) --------------------
+
+def _registrar_despachos(monkeypatch):
+    despachos: list[int] = []
+    monkeypatch.setattr(
+        mps.PagoServicio, "_disparar_generacion_comprobante_pdf",
+        lambda self, pago_id: despachos.append(pago_id),
+    )
+    return despachos
+
+
+def test_regularizar_despacha_el_comprobante_una_sola_vez(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    _, membresia = _crear_persona_membresia(db_session)
+    despachos = _registrar_despachos(monkeypatch)
+
+    resp = _regularizar_monto(client, membresia.id, "60.00")
+
+    assert resp.status_code == 201, resp.text
+    assert despachos == [resp.json()["id"]]
+
+
+def test_regularizar_despacha_el_comprobante_con_el_pago_ya_commiteado(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    _, membresia = _crear_persona_membresia(db_session)
+    estados: list[bool] = []
+
+    def _despachar(self, pago_id):
+        estados.append(self.db.in_transaction() and bool(self.db.new))
+
+    monkeypatch.setattr(mps.PagoServicio, "_disparar_generacion_comprobante_pdf", _despachar)
+
+    assert _regularizar_monto(client, membresia.id, "60.00").status_code == 201
+    assert estados == [False]  # sin cambios pendientes: ya se hizo commit
+
+
+def test_regularizar_rechazada_no_despacha_el_comprobante(client, db_session, monkeypatch):
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    _, membresia = _crear_persona_membresia(db_session)
+    despachos = _registrar_despachos(monkeypatch)
+
+    resp = _regularizar_monto(client, membresia.id, "30.00")  # esperado: $60.00
+
+    assert resp.status_code == 400
+    assert despachos == []
+
+
+def test_regularizar_no_falla_si_el_broker_esta_caido(client, db_session, monkeypatch):
+    """Con el despachador REAL y `.delay` explotando, la regularización queda
+    commiteada y responde 201 (la reconciliación beat recupera el PDF)."""
+    from app.infraestructura.tareas.comprobante_tareas import generar_comprobante_pdf_tarea
+    from tests.test_pago_comprobante_atomico import _DISPARO_ORIGINAL
+
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    _, membresia = _crear_persona_membresia(db_session)
+    monkeypatch.setattr(mps.PagoServicio, "_disparar_generacion_comprobante_pdf", _DISPARO_ORIGINAL)
+
+    def _broker_caido(*args, **kwargs):
+        raise ConnectionError("redis caído")
+
+    monkeypatch.setattr(generar_comprobante_pdf_tarea, "delay", _broker_caido)
+
+    resp = _regularizar_monto(client, membresia.id, "60.00")
+
+    assert resp.status_code == 201, resp.text
+    assert db_session.get(Pago, resp.json()["id"]).estado_pago == EstadoPago.APROBADO

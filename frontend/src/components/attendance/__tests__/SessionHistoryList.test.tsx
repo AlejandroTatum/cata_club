@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import SessionHistoryList from "@/components/attendance/SessionHistoryList";
 import AttendancePeriodRail from "@/components/attendance/AttendancePeriodRail";
@@ -44,6 +44,21 @@ describe("SessionHistoryList", () => {
     expect(screen.queryByRole("columnheader", { name: "Acciones" })).not.toBeInTheDocument();
   });
 
+  it("keeps the result bar short and fixed on desktop with the counts beside it", () => {
+    render(<SessionHistoryList pageSize={10} sessions={[session(1)]} rangeInvalid={false} emptyAction={EMPTY_ACTION} />);
+
+    const bar = screen.getAllByRole("img", { name: /3 presentes/i })[0];
+    expect(bar).toHaveClass("lg:w-40", "lg:flex-none");
+    expect(bar).not.toHaveClass("lg:w-full");
+    // Bar and counts share one line from `lg`, and the row never stretches with the window.
+    const line = bar.parentElement as HTMLElement;
+    expect(line).toHaveClass("lg:flex-row", "lg:items-center");
+    expect(line).toHaveTextContent("3 presentes");
+    const group = line.parentElement as HTMLElement;
+    expect(group.className).not.toMatch(/min-w-\[240px\]/);
+    expect(group).not.toHaveTextContent("por revisar");
+  });
+
   // ENT-19 / ADMA-29: «No registrado» read as «the attendance was not recorded».
   it("shows a dash, never «No registrado», when a session has no author", async () => {
     render(
@@ -60,21 +75,19 @@ describe("SessionHistoryList", () => {
     expect(screen.queryByText(/No registrado/)).not.toBeInTheDocument();
   });
 
-  // ENT-07: a session holding records flagged for review says so in the list, so
-  // the admin does not have to open every session to find them.
-  it("flags the sessions that hold records to review, and only those", async () => {
+  // Issue #1578: the owner removed «N por revisar»; flagged records add no count.
+  it("never shows «por revisar», even when records were flagged for review", async () => {
     render(
       <SessionHistoryList
         pageSize={10}
-        sessions={[session(2, { reviewCount: 2 }), session(1, { reviewCount: 0 })]}
+        sessions={[session(2)]}
         rangeInvalid={false}
         emptyAction={EMPTY_ACTION}
       />,
     );
 
     const rows = (await screen.findAllByRole("row")).slice(1);
-    expect(rows[0]).toHaveTextContent("2 por revisar");
-    expect(rows[1]).not.toHaveTextContent("por revisar");
+    expect(rows[0]).not.toHaveTextContent("por revisar");
   });
 
   it("says why the list is empty, differently for an unusable range", () => {
@@ -128,6 +141,91 @@ describe("SessionHistoryList", () => {
     expect(screen.getByText("Detalle 2026-06-01")).toBeInTheDocument();
   });
 
+  describe("detail placement", () => {
+    const original = window.matchMedia;
+    afterEach(() => {
+      window.matchMedia = original;
+    });
+    const setViewport = (desktop: boolean): void => {
+      window.matchMedia = ((query: string) => ({
+        matches: desktop,
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      })) as unknown as typeof window.matchMedia;
+    };
+    const renderThree = (): void => {
+      render(
+        <SessionHistoryList
+          pageSize={10}
+          sessions={[session(3), session(2), session(1)]}
+          rangeInvalid={false}
+          emptyAction={EMPTY_ACTION}
+          renderDetail={(s) => <button type="button" id={`fix-${s.fecha}`}>Corregir {s.fecha}</button>}
+        />,
+      );
+    };
+
+    it("opens the detail in the row right under the selected session on desktop", () => {
+      setViewport(true);
+      renderThree();
+      const table = screen.getByTestId("history-desktop-table");
+      const toggle = within(table).getAllByRole("button", { name: /^Registros/ })[1];
+      fireEvent.click(toggle);
+
+      const panel = screen.getByTestId("session-detail");
+      const selectedRow = toggle.closest("tr") as HTMLElement;
+      expect(selectedRow.nextElementSibling).toBe(panel.closest("tr"));
+      expect(selectedRow).toHaveTextContent("02/06/2026");
+      expect(panel.closest("td")).toHaveAttribute("colspan");
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+      expect(toggle).toHaveAttribute("aria-controls", panel.id);
+    });
+
+    it("opens the detail inside the selected card on mobile", () => {
+      setViewport(false);
+      renderThree();
+      const list = screen.getByTestId("history-mobile-list");
+      const toggle = within(list).getAllByRole("button", { name: /^Registros/ })[1];
+      fireEvent.click(toggle);
+
+      const panel = screen.getByTestId("session-detail");
+      expect(screen.getByTestId("history-mobile-card-2026-06-02-1")).toContainElement(panel);
+      expect(toggle).toHaveAttribute("aria-controls", panel.id);
+    });
+
+    it("keeps a single panel, with no duplicated ids, and closes the previous one", () => {
+      setViewport(true);
+      renderThree();
+      fireEvent.click(screen.getAllByRole("button", { name: /^Registros/ })[0]);
+      fireEvent.click(screen.getAllByRole("button", { name: /^Registros/ })[2]);
+
+      expect(screen.getAllByTestId("session-detail")).toHaveLength(1);
+      expect(screen.getAllByRole("button", { name: /^Corregir/ })).toHaveLength(1);
+      const ids = Array.from(document.querySelectorAll("[id]")).map((el) => el.id);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(screen.getByTestId("session-detail").closest("tr")?.previousElementSibling).toHaveTextContent("01/06/2026");
+    });
+
+    it("closes the open detail when the page changes", () => {
+      setViewport(true);
+      const many = Array.from({ length: 11 }, (_, i) => session(i + 1));
+      render(
+        <SessionHistoryList
+          pageSize={10}
+          sessions={many}
+          rangeInvalid={false}
+          emptyAction={EMPTY_ACTION}
+          renderDetail={() => <p>Detalle</p>}
+        />,
+      );
+      fireEvent.click(screen.getAllByRole("button", { name: /^Registros/ })[0]);
+      expect(screen.getByTestId("session-detail")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
+      expect(screen.queryByTestId("session-detail")).not.toBeInTheDocument();
+    });
+  });
+
   it("adds the actions column only when a role-specific action is given", () => {
     render(
       <SessionHistoryList
@@ -162,6 +260,15 @@ describe("AttendancePeriodRail", () => {
     expect(within(rail).getByRole("region", { name: "Sin lista en el período" })).toBeInTheDocument();
     expect(within(rail).getByRole("heading", { name: "Cómo leer el historial" })).toBeInTheDocument();
     expect(rail).toHaveTextContent("Regla extra");
+  });
+
+  it("omits the standing guide when showGuide is false", () => {
+    render(<AttendancePeriodRail {...baseProps} studentFiltered={false} showGuide={false} guideExtra={<p>Regla extra</p>} />);
+
+    const rail = screen.getByRole("complementary", { name: "Resumen del período" });
+    expect(within(rail).queryByRole("heading", { name: "Cómo leer el historial" })).not.toBeInTheDocument();
+    expect(rail).not.toHaveTextContent("Regla extra");
+    expect(rail).toHaveTextContent("Listas tomadas");
   });
 
   it("replaces the schedule comparison with its explanation when a student is filtered", () => {

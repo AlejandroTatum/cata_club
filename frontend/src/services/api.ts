@@ -883,7 +883,8 @@ export interface CorrectAttendanceInput {
   estado: EstadoAsistencia;
   justificativo?: string | null;
   estadoJustificativo?: boolean | null;
-  motivo: string;
+  /** Optional for the admin's direct correction (issue #1578). */
+  motivo?: string;
 }
 
 /** Confirms the correction with the updated row plus the trace that got
@@ -1780,10 +1781,16 @@ export async function solicitarRecuperacion(correo: string): Promise<{ mensaje: 
 export async function restablecerContrasenia(
   token: string,
   nuevaContrasenia: string,
+  aceptaTerminos = false,
 ): Promise<void> {
   await request<void>(apiEndpoint('/auth/restablecer-contrasenia'), {
     method: 'POST',
-    body: JSON.stringify({ token, nueva_contrasenia: nuevaContrasenia }),
+    // `acepta_terminos` only travels for a trainer's invitation link (#1575).
+    body: JSON.stringify({
+      token,
+      nueva_contrasenia: nuevaContrasenia,
+      ...(aceptaTerminos ? { acepta_terminos: true } : {}),
+    }),
   });
 }
 
@@ -2318,6 +2325,8 @@ export interface RegularizarDeudaInput {
   fechaInicio: string;
   fechaFin: string;
   motivo: string;
+  /** Admin's choice (S12): `false` charges the normal price; absent applies the benefit. */
+  aplicarDescuento?: boolean;
 }
 
 /** Fetch a membership's derived owed months — `GET /api/membresias/{id}/deuda` (admin only). */
@@ -2336,6 +2345,10 @@ export interface CotizacionRegularizacion {
   montoBase: string;
   descuentoAplicado: string;
   montoEsperado: string;
+  /** The member has an active benefit (even when the quote ignores it). */
+  tieneBeneficio?: boolean;
+  beneficioPorcentaje?: string | null;
+  descuentoDisponible?: string;
 }
 
 /** Quote a regularization — `GET /api/membresias/{id}/regularizar-deuda/cotizacion`
@@ -2345,9 +2358,11 @@ export async function fetchCotizacionRegularizacion(
   membresiaId: number,
   fechaInicio: string,
   fechaFin: string,
+  aplicarDescuento?: boolean,
 ): Promise<CotizacionRegularizacion> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
   const query = new URLSearchParams({ fechaInicio, fechaFin });
+  if (aplicarDescuento !== undefined) query.set("aplicarDescuento", String(aplicarDescuento));
   return request<CotizacionRegularizacion>(
     apiEndpoint(`/membresias/${membresiaId}/regularizar-deuda/cotizacion?${query.toString()}`),
     { headers: mockHeaders },
@@ -2829,6 +2844,35 @@ export async function independizarPersona(
     headers: { "Idempotency-Key": idempotencyKey },
     body: JSON.stringify(payload),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Nuevo entrenador — alta directa por el administrador (#1575)
+// ---------------------------------------------------------------------------
+
+export interface CrearEntrenadorPayload {
+  nombres: string;
+  apellidos: string;
+  cedula: string;
+  fechaNacimiento: string;
+  correo: string;
+  telefono: string;
+}
+
+/**
+ * Create a trainer account (no ficha, plan or membership) and send the invite
+ * email — `POST /personas/entrenadores`, ADMINISTRADOR-only.
+ */
+export async function crearEntrenador(payload: CrearEntrenadorPayload): Promise<{ personaId: number }> {
+  return request<{ personaId: number }>(apiEndpoint('/personas/entrenadores'), {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Resend a trainer's invitation while they have not set a password yet. */
+export async function reenviarInvitacionEntrenador(personaId: number): Promise<void> {
+  await request<void>(apiEndpoint(`/personas/${personaId}/entrenador/invitacion`), { method: 'POST' });
 }
 
 // ---------------------------------------------------------------------------

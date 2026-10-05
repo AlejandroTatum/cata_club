@@ -180,13 +180,6 @@ export default function GaleriaPage(): React.ReactElement {
     <>
       <div className={PAGE_RAIL}>
         <div className="flex min-w-0 flex-col gap-page max-lg:contents lg:col-start-2 lg:row-start-1">
-        <PublishGuide className="max-lg:order-3" title="Cómo se publica en el sitio" rules={[
-          { term: "Dónde aparece", detail: "Cada foto es una diapositiva de la galería de la landing, con su título y descripción." },
-          { term: "Título y descripción", detail: `Hasta ${TITULO_MAX_PALABRAS} palabras el título y ${DESCRIPCION_MAX_PALABRAS} la descripción; esta última es también la descripción accesible de la foto.` },
-          { term: "Orden y visibilidad", detail: "Se muestran de inmediato, en el orden de esta lista; usa Subir y Bajar para cambiarlo. Una foto oculta no se muestra en la landing, pero se conserva." },
-          { term: "Encuadre", detail: "La galería usa fotos de 3:2: arrastra la foto y usa el zoom para elegir el recorte antes de publicarla." },
-          { term: "Al eliminar", detail: "La foto deja de mostrarse en la landing y no se puede recuperar." },
-        ]} />
         <form onSubmit={submit} className="card flex max-lg:order-1 min-w-0 flex-col gap-4 p-4">
           <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">{editando ? "Editar foto" : "Subir foto"}</h2>
           <FileDropZone
@@ -234,12 +227,21 @@ export default function GaleriaPage(): React.ReactElement {
             {editando && <Button type="button" onClick={limpiarFormulario} disabled={saving}>Cancelar edición</Button>}
           </div>
         </form>
+        <PublishGuide className="max-lg:order-3" title="Cómo se publica en el sitio" rules={[
+          { term: "Dónde aparece", detail: "Cada foto es una diapositiva de la galería de la landing, con su título y descripción." },
+          { term: "Título y descripción", detail: `Hasta ${TITULO_MAX_PALABRAS} palabras el título y ${DESCRIPCION_MAX_PALABRAS} la descripción; esta última es también la descripción accesible de la foto.` },
+          { term: "Orden y visibilidad", detail: "Se muestran de inmediato, en el orden de esta lista; usa Mover antes y Mover después para cambiarlo. Una foto oculta no se muestra en la landing, pero se conserva." },
+          { term: "Encuadre", detail: "La galería usa fotos de 3:2: arrastra la foto y usa el zoom para elegir el recorte antes de publicarla." },
+          { term: "Al eliminar", detail: "La foto deja de mostrarse en la landing y no se puede recuperar." },
+        ]} />
         </div>
         <section aria-label="Fotos publicadas" className="flex min-w-0 flex-col max-lg:order-2 lg:col-start-1 lg:row-start-1 lg:self-stretch">
           {cargando ? <LoadingState label="Cargando fotos…" />
             : errorCarga ? <ErrorState message="No se pudo cargar la galería." onRetry={() => void load()} />
             : entradas.length === 0 ? <EmptyGrid icon={<ImageIcon size={ICON.lg} />} title="Aún no hay fotos en la galería" description="Las fotos publicadas aparecen aquí y en la galería del sitio." tileRatio="3 / 2" tiles={15} />
-            : <ul className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">
+            : <>
+              <p className="mb-3 text-xs text-ink-2">Mover antes y Mover después cambian el orden en que se muestran las fotos en la landing.</p>
+              <ul className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">
               {entradas.map((entrada, indice) => <li key={entrada.id} className="card flex flex-col overflow-hidden">
                 {/* eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset */}
                 <img src={entrada.imagenUrl} alt={entrada.titulo} loading="lazy" width={400} height={267} style={{ aspectRatio: "3 / 2" }} className={`h-auto w-full bg-sunken object-cover ${entrada.visible ? "" : "opacity-50"}`} />
@@ -248,15 +250,15 @@ export default function GaleriaPage(): React.ReactElement {
                   {!entrada.visible && <p className="text-xs font-semibold text-ink-2">Oculta</p>}
                   <p className="line-clamp-2 text-xs text-ink-2">{entrada.descripcion}</p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    <Button size="sm" aria-label={`Subir ${entrada.titulo}`} disabled={indice === 0} onClick={() => void mover(entrada, "subir")}>Subir</Button>
-                    <Button size="sm" aria-label={`Bajar ${entrada.titulo}`} disabled={indice === entradas.length - 1} onClick={() => void mover(entrada, "bajar")}>Bajar</Button>
+                    <Button size="sm" aria-label={`Mover antes ${entrada.titulo}`} title="Mover antes" disabled={indice === 0} onClick={() => void mover(entrada, "subir")}>Mover antes</Button>
+                    <Button size="sm" aria-label={`Mover después ${entrada.titulo}`} title="Mover después" disabled={indice === entradas.length - 1} onClick={() => void mover(entrada, "bajar")}>Mover después</Button>
                     <Button size="sm" aria-label={`Editar ${entrada.titulo}`} onClick={() => empezarEdicion(entrada)}>Editar</Button>
                     <Button size="sm" aria-label={`${entrada.visible ? "Ocultar" : "Mostrar"} ${entrada.titulo}`} onClick={() => void alternarVisibilidad(entrada)}>{entrada.visible ? "Ocultar" : "Mostrar"}</Button>
                     <Button size="sm" className="text-state-bad" aria-label={`Eliminar ${entrada.titulo}`} onClick={() => setPorEliminar(entrada)}>Eliminar</Button>
                   </div>
                 </div>
               </li>)}
-            </ul>}
+            </ul></>}
         </section>
       </div>
       <ConfirmDialog

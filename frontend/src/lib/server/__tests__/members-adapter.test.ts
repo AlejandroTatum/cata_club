@@ -468,6 +468,19 @@ describe("buildMemberAccounts", () => {
       expect(accounts[0].accountState).toBe(expected);
     });
 
+    // Issue #1575: a trainer the admin created who has not set a password.
+    it.each<[boolean | null, boolean | undefined, "invitation" | "active" | "inactive" | "none"]>([
+      [true, true, "invitation"],
+      [true, false, "active"],
+      [true, undefined, "active"],
+      [false, true, "inactive"],
+      [null, true, "none"],
+    ])("maps cuentaActiva=%s + invitacionPendiente=%s to %s", (cuentaActiva, invitacionPendiente, expected) => {
+      const persona: BackendPersonaFull = { ...admin, cuentaActiva, invitacionPendiente };
+      const accounts = buildMemberAccounts([persona], new Map(), new Map(), new Map(), new Map());
+      expect(accounts[0].accountState).toBe(expected);
+    });
+
     it("does not depend on Persona.activo nor on the membership state", () => {
       const accounts = buildMemberAccounts(
         [{ ...child, activo: false, cuentaActiva: true }],

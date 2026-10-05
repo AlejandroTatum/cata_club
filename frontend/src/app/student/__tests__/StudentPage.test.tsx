@@ -619,7 +619,7 @@ describe("StudentPage — the club membership card (carnet)", () => {
     });
   });
 
-  it("omits the coverage end when no payment has been approved", async () => {
+  it("shows a dash for the coverage end when no payment has been approved", async () => {
     mockFetchStudentPortal.mockResolvedValueOnce({
       ...PORTAL,
       self: {
@@ -649,7 +649,8 @@ describe("StudentPage — the club membership card (carnet)", () => {
     await waitFor(() => {
       expect(within(facts).getByText("Jugador desde")).toBeInTheDocument();
     });
-    expect(within(facts).queryByText("Válido hasta")).not.toBeInTheDocument();
+    // The row stays on the credential and reads "—" rather than a made-up date.
+    expect(within(facts).getByText("Válido hasta").parentElement?.lastElementChild?.textContent).toBe("—");
     // No date from the refused rows leaked onto the credential.
     expect(within(facts).queryByText("30/06/2026")).not.toBeInTheDocument();
     expect(within(facts).queryByText("31/07/2026")).not.toBeInTheDocument();
@@ -662,7 +663,7 @@ describe("StudentPage — the club membership card (carnet)", () => {
    * sources (issue #1328), so a `null` here is authoritative and must not be
    * second-guessed by re-deriving a date from `pagos`.
    */
-  it("omits the coverage end when MembershipSummary.cubiertoHasta is null, even with an approved payment", async () => {
+  it("shows a dash for the coverage end when MembershipSummary.cubiertoHasta is null, even with an approved payment", async () => {
     mockFetchStudentPortal.mockResolvedValueOnce({
       ...PORTAL,
       self: {
@@ -687,7 +688,8 @@ describe("StudentPage — the club membership card (carnet)", () => {
     await waitFor(() => {
       expect(within(facts).getByText("Jugador desde")).toBeInTheDocument();
     });
-    expect(within(facts).queryByText("Válido hasta")).not.toBeInTheDocument();
+    // The row stays on the credential and reads "—" rather than a made-up date.
+    expect(within(facts).getByText("Válido hasta").parentElement?.lastElementChild?.textContent).toBe("—");
     // The approved payment's own `fechaFin` never leaks onto the credential.
     expect(within(facts).queryByText("31/07/2026")).not.toBeInTheDocument();
 
@@ -1219,72 +1221,22 @@ describe("globals.css — the carnet's print sheet", () => {
  * The ink cost is real and is recorded in the component, not re-argued here.
  */
 describe("StudentPage — the printed carnet is the same object as the screen one", () => {
-  // THE MARK IS DRAWN, NOT PHOTOGRAPHED. It used to be `/brand/cata-club-logo.jpeg`
-  // on a white disc. A photographic JPEG halftones badly at credential size —
-  // that observation is #286's, and it was always true — and the answer #286
-  // reached (drop the mark) left a blank disc as the most conspicuous thing on
-  // the sheet. A paddle drawn in CSS costs nothing, prints as flat colour, and
-  // scales without a second asset.
-  it("draws a paddle that is actually a paddle, in vector and not in boxes", async () => {
+  // THE MARK IS THE CLUB'S REAL LOGO — the same asset the sidebar uses, not a
+  // drawn placeholder. It is named for assistive tech (the mock's paddle was
+  // decorative; this is the club's actual mark).
+  it("heads the credential with the club's real logo, named for screen readers", async () => {
     render(<StudentPage />);
 
     const carnet = await screen.findByTestId("student-carnet");
-    // No raster asset reaches the credential at all — not the club logo, not
-    // anything else out of `/brand/`.
-    expect(carnet.querySelector('img[src*="cata-club-logo"]')).toBeNull();
-    expect(carnet.querySelector('img[src^="/brand/"]')).toBeNull();
-
-    const paddle = within(carnet).getByTestId("carnet-paddle");
-    expect(paddle).toHaveAttribute("aria-hidden", "true");
-    expect(paddle.tagName.toLowerCase()).toBe("svg");
-    expect(paddle).toHaveAttribute("focusable", "false");
-
-    // WHAT THIS LOCK IS REALLY FOR. The mark it replaces was a disc with a bar
-    // rotated 45° off its RIM and a white highlight inside: at 30px that reads
-    // as a magnifying glass, because no paddle is held diagonally from its
-    // edge. The three assertions below are the three things that make it a
-    // paddle instead: a red blade (a rubber is red or black, never yellow), a
-    // handle leaving the BOTTOM of the blade, and the whole thing tilted the
-    // way a hand holds it.
-    const blade = paddle.querySelector("ellipse");
-    const handle = paddle.querySelector("path");
-    expect(blade?.getAttribute("class")).toMatch(/\bfill-cata-red\b/);
-    expect(handle?.getAttribute("class")).toMatch(/\bfill-ball\b/);
-    expect(paddle.querySelector("g")?.getAttribute("transform")).toMatch(/rotate\(-24/);
-
-    // The blade's centre and the handle's top must overlap on the SAME axis —
-    // the handle hangs below the blade, it does not sprout from its side.
-    const bladeCx = Number(blade?.getAttribute("cx"));
-    const handleStartX = Number(handle?.getAttribute("d")?.match(/M([\d.]+)/)?.[1]);
-    expect(Math.abs(bladeCx - handleStartX)).toBeLessThan(3);
+    const logo = within(carnet).getByRole("img", { name: "Logo de Cata Club" });
+    expect(logo.tagName.toLowerCase()).toBe("img");
+    expect(logo.getAttribute("src")).toBe("/brand/cata-club-logo.jpeg");
+    // The drawn paddle is gone.
+    expect(within(carnet).queryByTestId("carnet-paddle")).toBeNull();
+    expect(carnet.querySelector("svg ellipse")).toBeNull();
   });
 
-  // The ball sits UPPER-RIGHT, clear of the handle, and that position is not a
-  // preference. Measured at the 30px the mark actually renders at: with the
-  // ball beside the handle at lower-right the two yellow shapes merge into one
-  // blob with a notch in it. Moved across the blade they read as two objects.
-  it("keeps the ball clear of the handle so both survive at mark size", async () => {
-    render(<StudentPage />);
-
-    const carnet = await screen.findByTestId("student-carnet");
-    const paddle = within(carnet).getByTestId("carnet-paddle");
-
-    const ball = paddle.querySelector("circle");
-    expect(ball?.getAttribute("class")).toMatch(/\bfill-ball\b/);
-    // Upper half of the 24-unit viewBox, and to the right of the blade.
-    expect(Number(ball?.getAttribute("cy"))).toBeLessThan(12);
-    expect(Number(ball?.getAttribute("cx"))).toBeGreaterThan(
-      Number(paddle.querySelector("ellipse")?.getAttribute("cx")),
-    );
-
-    // And it is still the card's ONLY ball: the club's one accent, spent once.
-    expect(paddle.querySelectorAll("circle")).toHaveLength(1);
-    for (const filled of carnet.querySelectorAll('[class*="bg-ball"]')) {
-      expect(paddle.contains(filled)).toBe(true);
-    }
-  });
-
-  it("keeps the card's one red rule and its white ink on paper", async () => {
+  it("keeps the accent bar and its white ink on paper", async () => {
     mockFetchStudentPortal.mockReset().mockResolvedValue({
       ...PORTAL,
       self: {
@@ -1300,10 +1252,9 @@ describe("StudentPage — the printed carnet is the same object as the screen on
     await waitFor(() => {
       expect(within(carnet).getByText("Franja")).toBeInTheDocument();
     });
-    const header = within(carnet).getByText("Cata Club").parentElement!;
-    expect(header.className).toMatch(/\bborder-b-2\b/);
-    expect(header.className).toMatch(/\bborder-cata-red\b/);
-    expect(header.className).not.toMatch(/print:border-/);
+    const bar = within(carnet).getByTestId("carnet-accent-bar");
+    expect(bar.firstElementChild?.className).toMatch(/\bbg-cata-red\b/);
+    expect(bar.className).not.toMatch(/print:bg-/);
 
     // The register's ink and its hairline follow the ground, and the ground
     // no longer flips.
@@ -2556,7 +2507,7 @@ describe("StudentPage — the credential inside the panel (Funda)", () => {
 
   // The header: the club signs the object before the object says whose it is —
   // one row, mark then wordmark then the word the card is FOR.
-  it("heads the credential with the mark, the wordmark and «Jugador», over one red rule", async () => {
+  it("heads the credential with the logo, the wordmark and «Jugador», over the accent bar", async () => {
     render(<StudentPage />);
 
     const carnet = await screen.findByTestId("student-carnet");
@@ -2566,9 +2517,7 @@ describe("StudentPage — the credential inside the panel (Funda)", () => {
     expect(wordmark.className).toMatch(/\btext-base\b/);
 
     const header = wordmark.parentElement!;
-    expect(header.className).toMatch(/\bborder-b-2\b/);
-    expect(header.className).toMatch(/\bborder-cata-red\b/);
-    // A ROW, in reading order, with "Jugador" pushed to the far edge.
+    // A ROW, in reading order, with the role label pushed to the far edge.
     expect(header.className).not.toMatch(/\bflex-col\b/);
     expect([...header.children].map((child) => child.textContent)).toEqual([
       "",
@@ -2577,23 +2526,18 @@ describe("StudentPage — the credential inside the panel (Funda)", () => {
     ]);
     expect(within(header).getByText("Jugador").className).toMatch(/\bml-auto\b/);
 
-    // DESIGN.md rations red. The credential spends its one FLAT appearance on
-    // the line that divides the club from the person. The week strip at the
-    // foot is the one other place red appears, and it is not decoration: red
-    // there is the datum — which days run — measured at 3:1 against the unlit
-    // fill for exactly that reason.
-    //
-    // The paddle's blade is the third and last exemption, and it is the same
-    // kind as the strip's: red there is not an accent, it is what the object
-    // IS. A table tennis rubber is red or black, so a yellow blade would be the
-    // depiction being wrong rather than the palette being obeyed. Anything red
-    // outside these three is decoration and this lock should catch it.
+    // The accent bar follows the header: the club's red with a ball tail.
+    const bar = within(carnet).getByTestId("carnet-accent-bar");
+    expect(header.nextElementSibling).toBe(bar);
+    expect(bar).toHaveAttribute("aria-hidden", "true");
+    expect(bar.children[0].className).toMatch(/\bbg-cata-red\b/);
+
+    // Red outside the bar is only ever DATUM: the training-day chips.
     const reds = [...carnet.querySelectorAll('[class*="cata-red"]')];
-    const strip = within(carnet).getByTestId("week-strip");
-    const paddle = within(carnet).getByTestId("carnet-paddle");
+    const days = within(carnet).getByTestId("carnet-training-days");
     expect(
-      reds.filter((element) => !strip.contains(element) && !paddle.contains(element)),
-    ).toEqual([header]);
+      reds.filter((element) => !days.contains(element) && !bar.contains(element)),
+    ).toEqual([]);
   });
 
   // The cédula is the fact this pass had to plumb through three layers to get
@@ -2634,7 +2578,8 @@ describe("StudentPage — the credential inside the panel (Funda)", () => {
 
     const carnet = await screen.findByTestId("student-carnet");
     expect(within(carnet).queryByText("Cédula")).not.toBeInTheDocument();
-    expect(within(carnet).queryByText(/^\s*—\s*$/)).not.toBeInTheDocument();
+    // The only dash on the credential is the register's "Válido hasta" value.
+    expect(within(carnet).getAllByText(/^\s*—\s*$/)).toHaveLength(1);
   });
 
   it("renders no plan row at all when the membership carries no categoría", async () => {
@@ -2648,7 +2593,7 @@ describe("StudentPage — the credential inside the panel (Funda)", () => {
   // The week strip at the foot, in the shared component's own on-coal skin —
   // a VARIANT of the primitive, not a wrapper selector reaching into it, and
   // not a fork. Its accessible label is half the piece and survives intact.
-  it("closes the credential with the week strip in its on-coal skin", async () => {
+  it("closes the credential with the seven day chips, training days marked", async () => {
     mockFetchStudentPortal
       .mockReset()
       .mockResolvedValue({ ...PORTAL, self: { ...PORTAL.self!, membership: FULL_MEMBERSHIP } });
@@ -2662,21 +2607,42 @@ describe("StudentPage — the credential inside the panel (Funda)", () => {
     const carnet = await screen.findByTestId("student-carnet");
     let strip: HTMLElement;
     await waitFor(() => {
-      strip = within(carnet).getByTestId("week-strip");
+      strip = within(carnet).getByTestId("carnet-training-days");
     });
     expect(strip!).toHaveAttribute("role", "img");
-    expect(strip!).toHaveAttribute("aria-label", "Martes y jueves");
+    expect(strip!).toHaveAttribute("aria-label", "Días de entrenamiento: Martes y jueves");
 
     const boxes = [...strip!.querySelectorAll<HTMLElement>("[data-day]")];
-    expect(boxes).toHaveLength(7);
-    // The unlit boxes take the coal skin: `bg-sunken` is the brightest thing
-    // that could land on this card, and it would make the five days that do
-    // NOT run shout louder than the two that do.
-    const monday = boxes[0];
-    expect(monday.className).not.toMatch(/\bbg-sunken\b/);
-    expect(monday.className).toMatch(/bg-white\/5\b/);
-    // And the days that run keep the club's red, which is the whole message.
+    expect(boxes.map((box) => box.textContent)).toEqual(["L", "M", "M", "J", "V", "S", "D"]);
+    expect(boxes.map((box) => box.dataset.state)).toEqual([
+      "inactivo",
+      "activo",
+      "inactivo",
+      "activo",
+      "inactivo",
+      "inactivo",
+      "inactivo",
+    ]);
+    // Training days wear the club's red; the rest are muted on the coal ground.
     expect(boxes[1].className).toMatch(/\bbg-cata-red\b/);
+    expect(boxes[0].className).toMatch(/bg-white\/5\b/);
+    expect(boxes[0].className).not.toMatch(/\bbg-sunken\b/);
+  });
+
+  it("signs the credential and shows the register's icons", async () => {
+    renderFullCarnet();
+
+    const carnet = await screen.findByTestId("student-carnet");
+    expect(within(carnet).getByText("¡Nos vemos en la mesa!")).toBeInTheDocument();
+    const facts = await screen.findByTestId("carnet-facts");
+    await waitFor(() => {
+      expect(within(facts).getByText("Franja")).toBeInTheDocument();
+    });
+    for (const row of [...facts.children]) {
+      // Each label carries a decorative icon, hidden from assistive tech.
+      const icon = row.firstElementChild!.querySelector("svg");
+      expect(icon).toHaveAttribute("aria-hidden", "true");
+    }
   });
 
   it("says it could not consult the schedule instead of drawing an empty week", async () => {

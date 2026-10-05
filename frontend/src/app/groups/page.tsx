@@ -1434,7 +1434,7 @@ export default function GroupsPage(): React.ReactElement {
               Días<span className="sr-only"> (obligatorio)</span>
             </legend>
             <div className="flex h-ctl overflow-hidden rounded-ctl border border-line-2">
-              {DIA_ORDER.map((dia) => {
+              {DIA_ORDER.filter((dia) => dia !== "DOMINGO" || selectedDias.has(dia)).map((dia) => {
                 const activo = selectedDias.has(dia);
                 return (
                   <button

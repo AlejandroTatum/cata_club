@@ -100,7 +100,11 @@ const APPROVED_NAV: ReadonlyArray<{ label: string; section: string }> = [
   { label: "Valores", section: "valores" },
   { label: "Galería", section: "galeria" },
   { label: "Horarios", section: "horarios" },
+  { label: "Mensualidad", section: "mensualidad" },
+  { label: "Cómo empezar", section: "como-empezar" },
+  { label: "Preguntas", section: "preguntas" },
   { label: "Contacto", section: "contacto" },
+  { label: "Patrocinadores", section: "patrocinadores" },
 ];
 
 /** The landing's own navbar: the six anchors inside `.landing-nav-links`. */
@@ -162,7 +166,7 @@ describe("public navigation parity (issue #771)", (): void => {
     expect(hrefsOf(headerNavAnchors(header)).map(targetSectionOf)).toEqual(expectedSections);
   });
 
-  it.each(["/terminos", "/consentimiento-salud", "/permiso-imagen-fetm"])(
+  it.each(["/terminos"])(
     "leaves the section links off the minimal bar on %s",
     (route): void => {
       mockPathname.mockReturnValue(route);

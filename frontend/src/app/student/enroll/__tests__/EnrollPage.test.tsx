@@ -379,6 +379,8 @@ describe("EnrollPage — the summary on the representative path (#1197)", () => 
     fillRepresentativeStep();
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
+    fireEvent.change(screen.getByLabelText(/^Condiciones de salud/i), { target: { value: "Ninguno" } });
+    fireEvent.change(screen.getByLabelText(/^Alergias/i), { target: { value: "Ninguno" } });
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
     expect(await screen.findByText(/resumen y confirmaci[oó]n/i)).toBeInTheDocument();
@@ -871,6 +873,10 @@ describe("EnrollPage — el teléfono de emergencia no puede repetir el del juga
     goToHealthStep();
 
     fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
+
+    fireEvent.change(screen.getByLabelText(/^Condiciones de salud/i), { target: { value: "Ninguno" } });
+
+    fireEvent.change(screen.getByLabelText(/^Alergias/i), { target: { value: "Ninguno" } });
     fireEvent.change(screen.getByLabelText(/nombre del contacto/i), { target: { value: "Ana Martinez" } });
     const telefonoEmergencia = screen.getByLabelText(/teléfono de emergencia/i);
     fireEvent.change(telefonoEmergencia, { target: { value: valor } });
@@ -1143,25 +1149,16 @@ describe("EnrollPage — motivo del bloqueo en el paso 5 (#312 / #2, #9)", () =>
     expect(screen.queryByText(/para confirmar la inscripción, marca la casilla de aceptación/i)).not.toBeInTheDocument();
   });
 
-  it("opens the in-flow legal review for each grouped document — no link leaves the wizard (#1368)", () => {
+  it("offers one consent link, to the single terms document, and no dialog triggers (#1615)", () => {
     render(<EnrollPage />);
     reachSummaryStep();
 
-    // #1368: the three documents used to be links to the public pages, and
-    // following one discarded the whole wizard. They are dialog triggers now,
-    // so the consent sentence contains no link at all.
-    const documents = [
-      ["Términos y condiciones (incluye privacidad)", "Términos, condiciones y acuerdo de responsabilidad de Cata Club"],
-      ["Consentimiento de datos de salud", "Consentimiento para el tratamiento de datos de salud"],
-      ["Permiso de uso de imagen", "Permiso de uso de imagen"],
-    ] as const;
-    for (const [triggerName, dialogName] of documents) {
-      fireEvent.click(screen.getByRole("button", { name: triggerName }));
-      expect(screen.getByRole("dialog", { name: dialogName })).toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
-      expect(screen.queryByRole("dialog", { name: dialogName })).not.toBeInTheDocument();
-    }
-    expect(within(screen.getByRole("checkbox").closest("label") as HTMLLabelElement).queryByRole("link")).not.toBeInTheDocument();
+    const consent = within(screen.getByRole("checkbox").closest("label") as HTMLLabelElement);
+    const links = consent.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute("href", "/terminos");
+    expect(links[0]).toHaveTextContent("Términos y condiciones");
+    expect(consent.queryAllByRole("button")).toHaveLength(0);
   });
 
   it("enables 'Confirmar inscripción' and drops the reason once the checkbox is checked", () => {
@@ -1219,20 +1216,27 @@ describe("EnrollPage — semántica nativa del consentimiento legal (#763)", () 
     expect(checkbox).toHaveAttribute("required");
   });
 
-  it("keeps exactly the three legal documents, each one reachable and named", () => {
+  it("flows the consent sentence inline and left-aligned (owner QA r2, S3)", () => {
     render(<EnrollPage />);
     reachSummaryStep();
 
+    // The label reads exactly the owner's wording (#1615). The link is a plain
+    // inline <a>: it breaks across lines with the sentence, so on a 360px
+    // screen nothing jumps to its own centred line or strands a comma.
     const consent = screen.getByRole("checkbox").closest("label") as HTMLLabelElement;
-    const triggers = within(consent).getAllByRole("button");
+    expect(consent.textContent).toBe("Acepto los Términos y condiciones");
+    const link = within(consent).getByRole("link");
+    expect(link.className).not.toMatch(/\b(block|flex|inline-block|inline-flex|text-center)\b/);
+    expect(consent.className).not.toMatch(/text-center/);
+    expect(consent.querySelector("button")).toBeNull();
+  });
 
-    expect(triggers).toHaveLength(3);
-    expect(triggers.map((trigger) => trigger.textContent)).toEqual([
-      "Términos y condiciones (incluye privacidad)",
-      "Consentimiento de datos de salud",
-      "Permiso de uso de imagen",
-    ]);
-    triggers.forEach((trigger) => expect(trigger).toHaveAccessibleName());
+  it("does not toggle the consent when the terms link is clicked", () => {
+    render(<EnrollPage />);
+    reachSummaryStep();
+
+    fireEvent.click(screen.getByRole("link", { name: "Términos y condiciones" }));
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
   });
 
   it("still blocks the submit through the business rule, not through the browser's bubble", () => {
@@ -1271,59 +1275,27 @@ describe("EnrollPage — semántica nativa del consentimiento legal (#763)", () 
 // so reviewing them costs no data, and closing lands back on the summary.
 // ---------------------------------------------------------------------------
 describe("EnrollPage — revisión legal sin perder el estado (#1368)", () => {
-  it("keeps the entered data and the consent state after reviewing and closing a document", () => {
+  it("keeps the entered data after reading the terms from the privacy link", () => {
     render(<EnrollPage />);
-    reachSummaryStep();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fillEnrollStudentStep();
+    const nombres = (screen.getByLabelText(/^Nombres/) as HTMLInputElement).value;
+    expect(nombres).not.toBe("");
 
-    // The visitor agrees BEFORE reading the documents — the exact order the
-    // reproduction in #1368 punished.
-    fireEvent.click(screen.getByRole("checkbox"));
-    expect(screen.getByRole("checkbox")).toBeChecked();
-
-    fireEvent.click(screen.getByRole("button", { name: "Consentimiento de datos de salud" }));
-    expect(screen.getByRole("dialog", { name: "Consentimiento para el tratamiento de datos de salud" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Leer el aviso de privacidad" }));
+    expect(screen.getByRole("dialog", { name: "Términos y condiciones de Cata Club" })).toBeInTheDocument();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
-    // Same summary, same data, same decision — and still no navigation.
     expect(window.location.pathname).toBe("/student/enroll");
-    expect(screen.getByRole("checkbox")).toBeChecked();
-    expect(screen.getByText(/Sofia Martinez/)).toBeInTheDocument();
-    expect(screen.getByText("1798765432")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /confirmar inscripción/i })).toBeEnabled();
-  });
-
-  it("returns focus to the document trigger after the review closes", () => {
-    render(<EnrollPage />);
-    reachSummaryStep();
-
-    const trigger = screen.getByRole("button", { name: "Términos y condiciones (incluye privacidad)" });
-    // jsdom does not focus on click; a real browser does when the visitor
-    // activates the trigger, and that is the element the trap restores.
-    trigger.focus();
-    fireEvent.click(trigger);
-    fireEvent.keyDown(document, { key: "Escape" });
-
-    expect(trigger).toHaveFocus();
-  });
-
-  it("does not toggle the consent checkbox when a document trigger is clicked", () => {
-    render(<EnrollPage />);
-    reachSummaryStep();
-
-    // The triggers live inside the checkbox's <label>: opening a review must
-    // never grant (or revoke) the consent on the visitor's behalf.
-    fireEvent.click(screen.getByRole("button", { name: "Permiso de uso de imagen" }));
-
-    expect(screen.getByRole("checkbox")).not.toBeChecked();
-    expect(screen.getByRole("dialog", { name: "Permiso de uso de imagen" })).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Nombres/)).toHaveValue(nombres);
   });
 
   it("publishes the accepted document text inside the review, from the same public content", () => {
     render(<EnrollPage />);
-    reachSummaryStep();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Términos y condiciones (incluye privacidad)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Leer el aviso de privacidad" }));
 
     // Transcribed from `src/app/terminos/content.ts`: if the document text
     // drifts, this test breaks loudly instead of silently reviewing a copy.
@@ -1448,6 +1420,19 @@ describe("EnrollPage — el borrador sobrevive a un reload (#317 / #62)", () => 
     expect(await screen.findByText("Paso 2 de 5")).toBeInTheDocument();
     expect(screen.getByLabelText(/^Nombres/)).toHaveValue("Lucas");
     expect(screen.getByLabelText(/cédula de identidad/i)).toHaveValue("1723456719");
+  });
+
+  it("sends the same acceptance payload the backend expects after the single checkbox (#1615)", async () => {
+    vi.mocked(enrollStudent).mockClear();
+    vi.mocked(enrollStudent).mockResolvedValueOnce({ enrolled: true });
+    render(<EnrollPage />);
+
+    await completeSelfEnrollmentWizard();
+
+    // One boolean fans out to the four consents (TERMINOS, PRIVACIDAD,
+    // DATOS_MEDICOS, FETM) on the server, at VERSION_LEGAL_VIGENTE.
+    expect(enrollStudent).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(enrollStudent).mock.calls[0][0]).toMatchObject({ aceptaConsentimientos: true });
   });
 
   it("limpia el borrador al completar la inscripción con éxito", async () => {
@@ -1605,6 +1590,8 @@ describe("EnrollPage — la confirmación no afirma la entrega del correo como h
     fireEvent.change(screen.getByLabelText(/^Confirmar contraseña/), { target: { value: "password8" } });
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
+    fireEvent.change(screen.getByLabelText(/^Condiciones de salud/i), { target: { value: "Ninguno" } });
+    fireEvent.change(screen.getByLabelText(/^Alergias/i), { target: { value: "Ninguno" } });
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
     expect(await screen.findByText(/resumen y confirmaci[oó]n/i)).toBeInTheDocument();

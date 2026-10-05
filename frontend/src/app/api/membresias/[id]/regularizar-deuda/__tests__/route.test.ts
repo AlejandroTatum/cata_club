@@ -54,6 +54,19 @@ afterEach(() => {
 });
 
 describe("POST /api/membresias/[id]/regularizar-deuda", () => {
+  it("maps aplicarDescuento to the backend's aplicar_descuento", async () => {
+    const fetchMock = vi.mocked(global.fetch);
+    fetchMock.mockResolvedValueOnce(jsonResponse(pagoRegularizado, 201));
+
+    await POST(postRequest("3", { ...payload, aplicarDescuento: false }), {
+      params: Promise.resolve({ id: "3" }),
+    });
+
+    const sent = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(sent.aplicar_descuento).toBe(false);
+    expect(sent).not.toHaveProperty("aplicarDescuento");
+  });
+
   it("proxies the payload and forwards the APROBADO payment with 201", async () => {
     const fetchMock = vi.mocked(global.fetch);
     fetchMock.mockResolvedValueOnce(jsonResponse(pagoRegularizado, 201));

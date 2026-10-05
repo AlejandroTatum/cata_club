@@ -44,15 +44,26 @@
  */
 
 import knowledge from "@/data/club-knowledge.json";
+import type { UserRole } from "@/types/domain";
 
 export interface FaqEntry {
   question: string;
   answer: string;
 }
 
+/**
+ * Who a section is for, as the knowledge file declares it (#1581): `publica`
+ * reaches everyone, including a visitor with no session; the rest are each
+ * shown only to their own role.
+ */
+export type FaqAudience = "publica" | "familia" | "entrenador" | "administrador";
+
+const FAQ_AUDIENCES: readonly FaqAudience[] = ["publica", "familia", "entrenador", "administrador"];
+
 export interface FaqSection {
   /** Who this section is for, named the way the club would say it. */
   title: string;
+  audience: FaqAudience;
   entries: FaqEntry[];
 }
 
@@ -84,14 +95,42 @@ export interface ClubProfile {
   contactNote: string;
 }
 
+function audienceOf(declared: string, title: string): FaqAudience {
+  const audience = FAQ_AUDIENCES.find((candidate): boolean => candidate === declared);
+  // A section without a known audience would be shown to nobody, silently.
+  if (!audience) throw new Error(`FAQ section "${title}" has no valid audiencia: ${declared}`);
+  return audience;
+}
+
 export const FAQ_SECTIONS: FaqSection[] = knowledge.faq.map(
   (section): FaqSection => ({
     title: section.titulo,
+    audience: audienceOf(section.audiencia, section.titulo),
     entries: section.entradas.map(
       (entry): FaqEntry => ({ question: entry.pregunta, answer: entry.respuesta }),
     ),
   }),
 );
+
+/**
+ * The private audience each role reads. Player and representante share one
+ * group; a visitor, or a role with no screens of its own, only gets the
+ * public sections.
+ */
+const AUDIENCE_BY_ROLE: Partial<Record<UserRole, FaqAudience>> = {
+  estudiante: "familia",
+  representante: "familia",
+  trainer: "entrenador",
+  admin: "administrador",
+};
+
+/** The sections `/ayuda` shows for a session: the public ones plus the role's own. */
+export function faqSectionsFor(role: UserRole | undefined): FaqSection[] {
+  const own = role ? AUDIENCE_BY_ROLE[role] : undefined;
+  return FAQ_SECTIONS.filter(
+    (section): boolean => section.audience === "publica" || section.audience === own,
+  );
+}
 
 export const CLUB_PROFILE: ClubProfile = {
   summary: knowledge.club.resumen,

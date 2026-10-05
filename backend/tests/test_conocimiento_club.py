@@ -83,6 +83,17 @@ class TestArchivoCanonico:
                 assert "¿" in entrada["pregunta"]
                 assert len(entrada["respuesta"]) > 20
 
+    def test_cada_seccion_de_faq_declara_su_audiencia(self, conocimiento):
+        # Issue #1581: `/ayuda` muestra a cada persona solo las preguntas de su
+        # rol. La audiencia se declara en los datos, no se deduce del título.
+        audiencias = {seccion["titulo"]: seccion.get("audiencia") for seccion in conocimiento["faq"]}
+        assert audiencias == {
+            "Para empezar": "publica",
+            "Si eres jugador o representante": "familia",
+            "Si eres entrenador": "entrenador",
+            "Si eres administrador": "administrador",
+        }
+
     def test_conserva_todo_lo_que_sabia_el_bloque_que_reemplaza(self, conocimiento):
         # `_FAQ_CONTENIDO` sabía cosas que el FAQ de la web nunca tuvo. Unificar
         # no puede ser una excusa para perderlas.

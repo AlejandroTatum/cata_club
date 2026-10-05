@@ -53,7 +53,7 @@ export function BeneficioNote({ beneficio }: { beneficio: BeneficioAsignado | nu
   if (!etiqueta) return null;
 
   return (
-    <p className="flex flex-wrap items-center gap-2 text-sm text-ink-2">
+    <p className="mb-3 flex flex-wrap items-center gap-2 text-sm text-ink-2">
       Tu beneficio: <DataBox>{etiqueta}</DataBox>
       <span className="text-ink-3-strong">{descuento.nombre}</span>
     </p>
@@ -82,10 +82,13 @@ function MonthCountField({
   value,
   onChange,
   disabled,
+  locked = false,
 }: {
   value: number;
   onChange: (value: number) => void;
   disabled?: boolean;
+  /** An active benefit is paid month by month: the count stays at one. */
+  locked?: boolean;
 }): React.ReactElement {
   return (
     <fieldset className="flex flex-col gap-1.5">
@@ -96,7 +99,7 @@ function MonthCountField({
         <button
           type="button"
           onClick={() => onChange(Math.max(MESES_MINIMO, value - 1))}
-          disabled={disabled || value <= MESES_MINIMO}
+          disabled={disabled || locked || value <= MESES_MINIMO}
           aria-label="Un mes menos"
           className="flex h-7 w-7 flex-none items-center justify-center rounded text-ink-2 hover:bg-sunken disabled:cursor-not-allowed disabled:opacity-40"
         >
@@ -111,13 +114,14 @@ function MonthCountField({
         <button
           type="button"
           onClick={() => onChange(Math.min(MESES_MAXIMO, value + 1))}
-          disabled={disabled || value >= MESES_MAXIMO}
+          disabled={disabled || locked || value >= MESES_MAXIMO}
           aria-label="Un mes más"
           className="flex h-7 w-7 flex-none items-center justify-center rounded text-ink-2 hover:bg-sunken disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         </button>
       </div>
+      {locked && <p className="text-xs text-ink-2">Con tu beneficio pagas mes a mes.</p>}
     </fieldset>
   );
 }
@@ -394,7 +398,10 @@ function RenewPaymentForm({
   onRegistered: () => void;
 }): React.ReactElement {
   /** Issue #400: a discrete month count, never a typed monto. */
-  const [months, setMonths] = useState<number>(MESES_MINIMO);
+  const [monthsChoice, setMonths] = useState<number>(MESES_MINIMO);
+  /** S12: with an active benefit the payment is month by month (the backend enforces it too). */
+  const benefitLocksMonths = beneficioPorcentaje != null || beneficioMonto != null;
+  const months = benefitLocksMonths ? MESES_MINIMO : monthsChoice;
   const [tipoPago, setTipoPago] = useState<"EFECTIVO" | "TRANSFERENCIA">("TRANSFERENCIA");
   const [fechaInicio, setFechaInicio] = useState<string>("");
   const [voucherFile, setVoucherFile] = useState<File | null>(null);
@@ -614,7 +621,7 @@ function RenewPaymentForm({
         </p>
       )}
       <div className="grid gap-3">
-        <MonthCountField value={months} onChange={setMonths} disabled={action.loading} />
+        <MonthCountField value={months} onChange={setMonths} disabled={action.loading} locked={benefitLocksMonths} />
         <label className="flex flex-col gap-1.5">
           <span className={FIELD_LABEL_CLASSES}>Forma de pago <span aria-hidden="true" className="text-state-bad">*</span></span>
           <select

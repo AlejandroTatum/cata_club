@@ -332,14 +332,15 @@ describe("GroupsPage — categoría form is typed input, not a locked catalog se
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 
-  it("offers all seven días as toggle buttons — not restricted to a fixed allowed set", async () => {
+  it("offers Monday to Saturday as toggle buttons — Domingo is not offered for new horarios", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
     fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
 
-    for (const dia of ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]) {
+    for (const dia of ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]) {
       expect(screen.getByRole("button", { name: dia })).toBeInTheDocument();
     }
+    expect(screen.queryByRole("button", { name: "Domingo" })).not.toBeInTheDocument();
   });
 });
 
@@ -2205,28 +2206,6 @@ describe("GroupsPage — per-field mirror of the training window and día cap (#
 
     await expectMarked(horaInicio(), FRANJA_INVERTIDA);
     expect(horaFin()).toHaveAttribute("aria-describedby", screen.getByText(FRANJA_INVERTIDA).id);
-  });
-
-  it("does not add a 7th día and explains the cap inline instead of disabling it", async () => {
-    await openCreateForm();
-
-    for (const dia of SEIS_DIAS) fireEvent.click(screen.getByRole("button", { name: dia }));
-    const domingo = screen.getByRole("button", { name: "Domingo" });
-    expect(domingo).not.toBeDisabled();
-    fireEvent.click(domingo);
-
-    expect(domingo).toHaveAttribute("aria-pressed", "false");
-    expect(
-      screen.getByText("Máximo 6 días por categoría. Quite uno para agregar domingo."),
-    ).toHaveAttribute("role", "alert");
-    expect(screen.getAllByRole("button", { pressed: true })).toHaveLength(6);
-
-    fireEvent.click(screen.getByRole("button", { name: "Sábado" }));
-    expect(
-      screen.queryByText(/Máximo 6 días por categoría/),
-    ).not.toBeInTheDocument();
-    fireEvent.click(domingo);
-    expect(domingo).toHaveAttribute("aria-pressed", "true");
   });
 
   it("marks the fieldset when no día is ticked at all", async () => {

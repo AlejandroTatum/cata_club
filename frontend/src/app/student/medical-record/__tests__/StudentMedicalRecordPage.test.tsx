@@ -74,8 +74,9 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => mockUseAuth(),
 }));
 
+const mockShowInfo = vi.fn();
 vi.mock("@/contexts/ToastContext", () => ({
-  useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn() }),
+  useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn(), showInfo: mockShowInfo }),
 }));
 
 const mockFetchStudentPortal = vi.fn();
@@ -200,9 +201,10 @@ describe("StudentMedicalRecordPage — reusing MedicalRecordEditor per represent
 
     await waitFor(() => expect(mockFetchFichaMedica).toHaveBeenCalledWith(41));
 
-    fireEvent.change(screen.getByLabelText("Estudiante"), { target: { value: "42" } });
+    fireEvent.click(within(screen.getByRole("group", { name: "Jugador" })).getByRole("button", { name: /Martín/ }));
 
     await waitFor(() => expect(mockFetchFichaMedica).toHaveBeenCalledWith(42));
+    expect(mockShowInfo).toHaveBeenCalledWith("Ahora ves a Martín");
   });
 
   it("saves through the SAME editor the admin uses, for the selected representado", async () => {

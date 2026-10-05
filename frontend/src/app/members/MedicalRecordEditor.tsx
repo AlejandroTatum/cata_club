@@ -6,12 +6,22 @@ import { Loader2, Save, CheckCircle2, Stethoscope, Pencil, X } from "lucide-reac
 import { ICON } from "@/lib/icon-size";
 import { fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
-import { Badge, Button, DataBox, ErrorState, LoadingState, PAGE_RAIL, cn } from "@/components/ui";
+import { Badge, Button, ErrorState, LoadingState, PAGE_RAIL, cn } from "@/components/ui";
 import EmergencyCard, { type EmergencyCardValues } from "./EmergencyCard";
 import type { FichaMedicaEditable, TipoSangre } from "@/types/domain";
 import { toUserMessage, isNotFound } from "@/lib/error-message";
 import { phoneFieldRule, toPhoneFieldDigits, toStoredPhone } from "@/lib/identity-validation";
 import { PhoneField } from "@/components/wizard-fields";
+import {
+  ALERGIAS_REQUIRED,
+  ENFERMEDADES_REQUIRED,
+  NINGUNO_HELP,
+  describeAlergias,
+  describeEnfermedades,
+  enfermedadesInputValue,
+  hasEnfermedadesInput,
+  requiredFichaTextError,
+} from "@/lib/ficha-declaration";
 
 /**
  * The blood types this editor OFFERS (issue #643).
@@ -49,19 +59,6 @@ function etiquetaTipoSangre(tipo: TipoSangre): string {
 }
 
 /**
- * La fila etiqueta-valor del modo lectura.
- *
- * Es la misma forma que `/profile` ya usa para su propio reposo (su
- * `DetailRow`): etiqueta gris y angosta a la izquierda, valor a la derecha
- * dentro de un `DataBox`. No se importa de allá porque es local a esa página;
- * lo que se copia es la forma, no el componente, para que las dos únicas
- * pantallas lectura-edición del producto se lean igual.
- *
- * La raya (`—`) no es decorativa: un campo médico opcional que quedó vacío
- * tiene que decir "acá no hay nada" en vez de dejar un hueco que se confunde
- * con un dato que no cargó.
- */
-/**
  * La ficha guardada, traducida a los cinco valores que llevan los inputs.
  *
  * Vive fuera del componente porque es la ÚNICA traducción, y la usan dos
@@ -85,7 +82,12 @@ function camposDe(ficha: FichaMedicaEditable): {
     // person editing knows the real value, and this is the only place it can
     // be backfilled without inventing it.
     tipoSangre: ficha.tipoSangre === "DESCONOCIDO" ? "" : ficha.tipoSangre,
-    enfermedades: ficha.enfermedades.map((e) => e.nombreEnfermedad).join(", "),
+    // #1574: a declared «none» (empty list + filled alergias) comes back as
+    // «Ninguno», so re-saving it untouched is valid; a legacy row stays blank.
+    enfermedades: enfermedadesInputValue(
+      ficha.enfermedades.map((e) => e.nombreEnfermedad),
+      ficha.alergias,
+    ),
     alergias: ficha.alergias ?? "",
     contactoEmergencia: ficha.contactoEmergencia ?? "",
     // Issue #1296: the field now shows the local digits without the trunk 0 —
@@ -95,19 +97,36 @@ function camposDe(ficha: FichaMedicaEditable): {
   };
 }
 
-function FilaLectura({
+/** Required-field rejections shown after a save attempt. */
+interface FichaFieldErrors {
+  tipoSangre?: string;
+  alergias?: string;
+  enfermedades?: string;
+  telefonoEmergencia?: string;
+}
+
+/**
+ * One field in read mode (#1619): the same label, grid cell and spacing as the
+ * control it stands in for, with the value in place of the box. A `<dt>`/`<dd>`
+ * pair so a screen reader announces label and value together, with no input to
+ * type in. No asterisk and no helper hint: those belong to editing.
+ *
+ * The dash is not decorative: an optional field left empty must say "nothing
+ * here" instead of leaving a gap that reads like data that failed to load.
+ */
+function CampoLectura({
   label,
   value,
+  wide = false,
 }: {
   label: string;
   value: string;
+  wide?: boolean;
 }): React.ReactElement {
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-field border-b border-line py-2 last:border-b-0">
-      <span className="w-[110px] flex-none text-xs text-ink-3 sm:w-[150px]">{label}</span>
-      <span className="flex min-w-[9rem] flex-1 flex-wrap items-center gap-x-2 gap-y-field text-sm font-semibold text-ink">
-        <DataBox>{value || "—"}</DataBox>
-      </span>
+    <div className={wide ? "sm:col-span-2" : undefined}>
+      <dt className="mb-1 text-xs font-semibold text-ink-2">{label}</dt>
+      <dd className="min-h-10 py-2 text-sm font-semibold text-ink">{value || "—"}</dd>
     </div>
   );
 }
@@ -203,7 +222,7 @@ export default function MedicalRecordEditor({
    * errors about someone else's omission. The complaint belongs to the moment
    * they try to save.
    */
-  const [fieldErrors, setFieldErrors] = useState<{ tipoSangre?: string; telefonoEmergencia?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<FichaFieldErrors>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -290,9 +309,13 @@ export default function MedicalRecordEditor({
    * A second copy written here would be a second definition of "valid
    * Ecuadorian phone", and the two would drift.
    */
-  function validar(): { tipoSangre?: string; telefonoEmergencia?: string } {
-    const errores: { tipoSangre?: string; telefonoEmergencia?: string } = {};
+  function validar(): FichaFieldErrors {
+    const errores: FichaFieldErrors = {};
     if (!tipoSangre) errores.tipoSangre = "El tipo de sangre es obligatorio.";
+    // #1574: «Ninguno» is the answer for "none"; blank is never one.
+    const alergiasError = requiredFichaTextError(alergias, ALERGIAS_REQUIRED);
+    if (alergiasError) errores.alergias = alergiasError;
+    if (!hasEnfermedadesInput(enfermedadesInput)) errores.enfermedades = ENFERMEDADES_REQUIRED;
     const telefonoError = phoneFieldRule(telefonoEmergencia, "El teléfono de emergencia", { guided: true });
     if (telefonoError) errores.telefonoEmergencia = telefonoError;
     return errores;
@@ -330,12 +353,10 @@ export default function MedicalRecordEditor({
         // it. `null` is the explicit "erase this" signal (see
         // FichaMedicaUpdatePayload's doc comment).
         //
-        // #643 narrows that by exactly one field. Alergias and the emergency
-        // contact NAME stay erasable; the emergency PHONE does not, because
-        // erasing it is erasing the only number the club would dial, and the
-        // record left behind is the invalid state this rule exists to forbid.
-        // It never reaches `null` here — the guard above returns first.
-        alergias: alergias.trim() || null,
+        // The emergency contact NAME stays erasable. Alergias (#1574) and the
+        // emergency PHONE (#643) do not: both are required, so the guard above
+        // returns before either could reach `null`.
+        alergias: alergias.trim(),
         contactoEmergencia: contactoEmergencia.trim() || null,
         telefonoEmergencia: toStoredPhone(telefonoEmergencia),
       });
@@ -384,7 +405,14 @@ export default function MedicalRecordEditor({
       : {
           tipoSangre: state.ficha.tipoSangre === "DESCONOCIDO" ? "" : etiquetaTipoSangre(state.ficha.tipoSangre),
           alergias: state.ficha.alergias ?? "",
-          enfermedades: state.ficha.enfermedades.map((e) => e.nombreEnfermedad).join(", "),
+          // Empty (not «Sin declarar») so the card counts it as missing; the
+          // card words that gap itself.
+          enfermedades: state.ficha.enfermedades.length > 0 || state.ficha.alergias?.trim()
+            ? describeEnfermedades(
+                state.ficha.enfermedades.map((e) => e.nombreEnfermedad),
+                state.ficha.alergias,
+              )
+            : "",
           contactoEmergencia: state.ficha.contactoEmergencia ?? "",
           telefonoEmergencia: state.ficha.telefonoEmergencia ?? "",
         };
@@ -434,32 +462,68 @@ export default function MedicalRecordEditor({
         )}
       </div>
       <div>
-        <label htmlFor={`alergias-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
-          Alergias
-        </label>
+        {/* Same asterisk-outside-the-label rule as «Tipo de sangre» above. */}
+        <div className="mb-1 flex items-center gap-1">
+          <label htmlFor={`alergias-${personaId}`} className="block text-xs font-semibold text-ink-2">
+            Alergias
+          </label>
+          <span className="text-xs font-semibold text-state-bad" aria-hidden="true">*</span>
+        </div>
         <input
           id={`alergias-${personaId}`}
           type="text"
           value={alergias}
           onChange={(e) => setAlergias(e.target.value)}
-          className="input-field w-full"
+          aria-required="true"
+          aria-invalid={fieldErrors.alergias ? true : undefined}
+          aria-describedby={`alergias-help-${personaId}`}
+          className={`input-field w-full ${fieldErrors.alergias ? "border-state-bad" : ""}`}
         />
+        {fieldErrors.alergias ? (
+          <p
+            id={`alergias-help-${personaId}`}
+            className="mt-1 text-xs font-semibold text-state-bad"
+            role="alert"
+          >
+            {fieldErrors.alergias}
+          </p>
+        ) : (
+          <p id={`alergias-help-${personaId}`} className="mt-1 text-2xs tracking-flat text-ink-3">
+            {NINGUNO_HELP}
+          </p>
+        )}
       </div>
       <div className="sm:col-span-2">
-        <label htmlFor={`enfermedades-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
-          Enfermedades (separadas por coma)
-        </label>
+        <div className="mb-1 flex items-center gap-1">
+          <label htmlFor={`enfermedades-${personaId}`} className="block text-xs font-semibold text-ink-2">
+            Enfermedades (separadas por coma)
+          </label>
+          <span className="text-xs font-semibold text-state-bad" aria-hidden="true">*</span>
+        </div>
         <input
           id={`enfermedades-${personaId}`}
           type="text"
           value={enfermedadesInput}
           onChange={(e) => setEnfermedadesInput(e.target.value)}
           placeholder="Ej: Asma, Diabetes"
-          className="input-field w-full"
+          aria-required="true"
+          aria-invalid={fieldErrors.enfermedades ? true : undefined}
+          aria-describedby={`enfermedades-help-${personaId}`}
+          className={`input-field w-full ${fieldErrors.enfermedades ? "border-state-bad" : ""}`}
         />
-        <p className="mt-1 text-2xs tracking-flat text-ink-3">
-          Al guardar se reemplaza la lista completa. Dejar vacío borra todas las enfermedades.
-        </p>
+        {fieldErrors.enfermedades ? (
+          <p
+            id={`enfermedades-help-${personaId}`}
+            className="mt-1 text-xs font-semibold text-state-bad"
+            role="alert"
+          >
+            {fieldErrors.enfermedades}
+          </p>
+        ) : (
+          <p id={`enfermedades-help-${personaId}`} className="mt-1 text-2xs tracking-flat text-ink-3">
+            {NINGUNO_HELP} Al guardar se reemplaza la lista completa.
+          </p>
+        )}
       </div>
     </>
   );
@@ -502,25 +566,29 @@ export default function MedicalRecordEditor({
     </>
   );
 
-  // Read mode: label-value rows, not the controls' grid. A grid of boxes
-  // invites typing, a list of rows reads top to bottom — `/profile` resolved
-  // the same pair this way. No date: `FichaMedicaEditable` carries no
-  // timestamp, so an «updated on…» line would be invented.
-  const saludRows = recordReadMode ? (
+  // Read mode: the same grid cells as the fields above, values instead of
+  // controls (#1619), so toggling Editar/Guardar never moves a datum. No date:
+  // `FichaMedicaEditable` carries no timestamp, so an «updated on…» line would
+  // be invented.
+  const saludRead = recordReadMode ? (
     <>
-      <FilaLectura label="Tipo de sangre" value={etiquetaTipoSangre(state.ficha.tipoSangre)} />
-      <FilaLectura label="Alergias" value={state.ficha.alergias ?? ""} />
-      <FilaLectura
+      <CampoLectura label="Tipo de sangre" value={etiquetaTipoSangre(state.ficha.tipoSangre)} />
+      <CampoLectura label="Alergias" value={describeAlergias(state.ficha.alergias)} />
+      <CampoLectura
+        wide
         label="Enfermedades"
-        value={state.ficha.enfermedades.map((e) => e.nombreEnfermedad).join(", ")}
+        value={describeEnfermedades(
+          state.ficha.enfermedades.map((e) => e.nombreEnfermedad),
+          state.ficha.alergias,
+        )}
       />
     </>
   ) : null;
 
-  const contactoRows = recordReadMode ? (
+  const contactoRead = recordReadMode ? (
     <>
-      <FilaLectura label="Contacto de emergencia" value={state.ficha.contactoEmergencia ?? ""} />
-      <FilaLectura label="Teléfono de emergencia" value={state.ficha.telefonoEmergencia ?? ""} />
+      <CampoLectura label="Contacto de emergencia" value={state.ficha.contactoEmergencia ?? ""} />
+      <CampoLectura label="Teléfono de emergencia" value={state.ficha.telefonoEmergencia ?? ""} />
     </>
   ) : null;
 
@@ -610,10 +678,10 @@ export default function MedicalRecordEditor({
         {headerBand}
         <div className="p-3 sm:p-4">
           {recordReadMode && (
-            <div data-testid="medical-record-rows" className="space-y-0">
-              <div>{saludRows}</div>
-              <div>{contactoRows}</div>
-            </div>
+            <dl data-testid="medical-record-rows" className="grid gap-3 sm:grid-cols-2">
+              {saludRead}
+              {contactoRead}
+            </dl>
           )}
           {editing && (
             <div>
@@ -643,12 +711,14 @@ export default function MedicalRecordEditor({
       {headerBand}
       {newNotice}
       <RecordSection title="Salud">
-        {recordReadMode ? <div data-testid="medical-record-rows">{saludRows}</div> : (
+        {recordReadMode ? (
+          <dl data-testid="medical-record-rows" className="grid gap-3 sm:grid-cols-2">{saludRead}</dl>
+        ) : (
           <div className="grid gap-3 sm:grid-cols-2">{saludFields}</div>
         )}
       </RecordSection>
       <RecordSection title="Contacto de emergencia">
-        {recordReadMode ? <div>{contactoRows}</div> : (
+        {recordReadMode ? <dl className="grid gap-3 sm:grid-cols-2">{contactoRead}</dl> : (
           <div className="grid gap-3 sm:grid-cols-2">{contactoFields}</div>
         )}
       </RecordSection>

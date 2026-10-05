@@ -22,6 +22,7 @@ from app.dominio.excepciones import (
     EntidadNoEncontrada, MembresiaPendienteDePago, NombreDuplicado, OperacionInvalida, PermisosInsuficientes, RecursoEnUso, ServicioNoDisponible,
 )
 from app.dominio.nombre_propio import nombre_completo
+from app.infraestructura.correo_deuda_regularizada import enviar_deuda_regularizada
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.membresia_repositorio import (
@@ -49,6 +50,7 @@ from app.servicios_negocio.dtos.membresia_pago_schemas import (
 )
 from app.servicios_negocio.dtos.cobertura_bonificada_schemas import (
     CoberturaBonificadaCreateDTO, CoberturaBonificadaResponseDTO,
+    CoberturaBonificadaListItemDTO,
 )
 from app.servicios_negocio.dtos.beneficio_schemas import AsignacionDescuentoResponseDTO
 from app.servicios_negocio.dtos.descuento_schemas import DescuentoResponseDTO
@@ -212,6 +214,10 @@ MENSAJE_MEMBRESIA_YA_GRATUITA = (
 # anterior, sin pisarla: `_hay_cobertura_en_rango`). Un descuento de monto
 # FIJO califica como "100%" solo si iguala exactamente la tarifa de ESE mes.
 MESES_POR_ACTIVACION_BENEFICIO = 1
+# QA owner R2 (S12): un pago con beneficio vigente se paga mes a mes.
+MENSAJE_BENEFICIO_SOLO_MES_A_MES = (
+    "Con beneficio activo solo puedes pagar un mes a la vez."
+)
 
 logger = logging.getLogger("cataclub.servicios.pagos")
 
@@ -239,6 +245,9 @@ class _CotizacionRegularizacion:
     monto_base: Decimal
     descuento: _DescuentoCongelado | None
     monto_esperado: Decimal
+    # Beneficio vigente del período aunque el admin elija el valor normal
+    # (`descuento` queda en `None` en ese caso).
+    beneficio_disponible: _DescuentoCongelado | None = None
 
     @property
     def descuento_aplicado(self) -> Decimal:
@@ -713,6 +722,12 @@ class PagoServicio:
                 "acción \"Regularizar deuda\" de la membresía."
             )
 
+    @staticmethod
+    def _validar_meses_con_beneficio(descuento_congelado, meses: int) -> None:
+        """Con un beneficio vigente solo se paga un mes a la vez (QA owner R2, S12)."""
+        if descuento_congelado is not None and meses > 1:
+            raise OperacionInvalida(MENSAJE_BENEFICIO_SOLO_MES_A_MES)
+
     def _registrar_pago_sin_commit(
         self,
         datos: PagoCreateDTO,
@@ -881,6 +896,7 @@ class PagoServicio:
             descuento_congelado, monto_final = self._congelar_beneficio_activo(
                 datos.persona_id, monto_base,
             )
+            self._validar_meses_con_beneficio(descuento_congelado, meses)
 
         # `Pago(**datos.model_dump(), ...)` ya no alcanza: `PagoCreateDTO`
         # perdió `monto` (la columna) y ganó `meses` (que NO es columna de
@@ -1622,21 +1638,30 @@ class PagoServicio:
 
     def _cotizar_regularizacion(
         self, membresia: Membresia, fecha_inicio: date, fecha_fin: date,
+        aplicar_descuento: bool = True,
     ) -> "_CotizacionRegularizacion":
         meses = _meses_del_periodo(fecha_inicio, fecha_fin)
         monto_base = membresia.monto_aplicado * meses
-        descuento, monto_esperado = self._congelar_beneficio_activo(
+        beneficio, monto_con_beneficio = self._congelar_beneficio_activo(
             membresia.persona_id, monto_base,
         )
+        # QA owner R2 (S12): el admin elige entre el valor normal y el
+        # descuento; el monto siempre se deriva acá, nunca del cliente.
+        if aplicar_descuento:
+            descuento, monto_esperado = beneficio, monto_con_beneficio
+        else:
+            descuento, monto_esperado = None, monto_base
         return _CotizacionRegularizacion(
             meses=meses,
             monto_base=monto_base,
             descuento=descuento,
             monto_esperado=monto_esperado,
+            beneficio_disponible=beneficio,
         )
 
     def cotizar_regularizacion(
         self, membresia_id: int, fecha_inicio: date, fecha_fin: date,
+        aplicar_descuento: bool = True,
     ) -> "_CotizacionRegularizacion":
         """Vista previa (solo lectura) del monto que `regularizar_deuda`
         exigirá para el período; el formulario del admin la usa para no
@@ -1646,7 +1671,9 @@ class PagoServicio:
             raise EntidadNoEncontrada(f"Membresía con id {membresia_id} no encontrada")
         if fecha_inicio >= fecha_fin:
             raise OperacionInvalida("La fecha de inicio debe ser anterior a la de fin.")
-        return self._cotizar_regularizacion(membresia, fecha_inicio, fecha_fin)
+        return self._cotizar_regularizacion(
+            membresia, fecha_inicio, fecha_fin, aplicar_descuento,
+        )
 
     def regularizar_deuda(self, membresia_id: int, datos: RegularizacionDeudaDTO, persona_id_admin: int) -> Pago:
         """Regulariza deuda de una membresía (issue #284), operación SOLO de admin.
@@ -1670,7 +1697,12 @@ class PagoServicio:
             recibe el aviso de 5 días y entra en la transición a VENCIDA. Una
             regularización puramente retroactiva (`fecha_fin < hoy`) no toca
             el estado: la deuda parcial debe seguir visible.
-          * NO dispara notificaciones, PDF ni la regla familiar.
+          * Avisa al socio (campana + correo, ver `_notificar_regularizacion`)
+            y, ya commiteado, encola el comprobante PDF oficial igual que
+            `validar_pago` (un fallo al encolar no revierte nada); NO dispara
+            la regla familiar.
+          * `aplicar_descuento` (S12): `False` cobra el valor normal; ausente
+            o `True` aplica el beneficio vigente.
           * Lockea la `Membresia` con `FOR UPDATE` antes de escribir, mismo
             orden (Membresia primero) que el resto de la clase.
           * `motivo` es OBLIGATORIO (ya validado por el DTO; se doble-chequea acá).
@@ -1708,6 +1740,7 @@ class PagoServicio:
         # de la persona) y cualquier otro valor se rechaza con el esperado.
         cotizacion = self._cotizar_regularizacion(
             membresia, datos.fecha_inicio, datos.fecha_fin,
+            aplicar_descuento=datos.aplicar_descuento is not False,
         )
         if datos.monto != cotizacion.monto_esperado:
             unidad_meses = "mes" if cotizacion.meses == 1 else "meses"
@@ -1745,7 +1778,35 @@ class PagoServicio:
         self.db.commit()
         if inspeccionar_orm(resultado).expired:
             self.db.refresh(resultado)
+        self._notificar_regularizacion(resultado)
+        # Último paso, ya commiteado: no propaga si el broker está caído.
+        self._disparar_generacion_comprobante_pdf(resultado.id)
         return resultado
+
+    def _notificar_regularizacion(self, pago: Pago) -> None:
+        """Avisa al socio que su deuda fue regularizada (QA owner R2, S13).
+
+        Mismo mecanismo que la aprobación de un pago: fila in-app a nombre de
+        la persona (el feed del representante la incluye por el #859, así que
+        no se escribe una segunda) y correo al titular, o a su representante
+        si es un menor sin cuenta. Best-effort: la regularización ya está
+        commiteada y ningún aviso fallido puede revertirla ni convertirla en
+        error."""
+        vigente_hasta = self._fecha_fin_maxima_combinada(pago.membresia_id) or pago.fecha_fin
+        # Tipo PAGO_APROBADO a propósito: `Notificacion.tipo` es un enum de
+        # base de datos y agregar un valor exige migración. El encabezado
+        # "Deuda regularizada" abre el mensaje.
+        self._crear_notificacion_pago(
+            pago=pago,
+            tipo=TipoNotificacion.PAGO_APROBADO,
+            mensaje=(
+                f"Deuda regularizada: el club regularizó tu deuda por {formatear_monto_usd(pago.monto)}. "
+                f"Tu cobertura está al día hasta el {vigente_hasta.strftime('%d/%m/%Y')}."
+            ),
+        )
+        self._enviar_correo_de_validacion_pago(
+            pago, TipoNotificacion.PAGO_APROBADO, regularizacion=True,
+        )
 
     # --- Issue #400 (slice 5b): corrección financiera -------------------------
     # Seis campos financieros congelados de `Pago`. Un DTO puede traer
@@ -2407,6 +2468,69 @@ class PagoServicio:
             persona_id_objetivo
         )
 
+    def listar_coberturas(
+        self, skip: int = 0, limit: int = 50,
+    ) -> tuple[list[CoberturaBonificadaListItemDTO], int]:
+        """Revisión del admin (issue #1609): las coberturas 100% no son
+        `Pago`, así que no entran en `listar_pagos`; este listado de solo
+        lectura las muestra junto a la cola, con monto cero."""
+        coberturas = self.repo_cobertura_bonificada.listar(skip=skip, limit=limit)
+        total = self.repo_cobertura_bonificada.contar()
+        items = []
+        for c in coberturas:
+            persona = self.repo_persona.obtener_por_id(c.persona_id)
+            items.append(CoberturaBonificadaListItemDTO(
+                id=c.id,
+                persona_id=c.persona_id,
+                persona_nombre_completo=nombre_completo(persona.nombres, persona.apellidos),
+                membresia_id=c.membresia_id,
+                monto=Decimal("0.00"),
+                fecha_inicio=c.fecha_inicio,
+                fecha_fin=c.fecha_fin,
+                otorgada_en=c.otorgada_en,
+            ))
+        return items, total
+
+    def generar_comprobante_cobertura(
+        self,
+        cobertura_id: int,
+        persona_id_solicitante: int | None = None,
+        roles_solicitante: list[str] | None = None,
+    ) -> tuple[bytes, str]:
+        """Recibo PDF de una cobertura bonificada (issue #1609), generado al
+        pedirlo: sin Cloudinary, sin Celery, sin `ComprobantePago`. Misma
+        autorización que el historial (`PoliticaAccesoPersona`): titular, su
+        representante o administrador. Devuelve `(bytes, nombre_archivo)`."""
+        from app.infraestructura.generador_pdf import generar_comprobante_cobertura_pdf
+
+        roles_solicitante = roles_solicitante or []
+        cobertura = self.repo_cobertura_bonificada.obtener_por_id(cobertura_id)
+        if cobertura is None:
+            raise EntidadNoEncontrada(f"Cobertura bonificada con id {cobertura_id} no encontrada")
+        if not PoliticaAccesoPersona(self.db).puede_acceder(
+            persona_id_objetivo=cobertura.persona_id,
+            persona_id_solicitante=persona_id_solicitante,
+            roles_solicitante=roles_solicitante,
+        ):
+            raise PermisosInsuficientes(
+                "Solo la propia persona, su representante, o un administrador "
+                "pueden descargar este recibo"
+            )
+        persona = self.repo_persona.obtener_por_id(cobertura.persona_id)
+        membresia = self.repo_membresia.obtener_por_id(cobertura.membresia_id)
+        pdf = generar_comprobante_cobertura_pdf(
+            cobertura_id=cobertura.id,
+            persona_nombre=nombre_completo(persona.nombres, persona.apellidos),
+            persona_cedula=persona.cedula,
+            persona_telefono=persona.telefono,
+            membresia_categoria=membresia.tipo_membresia.categoria,
+            monto=Decimal("0.00"),
+            fecha_inicio=cobertura.fecha_inicio,
+            fecha_fin=cobertura.fecha_fin,
+            fecha_otorgamiento=cobertura.otorgada_en,
+        )
+        return pdf, f"recibo-cobertura-C-{cobertura.id:06d}.pdf"
+
     def listar_pagos(
         self,
         estado_pago: EstadoPago | None = None,
@@ -2799,7 +2923,9 @@ class PagoServicio:
             return representante
         return None
 
-    def _enviar_correo_de_validacion_pago(self, pago: Pago, tipo: TipoNotificacion) -> None:
+    def _enviar_correo_de_validacion_pago(
+        self, pago: Pago, tipo: TipoNotificacion, regularizacion: bool = False,
+    ) -> None:
         """Correo al titular por la aprobación o el rechazo de su pago.
 
         Best-effort y NUNCA levanta: cuando esto corre, la validación ya está
@@ -2840,7 +2966,18 @@ class PagoServicio:
         )
         try:
             servicio = ServicioNotificaciones()
-            if tipo == TipoNotificacion.PAGO_APROBADO:
+            if regularizacion:
+                enviar_deuda_regularizada(
+                    servicio,
+                    correo=destinatario.usuario.correo,
+                    nombre=destinatario.nombres,
+                    monto=pago.monto,
+                    vigente_hasta=(
+                        self._fecha_fin_maxima_combinada(pago.membresia_id) or pago.fecha_fin
+                    ),
+                    nombre_alumno=nombre_alumno,
+                )
+            elif tipo == TipoNotificacion.PAGO_APROBADO:
                 servicio.enviar_pago_aprobado(
                     correo=destinatario.usuario.correo,
                     nombre=destinatario.nombres,

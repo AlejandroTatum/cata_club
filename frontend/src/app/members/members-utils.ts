@@ -217,7 +217,7 @@ export interface MemberAccount {
  * estudiantes[].activo` (`Persona.activo`, club membership) and of
  * `Membresía`. `"none"` is the persona has no `Usuario` at all.
  */
-export type AccountState = "active" | "inactive" | "none";
+export type AccountState = "active" | "inactive" | "none" | "invitation";
 
 /** Aggregate statistics for the members overview. */
 export interface MemberStats {
@@ -275,12 +275,15 @@ export const ACCOUNT_STATE_LABELS: Record<AccountState, string> = {
   active: "Activa",
   inactive: "Inactiva",
   none: "Sin cuenta",
+  // Issue #1575: a trainer the admin created who has not set a password yet.
+  invitation: "Invitación pendiente",
 };
 
 export const ACCOUNT_STATE_TONE: Record<AccountState, BadgeTone> = {
   active: "ok",
   inactive: "bad",
   none: "neutral",
+  invitation: "warn",
 };
 
 export const PAYMENT_STATUS_TONE: Record<PaymentStatus, BadgeTone> = {
@@ -797,4 +800,28 @@ export function getTotalPages(
   pageSize: number = MEMBERS_PAGE_SIZE,
 ): number {
   return Math.max(1, Math.ceil(totalAccounts / pageSize));
+}
+
+/**
+ * «Socio antiguo» result line: the one-month period that starts at the last
+ * payment ends at `fechaFin`; from that day on the member either is covered
+ * (`fechaFin >= hoy`) or owes (`Debe desde`).
+ */
+export function describeEstadoMigracion(fechaFin: string, hoy: string): string {
+  return fechaFin >= hoy ? `Al día hasta ${formatDate(fechaFin)}` : `Debe desde ${formatDate(fechaFin)}`;
+}
+
+/**
+ * Whether a member still has no first coverage (no membership, or a never
+ * covered INACTIVA one with no payment awaiting validation): the only moment
+ * the admin is asked «¿Socio nuevo o socio antiguo?».
+ */
+export function isPrimerPagoPendiente(student: MemberStudentSummary): boolean {
+  const membresia = student.membresia;
+  if (!membresia) return true;
+  return (
+    membresia.estadoBackend === "INACTIVA"
+    && !membresia.cubiertoHasta
+    && student.ultimoPago?.estado !== "pendiente_validacion"
+  );
 }

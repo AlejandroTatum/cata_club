@@ -8,5 +8,5 @@ def test_enfermedades_repetidas_o_vacias_se_descartan_conservando_el_orden():
     assert datos.enfermedades == ["Asma", "Diabetes"]
 
 
-def test_enfermedades_nulas_siguen_siendo_nulas():
-    assert FichaMedicaUpdateDTO(enfermedades=None).enfermedades is None
+def test_enfermedades_omitidas_siguen_siendo_nulas():
+    assert FichaMedicaUpdateDTO().enfermedades is None

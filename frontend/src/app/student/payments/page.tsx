@@ -57,7 +57,8 @@ import type { StudentPortalSummary, PagoPersona, MembershipSummary, BeneficioAsi
 import { BackLink, Badge, Button, EmptyState, FilterPanel, FilterPill, InfoPanel, LoadingState, PAGE_RAIL, StatCard, buttonClasses, cn } from "@/components/ui";
 
 import { describePaymentSituation, firstNameOf, hasOwnMembership, isMinor } from "../student-utils";
-import ManagedStudentPicker, { useManagedProfiles, withSelectedStudent } from "../ManagedStudentPicker";
+import { useManagedProfiles, withSelectedStudent } from "../ManagedStudentPicker";
+import FamilyStrip from "../FamilyStrip";
 import { getEmptyStateMessage, countPagosByStatus, formatPagoMonto, PAGO_FILTER_LABELS, prepareVoucher, type PagoStatusFilter } from "./payments-utils";
 import { formatDate } from "@/lib/format-utils";
 import { CreditCard } from "lucide-react";
@@ -518,8 +519,7 @@ function PaymentsContent({
     // buys a rail that says HOW a payment is made, which is the thing this
     // screen was missing rather than a thing it was too narrow for.
     <>
-      <ManagedStudentPicker
-        id="student-select-payments"
+      <FamilyStrip
         profiles={managedProfiles}
         value={selectedId}
         onChange={(id) => {
@@ -531,7 +531,7 @@ function PaymentsContent({
       {/* Rail layout: history on the left, the account's state and the action
           on the right. The aside comes FIRST in the DOM (phone reading order:
           status, pay, then history) and is placed in column 2 from `lg` up. */}
-      <div className={cn(PAGE_RAIL, "lg:items-stretch")}>
+      <div className={PAGE_RAIL}>
         <aside
           data-dash-col
           aria-label="Membresía y registro de pagos"
@@ -686,10 +686,9 @@ function PaymentsContent({
       )}
       {pagosState.status === "ready" && (
         // One card: title, count and the status pills on top, rows below. It
-        // claims the column's remaining height (the grid row is as tall as the
-        // rail), and short lists are topped up with ghost rows so both columns
-        // end together instead of leaving a void under the last payment.
-        <section className="card flex flex-1 flex-col overflow-hidden lg:min-h-[calc(100dvh-27rem)]" aria-labelledby="pagos-title">
+        // has its own height: it measures its payments (or its empty state)
+        // and does not follow the aside when the pay form opens.
+        <section className="card flex flex-col overflow-hidden" aria-labelledby="pagos-title">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-field px-5 py-4">
             <h2 id="pagos-title" className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
               Historial de pagos
@@ -722,7 +721,6 @@ function PaymentsContent({
             <>
               <EmptyState
                 surface="inset"
-                fill
                 icon={<CreditCard size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
                 title={getEmptyStateMessage(filter)}
                 description={

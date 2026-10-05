@@ -41,7 +41,10 @@ export interface SiteNavSection {
 }
 
 /**
- * The approved order, which is also the order the sections sit on the page.
+ * The approved order, which is also the order the sections sit on the page
+ * (the sponsor strip closes the page, after Contacto). Every entry is always
+ * listed: a section with nothing to show renders an empty state instead of
+ * dropping out of the menu (issue #1622).
  * `Location` answers to "Contacto"; `#nosotros` (Misión y Visión) is
  * deliberately not here — the footer's "Nosotros" column is where that section
  * is named. Issue #1372 removed Logros from both the landing and
@@ -52,7 +55,11 @@ export const SITE_NAV_SECTIONS: readonly SiteNavSection[] = [
   { id: "valores", label: "Valores" },
   { id: "galeria", label: "Galería" },
   { id: "horarios", label: "Horarios" },
+  { id: "mensualidad", label: "Mensualidad" },
+  { id: "como-empezar", label: "Cómo empezar" },
+  { id: "preguntas", label: "Preguntas" },
   { id: "contacto", label: "Contacto" },
+  { id: "patrocinadores", label: "Patrocinadores" },
 ];
 
 /** Href for a link rendered ON the landing: a same-document fragment. */

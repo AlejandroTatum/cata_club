@@ -15,6 +15,7 @@ import { ICON } from "@/lib/icon-size";
 import type { Notificacion, TipoNotificacion } from "@/types/domain";
 import { formatDateTime } from "@/lib/format-utils";
 import { useDismissablePopup } from "@/lib/useDismissablePopup";
+import { regularizacionDisplay } from "@/lib/notifications";
 
 const TIPO_LABELS: Record<TipoNotificacion, string> = {
   MIEMBRESIA_VENCIMIENTO_PROXIMO: "Membresía próxima a vencer",
@@ -55,7 +56,8 @@ export interface NotificationBellProps {
 
 const TRIGGER_VARIANT_CLASSES: Record<"dark" | "light", string> = {
   dark: "touch-target relative inline-flex items-center justify-center rounded-xl p-2 text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white",
-  light: "touch-target relative inline-flex items-center justify-center rounded-xl p-2 text-cata-text/65 transition-colors hover:bg-cata-bg hover:text-cata-text",
+  light:
+    "touch-target relative inline-flex items-center justify-center rounded-xl p-2 text-cata-text/65 transition-colors hover:bg-cata-bg hover:text-cata-text",
 };
 
 export default function NotificationBell({
@@ -88,7 +90,11 @@ export default function NotificationBell({
         aria-haspopup="dialog"
         aria-controls={panelId}
         aria-expanded={open}
-        aria-label={unreadCount > 0 ? `Notificaciones — ${unreadCount} sin leer` : "Notificaciones"}
+        aria-label={
+          unreadCount > 0
+            ? `Notificaciones — ${unreadCount} sin leer`
+            : "Notificaciones"
+        }
       >
         <Bell size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
         {unreadCount > 0 && (
@@ -110,10 +116,16 @@ export default function NotificationBell({
           className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[90vw] rounded-xl border border-cata-border bg-cata-surface p-2 shadow-elevated"
         >
           <div className="flex items-center justify-between px-2 py-1.5">
-            <p className="text-xs font-bold uppercase tracking-wider text-ink-3">Notificaciones</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-ink-3">
+              Notificaciones
+            </p>
             {unreadCount > 0 && (
               <span className="flex items-center gap-1 text-2xs tracking-flat font-semibold text-cata-red">
-                <CheckCheck size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                <CheckCheck
+                  size={ICON.sm}
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
                 {unreadCount} sin leer
               </span>
             )}
@@ -128,7 +140,11 @@ export default function NotificationBell({
                 aria-busy={marcandoTodas}
                 className="flex items-center gap-1 text-2xs tracking-flat font-semibold text-cata-text/65 transition-colors hover:text-cata-text disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <CheckCheck size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                <CheckCheck
+                  size={ICON.sm}
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
                 Marcar todas como leídas
               </button>
             </div>
@@ -137,7 +153,11 @@ export default function NotificationBell({
           {errorMarcarTodas && (
             // `status`/`polite`: se anuncia una vez, cuando el intento falla
             // -- no es una alerta que interrumpa la lectura del panel.
-            <p role="status" aria-live="polite" className="px-2 pb-1.5 text-2xs text-cata-red">
+            <p
+              role="status"
+              aria-live="polite"
+              className="px-2 pb-1.5 text-2xs text-cata-red"
+            >
               No se pudieron marcar todas las notificaciones como leídas.
             </p>
           )}
@@ -149,31 +169,45 @@ export default function NotificationBell({
           )}
 
           {!loadError && notificaciones.length === 0 && (
-            <p className="px-2 py-4 text-center text-xs text-ink-3">No hay notificaciones.</p>
+            <p className="px-2 py-4 text-center text-xs text-ink-3">
+              No hay notificaciones.
+            </p>
           )}
 
           {notificaciones.length > 0 && (
             <ul className="max-h-96 space-y-1 overflow-y-auto">
-              {notificaciones.map((n) => (
-                <li key={n.id}>
-                  <button
-                    type="button"
-                    onClick={() => !n.leida && onMarkRead(n.id)}
-                    className={`w-full rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-cata-bg ${
-                      n.leida ? "opacity-60" : ""
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      {!n.leida && (
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cata-red" aria-hidden="true" />
-                      )}
-                      <p className="text-xs font-semibold text-cata-text">{TIPO_LABELS[n.tipo]}</p>
-                    </div>
-                    <p className="mt-0.5 text-xs text-cata-text/65">{n.mensaje}</p>
-                    <p className="mt-1 text-2xs tracking-flat text-ink-3">{formatDateTime(n.fechaCreacion)}</p>
-                  </button>
-                </li>
-              ))}
+              {notificaciones.map((n) => {
+                const regularizacion = regularizacionDisplay(n);
+                return (
+                  <li key={n.id}>
+                    <button
+                      type="button"
+                      onClick={() => !n.leida && onMarkRead(n.id)}
+                      className={`w-full rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-cata-bg ${
+                        n.leida ? "opacity-60" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        {!n.leida && (
+                          <span
+                            className="h-1.5 w-1.5 shrink-0 rounded-full bg-cata-red"
+                            aria-hidden="true"
+                          />
+                        )}
+                        <p className="text-xs font-semibold text-cata-text">
+                          {regularizacion?.title ?? TIPO_LABELS[n.tipo]}
+                        </p>
+                      </div>
+                      <p className="mt-0.5 text-xs text-cata-text/65">
+                        {regularizacion?.body ?? n.mensaje}
+                      </p>
+                      <p className="mt-1 text-2xs tracking-flat text-ink-3">
+                        {formatDateTime(n.fechaCreacion)}
+                      </p>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

@@ -3,7 +3,7 @@
  *
  * The product speaks «tú» ("Inscríbete", "tu cuenta"). This lock bans voseo
  * ("Revisá", "vos") and "usted" shapes ("usted", "Inscríbase") in every
- * shipped source string. Legal pages (terminos, consentimiento-salud, permiso-imagen-fetm) stay in "usted"
+ * shipped source string. Legal pages (terminos) stay in "usted"
  * until the lawyer replies, so they are allowlisted below.
  *
  * ProfilePage.test.tsx only renders `/profile`, so it can only catch a
@@ -57,7 +57,7 @@ function withoutModuleSpecifiers(text: string): string {
 }
 
 /** Legal pages stay in "usted" until the lawyer replies (QA4 S6). */
-const USTED_ALLOWLIST = ["app/terminos/", "app/consentimiento-salud/", "app/permiso-imagen-fetm/"];
+const USTED_ALLOWLIST = ["app/terminos/"];
 
 function findOffenders(): string[] {
   return sourceFiles(SRC, { exclude: USTED_ALLOWLIST }).flatMap((path) => {
@@ -82,8 +82,6 @@ describe("tú register — app-wide copy sweep (issue #340 follow-up, QA4 S6)", 
   it("allowlists the legal pages and nothing else", () => {
     const scanned = sourceFiles(SRC, { exclude: USTED_ALLOWLIST });
     expect(scanned.some((p) => p.includes("app/terminos/"))).toBe(false);
-    expect(scanned.some((p) => p.includes("app/consentimiento-salud/"))).toBe(false);
-    expect(scanned.some((p) => p.includes("app/permiso-imagen-fetm/"))).toBe(false);
     expect(scanned.some((p) => p.includes("app/trainer/"))).toBe(true);
   });
 

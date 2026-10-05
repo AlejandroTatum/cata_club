@@ -26,6 +26,14 @@ vi.mock("../SuspenderReactivarForm", () => ({
   ),
 }));
 vi.mock("../CambiarPlanForm", () => ({ default: () => <div /> }));
+vi.mock("../MigrarSocioAntiguoForm", () => ({
+  default: ({ membresiaId, onDone, onBack }: { membresiaId?: number; onDone: (r: string) => void; onBack: () => void }) => (
+    <div data-testid="migrar" data-membresia-id={membresiaId ?? ""}>
+      <button type="button" onClick={() => onDone("Al día hasta 20/10/2026")}>mock-done</button>
+      <button type="button" onClick={onBack}>mock-back</button>
+    </div>
+  ),
+}));
 vi.mock("../RegisterPaymentForm", () => ({
   default: ({ onPaymentRegistered }: { onPaymentRegistered?: () => void }) => (
     <button type="button" onClick={() => onPaymentRegistered?.()}>
@@ -111,8 +119,70 @@ describe("StudentMembershipActions — ADMA-17 suspended membership", () => {
 describe("StudentMembershipActions — ADMA-05 existing membership", () => {
   it("does not offer «Crear membresía» when the person already has an INACTIVA one", () => {
     renderActions(student("vencida", "INACTIVA"));
+    fireEvent.click(screen.getByRole("radio", { name: "Socio nuevo" }));
 
     expect(screen.queryByRole("button", { name: /crear membresía/i })).not.toBeInTheDocument();
     expect(within(document.body).getByRole("button", { name: "Registrar pago" })).toBeInTheDocument();
+  });
+});
+
+describe("StudentMembershipActions — ¿Socio nuevo o socio antiguo? (L17)", () => {
+  const sinCobertura = () => student("vencida", "INACTIVA");
+
+  it("asks first, showing none of the usual first-payment actions", () => {
+    renderActions(sinCobertura());
+
+    expect(screen.getByRole("radio", { name: "Socio nuevo" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Socio antiguo" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Registrar pago" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Regularizar deuda" })).not.toBeInTheDocument();
+  });
+
+  it("«Socio nuevo» leaves the existing flow untouched and the question gone", () => {
+    renderActions(sinCobertura());
+    fireEvent.click(screen.getByRole("radio", { name: "Socio nuevo" }));
+
+    expect(screen.queryByRole("radio", { name: "Socio antiguo" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Registrar pago" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Regularizar deuda" })).toBeInTheDocument();
+  });
+
+  it("«Socio antiguo» goes straight to the last-payment form for the existing membership", () => {
+    renderActions(sinCobertura());
+    fireEvent.click(screen.getByRole("radio", { name: "Socio antiguo" }));
+
+    expect(screen.getByTestId("migrar")).toHaveAttribute("data-membresia-id", "3");
+    expect(screen.queryByRole("button", { name: "Registrar pago" })).not.toBeInTheDocument();
+  });
+
+  it("with no membership it asks too, and the form creates it (no membership id)", () => {
+    renderActions({ ...sinCobertura(), membresia: null });
+    fireEvent.click(screen.getByRole("radio", { name: "Socio antiguo" }));
+
+    expect(screen.getByTestId("migrar")).toHaveAttribute("data-membresia-id", "");
+  });
+
+  it("shows the resulting state once the migration is done", () => {
+    renderActions(sinCobertura());
+    fireEvent.click(screen.getByRole("radio", { name: "Socio antiguo" }));
+    fireEvent.click(screen.getByRole("button", { name: "mock-done" }));
+
+    expect(screen.getByText(/Socio antiguo registrado\. Al día hasta 20\/10\/2026\./)).toBeInTheDocument();
+  });
+
+  it("never asks once the member has coverage", () => {
+    const conCobertura = student("activa", "ACTIVA");
+    conCobertura.membresia = { ...conCobertura.membresia!, cubiertoHasta: "2026-11-30" };
+    renderActions(conCobertura);
+
+    expect(screen.queryByRole("radio", { name: "Socio nuevo" })).not.toBeInTheDocument();
+  });
+
+  it("never asks while a payment awaits validation", () => {
+    const pendiente = sinCobertura();
+    pendiente.ultimoPago = { estado: "pendiente_validacion" } as MemberStudentSummary["ultimoPago"];
+    renderActions(pendiente);
+
+    expect(screen.queryByRole("radio", { name: "Socio nuevo" })).not.toBeInTheDocument();
   });
 });

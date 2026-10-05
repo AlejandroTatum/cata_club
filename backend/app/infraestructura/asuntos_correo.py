@@ -13,6 +13,7 @@ constante es la única fuente; nada más la copia.
 """
 
 ASUNTO_RECUPERACION = "Cata Club | Recuperación de contraseña"
+ASUNTO_INVITACION_ENTRENADOR = "Cata Club | Te invitamos como entrenador"
 
 # Ciclo de validación de pagos y alta del alumno (PR 1 de mejoras de la
 # experiencia del alumno). Estaban inline en `notificaciones_servicio.py`;

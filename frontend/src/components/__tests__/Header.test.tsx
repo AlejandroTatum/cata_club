@@ -258,7 +258,7 @@ describe("Header", (): void => {
 
   // --- Public legal routes (issue #782) ---
   //
-  // `/terminos`, `/consentimiento-salud` and `/permiso-imagen-fetm` are the pages a user
+  // `/terminos` is the page a user
   // opens FROM INSIDE the product — accepting a consent, re-reading what they
   // signed — so the header there has to answer the session question the same
   // way the rest of the product does. The legal branch used to be taken before
@@ -266,7 +266,7 @@ describe("Header", (): void => {
   // a live session was told to "Iniciar sesión", and clicking it landed him on
   // a login screen he did not need.
 
-  const LEGAL_ROUTES = ["/terminos", "/consentimiento-salud", "/permiso-imagen-fetm"];
+  const LEGAL_ROUTES = ["/terminos"];
 
   it.each(LEGAL_ROUTES)("offers Iniciar sesión on %s to an anonymous visitor", (route): void => {
     mockPathname.mockReturnValue(route);
@@ -301,18 +301,19 @@ describe("Header", (): void => {
     expect(screen.getByRole("link", { name: /Iniciar sesión/i })).toHaveAttribute("href", "/login");
   });
 
-  // VIS-03: with no gallery photos «Galería» must not be offered. The public bar
-  // on /ayuda is the minimal one, so it carries no section link at all — pinned
-  // here so a future link list cannot bring `/#galeria` back unconditionally.
+  // The public bar on /ayuda is the minimal one, so it carries no section link
+  // at all, «Galería» and «Patrocinadores» included — pinned here so a future
+  // link list cannot bring them back by accident.
   it("draws no landing section link, «Galería» included, on the /ayuda public bar", (): void => {
     mockPathname.mockReturnValue("/ayuda");
 
     render(<Header />);
 
-    for (const label of ["Inicio", "Horarios", "Valores", "Galería", "Contacto"]) {
+    for (const label of ["Inicio", "Horarios", "Valores", "Galería", "Contacto", "Patrocinadores"]) {
       expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
     }
     expect(document.querySelector('a[href="/#galeria"]')).toBeNull();
+    expect(document.querySelector('a[href="/#patrocinadores"]')).toBeNull();
   });
 
   it("draws nothing on /ayuda once there is a session, because the app shell owns the chrome", (): void => {
@@ -332,7 +333,7 @@ describe("Header", (): void => {
 
     render(<Header />);
 
-    for (const label of ["Inicio", "Horarios", "Valores", "Galería", "Contacto"]) {
+    for (const label of ["Inicio", "Horarios", "Valores", "Galería", "Contacto", "Patrocinadores"]) {
       expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
     }
     expect(screen.queryByRole("button", { name: /Abrir menú/i })).not.toBeInTheDocument();
@@ -350,7 +351,7 @@ describe("Header", (): void => {
   });
 
   it("opens Perfil and Cerrar Sesión from the account menu on a legal route", (): void => {
-    mockPathname.mockReturnValue("/consentimiento-salud");
+    mockPathname.mockReturnValue("/terminos");
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
 
     render(<Header />);

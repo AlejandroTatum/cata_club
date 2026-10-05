@@ -179,6 +179,7 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("GET", "/geografia/provincias/{provincia_id}"),             # (a)
     ("GET", "/membresias/mias"),                                 # (b)
     ("GET", "/membresias/coberturas/persona/{persona_id}"),     # (b) - ownership via PoliticaAccesoPersona
+    ("GET", "/membresias/coberturas/{cobertura_id}/comprobante"),  # (b) - ownership via PoliticaAccesoPersona
     ("GET", "/membresias/pagos/persona/{persona_id}"),           # (b)
     ("GET", "/membresias/pagos/{pago_id}"),                      # (b)
     ("GET", "/membresias/persona/{persona_id}"),                 # (b)
@@ -304,6 +305,7 @@ RUTAS_ROLES_REQUERIDOS = {
     # su hermano de una sola membresía, arriba.
     ("GET", "/membresias/deuda/bulk"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/membresias/pagos"): frozenset({"ADMINISTRADOR"}),
+    ("GET", "/membresias/coberturas/todas"): frozenset({"ADMINISTRADOR"}),
     # Issue #400 (slice 5b): ver el historial de correcciones financieras de
     # un pago es tan sensible como crear una -- mismo rol que su hermano POST
     # .../corregir, más abajo.
@@ -381,6 +383,9 @@ RUTAS_ROLES_REQUERIDOS = {
     ("DELETE", "/membresias/tipos/{tipo_id}"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/membresias/tipos/{tipo_id}"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/"): frozenset({"ADMINISTRADOR"}),
+    # Issue #1575: alta de entrenadores y reenvío de su invitación.
+    ("POST", "/personas/entrenadores"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/personas/{persona_id}/entrenador/invitacion"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/sponsors/"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/galeria/"): frozenset({"ADMINISTRADOR"}),
         ("POST", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),

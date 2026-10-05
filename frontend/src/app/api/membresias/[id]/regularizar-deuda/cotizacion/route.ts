@@ -30,6 +30,8 @@ export async function GET(request: NextRequest, context: RouteContext): Promise<
   }
 
   const query = new URLSearchParams({ fecha_inicio: fechaInicio, fecha_fin: fechaFin });
+  const aplicarDescuento = searchParams.get("aplicarDescuento");
+  if (aplicarDescuento !== null) query.set("aplicar_descuento", aplicarDescuento);
   const result = await backendFetchAuthed(
     request,
     `/membresias/${membresiaId}/regularizar-deuda/cotizacion?${query.toString()}`,

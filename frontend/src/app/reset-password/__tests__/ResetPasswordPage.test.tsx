@@ -18,7 +18,7 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import ResetPasswordPage from "@/app/reset-password/page";
 import { buildPasswordRules } from "@/app/reset-password/reset-password-utils";
@@ -32,9 +32,14 @@ import { ApiClientError as MockApiClientError } from "@/services/api";
 // ---------------------------------------------------------------------------
 
 let mockToken: string | null = "valid-token";
+let mockInvitation = false;
 vi.mock("next/navigation", () => ({
   useSearchParams: () => ({
-    get: (key: string) => (key === "token" ? mockToken : null),
+    get: (key: string) => {
+      if (key === "token") return mockToken;
+      if (key === "invitacion") return mockInvitation ? "1" : null;
+      return null;
+    },
   }),
 }));
 
@@ -70,8 +75,12 @@ vi.mock("@/services/api", () => {
     }
   }
   return {
-    restablecerContrasenia: (token: string, nuevaContrasenia: string) =>
-      mockRestablecerContrasenia(token, nuevaContrasenia),
+    // The third argument only travels for a trainer's invitation (#1575): an
+    // ordinary reset must keep calling the client with exactly two.
+    restablecerContrasenia: (token: string, nuevaContrasenia: string, aceptaTerminos?: boolean) =>
+      aceptaTerminos === undefined
+        ? mockRestablecerContrasenia(token, nuevaContrasenia)
+        : mockRestablecerContrasenia(token, nuevaContrasenia, aceptaTerminos),
     ApiClientError: MockApiClientError,
   };
 });
@@ -591,5 +600,78 @@ describe("ResetPasswordPage — the eyebrow is not the admin one", () => {
 
     expect(screen.getByText("Acceso al club")).toBeInTheDocument();
     expect(screen.queryByText("Panel de gestión")).not.toBeInTheDocument();
+  });
+});
+
+describe("ResetPasswordPage — trainer invitation link (#1575)", () => {
+  beforeEach(() => {
+    mockToken = "invite-token";
+    mockInvitation = true;
+    mockRestablecerContrasenia.mockReset();
+  });
+
+  afterEach(() => {
+    mockInvitation = false;
+    mockToken = "valid-token";
+  });
+
+  it("welcomes the trainer instead of talking about a reset", () => {
+    render(<ResetPasswordPage />);
+
+    expect(screen.getByRole("heading", { name: "Crea tu contraseña" })).toBeTruthy();
+  });
+
+  it("asks to accept the current terms, linking to them", () => {
+    render(<ResetPasswordPage />);
+
+    const checkbox = screen.getByRole("checkbox", { name: "Acepto los Términos y condiciones" });
+    expect((checkbox as HTMLInputElement).checked).toBe(false);
+    expect(screen.getAllByRole("link", { name: "Términos y condiciones" })).toHaveLength(1);
+    const link = screen.getByRole("link", { name: "Términos y condiciones" });
+    expect(link.getAttribute("href")).toBe("/terminos");
+    expect(link.getAttribute("target")).toBe("_blank");
+  });
+
+  it("keeps submit disabled until the terms are accepted, even with a valid password", () => {
+    render(<ResetPasswordPage />);
+    fillMatchingPasswords();
+
+    expect((screen.getByRole("button", { name: "Guardar contraseña" }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Acepto los Términos y condiciones" }));
+
+    expect((screen.getByRole("button", { name: "Guardar contraseña" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("sends the acceptance with the new password and confirms the account is ready", async () => {
+    mockRestablecerContrasenia.mockResolvedValueOnce(undefined);
+    render(<ResetPasswordPage />);
+    fillMatchingPasswords("unaClaveSegura1");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Acepto los Términos y condiciones" }));
+
+    submitResetForm();
+
+    await waitFor(() => {
+      expect(mockRestablecerContrasenia).toHaveBeenCalledWith("invite-token", "unaClaveSegura1", true);
+    });
+    expect(await screen.findByRole("heading", { name: "Tu cuenta está lista" })).toBeTruthy();
+  });
+});
+
+describe("ResetPasswordPage — an ordinary recovery link (#1575 non-regression)", () => {
+  it("shows no terms checkbox and calls the client with exactly token and password", async () => {
+    mockToken = "valid-token";
+    mockInvitation = false;
+    mockRestablecerContrasenia.mockReset();
+    mockRestablecerContrasenia.mockResolvedValueOnce(undefined);
+    render(<ResetPasswordPage />);
+
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    fillMatchingPasswords("unaClaveSegura1");
+    submitResetForm();
+
+    await waitFor(() => {
+      expect(mockRestablecerContrasenia).toHaveBeenCalledWith("valid-token", "unaClaveSegura1");
+    });
   });
 });

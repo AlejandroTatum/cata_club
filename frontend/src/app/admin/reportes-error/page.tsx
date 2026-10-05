@@ -5,7 +5,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { ErrorState, FilterPanel, FilterPill, LoadingState, PAGE_RAIL, cn } from "@/components/ui";
 import { fetchReportesError, fetchReporteError, type ReporteError } from "@/services/api";
-import { EmptyInbox, GhostDetail, GhostRows, HowItWorks, SelectPrompt, SummaryStrip } from "./InboxParts";
+import { EmptyInbox, GhostRows, HowItWorks, SelectPrompt, SummaryStrip } from "./InboxParts";
 import { NO_DISPONIBLE, applyFilter, buildChips, formatFecha, resumirNavegador, summarize, type InboxFilter } from "./inbox";
 
 /** Both columns reach the bottom of the screen (page header and padding above, ~24px margin below), so no dead band is left under a short inbox. */
@@ -129,7 +129,6 @@ export default function ReportesErrorPage(): React.ReactElement {
               </div>
             </section>}
           <HowItWorks />
-          {selectedId === null && <GhostDetail />}
         </aside>
       </div>}
   </AppShell></ProtectedRoute>;

@@ -72,6 +72,17 @@ describe("POST /api/auth/restablecer-contrasenia", () => {
     expect(json).toEqual({ success: true });
   });
 
+  it("forwards acepta_terminos only when the client sent it as true (trainer invitation, #1575)", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(emptyResponse(204));
+
+    await POST(restablecerRequest({ token: "t", nueva_contrasenia: "12345678", acepta_terminos: true }));
+    await POST(restablecerRequest({ token: "t", nueva_contrasenia: "12345678", acepta_terminos: "yes" }));
+
+    const bodies = vi.mocked(global.fetch).mock.calls.map(([, init]) => JSON.parse(String((init as RequestInit).body)));
+    expect(bodies[0]).toEqual({ token: "t", nueva_contrasenia: "12345678", acepta_terminos: true });
+    expect(bodies[1]).toEqual({ token: "t", nueva_contrasenia: "12345678" });
+  });
+
   it("calls the backend with token and nueva_contrasenia in a JSON body", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(emptyResponse(204));
 

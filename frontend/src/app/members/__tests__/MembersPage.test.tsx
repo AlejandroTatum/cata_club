@@ -163,6 +163,8 @@ const mockSearchStudents = vi.fn().mockResolvedValue([]);
 const mockVincularRepresentado = vi.fn();
 const mockIndependizarPersona = vi.fn();
 const mockReasignarRepresentante = vi.fn();
+const mockCrearEntrenador = vi.fn();
+const mockReenviarInvitacionEntrenador = vi.fn();
 
 vi.mock("@/services/api", () => {
   class MockApiClientError extends Error {
@@ -175,6 +177,8 @@ vi.mock("@/services/api", () => {
   }
   return {
     fetchMembers: () => mockFetchMembers(),
+    crearEntrenador: (data: unknown) => mockCrearEntrenador(data),
+    reenviarInvitacionEntrenador: (personaId: number) => mockReenviarInvitacionEntrenador(personaId),
     obtenerRolesDePersona: (personaId: number) => mockObtenerRolesDePersona(personaId),
     asignarRol: (personaId: number, tipoRol: string) => mockAsignarRol(personaId, tipoRol),
     quitarRol: (personaId: number, tipoRol: string) => mockQuitarRol(personaId, tipoRol),
@@ -1391,6 +1395,7 @@ describe("MembersPage — Crear membresía inline form", () => {
     fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
     const dialog = screen.getByRole("dialog");
 
+    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
     const crearButton = await within(dialog).findByRole("button", { name: /crear membresía/i });
     fireEvent.click(crearButton);
 
@@ -1610,6 +1615,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     const dialog = await openMemberDialog({
       membresia: { ...MEMBRESIA_VENCIDA, estadoBackend: "INACTIVA" },
     });
+    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
     await openPaymentForm(dialog);
     await within(dialog).findByDisplayValue("85");
 
@@ -1888,6 +1894,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
 
     const dialog = screen.getByRole("dialog");
+    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
     await within(dialog).findByRole("button", { name: /crear membresía/i });
     expect(within(dialog).queryByRole("button", { name: /^registrar pago$/i })).not.toBeInTheDocument();
   });
@@ -2567,6 +2574,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
     fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
     const dialog = screen.getByRole("dialog");
 
+    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
     fireEvent.click(await within(dialog).findByRole("button", { name: /crear membresía/i }));
     const combobox = await within(dialog).findByRole("combobox");
     fireEvent.change(combobox, { target: { value: "5" } });
@@ -2607,6 +2615,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
     fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
     const dialog = screen.getByRole("dialog");
 
+    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
     fireEvent.click(await within(dialog).findByRole("button", { name: /crear membresía/i }));
     const combobox = await within(dialog).findByRole("combobox");
     fireEvent.change(combobox, { target: { value: "5" } });
@@ -2644,6 +2653,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
     fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
     const dialog = screen.getByRole("dialog");
 
+    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
     fireEvent.click(await within(dialog).findByRole("button", { name: /crear membresía/i }));
     const combobox = await within(dialog).findByRole("combobox");
     fireEvent.change(combobox, { target: { value: "5" } });
@@ -3723,7 +3733,8 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     fireEvent.click(getRowButton(row, /^pagos/i));
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).queryByRole("radio")).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("radio", { name: /rol|estado|activ/i })).not.toBeInTheDocument();
+    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
     expect(within(dialog).queryByText("Roles")).not.toBeInTheDocument();
     expect(await within(dialog).findByRole("button", { name: /crear membresía/i })).toBeInTheDocument();
   });
@@ -3819,6 +3830,7 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
 
     const dialogs = await screen.findAllByRole("dialog");
     expect(dialogs).toHaveLength(1);
+    fireEvent.click(await within(dialogs[0]).findByRole("radio", { name: "Socio nuevo" }));
     expect(await within(dialogs[0]).findByRole("button", { name: /crear membresía/i })).toBeInTheDocument();
   });
 
@@ -4673,5 +4685,71 @@ describe("MembersPage — Pagos dialog hierarchy (admin redesign v4)", () => {
     expect(within(dialog).getByRole("button", { name: "Regularizar deuda" })).toHaveClass("bg-cata-red");
     expect(within(dialog).getByRole("button", { name: "Registrar pago" })).not.toHaveClass("bg-cata-red");
     expect(dialog.querySelectorAll("button.bg-cata-red")).toHaveLength(1);
+  });
+});
+
+// --- Issue #1575: admin creates trainers directly ----------------------------
+describe("MembersPage — Nuevo entrenador (#1575)", () => {
+  it("offers «Nuevo entrenador» in the page header and opens the minimal form", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT] });
+    render(<ToastProvider><MembersPage /></ToastProvider>);
+    await findAccountRow();
+
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo entrenador" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Nuevo entrenador" });
+    expect(within(dialog).getByLabelText(/^Cédula/)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Crear y enviar invitación" })).toBeInTheDocument();
+  });
+
+  it("refreshes the list after a trainer is created", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT] });
+    mockCrearEntrenador.mockResolvedValue({ personaId: 91 });
+    render(<ToastProvider><MembersPage /></ToastProvider>);
+    await findAccountRow();
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo entrenador" }));
+    const dialog = await screen.findByRole("dialog", { name: "Nuevo entrenador" });
+    fireEvent.change(within(dialog).getByLabelText(/^Nombres/), { target: { value: "Marta" } });
+    fireEvent.change(within(dialog).getByLabelText(/^Apellidos/), { target: { value: "Zambrano" } });
+    fireEvent.change(within(dialog).getByLabelText(/^Cédula/), { target: { value: "1710034065" } });
+    fireEvent.change(within(dialog).getByLabelText(/^Fecha de nacimiento/), { target: { value: "1988-03-02" } });
+    fireEvent.change(within(dialog).getByLabelText(/^Correo/), { target: { value: "marta@cataclub.com" } });
+    fireEvent.change(within(dialog).getByLabelText(/^Celular/), { target: { value: "0991234567" } });
+    const callsBefore = mockFetchMembers.mock.calls.length;
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Crear y enviar invitación" }));
+
+    await waitFor(() => expect(mockCrearEntrenador).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockFetchMembers.mock.calls.length).toBeGreaterThan(callsBefore));
+  });
+
+  it("marks an account whose trainer has not set a password as «Invitación pendiente»", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [{ ...ACCOUNT, accountState: "invitation" }] });
+    render(<ToastProvider><MembersPage /></ToastProvider>);
+
+    const row = await findAccountRow();
+
+    expect(within(row).getByText("Invitación pendiente")).toBeInTheDocument();
+  });
+
+  it("lets the admin resend the invitation from a pending account", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [{ ...ACCOUNT, accountState: "invitation" }] });
+    mockReenviarInvitacionEntrenador.mockResolvedValue(undefined);
+    render(<ToastProvider><MembersPage /></ToastProvider>);
+    fireEvent.click(getEditButton(await findAccountRow()));
+    const dialog = await screen.findByRole("dialog");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Reenviar invitación" }));
+
+    await waitFor(() => expect(mockReenviarInvitacionEntrenador).toHaveBeenCalledWith(Number(ACCOUNT.id)));
+  });
+
+  it("offers no resend once the account is active", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [{ ...ACCOUNT, accountState: "active" }] });
+    render(<ToastProvider><MembersPage /></ToastProvider>);
+    fireEvent.click(getEditButton(await findAccountRow()));
+    const dialog = await screen.findByRole("dialog");
+
+    expect(within(dialog).queryByRole("button", { name: "Reenviar invitación" })).not.toBeInTheDocument();
   });
 });

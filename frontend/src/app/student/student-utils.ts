@@ -1223,3 +1223,52 @@ export function describeNextPayment(input: NextPaymentInput): NextPaymentTile {
   }
   return { hot: false, tone: "ok", value, status: "Al día", hint: `vence el ${formatDate(input.coverageEnd)}` };
 }
+
+export interface CoverageStat {
+  tone: "ok" | "bad" | "neutral";
+  status: string;
+  value: number | string;
+  unit: string | undefined;
+  hint: string;
+}
+
+const pluralDays = (n: number): string => (n === 1 ? "día" : "días");
+
+/** What the student's «Cobertura» tile says: the figure, the verdict and the date it rests on. */
+export function describeCoverageStat(daysLeft: number | null, coverageEnd: string | null): CoverageStat {
+  if (daysLeft === null || coverageEnd === null) {
+    return { tone: "neutral", status: "Sin pago", value: "—", unit: undefined, hint: "sin pago aprobado todavía" };
+  }
+  const date = formatDate(coverageEnd);
+  const days = Math.abs(daysLeft);
+  const unit = pluralDays(days);
+  if (daysLeft < 0) {
+    return { tone: "bad", status: "Vencida", value: days, unit, hint: `vencida hace ${days} ${unit} · desde el ${date}` };
+  }
+  if (daysLeft === 0) {
+    return { tone: "ok", status: "Al día", value: days, unit, hint: `vence hoy · ${date}` };
+  }
+  return {
+    tone: "ok",
+    status: "Al día",
+    value: days,
+    unit,
+    hint: `${days === 1 ? "restante" : "restantes"} · hasta el ${date}`,
+  };
+}
+
+export interface PendingStat {
+  tone: "warn" | "neutral";
+  status: string;
+  hint: string;
+}
+
+/** What the «Pagos por validar» tile says. Zero pending is «Sin pendientes», not «Al día». */
+export function describePendingStat(pending: number): PendingStat {
+  if (pending <= 0) return { tone: "neutral", status: "Sin pendientes", hint: "ningún pago espera validación" };
+  return {
+    tone: "warn",
+    status: "Por validar",
+    hint: pending === 1 ? "espera validación del club" : "esperan validación del club",
+  };
+}

@@ -7,7 +7,7 @@
  * can see this data.
  */
 
-import { HeartPulse, ShieldCheck } from "lucide-react";
+import { HeartPulse, Phone, ShieldCheck, TriangleAlert } from "lucide-react";
 import { DataBox } from "@/components/ui";
 import { ICON } from "@/lib/icon-size";
 
@@ -39,6 +39,15 @@ function Line({ label, value, emptyText }: { label: string; value: string; empty
   );
 }
 
+function Alert({ label, value }: { label: string; value: string }): React.ReactElement {
+  return (
+    <div>
+      <dt className="text-2xs font-bold uppercase text-state-warn">{label}</dt>
+      <dd className="break-words text-base font-bold text-ink">{value}</dd>
+    </div>
+  );
+}
+
 export default function EmergencyCard({
   studentName,
   values,
@@ -51,6 +60,12 @@ export default function EmergencyCard({
 }): React.ReactElement {
   const filled = FIELD_LABELS.filter(({ key }) => values[key].trim() !== "");
   const missing = FIELD_LABELS.filter(({ key }) => values[key].trim() === "");
+  const hasHealthAlert = values.alergias.trim() !== "" || values.enfermedades.trim() !== "";
+  // What is NOT filled stays a quiet line; what is filled lives in the warning block above.
+  const quietLines = [
+    { label: "Alergias", empty: values.alergias.trim() === "" },
+    { label: "Enfermedades", empty: values.enfermedades.trim() === "" },
+  ].filter((line) => line.empty);
   const pct = Math.round((filled.length / FIELD_LABELS.length) * 100);
   const complete = missing.length === 0;
 
@@ -78,12 +93,55 @@ export default function EmergencyCard({
             {values.tipoSangre ? values.tipoSangre.replace(" POSITIVO", "+").replace(" NEGATIVO", "−") : "Sangre —"}
           </span>
         </header>
-        <dl className="px-4">
-          <Line label="Alergias" value={values.alergias} emptyText="Sin registrar" />
-          <Line label="Enfermedades" value={values.enfermedades} emptyText="Sin registrar" />
-          <Line label="Contacto" value={values.contactoEmergencia} emptyText="Sin registrar" />
-          <Line label="Teléfono" value={values.telefonoEmergencia} emptyText="Sin registrar" />
-        </dl>
+        <div className="flex flex-col gap-3 p-4">
+          {hasHealthAlert ? (
+            <div
+              data-testid="emergency-card-health"
+              className="flex flex-col gap-2.5 rounded-ctl border border-state-warn/30 bg-state-warn-bg p-3"
+            >
+              <div className="flex items-center gap-1.5 text-2xs font-bold uppercase text-state-warn">
+                <TriangleAlert size={ICON.sm} strokeWidth={1.75} aria-hidden="true" />
+                Atención médica
+              </div>
+              <dl className="flex flex-col gap-2">
+                {values.alergias.trim() !== "" && <Alert label="Alergias" value={values.alergias} />}
+                {values.enfermedades.trim() !== "" && <Alert label="Enfermedades" value={values.enfermedades} />}
+              </dl>
+            </div>
+          ) : null}
+          {quietLines.length > 0 ? (
+            <dl>
+              {quietLines.map(({ label }) => (
+                <Line key={label} label={label} value="" emptyText="Sin declarar" />
+              ))}
+            </dl>
+          ) : null}
+          <div data-testid="emergency-card-contact" className="rounded-ctl border border-line p-3">
+            <div className="flex items-center gap-1.5 text-2xs font-bold uppercase text-ink-3-strong">
+              <Phone size={ICON.sm} strokeWidth={1.75} aria-hidden="true" />
+              Contacto de emergencia
+            </div>
+            {values.contactoEmergencia.trim() === "" && values.telefonoEmergencia.trim() === "" ? (
+              <p className="mt-1.5 text-sm text-ink-3-strong">Sin registrar</p>
+            ) : (
+              <div className="mt-1.5 flex flex-col gap-1">
+                <p className={values.contactoEmergencia ? "break-words text-sm font-semibold text-ink" : "text-sm text-ink-3-strong"}>
+                  {values.contactoEmergencia || "Sin registrar"}
+                </p>
+                {values.telefonoEmergencia ? (
+                  <a
+                    href={`tel:${values.telefonoEmergencia.replace(/[^\d+]/g, "")}`}
+                    className="inline-flex min-h-9 items-center gap-1.5 self-start text-base font-extrabold tabular-nums text-ink underline decoration-line-2 underline-offset-4 hover:decoration-ink"
+                  >
+                    {values.telefonoEmergencia}
+                  </a>
+                ) : (
+                  <p className="text-sm text-ink-3-strong">Teléfono sin registrar</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       </section>
 
       <section className="card p-4" aria-labelledby="emergency-completeness-title">

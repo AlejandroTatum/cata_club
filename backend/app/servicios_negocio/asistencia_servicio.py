@@ -1048,14 +1048,9 @@ class AsistenciaServicio:
                 "Solo un administrador puede corregir una asistencia ya registrada.",
             )
 
-        # ENT-09: el motivo es lo que hace auditable la corrección, así que uno
-        # en blanco (solo espacios) no cuenta. Se guarda recortado.
+        # Issue #1578: el motivo es opcional para el admin; la columna es NOT
+        # NULL, así que sin motivo se guarda vacío (la traza sigue completa).
         motivo = datos.motivo.strip()
-        if not motivo:
-            raise OperacionInvalida(
-                "Indica el motivo de la corrección.",
-                detalle_tecnico=f"motivo en blanco: asistencia_id={asistencia_id}",
-            )
 
         asistencia = self.repo.obtener_por_id(asistencia_id)
         if not asistencia:

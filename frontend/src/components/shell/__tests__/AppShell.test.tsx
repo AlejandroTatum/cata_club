@@ -1040,12 +1040,20 @@ describe("AppShell — Ayuda", (): void => {
   });
 
   // ADMB-15: the footer held four rows (two of them help) and hid the last
-  // menu items behind it. Help is ONE row now; /ayuda hosts the report button.
+  // menu items behind it. Help is ONE row now; /ayuda keeps its own report button.
   it("folds Reportar un problema and Preguntas frecuentes into the single Ayuda row", (): void => {
     render(<AppShell title="Panel de Control">{null}</AppShell>);
 
     expect(screen.getAllByRole("link", { name: "Ayuda" })).toHaveLength(1);
     expect(screen.queryByRole("link", { name: "Preguntas frecuentes" })).not.toBeInTheDocument();
+    // The floating launcher is the one report entry point inside the shell.
+    expect(screen.getAllByRole("button", { name: "Reportar un problema" })).toHaveLength(1);
+  });
+
+  it("omits the floating report button when there is no session", (): void => {
+    mockUseAuth.mockReturnValue({ ...createAuthenticatedAuth("admin", "Admin Cata Club"), session: null });
+    render(<AppShell title="Panel de Control">{null}</AppShell>);
+
     expect(screen.queryByRole("button", { name: "Reportar un problema" })).not.toBeInTheDocument();
   });
 });

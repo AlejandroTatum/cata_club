@@ -311,7 +311,8 @@ async def restablecer_contrasenia(request: Request, datos: RestablecerContraseni
     # olvidó su clave puede no tener sesión), así que provocarlo no requiere
     # estar autenticado.
     await run_in_threadpool(
-        AuthServicio(db).restablecer_contrasenia, datos.token, datos.nueva_contrasenia,
+        AuthServicio(db).restablecer_contrasenia,
+        datos.token, datos.nueva_contrasenia, datos.acepta_terminos,
     )
 
 

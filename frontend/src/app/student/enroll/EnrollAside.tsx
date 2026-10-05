@@ -21,8 +21,7 @@ import { cn } from "@/components/ui/cn";
 export type EnrollAsideStep =
   "type" | "personal" | "representative" | "health" | "summary";
 
-export type EnrollAsideDocument =
-  "terminos" | "privacidad" | "consentimiento-salud" | "permiso-imagen-fetm";
+export type EnrollAsideDocument = "terminos" | "privacidad";
 
 interface EnrollAsideProps {
   step: EnrollAsideStep;
@@ -216,8 +215,8 @@ export default function EnrollAside(props: EnrollAsideProps): ReactElement {
             Es información que el club necesita conocer para la seguridad del
             jugador.
           </Item>
-          <Item title="Campos opcionales">
-            Condiciones de salud y alergias son opcionales.
+          <Item title="Alergias y condiciones de salud">
+            Son obligatorias. Si no tiene, escribe «Ninguno».
           </Item>
           <PrivacyLink onOpen={() => props.onOpenDocument("privacidad")} />
         </>
@@ -230,8 +229,7 @@ export default function EnrollAside(props: EnrollAsideProps): ReactElement {
             Corrige cualquier bloque antes de confirmar con tu botón Editar.
           </Item>
           <Item title="Tu consentimiento">
-            Para confirmar, acepta los Términos y condiciones (incluye privacidad), el
-            Consentimiento de datos de salud y el Permiso de uso de imagen.
+            Para confirmar, acepta los Términos y condiciones.
           </Item>
         </>
       )}

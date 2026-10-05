@@ -1,28 +1,34 @@
 import { heading, paragraph, type LegalBlock } from "./legal-content";
+import { healthChapter } from "./health-chapter";
+import { imageChapter } from "./image-chapter";
 
 /** The anchor of the privacy chapter: old `/privacidad` links resolve here. */
 export const PRIVACY_CHAPTER_ID = "privacidad";
+/** The anchors of the health-data and image chapters: the old pages redirect here. */
+export const HEALTH_CHAPTER_ID = "consentimiento-salud";
+export const IMAGE_CHAPTER_ID = "permiso-imagen";
 
 /**
- * Document 1, version 2.2 (the lawyer-approved 2.1 reworded so acceptance is mandatory; pending lawyer validation): terms, conditions and
- * liability agreement. The privacy notice is its chapter VIII, not a separate
- * document. Published verbatim.
+ * The single public document, version 2.2 (the lawyer-approved 2.1 reworded so acceptance is mandatory; pending lawyer validation): terms, conditions and
+ * liability agreement. The privacy notice (VIII), the health-data consent (X)
+ * and the image permission (XI) are chapters of it, not separate documents
+ * (#1615). Published verbatim.
  */
 export const legalBlocks: readonly LegalBlock[] = [
   paragraph("Al aceptar estos términos, usted se compromete a usar la plataforma conforme a ellos."),
 
   heading("Capítulo I. Quiénes somos y objeto"),
-  paragraph("Lucía Catalina Cedillo Flor, con cédula de ciudadanía 0102724358, propietaria de Cata Club (nombre comercial; en adelante, «el club»), opera el club de tenis de mesa de Loja, Ecuador. Dirección: Av. Manuel Agustín Aguirre, Barrio Perpetuo Socorro, junto al Coliseo Ciudad de Loja, Loja, Ecuador. Correo: cataclub.loja@proton.me. WhatsApp: 0994219619 y 0990288152."),
+  paragraph("Lucía Catalina Cedillo Flor, con cédula de ciudadanía 0102724358, propietaria de Cata Club (en adelante, «el club»), opera el club de tenis de mesa de Loja, Ecuador. Dirección: Av. Manuel Agustín Aguirre, Barrio Perpetuo Socorro, junto al Coliseo Ciudad de Loja, Loja, Ecuador. Correo: cataclub.loja@proton.me. WhatsApp: 0994219619 y 0990288152."),
   paragraph("La plataforma de Cata Club permite crear una cuenta, registrar jugadores, consultar horarios y asistencia, ver membresías, subir comprobantes de pago y ver los recibos del club. Estos términos regulan su uso. El club es también el responsable del tratamiento de los datos personales (Capítulo VIII)."),
 
   heading("Capítulo II. Compromisos del club"),
   paragraph("El club se compromete a:"),
-  paragraph("• hacer lo posible para que la plataforma funcione de forma segura y continua;"),
-  paragraph("• mostrar a cada cuenta únicamente la información que su rol necesita;"),
-  paragraph("• tratar los datos personales conforme a la Ley Orgánica de Protección de Datos Personales y a lo descrito en el Capítulo VIII;"),
-  paragraph("• revisar los pagos que se registren, emitir el recibo cuando los valide y responder por sus canales de contacto las consultas, los errores de pago y las solicitudes de devolución;"),
-  paragraph("• guardar qué documento y qué versión usted aceptó, la fecha y su cuenta, y no aceptar nunca en su nombre;"),
-  paragraph("• respetar los derechos que la ley le reconoce como titular de datos personales y como consumidor, y actuar siempre según el interés superior del niño, niña o adolescente."),
+  paragraph("• Hacer lo posible para que la plataforma funcione de forma segura y continua."),
+  paragraph("• Mostrar a cada cuenta únicamente la información que su rol necesita."),
+  paragraph("• Tratar los datos personales conforme a la Ley Orgánica de Protección de Datos Personales y a lo descrito en el Capítulo VIII."),
+  paragraph("• Revisar los pagos que se registren, emitir el recibo cuando los valide y responder por sus canales de contacto las consultas, los errores de pago y las solicitudes de devolución."),
+  paragraph("• Registrar el documento y la versión aceptada por el usuario, junto con la fecha de aceptación y la cuenta asociada. La aceptación deberá ser realizada directamente por el usuario y no por el sistema en su nombre."),
+  paragraph("• Respetar los derechos que la ley le reconoce como titular de datos personales y como consumidor, y actuar siempre según el interés superior del niño, niña o adolescente."),
 
   heading("Capítulo III. Cómo se usa la plataforma"),
   heading("Su cuenta"),
@@ -40,16 +46,16 @@ export const legalBlocks: readonly LegalBlock[] = [
 
   heading("Capítulo IV. Compromisos y responsabilidades de la persona usuaria"),
   paragraph("Al usar la plataforma, usted se compromete a:"),
-  paragraph("• dar datos verdaderos, completos y actualizados;"),
-  paragraph("• cuidar su contraseña, no compartir su cuenta con otras personas y avisarnos de inmediato si cree que alguien entró a su cuenta sin permiso;"),
-  paragraph("• si es representante, actuar en beneficio del jugador menor de edad y mantener al día su información y sus pagos y, si el jugador es menor de 15 años, sus consentimientos;"),
-  paragraph("• usar la plataforma solo para asuntos del club."),
+  paragraph("• Dar datos verdaderos, completos y actualizados."),
+  paragraph("• Cuidar su contraseña, no compartir su cuenta con otras personas y avisarnos de inmediato si cree que alguien entró a su cuenta sin permiso."),
+  paragraph("• Si es representante, actuar en beneficio del jugador menor de edad y mantener al día su información y sus pagos y, si el jugador es menor de 15 años, sus consentimientos."),
+  paragraph("• Usar la plataforma solo para asuntos del club."),
   paragraph("No está permitido:"),
-  paragraph("• dar información falsa a propósito;"),
-  paragraph("• entrar a cuentas de otras personas;"),
-  paragraph("• intentar eludir los controles de seguridad;"),
-  paragraph("• subir archivos ilícitos, dañinos o que no correspondan (por ejemplo, un comprobante falso);"),
-  paragraph("• afectar el funcionamiento del servicio o la privacidad de otras personas."),
+  paragraph("• Dar información falsa a propósito."),
+  paragraph("• Entrar a cuentas de otras personas."),
+  paragraph("• Intentar eludir los controles de seguridad."),
+  paragraph("• Subir archivos ilícitos, dañinos o que no correspondan (por ejemplo, un comprobante falso)."),
+  paragraph("• Afectar el funcionamiento del servicio o la privacidad de otras personas."),
 
   heading("Capítulo V. Seguridad y suspensión"),
   paragraph("El club puede limitar funciones o suspender una cuenta si hay indicios de uso indebido, de riesgo para otras cuentas o de necesidad de proteger el servicio. Cuando lo haga, le explicará el motivo por los canales de contacto y la medida será proporcional a la situación."),
@@ -125,13 +131,19 @@ export const legalBlocks: readonly LegalBlock[] = [
 
   heading("Capítulo IX. Ley aplicable y contacto"),
   paragraph("Estos términos se rigen por las leyes de la República del Ecuador. Para consultas sobre ellos, escriba a cataclub.loja@proton.me."),
+
+  heading("Capítulo X. Consentimiento para el tratamiento de datos de salud", HEALTH_CHAPTER_ID),
+  ...healthChapter,
+
+  heading("Capítulo XI. Permiso de uso de imagen", IMAGE_CHAPTER_ID),
+  ...imageChapter,
 ];
 
 /** Key points of the document above, for the side summary. Nothing here goes beyond the text. */
 export const summary: readonly string[] = [
   "La responsable es Lucía Catalina Cedillo Flor, propietaria de Cata Club; puede escribirle a cataclub.loja@proton.me.",
   "Solo el recibo del club prueba que un pago fue recibido y validado; el comprobante que usted sube no lo reemplaza.",
-  "Para crear una cuenta debe aceptar en conjunto estos términos, el consentimiento de datos de salud y el permiso de uso de imagen; puede retirarlos después, y el retiro vale hacia adelante.",
+  "Para crear una cuenta debe aceptar este documento, que incluye el consentimiento de datos de salud (Capítulo X) y el permiso de uso de imagen (Capítulo XI); puede retirarlos después, y el retiro vale hacia adelante.",
   "El aviso de privacidad es el Capítulo VIII: qué datos recogemos, para qué, quién los ve y cuánto tiempo se conservan.",
   "Cada aceptación guarda la versión, la fecha y su cuenta; nunca se acepta en su nombre.",
 ];

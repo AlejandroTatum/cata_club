@@ -8,12 +8,14 @@ import RegisterPaymentForm from "./RegisterPaymentForm";
 import RegularizarDeudaForm from "./RegularizarDeudaForm";
 import SuspenderReactivarForm from "./SuspenderReactivarForm";
 import CambiarPlanForm from "./CambiarPlanForm";
+import MigrarSocioAntiguoForm from "./MigrarSocioAntiguoForm";
 import { Badge, DataBox, PAGE_RAIL } from "@/components/ui";
 import { ACTION_TRIGGER } from "./payment-action-styles";
 import { formatCurrency } from "@/lib/format-utils";
 import {
   formatMembershipCoverage,
   getMembershipStatusBadge,
+  isPrimerPagoPendiente,
   type MemberStudentSummary,
 } from "./members-utils";
 
@@ -150,6 +152,10 @@ export default function StudentMembershipActions({
   const membresia = student.membresia;
   // ADMA-04: the history fetches once on open, so a write has to ask for a refetch.
   const [historyVersion, setHistoryVersion] = useState(0);
+  // QA round 2 (L17): before the first coverage the admin says whether this is a
+  // new member (the usual first-payment flow) or an old one (load the last payment).
+  const [tipoSocio, setTipoSocio] = useState<"nuevo" | "antiguo" | null>(null);
+  const [resultadoMigracion, setResultadoMigracion] = useState<string | null>(null);
   const onPaymentRegistered = (): void => {
     setHistoryVersion((version) => version + 1);
     onPaymentRegisteredProp();
@@ -164,6 +170,7 @@ export default function StudentMembershipActions({
       </>
     );
   }
+  const preguntarTipoSocio = isPrimerPagoPendiente(student) && tipoSocio !== "nuevo";
   const debtKnown = membresia?.mesesAdeudados !== undefined;
   const hasDebt = debtKnown && (membresia?.mesesAdeudados ?? 0) > 0;
   /*
@@ -236,13 +243,50 @@ export default function StudentMembershipActions({
         <section aria-label="Acciones" className="grid content-start gap-3 lg:order-2">
           <h3 className="text-sm font-bold text-ink">Acciones</h3>
 
-          {!membresia && (
+          {resultadoMigracion && (
+            <output className="rounded-ctl border border-line bg-sunken px-3 py-2 text-xs font-semibold text-ink">
+              Socio antiguo registrado. {resultadoMigracion}.
+            </output>
+          )}
+
+          {preguntarTipoSocio && tipoSocio === null && (
+            <ActionTile description="¿Socio nuevo o socio antiguo?">
+              <div className="grid gap-1">
+                <label className="flex items-center gap-2 text-xs text-ink">
+                  <input type="radio" name="tipo-socio" onChange={() => setTipoSocio("nuevo")} />
+                  Socio nuevo
+                </label>
+                <label className="flex items-center gap-2 text-xs text-ink">
+                  <input type="radio" name="tipo-socio" onChange={() => setTipoSocio("antiguo")} />
+                  Socio antiguo
+                </label>
+              </div>
+            </ActionTile>
+          )}
+
+          {preguntarTipoSocio && tipoSocio === "antiguo" && (
+            <ActionTile description="Anota su último pago; el sistema calcula hasta cuándo está al día.">
+              <MigrarSocioAntiguoForm
+                personaId={personaId}
+                membresiaId={membresia ? Number(membresia.id) : undefined}
+                onDone={(resultado) => {
+                  setResultadoMigracion(resultado);
+                  setTipoSocio(null);
+                  onMembershipCreated();
+                }}
+                onRefetch={onMembershipCreated}
+                onBack={() => setTipoSocio(null)}
+              />
+            </ActionTile>
+          )}
+
+          {!preguntarTipoSocio && !membresia && (
             <ActionTile description="Asigna un plan para poder registrar pagos.">
               <CreateMembershipForm personaId={personaId} onCreated={onMembershipCreated} />
             </ActionTile>
           )}
 
-          {membresia && (
+          {!preguntarTipoSocio && membresia && (
             <>
               {debtUnavailable && (
                 <p className="text-2xs text-ink-3" role="status">
@@ -281,7 +325,7 @@ export default function StudentMembershipActions({
           </div>
 
           {/* Suspension/reactivation and plan changes remain revealed secondary actions. */}
-          {membresia && membresia.estado === "activa" && (
+          {!preguntarTipoSocio && membresia && membresia.estado === "activa" && (
             <ActionTile description="Pausa los cobros hasta que se reactive.">
               <SuspenderReactivarForm
                 membresiaId={Number(membresia.id)}
@@ -290,7 +334,7 @@ export default function StudentMembershipActions({
               />
             </ActionTile>
           )}
-          {membresia && (
+          {!preguntarTipoSocio && membresia && (
             <ActionTile description="La nueva tarifa rige desde el próximo pago.">
               <CambiarPlanForm membresiaId={Number(membresia.id)} tipoActual={membresia.tipo} onChanged={onMembresiaChanged} />
             </ActionTile>

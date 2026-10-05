@@ -37,11 +37,19 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import AyudaPage from "@/app/ayuda/page";
 import { buildUstedRegisterRegex } from "@/lib/__tests__/usted-register-lock";
+import type { UserRole } from "@/types/domain";
 
+/**
+ * /ayuda shows each role only its own sections (#1581), so the guard has to
+ * walk every role to see the whole FAQ the model was told about.
+ */
+let mockRole: UserRole | null = null;
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({
-    session: null,
-    isAuthenticated: false,
+    session: mockRole
+      ? { user: { id: "u1", name: "Test", email: "t@cataclub.com", role: mockRole, representanteId: null } }
+      : null,
+    isAuthenticated: mockRole !== null,
     isLoading: false,
     login: vi.fn(),
     logout: vi.fn(),
@@ -109,6 +117,21 @@ function renderedFaq(root: HTMLElement): RenderedEntry[] {
   );
 }
 
+/** One session per audience: the visitor plus each of the three signed-in groups. */
+const ROLES_TO_WALK: (UserRole | null)[] = [null, "estudiante", "trainer", "admin"];
+
+/** Everything the page can show, across every audience. */
+function renderedFaqAcrossRoles(): RenderedEntry[] {
+  return ROLES_TO_WALK.flatMap((role): RenderedEntry[] => {
+    mockRole = role;
+    const view = render(<AyudaPage />);
+    const entries = renderedFaq(view.container);
+    view.unmount();
+    mockRole = null;
+    return entries;
+  });
+}
+
 /** The questions the prompt itself carries, as the serialiser writes them. */
 function promptQuestions(prompt: string): string[] {
   return prompt
@@ -141,10 +164,9 @@ describe("club knowledge parity — /ayuda vs the system prompt (issue #768)", (
   });
 
   it("answers every browsable question with the same words the model was given", (): void => {
-    const page = render(<AyudaPage />).container;
     const prompt = normalise(systemPrompt());
 
-    for (const entry of renderedFaq(page)) {
+    for (const entry of renderedFaqAcrossRoles()) {
       expect(prompt, `question not in the prompt: ${entry.question}`).toContain(entry.question);
       expect(prompt, `answer drifted for: ${entry.question}`).toContain(entry.answer);
     }
@@ -153,8 +175,7 @@ describe("club knowledge parity — /ayuda vs the system prompt (issue #768)", (
   it("hides nothing from the reader that the model was told", (): void => {
     // The other direction. Without it the page could quietly drop a section
     // and stay green while the assistant kept answering from it.
-    const page = render(<AyudaPage />).container;
-    const onScreen = renderedFaq(page).map((entry): string => entry.question);
+    const onScreen = renderedFaqAcrossRoles().map((entry): string => entry.question);
 
     for (const question of promptQuestions(systemPrompt())) {
       expect(onScreen, `the prompt answers a question the page never shows: ${question}`).toContain(
