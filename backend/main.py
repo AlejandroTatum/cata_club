@@ -45,6 +45,7 @@ from app.presentacion.routers import (
     supresion_datos_router,
     reporte_error_router,
     actividad_router,
+    portal_router,
 )
 from app.dominio.excepciones import (
     EntidadNoEncontrada, EntidadDuplicada, NombreDuplicado, OperacionInvalida, RecursoEnUso,
@@ -429,6 +430,7 @@ app.add_middleware(_CabecerasDeSeguridadMiddleware)
 app.include_router(auth_router.router, prefix="/api/v1")
 app.include_router(personas_router.router, prefix="/api/v1")
 app.include_router(membresias_pagos_router.router, prefix="/api/v1")
+app.include_router(portal_router.router, prefix="/api/v1")
 app.include_router(descuentos_router.router, prefix="/api/v1")
 app.include_router(asistencias_router.router, prefix="/api/v1")
 app.include_router(ficha_medica_router.router, prefix="/api/v1")

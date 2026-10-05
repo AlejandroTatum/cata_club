@@ -413,6 +413,13 @@
     min-height: 44px;
   }
 
+  /* Pill chips whose box may grow under the thumb only: the trainer hero's
+     student chips are 28px (24px avatar plus padding). `items-center` on the
+     chip keeps avatar and name vertically centred in the taller box. */
+  .touch-target-chip {
+    min-height: 44px;
+  }
+
   /* A control that must not move or grow — the password eye sits inside the
      field's padding: an invisible 44px hit area centred on it instead. The
      host is already `absolute`, so the pseudo-element anchors to it. */
