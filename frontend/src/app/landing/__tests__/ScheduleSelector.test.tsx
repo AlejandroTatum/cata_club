@@ -125,6 +125,23 @@ describe("ScheduleSelector (cards side by side)", (): void => {
     expect(help.parentElement?.lastElementChild).toBe(help);
   });
 
+  it("never puts two adjacent cards, or two cards in one column of the three-up grid, on the same ground", (): void => {
+    // Ten categories: enough to wrap the four-step palette twice. Three brand
+    // grounds cannot also keep the two-column (tablet) grid repeat-free — that
+    // needs four — so the invariant pins the one-column stack (neighbours) and
+    // the three-up desktop grid (a card and the one three places later).
+    const many = Array.from({ length: 10 }, (_, index): LandingSchedule => category(`Grupo ${index + 1}`, [weekSlot("15:00 – 16:00")]));
+    const { container } = renderCards(many);
+    const grounds = Array.from(container.querySelectorAll<HTMLElement>(".landing-schedule-tile:not(.landing-schedule-help)"))
+      .map((tile): string => tile.style.getPropertyValue("--landing-tile"));
+    expect(grounds).toHaveLength(10);
+    expect(grounds.every((ground): boolean => ground.startsWith("var(--landing-"))).toBe(true);
+    grounds.forEach((ground, index): void => {
+      if (index + 1 < grounds.length) expect(ground, `card ${index + 1} and its neighbour`).not.toBe(grounds[index + 1]);
+      if (index + 3 < grounds.length) expect(ground, `card ${index + 1} and the card below it`).not.toBe(grounds[index + 3]);
+    });
+  });
+
   it("has no tabs, day balls or rolling digits left from the old selector", (): void => {
     const { container } = renderCards();
     expect(screen.queryByRole("tablist")).toBeNull();

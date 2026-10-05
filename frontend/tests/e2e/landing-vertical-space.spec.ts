@@ -101,8 +101,9 @@ const CEILINGS: Record<(typeof VIEWPORTS)[number]["name"], Record<string, number
      the contact sheet became a grid of icon-led cards with tappable pills and
      the footer traded its photo for link cards (now carrying #1587's and
      #1622's links) and an outline wordmark; measured 7072px with every
-     catalog absent. */
-  desktop: { valores: 709, cta: 400, scrollHeight: 7110 },
+     catalog absent. Re-based 7110 -> 7120 once the contact pills reached
+     the 44px tap target; measured 7080px. */
+  desktop: { valores: 709, cta: 400, scrollHeight: 7120 },
   /* Mobile scrollHeight re-based 9177 -> 9300 for the FAQ card accordion
      (intro card stacked above three bordered cards) and the colored plan and
      step cards; measured 9270px at 390x844 with the tariffs catalog absent.
@@ -116,8 +117,9 @@ const CEILINGS: Record<(typeof VIEWPORTS)[number]["name"], Record<string, number
      the values, the stats, the icon-led contact cards and the footer's link
      cards became bordered cards with inner padding, and the footer swapped
      its photo for an outline wordmark; measured 10272px with every catalog
-     absent. */
-  mobile: { valores: 1170, cta: 450, scrollHeight: 10310 },
+     absent. Re-based 10310 -> 10340 once the contact pills reached the
+     44px tap target, which left only 10px of headroom; measured 10300px. */
+  mobile: { valores: 1170, cta: 450, scrollHeight: 10340 },
 };
 
 test.describe("landing vertical space", () => {
