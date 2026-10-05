@@ -1395,6 +1395,7 @@ describe("MembersPage — Crear membresía inline form", () => {
     fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
     const dialog = screen.getByRole("dialog");
 
+    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
     const crearButton = await within(dialog).findByRole("button", { name: /crear membresía/i });
     fireEvent.click(crearButton);
 
@@ -1614,6 +1615,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     const dialog = await openMemberDialog({
       membresia: { ...MEMBRESIA_VENCIDA, estadoBackend: "INACTIVA" },
     });
+    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
     await openPaymentForm(dialog);
     await within(dialog).findByDisplayValue("85");
 
@@ -1892,6 +1894,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
 
     const dialog = screen.getByRole("dialog");
+    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
     await within(dialog).findByRole("button", { name: /crear membresía/i });
     expect(within(dialog).queryByRole("button", { name: /^registrar pago$/i })).not.toBeInTheDocument();
   });
@@ -2571,6 +2574,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
     fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
     const dialog = screen.getByRole("dialog");
 
+    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
     fireEvent.click(await within(dialog).findByRole("button", { name: /crear membresía/i }));
     const combobox = await within(dialog).findByRole("combobox");
     fireEvent.change(combobox, { target: { value: "5" } });
@@ -2611,6 +2615,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
     fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
     const dialog = screen.getByRole("dialog");
 
+    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
     fireEvent.click(await within(dialog).findByRole("button", { name: /crear membresía/i }));
     const combobox = await within(dialog).findByRole("combobox");
     fireEvent.change(combobox, { target: { value: "5" } });
@@ -2648,6 +2653,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
     fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
     const dialog = screen.getByRole("dialog");
 
+    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
     fireEvent.click(await within(dialog).findByRole("button", { name: /crear membresía/i }));
     const combobox = await within(dialog).findByRole("combobox");
     fireEvent.change(combobox, { target: { value: "5" } });
@@ -3727,7 +3733,8 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     fireEvent.click(getRowButton(row, /^pagos/i));
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).queryByRole("radio")).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("radio", { name: /rol|estado|activ/i })).not.toBeInTheDocument();
+    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
     expect(within(dialog).queryByText("Roles")).not.toBeInTheDocument();
     expect(await within(dialog).findByRole("button", { name: /crear membresía/i })).toBeInTheDocument();
   });
@@ -3823,6 +3830,7 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
 
     const dialogs = await screen.findAllByRole("dialog");
     expect(dialogs).toHaveLength(1);
+    fireEvent.click(await within(dialogs[0]).findByRole("radio", { name: "Socio nuevo" }));
     expect(await within(dialogs[0]).findByRole("button", { name: /crear membresía/i })).toBeInTheDocument();
   });
 

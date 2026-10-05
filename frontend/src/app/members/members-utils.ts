@@ -801,3 +801,27 @@ export function getTotalPages(
 ): number {
   return Math.max(1, Math.ceil(totalAccounts / pageSize));
 }
+
+/**
+ * «Socio antiguo» result line: the one-month period that starts at the last
+ * payment ends at `fechaFin`; from that day on the member either is covered
+ * (`fechaFin >= hoy`) or owes (`Debe desde`).
+ */
+export function describeEstadoMigracion(fechaFin: string, hoy: string): string {
+  return fechaFin >= hoy ? `Al día hasta ${formatDate(fechaFin)}` : `Debe desde ${formatDate(fechaFin)}`;
+}
+
+/**
+ * Whether a member still has no first coverage (no membership, or a never
+ * covered INACTIVA one with no payment awaiting validation): the only moment
+ * the admin is asked «¿Socio nuevo o socio antiguo?».
+ */
+export function isPrimerPagoPendiente(student: MemberStudentSummary): boolean {
+  const membresia = student.membresia;
+  if (!membresia) return true;
+  return (
+    membresia.estadoBackend === "INACTIVA"
+    && !membresia.cubiertoHasta
+    && student.ultimoPago?.estado !== "pendiente_validacion"
+  );
+}
