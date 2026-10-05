@@ -17,6 +17,7 @@ from app.infraestructura.generador_pdf import (
 )
 from app.soporte_transversal.formato import formatear_monto_usd
 from app.dominio.enums import EstadoMembresia, EstadoPago
+from app.infraestructura.repositorios.antecedentes_club_repositorio import AntecedentesClubRepositorio
 from app.infraestructura.repositorios.membresia_repositorio import HistorialEstadoMembresiaRepositorio
 from app.servicios_negocio.dtos.membresia_pago_schemas import (
     MembresiaCreateDTO, MembresiaEstadisticasResponseDTO, MembresiaPropiaCreateDTO, MembresiaResponseDTO,
@@ -275,11 +276,15 @@ def _con_cubierto_hasta(db: Session, membresias: list) -> List[MembresiaResponse
     )
     suspendidas = [m.id for m in membresias if m.estado == EstadoMembresia.SUSPENDIDA]
     motivo_por_id = HistorialEstadoMembresiaRepositorio(db).motivo_ultima_suspension_bulk(suspendidas)
+    socio_desde_por_persona = AntecedentesClubRepositorio(db).fechas_inicio_por_personas(
+        list({membresia.persona_id for membresia in membresias})
+    )
     return [
         MembresiaResponseDTO.model_validate(membresia).model_copy(
             update={
                 "cubierto_hasta": cobertura_por_id.get(membresia.id),
                 "motivo_suspension": motivo_por_id.get(membresia.id),
+                "socio_desde": socio_desde_por_persona.get(membresia.persona_id),
             }
         )
         for membresia in membresias

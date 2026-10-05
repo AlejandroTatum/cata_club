@@ -26,6 +26,7 @@ vi.mock("../SuspenderReactivarForm", () => ({
   ),
 }));
 vi.mock("../CambiarPlanForm", () => ({ default: () => <div /> }));
+vi.mock("../SocioDesdeForm", () => ({ default: () => <div /> }));
 vi.mock("../RegisterPaymentForm", () => ({
   default: ({ onPaymentRegistered }: { onPaymentRegistered?: () => void }) => (
     <button type="button" onClick={() => onPaymentRegistered?.()}>

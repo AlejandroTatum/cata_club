@@ -859,9 +859,9 @@ def test_membresias_mias_cubierto_hasta_no_incurre_en_n_mas_uno(client, db_sessi
     for membresia_dto in cuerpo:
         assert membresia_dto["cubiertoHasta"] == fechas_fin_esperadas[membresia_dto["id"]].isoformat()
     selects = [s for s in sentencias if s.strip().upper().startswith("SELECT")]
-    assert len(selects) <= 4, (
-        f"Se esperaban a lo sumo 4 SELECTs (autorización + membresías + 2 "
-        f"anclas agrupadas), se ejecutaron {len(selects)}: {selects}"
+    assert len(selects) <= 5, (
+        f"Se esperaban a lo sumo 5 SELECTs (autorización + membresías + 2 "
+        f"anclas agrupadas + 1 «socio desde» agrupado), se ejecutaron {len(selects)}: {selects}"
     )
 
 

@@ -95,6 +95,12 @@ export interface BackendMembresiaPropia {
    */
   fechaActivacion?: string;
   /**
+   * `MembresiaResponseDTO.socio_desde` (QA round 2, L15): the person's real
+   * club join date (`AntecedentesClub.fecha_inicio_club`), which an admin can
+   * set for migrated members. Wins over `fechaActivacion` for «Jugador desde».
+   */
+  socioDesde?: string | null;
+  /**
    * `MembresiaResponseDTO.es_gratuidad_familiar` (issue #400, slice 4c-a) —
    * the authoritative gratuity signal, not `montoAplicado === "0"` (see
    * `BackendMembresia` in payments-adapter.ts for the two-zero-classes
@@ -130,6 +136,8 @@ export interface MembershipView {
   categoria: string | null;
   modalidad: string | null;
   fechaActivacion: string | null;
+  /** Normalized to `null` when absent — see `BackendMembresiaPropia.socioDesde`. */
+  socioDesde: string | null;
   /** Normalized to `false` when the backend omits it — see `BackendMembresiaPropia.esGratuidadFamiliar`. */
   esGratuidadFamiliar: boolean;
   /** Normalized to `null` when the backend omits it — see `BackendMembresiaPropia.cubiertoHasta`. */
@@ -151,6 +159,7 @@ export function buildMembershipView(
     categoria: tipo?.categoria ?? null,
     modalidad: tipo?.modalidad ?? null,
     fechaActivacion: mem.fechaActivacion ?? null,
+    socioDesde: mem.socioDesde ?? null,
     esGratuidadFamiliar: mem.esGratuidadFamiliar ?? false,
     cubiertoHasta: mem.cubiertoHasta ?? null,
     motivoSuspension: mem.motivoSuspension ?? null,

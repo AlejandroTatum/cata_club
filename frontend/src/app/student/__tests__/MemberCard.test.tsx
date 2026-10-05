@@ -107,6 +107,20 @@ describe("MemberCard", () => {
     ]);
   });
 
+  it("prints the admin-set socioDesde as «Jugador desde», not the enrollment date", () => {
+    renderCard({ profile: { ...PROFILE, membership: { ...PROFILE.membership!, socioDesde: "2019-03-15" } } });
+
+    const row = within(screen.getByTestId("carnet-facts")).getByText("Jugador desde").parentElement!;
+    expect(row.lastElementChild?.textContent).toBe("15/03/2019");
+  });
+
+  it("falls back to the activation date when socioDesde is null", () => {
+    renderCard({ profile: { ...PROFILE, membership: { ...PROFILE.membership!, socioDesde: null } } });
+
+    const row = within(screen.getByTestId("carnet-facts")).getByText("Jugador desde").parentElement!;
+    expect(row.lastElementChild?.textContent).toBe("04/10/2026");
+  });
+
   it("falls back to a dash when there is no coverage end", () => {
     renderCard({ coverageEnd: null });
 

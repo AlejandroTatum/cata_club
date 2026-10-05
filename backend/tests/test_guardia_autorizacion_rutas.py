@@ -326,6 +326,7 @@ RUTAS_ROLES_REQUERIDOS = {
     ("PATCH", "/membresias/pagos/{pago_id}/validar"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),
+    ("PUT", "/personas/{persona_id}/socio-desde"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}/cuenta/estado"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}/estado"): frozenset({"ADMINISTRADOR"}),
     # Issue #389: corregir es un acto DISTINTO de tomar -- solo admin,

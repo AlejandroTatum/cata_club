@@ -77,8 +77,9 @@ export function MembershipCard({
   }
   // Both already loaded: they sit beside the heading so the card's right side
   // carries the membership's facts instead of staying blank on a wide screen.
-  if (membership?.fechaActivacion) {
-    facts.push({ label: "Jugador desde", value: formatDate(membership.fechaActivacion) });
+  const playerSince = membership?.socioDesde ?? membership?.fechaActivacion;
+  if (playerSince) {
+    facts.push({ label: "Jugador desde", value: formatDate(playerSince) });
   }
   if (approvedCount) facts.push({ label: "Pagos aprobados", value: String(approvedCount) });
 

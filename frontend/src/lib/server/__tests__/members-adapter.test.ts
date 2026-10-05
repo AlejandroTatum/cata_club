@@ -139,6 +139,7 @@ describe("buildMemberAccounts", () => {
       cubiertoHasta: null,
       monto: 25,
       esGratuidadFamiliar: false,
+      socioDesde: null,
     });
     expect(student?.ultimoPago?.estado).toBe("aprobado");
     expect(student?.ultimoPago?.monto).toBe(50);
@@ -201,6 +202,7 @@ describe("buildMemberAccounts", () => {
       // proves the adapter defaults an absent backend flag to `false`
       // instead of leaving it `undefined` (issue #400, slice 4c-a).
       esGratuidadFamiliar: false,
+      socioDesde: null,
     });
     // No payment means no payment row — the membership does not fabricate one.
     expect(student.ultimoPago).toBeNull();

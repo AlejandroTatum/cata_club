@@ -261,6 +261,7 @@ function buildMemberStudentSummary(
           // interface's doc comment (payments-adapter.ts) for why an older
           // backend omitting it must resolve to "no gratuity" here.
           esGratuidadFamiliar: membresia.esGratuidadFamiliar ?? false,
+          socioDesde: membresia.socioDesde ?? membresia.fechaActivacion ?? null,
           ...(deuda
             ? {
               mesesAdeudados: deuda.mesesAdeudados, montoAdeudado: deuda.mesesAdeudados * deuda.montoMensual,

@@ -562,7 +562,11 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
               ? ""
               : modalidad.charAt(0).toUpperCase() + modalidad.slice(1).toLowerCase()
           }
-          since={selfMembership.fechaActivacion ? formatDate(selfMembership.fechaActivacion) : null}
+          since={
+            (selfMembership.socioDesde ?? selfMembership.fechaActivacion)
+              ? formatDate((selfMembership.socioDesde ?? selfMembership.fechaActivacion) as string)
+              : null
+          }
         />
       );
     }

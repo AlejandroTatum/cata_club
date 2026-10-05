@@ -53,3 +53,17 @@ describe("MembershipCard — suspension reason", () => {
     expect(screen.queryByTestId("suspension-reason")).toBeNull();
   });
 });
+
+describe("MembershipCard — Jugador desde", () => {
+  it("prefers the admin-set socioDesde over the activation date", () => {
+    renderCard(membership({ estado: "ACTIVA", fechaActivacion: "2026-10-05T00:00:00Z", socioDesde: "2019-03-15" }));
+
+    expect(screen.getByText("Jugador desde").parentElement).toHaveTextContent("15/03/2019");
+  });
+
+  it("falls back to the activation date without socioDesde", () => {
+    renderCard(membership({ estado: "ACTIVA", fechaActivacion: "2026-10-05T00:00:00Z", socioDesde: null }));
+
+    expect(screen.getByText("Jugador desde").parentElement).toHaveTextContent("05/10/2026");
+  });
+});
