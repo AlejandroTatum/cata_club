@@ -484,9 +484,25 @@ DC="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
   crontab -l
   ```
 
-  **Esperado:** dos entradas (backup 03:30, frescura+heartbeat 07:00). **Detente
-  si:** aborta (falta destinatario, B2 mal configurado, log inescribible o
-  `heartbeat-url.txt`): el mensaje trae el comando exacto.
+  **Esperado:** tres entradas (backup 03:30, frescura+heartbeat 07:00 y
+  `host-snapshot.sh` cada minuto). `install-cron` también crea
+  `/var/lib/cata-club/metricas` y `/var/log/cata-club-host-snapshot.log`
+  (puede pedir `sudo`). **Detente si:** aborta (falta destinatario, B2 mal
+  configurado, log inescribible o `heartbeat-url.txt`): el mensaje trae el
+  comando exacto.
+
+  **Verificación de «Servidor y memoria»** (issue #1614), pasado el primer
+  minuto y con el stack arriba:
+
+  ```bash
+  find /var/lib/cata-club/metricas/host.json -mmin -1 | grep .
+  docker compose exec celery-worker cat /host-metricas/host.json
+  ```
+
+  **Esperado:** `find` imprime la ruta (archivo de menos de 1 minuto) y el
+  segundo comando muestra el JSON. **Detente si:** `find` no imprime nada:
+  revisa `/var/log/cata-club-host-snapshot.log`; sin este archivo Admin →
+  Actividad → Métricas avanzadas muestra «Aún no hay mediciones».
 
 ## 8. Primer administrador y categorías
 
