@@ -123,7 +123,7 @@ def test_inscripcion_registra_los_cuatro_documentos_y_el_representado(db_session
     }
     assert all(registro.representado_persona_id == alumno.id for registro in consentimientos)
     assert all(registro.version_documento and registro.texto_aceptado for registro in consentimientos)
-    assert {registro.version_documento for registro in consentimientos} == {"2.3"}
+    assert {registro.version_documento for registro in consentimientos} == {"2.4"}
 
 
 def test_inscripcion_del_menor_entrega_aviso_propio_al_representante(monkeypatch, db_session):

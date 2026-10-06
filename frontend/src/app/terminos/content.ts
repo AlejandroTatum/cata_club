@@ -9,7 +9,7 @@ export const HEALTH_CHAPTER_ID = "consentimiento-salud";
 export const IMAGE_CHAPTER_ID = "permiso-imagen";
 
 /**
- * The single public document, version 2.3 (the lawyer-approved 2.1 reworded so acceptance is mandatory; pending lawyer validation): terms, conditions and
+ * The single public document, version 2.4 (2.3 plus the second-guardian text, approved by the club; 2.3 was the lawyer-approved 2.1 reworded so acceptance is mandatory): terms, conditions and
  * liability agreement. The privacy notice (VIII), the health-data consent (X)
  * and the image permission (XI) are chapters of it, not separate documents
  * (#1615). Published verbatim.
@@ -36,6 +36,8 @@ export const legalBlocks: readonly LegalBlock[] = [
   heading("Menores y representantes"),
   paragraph("Si el jugador es menor de 18 años, su cuenta debe estar vinculada a un representante legal. El representante es quien registra al jugador, acepta estos términos en su nombre y administra su información y sus pagos y, mientras el jugador sea menor de 15 años, sus consentimientos. El jugador de 15 a 17 años da y retira sus propios consentimientos, y su representante es informado."),
   paragraph("Podemos pedirle un documento que acredite quién es el representante. Si el jugador tiene de 15 a 17 años, también respetamos su derecho a opinar y a decidir sobre el uso de su imagen y de sus datos, conforme al Capítulo VIII y al Permiso de uso de imagen. En todos los casos, el interés del niño, niña o adolescente es lo primero."),
+  paragraph("Un jugador menor de edad puede tener hasta dos representantes con cuenta propia en el sistema: el representante principal y, si el principal lo decide, un segundo representante. El representante principal invita al segundo por correo electrónico y puede quitarlo en cualquier momento; el administrador del club también puede agregarlo o quitarlo. El acceso del segundo representante termina en el momento en que se lo quita."),
+  paragraph("El segundo representante puede ver la información del jugador, recibir sus avisos, pagar su membresía, subir comprobantes y editar sus datos generales. No puede firmar ni editar la ficha médica ni los consentimientos legales del jugador: esas decisiones corresponden al representante principal, y el segundo representante solo puede verlas."),
   heading("Membresías, pagos, comprobantes y recibos"),
   paragraph("Los precios, las formas de pago y los datos para pagar le son comunicados por el club a través de sus canales de contacto."),
   paragraph("Cuando usted pague, suba en el sistema su comprobante: es el documento que usted presenta como prueba de su pago (por ejemplo, la foto o captura de una transferencia). Un pago aparece como «Por validar» hasta que una persona del club lo revise. Mientras esté «Por validar», no se considera confirmado."),
@@ -92,9 +94,9 @@ export const legalBlocks: readonly LegalBlock[] = [
   paragraph("• Mantener la seguridad, detectar errores y poder demostrar qué aceptó usted y cuándo. Base: interés legítimo del club y obligaciones legales."),
   paragraph("No usamos sus datos para otras finalidades sin su autorización previa. No vendemos sus datos. No tomamos decisiones únicamente automatizadas sobre usted."),
   heading("Quién puede ver sus datos"),
-  paragraph("• Ficha médica: el administrador del club y el representante del jugador. El entrenador no la ve de manera normal: solo puede consultarla en una emergencia, a través de una vía especial, y cada consulta queda registrada para auditoría."),
+  paragraph("• Ficha médica: el administrador del club y los representantes del jugador (el principal y, si lo hay, el segundo). El segundo representante solo la ve; no la firma ni la edita. El entrenador no la ve de manera normal: solo puede consultarla en una emergencia, a través de una vía especial, y cada consulta queda registrada para auditoría."),
   paragraph("• Reportes de error: solo el administrador."),
-  paragraph("• Datos de cuenta y de jugadores: cada persona ve lo suyo y lo de los jugadores que representa. El personal del club ve solo lo que su función necesita."),
+  paragraph("• Datos de cuenta y de jugadores: cada persona ve lo suyo y lo de los jugadores que representa, sea como representante principal o como segundo representante. Los dos representantes de un jugador reciben sus avisos y correos y ven su información, sus pagos y sus recibos. El personal del club ve solo lo que su función necesita."),
   heading("Proveedores que tratan datos por cuenta del club"),
   paragraph("El club usa estos proveedores, que tratan datos solo para prestarle el servicio:"),
   paragraph("• DigitalOcean: aloja el servidor del sistema. El proveedor es responsable de la seguridad física de la infraestructura que presta."),
@@ -120,9 +122,12 @@ export const legalBlocks: readonly LegalBlock[] = [
   paragraph("• Pedir portabilidad: recibir sus datos en un formato estructurado y de uso común. Si la pide, el club la atiende por correo."),
   paragraph("• Retirar su consentimiento cuando el tratamiento se base en él. El retiro vale hacia adelante y no afecta lo que se hizo antes."),
   paragraph("Para ejercer un derecho, escriba a cataclub.loja@proton.me con su nombre y lo que necesita. Le responderemos en un máximo de 15 días. Si no recibe respuesta o no está de acuerdo, puede presentar un reclamo ante la Superintendencia de Protección de Datos Personales."),
+  paragraph("Los derechos sobre los datos de un jugador menor de 15 años los ejerce su representante principal. El segundo representante puede pedir al club, por los canales de contacto, que se le explique cómo se tratan los datos que ve. Si el segundo representante pide eliminar su cuenta, se lo retira del jugador y se conserva el registro de su alta y su baja."),
   heading("Menores y representantes en materia de datos"),
   paragraph("Menores de 15 años: su representante legal da las autorizaciones y recibe esta información en su nombre. Adolescentes de 15 a 17 años: ellos mismos pueden dar su autorización y ejercer sus derechos de manera directa; su representante también es informado. En ningún caso un representante puede retirar una autorización que dio el propio adolescente."),
   paragraph("El jugador adolescente puede pedir que se le explique el contenido de este capítulo."),
+  paragraph("Cuando el representante principal agrega a un segundo representante, los datos del jugador menor de edad, incluidos los de salud, quedan visibles para esa otra persona adulta. El representante principal debe hacerlo únicamente con una persona de su confianza y con derecho a conocer esos datos. El club registra quién agregó o quitó a un segundo representante, a quién y cuándo, y conserva ese registro para poder demostrarlo."),
+  paragraph("El segundo representante recibe el mismo deber de reserva que el representante principal: usa estos datos solo para el cuidado y la gestión de la participación del jugador en el club. Si usted no desea que otra persona vea los datos de su hijo o hija, no la invite; si ya lo hizo, puede quitarla desde su cuenta."),
   heading("Seguridad e incidentes"),
   paragraph("Protegemos los datos con medidas técnicas y organizativas: acceso por roles, sesiones protegidas, archivos privados con enlaces que vencen, copias de respaldo y registro de las consultas a la ficha médica."),
   paragraph("Si ocurre una violación de seguridad que afecte sus datos, el club la notificará a la Superintendencia de Protección de Datos Personales dentro de 5 días y, cuando exista un riesgo para sus derechos, le avisará a usted dentro de 3 días (Arts. 43 y 46 de la Ley Orgánica de Protección de Datos Personales)."),
