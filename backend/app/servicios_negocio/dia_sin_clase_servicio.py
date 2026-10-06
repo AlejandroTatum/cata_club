@@ -8,6 +8,7 @@ Decisión de producto: el aviso (campana + correo) se emite UNA vez, al crear.
 Editar o borrar no reenvía nada -- reenviar correo por cada retoque de un
 texto gastaría el cupo diario de correo del plan gratuito.
 """
+import logging
 from datetime import date
 
 from sqlalchemy import inspect as inspeccionar_orm
@@ -20,6 +21,10 @@ from app.servicios_negocio.dtos.dia_sin_clase_schemas import (
     DiaSinClaseCreateDTO,
     DiaSinClaseUpdateDTO,
 )
+
+logger = logging.getLogger("cataclub.dia_sin_clase")
+
+TAREA_AVISO = "app.infraestructura.tareas.dia_sin_clase_tareas.avisar_dia_sin_clase"
 
 
 class DiaSinClaseServicio:
@@ -39,6 +44,7 @@ class DiaSinClaseServicio:
         self.db.commit()
         if inspeccionar_orm(dia).expired:
             self.db.refresh(dia)
+        self._encolar_aviso(dia.id)
         return dia
 
     def actualizar(self, dia_id: int, datos: DiaSinClaseUpdateDTO) -> DiaSinClase:
@@ -60,3 +66,18 @@ class DiaSinClaseServicio:
         if dia is None:
             raise EntidadNoEncontrada(f"Día sin clase con id {dia_id} no encontrado")
         return dia
+
+    @staticmethod
+    def _encolar_aviso(dia_id: int) -> None:
+        """Publica la tarea que avisa a los socios, DESPUÉS del commit. Un
+        broker caído no propaga: el día ya quedó creado y el admin no debe
+        reintentar un alta que sí ocurrió (mismo criterio que el comprobante
+        de pago)."""
+        from app.infraestructura.tareas.celery_app import celery_app
+
+        try:
+            celery_app.send_task(TAREA_AVISO, args=[dia_id])
+        except Exception:
+            logger.exception(
+                "No se pudo encolar el aviso del día sin clase %s (¿broker caído?)", dia_id,
+            )

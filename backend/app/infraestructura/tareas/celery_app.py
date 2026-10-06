@@ -26,6 +26,7 @@ celery_app = Celery(
         "app.infraestructura.tareas.vencimientos_tareas",
         "app.infraestructura.tareas.contador_correo_tareas",
         "app.infraestructura.tareas.recordatorio_sesion_tareas",
+        "app.infraestructura.tareas.dia_sin_clase_tareas",
         "app.infraestructura.tareas.reporte_error_tareas",
         "app.infraestructura.tareas.metricas_tareas",
         "app.infraestructura.tareas.latido_tareas",

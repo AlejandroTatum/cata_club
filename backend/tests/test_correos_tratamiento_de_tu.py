@@ -30,6 +30,7 @@ MODULOS = [
     "infraestructura/generador_pdf.py",
     "infraestructura/tareas/alertas_tareas.py",
     "infraestructura/tareas/recordatorio_sesion_tareas.py",
+    "infraestructura/tareas/dia_sin_clase_tareas.py",
     "servicios_negocio/relacion_representacion_servicio.py",
 ]
 
