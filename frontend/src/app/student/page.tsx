@@ -36,6 +36,7 @@ import {
 import FamilyStrip from "./FamilyStrip";
 import CuotaCard from "./CuotaCard";
 import MemberCard from "./MemberCard";
+import NoClassDays from "./NoClassDays";
 import WeekPlan from "./WeekPlan";
 import JoinAsPlayerAction from "./JoinAsPlayerAction";
 import StudentErrorState from "./StudentErrorState";
@@ -591,6 +592,9 @@ function ActivePortalView({
           club-specific: a representante lands on one child and swaps to the
           next without leaving the page. */}
       <FamilyStrip profiles={managedProfiles} value={selectedId} onChange={setSelectedId} />
+
+      {/* Club-wide no-class days (issue #1665): members only, never the landing. */}
+      <NoClassDays />
 
       {selectedProfile === null || paymentSituation === null ? (
         <EmptyState

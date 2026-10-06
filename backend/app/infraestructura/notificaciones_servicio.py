@@ -36,6 +36,7 @@ from app.dominio.modelos import (
     Usuario,
 )
 from app.infraestructura.asuntos_correo import (
+    ASUNTO_DIA_SIN_CLASE,
     ASUNTO_PAGO_APROBADO,
     ASUNTO_PAGO_RECHAZADO,
     ASUNTO_INVITACION_ENTRENADOR,
@@ -763,3 +764,42 @@ class ServicioNotificaciones:
         )
         self.enviar_correo(correo, asunto, texto, html)
         logger.info("[PAGO_RECHAZADO] correo=%s", _enmascarar_correo(correo))
+
+    def enviar_dia_sin_clase(
+        self,
+        correo: str,
+        nombre: Optional[str],
+        fecha_inicio: date,
+        fecha_fin: date,
+        motivo: str,
+    ) -> None:
+        """Avisa al socio (o a su representante) que el club no tendrá clase
+        (issue #1665). Informa nada más: fechas y motivo, sin botón de pago ni
+        nada que cobrar -- un día sin clase no toca cobertura ni cuotas.
+
+        `motivo` es texto libre de administración: viaja escapado en el HTML
+        por el layout compartido."""
+        saludo = f"Hola {nombre}," if nombre else "Hola,"
+        inicio = fecha_inicio.strftime("%d/%m/%Y")
+        if fecha_fin == fecha_inicio:
+            cuando = f"el {inicio}"
+            filas = [("Fecha", inicio)]
+        else:
+            fin = fecha_fin.strftime("%d/%m/%Y")
+            cuando = f"del {inicio} al {fin}"
+            filas = [("Desde", inicio), ("Hasta", fin)]
+        filas.append(("Motivo", motivo))
+        texto, html = construir_correo(
+            titulo="Día sin clase",
+            preheader=f"El club no tendrá clase {cuando}.",
+            saludo=saludo,
+            parrafos=(
+                f"El club no tendrá clase {cuando}.",
+                "Retomamos las clases con normalidad después de esa fecha.",
+            ),
+            filas=filas,
+            cta_etiqueta="Ver mi panel",
+            cta_url=f"{self._frontend_url}/student",
+        )
+        self.enviar_correo(correo, ASUNTO_DIA_SIN_CLASE, texto, html)
+        logger.info("[DIA_SIN_CLASE] correo=%s", _enmascarar_correo(correo))

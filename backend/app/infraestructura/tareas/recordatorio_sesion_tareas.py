@@ -77,6 +77,7 @@ from app.dominio.enums import DiaSemana, EstadoMembresia, TipoNotificacion
 from app.dominio.modelos import (
     AlumnoHorario,
     CategoriaHorario,
+    DiaSinClase,
     HorarioEntrenamiento,
     Membresia,
     Notificacion,
@@ -243,6 +244,22 @@ def recordar_sesion_de_manana() -> dict:
     sin_cuenta_alcanzable: list[int] = []
 
     with SessionLocal() as db:
+        # Issue #1665: un día sin clase del club no tiene sesión que recordar.
+        if db.execute(
+            select(DiaSinClase.id).where(
+                DiaSinClase.fecha_inicio <= sesion, DiaSinClase.fecha_fin >= sesion,
+            ).limit(1)
+        ).first() is not None:
+            logger.info("Recordatorios de sesión %s omitidos: día sin clase", sesion.isoformat())
+            return {
+                "sesion": sesion.isoformat(),
+                "dia_semana": dia_de_la_sesion.value,
+                "total_recordatorios": 0,
+                "recordatorios": [],
+                "total_sin_cuenta_alcanzable": 0,
+                "sin_cuenta_alcanzable": [],
+                "dia_sin_clase": True,
+            }
         stmt = (
             select(Persona, HorarioEntrenamiento, CategoriaHorario.label)
             .join(Membresia, Membresia.persona_id == Persona.id)

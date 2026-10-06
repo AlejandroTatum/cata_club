@@ -61,7 +61,10 @@ const mockFetchAlumnosPorHorario = vi.fn();
 const mockFetchRecentAttendanceSessions = vi.fn();
 const mockFetchFichaEmergencia = vi.fn();
 
+const mockFetchDiasSinClase = vi.fn();
+
 vi.mock("@/services/api", () => ({
+  fetchDiasSinClase: (...args: unknown[]) => mockFetchDiasSinClase(...args),
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
   // QA4 PERF-01: counts for every horario, names only for the hero's horario.
@@ -191,6 +194,7 @@ const ROSTER: AlumnoHorario[] = [
 
 describe("TrainerPage — Mi día", () => {
   beforeEach(() => {
+    mockFetchDiasSinClase.mockResolvedValue([]);
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(NOW);
     mockFetchTrainingSchedules.mockReset().mockResolvedValue(TODAY_SCHEDULES);

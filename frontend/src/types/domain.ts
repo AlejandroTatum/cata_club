@@ -465,7 +465,9 @@ export type TipoNotificacion =
   // email budget is spent on reminders — so this type exists for the bell and
   // nothing else. See
   // `backend/app/infraestructura/tareas/recordatorio_sesion_tareas.py`.
-  | "RECORDATORIO_SESION";
+  | "RECORDATORIO_SESION"
+  // Issue #1665: in-app (and email) notice of a club-wide no-class day.
+  | "DIA_SIN_CLASE";
 
 /**
  * An in-app notification (`GET /ranking/notificaciones/mias`) —
