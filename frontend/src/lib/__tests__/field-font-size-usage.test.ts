@@ -41,7 +41,7 @@
  * ## What this deliberately does NOT check
  *
  * **That the rule fires on a real phone.** `@media (pointer: coarse)` is a
- * claim about the device, and jsdom has no device. `members-dialog-zoom.mobile.spec.ts`
+ * claim about the device, and jsdom has no device. `members-pagos-zoom.mobile.spec.ts`
  * measures the computed size in an emulated mobile Chromium; this file measures
  * that the declaration those pixels come from is still here and still wins.
  *

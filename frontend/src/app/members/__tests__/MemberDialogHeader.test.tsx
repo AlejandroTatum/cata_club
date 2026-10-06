@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import MedicalRecordDialog from "../MedicalRecordDialog";
-import PaymentsDialog from "../PaymentsDialog";
 import MemberDialogHeader from "../MemberDialogHeader";
 import type { MemberAccount } from "../members-utils";
 
@@ -17,7 +16,6 @@ const ACCOUNT: MemberAccount = {
 };
 
 describe.each([
-  ["Pagos", <PaymentsDialog key="p" account={ACCOUNT} onClose={() => {}} onMembershipCreated={() => {}} onDebtRegularized={() => {}} onMembresiaChanged={() => {}} onPaymentRegistered={() => {}} />],
   ["Ficha médica", <MedicalRecordDialog key="m" account={ACCOUNT} onClose={() => {}} />],
 ])("%s dialog header", (purpose, dialog) => {
   it("shows the shared identity header with the dialog purpose", () => {

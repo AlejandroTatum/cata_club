@@ -129,7 +129,7 @@ export default function MigrarSocioAntiguoForm({
       // Created now or on an earlier attempt: either way the admin must know it exists.
       const message =
         id !== null && (recienCreada || creadaId !== null)
-          ? `La membresía se creó, pero no se pudo registrar el último pago: ${detalle} Corrige la fecha y reintenta, o usa «Regularizar deuda».`
+          ? `La membresía se creó, pero no se pudo registrar el último pago: ${detalle} Corrige la fecha y reintenta, o usa «Cargar pagos atrasados».`
           : detalle;
       setError(message);
       showError(message);
@@ -211,7 +211,7 @@ export default function MigrarSocioAntiguoForm({
         </button>
         {creadaId !== null && error && (
           <button type="button" onClick={onRefetch} disabled={loading} className={`${ACTION_TRIGGER} w-auto`}>
-            Cerrar y usar Regularizar deuda
+            Cerrar y usar Cargar pagos atrasados
           </button>
         )}
       </div>

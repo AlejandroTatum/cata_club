@@ -19,6 +19,7 @@ import {
   getDebtSummary,
   getAccountStateBadge,
   getMembershipStatusBadge,
+  describePaymentsState,
   isRepresentativePersonaRow,
   normalizeText,
   accountMatchesFlag,
@@ -1340,5 +1341,97 @@ describe("getDebtSummary", () => {
     expect(getDebtSummary(accountWith({ id: 1, estado: "vencida", monto: 40 }))).toBeNull();
     expect(getDebtSummary(accountWith({ id: 1, estado: "vencida", monto: 40, mesesAdeudados: 0, montoAdeudado: 0 }))).toBeNull();
     expect(getDebtSummary(accountWith(null))).toBeNull();
+  });
+});
+
+// #1668: the dedicated payments page says in plain words where a member stands
+// and which ONE action comes next.
+describe("describePaymentsState", () => {
+  const base = { id: "7", nombres: "Sofía", apellidos: "Vera", activo: true, ultimoPago: null };
+  const membresia = (extra: Record<string, unknown>) => ({
+    id: 3,
+    tipo: "Mensual",
+    estado: "activa" as const,
+    fechaInicio: "2026-01-01",
+    fechaFin: "2026-02-01",
+    monto: 25,
+    ...extra,
+  });
+
+  it("asks for the first payment when there is no membership", () => {
+    expect(describePaymentsState({ ...base, membresia: null })).toMatchObject({
+      key: "primer-pago",
+      label: "Primer pago pendiente",
+      primaryAction: "tipo-socio",
+    });
+  });
+
+  it("asks for the first payment on a never-covered INACTIVA membership", () => {
+    const student = { ...base, membresia: membresia({ estado: "vencida", estadoBackend: "INACTIVA", cubiertoHasta: null }) };
+    expect(describePaymentsState(student).key).toBe("primer-pago");
+  });
+
+  it("puts a payment waiting for review first and says how to fix a wrong one", () => {
+    const student = {
+      ...base,
+      membresia: membresia({ estado: "vencida", estadoBackend: "INACTIVA", cubiertoHasta: null }),
+      ultimoPago: { estado: "pendiente_validacion" as const, fechaPago: "2026-09-01", monto: 25, periodo: "" },
+    };
+    const state = describePaymentsState(student);
+    expect(state).toMatchObject({ key: "pendiente-revision", label: "Pago pendiente de revisión", primaryAction: "revisar-pago" });
+    expect(state.detail).toMatch(/recházalo/i);
+    expect(state.detail).toMatch(/vuelve a registrarlo/i);
+  });
+
+  it("leads with reactivation for a suspended membership", () => {
+    expect(describePaymentsState({ ...base, membresia: membresia({ estado: "suspendida" }) })).toMatchObject({
+      key: "suspendida",
+      primaryAction: "reactivar",
+    });
+  });
+
+  it("tells the admin a rejected payment must be registered again", () => {
+    const student = {
+      ...base,
+      membresia: membresia({ cubiertoHasta: "2026-10-01" }),
+      ultimoPago: { estado: "rechazado" as const, fechaPago: "2026-09-01", monto: 25, periodo: "" },
+    };
+    expect(describePaymentsState(student)).toMatchObject({ key: "rechazado", label: "Último pago rechazado", primaryAction: "registrar-pago" });
+  });
+
+  it.each([
+    [1, "Debe 1 mes"],
+    [3, "Debe 3 meses"],
+  ])("says how many months are owed (%i)", (meses, label) => {
+    const student = { ...base, membresia: membresia({ estado: "vencida", cubiertoHasta: "2026-06-30", mesesAdeudados: meses }) };
+    expect(describePaymentsState(student)).toMatchObject({ key: "debe", label, primaryAction: "regularizar-deuda" });
+  });
+
+  it("never claims «Al día» over a lapsed membership whose debt could not be read", () => {
+    const student = { ...base, membresia: membresia({ estado: "vencida", cubiertoHasta: "2026-06-30" }) };
+    expect(describePaymentsState(student)).toMatchObject({ key: "vencida", label: "Membresía vencida", primaryAction: "registrar-pago" });
+  });
+
+  it("never reads «Al día» for a VENCIDA membership whose debt is 0 months", () => {
+    const student = { ...base, membresia: membresia({ estado: "vencida", cubiertoHasta: "2026-06-30", mesesAdeudados: 0 }) };
+    expect(describePaymentsState(student)).toMatchObject({ key: "vencida", label: "Membresía vencida", primaryAction: "registrar-pago" });
+  });
+
+  it("a suspended membership with a payment under review leads with reactivation, and mentions the payment", () => {
+    const student = {
+      ...base,
+      membresia: membresia({ estado: "suspendida", estadoBackend: "SUSPENDIDA" }),
+      ultimoPago: { estado: "pendiente_validacion" as const, fechaPago: "2026-09-01", monto: 25, periodo: "" },
+    };
+    const state = describePaymentsState(student);
+    expect(state).toMatchObject({ key: "suspendida", primaryAction: "reactivar" });
+    expect(state.detail).toMatch(/mientras esté suspendida/i);
+  });
+
+  it("reads «Al día» with the coverage date and offers the next payment", () => {
+    const student = { ...base, membresia: membresia({ cubiertoHasta: "2026-12-01", mesesAdeudados: 0 }) };
+    const state = describePaymentsState(student);
+    expect(state).toMatchObject({ key: "al-dia", label: "Al día", primaryAction: "registrar-pago" });
+    expect(state.detail).toContain("01/12/2026");
   });
 });
