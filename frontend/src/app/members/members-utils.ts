@@ -600,6 +600,25 @@ export function countActiveStudents(account: MemberAccount): number {
 }
 
 /**
+ * Issues #1661/#1669: is this account a player (someone who can be put in a
+ * horario), as opposed to pure staff or a representative?
+ *
+ * A player has the ALUMNO role, an own membership that allows training
+ * (ACTIVA or VENCIDA — the backend `puede_entrenar` rule), or no known role
+ * at all (a represented minor has no `Usuario`, so the roles lookup yields
+ * nothing for them). Accounts whose only roles are ADMINISTRADOR /
+ * ENTRENADOR / REPRESENTANTE and that hold no such membership are not.
+ */
+export function isPlayerAccount(account: MemberAccount): boolean {
+  const roles = account.backendRoles ?? [];
+  if (roles.length === 0 || roles.includes("ALUMNO")) return true;
+  return account.estudiantes.some((student) => {
+    const estado = student.membresia?.estadoBackend;
+    return estado === "ACTIVA" || estado === "VENCIDA";
+  });
+}
+
+/**
  * Issue #1132: the role labels `IdentityCell` actually renders for this
  * row — `account.backendRoles` (the real roles, issue #1132's bulk
  * lookup), plus `"ALUMNO"` when the person is a player right now (an OWN
