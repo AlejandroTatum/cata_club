@@ -76,7 +76,10 @@ describe("GET /api/fichas-medicas/persona/[id]/emergencia", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body).toEqual(fichaEmergencia);
+    expect(body).toEqual({
+      ...fichaEmergencia,
+      contactoEfectivo: { nombre: "Marta Solís", telefono: "0987654321", esRepresentante: false },
+    });
 
     const [url, init] = vi.mocked(global.fetch).mock.calls[0] ?? [];
     expect(String(url)).toBe("http://localhost:8000/api/v1/fichas-medicas/persona/5/emergencia");
@@ -92,5 +95,48 @@ describe("GET /api/fichas-medicas/persona/[id]/emergencia", () => {
     const response = await GET(getRequest("5", `${ACCESS_TOKEN_COOKIE}=${access}`), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(403);
+  });
+
+  describe("effective emergency contact (#1667)", () => {
+    async function getEfectivo(ficha: Record<string, unknown>): Promise<unknown> {
+      vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ ...fichaEmergencia, ...ficha }));
+      const access = makeJwt(3600);
+      const response = await GET(getRequest("5", `${ACCESS_TOKEN_COOKIE}=${access}`), { params: Promise.resolve({ id: "5" }) });
+      return (await response.json()).contactoEfectivo;
+    }
+
+    it("falls back to the representative when the minor has no own contact", async () => {
+      expect(
+        await getEfectivo({ contactoEmergencia: null, telefonoEmergencia: null }),
+      ).toEqual({ nombre: "Marta Solís", telefono: "0987654321", esRepresentante: true });
+    });
+
+    it("keeps the representative as the contact when the own fields are blank strings", async () => {
+      expect(
+        await getEfectivo({ contactoEmergencia: " ", telefonoEmergencia: "" }),
+      ).toEqual({ nombre: "Marta Solís", telefono: "0987654321", esRepresentante: true });
+    });
+
+    it("keeps an adult's own contact untouched when there is no representative", async () => {
+      expect(
+        await getEfectivo({
+          contactoEmergencia: "Ana Torres",
+          telefonoEmergencia: "0991112233",
+          representanteNombreCompleto: null,
+          representanteTelefono: null,
+        }),
+      ).toEqual({ nombre: "Ana Torres", telefono: "0991112233", esRepresentante: false });
+    });
+
+    it("is null when there is neither an own contact nor a representative with a phone", async () => {
+      expect(
+        await getEfectivo({
+          contactoEmergencia: null,
+          telefonoEmergencia: null,
+          representanteNombreCompleto: "Marta Solís",
+          representanteTelefono: null,
+        }),
+      ).toBeNull();
+    });
   });
 });

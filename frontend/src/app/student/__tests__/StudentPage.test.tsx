@@ -873,7 +873,7 @@ describe("StudentPage — the carnet shows the student's photo", () => {
     expect(img).toHaveAttribute("height", "78");
   });
 
-  it("falls back to initials instead of showing a broken image when the photo fails to load", async () => {
+  it("falls back to the silhouette instead of showing a broken image when the photo fails to load", async () => {
     mockFetchStudentPortal.mockResolvedValueOnce({
       ...PORTAL,
       self: { ...PORTAL.self!, fotoUrl: "https://broken.example/foto.jpg" },
@@ -886,16 +886,16 @@ describe("StudentPage — the carnet shows the student's photo", () => {
 
     await waitFor(() => {
       expect(within(photo).queryByRole("img")).not.toBeInTheDocument();
-      expect(within(photo).getByText("A")).toBeInTheDocument();
+      expect(within(photo).getByTestId("carnet-photo-silhouette")).toBeInTheDocument();
     });
   });
 
-  it("shows initials when there is no photo, never a broken image", async () => {
+  it("shows the silhouette when there is no photo, never a broken image", async () => {
     render(<StudentPage />);
 
     const photo = await screen.findByTestId("carnet-photo");
     expect(within(photo).queryByRole("img")).not.toBeInTheDocument();
-    expect(within(photo).getByText("A")).toBeInTheDocument();
+    expect(within(photo).getByTestId("carnet-photo-silhouette")).toBeInTheDocument();
   });
 
   it("offers the upload trigger on the account's own carnet", async () => {

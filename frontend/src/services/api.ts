@@ -1517,6 +1517,24 @@ export async function fetchStudentPortal(personaId: string): Promise<StudentPort
   return request<StudentPortalSummary>(apiEndpoint(`/student?personaId=${encodeURIComponent(personaId)}`));
 }
 
+/** One persona's carnet data for the admin's printing — `GET /api/carnets`. */
+export interface CarnetSummary {
+  profile: StudentProfileSummary;
+  coverageEnd: string | null;
+  asignaciones: AlumnoHorario[];
+}
+
+export interface CarnetsResponse {
+  carnets: CarnetSummary[];
+  /** Personas that could not be read; the sheet prints without them. */
+  missing: number[];
+}
+
+/** Admin only (enforced by the BFF): the carnets of these personas, in order. */
+export async function fetchCarnets(personaIds: readonly number[]): Promise<CarnetsResponse> {
+  return request<CarnetsResponse>(apiEndpoint(`/carnets?ids=${personaIds.join(",")}`));
+}
+
 // ---------------------------------------------------------------------------
 // Dashboard API Methods (Fase 7)
 // ---------------------------------------------------------------------------
@@ -2941,6 +2959,15 @@ export interface FichaEmergencia {
   telefonoEmergencia: string | null;
   representanteNombreCompleto: string | null;
   representanteTelefono: string | null;
+  /**
+   * Issue #1667: who to call, resolved by the BFF — the person's own contact,
+   * else the representative (a minor has none of their own, #1138), else null.
+   */
+  contactoEfectivo?: {
+    nombre: string | null;
+    telefono: string | null;
+    esRepresentante: boolean;
+  } | null;
 }
 
 /**
