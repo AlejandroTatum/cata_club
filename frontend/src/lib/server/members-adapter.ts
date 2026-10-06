@@ -399,7 +399,12 @@ export function buildMemberAccounts(
       // does not check the representative's own contact data (that's a wider
       // question `EmergencyCardDialog.tsx`'s `estaCompletamenteVacia` asks,
       // not this one).
-      sinDatosEmergencia: persona.representanteId == null && !personaIdsConFicha.has(persona.id),
+      // Issue #1667: a represented persona is in the gap only when the
+      // representative (who is the emergency contact, #1138) has no phone.
+      // A representative outside the loaded page is unknown, not missing.
+      sinDatosEmergencia:
+        !personaIdsConFicha.has(persona.id) &&
+        (persona.representanteId == null || (representante !== undefined && !representante.telefono?.trim())),
       accountState: resolveAccountState(persona.cuentaActiva, persona.invitacionPendiente),
       estudiantes: [studentSummaryByPersonaId.get(persona.id)!],
       // Issue #1221: the personas represented BY this persona — empty for a
