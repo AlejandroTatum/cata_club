@@ -14,6 +14,11 @@ interface StudentSearchProps {
   readonly disabled?: boolean;
   /** Restricts the global active-person search to a role when needed. */
   readonly role?: string;
+  /**
+   * Restricts the search to players: an ALUMNO account or an eligible
+   * membership, including represented minors with no account of their own.
+   */
+  readonly playersOnly?: boolean;
   /** Student ids that must not be offered for the current operation. */
   readonly excludeIds?: readonly number[];
   /** Shows excluded ids as disabled results instead of hiding them. */
@@ -29,6 +34,7 @@ export default function StudentSearch({
   placeholder = "Buscar jugador por nombre…",
   disabled = false,
   role,
+  playersOnly = false,
   excludeIds = [],
   showExcluded = false,
   id,
@@ -74,7 +80,7 @@ export default function StudentSearch({
       setError(false);
       setOpen(true);
       try {
-        const data = await searchStudents(query.trim(), { limit: 10, ...(role ? { rol: role } : {}) });
+        const data = await searchStudents(query.trim(), { limit: 10, ...(role ? { rol: role } : {}), ...(playersOnly ? { jugador: true } : {}) });
         if (cancelled) return;
         setResults(Array.isArray(data) ? data : []);
         setActiveIndex(-1);
@@ -95,7 +101,7 @@ export default function StudentSearch({
       cancelled = true;
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [query, role]);
+  }, [query, role, playersOnly]);
 
   function handleSelect(alumno: PersonaBusqueda): void {
     onSelect(alumno);

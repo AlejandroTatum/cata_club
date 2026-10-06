@@ -309,11 +309,14 @@ async def buscar_personas(
     request: Request,
     q: str = Query(..., min_length=2, max_length=100),
     rol: Optional[str] = Query(default=None),
+    jugador: bool = Query(default=False),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=50),
     db: Session = Depends(obtener_sesion),
 ):
-    return PersonaServicio(db).buscar_por_nombre(q=q, rol=rol, skip=skip, limit=limit)
+    return PersonaServicio(db).buscar_por_nombre(
+        q=q, rol=rol, skip=skip, limit=limit, solo_jugadores=jugador
+    )
 
 
 # --- `PersonaResponseDTO` expone cédula, teléfono y fecha de nacimiento: PII
