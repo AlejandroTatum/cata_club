@@ -87,12 +87,13 @@ def _datos_invitado(secuencia=8300, **extra):
     return d
 
 
+NEUTRA = {"mensaje": "Si el correo es válido, enviaremos la invitación."}
+
+
 def _invitar(client, fam, *, correo=CORREO_NUEVO, persona_ids=None, datos="auto"):
     cuerpo = {"persona_ids": persona_ids or [fam.menor.id], "correo": correo}
-    if datos == "auto":
-        datos = _datos_invitado()
     if datos is not None:
-        cuerpo["datos"] = datos
+        cuerpo["datos"] = _datos_invitado() if datos == "auto" else datos
     return client.post(f"{BASE}/co-representantes/invitaciones", json=cuerpo)
 
 
@@ -128,8 +129,8 @@ def _restablecer(client, token, **extra):
 def test_invitar_con_correo_nuevo_crea_la_cuenta_y_encola_el_correo(client, db_session, fam):
     respuesta = _invitar(client, fam)
 
-    assert respuesta.status_code == 201, respuesta.text
-    assert respuesta.json() == {"estado": "INVITADO", "personaIds": [fam.menor.id]}
+    assert respuesta.status_code == 202, respuesta.text
+    assert respuesta.json() == NEUTRA
     cuenta = db_session.query(Usuario).filter_by(correo=CORREO_NUEVO).one()
     assert [r.tipo_rol for r in cuenta.roles] == [TipoRol.REPRESENTANTE]
     assert cuenta.correo_verificado is False
@@ -163,13 +164,12 @@ def test_el_worker_envia_un_enlace_de_un_solo_proposito_sin_contrasenia(client, 
     assert payload["type"] == "reset_password"
 
 
-def test_sin_datos_el_correo_nuevo_pide_datos_y_no_crea_nada(client, db_session, fam):
+def test_sin_datos_la_peticion_se_rechaza_y_no_crea_nada(client, db_session, fam):
     antes = (db_session.query(Persona).count(), db_session.query(Usuario).count())
 
     respuesta = _invitar(client, fam, datos=None)
 
-    assert respuesta.status_code == 200
-    assert respuesta.json()["estado"] == "REQUIERE_DATOS"
+    assert respuesta.status_code == 422
     assert (db_session.query(Persona).count(), db_session.query(Usuario).count()) == antes
     assert db_session.query(CoRepresentante).count() == 0
 
@@ -182,68 +182,149 @@ def test_datos_invalidos_o_duplicados_no_dejan_nada(client, db_session, fam):
     sin_cedula_valida = _invitar(client, fam, datos=_datos_invitado(cedula="1234567890"))
 
     assert menor_de_edad.status_code == 400 and "mayor de edad" in menor_de_edad.json()["detail"]
-    assert cedula_repetida.status_code == 400
+    assert cedula_repetida.status_code == 202 and cedula_repetida.json() == NEUTRA
     assert sin_cedula_valida.status_code == 422
     assert (db_session.query(Persona).count(), db_session.query(Usuario).count()) == antes
     assert db_session.query(CoRepresentante).count() == 0
 
 
-# --- Invitar con una cuenta REPRESENTANTE existente: solo vincula -----------
-def test_invitar_a_un_representante_existente_vincula_sin_crear_nada(client, db_session, fam):
+# --- Cuenta existente: invitación pendiente, nunca vínculo silencioso -------
+def _correos_enviados():
+    enviados = []
+    return enviados, patch.object(
+        ServicioNotificaciones, "enviar_correo", lambda self, *a: enviados.append(a),
+    )
+
+
+def test_invitar_a_un_representante_existente_deja_una_invitacion_pendiente_sin_vincular(client, db_session, fam):
     antes = (db_session.query(Persona).count(), db_session.query(Usuario).count())
+    enviados, espia = _correos_enviados()
 
-    respuesta = _invitar(client, fam, correo="Existente@X.com", datos=None)
+    with espia:
+        respuesta = _invitar(client, fam, correo="Existente@X.com")
 
-    assert respuesta.status_code == 201, respuesta.text
-    assert respuesta.json()["estado"] == "VINCULADO"
+    assert respuesta.status_code == 202 and respuesta.json() == NEUTRA
     assert (db_session.query(Persona).count(), db_session.query(Usuario).count()) == antes
-    assert db_session.query(CoRepresentante).filter_by(persona_id=fam.menor.id).one().co_representante_id == fam.existente.id
+    assert db_session.query(CoRepresentante).count() == 0
     assert db_session.query(RecuperacionOutbox).count() == 0
+    invitacion = db_session.query(CoRepresentanteInvitacion).one()
+    assert invitacion.co_representante_id == fam.existente.id and invitacion.aceptada_en is None
+    assert _eventos(db_session, fam.menor.id) == [("INVITACION", "REPRESENTANTE", fam.principal.id, fam.existente.id)]
+    # Aviso sin enlace de un solo uso ni contraseña.
+    assert enviados[0][0] == "existente@x.com" and "token=" not in enviados[0][2]
+    # Antes de aceptar no hay acceso a nada del menor.
+    _como(fam.existente.id, ["REPRESENTANTE"], "existente@x.com")
+    assert client.get(f"{BASE}/personas/{fam.menor.id}").status_code == 403
+    assert client.get(f"{BASE}/co-representantes/mios").json() == []
+
+
+def test_la_respuesta_es_identica_exista_o_no_el_correo(client, db_session, fam):
+    otra = crear_persona_orm(db_session, cedula_valida(8212), nombres="Otro", apellidos="Rol")
+    _cuenta(db_session, otra, "admin2@x.com", TipoRol.ADMINISTRADOR)
+    inactiva = crear_persona_orm(db_session, cedula_valida(8213), nombres="In", apellidos="Activa")
+    _cuenta(db_session, inactiva, "sinverificar@x.com", TipoRol.REPRESENTANTE, verificado=False)
+    db_session.commit()
+
+    correos = [CORREO_NUEVO, "existente@x.com", "admin2@x.com", "sinverificar@x.com", "madre@x.com", "no-existe@x.com"]
+    respuestas = []
+    for i, correo in enumerate(correos):
+        # Cada correo se prueba sobre un menor sin guardián: se quita lo que dejó el intento previo.
+        client.delete(f"{BASE}/co-representantes/persona/{fam.menor.id}")
+        with _correos_enviados()[1]:
+            r = _invitar(client, fam, correo=correo, datos=_datos_invitado(8400 + i))
+        respuestas.append((correo, r.status_code, r.json()))
+
+    assert {(s, tuple(sorted(b.items()))) for _, s, b in respuestas} == {(202, tuple(sorted(NEUTRA.items())))}, respuestas
+
+
+def test_un_correo_ajeno_o_de_otro_rol_no_deja_rastro(client, db_session, fam):
+    otra = crear_persona_orm(db_session, cedula_valida(8214), nombres="Otro", apellidos="Rol")
+    _cuenta(db_session, otra, "otrorol@x.com", TipoRol.ENTRENADOR)
+    db_session.commit()
+
+    assert _invitar(client, fam, correo="otrorol@x.com").json() == NEUTRA
+    assert _invitar(client, fam, correo="madre@x.com").json() == NEUTRA
+
+    assert db_session.query(CoRepresentante).count() == 0
     assert db_session.query(CoRepresentanteInvitacion).count() == 0
-    assert _eventos(db_session, fam.menor.id) == [("ALTA", "REPRESENTANTE", fam.principal.id, fam.existente.id)]
-
-
-@pytest.mark.parametrize("rol", [TipoRol.ADMINISTRADOR, TipoRol.ENTRENADOR, TipoRol.ALUMNO])
-def test_una_cuenta_que_no_es_representante_se_rechaza_sin_cambiarle_el_rol(client, db_session, fam, rol):
-    otra = crear_persona_orm(db_session, cedula_valida(8210), nombres="Otro", apellidos="Rol")
-    _cuenta(db_session, otra, "otrorol@x.com", rol)
-    db_session.commit()
-
-    respuesta = _invitar(client, fam, correo="otrorol@x.com", datos=None)
-
-    assert respuesta.status_code == 400
-    assert "no es de representante" in respuesta.json()["detail"]
-    assert db_session.query(CoRepresentante).count() == 0
     db_session.expire_all()
-    assert [r.tipo_rol for r in db_session.query(Usuario).filter_by(correo="otrorol@x.com").one().roles] == [rol]
+    assert [r.tipo_rol for r in db_session.query(Usuario).filter_by(correo="otrorol@x.com").one().roles] == [TipoRol.ENTRENADOR]
 
 
-def test_una_cuenta_representante_sin_correo_verificado_se_rechaza(client, db_session, fam):
-    """Un correo sin verificar no prueba quién controla la cuenta: no se le
-    entregan los datos de un menor."""
-    otra = crear_persona_orm(db_session, cedula_valida(8211), nombres="Sin", apellidos="Verificar")
-    _cuenta(db_session, otra, "sinverificar@x.com", TipoRol.REPRESENTANTE, verificado=False)
-    db_session.commit()
+def test_el_principal_no_ve_los_datos_del_invitado_hasta_que_acepta(client, db_session, fam):
+    _invitar(client, fam, correo="existente@x.com")
 
-    respuesta = _invitar(client, fam, correo="sinverificar@x.com", datos=None)
+    segundo = {m["personaId"]: m for m in client.get(f"{BASE}/co-representantes/mios").json()}[fam.menor.id]
+    assert segundo["completo"] is True
+    assert segundo["segundoGuardian"] == {
+        "personaId": None, "nombres": None, "apellidos": None,
+        "correo": "existente@x.com", "estado": "PENDIENTE",
+    }
+    assert "Padre" not in str(segundo) and "Existente" not in str(segundo)
 
-    assert respuesta.status_code == 400
-    assert "verificó su correo" in respuesta.json()["detail"]
+
+def test_la_cuenta_invitada_ve_la_invitacion_y_al_aceptar_queda_vinculada(client, db_session, fam):
+    _invitar(client, fam, correo="existente@x.com")
+    _como(fam.existente.id, ["REPRESENTANTE"], "existente@x.com")
+
+    recibidas = client.get(f"{BASE}/co-representantes/invitaciones/recibidas").json()
+    assert len(recibidas) == 1 and recibidas[0]["nombreMenor"] == "Hijo"
+    assert "apellidos" not in str(recibidas).lower()
+
+    assert client.post(f"{BASE}/co-representantes/invitaciones/{recibidas[0]['id']}/aceptar").status_code == 204
+
+    assert db_session.query(CoRepresentante).filter_by(persona_id=fam.menor.id).one().co_representante_id == fam.existente.id
+    assert [e[0] for e in _eventos(db_session, fam.menor.id)] == ["INVITACION", "ACEPTACION", "ALTA"]
+    assert client.get(f"{BASE}/personas/{fam.menor.id}").status_code == 200
+    assert client.get(f"{BASE}/co-representantes/invitaciones/recibidas").json() == []
+    _como(fam.principal.id, ["REPRESENTANTE"], "madre@x.com")
+    visto = {m["personaId"]: m for m in client.get(f"{BASE}/co-representantes/mios").json()}[fam.menor.id]
+    assert visto["segundoGuardian"]["estado"] == "ACTIVO" and visto["segundoGuardian"]["nombres"] == "Padre"
+
+
+def test_nadie_mas_puede_aceptar_una_invitacion_ajena(client, db_session, fam):
+    _invitar(client, fam, correo="existente@x.com")
+    invitacion_id = db_session.query(CoRepresentanteInvitacion).one().id
+
+    for persona, correo in ((fam.ajeno, "ajeno@x.com"), (fam.principal, "madre@x.com")):
+        _como(persona.id, ["REPRESENTANTE"], correo)
+        assert client.post(f"{BASE}/co-representantes/invitaciones/{invitacion_id}/aceptar").status_code == 404
+    assert client.post(f"{BASE}/co-representantes/invitaciones/999999/aceptar").status_code == 404
     assert db_session.query(CoRepresentante).count() == 0
+
+
+def test_quitar_cancela_la_invitacion_pendiente_y_ya_no_se_puede_aceptar(client, db_session, fam):
+    _invitar(client, fam, correo="existente@x.com")
+    invitacion_id = db_session.query(CoRepresentanteInvitacion).one().id
+
+    assert client.delete(f"{BASE}/co-representantes/persona/{fam.menor.id}").status_code == 204
+
+    _como(fam.existente.id, ["REPRESENTANTE"], "existente@x.com")
+    assert client.post(f"{BASE}/co-representantes/invitaciones/{invitacion_id}/aceptar").status_code == 404
+    assert db_session.query(CoRepresentante).count() == 0
+    assert [e[0] for e in _eventos(db_session, fam.menor.id)] == ["INVITACION", "INVITACION_CANCELADA"]
+
+
+def test_una_invitacion_pendiente_ocupa_el_cupo_del_segundo_guardian(client, db_session, fam):
+    _invitar(client, fam, correo="existente@x.com")
+
+    otra = _invitar(client, fam, correo="ajeno@x.com")
+
+    assert otra.status_code == 400 and "dos representantes" in otra.json()["detail"]
 
 
 def test_no_se_puede_invitar_al_propio_principal(client, db_session, fam):
-    respuesta = _invitar(client, fam, correo="madre@x.com", datos=None)
+    respuesta = _invitar(client, fam, correo="madre@x.com")
 
-    assert respuesta.status_code == 400
+    assert respuesta.status_code == 202 and respuesta.json() == NEUTRA
     assert db_session.query(CoRepresentante).count() == 0
 
 
 # --- Máximo dos guardianes ---------------------------------------------------
 def test_un_menor_no_admite_un_tercer_guardian(client, db_session, fam):
-    assert _invitar(client, fam, correo="existente@x.com", datos=None).status_code == 201
+    _con_segundo_guardian(client, db_session, fam)
 
-    tercero = _invitar(client, fam, correo="ajeno@x.com", datos=None)
+    tercero = _invitar(client, fam, correo="ajeno@x.com")
 
     assert tercero.status_code == 400
     assert "dos representantes" in tercero.json()["detail"]
@@ -281,7 +362,7 @@ def test_invitar_para_varios_hijos_es_todo_o_nada(client, db_session, fam):
 def test_una_invitacion_cubre_a_varios_hijos_con_un_solo_correo(client, db_session, fam):
     respuesta = _invitar(client, fam, persona_ids=[fam.menor.id, fam.menor2.id])
 
-    assert respuesta.status_code == 201, respuesta.text
+    assert respuesta.status_code == 202, respuesta.text
     assert db_session.query(CoRepresentante).count() == 2
     assert db_session.query(RecuperacionOutbox).count() == 1
     cuenta = db_session.query(Usuario).filter_by(correo=CORREO_NUEVO).one()
@@ -363,9 +444,9 @@ def test_reinvitar_al_mismo_correo_reenvia_el_enlace_sin_duplicar_nada(client, d
     db_session.query(RecuperacionOutbox).update({"status": "ENVIADO"})
     db_session.commit()
 
-    otra = _invitar(client, fam, datos=None)
+    otra = _invitar(client, fam)
 
-    assert otra.status_code == 201 and otra.json()["estado"] == "INVITADO"
+    assert otra.status_code == 202 and otra.json() == NEUTRA
     assert db_session.query(Usuario).filter_by(correo=CORREO_NUEVO).count() == 1
     assert db_session.query(CoRepresentante).count() == 1
     assert db_session.query(RecuperacionOutbox).filter_by(usuario_id=cuenta.id, status="PENDIENTE").count() == 1
@@ -373,14 +454,19 @@ def test_reinvitar_al_mismo_correo_reenvia_el_enlace_sin_duplicar_nada(client, d
 
 # --- Quién puede invitar / quitar -------------------------------------------
 def _con_segundo_guardian(client, db_session, fam):
-    assert _invitar(client, fam, correo="existente@x.com", datos=None).status_code == 201
+    """Invita a la cuenta existente y ella acepta con su propia sesión."""
+    assert _invitar(client, fam, correo="existente@x.com").status_code == 202
+    invitacion_id = db_session.query(CoRepresentanteInvitacion).order_by(CoRepresentanteInvitacion.id.desc()).first().id
+    _como(fam.existente.id, ["REPRESENTANTE"], "existente@x.com")
+    assert client.post(f"{BASE}/co-representantes/invitaciones/{invitacion_id}/aceptar").status_code == 204
+    _como(fam.principal.id, ["REPRESENTANTE"], "madre@x.com")
 
 
 def test_el_segundo_guardian_no_invita_ni_quita(client, db_session, fam):
     _con_segundo_guardian(client, db_session, fam)
     _como(fam.existente.id, ["REPRESENTANTE"], "existente@x.com")
 
-    assert _invitar(client, fam, correo="ajeno@x.com", datos=None).status_code == 403
+    assert _invitar(client, fam, correo="ajeno@x.com").status_code == 403
     assert client.delete(f"{BASE}/co-representantes/persona/{fam.menor.id}").status_code == 403
     assert db_session.query(CoRepresentante).filter_by(persona_id=fam.menor.id).count() == 1
 
@@ -389,7 +475,7 @@ def test_un_adulto_ajeno_no_invita_ni_quita_ni_distingue_si_el_menor_existe(clie
     _con_segundo_guardian(client, db_session, fam)
     _como(fam.ajeno.id, ["REPRESENTANTE"], "ajeno@x.com")
 
-    assert _invitar(client, fam, correo="otro@x.com", datos=None).status_code == 403
+    assert _invitar(client, fam, correo="otro@x.com").status_code == 403
     assert client.delete(f"{BASE}/co-representantes/persona/{fam.menor.id}").status_code == 403
     assert client.delete(f"{BASE}/co-representantes/persona/999999").status_code == 403
     assert db_session.query(CoRepresentante).filter_by(persona_id=fam.menor.id).count() == 1
@@ -398,7 +484,7 @@ def test_un_adulto_ajeno_no_invita_ni_quita_ni_distingue_si_el_menor_existe(clie
 def test_el_administrador_agrega_y_quita_y_queda_auditado_como_admin(client, db_session, fam):
     _como(fam.admin.id, ["ADMINISTRADOR"])
 
-    assert _invitar(client, fam, correo="existente@x.com", datos=None).status_code == 201
+    assert _invitar(client, fam, correo="existente@x.com").status_code == 202
     assert client.delete(f"{BASE}/co-representantes/persona/{fam.menor.id}").status_code == 204
 
     assert _eventos(db_session, fam.menor.id) == [
@@ -437,10 +523,12 @@ def test_el_principal_y_el_segundo_pueden_ser_el_mismo_menor_solo_una_vez(client
     _con_segundo_guardian(client, db_session, fam)
     assert client.delete(f"{BASE}/co-representantes/persona/{fam.menor.id}").status_code == 204
 
-    assert _invitar(client, fam, correo="existente@x.com", datos=None).status_code == 201
+    _con_segundo_guardian(client, db_session, fam)
 
     assert db_session.query(CoRepresentante).filter_by(persona_id=fam.menor.id).count() == 1
-    assert [e[0] for e in _eventos(db_session, fam.menor.id)] == ["ALTA", "BAJA", "ALTA"]
+    assert [e[0] for e in _eventos(db_session, fam.menor.id)] == [
+        "INVITACION", "ACEPTACION", "ALTA", "BAJA", "INVITACION", "ACEPTACION", "ALTA",
+    ]
 
 
 # --- Tablero del representante ----------------------------------------------

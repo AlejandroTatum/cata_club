@@ -608,6 +608,33 @@ class ServicioNotificaciones:
         self.enviar_correo(correo, ASUNTO_INVITACION_CO_REPRESENTANTE, texto, html)
         logger.info("[INVITAR_CO_REPRESENTANTE] correo=%s", _enmascarar_correo(correo))
 
+    def enviar_aviso_invitacion_co_representante(
+        self, correo: str, nombre: Optional[str], nombre_menor: str, nombre_invitante: str,
+    ) -> None:
+        """Avisa a una cuenta de representante YA existente que la invitaron
+        como segundo representante (issue #1666). NO lleva ningún enlace de un
+        solo uso ni contraseña: la invitación se acepta entrando a la cuenta,
+        con su propia sesión, y mientras tanto no se comparte ningún dato."""
+        enlace = f"{self._frontend_url}/student"
+        saludo = f"Hola {nombre}," if nombre else "Hola,"
+        texto, html = construir_correo(
+            titulo="Te invitaron como segundo representante",
+            preheader="Entra a tu cuenta para aceptar o ignorar la invitación.",
+            saludo=saludo,
+            parrafos=(
+                f"{nombre_invitante} te invitó en Cata Club como segundo representante de "
+                f"{nombre_menor}. No se comparte ningún dato hasta que aceptes.",
+                "Para aceptar, entra a tu cuenta y confirma la invitación en la sección "
+                "«Representantes». La ficha médica y los consentimientos legales solo los "
+                "firma el representante principal.",
+                "Si no esperabas este correo, ignóralo: sin tu aceptación no pasa nada.",
+            ),
+            cta_etiqueta="Entrar a mi cuenta",
+            cta_url=enlace,
+        )
+        self.enviar_correo(correo, ASUNTO_INVITACION_CO_REPRESENTANTE, texto, html)
+        logger.info("[AVISO_CO_REPRESENTANTE] correo=%s", _enmascarar_correo(correo))
+
     def enviar_verificacion_correo(self, correo: str, token: str, nombre: Optional[str] = None) -> None:
         """Envía el enlace que prueba el control de la dirección (issue #790).
 

@@ -47,6 +47,20 @@ def retirar_vinculo(
             cuenta.version_contrasenia += 1
 
 
+def cancelar_invitacion(
+    db: Session, invitacion, *, actor_persona_id: int, origen: str,
+) -> None:
+    """Cancela una invitación pendiente que NO llegó a vincular (cuenta
+    existente que aún no aceptó). Deja `INVITACION_CANCELADA`; sin commit."""
+    repo = CoRepresentanteRepositorio(db)
+    repo.cancelar_pendiente(invitacion, datetime.now(timezone.utc))
+    repo.registrar_evento(CoRepresentanteEvento(
+        persona_id=invitacion.persona_id, co_representante_id=invitacion.co_representante_id,
+        actor_persona_id=actor_persona_id, operacion="INVITACION_CANCELADA", origen=origen,
+        invitacion_id=invitacion.id,
+    ))
+
+
 def retirar_del_menor(
     db: Session, persona_id: int, *, actor_persona_id: int, origen: str,
     solo_si_es: Optional[int] = None,
@@ -55,6 +69,12 @@ def retirar_del_menor(
     esa persona (p. ej. el nuevo principal). Devuelve si retiró algo."""
     repo = CoRepresentanteRepositorio(db)
     vinculo = repo.obtener_por_persona(persona_id)
+    pendiente = repo.obtener_pendiente(persona_id)
+    if vinculo is None and pendiente is not None and solo_si_es is None:
+        # Invitación de una cuenta existente que aún no aceptó: sin vínculo,
+        # pero también debe caer con el principal que la emitió.
+        cancelar_invitacion(db, pendiente, actor_persona_id=actor_persona_id, origen=origen)
+        return True
     if vinculo is None or (solo_si_es is not None and vinculo.co_representante_id != solo_si_es):
         return False
     retirar_vinculo(db, vinculo, actor_persona_id=actor_persona_id, origen=origen)

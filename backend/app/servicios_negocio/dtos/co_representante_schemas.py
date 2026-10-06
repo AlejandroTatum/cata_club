@@ -27,22 +27,27 @@ class DatosInvitadoDTO(BaseModel):
 class InvitarCoRepresentanteDTO(BaseModel):
     persona_ids: List[int] = Field(..., min_length=1, max_length=MAX_PERSONAS_POR_INVITACION)
     correo: CorreoValidado = Field(..., max_length=100)
-    datos: Optional[DatosInvitadoDTO] = None
+    # Siempre se envían: se usan solo si el correo no tiene cuenta, y la
+    # respuesta no puede delatar si la tiene.
+    datos: DatosInvitadoDTO
 
 
 class InvitacionCoRepresentanteResponseDTO(ResponseBase, BaseModel):
-    """`REQUIERE_DATOS`: el correo no tiene cuenta y falta `datos` -- no se
-    hizo nada. `INVITADO`: se creó la cuenta y se envió el enlace de
-    contraseña. `VINCULADO`: la cuenta REPRESENTANTE ya existía; solo se
-    vinculó."""
-    estado: Literal["REQUIERE_DATOS", "INVITADO", "VINCULADO"]
-    persona_ids: List[int] = []
+    """Respuesta ÚNICA, sin importar qué pasó con el correo."""
+    mensaje: str
+
+
+class InvitacionRecibidaDTO(ResponseBase, BaseModel):
+    id: int
+    nombre_menor: str
+    nombre_invitante: str
 
 
 class GuardianDeMenorDTO(ResponseBase, BaseModel):
-    persona_id: int
-    nombres: str
-    apellidos: str
+    """Con `PENDIENTE` solo viaja el correo que el principal escribió."""
+    persona_id: Optional[int] = None
+    nombres: Optional[str] = None
+    apellidos: Optional[str] = None
     correo: Optional[str] = None
     estado: Literal["ACTIVO", "PENDIENTE"]
 

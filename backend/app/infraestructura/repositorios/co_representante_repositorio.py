@@ -62,6 +62,9 @@ class CoRepresentanteRepositorio:
             ).order_by(CoRepresentanteInvitacion.id)
         ).scalars())
 
+    def obtener_invitacion(self, invitacion_id: int) -> Optional[CoRepresentanteInvitacion]:
+        return self.db.get(CoRepresentanteInvitacion, invitacion_id)
+
     def crear_invitacion(self, invitacion: CoRepresentanteInvitacion) -> CoRepresentanteInvitacion:
         self.db.add(invitacion)
         self.db.flush()
