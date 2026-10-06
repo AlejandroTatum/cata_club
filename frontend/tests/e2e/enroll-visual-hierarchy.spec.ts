@@ -113,7 +113,7 @@ for (const [viewportName, viewport] of Object.entries({ desktop: DESKTOP, mobile
     test("the selected choice card resolves its border to cata-red", async ({ page }) => {
       await goToEnroll(page);
 
-      const selected = page.getByRole("radio", { name: /^Jugador Me inscribo yo al club/ });
+      const selected = page.getByRole("radio", { name: /^Jugador Soy mayor de edad/ });
       await expect(selected).toHaveAttribute("aria-checked", "true");
 
       const borderColor = await selected.evaluate((el) => getComputedStyle(el).borderColor);
@@ -122,3 +122,25 @@ for (const [viewportName, viewport] of Object.entries({ desktop: DESKTOP, mobile
     });
   });
 }
+
+// #1663: on a phone the step buttons sit at the bottom of the page, so a step
+// used to open at the previous scroll position. It must open from the top.
+test.describe("scroll position — mobile (390×844)", () => {
+  test("a direct visit starts at the top and every step change returns to it", async ({ page }) => {
+    await page.setViewportSize(MOBILE);
+    await goToEnroll(page);
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+
+    await page.getByRole("button", { name: /^Siguiente/ }).click();
+    await expect(page.getByRole("heading", { name: /datos del jugador/i })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await page.getByRole("button", { name: /^Atrás/ }).click();
+    await expect(page.getByRole("heading", { name: /tipo de inscripción/i })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  });
+});
