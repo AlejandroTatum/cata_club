@@ -4682,6 +4682,15 @@ describe("MembersPage — Imprimir carnet (issue #1670)", () => {
     apellidos: "Menor",
     backendRoles: undefined,
     representadoPor: "Rosa Representante",
+    estudiantes: [
+      {
+        ...SOFIA_SUMMARY,
+        id: "4",
+        nombres: "Mateo",
+        apellidos: "Menor",
+        membresia: { estado: "activa", estadoBackend: "ACTIVA" } as unknown as MemberAccount["estudiantes"][number]["membresia"],
+      },
+    ],
   };
 
   beforeEach(() => {
@@ -4724,6 +4733,16 @@ describe("MembersPage — Imprimir carnet (issue #1670)", () => {
 
     const names = await menuItemNames("Mateo Menor");
     expect(names).toContain("Imprimir carnet de Mateo Menor");
+  });
+
+  it("does not offer it for a represented minor who cannot train yet (#1669 rule A)", async () => {
+    mockFetchMembers.mockResolvedValue({
+      accounts: [{ ...MINOR_WITHOUT_ACCOUNT, estudiantes: [{ ...MINOR_WITHOUT_ACCOUNT.estudiantes[0], membresia: null }] }],
+    });
+    render(<MembersPage />);
+
+    const names = await menuItemNames("Mateo Menor");
+    expect(names).not.toContain("Imprimir carnet de Mateo Menor");
   });
 
   it.each([
