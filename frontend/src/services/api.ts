@@ -1755,10 +1755,11 @@ export async function exportPagosReportePdf(params?: {
 /** Search persons by name (autocomplete). */
 export async function searchStudents(
   query: string,
-  opts?: { rol?: string; limit?: number },
+  opts?: { rol?: string; jugador?: boolean; limit?: number },
 ): Promise<PersonaBusqueda[]> {
   const params = new URLSearchParams({ q: query });
   if (opts?.rol) params.set("rol", opts.rol);
+  if (opts?.jugador) params.set("jugador", "true");
   if (opts?.limit) params.set("limit", String(opts.limit));
   return request<PersonaBusqueda[]>(apiEndpoint(`/personas/buscar?${params}`));
 }

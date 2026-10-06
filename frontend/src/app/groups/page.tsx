@@ -82,6 +82,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import StudentSearch from "@/components/StudentSearch";
+import { isPlayerAccount } from "@/app/members/members-utils";
 import AppShell from "@/components/shell/AppShell";
 import Link from "next/link";
 import {
@@ -696,7 +697,7 @@ export default function GroupsPage(): React.ReactElement {
         }),
       ]);
       setHorarios(horariosData);
-      const students: StudentRef[] = membersData.accounts.flatMap((account) =>
+      const students: StudentRef[] = membersData.accounts.filter(isPlayerAccount).flatMap((account) =>
         account.estudiantes.map((estudiante) => ({
           id: estudiante.id,
           nombres: estudiante.nombres,
@@ -1617,7 +1618,7 @@ export default function GroupsPage(): React.ReactElement {
               id="alumno-select"
               ariaLabel="Seleccionar jugador"
               placeholder="Buscar jugador por nombre…"
-              role="ALUMNO"
+              playersOnly
               excludeIds={roster.alumnos.map((alumno) => alumno.personaId)}
                   showExcluded
               disabled={roster.assigning}
