@@ -32,6 +32,7 @@ const TIPO_LABELS: Record<TipoNotificacion, string> = {
   RESUMEN_CUPO_CORREO_ADMIN: "Tope de correos",
   NUEVO_REPORTE_ERROR: "Nuevo reporte de error",
   RECORDATORIO_SESION: "Recordatorio de sesión",
+  DIA_SIN_CLASE: "Día sin clase",
 };
 
 export interface NotificationBellProps {

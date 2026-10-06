@@ -62,7 +62,10 @@ const mockFetchTrainingSchedules = vi.fn();
 const mockSearchStudents = vi.fn();
 const mockFetchConteos = vi.fn();
 
+const mockFetchDiasSinClase = vi.fn();
+
 vi.mock("@/services/api", () => ({
+  fetchDiasSinClase: (...args: unknown[]) => mockFetchDiasSinClase(...args),
   // QA4 PERF-01: the screen reads counts, never the ~500 KB roster. Fixtures
   // keep the roster-row shape; this folds them into the counts the API returns.
   fetchConteosPorHorario: async () => {
@@ -132,6 +135,7 @@ const TODAY_IN_CLUB_TIME = new Date("2026-08-15T15:00:00Z");
 
 describe("TrainerAttendanceHistoryPage", () => {
   beforeEach(() => {
+    mockFetchDiasSinClase.mockResolvedValue([]);
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(TODAY_IN_CLUB_TIME);
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Mendoza"));
@@ -755,7 +759,7 @@ describe("TrainerAttendanceHistoryPage — las tres cifras del período", () => 
     expect(estimado).toHaveTextContent(/estimado/i);
     const note = screen.getByRole("note");
     expect(note).toHaveTextContent(/Estimación/);
-    expect(note).toHaveTextContent(/feriados/);
+    expect(note).toHaveTextContent(/días sin clase/);
     expect(note).toHaveTextContent(/cancelaciones/);
   });
 

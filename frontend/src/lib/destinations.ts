@@ -87,6 +87,7 @@ export const DESTINATIONS: Record<string, Destination> = {
   // La galería de la landing es contenido del club igual que los
   // patrocinadores: se administra adentro y se publica afuera (issue #1372).
   "/galeria": { label: "Galería", preposition: "a" },
+  "/admin/dias-sin-clase": { label: "Días sin clase", preposition: "a" },
   "/admin/reportes-error": { label: "Errores reportados", preposition: "a" },
   "/admin/actividad": { label: "Actividad del club", preposition: "a" },
   "/tarifas": { label: "Tarifas", preposition: "a" },

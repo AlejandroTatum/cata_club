@@ -46,6 +46,7 @@ from app.presentacion.routers import (
     reporte_error_router,
     actividad_router,
     portal_router,
+    dias_sin_clase_router,
 )
 from app.dominio.excepciones import (
     EntidadNoEncontrada, EntidadDuplicada, NombreDuplicado, OperacionInvalida, RecursoEnUso,
@@ -443,6 +444,7 @@ app.include_router(galeria_router.router, prefix="/api/v1")
 app.include_router(supresion_datos_router.router, prefix="/api/v1")
 app.include_router(reporte_error_router.router, prefix="/api/v1")
 app.include_router(actividad_router.router, prefix="/api/v1")
+app.include_router(dias_sin_clase_router.router, prefix="/api/v1")
 
 
 # --- Métricas internas (issue #1309): exponer el endpoint --------------------

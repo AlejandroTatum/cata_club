@@ -105,7 +105,10 @@ const mockFetchPagosDePersona = vi.fn();
 const mockFetchHorariosPorAlumno = vi.fn();
 const mockSubirFotoPersona = vi.fn();
 
+const mockFetchDiasSinClase = vi.fn();
+
 vi.mock("@/services/api", () => ({
+  fetchDiasSinClase: (...args: unknown[]) => mockFetchDiasSinClase(...args),
   fetchStudentPortal: () => mockFetchStudentPortal(),
   // Still read here — the carnet's "Cobertura hasta" is the furthest
   // `fechaFin` among approved payments, the only real coverage date there is.
@@ -183,6 +186,7 @@ const PAGO_APROBADO: PagoPersona = {
 };
 
 beforeEach(() => {
+    mockFetchDiasSinClase.mockResolvedValue([]);
   mockAuthSession = {
     user: { id: "9", name: "Alumno Test", email: "alumno@cataclub.com", role: "estudiante", representanteId: null },
     roles: ["ALUMNO"],
@@ -3166,5 +3170,25 @@ describe("StudentPage — QA4 family portal findings", () => {
 
     const alert = await screen.findByRole("alert");
     expect(within(alert).getByRole("link")).toHaveAttribute("href", expect.stringContaining("wa.me"));
+  });
+});
+
+/** Issue #1665: the club-wide no-class days are announced in the member panel. */
+describe("StudentPage — no-class days", () => {
+  it("shows the upcoming no-class days with their reason, and nothing when there are none", async () => {
+    mockFetchDiasSinClase.mockResolvedValue([
+      { id: 1, fechaInicio: "2999-07-04", fechaFin: "2999-07-04", motivo: "Feriado nacional" },
+    ]);
+    const { unmount } = render(<StudentPage />);
+
+    const panel = await screen.findByRole("complementary", { name: "Días sin clase" });
+    expect(within(panel).getByText("04/07/2999")).toBeInTheDocument();
+    expect(within(panel).getByText("Feriado nacional")).toBeInTheDocument();
+    unmount();
+
+    mockFetchDiasSinClase.mockResolvedValue([]);
+    render(<StudentPage />);
+    await screen.findByTestId("student-carnet");
+    expect(screen.queryByRole("complementary", { name: "Días sin clase" })).not.toBeInTheDocument();
   });
 });
