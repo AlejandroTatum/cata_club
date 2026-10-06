@@ -175,7 +175,7 @@ describe("EnrollPage — the named stepper", () => {
   it("adds the representante step once a dependent enrollment is chosen", () => {
     render(<EnrollPage />);
 
-    fireEvent.click(screen.getByRole("radio", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /^Representante Inscribo a un hijo/ }));
 
     const stepper = screen.getByRole("list", { name: /pasos de la inscripción/i });
     expect(within(stepper).getByText("Representante")).toBeInTheDocument();
@@ -263,11 +263,100 @@ describe("EnrollPage — the named stepper", () => {
   });
 });
 
+// #1662 — the two choice cards carry a title and one short line, nothing else.
+describe("EnrollPage — minimal choice cards (#1662)", () => {
+  it("shows only a title and one short line on each card", () => {
+    render(<EnrollPage />);
+
+    const jugador = screen.getByRole("radio", { name: /^Jugador Soy mayor de edad/ });
+    const representante = screen.getByRole("radio", { name: /^Representante Inscribo a un hijo/ });
+
+    expect(jugador).toHaveTextContent("Soy mayor de edad y me inscribo yo.");
+    expect(representante).toHaveTextContent("Inscribo a un hijo o menor a mi cargo.");
+    expect(screen.queryByText(/te pediremos/i)).not.toBeInTheDocument();
+    expect(jugador).not.toHaveTextContent("·");
+    expect(representante).not.toHaveTextContent("·");
+  });
+});
+
+// #1663 — every step, and the page itself, opens from the top on mobile.
+describe("EnrollPage — scroll to top (#1663)", () => {
+  let scrollTo: ReturnType<typeof vi.fn>;
+  const original = window.scrollTo;
+
+  beforeEach(() => {
+    scrollTo = vi.fn();
+    window.scrollTo = scrollTo as unknown as typeof window.scrollTo;
+  });
+
+  afterEach(() => {
+    window.scrollTo = original;
+  });
+
+  it("starts at the top when the page opens", () => {
+    render(<EnrollPage />);
+
+    expect(scrollTo).toHaveBeenCalledWith(0, 0);
+  });
+
+  it("stops the browser restoring a stale scroll on Atrás while mounted, then hands it back", () => {
+    window.history.scrollRestoration = "auto";
+    const { unmount } = render(<EnrollPage />);
+    expect(window.history.scrollRestoration).toBe("manual");
+
+    unmount();
+    expect(window.history.scrollRestoration).toBe("auto");
+  });
+
+  it("scrolls to the top on every Siguiente and Atrás without stealing focus", () => {
+    render(<EnrollPage />);
+    scrollTo.mockClear();
+
+    const siguiente = screen.getByRole("button", { name: /^Siguiente/ });
+    siguiente.focus();
+    fireEvent.click(siguiente);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenLastCalledWith(expect.objectContaining({ top: 0 }));
+    expect(screen.getByRole("heading", { name: /datos del jugador/i })).toBeInTheDocument();
+
+    fillEnrollStudentStep();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("heading", { name: /salud y emergencia/i })).toBeInTheDocument();
+  });
+
+  it("does not scroll when a validation error keeps the step", () => {
+    render(<EnrollPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    scrollTo.mockClear();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: /datos del jugador/i })).toBeInTheDocument();
+  });
+
+  it("uses an instant jump when the visitor prefers reduced motion", () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query.includes("prefers-reduced-motion"),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    render(<EnrollPage />);
+    scrollTo.mockClear();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "auto" });
+    vi.unstubAllGlobals();
+  });
+});
+
 // #312 / hallazgo #33 — same gap on the representative step (paso 3).
 describe("EnrollPage — autocomplete on the representative step", () => {
   it("declares autocomplete on the representative's own fields", () => {
     render(<EnrollPage />);
-    fireEvent.click(screen.getByRole("radio", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /^Representante Inscribo a un hijo/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     // Issue #1137, invariante (B): a child enrollment's personal step no
     // longer has an optional credentials section that happens to reuse
@@ -302,7 +391,7 @@ describe("EnrollPage — autocomplete on the representative step", () => {
 describe("EnrollPage — the majority-age note on the representative step (#1320)", () => {
   it("renders the note as a plain field hint, not a warning card", () => {
     render(<EnrollPage />);
-    fireEvent.click(screen.getByRole("radio", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /^Representante Inscribo a un hijo/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Lucas" } });
     fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
@@ -331,7 +420,7 @@ describe("EnrollPage — the majority-age note on the representative step (#1320
   // local digits — like the student's phone on the self flow.
   it("collects the representative's phone with the +593 PhoneField and stores the local 0 form", () => {
     render(<EnrollPage />);
-    fireEvent.click(screen.getByRole("radio", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /^Representante Inscribo a un hijo/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Lucas" } });
     fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
@@ -372,7 +461,7 @@ describe("EnrollPage — the summary on the representative path (#1197)", () => 
 
   it("shows the representative's cédula and phone, not the (absent) student phone", async () => {
     render(<EnrollPage />);
-    fireEvent.click(screen.getByRole("radio", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /^Representante Inscribo a un hijo/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     fillChildStudentStep();
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
@@ -406,13 +495,13 @@ describe("EnrollPage — choice cards", () => {
   it("marks the selected type with the red border and the coal + ball pill", () => {
     render(<EnrollPage />);
 
-    const selected = screen.getByRole("radio", { name: /^Jugador Me inscribo yo al club/ });
+    const selected = screen.getByRole("radio", { name: /^Jugador Soy mayor de edad/ });
     expect(selected).toHaveAttribute("aria-checked", "true");
     expect(selected.className).toContain("border-cata-red");
     expect(selected.className).toContain("ring-cata-red");
     expect(screen.getByText("Seleccionado").className).toContain("bg-coal");
 
-    const other = screen.getByRole("radio", { name: /^Representante Gestiono la inscripción/ });
+    const other = screen.getByRole("radio", { name: /^Representante Inscribo a un hijo/ });
     expect(other).toHaveAttribute("aria-checked", "false");
     expect(other.className).not.toMatch(/cata-red/);
   });
@@ -420,12 +509,12 @@ describe("EnrollPage — choice cards", () => {
   it("moves the selection when the other card is chosen", () => {
     render(<EnrollPage />);
 
-    const representante = screen.getByRole("radio", { name: /^Representante Gestiono la inscripción/ });
+    const representante = screen.getByRole("radio", { name: /^Representante Inscribo a un hijo/ });
     fireEvent.click(representante);
 
     expect(representante).toHaveAttribute("aria-checked", "true");
     expect(
-      screen.getByRole("radio", { name: /^Jugador Me inscribo yo al club/ }),
+      screen.getByRole("radio", { name: /^Jugador Soy mayor de edad/ }),
     ).toHaveAttribute("aria-checked", "false");
   });
 });
@@ -444,8 +533,8 @@ describe("EnrollPage — choice cards as a radio group (REG-18) and navigation a
 
   it("keeps a single tab stop on the selected radio and moves the choice with the arrow keys", () => {
     render(<EnrollPage />);
-    const jugador = screen.getByRole("radio", { name: /^Jugador Me inscribo yo al club/ });
-    const representante = screen.getByRole("radio", { name: /^Representante Gestiono la inscripción/ });
+    const jugador = screen.getByRole("radio", { name: /^Jugador Soy mayor de edad/ });
+    const representante = screen.getByRole("radio", { name: /^Representante Inscribo a un hijo/ });
     expect(jugador).toHaveAttribute("tabindex", "0");
     expect(representante).toHaveAttribute("tabindex", "-1");
 
@@ -658,7 +747,7 @@ describe("EnrollPage — error prevention on the student step", () => {
 describe("EnrollPage — un enrolamiento de menor nunca pide tus credenciales (#1137)", () => {
   it("never renders the student's own credential fields for a child enrollment", () => {
     render(<EnrollPage />);
-    fireEvent.click(screen.getByRole("radio", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /^Representante Inscribo a un hijo/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
     expect(screen.queryByLabelText(/^Correo electrónico/)).not.toBeInTheDocument();
@@ -788,7 +877,7 @@ describe("EnrollPage — guía informativa de la contraseña (#1395)", () => {
 
   it("shows the same guidance under the representative's own credentials", () => {
     render(<EnrollPage />);
-    fireEvent.click(screen.getByRole("radio", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /^Representante Inscribo a un hijo/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     fillChildStudentStep();
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
@@ -801,7 +890,7 @@ describe("EnrollPage — guía informativa de la contraseña (#1395)", () => {
 
   it("renders no guidance on the child flow's personal step — no credentials there", () => {
     render(<EnrollPage />);
-    fireEvent.click(screen.getByRole("radio", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /^Representante Inscribo a un hijo/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
     expect(screen.queryByText("Al menos 8 caracteres.")).not.toBeInTheDocument();
@@ -1328,7 +1417,7 @@ describe("EnrollPage — el conteo de pasos no cambia mientras se decide (#317 /
 
     const before = screen.getByText(/4 o 5 pasos/i).textContent;
 
-    fireEvent.click(screen.getByRole("radio", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /^Representante Inscribo a un hijo/ }));
 
     const after = screen.getByText(/4 o 5 pasos/i).textContent;
     expect(after).toBe(before);
@@ -1338,7 +1427,7 @@ describe("EnrollPage — el conteo de pasos no cambia mientras se decide (#317 /
   it("resuelve el número exacto de pasos recién al avanzar del paso 1", () => {
     render(<EnrollPage />);
 
-    fireEvent.click(screen.getByRole("radio", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /^Representante Inscribo a un hijo/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
     expect(screen.getByText("Paso 2 de 5")).toBeInTheDocument();
@@ -1373,7 +1462,7 @@ describe("EnrollPage — el compacto nombra el paso con el total ya resuelto (#1
 describe("EnrollPage — el borrador sobrevive a un reload (#317 / #62)", () => {
   /** Walks to the representative step (step 3 of 5) with step 2 fully filled. */
   function reachRepresentativeStep(): void {
-    fireEvent.click(screen.getByRole("radio", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /^Representante Inscribo a un hijo/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Lucas" } });
     fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
@@ -1573,7 +1662,7 @@ describe("EnrollPage — la confirmación no afirma la entrega del correo como h
 
   it("el resumen del representante lleva la misma verdad: quien recibe el correo es el adulto", async () => {
     render(<EnrollPage />);
-    fireEvent.click(screen.getByRole("radio", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /^Representante Inscribo a un hijo/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Lucas" } });
     fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
