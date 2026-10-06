@@ -10,7 +10,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from tests.arnes_migraciones import ArnesMigracion
 
-REVISION_ANTERIOR = "w1galeriaorden"
+REVISION_ANTERIOR = "x1665diasinclase"
 REVISION_GUARDIAN = "x1666coguardian"
 TABLAS = ("co_representante", "co_representante_invitacion", "co_representante_evento")
 
