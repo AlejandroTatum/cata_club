@@ -82,8 +82,10 @@ vi.mock("@/contexts/ToastContext", () => ({
 const mockFetchStudentPortal = vi.fn();
 const mockFetchFichaMedica = vi.fn();
 const mockActualizarFichaMedica = vi.fn();
+const mockFetchMiPerfil = vi.fn();
 vi.mock("@/services/api", () => ({
   fetchStudentPortal: () => mockFetchStudentPortal(),
+  fetchMiPerfil: () => mockFetchMiPerfil(),
   fetchFichaMedica: (personaId: number) => mockFetchFichaMedica(personaId),
   actualizarFichaMedica: (personaId: number, data: unknown) =>
     mockActualizarFichaMedica(personaId, data),
@@ -150,6 +152,12 @@ beforeEach(() => {
     self: null,
     representados: [SOFIA, MARTIN],
     membershipPlans: [],
+  });
+  mockFetchMiPerfil.mockReset().mockResolvedValue({
+    personaId: 9,
+    nombres: "Madre",
+    apellidos: "Tutora",
+    telefono: "0900000004",
   });
   mockFetchFichaMedica.mockReset().mockResolvedValue(ficha());
   mockActualizarFichaMedica.mockReset().mockResolvedValue(ficha());
@@ -344,5 +352,25 @@ describe("StudentMedicalRecordPage — the guide", () => {
     const block = guide.closest("details") as HTMLElement;
     expect(block).not.toHaveAttribute("open");
     expect(within(block).getByText(/obligatorios/i)).toBeInTheDocument();
+  });
+});
+
+describe("StudentMedicalRecordPage — the representative is the default emergency contact (#1667)", () => {
+  it("pre-fills a minor's new ficha with the logged-in representative and shows them on the card", async () => {
+    mockFetchStudentPortal.mockResolvedValue({
+      self: null,
+      representados: [{ ...SOFIA, representanteId: 9, representante: { nombres: "Madre", apellidos: "Tutora" } }],
+      membershipPlans: [],
+    });
+    mockFetchFichaMedica.mockRejectedValue(Object.assign(new Error("Ficha médica no encontrada"), { status: 404 }));
+
+    render(<StudentMedicalRecordPage />);
+
+    const nombre = await screen.findByLabelText<HTMLInputElement>("Contacto de emergencia");
+    await waitFor(() => expect(nombre.value).toBe("Madre Tutora"));
+    expect(screen.getByLabelText<HTMLInputElement>(/Teléfono de emergencia/).value).toBe("900000004");
+    const contacto = await within(screen.getByTestId("emergency-card")).findByTestId("emergency-card-contact");
+    expect(contacto).toHaveTextContent("Representante: Madre Tutora");
+    expect(contacto).not.toHaveTextContent("Sin registrar");
   });
 });
