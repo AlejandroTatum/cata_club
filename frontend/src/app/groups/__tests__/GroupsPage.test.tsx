@@ -186,6 +186,9 @@ function elegirHora(label: "Hora de inicio" | "Hora de fin", hhmm: string): void
   fireEvent.click(within(screen.getByRole("group", { name: "Minutos" })).getByRole("button", { name: mm }));
 }
 
+/** A membership that lets the person train (#1669 rule A): players without the ALUMNO role need one. */
+const TRAINING = { estado: "activa", estadoBackend: "ACTIVA" } as unknown as MemberAccount["estudiantes"][number]["membresia"];
+
 describe("GroupsPage — the landing-publication toggle", () => {
   const RECURRING_ROWS = [
     { id: 101, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
@@ -1253,7 +1256,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     apellidos: "Ruiz",
     telefono: "0999999999",
     estudiantes: [
-      { id: "50", nombres: "Carla", apellidos: "Ruiz", activo: true, membresia: null, ultimoPago: null },
+      { id: "50", nombres: "Carla", apellidos: "Ruiz", activo: true, membresia: TRAINING, ultimoPago: null },
     ],
   };
 
@@ -1264,7 +1267,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     apellidos: "Vega",
     telefono: "0999999999",
     estudiantes: [
-      { id: "70", nombres: "Diego", apellidos: "Vega", activo: true, membresia: null, ultimoPago: null },
+      { id: "70", nombres: "Diego", apellidos: "Vega", activo: true, membresia: TRAINING, ultimoPago: null },
     ],
   };
 
@@ -1300,7 +1303,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     return screen.getAllByTestId("horario-card");
   }
 
-  it("keeps staff out of «Sin grupo» and its counter, but lists staff who play and no-account minors (#1661)", async () => {
+  it("keeps staff and minors who cannot train out of «Sin grupo», but lists staff who play and minors with a training membership (#1661/#1669)", async () => {
     const cuenta = (id: string, nombres: string, backendRoles: MemberAccount["backendRoles"], membresiaActiva = false): MemberAccount => ({
       id: `acc-${id}`,
       role: "representante",
@@ -1327,8 +1330,11 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
         cuenta("82", "Entrenador", ["ENTRENADOR"]),
         cuenta("83", "Representante", ["REPRESENTANTE"]),
         cuenta("84", "Jugadora", ["ALUMNO"]),
-        cuenta("85", "Matias", undefined),
+        cuenta("85", "Matias", undefined, true),
         cuenta("86", "Entrenajuega", ["ENTRENADOR"], true),
+        // A no-account minor whose first payment is still pending cannot be
+        // found by the horario player search, so «Sin grupo» must not list her.
+        cuenta("87", "Sinmembresia", undefined),
       ],
     });
     render(<ToastProvider><GroupsPage /></ToastProvider>);
@@ -1339,7 +1345,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     expect(nombres.join("|")).toContain("Jugadora Prueba");
     expect(nombres.join("|")).toContain("Matias Prueba");
     expect(nombres.join("|")).toContain("Entrenajuega Prueba");
-    expect(nombres.join("|")).not.toMatch(/Adminona|Entrenador Prueba|Representante/);
+    expect(nombres.join("|")).not.toMatch(/Adminona|Entrenador Prueba|Representante|Sinmembresia/);
     expect(within(screen.getByTestId("groups-summary")).getByText("Sin grupo").parentElement).toHaveTextContent("3");
   });
 
@@ -2586,8 +2592,8 @@ describe("GroupsPage — summary strip", () => {
       accounts: [
         {
           estudiantes: [
-            { id: 1, nombres: "Ana", apellidos: "Paz", activo: true },
-            { id: 2, nombres: "Luis", apellidos: "Mora", activo: true },
+            { id: 1, nombres: "Ana", apellidos: "Paz", activo: true, membresia: TRAINING },
+            { id: 2, nombres: "Luis", apellidos: "Mora", activo: true, membresia: TRAINING },
             { id: 3, nombres: "Eva", apellidos: "Sol", activo: false },
           ],
         },
@@ -2632,8 +2638,8 @@ describe("GroupsPage — rail", () => {
       accounts: [
         {
           estudiantes: [
-            { id: 1, nombres: "Ana", apellidos: "Paz", activo: true },
-            { id: 2, nombres: "Luis", apellidos: "Mora", activo: true },
+            { id: 1, nombres: "Ana", apellidos: "Paz", activo: true, membresia: TRAINING },
+            { id: 2, nombres: "Luis", apellidos: "Mora", activo: true, membresia: TRAINING },
           ],
         },
       ],
@@ -2670,6 +2676,7 @@ describe("GroupsPage — rail", () => {
             nombres: `Alumno${i + 1}`,
             apellidos: "Prueba",
             activo: true,
+            membresia: TRAINING,
           })),
         },
       ],

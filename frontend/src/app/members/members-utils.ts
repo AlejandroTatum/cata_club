@@ -603,15 +603,18 @@ export function countActiveStudents(account: MemberAccount): number {
  * Issues #1661/#1669: is this account a player (someone who can be put in a
  * horario), as opposed to pure staff or a representative?
  *
- * A player has the ALUMNO role, an own membership that allows training
- * (ACTIVA or VENCIDA — the backend `puede_entrenar` rule), or no known role
- * at all (a represented minor has no `Usuario`, so the roles lookup yields
- * nothing for them). Accounts whose only roles are ADMINISTRADOR /
- * ENTRENADOR / REPRESENTANTE and that hold no such membership are not.
+ * The same rule as the backend horario player search
+ * (`GET /personas/buscar?jugador=true`): the ALUMNO role, or an own
+ * membership that allows training (ACTIVA or VENCIDA — the backend
+ * `puede_entrenar` rule). A represented minor has no `Usuario` and so no
+ * role; they count only once their membership allows training, otherwise
+ * «Sin grupo» would list someone the horario search cannot find (owner
+ * decision A, #1669). Staff and representatives without such a membership
+ * are not players.
  */
 export function isPlayerAccount(account: MemberAccount): boolean {
   const roles = account.backendRoles ?? [];
-  if (roles.length === 0 || roles.includes("ALUMNO")) return true;
+  if (roles.includes("ALUMNO")) return true;
   return account.estudiantes.some((student) => {
     const estado = student.membresia?.estadoBackend;
     return estado === "ACTIVA" || estado === "VENCIDA";
@@ -622,7 +625,8 @@ export function isPlayerAccount(account: MemberAccount): boolean {
  * Issue #1670: whether the admin may print this account's carnet — players
  * only (the #1661/#1669 rule via `isPlayerAccount`), and never the
  * representative's own row, which holds no player to put on a card. A
- * represented minor without an account of their own qualifies.
+ * represented minor without an account of their own qualifies once their
+ * membership allows training.
  */
 export function canPrintCarnet(account: MemberAccount): boolean {
   return isPlayerAccount(account) && !isRepresentativePersonaRow(account);

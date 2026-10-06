@@ -218,15 +218,20 @@ describe("CarnetsPage — picking a batch", () => {
     backendRoles: ["ALUMNO"],
   };
   const trainer: MemberAccount = { ...player, id: "12", nombres: "Tito", apellidos: "Entrenador", backendRoles: ["ENTRENADOR"] };
-  const minor: MemberAccount = { ...player, id: "13", nombres: "Mateo", apellidos: "Menor", backendRoles: undefined, representadoPor: "Ana Jugadora" };
+  const minor: MemberAccount = { ...player, id: "13", nombres: "Mateo", apellidos: "Menor", backendRoles: undefined, representadoPor: "Ana Jugadora",
+    estudiantes: [{ id: "13", nombres: "Mateo", apellidos: "Menor", activo: true, membresia: { estado: "activa", estadoBackend: "ACTIVA" } as unknown as MemberAccount["estudiantes"][number]["membresia"], ultimoPago: null }],
+  };
+  // #1669 rule A: a minor who cannot train yet (first payment pending) is not a player.
+  const pendingMinor: MemberAccount = { ...player, id: "14", nombres: "Lia", apellidos: "Pendiente", backendRoles: undefined, representadoPor: "Ana Jugadora" };
 
   it("lists players only and prints the ones chosen", async () => {
-    mockFetchMembers.mockResolvedValue({ accounts: [player, trainer, minor] });
+    mockFetchMembers.mockResolvedValue({ accounts: [player, trainer, minor, pendingMinor] });
     render(<CarnetsPage />);
 
     expect(await screen.findByRole("checkbox", { name: "Elegir a Ana Jugadora" })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Elegir a Mateo Menor" })).toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: /Tito/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /Lia Pendiente/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /ver e imprimir/i })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Elegir a Ana Jugadora" }));
