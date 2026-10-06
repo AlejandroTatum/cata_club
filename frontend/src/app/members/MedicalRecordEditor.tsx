@@ -1,7 +1,7 @@
 "use client";
 
 import LinkifiedText from "@/components/LinkifiedText";
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { Loader2, Save, CheckCircle2, Stethoscope, Pencil, X } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { fetchFichaMedica, fetchFichaEmergencia, actualizarFichaMedica } from "@/services/api";
@@ -164,6 +164,12 @@ interface MedicalRecordEditorProps {
   hideNewNotice?: boolean;
   /** Extra block under the form's cards (e.g. a collapsed guide); only read with `withEmergencyCard`. */
   formFooter?: ReactNode;
+  /**
+   * The representative, when the caller already knows them (the representative's
+   * own page: they ARE the contact, and `/emergencia` is admin/trainer-only so
+   * the lookup would 403). Skips that lookup.
+   */
+  representanteContacto?: { nombre: string; telefono: string } | null;
 }
 
 export default function MedicalRecordEditor({
@@ -173,6 +179,7 @@ export default function MedicalRecordEditor({
   viewerIsOwner = true,
   hideNewNotice = false,
   formFooter,
+  representanteContacto: representanteConocido = null,
 }: MedicalRecordEditorProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
   const [state, setState] = useState<
@@ -224,28 +231,34 @@ export default function MedicalRecordEditor({
    */
   const [fieldErrors, setFieldErrors] = useState<FichaFieldErrors>({});
   /** #1667: the representative standing in as emergency contact; null when the person has their own or none. */
-  const [representante, setRepresentante] = useState<{ nombre: string; telefono: string } | null>(null);
+  const [representanteBuscado, setRepresentanteBuscado] = useState<{ nombre: string; telefono: string } | null>(null);
+  const representante = representanteConocido ?? representanteBuscado;
+  /** Set once the user types in either contact field: the default never overwrites a choice. */
+  const contactoTocado = useRef(false);
+  const tieneRepresentanteConocido = representanteConocido !== null;
 
   useEffect(() => {
     let cancelled = false;
-    setRepresentante(null);
+    setRepresentanteBuscado(null);
+    if (tieneRepresentanteConocido) return;
     // Best effort: a failed lookup only means the card keeps saying «Sin registrar».
     Promise.resolve()
       .then(() => fetchFichaEmergencia(personaId))
       .then((emergencia) => {
         const efectivo = emergencia?.contactoEfectivo;
         if (cancelled || !efectivo?.esRepresentante) return;
-        setRepresentante({ nombre: efectivo.nombre ?? "", telefono: efectivo.telefono ?? "" });
+        setRepresentanteBuscado({ nombre: efectivo.nombre ?? "", telefono: efectivo.telefono ?? "" });
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [personaId, reloadToken]);
+  }, [personaId, reloadToken, tieneRepresentanteConocido]);
 
   useEffect(() => {
     let cancelled = false;
     setState({ status: "loading" });
+    contactoTocado.current = false;
     setSaveError(null);
     setSaveSuccess(false);
 
@@ -287,6 +300,19 @@ export default function MedicalRecordEditor({
       cancelled = true;
     };
   }, [personaId, reloadToken]);
+
+  // The representative is the default contact of a ficha that has none: the
+  // fields open filled (and editable) instead of empty. Runs whenever either
+  // side (the ficha or the representative) arrives last.
+  const sinContactoPropio =
+    state.status === "ready" &&
+    !state.ficha?.contactoEmergencia?.trim() &&
+    !state.ficha?.telefonoEmergencia?.trim();
+  useEffect(() => {
+    if (!representante || !sinContactoPropio || contactoTocado.current) return;
+    setContactoEmergencia(representante.nombre);
+    setTelefonoEmergencia(toPhoneFieldDigits(representante.telefono));
+  }, [representante, sinContactoPropio]);
 
   function empezarEdicion(): void {
     setSaveError(null);
@@ -407,6 +433,7 @@ export default function MedicalRecordEditor({
   }
 
   const representanteContacto = representante?.nombre ? `Representante: ${representante.nombre}` : "";
+  const mostrarPorDefecto = editing && !!representante?.nombre && sinContactoPropio;
 
   // Live values for the emergency card: what the form holds while editing (or
   // creating), the stored record otherwise.
@@ -420,7 +447,11 @@ export default function MedicalRecordEditor({
             .map((e) => e.trim())
             .filter(Boolean)
             .join(", "),
-          contactoEmergencia: contactoEmergencia.trim() || representanteContacto,
+          // The pre-filled default keeps its «Representante:» label until it is changed.
+          contactoEmergencia:
+            !contactoEmergencia.trim() || contactoEmergencia.trim() === representante?.nombre
+              ? representanteContacto
+              : contactoEmergencia.trim(),
           telefonoEmergencia: telefonoEmergencia.trim()
             ? `+593 ${telefonoEmergencia.trim()}`
             : (representante?.telefono ?? ""),
@@ -561,7 +592,10 @@ export default function MedicalRecordEditor({
           id={`contacto-${personaId}`}
           type="text"
           value={contactoEmergencia}
-          onChange={(e) => setContactoEmergencia(e.target.value)}
+          onChange={(e) => {
+            contactoTocado.current = true;
+            setContactoEmergencia(e.target.value);
+          }}
           // 150 chars, same cap `EmergencyContactFields` (wizard-fields.tsx)
           // uses for the identical field on the enrollment wizards —
           // issue #667's emergency-contact parity gap.
@@ -581,11 +615,20 @@ export default function MedicalRecordEditor({
           field={String(personaId)}
           label="Teléfono de emergencia"
           value={telefonoEmergencia}
-          onChange={setTelefonoEmergencia}
+          onChange={(value) => {
+            contactoTocado.current = true;
+            setTelefonoEmergencia(value);
+          }}
           required
           error={fieldErrors.telefonoEmergencia}
         />
       </div>
+      {mostrarPorDefecto && (
+        <p className="text-2xs tracking-flat text-ink-3 sm:col-span-2">
+          Por defecto es el representante: {representante.nombre}
+          {representante.telefono ? ` · ${representante.telefono}` : ""}. Puedes cambiarlo.
+        </p>
+      )}
     </>
   );
 

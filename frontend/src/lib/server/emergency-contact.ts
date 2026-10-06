@@ -24,17 +24,26 @@ function present(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
-/** The person's own contact when they have one, else the representative (needs a phone), else null. */
+/**
+ * The representative when the person has one with a phone, else the person's own contact, else null.
+ *
+ * The representative comes first because for a represented minor the backend
+ * (#1138) already copies them into `contactoEmergencia`/`telefonoEmergencia`:
+ * reading those as "the person's own" is what hid the representative from
+ * every screen.
+ */
 export function resolveEffectiveEmergencyContact(source: EmergencyContactSource): EffectiveEmergencyContact | null {
+  const representanteTelefono = present(source.representanteTelefono);
+  if (representanteTelefono) {
+    return {
+      nombre: present(source.representanteNombreCompleto),
+      telefono: representanteTelefono,
+      esRepresentante: true,
+    };
+  }
+
   const nombre = present(source.contactoEmergencia);
   const telefono = present(source.telefonoEmergencia);
   if (nombre || telefono) return { nombre, telefono, esRepresentante: false };
-
-  const representanteTelefono = present(source.representanteTelefono);
-  if (!representanteTelefono) return null;
-  return {
-    nombre: present(source.representanteNombreCompleto),
-    telefono: representanteTelefono,
-    esRepresentante: true,
-  };
+  return null;
 }
