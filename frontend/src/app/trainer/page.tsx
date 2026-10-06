@@ -28,6 +28,7 @@
 
 "use client";
 
+import { useNoClassDays } from "@/lib/use-no-class-days";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -289,6 +290,8 @@ export default function TrainerPage(): React.ReactElement {
    * that already have a list, newest first. Same cross the history screen
    * counts (`findMissingSessions`), with the same ESTIMATE caveat.
    */
+  const { fechaInicio: mesDesde, fechaFin: mesHasta } = monthToDateRange();
+  const noClassDays = useNoClassDays(mesDesde, mesHasta);
   const missingSessions = useMemo(() => {
     const { fechaInicio, fechaFin } = monthToDateRange();
     return findMissingSessions({
@@ -299,8 +302,9 @@ export default function TrainerPage(): React.ReactElement {
       hasta: fechaFin,
       hoy: clubIsoDate(),
       horaActual: clubTimeHHMM(),
+      noClassDays,
     });
-  }, [monthRecords, schedules, enrolledBySchedule]);
+  }, [monthRecords, schedules, enrolledBySchedule, noClassDays]);
 
   const todayClasses = useMemo(() => buildTodayClasses(todaySchedules, records), [todaySchedules, records]);
   const timelineItems = useMemo(

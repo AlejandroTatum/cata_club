@@ -2235,6 +2235,30 @@ class Sponsor(Base):
     logo_public_id: Mapped[str] = mapped_column(String(64), unique=True)
 
 
+class DiaSinClase(Base):
+    """Día (o rango de días) sin clase para el club entero (issue #1665).
+
+    Sin alcance por categoría ni horario: decisión del dueño, es del club
+    entero. `fecha_fin` es inclusiva; un solo día lleva `fecha_fin ==
+    fecha_inicio`. No afecta cobertura ni cuotas: solo deja de contar como
+    sesión programada. Ver `AsistenciaServicio`/`DiaSinClaseServicio`."""
+    __tablename__ = "dia_sin_clase"
+    __table_args__ = (
+        CheckConstraint("fecha_fin >= fecha_inicio", name="ck_dia_sin_clase_rango"),
+        Index("ix_dia_sin_clase_fecha_fin", "fecha_fin"),
+    )
+
+    MOTIVO_MAX = 200
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fecha_inicio: Mapped[date] = mapped_column(Date)
+    fecha_fin: Mapped[date] = mapped_column(Date)
+    motivo: Mapped[str] = mapped_column(String(MOTIVO_MAX))
+    fecha_creacion: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_ahora_utc,
+    )
+
+
 class VinculacionRepresentante(Base):
     """Ledger append-only de la relación de representación (issue #1133).
 
