@@ -21,7 +21,7 @@ import pytest
 
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import TipoSangre
-from app.dominio.modelos import CoRepresentante, FichaMedica
+from app.dominio.modelos import CoRepresentante, FichaMedica, Persona
 from app.seguridad.gestor_auth import GestorAutenticacion
 from main import app
 from tests.archivos_validos import jpeg_valido
@@ -254,3 +254,27 @@ def test_quitar_el_vinculo_corta_el_acceso_en_la_siguiente_llamada(client, db_se
     db_session.commit()
     for nombre in ("GET /personas/{id}", "GET /fichas-medicas/persona/{id}", "GET /membresias/pagos/persona/{id}"):
         assert ENDPOINTS[nombre](client, esc).status_code == 403, nombre
+
+
+# --- Defensa en profundidad: el vínculo solo vale con un principal vivo ------
+def _emancipar_sin_limpiar_el_vinculo(db_session, esc) -> None:
+    """Simula una independencia que dejó la fila `co_representante` intacta."""
+    db_session.query(Persona).filter_by(id=esc.menor.id).update(
+        {"representante_id": None, "fecha_nacimiento": date(1990, 1, 1)}
+    )
+    db_session.commit()
+    db_session.expire_all()
+
+
+def test_sin_principal_el_segundo_guardian_pierde_el_acceso_aunque_la_fila_siga(client, db_session, esc):
+    _emancipar_sin_limpiar_el_vinculo(db_session, esc)
+    assert db_session.query(CoRepresentante).filter_by(persona_id=esc.menor.id).count() == 1
+    _actuar(esc, "S")
+    for nombre in (
+        "GET /personas/{id}", "GET /fichas-medicas/persona/{id}",
+        "GET /membresias/pagos/persona/{id}", "GET /asistencias/persona/{id}",
+    ):
+        assert ENDPOINTS[nombre](client, esc).status_code == 403, nombre
+    portal = client.get(f"{BASE}/portal/alumno/{esc.segundo.id}")
+    assert portal.json()["representados"] == []
+    assert GestorAutenticacion.alta_presencial_completada(db_session, esc.segundo.id) is False

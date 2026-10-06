@@ -47,7 +47,7 @@ they inherit the backend row (listed at the end).
 | PATCH /fichas-medicas/persona/{id} (#8) | yes | **no** | no | yes | S2: medical record is view-only for the second guardian |
 | Legal consents (`/auth/consentimiento-legal*`, enrollment acceptance) | own account | own account only; no consent is ever written for the minor | own | own | consents are scoped to the signing account (`ConsentimientoLegal.cuenta_id` from the token); S has none for the minor and cannot create one |
 | POST /personas/{id}/representados, /vincular-representado, /me/representados | titular | titular | titular | yes | act on the caller's own account (`exigir_acceso_directo`), unchanged |
-| POST /personas/{id}/independizar, /reasignar-representante | no | no | no | yes | admin-only, unchanged; they also clear a stale second-guardian link |
+| POST /personas/{id}/independizar, /reasignar-representante | no | no | no | yes | admin-only, unchanged; they also clear a stale second-guardian link, and the policy itself grants the second guardian nothing once the minor has no primary |
 | Emergency contact of a minor (#1138), family-gratuity count (`contar_membresias_activas_familia`) | primary | primary | - | - | derived from `Persona.representante_id` by design; unchanged |
 | POST /co-representantes/persona/{id}/invitaciones | yes | **no** | no | yes | S2: primary invites, admin too |
 | DELETE /co-representantes/persona/{id} | yes | **no** | no | yes | S2: primary removes, admin too |

@@ -87,6 +87,8 @@ class PoliticaAccesoPersona:
             return True
         if alcance is AlcanceRepresentacion.FIRMA_LEGAL:
             return False
+        if persona_objetivo.representante_id is None:
+            return False
         return self._repo_co_representante.existe(persona_objetivo.id, persona_id_solicitante)
 
     def puede_acceder(

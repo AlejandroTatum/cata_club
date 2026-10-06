@@ -125,9 +125,14 @@ class PersonaRepositorio:
         que `persona_id` es guardián" para listados y compuertas."""
         return or_(
             Persona.representante_id == persona_id,
-            exists().where(
-                CoRepresentante.persona_id == Persona.id,
-                CoRepresentante.co_representante_id == persona_id,
+            # Solo mientras el menor conserve un principal: sin él, la fila
+            # del segundo guardián es un resto y no concede nada.
+            and_(
+                Persona.representante_id.is_not(None),
+                exists().where(
+                    CoRepresentante.persona_id == Persona.id,
+                    CoRepresentante.co_representante_id == persona_id,
+                ),
             ),
         )
 
