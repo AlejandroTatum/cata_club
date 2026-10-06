@@ -46,7 +46,7 @@ function PagosHeader({
   return (
     <header className="grid gap-2">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h2 className="text-lg font-bold text-ink">
+        <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
           {student.nombres} {student.apellidos}
         </h2>
         <Badge tone={state.tone}>{state.label}</Badge>
@@ -102,7 +102,7 @@ function Block({
     <section
       {...dataAttrs}
       className={`grid content-start gap-3 rounded-ctl border p-4 ${
-        tone === "primary" ? "border-line-2 bg-paper shadow-sm" : "border-line bg-paper"
+        tone === "primary" ? "border-line-2 bg-paper shadow-soft" : "border-line bg-paper"
       }`}
     >
       <h3 className="text-base font-bold text-ink">{title}</h3>
@@ -282,7 +282,7 @@ export default function StudentMembershipActions({
                 key={tipo}
                 type="button"
                 onClick={() => setTipoSocio(tipo)}
-                className="grid gap-1 rounded-ctl border border-line-2 bg-paper p-4 text-left transition-colors hover:border-cata-red hover:bg-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ball"
+                className="grid gap-1 rounded-ctl border border-line-2 bg-paper p-4 text-left transition-colors hover:border-cata-red hover:bg-sunken"
               >
                 <span className="text-base font-bold text-ink">{TIPO_SOCIO_OPCIONES[tipo].titulo}</span>
                 <span className="text-sm text-ink-2">{TIPO_SOCIO_OPCIONES[tipo].detalle}</span>
