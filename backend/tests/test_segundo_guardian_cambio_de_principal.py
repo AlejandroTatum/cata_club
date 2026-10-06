@@ -41,15 +41,23 @@ def test_reasignar_al_propio_segundo_guardian_lo_retira_y_lo_audita(db_session):
     assert _eventos(db_session, menor.id) == [("BAJA", "ADMIN", admin.id, nuevo.id)]
 
 
-def test_reasignar_a_un_tercero_conserva_al_segundo_guardian(db_session):
+def test_reasignar_a_un_tercero_retira_al_segundo_guardian_y_le_corta_el_acceso(db_session, client):
+    """Decisión del padre: ANY reasignación del principal limpia el vínculo; el
+    nuevo principal re-invita si hace falta."""
     admin, viejo, _, nuevo, _, menor = _escenario(db_session)
     segundo, _ = _representante(db_session, 410)
     _vincular_segundo(db_session, menor, segundo, viejo)
+    from app.seguridad.gestor_auth import GestorAutenticacion
+    from main import app
 
     _reasignar(db_session, admin, menor, nuevo=nuevo, actual=viejo.id)
 
-    assert db_session.query(CoRepresentante).filter_by(persona_id=menor.id).one().co_representante_id == segundo.id
-    assert _eventos(db_session, menor.id) == []
+    assert db_session.query(CoRepresentante).count() == 0
+    assert _eventos(db_session, menor.id) == [("BAJA", "ADMIN", admin.id, segundo.id)]
+    app.dependency_overrides[GestorAutenticacion.decodificar_token] = lambda: {
+        "sub": "s@x.com", "persona_id": segundo.id, "roles": ["REPRESENTANTE"],
+    }
+    assert client.get(f"/api/v1/personas/{menor.id}").status_code == 403
 
 
 def test_independizar_retira_al_segundo_guardian(db_session):

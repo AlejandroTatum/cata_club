@@ -444,11 +444,11 @@ class RelacionRepresentacionServicio:
         #    acceso por el vínculo recién comiteado: no hay token previo que
         #    revocar) y evidencia con la clave como recibo de replay.
         self.repo_persona.actualizar(persona, {"representante_id": destino.id})
-        # Issue #1666: si el nuevo principal era el segundo guardián, ya no lo
-        # es (no se puede ser los dos); cualquier otro segundo guardián sigue.
+        # Issue #1666: toda reasignación del principal retira al segundo
+        # guardián (el vínculo no guarda bajo qué principal nació); el nuevo
+        # principal re-invita si hace falta.
         retirar_del_menor(
             self.db, persona_id, actor_persona_id=admin_actor_id, origen="ADMIN",
-            solo_si_es=destino.id,
         )
 
         usuario_viejo = (
