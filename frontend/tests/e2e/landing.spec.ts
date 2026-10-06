@@ -93,14 +93,16 @@ test.describe("Landing page", () => {
         ),
       })
     );
+    // The footer strip; the highlight strip under the hero renders the same roster.
+    const strip = page.locator("#patrocinadores");
     await page.goto("/");
     // Two copies, each repeating the two records five times: with two sponsors
     // that is what it takes for one copy to outrun a 4K viewport on real logos
     // instead of on stretched gaps (issue #765, Sponsors.tsx#repetitionsFor).
-    await expect(page.locator(".landing-sponsors-item")).toHaveCount(20);
+    await expect(strip.locator(".landing-sponsors-item")).toHaveCount(20);
     // The gap jsdom cannot measure: every space between logos is the same, and
     // it is the token's, not whatever `min-width: 100vw` had left over.
-    const spacing = await page.locator(".landing-sponsors-copy").first().evaluate((copy) => {
+    const spacing = await strip.locator(".landing-sponsors-copy").first().evaluate((copy) => {
       const boxes = [...copy.querySelectorAll(".landing-sponsors-item")].map((item) => item.getBoundingClientRect());
       return {
         gaps: boxes.slice(1).map((box, index) => Math.round(box.left - boxes[index].right)),
@@ -116,15 +118,15 @@ test.describe("Landing page", () => {
     expect(spacing.copyWidth).toBeGreaterThanOrEqual(spacing.viewportWidth);
         // Canonical public term and full brand colour: the strip no longer greys
         // or dims logos, and there is no dead href-hover restore.
-        await expect(page.locator(".landing-sponsors-head")).toHaveText("Patrocinadores");
-        await expect(page.locator(".landing-sponsor img").first()).toHaveCSS("filter", "none");
-        await expect(page.locator(".landing-sponsor img").first()).toHaveCSS("opacity", "1");
-    const metrics = await page.locator(".landing-sponsors-item >> nth=0").evaluate((item) => {
+        await expect(strip.locator(".landing-sponsors-head")).toHaveText("Patrocinadores");
+        await expect(strip.locator(".landing-sponsor img").first()).toHaveCSS("filter", "none");
+        await expect(strip.locator(".landing-sponsor img").first()).toHaveCSS("opacity", "1");
+    const metrics = await strip.locator(".landing-sponsors-item >> nth=0").evaluate((item) => {
       const img = item.querySelector("img")!;
       const imgBox = img.getBoundingClientRect();
       const cardBox = item.getBoundingClientRect();
       const tile = img.closest(".landing-sponsor")!.getBoundingClientRect();
-      const track = document.querySelector(".landing-sponsors-track")!;
+      const track = document.querySelector("#patrocinadores .landing-sponsors-track")!;
       return {
         ratio: (imgBox.width * imgBox.height) / (cardBox.width * cardBox.height),
         imgW: imgBox.width,

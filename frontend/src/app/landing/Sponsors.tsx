@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 
 export interface SponsorItem {
   /** Numeric id from the backend — the stable identity used for React keys. */
@@ -83,23 +83,18 @@ function SponsorLogo({ sponsor }: { sponsor: SponsorItem }): React.ReactElement 
   );
 }
 
-type SponsorsState =
+export type SponsorsState =
   | { kind: "loading" }
   | { kind: "ready"; sponsors: SponsorItem[] }
   | { kind: "empty" }
   | { kind: "error" };
 
-/**
- * Data-driven sponsor marquee backed entirely by the public GET /api/sponsors
- * route (which proxies the backend's /sponsors/). No static sponsor list
- * competes with the API: while loading the strip stays quiet, and empty or
- * error responses surface an honest one-line status instead of invented
- * placeholder slots.
- */
-export default function Sponsors(): React.ReactElement {
+/** Fetches the public roster once. */
+function useSponsorsFetch(enabled: boolean): SponsorsState {
   const [state, setState] = useState<SponsorsState>({ kind: "loading" });
 
-  useEffect((): (() => void) => {
+  useEffect((): (() => void) | void => {
+    if (!enabled) return;
     let cancelled = false;
     fetch("/api/sponsors", { cache: "no-store" })
       .then((response): Promise<unknown> => {
@@ -117,7 +112,38 @@ export default function Sponsors(): React.ReactElement {
         if (!cancelled) setState({ kind: "error" });
       });
     return (): void => { cancelled = true; };
-  }, []);
+  }, [enabled]);
+
+  return state;
+}
+
+const SponsorsContext = createContext<SponsorsState | null>(null);
+
+/**
+ * Fetches GET /api/sponsors once and shares it with every `Sponsors` strip
+ * below it, so the page can show the roster in several places for one request.
+ */
+export function SponsorsProvider({ children }: { children: React.ReactNode }): React.ReactElement {
+  const state = useSponsorsFetch(true);
+  return <SponsorsContext.Provider value={state}>{children}</SponsorsContext.Provider>;
+}
+
+/**
+ * Data-driven sponsor marquee backed entirely by the public GET /api/sponsors
+ * route (which proxies the backend's /sponsors/). No static sponsor list
+ * competes with the API: while loading the strip stays quiet, and empty or
+ * error responses surface an honest one-line status instead of invented
+ * placeholder slots. Inside a `SponsorsProvider` it reads the shared roster;
+ * on its own it fetches. The `highlight` strip (under the hero) carries its own
+ * id and accessible name and renders nothing until there are sponsors; the
+ * default strip keeps `#patrocinadores`, the target of the nav and footer links.
+ */
+export default function Sponsors({ highlight = false }: { highlight?: boolean }): React.ReactElement | null {
+  const shared = useContext(SponsorsContext);
+  const own = useSponsorsFetch(shared === null);
+  const state = shared ?? own;
+
+  if (highlight && state.kind !== "ready") return null;
 
   let accessibleStatus: string;
   if (state.kind === "ready") {
@@ -148,7 +174,11 @@ export default function Sponsors(): React.ReactElement {
     : [];
 
   return (
-    <section className="landing-sponsors" id="patrocinadores" aria-label="Patrocinadores del club">
+    <section
+      className={highlight ? "landing-sponsors landing-sponsors-highlight" : "landing-sponsors"}
+      id={highlight ? "patrocinadores-destacados" : "patrocinadores"}
+      aria-label={highlight ? "Patrocinadores destacados del club" : "Patrocinadores del club"}
+    >
       <p className="landing-sponsors-head">Patrocinadores</p>
       {/* The empty/error paragraphs below are themselves the accessible status;
           only loading/ready states need a screen-reader-only copy. */}

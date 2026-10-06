@@ -512,6 +512,15 @@
    grid never ends on an orphan, whatever number of categories the club publishes. */
 .landing-schedule-help:nth-child(3n + 1):last-child { grid-column: 1 / -1; }
 .landing-schedule-help:nth-child(3n + 2):last-child { grid-column: span 2; }
+/* Alone on its row in the 3-column grid the help card is a banner, not a tile:
+   centre it and scale the type up so the width does not read as dead space.
+   Tablet and phone grids (2 and 1 columns) keep the regular tile. */
+@media (min-width: 1025px) {
+  .landing-schedule-help:nth-child(3n + 1):last-child { align-items: center; text-align: center; }
+  .landing-schedule-help:nth-child(3n + 1):last-child h3 { align-self: center; font-size: 40px; }
+  .landing-schedule-help:nth-child(3n + 1):last-child p { max-width: 44ch; margin-top: 14px; font-size: 19px; }
+  .landing-schedule-help:nth-child(3n + 1):last-child a { align-self: center; min-height: 56px; margin-top: 24px; padding: 0 26px; font-size: 15px; }
+}
 .landing-schedule-note { margin: 0; color: var(--landing-text-muted); font-size: 14px; }
 @keyframes landing-schedule-rise { from { opacity: 0; transform: translateY(28px) scale(0.98); } to { opacity: 1; transform: none; } }
 
@@ -821,6 +830,12 @@
    yellow on red 3.7:1 is only used for the 40px+ amount (large text, 3:1). */
 .landing-prices { background: var(--landing-surface); }
 .landing-prices-list { display: grid; width: 100%; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; margin: 0; padding: 0; list-style: none; }
+/* One or two plans would stretch into half-width banners with the label and
+   price lost in a corner: cap the cards and centre the list. Three or more
+   keep the full-width grid above. */
+@media (min-width: 769px) {
+  .landing-prices-list:has(> .landing-price:first-child:nth-last-child(-n + 2)) { grid-template-columns: repeat(auto-fit, minmax(240px, 420px)); justify-content: center; }
+}
 .landing-price { --price-bg: var(--landing-brand-red); --price-fg: var(--landing-on-action); --price-accent: var(--landing-brand-yellow); --price-shadow: var(--landing-brand-black); position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 40px; min-height: 190px; padding: 24px 26px 26px; overflow: hidden; border: 2px solid var(--landing-brand-black); border-radius: 20px; background: var(--price-bg); color: var(--price-fg); box-shadow: 6px 6px 0 var(--price-shadow); }
 .landing-price:nth-child(3n + 2) { --price-bg: var(--landing-brand-yellow); --price-fg: var(--landing-brand-black); --price-accent: var(--landing-brand-black); }
 .landing-price:nth-child(3n) { --price-bg: var(--landing-brand-black); --price-fg: var(--landing-on-action); --price-accent: var(--landing-brand-yellow); --price-shadow: var(--landing-brand-red); }
@@ -1300,3 +1315,6 @@ html.launch-locked, html.launch-locked body { overflow: hidden; }
 @media (max-width: 600px) {
   .launch-preview { flex-direction: column; gap: 8px; border-radius: 18px; padding: 10px 14px; text-align: center; bottom: 76px; }
 }
+
+/* The strip under the hero sits against the ticker: tighter than the footer one. */
+.landing-sponsors-highlight { padding-block: 36px 40px; }
