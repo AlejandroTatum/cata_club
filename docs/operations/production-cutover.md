@@ -550,16 +550,47 @@ anunciar. Se prueba todo con servicios reales y después se borra lo de prueba.
   $DC down
   docker volume ls --format '{{.Name}}' | grep -E 'db_data|redis_data'
   docker volume rm <volumen_db_data> <volumen_redis_data>
+  ```
+
+  Archiva el ledger de releases, igual que en el [paso 2.5](#2-parar-el-stack-y-limpiar-el-estado-de-staging).
+  La base nueva no tiene `alembic_version`. Si el puntero del ensayo queda en
+  `releases/`, el preflight y `deploy.sh` se niegan a seguir:
+
+  ```bash
+  sudo mv /var/lib/cata-club/releases/current.env \
+    "/var/lib/cata-club/releases/current.env.pre-reset-$(date -u +%Y%m%dT%H%M%SZ)"
+  ls /var/lib/cata-club/releases/
+  ```
+
+  Fija el SHA en `.env`, además de exportarlo. `deploy.sh` valida
+  `runtime = HEAD = IMAGE_TAG = ledger`, y un `IMAGE_TAG` viejo en `.env` lo
+  hace fallar:
+
+  ```bash
   export IMAGE_TAG="$(git rev-parse HEAD)"
+  sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${IMAGE_TAG}/" .env
+  grep '^IMAGE_TAG=' .env
   export MIGRATION_COMPATIBILITY=none
   ./scripts/ops/preflight-production.sh
   ./scripts/deploy/deploy.sh
   ```
 
-  Mueve fuera de `BACKUP_DIR` los dumps generados durante el ensayo (contienen
-  datos de prueba), igual que los dumps de staging del paso 2. **No** borres el
-  volumen de Caddy: conserva los certificados. **Esperado:** «Validaciones OK»
-  y una base sin usuarios.
+  Mueve fuera de `BACKUP_DIR` los dumps generados durante el ensayo, porque
+  contienen datos de prueba. Es lo mismo que el paso 2.6. El usuario `deploy`
+  no puede crear directorios dentro de `/var/backups`, así que el directorio de
+  destino se crea con `sudo`:
+
+  ```bash
+  sudo install -d -m 700 -o deploy -g deploy "/var/backups/cataclub-ensayo-$(date -u +%F)"
+  sudo mv /var/backups/cataclub/cataclub_*.dump.age "/var/backups/cataclub-ensayo-$(date -u +%F)/"
+  ```
+
+  Si `sudo` no está disponible, usa un directorio del propio usuario, por
+  ejemplo `~/backups-ensayo-<fecha>` con modo 700. Es lo que se hizo el
+  2026-10-05. **No** borres el volumen de Caddy: conserva los certificados.
+  **Esperado:** el ledger muestra el puntero archivado y, después del deploy,
+  un `current.env` nuevo con el SHA de `.env`. «Validaciones OK» y una base sin
+  usuarios.
 
 - [ ] **8b.3 👤 Borrar las fotos de prueba** en la consola de Cloudinary (carpetas
   de producción configuradas en `CLOUDINARY_CARPETA_*`). La base nueva ya no
