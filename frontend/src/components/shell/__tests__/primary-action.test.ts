@@ -72,6 +72,9 @@ const NO_HEADER_ACTION: Record<string, string> = {
   // Same shape, same reason (issue #1372): the gallery upload needs título,
   // descripción and the photo file beside its submit control.
   "app/galeria/page.tsx": "upload form — the submit action belongs with its required fields",
+  // A form beside its list (issue #1665): the submit action belongs with the
+  // date and reason fields it needs.
+  "app/admin/dias-sin-clase/page.tsx": "form — the submit action belongs with its required fields",
   // Read-only monitoring screen (issue #1314): it only looks, so there is no
   // verb to promote. Its view and period controls change what is drawn, not the
   // data, and live with the figures they filter.

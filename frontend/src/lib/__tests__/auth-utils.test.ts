@@ -226,6 +226,7 @@ describe("getNavGroupsForRoles", () => {
           { href: "/payments", label: "Pagos" },
           { href: "/attendance", label: "Asistencias" },
           { href: "/groups", label: "Grupos y horarios" },
+          { href: "/admin/dias-sin-clase", label: "Días sin clase" },
           { href: "/reports", label: "Informes" },
         ],
       },
@@ -249,10 +250,10 @@ describe("getNavGroupsForRoles", () => {
     expect(groups).toHaveLength(4);
   });
 
-  it("still offers all twelve admin destinations, none twice", () => {
+  it("still offers all thirteen admin destinations, none twice", () => {
     const hrefs = sectionHrefs(getNavGroupsForRoles(["admin"]));
-    expect(hrefs).toHaveLength(12);
-    expect(new Set(hrefs).size).toBe(12);
+    expect(hrefs).toHaveLength(13);
+    expect(new Set(hrefs).size).toBe(13);
   });
 
   // The four trainer destinations, in the exact order the sidebar shows them.

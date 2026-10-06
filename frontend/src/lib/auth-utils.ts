@@ -97,7 +97,7 @@ const RAIL_GROUPS: readonly {
   {
     heading: "Operación",
     roles: ["admin"],
-    hrefs: ["/dashboard", "/members", "/payments", "/attendance", "/groups", "/reports"],
+    hrefs: ["/dashboard", "/members", "/payments", "/attendance", "/groups", "/admin/dias-sin-clase", "/reports"],
   },
   { heading: "Catálogo y tarifas", roles: ["admin"], hrefs: ["/tarifas", "/discounts"] },
   {
@@ -150,6 +150,7 @@ function sectionsForRole(role: UserRole, studentIsAdult: boolean): NavLinkDef[] 
         row("/payments"),
         row("/attendance"),
         row("/groups"),
+        row("/admin/dias-sin-clase"),
         row("/reports"),
         row("/tarifas"),
         row("/discounts"),

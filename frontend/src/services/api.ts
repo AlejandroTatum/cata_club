@@ -3095,6 +3095,46 @@ export async function eliminarSponsor(id: number): Promise<void> {
   await request<unknown>(apiEndpoint(`/sponsors/${id}`), { method: "DELETE" });
 }
 
+/** A club-wide no-class day or range (issue #1665); both dates are `YYYY-MM-DD`, `fechaFin` inclusive. */
+export interface DiaSinClase {
+  id: number;
+  fechaInicio: string;
+  fechaFin: string;
+  motivo: string;
+}
+
+export interface DiaSinClaseInput {
+  /** `YYYY-MM-DD`. */
+  fecha_inicio: string;
+  /** Omitted for a single day. */
+  fecha_fin?: string | null;
+  motivo: string;
+}
+
+/** Signed-in members: no-class days touching `[desde, hasta]` (both optional). */
+export async function fetchDiasSinClase(params?: { desde?: string; hasta?: string }): Promise<DiaSinClase[]> {
+  const query = new URLSearchParams();
+  if (params?.desde) query.set("desde", params.desde);
+  if (params?.hasta) query.set("hasta", params.hasta);
+  const suffix = query.size > 0 ? `?${query.toString()}` : "";
+  return request<DiaSinClase[]>(apiEndpoint(`/dias-sin-clase${suffix}`));
+}
+
+/** Admin-only: announce a no-class day. Members are notified once, on creation. */
+export async function crearDiaSinClase(data: DiaSinClaseInput): Promise<DiaSinClase> {
+  return request<DiaSinClase>(apiEndpoint("/dias-sin-clase"), { method: "POST", body: JSON.stringify(data) });
+}
+
+/** Admin-only: edit a no-class day. Editing does not notify again. */
+export async function actualizarDiaSinClase(id: number, data: DiaSinClaseInput): Promise<DiaSinClase> {
+  return request<DiaSinClase>(apiEndpoint(`/dias-sin-clase/${id}`), { method: "PUT", body: JSON.stringify(data) });
+}
+
+/** Admin-only: remove a no-class day. */
+export async function eliminarDiaSinClase(id: number): Promise<void> {
+  await request<unknown>(apiEndpoint(`/dias-sin-clase/${id}`), { method: "DELETE" });
+}
+
 /** One published gallery entry — wire contract mirrors Sponsor (camelCase via
  * the backend's ResponseBase alias generator, asserted by
  * backend/tests/test_galeria.py). */
