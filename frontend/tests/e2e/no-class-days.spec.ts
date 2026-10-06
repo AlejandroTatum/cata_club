@@ -49,7 +49,7 @@ async function mockAdminAndDays(page: Page, days: Day[]): Promise<void> {
     const day = { id: Number(id ?? 100), fechaInicio: body.fecha_inicio, fechaFin: body.fecha_fin ?? body.fecha_inicio, motivo: body.motivo };
     if (request.method() === "POST") days.push(day);
     else days.splice(days.findIndex((d) => d.id === day.id), 1, day);
-    return fulfillJson(route, day, request.method() === "POST" ? 201 : 200);
+    return request.method() === "POST" ? fulfillJson(route, { ...day, avisoEncolado: true }, 201) : fulfillJson(route, day);
   });
 }
 

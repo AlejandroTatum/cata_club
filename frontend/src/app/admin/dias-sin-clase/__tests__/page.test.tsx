@@ -7,6 +7,7 @@ const fetchDiasSinClase = vi.fn();
 const crearDiaSinClase = vi.fn();
 const actualizarDiaSinClase = vi.fn();
 const eliminarDiaSinClase = vi.fn();
+const reenviarAvisoDiaSinClase = vi.fn();
 const showSuccess = vi.fn();
 const showError = vi.fn();
 
@@ -18,24 +19,26 @@ vi.mock("@/services/api", () => ({
   crearDiaSinClase: (...args: unknown[]) => crearDiaSinClase(...args),
   actualizarDiaSinClase: (...args: unknown[]) => actualizarDiaSinClase(...args),
   eliminarDiaSinClase: (id: number) => eliminarDiaSinClase(id),
+  reenviarAvisoDiaSinClase: (id: number) => reenviarAvisoDiaSinClase(id),
 }));
 
-const FERIADO = { id: 1, fechaInicio: "2029-07-04", fechaFin: "2029-07-04", motivo: "Feriado" };
-const CIERRE = { id: 2, fechaInicio: "2029-07-10", fechaFin: "2029-07-12", motivo: "Cancha cerrada" };
+const FERIADO = { id: 1, fechaInicio: "2999-07-04", fechaFin: "2999-07-04", motivo: "Feriado" };
+const CIERRE = { id: 2, fechaInicio: "2999-07-10", fechaFin: "2999-07-12", motivo: "Cancha cerrada" };
 
 describe("DiasSinClasePage (admin)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchDiasSinClase.mockResolvedValue([FERIADO, CIERRE]);
-    crearDiaSinClase.mockResolvedValue(FERIADO);
+    crearDiaSinClase.mockResolvedValue({ ...FERIADO, avisoEncolado: true });
+    reenviarAvisoDiaSinClase.mockResolvedValue(undefined);
     actualizarDiaSinClase.mockResolvedValue(FERIADO);
     eliminarDiaSinClase.mockResolvedValue(undefined);
   });
 
   it("lists published days with a single date or a range, and their reason", async () => {
     render(<DiasSinClasePage />);
-    expect(await screen.findByText("04/07/2029")).toBeInTheDocument();
-    expect(screen.getByText("10/07/2029 – 12/07/2029")).toBeInTheDocument();
+    expect(await screen.findByText("04/07/2999")).toBeInTheDocument();
+    expect(screen.getByText("10/07/2999 – 12/07/2999")).toBeInTheDocument();
     expect(screen.getByText("Cancha cerrada")).toBeInTheDocument();
   });
 
@@ -82,8 +85,8 @@ describe("DiasSinClasePage (admin)", () => {
 
   it("edits a day: loads it into the form and saves without the creation promise", async () => {
     render(<DiasSinClasePage />);
-    fireEvent.click(await screen.findByRole("button", { name: "Editar 10/07/2029 – 12/07/2029" }));
-    expect(screen.getByLabelText(/^Desde/)).toHaveValue("2029-07-10");
+    fireEvent.click(await screen.findByRole("button", { name: "Editar 10/07/2999 – 12/07/2999" }));
+    expect(screen.getByLabelText(/^Desde/)).toHaveValue("2999-07-10");
     expect(screen.getByLabelText(/^Motivo/)).toHaveValue("Cancha cerrada");
     expect(screen.getByText("Editar no vuelve a enviar el aviso a los socios.")).toBeInTheDocument();
 
@@ -91,14 +94,14 @@ describe("DiasSinClasePage (admin)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
 
     await waitFor(() => expect(actualizarDiaSinClase).toHaveBeenCalledWith(2, {
-      fecha_inicio: "2029-07-10", fecha_fin: "2029-07-12", motivo: "Torneo",
+      fecha_inicio: "2999-07-10", fecha_fin: "2999-07-12", motivo: "Torneo",
     }));
     expect(crearDiaSinClase).not.toHaveBeenCalled();
   });
 
   it("deletes only after the admin confirms", async () => {
     render(<DiasSinClasePage />);
-    fireEvent.click(await screen.findByRole("button", { name: "Eliminar 04/07/2029" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Eliminar 04/07/2999" }));
     expect(eliminarDiaSinClase).not.toHaveBeenCalled();
 
     const dialog = await screen.findByRole("dialog");
@@ -117,5 +120,48 @@ describe("DiasSinClasePage (admin)", () => {
     fetchDiasSinClase.mockRejectedValueOnce(new Error("boom"));
     render(<DiasSinClasePage />);
     expect(await screen.findByText("No se pudieron cargar los días sin clase.")).toBeInTheDocument();
+  });
+
+  async function fillAndPublish(): Promise<void> {
+    await screen.findByText("Feriado");
+    fireEvent.change(screen.getByLabelText(/^Desde/), { target: { value: "2999-08-01" } });
+    fireEvent.change(screen.getByLabelText(/^Motivo/), { target: { value: "Evento" } });
+    fireEvent.click(screen.getByRole("button", { name: "Publicar día sin clase" }));
+  }
+
+  it("warns that the day was saved but the notice failed, and retries it", async () => {
+    crearDiaSinClase.mockResolvedValue({ id: 7, fechaInicio: "2999-08-01", fechaFin: "2999-08-01", motivo: "Evento", avisoEncolado: false });
+    render(<DiasSinClasePage />);
+    await fillAndPublish();
+
+    expect(await screen.findByText("El día se guardó, pero no se pudo enviar el aviso a los socios.")).toBeInTheDocument();
+    expect(showSuccess).not.toHaveBeenCalledWith(expect.stringContaining("recibirán el aviso"));
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar aviso" }));
+
+    await waitFor(() => expect(reenviarAvisoDiaSinClase).toHaveBeenCalledWith(7));
+    await waitFor(() => expect(screen.queryByText(/no se pudo enviar el aviso/)).not.toBeInTheDocument());
+    expect(showSuccess).toHaveBeenCalledWith("Aviso reenviado a los socios.");
+  });
+
+  it("keeps the warning when the retry fails too", async () => {
+    crearDiaSinClase.mockResolvedValue({ id: 7, fechaInicio: "2999-08-01", fechaFin: "2999-08-01", motivo: "Evento", avisoEncolado: false });
+    reenviarAvisoDiaSinClase.mockRejectedValue(new Error("down"));
+    render(<DiasSinClasePage />);
+    await fillAndPublish();
+    fireEvent.click(await screen.findByRole("button", { name: "Reintentar aviso" }));
+
+    await waitFor(() => expect(showError).toHaveBeenCalledWith("No se pudo reenviar el aviso. Intenta de nuevo."));
+    expect(screen.getByText(/no se pudo enviar el aviso/)).toBeInTheDocument();
+  });
+
+  it("offers «Reenviar aviso» on upcoming days only", async () => {
+    fetchDiasSinClase.mockResolvedValue([FERIADO, { id: 3, fechaInicio: "2000-01-01", fechaFin: "2000-01-01", motivo: "Viejo" }]);
+    render(<DiasSinClasePage />);
+    await screen.findByText("Viejo");
+
+    expect(screen.getAllByRole("button", { name: /^Reenviar aviso/ })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Reenviar aviso 04/07/2999" }));
+    await waitFor(() => expect(reenviarAvisoDiaSinClase).toHaveBeenCalledWith(1));
+    expect(showSuccess).toHaveBeenCalledWith("Aviso reenviado a los socios.");
   });
 });

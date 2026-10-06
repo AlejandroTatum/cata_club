@@ -15,6 +15,11 @@ class DiaSinClaseResponseDTO(ResponseBase, BaseModel):
     motivo: str
 
 
+class DiaSinClaseCreadoResponseDTO(DiaSinClaseResponseDTO):
+    """Respuesta del alta: informa si el aviso a los socios quedó encolado."""
+    aviso_encolado: bool
+
+
 def _motivo_sin_espacios(valor: str) -> str:
     limpio = valor.strip()
     if not limpio:

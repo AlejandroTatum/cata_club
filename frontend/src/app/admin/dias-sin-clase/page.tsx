@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { CalendarOff, Pencil, Trash2 } from "lucide-react";
+import { CalendarOff, Pencil, Send, Trash2 } from "lucide-react";
 import CampoFormularioAdmin from "@/components/admin/CampoFormularioAdmin";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -10,11 +10,13 @@ import { Button, EmptyState, ErrorState, LoadingState, PAGE_RAIL } from "@/compo
 import { useToast } from "@/contexts/ToastContext";
 import { toUserMessage } from "@/lib/error-message";
 import { ICON } from "@/lib/icon-size";
+import { clubIsoDate } from "@/lib/club-date";
 import { formatNoClassRange } from "@/lib/no-class-days";
 import {
   actualizarDiaSinClase,
   crearDiaSinClase,
   eliminarDiaSinClase,
+  reenviarAvisoDiaSinClase,
   fetchDiasSinClase,
   type DiaSinClase,
 } from "@/services/api";
@@ -32,6 +34,7 @@ export default function DiasSinClasePage(): React.ReactElement {
   const [motivo, setMotivo] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [avisoFallido, setAvisoFallido] = useState<DiaSinClase | null>(null);
   const [porEliminar, setPorEliminar] = useState<DiaSinClase | null>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
 
@@ -68,14 +71,27 @@ export default function DiasSinClasePage(): React.ReactElement {
         await actualizarDiaSinClase(editando.id, datos);
         showSuccess("Día sin clase actualizado.");
       } else {
-        await crearDiaSinClase(datos);
-        showSuccess("Día sin clase publicado. Los socios recibirán el aviso.");
+        const creado = await crearDiaSinClase(datos);
+        if (creado.avisoEncolado) {
+          setAvisoFallido(null);
+          showSuccess("Día sin clase publicado. Los socios recibirán el aviso.");
+        } else {
+          setAvisoFallido(creado);
+        }
       }
       limpiarFormulario();
       await load();
     } catch (cause: unknown) {
       setError(toUserMessage(cause, "No se pudo guardar el día sin clase. Intenta de nuevo."));
     } finally { setSaving(false); }
+  }
+
+  async function reenviarAviso(dia: DiaSinClase): Promise<void> {
+    try {
+      await reenviarAvisoDiaSinClase(dia.id);
+      if (avisoFallido?.id === dia.id) setAvisoFallido(null);
+      showSuccess("Aviso reenviado a los socios.");
+    } catch { showError("No se pudo reenviar el aviso. Intenta de nuevo."); }
   }
 
   async function confirmarEliminar(): Promise<void> {
@@ -85,10 +101,13 @@ export default function DiasSinClasePage(): React.ReactElement {
     try {
       await eliminarDiaSinClase(dia.id);
       if (editando?.id === dia.id) limpiarFormulario();
+      if (avisoFallido?.id === dia.id) setAvisoFallido(null);
       showSuccess("Día sin clase eliminado.");
       await load();
     } catch { showError("No se pudo eliminar el día sin clase."); }
   }
+
+  const hoy = clubIsoDate();
 
   return <ProtectedRoute allowedRoles={["admin"]}><AppShell
     title="Días sin clase"
@@ -126,6 +145,14 @@ export default function DiasSinClasePage(): React.ReactElement {
           </form>
         </div>
         <div className="flex min-w-0 flex-col gap-page lg:col-start-1 lg:row-start-1">
+          {avisoFallido && (
+            <div role="alert" className="card flex flex-wrap items-center gap-3 border-state-bad p-4">
+              <p className="min-w-0 flex-1 text-sm text-ink">
+                El día se guardó, pero no se pudo enviar el aviso a los socios.
+              </p>
+              <Button type="button" onClick={() => void reenviarAviso(avisoFallido)}>Reintentar aviso</Button>
+            </div>
+          )}
           <section aria-label="Días sin clase publicados" className="flex min-w-0 flex-col">
             {cargando ? <LoadingState label="Cargando días sin clase…" />
               : errorCarga ? <ErrorState message="No se pudieron cargar los días sin clase." onRetry={() => void load()} />
@@ -136,6 +163,11 @@ export default function DiasSinClasePage(): React.ReactElement {
                   <p className="break-words text-sm text-ink-2">{dia.motivo}</p>
                 </div>
                 <div className="flex shrink-0 gap-1">
+                  {dia.fechaFin >= hoy && (
+                    <Button size="sm" aria-label={`Reenviar aviso ${formatNoClassRange(dia)}`} title="Reenviar aviso" onClick={() => void reenviarAviso(dia)}>
+                      <Send size={ICON.sm} aria-hidden="true" />
+                    </Button>
+                  )}
                   <Button size="sm" aria-label={`Editar ${formatNoClassRange(dia)}`} onClick={() => empezarEdicion(dia)}>
                     <Pencil size={ICON.sm} aria-hidden="true" />
                   </Button>

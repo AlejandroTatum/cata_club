@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/server/auth";
 import { GET, POST } from "../route";
 import { DELETE, PUT } from "../[id]/route";
+import { POST as AVISAR } from "../[id]/avisar/route";
 
 const token = "eyJhbGciOiJub25lIn0.eyJleHAiOjk5OTk5OTk5OTl9.sig";
 const cookie = `${ACCESS_TOKEN_COOKIE}=${token}`;
@@ -59,5 +60,16 @@ describe("/api/dias-sin-clase", () => {
 
     expect((await DELETE(request("DELETE", "/abc"), props("abc"))).status).toBe(400);
     expect((await PUT(request("PUT", "/x", {}), props("x"))).status).toBe(400);
+  });
+
+  it("resends the notice through the backend, passing a 403 or 409 through", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response(JSON.stringify({ encolado: true }), { status: 202 }));
+    const ok = await AVISAR(request("POST", "/3/avisar"), props("3"));
+    expect(ok.status).toBe(202);
+    expect(global.fetch).toHaveBeenCalledWith("http://backend/api/v1/dias-sin-clase/3/avisar", expect.objectContaining({ method: "POST" }));
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response(JSON.stringify({ detail: "Ese día sin clase ya terminó." }), { status: 409 }));
+    expect((await AVISAR(request("POST", "/3/avisar"), props("3"))).status).toBe(409);
+    expect((await AVISAR(request("POST", "/x/avisar"), props("x"))).status).toBe(400);
   });
 });

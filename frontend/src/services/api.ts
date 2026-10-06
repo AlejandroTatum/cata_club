@@ -3129,14 +3129,24 @@ export async function fetchDiasSinClase(params?: { desde?: string; hasta?: strin
   return request<DiaSinClase[]>(apiEndpoint(`/dias-sin-clase${suffix}`));
 }
 
+/** Creation answer: `avisoEncolado` is false when the day saved but the members' notice could not be queued. */
+export interface DiaSinClaseCreado extends DiaSinClase {
+  avisoEncolado: boolean;
+}
+
 /** Admin-only: announce a no-class day. Members are notified once, on creation. */
-export async function crearDiaSinClase(data: DiaSinClaseInput): Promise<DiaSinClase> {
-  return request<DiaSinClase>(apiEndpoint("/dias-sin-clase"), { method: "POST", body: JSON.stringify(data) });
+export async function crearDiaSinClase(data: DiaSinClaseInput): Promise<DiaSinClaseCreado> {
+  return request<DiaSinClaseCreado>(apiEndpoint("/dias-sin-clase"), { method: "POST", body: JSON.stringify(data) });
 }
 
 /** Admin-only: edit a no-class day. Editing does not notify again. */
 export async function actualizarDiaSinClase(id: number, data: DiaSinClaseInput): Promise<DiaSinClase> {
   return request<DiaSinClase>(apiEndpoint(`/dias-sin-clase/${id}`), { method: "PUT", body: JSON.stringify(data) });
+}
+
+/** Admin-only: queue the notice again; only members who never received it are reached. */
+export async function reenviarAvisoDiaSinClase(id: number): Promise<void> {
+  await request<unknown>(apiEndpoint(`/dias-sin-clase/${id}/avisar`), { method: "POST" });
 }
 
 /** Admin-only: remove a no-class day. */

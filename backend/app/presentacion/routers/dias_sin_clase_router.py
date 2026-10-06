@@ -8,6 +8,7 @@ from app.infraestructura.db import obtener_sesion
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.dia_sin_clase_servicio import DiaSinClaseServicio
 from app.servicios_negocio.dtos.dia_sin_clase_schemas import (
+    DiaSinClaseCreadoResponseDTO,
     DiaSinClaseCreateDTO,
     DiaSinClaseResponseDTO,
     DiaSinClaseUpdateDTO,
@@ -33,11 +34,25 @@ async def listar_dias_sin_clase(
 
 
 @router.post(
-    "/", response_model=DiaSinClaseResponseDTO, status_code=status.HTTP_201_CREATED,
+    "/", response_model=DiaSinClaseCreadoResponseDTO, status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
 )
 async def crear_dia_sin_clase(datos: DiaSinClaseCreateDTO, db: Session = Depends(obtener_sesion)):
-    return DiaSinClaseServicio(db).crear(datos)
+    dia, encolado = DiaSinClaseServicio(db).crear(datos)
+    return DiaSinClaseCreadoResponseDTO(
+        id=dia.id, fecha_inicio=dia.fecha_inicio, fecha_fin=dia.fecha_fin,
+        motivo=dia.motivo, aviso_encolado=encolado,
+    )
+
+
+@router.post(
+    "/{dia_id}/avisar", status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
+)
+async def reenviar_aviso_dia_sin_clase(dia_id: int, db: Session = Depends(obtener_sesion)):
+    """Reencola el aviso; solo alcanza a las cuentas que aún no lo recibieron."""
+    DiaSinClaseServicio(db).reenviar_aviso(dia_id)
+    return {"encolado": True}
 
 
 @router.put(

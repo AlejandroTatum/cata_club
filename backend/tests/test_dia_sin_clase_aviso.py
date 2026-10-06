@@ -212,3 +212,89 @@ def test_el_recordatorio_de_sesion_omite_un_dia_sin_clase(db_session, monkeypatc
 
     assert resultado["total_recordatorios"] == 0
     assert db_session.query(Notificacion).count() == 0
+
+
+# --- Aviso fallido: el admin se entera y puede reenviar (issue #1665) -------
+
+RUTA_API = "/api/v1/dias-sin-clase/"
+TAREA = "app.infraestructura.tareas.dia_sin_clase_tareas.avisar_dia_sin_clase"
+
+
+def _broker_caido(monkeypatch):
+    def _falla(*_a, **_k):
+        raise ConnectionError("broker down")
+
+    monkeypatch.setattr(celery_app, "send_task", _falla)
+
+
+def test_crear_informa_si_el_aviso_se_encolo(client, monkeypatch):
+    monkeypatch.setattr(celery_app, "send_task", lambda *a, **k: None)
+    ok = client.post(RUTA_API, json={"fecha_inicio": "2999-07-04", "motivo": "Feriado"})
+    assert ok.status_code == 201 and ok.json()["avisoEncolado"] is True
+
+
+def test_si_el_encolado_falla_el_dia_se_guarda_y_se_informa(client, monkeypatch, db_session):
+    _broker_caido(monkeypatch)
+
+    response = client.post(RUTA_API, json={"fecha_inicio": "2999-07-04", "motivo": "Feriado"})
+
+    assert response.status_code == 201
+    assert response.json()["avisoEncolado"] is False
+    assert db_session.get(DiaSinClase, response.json()["id"]) is not None
+
+
+def test_el_admin_reenvia_el_aviso_y_se_encola_la_tarea(client, monkeypatch):
+    publicadas = []
+    monkeypatch.setattr(celery_app, "send_task", lambda n, args=None, **_: publicadas.append((n, args)))
+    dia_id = client.post(RUTA_API, json={"fecha_inicio": "2999-07-04", "motivo": "Feriado"}).json()["id"]
+    publicadas.clear()
+
+    response = client.post(f"{RUTA_API}{dia_id}/avisar")
+
+    assert response.status_code == 202
+    assert publicadas == [(TAREA, [dia_id])]
+
+
+def test_reenviar_es_solo_del_administrador(client_sin_permisos, db_session, monkeypatch):
+    publicadas = []
+    monkeypatch.setattr(celery_app, "send_task", lambda *a, **k: publicadas.append(a))
+    dia = _dia(db_session, inicio=date(2999, 7, 4))
+
+    assert client_sin_permisos.post(f"{RUTA_API}{dia.id}/avisar").status_code == 403
+    assert publicadas == []
+
+
+def test_reenviar_un_dia_inexistente_da_404(client):
+    assert client.post(f"{RUTA_API}999999/avisar").status_code == 404
+
+
+def test_reenviar_un_dia_que_ya_termino_se_rechaza_con_409(client, db_session, monkeypatch):
+    publicadas = []
+    monkeypatch.setattr(celery_app, "send_task", lambda *a, **k: publicadas.append(a))
+    dia = _dia(db_session, inicio=date(2000, 1, 1))
+
+    response = client.post(f"{RUTA_API}{dia.id}/avisar")
+
+    assert response.status_code == 409
+    assert publicadas == []
+
+
+def test_si_el_reenvio_no_se_puede_encolar_responde_503(client, db_session, monkeypatch):
+    _broker_caido(monkeypatch)
+    dia = _dia(db_session, inicio=date(2999, 7, 4))
+
+    assert client.post(f"{RUTA_API}{dia.id}/avisar").status_code == 503
+
+
+def test_reenviar_tras_un_envio_parcial_avisa_solo_a_quien_falta(sesion_inyectada, monkeypatch):
+    smtp = configurar_smtp_falso(monkeypatch)
+    primero = _socio(sesion_inyectada, 930, correo="primero930@cataclub.test")
+    dia = _dia(sesion_inyectada, inicio=date(2999, 7, 4))
+    tareas.avisar_dia_sin_clase(dia.id)
+    segundo = _socio(sesion_inyectada, 931, correo="segundo931@cataclub.test")
+
+    resultado = tareas.avisar_dia_sin_clase(dia.id)
+
+    assert resultado["avisados"] == 1
+    assert [a.persona_id for a in _avisos(sesion_inyectada)] == [primero.id, segundo.id]
+    assert smtp.enviados == ["primero930@cataclub.test", "segundo931@cataclub.test"]

@@ -397,6 +397,7 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/dias-sin-clase/"): frozenset({"ADMINISTRADOR"}),
     ("PUT", "/dias-sin-clase/{dia_id}"): frozenset({"ADMINISTRADOR"}),
     ("DELETE", "/dias-sin-clase/{dia_id}"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/dias-sin-clase/{dia_id}/avisar"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/galeria/"): frozenset({"ADMINISTRADOR"}),
         ("POST", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),
     # Issue #398: solo el club (ADMINISTRADOR) concede un beneficio -- el
