@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import BeneficioSection from "./BeneficioSection";
 import PaymentHistorySection from "./PaymentHistorySection";
 import CreateMembershipForm from "./CreateMembershipForm";
@@ -10,9 +11,10 @@ import SuspenderReactivarForm from "./SuspenderReactivarForm";
 import CambiarPlanForm from "./CambiarPlanForm";
 import MigrarSocioAntiguoForm from "./MigrarSocioAntiguoForm";
 import { Badge, DataBox, PAGE_RAIL } from "@/components/ui";
-import { ACTION_TRIGGER } from "./payment-action-styles";
+import { ACTION_TRIGGER, PRIMARY_ACTION_TRIGGER } from "./payment-action-styles";
 import { formatCurrency } from "@/lib/format-utils";
 import {
+  describePaymentsState,
   formatMembershipCoverage,
   getMembershipStatusBadge,
   isPrimerPagoPendiente,
@@ -22,7 +24,7 @@ import {
 /**
  * The header strip of a student's Pagos block: where the membership stands
  * before any action is offered. Everything here is read from the row's own
- * data (no extra fetch), so it is correct the moment the dialog opens.
+ * data (no extra fetch), so it is correct the moment the page opens.
  */
 function MembershipSummary({ student }: { student: MemberStudentSummary }): React.ReactElement {
   const { membresia } = student;
@@ -86,13 +88,21 @@ function ActionTile({
   );
 }
 
+/** One sentence each: what the choice means and when to use it. */
+const TIPO_SOCIO_EXPLICACION = {
+  nuevo: "Se inscribe ahora: se le asigna un plan y se registra su primer pago.",
+  antiguo: "Ya pagaba antes de usar el sistema: se anota su último pago y el sistema calcula hasta cuándo está al día.",
+} as const;
+
 /** Rows the history column is padded to so it matches the actions column's height. */
 const HISTORY_MIN_ROWS = 7;
 
 const ACTION_DESCRIPTION = {
   "registrar-pago": "Efectivo o transferencia, por período.",
-  "regularizar-deuda": "Pagos atrasados de meses ya vencidos.",
+  "regularizar-deuda":
+    "Para meses vencidos que no figuran pagados, por ejemplo los pagados antes de usar el sistema.",
   reactivar: "Vuelve a activar la membresía.",
+  "revisar-pago": "Aprueba o rechaza el pago en la lista de pagos pendientes.",
 } as const;
 
 /**
@@ -103,10 +113,9 @@ const ACTION_DESCRIPTION = {
  * every one of them currently resolves to the same `loadMembers` call at the
  * page level.
  *
- * Lives here (not in `page.tsx`) so both the account edit dialog's
- * "Estudiantes a cargo" section and the direct "Pagos" entry point (issue
- * #505) depend on the same contract without either importing the page
- * module.
+ * Lives here (not in `page.tsx`) so the members page and the per-member
+ * payments page (`/members/[id]/pagos`, #1668) depend on the same contract
+ * without either importing the other's page module.
  */
 export interface MembresiaCallbacks {
   /** Called after a membership is successfully created so the page can
@@ -130,16 +139,14 @@ interface StudentMembershipActionsProps extends MembresiaCallbacks {
 
 /**
  * The membership/payment write flows for one student — club benefit, create
- * a membership, register a payment, regularize debt, suspend/reactivate,
- * change plan. Extracted from `StudentEditPanel` (issue #505) so the exact
- * same block renders both inside the account edit dialog's "Estudiantes a
- * cargo" section and, directly, inside the new "Pagos" entry point: one
- * implementation, two entry points, no duplicated business logic or
- * validation.
+ * a membership, register a payment, register overdue months, suspend/
+ * reactivate, change plan. Rendered by the per-member payments page (#1668),
+ * which replaced the Pagos dialog (#505) without forking any of these flows.
  *
  * Which write flow is offered is decided here, and only here: a membership
  * is created when there is none, and a payment is registered against one
- * that exists — unchanged from the original `StudentEditPanel` logic.
+ * that exists. What the page LEADS with is `describePaymentsState`: one plain
+ * state and one primary action; everything else is secondary.
  */
 export default function StudentMembershipActions({
   personaId,
@@ -191,13 +198,20 @@ export default function StudentMembershipActions({
    * did fail and the message is true when it is shown.
    */
   const debtUnavailable = membresia?.estado === "vencida" && !debtKnown;
+  const state = describePaymentsState(student);
+  // «Socio nuevo» was picked: the first-payment step is now the membership /
+  // payment form itself, so the primary action is the payment, not the choice.
+  const primaryName = state.primaryAction === "tipo-socio" ? "registrar-pago" : state.primaryAction;
+  // «Cargar pagos atrasados» only applies when months are owed (or the debt
+  // could not be read, so it cannot be ruled out).
+  const catchUpApplies = hasDebt || debtUnavailable;
   const regularizeDebt = membresia && (
     <RegularizarDeudaForm
       membresiaId={Number(membresia.id)}
       montoMensual={membresia.monto ?? 0}
       esGratuidadFamiliar={membresia.esGratuidadFamiliar}
       onRegularized={onDebtRegularized}
-      primary={hasDebt}
+      primary={primaryName === "regularizar-deuda"}
     />
   );
   const registerPayment = membresia && (
@@ -205,7 +219,7 @@ export default function StudentMembershipActions({
       personaId={personaId}
       membresia={membresia}
       onPaymentRegistered={onPaymentRegistered}
-      primary={!hasDebt}
+      primary={primaryName === "registrar-pago"}
     />
   );
   // ADMA-17: a suspended membership rejects payments, so the way out leads.
@@ -223,19 +237,42 @@ export default function StudentMembershipActions({
       Registrar pago
     </button>
   );
-  const primaryAction = suspended
-    ? { name: "reactivar" as const, content: reactivar }
-    : hasDebt
-    ? { name: "regularizar-deuda" as const, content: regularizeDebt }
-    : { name: "registrar-pago" as const, content: registerPayment };
+  const reviewPayment = (
+    <Link href="/payments" className={PRIMARY_ACTION_TRIGGER}>
+      Revisar el pago
+    </Link>
+  );
+  const actionContent = {
+    "registrar-pago": registerPayment,
+    "regularizar-deuda": regularizeDebt,
+    reactivar,
+    "revisar-pago": reviewPayment,
+  } as const;
+  const primaryAction = { name: primaryName, content: actionContent[primaryName as keyof typeof actionContent] };
   const secondaryAction = suspended
     ? { name: "registrar-pago" as const, content: registerPaymentBlocked }
-    : hasDebt
+    : primaryName === "regularizar-deuda"
     ? { name: "registrar-pago" as const, content: registerPayment }
-    : { name: "regularizar-deuda" as const, content: regularizeDebt };
+    : primaryName === "registrar-pago" && catchUpApplies
+    ? { name: "regularizar-deuda" as const, content: regularizeDebt }
+    : primaryName === "revisar-pago"
+    ? { name: "registrar-pago" as const, content: registerPayment }
+    : null;
+  // A third tile only when the catch-up applies and no earlier tile already carries it.
+  const extraCatchUp = catchUpApplies && regularizeDebt
+    && primaryName !== "regularizar-deuda" && secondaryAction?.name !== "regularizar-deuda";
 
   return (
     <div className="grid gap-section">
+      {/* Where this member stands, in plain words, before any action. */}
+      <section
+        aria-label="Estado de los pagos"
+        className="flex flex-wrap items-start gap-x-3 gap-y-1 rounded-ctl border border-line bg-sunken px-4 py-3"
+      >
+        <Badge tone={state.tone}>{state.label}</Badge>
+        <p className="min-w-0 flex-1 text-sm text-ink-2">{state.detail}</p>
+      </section>
+
       <div className={PAGE_RAIL}>
         {/* Actions first in the DOM (and on a phone) so the primary one is
             reachable without scrolling past the history; from `lg` the history
@@ -250,16 +287,39 @@ export default function StudentMembershipActions({
           )}
 
           {preguntarTipoSocio && tipoSocio === null && (
-            <ActionTile description="¿Socio nuevo o socio antiguo?">
-              <div className="grid gap-1">
-                <label className="flex items-center gap-2 text-xs text-ink">
-                  <input type="radio" name="tipo-socio" onChange={() => setTipoSocio("nuevo")} />
-                  Socio nuevo
-                </label>
-                <label className="flex items-center gap-2 text-xs text-ink">
-                  <input type="radio" name="tipo-socio" onChange={() => setTipoSocio("antiguo")} />
-                  Socio antiguo
-                </label>
+            <ActionTile
+              data-primary-action="tipo-socio"
+              description="¿Socio nuevo o socio antiguo?"
+            >
+              <div className="grid gap-2">
+                <div>
+                  <label className="flex items-center gap-2 text-xs text-ink">
+                    <input
+                      type="radio"
+                      name="tipo-socio"
+                      aria-describedby={`tipo-socio-nuevo-${personaId}`}
+                      onChange={() => setTipoSocio("nuevo")}
+                    />
+                    Socio nuevo
+                  </label>
+                  <p id={`tipo-socio-nuevo-${personaId}`} className="pl-6 text-2xs text-ink-3">
+                    {TIPO_SOCIO_EXPLICACION.nuevo}
+                  </p>
+                </div>
+                <div>
+                  <label className="flex items-center gap-2 text-xs text-ink">
+                    <input
+                      type="radio"
+                      name="tipo-socio"
+                      aria-describedby={`tipo-socio-antiguo-${personaId}`}
+                      onChange={() => setTipoSocio("antiguo")}
+                    />
+                    Socio antiguo
+                  </label>
+                  <p id={`tipo-socio-antiguo-${personaId}`} className="pl-6 text-2xs text-ink-3">
+                    {TIPO_SOCIO_EXPLICACION.antiguo}
+                  </p>
+                </div>
               </div>
             </ActionTile>
           )}
@@ -271,7 +331,10 @@ export default function StudentMembershipActions({
           )}
 
           {preguntarTipoSocio && tipoSocio === "antiguo" && (
-            <ActionTile description="Anota su último pago; el sistema calcula hasta cuándo está al día.">
+            <ActionTile
+              data-primary-action="tipo-socio"
+              description="Anota su último pago; el sistema calcula hasta cuándo está al día."
+            >
               <MigrarSocioAntiguoForm
                 personaId={personaId}
                 membresiaId={membresia ? Number(membresia.id) : undefined}
@@ -287,7 +350,7 @@ export default function StudentMembershipActions({
           )}
 
           {!preguntarTipoSocio && !membresia && (
-            <ActionTile description="Asigna un plan para poder registrar pagos.">
+            <ActionTile data-primary-action="crear-membresia" description="Asigna un plan para poder registrar pagos.">
               <CreateMembershipForm personaId={personaId} onCreated={onMembershipCreated} />
             </ActionTile>
           )}
@@ -305,17 +368,19 @@ export default function StudentMembershipActions({
               >
                 {primaryAction.content}
               </ActionTile>
-              <ActionTile
-                data-secondary-action={secondaryAction.name}
-                description={
-                  suspended
-                    ? "Reactiva la membresía para registrar pagos."
-                    : ACTION_DESCRIPTION[secondaryAction.name]
-                }
-              >
-                {secondaryAction.content}
-              </ActionTile>
-              {suspended && regularizeDebt && (
+              {secondaryAction && (
+                <ActionTile
+                  data-secondary-action={secondaryAction.name}
+                  description={
+                    suspended && secondaryAction.name === "registrar-pago"
+                      ? "Reactiva la membresía para registrar pagos."
+                      : ACTION_DESCRIPTION[secondaryAction.name]
+                  }
+                >
+                  {secondaryAction.content}
+                </ActionTile>
+              )}
+              {extraCatchUp && (
                 <ActionTile description={ACTION_DESCRIPTION["regularizar-deuda"]}>{regularizeDebt}</ActionTile>
               )}
             </>

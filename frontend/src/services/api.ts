@@ -1270,6 +1270,17 @@ export async function fetchMembers(): Promise<MembersResponse> {
 }
 
 /**
+ * One account by id, built server-side (`GET /api/members/:id`) — the
+ * per-member payments page (#1668) loads this instead of the whole list, so a
+ * member the list never showed is still reachable by direct URL. A missing
+ * member rejects with an `ApiClientError` whose `status` is 404.
+ */
+export async function fetchMember(id: string): Promise<MemberAccount> {
+  const { account } = await request<{ account: MemberAccount }>(apiEndpoint(`/members/${encodeURIComponent(id)}`));
+  return account;
+}
+
+/**
  * Page size for roster listings paginated on the backend (issue #7):
  * asignaciones and horario rosters. 200 is the backend's hard cap (`le=200`)
  * and the same ceiling `PERSONAS_PAGE_LIMIT` already uses in

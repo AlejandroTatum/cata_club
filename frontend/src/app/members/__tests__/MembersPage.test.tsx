@@ -1710,7 +1710,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     ).toBeInTheDocument();
   });
 
-  it("offers 'Regularizar deuda' for a membership, shows the derived debt and submits the motivo", async () => {
+  it("offers 'Cargar pagos atrasados' for a membership, shows the derived debt and submits the motivo", async () => {
     mockFetchMembresiaDeuda.mockResolvedValue({
       mesesAdeudados: 4,
       ultimaCoberturaFin: "2026-03-31",
@@ -1735,7 +1735,7 @@ describe("MembersPage — Registrar pago inline form", () => {
 
     // The debt is derived and admin-only: opening the tool fetches it and
     // shows the owed months before anything is written.
-    fireEvent.click(within(dialog).getByRole("button", { name: /regularizar deuda/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /cargar pagos atrasados/i }));
     expect(await within(dialog).findByText(/4 meses adeudados/i)).toBeInTheDocument();
     expect(within(dialog).getByLabelText(/fecha inicio/i)).toBeRequired();
     expect(within(dialog).getByLabelText(/fecha fin/i)).toBeRequired();
@@ -1745,7 +1745,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     fireEvent.change(within(dialog).getByLabelText(/fecha fin/i), { target: { value: "2026-04-30" } });
     fireEvent.change(within(dialog).getByLabelText(/^motivo/i), { target: { value: "Demora del club" } });
     await within(dialog).findByText(/85,00/);
-    fireEvent.click(within(dialog).getByRole("button", { name: /^regularizar$/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /^cargar pagos$/i }));
 
     expect(mockRegularizarDeuda).toHaveBeenCalledWith(42, {
       monto: 85,
@@ -1760,7 +1760,7 @@ describe("MembersPage — Registrar pago inline form", () => {
   // to "catch up on" — the backend's `RegularizacionDeudaDTO.monto`
   // requires `> 0` regardless, so there is no honest amount this admin
   // could submit for a member who does not pay.
-  it("does NOT offer 'Regularizar deuda' for a gratuitous membership, and explains why", async () => {
+  it("does NOT offer 'Cargar pagos atrasados' for a gratuitous membership, and explains why", async () => {
     const dialog = await openMemberDialog({
       membresia: { ...MEMBRESIA_VENCIDA, esGratuidadFamiliar: true },
     });
@@ -1769,7 +1769,7 @@ describe("MembersPage — Registrar pago inline form", () => {
       await within(dialog).findByText(/no hay ningún monto que regularizar/i),
     ).toBeInTheDocument();
     expect(
-      within(dialog).queryByRole("button", { name: /regularizar deuda/i }),
+      within(dialog).queryByRole("button", { name: /cargar pagos atrasados/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -1798,7 +1798,7 @@ describe("MembersPage — Registrar pago inline form", () => {
       },
     });
 
-    fireEvent.click(within(dialog).getByRole("button", { name: /regularizar deuda/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /cargar pagos atrasados/i }));
 
     expect(await within(dialog).findByText(/vencida desde el 20\/07\/2026/i)).toBeInTheDocument();
     expect(within(dialog).queryByText(/0 meses adeudados/i)).not.toBeInTheDocument();
@@ -2283,7 +2283,7 @@ describe("MembersPage — estado de deuda en Pagos (issue #538)", () => {
     // And it stays inside the Payments dialog, as before.
     fireEvent.click(rowPayments);
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /regularizar deuda/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /cargar pagos atrasados/i }));
     expect(await within(dialog).findByText(/3 meses adeudados/i)).toBeInTheDocument();
   });
 
@@ -2326,7 +2326,7 @@ describe("MembersPage — estado de deuda en Pagos (issue #538)", () => {
 
     fireEvent.click(payments);
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /regularizar deuda/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /cargar pagos atrasados/i }));
     expect(await within(dialog).findByText(/1 mes adeudado/i)).toBeInTheDocument();
     expect(within(dialog).queryByText(/1 mes adeudados/i)).not.toBeInTheDocument();
   });
@@ -3696,11 +3696,11 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     expect(getRowButton(row, /^pagos/i)).toHaveAccessibleName("Pagos de María González");
     expect(within(row).queryByText(/adeudado/i)).not.toBeInTheDocument();
 
-    // The debt flows stay inside the Payments dialog: Regularizar deuda opens
+    // The debt flows stay inside the Payments dialog: Cargar pagos atrasados opens
     // with the derived months — nothing was lost by cleaning the button.
     fireEvent.click(getRowButton(row, /^pagos/i));
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /regularizar deuda/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /cargar pagos atrasados/i }));
     expect(await within(dialog).findByText(/4 meses adeudados/i)).toBeInTheDocument();
   });
 
@@ -3752,7 +3752,7 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
         expect(archivedNotice).toBeInTheDocument();
         expect(archivedNotice.tagName).toBe("OUTPUT");
     expect(within(dialog).getByText(/historial de pagos/i)).toBeInTheDocument();
-    expect(within(dialog).queryByRole("button", { name: /crear membresía|registrar pago|regularizar deuda|suspender|reactivar|cambiar plan/i })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /crear membresía|registrar pago|cargar pagos atrasados|suspender|reactivar|cambiar plan/i })).not.toBeInTheDocument();
   });
 
   it("keeps Editar focused on account editing, without duplicated student actions", async () => {
@@ -3769,10 +3769,10 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     expect(within(dialog).getByText("Jugadores a cargo")).toBeInTheDocument();
     expect(within(dialog).getByRole("radio", { name: /admin/i })).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: /ficha médica/i })).not.toBeInTheDocument();
-    expect(within(dialog).queryByRole("button", { name: /crear membresía|registrar pago|regularizar deuda/i })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /crear membresía|registrar pago|cargar pagos atrasados/i })).not.toBeInTheDocument();
   });
 
-  it("puts Regularizar deuda before Registrar pago when canonical debt data exists", async () => {
+  it("puts Cargar pagos atrasados before Registrar pago when canonical debt data exists", async () => {
     mockFetchMembers.mockReset().mockResolvedValue({
       accounts: [{
         ...ACCOUNT,
@@ -3787,7 +3787,7 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     fireEvent.click(getRowButton(row, /^pagos/i));
     const dialog = await screen.findByRole("dialog");
     const buttons = within(dialog).getAllByRole("button");
-    const regularizar = buttons.findIndex((button) => /regularizar deuda/i.test(button.textContent ?? ""));
+    const regularizar = buttons.findIndex((button) => /cargar pagos atrasados/i.test(button.textContent ?? ""));
     const registrar = buttons.findIndex((button) => /registrar pago/i.test(button.textContent ?? ""));
     expect(regularizar).toBeGreaterThan(-1);
     expect(regularizar).toBeLessThan(registrar);
@@ -3809,7 +3809,7 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     const dialog = await screen.findByRole("dialog");
     const buttons = within(dialog).getAllByRole("button");
     const registrar = buttons.findIndex((button) => /registrar pago/i.test(button.textContent ?? ""));
-    const regularizar = buttons.findIndex((button) => /regularizar deuda/i.test(button.textContent ?? ""));
+    const regularizar = buttons.findIndex((button) => /cargar pagos atrasados/i.test(button.textContent ?? ""));
     expect(registrar).toBeGreaterThan(-1);
     expect(registrar).toBeLessThan(regularizar);
     expect(within(dialog).getByText(/deuda no disponible/i)).toBeInTheDocument();
@@ -4653,7 +4653,7 @@ describe("MembersPage — Pagos dialog hierarchy (admin redesign v4)", () => {
 
     const registrar = within(actions).getByRole("button", { name: "Registrar pago" });
     expect(registrar).toHaveClass("bg-cata-red", "h-ctl");
-    for (const name of ["Regularizar deuda", "Suspender membresía", "Cambiar plan", "Asignar beneficio"]) {
+    for (const name of ["Suspender membresía", "Cambiar plan", "Asignar beneficio"]) {
       const trigger = await within(actions).findByRole("button", { name });
       expect(trigger, name).toHaveClass("bg-paper", "h-ctl", "w-full");
       expect(trigger, name).not.toHaveClass("bg-cata-red");
@@ -4663,12 +4663,14 @@ describe("MembersPage — Pagos dialog hierarchy (admin redesign v4)", () => {
     // Suspending is the one that takes something away.
     expect(within(actions).getByRole("button", { name: "Suspender membresía" })).toHaveClass("text-state-bad");
     // Each trigger has its one-line explanation next to it.
-    expect(within(actions).getByText(/pagos atrasados/i)).toBeInTheDocument();
+    // «Cargar pagos atrasados» only applies when months are owed: not offered here.
+    expect(within(actions).queryByRole("button", { name: /cargar pagos atrasados/i })).not.toBeInTheDocument();
+    expect(within(actions).getByText(/efectivo o transferencia/i)).toBeInTheDocument();
     expect(within(actions).getByText(/pausa los cobros/i)).toBeInTheDocument();
     expect(within(actions).getByText(/rige desde el próximo pago/i)).toBeInTheDocument();
   });
 
-  it("hands the red primary to Regularizar deuda when there is debt", async () => {
+  it("hands the red primary to Cargar pagos atrasados when there is debt", async () => {
     mockFetchMembers.mockReset().mockResolvedValue({
       accounts: [{
         ...ACCOUNT,
@@ -4682,7 +4684,7 @@ describe("MembersPage — Pagos dialog hierarchy (admin redesign v4)", () => {
     fireEvent.click(getRowAction(await findAccountRow(), /^pagos/i));
     const dialog = await screen.findByRole("dialog");
 
-    expect(within(dialog).getByRole("button", { name: "Regularizar deuda" })).toHaveClass("bg-cata-red");
+    expect(within(dialog).getByRole("button", { name: "Cargar pagos atrasados" })).toHaveClass("bg-cata-red");
     expect(within(dialog).getByRole("button", { name: "Registrar pago" })).not.toHaveClass("bg-cata-red");
     expect(dialog.querySelectorAll("button.bg-cata-red")).toHaveLength(1);
   });

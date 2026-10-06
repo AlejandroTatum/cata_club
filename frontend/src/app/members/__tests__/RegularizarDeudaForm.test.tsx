@@ -34,7 +34,7 @@ async function open(
       {...props}
     />,
   );
-  fireEvent.click(screen.getByRole("button", { name: "Regularizar deuda" }));
+  fireEvent.click(screen.getByRole("button", { name: "Cargar pagos atrasados" }));
   // `handleOpen` fires `void loadDeuda()` (fire-and-forget) — awaiting its
   // mocked resolution here keeps every state update inside `act()`.
   await waitFor(() => expect(mockFetchMembresiaDeuda).toHaveBeenCalled());
@@ -70,11 +70,11 @@ beforeEach(() => {
 describe("RegularizarDeudaForm — monto cotizado por el backend (ADM-09)", () => {
   it("collapses the form with a Cancelar button without submitting", async () => {
     await open();
-    expect(screen.getByRole("form", { name: "Regularizar deuda" })).toBeInTheDocument();
+    expect(screen.getByRole("form", { name: "Cargar pagos atrasados" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
 
-    expect(screen.queryByRole("form", { name: "Regularizar deuda" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("form", { name: "Cargar pagos atrasados" })).not.toBeInTheDocument();
     expect(mockRegularizarDeuda).not.toHaveBeenCalled();
   });
 
@@ -105,7 +105,7 @@ describe("RegularizarDeudaForm — monto cotizado por el backend (ADM-09)", () =
     fillRequiredFields();
     await screen.findByText("$25,00");
 
-    fireEvent.click(screen.getByRole("button", { name: /^Regularizar$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Cargar pagos$/ }));
 
     await waitFor(() => {
       expect(mockRegularizarDeuda).toHaveBeenCalledWith(42, {
@@ -129,7 +129,7 @@ describe("RegularizarDeudaForm — monto cotizado por el backend (ADM-09)", () =
     fillRequiredFields();
     await screen.findByText("$0,00");
 
-    fireEvent.click(screen.getByRole("button", { name: /^Regularizar$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Cargar pagos$/ }));
 
     await waitFor(() => {
       expect(mockRegularizarDeuda).toHaveBeenCalledWith(42, {
@@ -144,7 +144,7 @@ describe("RegularizarDeudaForm — monto cotizado por el backend (ADM-09)", () =
   it("does not submit while there is no quote", async () => {
     await open();
     fireEvent.change(screen.getByLabelText(/^Motivo/), { target: { value: "Demora del club" } });
-    fireEvent.click(screen.getByRole("button", { name: /^Regularizar$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Cargar pagos$/ }));
 
     expect(await screen.findByText("Las fechas son obligatorias.")).toBeInTheDocument();
     expect(mockRegularizarDeuda).not.toHaveBeenCalled();
@@ -161,7 +161,7 @@ describe("RegularizarDeudaForm — monto cotizado por el backend (ADM-09)", () =
     fillRequiredFields();
     await screen.findByText("$325,00");
 
-    fireEvent.click(screen.getByRole("button", { name: /^Regularizar$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Cargar pagos$/ }));
 
     expect(
       await screen.findByText("El pago no puede cubrir más de 12 meses. Reduce el monto ingresado."),
@@ -175,7 +175,7 @@ describe("RegularizarDeudaForm — monto cotizado por el backend (ADM-09)", () =
     fillRequiredFields();
 
     await waitFor(() => expect(mockFetchCotizacion).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("button", { name: /^Regularizar$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Cargar pagos$/ }));
     expect(mockRegularizarDeuda).not.toHaveBeenCalled();
   });
 });
@@ -200,7 +200,7 @@ describe("RegularizarDeudaForm — valor normal o descuento (S12)", () => {
     fillRequiredFields();
     expect(await screen.findByRole("radio", { name: "Aplicar descuento (50%)" })).toBeChecked();
 
-    fireEvent.click(screen.getByRole("button", { name: /^Regularizar$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Cargar pagos$/ }));
 
     await waitFor(() =>
       expect(mockRegularizarDeuda).toHaveBeenCalledWith(42, expect.objectContaining({ monto: 12.5, aplicarDescuento: true })),
@@ -220,7 +220,7 @@ describe("RegularizarDeudaForm — valor normal o descuento (S12)", () => {
     await waitFor(() => expect(mockFetchCotizacion).toHaveBeenLastCalledWith(42, "2026-01-01", "2026-01-31", false));
     await screen.findByText("$25,00");
 
-    fireEvent.click(screen.getByRole("button", { name: /^Regularizar$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Cargar pagos$/ }));
 
     await waitFor(() =>
       expect(mockRegularizarDeuda).toHaveBeenCalledWith(42, expect.objectContaining({ monto: 25, aplicarDescuento: false })),
@@ -233,8 +233,8 @@ describe("RegularizarDeudaForm — ayuda en lenguaje del club (#1492, ADMA-13)",
     await open();
     expect(
       screen.getByText(
-        "Registra aquí los meses atrasados que el jugador ya pagó o debe regularizar. " +
-          "Si el período incluye hoy, la membresía queda activa.",
+        "Registra aquí los meses vencidos que no figuran pagados: los que se pagaron antes de usar " +
+          "el sistema o los que se pagan ahora. Si el período incluye hoy, la membresía queda activa.",
       ),
     ).toBeInTheDocument();
   });

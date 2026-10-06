@@ -181,7 +181,7 @@ describe("MigrarSocioAntiguoForm", () => {
 
     const aviso = await screen.findByText(/La membresía se creó, pero no se pudo registrar el último pago/);
     expect(aviso).toHaveTextContent("El período se solapa con una cobertura ya registrada.");
-    expect(aviso).toHaveTextContent("Regularizar deuda");
+    expect(aviso).toHaveTextContent("Cargar pagos atrasados");
     expect(onDone).not.toHaveBeenCalled();
 
     ultimoPago("2026-09-25");
@@ -192,7 +192,7 @@ describe("MigrarSocioAntiguoForm", () => {
     expect(mockRegularizar).toHaveBeenLastCalledWith(55, expect.objectContaining({ fechaInicio: "2026-09-25" }));
   });
 
-  it("after a partial failure the admin can close and go to «Regularizar deuda» (refetch)", async () => {
+  it("after a partial failure the admin can close and go to «Cargar pagos atrasados» (refetch)", async () => {
     mockCotizacion.mockRejectedValueOnce(new ApiClientError("No se pudo calcular el monto.", 400, true));
     const { onRefetch } = await renderForm();
     await pickPlan();
@@ -200,7 +200,7 @@ describe("MigrarSocioAntiguoForm", () => {
     registrar();
     await screen.findByText(/La membresía se creó/);
 
-    fireEvent.click(screen.getByRole("button", { name: /Cerrar y usar Regularizar deuda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Cerrar y usar Cargar pagos atrasados/ }));
 
     expect(onRefetch).toHaveBeenCalled();
     expect(mockRegularizar).not.toHaveBeenCalled();
