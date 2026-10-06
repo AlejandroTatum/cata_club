@@ -26,7 +26,7 @@ const PRICES_STATUS: Record<Exclude<TarifasState["kind"], "ready">, string> = {
   error: "No se pudieron cargar los valores. Escríbenos por WhatsApp y te los indicamos.",
 };
 
-const STEPS = ["Elige la categoría", "Inscríbete en línea", "Paga y empieza"] as const;
+const STEPS = ["Elige la categoría", "Inscríbete en línea", "Listo para entrenar"] as const;
 
 const FAQ: { question: string; answer: string }[] = [
   { question: "¿Cuánto cuesta?", answer: "Los valores vigentes de cada plan están en la sección Mensualidad, más arriba en esta página." },
