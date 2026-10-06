@@ -775,6 +775,19 @@ export function describePaymentsState(
       primaryAction: "tipo-socio",
     };
   }
+  // Suspension outranks a payment under review: reactivation is what unblocks everything else.
+  if (membresia?.estado === "suspendida") {
+    return {
+      key: "suspendida",
+      label: "Membresía suspendida",
+      tone: "warn",
+      detail:
+        ultimoPago?.estado === "pendiente_validacion"
+          ? "Reactívala primero: mientras esté suspendida no se pueden registrar pagos. El pago pendiente se revisa en Pagos pendientes."
+          : "No se pueden registrar pagos mientras esté suspendida. Reactívala para continuar.",
+      primaryAction: "reactivar",
+    };
+  }
   if (ultimoPago?.estado === "pendiente_validacion") {
     return {
       key: "pendiente-revision",
@@ -783,15 +796,6 @@ export function describePaymentsState(
       detail:
         "Hay un pago esperando aprobación. Si tiene un error, recházalo en Pagos pendientes y vuelve a registrarlo.",
       primaryAction: "revisar-pago",
-    };
-  }
-  if (membresia?.estado === "suspendida") {
-    return {
-      key: "suspendida",
-      label: "Membresía suspendida",
-      tone: "warn",
-      detail: "No se pueden registrar pagos mientras esté suspendida. Reactívala para continuar.",
-      primaryAction: "reactivar",
     };
   }
   if (ultimoPago?.estado === "rechazado") {
@@ -813,13 +817,17 @@ export function describePaymentsState(
       primaryAction: "regularizar-deuda",
     };
   }
-  if (membresia?.estado === "vencida" && membresia.mesesAdeudados === undefined) {
-    // The bulk debt lookup failed: never claim «Al día» over a lapsed membership.
+  if (membresia?.estado === "vencida") {
+    // Lapsed with no whole month owed yet (0), or the bulk debt lookup failed
+    // (undefined): either way never claim «Al día» over a lapsed membership.
     return {
       key: "vencida",
       label: "Membresía vencida",
       tone: "bad",
-      detail: "No se pudo calcular cuánto debe. Puedes registrar el pago igualmente.",
+      detail:
+        membresia.mesesAdeudados === undefined
+          ? "No se pudo calcular cuánto debe. Puedes registrar el pago igualmente."
+          : "La cobertura venció y todavía no se completó un mes de deuda. Registra el siguiente pago.",
       primaryAction: "registrar-pago",
     };
   }

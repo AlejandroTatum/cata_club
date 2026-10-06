@@ -15,6 +15,7 @@ import { render, screen, fireEvent, waitFor, within } from "@testing-library/rea
 import PagosPage from "../page";
 import type { MemberAccount, MemberStudentSummary } from "@/app/members/members-utils";
 
+let mockRouteId = "450";
 const mockFetchMember = vi.fn();
 const mockFetchMembers = vi.fn();
 const mockFetchPagos = vi.fn();
@@ -23,7 +24,7 @@ const mockFetchCorrecciones = vi.fn();
 const mockCorregirPago = vi.fn();
 
 vi.mock("next/navigation", () => ({
-  useParams: () => ({ id: "450" }),
+  useParams: () => ({ id: mockRouteId }),
   usePathname: () => "/members/450/pagos",
   useRouter: () => ({ push: vi.fn() }),
 }));
@@ -131,6 +132,7 @@ async function primaryAction(): Promise<HTMLElement> {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockRouteId = "450";
   mockFetchPagos.mockResolvedValue([]);
   mockFetchCorrecciones.mockResolvedValue([]);
 });
@@ -230,6 +232,23 @@ describe("PagosPage — one plain state and ONE primary action each", () => {
 
     const primary = await primaryAction();
     expect(primary).toHaveAttribute("data-primary-action", "reactivar");
+  });
+});
+
+describe("PagosPage — ignores a stale response when the member changes", () => {
+  it("keeps showing the latest member when an older request resolves last", async () => {
+    let releaseOld: (a: MemberAccount) => void = () => {};
+    mockFetchMember.mockImplementationOnce(() => new Promise<MemberAccount>((r) => { releaseOld = r; }));
+    const { rerender } = render(<PagosPage />);
+    mockRouteId = "451";
+    mockFetchMember.mockResolvedValueOnce({ ...accountWith(studentWith({ membresia: membresia() })), id: "451", nombres: "Nueva", apellidos: "Persona" });
+    rerender(<PagosPage />);
+    expect(await screen.findByText("Nueva Persona")).toBeInTheDocument();
+
+    releaseOld(accountWith(studentWith({ membresia: membresia() })));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByText("Nueva Persona")).toBeInTheDocument();
+    expect(screen.queryByText("Lucía Vera")).not.toBeInTheDocument();
   });
 });
 

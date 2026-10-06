@@ -1412,6 +1412,22 @@ describe("describePaymentsState", () => {
     expect(describePaymentsState(student)).toMatchObject({ key: "vencida", label: "Membresía vencida", primaryAction: "registrar-pago" });
   });
 
+  it("never reads «Al día» for a VENCIDA membership whose debt is 0 months", () => {
+    const student = { ...base, membresia: membresia({ estado: "vencida", cubiertoHasta: "2026-06-30", mesesAdeudados: 0 }) };
+    expect(describePaymentsState(student)).toMatchObject({ key: "vencida", label: "Membresía vencida", primaryAction: "registrar-pago" });
+  });
+
+  it("a suspended membership with a payment under review leads with reactivation, and mentions the payment", () => {
+    const student = {
+      ...base,
+      membresia: membresia({ estado: "suspendida", estadoBackend: "SUSPENDIDA" }),
+      ultimoPago: { estado: "pendiente_validacion" as const, fechaPago: "2026-09-01", monto: 25, periodo: "" },
+    };
+    const state = describePaymentsState(student);
+    expect(state).toMatchObject({ key: "suspendida", primaryAction: "reactivar" });
+    expect(state.detail).toMatch(/mientras esté suspendida/i);
+  });
+
   it("reads «Al día» with the coverage date and offers the next payment", () => {
     const student = { ...base, membresia: membresia({ cubiertoHasta: "2026-12-01", mesesAdeudados: 0 }) };
     const state = describePaymentsState(student);

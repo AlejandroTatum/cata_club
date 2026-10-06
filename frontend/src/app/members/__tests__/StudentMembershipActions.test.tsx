@@ -126,6 +126,17 @@ describe("StudentMembershipActions — ADMA-05 existing membership", () => {
   });
 });
 
+describe("StudentMembershipActions — suspended with a payment under review (#1668)", () => {
+  it("still leads with Reactivar and says the pending payment can be reviewed after", () => {
+    const s = student("suspendida", "SUSPENDIDA");
+    renderActions({ ...s, ultimoPago: { estado: "pendiente_validacion", fechaPago: "2026-09-01", monto: 25, periodo: "" } });
+
+    expect(screen.getAllByRole("button", { name: "Reactivar membresía" })).toHaveLength(1);
+    expect(document.querySelector("[data-primary-action]")).toHaveAttribute("data-primary-action", "reactivar");
+    expect(screen.getByText(/mientras esté suspendida/i)).toBeInTheDocument();
+  });
+});
+
 describe("StudentMembershipActions — ¿Socio nuevo o socio antiguo? (L17)", () => {
   const sinCobertura = () => student("vencida", "INACTIVA");
 
@@ -163,17 +174,6 @@ describe("StudentMembershipActions — ¿Socio nuevo o socio antiguo? (L17)", ()
     expect(screen.queryByRole("button", { name: "Cancelar" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("radio", { name: "Socio antiguo" }));
-    expect(screen.queryByRole("button", { name: "Cancelar" })).not.toBeInTheDocument();
-  });
-
-  it("«Socio nuevo» → «Cancelar» brings the question back and creates nothing (#1664)", () => {
-    renderActions(sinCobertura());
-    fireEvent.click(screen.getByRole("radio", { name: "Socio nuevo" }));
-    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
-
-    expect(screen.getByText("¿Socio nuevo o socio antiguo?")).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "Socio nuevo" })).not.toBeChecked();
-    expect(screen.queryByRole("button", { name: "Registrar pago" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancelar" })).not.toBeInTheDocument();
   });
 

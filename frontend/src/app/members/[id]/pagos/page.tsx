@@ -16,7 +16,7 @@
  * so a member beyond the first page of Miembros opens the same way.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -38,15 +38,21 @@ export default function MemberPaymentsPage(): React.ReactElement {
   const id = params.id;
   const { session, isLoading } = useAuth();
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  // Only the latest request may write state: a slow answer for a previous id
+  // (or an older refresh) must not overwrite the member now on screen.
+  const latest = useRef(0);
 
   // `silent` refreshes after a write WITHOUT swapping the page for a spinner,
   // which would unmount the form the admin is still looking at.
   const load = useCallback(
     async ({ silent = false } = {}): Promise<void> => {
+      const request = ++latest.current;
       if (!silent) setState({ status: "loading" });
       try {
-        setState({ status: "ready", account: await fetchMember(id) });
+        const account = await fetchMember(id);
+        if (request === latest.current) setState({ status: "ready", account });
       } catch (err) {
+        if (request !== latest.current) return;
         if (err instanceof ApiClientError && err.status === 404) {
           setState({ status: "notFound" });
         } else if (!silent) {
