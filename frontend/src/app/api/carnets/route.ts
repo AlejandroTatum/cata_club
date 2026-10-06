@@ -51,7 +51,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const ids = parseIds(request.nextUrl.searchParams.get("ids"));
   if (!ids || ids.length > CARNETS_MAX_IDS) {
     return NextResponse.json(
-      { message: `Indique entre 1 y ${CARNETS_MAX_IDS} jugadores.` },
+      { message: `Indica entre 1 y ${CARNETS_MAX_IDS} jugadores.` },
       { status: 400 },
     );
   }

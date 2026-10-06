@@ -18,6 +18,7 @@ import LinkifiedText from "@/components/LinkifiedText";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -26,6 +27,7 @@ import {
   BackLink,
   Badge,
   Button,
+  buttonClasses,
   DataBox,
   DataRow,
   EmptyState,
@@ -66,6 +68,7 @@ import {
   ChevronRight,
   AlertTriangle,
   UserPlus,
+  IdCard,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { fetchMembers, fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
@@ -82,6 +85,9 @@ import {
   getMembershipStatusBadge,
   getDebtSummary,
   isRepresentativePersonaRow,
+  canPrintCarnet,
+  carnetsHref,
+  CARNETS_PATH,
   paginateAccounts,
   getTotalPages,
   MEMBERS_PAGE_SIZE,
@@ -432,6 +438,7 @@ function AccountRowActions({
   onPayments,
 }: AccountListItemProps & { showStudentActions: boolean }): React.ReactElement {
   const fullName = `${account.nombres} ${account.apellidos}`;
+  const router = useRouter();
 
   // Every row draws the same two slots at the same width, so the buttons line
   // up down the column. The representative's row has nothing to put in the
@@ -468,6 +475,16 @@ function AccountRowActions({
             icon: <Stethoscope size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
             onSelect: onMedical,
           },
+          // Issue #1670: players only — staff and representatives hold no carnet.
+          ...(canPrintCarnet(account)
+            ? [
+                {
+                  label: `Imprimir carnet de ${fullName}`,
+                  icon: <IdCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+                  onSelect: () => router.push(carnetsHref([account.id])),
+                },
+              ]
+            : []),
         ]}
       />
       </div>
@@ -1212,10 +1229,17 @@ export default function MembersPage(): React.ReactElement {
         title="Miembros"
         subtitle="Las cuentas que pagan y los jugadores que tienen a cargo."
         actions={
-          <Button variant="primary" onClick={() => setNewTrainerOpen(true)}>
-            <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-            Nuevo entrenador
-          </Button>
+          <>
+            {/* Issue #1670: pick several players and print their carnets on A4. */}
+            <Link href={CARNETS_PATH} className={buttonClasses("secondary")}>
+              <IdCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+              Carnets por lote
+            </Link>
+            <Button variant="primary" onClick={() => setNewTrainerOpen(true)}>
+              <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+              Nuevo entrenador
+            </Button>
+          </>
         }
       >
         {error && (
