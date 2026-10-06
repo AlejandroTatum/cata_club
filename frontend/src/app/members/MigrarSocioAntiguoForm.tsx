@@ -141,7 +141,7 @@ export default function MigrarSocioAntiguoForm({
   return (
     <div className="grid gap-2" role="group" aria-label="Socio antiguo">
       {necesitaPlan && (
-        <label className="block text-2xs text-ink-3">
+        <label className="block text-xs text-ink-3">
           <span>Plan <span aria-hidden="true" className="text-state-bad">*</span></span>
           <select
             value={tipoId}
@@ -170,7 +170,7 @@ export default function MigrarSocioAntiguoForm({
       />
       {tieneBeneficio && (
         <fieldset>
-          <legend className="text-2xs text-ink-3">Valor a cobrar</legend>
+          <legend className="text-xs text-ink-3">Valor a cobrar</legend>
           <label className="mt-1 flex items-center gap-2 text-xs text-ink">
             <input
               type="radio"
@@ -191,7 +191,7 @@ export default function MigrarSocioAntiguoForm({
           </label>
         </fieldset>
       )}
-      {error && <p role="alert" className="text-2xs text-cata-red"><LinkifiedText text={error} /></p>}
+      {error && <p role="alert" className="text-xs text-cata-red"><LinkifiedText text={error} /></p>}
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
@@ -207,7 +207,7 @@ export default function MigrarSocioAntiguoForm({
           Registrar socio antiguo
         </button>
         <button type="button" onClick={onBack} disabled={loading} className={`${ACTION_TRIGGER} w-auto`}>
-          Volver
+          Cancelar
         </button>
         {creadaId !== null && error && (
           <button type="button" onClick={onRefetch} disabled={loading} className={`${ACTION_TRIGGER} w-auto`}>

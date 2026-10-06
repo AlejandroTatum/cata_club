@@ -125,13 +125,13 @@ export default function SuspenderReactivarForm({
             required
           />
 
-          {error && <p className="mt-2 text-2xs text-cata-red"><LinkifiedText text={error} /></p>}
+          {error && <p className="mt-2 text-xs text-cata-red"><LinkifiedText text={error} /></p>}
 
           <div className="mt-3 flex items-center gap-2">
             <button
               type="submit"
               disabled={loading || !motivo.trim()}
-              className={`inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-2xs tracking-flat font-semibold text-white transition-colors hover:bg-cata-red/90 disabled:opacity-50 ${MIN_TARGET_CLASS}`}
+              className={`inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-cata-red/90 disabled:opacity-50 ${MIN_TARGET_CLASS}`}
             >
               {loading ? (
                 <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
