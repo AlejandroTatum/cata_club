@@ -47,6 +47,24 @@ const ACCOUNT = {
   }],
 };
 
+/** An approved payment: the row that offers «Corregir este pago». */
+const PAGO_APROBADO = {
+  id: 9,
+  monto: "50.00",
+  motivoRechazo: null,
+  estadoPago: "APROBADO",
+  tipoPago: "TRANSFERENCIA",
+  fechaRegistro: "2026-06-01T10:00:00",
+  fechaValidacion: "2026-06-02T10:00:00",
+  fechaInicio: "2026-05-01",
+  fechaFin: "2026-06-30",
+  personaId: 10,
+  membresiaId: 10,
+  voucherUrl: null,
+  voucherFormato: null,
+  comprobanteOficialUrl: null,
+};
+
 async function fulfillJson(route: Route, body: unknown, status = 200): Promise<void> {
   await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 }
@@ -74,7 +92,9 @@ async function mockMembersRuntime(page: Page): Promise<void> {
     fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }),
   );
   await page.route("**/api/personas/*/beneficio", (route: Route) => fulfillJson(route, null));
-  await page.route("**/api/membresias/pagos/persona/*", (route: Route) => fulfillJson(route, []));
+  await page.route("**/api/membresias/pagos/persona/*", (route: Route) => fulfillJson(route, [PAGO_APROBADO]));
+  await page.route("**/api/membresias/pagos/9", (route: Route) => fulfillJson(route, PAGO_APROBADO));
+  await page.route("**/api/membresias/pagos/9/correcciones", (route: Route) => fulfillJson(route, []));
 }
 
 test("Miembros → Pagos opens the member's page, fits a 390px phone, and the back link returns", async ({ page }) => {
@@ -130,4 +150,25 @@ test("a direct URL loads the member by id, and an unknown member says so", async
   await page.goto("/members/999/pagos");
   await expect(page.getByText("No encontramos a este miembro")).toBeVisible();
   await expect(page.getByRole("link", { name: /volver a miembros/i })).toHaveAttribute("href", "/members");
+});
+
+test("correcting an approved payment fits a 390px phone: amount, months, dates and reason, nothing clipped", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockMembersRuntime(page);
+
+  await page.goto("/members/1/pagos");
+  await page.getByRole("button", { name: "Corregir este pago" }).click();
+
+  const form = page.locator("form").filter({ has: page.getByLabel(/meses comprados/i) });
+  await expect(form).toBeVisible();
+  for (const label of [/^monto/i, /meses comprados/i, /fecha inicio/i, /fecha fin/i, /^motivo/i]) {
+    await expect(form.getByLabel(label)).toBeVisible();
+  }
+
+  // Nothing spills sideways, and the date pair stays inside the form.
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
+  ).toBeLessThanOrEqual(0);
+  const overflow = await form.evaluate((el) => el.scrollWidth - el.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
 });

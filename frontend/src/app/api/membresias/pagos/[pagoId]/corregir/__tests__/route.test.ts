@@ -167,6 +167,21 @@ describe("POST /api/membresias/pagos/[pagoId]/corregir", () => {
     expect(response.status).toBe(409);
   });
 
+  // #1668: the member's payments page shows this sentence to the admin as is, so
+  // the BFF must hand the overlap / continuity rule through, not a generic one.
+  it("relays the backend's overlap / continuity message in `message`", async () => {
+    const detail =
+      "El período corregido se superpone o rompe la continuidad con la cobertura de otro pago aprobado, o de un beneficio bonificado, de esta membresía.";
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail }, 400));
+
+    const response = await POST(postRequest("9", { motivo: "x", fechaFin: "2026-12-01" }), {
+      params: Promise.resolve({ pagoId: "9" }),
+    });
+
+    expect(response.status).toBe(400);
+    expect((await response.json()).message).toBe(detail);
+  });
+
   it("relays the backend's 422 as-is", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Entidad no procesable" }, 422));
 

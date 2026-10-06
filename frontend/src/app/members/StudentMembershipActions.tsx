@@ -163,6 +163,8 @@ export default function StudentMembershipActions({
   // new member (the usual first-payment flow) or an old one (load the last payment).
   const [tipoSocio, setTipoSocio] = useState<"nuevo" | "antiguo" | null>(null);
   const [resultadoMigracion, setResultadoMigracion] = useState<string | null>(null);
+  // A registration and a correction both change the history AND the member's
+  // standing (coverage, debt), so both refetch the two.
   const onPaymentRegistered = (): void => {
     setHistoryVersion((version) => version + 1);
     onPaymentRegisteredProp();
@@ -417,7 +419,12 @@ export default function StudentMembershipActions({
             tokens `student/payments/page.tsx` already established. */}
         <div className="grid min-w-0 content-start gap-section lg:order-1">
           <MembershipSummary student={student} />
-          <PaymentHistorySection personaId={personaId} minRows={HISTORY_MIN_ROWS} refreshKey={historyVersion} />
+          <PaymentHistorySection
+            personaId={personaId}
+            minRows={HISTORY_MIN_ROWS}
+            refreshKey={historyVersion}
+            onCorrected={onPaymentRegistered}
+          />
         </div>
       </div>
     </div>

@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { History } from "lucide-react";
-import { Badge, EmptyState, ErrorState, LoadingState } from "@/components/ui";
+import { Badge, Button, EmptyState, ErrorState, LoadingState } from "@/components/ui";
+import PagoCorreccionSection from "@/app/payments/PagoCorreccionSection";
 import { ICON } from "@/lib/icon-size";
 import { fetchPagosDePersona, type PagoPersona } from "@/services/api";
 import { toUserMessage } from "@/lib/error-message";
@@ -25,6 +27,14 @@ interface PaymentHistorySectionProps {
   personaId: number;
   /** Bump to fetch the history again (ADMA-04: after a payment is registered). */
   refreshKey?: number;
+  /**
+   * #1668 — the member's payments page passes this to turn the history into
+   * the place to fix a wrong payment: an APPROVED row opens the correction
+   * (amount, months, dates + reason, with its history), and a PENDING row says
+   * to reject it and register it again. Called after a correction succeeds.
+   * Without it the history stays read-only.
+   */
+  onCorrected?: () => void;
 }
 
 type LoadState =
@@ -60,8 +70,12 @@ export default function PaymentHistorySection({
   personaId,
   minRows = 0,
   refreshKey = 0,
+  onCorrected,
 }: PaymentHistorySectionProps): React.ReactElement {
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  // The one payment whose correction is open: fixing two at once would make
+  // two forms disagree about the same chain of months.
+  const [correctingId, setCorrectingId] = useState<number | null>(null);
 
   function load(): void {
     // A refetch keeps the rows already on screen instead of flashing a spinner.
@@ -129,6 +143,39 @@ export default function PaymentHistorySection({
                     <Badge tone={estado.tone}>{estado.label}</Badge>
                     {faltaComprobante && <Badge tone="bad">Falta el comprobante</Badge>}
                   </div>
+                  {onCorrected && pago.estadoPago === "PENDIENTE_VALIDACION" && (
+                    <p className="text-2xs text-ink-2 sm:col-span-3">
+                      Si este pago está mal, recházalo y vuelve a registrarlo.{" "}
+                      <Link href="/payments" className="font-semibold text-cata-red underline-offset-2 hover:underline">
+                        Ir a pagos pendientes
+                      </Link>
+                    </p>
+                  )}
+                  {onCorrected && pago.estadoPago === "APROBADO" && (
+                    <div className="sm:col-span-3">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        aria-expanded={correctingId === pago.id}
+                        onClick={() => setCorrectingId((current) => (current === pago.id ? null : pago.id))}
+                      >
+                        Corregir este pago
+                      </Button>
+                      {correctingId === pago.id && (
+                        <div className="mt-2">
+                          <PagoCorreccionSection
+                            pagoId={pago.id}
+                            extended
+                            initialOpen
+                            onCorrected={() => {
+                              setCorrectingId(null);
+                              onCorrected();
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </li>
               );
             })}

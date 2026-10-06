@@ -18,6 +18,9 @@ import type { MemberAccount, MemberStudentSummary } from "@/app/members/members-
 const mockFetchMember = vi.fn();
 const mockFetchMembers = vi.fn();
 const mockFetchPagos = vi.fn();
+const mockFetchPagoDetalle = vi.fn();
+const mockFetchCorrecciones = vi.fn();
+const mockCorregirPago = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "450" }),
@@ -54,6 +57,9 @@ vi.mock("@/services/api", async (importOriginal) => {
     fetchMember: (id: string) => mockFetchMember(id),
     fetchMembers: () => mockFetchMembers(),
     fetchPagosDePersona: (id: string) => mockFetchPagos(id),
+    fetchPagoDetalle: (id: number) => mockFetchPagoDetalle(id),
+    fetchCorrecciones: (id: number) => mockFetchCorrecciones(id),
+    corregirPago: (id: number, datos: unknown) => mockCorregirPago(id, datos),
   };
 });
 vi.mock("@/app/members/BeneficioSection", () => ({ default: () => <div /> }));
@@ -126,6 +132,7 @@ async function primaryAction(): Promise<HTMLElement> {
 beforeEach(() => {
   vi.clearAllMocks();
   mockFetchPagos.mockResolvedValue([]);
+  mockFetchCorrecciones.mockResolvedValue([]);
 });
 
 describe("PagosPage — loading one member by id", () => {
@@ -257,5 +264,123 @@ describe("PagosPage — first payment and «socio nuevo / antiguo»", () => {
     expect(await screen.findByText("formulario socio antiguo")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "volver" }));
     expect(await screen.findByRole("radio", { name: /socio nuevo/i })).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T2 (#1668, S3 c/d + S4): a wrong payment or a wrong month.
+// ---------------------------------------------------------------------------
+
+const pagoDe = (extra: Record<string, unknown>) => ({
+  id: 9,
+  monto: "50.00",
+  motivoRechazo: null,
+  estadoPago: "APROBADO",
+  tipoPago: "TRANSFERENCIA",
+  fechaRegistro: "2026-09-01T10:00:00",
+  fechaValidacion: "2026-09-02T10:00:00",
+  fechaInicio: "2026-07-01",
+  fechaFin: "2026-09-01",
+  personaId: 450,
+  membresiaId: 77,
+  voucherUrl: null,
+  voucherFormato: null,
+  ...extra,
+});
+
+describe("PagosPage — correcting an approved payment (amount, months, dates)", () => {
+  beforeEach(() => {
+    loadStudent(studentWith({ membresia: membresia({ mesesAdeudados: 0 }), ultimoPago: pagoUltimo("aprobado") }));
+    mockFetchPagoDetalle.mockResolvedValue(pagoDe({}));
+  });
+
+  it("offers «Corregir este pago» on approved payments only", async () => {
+    mockFetchPagos.mockResolvedValue([
+      pagoDe({ id: 9 }),
+      pagoDe({ id: 10, estadoPago: "PENDIENTE_VALIDACION", fechaValidacion: null }),
+      pagoDe({ id: 11, estadoPago: "RECHAZADO", motivoRechazo: "Comprobante ilegible" }),
+    ]);
+    render(<PagosPage />);
+
+    expect(await screen.findAllByRole("button", { name: "Corregir este pago" })).toHaveLength(1);
+  });
+
+  it("opens amount, months, dates and a required reason, with the correction history", async () => {
+    mockFetchPagos.mockResolvedValue([pagoDe({})]);
+    mockFetchCorrecciones.mockResolvedValue([
+      {
+        id: 1, pagoId: 9, tarifaMensualAplicadaAnterior: null, tarifaMensualAplicadaNuevo: null,
+        mesesCompradosAnterior: 2, mesesCompradosNuevo: 3, montoBaseAnterior: null, montoBaseNuevo: null,
+        montoAnterior: "40.00", montoNuevo: "50.00", fechaInicioAnterior: "2026-07-01", fechaInicioNuevo: "2026-07-01",
+        fechaFinAnterior: "2026-08-01", fechaFinNuevo: "2026-09-01", efectoCobertura: "AMPLIADA",
+        motivo: "Faltaba un mes", actorPersonaId: 1, fechaRegistro: "2026-09-02T10:00:00",
+      },
+    ]);
+    render(<PagosPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Corregir este pago" }));
+
+    expect(await screen.findByLabelText(/^monto/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/meses comprados/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/fecha inicio/i)).toHaveValue("2026-07-01");
+    expect(screen.getByLabelText(/fecha fin/i)).toHaveValue("2026-09-01");
+    expect(screen.getByLabelText(/^motivo/i)).toBeRequired();
+    expect(await screen.findByText(/faltaba un mes/i)).toBeInTheDocument();
+    expect(screen.getByText(/meses: 2 → 3/i)).toBeInTheDocument();
+    expect(mockFetchCorrecciones).toHaveBeenCalledWith(9);
+  });
+
+  it("submits the correction, then refreshes the member and the payment list", async () => {
+    mockFetchPagos.mockResolvedValue([pagoDe({})]);
+    mockCorregirPago.mockResolvedValue({ pago: pagoDe({ fechaFin: "2026-08-01" }), correccion: { id: 2 } });
+    render(<PagosPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Corregir este pago" }));
+    await screen.findByLabelText(/fecha fin/i);
+    const membersBefore = mockFetchMember.mock.calls.length;
+    const pagosBefore = mockFetchPagos.mock.calls.length;
+
+    fireEvent.change(screen.getByLabelText(/fecha fin/i), { target: { value: "2026-08-01" } });
+    fireEvent.change(screen.getByLabelText(/meses comprados/i), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText(/^monto/i), { target: { value: "25" } });
+    fireEvent.change(screen.getByLabelText(/^motivo/i), { target: { value: "Se cobró un mes de más" } });
+    fireEvent.click(screen.getByRole("button", { name: /registrar corrección/i }));
+
+    await waitFor(() =>
+      expect(mockCorregirPago).toHaveBeenCalledWith(9, {
+        motivo: "Se cobró un mes de más",
+        monto: "25",
+        mesesComprados: 1,
+        fechaFin: "2026-08-01",
+      }),
+    );
+    await waitFor(() => expect(mockFetchMember.mock.calls.length).toBeGreaterThan(membersBefore));
+    await waitFor(() => expect(mockFetchPagos.mock.calls.length).toBeGreaterThan(pagosBefore));
+  });
+
+  it("shows the backend's overlap message when the new dates collide with another payment", async () => {
+    const { ApiClientError } = await import("@/services/api");
+    mockFetchPagos.mockResolvedValue([pagoDe({})]);
+    mockCorregirPago.mockRejectedValue(
+      new ApiClientError("El período corregido se superpone o rompe la continuidad con la cobertura de otro pago aprobado.", 400),
+    );
+    render(<PagosPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Corregir este pago" }));
+    fireEvent.change(await screen.findByLabelText(/fecha fin/i), { target: { value: "2026-12-01" } });
+    fireEvent.change(screen.getByLabelText(/^motivo/i), { target: { value: "Se extendió" } });
+    fireEvent.click(screen.getByRole("button", { name: /registrar corrección/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/se superpone o rompe la continuidad/i);
+  });
+});
+
+describe("PagosPage — a wrong PENDING payment: reject it and register it again", () => {
+  it("says so plainly on the pending row, with a way to the review queue and no correction button", async () => {
+    loadStudent(studentWith({ membresia: membresia({ estado: "vencida", estadoBackend: "INACTIVA", cubiertoHasta: null }), ultimoPago: pagoUltimo("pendiente_validacion") }));
+    mockFetchPagos.mockResolvedValue([pagoDe({ id: 10, estadoPago: "PENDIENTE_VALIDACION", fechaValidacion: null })]);
+    render(<PagosPage />);
+
+    const guidance = await screen.findByText(/si este pago está mal, recházalo y vuelve a registrarlo/i);
+    expect(within(guidance.closest("li") as HTMLElement).getByRole("link", { name: /ir a pagos pendientes/i })).toHaveAttribute("href", "/payments");
+    expect(screen.queryByRole("button", { name: "Corregir este pago" })).not.toBeInTheDocument();
   });
 });
