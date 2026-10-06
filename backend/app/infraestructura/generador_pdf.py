@@ -45,7 +45,7 @@ _LINEAS_MEMBRETE = (
 )
 _PIE_TELEFONOS = "Tel\u00e9fonos: 0994219619 \u2013 0990288152"
 _TAM_LINEA_MEMBRETE = 10
-_INTERLINEADO_MEMBRETE = 4.6 * mm
+_INTERLINEADO_MEMBRETE = 4.2 * mm
 _MARGEN_PAPEL_MEMBRETE = 8 * mm
 _ROJO_INSTITUCIONAL = "#D92128"
 _NEGRO_INSTITUCIONAL = "#111111"
@@ -56,14 +56,14 @@ _GRIS_FILAS_ALTERNAS = "#F3F0F0"
 _NOMBRE_CLUB = "Cata Club - Tenis de Mesa"
 
 # Alto que se reserva arriba de la hoja: el banner (escalado al ancho del
-# contenido), las tres líneas del membrete y un respiro. Ni el banner ni las
+# contenido), las tres líneas del membrete (pegadas al banner) y un respiro. Ni el banner ni las
 # líneas son flowables, así que no empujan el contenido: si el margen superior
 # no los deja pasar, el texto les cae encima.
 def _margen_superior(ancho_contenido: float) -> float:
     alto_banner = ancho_contenido * _MEMBRETE_PROPORCION
     return (
-        _MARGEN_PAPEL_MEMBRETE + alto_banner + 3 * mm
-        + len(_LINEAS_MEMBRETE) * _INTERLINEADO_MEMBRETE + 5 * mm
+        _MARGEN_PAPEL_MEMBRETE + alto_banner
+        + len(_LINEAS_MEMBRETE) * _INTERLINEADO_MEMBRETE + 4 * mm
     )
 
 
@@ -603,7 +603,8 @@ def _dibujar_encabezado_pagina(canvas, doc) -> None:
         )
 
     canvas.setFillColor(colors.HexColor(_NEGRO_INSTITUCIONAL))
-    y -= 3 * mm
+    # El PNG ya trae ~3 mm de blanco bajo el logo: el título arranca sin
+    # separación extra para quedar pegado al banner.
     for indice, linea in enumerate(_LINEAS_MEMBRETE):
         y -= _INTERLINEADO_MEMBRETE
         canvas.setFont(
