@@ -123,6 +123,21 @@ describe("tú register — app-wide copy sweep (issue #340 follow-up, QA4 S6)", 
     expect(banned("estas seis fichas")).toBe(false);
   });
 
+  it("treats accented letters as word characters at the boundary", () => {
+    const banned = (text: string) => buildUstedRegisterRegex().test(text);
+    // A listed word ending in an accented letter matches before punctuation,
+    // a closing bracket or the end of the string (no ASCII `\b` transition).
+    expect(banned("Revisá.")).toBe(true);
+    expect(banned("(revisá)")).toBe(true);
+    expect(banned("Primero revisá")).toBe(true);
+    expect(banned("Alárguela")).toBe(true);
+    // The same letters glued to an accented neighbour are a different word.
+    expect(banned("óvos")).toBe(false);
+    expect(banned("revisáé")).toBe(false);
+    expect(banned("ñrevisá")).toBe(false);
+    expect(banned("sinusted")).toBe(false);
+  });
+
   it("only exempts real module specifiers, not path-like copy", () => {
     const banned = (text: string) => buildUstedRegisterRegex().test(text);
     const stripped = withoutModuleSpecifiers(
