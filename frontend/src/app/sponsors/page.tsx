@@ -92,12 +92,7 @@ export default function SponsorsPage(): React.ReactElement {
     <>
       <div className={`${PAGE_RAIL} ${vacio ? "lg:flex-1" : ""}`}>
         <div className="flex min-w-0 flex-col gap-page max-lg:contents lg:col-start-2 lg:row-start-1">
-        <PublishGuide className="max-lg:order-3" title="Cómo se publica en el sitio" rules={[
-          { term: "Dónde aparece", detail: "El logo se muestra en la franja de patrocinadores de la landing; el nombre es su texto alternativo." },
-          { term: "Orden y visibilidad", detail: "Se muestran de inmediato, en el orden en que se cargaron. No hay borradores." },
-          { term: "Al eliminar", detail: "El logo deja de mostrarse en la landing y no se puede recuperar." },
-        ]} />
-        <form onSubmit={submit} className="card flex max-lg:order-1 min-w-0 flex-col gap-4 p-4">
+        <form onSubmit={submit} className="card flex max-lg:order-1 min-w-0 flex-col gap-4 p-4 lg:order-2">
           <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Agregar patrocinador</h2>
           <div className="flex flex-col gap-field text-sm font-semibold">
             <label htmlFor="sponsor-nombre">Nombre corto</label>
@@ -127,6 +122,11 @@ export default function SponsorsPage(): React.ReactElement {
           {error && <p ref={errorRef} role="alert" tabIndex={-1} className="text-sm text-state-bad">{error}</p>}
           <Button type="submit" variant="primary" disabled={saving} className="self-start">{saving ? "Subiendo…" : "Subir logo"}</Button>
         </form>
+        <PublishGuide className="max-lg:order-3 lg:order-1" title="Cómo se publica en el sitio" rules={[
+          { term: "Dónde aparece", detail: "El logo se muestra en la franja de patrocinadores de la landing; el nombre es su texto alternativo." },
+          { term: "Orden y visibilidad", detail: "Se muestran de inmediato, en el orden en que se cargaron. No hay borradores." },
+          { term: "Al eliminar", detail: "El logo deja de mostrarse en la landing y no se puede recuperar." },
+        ]} />
         </div>
         <div className={`flex min-w-0 flex-col gap-page max-lg:order-2 lg:col-start-1 lg:row-start-1 ${vacio ? "lg:self-stretch" : ""}`}>
         <section aria-label="Logos cargados" className={`flex min-w-0 flex-col ${vacio ? "lg:flex-1" : ""}`}>

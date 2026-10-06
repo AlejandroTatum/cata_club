@@ -17,7 +17,7 @@
 
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, Download, History, Loader2, Pencil } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { Badge, Button } from "@/components/ui";
@@ -38,15 +38,39 @@ interface PagoCorreccionSectionProps {
   /** Called after a successful correction, so the page can refetch the pago
    *  itself (the corrected monto/fechas live there, not in this section). */
   onCorrected: () => void;
+  /**
+   * #1668 / S4 — the member's payments page corrects amount, months AND
+   * covered dates (start/end), not only the amount. Off by default: the
+   * `/payments` queue keeps ADMA-16's amount-only form. The form opens
+   * prefilled with what the payment says now and sends only what the admin
+   * changed; the history also lists the months and dates that moved.
+   */
+  extended?: boolean;
+  /** Start with the correction form already open (the admin asked to correct). */
+  initialOpen?: boolean;
 }
 
-/** ADMA-16: the admin writes only the correct final amount (and why). */
+/**
+ * ADMA-16: by default the admin writes only the correct final amount (and
+ * why). `extended` adds months and the two covered dates; for those, "same as
+ * the payment now" means "no change" and is never sent.
+ */
 interface FormState {
   monto: string;
+  mesesComprados: string;
+  fechaInicio: string;
+  fechaFin: string;
   motivo: string;
 }
 
-const EMPTY_FORM: FormState = { monto: "", motivo: "" };
+const EMPTY_FORM: FormState = { monto: "", mesesComprados: "", fechaInicio: "", fechaFin: "", motivo: "" };
+
+/** What the payment says right now — the baseline an extended correction is measured against. */
+interface PagoActual {
+  monto: string;
+  fechaInicio: string;
+  fechaFin: string;
+}
 
 const EFECTO_LABEL: Record<CorreccionPago["efectoCobertura"], string> = {
   SIN_CAMBIO: "Sin cambio en la cobertura",
@@ -59,13 +83,41 @@ function buildInput(form: FormState): CorreccionPagoInput {
   return { motivo: form.motivo.trim(), monto: form.monto.trim() };
 }
 
+/** Extended: only the fields that differ from the payment as it stands today. */
+function buildExtendedInput(form: FormState, actual: PagoActual): CorreccionPagoInput {
+  const input: CorreccionPagoInput = { motivo: form.motivo.trim() };
+  const monto = form.monto.trim();
+  if (monto && Number(monto) !== Number(actual.monto)) input.monto = monto;
+  const meses = Number(form.mesesComprados);
+  if (form.mesesComprados.trim() && Number.isInteger(meses) && meses > 0) input.mesesComprados = meses;
+  if (form.fechaInicio && form.fechaInicio !== actual.fechaInicio) input.fechaInicio = form.fechaInicio;
+  if (form.fechaFin && form.fechaFin !== actual.fechaFin) input.fechaFin = form.fechaFin;
+  return input;
+}
+
+/** «Etiqueta: antes → después», only for a value that actually moved. */
+function changedLine<T extends string | number | null>(
+  label: string,
+  before: T,
+  after: T,
+  format: (value: NonNullable<T>) => string,
+): string | null {
+  if (before === after || before === null || after === null) return null;
+  return `${label}: ${format(before as NonNullable<T>)} → ${format(after as NonNullable<T>)}`;
+}
+
 export default function PagoCorreccionSection({
   pagoId,
   onCorrected,
+  extended = false,
+  initialOpen = false,
 }: PagoCorreccionSectionProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
   const [comprobanteUrl, setComprobanteUrl] = useState<string | null>(null);
   const [correcciones, setCorrecciones] = useState<CorreccionPago[]>([]);
+  // `initialOpen` applies to the first load only: a refetch after a correction must not reopen the form.
+  const autoOpened = useRef(false);
+  const [pagoActual, setPagoActual] = useState<PagoActual | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
@@ -82,6 +134,13 @@ export default function PagoCorreccionSection({
         fetchCorrecciones(pagoId),
       ]);
       setComprobanteUrl(pago.comprobanteOficialUrl ?? null);
+      const actual = { monto: pago.monto, fechaInicio: pago.fechaInicio, fechaFin: pago.fechaFin };
+      setPagoActual(actual);
+      if (initialOpen && extended && !autoOpened.current) {
+        autoOpened.current = true;
+        setForm((current) => (current === EMPTY_FORM ? { ...EMPTY_FORM, ...actual } : current));
+        setFormOpen(true);
+      }
       setCorrecciones(historial);
     } catch (err) {
       console.error("[payments] PagoCorreccionSection load failed", err);
@@ -89,19 +148,34 @@ export default function PagoCorreccionSection({
     } finally {
       setLoading(false);
     }
-  }, [pagoId]);
+  }, [pagoId, extended, initialOpen]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  // Extended: the form opens on the payment as it stands, so only edits count.
+  function openForm(): void {
+    setForm(
+      extended && pagoActual
+        ? { ...EMPTY_FORM, monto: pagoActual.monto, fechaInicio: pagoActual.fechaInicio, fechaFin: pagoActual.fechaFin }
+        : EMPTY_FORM,
+    );
+    setSubmitError(null);
+    setFormOpen(true);
+  }
+
+  const input = extended && pagoActual ? buildExtendedInput(form, pagoActual) : buildInput(form);
+  const hasChange = extended ? Object.keys(input).length > 1 : Boolean(form.monto.trim());
+  const canSubmit = !submitting && hasChange && Boolean(form.motivo.trim());
+
   async function handleSubmit(event: React.FormEvent): Promise<void> {
     event.preventDefault();
-    if (!form.monto.trim() || !form.motivo.trim()) return;
+    if (!canSubmit) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await corregirPago(pagoId, buildInput(form));
+      await corregirPago(pagoId, input);
       showSuccess("Corrección registrada correctamente.");
       setFormOpen(false);
       setForm(EMPTY_FORM);
@@ -157,6 +231,12 @@ export default function PagoCorreccionSection({
                   <p className="mt-0.5">
                     Monto: {formatCurrency(Number(c.montoAnterior))} → {formatCurrency(Number(c.montoNuevo))}
                   </p>
+                  {extended &&
+                    [
+                      changedLine("Meses", c.mesesCompradosAnterior, c.mesesCompradosNuevo, String),
+                      changedLine("Desde", c.fechaInicioAnterior, c.fechaInicioNuevo, formatDate),
+                      changedLine("Hasta", c.fechaFinAnterior, c.fechaFinNuevo, formatDate),
+                    ].map((line) => line && <p key={line} className="mt-0.5">{line}</p>)}
                   <p className="mt-0.5 italic text-ink-3">&ldquo;{c.motivo}&rdquo;</p>
                 </li>
               ))}
@@ -166,7 +246,7 @@ export default function PagoCorreccionSection({
           <div className="mt-3 border-t border-line pt-3">
             <button
               type="button"
-              onClick={() => setFormOpen((v) => !v)}
+              onClick={() => (formOpen ? setFormOpen(false) : openForm())}
               className="inline-flex items-center gap-1 rounded-lg bg-ink/10 px-2.5 py-1 text-2xs tracking-flat font-semibold text-ink transition-colors hover:bg-ink/20"
             >
               <Pencil size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
@@ -175,16 +255,51 @@ export default function PagoCorreccionSection({
 
             {formOpen && (
               <form onSubmit={handleSubmit} className="mt-2 rounded-lg border border-line bg-surface p-3">
+                {extended && (
+                  <p className="mb-2 text-2xs text-ink-3">
+                    Cambia solo lo que está mal; lo que dejes igual no se modifica. El sistema comprueba que los
+                    meses no se superpongan ni dejen huecos con otros pagos.
+                  </p>
+                )}
                 <CampoFormularioAdmin
-                  label="Monto correcto"
+                  label={extended ? "Monto" : "Monto correcto"}
                   type="number"
                   value={form.monto}
                   onChange={(v) => setForm((f) => ({ ...f, monto: v }))}
-                  required
+                  required={!extended}
                 />
                 <p className="mt-1 text-2xs text-ink-3">
                   Escribe el monto correcto; el sistema ajusta la tarifa y la base.
                 </p>
+
+                {extended && (
+                  <>
+                    <CampoFormularioAdmin
+                      label="Meses comprados (vacío = sin cambio)"
+                      type="number"
+                      value={form.mesesComprados}
+                      onChange={(v) => setForm((f) => ({ ...f, mesesComprados: v }))}
+                      numberStep="1"
+                      numberMin="1"
+                      numberInputMode="numeric"
+                      labelClassName="mt-2 block text-2xs text-ink-3"
+                    />
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <CampoFormularioAdmin
+                        label="Fecha inicio"
+                        type="date"
+                        value={form.fechaInicio}
+                        onChange={(v) => setForm((f) => ({ ...f, fechaInicio: v }))}
+                      />
+                      <CampoFormularioAdmin
+                        label="Fecha fin"
+                        type="date"
+                        value={form.fechaFin}
+                        onChange={(v) => setForm((f) => ({ ...f, fechaFin: v }))}
+                      />
+                    </div>
+                  </>
+                )}
 
                 <CampoFormularioAdmin
                   label="Motivo (obligatorio)"
@@ -196,10 +311,14 @@ export default function PagoCorreccionSection({
                   required
                 />
 
-                {submitError && <p className="mt-2 text-2xs text-state-bad">{submitError}</p>}
+                {submitError && (
+                  <p role="alert" className="mt-2 text-2xs text-state-bad">
+                    {submitError}
+                  </p>
+                )}
 
                 <div className="mt-3 flex items-center gap-2">
-                  <Button type="submit" size="sm" disabled={submitting || !form.monto.trim() || !form.motivo.trim()}>
+                  <Button type="submit" size="sm" disabled={!canSubmit}>
                     {submitting ? (
                       <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
                     ) : (

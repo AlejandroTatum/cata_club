@@ -193,17 +193,17 @@ export default function AyudaPage(): React.ReactElement {
         />
       )}
       {/*
-       * Two columns on wide screens, one on narrow ones — #203's grid. Each
-       * visible FAQ section renders as exactly one `<section>`, which is
-       * also exactly one grid cell: a section's questions can never split
-       * across columns because there is nothing splitting them, the CSS
-       * grid just wraps whole cells.
+       * Two columns on wide screens, one on narrow ones. The categories differ
+       * a lot in length ("Para empezar" has 4 questions, the administrator's
+       * more than 12), so a row-based grid left a dead band under the short
+       * card. CSS columns flow whole cards top to bottom, so the columns stay
+       * balanced and a short card is followed by the next one instead of by
+       * empty space; `break-inside-avoid` keeps a card's questions in one
+       * column, and the reading order stays "Para empezar" first.
        */}
       <div
         data-testid="faq-grid"
-        // Each card keeps its own content height: stretching the short one
-        // to match its neighbour left a dead band under its last question.
-        className="grid grid-cols-1 items-start gap-page xl:grid-cols-2"
+        className="columns-1 gap-page xl:columns-2"
       >
         {visibleSections.map((section) => {
           const slug = sectionSlug(section.title);
@@ -212,7 +212,7 @@ export default function AyudaPage(): React.ReactElement {
           const Icon = accent.icon;
 
           return (
-            <section key={section.title} aria-labelledby={headingId} className="card p-page">
+            <section key={section.title} aria-labelledby={headingId} className="card mb-page break-inside-avoid p-page">
               <div className="mb-4 flex items-center gap-3">
                 {/* `rounded-ctl`, not the 12px this used to write: the system
                     has two radii, and a 36px chip is control-shaped. */}

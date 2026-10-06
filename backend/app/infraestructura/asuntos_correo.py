@@ -25,6 +25,9 @@ ASUNTO_INVITACION_CO_REPRESENTANTE = "Cata Club | Te invitaron como segundo repr
 ASUNTO_PAGO_APROBADO = "Cata Club | Pago aprobado"
 ASUNTO_PAGO_RECHAZADO = "Cata Club | Pago rechazado"
 
+# Día sin clase del club entero (issue #1665).
+ASUNTO_DIA_SIN_CLASE = "Cata Club | Día sin clase"
+
 # Verificación de correo (issue #1375): era el único asunto que seguía
 # inline en `notificaciones_servicio.py`; se mueve acá por la misma razón
 # que los anteriores -- una sola fuente, sin copias. QA4 REG-20: es también

@@ -106,7 +106,10 @@ const mockFetchHorariosPorAlumno = vi.fn();
 const mockSubirFotoPersona = vi.fn();
 const mockFetchMisMenoresConGuardianes = vi.fn();
 
+const mockFetchDiasSinClase = vi.fn();
+
 vi.mock("@/services/api", () => ({
+  fetchDiasSinClase: (...args: unknown[]) => mockFetchDiasSinClase(...args),
   fetchStudentPortal: () => mockFetchStudentPortal(),
   // Still read here — the carnet's "Cobertura hasta" is the furthest
   // `fechaFin` among approved payments, the only real coverage date there is.
@@ -189,6 +192,7 @@ const PAGO_APROBADO: PagoPersona = {
 };
 
 beforeEach(() => {
+    mockFetchDiasSinClase.mockResolvedValue([]);
   mockAuthSession = {
     user: { id: "9", name: "Alumno Test", email: "alumno@cataclub.com", role: "estudiante", representanteId: null },
     roles: ["ALUMNO"],
@@ -880,7 +884,7 @@ describe("StudentPage — the carnet shows the student's photo", () => {
     expect(img).toHaveAttribute("height", "78");
   });
 
-  it("falls back to initials instead of showing a broken image when the photo fails to load", async () => {
+  it("falls back to the silhouette instead of showing a broken image when the photo fails to load", async () => {
     mockFetchStudentPortal.mockResolvedValueOnce({
       ...PORTAL,
       self: { ...PORTAL.self!, fotoUrl: "https://broken.example/foto.jpg" },
@@ -893,16 +897,16 @@ describe("StudentPage — the carnet shows the student's photo", () => {
 
     await waitFor(() => {
       expect(within(photo).queryByRole("img")).not.toBeInTheDocument();
-      expect(within(photo).getByText("A")).toBeInTheDocument();
+      expect(within(photo).getByTestId("carnet-photo-silhouette")).toBeInTheDocument();
     });
   });
 
-  it("shows initials when there is no photo, never a broken image", async () => {
+  it("shows the silhouette when there is no photo, never a broken image", async () => {
     render(<StudentPage />);
 
     const photo = await screen.findByTestId("carnet-photo");
     expect(within(photo).queryByRole("img")).not.toBeInTheDocument();
-    expect(within(photo).getByText("A")).toBeInTheDocument();
+    expect(within(photo).getByTestId("carnet-photo-silhouette")).toBeInTheDocument();
   });
 
   it("offers the upload trigger on the account's own carnet", async () => {
@@ -3217,5 +3221,25 @@ describe("StudentPage — «Representantes» card", () => {
     await screen.findByTestId("student-carnet");
     expect(mockFetchMisMenoresConGuardianes).not.toHaveBeenCalled();
     expect(screen.queryByRole("region", { name: "Representantes" })).toBeNull();
+  });
+});
+
+/** Issue #1665: the club-wide no-class days are announced in the member panel. */
+describe("StudentPage — no-class days", () => {
+  it("shows the upcoming no-class days with their reason, and nothing when there are none", async () => {
+    mockFetchDiasSinClase.mockResolvedValue([
+      { id: 1, fechaInicio: "2999-07-04", fechaFin: "2999-07-04", motivo: "Feriado nacional" },
+    ]);
+    const { unmount } = render(<StudentPage />);
+
+    const panel = await screen.findByRole("complementary", { name: "Días sin clase" });
+    expect(within(panel).getByText("04/07/2999")).toBeInTheDocument();
+    expect(within(panel).getByText("Feriado nacional")).toBeInTheDocument();
+    unmount();
+
+    mockFetchDiasSinClase.mockResolvedValue([]);
+    render(<StudentPage />);
+    await screen.findByTestId("student-carnet");
+    expect(screen.queryByRole("complementary", { name: "Días sin clase" })).not.toBeInTheDocument();
   });
 });

@@ -129,29 +129,16 @@ const ENROLLMENT_CHOICES: {
   value: EnrollmentType;
   title: string;
   description: string;
-  /** What the visitor will be asked, step by step, and how long it takes. */
-  asks: string[];
-  steps: string;
 }[] = [
   {
     value: ENROLLMENT_TYPES.SELF,
     title: "Jugador",
-    description:
-      "Me inscribo yo al club. Soy mayor de edad y gestiono mi propia cuenta como jugador.",
-    asks: ["Tus datos personales y de acceso", "Salud y contacto de emergencia"],
-    steps: "4 pasos",
+    description: "Soy mayor de edad y me inscribo yo.",
   },
   {
     value: ENROLLMENT_TYPES.CHILD,
     title: "Representante",
-    description:
-      "Gestiono la inscripción de un hijo o menor a mi cargo. El jugador es distinto de mi cuenta.",
-    asks: [
-      "Los datos del jugador",
-      "Tus propios datos y los de acceso a la cuenta",
-      "Salud del jugador; tu contacto de emergencia eres tú",
-    ],
-    steps: "5 pasos",
+    description: "Inscribo a un hijo o menor a mi cargo.",
   },
 ];
 
@@ -378,6 +365,35 @@ function EnrollWizard(): React.ReactElement {
     focusStepHeadingOnNextStepChange.current = false;
     stepHeadingRef.current?.focus();
   }, [step]);
+
+  /**
+   * #1663: the button that moves between steps sits at the bottom of the
+   * page, so on mobile the new step used to open at the previous scroll
+   * position — its end. Every step change (not the first render) returns the
+   * page to the top, where the step heading is; a `Stepper` jump additionally
+   * focuses that heading above. Reduced motion gets an instant jump.
+   */
+  const previousStep = useRef(step);
+  useEffect(() => {
+    if (previousStep.current === step) return;
+    previousStep.current = step;
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+  }, [step]);
+
+  // #1663: arriving here (from the landing or a direct URL) must start at the
+  // top, whatever scroll position the previous page or the browser restored.
+  // Restoration is also switched to manual while the wizard is mounted:
+  // "Atrás" is `history.back()`, and the browser would otherwise put back the
+  // scroll the previous entry had — its end — right after the step changed.
+  useEffect(() => {
+    const previous = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+    window.scrollTo(0, 0);
+    return () => {
+      window.history.scrollRestoration = previous;
+    };
+  }, []);
 
   useEffect(() => {
     if (attemptCount === 0) return;
@@ -822,16 +838,6 @@ function EnrollWizard(): React.ReactElement {
               >
                 <b className="text-base font-bold text-ink">{choice.title}</b>
                 <p className="text-sm text-ink-2">{choice.description}</p>
-                <span className="mt-field block text-xs font-bold uppercase tracking-flat text-ink-3-strong">
-                  Te pediremos · {choice.steps}
-                </span>
-                <span className="block text-sm text-ink-2">
-                  {choice.asks.map((ask) => (
-                    <span key={ask} className="block py-0.5">
-                      · {ask}
-                    </span>
-                  ))}
-                </span>
                 {/* Coal fill plus the yellow ball dot — the system's ONE way of
                     drawing a selected state, the same one `FilterPill` draws.
                     Not a `Badge`: the four badge tones are STATUSES, and a

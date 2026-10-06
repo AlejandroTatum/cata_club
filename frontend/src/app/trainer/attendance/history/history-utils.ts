@@ -11,13 +11,15 @@
  *
  * El modelo no tiene con qué hacerla exacta. `HorarioEntrenamiento`
  * (`backend/app/dominio/modelos.py:595`) guarda categoría, día de la semana y
- * las dos horas, y nada más: no hay `vigente_desde`/`vigente_hasta`, ni baja
- * suave, ni feriados, ni cancelaciones en ninguna tabla. De ahí salen tres
- * formas de mentir, todas hacia arriba:
+ * las dos horas, y nada más: no hay `vigente_desde`/`vigente_hasta` ni baja
+ * suave. Los días sin clase que el administrador publica (issue #1665, del club
+ * entero) sí se descuentan, vía `noClassDays`; nada más cancela una sesión. De
+ * ahí salen dos formas de mentir, ambas hacia arriba:
  *
  *   - un horario dado de alta este mes se expande hacia atrás sobre semanas en
  *     las que ese grupo todavía no existía;
- *   - un feriado o una clase suspendida se cuentan como sesión programada;
+ *   - una clase suspendida que nadie publicó como día sin clase se cuenta como
+ *     sesión programada;
  *   - un horario que dejó de darse sigue expandiéndose hasta que alguien lo
  *     borre, y borrarlo se llevaría también su historia.
  *
@@ -31,6 +33,7 @@
 
 import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
 import { calendarIsoDate, diaSemanaOfCalendarDate } from "@/lib/club-date";
+import { isNoClassDate, type NoClassRange } from "@/lib/no-class-days";
 
 /** Una sesión ya tomada, reducida a lo único con lo que se la cruza. */
 export interface TakenSession {
@@ -87,6 +90,12 @@ export interface PeriodCoverageInput {
    * Sin esto, cualquier lista cuenta como completa.
    */
   inscritosPorHorario?: Record<number, number>;
+  /**
+   * Días sin clase del club (issue #1665). Un día dentro de alguno de estos
+   * rangos no tiene sesión esperada: no suma a las programadas ni queda como
+   * lista faltante.
+   */
+  noClassDays?: readonly NoClassRange[];
 }
 
 /**
@@ -128,7 +137,7 @@ interface ScheduledSessionsExpansion {
  * arrancó.
  */
 function expandScheduledSessions(input: PeriodCoverageInput): ScheduledSessionsExpansion {
-  const { sessions, schedules, desde, hasta, hoy, horaActual, horarioId } = input;
+  const { sessions, schedules, desde, hasta, hoy, horaActual, horarioId, noClassDays } = input;
 
   const tomadas = new Set(sessions.map((s) => sessionKey(s.fecha, s.horarioId)));
   const registradosPorSesion = new Map<string, number>();
@@ -159,7 +168,7 @@ function expandScheduledSessions(input: PeriodCoverageInput): ScheduledSessionsE
       if (fecha > fin) break;
 
       const diaSemana = diaSemanaOfCalendarDate(fecha);
-      if (diaSemana !== null) {
+      if (diaSemana !== null && !(noClassDays && isNoClassDate(fecha, noClassDays))) {
         for (const schedule of expandibles) {
           if (schedule.diaSemana !== diaSemana) continue;
           // Hoy, un horario que todavía no arrancó no es "programada sin
@@ -213,7 +222,7 @@ export function findMissingSessions(input: PeriodCoverageInput): MissingSession[
  * La advertencia que convierte una cifra en una estimación.
  *
  * "Sin lista" no sale del backend: se deriva expandiendo el horario semanal
- * sobre el rango del filtro (ver el encabezado de este módulo para las tres
+ * sobre el rango del filtro (ver el encabezado de este módulo para las dos
  * formas en que eso miente hacia arriba, y para por qué el modelo no puede
  * hacerlo exacto). Compartida por el historial y por la columna "Sesiones sin
  * lista" del panel del entrenador — las dos leen la misma estimación y la
@@ -225,5 +234,5 @@ export function findMissingSessions(input: PeriodCoverageInput): MissingSession[
  * es únicamente que el horario semanal dice una cosa y las listas dicen otra.
  */
 export const AVISO_ESTIMACION =
-  "Estimación: se compara contra el horario semanal, que no contempla feriados, " +
-  "cancelaciones ni desde cuándo rige cada horario.";
+  "Estimación: se compara contra el horario semanal, que descuenta los días sin clase " +
+  "publicados por el club pero no contempla otras cancelaciones ni desde cuándo rige cada horario.";

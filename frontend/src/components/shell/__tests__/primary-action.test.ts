@@ -72,6 +72,9 @@ const NO_HEADER_ACTION: Record<string, string> = {
   // Same shape, same reason (issue #1372): the gallery upload needs título,
   // descripción and the photo file beside its submit control.
   "app/galeria/page.tsx": "upload form — the submit action belongs with its required fields",
+  // A form beside its list (issue #1665): the submit action belongs with the
+  // date and reason fields it needs.
+  "app/admin/dias-sin-clase/page.tsx": "form — the submit action belongs with its required fields",
   // Read-only monitoring screen (issue #1314): it only looks, so there is no
   // verb to promote. Its view and period controls change what is drawn, not the
   // data, and live with the figures they filter.
@@ -116,6 +119,16 @@ const NO_HEADER_ACTION: Record<string, string> = {
   // justo la pregunta que el renglón ya contesta. Inscribir o dar de baja a un
   // alumno es del administrador, y ofrecerlo acá terminaría en un 403.
   "app/trainer/students/page.tsx": "roster — the only action is per row, bound to one alumno",
+  // One member's payments (#1668). Which action leads (reactivate, review a
+  // pending payment, register one, load overdue months…) depends on the state
+  // the page's own banner explains, and each action is a form bound to the
+  // payment it records — a header button would arrive without that sentence.
+  "app/members/[id]/pagos/page.tsx": "the action depends on the member's state, which the page's banner explains",
+  // El carnet que se imprime depende de lo elegido: sin jugadores no hay nada
+  // que imprimir, y «Imprimir N carnets» solo existe con la hoja cargada, junto
+  // a la cuenta de hojas que anuncia. Un botón en el encabezado faltaría la
+  // mayor parte del tiempo (selector, carga, error) y apuntaría lejos de ella.
+  "app/members/carnets/page.tsx": "the print action needs the loaded sheet and sits beside its sheet count (#1670)",
 };
 
 function read(path: string): string {

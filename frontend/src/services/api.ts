@@ -1270,6 +1270,17 @@ export async function fetchMembers(): Promise<MembersResponse> {
 }
 
 /**
+ * One account by id, built server-side (`GET /api/members/:id`) — the
+ * per-member payments page (#1668) loads this instead of the whole list, so a
+ * member the list never showed is still reachable by direct URL. A missing
+ * member rejects with an `ApiClientError` whose `status` is 404.
+ */
+export async function fetchMember(id: string): Promise<MemberAccount> {
+  const { account } = await request<{ account: MemberAccount }>(apiEndpoint(`/members/${encodeURIComponent(id)}`));
+  return account;
+}
+
+/**
  * Page size for roster listings paginated on the backend (issue #7):
  * asignaciones and horario rosters. 200 is the backend's hard cap (`le=200`)
  * and the same ceiling `PERSONAS_PAGE_LIMIT` already uses in
@@ -1515,6 +1526,24 @@ export interface StudentPortalSummary {
 /** Fetch the logged-in persona's own portal data — `GET /api/student`. */
 export async function fetchStudentPortal(personaId: string): Promise<StudentPortalSummary> {
   return request<StudentPortalSummary>(apiEndpoint(`/student?personaId=${encodeURIComponent(personaId)}`));
+}
+
+/** One persona's carnet data for the admin's printing — `GET /api/carnets`. */
+export interface CarnetSummary {
+  profile: StudentProfileSummary;
+  coverageEnd: string | null;
+  asignaciones: AlumnoHorario[];
+}
+
+export interface CarnetsResponse {
+  carnets: CarnetSummary[];
+  /** Personas that could not be read; the sheet prints without them. */
+  missing: number[];
+}
+
+/** Admin only (enforced by the BFF): the carnets of these personas, in order. */
+export async function fetchCarnets(personaIds: readonly number[]): Promise<CarnetsResponse> {
+  return request<CarnetsResponse>(apiEndpoint(`/carnets?ids=${personaIds.join(",")}`));
 }
 
 // ---------------------------------------------------------------------------
@@ -3011,6 +3040,15 @@ export interface FichaEmergencia {
   telefonoEmergencia: string | null;
   representanteNombreCompleto: string | null;
   representanteTelefono: string | null;
+  /**
+   * Issue #1667: who to call, resolved by the BFF — the person's own contact,
+   * else the representative (a minor has none of their own, #1138), else null.
+   */
+  contactoEfectivo?: {
+    nombre: string | null;
+    telefono: string | null;
+    esRepresentante: boolean;
+  } | null;
 }
 
 /**
@@ -3163,6 +3201,56 @@ export async function crearSponsor(nombre: string, archivo: File): Promise<Spons
 /** Admin-only: remove a sponsor and its hosted logo. */
 export async function eliminarSponsor(id: number): Promise<void> {
   await request<unknown>(apiEndpoint(`/sponsors/${id}`), { method: "DELETE" });
+}
+
+/** A club-wide no-class day or range (issue #1665); both dates are `YYYY-MM-DD`, `fechaFin` inclusive. */
+export interface DiaSinClase {
+  id: number;
+  fechaInicio: string;
+  fechaFin: string;
+  motivo: string;
+}
+
+export interface DiaSinClaseInput {
+  /** `YYYY-MM-DD`. */
+  fecha_inicio: string;
+  /** Omitted for a single day. */
+  fecha_fin?: string | null;
+  motivo: string;
+}
+
+/** Signed-in members: no-class days touching `[desde, hasta]` (both optional). */
+export async function fetchDiasSinClase(params?: { desde?: string; hasta?: string }): Promise<DiaSinClase[]> {
+  const query = new URLSearchParams();
+  if (params?.desde) query.set("desde", params.desde);
+  if (params?.hasta) query.set("hasta", params.hasta);
+  const suffix = query.size > 0 ? `?${query.toString()}` : "";
+  return request<DiaSinClase[]>(apiEndpoint(`/dias-sin-clase${suffix}`));
+}
+
+/** Creation answer: `avisoEncolado` is false when the day saved but the members' notice could not be queued. */
+export interface DiaSinClaseCreado extends DiaSinClase {
+  avisoEncolado: boolean;
+}
+
+/** Admin-only: announce a no-class day. Members are notified once, on creation. */
+export async function crearDiaSinClase(data: DiaSinClaseInput): Promise<DiaSinClaseCreado> {
+  return request<DiaSinClaseCreado>(apiEndpoint("/dias-sin-clase"), { method: "POST", body: JSON.stringify(data) });
+}
+
+/** Admin-only: edit a no-class day. Editing does not notify again. */
+export async function actualizarDiaSinClase(id: number, data: DiaSinClaseInput): Promise<DiaSinClase> {
+  return request<DiaSinClase>(apiEndpoint(`/dias-sin-clase/${id}`), { method: "PUT", body: JSON.stringify(data) });
+}
+
+/** Admin-only: queue the notice again; only members who never received it are reached. */
+export async function reenviarAvisoDiaSinClase(id: number): Promise<void> {
+  await request<unknown>(apiEndpoint(`/dias-sin-clase/${id}/avisar`), { method: "POST" });
+}
+
+/** Admin-only: remove a no-class day. */
+export async function eliminarDiaSinClase(id: number): Promise<void> {
+  await request<unknown>(apiEndpoint(`/dias-sin-clase/${id}`), { method: "DELETE" });
 }
 
 /** One published gallery entry — wire contract mirrors Sponsor (camelCase via

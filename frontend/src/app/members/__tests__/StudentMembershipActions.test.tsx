@@ -17,7 +17,7 @@ vi.mock("@/services/api", async (importOriginal) => {
 });
 
 vi.mock("../BeneficioSection", () => ({ default: () => <div /> }));
-vi.mock("../RegularizarDeudaForm", () => ({ default: () => <button type="button">Regularizar deuda</button> }));
+vi.mock("../RegularizarDeudaForm", () => ({ default: () => <button type="button">Cargar pagos atrasados</button> }));
 vi.mock("../SuspenderReactivarForm", () => ({
   default: ({ estado, primary }: { estado: string; primary?: boolean }) => (
     <button type="button" data-primary={primary ? "yes" : "no"}>
@@ -126,6 +126,17 @@ describe("StudentMembershipActions — ADMA-05 existing membership", () => {
   });
 });
 
+describe("StudentMembershipActions — suspended with a payment under review (#1668)", () => {
+  it("still leads with Reactivar and says the pending payment can be reviewed after", () => {
+    const s = student("suspendida", "SUSPENDIDA");
+    renderActions({ ...s, ultimoPago: { estado: "pendiente_validacion", fechaPago: "2026-09-01", monto: 25, periodo: "" } });
+
+    expect(screen.getAllByRole("button", { name: "Reactivar membresía" })).toHaveLength(1);
+    expect(document.querySelector("[data-primary-action]")).toHaveAttribute("data-primary-action", "reactivar");
+    expect(screen.getByText(/mientras esté suspendida/i)).toBeInTheDocument();
+  });
+});
+
 describe("StudentMembershipActions — ¿Socio nuevo o socio antiguo? (L17)", () => {
   const sinCobertura = () => student("vencida", "INACTIVA");
 
@@ -135,7 +146,7 @@ describe("StudentMembershipActions — ¿Socio nuevo o socio antiguo? (L17)", ()
     expect(screen.getByRole("radio", { name: "Socio nuevo" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Socio antiguo" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Registrar pago" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Regularizar deuda" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cargar pagos atrasados" })).not.toBeInTheDocument();
   });
 
   it("«Socio nuevo» leaves the existing flow untouched and the question gone", () => {
@@ -144,7 +155,34 @@ describe("StudentMembershipActions — ¿Socio nuevo o socio antiguo? (L17)", ()
 
     expect(screen.queryByRole("radio", { name: "Socio antiguo" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Registrar pago" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Regularizar deuda" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cargar pagos atrasados" })).toBeInTheDocument();
+  });
+
+  it("«Socio nuevo» → «Cancelar» brings the question back and creates nothing (#1664)", () => {
+    renderActions(sinCobertura());
+    fireEvent.click(screen.getByRole("radio", { name: "Socio nuevo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(screen.getByText("¿Socio nuevo o socio antiguo?")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Socio nuevo" })).not.toBeChecked();
+    expect(screen.queryByRole("button", { name: "Registrar pago" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancelar" })).not.toBeInTheDocument();
+  });
+
+  it("offers no «Cancelar» before choosing, nor under «Socio antiguo» (which keeps «Volver»)", () => {
+    renderActions(sinCobertura());
+    expect(screen.queryByRole("button", { name: "Cancelar" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Socio antiguo" }));
+    expect(screen.queryByRole("button", { name: "Cancelar" })).not.toBeInTheDocument();
+  });
+
+  it("offers no «Cancelar» before choosing, nor under «Socio antiguo» (which keeps «Volver»)", () => {
+    renderActions(sinCobertura());
+    expect(screen.queryByRole("button", { name: "Cancelar" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Socio antiguo" }));
+    expect(screen.queryByRole("button", { name: "Cancelar" })).not.toBeInTheDocument();
   });
 
   it("«Socio antiguo» goes straight to the last-payment form for the existing membership", () => {
@@ -176,6 +214,14 @@ describe("StudentMembershipActions — ¿Socio nuevo o socio antiguo? (L17)", ()
     renderActions(conCobertura);
 
     expect(screen.queryByRole("radio", { name: "Socio nuevo" })).not.toBeInTheDocument();
+  });
+
+  it("shows no «Cancelar» for a member who already has coverage", () => {
+    const conCobertura = student("activa", "ACTIVA");
+    conCobertura.membresia = { ...conCobertura.membresia!, cubiertoHasta: "2026-11-30" };
+    renderActions(conCobertura);
+
+    expect(screen.queryByRole("button", { name: "Cancelar" })).not.toBeInTheDocument();
   });
 
   it("never asks while a payment awaits validation", () => {

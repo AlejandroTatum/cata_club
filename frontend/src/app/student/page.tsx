@@ -37,6 +37,7 @@ import FamilyStrip from "./FamilyStrip";
 import GuardiansCard from "./GuardiansCard";
 import CuotaCard from "./CuotaCard";
 import MemberCard from "./MemberCard";
+import NoClassDays from "./NoClassDays";
 import WeekPlan from "./WeekPlan";
 import JoinAsPlayerAction from "./JoinAsPlayerAction";
 import StudentErrorState from "./StudentErrorState";
@@ -596,6 +597,8 @@ function ActivePortalView({
       {/* Issue #1666: the primary invites / removes the second guardian here;
           the second guardian sees the same card read-only. */}
       {representative && <GuardiansCard />}
+      {/* Club-wide no-class days (issue #1665): members only, never the landing. */}
+      <NoClassDays />
 
       {selectedProfile === null || paymentSituation === null ? (
         <EmptyState
