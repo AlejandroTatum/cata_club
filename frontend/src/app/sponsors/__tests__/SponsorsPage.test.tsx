@@ -51,7 +51,9 @@ describe("SponsorsPage", () => {
     const list = screen.getByRole("region", { name: "Logos cargados" }).parentElement!;
     // The mobile order cannot depend on CSS `order` alone: the form must also come first in the source.
     expect(form.compareDocumentPosition(guide) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // Desktop unchanged: the form and guide share the right column, the list owns the left one.
+    // Desktop unchanged: the guide stays above the form (flex `lg:order`), both in the right column; the list owns the left one.
+    expect(guide).toHaveClass("lg:order-1");
+    expect(form).toHaveClass("lg:order-2");
     expect(form.parentElement).toBe(guide.parentElement);
     expect(form.parentElement).toHaveClass("max-lg:contents", "lg:col-start-2", "lg:row-start-1");
     expect(list).toHaveClass("lg:col-start-1", "lg:row-start-1");
