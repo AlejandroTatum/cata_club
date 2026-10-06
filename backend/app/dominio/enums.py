@@ -207,3 +207,7 @@ class TipoNotificacion(str, enum.Enum):
     # haría que los dos se pisaran la fila. Ver
     # `app/infraestructura/tareas/recordatorio_sesion_tareas.py`.
     RECORDATORIO_SESION = "RECORDATORIO_SESION"
+    # Issue #1665: aviso IN-APP (y correo) de un día sin clase del club entero.
+    # Tipo propio: la dedup `(tipo, persona_id, entidad_relacionada_id)` se
+    # apoya en el tipo, y `entidad_relacionada_id` es el id del `DiaSinClase`.
+    DIA_SIN_CLASE = "DIA_SIN_CLASE"
