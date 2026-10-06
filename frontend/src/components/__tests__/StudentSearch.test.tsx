@@ -9,7 +9,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import StudentSearch from "@/components/StudentSearch";
 import type { PersonaBusqueda } from "@/types/domain";
 
@@ -85,6 +85,12 @@ describe("StudentSearch — selection identity contract (issue #200)", () => {
 });
 
 describe("StudentSearch — autocomplete and accessibility contract", () => {
+  it("asks only for players when playersOnly is set, and sends no role", async () => {
+    render(<StudentSearch onSelect={() => {}} playersOnly />);
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "Ma" } });
+    await waitFor(() => expect(mockSearchStudents).toHaveBeenCalledWith("Ma", { limit: 10, jugador: true }));
+  });
+
   it("uses the requested role and excludes roster persona ids", async () => {
     render(<StudentSearch onSelect={() => {}} role="ALUMNO" excludeIds={[ANA.id]} />);
 

@@ -1300,6 +1300,49 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     return screen.getAllByTestId("horario-card");
   }
 
+  it("keeps staff out of «Sin grupo» and its counter, but lists staff who play and no-account minors (#1661)", async () => {
+    const cuenta = (id: string, nombres: string, backendRoles: MemberAccount["backendRoles"], membresiaActiva = false): MemberAccount => ({
+      id: `acc-${id}`,
+      role: "representante",
+      backendRoles,
+      nombres,
+      apellidos: "Prueba",
+      telefono: "0999999999",
+      estudiantes: [
+        {
+          id,
+          nombres,
+          apellidos: "Prueba",
+          activo: true,
+          membresia: membresiaActiva
+            ? ({ estado: "activa", estadoBackend: "ACTIVA" } as unknown as MemberAccount["estudiantes"][number]["membresia"])
+            : null,
+          ultimoPago: null,
+        },
+      ],
+    });
+    mockFetchMembers.mockResolvedValue({
+      accounts: [
+        cuenta("81", "Adminona", ["ADMINISTRADOR"]),
+        cuenta("82", "Entrenador", ["ENTRENADOR"]),
+        cuenta("83", "Representante", ["REPRESENTANTE"]),
+        cuenta("84", "Jugadora", ["ALUMNO"]),
+        cuenta("85", "Matias", undefined),
+        cuenta("86", "Entrenajuega", ["ENTRENADOR"], true),
+      ],
+    });
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    const lista = await screen.findByTestId("sin-grupo-list");
+    const nombres = within(lista).getAllByRole("listitem").map((li) => li.textContent);
+    expect(nombres.join("|")).toContain("Jugadora Prueba");
+    expect(nombres.join("|")).toContain("Matias Prueba");
+    expect(nombres.join("|")).toContain("Entrenajuega Prueba");
+    expect(nombres.join("|")).not.toMatch(/Adminona|Entrenador Prueba|Representante/);
+    expect(within(screen.getByTestId("groups-summary")).getByText("Sin grupo").parentElement).toHaveTextContent("3");
+  });
+
   it("does not render a nivel-filtered roster block outside the accordion", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
@@ -1460,7 +1503,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
 
     await searchForStudent("Di");
 
-    expect(mockSearchStudents).toHaveBeenCalledWith("Di", { rol: "ALUMNO", limit: 10 });
+    expect(mockSearchStudents).toHaveBeenCalledWith("Di", { jugador: true, limit: 10 });
     expect(await screen.findByRole("option", { name: /Diego Vega/i })).toBeInTheDocument();
     expect(await screen.findByRole("option", { name: /Ana Pérez.*Ya asignado/i })).toHaveAttribute("aria-disabled", "true");
   });
