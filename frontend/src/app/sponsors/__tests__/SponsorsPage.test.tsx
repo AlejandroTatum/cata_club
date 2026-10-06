@@ -40,6 +40,22 @@ describe("SponsorsPage", () => {
     expect(list).toHaveClass("max-lg:order-2");
     expect(guide).toHaveClass("max-lg:order-3");
   });
+  it.each([
+    ["with sponsors", [{ id: 1, nombre: "Municipio", logoUrl: "https://cdn/logo.png" }], "Municipio"],
+    ["without sponsors", [], "Aún no hay patrocinadores cargados"],
+  ])("renders the form before the guide in the DOM and keeps the desktop columns (%s)", async (_label, data, ready) => {
+    fetchSponsors.mockResolvedValue(data);
+    render(<SponsorsPage />); await screen.findByText(ready);
+    const form = screen.getByRole("heading", { name: "Agregar patrocinador" }).closest("form")!;
+    const guide = screen.getByRole("complementary", { name: "Cómo se publica en el sitio" });
+    const list = screen.getByRole("region", { name: "Logos cargados" }).parentElement!;
+    // The mobile order cannot depend on CSS `order` alone: the form must also come first in the source.
+    expect(form.compareDocumentPosition(guide) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Desktop unchanged: the form and guide share the right column, the list owns the left one.
+    expect(form.parentElement).toBe(guide.parentElement);
+    expect(form.parentElement).toHaveClass("max-lg:contents", "lg:col-start-2", "lg:row-start-1");
+    expect(list).toHaveClass("lg:col-start-1", "lg:row-start-1");
+  });
   it("lists uploaded logos with meaningful alt text, lazy loading and dimensions", async () => {
     render(<SponsorsPage />);
     const img = await screen.findByRole("img", { name: "Logo de Municipio" });
