@@ -26,9 +26,11 @@ import MedicalRecordEditor from "../MedicalRecordEditor";
 
 const mockFetchFichaMedica = vi.fn();
 const mockActualizarFichaMedica = vi.fn();
+const mockFetchFichaEmergencia = vi.fn();
 
 vi.mock("@/services/api", () => ({
   fetchFichaMedica: (personaId: number) => mockFetchFichaMedica(personaId),
+  fetchFichaEmergencia: (personaId: number) => mockFetchFichaEmergencia(personaId),
   actualizarFichaMedica: (personaId: number, data: unknown) =>
     mockActualizarFichaMedica(personaId, data),
 }));
@@ -983,5 +985,81 @@ describe("MedicalRecordEditor — «Ninguna» vs «Sin declarar» (#1574)", () =
     const card = await screen.findByTestId("emergency-card");
     expect(card).toHaveTextContent(/Alergias\s*Ninguna/);
     expect(card).toHaveTextContent(/Enfermedades\s*Ninguna/);
+  });
+});
+
+describe("MedicalRecordEditor — representative as emergency contact (#1667)", () => {
+  const FICHA_MENOR = {
+    id: 4,
+    personaId: 9,
+    tipoSangre: "O_POSITIVO",
+    enfermedades: [],
+    alergias: "Ninguna",
+    contactoEmergencia: null,
+    telefonoEmergencia: null,
+  };
+  const REPRESENTANTE = { nombre: "Marta Solís", telefono: "+593987654321", esRepresentante: true };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetchFichaEmergencia.mockResolvedValue({ contactoEfectivo: null });
+  });
+
+  it("shows the representative on the emergency card instead of «Sin registrar»", async () => {
+    mockFetchFichaMedica.mockResolvedValue(FICHA_MENOR);
+    mockFetchFichaEmergencia.mockResolvedValue({ contactoEfectivo: REPRESENTANTE });
+
+    render(<MedicalRecordEditor personaId={9} withEmergencyCard />);
+
+    const contacto = await within(await screen.findByTestId("emergency-card")).findByTestId("emergency-card-contact");
+    await waitFor(() => expect(contacto).toHaveTextContent("Representante: Marta Solís"));
+    expect(contacto).toHaveTextContent("+593987654321");
+    expect(contacto).not.toHaveTextContent("Sin registrar");
+  });
+
+  it("shows the representative in the read-only record rows", async () => {
+    mockFetchFichaMedica.mockResolvedValue(FICHA_MENOR);
+    mockFetchFichaEmergencia.mockResolvedValue({ contactoEfectivo: REPRESENTANTE });
+
+    render(<MedicalRecordEditor personaId={9} />);
+
+    expect(await screen.findByText("Representante: Marta Solís")).toBeInTheDocument();
+    expect(screen.getByText("+593987654321")).toBeInTheDocument();
+  });
+
+  it("still shows an adult's own emergency contact, not a representative", async () => {
+    mockFetchFichaMedica.mockResolvedValue({
+      ...FICHA_MENOR,
+      contactoEmergencia: "Ana Torres",
+      telefonoEmergencia: "0991112233",
+    });
+    mockFetchFichaEmergencia.mockResolvedValue({
+      contactoEfectivo: { nombre: "Ana Torres", telefono: "0991112233", esRepresentante: false },
+    });
+
+    render(<MedicalRecordEditor personaId={9} withEmergencyCard />);
+
+    const contacto = await within(await screen.findByTestId("emergency-card")).findByTestId("emergency-card-contact");
+    expect(contacto).toHaveTextContent("Ana Torres");
+    expect(contacto).not.toHaveTextContent("Representante");
+  });
+
+  it("keeps flagging an adult with no contact and no representative", async () => {
+    mockFetchFichaMedica.mockResolvedValue(FICHA_MENOR);
+
+    render(<MedicalRecordEditor personaId={9} withEmergencyCard />);
+
+    const contacto = await within(await screen.findByTestId("emergency-card")).findByTestId("emergency-card-contact");
+    expect(contacto).toHaveTextContent("Sin registrar");
+  });
+
+  it("does not lose the record when the emergency lookup fails", async () => {
+    mockFetchFichaMedica.mockResolvedValue(FICHA_MENOR);
+    mockFetchFichaEmergencia.mockRejectedValue(new Error("boom"));
+
+    render(<MedicalRecordEditor personaId={9} withEmergencyCard />);
+
+    const contacto = await within(await screen.findByTestId("emergency-card")).findByTestId("emergency-card-contact");
+    expect(contacto).toHaveTextContent("Sin registrar");
   });
 });
