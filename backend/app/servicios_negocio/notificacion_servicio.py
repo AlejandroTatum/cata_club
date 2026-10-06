@@ -63,8 +63,12 @@ class NotificacionServicio:
         además necesita nombres, no solo ids) consulten una sola vez y nunca
         puedan divergir sobre a quién representa `persona_id`.
 
+        Issue #1666: "dependientes" son los de ambos guardianes -- el
+        principal y el segundo -- vía `listar_representados_accesibles`, así
+        que los dos ven el mismo feed del menor.
+
         Baja lógica: los dependientes salen de
-        `PersonaRepositorio.listar_representados`, que filtra por `activo`, y
+        `PersonaRepositorio.listar_representados_accesibles`, que filtra por `activo`, y
         NO de la relación ORM `persona.representados`, que no se puede
         filtrar. Es el mismo criterio operativo que el resto de los listados:
         el feed alimenta el portal del representante, y ahí un dependiente
@@ -75,7 +79,7 @@ class NotificacionServicio:
         from app.infraestructura.repositorios.persona_repositorio import (
             PersonaRepositorio,
         )
-        return PersonaRepositorio(self.db).listar_representados(persona_id)
+        return PersonaRepositorio(self.db).listar_representados_accesibles(persona_id)
 
     def _resolver_ids_autorizados(self, persona_id: int) -> list[int]:
         """Persona propia + sus dependientes ACTIVOS -- el mismo alcance que

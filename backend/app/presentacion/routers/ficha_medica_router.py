@@ -13,7 +13,7 @@ from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.ficha_medica_servicio import FichaMedicaServicio
 from app.servicios_negocio.gestor_permisos import GestorPermisos
 from app.servicios_negocio.persona_servicio import _calcular_edad, EDAD_MAYORIA_EDAD
-from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
+from app.servicios_negocio.politica_acceso import AlcanceRepresentacion, PoliticaAccesoPersona
 
 router = APIRouter(prefix="/fichas-medicas", tags=["Ficha Médica"])
 
@@ -64,6 +64,12 @@ def _es_titular_mayor_de_edad(
 _MENSAJE_SIN_ACCESO = (
     "Solo un administrador, el representante de esta persona, o la propia "
     "persona (si es mayor de edad) pueden acceder a su ficha médica"
+)
+
+
+_MENSAJE_SIN_ACCESO_ESCRITURA = (
+    "Solo un administrador, el representante principal de esta persona, o la "
+    "propia persona (si es mayor de edad) pueden editar su ficha médica"
 )
 
 
@@ -159,8 +165,10 @@ async def actualizar_ficha_medica(
     db: Session = Depends(obtener_sesion),
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
 ):
-    """Mismo criterio que la lectura: ADMINISTRADOR, el representante, o la
-    propia persona si es mayor de edad."""
+    """Mismo criterio que la lectura -- ADMINISTRADOR, el representante
+    principal, o la propia persona si es mayor de edad --, salvo que el
+    segundo guardián (issue #1666) SOLO LA VE: editar la ficha médica es
+    firmar un dato de salud, alcance `FIRMA_LEGAL`."""
     persona_id_solicitante = token_payload.get("persona_id")
     PoliticaAccesoPersona(db).exigir_acceso(
         persona_id_objetivo=persona_id,
@@ -169,7 +177,8 @@ async def actualizar_ficha_medica(
         incluir_titular=_es_titular_mayor_de_edad(
             db, persona_id_objetivo=persona_id, persona_id_solicitante=persona_id_solicitante,
         ),
-        mensaje=_MENSAJE_SIN_ACCESO,
+        alcance=AlcanceRepresentacion.FIRMA_LEGAL,
+        mensaje=_MENSAJE_SIN_ACCESO_ESCRITURA,
     )
     return FichaMedicaServicio(db).actualizar_por_persona(persona_id, datos)
 

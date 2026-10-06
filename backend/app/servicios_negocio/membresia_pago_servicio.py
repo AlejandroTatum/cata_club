@@ -662,7 +662,9 @@ class PagoServicio:
             persona = self.db.query(Persona).filter(
                 Persona.id == datos.persona_id,
             ).with_for_update().one_or_none()
-            if persona is None or persona.representante_id != representante_id:
+            if persona is None or not PoliticaAccesoPersona(self.db).es_guardian(
+                persona, representante_id,
+            ):
                 raise PermisosInsuficientes("Solo el representante puede inscribir a su representado")
             if _calcular_edad(persona.fecha_nacimiento) >= 18:
                 raise OperacionInvalida("Esta inscripción directa requiere un menor de edad")
@@ -2187,18 +2189,14 @@ class PagoServicio:
         roles_solicitante = roles_solicitante or []
         membresia = self.repo_membresia.obtener_por_id_con_bloqueo(membresia_id)
 
-        es_duenio = (
-            membresia is not None
-            and persona_id_solicitante is not None
-            and persona_id_solicitante == membresia.persona_id
+        # Titular o guardián (principal o segundo, issue #1666), SIN la rama
+        # de admin: roles vacíos a propósito.
+        autorizado = membresia is not None and PoliticaAccesoPersona(self.db).puede_acceder(
+            persona_id_objetivo=membresia.persona_id,
+            persona_id_solicitante=persona_id_solicitante,
+            roles_solicitante=[],
         )
-        es_representante = False
-        if membresia is not None and not es_duenio and persona_id_solicitante is not None:
-            persona_objetivo = self.repo_persona.obtener_por_id(membresia.persona_id)
-            es_representante = bool(
-                persona_objetivo and persona_objetivo.representante_id == persona_id_solicitante
-            )
-        if not (es_duenio or es_representante):
+        if not autorizado:
             raise PermisosInsuficientes(
                 "Solo el titular de la membresía, o su representante, "
                 "pueden aplicar su beneficio bonificado"

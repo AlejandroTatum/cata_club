@@ -11,9 +11,10 @@ from sqlalchemy.orm import Session
 from app.soporte_transversal.configuracion import settings
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoRol
 from app.dominio.excepciones import CredencialesInvalidas, PermisosInsuficientes
-from app.dominio.modelos import HistorialEstadoMembresia, Membresia, Pago, Persona
+from app.dominio.modelos import HistorialEstadoMembresia, Membresia, Pago
 from app.infraestructura import presencia
 from app.infraestructura.db import obtener_sesion
+from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
 
 if TYPE_CHECKING:
@@ -54,11 +55,8 @@ class GestorAutenticacion:
         CUALQUIER persona representada por `persona_id` cumple la misma
         regla, no solo `persona_id` en sí.
         """
-        ids_representados = [
-            fila[0] for fila in db.query(Persona.id).filter(
-                Persona.representante_id == persona_id,
-            ).all()
-        ]
+        # Issue #1666: representados del principal Y del segundo guardián.
+        ids_representados = PersonaRepositorio(db).ids_representados_accesibles(persona_id)
         ids_habilitantes = [persona_id, *ids_representados]
 
         estado_habilitante = (

@@ -607,10 +607,12 @@ class PersonaServicio:
         return persona
 
     def listar_representados(self, persona_id: int) -> list[Persona]:
-        """Dependientes ACTIVOS. `obtener_persona` se conserva para que un
-        `persona_id` inexistente siga dando 404 y no una lista vacía."""
+        """Dependientes ACTIVOS de los que `persona_id` es guardián -- como
+        principal o como segundo guardián (issue #1666). `obtener_persona` se
+        conserva para que un `persona_id` inexistente siga dando 404 y no una
+        lista vacía."""
         self.obtener_persona(persona_id)
-        return self.repo.listar_representados(persona_id)
+        return self.repo.listar_representados_accesibles(persona_id)
 
     def actualizar_persona(self, persona_id: int, cambios: PersonaUpdateDTO) -> Persona:
         persona = self.obtener_persona(persona_id)
