@@ -586,7 +586,7 @@ class ServicioNotificaciones:
         (issue #1666). Mismo enlace y vigencia que la invitación de un
         entrenador: el correo NUNCA lleva una contraseña, solo el enlace de un
         solo uso. Nombra al menor solo por el nombre de pila."""
-        enlace = f"{self._frontend_url}/reset-password?token={token}&invitacion=1"
+        enlace = f"{self._frontend_url}/reset-password?token={token}&invitacion=representante"
         saludo = f"Hola {nombre}," if nombre else "Hola,"
         texto, html = construir_correo(
             titulo="Te invitaron como segundo representante",

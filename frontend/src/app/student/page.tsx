@@ -34,6 +34,7 @@ import {
   withSelectedStudent,
 } from "./ManagedStudentPicker";
 import FamilyStrip from "./FamilyStrip";
+import GuardiansCard from "./GuardiansCard";
 import CuotaCard from "./CuotaCard";
 import MemberCard from "./MemberCard";
 import WeekPlan from "./WeekPlan";
@@ -591,6 +592,10 @@ function ActivePortalView({
           club-specific: a representante lands on one child and swaps to the
           next without leaving the page. */}
       <FamilyStrip profiles={managedProfiles} value={selectedId} onChange={setSelectedId} />
+
+      {/* Issue #1666: the primary invites / removes the second guardian here;
+          the second guardian sees the same card read-only. */}
+      {representative && <GuardiansCard />}
 
       {selectedProfile === null || paymentSituation === null ? (
         <EmptyState

@@ -33,11 +33,13 @@ import { ApiClientError as MockApiClientError } from "@/services/api";
 
 let mockToken: string | null = "valid-token";
 let mockInvitation = false;
+/** `?invitacion=` value when `mockInvitation` is on: "1" (trainer) or "representante" (#1666). */
+let mockInvitationKind = "1";
 vi.mock("next/navigation", () => ({
   useSearchParams: () => ({
     get: (key: string) => {
       if (key === "token") return mockToken;
-      if (key === "invitacion") return mockInvitation ? "1" : null;
+      if (key === "invitacion") return mockInvitation ? mockInvitationKind : null;
       return null;
     },
   }),
@@ -673,5 +675,34 @@ describe("ResetPasswordPage — an ordinary recovery link (#1575 non-regression)
     await waitFor(() => {
       expect(mockRestablecerContrasenia).toHaveBeenCalledWith("valid-token", "unaClaveSegura1");
     });
+  });
+});
+
+describe("ResetPasswordPage — second guardian invitation link (#1666)", () => {
+  beforeEach(() => {
+    mockToken = "invite-token";
+    mockInvitation = true;
+    mockInvitationKind = "representante";
+    mockRestablecerContrasenia.mockReset();
+  });
+
+  afterEach(() => {
+    mockInvitation = false;
+    mockInvitationKind = "1";
+    mockToken = "valid-token";
+  });
+
+  it("welcomes the invited guardian, not a trainer", () => {
+    render(<ResetPasswordPage />);
+
+    expect(screen.getByRole("heading", { name: "Crea tu contraseña" })).toBeTruthy();
+    expect(screen.getByText(/Te invitaron como segundo representante/)).toBeTruthy();
+    expect(screen.queryByText(/cuenta de entrenador/)).toBeNull();
+  });
+
+  it("still asks to accept the terms, like any first entry", () => {
+    render(<ResetPasswordPage />);
+
+    expect(screen.getByRole("checkbox", { name: "Acepto los Términos y condiciones" })).toBeTruthy();
   });
 });

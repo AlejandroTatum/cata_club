@@ -151,7 +151,7 @@ def test_el_worker_envia_un_enlace_de_un_solo_proposito_sin_contrasenia(client, 
     assert correo == CORREO_NUEVO
     assert "segundo representante" in asunto
     assert "Hijo" in texto and "Madre Principal" in texto
-    assert "/reset-password?token=" in texto and "invitacion=1" in texto
+    assert "/reset-password?token=" in texto and "invitacion=representante" in texto
     # Ninguna contraseña viaja en el cuerpo: ni su hash ni un "tu contraseña es".
     assert cuenta.contrasenia not in texto and cuenta.contrasenia not in html
     for fragmento in ("tu contraseña es", "contraseña temporal", "clave temporal"):
