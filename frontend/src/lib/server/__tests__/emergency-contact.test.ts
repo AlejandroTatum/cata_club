@@ -13,6 +13,28 @@ describe("resolveEffectiveEmergencyContact", () => {
     ).toEqual({ nombre: "Sofia Loor Zamora", telefono: "0900000004", esRepresentante: true });
   });
 
+  it("keeps a minor's own contact when it differs from the representative", () => {
+    expect(
+      resolveEffectiveEmergencyContact({
+        contactoEmergencia: "Luis Loor",
+        telefonoEmergencia: "0987654321",
+        representanteNombreCompleto: "Sofia Loor Zamora",
+        representanteTelefono: "0900000004",
+      }),
+    ).toEqual({ nombre: "Luis Loor", telefono: "0987654321", esRepresentante: false });
+  });
+
+  it("falls back to the representative when the minor has no contact", () => {
+    expect(
+      resolveEffectiveEmergencyContact({
+        contactoEmergencia: null,
+        telefonoEmergencia: " ",
+        representanteNombreCompleto: "Sofia Loor Zamora",
+        representanteTelefono: "0900000004",
+      }),
+    ).toEqual({ nombre: "Sofia Loor Zamora", telefono: "0900000004", esRepresentante: true });
+  });
+
   it("keeps an adult's own contact", () => {
     expect(
       resolveEffectiveEmergencyContact({

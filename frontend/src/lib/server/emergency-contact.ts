@@ -24,26 +24,34 @@ function present(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
+function digits(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
 /**
- * The representative when the person has one with a phone, else the person's own contact, else null.
+ * The person's own declared contact, else the representative (when they have
+ * a phone), else null.
  *
- * The representative comes first because for a represented minor the backend
- * (#1138) already copies them into `contactoEmergencia`/`telefonoEmergencia`:
- * reading those as "the person's own" is what hid the representative from
- * every screen.
+ * For a represented minor the backend (#1138) copies the representative into
+ * `contactoEmergencia`/`telefonoEmergencia`, so a stored contact with the
+ * representative's phone is the representative, not a contact of their own.
+ * A different contact chosen on purpose is never replaced.
  */
 export function resolveEffectiveEmergencyContact(source: EmergencyContactSource): EffectiveEmergencyContact | null {
+  const nombre = present(source.contactoEmergencia);
+  const telefono = present(source.telefonoEmergencia);
   const representanteTelefono = present(source.representanteTelefono);
-  if (representanteTelefono) {
+
+  const isRepresentativeCopy =
+    representanteTelefono !== null && (telefono === null || digits(telefono) === digits(representanteTelefono));
+  if (representanteTelefono && isRepresentativeCopy) {
     return {
-      nombre: present(source.representanteNombreCompleto),
+      nombre: present(source.representanteNombreCompleto) ?? nombre,
       telefono: representanteTelefono,
       esRepresentante: true,
     };
   }
 
-  const nombre = present(source.contactoEmergencia);
-  const telefono = present(source.telefonoEmergencia);
   if (nombre || telefono) return { nombre, telefono, esRepresentante: false };
   return null;
 }
