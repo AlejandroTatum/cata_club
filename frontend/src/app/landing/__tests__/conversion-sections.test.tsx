@@ -63,7 +63,7 @@ describe("steps and enrollment entry points (LAN-14)", () => {
   it("shows the three steps in order", () => {
     render(<LandingPage />);
     const steps = Array.from(document.querySelectorAll(".landing-steps-list li")).map((li) => li.textContent);
-    expect(steps).toEqual(["Elige la categoría", "Inscríbete en línea", "Paga y empieza"]);
+    expect(steps).toEqual(["Elige la categoría", "Inscríbete en línea", "Listo para entrenar"]);
   });
 
   it("sends adults and parents to the matching enrollment type", () => {
