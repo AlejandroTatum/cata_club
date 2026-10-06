@@ -10,20 +10,34 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { proxyBackendGet } from "@/lib/server/backend-client";
+import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
+import { setAuthCookies } from "@/lib/server/auth";
 import { parseNumericIdOrBadRequest } from "@/lib/server/bff-helpers";
+import { resolveEffectiveEmergencyContact, type EmergencyContactSource } from "@/lib/server/emergency-contact";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
+const ERROR_MESSAGE = "No se pudo cargar la ficha de emergencia.";
+
 export async function GET(request: NextRequest, context: RouteContext): Promise<NextResponse> {
   const personaId = parseNumericIdOrBadRequest((await context.params).id, "persona");
   if (personaId instanceof NextResponse) return personaId;
 
-  return proxyBackendGet(
-    request,
-    `/fichas-medicas/persona/${personaId}/emergencia`,
-    "No se pudo cargar la ficha de emergencia.",
-  );
+  const result = await backendFetchAuthed(request, `/fichas-medicas/persona/${personaId}/emergencia`);
+  if (!result.ok) {
+    return NextResponse.json({ message: ERROR_MESSAGE }, { status: result.status });
+  }
+  if (!result.response.ok) {
+    return passthroughBackendError(result.response, ERROR_MESSAGE);
+  }
+
+  // Issue #1667: the effective contact is resolved here, once, so every screen agrees.
+  const ficha = (await result.response.json()) as EmergencyContactSource;
+  const response = NextResponse.json({ ...ficha, contactoEfectivo: resolveEffectiveEmergencyContact(ficha) });
+  if (result.refreshedAccessToken) {
+    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+  }
+  return response;
 }

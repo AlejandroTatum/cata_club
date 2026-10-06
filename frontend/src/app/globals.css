@@ -636,3 +636,117 @@
     box-shadow: none !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Carnets por lote (#1670) — la hoja A4 del admin.
+ *
+ * El MISMO carnet que ve el jugador (`MemberCardCredential`), no un segundo
+ * diseño: el contenido se compone a los 72mm de la hoja individual y se escala
+ * uniformemente (54/72 = 0.75) a la credencial estándar CR80 de 85,6×54mm. La
+ * decisión del dueño fue ese tamaño, y entran 3×3 = 9 por A4 con marcas de
+ * corte: 3×54 + 2×6 + 5 = 179mm de ancho y 3×85,6 + 2×6 + 5 = 273,8mm de alto,
+ * dentro de los 190×277mm útiles con margen de 10mm.
+ *
+ * Geometría en milímetros y fuera de la credencial: el bloque `carnet-` de
+ * arriba solo conoce sus tres pasos de ritmo. Las marcas de corte son un fondo
+ * (`::before`) de ocho filetes de 0,25mm por celda, a 1mm de cada esquina; el
+ * papel las imprime porque la hoja fuerza `print-color-adjust: exact`.
+ * ------------------------------------------------------------------------- */
+.carnet-sheet {
+  /* The standard card, once: every box below is one of these two. */
+  --carnet-card-w: 54mm;
+  --carnet-card-h: 85.6mm;
+  display: grid;
+  grid-template-columns: repeat(3, var(--carnet-card-w));
+  grid-auto-rows: var(--carnet-card-h);
+  gap: 6mm;
+  width: max-content;
+  margin: 0 auto;
+  padding: 2.5mm;
+  background: #ffffff;
+}
+
+.carnet-sheet-cell {
+  position: relative;
+  width: var(--carnet-card-w);
+  height: var(--carnet-card-h);
+}
+
+/* Las marcas: una caja 2,5mm más grande que la tarjeta por cada lado. */
+.carnet-sheet-cell::before {
+  content: "";
+  position: absolute;
+  inset: -2.5mm;
+  pointer-events: none;
+  background-color: transparent;
+  background-image:
+    linear-gradient(#131316, #131316), linear-gradient(#131316, #131316),
+    linear-gradient(#131316, #131316), linear-gradient(#131316, #131316),
+    linear-gradient(#131316, #131316), linear-gradient(#131316, #131316),
+    linear-gradient(#131316, #131316), linear-gradient(#131316, #131316);
+  background-repeat: no-repeat;
+  background-size:
+    0.25mm 1.5mm, 1.5mm 0.25mm,
+    0.25mm 1.5mm, 1.5mm 0.25mm,
+    0.25mm 1.5mm, 1.5mm 0.25mm,
+    0.25mm 1.5mm, 1.5mm 0.25mm;
+  background-position:
+    2.5mm 0, 0 2.5mm,
+    56.5mm 0, 57.5mm 2.5mm,
+    2.5mm 89.1mm, 0 88.1mm,
+    56.5mm 89.1mm, 57.5mm 88.1mm;
+}
+
+/* Clips the unscaled 72mm box so only the 54 × 85,6mm card takes part in layout. */
+.carnet-sheet-clip {
+  width: var(--carnet-card-w);
+  height: var(--carnet-card-h);
+  overflow: hidden;
+}
+
+/* The card, scaled onto its cell: 72mm × (85,6 / 0,75) → 54 × 85,6mm. */
+.carnet-sheet-scale {
+  width: 72mm;
+  transform: scale(0.75);
+  transform-origin: 0 0;
+}
+
+.carnet-sheet-credential {
+  --carnet-page: 4mm;
+  --carnet-section: 2.6mm;
+  --carnet-field: 1.3mm;
+  box-sizing: border-box;
+  width: 72mm;
+  height: calc(var(--carnet-card-h) / 0.75);
+  overflow: hidden;
+}
+
+@media print {
+  /* Same trick as the single carnet, for a block that must paginate: it is
+     `position: absolute`, not `fixed` (a fixed box repeats on every page and
+     never flows), and every page of the sheet after the first is a page break. */
+  #carnet-batch,
+  #carnet-batch * {
+    visibility: visible;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  #carnet-batch {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+
+  .carnet-sheet {
+    width: 100%;
+    justify-content: center;
+    break-after: page;
+    break-inside: avoid;
+  }
+
+  .carnet-sheet:last-child {
+    break-after: auto;
+  }
+}
