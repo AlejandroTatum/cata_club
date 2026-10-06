@@ -186,6 +186,7 @@ export default function StudentMembershipActions({
   // Loaded by the history; the page leads with the pending one and shows
   // «¿Algo está mal?» only when there is something to fix.
   const [pagos, setPagos] = useState<PagoPersona[] | null>(null);
+  const [pagosFailed, setPagosFailed] = useState(false);
   // A registration and a correction both change the history AND the member's
   // standing (coverage, debt), so both refetch the two.
   const onPaymentRegistered = (): void => {
@@ -351,7 +352,13 @@ export default function StudentMembershipActions({
           {pendiente ? (
             <PagoPendienteRevision key={pendiente.id} pago={pendiente} onResolved={resolvePending} />
           ) : (
-            <p className="text-sm text-ink-3">{pagos === null ? "Cargando el pago…" : "No se encontró el pago pendiente."}</p>
+            <p className="text-sm text-ink-3" role="status">
+              {pagos !== null
+                ? "No se encontró el pago pendiente."
+                : pagosFailed
+                  ? "No se pudo cargar el pago pendiente. Recarga la página."
+                  : "Cargando el pago…"}
+            </p>
           )}
         </Block>
       );
@@ -418,7 +425,11 @@ export default function StudentMembershipActions({
         personaId={personaId}
         refreshKey={historyVersion}
         onCorrected={onPaymentRegistered}
-        onLoaded={setPagos}
+        onLoaded={(loaded) => {
+          setPagosFailed(false);
+          setPagos(loaded);
+        }}
+        onLoadFailed={() => setPagosFailed(true)}
       />
 
       {/* Everything else, quieter. Beneficio del club attaches to the PERSONA,

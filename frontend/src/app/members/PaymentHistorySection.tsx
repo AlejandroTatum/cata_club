@@ -31,6 +31,8 @@ interface PaymentHistorySectionProps {
   onCorrected?: () => void;
   /** Reports every payment once the history is loaded, so the page can lead with the pending one. */
   onLoaded?: (pagos: PagoPersona[]) => void;
+  /** Called when the history could not be loaded, so callers can stop waiting on it. */
+  onLoadFailed?: () => void;
 }
 
 type LoadState =
@@ -67,6 +69,7 @@ export default function PaymentHistorySection({
   refreshKey = 0,
   onCorrected,
   onLoaded,
+  onLoadFailed,
 }: PaymentHistorySectionProps): React.ReactElement {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   // The one payment whose correction is open: fixing two at once would make
@@ -87,6 +90,7 @@ export default function PaymentHistorySection({
           status: "error",
           message: toUserMessage(err, "No se pudo cargar el historial de pagos."),
         });
+        onLoadFailed?.();
       });
   }
 

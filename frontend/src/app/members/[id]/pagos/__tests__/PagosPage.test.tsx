@@ -205,6 +205,16 @@ describe("PagosPage — one plain state and ONE primary action each", () => {
     await waitFor(() => expect(mockFetchMember.mock.calls.length).toBeGreaterThan(1));
   });
 
+  it("pending review: when the payments fail to load, says so instead of loading forever", async () => {
+    loadStudent(studentWith({ membresia: membresia({ estado: "vencida", estadoBackend: "INACTIVA", cubiertoHasta: null }), ultimoPago: pagoUltimo("pendiente_validacion") }));
+    mockFetchPagos.mockRejectedValue(new Error("network"));
+    render(<PagosPage />);
+
+    const primary = await primaryAction();
+    expect(await within(primary).findByText("No se pudo cargar el pago pendiente. Recarga la página.")).toBeInTheDocument();
+    expect(within(primary).queryByText("Cargando el pago…")).not.toBeInTheDocument();
+  });
+
   it("rejected: register the payment again", async () => {
     loadStudent(studentWith({ membresia: membresia(), ultimoPago: pagoUltimo("rechazado") }));
     render(<PagosPage />);
