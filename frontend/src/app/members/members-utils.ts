@@ -757,6 +757,112 @@ export function getMembershipStatusBadge(
   return { label: MEMBERSHIP_STATUS_LABELS[membresia.estado], tone: MEMBERSHIP_STATUS_TONE[membresia.estado] };
 }
 
+/** The one action a payments state leads with (matches the tile `data-primary-action`). */
+export type PaymentsPrimaryAction =
+  | "tipo-socio"
+  | "revisar-pago"
+  | "reactivar"
+  | "registrar-pago"
+  | "regularizar-deuda";
+
+export interface PaymentsState {
+  key: "primer-pago" | "pendiente-revision" | "suspendida" | "rechazado" | "debe" | "vencida" | "al-dia";
+  /** What the admin reads first, in plain Spanish. */
+  label: string;
+  tone: BadgeTone;
+  /** One sentence: what this means and what to do about it. */
+  detail: string;
+  primaryAction: PaymentsPrimaryAction;
+}
+
+/**
+ * Where a member stands on the payments page (#1668), in the words the club
+ * uses, and the ONE action that moves them forward. A pure read of the row's
+ * own data — same precedence the actions already followed (a first payment
+ * and a payment under review outrank everything, then suspension, a rejected
+ * payment, debt, and finally "al día").
+ */
+export function describePaymentsState(
+  student: Pick<MemberStudentSummary, "membresia" | "ultimoPago">,
+): PaymentsState {
+  const { membresia, ultimoPago } = student;
+  if (isPrimerPagoPendiente(student as MemberStudentSummary)) {
+    return {
+      key: "primer-pago",
+      label: "Primer pago pendiente",
+      tone: "neutral",
+      detail: "Todavía no tiene ningún pago. Empieza indicando si es socio nuevo o antiguo.",
+      primaryAction: "tipo-socio",
+    };
+  }
+  // Suspension outranks a payment under review: reactivation is what unblocks everything else.
+  if (membresia?.estado === "suspendida") {
+    return {
+      key: "suspendida",
+      label: "Membresía suspendida",
+      tone: "warn",
+      detail:
+        ultimoPago?.estado === "pendiente_validacion"
+          ? "Reactívala primero: mientras esté suspendida no se pueden registrar pagos. El pago pendiente se revisa en Pagos pendientes."
+          : "No se pueden registrar pagos mientras esté suspendida. Reactívala para continuar.",
+      primaryAction: "reactivar",
+    };
+  }
+  if (ultimoPago?.estado === "pendiente_validacion") {
+    return {
+      key: "pendiente-revision",
+      label: "Pago pendiente de revisión",
+      tone: "warn",
+      detail:
+        "Hay un pago esperando aprobación. Si tiene un error, recházalo en Pagos pendientes y vuelve a registrarlo.",
+      primaryAction: "revisar-pago",
+    };
+  }
+  if (ultimoPago?.estado === "rechazado") {
+    return {
+      key: "rechazado",
+      label: "Último pago rechazado",
+      tone: "bad",
+      detail: "El último pago no fue aprobado. Regístralo de nuevo con los datos correctos.",
+      primaryAction: "registrar-pago",
+    };
+  }
+  const meses = membresia?.mesesAdeudados ?? 0;
+  if (meses > 0) {
+    return {
+      key: "debe",
+      label: `Debe ${meses} ${meses === 1 ? "mes" : "meses"}`,
+      tone: "bad",
+      detail: "Registra los pagos de los meses vencidos para dejarlo al día.",
+      primaryAction: "regularizar-deuda",
+    };
+  }
+  if (membresia?.estado === "vencida") {
+    // Lapsed with no whole month owed yet (0), or the bulk debt lookup failed
+    // (undefined): either way never claim «Al día» over a lapsed membership.
+    return {
+      key: "vencida",
+      label: "Membresía vencida",
+      tone: "bad",
+      detail:
+        membresia.mesesAdeudados === undefined
+          ? "No se pudo calcular cuánto debe. Puedes registrar el pago igualmente."
+          : "La cobertura venció y todavía no se completó un mes de deuda. Registra el siguiente pago.",
+      primaryAction: "registrar-pago",
+    };
+  }
+  const hasta = formatMembershipCoverage(membresia?.cubiertoHasta);
+  return {
+    key: "al-dia",
+    label: "Al día",
+    tone: "ok",
+    detail: hasta
+      ? `${hasta.replace(/^Hasta/, "Cubierto hasta")}. Registra el siguiente pago cuando llegue el momento.`
+      : "No tiene meses pendientes. Registra el siguiente pago cuando llegue el momento.",
+    primaryAction: "registrar-pago",
+  };
+}
+
 /**
  * Whether this row IS the representative/payer's own persona row — the root
  * account that pays for others but has never had a membership of her own on
@@ -777,7 +883,7 @@ export function getMembershipStatusBadge(
  * short-circuiting to "not the payer's row" whenever it is set — fixes that
  * misclassification without touching the backend role lookup, while the
  * membership check keeps covering the representative who also plays and
- * carries her own membership (`tests/e2e/members-payments-dialog.spec.ts`).
+ * carries her own membership (`tests/e2e/members-pagos-page.spec.ts`).
  *
  * `role === "estudiante"` accounts are never hidden here even before their
  * first membership exists — that is exactly the account the "Pagos" entry

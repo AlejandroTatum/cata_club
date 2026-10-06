@@ -1,6 +1,6 @@
 /**
  * Regression lock for issues #856 and #1036: on several iPhone browsers,
- * Ficha médica, Pagos and Editar miembro opened with the header and close
+ * Ficha médica, Pagos (a dialog back then) and Editar miembro opened with the header and close
  * button visible but the body collapsed or off-screen. jsdom cannot measure
  * real layout, so these tests assert the STRUCTURE that makes the height
  * chain definite in WebKit rather than the resulting pixels — see
@@ -8,12 +8,11 @@
  * `native-dialog-shell.assertions.ts` for the shared shell/body chain check
  * and the full iPhone measurement numbers.
  *
- * `MedicalRecordDialog` and `PaymentsDialog` render the shared shell
- * directly and are exercised here with no students, which keeps both free of
- * `MedicalRecordEditor`/`StudentMembershipActions`' own API-backed content —
- * this suite is about the shell/body wrapper chain, not their internals
- * (already covered by `MedicalRecordEditor.test.tsx` and friends). The third
- * dialog sharing this container, `MemberEditDialog`, is not exported from
+ * `MedicalRecordDialog` renders the shared shell directly and is exercised
+ * here with no students, which keeps it free of `MedicalRecordEditor`'s own
+ * API-backed content — this suite is about the shell/body wrapper chain, not
+ * its internals (already covered by `MedicalRecordEditor.test.tsx`). Pagos is
+ * a page now (#1668). The other dialog sharing this container, `MemberEditDialog`, is not exported from
  * `page.tsx`; its own chain is asserted in `MembersPage.test.tsx`, next to
  * the rest of its coverage.
  */
@@ -22,7 +21,6 @@ import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { NATIVE_DIALOG_SHELL_CLASS, NATIVE_DIALOG_BODY_CLASS } from "../useNativeDialog";
 import MedicalRecordDialog from "../MedicalRecordDialog";
-import PaymentsDialog from "../PaymentsDialog";
 import type { MemberAccount } from "../members-utils";
 import { expectSharedNativeDialogChain } from "./native-dialog-shell.assertions";
 
@@ -78,31 +76,6 @@ describe("MedicalRecordDialog — shared shell chain (issue #856)", () => {
 
   it("keeps the header and footer as shrink-0 siblings of the scrolling body", () => {
     render(<MedicalRecordDialog account={ACCOUNT} onClose={() => {}} />);
-
-    const dialog = screen.getByRole("dialog");
-    const [header, , footer] = Array.from(dialog.children) as HTMLElement[];
-    expect(header).toHaveClass("shrink-0");
-    expect(footer).toHaveClass("shrink-0");
-  });
-});
-
-describe("PaymentsDialog — shared shell chain (issue #856)", () => {
-  const membresiaCallbacks = {
-    onMembershipCreated: () => {},
-    onDebtRegularized: () => {},
-    onMembresiaChanged: () => {},
-    onPaymentRegistered: () => {},
-  };
-
-  it("dialog has no fit-content height, and the body is a min-h-0 flex-auto scroll container", () => {
-    render(<PaymentsDialog account={ACCOUNT} onClose={() => {}} {...membresiaCallbacks} />);
-
-    const dialog = screen.getByRole("dialog");
-    expectSharedNativeDialogChain(dialog);
-  });
-
-  it("keeps the header and footer as shrink-0 siblings of the scrolling body", () => {
-    render(<PaymentsDialog account={ACCOUNT} onClose={() => {}} {...membresiaCallbacks} />);
 
     const dialog = screen.getByRole("dialog");
     const [header, , footer] = Array.from(dialog.children) as HTMLElement[];

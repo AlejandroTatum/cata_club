@@ -16,7 +16,7 @@
  *      behind — actually matches on a phone. A floor behind a predicate that
  *      never fires is not a floor, and this is the one assumption in the fix
  *      that no amount of source reading can settle.
- *   2. Every field inside the Pagos dialog COMPUTES to at least 16px, cascade
+ *   2. Every field inside the Pagos page (#1668; a dialog when this was written) COMPUTES to at least 16px, cascade
  *      resolved. That is the part the specificity argument in `globals.css`
  *      claims and this measures: the Beneficio select writes
  *      `input-field text-xs`, two classes deep, and a floor written on the bare
@@ -27,7 +27,7 @@
  * size (`BeneficioSection`), a hand-rolled `h-ctl … text-sm` number input
  * (`RegisterPaymentForm`), and a debt field beside them.
  *
- * ONE `page.goto`, for the reason `members-payments-dialog.spec.ts` gives: CI
+ * ONE `page.goto`, for the reason `members-pagos-page.spec.ts` gives: CI
  * runs on a 4-vCPU runner. Everything after the navigation is a click or a
  * viewport change, and the 320px clipping check reuses the same loaded page
  * rather than paying for a second one.
@@ -50,7 +50,7 @@ const MOCK_ACCESS_TOKEN = "mock-header.mock-payload.mock-signature";
 /** The size at which iOS and Android stop zooming into a focused field. */
 const ZOOM_FLOOR_PX = 16;
 
-/** Debt present, so the dialog renders the most controls it ever does. */
+/** Debt present, so the page renders the most controls it ever does. */
 const ACCOUNT = {
   id: "1",
   role: "representante",
@@ -91,16 +91,17 @@ async function mockMembersRuntime(page: Page): Promise<void> {
     loggedInAt: "2026-07-21T00:00:00.000Z",
   }));
   // AppShell's pending-payments badge calls this; unmocked it 401s, the refresh
-  // 401s too, and the session is dropped before the Pagos dialog can open.
+  // 401s too, and the session is dropped before the Pagos page can render.
   await page.route("**/api/dashboard", (route: Route) => fulfillJson(route, {}));
   await page.route("**/api/members", (route: Route) =>
     fulfillJson(route, { accounts: [ACCOUNT], personasCapped: false }),
   );
+  await page.route("**/api/members/1", (route: Route) => fulfillJson(route, { account: ACCOUNT }));
   await page.route("**/api/ranking/notificaciones/mias", (route: Route) =>
     fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }),
   );
   await page.route("**/api/personas/*/beneficio", (route: Route) => fulfillJson(route, null));
-  await page.route("**/api/personas/*/pagos**", (route: Route) => fulfillJson(route, { items: [], total: 0 }));
+  await page.route("**/api/membresias/pagos/persona/*", (route: Route) => fulfillJson(route, []));
   // A non-empty catalogue, or the Beneficio picker renders "no hay descuentos"
   // instead of the `<select>` — which is the single most important field here.
   // Paginated backend (issue #814): `fetchDescuentos` unwraps `{items,
@@ -153,9 +154,9 @@ async function clippedInside(scope: Locator): Promise<Clipped[]> {
   });
 }
 
-test("no field in the Pagos dialog is small enough to make a phone zoom", async ({ page }) => {
+test("no field in the Pagos page is small enough to make a phone zoom", async ({ page }) => {
   await mockMembersRuntime(page);
-  await page.goto("/members");
+  await page.goto("/members/1/pagos");
 
   // The premise, asserted rather than assumed: this project really is a coarse
   // pointer, so the floor's media query fires here. If Playwright's emulation
@@ -163,17 +164,16 @@ test("no field in the Pagos dialog is small enough to make a phone zoom", async 
   // reason — a desktop-shaped page with desktop-sized fields.
   expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
 
-  await page.getByRole("button", { name: "Pagos de María González" }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toBeVisible();
+  const pagosPage = page.getByRole("main");
+  await expect(pagosPage.getByRole("button", { name: /cargar pagos atrasados/i })).toBeVisible();
 
   // Reveal the two fields that are behind a disclosure. Both are clicks on the
   // page already loaded, so neither costs a navigation.
-  await dialog.getByRole("button", { name: /asignar beneficio/i }).click();
-  await expect(dialog.locator("select")).toBeVisible();
-  await dialog.getByRole("button", { name: /registrar pago/i }).click();
+  await pagosPage.getByRole("button", { name: /asignar beneficio/i }).click();
+  await expect(pagosPage.locator("select")).toBeVisible();
+  await pagosPage.getByRole("button", { name: /registrar pago/i }).click();
 
-  const undersized = await dialog
+  const undersized = await pagosPage
     .locator(
       "input:visible:not([type=checkbox]):not([type=radio]):not([type=file]), select:visible, textarea:visible",
     )
@@ -190,7 +190,7 @@ test("no field in the Pagos dialog is small enough to make a phone zoom", async 
   expect(undersized).toEqual([]);
 
   // Not vacuous: an empty selector would also produce an empty offender list.
-  const measured = await dialog
+  const measured = await pagosPage
     .locator("input:visible:not([type=checkbox]):not([type=radio]):not([type=file]), select:visible, textarea:visible")
     .count();
   expect(measured).toBeGreaterThan(1);
@@ -209,7 +209,7 @@ test("no field in the Pagos dialog is small enough to make a phone zoom", async 
    * the action pair below it, so a fix that widened one group by squeezing a
    * neighbour would still be caught here.
    */
-  const registerForm = dialog
+  const registerForm = pagosPage
     .locator("div.bg-sunken")
     .filter({ has: page.getByRole("radiogroup", { name: "Método de pago" }) });
   await expect(registerForm).toBeVisible();
@@ -230,7 +230,9 @@ test("no field in the Pagos dialog is small enough to make a phone zoom", async 
   await page.setViewportSize({ width: 320, height: 800 });
   expect(await clippedInside(registerForm)).toEqual([]);
 
-  await page.keyboard.press("Escape");
+  // Back to Miembros through the page's own link (no second navigation).
+  await page.getByRole("link", { name: /volver a miembros/i }).click();
+  await expect(page).toHaveURL(/\/members$/);
 
   // Editar lives in the row's overflow menu now; the card's visible actions
   // (Pagos and the menu trigger) must stay inside the card at 320px.
