@@ -21,6 +21,7 @@
 
 "use client";
 
+import { useNoClassDays } from "@/lib/use-no-class-days";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -141,6 +142,7 @@ export default function AttendancePage(): React.ReactElement {
 
   const scopedRecords = useMemo(() => narrowToHorarios(records, query), [records, query]);
   const scopedSchedules = useMemo(() => narrowSchedules(schedules, query), [schedules, query]);
+  const noClassDays = useNoClassDays(query?.fechaInicio, query?.fechaFin);
   const sessions = useMemo(() => groupRecordsBySession(scopedRecords), [scopedRecords]);
   const recordsBySession = useMemo(() => {
     const map = new Map<string, AttendanceRecord[]>();
@@ -246,6 +248,7 @@ export default function AttendancePage(): React.ReactElement {
                 horarioId={query.horarioId ?? null}
                 studentFiltered={Boolean(filters.student)}
                 inscritosPorHorario={inscritosPorHorario}
+                noClassDays={noClassDays}
                 guideExtra={
                   <>
                     <p>
