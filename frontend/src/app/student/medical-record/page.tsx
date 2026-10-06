@@ -63,7 +63,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
-import { fetchStudentPortal } from "@/services/api";
+import { fetchMiPerfil, fetchStudentPortal } from "@/services/api";
 import type { StudentPortalSummary } from "@/services/api";
 import { BackLink, EmptyState, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
 import MedicalRecordEditor from "@/app/members/MedicalRecordEditor";
@@ -130,6 +130,19 @@ function RepresentanteMedicalRecordView({
   // in a way this picker does not express. Passing `false` keeps `data.self`
   // out of `managedProfiles` unconditionally, so this branch can never offer
   // a destination the backend would 403.
+  const [miPerfil, setMiPerfil] = useState<{ nombres: string; apellidos: string; telefono: string } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    // Best effort: without it the form just opens empty, as before.
+    fetchMiPerfil()
+      .then((perfil) => {
+        if (!cancelled) setMiPerfil(perfil);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const { managedProfiles, selectedId, setSelectedId, selectedProfile } = useManagedProfiles(
     data,
     false,
@@ -156,6 +169,12 @@ function RepresentanteMedicalRecordView({
   }
 
   const studentName = firstNameOf(selectedProfile.nombres);
+  // The logged-in representative IS the emergency contact of their own
+  // representado; a child linked to someone else gets no default from here.
+  const representanteContacto =
+    miPerfil && String(selectedProfile.representanteId) === accountPersonaId
+      ? { nombre: `${miPerfil.nombres} ${miPerfil.apellidos}`.trim(), telefono: miPerfil.telefono }
+      : null;
 
   return (
     <>
@@ -188,6 +207,7 @@ function RepresentanteMedicalRecordView({
         studentName={studentName}
         withEmergencyCard
         viewerIsOwner={false}
+        representanteContacto={representanteContacto}
         formFooter={<MedicalRecordGuide />}
       />
     </>
