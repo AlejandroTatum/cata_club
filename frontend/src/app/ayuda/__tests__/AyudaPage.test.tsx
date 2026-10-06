@@ -195,21 +195,25 @@ describe("AyudaPage — the club's face on its card titles", () => {
 // ---------------------------------------------------------------------------
 
 describe("AyudaPage — FAQ grid (#203)", () => {
-  it("lays the FAQ sections out two-up on desktop and one-up on narrow screens", () => {
+  it("flows the FAQ sections in balanced columns: one on narrow screens, two on desktop (#1660)", () => {
     render(<AyudaPage />);
     const grid = screen.getByTestId("faq-grid");
 
-    expect(grid).toHaveClass("grid-cols-1");
-    expect(grid).toHaveClass("xl:grid-cols-2");
+    expect(grid).toHaveClass("columns-1");
+    expect(grid).toHaveClass("xl:columns-2");
+    // A row-based grid leaves a dead band under the short card.
+    expect(grid.className).not.toMatch(/\bgrid\b/);
   });
 
-  it("sizes each section card to its own content (#1618)", () => {
+  it("keeps each section card whole and sized to its own content (#1618, #1660)", () => {
     render(<AyudaPage />);
     const grid = screen.getByTestId("faq-grid");
 
-    expect(grid).toHaveClass("items-start");
     expect(grid.className).not.toMatch(/auto-rows-fr/);
     expect(grid.className).not.toMatch(/min-h-/);
+    for (const section of Array.from(grid.querySelectorAll(":scope > section"))) {
+      expect(section).toHaveClass("break-inside-avoid");
+    }
   });
 
   it("keeps every section, and all of its questions, inside one grid cell", () => {
