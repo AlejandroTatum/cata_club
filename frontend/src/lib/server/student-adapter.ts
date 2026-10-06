@@ -232,3 +232,44 @@ export function buildStudentProfileView(
     fotoUrl: persona.fotoUrl ?? null,
   };
 }
+
+/**
+ * One profile of `GET /portal/alumno/{id}` (issue #1592): the persona with its
+ * attendance, memberships and representative. Shared by `/api/student` and the
+ * admin's `/api/carnets`, so both build the profile — and so the carnet — the
+ * same way.
+ */
+export interface BackendPortalPerfil {
+  persona: BackendPersonaFull;
+  representante: { nombres: string; apellidos: string } | null;
+  historial: BackendAsistencia[];
+  membresias: BackendMembresiaPropia[];
+}
+
+export function buildPortalProfile(
+  perfil: BackendPortalPerfil,
+  horariosById: Map<number, BackendHorario>,
+  tiposById: Map<number, BackendTipoMembresiaCatalogo>,
+): StudentProfileView {
+  const recentSessions = buildRecentSessions(perfil.historial, horariosById);
+  const { membresias } = perfil;
+  const activeMembership =
+    membresias.find((m) => m.estado === "ACTIVA" || m.estado === "VENCIDA") ?? membresias[0] ?? null;
+  const membership = activeMembership ? buildMembershipView(activeMembership, tiposById) : null;
+  const representante = perfil.representante
+    ? { nombres: perfil.representante.nombres, apellidos: perfil.representante.apellidos }
+    : null;
+  return buildStudentProfileView(perfil.persona, recentSessions, membership, representante);
+}
+
+/**
+ * What the admin's carnet needs for ONE person: the profile the player's own
+ * card is built from, the coverage date the card prints, and the assignments
+ * its "Franja" row and training-day chips read. `asignaciones` is the backend's
+ * `AlumnoHorario` list, passed through untouched.
+ */
+export interface CarnetView {
+  profile: StudentProfileView;
+  coverageEnd: string | null;
+  asignaciones: unknown[];
+}
