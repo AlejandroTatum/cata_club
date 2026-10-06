@@ -34,6 +34,7 @@ from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.auth_servicio import AuthServicio
+from app.servicios_negocio.co_representante_vinculo import retirar_vinculo
 from app.servicios_negocio.dtos.co_representante_schemas import (
     DatosInvitadoDTO, GuardianDeMenorDTO, MenorConGuardianesDTO,
 )
@@ -277,22 +278,8 @@ class CoRepresentanteServicio:
         if vinculo is None:
             raise EntidadNoEncontrada(MENSAJE_SIN_SEGUNDO)
         origen = "ADMIN" if ROL_ADMINISTRADOR in (roles or []) else "REPRESENTANTE"
-        co_id = vinculo.co_representante_id
-        ahora = datetime.now(timezone.utc)
         try:
-            pendientes = self.repo.listar_pendientes_de_cuenta(co_id)
-            for invitacion in pendientes:
-                if invitacion.persona_id == menor.id:
-                    self.repo.cancelar_pendiente(invitacion, ahora)
-                    self._evento(menor.id, co_id, actor_persona_id, "INVITACION_CANCELADA", origen, invitacion.id)
-            self.repo.eliminar(vinculo)
-            self._evento(menor.id, co_id, actor_persona_id, "BAJA", origen)
-            if pendientes and all(i.persona_id == menor.id for i in pendientes):
-                # Sin invitaciones vivas: el enlace de contraseña ya enviado
-                # deja de servir (single-use por versión de contraseña).
-                cuenta = self.repo_usuario.obtener_por_persona_id(co_id)
-                if cuenta is not None and not cuenta.correo_verificado:
-                    cuenta.version_contrasenia += 1
+            retirar_vinculo(self.db, vinculo, actor_persona_id=actor_persona_id, origen=origen)
             self.db.commit()
         except Exception:
             self.db.rollback()

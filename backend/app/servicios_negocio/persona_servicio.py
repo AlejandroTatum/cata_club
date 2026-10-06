@@ -36,6 +36,7 @@ from app.infraestructura.repositorios.restricciones_identidad import identidad_e
 from app.infraestructura.repositorios.vinculacion_representante_repositorio import (
     VinculacionRepresentanteRepositorio,
 )
+from app.servicios_negocio.co_representante_vinculo import retirar_del_menor
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.auth_servicio import AuthServicio
 from app.servicios_negocio.rol_servicio import RolServicio
@@ -440,6 +441,11 @@ class PersonaServicio:
 
         representante_anterior_id = representado.representante_id
         self.repo.actualizar(representado, {"representante_id": representante_id})
+        # Issue #1666: el nuevo principal no puede ser también el segundo guardián.
+        retirar_del_menor(
+            self.db, representado.id, actor_persona_id=actor_persona_id, origen="SISTEMA",
+            solo_si_es=representante_id,
+        )
 
         # Issue #1133: el ledger completo -- la vinculación de mostrador
         # también pasa por el repositorio, nunca por un `self.db.add(...)`
