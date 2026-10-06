@@ -2,10 +2,10 @@
  * POST /api/co-representantes/invitaciones — the primary guardian (or an
  * admin) invites a second guardian for one or more minors. Issue #1666.
  *
- * BFF proxy to FastAPI's `POST /co-representantes/invitaciones`. The backend
- * answers 201 (`INVITADO` / `VINCULADO`) or 200 (`REQUIERE_DATOS`: the e-mail
- * has no account and `datos` is needed to create it); both bodies and status
- * codes pass through. The backend body is snake_case, so the camelCase
+ * BFF proxy to FastAPI's `POST /co-representantes/invitaciones`. `datos` is
+ * always required and the backend always answers the same neutral 202 whether
+ * or not the e-mail has an account (no account enumeration); the body and
+ * status pass through. The backend body is snake_case, so the camelCase
  * browser payload is translated here and nothing else is added.
  */
 

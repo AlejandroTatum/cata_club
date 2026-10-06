@@ -16,6 +16,8 @@ import type { MenorConGuardianes } from "@/services/api";
 const mockFetch = vi.fn();
 const mockInvitar = vi.fn();
 const mockQuitar = vi.fn();
+const mockRecibidas = vi.fn();
+const mockAceptar = vi.fn();
 const mockShowSuccess = vi.fn();
 const mockShowError = vi.fn();
 
@@ -23,6 +25,8 @@ vi.mock("@/services/api", () => ({
   fetchMisMenoresConGuardianes: () => mockFetch(),
   invitarCoRepresentante: (...args: unknown[]) => mockInvitar(...args),
   quitarCoRepresentante: (...args: unknown[]) => mockQuitar(...args),
+  fetchInvitacionesRecibidas: () => mockRecibidas(),
+  aceptarInvitacionRecibida: (...args: unknown[]) => mockAceptar(...args),
 }));
 
 vi.mock("@/contexts/ToastContext", () => ({
@@ -58,12 +62,25 @@ const CON_SEGUNDO = menor({
   },
 });
 
+const PENDIENTE = menor({
+  completo: true,
+  segundoGuardian: {
+    personaId: null,
+    nombres: null,
+    apellidos: null,
+    correo: "luis@example.com",
+    estado: "PENDIENTE",
+  },
+});
+
 const BOTON_INVITAR = /invitar a otro representante/i;
 
 beforeEach(() => {
   mockFetch.mockReset();
   mockInvitar.mockReset();
   mockQuitar.mockReset();
+  mockRecibidas.mockReset().mockResolvedValue([]);
+  mockAceptar.mockReset();
   mockShowSuccess.mockReset();
   mockShowError.mockReset();
 });
@@ -113,28 +130,68 @@ describe("GuardiansCard — who sees what", () => {
   });
 });
 
+const DATOS_INVITADO = {
+  nombres: "Pablo",
+  apellidos: "Torres",
+  cedula: "1710034065",
+  fechaNacimiento: "1982-04-04",
+  telefono: "0991234567",
+};
+
+function llenarDatos(): void {
+  fireEvent.change(screen.getByLabelText("Nombres"), { target: { value: "Pablo" } });
+  fireEvent.change(screen.getByLabelText("Apellidos"), { target: { value: "Torres" } });
+  fireEvent.change(screen.getByLabelText("Cédula"), { target: { value: "1710034065" } });
+  fireEvent.change(screen.getByLabelText("Fecha de nacimiento"), { target: { value: "1982-04-04" } });
+  fireEvent.change(screen.getByLabelText("Teléfono"), { target: { value: "0991234567" } });
+}
+
+const MENSAJE_NEUTRO = "Si el correo es válido, enviaremos la invitación.";
+
 describe("GuardiansCard — invite", () => {
-  it("submits the e-mail for the only eligible minor and refreshes", async () => {
+  it("collects the invitee's data up front and sends everything in one step", async () => {
     mockFetch.mockResolvedValue([menor()]);
-    mockInvitar.mockResolvedValue({ estado: "VINCULADO", personaIds: [10] });
+    mockInvitar.mockResolvedValue({ mensaje: MENSAJE_NEUTRO });
     render(<GuardiansCard />);
 
     fireEvent.click(await screen.findByRole("button", { name: BOTON_INVITAR }));
     fireEvent.change(screen.getByLabelText(/correo de la persona a invitar/i), {
       target: { value: "  pablo@example.com " },
     });
+    llenarDatos();
     fireEvent.click(screen.getByRole("button", { name: /enviar invitación/i }));
 
     await waitFor(() =>
-      expect(mockInvitar).toHaveBeenCalledWith({ personaIds: [10], correo: "pablo@example.com" }),
+      expect(mockInvitar).toHaveBeenCalledWith({
+        personaIds: [10],
+        correo: "pablo@example.com",
+        datos: DATOS_INVITADO,
+      }),
     );
-    await waitFor(() => expect(mockShowSuccess).toHaveBeenCalled());
+    expect(mockInvitar).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mockShowSuccess).toHaveBeenCalledWith(MENSAJE_NEUTRO));
     expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("button", { name: /crear cuenta e invitar/i })).not.toBeInTheDocument();
+  });
+
+  it("shows the same neutral message whatever the backend decided", async () => {
+    mockFetch.mockResolvedValue([menor()]);
+    mockInvitar.mockResolvedValue({ mensaje: "otra cosa" });
+    render(<GuardiansCard />);
+
+    fireEvent.click(await screen.findByRole("button", { name: BOTON_INVITAR }));
+    fireEvent.change(screen.getByLabelText(/correo de la persona a invitar/i), {
+      target: { value: "pablo@example.com" },
+    });
+    llenarDatos();
+    fireEvent.click(screen.getByRole("button", { name: /enviar invitación/i }));
+
+    await waitFor(() => expect(mockShowSuccess).toHaveBeenCalledWith(MENSAJE_NEUTRO));
   });
 
   it("lets the primary pick which of several minors", async () => {
     mockFetch.mockResolvedValue([menor(), menor({ personaId: 11, nombres: "Ana" })]);
-    mockInvitar.mockResolvedValue({ estado: "INVITADO", personaIds: [11] });
+    mockInvitar.mockResolvedValue({ mensaje: MENSAJE_NEUTRO });
     render(<GuardiansCard />);
 
     fireEvent.click(await screen.findByRole("button", { name: BOTON_INVITAR }));
@@ -142,61 +199,46 @@ describe("GuardiansCard — invite", () => {
     fireEvent.change(screen.getByLabelText(/correo de la persona a invitar/i), {
       target: { value: "pablo@example.com" },
     });
+    llenarDatos();
     fireEvent.click(screen.getByRole("button", { name: /enviar invitación/i }));
 
     await waitFor(() =>
-      expect(mockInvitar).toHaveBeenCalledWith({ personaIds: [11], correo: "pablo@example.com" }),
+      expect(mockInvitar).toHaveBeenCalledWith({
+        personaIds: [11],
+        correo: "pablo@example.com",
+        datos: DATOS_INVITADO,
+      }),
     );
   });
 
-  it("asks for the invitee's data when the e-mail has no account, then sends them", async () => {
+  it("does not call the backend until every data field is filled", async () => {
     mockFetch.mockResolvedValue([menor()]);
-    mockInvitar
-      .mockResolvedValueOnce({ estado: "REQUIERE_DATOS", personaIds: [] })
-      .mockResolvedValueOnce({ estado: "INVITADO", personaIds: [10] });
     render(<GuardiansCard />);
 
     fireEvent.click(await screen.findByRole("button", { name: BOTON_INVITAR }));
     fireEvent.change(screen.getByLabelText(/correo de la persona a invitar/i), {
-      target: { value: "nuevo@example.com" },
+      target: { value: "pablo@example.com" },
     });
+    fireEvent.change(screen.getByLabelText("Nombres"), { target: { value: "Pablo" } });
     fireEvent.click(screen.getByRole("button", { name: /enviar invitación/i }));
 
-    fireEvent.change(await screen.findByLabelText("Nombres"), { target: { value: "Pablo" } });
-    fireEvent.change(screen.getByLabelText("Apellidos"), { target: { value: "Torres" } });
-    fireEvent.change(screen.getByLabelText("Cédula"), { target: { value: "1710034065" } });
-    fireEvent.change(screen.getByLabelText("Fecha de nacimiento"), { target: { value: "1982-04-04" } });
-    fireEvent.change(screen.getByLabelText("Teléfono"), { target: { value: "0991234567" } });
-    fireEvent.click(screen.getByRole("button", { name: /crear cuenta e invitar/i }));
-
-    await waitFor(() => expect(mockInvitar).toHaveBeenCalledTimes(2));
-    expect(mockInvitar).toHaveBeenLastCalledWith({
-      personaIds: [10],
-      correo: "nuevo@example.com",
-      datos: {
-        nombres: "Pablo",
-        apellidos: "Torres",
-        cedula: "1710034065",
-        fechaNacimiento: "1982-04-04",
-        telefono: "0991234567",
-      },
-    });
+    expect(await screen.findByRole("alert")).toHaveTextContent(/completa los datos/i);
+    expect(mockInvitar).not.toHaveBeenCalled();
   });
 
-  it("shows the backend's clear message when the e-mail belongs to another kind of account", async () => {
+  it("shows the backend's message when the invitation is refused", async () => {
     mockFetch.mockResolvedValue([menor()]);
-    mockInvitar.mockRejectedValue(
-      Object.assign(new Error("Ese correo ya pertenece a una cuenta que no es de representante."), { status: 400 }),
-    );
+    mockInvitar.mockRejectedValue(Object.assign(new Error("Solo el representante principal."), { status: 400 }));
     render(<GuardiansCard />);
 
     fireEvent.click(await screen.findByRole("button", { name: BOTON_INVITAR }));
     fireEvent.change(screen.getByLabelText(/correo de la persona a invitar/i), {
-      target: { value: "entrenador@example.com" },
+      target: { value: "pablo@example.com" },
     });
+    llenarDatos();
     fireEvent.click(screen.getByRole("button", { name: /enviar invitación/i }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/no es de representante/);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/solo el representante principal/i);
     expect(mockShowSuccess).not.toHaveBeenCalled();
   });
 
@@ -239,21 +281,76 @@ describe("GuardiansCard — remove", () => {
     expect(screen.getByRole("button", { name: /quitar al segundo representante/i })).toBeInTheDocument();
   });
 
-  it("flags a pending invitation", async () => {
-    mockFetch.mockResolvedValue([
-      menor({
-        completo: true,
-        segundoGuardian: {
-          personaId: 21,
-          nombres: "Luis",
-          apellidos: "Mora",
-          correo: "luis@example.com",
-          estado: "PENDIENTE",
-        },
-      }),
-    ]);
+  it("shows a pending second guardian as «Invitación pendiente: correo» with the remove action", async () => {
+    mockFetch.mockResolvedValueOnce([PENDIENTE]).mockResolvedValueOnce([menor()]);
+    mockQuitar.mockResolvedValue(undefined);
     render(<GuardiansCard />);
 
-    expect(await screen.findByText("Invitación pendiente")).toBeInTheDocument();
+    expect(await screen.findByText("Invitación pendiente: luis@example.com")).toBeInTheDocument();
+    expect(screen.queryByText(/null/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /quitar al segundo representante de Nico Torres/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    await waitFor(() => expect(mockQuitar).toHaveBeenCalledWith(10));
+    await waitFor(() => expect(screen.getByText("Sin segundo representante.")).toBeInTheDocument());
+  });
+});
+
+describe("GuardiansCard — received invitations", () => {
+  const RECIBIDA = { id: 7, nombreMenor: "Nico", nombreInvitante: "Marta Torres" };
+
+  it("lists the invitations with the child's first name and who invited", async () => {
+    mockFetch.mockResolvedValue([]);
+    mockRecibidas.mockResolvedValue([RECIBIDA]);
+    render(<GuardiansCard />);
+
+    expect(await screen.findByText("Invitaciones recibidas")).toBeInTheDocument();
+    expect(screen.getByText(/Marta Torres/)).toBeInTheDocument();
+    expect(screen.getByText(/Nico/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /aceptar/i })).toBeInTheDocument();
+  });
+
+  it("accepts an invitation and refreshes both lists", async () => {
+    mockFetch.mockResolvedValueOnce([]).mockResolvedValueOnce([menor({ rol: "SEGUNDO", completo: true })]);
+    mockRecibidas.mockResolvedValueOnce([RECIBIDA]).mockResolvedValueOnce([]);
+    mockAceptar.mockResolvedValue(undefined);
+    render(<GuardiansCard />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /aceptar/i }));
+
+    await waitFor(() => expect(mockAceptar).toHaveBeenCalledWith(7));
+    expect(await screen.findByText(/Eres su segundo representante/)).toBeInTheDocument();
+    expect(screen.queryByText("Invitaciones recibidas")).not.toBeInTheDocument();
+    expect(mockShowSuccess).toHaveBeenCalled();
+  });
+
+  it("keeps the invitation and reports the error when accepting fails", async () => {
+    mockFetch.mockResolvedValue([]);
+    mockRecibidas.mockResolvedValue([RECIBIDA]);
+    mockAceptar.mockRejectedValue(
+      Object.assign(new Error("La invitación ya no está disponible."), { status: 409 }),
+    );
+    render(<GuardiansCard />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /aceptar/i }));
+
+    await waitFor(() => expect(mockShowError).toHaveBeenCalledWith("La invitación ya no está disponible."));
+    expect(screen.getByText("Invitaciones recibidas")).toBeInTheDocument();
+  });
+
+  it("hides the section when there are none", async () => {
+    mockFetch.mockResolvedValue([menor()]);
+    render(<GuardiansCard />);
+
+    await screen.findByText("Sin segundo representante.");
+    expect(screen.queryByText("Invitaciones recibidas")).not.toBeInTheDocument();
+  });
+
+  it("still shows the invitations when the guardians list cannot load", async () => {
+    mockFetch.mockRejectedValue(new Error("boom"));
+    mockRecibidas.mockResolvedValue([RECIBIDA]);
+    render(<GuardiansCard />);
+
+    expect(await screen.findByText("Invitaciones recibidas")).toBeInTheDocument();
   });
 });

@@ -1554,11 +1554,12 @@ export type RolGuardian = "PRINCIPAL" | "SEGUNDO";
 
 /** El otro guardián de un menor; solo el representante principal lo recibe. */
 export interface GuardianDeMenor {
-  personaId: number;
-  nombres: string;
-  apellidos: string;
+  /** `null` mientras la invitación está PENDIENTE: solo se conoce el correo escrito. */
+  personaId: number | null;
+  nombres: string | null;
+  apellidos: string | null;
   correo: string | null;
-  /** PENDIENTE: la cuenta fue creada por la invitación y aún no fijó su contraseña. */
+  /** PENDIENTE: invitación enviada y aún no aceptada por la cuenta invitada. */
   estado: "ACTIVO" | "PENDIENTE";
 }
 
@@ -1585,15 +1586,20 @@ export interface DatosInvitadoPayload {
 export interface InvitarCoRepresentantePayload {
   personaIds: number[];
   correo: string;
-  /** Solo se exigen cuando el correo no tiene cuenta (estado REQUIERE_DATOS). */
-  datos?: DatosInvitadoPayload;
+  /** Siempre se envían: la respuesta no revela si el correo ya tiene cuenta. */
+  datos: DatosInvitadoPayload;
 }
 
+/** Respuesta única (202), sin importar qué pasó con el correo. */
 export interface InvitacionCoRepresentanteResultado {
-  /** REQUIERE_DATOS: no se hizo nada, falta `datos`. INVITADO: se creó la cuenta
-   *  y se envió el enlace. VINCULADO: la cuenta de representante ya existía. */
-  estado: "REQUIERE_DATOS" | "INVITADO" | "VINCULADO";
-  personaIds: number[];
+  mensaje: string;
+}
+
+/** Invitación pendiente de la cuenta de la sesión. */
+export interface InvitacionRecibida {
+  id: number;
+  nombreMenor: string;
+  nombreInvitante: string;
 }
 
 /** Menores de los que la sesión es guardián — `GET /api/co-representantes/mios`. */
@@ -1601,13 +1607,25 @@ export function fetchMisMenoresConGuardianes(): Promise<MenorConGuardianes[]> {
   return request<MenorConGuardianes[]>(apiEndpoint("/co-representantes/mios"));
 }
 
-/** Invita (o vincula) al segundo representante — `POST /api/co-representantes/invitaciones`. */
+/** Invita al segundo representante — `POST /api/co-representantes/invitaciones` (202). */
 export function invitarCoRepresentante(
   payload: InvitarCoRepresentantePayload,
 ): Promise<InvitacionCoRepresentanteResultado> {
   return request<InvitacionCoRepresentanteResultado>(apiEndpoint("/co-representantes/invitaciones"), {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+/** Invitaciones que esperan a la sesión — `GET /api/co-representantes/invitaciones/recibidas`. */
+export function fetchInvitacionesRecibidas(): Promise<InvitacionRecibida[]> {
+  return request<InvitacionRecibida[]>(apiEndpoint("/co-representantes/invitaciones/recibidas"));
+}
+
+/** Acepta una invitación recibida — `POST /api/co-representantes/invitaciones/{id}/aceptar`. */
+export async function aceptarInvitacionRecibida(invitacionId: number): Promise<void> {
+  await request<void>(apiEndpoint(`/co-representantes/invitaciones/${invitacionId}/aceptar`), {
+    method: "POST",
   });
 }
 

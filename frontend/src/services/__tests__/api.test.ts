@@ -27,6 +27,8 @@ import {
   fetchNotificaciones,
   marcarNotificacionLeida,
   marcarTodasNotificacionesLeidas,
+  fetchInvitacionesRecibidas,
+  aceptarInvitacionRecibida,
   fetchMiPerfil,
   actualizarMiPerfil,
   invalidarOtrasSesiones,
@@ -723,6 +725,32 @@ describe("marcarNotificacionLeida", () => {
       expect.objectContaining({ method: "PATCH" }),
     );
     expect(result.leida).toBe(true);
+  });
+});
+
+describe("second guardian invitations (#1666)", () => {
+  it("fetchInvitacionesRecibidas GETs /api/co-representantes/invitaciones/recibidas", async () => {
+    const recibidas = [{ id: 7, nombreMenor: "Nico", nombreInvitante: "Marta Torres" }];
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(recibidas));
+
+    const result = await fetchInvitacionesRecibidas();
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/co-representantes/invitaciones/recibidas",
+      expect.anything(),
+    );
+    expect(result).toEqual(recibidas);
+  });
+
+  it("aceptarInvitacionRecibida POSTs to /api/co-representantes/invitaciones/:id/aceptar", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(new Response(null, { status: 204 }));
+
+    await aceptarInvitacionRecibida(7);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/co-representantes/invitaciones/7/aceptar",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 });
 

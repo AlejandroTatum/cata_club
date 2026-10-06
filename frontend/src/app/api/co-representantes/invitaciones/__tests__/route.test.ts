@@ -44,52 +44,31 @@ function postRequest(body: unknown, cookie = ""): NextRequest {
   });
 }
 
+const DATOS = { nombres: "Pablo", apellidos: "Torres", cedula: "1710034065", fechaNacimiento: "1982-04-04", telefono: "0991234567" };
+const MENSAJE = { mensaje: "Si el correo es válido, enviaremos la invitación." };
+
 describe("POST /api/co-representantes/invitaciones", () => {
   it("returns 401 without calling the backend when no auth cookie is present", async () => {
-    const response = await POST(postRequest({ personaIds: [10], correo: "a@b.com" }));
+    const response = await POST(postRequest({ personaIds: [10], correo: "a@b.com", datos: DATOS }));
 
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("sends a snake_case body and passes the 201 result through", async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ estado: "VINCULADO", personaIds: [10] }, 201));
+  it("translates the body to snake_case and passes the neutral 202 through", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(MENSAJE, 202));
 
-    const response = await POST(postRequest({ personaIds: [10, 11], correo: "a@b.com" }, COOKIE));
+    const response = await POST(postRequest({ personaIds: [10, 11], correo: "a@b.com", datos: DATOS }, COOKIE));
 
-    expect(response.status).toBe(201);
-    expect(await response.json()).toEqual({ estado: "VINCULADO", personaIds: [10] });
+    expect(response.status).toBe(202);
+    expect(await response.json()).toEqual(MENSAJE);
     expect(global.fetch).toHaveBeenNthCalledWith(
       1,
       "http://localhost:8000/api/v1/co-representantes/invitaciones",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ persona_ids: [10, 11], correo: "a@b.com" }),
-      }),
-    );
-  });
-
-  it("translates the invitee data and keeps the 200 of REQUIERE_DATOS", async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ estado: "REQUIERE_DATOS", personaIds: [] }, 200));
-
-    const response = await POST(
-      postRequest(
-        {
-          personaIds: [10],
-          correo: "a@b.com",
-          datos: { nombres: "Pablo", apellidos: "Torres", cedula: "1710034065", fechaNacimiento: "1982-04-04", telefono: "0991234567" },
-        },
-        COOKIE,
-      ),
-    );
-
-    expect(response.status).toBe(200);
-    expect(global.fetch).toHaveBeenNthCalledWith(
-      1,
-      "http://localhost:8000/api/v1/co-representantes/invitaciones",
-      expect.objectContaining({
         body: JSON.stringify({
-          persona_ids: [10],
+          persona_ids: [10, 11],
           correo: "a@b.com",
           datos: { nombres: "Pablo", apellidos: "Torres", cedula: "1710034065", fecha_nacimiento: "1982-04-04", telefono: "0991234567" },
         }),
@@ -97,10 +76,18 @@ describe("POST /api/co-representantes/invitaciones", () => {
     );
   });
 
+  it("forwards the backend's 422 when the data is missing", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "datos requerido" }, 422));
+
+    const response = await POST(postRequest({ personaIds: [10], correo: "a@b.com" }, COOKIE));
+
+    expect(response.status).toBe(422);
+  });
+
   it("forwards the backend's refusal (e.g. 403 for a second guardian) untouched", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Solo el representante principal" }, 403));
 
-    const response = await POST(postRequest({ personaIds: [10], correo: "a@b.com" }, COOKIE));
+    const response = await POST(postRequest({ personaIds: [10], correo: "a@b.com", datos: DATOS }, COOKIE));
 
     expect(response.status).toBe(403);
   });

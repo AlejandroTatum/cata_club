@@ -105,6 +105,7 @@ const mockFetchPagosDePersona = vi.fn();
 const mockFetchHorariosPorAlumno = vi.fn();
 const mockSubirFotoPersona = vi.fn();
 const mockFetchMisMenoresConGuardianes = vi.fn();
+const mockFetchInvitacionesRecibidas = vi.fn();
 
 const mockFetchDiasSinClase = vi.fn();
 
@@ -121,6 +122,8 @@ vi.mock("@/services/api", () => ({
   // Issue #1666: the «Representantes» card; its own behavior is covered in
   // `GuardiansCard.test.tsx`, so here it just resolves to "nothing to show".
   fetchMisMenoresConGuardianes: () => mockFetchMisMenoresConGuardianes(),
+  fetchInvitacionesRecibidas: () => mockFetchInvitacionesRecibidas(),
+  aceptarInvitacionRecibida: vi.fn(),
   invitarCoRepresentante: vi.fn(),
   quitarCoRepresentante: vi.fn(),
 }));
@@ -206,6 +209,7 @@ beforeEach(() => {
   mockFetchHorariosPorAlumno.mockReset().mockResolvedValue([]);
   mockSubirFotoPersona.mockReset().mockResolvedValue(undefined);
   mockFetchMisMenoresConGuardianes.mockReset().mockResolvedValue([]);
+  mockFetchInvitacionesRecibidas.mockReset().mockResolvedValue([]);
   mockRefreshSession.mockReset();
   mockRefreshSession.mockResolvedValue(undefined);
 });
@@ -3215,11 +3219,27 @@ describe("StudentPage — «Representantes» card", () => {
     expect(screen.queryByRole("button", { name: /invitar a otro representante/i })).toBeNull();
   });
 
+  it("shows «Invitaciones recibidas» to an invited representative who has no child yet", async () => {
+    mockAuthSession = {
+      user: { id: "9", name: "Pablo Torres", email: "pablo@cataclub.com", role: "representante", representanteId: null },
+      roles: ["REPRESENTANTE"],
+      loggedInAt: "2026-07-01T12:00:00Z",
+    };
+    mockFetchStudentPortal.mockReset().mockResolvedValue({ self: null, representados: [], membershipPlans: [] });
+    mockFetchInvitacionesRecibidas.mockResolvedValue([{ id: 7, nombreMenor: "Sofía", nombreInvitante: "Laura Vera" }]);
+
+    render(<StudentPage />);
+
+    expect(await screen.findByText("Invitaciones recibidas")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /aceptar/i })).toBeInTheDocument();
+  });
+
   it("does not ask for the card at all when the account has no dependents", async () => {
     render(<StudentPage />);
 
     await screen.findByTestId("student-carnet");
     expect(mockFetchMisMenoresConGuardianes).not.toHaveBeenCalled();
+    expect(mockFetchInvitacionesRecibidas).not.toHaveBeenCalled();
     expect(screen.queryByRole("region", { name: "Representantes" })).toBeNull();
   });
 });
