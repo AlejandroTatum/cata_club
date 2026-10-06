@@ -10,7 +10,7 @@ dentro del servicio; el rol del token solo filtra la puerta de entrada.
 """
 from typing import List
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
@@ -22,6 +22,7 @@ from app.servicios_negocio.dtos.co_representante_schemas import (
     InvitacionCoRepresentanteResponseDTO, InvitarCoRepresentanteDTO, MenorConGuardianesDTO,
 )
 from app.servicios_negocio.gestor_permisos import GestorPermisos
+from app.soporte_transversal.rate_limit import limiter
 
 router = APIRouter(prefix="/co-representantes", tags=["Segundo representante"])
 
@@ -43,7 +44,9 @@ async def listar_mis_menores(
     response_model=InvitacionCoRepresentanteResponseDTO,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit("10/minute")
 async def invitar_co_representante(
+    request: Request,
     datos: InvitarCoRepresentanteDTO,
     response: Response,
     db: Session = Depends(obtener_sesion),

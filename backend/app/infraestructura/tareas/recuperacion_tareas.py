@@ -13,6 +13,7 @@ from app.dominio.invitacion_entrenador import (
     PROPOSITO_INVITACION_ENTRENADOR, invitacion_pendiente,
 )
 from app.dominio.modelos import RecuperacionOutbox, Usuario
+from app.dominio.nombre_propio import nombre_completo
 from app.infraestructura.db import SessionLocal
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
 from app.infraestructura.repositorios.co_representante_repositorio import CoRepresentanteRepositorio
@@ -71,7 +72,7 @@ def _enviar_enlace(usuario: Usuario) -> None:
         notificaciones.enviar_invitacion_co_representante(
             usuario.correo, token, usuario.persona.nombres,
             nombre_menor=" y ".join(menores) if len(menores) <= 2 else ", ".join(menores),
-            nombre_invitante=f"{invitante.nombres} {invitante.apellidos}",
+            nombre_invitante=nombre_completo(invitante.nombres, invitante.apellidos),
         )
         return
     token = GestorAutenticacion.crear_token_recuperacion(

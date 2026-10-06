@@ -2356,6 +2356,7 @@ class CoRepresentante(Base):
     __table_args__ = (
         UniqueConstraint("persona_id", name="uq_co_representante_persona"),
         Index("ix_co_representante_co_representante_id", "co_representante_id"),
+        Index("ix_co_representante_creado_por_persona_id", "creado_por_persona_id"),
         CheckConstraint(
             "persona_id <> co_representante_id", name="ck_co_representante_distintos",
         ).ddl_if(dialect="postgresql"),
@@ -2386,6 +2387,7 @@ class CoRepresentanteInvitacion(Base):
     __table_args__ = (
         Index("ix_co_representante_invitacion_persona_id", "persona_id"),
         Index("ix_co_representante_invitacion_co_representante_id", "co_representante_id"),
+        Index("ix_co_representante_invitacion_invitada_por_persona_id", "invitada_por_persona_id"),
         Index(
             "uq_co_representante_invitacion_pendiente",
             "persona_id",
@@ -2413,6 +2415,9 @@ class CoRepresentanteEvento(Base):
     __tablename__ = "co_representante_evento"
     __table_args__ = (
         Index("ix_co_representante_evento_persona_fecha", "persona_id", text("fecha DESC"), text("id DESC")),
+        Index("ix_co_representante_evento_co_representante_id", "co_representante_id"),
+        Index("ix_co_representante_evento_actor_persona_id", "actor_persona_id"),
+        Index("ix_co_representante_evento_invitacion_id", "invitacion_id"),
         CheckConstraint(
             "operacion IN ('INVITACION', 'INVITACION_CANCELADA', 'ALTA', 'ACEPTACION', 'BAJA')",
             name="ck_co_representante_evento_operacion",

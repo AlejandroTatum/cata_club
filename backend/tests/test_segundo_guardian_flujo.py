@@ -218,6 +218,20 @@ def test_una_cuenta_que_no_es_representante_se_rechaza_sin_cambiarle_el_rol(clie
     assert [r.tipo_rol for r in db_session.query(Usuario).filter_by(correo="otrorol@x.com").one().roles] == [rol]
 
 
+def test_una_cuenta_representante_sin_correo_verificado_se_rechaza(client, db_session, fam):
+    """Un correo sin verificar no prueba quién controla la cuenta: no se le
+    entregan los datos de un menor."""
+    otra = crear_persona_orm(db_session, cedula_valida(8211), nombres="Sin", apellidos="Verificar")
+    _cuenta(db_session, otra, "sinverificar@x.com", TipoRol.REPRESENTANTE, verificado=False)
+    db_session.commit()
+
+    respuesta = _invitar(client, fam, correo="sinverificar@x.com", datos=None)
+
+    assert respuesta.status_code == 400
+    assert "verificó su correo" in respuesta.json()["detail"]
+    assert db_session.query(CoRepresentante).count() == 0
+
+
 def test_no_se_puede_invitar_al_propio_principal(client, db_session, fam):
     respuesta = _invitar(client, fam, correo="madre@x.com", datos=None)
 

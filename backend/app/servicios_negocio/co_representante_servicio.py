@@ -56,6 +56,10 @@ MENSAJE_CUENTA_NO_REPRESENTANTE = (
     "Ese correo ya pertenece a una cuenta que no es de representante (administrador, "
     "entrenador o jugador). Usa otro correo para invitar a la persona."
 )
+MENSAJE_CUENTA_SIN_VERIFICAR = (
+    "Esa cuenta todavía no verificó su correo. Pídele que lo verifique antes de "
+    "agregarla como segunda representante."
+)
 MENSAJE_CUENTA_INACTIVA = "Esa cuenta está desactivada y no puede ser segundo representante."
 MENSAJE_INVITADO_MENOR = "El segundo representante debe ser mayor de edad."
 MENSAJE_INVITADO_ES_PRINCIPAL = "Esa persona ya es el representante principal de este menor."
@@ -200,6 +204,13 @@ class CoRepresentanteServicio:
             raise OperacionInvalida(MENSAJE_CUENTA_NO_REPRESENTANTE)
         if not cuenta.activo or not cuenta.persona.activo:
             raise OperacionInvalida(MENSAJE_CUENTA_INACTIVA)
+        # Un correo sin verificar no prueba quién controla la cuenta: darle los
+        # datos de un menor a quien quizá no es el dueño del correo sería
+        # entregarlos a ciegas. La única excepción es la cuenta que ESTA misma
+        # invitación creó y cuyo dueño aún no fijó la contraseña (ver
+        # `_es_pendiente`): ahí el enlace de un solo uso es la prueba.
+        if not cuenta.correo_verificado and not self._es_pendiente(cuenta):
+            raise OperacionInvalida(MENSAJE_CUENTA_SIN_VERIFICAR)
         if calcular_edad(cuenta.persona.fecha_nacimiento, hoy_club()) < EDAD_MAYORIA_EDAD:
             raise OperacionInvalida(MENSAJE_INVITADO_MENOR)
 

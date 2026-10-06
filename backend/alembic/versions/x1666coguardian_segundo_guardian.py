@@ -49,6 +49,9 @@ def upgrade() -> None:
     op.create_index(
         "ix_co_representante_co_representante_id", "co_representante", ["co_representante_id"],
     )
+    op.create_index(
+        "ix_co_representante_creado_por_persona_id", "co_representante", ["creado_por_persona_id"],
+    )
 
     op.create_table(
         "co_representante_invitacion",
@@ -67,6 +70,10 @@ def upgrade() -> None:
     op.create_index(
         "ix_co_representante_invitacion_co_representante_id",
         "co_representante_invitacion", ["co_representante_id"],
+    )
+    op.create_index(
+        "ix_co_representante_invitacion_invitada_por_persona_id",
+        "co_representante_invitacion", ["invitada_por_persona_id"],
     )
     op.create_index(
         "uq_co_representante_invitacion_pendiente",
@@ -102,6 +109,8 @@ def upgrade() -> None:
         "CREATE INDEX ix_co_representante_evento_persona_fecha "
         f"ON {EVENTO} (persona_id, fecha DESC, id DESC)"
     ))
+    for columna in ("co_representante_id", "actor_persona_id", "invitacion_id"):
+        op.create_index(f"ix_co_representante_evento_{columna}", EVENTO, [columna])
 
     op.execute(sa.text(f"""
         CREATE OR REPLACE FUNCTION {FN_APPEND_ONLY}() RETURNS trigger
