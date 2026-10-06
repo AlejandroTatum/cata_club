@@ -25,9 +25,10 @@ vi.mock("@/components/ProtectedRoute", () => ({
 
 // AppShell renders NotificationBell + needs next/navigation, next/link,
 // next/image, AuthContext — same minimal mock pattern as GroupsPage.test.tsx.
+const mockRouterPush = vi.fn();
 vi.mock("next/navigation", () => ({
   usePathname: () => "/members",
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: mockRouterPush }),
 }));
 
 vi.mock("next/link", () => ({
@@ -4751,5 +4752,95 @@ describe("MembersPage — Nuevo entrenador (#1575)", () => {
     const dialog = await screen.findByRole("dialog");
 
     expect(within(dialog).queryByRole("button", { name: "Reenviar invitación" })).not.toBeInTheDocument();
+  });
+});
+
+describe("MembersPage — Imprimir carnet (issue #1670)", () => {
+  const PLAYER: MemberAccount = { ...ACCOUNT, backendRoles: ["ALUMNO"] };
+  const STAFF: MemberAccount = {
+    ...ACCOUNT,
+    id: "2",
+    nombres: "Tito",
+    apellidos: "Entrenador",
+    role: "estudiante",
+    backendRoles: ["ENTRENADOR"],
+    estudiantes: [{ ...SOFIA_SUMMARY, id: "20" }],
+  };
+  const REPRESENTATIVE: MemberAccount = {
+    ...ACCOUNT,
+    id: "3",
+    nombres: "Rosa",
+    apellidos: "Representante",
+    role: "representante",
+    backendRoles: ["REPRESENTANTE"],
+    estudiantes: [{ ...SOFIA_SUMMARY, id: "30" }],
+  };
+  const MINOR_WITHOUT_ACCOUNT: MemberAccount = {
+    ...ACCOUNT,
+    id: "4",
+    nombres: "Mateo",
+    apellidos: "Menor",
+    backendRoles: undefined,
+    representadoPor: "Rosa Representante",
+  };
+
+  beforeEach(() => {
+    mockRouterPush.mockReset();
+    mockFetchMembers.mockReset();
+  });
+
+  /** The row's "Más acciones" menu items, by accessible name. */
+  async function menuItemNames(name: string): Promise<string[]> {
+    const matches = await screen.findAllByText(name);
+    const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
+    const visible = within(row)
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label") ?? button.textContent ?? "");
+    // A representative's own row has no overflow menu at all, only "Editar".
+    if (within(row).queryAllByRole("button", { name: /^más acciones para/i }).length === 0) return visible;
+    const trigger = getRowActionsTrigger(row);
+    fireEvent.click(trigger);
+    const menu = document.getElementById(trigger.getAttribute("aria-controls") ?? "") as HTMLElement;
+    return [
+      ...visible,
+      ...within(menu)
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent ?? ""),
+    ];
+  }
+
+  it("offers the action for a player, and it opens that player's carnet", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [PLAYER] });
+    render(<MembersPage />);
+
+    const row = await findAccountRow();
+    fireEvent.click(getRowAction(row, /^imprimir carnet de maría gonzález$/i));
+    expect(mockRouterPush).toHaveBeenCalledWith("/members/carnets?ids=1");
+  });
+
+  it("offers it for a represented minor with no account of their own", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [MINOR_WITHOUT_ACCOUNT] });
+    render(<MembersPage />);
+
+    const names = await menuItemNames("Mateo Menor");
+    expect(names).toContain("Imprimir carnet de Mateo Menor");
+  });
+
+  it.each([
+    ["Tito Entrenador", STAFF],
+    ["Rosa Representante", REPRESENTATIVE],
+  ])("does not offer it for %s: staff and representatives hold no carnet", async (name, account) => {
+    mockFetchMembers.mockResolvedValue({ accounts: [account] });
+    render(<MembersPage />);
+
+    const names = await menuItemNames(name);
+    expect(names.some((label) => /carnet/i.test(label))).toBe(false);
+  });
+
+  it("links to the batch picker from the page header", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [PLAYER] });
+    render(<MembersPage />);
+
+    expect(await screen.findByRole("link", { name: /carnets por lote/i })).toHaveAttribute("href", "/members/carnets");
   });
 });
