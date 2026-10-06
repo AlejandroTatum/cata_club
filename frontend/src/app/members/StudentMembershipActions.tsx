@@ -264,6 +264,12 @@ export default function StudentMembershipActions({
             </ActionTile>
           )}
 
+          {isPrimerPagoPendiente(student) && tipoSocio === "nuevo" && (
+            <button type="button" onClick={() => setTipoSocio(null)} className={`${ACTION_TRIGGER} w-auto`}>
+              Cancelar
+            </button>
+          )}
+
           {preguntarTipoSocio && tipoSocio === "antiguo" && (
             <ActionTile description="Anota su último pago; el sistema calcula hasta cuándo está al día.">
               <MigrarSocioAntiguoForm
