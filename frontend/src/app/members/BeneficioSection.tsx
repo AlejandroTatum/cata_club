@@ -144,11 +144,11 @@ export default function BeneficioSection({ personaId, tarifaMensual }: Beneficio
         <div className="space-y-field">
           <div className="flex flex-wrap items-center gap-3">
             <span className="inline-flex flex-col items-start gap-0.5">
-              <span className="text-2xs text-ink-3">Beneficio</span>
+              <span className="text-xs text-ink-3">Beneficio</span>
               <DataBox>{beneficio.descuento.nombre}</DataBox>
             </span>
             <span className="inline-flex flex-col items-start gap-0.5">
-              <span className="text-2xs text-ink-3">Valor</span>
+              <span className="text-xs text-ink-3">Valor</span>
               <DataBox>{descuentoValorLabel(beneficio.descuento)}</DataBox>
             </span>
           </div>
@@ -157,7 +157,7 @@ export default function BeneficioSection({ personaId, tarifaMensual }: Beneficio
               NAME (`asignado_por_nombre`), the same way every other actor
               reference in the app already did; this used to print the raw
               persona id as "Asignado por persona #1". */}
-          <p className="text-2xs text-ink-3">Asignado por {beneficio.asignadoPorNombre}</p>
+          <p className="text-xs text-ink-3">Asignado por {beneficio.asignadoPorNombre}</p>
           <button
             type="button"
             onClick={() => setPendingRetiro(true)}
@@ -186,9 +186,9 @@ export default function BeneficioSection({ personaId, tarifaMensual }: Beneficio
           {assignOpen && (
             <div className="space-y-field">
               {catalogo === null ? (
-                <p className="text-2xs text-ink-3">Cargando catálogo…</p>
+                <p className="text-xs text-ink-3">Cargando catálogo…</p>
               ) : ofrecidos.length === 0 ? (
-                <p className="text-2xs text-ink-3">No hay descuentos activos en el catálogo.</p>
+                <p className="text-xs text-ink-3">No hay descuentos activos en el catálogo.</p>
               ) : (
                 <select
                   value={selectedDescuentoId}

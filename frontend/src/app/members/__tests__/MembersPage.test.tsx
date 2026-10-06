@@ -1412,7 +1412,7 @@ describe("MembersPage — Crear membresía inline form", () => {
   it("opens the create-membership form (type select + Crear/Cancelar) inside the student's card", async () => {
     const dialog = await openPagosPage();
 
-    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
+    fireEvent.click(await within(dialog).findByRole("button", { name: /^Socio nuevo/ }));
     const crearButton = await within(dialog).findByRole("button", { name: /crear membresía/i });
     fireEvent.click(crearButton);
 
@@ -1631,7 +1631,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     const dialog = await openMemberDialog({
       membresia: { ...MEMBRESIA_VENCIDA, estadoBackend: "INACTIVA" },
     });
-    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
+    fireEvent.click(await within(dialog).findByRole("button", { name: /^Socio nuevo/ }));
     await openPaymentForm(dialog);
     await within(dialog).findByDisplayValue("85");
 
@@ -1872,7 +1872,7 @@ describe("MembersPage — Registrar pago inline form", () => {
       },
     });
 
-    expect(within(dialog).getAllByText("Hasta 01/12/2026").length).toBeGreaterThan(0);
+    expect(within(dialog).getAllByText(/hasta 01\/12\/2026/i).length).toBeGreaterThan(0);
     expect(within(dialog).queryByText(/01\/09\/2026/)).not.toBeInTheDocument();
   });
 
@@ -1902,7 +1902,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT] });
 
     const dialog = await openPagosPage();
-    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
+    fireEvent.click(await within(dialog).findByRole("button", { name: /^Socio nuevo/ }));
     await within(dialog).findByRole("button", { name: /crear membresía/i });
     expect(within(dialog).queryByRole("button", { name: /^registrar pago$/i })).not.toBeInTheDocument();
   });
@@ -2534,7 +2534,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
 
     const dialog = await openPagosPage();
 
-    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
+    fireEvent.click(await within(dialog).findByRole("button", { name: /^Socio nuevo/ }));
     fireEvent.click(await within(dialog).findByRole("button", { name: /crear membresía/i }));
     const combobox = await within(dialog).findByRole("combobox");
     fireEvent.change(combobox, { target: { value: "5" } });
@@ -2568,7 +2568,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
 
     const dialog = await openPagosPage();
 
-    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
+    fireEvent.click(await within(dialog).findByRole("button", { name: /^Socio nuevo/ }));
     fireEvent.click(await within(dialog).findByRole("button", { name: /crear membresía/i }));
     const combobox = await within(dialog).findByRole("combobox");
     fireEvent.change(combobox, { target: { value: "5" } });
@@ -2598,7 +2598,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
     });
     const dialog = await openPagosPage();
 
-    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
+    fireEvent.click(await within(dialog).findByRole("button", { name: /^Socio nuevo/ }));
     fireEvent.click(await within(dialog).findByRole("button", { name: /crear membresía/i }));
     const combobox = await within(dialog).findByRole("combobox");
     fireEvent.change(combobox, { target: { value: "5" } });
@@ -3675,7 +3675,7 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
   it("opens the pagos/membresía flow directly from the row, with no roles/estado controls present", async () => {
     const dialog = await openPagosPage();
     expect(within(dialog).queryByRole("radio", { name: /rol|estado|activ/i })).not.toBeInTheDocument();
-    fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
+    fireEvent.click(await within(dialog).findByRole("button", { name: /^Socio nuevo/ }));
     expect(within(dialog).queryByText("Roles")).not.toBeInTheDocument();
     expect(await within(dialog).findByRole("button", { name: /crear membresía/i })).toBeInTheDocument();
   });
@@ -3710,7 +3710,7 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     expect(within(dialog).queryByRole("button", { name: /crear membresía|registrar pago|cargar pagos atrasados/i })).not.toBeInTheDocument();
   });
 
-  it("puts Cargar pagos atrasados before Registrar pago when canonical debt data exists", async () => {
+  it("leads with Registrar pago and offers Cargar pagos atrasados after it when canonical debt data exists", async () => {
     mockFetchMembers.mockReset().mockResolvedValue({
       accounts: [{
         ...ACCOUNT,
@@ -3724,8 +3724,8 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     const buttons = within(dialog).getAllByRole("button");
     const regularizar = buttons.findIndex((button) => /cargar pagos atrasados/i.test(button.textContent ?? ""));
     const registrar = buttons.findIndex((button) => /registrar pago/i.test(button.textContent ?? ""));
-    expect(regularizar).toBeGreaterThan(-1);
-    expect(regularizar).toBeLessThan(registrar);
+    expect(registrar).toBeGreaterThan(-1);
+    expect(regularizar).toBeGreaterThan(registrar);
   });
 
   it("keeps Registrar pago first without verified debt and marks degraded debt data explicitly", async () => {
@@ -4540,7 +4540,7 @@ describe("MembersPage — Pagos page hierarchy (admin redesign v4, now #1668)", 
     const summary = within(dialog).getByLabelText("Resumen de la membresía");
     expect(within(summary).getByText("Mensual")).toBeInTheDocument();
     expect(within(summary).getByText(/\$\s?85/)).toBeInTheDocument();
-    expect(within(summary).getByText("Vigencia")).toBeInTheDocument();
+    expect(within(summary).getByText("Tarifa mensual:")).toBeInTheDocument();
   });
 
   it("shows the payment history as its own labelled section, with no toggle", async () => {
@@ -4551,30 +4551,27 @@ describe("MembersPage — Pagos page hierarchy (admin redesign v4, now #1668)", 
     await waitFor(() => expect(mockFetchPagosDePersona).toHaveBeenCalled());
   });
 
-  it("offers one red primary and equal-size secondary actions, each explained", async () => {
+  it("offers one red primary in «Siguiente paso» and quieter secondary actions under «Otras acciones»", async () => {
     const dialog = await openActiveMembershipPayments();
-    const actions = within(dialog).getByRole("region", { name: "Acciones" });
+    const next = within(dialog).getByRole("region", { name: "Siguiente paso" });
+    const others = within(dialog).getByRole("region", { name: "Otras acciones" });
 
-    const registrar = within(actions).getByRole("button", { name: "Registrar pago" });
-    expect(registrar).toHaveClass("bg-cata-red", "h-ctl");
+    expect(within(next).getByRole("button", { name: "Registrar pago" })).toHaveClass("bg-cata-red", "h-ctl");
     for (const name of ["Suspender membresía", "Cambiar plan", "Asignar beneficio"]) {
-      const trigger = await within(actions).findByRole("button", { name });
+      const trigger = await within(others).findByRole("button", { name });
       expect(trigger, name).toHaveClass("bg-paper", "h-ctl", "w-full");
       expect(trigger, name).not.toHaveClass("bg-cata-red");
     }
-    // Same size for the primary and the rest.
-    expect(registrar).toHaveClass("w-full");
     // Suspending is the one that takes something away.
-    expect(within(actions).getByRole("button", { name: "Suspender membresía" })).toHaveClass("text-state-bad");
-    // Each trigger has its one-line explanation next to it.
+    expect(within(others).getByRole("button", { name: "Suspender membresía" })).toHaveClass("text-state-bad");
     // «Cargar pagos atrasados» only applies when months are owed: not offered here.
-    expect(within(actions).queryByRole("button", { name: /cargar pagos atrasados/i })).not.toBeInTheDocument();
-    expect(within(actions).getByText(/efectivo o transferencia/i)).toBeInTheDocument();
-    expect(within(actions).getByText(/pausa los cobros/i)).toBeInTheDocument();
-    expect(within(actions).getByText(/rige desde el próximo pago/i)).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /cargar pagos atrasados/i })).not.toBeInTheDocument();
+    expect(within(next).getByText(/efectivo o transferencia/i)).toBeInTheDocument();
+    expect(within(others).getByText(/pausa los cobros/i)).toBeInTheDocument();
+    expect(within(others).getByText(/rige desde el próximo pago/i)).toBeInTheDocument();
   });
 
-  it("hands the red primary to Cargar pagos atrasados when there is debt", async () => {
+  it("keeps Registrar pago as the one red primary when months are owed, with the catch-up beside it", async () => {
     mockFetchMembers.mockReset().mockResolvedValue({
       accounts: [{
         ...ACCOUNT,
@@ -4586,8 +4583,8 @@ describe("MembersPage — Pagos page hierarchy (admin redesign v4, now #1668)", 
     });
     const dialog = await openPagosPage();
 
-    expect(within(dialog).getByRole("button", { name: "Cargar pagos atrasados" })).toHaveClass("bg-cata-red");
-    expect(within(dialog).getByRole("button", { name: "Registrar pago" })).not.toHaveClass("bg-cata-red");
+    expect(within(dialog).getByRole("button", { name: "Registrar pago" })).toHaveClass("bg-cata-red");
+    expect(within(dialog).getByRole("button", { name: "Cargar pagos atrasados" })).not.toHaveClass("bg-cata-red");
     expect(dialog.querySelectorAll("button.bg-cata-red")).toHaveLength(1);
   });
 });

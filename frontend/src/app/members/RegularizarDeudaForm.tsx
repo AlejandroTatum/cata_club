@@ -164,7 +164,7 @@ export default function RegularizarDeudaForm({
   // the moment a membership's gratuity changes between renders).
   if (esGratuidadFamiliar) {
     return (
-      <p className="mt-2.5 text-2xs text-ink-3">
+      <p className="mt-2.5 text-xs text-ink-3">
         Gratuidad familiar: esta membresía no genera ningún cobro, así que no hay ningún monto que
         regularizar.
       </p>
@@ -235,7 +235,7 @@ export default function RegularizarDeudaForm({
           aria-label="Cargar pagos atrasados"
         >
           <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="text-xs font-bold uppercase tracking-wider text-ink-3">
+            <p className="text-sm font-bold text-ink">
               Cargar pagos atrasados
             </p>
             {/*
@@ -250,24 +250,24 @@ export default function RegularizarDeudaForm({
               y que antes se pedía y se descartaba.
             */}
             {!deudaError && mesesAdeudados !== null && mesesAdeudados > 0 && (
-              <span className="rounded-full bg-cata-red/15 px-2 py-0.5 text-2xs font-semibold text-cata-red">
+              <span className="rounded-full bg-cata-red/15 px-2 py-0.5 text-xs font-semibold text-cata-red">
                 {mesesAdeudados} {mesesAdeudados === 1 ? "mes adeudado" : "meses adeudados"}
               </span>
             )}
             {!deudaError && mesesAdeudados === 0 && ultimaCoberturaFin && (
-              <span className="rounded-full bg-state-warn-bg px-2 py-0.5 text-2xs font-semibold text-state-warn">
+              <span className="rounded-full bg-state-warn-bg px-2 py-0.5 text-xs font-semibold text-state-warn">
                 Vencida desde el {formatDate(ultimaCoberturaFin)}
               </span>
             )}
           </div>
 
           {deudaError && (
-            <p className="mb-2 text-2xs text-ink-3">
+            <p className="mb-2 text-xs text-ink-3">
               No se pudo calcular la deuda; registra el período directamente.
             </p>
           )}
 
-          <p className="mb-2 text-2xs text-ink-3">
+          <p className="mb-2 text-xs text-ink-3">
             Registra aquí los meses vencidos que no figuran pagados: los que se pagaron antes de usar
             el sistema o los que se pagan ahora. Si el período incluye hoy, la membresía queda activa.
           </p>
@@ -292,7 +292,7 @@ export default function RegularizarDeudaForm({
 
           {cotizacion?.tieneBeneficio && (
             <fieldset className="mt-2">
-              <legend className="text-2xs text-ink-3">Valor a cobrar</legend>
+              <legend className="text-xs text-ink-3">Valor a cobrar</legend>
               <label className="mt-1 flex items-center gap-2 text-xs text-ink">
                 <input
                   type="radio"
@@ -317,14 +317,14 @@ export default function RegularizarDeudaForm({
           )}
 
           <div className="mt-2" aria-live="polite">
-            <p className="text-2xs text-ink-3">Monto a regularizar</p>
+            <p className="text-xs text-ink-3">Monto a regularizar</p>
             {cotizando && <p className="text-xs text-ink-3">Calculando…</p>}
             {!cotizando && cotizacion && (
               <>
                 <p className="text-sm font-semibold text-ink">
                   {formatCurrency(Number(cotizacion.montoEsperado))}
                 </p>
-                <p className="mt-0.5 text-2xs text-ink-3">
+                <p className="mt-0.5 text-xs text-ink-3">
                   {cotizacion.meses} {cotizacion.meses === 1 ? "mes" : "meses"}
                   {montoMensual > 0 ? ` × ${formatCurrency(montoMensual)}` : ""}
                   {Number(cotizacion.descuentoAplicado) > 0
@@ -336,7 +336,7 @@ export default function RegularizarDeudaForm({
             {!cotizando && !cotizacion && !cotizacionError && (
               <p className="text-xs text-ink-3">Indica las fechas para calcular el monto.</p>
             )}
-            {cotizacionError && <p className="text-2xs text-cata-red"><LinkifiedText text={cotizacionError} /></p>}
+            {cotizacionError && <p className="text-xs text-cata-red"><LinkifiedText text={cotizacionError} /></p>}
           </div>
 
           <CampoFormularioAdmin
@@ -345,17 +345,17 @@ export default function RegularizarDeudaForm({
             value={motivo}
             onChange={setMotivo}
             placeholder="Por qué se regulariza (p. ej. demora del club, acuerdo con el jugador)"
-            labelClassName="mt-2 block text-2xs text-ink-3"
+            labelClassName="mt-2 block text-xs text-ink-3"
             required
           />
 
-          {error && <p className="mt-2 text-2xs text-cata-red"><LinkifiedText text={error} /></p>}
+          {error && <p className="mt-2 text-xs text-cata-red"><LinkifiedText text={error} /></p>}
 
           <div className="mt-3 flex items-center gap-2">
             <button
               type="submit"
               disabled={loading}
-              className={`inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-2xs tracking-flat font-semibold text-white transition-colors hover:bg-cata-red/90 disabled:opacity-50 ${MIN_TARGET_CLASS}`}
+              className={`inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-cata-red/90 disabled:opacity-50 ${MIN_TARGET_CLASS}`}
             >
               {loading ? (
                 <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
@@ -368,7 +368,7 @@ export default function RegularizarDeudaForm({
               type="button"
               onClick={handleClose}
               disabled={loading}
-              className={`inline-flex items-center rounded-lg border border-line-2 bg-paper px-2.5 py-1 text-2xs tracking-flat font-semibold text-ink-2 transition-colors hover:bg-surface disabled:opacity-50 ${MIN_TARGET_CLASS}`}
+              className={`inline-flex items-center rounded-lg border border-line-2 bg-paper px-2.5 py-1 text-xs font-semibold text-ink-2 transition-colors hover:bg-surface disabled:opacity-50 ${MIN_TARGET_CLASS}`}
             >
               Cancelar
             </button>

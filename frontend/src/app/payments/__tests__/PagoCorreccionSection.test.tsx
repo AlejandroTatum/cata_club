@@ -61,8 +61,8 @@ const CORRECCION = {
 };
 
 async function renderExtended(onCorrected = vi.fn()): Promise<void> {
-  render(<PagoCorreccionSection pagoId={9} onCorrected={onCorrected} extended />);
-  await screen.findByRole("button", { name: /corregir pago/i });
+  render(<PagoCorreccionSection pagoId={9} onCorrected={onCorrected} extended initialOpen />);
+  await screen.findByRole("button", { name: /registrar corrección/i });
 }
 
 beforeEach(() => {
@@ -74,26 +74,27 @@ beforeEach(() => {
 describe("PagoCorreccionSection — extended (amount, months, dates)", () => {
   it("offers amount, months, start and end dates plus a required reason, prefilled with what the payment says now", async () => {
     await renderExtended();
-    fireEvent.click(screen.getByRole("button", { name: /corregir pago/i }));
 
     expect(screen.getByLabelText(/^monto/i)).toHaveValue(50);
-    expect(screen.getByLabelText(/meses comprados/i)).toHaveValue(null);
-    expect(screen.getByLabelText(/fecha inicio/i)).toHaveValue("2026-07-01");
-    expect(screen.getByLabelText(/fecha fin/i)).toHaveValue("2026-09-01");
+    expect(screen.getByLabelText(/^meses/i)).toHaveValue(null);
+    expect(screen.getByLabelText(/^desde/i)).toHaveValue("2026-07-01");
+    expect(screen.getByLabelText(/^hasta/i)).toHaveValue("2026-09-01");
     expect(screen.getByLabelText(/^motivo/i)).toBeRequired();
     expect(screen.getByText(/solo lo que está mal/i)).toBeInTheDocument();
+    expect(screen.getByText(/si te equivocaste de mes, cambia las fechas/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Corregir el pago de $50,00 del 01/07 al 01/09" })).toBeInTheDocument();
   });
 
   it("keeps «Registrar corrección» off until something changed AND a reason is given", async () => {
     await renderExtended();
-    fireEvent.click(screen.getByRole("button", { name: /corregir pago/i }));
     const submit = screen.getByRole("button", { name: /registrar corrección/i });
 
     fireEvent.change(screen.getByLabelText(/^motivo/i), { target: { value: "Probando" } });
     expect(submit).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText(/fecha fin/i), { target: { value: "2026-08-01" } });
+    fireEvent.change(screen.getByLabelText(/^hasta/i), { target: { value: "2026-08-01" } });
     expect(submit).toBeEnabled();
+    expect(screen.getByText("Hasta: 01/09/2026 → 01/08/2026")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/^motivo/i), { target: { value: "  " } });
     expect(submit).toBeDisabled();
@@ -103,11 +104,10 @@ describe("PagoCorreccionSection — extended (amount, months, dates)", () => {
     mockCorregirPago.mockResolvedValue({ pago: PAGO, correccion: CORRECCION });
     const onCorrected = vi.fn();
     await renderExtended(onCorrected);
-    fireEvent.click(screen.getByRole("button", { name: /corregir pago/i }));
 
     fireEvent.change(screen.getByLabelText(/^monto/i), { target: { value: "25.00" } });
-    fireEvent.change(screen.getByLabelText(/meses comprados/i), { target: { value: "1" } });
-    fireEvent.change(screen.getByLabelText(/fecha fin/i), { target: { value: "2026-08-01" } });
+    fireEvent.change(screen.getByLabelText(/^meses/i), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText(/^hasta/i), { target: { value: "2026-08-01" } });
     fireEvent.change(screen.getByLabelText(/^motivo/i), { target: { value: "Se cobró un mes de más" } });
     fireEvent.click(screen.getByRole("button", { name: /registrar corrección/i }));
 
@@ -133,14 +133,13 @@ describe("PagoCorreccionSection — extended (amount, months, dates)", () => {
       ),
     );
     await renderExtended();
-    fireEvent.click(screen.getByRole("button", { name: /corregir pago/i }));
-    fireEvent.change(screen.getByLabelText(/fecha fin/i), { target: { value: "2026-12-01" } });
+    fireEvent.change(screen.getByLabelText(/^hasta/i), { target: { value: "2026-12-01" } });
     fireEvent.change(screen.getByLabelText(/^motivo/i), { target: { value: "Se extendió" } });
     fireEvent.click(screen.getByRole("button", { name: /registrar corrección/i }));
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/se superpone o rompe la continuidad/i);
-    expect(screen.getByLabelText(/fecha fin/i)).toHaveValue("2026-12-01");
+    expect(screen.getByLabelText(/^hasta/i)).toHaveValue("2026-12-01");
     expect(screen.getByLabelText(/^motivo/i)).toHaveValue("Se extendió");
   });
 
