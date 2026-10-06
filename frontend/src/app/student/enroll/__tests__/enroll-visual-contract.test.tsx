@@ -97,7 +97,7 @@ function next(): void {
 }
 
 function chooseRepresentative(): void {
-  fireEvent.click(screen.getByRole("radio", { name: /^Representante Gestiono la inscripción/ }));
+  fireEvent.click(screen.getByRole("radio", { name: /^Representante Inscribo a un hijo/ }));
 }
 
 /** Fills the child/dependent flow's student step — no phone field (#1197). */
