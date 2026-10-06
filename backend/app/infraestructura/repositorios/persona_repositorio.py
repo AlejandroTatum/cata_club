@@ -1,8 +1,9 @@
 from typing import Optional, List
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.dominio.modelos import Persona, Usuario, Rol, usuario_rol
+from app.dominio.enums import EstadoMembresia, TipoRol
+from app.dominio.modelos import Persona, Usuario, Rol, usuario_rol, Membresia
 
 # Mismo mapeo de acentos que el `func.translate` de más abajo, pero en
 # Python: como el patrón LIKE ahora lo arma `.contains(autoescape=True)` (que
@@ -167,10 +168,34 @@ class PersonaRepositorio:
         )
 
     def buscar_por_nombre(
-        self, q: str, rol: Optional[str] = None, skip: int = 0, limit: int = 20
+        self,
+        q: str,
+        rol: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 20,
+        solo_jugadores: bool = False,
     ) -> List[Persona]:
-        """Búsqueda de personas por nombre/apellido con filtro opcional por rol."""
+        """Búsqueda de personas por nombre/apellido con filtro opcional por rol.
+
+        `solo_jugadores` (#1669/#1661) ofrece únicamente a quien juega: rol
+        ALUMNO **o** una membresía que habilita entrenar (ACTIVA/VENCIDA, la
+        misma regla que `MembresiaRepositorio.puede_entrenar`). No pasa por
+        un JOIN a `usuario`: un menor representado no tiene cuenta propia y
+        el JOIN lo descartaría. Excluye al staff y a los representantes sin
+        membresía."""
         stmt = select(Persona)
+        if solo_jugadores:
+            es_alumno = exists().where(
+                Usuario.persona_id == Persona.id,
+                usuario_rol.c.usuario_id == Usuario.id,
+                usuario_rol.c.rol_id == Rol.id,
+                Rol.tipo_rol == TipoRol.ALUMNO,
+            )
+            puede_entrenar = exists().where(
+                Membresia.persona_id == Persona.id,
+                Membresia.estado.in_((EstadoMembresia.ACTIVA, EstadoMembresia.VENCIDA)),
+            )
+            stmt = stmt.where(or_(es_alumno, puede_entrenar))
         if rol:
             stmt = (
                 stmt.join(Usuario, Usuario.persona_id == Persona.id)
