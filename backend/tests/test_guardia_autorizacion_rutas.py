@@ -163,6 +163,9 @@ RUTAS_PUBLICAS = {
 #   (b) ownership verificado DENTRO del handler via `PoliticaAccesoPersona`
 #       o un chequeo equivalente contra `token_payload["persona_id"]`.
 RUTAS_SOLO_AUTENTICADAS = {
+    # Issue #1665: los días sin clase los lee cualquier socio autenticado; no hay
+    # lectura pública (decisión del dueño: solo socios logueados, no la landing).
+    ("GET", "/dias-sin-clase/"),
     ("POST", "/reportes-error/"),  # reporter authenticated; ownership from token
     ("GET", "/asistencias/alumnos/{persona_id}/horarios"),      # (b)
     ("GET", "/asistencias/categorias"),                          # (a)
@@ -390,6 +393,11 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/personas/entrenadores"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/{persona_id}/entrenador/invitacion"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/sponsors/"): frozenset({"ADMINISTRADOR"}),
+    # Issue #1665: solo el administrador publica, edita o borra un día sin clase.
+    ("POST", "/dias-sin-clase/"): frozenset({"ADMINISTRADOR"}),
+    ("PUT", "/dias-sin-clase/{dia_id}"): frozenset({"ADMINISTRADOR"}),
+    ("DELETE", "/dias-sin-clase/{dia_id}"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/dias-sin-clase/{dia_id}/avisar"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/galeria/"): frozenset({"ADMINISTRADOR"}),
         ("POST", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),
     # Issue #398: solo el club (ADMINISTRADOR) concede un beneficio -- el

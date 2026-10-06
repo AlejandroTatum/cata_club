@@ -101,7 +101,10 @@ const mockFetchNotificaciones = vi.fn().mockResolvedValue({ items: [], total: 0,
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
 const mockCorrectAttendance = vi.fn();
 
+const mockFetchDiasSinClase = vi.fn();
+
 vi.mock("@/services/api", () => ({
+  fetchDiasSinClase: (...args: unknown[]) => mockFetchDiasSinClase(...args),
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
   fetchCorrectionRequests: (filters?: unknown) => mockFetchCorrectionRequests(filters),
@@ -120,6 +123,7 @@ vi.mock("@/services/api", () => ({
 }));
 
 beforeEach(() => {
+    mockFetchDiasSinClase.mockResolvedValue([]);
   mockFetchTrainingSchedules.mockReset().mockResolvedValue(SCHEDULES);
   mockFetchAttendanceRecords.mockReset().mockResolvedValue(buildRecords(5));
   mockFetchConteos.mockReset().mockResolvedValue([]);

@@ -288,3 +288,55 @@ describe("lista incompleta (ENT-13)", () => {
     expect(faltantes).toEqual([]);
   });
 });
+
+describe("días sin clase del club (issue #1665)", () => {
+  const BASE = {
+    sessions: [],
+    schedules: SCHEDULES,
+    desde: "2026-07-13",
+    hasta: "2026-07-24",
+    hoy: "2026-08-15",
+  };
+
+  it("un día ordinario sigue contando como sesión programada", () => {
+    const coverage = summarizePeriodCoverage({ ...BASE, noClassDays: [] });
+
+    // Lunes 13 y 20 (horario 7) + viernes 17 y 24 (horario 9).
+    expect(coverage.sesionesProgramadas).toBe(4);
+    expect(coverage.sinLista).toBe(4);
+    expect(summarizePeriodCoverage(BASE)).toEqual(coverage);
+  });
+
+  it("un día sin clase deja de contar como programada y como lista faltante", () => {
+    const noClassDays = [{ fechaInicio: "2026-07-20", fechaFin: "2026-07-20" }];
+
+    const coverage = summarizePeriodCoverage({ ...BASE, noClassDays });
+    const faltantes = findMissingSessions({ ...BASE, noClassDays });
+
+    expect(coverage.sesionesProgramadas).toBe(3);
+    expect(coverage.sinLista).toBe(3);
+    expect(faltantes.map((s) => s.fecha)).not.toContain("2026-07-20");
+    expect(faltantes).toHaveLength(3);
+  });
+
+  it("un rango descuenta cada día cubierto, extremos incluidos", () => {
+    const noClassDays = [{ fechaInicio: "2026-07-17", fechaFin: "2026-07-20" }];
+
+    const coverage = summarizePeriodCoverage({ ...BASE, noClassDays });
+
+    // Quedan solo el lunes 13 y el viernes 24.
+    expect(coverage.sesionesProgramadas).toBe(2);
+    expect(coverage.sinLista).toBe(2);
+  });
+
+  it("una lista tomada en un día sin clase no genera hueco negativo", () => {
+    const coverage = summarizePeriodCoverage({
+      ...BASE,
+      sessions: [{ fecha: "2026-07-20", horarioId: 7 }],
+      noClassDays: [{ fechaInicio: "2026-07-20", fechaFin: "2026-07-20" }],
+    });
+
+    expect(coverage.sinLista).toBeGreaterThanOrEqual(0);
+    expect(coverage.sesionesProgramadas).toBe(3);
+  });
+});

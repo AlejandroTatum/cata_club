@@ -25,6 +25,7 @@ import {
 } from "@/app/trainer/trainer-day-utils";
 import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
 import { clubIsoDate, clubTimeHHMM } from "@/lib/club-date";
+import type { NoClassRange } from "@/lib/no-class-days";
 import type { EstadoAsistencia } from "@/types/domain";
 
 /** Sessions without a list shown in the rail before the rest are left to the period's stats. */
@@ -70,6 +71,8 @@ export interface AttendancePeriodRailProps {
   studentFiltered: boolean;
   /** Enrolled students per horario id. With it, a list holding fewer records than that is listed as incomplete. */
   inscritosPorHorario?: Record<number, number>;
+  /** The club's no-class days: a day inside one has no expected session, so it is not counted as scheduled or missing. */
+  noClassDays?: readonly NoClassRange[];
   /** Draws the «Cómo leer el historial» card (default). The trainer's history turns it off. */
   showGuide?: boolean;
   /** Extra paragraphs for the indications card (role-specific rules). */
@@ -84,6 +87,7 @@ export default function AttendancePeriodRail({
   horarioId,
   studentFiltered,
   inscritosPorHorario,
+  noClassDays,
   showGuide = true,
   guideExtra,
 }: AttendancePeriodRailProps): React.ReactElement {
@@ -104,6 +108,7 @@ export default function AttendancePeriodRail({
       // Dentro de hoy, el mismo razonamiento corre por hora.
       horaActual: clubTimeHHMM(),
       horarioId,
+      noClassDays,
     }),
     [
       sessions,
@@ -112,6 +117,7 @@ export default function AttendancePeriodRail({
       fechaFin,
       horarioId,
       inscritosPorHorario,
+      noClassDays,
     ],
   );
   const coverage = useMemo(
