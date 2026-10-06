@@ -41,9 +41,6 @@ test.describe("landing wide cards (desktop)", () => {
     const heading = (await help.locator("h3").boundingBox())!;
     expect(Math.abs(heading.x + heading.width / 2 - (tile.x + tile.width / 2))).toBeLessThan(2);
     await help.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(1500);
-    await page.screenshot({ path: "/tmp/landing-help-full2.png" });
-
     await page.unroute("**/api/schedules");
     await page.route("**/api/schedules", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SCHEDULE(4)) }));
     await page.reload();
@@ -62,7 +59,6 @@ test.describe("landing wide cards (desktop)", () => {
         if (count < 3) expect(width).toBeLessThanOrEqual(420);
         else expect(width).toBeGreaterThan(300);
       }
-      await page.locator("#mensualidad").screenshot({ path: `/tmp/landing-prices-${count}.png` });
     });
   }
 
@@ -74,13 +70,15 @@ test.describe("landing wide cards (desktop)", () => {
     expect(calls.sponsorCalls()).toBe(1);
     const ids = await page.locator("[id]").evaluateAll((nodes) => nodes.map((node) => node.id));
     expect(new Set(ids).size).toBe(ids.length);
-    await page.locator("#patrocinadores-destacados").screenshot({ path: "/tmp/landing-sponsors-hero.png" });
   });
 
   test("no strip renders without sponsors", async ({ page }) => {
     await mock(page, { categories: 3, tarifas: 2 });
     await page.goto("/");
-    await expect(page.locator("#patrocinadores")).toBeVisible();
+    // The roster resolved empty (footer strip says so) and the hero rendered,
+    // so the missing highlight strip is a decision, not a page that never loaded.
+    await expect(page.locator("#inicio")).toBeVisible();
+    await expect(page.locator("#patrocinadores")).toContainText("Pronto anunciaremos a nuestros patrocinadores");
     await expect(page.locator("#patrocinadores-destacados")).toHaveCount(0);
   });
 });
@@ -97,7 +95,5 @@ test.describe("landing wide cards (390px)", () => {
     const width = await cards.first().evaluate((node) => node.getBoundingClientRect().width);
     expect(width).toBeGreaterThan(300);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await page.locator("#patrocinadores-destacados").screenshot({ path: "/tmp/landing-sponsors-hero-390.png" });
-    await page.locator("#mensualidad").screenshot({ path: "/tmp/landing-prices-390.png" });
   });
 });
