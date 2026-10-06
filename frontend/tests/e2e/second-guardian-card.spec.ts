@@ -23,6 +23,8 @@ async function mockPortal(page: Page, minors: unknown[], onInvite?: (body: unkno
     const respond = (data: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(data) });
     if (path === "/api/auth/session") return respond(SESSION);
     if (path === "/api/student") return respond(PORTAL);
+    // The portal reads the selected child's payments and schedule as plain lists.
+    if (path.startsWith("/api/membresias/pagos/persona/") || path.startsWith("/api/asistencias/alumnos/")) return respond([]);
     if (path === "/api/co-representantes/mios") return respond(minors);
     if (path === "/api/co-representantes/invitaciones") {
       onInvite?.(route.request().postDataJSON());
