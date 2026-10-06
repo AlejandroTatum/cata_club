@@ -9,17 +9,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
-import type { BackendPersonaFull } from "@/lib/server/members-adapter";
-import type { BackendAsistencia, BackendHorario } from "@/lib/server/attendance-adapter";
+import type { BackendHorario } from "@/lib/server/attendance-adapter";
 import {
   buildMembershipPlans,
-  buildMembershipView,
-  buildRecentSessions,
-  buildStudentProfileView,
-  type BackendMembresiaPropia,
+  buildPortalProfile,
+  type BackendPortalPerfil,
   type BackendTipoMembresiaCatalogo,
   type StudentPortalView,
-  type StudentProfileView,
 } from "@/lib/server/student-adapter";
 
 /**
@@ -30,34 +26,11 @@ import {
  */
 const HISTORIAL_PAGE_LIMIT = 200;
 
-interface BackendPortalPerfil {
-  persona: BackendPersonaFull;
-  representante: { nombres: string; apellidos: string } | null;
-  historial: BackendAsistencia[];
-  membresias: BackendMembresiaPropia[];
-}
-
 interface BackendPortalAlumno {
   titular: BackendPortalPerfil;
   representados: BackendPortalPerfil[];
   horarios: BackendHorario[];
   tipos: BackendTipoMembresiaCatalogo[];
-}
-
-function buildProfile(
-  perfil: BackendPortalPerfil,
-  horariosById: Map<number, BackendHorario>,
-  tiposById: Map<number, BackendTipoMembresiaCatalogo>,
-): StudentProfileView {
-  const recentSessions = buildRecentSessions(perfil.historial, horariosById);
-  const { membresias } = perfil;
-  const activeMembership =
-    membresias.find((m) => m.estado === "ACTIVA" || m.estado === "VENCIDA") ?? membresias[0] ?? null;
-  const membership = activeMembership ? buildMembershipView(activeMembership, tiposById) : null;
-  const representante = perfil.representante
-    ? { nombres: perfil.representante.nombres, apellidos: perfil.representante.apellidos }
-    : null;
-  return buildStudentProfileView(perfil.persona, recentSessions, membership, representante);
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -80,8 +53,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const tiposById = new Map(aggregate.tipos.map((tipo) => [tipo.id, tipo]));
 
   const portal: StudentPortalView = {
-    self: buildProfile(aggregate.titular, horariosById, tiposById),
-    representados: aggregate.representados.map((perfil) => buildProfile(perfil, horariosById, tiposById)),
+    self: buildPortalProfile(aggregate.titular, horariosById, tiposById),
+    representados: aggregate.representados.map((perfil) => buildPortalProfile(perfil, horariosById, tiposById)),
     membershipPlans: buildMembershipPlans(aggregate.tipos),
   };
 

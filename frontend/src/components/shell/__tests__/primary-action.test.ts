@@ -116,6 +116,11 @@ const NO_HEADER_ACTION: Record<string, string> = {
   // justo la pregunta que el renglón ya contesta. Inscribir o dar de baja a un
   // alumno es del administrador, y ofrecerlo acá terminaría en un 403.
   "app/trainer/students/page.tsx": "roster — the only action is per row, bound to one alumno",
+  // El carnet que se imprime depende de lo elegido: sin jugadores no hay nada
+  // que imprimir, y «Imprimir N carnets» solo existe con la hoja cargada, junto
+  // a la cuenta de hojas que anuncia. Un botón en el encabezado faltaría la
+  // mayor parte del tiempo (selector, carga, error) y apuntaría lejos de ella.
+  "app/members/carnets/page.tsx": "the print action needs the loaded sheet and sits beside its sheet count (#1670)",
 };
 
 function read(path: string): string {
