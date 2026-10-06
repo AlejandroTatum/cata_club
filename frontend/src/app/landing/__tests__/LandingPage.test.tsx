@@ -369,6 +369,52 @@ describe("LandingPage", (): void => {
     expect(within(sponsors).queryByRole("img")).not.toBeInTheDocument();
   });
 
+  describe("second sponsors strip under the hero (#1659)", (): void => {
+    const stubSponsors = (payload: unknown): Mock => {
+      const fetchMock = vi.fn((input: RequestInfo | URL): Promise<{ ok: boolean; json: () => Promise<unknown> }> => {
+        const url = String(input);
+        return Promise.resolve({ ok: true, json: async (): Promise<unknown> => url.includes("/api/sponsors") ? payload : url.includes("/api/schedules") ? publicSchedulePayload : [] });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      return fetchMock;
+    };
+
+    it("shows a strip right after the hero and keeps the footer strip, from a single /api/sponsors request", async (): Promise<void> => {
+      const fetchMock = stubSponsors([{ id: 1, nombre: "Municipio", logoUrl: "https://cdn/muni.png" }]);
+      const { container } = render(<LandingPage />);
+
+      const highlight = await screen.findByRole("region", { name: "Patrocinadores destacados del club" });
+      const footerStrip = screen.getByRole("region", { name: "Patrocinadores del club" });
+      await within(footerStrip).findAllByAltText("Municipio");
+      await within(highlight).findAllByAltText("Municipio");
+
+      const main = container.querySelector("main") as HTMLElement;
+      expect(main.contains(highlight)).toBe(true);
+      expect(main.contains(footerStrip)).toBe(false);
+      const sections = Array.from(main.children);
+      expect(sections.indexOf(highlight)).toBeGreaterThan(sections.indexOf(container.querySelector("#inicio") as HTMLElement));
+      expect(sections.indexOf(highlight)).toBeLessThan(sections.indexOf(container.querySelector("#nosotros") ?? sections[sections.length - 1]));
+
+      expect(footerStrip.id).toBe("patrocinadores");
+      expect(highlight.id).not.toBe("patrocinadores");
+      const ids = Array.from(container.querySelectorAll("[id]")).map((node): string => node.id);
+      expect(new Set(ids).size).toBe(ids.length);
+
+      const sponsorCalls = fetchMock.mock.calls.filter(([input]): boolean => String(input).includes("/api/sponsors"));
+      expect(sponsorCalls).toHaveLength(1);
+    });
+
+    it("renders neither a highlight strip nor its fetch twice when there are no sponsors", async (): Promise<void> => {
+      const fetchMock = stubSponsors([]);
+      render(<LandingPage />);
+
+      expect(await screen.findByText("Pronto anunciaremos a nuestros patrocinadores")).toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "Patrocinadores destacados del club" })).not.toBeInTheDocument();
+      expect(document.querySelectorAll("#patrocinadores-destacados")).toHaveLength(0);
+      expect(fetchMock.mock.calls.filter(([input]): boolean => String(input).includes("/api/sponsors"))).toHaveLength(1);
+    });
+  });
+
   it("renders one card per published category, plus the help card", async (): Promise<void> => {
     render(<LandingPage />);
 

@@ -1270,6 +1270,17 @@ export async function fetchMembers(): Promise<MembersResponse> {
 }
 
 /**
+ * One account by id, built server-side (`GET /api/members/:id`) — the
+ * per-member payments page (#1668) loads this instead of the whole list, so a
+ * member the list never showed is still reachable by direct URL. A missing
+ * member rejects with an `ApiClientError` whose `status` is 404.
+ */
+export async function fetchMember(id: string): Promise<MemberAccount> {
+  const { account } = await request<{ account: MemberAccount }>(apiEndpoint(`/members/${encodeURIComponent(id)}`));
+  return account;
+}
+
+/**
  * Page size for roster listings paginated on the backend (issue #7):
  * asignaciones and horario rosters. 200 is the backend's hard cap (`le=200`)
  * and the same ceiling `PERSONAS_PAGE_LIMIT` already uses in
@@ -1515,6 +1526,24 @@ export interface StudentPortalSummary {
 /** Fetch the logged-in persona's own portal data — `GET /api/student`. */
 export async function fetchStudentPortal(personaId: string): Promise<StudentPortalSummary> {
   return request<StudentPortalSummary>(apiEndpoint(`/student?personaId=${encodeURIComponent(personaId)}`));
+}
+
+/** One persona's carnet data for the admin's printing — `GET /api/carnets`. */
+export interface CarnetSummary {
+  profile: StudentProfileSummary;
+  coverageEnd: string | null;
+  asignaciones: AlumnoHorario[];
+}
+
+export interface CarnetsResponse {
+  carnets: CarnetSummary[];
+  /** Personas that could not be read; the sheet prints without them. */
+  missing: number[];
+}
+
+/** Admin only (enforced by the BFF): the carnets of these personas, in order. */
+export async function fetchCarnets(personaIds: readonly number[]): Promise<CarnetsResponse> {
+  return request<CarnetsResponse>(apiEndpoint(`/carnets?ids=${personaIds.join(",")}`));
 }
 
 // ---------------------------------------------------------------------------

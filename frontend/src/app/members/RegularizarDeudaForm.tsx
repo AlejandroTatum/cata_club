@@ -221,7 +221,7 @@ export default function RegularizarDeudaForm({
         className={primary ? PRIMARY_ACTION_TRIGGER : ACTION_TRIGGER}
       >
         <Wallet size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-        Regularizar deuda
+        Cargar pagos atrasados
       </button>
 
       {open && (
@@ -232,11 +232,11 @@ export default function RegularizarDeudaForm({
           // with a native, English tooltip before the Spanish message runs.
           noValidate
           className="mt-2 rounded-lg border border-line bg-surface p-3"
-          aria-label="Regularizar deuda"
+          aria-label="Cargar pagos atrasados"
         >
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-xs font-bold uppercase tracking-wider text-ink-3">
-              Regularizar deuda
+              Cargar pagos atrasados
             </p>
             {/*
               Issue #313 (K5 hallazgo #15): "Membresía: Vencida" y "0 meses
@@ -268,8 +268,8 @@ export default function RegularizarDeudaForm({
           )}
 
           <p className="mb-2 text-2xs text-ink-3">
-            Registra aquí los meses atrasados que el jugador ya pagó o debe regularizar. Si el
-            período incluye hoy, la membresía queda activa.
+            Registra aquí los meses vencidos que no figuran pagados: los que se pagaron antes de usar
+            el sistema o los que se pagan ahora. Si el período incluye hoy, la membresía queda activa.
           </p>
 
           <div className="grid grid-cols-2 gap-2">
@@ -362,7 +362,7 @@ export default function RegularizarDeudaForm({
               ) : (
                 <CheckCircle2 size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               )}
-              {regularized ? "Regularizada" : "Regularizar"}
+              {regularized ? "Cargados" : "Cargar pagos"}
             </button>
             <button
               type="button"

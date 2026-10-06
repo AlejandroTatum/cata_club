@@ -11,9 +11,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { getRowAction, getRowActionsTrigger } from "./row-actions";
 import MembersPage from "@/app/members/page";
+import PagosPage from "@/app/members/[id]/pagos/page";
 import type { MemberAccount, MemberStudentSummary } from "@/app/members/members-utils";
 import type { DescuentoCatalogo } from "@/services/api";
 import { ToastProvider } from "@/contexts/ToastContext";
@@ -25,9 +26,14 @@ vi.mock("@/components/ProtectedRoute", () => ({
 
 // AppShell renders NotificationBell + needs next/navigation, next/link,
 // next/image, AuthContext — same minimal mock pattern as GroupsPage.test.tsx.
+// #1668: «Pagos» is a page, so the row's trigger navigates; the page itself is
+// rendered by the helpers below, with the account id as the route parameter.
+const mockRouterPush = vi.fn();
+let mockRouteParamId = "1";
 vi.mock("next/navigation", () => ({
   usePathname: () => "/members",
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: mockRouterPush }),
+  useParams: () => ({ id: mockRouteParamId }),
 }));
 
 vi.mock("next/link", () => ({
@@ -92,6 +98,7 @@ function hydratingAuth(): AuthState {
 // below overrides this per test.
 beforeEach(() => {
   mockUseAuth.mockReturnValue(resolvedAuth("admin"));
+  mockRouterPush.mockReset();
   // `BeneficioSection` (issue #398) mounts unconditionally inside every
   // student edit panel, so every test that opens the edit modal fetches a
   // benefit whether it cares about one or not. Defaulting to "no beneficio"
@@ -117,6 +124,7 @@ vi.mock("@/contexts/ToastContext", () => ({
 }));
 
 const mockFetchMembers = vi.fn();
+const mockFetchMember = vi.fn();
 const mockObtenerRolesDePersona = vi.fn();
 const mockAsignarRol = vi.fn();
 const mockQuitarRol = vi.fn();
@@ -177,6 +185,7 @@ vi.mock("@/services/api", () => {
   }
   return {
     fetchMembers: () => mockFetchMembers(),
+    fetchMember: (id: string) => mockFetchMember(id),
     crearEntrenador: (data: unknown) => mockCrearEntrenador(data),
     reenviarInvitacionEntrenador: (personaId: number) => mockReenviarInvitacionEntrenador(personaId),
     obtenerRolesDePersona: (personaId: number) => mockObtenerRolesDePersona(personaId),
@@ -276,6 +285,27 @@ async function findAccountCard(): Promise<HTMLElement> {
   return card as HTMLElement;
 }
 
+/**
+ * #1668: «Pagos» is a page of its own (`/members/[id]/pagos`). Renders it for
+ * `account` — by default the first account the members list mock resolves, so
+ * a test arranges its data once and reaches the page the way the admin does —
+ * and returns the page's content region where the Pagos dialog used to be.
+ */
+async function openPagosPage(account?: MemberAccount): Promise<HTMLElement> {
+  const target = account ?? ((await mockFetchMembers()) as { accounts: MemberAccount[] }).accounts[0];
+  mockFetchMember.mockResolvedValue(target);
+  mockRouteParamId = target.id;
+  render(
+    <ToastProvider>
+      <PagosPage />
+    </ToastProvider>,
+  );
+  const main = await screen.findByRole("main");
+  // The page names the member once their account has loaded.
+  await waitFor(() => expect(within(main).getByText(/historial de pagos/i)).toBeInTheDocument());
+  return main;
+}
+
 /** Each rendering carries exactly one "Editar <name>" action, inside the row's overflow menu. */
 function getEditButton(container: HTMLElement): HTMLElement {
   return getRowAction(container, /^editar/i);
@@ -366,7 +396,6 @@ describe("MembersPage — Editar member modal", () => {
     const row = await findAccountRow();
     const dialog = await openModalAndWaitForRoles(row);
 
-    expect(dialog.className).toContain("max-w-5xl");
     const heading = (name: string): HTMLElement =>
       within(dialog).getByRole("heading", { name });
     const left = heading("Datos de la cuenta").closest("section")?.parentElement as HTMLElement;
@@ -1381,19 +1410,7 @@ describe("MembersPage — Crear membresía inline form", () => {
   });
 
   it("opens the create-membership form (type select + Crear/Cancelar) inside the student's card", async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-
-    // Membership creation lives inside the student's edit-panel card, only
-    // reachable via the account's edit modal — no more row expansion. The
-    // card is fixed-width (no dynamic grid-column-span hack needed anymore,
-    // unlike the old cramped 4-column row layout).
-    fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
-    const dialog = screen.getByRole("dialog");
+    const dialog = await openPagosPage();
 
     fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
     const crearButton = await within(dialog).findByRole("button", { name: /crear membresía/i });
@@ -1466,6 +1483,7 @@ describe("MembersPage — Registrar pago inline form", () => {
       dependientes: [estudianteConMembresia],
     };
     mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia] });
+    mockFetchMember.mockResolvedValue(cuentaConMembresia);
     mockFetchDescuentos.mockResolvedValue(options.descuentos ?? []);
     if (options.registrarPagoRejects) {
       mockRegistrarPago.mockRejectedValueOnce(options.registrarPagoRejects);
@@ -1473,17 +1491,15 @@ describe("MembersPage — Registrar pago inline form", () => {
       mockRegistrarPago.mockResolvedValueOnce({ id: 99, estadoPago: "PENDIENTE_VALIDACION" });
     }
 
+    if (options.entryPoint !== "edit") return openPagosPage(cuentaConMembresia);
+
     render(
       <ToastProvider>
         <MembersPage />
       </ToastProvider>,
     );
     const row = await findAccountRow();
-        fireEvent.click(
-          options.entryPoint === "edit"
-            ? getEditButton(row)
-            : within(row).getByRole("button", { name: /^pagos/i }),
-        );
+    fireEvent.click(getEditButton(row));
     return screen.getByRole("dialog");
   }
 
@@ -1710,7 +1726,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     ).toBeInTheDocument();
   });
 
-  it("offers 'Regularizar deuda' for a membership, shows the derived debt and submits the motivo", async () => {
+  it("offers 'Cargar pagos atrasados' for a membership, shows the derived debt and submits the motivo", async () => {
     mockFetchMembresiaDeuda.mockResolvedValue({
       mesesAdeudados: 4,
       ultimaCoberturaFin: "2026-03-31",
@@ -1735,7 +1751,7 @@ describe("MembersPage — Registrar pago inline form", () => {
 
     // The debt is derived and admin-only: opening the tool fetches it and
     // shows the owed months before anything is written.
-    fireEvent.click(within(dialog).getByRole("button", { name: /regularizar deuda/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /cargar pagos atrasados/i }));
     expect(await within(dialog).findByText(/4 meses adeudados/i)).toBeInTheDocument();
     expect(within(dialog).getByLabelText(/fecha inicio/i)).toBeRequired();
     expect(within(dialog).getByLabelText(/fecha fin/i)).toBeRequired();
@@ -1745,7 +1761,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     fireEvent.change(within(dialog).getByLabelText(/fecha fin/i), { target: { value: "2026-04-30" } });
     fireEvent.change(within(dialog).getByLabelText(/^motivo/i), { target: { value: "Demora del club" } });
     await within(dialog).findByText(/85,00/);
-    fireEvent.click(within(dialog).getByRole("button", { name: /^regularizar$/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /^cargar pagos$/i }));
 
     expect(mockRegularizarDeuda).toHaveBeenCalledWith(42, {
       monto: 85,
@@ -1760,7 +1776,7 @@ describe("MembersPage — Registrar pago inline form", () => {
   // to "catch up on" — the backend's `RegularizacionDeudaDTO.monto`
   // requires `> 0` regardless, so there is no honest amount this admin
   // could submit for a member who does not pay.
-  it("does NOT offer 'Regularizar deuda' for a gratuitous membership, and explains why", async () => {
+  it("does NOT offer 'Cargar pagos atrasados' for a gratuitous membership, and explains why", async () => {
     const dialog = await openMemberDialog({
       membresia: { ...MEMBRESIA_VENCIDA, esGratuidadFamiliar: true },
     });
@@ -1769,7 +1785,7 @@ describe("MembersPage — Registrar pago inline form", () => {
       await within(dialog).findByText(/no hay ningún monto que regularizar/i),
     ).toBeInTheDocument();
     expect(
-      within(dialog).queryByRole("button", { name: /regularizar deuda/i }),
+      within(dialog).queryByRole("button", { name: /cargar pagos atrasados/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -1798,7 +1814,7 @@ describe("MembersPage — Registrar pago inline form", () => {
       },
     });
 
-    fireEvent.click(within(dialog).getByRole("button", { name: /regularizar deuda/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /cargar pagos atrasados/i }));
 
     expect(await within(dialog).findByText(/vencida desde el 20\/07\/2026/i)).toBeInTheDocument();
     expect(within(dialog).queryByText(/0 meses adeudados/i)).not.toBeInTheDocument();
@@ -1885,15 +1901,7 @@ describe("MembersPage — Registrar pago inline form", () => {
   it("does NOT render a 'Registrar pago' button when the student has no membership", async () => {
     mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT] });
 
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-    fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
-
-    const dialog = screen.getByRole("dialog");
+    const dialog = await openPagosPage();
     fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
     await within(dialog).findByRole("button", { name: /crear membresía/i });
     expect(within(dialog).queryByRole("button", { name: /^registrar pago$/i })).not.toBeInTheDocument();
@@ -1984,14 +1992,7 @@ describe("MembersPage — Beneficio del club", () => {
   };
 
   async function openEditModal(): Promise<HTMLElement> {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-    fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
-    return screen.getByRole("dialog");
+    return openPagosPage();
   }
 
   it("renders the active benefit, including who granted it", async () => {
@@ -2186,15 +2187,7 @@ describe("MembersPage — Beneficio del club", () => {
         },
       ],
     };
-    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia] });
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-    fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
-    return screen.getByRole("dialog");
+    return openPagosPage(cuentaConMembresia);
   }
 
   it("disables Asignar and shows an actionable currency message for a discount above the tarifa", async () => {
@@ -2280,10 +2273,12 @@ describe("MembersPage — estado de deuda en Pagos (issue #538)", () => {
     expect(within(card).getByRole("button", { name: "Pagos de María González" })).toBeInTheDocument();
     expect(within(card).getByText(/Debe \$90,00 · 3 meses · desde 31\/05\/2026/)).toBeInTheDocument();
 
-    // And it stays inside the Payments dialog, as before.
+    // And it stays inside the member's Pagos page, as before.
     fireEvent.click(rowPayments);
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /regularizar deuda/i }));
+    expect(mockRouterPush).toHaveBeenCalledWith("/members/1/pagos");
+    cleanup();
+    const dialog = await openPagosPage();
+    fireEvent.click(within(dialog).getByRole("button", { name: /cargar pagos atrasados/i }));
     expect(await within(dialog).findByText(/3 meses adeudados/i)).toBeInTheDocument();
   });
 
@@ -2325,8 +2320,10 @@ describe("MembersPage — estado de deuda en Pagos (issue #538)", () => {
     expect(within(row).getByText(/Debe \$30,00 · 1 mes$/)).toBeInTheDocument();
 
     fireEvent.click(payments);
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /regularizar deuda/i }));
+    expect(mockRouterPush).toHaveBeenCalledWith("/members/1/pagos");
+    cleanup();
+    const dialog = await openPagosPage();
+    fireEvent.click(within(dialog).getByRole("button", { name: /cargar pagos atrasados/i }));
     expect(await within(dialog).findByText(/1 mes adeudado/i)).toBeInTheDocument();
     expect(within(dialog).queryByText(/1 mes adeudados/i)).not.toBeInTheDocument();
   });
@@ -2428,42 +2425,12 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
   });
 
   it("offers no 'Guardar cambios' button, because nothing in the footer saves", async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-    fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
-    const dialog = screen.getByRole("dialog");
+    const dialog = await openPagosPage();
 
     expect(within(dialog).queryByRole("button", { name: /guardar cambios/i })).not.toBeInTheDocument();
     // The paired "Cancelar" is gone too — with no save to cancel, offering
     // "Cancelar" implies discardable changes that were already persisted.
     expect(within(dialog).queryByRole("button", { name: /^cancelar$/i })).not.toBeInTheDocument();
-  });
-
-  it("closes the modal from a single secondary 'Cerrar' action in the footer", async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-    fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
-    const dialog = screen.getByRole("dialog");
-
-    // Exactly one control is named plain "Cerrar" — the footer's secondary.
-    // The header's icon-only dismiss is "Cerrar ventana" so the two are
-    // distinguishable in a screen reader's controls list.
-    const footerClose = within(dialog).getByRole("button", { name: "Cerrar" });
-    // Secondary, not the red primary: dismissing is not the CTA here.
-    expect(footerClose.className).toContain("bg-paper");
-    expect(footerClose.className).not.toContain("cata-red");
-
-    fireEvent.click(footerClose);
-
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
   it("declares each group's save contract instead of one blanket claim in the header", async () => {
@@ -2565,21 +2532,14 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
     ]);
     mockCrearMembresia.mockResolvedValue({ id: 77 });
 
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-    fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
-    const dialog = screen.getByRole("dialog");
+    const dialog = await openPagosPage();
 
     fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
     fireEvent.click(await within(dialog).findByRole("button", { name: /crear membresía/i }));
     const combobox = await within(dialog).findByRole("combobox");
     fireEvent.change(combobox, { target: { value: "5" } });
 
-    const callsBefore = mockFetchMembers.mock.calls.length;
+    const callsBefore = mockFetchMember.mock.calls.length;
     const form = combobox.parentElement as HTMLElement;
     fireEvent.click(within(form).getByRole("button", { name: /^crear$/i }));
 
@@ -2587,7 +2547,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
     // The list refreshes itself — the row shows the new membership without a
     // manual page reload.
     await waitFor(() =>
-      expect(mockFetchMembers.mock.calls.length).toBeGreaterThan(callsBefore),
+      expect(mockFetchMember.mock.calls.length).toBeGreaterThan(callsBefore),
     );
     expect(screen.queryByText(/recarga para verla/i)).not.toBeInTheDocument();
   });
@@ -2606,14 +2566,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
     ]);
     mockCrearMembresia.mockResolvedValue({ id: 77 });
 
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-    fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
-    const dialog = screen.getByRole("dialog");
+    const dialog = await openPagosPage();
 
     fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
     fireEvent.click(await within(dialog).findByRole("button", { name: /crear membresía/i }));
@@ -2630,37 +2583,30 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
     expect(payload).not.toHaveProperty("montoAplicado");
   });
 
-  it("keeps the edit dialog open while the post-creation refresh is in flight", async () => {
+  it("keeps the payments page mounted (no spinner swap) while the post-creation refresh is in flight", async () => {
     mockFetchTiposMembresia.mockResolvedValue([
       { id: 5, categoria: "Mensual", precio: 25, modalidad: "mensual" },
     ]);
     mockCrearMembresia.mockResolvedValue({ id: 77 });
 
     // Hold the refresh open so the in-flight window is observable. The bug was
-    // that the refresh flipped the page-level `loading` flag, which gates the
-    // whole account list — unmounting the dialog the admin was working in and
-    // discarding every unsaved field in it.
+    // that the refresh flipped the page-level `loading` flag — unmounting the
+    // form the admin was working in and discarding every unsaved field in it.
     let releaseRefresh: (() => void) | undefined;
     const refreshed = new Promise<void>((resolve) => {
       releaseRefresh = resolve;
     });
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-    fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
-    const dialog = screen.getByRole("dialog");
+    const dialog = await openPagosPage();
 
     fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
     fireEvent.click(await within(dialog).findByRole("button", { name: /crear membresía/i }));
     const combobox = await within(dialog).findByRole("combobox");
     fireEvent.change(combobox, { target: { value: "5" } });
 
-    mockFetchMembers.mockImplementationOnce(async () => {
+    const callsBefore = mockFetchMember.mock.calls.length;
+    mockFetchMember.mockImplementationOnce(async () => {
       await refreshed;
-      return { accounts: [ACCOUNT] };
+      return ACCOUNT;
     });
 
     const form = combobox.parentElement as HTMLElement;
@@ -2668,11 +2614,13 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
 
     await waitFor(() => expect(mockCrearMembresia).toHaveBeenCalled());
 
-    // Mid-refresh: the dialog is still mounted and still holds its own state.
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // Mid-refresh: the page is still mounted and still holds its own state.
+    expect(dialog).toBeInTheDocument();
+    expect(screen.queryByText(/cargando pagos/i)).not.toBeInTheDocument();
 
     releaseRefresh?.();
-    await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+    await waitFor(() => expect(mockFetchMember.mock.calls.length).toBeGreaterThan(callsBefore));
+    expect(dialog).toBeInTheDocument();
   });
 });
 
@@ -3696,11 +3644,13 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     expect(getRowButton(row, /^pagos/i)).toHaveAccessibleName("Pagos de María González");
     expect(within(row).queryByText(/adeudado/i)).not.toBeInTheDocument();
 
-    // The debt flows stay inside the Payments dialog: Regularizar deuda opens
-    // with the derived months — nothing was lost by cleaning the button.
+    // The debt flows stay inside the member's Pagos page: Cargar pagos atrasados
+    // opens with the derived months — nothing was lost by cleaning the button.
     fireEvent.click(getRowButton(row, /^pagos/i));
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /regularizar deuda/i }));
+    expect(mockRouterPush).toHaveBeenCalledWith("/members/1/pagos");
+    cleanup();
+    const dialog = await openPagosPage();
+    fireEvent.click(within(dialog).getByRole("button", { name: /cargar pagos atrasados/i }));
     expect(await within(dialog).findByText(/4 meses adeudados/i)).toBeInTheDocument();
   });
 
@@ -3723,16 +3673,7 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
   });
 
   it("opens the pagos/membresía flow directly from the row, with no roles/estado controls present", async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-
-    fireEvent.click(getRowButton(row, /^pagos/i));
-
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await openPagosPage();
     expect(within(dialog).queryByRole("radio", { name: /rol|estado|activ/i })).not.toBeInTheDocument();
     fireEvent.click(await within(dialog).findByRole("radio", { name: "Socio nuevo" }));
     expect(within(dialog).queryByText("Roles")).not.toBeInTheDocument();
@@ -3744,15 +3685,12 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
       ...ACCOUNT,
       estudiantes: [{ ...ACCOUNT.estudiantes[0], activo: false, membresia: { id: 42, estado: "vencida", monto: 85 } }],
     }] });
-    render(<ToastProvider><MembersPage /></ToastProvider>);
-    const row = await findAccountRow();
-    fireEvent.click(getRowButton(row, /^pagos/i));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await openPagosPage();
     const archivedNotice = within(dialog).getByText(/inactivo\/archivado/i);
         expect(archivedNotice).toBeInTheDocument();
         expect(archivedNotice.tagName).toBe("OUTPUT");
     expect(within(dialog).getByText(/historial de pagos/i)).toBeInTheDocument();
-    expect(within(dialog).queryByRole("button", { name: /crear membresía|registrar pago|regularizar deuda|suspender|reactivar|cambiar plan/i })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /crear membresía|registrar pago|cargar pagos atrasados|suspender|reactivar|cambiar plan/i })).not.toBeInTheDocument();
   });
 
   it("keeps Editar focused on account editing, without duplicated student actions", async () => {
@@ -3769,10 +3707,10 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     expect(within(dialog).getByText("Jugadores a cargo")).toBeInTheDocument();
     expect(within(dialog).getByRole("radio", { name: /admin/i })).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: /ficha médica/i })).not.toBeInTheDocument();
-    expect(within(dialog).queryByRole("button", { name: /crear membresía|registrar pago|regularizar deuda/i })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /crear membresía|registrar pago|cargar pagos atrasados/i })).not.toBeInTheDocument();
   });
 
-  it("puts Regularizar deuda before Registrar pago when canonical debt data exists", async () => {
+  it("puts Cargar pagos atrasados before Registrar pago when canonical debt data exists", async () => {
     mockFetchMembers.mockReset().mockResolvedValue({
       accounts: [{
         ...ACCOUNT,
@@ -3782,12 +3720,9 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
         }],
       }],
     });
-    render(<ToastProvider><MembersPage /></ToastProvider>);
-    const row = await findAccountRow();
-    fireEvent.click(getRowButton(row, /^pagos/i));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await openPagosPage();
     const buttons = within(dialog).getAllByRole("button");
-    const regularizar = buttons.findIndex((button) => /regularizar deuda/i.test(button.textContent ?? ""));
+    const regularizar = buttons.findIndex((button) => /cargar pagos atrasados/i.test(button.textContent ?? ""));
     const registrar = buttons.findIndex((button) => /registrar pago/i.test(button.textContent ?? ""));
     expect(regularizar).toBeGreaterThan(-1);
     expect(regularizar).toBeLessThan(registrar);
@@ -3803,19 +3738,16 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
         }],
       }],
     });
-    render(<ToastProvider><MembersPage /></ToastProvider>);
-    const row = await findAccountRow();
-    fireEvent.click(getRowButton(row, /^pagos/i));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await openPagosPage();
     const buttons = within(dialog).getAllByRole("button");
     const registrar = buttons.findIndex((button) => /registrar pago/i.test(button.textContent ?? ""));
-    const regularizar = buttons.findIndex((button) => /regularizar deuda/i.test(button.textContent ?? ""));
+    const regularizar = buttons.findIndex((button) => /cargar pagos atrasados/i.test(button.textContent ?? ""));
     expect(registrar).toBeGreaterThan(-1);
     expect(registrar).toBeLessThan(regularizar);
     expect(within(dialog).getByText(/deuda no disponible/i)).toBeInTheDocument();
   });
 
-  it("only one row dialog is open at a time: Pagos closes an already-open Ficha médica dialog for the same row", async () => {
+  it("sends «Pagos» to the member's own page, with no dialog opened for it (#1668)", async () => {
     render(
       <ToastProvider>
         <MembersPage />
@@ -3823,15 +3755,24 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     );
     const row = await findAccountRow();
 
-    fireEvent.click(getRowButton(row, /^ficha médica/i));
-    await screen.findByRole("dialog");
-
     fireEvent.click(getRowButton(row, /^pagos/i));
 
-    const dialogs = await screen.findAllByRole("dialog");
-    expect(dialogs).toHaveLength(1);
-    fireEvent.click(await within(dialogs[0]).findByRole("radio", { name: "Socio nuevo" }));
-    expect(await within(dialogs[0]).findByRole("button", { name: /crear membresía/i })).toBeInTheDocument();
+    expect(mockRouterPush).toHaveBeenCalledTimes(1);
+    expect(mockRouterPush).toHaveBeenCalledWith("/members/1/pagos");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("sends the card's «Pagos» to the same page", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const card = await findAccountCard();
+
+    fireEvent.click(within(card).getAllByRole("button", { name: /^pagos/i })[0]);
+
+    expect(mockRouterPush).toHaveBeenCalledWith("/members/1/pagos");
   });
 
   it("returns focus to the Ficha médica trigger when its dialog closes", async () => {
@@ -3850,36 +3791,6 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     expect(document.activeElement).toBe(trigger);
   });
 
-  it("returns focus to the Pagos trigger when its dialog closes", async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-    const trigger = getRowButton(row, /^pagos/i);
-
-    fireEvent.click(trigger);
-    await screen.findByRole("dialog");
-    fireEvent.click(screen.getByRole("button", { name: "Cerrar ventana" }));
-
-    expect(document.activeElement).toBe(trigger);
-  });
-
-  it("closes the Pagos dialog on Escape, same as the account dialog", async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    const row = await findAccountRow();
-    fireEvent.click(getRowButton(row, /^pagos/i));
-    await screen.findByRole("dialog");
-
-    fireEvent.keyDown(document, { key: "Escape" });
-
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
 });
 
 /**
@@ -3932,7 +3843,6 @@ describe("MembersPage — mobile-safe dialog viewport (issue #659)", () => {
 
   it.each([
     ["Ficha médica", /^ficha médica/i],
-    ["Pagos", /^pagos/i],
     ["Editar", /^editar/i],
   ])("sizes the %s dialog off the dynamic viewport instead of the static one", async (_label, triggerName) => {
     render(
@@ -3953,7 +3863,6 @@ describe("MembersPage — mobile-safe dialog viewport (issue #659)", () => {
 
   it.each([
     ["Ficha médica", /^ficha médica/i],
-    ["Pagos", /^pagos/i],
     ["Editar", /^editar/i],
   ])("keeps the %s dialog clear of the notch/home-indicator safe area", async (_label, triggerName) => {
     render(
@@ -3974,7 +3883,6 @@ describe("MembersPage — mobile-safe dialog viewport (issue #659)", () => {
 
   it.each([
     ["Ficha médica", /^ficha médica/i],
-    ["Pagos", /^pagos/i],
   ])("lets the %s dialog title actually shrink instead of overflowing the header row", async (_label, triggerName) => {
     render(
       <ToastProvider>
@@ -4059,7 +3967,6 @@ describe("MembersPage — the dialog follows the visual viewport (issue #767)", 
 
   const TRIGGERS: readonly (readonly [string, RegExp])[] = [
     ["Ficha médica", /^ficha médica/i],
-    ["Pagos", /^pagos/i],
     ["Editar", /^editar/i],
   ];
 
@@ -4606,7 +4513,7 @@ describe("MembersPage — rail (admin redesign v4)", () => {
 // Admin redesign v4 — the Pagos dialog has a hierarchy.
 // ---------------------------------------------------------------------------
 
-describe("MembersPage — Pagos dialog hierarchy (admin redesign v4)", () => {
+describe("MembersPage — Pagos page hierarchy (admin redesign v4, now #1668)", () => {
   async function openActiveMembershipPayments(): Promise<HTMLElement> {
     mockFetchMembers.mockReset().mockResolvedValue({
       accounts: [{
@@ -4624,9 +4531,7 @@ describe("MembersPage — Pagos dialog hierarchy (admin redesign v4)", () => {
         }],
       }],
     });
-    render(<ToastProvider><MembersPage /></ToastProvider>);
-    fireEvent.click(getRowAction(await findAccountRow(), /^pagos/i));
-    return screen.findByRole("dialog");
+    return openPagosPage();
   }
 
   it("summarises the membership before offering any action", async () => {
@@ -4636,7 +4541,6 @@ describe("MembersPage — Pagos dialog hierarchy (admin redesign v4)", () => {
     expect(within(summary).getByText("Mensual")).toBeInTheDocument();
     expect(within(summary).getByText(/\$\s?85/)).toBeInTheDocument();
     expect(within(summary).getByText("Vigencia")).toBeInTheDocument();
-    expect(dialog.className).toContain("max-w-5xl");
   });
 
   it("shows the payment history as its own labelled section, with no toggle", async () => {
@@ -4653,7 +4557,7 @@ describe("MembersPage — Pagos dialog hierarchy (admin redesign v4)", () => {
 
     const registrar = within(actions).getByRole("button", { name: "Registrar pago" });
     expect(registrar).toHaveClass("bg-cata-red", "h-ctl");
-    for (const name of ["Regularizar deuda", "Suspender membresía", "Cambiar plan", "Asignar beneficio"]) {
+    for (const name of ["Suspender membresía", "Cambiar plan", "Asignar beneficio"]) {
       const trigger = await within(actions).findByRole("button", { name });
       expect(trigger, name).toHaveClass("bg-paper", "h-ctl", "w-full");
       expect(trigger, name).not.toHaveClass("bg-cata-red");
@@ -4663,12 +4567,14 @@ describe("MembersPage — Pagos dialog hierarchy (admin redesign v4)", () => {
     // Suspending is the one that takes something away.
     expect(within(actions).getByRole("button", { name: "Suspender membresía" })).toHaveClass("text-state-bad");
     // Each trigger has its one-line explanation next to it.
-    expect(within(actions).getByText(/pagos atrasados/i)).toBeInTheDocument();
+    // «Cargar pagos atrasados» only applies when months are owed: not offered here.
+    expect(within(actions).queryByRole("button", { name: /cargar pagos atrasados/i })).not.toBeInTheDocument();
+    expect(within(actions).getByText(/efectivo o transferencia/i)).toBeInTheDocument();
     expect(within(actions).getByText(/pausa los cobros/i)).toBeInTheDocument();
     expect(within(actions).getByText(/rige desde el próximo pago/i)).toBeInTheDocument();
   });
 
-  it("hands the red primary to Regularizar deuda when there is debt", async () => {
+  it("hands the red primary to Cargar pagos atrasados when there is debt", async () => {
     mockFetchMembers.mockReset().mockResolvedValue({
       accounts: [{
         ...ACCOUNT,
@@ -4678,11 +4584,9 @@ describe("MembersPage — Pagos dialog hierarchy (admin redesign v4)", () => {
         }],
       }],
     });
-    render(<ToastProvider><MembersPage /></ToastProvider>);
-    fireEvent.click(getRowAction(await findAccountRow(), /^pagos/i));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await openPagosPage();
 
-    expect(within(dialog).getByRole("button", { name: "Regularizar deuda" })).toHaveClass("bg-cata-red");
+    expect(within(dialog).getByRole("button", { name: "Cargar pagos atrasados" })).toHaveClass("bg-cata-red");
     expect(within(dialog).getByRole("button", { name: "Registrar pago" })).not.toHaveClass("bg-cata-red");
     expect(dialog.querySelectorAll("button.bg-cata-red")).toHaveLength(1);
   });
@@ -4751,5 +4655,95 @@ describe("MembersPage — Nuevo entrenador (#1575)", () => {
     const dialog = await screen.findByRole("dialog");
 
     expect(within(dialog).queryByRole("button", { name: "Reenviar invitación" })).not.toBeInTheDocument();
+  });
+});
+
+describe("MembersPage — Imprimir carnet (issue #1670)", () => {
+  const PLAYER: MemberAccount = { ...ACCOUNT, backendRoles: ["ALUMNO"] };
+  const STAFF: MemberAccount = {
+    ...ACCOUNT,
+    id: "2",
+    nombres: "Tito",
+    apellidos: "Entrenador",
+    role: "estudiante",
+    backendRoles: ["ENTRENADOR"],
+    estudiantes: [{ ...SOFIA_SUMMARY, id: "20" }],
+  };
+  const REPRESENTATIVE: MemberAccount = {
+    ...ACCOUNT,
+    id: "3",
+    nombres: "Rosa",
+    apellidos: "Representante",
+    role: "representante",
+    backendRoles: ["REPRESENTANTE"],
+    estudiantes: [{ ...SOFIA_SUMMARY, id: "30" }],
+  };
+  const MINOR_WITHOUT_ACCOUNT: MemberAccount = {
+    ...ACCOUNT,
+    id: "4",
+    nombres: "Mateo",
+    apellidos: "Menor",
+    backendRoles: undefined,
+    representadoPor: "Rosa Representante",
+  };
+
+  beforeEach(() => {
+    mockRouterPush.mockReset();
+    mockFetchMembers.mockReset();
+  });
+
+  /** The row's "Más acciones" menu items, by accessible name. */
+  async function menuItemNames(name: string): Promise<string[]> {
+    const matches = await screen.findAllByText(name);
+    const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
+    const visible = within(row)
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label") ?? button.textContent ?? "");
+    // A representative's own row has no overflow menu at all, only "Editar".
+    if (within(row).queryAllByRole("button", { name: /^más acciones para/i }).length === 0) return visible;
+    const trigger = getRowActionsTrigger(row);
+    fireEvent.click(trigger);
+    const menu = document.getElementById(trigger.getAttribute("aria-controls") ?? "") as HTMLElement;
+    return [
+      ...visible,
+      ...within(menu)
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent ?? ""),
+    ];
+  }
+
+  it("offers the action for a player, and it opens that player's carnet", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [PLAYER] });
+    render(<MembersPage />);
+
+    const row = await findAccountRow();
+    fireEvent.click(getRowAction(row, /^imprimir carnet de maría gonzález$/i));
+    expect(mockRouterPush).toHaveBeenCalledWith("/members/carnets?ids=1");
+  });
+
+  it("offers it for a represented minor with no account of their own", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [MINOR_WITHOUT_ACCOUNT] });
+    render(<MembersPage />);
+
+    const names = await menuItemNames("Mateo Menor");
+    expect(names).toContain("Imprimir carnet de Mateo Menor");
+  });
+
+  it.each([
+    ["Tito Entrenador", STAFF],
+    ["Rosa Representante", REPRESENTATIVE],
+  ])("does not offer it for %s: staff and representatives hold no carnet", async (name, account) => {
+    mockFetchMembers.mockResolvedValue({ accounts: [account] });
+    render(<MembersPage />);
+
+    const names = await menuItemNames(name);
+    expect(names.some((label) => /carnet/i.test(label))).toBe(false);
+  });
+
+  it("links to the batch picker from the page header", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [PLAYER] });
+    render(<MembersPage />);
+
+    expect(await screen.findByRole("link", { name: /carnets por lote/i })).toHaveAttribute("href", "/members/carnets");
   });
 });

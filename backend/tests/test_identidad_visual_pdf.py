@@ -403,3 +403,54 @@ def test_el_banner_del_membrete_existe_y_conserva_la_proporcion_del_cliente():
     ancho, alto = Image.open(ruta).size
     assert (ancho, alto) == (1166, 253)
     assert generador_pdf._MEMBRETE_PROPORCION == pytest.approx(alto / ancho)
+
+
+# --- #1655: el bloque de título va pegado al banner --------------------------
+
+def _posiciones_del_membrete(monkeypatch, generar):
+    """Devuelve (y_base_del_banner, [y de cada línea del membrete], margen superior)."""
+    from reportlab.pdfgen.canvas import Canvas
+
+    banner: list[float] = []
+    lineas: dict[str, float] = {}
+    imagen_original = Canvas.drawImage
+    centrado_original = Canvas.drawCentredString
+
+    def _imagen(self, imagen, x, y, *a, **k):
+        banner.append(y)
+        return imagen_original(self, imagen, x, y, *a, **k)
+
+    def _centrado(self, x, y, texto, *a, **k):
+        if texto in _LINEAS_MEMBRETE:
+            lineas[texto] = y
+        return centrado_original(self, x, y, texto, *a, **k)
+
+    monkeypatch.setattr(Canvas, "drawImage", _imagen)
+    monkeypatch.setattr(Canvas, "drawCentredString", _centrado)
+    generar()
+    return banner[0], [lineas[t] for t in _LINEAS_MEMBRETE]
+
+
+@pytest.mark.parametrize("generar", [_generar_comprobante, _generar_reporte])
+def test_el_titulo_del_membrete_queda_pegado_al_banner(monkeypatch, generar):
+    base_banner, lineas = _posiciones_del_membrete(monkeypatch, generar)
+
+    # La primera línea arranca a menos de 4 mm de la base del banner (antes ~6,4 mm).
+    assert base_banner - lineas[0] < 4 * mm
+    assert lineas == sorted(lineas, reverse=True)
+
+
+@pytest.mark.parametrize(
+    "generar, margen_lateral",
+    [(_generar_comprobante, 18 * mm), (_generar_reporte, 14 * mm)],
+)
+def test_el_margen_superior_coincide_con_la_altura_del_membrete(
+    monkeypatch, generar, margen_lateral,
+):
+    from reportlab.lib.pagesizes import A4
+
+    _, lineas = _posiciones_del_membrete(monkeypatch, generar)
+    inicio_del_cuerpo = A4[1] - generador_pdf._margen_superior(A4[0] - 2 * margen_lateral)
+
+    # El cuerpo arranca entre 2 y 6 mm bajo la última línea: sin solape ni hueco.
+    assert 2 * mm <= lineas[-1] - inicio_del_cuerpo <= 6 * mm

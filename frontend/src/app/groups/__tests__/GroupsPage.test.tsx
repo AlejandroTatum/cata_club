@@ -1366,6 +1366,21 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     expect(screen.getByText("15 años")).toBeInTheDocument();
   });
 
+  it("links the whole categoría's roster to the carnet sheets, each player once (issue #1670)", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    const [multiDiaCard] = cards();
+    fireEvent.click(await within(multiDiaCard).findByRole("button", { name: /ver jugadores/i }));
+    await screen.findByText("Bruno Díaz");
+
+    // Ana (20) is enrolled on two días and appears once; the title names the categoría.
+    expect(screen.getByRole("link", { name: /imprimir carnets/i })).toHaveAttribute(
+      "href",
+      "/members/carnets?ids=20%2C21&titulo=Formativo",
+    );
+  });
+
   it("renders the deduplicated union of every día's roster, not just one día (bugfix)", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();

@@ -18,6 +18,7 @@ import LinkifiedText from "@/components/LinkifiedText";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -26,6 +27,7 @@ import {
   BackLink,
   Badge,
   Button,
+  buttonClasses,
   DataBox,
   DataRow,
   EmptyState,
@@ -66,6 +68,7 @@ import {
   ChevronRight,
   AlertTriangle,
   UserPlus,
+  IdCard,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { fetchMembers, fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
@@ -82,6 +85,9 @@ import {
   getMembershipStatusBadge,
   getDebtSummary,
   isRepresentativePersonaRow,
+  canPrintCarnet,
+  carnetsHref,
+  CARNETS_PATH,
   paginateAccounts,
   getTotalPages,
   MEMBERS_PAGE_SIZE,
@@ -105,7 +111,6 @@ import ReassignRepresentativeSection from "./ReassignRepresentativeSection";
 import IndependizarSection from "./IndependizarSection";
 import { useNativeDialog, NATIVE_DIALOG_WIDE_SHELL_CLASS, NATIVE_DIALOG_BODY_CLASS } from "./useNativeDialog";
 import MedicalRecordDialog from "./MedicalRecordDialog";
-import PaymentsDialog from "./PaymentsDialog";
 import NewTrainerDialog from "./NewTrainerDialog";
 import ResendInvitationSection from "./ResendInvitationSection";
 
@@ -329,7 +334,7 @@ interface AccountListItemProps {
   onEdit: () => void;
   /** Issue #505: opens `MedicalRecordDialog` directly for this account. */
   onMedical: () => void;
-  /** Issue #505: opens `PaymentsDialog` directly for this account. */
+  /** #1668: goes to this account's payments page (`/members/[id]/pagos`). */
   onPayments: () => void;
 }
 
@@ -384,10 +389,10 @@ function EditAccountButton({
 }
 
 /**
- * Issue #505: direct entry point into `PaymentsDialog` — no need to open
- * `EditAccountButton`'s dialog first and scroll past roles/estado to reach
- * the membership/payment forms. Same trigger level, size and
- * focus-before-open pattern as `EditAccountButton`.
+ * Direct entry point into the member's payments page (#1668; it was the
+ * Pagos dialog of issue #505) — no need to open `EditAccountButton`'s dialog
+ * first and scroll past roles/estado to reach the membership/payment forms.
+ * Same trigger level and size as `EditAccountButton`.
  */
 function PaymentsAccessButton({
   account,
@@ -432,6 +437,7 @@ function AccountRowActions({
   onPayments,
 }: AccountListItemProps & { showStudentActions: boolean }): React.ReactElement {
   const fullName = `${account.nombres} ${account.apellidos}`;
+  const router = useRouter();
 
   // Every row draws the same two slots at the same width, so the buttons line
   // up down the column. The representative's row has nothing to put in the
@@ -468,6 +474,16 @@ function AccountRowActions({
             icon: <Stethoscope size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
             onSelect: onMedical,
           },
+          // Issue #1670: players only — staff and representatives hold no carnet.
+          ...(canPrintCarnet(account)
+            ? [
+                {
+                  label: `Imprimir carnet de ${fullName}`,
+                  icon: <IdCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+                  onSelect: () => router.push(carnetsHref([account.id])),
+                },
+              ]
+            : []),
         ]}
       />
       </div>
@@ -661,7 +677,7 @@ function MemberEditDialog({
   // renders the ::backdrop for us, so no manual focus trap is needed (unlike
   // ConfirmDialog.tsx's older role="dialog" div convention). Escape/backdrop/
   // focus-restore wiring lives in `useNativeDialog` (issue #505) — shared with
-  // the two new direct entry points, `MedicalRecordDialog` and `PaymentsDialog`.
+  // the direct entry point `MedicalRecordDialog`.
   const { dialogRef, closeButtonRef, shellStyle } = useNativeDialog(onClose);
 
   return (
@@ -1077,7 +1093,7 @@ function MembersRail({
         <dl className="grid gap-2">
           <div>
             <dt className="font-semibold text-ink">Pagos</dt>
-            <dd>Registrar un pago, regularizar deuda, cambiar de plan o suspender la membresía.</dd>
+            <dd>Registrar un pago, cargar pagos atrasados, cambiar de plan o suspender la membresía.</dd>
           </div>
           <div>
             <dt className="font-semibold text-ink">Editar</dt>
@@ -1124,14 +1140,14 @@ export default function MembersPage(): React.ReactElement {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   /**
-   * Issue #505: the row now offers three direct entry points — Ficha médica,
-   * Pagos, Editar — that each open their own dialog. One shared field (not
-   * three independent id states) keeps the pre-existing "only one dialog at
-   * a time" behavior: opening any of the three for any account replaces
-   * whatever was open, the same way `editingAccountId` used to.
+   * Issue #505: the row offers direct entry points — Ficha médica, Editar —
+   * that each open their own dialog (Pagos is a page, #1668). One shared field
+   * keeps the pre-existing "only one dialog at a time" behavior: opening one
+   * for any account replaces whatever was open.
    */
+  const router = useRouter();
   const [openDialog, setOpenDialog] = useState<{
-    kind: "edit" | "medical" | "payments";
+    kind: "edit" | "medical";
     accountId: string;
   } | null>(null);
   const [page, setPage] = useState(1);
@@ -1139,7 +1155,7 @@ export default function MembersPage(): React.ReactElement {
   // per-account dialogs above.
   const [newTrainerOpen, setNewTrainerOpen] = useState(false);
 
-  const toggleDialog = useCallback((kind: "edit" | "medical" | "payments", accountId: string) => {
+  const toggleDialog = useCallback((kind: "edit" | "medical", accountId: string) => {
     setOpenDialog((prev) => (prev?.kind === kind && prev.accountId === accountId ? null : { kind, accountId }));
   }, []);
   const closeDialog = useCallback(() => setOpenDialog(null), []);
@@ -1197,13 +1213,12 @@ export default function MembersPage(): React.ReactElement {
     [filteredAccounts, page],
   );
 
-  const findOpenAccount = (kind: "edit" | "medical" | "payments"): MemberAccount | null =>
+  const findOpenAccount = (kind: "edit" | "medical"): MemberAccount | null =>
     openDialog?.kind === kind
       ? (accounts.find((account) => account.id === openDialog.accountId) ?? null)
       : null;
   const editingAccount = findOpenAccount("edit");
   const medicalAccount = findOpenAccount("medical");
-  const paymentsAccount = findOpenAccount("payments");
 
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
@@ -1212,10 +1227,17 @@ export default function MembersPage(): React.ReactElement {
         title="Miembros"
         subtitle="Las cuentas que pagan y los jugadores que tienen a cargo."
         actions={
-          <Button variant="primary" onClick={() => setNewTrainerOpen(true)}>
-            <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-            Nuevo entrenador
-          </Button>
+          <>
+            {/* Issue #1670: pick several players and print their carnets on A4. */}
+            <Link href={CARNETS_PATH} className={buttonClasses("secondary")}>
+              <IdCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+              Carnets por lote
+            </Link>
+            <Button variant="primary" onClick={() => setNewTrainerOpen(true)}>
+              <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+              Nuevo entrenador
+            </Button>
+          </>
         }
       >
         {error && (
@@ -1297,7 +1319,7 @@ export default function MembersPage(): React.ReactElement {
                   account={account}
                   onEdit={() => toggleDialog("edit", account.id)}
                   onMedical={() => toggleDialog("medical", account.id)}
-                  onPayments={() => toggleDialog("payments", account.id)}
+                  onPayments={() => router.push(`/members/${account.id}/pagos`)}
                 />
               )}
               renderRow={(account) => (
@@ -1305,7 +1327,7 @@ export default function MembersPage(): React.ReactElement {
                   account={account}
                   onEdit={() => toggleDialog("edit", account.id)}
                   onMedical={() => toggleDialog("medical", account.id)}
-                  onPayments={() => toggleDialog("payments", account.id)}
+                  onPayments={() => router.push(`/members/${account.id}/pagos`)}
                 />
               )}
               tableHead={
@@ -1426,22 +1448,11 @@ export default function MembersPage(): React.ReactElement {
             onPaymentRegistered={() => void loadMembers({ silent: true })}
           />
         )}
-        {/* Issue #505: direct entry points, mutually exclusive with the
-            dialog above and with each other via the shared `openDialog`
-            state — opening any of the three closes whichever was open. */}
+        {/* Issue #505: Ficha médica opens directly, mutually exclusive with the
+            dialog above via the shared `openDialog` state. Pagos is a page of
+            its own now (#1668), reached through the row's «Pagos» trigger. */}
         {medicalAccount && (
           <MedicalRecordDialog key={medicalAccount.id} account={medicalAccount} onClose={closeDialog} />
-        )}
-        {paymentsAccount && (
-          <PaymentsDialog
-            key={paymentsAccount.id}
-            account={paymentsAccount}
-            onClose={closeDialog}
-            onMembershipCreated={() => void loadMembers({ silent: true })}
-            onDebtRegularized={() => void loadMembers({ silent: true })}
-            onMembresiaChanged={() => void loadMembers({ silent: true })}
-            onPaymentRegistered={() => void loadMembers({ silent: true })}
-          />
         )}
       </AppShell>
     </ProtectedRoute>
