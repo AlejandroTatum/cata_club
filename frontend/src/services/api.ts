@@ -2959,6 +2959,15 @@ export interface FichaEmergencia {
   telefonoEmergencia: string | null;
   representanteNombreCompleto: string | null;
   representanteTelefono: string | null;
+  /**
+   * Issue #1667: who to call, resolved by the BFF — the person's own contact,
+   * else the representative (a minor has none of their own, #1138), else null.
+   */
+  contactoEfectivo?: {
+    nombre: string | null;
+    telefono: string | null;
+    esRepresentante: boolean;
+  } | null;
 }
 
 /**
