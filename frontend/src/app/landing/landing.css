@@ -1315,3 +1315,6 @@ html.launch-locked, html.launch-locked body { overflow: hidden; }
 @media (max-width: 600px) {
   .launch-preview { flex-direction: column; gap: 8px; border-radius: 18px; padding: 10px 14px; text-align: center; bottom: 76px; }
 }
+
+/* The strip under the hero sits against the ticker: tighter than the footer one. */
+.landing-sponsors-highlight { padding-block: 36px 40px; }
