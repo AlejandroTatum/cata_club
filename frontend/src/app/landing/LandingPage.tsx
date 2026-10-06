@@ -23,7 +23,7 @@ import LandingMap from "./LandingMap";
 import LandingMotionLoader from "./LandingMotionLoader";
 import NavScrollSpy from "./NavScrollSpy";
 import ScheduleSelector from "./ScheduleSelector";
-import Sponsors from "./Sponsors";
+import Sponsors, { SponsorsProvider } from "./Sponsors";
 import Ticker from "./Ticker";
 import { CLUB_NEIGHBORHOOD, CLUB_PLUS_CODE, CLUB_STREET_ADDRESS, clubOpenStreetMapUrl } from "./club-location";
 import { ENROLL_HREF, Faq, MobileBar, Prices, Steps } from "./ConversionSections";
@@ -508,6 +508,7 @@ function Footer(): React.ReactElement {
 
 export default function LandingPage({ siteUrl = null }: { siteUrl?: string | null }): React.ReactElement {
   return (
+    <SponsorsProvider>
     <div className="landing-page">
       <a className="landing-skip-link" href="#inicio">Saltar al contenido</a>
       <LandingMotionLoader />
@@ -527,7 +528,7 @@ export default function LandingPage({ siteUrl = null }: { siteUrl?: string | nul
        <PublicTarifas>
         <OpeningHoursJsonLd siteUrl={siteUrl} />
         <main>
-          <Hero /><Ticker /><MissionVision /><Values /><Stats /><Gallery /><Schedule /><Prices /><Steps /><Faq /><Motto /><Location />
+          <Hero /><Ticker /><Sponsors highlight /><MissionVision /><Values /><Stats /><Gallery /><Schedule /><Prices /><Steps /><Faq /><Motto /><Location />
         </main>
        </PublicTarifas>
       </PublicSchedules>
@@ -537,5 +538,6 @@ export default function LandingPage({ siteUrl = null }: { siteUrl?: string | nul
       <Footer />
       <MobileBar />
     </div>
+    </SponsorsProvider>
   );
 }
