@@ -33,6 +33,13 @@ class PersonaRepositorio:
     def obtener_por_id(self, persona_id: int) -> Optional[Persona]:
         return self.db.get(Persona, persona_id)
 
+    def obtener_por_id_con_bloqueo(self, persona_id: int) -> Optional[Persona]:
+        """`SELECT ... FOR UPDATE`: serializa dos invitaciones concurrentes
+        sobre el mismo menor (tope de dos guardianes)."""
+        return (
+            self.db.query(Persona).filter(Persona.id == persona_id).with_for_update().one_or_none()
+        )
+
     def listar_por_ids(self, persona_ids: list[int]) -> dict[int, Persona]:
         """Varias personas en UNA consulta IN (lote de asistencia, ENT-01)."""
         if not persona_ids:

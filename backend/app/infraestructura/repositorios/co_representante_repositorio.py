@@ -51,13 +51,16 @@ class CoRepresentanteRepositorio:
             )
         ).scalar_one_or_none()
 
-    def obtener_por_hash(self, token_hash: str, *, bloquear: bool = False) -> Optional[CoRepresentanteInvitacion]:
-        consulta = select(CoRepresentanteInvitacion).where(
-            CoRepresentanteInvitacion.token_hash == token_hash
-        )
-        if bloquear:
-            consulta = consulta.with_for_update()
-        return self.db.execute(consulta).scalar_one_or_none()
+    def listar_pendientes_de_cuenta(self, co_representante_id: int) -> list[CoRepresentanteInvitacion]:
+        """Invitaciones pendientes que CREARON la cuenta de `co_representante_id`
+        (una por menor, si se la invitó para varios hijos a la vez)."""
+        return list(self.db.execute(
+            select(CoRepresentanteInvitacion).where(
+                CoRepresentanteInvitacion.co_representante_id == co_representante_id,
+                CoRepresentanteInvitacion.aceptada_en.is_(None),
+                CoRepresentanteInvitacion.cancelada_en.is_(None),
+            ).order_by(CoRepresentanteInvitacion.id)
+        ).scalars())
 
     def crear_invitacion(self, invitacion: CoRepresentanteInvitacion) -> CoRepresentanteInvitacion:
         self.db.add(invitacion)

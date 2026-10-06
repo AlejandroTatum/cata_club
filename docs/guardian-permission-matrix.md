@@ -49,11 +49,10 @@ they inherit the backend row (listed at the end).
 | POST /personas/{id}/representados, /vincular-representado, /me/representados | titular | titular | titular | yes | act on the caller's own account (`exigir_acceso_directo`), unchanged |
 | POST /personas/{id}/independizar, /reasignar-representante | no | no | no | yes | admin-only, unchanged; they also clear a stale second-guardian link, and the policy itself grants the second guardian nothing once the minor has no primary |
 | Emergency contact of a minor (#1138), family-gratuity count (`contar_membresias_activas_familia`) | primary | primary | - | - | derived from `Persona.representante_id` by design; unchanged |
-| POST /co-representantes/persona/{id}/invitaciones | yes | **no** | no | yes | S2: primary invites, admin too |
-| DELETE /co-representantes/persona/{id} | yes | **no** | no | yes | S2: primary removes, admin too |
-| POST /co-representantes/persona/{id} (direct add) | no | no | no | yes | admin only |
-| GET /co-representantes/persona/{id} | yes | yes | no | yes | read the guardians of a minor |
-| POST /co-representantes/invitaciones/aceptar | - | the invited account (token + matching e-mail) | token bound to e-mail | - | accept = explicit consent of the invitee |
+| POST /co-representantes/invitaciones (body: `persona_ids`, `correo`, `datos?`) | yes | **no (403)** | no (403) | yes | S2/L4: the primary invites, admin too. All-or-nothing across the listed minors; existing REPRESENTANTE account is linked, unknown e-mail creates the account, other-role account is rejected |
+| DELETE /co-representantes/persona/{id} | yes | **no (403)** | no (403) | yes (404 if missing) | S2: primary removes, admin too; access is revoked on the next request |
+| GET /co-representantes/mios | own minors | own minors (role SEGUNDO, never sees the other guardian) | `[]` | n/a (REPRESENTANTE role only) | feeds the dashboard card |
+| Accept invitation = POST /auth/restablecer-contrasenia with the invitation token | - | the invited account (single-use, 30-min `reset_password` token, claim `prp=invitacion_co_representante`) | - | - | existing set-password mechanism; verifies the e-mail, records ACEPTACION |
 
 ### Admin/staff-only endpoints (no guardian branch, unchanged)
 `/personas` admin CRUD, `/membresias` admin CRUD/validation, `/fichas-medicas/` POST + `/existe`,
@@ -64,5 +63,5 @@ they inherit the backend row (listed at the end).
 `/api/student` (#20), `/api/personas/[id]`, `/[id]/beneficio`, `/[id]/foto`, `/[id]/representados`,
 `/api/asistencias/alumnos/[id]/horarios`, `/api/fichas-medicas/persona/[id]` (#7/#8),
 `/api/membresias/{mias,persona/[id],pagos,pagos/[pagoId],pagos/persona/[id],pagos/[pagoId]/voucher,representado/pago,[id]/aplicar-beneficio,coberturas/*}`,
-`/api/ranking/notificaciones/*`, `/api/auth/me`. New BFF routes: `/api/co-representantes/**`.
+`/api/ranking/notificaciones/*`, `/api/auth/me`. New BFF routes: `/api/co-representantes/**` (thin proxies).
 

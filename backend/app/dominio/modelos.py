@@ -2371,29 +2371,36 @@ class CoRepresentante(Base):
 
 
 class CoRepresentanteInvitacion(Base):
-    """Invitación pendiente por correo. Se guarda SOLO el hash SHA-256 del
-    token: la base no permite reconstruir un enlace usable. A lo sumo una
-    pendiente por menor (la nueva reemplaza a la anterior)."""
+    """Invitación que CREÓ la cuenta del segundo guardián (decisión del dueño,
+    L4: "La invitación le crea la cuenta"). Existe solo cuando el correo
+    invitado no tenía cuenta; con una cuenta REPRESENTANTE ya existente se
+    vincula sin invitación.
+
+    NO guarda ningún token: el enlace es el de fijar contraseña de siempre
+    (`RecuperacionOutbox`, token `reset_password` con el claim `prp`), que se
+    acuña al enviar y es de un solo uso y corta duración. Esta fila solo dice
+    que la cuenta está pendiente de aceptar y quién la invitó. A lo sumo una
+    pendiente por menor."""
 
     __tablename__ = "co_representante_invitacion"
     __table_args__ = (
         Index("ix_co_representante_invitacion_persona_id", "persona_id"),
+        Index("ix_co_representante_invitacion_co_representante_id", "co_representante_id"),
         Index(
             "uq_co_representante_invitacion_pendiente",
             "persona_id",
             unique=True,
             postgresql_where=text("aceptada_en IS NULL AND cancelada_en IS NULL"),
         ),
-        UniqueConstraint("token_hash", name="uq_co_representante_invitacion_token_hash"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    # El menor y la persona invitada (cuenta creada por la invitación).
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
+    co_representante_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
     correo: Mapped[str] = mapped_column(String(255))
-    token_hash: Mapped[str] = mapped_column(CHAR(64))
     invitada_por_persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
     creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
-    vence_en: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     aceptada_en: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     cancelada_en: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -2407,7 +2414,7 @@ class CoRepresentanteEvento(Base):
     __table_args__ = (
         Index("ix_co_representante_evento_persona_fecha", "persona_id", text("fecha DESC"), text("id DESC")),
         CheckConstraint(
-            "operacion IN ('INVITACION', 'INVITACION_CANCELADA', 'ALTA', 'BAJA')",
+            "operacion IN ('INVITACION', 'INVITACION_CANCELADA', 'ALTA', 'ACEPTACION', 'BAJA')",
             name="ck_co_representante_evento_operacion",
         ).ddl_if(dialect="postgresql"),
         CheckConstraint(
@@ -2419,7 +2426,6 @@ class CoRepresentanteEvento(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     fecha: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
-    # `None` en una invitación todavía sin cuenta aceptante.
     co_representante_id: Mapped[Optional[int]] = mapped_column(ForeignKey("persona.id"), nullable=True)
     actor_persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
     operacion: Mapped[str] = mapped_column(String(24))

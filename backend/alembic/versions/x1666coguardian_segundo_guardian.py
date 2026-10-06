@@ -10,8 +10,9 @@ quedan intactos.
 - `co_representante`: vínculo activo. `UNIQUE(persona_id)` es el tope de dos
   guardianes (principal + uno). Un trigger impide que el segundo guardián sea
   el mismo que el principal del menor.
-- `co_representante_invitacion`: invitaciones por correo (solo el hash del
-  token). A lo sumo una pendiente por menor.
+- `co_representante_invitacion`: invitación que creó la cuenta del segundo
+  guardián (sin token: el enlace es el de fijar contraseña de siempre). A lo
+  sumo una pendiente por menor.
 - `co_representante_evento`: ledger append-only de invitaciones, altas y bajas.
 """
 from typing import Sequence, Union
@@ -53,17 +54,19 @@ def upgrade() -> None:
         "co_representante_invitacion",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("persona_id", sa.Integer(), sa.ForeignKey("persona.id"), nullable=False),
+        sa.Column("co_representante_id", sa.Integer(), sa.ForeignKey("persona.id"), nullable=False),
         sa.Column("correo", sa.String(length=255), nullable=False),
-        sa.Column("token_hash", sa.CHAR(length=64), nullable=False),
         sa.Column("invitada_por_persona_id", sa.Integer(), sa.ForeignKey("persona.id"), nullable=False),
         sa.Column("creada_en", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("vence_en", sa.DateTime(timezone=True), nullable=False),
         sa.Column("aceptada_en", sa.DateTime(timezone=True), nullable=True),
         sa.Column("cancelada_en", sa.DateTime(timezone=True), nullable=True),
-        sa.UniqueConstraint("token_hash", name="uq_co_representante_invitacion_token_hash"),
     )
     op.create_index(
         "ix_co_representante_invitacion_persona_id", "co_representante_invitacion", ["persona_id"],
+    )
+    op.create_index(
+        "ix_co_representante_invitacion_co_representante_id",
+        "co_representante_invitacion", ["co_representante_id"],
     )
     op.create_index(
         "uq_co_representante_invitacion_pendiente",
@@ -87,7 +90,7 @@ def upgrade() -> None:
             sa.ForeignKey("co_representante_invitacion.id"), nullable=True,
         ),
         sa.CheckConstraint(
-            "operacion IN ('INVITACION', 'INVITACION_CANCELADA', 'ALTA', 'BAJA')",
+            "operacion IN ('INVITACION', 'INVITACION_CANCELADA', 'ALTA', 'ACEPTACION', 'BAJA')",
             name="ck_co_representante_evento_operacion",
         ),
         sa.CheckConstraint(
