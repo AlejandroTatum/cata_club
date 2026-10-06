@@ -47,7 +47,7 @@ const ACCOUNT = {
   }],
 };
 
-/** An approved payment: the row that offers «Corregir este pago». */
+/** An approved payment: the row that offers «Corregir monto o meses». */
 const PAGO_APROBADO = {
   id: 9,
   monto: "50.00",
@@ -113,7 +113,9 @@ test("Miembros → Pagos opens the member's page, fits a 390px phone, and the ba
   await expect(page.getByText("Debe 2 meses").first()).toBeVisible();
   const primary = page.locator("[data-primary-action]");
   await expect(primary).toHaveCount(1);
-  await expect(primary).toHaveAttribute("data-primary-action", "regularizar-deuda");
+  await expect(primary).toHaveAttribute("data-primary-action", "registrar-pago");
+  await expect(primary.getByRole("button", { name: "Registrar pago" })).toBeVisible();
+  // Months are owed, so the catch-up is offered next to it.
   await expect(primary.getByRole("button", { name: "Cargar pagos atrasados" })).toBeVisible();
 
   // 390px: nothing spills sideways.
@@ -144,7 +146,7 @@ test("a direct URL loads the member by id, and an unknown member says so", async
   await mockMembersRuntime(page);
 
   await page.goto("/members/1/pagos");
-  await expect(page.getByText("María González").first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sofía González" })).toBeVisible();
   await expect(page.locator("[data-primary-action]")).toHaveCount(1);
 
   await page.goto("/members/999/pagos");
@@ -157,11 +159,11 @@ test("correcting an approved payment fits a 390px phone: amount, months, dates a
   await mockMembersRuntime(page);
 
   await page.goto("/members/1/pagos");
-  await page.getByRole("button", { name: "Corregir este pago" }).click();
+  await page.getByRole("button", { name: "Corregir monto o meses" }).click();
 
-  const form = page.locator("form").filter({ has: page.getByLabel(/meses comprados/i) });
+  const form = page.locator("form").filter({ has: page.getByLabel(/^meses/i) });
   await expect(form).toBeVisible();
-  for (const label of [/^monto/i, /meses comprados/i, /fecha inicio/i, /fecha fin/i, /^motivo/i]) {
+  for (const label of [/^monto/i, /^meses/i, /^desde/i, /^hasta/i, /^motivo/i]) {
     await expect(form.getByLabel(label)).toBeVisible();
   }
 
