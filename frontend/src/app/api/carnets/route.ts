@@ -10,7 +10,7 @@
  *
  * ADMIN ONLY, enforced here: both backend endpoints also answer to the person
  * themselves, so without `requireAdmin` any member could read their own data
- * through a route meant for the club. A persona that cannot be read lands in
+ * through a route meant for the club. A persona whose portal OR schedule cannot be read lands in
  * `missing` rather than failing the whole sheet.
  */
 import { NextRequest, NextResponse } from "next/server";
@@ -66,15 +66,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     for (const result of [portal, horarios]) {
       if (result.ok && result.refreshedAccessToken) refreshedAccessToken = result.refreshedAccessToken;
     }
-    if (!portal.ok || !portal.response.ok) return null;
+    // A schedule that failed to load is not "no training days": printing it so
+    // would put wrong data on a physical card, so the persona is reported as missing.
+    if (!portal.ok || !portal.response.ok || !horarios.ok || !horarios.response.ok) return null;
     const aggregate = (await portal.response.json()) as BackendPortalAlumno;
     const profile = buildPortalProfile(
       aggregate.titular,
       new Map(aggregate.horarios.map((horario) => [horario.id, horario])),
       new Map(aggregate.tipos.map((tipo) => [tipo.id, tipo])),
     );
-    const asignaciones =
-      horarios.ok && horarios.response.ok ? ((await horarios.response.json()) as unknown[]) : [];
+    const asignaciones = (await horarios.response.json()) as unknown[];
     return { profile, coverageEnd: profile.membership?.cubiertoHasta ?? null, asignaciones };
   }
 

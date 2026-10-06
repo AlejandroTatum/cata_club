@@ -65,7 +65,11 @@ function portalBody(id: number) {
 }
 
 /** Backend double: `/auth/me` with the given roles, the portal, and the assignments. */
-function mockBackend(roles: string[], missing: number[] = []): void {
+function mockBackend(
+  roles: string[],
+  missing: number[] = [],
+  horariosFail: Record<number, "500" | "network"> = {},
+): void {
   vi.mocked(global.fetch).mockImplementation(async (input) => {
     const url = String(input);
     if (url.includes("/auth/me")) {
@@ -78,6 +82,9 @@ function mockBackend(roles: string[], missing: number[] = []): void {
     }
     const horarios = url.match(/\/asistencias\/alumnos\/(\d+)\/horarios/);
     if (horarios) {
+      const failure = horariosFail[Number(horarios[1])];
+      if (failure === "500") return jsonResponse({ detail: "boom" }, 500);
+      if (failure === "network") throw new TypeError("fetch failed");
       return jsonResponse([{ id: 1, personaId: Number(horarios[1]), horarioDia: "LUNES" }]);
     }
     return jsonResponse({}, 500);
@@ -150,5 +157,25 @@ describe("GET /api/carnets", () => {
     expect(response.status).toBe(200);
     expect(body.carnets).toHaveLength(1);
     expect(body.missing).toEqual([6]);
+  });
+
+  it("reports a persona whose schedule fails to load (500) instead of printing empty days", async () => {
+    mockBackend(["ADMINISTRADOR"], [], { 6: "500" });
+    const response = await GET(getRequest("http://localhost/api/carnets?ids=5,6"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.carnets.map((entry: { profile: { personaId: string } }) => entry.profile.personaId)).toEqual(["5"]);
+    expect(body.missing).toEqual([6]);
+  });
+
+  it("reports a persona whose schedule request dies on the network, and still serves the rest", async () => {
+    mockBackend(["ADMINISTRADOR"], [], { 5: "network" });
+    const response = await GET(getRequest("http://localhost/api/carnets?ids=5,6"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.carnets.map((entry: { profile: { personaId: string } }) => entry.profile.personaId)).toEqual(["6"]);
+    expect(body.missing).toEqual([5]);
   });
 });
