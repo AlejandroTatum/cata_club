@@ -165,60 +165,29 @@ function RegisterRow({
   );
 }
 
-export default function MemberCard({
+/**
+ * The credential itself — the dark card, and nothing else. `MemberCard` wraps
+ * it in the student's panel; the admin's batch sheet (`/members/carnets`) lays
+ * N of them on an A4. `variant="sheet"` drops only the single card's print
+ * identity (`#carnet-print-area`) and its screen chrome: what is drawn on the
+ * card is the same in both.
+ *
+ * A player with no photo gets a silhouette, never a blank or a broken image.
+ */
+export function MemberCardCredential({
   profile,
   coverageEnd,
   horariosState,
-  className,
-  canManagePhoto,
-  onPhotoUploaded,
+  variant = "single",
 }: {
   profile: StudentProfileSummary;
-  /**
-   * `MembershipSummary.cubiertoHasta`, `null` when the backend has no coverage
-   * on record (issue #1328). The same date `CuotaCard` prints.
-   */
   coverageEnd: string | null;
-  /** The same assignments the training panel reads. */
   horariosState: MemberCardHorariosState;
-  className?: string;
-  /** Whether the authenticated account may manage this profile's photo. */
-  canManagePhoto: boolean;
-  onPhotoUploaded: () => void;
+  variant?: "single" | "sheet";
 }): React.ReactElement {
+  const isSheet = variant === "sheet";
   const fullName = `${profile.nombres} ${profile.apellidos}`.trim();
-  const initial = fullName.trim().charAt(0).toUpperCase() || "?";
-  const fotoInputRef = useRef<HTMLInputElement>(null);
-  const [uploadingFoto, setUploadingFoto] = useState(false);
-  const [fotoError, setFotoError] = useState<string | null>(null);
   const [fotoFallback, setFotoFallback] = useState(false);
-
-  async function handleFotoChange(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
-    const archivo = e.target.files?.[0];
-    e.target.value = ""; // reset so re-selecting the same file re-triggers onChange
-    if (!archivo) return;
-
-    setFotoError(null);
-    setUploadingFoto(true);
-    try {
-      // Upload and failure handling are shared with `/profile`
-      // (`lib/photo-upload.ts`); this surface sends the file without that
-      // module's optional pre-check, as it always has.
-      const resultado = await subirFotoDeArchivo(
-        archivo,
-        (foto) => subirFotoPersona(profile.personaId, foto),
-        "No se pudo actualizar la foto.",
-      );
-      if (resultado.status === "failed") {
-        setFotoError(resultado.message);
-        return;
-      }
-      setFotoFallback(false);
-      onPhotoUploaded();
-    } finally {
-      setUploadingFoto(false);
-    }
-  }
 
   // Derived from the assignments, never from the plan. `null` means "the club
   // assigned nothing" and the row is omitted — but only for `ready`: a pending
@@ -271,6 +240,186 @@ export default function MemberCard({
       : null;
 
   return (
+    // THE CREDENTIAL — `role="group"` rather than a second landmark; the label
+    // says whose card this is. In the single view it is the only thing that
+    // prints (`#carnet-print-area`); on the batch sheet it is one cell.
+    <div
+      {...(isSheet ? {} : { id: "carnet-print-area" })}
+      data-testid={isSheet ? "carnet-sheet-card" : "student-carnet"}
+      role="group"
+      aria-label={`Carnet de jugador de ${fullName}`}
+      className={cn(
+        "carnet-credential bg-coal p-[var(--carnet-page)] text-white",
+        "flex flex-col",
+        isSheet
+          ? // The sheet owns the geometry (`.carnet-sheet-credential` in
+            // `globals.css`): the same 72mm design, scaled onto a card cell.
+            "carnet-sheet-credential"
+          : // No `min-h` / aspect-ratio: the sheet's `#carnet-print-area` rule
+            // owns the printed geometry. The shadow is dropped on paper.
+            "my-section w-full max-w-[284px] rounded-ctl shadow-elevated print:rounded-none print:shadow-none",
+      )}
+    >
+      {/* 1 · THE HEADER — the real club mark (the sidebar's asset), the
+          wordmark, and the role label at the far edge. */}
+      <div className="flex items-center gap-[var(--carnet-field)]">
+        <span
+          data-testid="carnet-logo"
+          className="relative block h-9 w-9 flex-none overflow-hidden rounded-full bg-white print:h-7 print:w-7"
+        >
+          <Image
+            src="/brand/cata-club-logo.jpeg"
+            alt="Logo de Cata Club"
+            fill
+            className="object-cover"
+            sizes="36px"
+          />
+        </span>
+        <b className="font-display text-base uppercase leading-none tracking-flat">Cata Club</b>
+        <span
+          data-testid="carnet-role"
+          className="ml-auto border-l border-white/[0.12] pl-[var(--carnet-field)] text-2xs font-extrabold uppercase leading-none text-ball"
+        >
+          Jugador
+        </span>
+      </div>
+
+      {/* 2 · THE ACCENT BAR — the club's red, with a ball-coloured tail.
+          Decorative, so it is a bare element and not announced. */}
+      <div
+        aria-hidden="true"
+        data-testid="carnet-accent-bar"
+        className="mt-[var(--carnet-field)] flex h-1 w-full overflow-hidden rounded-full"
+      >
+        <span className="h-full flex-[5] bg-cata-red" />
+        <span className="h-full flex-1 bg-ball" />
+      </div>
+
+      {/* 3 · THE IDENTITY — photo, then name and cédula beside it. */}
+      <div className="mt-[var(--carnet-section)] flex items-start gap-[var(--carnet-field)]">
+        {/* A document photo: a portrait rectangle behind a real 2px
+            `border` (a ring is a box-shadow, and Chrome drops those when
+            "Background graphics" is off). */}
+        <span
+          data-testid="carnet-photo"
+          className="flex h-[78px] w-[62px] flex-none items-center justify-center overflow-hidden rounded-[3px] border-2 border-ball bg-white/10 print:h-[62px] print:w-[49px]"
+        >
+          {profile.fotoUrl && !fotoFallback ? (
+            /* eslint-disable-next-line @next/next/no-img-element -- remote Cloudinary URL, not a local/static asset (AppShell/Profile/Sponsors convention) */
+            <img
+              src={profile.fotoUrl}
+              alt={`Foto de ${fullName}`}
+              width={62}
+              height={78}
+              className="h-full w-full object-cover"
+              onError={() => setFotoFallback(true)}
+            />
+          ) : (
+            <User
+              data-testid="carnet-photo-silhouette"
+              aria-hidden="true"
+              fill="currentColor"
+              strokeWidth={1}
+              className="h-3/4 w-3/4 text-white/50"
+            />
+          )}
+        </span>
+        <div className="min-w-0 flex-1">
+          {/* The hero: Barlow (Graduate has no lowercase design), balanced. */}
+          <p className="text-balance text-xl font-extrabold leading-crisp tracking-dense print:text-lg">
+            {fullName}
+          </p>
+          {/* Absent cédula means the row is not drawn, never a blank. */}
+          {profile.cedula && (
+            <div className="mt-[var(--carnet-field)]">
+              <span className="block text-2xs font-extrabold uppercase leading-none text-white/60">
+                Cédula
+              </span>
+              {/* Barlow, tracked WIDE: a document number, not a score. */}
+              <b className="mt-[var(--carnet-field)] block text-lg font-bold leading-none tracking-caps tabular-nums print:text-base">
+                {profile.cedula}
+              </b>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 4 · THE REGISTER — label/value lines, ruled between. */}
+      <div data-testid="carnet-facts" className="mt-[var(--carnet-section)]">
+        {register.map((row, index) => (
+          <RegisterRow key={row.label} {...row} ruled={index > 0} />
+        ))}
+      </div>
+
+      {/* 5 · THE WEEK AND THE SIGNATURE. */}
+      {trainingDays && (
+        <div className="pt-[var(--carnet-section)]">
+          <TrainingDayChips days={trainingDays} />
+        </div>
+      )}
+      <p
+        data-testid="carnet-signature"
+        className="pt-[var(--carnet-section)] text-right text-sm font-semibold italic leading-none text-white/80 print:text-xs"
+      >
+        ¡Nos vemos en la mesa!
+        <span aria-hidden="true" className="ml-auto mt-[var(--carnet-field)] block h-0.5 w-2/3 rounded-full bg-ball" />
+      </p>
+    </div>
+  );
+}
+
+export default function MemberCard({
+  profile,
+  coverageEnd,
+  horariosState,
+  className,
+  canManagePhoto,
+  onPhotoUploaded,
+}: {
+  profile: StudentProfileSummary;
+  /**
+   * `MembershipSummary.cubiertoHasta`, `null` when the backend has no coverage
+   * on record (issue #1328). The same date `CuotaCard` prints.
+   */
+  coverageEnd: string | null;
+  /** The same assignments the training panel reads. */
+  horariosState: MemberCardHorariosState;
+  className?: string;
+  /** Whether the authenticated account may manage this profile's photo. */
+  canManagePhoto: boolean;
+  onPhotoUploaded: () => void;
+}): React.ReactElement {
+  const fotoInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingFoto, setUploadingFoto] = useState(false);
+  const [fotoError, setFotoError] = useState<string | null>(null);
+
+  async function handleFotoChange(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
+    const archivo = e.target.files?.[0];
+    e.target.value = ""; // reset so re-selecting the same file re-triggers onChange
+    if (!archivo) return;
+
+    setFotoError(null);
+    setUploadingFoto(true);
+    try {
+      // Upload and failure handling are shared with `/profile`
+      // (`lib/photo-upload.ts`); this surface sends the file without that
+      // module's optional pre-check, as it always has.
+      const resultado = await subirFotoDeArchivo(
+        archivo,
+        (foto) => subirFotoPersona(profile.personaId, foto),
+        "No se pudo actualizar la foto.",
+      );
+      if (resultado.status === "failed") {
+        setFotoError(resultado.message);
+        return;
+      }
+      onPhotoUploaded();
+    } finally {
+      setUploadingFoto(false);
+    }
+  }
+
+  return (
     // THE PANEL — `.card` grammar, `CuotaCard`'s header row, and a footer with
     // the panel's own controls. Nothing here prints: the print sheet keeps only
     // `#carnet-print-area`.
@@ -293,122 +442,13 @@ export default function MemberCard({
       </div>
 
       <div className="flex justify-center px-5 py-4">
-        {/* THE CREDENTIAL — the only thing that prints. `role="group"` rather
-            than a second landmark; the label says whose card this is. */}
-        <div
-          id="carnet-print-area"
-          data-testid="student-carnet"
-          role="group"
-          aria-label={`Carnet de jugador de ${fullName}`}
-          className={cn(
-            "carnet-credential my-section w-full max-w-[284px] rounded-ctl bg-coal p-[var(--carnet-page)] text-white shadow-elevated",
-            "flex flex-col",
-            // No `min-h` / aspect-ratio: the sheet's `#carnet-print-area` rule
-            // owns the printed geometry. The shadow is dropped on paper.
-            "print:rounded-none print:shadow-none",
-          )}
-        >
-          {/* 1 · THE HEADER — the real club mark (the sidebar's asset), the
-              wordmark, and the role label at the far edge. */}
-          <div className="flex items-center gap-[var(--carnet-field)]">
-            <span
-              data-testid="carnet-logo"
-              className="relative block h-9 w-9 flex-none overflow-hidden rounded-full bg-white print:h-7 print:w-7"
-            >
-              <Image
-                src="/brand/cata-club-logo.jpeg"
-                alt="Logo de Cata Club"
-                fill
-                className="object-cover"
-                sizes="36px"
-              />
-            </span>
-            <b className="font-display text-base uppercase leading-none tracking-flat">Cata Club</b>
-            <span
-              data-testid="carnet-role"
-              className="ml-auto border-l border-white/[0.12] pl-[var(--carnet-field)] text-2xs font-extrabold uppercase leading-none text-ball"
-            >
-              Jugador
-            </span>
-          </div>
-
-          {/* 2 · THE ACCENT BAR — the club's red, with a ball-coloured tail.
-              Decorative, so it is a bare element and not announced. */}
-          <div
-            aria-hidden="true"
-            data-testid="carnet-accent-bar"
-            className="mt-[var(--carnet-field)] flex h-1 w-full overflow-hidden rounded-full"
-          >
-            <span className="h-full flex-[5] bg-cata-red" />
-            <span className="h-full flex-1 bg-ball" />
-          </div>
-
-          {/* 3 · THE IDENTITY — photo, then name and cédula beside it. */}
-          <div className="mt-[var(--carnet-section)] flex items-start gap-[var(--carnet-field)]">
-            {/* A document photo: a portrait rectangle behind a real 2px
-                `border` (a ring is a box-shadow, and Chrome drops those when
-                "Background graphics" is off). */}
-            <span
-              data-testid="carnet-photo"
-              className="flex h-[78px] w-[62px] flex-none items-center justify-center overflow-hidden rounded-[3px] border-2 border-ball bg-white/10 print:h-[62px] print:w-[49px]"
-            >
-              {profile.fotoUrl && !fotoFallback ? (
-                /* eslint-disable-next-line @next/next/no-img-element -- remote Cloudinary URL, not a local/static asset (AppShell/Profile/Sponsors convention) */
-                <img
-                  src={profile.fotoUrl}
-                  alt={`Foto de ${fullName}`}
-                  width={62}
-                  height={78}
-                  className="h-full w-full object-cover"
-                  onError={() => setFotoFallback(true)}
-                />
-              ) : (
-                <span aria-hidden="true" className="text-2xl font-bold text-white/70">
-                  {initial}
-                </span>
-              )}
-            </span>
-            <div className="min-w-0 flex-1">
-              {/* The hero: Barlow (Graduate has no lowercase design), balanced. */}
-              <p className="text-balance text-xl font-extrabold leading-crisp tracking-dense print:text-lg">
-                {fullName}
-              </p>
-              {/* Absent cédula means the row is not drawn, never a blank. */}
-              {profile.cedula && (
-                <div className="mt-[var(--carnet-field)]">
-                  <span className="block text-2xs font-extrabold uppercase leading-none text-white/60">
-                    Cédula
-                  </span>
-                  {/* Barlow, tracked WIDE: a document number, not a score. */}
-                  <b className="mt-[var(--carnet-field)] block text-lg font-bold leading-none tracking-caps tabular-nums print:text-base">
-                    {profile.cedula}
-                  </b>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* 4 · THE REGISTER — label/value lines, ruled between. */}
-          <div data-testid="carnet-facts" className="mt-[var(--carnet-section)]">
-            {register.map((row, index) => (
-              <RegisterRow key={row.label} {...row} ruled={index > 0} />
-            ))}
-          </div>
-
-          {/* 5 · THE WEEK AND THE SIGNATURE. */}
-          {trainingDays && (
-            <div className="pt-[var(--carnet-section)]">
-              <TrainingDayChips days={trainingDays} />
-            </div>
-          )}
-          <p
-            data-testid="carnet-signature"
-            className="pt-[var(--carnet-section)] text-right text-sm font-semibold italic leading-none text-white/80 print:text-xs"
-          >
-            ¡Nos vemos en la mesa!
-            <span aria-hidden="true" className="ml-auto mt-[var(--carnet-field)] block h-0.5 w-2/3 rounded-full bg-ball" />
-          </p>
-        </div>
+        {/* Keyed by its photo, so a fresh upload clears an earlier load failure. */}
+        <MemberCardCredential
+          key={profile.fotoUrl ?? ""}
+          profile={profile}
+          coverageEnd={coverageEnd}
+          horariosState={horariosState}
+        />
       </div>
 
       {/* THE FOOTER — the size note and the photo control are panel chrome:

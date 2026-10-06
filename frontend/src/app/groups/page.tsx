@@ -82,7 +82,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import StudentSearch from "@/components/StudentSearch";
-import { isPlayerAccount } from "@/app/members/members-utils";
+import { carnetsHref, isPlayerAccount } from "@/app/members/members-utils";
+import { MAX_CARNETS } from "@/app/members/carnets/carnet-sheet-utils";
 import AppShell from "@/components/shell/AppShell";
 import Link from "next/link";
 import {
@@ -96,10 +97,11 @@ import {
   Loader2,
   UserPlus,
   UserMinus,
+  IdCard,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import { Button, Badge, EmptyState, ErrorState, InfoPanel, LoadingState, PAGE_RAIL, Pagination, STAT_GRID, StatCard, TimePicker24 } from "@/components/ui";
+import { Button, buttonClasses, Badge, EmptyState, ErrorState, InfoPanel, LoadingState, PAGE_RAIL, Pagination, STAT_GRID, StatCard, TimePicker24 } from "@/components/ui";
 import { DIA_SEMANA_LABELS, getTotalPages, paginateRecords } from "@/app/attendance/attendance-utils";
 import { useGroupRoster } from "./useGroupRoster";
 import MoverAlumnosDialog from "./MoverAlumnosDialog";
@@ -1602,9 +1604,27 @@ export default function GroupsPage(): React.ReactElement {
               Jugadores de {categoriaLabel(card.categoria)}
             </h3>
           </div>
-          <Button size="sm" onClick={closeExpanded}>
-            Cerrar
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Issue #1670: the whole categoría's carnets on A4 sheets. The
+                roster is already deduplicated and is made of enrolled players. */}
+            {roster.alumnos.length > 0 && (
+              <Link
+                href={carnetsHref(
+                  roster.alumnos.slice(0, MAX_CARNETS).map((alumno) => alumno.personaId),
+                  categoriaLabel(card.categoria),
+                )}
+                className={buttonClasses("secondary", "sm")}
+              >
+                <IdCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                {roster.alumnos.length > MAX_CARNETS
+                  ? `Imprimir carnets (primeros ${MAX_CARNETS})`
+                  : "Imprimir carnets"}
+              </Link>
+            )}
+            <Button size="sm" onClick={closeExpanded}>
+              Cerrar
+            </Button>
+          </div>
         </div>
 
         {/* Asignar first — before the roster, not after it. It is the panel's

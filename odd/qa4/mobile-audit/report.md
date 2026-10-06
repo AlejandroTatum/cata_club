@@ -11,7 +11,7 @@
 |---|---|---|
 | Blocker | 0 | 0 |
 | Major | 6 | 6 |
-| Minor | 8 | 0 (quedan listados; ninguno es un cambio trivial de una línea) |
+| Minor | 8 | 7 (m1–m7 corregidos en #1647; m8 sigue abierto) |
 
 31 pantallas × 2 anchos = 62 corridas. Estado final: las 62 pasan, con 0 desborde horizontal, 0 errores de consola y 0 voseo o «usted» fuera de las páginas legales.
 
@@ -32,7 +32,7 @@ Pantallas: públicas (landing, login, inscripción, ayuda, términos, privacidad
 | M5 | Landing, legales | Enlace «Iniciar sesión» de 36 px, logo de 40 px, enlaces de contacto (teléfonos, redes) de 20–25 px, tarjetas de documentos legales de 40 px. | `3f89dbac` |
 | M6 | Asistencias, pagos y ficha médica del representante, a 360 px | El selector de jugador con un nombre largo empujaba la página 6 px fuera del ancho. | segundo commit `fix(student)` |
 
-### Minor (listados, sin corregir)
+### Minor (m1–m7 corregidos en #1647; m8 abierto)
 
 | # | Pantalla | Hallazgo |
 |---|---|---|
@@ -45,7 +45,7 @@ Pantallas: públicas (landing, login, inscripción, ayuda, términos, privacidad
 | m7 | Día del entrenador | El desplegable «Es una estimación» mide 19 px. |
 | m8 | Miembros (412) y agregar jugador (360) | Un error de hidratación de React (#418) apareció 2 veces en las primeras corridas y no volvió a aparecer en las 4 siguientes. No es reproducible; conviene vigilarlo en la cuenta con datos reales. |
 
-Estos minor están en la lista de excepciones del spec (con su motivo), de modo que la guardia protege todo lo demás. Al corregir uno, se borra su línea.
+m1–m7 se corrigieron con `.touch-target-row` / `.touch-target-pad` (puntero táctil) y sus excepciones salieron del spec. m8 (#418) sigue abierto en #1567.
 
 ## Notas para quien decide
 
