@@ -121,6 +121,11 @@ const NO_HEADER_ACTION: Record<string, string> = {
   // the page's own banner explains, and each action is a form bound to the
   // payment it records — a header button would arrive without that sentence.
   "app/members/[id]/pagos/page.tsx": "the action depends on the member's state, which the page's banner explains",
+  // El carnet que se imprime depende de lo elegido: sin jugadores no hay nada
+  // que imprimir, y «Imprimir N carnets» solo existe con la hoja cargada, junto
+  // a la cuenta de hojas que anuncia. Un botón en el encabezado faltaría la
+  // mayor parte del tiempo (selector, carga, error) y apuntaría lejos de ella.
+  "app/members/carnets/page.tsx": "the print action needs the loaded sheet and sits beside its sheet count (#1670)",
 };
 
 function read(path: string): string {

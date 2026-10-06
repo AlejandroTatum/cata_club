@@ -619,6 +619,26 @@ export function isPlayerAccount(account: MemberAccount): boolean {
 }
 
 /**
+ * Issue #1670: whether the admin may print this account's carnet — players
+ * only (the #1661/#1669 rule via `isPlayerAccount`), and never the
+ * representative's own row, which holds no player to put on a card. A
+ * represented minor without an account of their own qualifies.
+ */
+export function canPrintCarnet(account: MemberAccount): boolean {
+  return isPlayerAccount(account) && !isRepresentativePersonaRow(account);
+}
+
+/** The admin's carnet printing screen (issue #1670). */
+export const CARNETS_PATH = "/members/carnets";
+
+/** The printing screen for these personas; `titulo` names a whole category on the sheet. */
+export function carnetsHref(personaIds: readonly (string | number)[], titulo?: string): string {
+  const query = new URLSearchParams({ ids: personaIds.join(",") });
+  if (titulo) query.set("titulo", titulo);
+  return `${CARNETS_PATH}?${query.toString()}`;
+}
+
+/**
  * Issue #1132: the role labels `IdentityCell` actually renders for this
  * row — `account.backendRoles` (the real roles, issue #1132's bulk
  * lookup), plus `"ALUMNO"` when the person is a player right now (an OWN
