@@ -17,11 +17,35 @@ vía `exigir_acceso`/`exigir_acceso_directo`, los routers `personas_router`,
 `PagoServicio.listar_pagos_de_persona` y `PagoServicio.adjuntar_voucher`
 en `membresia_pago_servicio.py` (issue #830, que terminó de migrar estos
 últimos cuatro).
+
+Issue #1666 (segundo guardián): "representante" pasó a significar DOS
+vínculos -- el principal y el segundo guardián --, y `AlcanceRepresentacion`
+dice cuáles entran en cada call site. Esa es la única definición: ningún
+endpoint compara `representante_id` por su cuenta.
 """
+from enum import Enum
+
 from sqlalchemy.orm import Session
 
 from app.dominio.excepciones import PermisosInsuficientes
+from app.dominio.modelos import Persona
+from app.infraestructura.repositorios.co_representante_repositorio import CoRepresentanteRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
+
+class AlcanceRepresentacion(Enum):
+    """Qué guardianes pasan la rama de representación (issue #1666).
+
+    `GENERAL`: el representante principal Y el segundo guardián -- ver,
+    pagar, subir comprobantes, editar datos generales.
+
+    `FIRMA_LEGAL`: SOLO el principal. Es lo que firma o edita la ficha médica
+    y los consentimientos legales: el segundo guardián únicamente los VE
+    (decisión del dueño, 2026-10-05). Todo call site que escribe un dato
+    médico o legal del representado debe pasar este alcance."""
+
+    GENERAL = "general"
+    FIRMA_LEGAL = "firma_legal"
+
 
 ROL_ADMINISTRADOR = "ADMINISTRADOR"
 ROL_ENTRENADOR = "ENTRENADOR"
@@ -40,6 +64,30 @@ class PoliticaAccesoPersona:
 
     def __init__(self, db: Session):
         self._repo_persona = PersonaRepositorio(db)
+        self._repo_co_representante = CoRepresentanteRepositorio(db)
+
+    def es_guardian(
+        self,
+        persona_objetivo: Persona,
+        persona_id_solicitante: int | None,
+        alcance: AlcanceRepresentacion = AlcanceRepresentacion.GENERAL,
+    ) -> bool:
+        """ÚNICA definición de "es guardián de" (issue #1666): el
+        representante principal (`Persona.representante_id`) o, solo con
+        alcance `GENERAL`, el segundo guardián vigente.
+
+        No incluye al propio titular ni a ningún rol: es solo la rama de
+        representación, para los call sites que ya resolvieron el resto (o
+        que no admiten titular ni admin, p. ej. inscribir a un representado).
+        El vínculo se lee en el momento de la petición, así que retirar al
+        segundo guardián corta su acceso en la siguiente llamada."""
+        if persona_id_solicitante is None:
+            return False
+        if persona_objetivo.representante_id == persona_id_solicitante:
+            return True
+        if alcance is AlcanceRepresentacion.FIRMA_LEGAL:
+            return False
+        return self._repo_co_representante.existe(persona_objetivo.id, persona_id_solicitante)
 
     def puede_acceder(
         self,
@@ -50,6 +98,7 @@ class PoliticaAccesoPersona:
         roles_privilegiados: tuple[str, ...] = SOLO_ADMINISTRADOR,
         incluir_representante_propio: bool = False,
         incluir_titular: bool = True,
+        alcance: AlcanceRepresentacion = AlcanceRepresentacion.GENERAL,
     ) -> bool:
         """
         El orden de evaluación no es casual y se conserva del código original:
@@ -75,6 +124,12 @@ class PoliticaAccesoPersona:
         ni en pagos a propósito: que un menor vea el nombre de su tutor es
         parte de su propia ficha; que vea los pagos o la asistencia del
         tutor, no.
+
+        `alcance` decide cuáles guardianes entran por la rama de
+        representación: `GENERAL` (default) admite al principal y al segundo
+        guardián; `FIRMA_LEGAL` solo al principal. El segundo guardián no
+        tiene sentido inverso (`incluir_representante_propio` sigue siendo del
+        principal).
         """
         roles = roles_solicitante or []
         if any(rol in roles_privilegiados for rol in roles):
@@ -90,7 +145,7 @@ class PoliticaAccesoPersona:
         if persona_objetivo is None:
             return False
 
-        if persona_objetivo.representante_id == persona_id_solicitante:
+        if self.es_guardian(persona_objetivo, persona_id_solicitante, alcance):
             return True
 
         if incluir_representante_propio:
@@ -110,6 +165,7 @@ class PoliticaAccesoPersona:
         roles_privilegiados: tuple[str, ...] = SOLO_ADMINISTRADOR,
         incluir_representante_propio: bool = False,
         incluir_titular: bool = True,
+        alcance: AlcanceRepresentacion = AlcanceRepresentacion.GENERAL,
         mensaje: str = (
             "Solo la propia persona, su representante, o un administrador "
             "pueden acceder a estos datos"
@@ -125,6 +181,7 @@ class PoliticaAccesoPersona:
             roles_privilegiados=roles_privilegiados,
             incluir_representante_propio=incluir_representante_propio,
             incluir_titular=incluir_titular,
+            alcance=alcance,
         ):
             raise PermisosInsuficientes(mensaje)
 

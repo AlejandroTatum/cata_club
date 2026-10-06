@@ -3,7 +3,7 @@ from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.dominio.enums import EstadoMembresia, TipoRol
-from app.dominio.modelos import Persona, Usuario, Rol, usuario_rol, Membresia
+from app.dominio.modelos import CoRepresentante, Persona, Usuario, Rol, usuario_rol, Membresia
 
 # Mismo mapeo de acentos que el `func.translate` de más abajo, pero en
 # Python: como el patrón LIKE ahora lo arma `.contains(autoescape=True)` (que
@@ -118,6 +118,43 @@ class PersonaRepositorio:
             .order_by(*self._ORDEN_NOMINA)
             .all()
         )
+
+    def _condicion_guardian(self, persona_id: int):
+        """`persona.representante_id == persona_id` O hay un vínculo de
+        segundo guardián (issue #1666). Única definición de "personas de las
+        que `persona_id` es guardián" para listados y compuertas."""
+        return or_(
+            Persona.representante_id == persona_id,
+            exists().where(
+                CoRepresentante.persona_id == Persona.id,
+                CoRepresentante.co_representante_id == persona_id,
+            ),
+        )
+
+    def listar_representados_accesibles(self, representante_id: int) -> List[Persona]:
+        """Dependientes ACTIVOS de los que `representante_id` es guardián:
+        como principal (`representante_id`) o como segundo guardián.
+
+        Es el listado de LECTURA (portal, feed de notificaciones). Los
+        invariantes de ciclo de vida -- no dar de baja a un representante que
+        deja menores huérfanos, no suprimir -- siguen usando
+        `listar_representados`/`contar_representados`, que son del principal:
+        un segundo guardián que se va no deja a nadie sin acceso."""
+        return (
+            self.db.query(Persona)
+            .filter(self._condicion_guardian(representante_id), Persona.activo.is_(True))
+            .order_by(*self._ORDEN_NOMINA)
+            .all()
+        )
+
+    def ids_representados_accesibles(self, persona_id: int) -> list[int]:
+        """Ids (activos o no) de las personas de las que `persona_id` es
+        guardián, principal o segundo. Lo usa la compuerta de activación."""
+        return [
+            fila[0] for fila in self.db.query(Persona.id).filter(
+                self._condicion_guardian(persona_id)
+            ).all()
+        ]
 
     # `listar_por_rol` (selector de entrenadores) se eliminó con la relación
     # entrenador–horario (issue #13): su único consumidor era el dropdown de
