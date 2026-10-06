@@ -4,7 +4,7 @@ import LinkifiedText from "@/components/LinkifiedText";
 import { useState, useEffect, type ReactNode } from "react";
 import { Loader2, Save, CheckCircle2, Stethoscope, Pencil, X } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
+import { fetchFichaMedica, fetchFichaEmergencia, actualizarFichaMedica } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
 import { Badge, Button, ErrorState, LoadingState, PAGE_RAIL, cn } from "@/components/ui";
 import EmergencyCard, { type EmergencyCardValues } from "./EmergencyCard";
@@ -223,6 +223,25 @@ export default function MedicalRecordEditor({
    * they try to save.
    */
   const [fieldErrors, setFieldErrors] = useState<FichaFieldErrors>({});
+  /** #1667: the representative standing in as emergency contact; null when the person has their own or none. */
+  const [representante, setRepresentante] = useState<{ nombre: string; telefono: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRepresentante(null);
+    // Best effort: a failed lookup only means the card keeps saying «Sin registrar».
+    Promise.resolve()
+      .then(() => fetchFichaEmergencia(personaId))
+      .then((emergencia) => {
+        const efectivo = emergencia?.contactoEfectivo;
+        if (cancelled || !efectivo?.esRepresentante) return;
+        setRepresentante({ nombre: efectivo.nombre ?? "", telefono: efectivo.telefono ?? "" });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [personaId, reloadToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -387,6 +406,8 @@ export default function MedicalRecordEditor({
     );
   }
 
+  const representanteContacto = representante?.nombre ? `Representante: ${representante.nombre}` : "";
+
   // Live values for the emergency card: what the form holds while editing (or
   // creating), the stored record otherwise.
   const cardValues: EmergencyCardValues =
@@ -399,8 +420,10 @@ export default function MedicalRecordEditor({
             .map((e) => e.trim())
             .filter(Boolean)
             .join(", "),
-          contactoEmergencia: contactoEmergencia.trim(),
-          telefonoEmergencia: telefonoEmergencia.trim() ? `+593 ${telefonoEmergencia.trim()}` : "",
+          contactoEmergencia: contactoEmergencia.trim() || representanteContacto,
+          telefonoEmergencia: telefonoEmergencia.trim()
+            ? `+593 ${telefonoEmergencia.trim()}`
+            : (representante?.telefono ?? ""),
         }
       : {
           tipoSangre: state.ficha.tipoSangre === "DESCONOCIDO" ? "" : etiquetaTipoSangre(state.ficha.tipoSangre),
@@ -413,8 +436,8 @@ export default function MedicalRecordEditor({
                 state.ficha.alergias,
               )
             : "",
-          contactoEmergencia: state.ficha.contactoEmergencia ?? "",
-          telefonoEmergencia: state.ficha.telefonoEmergencia ?? "",
+          contactoEmergencia: state.ficha.contactoEmergencia?.trim() || representanteContacto,
+          telefonoEmergencia: state.ficha.telefonoEmergencia?.trim() || (representante?.telefono ?? ""),
         };
 
   const recordReadMode = !editing && state.status === "ready" && !state.isNew;
@@ -587,8 +610,14 @@ export default function MedicalRecordEditor({
 
   const contactoRead = recordReadMode ? (
     <>
-      <CampoLectura label="Contacto de emergencia" value={state.ficha.contactoEmergencia ?? ""} />
-      <CampoLectura label="Teléfono de emergencia" value={state.ficha.telefonoEmergencia ?? ""} />
+      <CampoLectura
+        label="Contacto de emergencia"
+        value={state.ficha.contactoEmergencia?.trim() || representanteContacto}
+      />
+      <CampoLectura
+        label="Teléfono de emergencia"
+        value={state.ficha.telefonoEmergencia?.trim() || (representante?.telefono ?? "")}
+      />
     </>
   ) : null;
 

@@ -147,6 +147,25 @@ describe("StudentMembershipActions — ¿Socio nuevo o socio antiguo? (L17)", ()
     expect(screen.getByRole("button", { name: "Regularizar deuda" })).toBeInTheDocument();
   });
 
+  it("«Socio nuevo» → «Cancelar» brings the question back and creates nothing (#1664)", () => {
+    renderActions(sinCobertura());
+    fireEvent.click(screen.getByRole("radio", { name: "Socio nuevo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(screen.getByText("¿Socio nuevo o socio antiguo?")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Socio nuevo" })).not.toBeChecked();
+    expect(screen.queryByRole("button", { name: "Registrar pago" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancelar" })).not.toBeInTheDocument();
+  });
+
+  it("offers no «Cancelar» before choosing, nor under «Socio antiguo» (which keeps «Volver»)", () => {
+    renderActions(sinCobertura());
+    expect(screen.queryByRole("button", { name: "Cancelar" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Socio antiguo" }));
+    expect(screen.queryByRole("button", { name: "Cancelar" })).not.toBeInTheDocument();
+  });
+
   it("«Socio antiguo» goes straight to the last-payment form for the existing membership", () => {
     renderActions(sinCobertura());
     fireEvent.click(screen.getByRole("radio", { name: "Socio antiguo" }));
@@ -176,6 +195,14 @@ describe("StudentMembershipActions — ¿Socio nuevo o socio antiguo? (L17)", ()
     renderActions(conCobertura);
 
     expect(screen.queryByRole("radio", { name: "Socio nuevo" })).not.toBeInTheDocument();
+  });
+
+  it("shows no «Cancelar» for a member who already has coverage", () => {
+    const conCobertura = student("activa", "ACTIVA");
+    conCobertura.membresia = { ...conCobertura.membresia!, cubiertoHasta: "2026-11-30" };
+    renderActions(conCobertura);
+
+    expect(screen.queryByRole("button", { name: "Cancelar" })).not.toBeInTheDocument();
   });
 
   it("never asks while a payment awaits validation", () => {

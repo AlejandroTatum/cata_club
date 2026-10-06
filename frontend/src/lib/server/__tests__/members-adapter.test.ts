@@ -292,6 +292,25 @@ describe("buildMemberAccounts", () => {
       expect(sofia?.sinDatosEmergencia).toBe(false);
     });
 
+    it("flags a represented persona only when the representative has no phone either (#1667)", () => {
+      const sinTelefono = { ...parent, telefono: " " };
+      const accounts = buildMemberAccounts([sinTelefono, child], new Map(), new Map(), new Map(), new Map(), new Set());
+
+      expect(accounts.find((a) => a.id === "3")?.sinDatosEmergencia).toBe(true);
+    });
+
+    it("does not flag a represented persona whose representative has a phone (#1667)", () => {
+      const accounts = buildMemberAccounts([parent, child], new Map(), new Map(), new Map(), new Map(), new Set());
+
+      expect(accounts.find((a) => a.id === "3")?.sinDatosEmergencia).toBe(false);
+    });
+
+    it("does not guess when the representative is not in the loaded page (#1667)", () => {
+      const accounts = buildMemberAccounts([child], new Map(), new Map(), new Map(), new Map(), new Set());
+
+      expect(accounts.find((a) => a.id === "3")?.sinDatosEmergencia).toBe(false);
+    });
+
     it("does NOT flag a root persona who has a ficha médica on file", () => {
       const accounts = buildMemberAccounts(
         [admin],
