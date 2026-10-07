@@ -185,6 +185,10 @@ def alertar_vencimientos_hoy_mas_5(self) -> dict:
                 Pago.fecha_fin <= fecha_objetivo,
                 Membresia.estado == EstadoMembresia.ACTIVA,
                     Persona.activo.is_(True),
+                # Mismo criterio que la mora: SEMANAL/DIARIA vencen sin aviso.
+                Membresia.tipo_membresia.has(
+                    TipoMembresia.periodicidad == PeriodicidadTarifa.MENSUAL
+                ),
             )
         )
         # `.unique()` es defensiva, no obligatoria para una relación a-uno:

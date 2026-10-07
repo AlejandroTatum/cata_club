@@ -291,7 +291,9 @@ def sesion_inyectada(db_session, monkeypatch):
     return db_session
 
 
-def _mora_con_tarifa(db, periodicidad: str, cedula: str):
+def _mora_con_tarifa(
+    db, periodicidad: str, cedula: str, fecha_fin: date = HOY_MORA - timedelta(days=1),
+):
     persona = crear_persona_orm(db, cedula)
     tipo = TipoMembresia(
         categoria=nombre_tarifa_unico("Mora"), precio=Decimal("30.00"),
@@ -309,7 +311,7 @@ def _mora_con_tarifa(db, periodicidad: str, cedula: str):
     db.add(Pago(
         monto=Decimal("30.00"), estado_pago=EstadoPago.APROBADO,
         tipo_pago=TipoPago.EFECTIVO, fecha_registro=datetime(2029, 6, 1, tzinfo=timezone.utc),
-        fecha_inicio=HOY_MORA - timedelta(days=8), fecha_fin=HOY_MORA - timedelta(days=1),
+        fecha_inicio=HOY_MORA - timedelta(days=8), fecha_fin=fecha_fin,
         persona_id=persona.id, membresia_id=membresia.id,
     ))
     db.commit()
@@ -331,6 +333,27 @@ def test_mora_solo_avisa_a_tarifas_mensuales(
     assert resultado["total_avisos_familia"] == avisos
     assert db_session.query(Notificacion).filter(
         Notificacion.tipo == TipoNotificacion.MIEMBRESIA_MORA_DIA_1,
+        Notificacion.persona_id == persona.id,
+    ).count() == avisos
+
+
+@pytest.mark.parametrize("periodicidad,avisos", [
+    ("MENSUAL", 1), ("SEMANAL", 0), ("DIARIA", 0),
+])
+def test_vencimiento_proximo_solo_avisa_a_tarifas_mensuales(
+    db_session, sesion_inyectada, monkeypatch, periodicidad, avisos,
+):
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY_MORA)
+    monkeypatch.setattr(ServicioNotificaciones, "enviar_correo", lambda self, **kw: None)
+    persona = _mora_con_tarifa(
+        db_session, periodicidad, cedula_valida(311),
+        fecha_fin=HOY_MORA + timedelta(days=5),
+    )
+
+    alertas_mod.alertar_vencimientos_hoy_mas_5()
+
+    assert db_session.query(Notificacion).filter(
+        Notificacion.tipo == TipoNotificacion.MIEMBRESIA_VENCIMIENTO_PROXIMO,
         Notificacion.persona_id == persona.id,
     ).count() == avisos
 
