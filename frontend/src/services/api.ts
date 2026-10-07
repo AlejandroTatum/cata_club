@@ -21,6 +21,7 @@
  */
 
 import type { ClubPaymentInfo } from "@/lib/club-payment-info";
+import type { Periodicidad } from "@/lib/tarifa-periodo";
 import type {
   UserRole,
   EstadoAsistencia,
@@ -2421,6 +2422,8 @@ export interface TipoMembresiaCatalogo {
   categoria: string;
   precio: string;
   modalidad: "PERSONALIZADA" | "MENSUAL";
+  /** How often it is paid: MENSUAL (default), SEMANAL (7 days) or DIARIA (the paid day only). Absent on older payloads = MENSUAL. */
+  periodicidad?: Periodicidad;
   /** `false` = hidden: off the web and off enrollment, still valid for who already has it. */
   activo: boolean;
   /** `true` once any membresía used it — the backend refuses to delete it then. */
@@ -2447,6 +2450,7 @@ export interface ActualizarTipoMembresiaInput {
   categoria?: string;
   precio?: string;
   modalidad?: "PERSONALIZADA" | "MENSUAL";
+  periodicidad?: Periodicidad;
   /** `false` hides the tariff, `true` shows it again. */
   activo?: boolean;
 }
@@ -2486,6 +2490,8 @@ export interface CrearTipoMembresiaInput {
   categoria: string;
   precio: string;
   modalidad: "PERSONALIZADA" | "MENSUAL";
+  /** Omitted = MENSUAL (the backend default). */
+  periodicidad?: Periodicidad;
 }
 
 /**
