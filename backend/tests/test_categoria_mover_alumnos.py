@@ -145,9 +145,12 @@ def test_mover_y_eliminar_con_destino_invalido_no_cambia_nada(
 
 
 def _registrar_asistencia(servicio, origen, persona_id):
+    # 2026-08-10 is a Monday: pick the Monday horario explicitly, because
+    # listar_horarios has no guaranteed order and the Wednesday one is rejected.
+    lunes = next(h for h in servicio.listar_horarios(origen.codigo) if h.dia_semana == DiaSemana.LUNES)
     servicio.registrar_asistencia(AsistenciaCreateDTO(
         fecha_entrenamiento="2026-08-10", estado=EstadoAsistencia.PRESENTE,
-        persona_id=persona_id, horario_id=servicio.listar_horarios(origen.codigo)[0].id,
+        persona_id=persona_id, horario_id=lunes.id,
     ), ["ADMINISTRADOR"], persona_id)
 
 
