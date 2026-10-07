@@ -1547,6 +1547,94 @@ export async function fetchCarnets(personaIds: readonly number[]): Promise<Carne
 }
 
 // ---------------------------------------------------------------------------
+// Segundo representante (#1666) — máximo dos guardianes por menor
+// ---------------------------------------------------------------------------
+
+export type RolGuardian = "PRINCIPAL" | "SEGUNDO";
+
+/** El otro guardián de un menor; solo el representante principal lo recibe. */
+export interface GuardianDeMenor {
+  /** `null` mientras la invitación está PENDIENTE: solo se conoce el correo escrito. */
+  personaId: number | null;
+  nombres: string | null;
+  apellidos: string | null;
+  correo: string | null;
+  /** PENDIENTE: invitación enviada y aún no aceptada por la cuenta invitada. */
+  estado: "ACTIVO" | "PENDIENTE";
+}
+
+/** Un menor del que la sesión es guardián, con el rol de la SESIÓN. */
+export interface MenorConGuardianes {
+  personaId: number;
+  nombres: string;
+  apellidos: string;
+  rol: RolGuardian;
+  segundoGuardian: GuardianDeMenor | null;
+  /** Ya tiene dos guardianes: no admite otro. */
+  completo: boolean;
+}
+
+/** Datos de la persona a la que la invitación le crea la cuenta. */
+export interface DatosInvitadoPayload {
+  nombres: string;
+  apellidos: string;
+  cedula: string;
+  fechaNacimiento: string;
+  telefono: string;
+}
+
+export interface InvitarCoRepresentantePayload {
+  personaIds: number[];
+  correo: string;
+  /** Siempre se envían: la respuesta no revela si el correo ya tiene cuenta. */
+  datos: DatosInvitadoPayload;
+}
+
+/** Respuesta única (202), sin importar qué pasó con el correo. */
+export interface InvitacionCoRepresentanteResultado {
+  mensaje: string;
+}
+
+/** Invitación pendiente de la cuenta de la sesión. */
+export interface InvitacionRecibida {
+  id: number;
+  nombreMenor: string;
+  nombreInvitante: string;
+}
+
+/** Menores de los que la sesión es guardián — `GET /api/co-representantes/mios`. */
+export function fetchMisMenoresConGuardianes(): Promise<MenorConGuardianes[]> {
+  return request<MenorConGuardianes[]>(apiEndpoint("/co-representantes/mios"));
+}
+
+/** Invita al segundo representante — `POST /api/co-representantes/invitaciones` (202). */
+export function invitarCoRepresentante(
+  payload: InvitarCoRepresentantePayload,
+): Promise<InvitacionCoRepresentanteResultado> {
+  return request<InvitacionCoRepresentanteResultado>(apiEndpoint("/co-representantes/invitaciones"), {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Invitaciones que esperan a la sesión — `GET /api/co-representantes/invitaciones/recibidas`. */
+export function fetchInvitacionesRecibidas(): Promise<InvitacionRecibida[]> {
+  return request<InvitacionRecibida[]>(apiEndpoint("/co-representantes/invitaciones/recibidas"));
+}
+
+/** Acepta una invitación recibida — `POST /api/co-representantes/invitaciones/{id}/aceptar`. */
+export async function aceptarInvitacionRecibida(invitacionId: number): Promise<void> {
+  await request<void>(apiEndpoint(`/co-representantes/invitaciones/${invitacionId}/aceptar`), {
+    method: "POST",
+  });
+}
+
+/** Quita al segundo representante de un menor — `DELETE /api/co-representantes/persona/{id}`. */
+export async function quitarCoRepresentante(personaId: number): Promise<void> {
+  await request<void>(apiEndpoint(`/co-representantes/persona/${personaId}`), { method: "DELETE" });
+}
+
+// ---------------------------------------------------------------------------
 // Dashboard API Methods (Fase 7)
 // ---------------------------------------------------------------------------
 

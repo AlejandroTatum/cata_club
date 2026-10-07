@@ -121,7 +121,12 @@ function ResetPasswordContent(): React.ReactElement {
    * the backend refuses an invitation password-set without it. An ordinary
    * recovery link never carries the flag and behaves exactly as before.
    */
-  const isInvitation = searchParams.get("invitacion") === "1";
+  const invitationKind = searchParams.get("invitacion");
+  /** Issue #1666: the same first-entry link, sent to a second guardian
+   *  (`?invitacion=representante`) instead of a trainer (`?invitacion=1`). */
+  const isGuardianInvitation = invitationKind === "representante";
+  const isInvitation = invitationKind === "1" || isGuardianInvitation;
+  const invitedRole = isGuardianInvitation ? "representante" : "entrenador";
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -188,7 +193,7 @@ function ResetPasswordContent(): React.ReactElement {
           </span>
           <p className="text-sm leading-relaxed text-ink-2">
             {isInvitation
-              ? "Creaste tu contraseña y aceptaste los términos. Ya puedes iniciar sesión como entrenador."
+              ? `Creaste tu contraseña y aceptaste los términos. Ya puedes iniciar sesión como ${invitedRole}.`
               : "Tu contraseña ha sido restablecida correctamente. Ya puedes iniciar sesión con tu nueva contraseña."}
           </p>
         </div>
@@ -206,7 +211,9 @@ function ResetPasswordContent(): React.ReactElement {
       title={isInvitation ? "Crea tu contraseña" : "Elige una contraseña nueva"}
       subtitle={
         isInvitation
-          ? "El club creó tu cuenta de entrenador. Elige una contraseña que cumpla las condiciones de abajo"
+          ? isGuardianInvitation
+            ? "Te invitaron como segundo representante. Elige una contraseña que cumpla las condiciones de abajo"
+            : "El club creó tu cuenta de entrenador. Elige una contraseña que cumpla las condiciones de abajo"
           : "Debe cumplir las condiciones de abajo"
       }
       note={EXPIRED_LINK_NOTE}
