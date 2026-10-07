@@ -507,6 +507,32 @@ persona que revisa la migración debe clasificarla explícitamente:
 - `manual-review-required`: cambio contractivo, datos transformados, downgrade
   necesario o cualquier duda.
 
+### Migraciones que agregan un valor de enum (`ALTER TYPE ... ADD VALUE`)
+
+Un `ADD VALUE` es expand-only para el deploy, pero **no** para el rollback:
+PostgreSQL no puede quitar un valor de enum sin reescribir las filas que lo
+usan, así que el `downgrade()` lo deja en su lugar. Mientras ninguna fila use
+el valor nuevo, la aplicación anterior sigue funcionando. Apenas existe una
+fila con ese valor, la aplicación anterior falla al leerla: SQLAlchemy mapea la
+columna con `SAEnum(<Enum>)` y lanza `LookupError` ante un valor que su enum de
+Python no conoce. Por ejemplo, `x1665diasinclase` agrega `DIA_SIN_CLASE` a
+`tiponotificacion`; un backend anterior a esa migración rompe la lectura de
+`notificacion` para cada usuario que haya recibido un aviso de día sin clase.
+
+Regla al clasificar: un rango que contenga un `ADD VALUE` se declara
+`backward-compatible` solo si se acepta que el rollback queda condicionado a la
+verificación de abajo. Anótalo en la evidencia del release como **sensible a
+rollback**, con la tabla, la columna y el valor nuevo. Para encontrar los
+valores agregados por un rango:
+
+```bash
+git diff <sha-anterior>..<sha-nuevo> -- backend/alembic/versions | grep 'ADD VALUE'
+```
+
+El ledger guarda la clasificación del release; `rollback-release.sh` la
+respeta, pero no mira los datos. La verificación previa al rollback es manual
+(ver "Backup y rollback").
+
 Para `manual-review-required`, el preflight exige un artefacto de aprobación explícito, fuera del repositorio y sin secretos. Se entrega mediante `MIGRATION_APPROVAL_FILE=/ruta/aprobacion.env` y se lee como datos, nunca como código shell. Debe contener exactamente estos valores ligados al release:
 
 ```text
@@ -749,3 +775,20 @@ Un rollback de aplicación exige una confirmación visible y usa un SHA conocido
 No es un rollback de base de datos. Verificar las sondas y el comportamiento de
 la aplicación después; si no hay un registro actual o la compatibilidad requiere
 revisión manual, el script se niega a cambiar Compose.
+
+**Antes de volver a un SHA anterior a un `ADD VALUE`** (ver "Migraciones que
+agregan un valor de enum"), cuenta las filas que ya usan el valor nuevo. Por
+ejemplo, para volver a un SHA anterior a `x1665diasinclase`:
+
+```bash
+cd /opt/cata-club
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T db \
+  sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
+  "SELECT count(*) FROM notificacion WHERE tipo = '\''DIA_SIN_CLASE'\''"'
+```
+
+- `0`: el rollback de imágenes es seguro respecto de ese valor.
+- Mayor que `0`: **no** ejecutar el rollback. Corregir hacia adelante con un
+  release nuevo. Borrar o reescribir esas filas para habilitar el rollback es
+  un cambio de datos: requiere backup verificado y aprobación explícita del
+  dueño, igual que un restore.
