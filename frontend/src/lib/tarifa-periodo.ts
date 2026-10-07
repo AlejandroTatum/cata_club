@@ -64,11 +64,6 @@ export function tarifaFactLabel(periodicidad: Periodicidad | null | undefined): 
   }
 }
 
-/** SEMANAL/DIARIA never accrue debt: only MENSUAL tariffs owe months. */
-export function accruesDebt(periodicidad: Periodicidad | null | undefined): boolean {
-  return normalizePeriodicidad(periodicidad) === "MENSUAL";
-}
-
 /** Coverage one payment buys: «1 mes», «1 semana (7 días)», «el día pagado». */
 export function coverageOfOnePayment(periodicidad: Periodicidad | null | undefined): string {
   switch (normalizePeriodicidad(periodicidad)) {

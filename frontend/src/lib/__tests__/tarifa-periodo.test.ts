@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  accruesDebt,
   coverageOfOnePayment,
   normalizePeriodicidad,
   periodSuffix,
@@ -20,13 +19,6 @@ describe("tarifa-periodo", () => {
     expect(normalizePeriodicidad(null)).toBe("MENSUAL");
     expect(normalizePeriodicidad("ANUAL")).toBe("MENSUAL");
     expect(periodSuffix(null)).toBe("al mes");
-  });
-
-  it("only MENSUAL accrues debt", () => {
-    expect(accruesDebt("MENSUAL")).toBe(true);
-    expect(accruesDebt(undefined)).toBe(true);
-    expect(accruesDebt("SEMANAL")).toBe(false);
-    expect(accruesDebt("DIARIA")).toBe(false);
   });
 
   it("describes the coverage of one payment", () => {
