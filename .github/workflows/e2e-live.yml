@@ -76,6 +76,12 @@ jobs:
     # la suite sin heredar el default de 360, que no es una red de seguridad
     # sino seis horas de runner tomado.
     timeout-minutes: 60
+    # docker-compose.override.yml builds with `network: host`. Newer runner
+    # images build through Bake, which refuses that without a
+    # `--allow=network.host` entitlement Compose cannot pass, so `make qa-up`
+    # failed before any spec ran. The classic builder honors it as before.
+    env:
+      COMPOSE_BAKE: "false"
 
     steps:
       - uses: actions/checkout@v4
