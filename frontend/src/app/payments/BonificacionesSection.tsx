@@ -2,7 +2,7 @@
 
 /** Read-only "Bonificaciones" list for the admin payments review (issue #1609). */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Download } from "lucide-react";
 import { formatDate, formatDateRange } from "@/lib/format-utils";
 import { formatCurrency } from "@/lib/format-utils";
@@ -19,6 +19,15 @@ interface BonificacionItem {
   otorgadaEn: string;
 }
 
+// A load-more batch, not a table page: the list renders every loaded row,
+// so the ten-rows-per-page rule (list-page-size.test.ts) does not apply.
+const LOAD_MORE_BATCH = 50;
+
+interface BonificacionesPage {
+  items?: BonificacionItem[];
+  total?: number;
+}
+
 /**
  * 100% benefit coverages never create a `Pago`, so they are not in the queue
  * above; this lists them read-only with the amount charged ($0,00) and the
@@ -27,19 +36,44 @@ interface BonificacionItem {
  */
 export function BonificacionesSection(): React.ReactElement | null {
   const [items, setItems] = useState<BonificacionItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreFailed, setMoreFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/membresias/coberturas/todas?skip=0&limit=50")
+    fetch(`/api/membresias/coberturas/todas?skip=0&limit=${LOAD_MORE_BATCH}`)
       .then((res) => (res.ok ? res.json() : null))
-      .then((body: { items?: BonificacionItem[] } | null) => {
-        if (!cancelled && body?.items) setItems(body.items);
+      .then((body: BonificacionesPage | null) => {
+        if (cancelled || !body?.items) return;
+        setItems(body.items);
+        setTotal(body.total ?? body.items.length);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const loadMore = useCallback(async (): Promise<void> => {
+    setLoadingMore(true);
+    setMoreFailed(false);
+    try {
+      const res = await fetch(`/api/membresias/coberturas/todas?skip=${items.length}&limit=${LOAD_MORE_BATCH}`);
+      const body: BonificacionesPage | null = res.ok ? await res.json() : null;
+      const nextItems = body?.items;
+      if (!body || !nextItems) throw new Error("bonificaciones page failed");
+      setItems((previous) => {
+        const seen = new Set(previous.map((i) => i.id));
+        return [...previous, ...nextItems.filter((i) => !seen.has(i.id))];
+      });
+      setTotal(body.total ?? total);
+    } catch {
+      setMoreFailed(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [items.length, total]);
 
   if (items.length === 0) return null;
 
@@ -77,6 +111,22 @@ export function BonificacionesSection(): React.ReactElement | null {
           </li>
         ))}
       </ul>
+      {moreFailed && (
+        <p role="alert" className="mt-2 text-sm text-state-bad">
+          {/* App-wide tú register, enforced by lib/__tests__/usted-register.test.ts. */}
+          No se pudieron cargar más bonificaciones. Intenta de nuevo.
+        </p>
+      )}
+      {items.length < total && (
+        <button
+          type="button"
+          onClick={() => void loadMore()}
+          disabled={loadingMore}
+          className="mt-3 h-9 rounded-ctl border border-line px-4 text-sm font-semibold text-ink-2 hover:text-ink disabled:opacity-60"
+        >
+          Cargar más
+        </button>
+      )}
     </section>
   );
 }
