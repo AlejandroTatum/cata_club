@@ -159,3 +159,16 @@ def test_el_cuerpo_de_otros_errores_de_dominio_no_cambia(client_sin_token, db_se
 
     assert respuesta.status_code == 403
     assert set(respuesta.json()) == {"detail", "message", "mensaje_seguro"}
+
+
+def test_editar_el_perfil_propio_si_esta_bloqueado_pero_leerlo_no(client_sin_token, db_session):
+    """`/auth/me` queda exento solo para GET: PATCH es un módulo más."""
+    usuario = _usuario(db_session, "patch-me@cataclub.test")
+    _aceptar_version(db_session, usuario, VERSION_ANTERIOR)
+
+    leer = client_sin_token.get("/api/v1/auth/me", headers=_headers(usuario))
+    editar = client_sin_token.patch("/api/v1/auth/me", headers=_headers(usuario), json={})
+
+    assert leer.status_code == 200
+    assert editar.status_code == 403
+    assert editar.json()["codigo"] == "reaceptacion_legal_pendiente"

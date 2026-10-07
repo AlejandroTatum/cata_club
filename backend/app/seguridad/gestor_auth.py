@@ -46,8 +46,11 @@ _SUPERFICIES_LIMITADAS = (
 # a propósito: `/personas` y `/auth/correo` son carve-outs del gate de
 # ACTIVACIÓN, no hacen falta para aceptar y exponen datos familiares, así que
 # aquí quedan bloqueados. El refresh no pasa por `decodificar_token`.
+#
+# Método: `/auth/me` está exento SOLO para GET (leer el perfil mínimo); su PATCH
+# edita datos y es un módulo más. El resto de las rutas exentas se usa con su
+# único método real (POST aceptar/logout/invalidar/cambiar, GET estado/sesiones).
 _SUPERFICIES_EXENTAS_REACEPTACION = (
-    "/auth/me",
     "/auth/logout",
     "/auth/me/sesiones",
     "/auth/sesiones/invalidar",
@@ -448,7 +451,10 @@ class GestorAutenticacion:
         # Re-aceptación legal (T4): una consulta indexada por request, antes
         # del gate de activación. Aplica a todos los roles; quien nunca aceptó
         # nada no tiene pares que renovar y pasa.
-        if not ruta.endswith(_SUPERFICIES_EXENTAS_REACEPTACION):
+        exenta_reaceptacion = ruta.endswith(_SUPERFICIES_EXENTAS_REACEPTACION) or (
+            ruta.endswith("/auth/me") and request.method == "GET"
+        )
+        if not exenta_reaceptacion:
             if _comprobador_reaceptacion is None:
                 raise RuntimeError("comprobador de re-aceptación legal no registrado")
             version_pendiente = _comprobador_reaceptacion(db, usuario.id)
