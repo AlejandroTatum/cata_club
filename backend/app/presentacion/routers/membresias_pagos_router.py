@@ -178,7 +178,7 @@ async def eliminar_tipo_membresia(tipo_id: int, db: Session = Depends(obtener_se
 @limiter.limit("60/minute")
 async def listar_tarifas_publicas(request: Request, db: Session = Depends(obtener_sesion)):
     tipos = MembresiaServicio(db).listar_tipos_membresia(solo_activas=True)
-    return [TarifaPublicaDTO(categoria=t.categoria, precio=t.precio) for t in tipos]
+    return [TarifaPublicaDTO(categoria=t.categoria, precio=t.precio, periodicidad=t.periodicidad) for t in tipos]
 
 
 def _recien_creada_sin_cobertura(membresia) -> MembresiaResponseDTO:

@@ -32,6 +32,17 @@ function renderCard(m: MembershipSummary): void {
   );
 }
 
+describe("MembershipCard — periodicidad", () => {
+  it.each([
+    [undefined, "Valor mensual"],
+    ["SEMANAL", "Valor semanal"],
+    ["DIARIA", "Valor por día"],
+  ] as const)("labels the %s price as «%s»", (periodicidad, label) => {
+    renderCard(membership({ estado: "ACTIVA", periodicidad }));
+    expect(screen.getByText(label)).toBeInTheDocument();
+  });
+});
+
 describe("MembershipCard — suspension reason", () => {
   it("shows the reason the club recorded for a suspended membership", () => {
     renderCard(membership({ motivoSuspension: "Lesión de rodilla" }));

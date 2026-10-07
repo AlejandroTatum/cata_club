@@ -38,6 +38,22 @@ function renderCard(s: PaymentSituation, extra: Partial<React.ComponentProps<typ
   );
 }
 
+describe("CuotaCard — periodicidad", () => {
+  it.each([
+    ["MENSUAL", "al mes"],
+    ["SEMANAL", "a la semana"],
+    ["DIARIA", "por día"],
+  ] as const)("notes the %s price as «%s»", (periodicidad, note) => {
+    renderCard(situation({}), { periodicidad });
+    expect(within(screen.getByTestId("cuota-figures")).getByText(note)).toBeInTheDocument();
+  });
+
+  it("defaults to «al mes» when the periodicity is unknown", () => {
+    renderCard(situation({}));
+    expect(within(screen.getByTestId("cuota-figures")).getByText("al mes")).toBeInTheDocument();
+  });
+});
+
 describe("CuotaCard", () => {
   it("states an expired cuota with a single Vencida badge and no red banner", () => {
     renderCard(situation({}));

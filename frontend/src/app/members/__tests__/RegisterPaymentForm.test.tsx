@@ -105,6 +105,33 @@ describe("RegisterPaymentForm — controls follow the md sizing standard (#539)"
   });
 });
 
+describe("RegisterPaymentForm — tarifas semanales y diarias", () => {
+  const SEMANAL: NonNullable<MemberStudentSummary["membresia"]> = { ...MEMBRESIA, monto: 8, periodicidad: "SEMANAL" };
+  const DIARIA: NonNullable<MemberStudentSummary["membresia"]> = { ...MEMBRESIA, monto: 3, periodicidad: "DIARIA" };
+
+  it("states a weekly payment as one week of coverage at the weekly price", () => {
+    render(<RegisterPaymentForm personaId={74} membresia={SEMANAL} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    expect(screen.getByText(/1 semana de vigencia \(precio semanal: \$8\)/i)).toBeInTheDocument();
+  });
+
+  it("states a daily payment as covering only the paid day", () => {
+    render(<RegisterPaymentForm personaId={74} membresia={DIARIA} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    expect(screen.getByText(/solo el día pagado \(precio por día: \$3\)/i)).toBeInTheDocument();
+  });
+
+  it("refuses an amount that is more than one period", () => {
+    render(<RegisterPaymentForm personaId={74} membresia={SEMANAL} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: /^Monto/ }), { target: { value: "16" } });
+
+    expect(screen.getByText(/un período por pago/i)).toBeInTheDocument();
+  });
+});
+
 describe("RegisterPaymentForm — ADMA-10: el admin elige el método, ninguno viene marcado", () => {
   it("opens with neither Efectivo nor Transferencia selected, and no voucher field yet", () => {
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);

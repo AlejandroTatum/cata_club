@@ -43,6 +43,13 @@ import {
 } from "@/services/api";
 import type { ActualizarTipoMembresiaInput, TipoMembresiaCatalogo } from "@/services/api";
 import { toUserMessage } from "@/lib/error-message";
+import {
+  PERIODICIDADES,
+  PERIODICIDAD_LABEL,
+  normalizePeriodicidad,
+  periodSuffix,
+} from "@/lib/tarifa-periodo";
+import type { Periodicidad } from "@/lib/tarifa-periodo";
 import TarifaUsage from "./TarifaUsage";
 
 const MODALIDAD_LABEL: Record<TipoMembresiaCatalogo["modalidad"], string> = {
@@ -106,6 +113,8 @@ interface PendingConfirm {
   categoriaNueva: string | null;
   /** `null` when the price did not change — omitted from the PATCH payload. */
   precioNuevo: string | null;
+  /** `null` when the periodicity did not change — omitted from the PATCH payload. */
+  periodicidadNueva: Periodicidad | null;
 }
 
 /** The text-only "Eliminar" at the right edge of a card's actions: red text
@@ -117,6 +126,7 @@ const EMPTY_NEW_TARIFA = {
   categoria: "",
   precioInput: "",
   modalidad: "MENSUAL" as TipoMembresiaCatalogo["modalidad"],
+  periodicidad: "MENSUAL" as Periodicidad,
 };
 
 /** A field caption with its required mark inline. The label is a flex column,
@@ -148,6 +158,7 @@ export default function TarifasPage(): React.ReactElement {
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [precioInput, setPrecioInput] = useState("");
+  const [periodicidadInput, setPeriodicidadInput] = useState<Periodicidad>("MENSUAL");
   const [categoriaInput, setCategoriaInput] = useState("");
   const [inputError, setInputError] = useState<string | null>(null);
   const [categoriaError, setCategoriaError] = useState<string | null>(null);
@@ -212,6 +223,7 @@ export default function TarifasPage(): React.ReactElement {
   function startEdit(tarifa: TipoMembresiaCatalogo): void {
     setEditingId(tarifa.id);
     setPrecioInput(tarifa.precio);
+    setPeriodicidadInput(normalizePeriodicidad(tarifa.periodicidad));
     setCategoriaInput(tarifa.categoria);
     setInputError(null);
     setCategoriaError(null);
@@ -252,7 +264,8 @@ export default function TarifasPage(): React.ReactElement {
 
     const categoriaChanged = categoriaTrimmed !== tarifa.categoria;
     const precioChanged = precioValue !== tarifa.precio;
-    if (!categoriaChanged && !precioChanged) {
+    const periodicidadChanged = periodicidadInput !== normalizePeriodicidad(tarifa.periodicidad);
+    if (!categoriaChanged && !precioChanged && !periodicidadChanged) {
       cancelEdit();
       return;
     }
@@ -262,6 +275,7 @@ export default function TarifasPage(): React.ReactElement {
       categoriaActual: tarifa.categoria,
       categoriaNueva: categoriaChanged ? categoriaTrimmed : null,
       precioNuevo: precioChanged ? precioValue : null,
+      periodicidadNueva: periodicidadChanged ? periodicidadInput : null,
     });
   }
 
@@ -273,6 +287,7 @@ export default function TarifasPage(): React.ReactElement {
       const payload: ActualizarTipoMembresiaInput = {};
       if (pending.categoriaNueva !== null) payload.categoria = pending.categoriaNueva;
       if (pending.precioNuevo !== null) payload.precio = pending.precioNuevo;
+      if (pending.periodicidadNueva !== null) payload.periodicidad = pending.periodicidadNueva;
       const actualizada = await actualizarTipoMembresia(pending.id, payload);
       setTarifas((prev) => prev.map((t) => (t.id === actualizada.id ? actualizada : t)));
       showSuccess(buildSuccessMessage(pending, actualizada));
@@ -304,6 +319,9 @@ export default function TarifasPage(): React.ReactElement {
   ): string {
     const categoriaChanged = pending.categoriaNueva !== null;
     const precioChanged = pending.precioNuevo !== null;
+    if (pending.periodicidadNueva !== null) {
+      return `Tarifa «${actualizada.categoria}» actualizada: ahora es ${PERIODICIDAD_LABEL[pending.periodicidadNueva].toLowerCase()}.`;
+    }
     if (categoriaChanged && precioChanged) {
       return `Tarifa «${pending.categoriaActual}» actualizada: nombre a «${actualizada.categoria}» y precio a $${actualizada.precio}.`;
     }
@@ -318,6 +336,11 @@ export default function TarifasPage(): React.ReactElement {
    *  wording the existing test suite (and admins) already know. */
   function confirmDialogLabel(pending: PendingConfirm | null): string {
     if (!pending) return "";
+    if (pending.periodicidadNueva !== null) {
+      return pending.categoriaNueva !== null || pending.precioNuevo !== null
+        ? "Cambiar tarifa"
+        : "Cambiar periodicidad";
+    }
     if (pending.categoriaNueva !== null && pending.precioNuevo !== null) return "Cambiar tarifa";
     if (pending.categoriaNueva !== null) return "Cambiar nombre";
     return "Cambiar precio";
@@ -333,6 +356,11 @@ export default function TarifasPage(): React.ReactElement {
     if (pending.precioNuevo !== null) {
       parts.push(
         `Vas a cambiar el precio a $${pending.precioNuevo}. El cambio aplica solo a los pagos futuros: las membresías y los pagos ya registrados no se modifican.`,
+      );
+    }
+    if (pending.periodicidadNueva !== null) {
+      parts.push(
+        `Vas a cambiar la periodicidad a ${PERIODICIDAD_LABEL[pending.periodicidadNueva].toLowerCase()}. Las tarifas semanales y diarias no generan deuda.`,
       );
     }
     return parts.join(" ");
@@ -436,7 +464,13 @@ export default function TarifasPage(): React.ReactElement {
     setCreating(true);
     setCreateError(null);
     try {
-      await crearTipoMembresia({ categoria, precio, modalidad: newTarifa.modalidad });
+      await crearTipoMembresia({
+        categoria,
+        precio,
+        modalidad: newTarifa.modalidad,
+        // MENSUAL is the backend default: only the new periodicities travel.
+        ...(newTarifa.periodicidad !== "MENSUAL" ? { periodicidad: newTarifa.periodicidad } : {}),
+      });
       showSuccess(`Tarifa «${categoria}» creada.`);
       closeCreateForm();
       await loadCatalog();
@@ -483,7 +517,7 @@ export default function TarifasPage(): React.ReactElement {
   function renderPrecioEditor(tarifa: TipoMembresiaCatalogo): React.ReactElement {
     return (
       <label className={FIELD_LABEL}>
-        Precio mensual
+        Precio {periodSuffix(periodicidadInput)}
         <MoneyInput
           value={precioInput}
           onChange={(e) => precioMasking.onChange(e.target.value)}
@@ -502,6 +536,33 @@ export default function TarifasPage(): React.ReactElement {
               {NUMERIC_FIELD_LIMIT_MESSAGE.amount}
             </span>
           )
+        )}
+      </label>
+    );
+  }
+
+  /** Edit-mode periodicity select, under the price it qualifies. */
+  function renderPeriodicidadEditor(tarifa: TipoMembresiaCatalogo): React.ReactElement {
+    return (
+      <label className={FIELD_LABEL}>
+        Periodicidad
+        <select
+          value={periodicidadInput}
+          onChange={(e) => setPeriodicidadInput(e.target.value as Periodicidad)}
+          className={FIELD_CONTROL}
+          aria-label={`Periodicidad de ${tarifa.categoria}`}
+          disabled={saving || tarifa.enUso}
+        >
+          {PERIODICIDADES.map((value) => (
+            <option key={value} value={value}>
+              {PERIODICIDAD_LABEL[value]}
+            </option>
+          ))}
+        </select>
+        {tarifa.enUso && (
+          <span className="text-xs font-normal text-muted-foreground">
+            No se puede cambiar: la tarifa ya tiene membresías. Crea una tarifa nueva.
+          </span>
         )}
       </label>
     );
@@ -600,7 +661,12 @@ export default function TarifasPage(): React.ReactElement {
   function renderGuidance(): React.ReactElement {
     return (
       <InfoPanel title="Cómo se aplican las tarifas">
-        <p>Cada tarifa define el precio y la modalidad de una membresía.</p>
+        <p>Cada tarifa define el precio, la modalidad y la periodicidad de una membresía.</p>
+        <p>
+          <strong className="text-ink">Semanal</strong> cubre 7 días desde el pago;{" "}
+          <strong className="text-ink">Diaria</strong> cubre solo el día pagado. Ninguna de las dos
+          acumula deuda.
+        </p>
         <p>
           <strong className="text-ink">Al editar un precio</strong>, el cambio aplica solo a los
           pagos futuros; las membresías y los pagos ya registrados no se modifican.
@@ -674,6 +740,22 @@ export default function TarifasPage(): React.ReactElement {
               <option value="PERSONALIZADA">Personalizada</option>
             </select>
           </label>
+          <label className={FIELD_LABEL}>
+            <RequiredCaption>Periodicidad</RequiredCaption>
+            <select
+              value={newTarifa.periodicidad}
+              required
+              onChange={(e) =>
+                setNewTarifa({ ...newTarifa, periodicidad: e.target.value as Periodicidad })
+              }
+              className={FIELD_CONTROL}
+              disabled={creating}
+            >
+              <option value="MENSUAL">Mensual</option>
+              <option value="SEMANAL">Semanal (cubre 7 días)</option>
+              <option value="DIARIA">Diaria (paga por día suelto)</option>
+            </select>
+          </label>
         </div>
         {createError && (
           <p className="text-xs text-state-bad" role="alert">
@@ -701,7 +783,7 @@ export default function TarifasPage(): React.ReactElement {
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
         title="Tarifas"
-        subtitle="El precio y la modalidad de cada membresía del club."
+        subtitle="El precio, la modalidad y la periodicidad de cada membresía del club."
         actions={
           <Button variant="dark" onClick={openCreateForm}>
             <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
@@ -764,6 +846,7 @@ export default function TarifasPage(): React.ReactElement {
                           </h3>
                           {renderNombreInput(tarifa)}
                           {renderPrecioEditor(tarifa)}
+                          {renderPeriodicidadEditor(tarifa)}
                           <p className="text-xs text-ink-3">
                             El nuevo precio aplica solo a los pagos futuros.
                           </p>
@@ -782,6 +865,9 @@ export default function TarifasPage(): React.ReactElement {
                             <div className="flex flex-wrap gap-1">
                               <Badge tone={oculta ? "neutral" : "ok"}>{oculta ? "Oculta" : "Visible"}</Badge>
                               <Badge>{MODALIDAD_LABEL[tarifa.modalidad]}</Badge>
+                              {normalizePeriodicidad(tarifa.periodicidad) !== "MENSUAL" && (
+                                <Badge>{PERIODICIDAD_LABEL[normalizePeriodicidad(tarifa.periodicidad)]}</Badge>
+                              )}
                             </div>
                           </div>
                           <div className="grid gap-1">
@@ -790,7 +876,12 @@ export default function TarifasPage(): React.ReactElement {
                                 "text-4xl font-extrabold tabular-nums",
                                 oculta ? "text-ink-3" : "text-ink",
                               )}
-                            >{`$ ${tarifa.precio}`}</p>
+                            >
+                              {`$ ${tarifa.precio}`}
+                              <span className="ml-2 text-sm font-semibold text-ink-3">
+                                {periodSuffix(tarifa.periodicidad)}
+                              </span>
+                            </p>
                             <p className="text-xs text-ink-3">
                               {oculta
                                 ? "No aparece en el sitio ni en inscripciones. Los jugadores que ya la tienen siguen pagando igual."

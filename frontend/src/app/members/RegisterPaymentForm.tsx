@@ -37,10 +37,11 @@ import type { RegistrarPagoInput } from "@/services/api";
 import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
 import { toUserMessage } from "@/lib/error-message";
 import { formatDate } from "@/lib/format-utils";
+import { normalizePeriodicidad, periodSuffix } from "@/lib/tarifa-periodo";
 import { MIN_TARGET_CLASS } from "@/lib/target-size";
 import { ACTION_TRIGGER, PRIMARY_ACTION_TRIGGER } from "./payment-action-styles";
 import {
-  addMonthsIso,
+  addPeriodsIso,
   excedeMesesMaximo,
   MAX_MESES_COBERTURA,
   MENSAJE_MESES_MAXIMO_EXCEDIDO,
@@ -76,6 +77,12 @@ export default function RegisterPaymentForm({
 }: RegisterPaymentFormProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
   const monthlyPrice = membresia.monto != null ? Number(membresia.monto) : 0;
+  /** SEMANAL/DIARIA take exactly one period per payment (the backend enforces it too). */
+  const periodicidad = normalizePeriodicidad(membresia.periodicidad);
+  const oneFixedPeriod = periodicidad !== "MENSUAL";
+  const MENSAJE_UN_PERIODO = `El monto debe ser exactamente $${monthlyPrice}: la tarifa ${
+    periodicidad === "SEMANAL" ? "semanal" : "diaria"
+  } se paga de a un período por pago.`;
 
   const [open, setOpen] = useState(false);
   const [monto, setMonto] = useState<string>(membresia.monto != null ? String(membresia.monto) : "");
@@ -129,7 +136,7 @@ export default function RegisterPaymentForm({
   function calcEndDate(baseDate: Date, amount: number): string {
     const months = wholeMonthsFor(amount, monthlyPrice);
     if (months === null) return "";
-    return addMonthsIso(calendarIsoDate(baseDate), months);
+    return addPeriodsIso(calendarIsoDate(baseDate), months, periodicidad);
   }
 
   /**
@@ -145,6 +152,7 @@ export default function RegisterPaymentForm({
   function montoMultipleHint(amount: number): string | null {
     if (amount <= 0 || monthlyPrice <= 0) return null;
     if (excedeMesesMaximo(amount, monthlyPrice)) return null;
+    if (oneFixedPeriod && wholeMonthsFor(amount, monthlyPrice) !== 1) return MENSAJE_UN_PERIODO;
     if (wholeMonthsFor(amount, monthlyPrice) !== null) return null;
     return `El monto debe ser un múltiplo de $${monthlyPrice} (un mes = $${monthlyPrice}).`;
   }
@@ -245,6 +253,7 @@ export default function RegisterPaymentForm({
         ? `El monto debe ser múltiplo de $${monthlyPrice}: registra uno o más meses completos.`
         : "No se pudo calcular a cuántos meses equivale este monto.";
     }
+    if (oneFixedPeriod && meses !== 1) return MENSAJE_UN_PERIODO;
     // Issue #666: re-checked here (not just in `handleMontoChange`) as the
     // last gate before a request is built — `handleSubmit` reads `meses`
     // straight from this same `wholeMonthsFor` call below.
@@ -579,9 +588,17 @@ export default function RegisterPaymentForm({
 
       {previewMonths !== null && (
         <p className="text-xs text-ink-3">
-          {previewMonths}{" "}
-          {previewMonths === 1 ? "mes de vigencia" : "meses de vigencia"} (precio
-          mensual: ${monthlyPrice})
+          {oneFixedPeriod ? (
+            periodicidad === "SEMANAL"
+              ? `${previewMonths} ${previewMonths === 1 ? "semana" : "semanas"} de vigencia (precio semanal: $${monthlyPrice})`
+              : `solo el día pagado (precio ${periodSuffix(periodicidad)}: $${monthlyPrice})`
+          ) : (
+            <>
+              {previewMonths}{" "}
+              {previewMonths === 1 ? "mes de vigencia" : "meses de vigencia"} (precio
+              mensual: ${monthlyPrice})
+            </>
+          )}
         </p>
       )}
 

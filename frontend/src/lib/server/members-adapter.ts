@@ -47,6 +47,7 @@ import type { AccountState, MemberAccount, MemberStudentSummary, PaymentStatus }
 import { MEMBERSHIP_STATUS_BY_ESTADO, type BackendEstadoPago, type BackendMembresia, type BackendTipoMembresia } from "@/lib/server/payments-adapter";
 import { readsAsVencida } from "@/lib/membership-status";
 import type { BackendPagoListItem } from "@/lib/server/payments-adapter";
+import { normalizePeriodicidad } from "@/lib/tarifa-periodo";
 
 // ---------------------------------------------------------------------------
 // Backend DTO shapes (camelCase, as received from FastAPI)
@@ -256,6 +257,7 @@ function buildMemberStudentSummary(
           // duplicado con otro nombre. Son dos hechos distintos: cuánto
           // cuesta el plan por mes, y cuánto fue el último pago.
           monto: Number(membresia.montoAplicado ?? 0),
+          periodicidad: normalizePeriodicidad(membresia.periodicidad),
           // Normalized to a concrete boolean (never left `undefined`), even
           // though the field is optional on `BackendMembresia` — see that
           // interface's doc comment (payments-adapter.ts) for why an older

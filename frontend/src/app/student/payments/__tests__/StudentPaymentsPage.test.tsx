@@ -1387,6 +1387,35 @@ describe("StudentPaymentsPage — registering a payment", () => {
     ).toBeInTheDocument();
   });
 
+  it("a weekly plan pays one week: no month stepper, week wording, one period sent", async () => {
+    mockFetchStudentPortal.mockResolvedValue({
+      ...PORTAL,
+      self: { ...SELF, membership: { ...SELF.membership!, periodicidad: "SEMANAL" } },
+    });
+    render(<StudentPaymentsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
+
+    expect(screen.queryByRole("button", { name: /un mes más/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: /^Meses a pagar/ })).not.toBeInTheDocument();
+    expect(await screen.findByText(/1 semana a \$25,00 a la semana/i)).toBeInTheDocument();
+    expect(screen.getByText(/Cubre 7 días/i)).toBeInTheDocument();
+  });
+
+  it("a daily plan covers only the paid day", async () => {
+    mockFetchStudentPortal.mockResolvedValue({
+      ...PORTAL,
+      self: { ...SELF, membership: { ...SELF.membership!, periodicidad: "DIARIA" } },
+    });
+    render(<StudentPaymentsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
+
+    expect(screen.queryByRole("button", { name: /un mes más/i })).not.toBeInTheDocument();
+    expect(await screen.findByText(/1 día a \$25,00 por día/i)).toBeInTheDocument();
+    expect(screen.getByText(/Cubre solo el día pagado/i)).toBeInTheDocument();
+  });
+
   it("clamps the month count between 1 and 12", async () => {
     render(<StudentPaymentsPage />);
 
