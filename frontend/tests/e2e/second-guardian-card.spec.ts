@@ -43,11 +43,20 @@ test("the primary representative invites a second guardian from the home", async
   await page.goto("/student");
   await page.getByRole("button", { name: /invitar a otro representante/i }).click();
   await page.getByLabel(/correo de la persona a invitar/i).fill("pablo@cataclub.test");
+  await page.getByLabel("Nombres").fill("Pablo");
+  await page.getByLabel("Apellidos").fill("Torres");
+  await page.getByLabel("Cédula").fill("1710034065");
+  await page.getByLabel("Fecha de nacimiento").fill("1982-04-04");
+  await page.getByLabel("Teléfono").fill("0991234567");
   const request = page.waitForRequest("**/api/co-representantes/invitaciones");
   await page.getByRole("button", { name: /enviar invitación/i }).click();
   await request;
 
-  expect(sent).toEqual({ personaIds: [42], correo: "pablo@cataclub.test" });
+  expect(sent).toEqual({
+    personaIds: [42],
+    correo: "pablo@cataclub.test",
+    datos: { nombres: "Pablo", apellidos: "Torres", cedula: "1710034065", fechaNacimiento: "1982-04-04", telefono: "0991234567" },
+  });
 });
 
 test("a second guardian sees no invite button", async ({ page }) => {
