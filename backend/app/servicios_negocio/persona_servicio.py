@@ -36,6 +36,7 @@ from app.infraestructura.repositorios.restricciones_identidad import identidad_e
 from app.infraestructura.repositorios.vinculacion_representante_repositorio import (
     VinculacionRepresentanteRepositorio,
 )
+from app.servicios_negocio.co_representante_vinculo import retirar_del_menor
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.auth_servicio import AuthServicio
 from app.servicios_negocio.rol_servicio import RolServicio
@@ -440,6 +441,11 @@ class PersonaServicio:
 
         representante_anterior_id = representado.representante_id
         self.repo.actualizar(representado, {"representante_id": representante_id})
+        # Issue #1666: el nuevo principal no puede ser también el segundo guardián.
+        retirar_del_menor(
+            self.db, representado.id, actor_persona_id=actor_persona_id, origen="SISTEMA",
+            solo_si_es=representante_id,
+        )
 
         # Issue #1133: el ledger completo -- la vinculación de mostrador
         # también pasa por el repositorio, nunca por un `self.db.add(...)`
@@ -607,10 +613,12 @@ class PersonaServicio:
         return persona
 
     def listar_representados(self, persona_id: int) -> list[Persona]:
-        """Dependientes ACTIVOS. `obtener_persona` se conserva para que un
-        `persona_id` inexistente siga dando 404 y no una lista vacía."""
+        """Dependientes ACTIVOS de los que `persona_id` es guardián -- como
+        principal o como segundo guardián (issue #1666). `obtener_persona` se
+        conserva para que un `persona_id` inexistente siga dando 404 y no una
+        lista vacía."""
         self.obtener_persona(persona_id)
-        return self.repo.listar_representados(persona_id)
+        return self.repo.listar_representados_accesibles(persona_id)
 
     def actualizar_persona(self, persona_id: int, cambios: PersonaUpdateDTO) -> Persona:
         persona = self.obtener_persona(persona_id)

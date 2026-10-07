@@ -576,6 +576,12 @@ class Persona(Base):
         "Persona", remote_side=[id], back_populates="representados"
     )
     representados: Mapped[List["Persona"]] = relationship("Persona", back_populates="representante")
+    # Issue #1666: segundo guardián (0..1) del menor. Link ACTIVO; el ledger de
+    # altas/bajas vive en `CoRepresentanteEvento`. Ver `CoRepresentante`.
+    co_representante_vinculo: Mapped[Optional["CoRepresentante"]] = relationship(
+        "CoRepresentante", foreign_keys="CoRepresentante.persona_id",
+        uselist=False, viewonly=True,
+    )
 
     # --- FKs opcionales (0..1) ---
     direccion_id: Mapped[Optional[int]] = mapped_column(ForeignKey("direccion.id"), nullable=True)
@@ -2353,6 +2359,109 @@ class VinculacionRepresentante(Base):
     origen: Mapped[str] = mapped_column(String(32), default="AUTOSERVICIO_LEGADO")
     idempotency_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     request_fingerprint: Mapped[Optional[str]] = mapped_column(CHAR(64), nullable=True)
+
+
+# ---------------------------------------------------------------------------
+# Segundo guardián de un menor (issue #1666)
+# ---------------------------------------------------------------------------
+# Decisión del dueño (2026-10-05): máximo DOS guardianes por menor -- el
+# principal (`Persona.representante_id`, sin cambios) más uno. El segundo ve
+# todo y paga igual que el principal, pero NO firma ni edita la ficha médica
+# ni los consentimientos legales. El principal lo invita por correo y puede
+# retirarlo; el administrador también. Retirarlo corta el acceso en el acto:
+# el vínculo ES la autorización, no hay cache ni token que sobreviva.
+class CoRepresentante(Base):
+    """Vínculo ACTIVO del segundo guardián. `UNIQUE(persona_id)` es el tope de
+    dos guardianes, garantizado por la base aun ante dos aceptaciones
+    concurrentes. Retirar el vínculo BORRA la fila; la evidencia queda en
+    `CoRepresentanteEvento` (append-only)."""
+
+    __tablename__ = "co_representante"
+    __table_args__ = (
+        UniqueConstraint("persona_id", name="uq_co_representante_persona"),
+        Index("ix_co_representante_co_representante_id", "co_representante_id"),
+        Index("ix_co_representante_creado_por_persona_id", "creado_por_persona_id"),
+        CheckConstraint(
+            "persona_id <> co_representante_id", name="ck_co_representante_distintos",
+        ).ddl_if(dialect="postgresql"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # El menor (o representado) cuyo segundo guardián es `co_representante_id`.
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
+    co_representante_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
+    co_representante: Mapped["Persona"] = relationship(foreign_keys=[co_representante_id])
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
+    creado_por_persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
+
+
+class CoRepresentanteInvitacion(Base):
+    """Invitación que CREÓ la cuenta del segundo guardián (decisión del dueño,
+    L4: "La invitación le crea la cuenta"). Existe solo cuando el correo
+    invitado no tenía cuenta; con una cuenta REPRESENTANTE ya existente se
+    vincula sin invitación.
+
+    NO guarda ningún token: el enlace es el de fijar contraseña de siempre
+    (`RecuperacionOutbox`, token `reset_password` con el claim `prp`), que se
+    acuña al enviar y es de un solo uso y corta duración. Esta fila solo dice
+    que la cuenta está pendiente de aceptar y quién la invitó. A lo sumo una
+    pendiente por menor."""
+
+    __tablename__ = "co_representante_invitacion"
+    __table_args__ = (
+        Index("ix_co_representante_invitacion_persona_id", "persona_id"),
+        Index("ix_co_representante_invitacion_co_representante_id", "co_representante_id"),
+        Index("ix_co_representante_invitacion_invitada_por_persona_id", "invitada_por_persona_id"),
+        Index(
+            "uq_co_representante_invitacion_pendiente",
+            "persona_id",
+            unique=True,
+            postgresql_where=text("aceptada_en IS NULL AND cancelada_en IS NULL"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # El menor y la persona invitada (cuenta creada por la invitación).
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
+    co_representante_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
+    correo: Mapped[str] = mapped_column(String(255))
+    invitada_por_persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
+    creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
+    aceptada_en: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelada_en: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class CoRepresentanteEvento(Base):
+    """Ledger append-only de invitaciones, altas y bajas del segundo guardián
+    (acceptance de #1666: "adding/removing a guardian is audited"). La base
+    rechaza `UPDATE`/`DELETE`/`TRUNCATE` (migración `x1666coguardian`)."""
+
+    __tablename__ = "co_representante_evento"
+    __table_args__ = (
+        Index("ix_co_representante_evento_persona_fecha", "persona_id", text("fecha DESC"), text("id DESC")),
+        Index("ix_co_representante_evento_co_representante_id", "co_representante_id"),
+        Index("ix_co_representante_evento_actor_persona_id", "actor_persona_id"),
+        Index("ix_co_representante_evento_invitacion_id", "invitacion_id"),
+        CheckConstraint(
+            "operacion IN ('INVITACION', 'INVITACION_CANCELADA', 'ALTA', 'ACEPTACION', 'BAJA')",
+            name="ck_co_representante_evento_operacion",
+        ).ddl_if(dialect="postgresql"),
+        CheckConstraint(
+            "origen IN ('REPRESENTANTE', 'ADMIN', 'INVITADO', 'SISTEMA')",
+            name="ck_co_representante_evento_origen",
+        ).ddl_if(dialect="postgresql"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fecha: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
+    co_representante_id: Mapped[Optional[int]] = mapped_column(ForeignKey("persona.id"), nullable=True)
+    actor_persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
+    operacion: Mapped[str] = mapped_column(String(24))
+    origen: Mapped[str] = mapped_column(String(16))
+    invitacion_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("co_representante_invitacion.id"), nullable=True
+    )
 
 
 # ---------------------------------------------------------------------------
