@@ -4866,6 +4866,17 @@ describe("MembersPage — role filter", () => {
     expect(names().sort()).toEqual([...expected].sort());
   });
 
+  it("keeps a player whose membership lapsed under «Jugador», even without the ALUMNO role", async () => {
+    const lapsedMinor = person("7", "Mateo", [], {
+      estudiantes: [{
+        id: "7", nombres: "Mateo", apellidos: "Prueba", activo: true, ultimoPago: null,
+        membresia: { id: 7, tipo: "Infantil", estado: "vencida", estadoBackend: "VENCIDA", fechaInicio: "", fechaFin: "", monto: 30 },
+      }],
+    });
+    await renderList([lapsedMinor, PLAYER]);
+    expect(names().sort()).toEqual(["Mateo", "Paula"]);
+  });
+
   it("counts each chip inside the selected role, so «Todos» matches the rows shown", async () => {
     await renderList();
     expect(screen.getByRole("button", { name: /^Todos\s*1$/ })).toBeInTheDocument();
@@ -4887,7 +4898,8 @@ describe("MembersPage — role filter", () => {
       });
     await renderList([lapsed("1", "Vera", ["ALUMNO"]), lapsed("2", "Vito", ["ENTRENADOR"]), PLAYER]);
     fireEvent.click(screen.getByRole("button", { name: /Membresía vencida/ }));
-    expect(names()).toEqual(["Vera"]);
+    // Vito coaches but also holds his own (lapsed) membership: he plays too.
+    expect(names().sort()).toEqual(["Vera", "Vito"]);
 
     chooseRole("Entrenador");
     expect(names()).toEqual(["Vito"]);

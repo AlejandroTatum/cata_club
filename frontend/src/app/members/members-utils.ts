@@ -605,10 +605,15 @@ const ROLE_FILTER_BACKEND_ROLE: Record<Exclude<MemberRoleFilter, "todos">, Backe
   representante: "REPRESENTANTE",
 };
 
-/** Does the account hold the picked role? A multi-role person matches each of theirs. */
+/**
+ * Does the account hold the picked role? A multi-role person matches each of
+ * theirs. «Jugador» is the club's one player rule (`isPlayerAccount`, owner
+ * decision A in #1669): a lapsed represented minor has no role but still plays.
+ */
 export function accountMatchesRole(account: MemberAccount, filter: MemberRoleFilter): boolean {
   if (filter === "todos") return true;
-  return accountDisplayRoles(account).includes(ROLE_FILTER_BACKEND_ROLE[filter]);
+  const shown = accountDisplayRoles(account).includes(ROLE_FILTER_BACKEND_ROLE[filter]);
+  return filter === "jugador" ? shown || isPlayerAccount(account) : shown;
 }
 
 /**

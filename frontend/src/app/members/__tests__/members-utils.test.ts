@@ -1505,7 +1505,7 @@ describe("accountMatchesRole", () => {
     expect(accountMatchesRole(rep, "jugador")).toBe(false);
   });
 
-  it("uses the list's own «Jugador» notion: ALUMNO role or an own ACTIVA membership", () => {
+  it("uses the club's «Jugador» rule: ALUMNO role or an own ACTIVA/VENCIDA membership", () => {
     expect(accountMatchesRole(roleAccount({ backendRoles: ["ALUMNO"] }), "jugador")).toBe(true);
     const repWithMembership = roleAccount({ backendRoles: ["REPRESENTANTE"], estudiantes: [activeStudent] });
     expect(accountMatchesRole(repWithMembership, "jugador")).toBe(true);
