@@ -3,7 +3,8 @@ suprime), el vínculo del segundo guardián no puede quedar incoherente, y toda
 baja deja evidencia en `CoRepresentanteEvento`."""
 from datetime import datetime, timedelta, timezone
 
-from app.dominio.modelos import CoRepresentante, CoRepresentanteEvento
+from app.dominio.modelos import CoRepresentante, CoRepresentanteEvento, CoRepresentanteInvitacion
+from app.servicios_negocio.co_representante_vinculo import retirar_del_menor
 from app.servicios_negocio.supresion_datos_servicio import DIAS_GRACIA, SupresionDatosServicio
 from tests.test_independencia_representada import (
     _admin as _admin_indep, _comando as _comando_indep, _independizar, _representado_adulto,
@@ -94,3 +95,45 @@ def test_suprimir_a_un_segundo_guardian_retira_sus_vinculos(db_session, monkeypa
 
     assert db_session.query(CoRepresentante).count() == 0
     assert _eventos(db_session, menor.id) == [("BAJA", "ADMIN", admin.id, segundo.id)]
+
+
+def _invitar_pendiente(db_session, menor, co, creador):
+    invitacion = CoRepresentanteInvitacion(
+        persona_id=menor.id, co_representante_id=co.id, correo=f"inv{co.id}@x.com",
+        invitada_por_persona_id=creador.id,
+    )
+    db_session.add(invitacion)
+    db_session.commit()
+    return invitacion
+
+
+def test_el_nuevo_principal_con_invitacion_pendiente_la_cancela_y_libera_el_cupo(db_session):
+    """Si el invitado pasa a ser el principal antes de aceptar, su invitación
+    pendiente cae: si no, bloquea toda invitación futura (índice único de
+    pendientes) y su enlace choca con el trigger de principal distinto."""
+    admin, viejo, _, nuevo, _, menor = _escenario(db_session)
+    invitacion = _invitar_pendiente(db_session, menor, nuevo, viejo)
+
+    assert retirar_del_menor(
+        db_session, menor.id, actor_persona_id=admin.id, origen="SISTEMA", solo_si_es=nuevo.id,
+    ) is True
+    db_session.commit()
+
+    db_session.refresh(invitacion)
+    assert invitacion.cancelada_en is not None
+    assert _eventos(db_session, menor.id) == [("INVITACION_CANCELADA", "SISTEMA", admin.id, nuevo.id)]
+
+
+def test_la_invitacion_pendiente_de_un_tercero_sobrevive_al_nuevo_principal(db_session):
+    admin, viejo, _, nuevo, _, menor = _escenario(db_session)
+    tercero, _ = _representante(db_session, 430)
+    invitacion = _invitar_pendiente(db_session, menor, tercero, viejo)
+
+    assert retirar_del_menor(
+        db_session, menor.id, actor_persona_id=admin.id, origen="SISTEMA", solo_si_es=nuevo.id,
+    ) is False
+    db_session.commit()
+
+    db_session.refresh(invitacion)
+    assert invitacion.cancelada_en is None
+    assert _eventos(db_session, menor.id) == []

@@ -70,9 +70,13 @@ def retirar_del_menor(
     repo = CoRepresentanteRepositorio(db)
     vinculo = repo.obtener_por_persona(persona_id)
     pendiente = repo.obtener_pendiente(persona_id)
-    if vinculo is None and pendiente is not None and solo_si_es is None:
+    if vinculo is None and pendiente is not None and (
+        solo_si_es is None or pendiente.co_representante_id == solo_si_es
+    ):
         # Invitación de una cuenta existente que aún no aceptó: sin vínculo,
-        # pero también debe caer con el principal que la emitió.
+        # pero también debe caer con el principal que la emitió, o cuando el
+        # invitado pasa a ser el principal (si no, bloquea toda invitación
+        # futura y su enlace choca con el trigger de principal distinto).
         cancelar_invitacion(db, pendiente, actor_persona_id=actor_persona_id, origen=origen)
         return True
     if vinculo is None or (solo_si_es is not None and vinculo.co_representante_id != solo_si_es):
