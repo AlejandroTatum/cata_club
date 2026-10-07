@@ -74,9 +74,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from app.dominio.enums import DiaSemana, EstadoMembresia, TipoNotificacion
+from app.dominio.guardianes import destinatarios_de_aviso
 from app.dominio.modelos import (
     AlumnoHorario,
     CategoriaHorario,
+    CoRepresentante,
     DiaSinClase,
     HorarioEntrenamiento,
     Membresia,
@@ -124,20 +126,18 @@ def _clave_del_dia(fecha: date) -> int:
 
 def _cuenta_alcanzable(persona: Persona) -> Persona | None:
     """Quién puede leer la campana por esta persona: ella misma si tiene
-    cuenta, si no su representante con cuenta, si no nadie.
+    cuenta, si no el primero de sus guardianes con cuenta (principal o segundo
+    guardián, issue #1666 -- ambos ven el aviso del menor en su feed), si no
+    nadie.
 
-    Réplica local deliberada de
-    `MembresiaPagoServicio._responsable_del_correo_de_pago` (ver el docstring
-    del módulo): `persona.usuario` llega precargado por `joinedload` en el
-    lote del llamador, así que esto no agrega ningún `SELECT` por alumno.
-    Devuelve `None` cuando no hay ninguna cuenta alcanzable; el llamador
-    loguea y omite -- nunca inventa una fila que nadie podría leer."""
-    if persona.usuario is not None:
-        return persona
-    representante = persona.representante if persona.representante_id else None
-    if representante is not None and representante.usuario is not None:
-        return representante
-    return None
+    Réplica local deliberada de `dominio.guardianes.destinatarios_de_aviso`
+    (ver el docstring del módulo): `persona.usuario` y los guardianes llegan
+    precargados por `joinedload` en el lote del llamador, así que esto no
+    agrega ningún `SELECT` por alumno. Devuelve `None` cuando no hay ninguna
+    cuenta alcanzable; el llamador loguea y omite -- nunca inventa una fila
+    que nadie podría leer."""
+    destinatarios = destinatarios_de_aviso(persona)
+    return destinatarios[0] if destinatarios else None
 
 
 def _franja_en_texto(etiqueta: str, hora_inicio: time, hora_fin: time) -> str:
@@ -283,6 +283,9 @@ def recordar_sesion_de_manana() -> dict:
             .options(
                 joinedload(Persona.usuario),
                 joinedload(Persona.representante).joinedload(Persona.usuario),
+                joinedload(Persona.co_representante_vinculo)
+                .joinedload(CoRepresentante.co_representante)
+                .joinedload(Persona.usuario),
             )
             .where(
                 # Membresía vigente (ver el docstring del módulo): SUSPENDIDA

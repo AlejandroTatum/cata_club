@@ -1,7 +1,7 @@
 import { heading, paragraph, type LegalBlock } from "./legal-content";
 
 /**
- * Chapter X of the terms (document 2 until #1615), version 2.3: consent for
+ * Chapter X of the terms (document 2 until #1615), version 2.4: consent for
  * the processing of health data. Moved verbatim from its former page; the
  * lawyer-approved 2.1 reworded so acceptance is mandatory (pending lawyer
  * validation).
@@ -26,6 +26,7 @@ export const healthChapter: readonly LegalBlock[] = [
   paragraph("• Jugadores menores de 15 años: autoriza su representante legal."),
   paragraph("• Jugadores de 15 a 17 años: autoriza el propio adolescente, con conocimiento de su representante."),
   paragraph("• Jugadores mayores de edad: autorizan ellos mismos."),
+  paragraph("Para los jugadores menores de 15 años autoriza su representante legal principal. El segundo representante, si lo hay, puede ver este consentimiento y la ficha médica, pero no los firma ni los retira."),
   heading("Sus derechos y cómo retirar esta autorización"),
   paragraph("Usted puede retirar esta autorización en cualquier momento, desde el sistema o escribiendo a cataclub.loja@proton.me, y puede indicar el motivo si lo desea. El retiro vale hacia adelante. Tras el retiro, la ficha médica ya no se usará y se tratará según lo que explica el Capítulo VIII de estos Términos y condiciones sobre eliminación. Como esta autorización es condición para usar el servicio, mientras esté retirada la cuenta quedará limitada a revisar los documentos y cerrar sesión, y el club no podrá consultar los datos de salud en una emergencia."),
   paragraph("También tiene los demás derechos descritos en ese capítulo (acceso, rectificación, eliminación, oposición y reclamo ante la Superintendencia de Protección de Datos Personales)."),
