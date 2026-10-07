@@ -68,7 +68,7 @@ describe("GET /api/fichas-medicas/persona/[id]/emergencia", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("calls /fichas-medicas/persona/{id}/emergencia with Authorization: Bearer and returns the payload as-is", async () => {
+  it("calls /fichas-medicas/persona/{id}/emergencia with Authorization: Bearer and returns the payload with the representative flagged as the contact", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(fichaEmergencia));
 
     const access = makeJwt(3600);
@@ -78,7 +78,7 @@ describe("GET /api/fichas-medicas/persona/[id]/emergencia", () => {
     expect(response.status).toBe(200);
     expect(body).toEqual({
       ...fichaEmergencia,
-      contactoEfectivo: { nombre: "Marta Solís", telefono: "0987654321", esRepresentante: false },
+      contactoEfectivo: { nombre: "Marta Solís", telefono: "0987654321", esRepresentante: true },
     });
 
     const [url, init] = vi.mocked(global.fetch).mock.calls[0] ?? [];

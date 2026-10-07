@@ -48,6 +48,8 @@ interface PagoCorreccionSectionProps {
   extended?: boolean;
   /** Start with the correction form already open (the admin asked to correct). */
   initialOpen?: boolean;
+  /** Extended only: the form is the whole section, so it needs its own way out. */
+  onCancel?: () => void;
 }
 
 /**
@@ -78,6 +80,11 @@ const EFECTO_LABEL: Record<CorreccionPago["efectoCobertura"], string> = {
   REDUCIDA: "Cobertura reducida",
 };
 
+/** «22/08» — day and month, for a title that already names the payment. */
+function shortDate(iso: string): string {
+  return formatDate(iso).slice(0, 5);
+}
+
 /** The server derives the base amount and the tariff from the final amount. */
 function buildInput(form: FormState): CorreccionPagoInput {
   return { motivo: form.motivo.trim(), monto: form.monto.trim() };
@@ -106,11 +113,15 @@ function changedLine<T extends string | number | null>(
   return `${label}: ${format(before as NonNullable<T>)} → ${format(after as NonNullable<T>)}`;
 }
 
+/** Field labels in the app's normal body type (the admin field default is the small caption step). */
+const FIELD_LABEL = "mt-2 block text-sm text-ink-2";
+
 export default function PagoCorreccionSection({
   pagoId,
   onCorrected,
   extended = false,
   initialOpen = false,
+  onCancel,
 }: PagoCorreccionSectionProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
   const [comprobanteUrl, setComprobanteUrl] = useState<string | null>(null);
@@ -167,6 +178,16 @@ export default function PagoCorreccionSection({
 
   const input = extended && pagoActual ? buildExtendedInput(form, pagoActual) : buildInput(form);
   const hasChange = extended ? Object.keys(input).length > 1 : Boolean(form.monto.trim());
+  // Extended: what will change, as «antes → después», shown before the admin confirms.
+  const cambios =
+    extended && pagoActual
+      ? [
+          changedLine("Monto", Number(pagoActual.monto), input.monto ? Number(input.monto) : null, (v) => formatCurrency(v)),
+          input.mesesComprados ? `Meses comprados: pasa a ${input.mesesComprados}` : null,
+          changedLine("Desde", pagoActual.fechaInicio, input.fechaInicio ?? null, formatDate),
+          changedLine("Hasta", pagoActual.fechaFin, input.fechaFin ?? null, formatDate),
+        ].filter((line): line is string => line !== null)
+      : [];
   const canSubmit = !submitting && hasChange && Boolean(form.motivo.trim());
 
   async function handleSubmit(event: React.FormEvent): Promise<void> {
@@ -194,7 +215,11 @@ export default function PagoCorreccionSection({
     <section className="card p-[18px]">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <History size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
-        <h2 className="flex-1 text-sm font-bold text-ink">Comprobante y correcciones</h2>
+        <h2 className="flex-1 text-sm font-bold text-ink">
+          {extended && pagoActual
+            ? `Corregir el pago de ${formatCurrency(Number(pagoActual.monto))} del ${shortDate(pagoActual.fechaInicio)} al ${shortDate(pagoActual.fechaFin)}`
+            : "Comprobante y correcciones"}
+        </h2>
       </div>
 
       {loading && <p className="text-xs text-ink-3">Cargando…</p>}
@@ -223,7 +248,7 @@ export default function PagoCorreccionSection({
           {correcciones.length > 0 && (
             <ul className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
               {correcciones.map((c) => (
-                <li key={c.id} className="text-2xs text-ink-2">
+                <li key={c.id} className="text-xs text-ink-2">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="font-semibold text-ink">{formatDate(c.fechaRegistro)}</span>
                     <Badge tone="neutral">{EFECTO_LABEL[c.efectoCobertura]}</Badge>
@@ -244,21 +269,23 @@ export default function PagoCorreccionSection({
           )}
 
           <div className="mt-3 border-t border-line pt-3">
+            {!extended && (
             <button
               type="button"
               onClick={() => (formOpen ? setFormOpen(false) : openForm())}
-              className="inline-flex items-center gap-1 rounded-lg bg-ink/10 px-2.5 py-1 text-2xs tracking-flat font-semibold text-ink transition-colors hover:bg-ink/20"
+              className="inline-flex items-center gap-1 rounded-lg bg-ink/10 px-2.5 py-1 text-xs font-semibold text-ink transition-colors hover:bg-ink/20"
             >
               <Pencil size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               Corregir pago
             </button>
+            )}
 
             {formOpen && (
               <form onSubmit={handleSubmit} className="mt-2 rounded-lg border border-line bg-surface p-3">
                 {extended && (
-                  <p className="mb-2 text-2xs text-ink-3">
-                    Cambia solo lo que está mal; lo que dejes igual no se modifica. El sistema comprueba que los
-                    meses no se superpongan ni dejen huecos con otros pagos.
+                  <p className="mb-2 text-sm text-ink-3">
+                    Cambia solo lo que está mal; lo que dejes igual no se modifica. Si te equivocaste de mes,
+                    cambia las fechas. El sistema comprueba que los meses no se superpongan con otros pagos.
                   </p>
                 )}
                 <CampoFormularioAdmin
@@ -267,35 +294,39 @@ export default function PagoCorreccionSection({
                   value={form.monto}
                   onChange={(v) => setForm((f) => ({ ...f, monto: v }))}
                   required={!extended}
+                  labelClassName={FIELD_LABEL}
                 />
-                <p className="mt-1 text-2xs text-ink-3">
+                <p className="mt-1 text-sm text-ink-3">
                   Escribe el monto correcto; el sistema ajusta la tarifa y la base.
+                  {extended && " En Meses, déjalo vacío si no cambia."}
                 </p>
 
                 {extended && (
                   <>
                     <CampoFormularioAdmin
-                      label="Meses comprados (vacío = sin cambio)"
+                      label="Meses"
                       type="number"
                       value={form.mesesComprados}
                       onChange={(v) => setForm((f) => ({ ...f, mesesComprados: v }))}
                       numberStep="1"
                       numberMin="1"
                       numberInputMode="numeric"
-                      labelClassName="mt-2 block text-2xs text-ink-3"
+                      labelClassName={FIELD_LABEL}
                     />
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       <CampoFormularioAdmin
-                        label="Fecha inicio"
+                        label="Desde"
                         type="date"
                         value={form.fechaInicio}
                         onChange={(v) => setForm((f) => ({ ...f, fechaInicio: v }))}
+                        labelClassName={FIELD_LABEL}
                       />
                       <CampoFormularioAdmin
-                        label="Fecha fin"
+                        label="Hasta"
                         type="date"
                         value={form.fechaFin}
                         onChange={(v) => setForm((f) => ({ ...f, fechaFin: v }))}
+                        labelClassName={FIELD_LABEL}
                       />
                     </div>
                   </>
@@ -307,12 +338,23 @@ export default function PagoCorreccionSection({
                   value={form.motivo}
                   onChange={(v) => setForm((f) => ({ ...f, motivo: v }))}
                   placeholder="Por qué se corrige (p. ej. error de tipeo, descuento mal aplicado)"
-                  labelClassName="mt-2 block text-2xs text-ink-3"
+                  labelClassName={FIELD_LABEL}
                   required
                 />
 
+                {cambios.length > 0 && (
+                  <div className="mt-3 rounded-ctl border border-line bg-paper p-3 text-sm text-ink">
+                    <p className="font-semibold">Se va a cambiar</p>
+                    <ul className="mt-1 grid gap-0.5 text-ink-2">
+                      {cambios.map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 {submitError && (
-                  <p role="alert" className="mt-2 text-2xs text-state-bad">
+                  <p role="alert" className="mt-2 text-sm text-state-bad">
                     {submitError}
                   </p>
                 )}
@@ -328,8 +370,8 @@ export default function PagoCorreccionSection({
                   </Button>
                   <button
                     type="button"
-                    onClick={() => setFormOpen(false)}
-                    className="rounded-lg border border-line px-2.5 py-1 text-xs text-ink-2 transition-colors hover:bg-paper"
+                    onClick={() => (extended && onCancel ? onCancel() : setFormOpen(false))}
+                    className="rounded-lg border border-line px-2.5 py-1 text-sm text-ink-2 transition-colors hover:bg-paper"
                   >
                     Cancelar
                   </button>

@@ -22,6 +22,7 @@ const mockFetchPagos = vi.fn();
 const mockFetchPagoDetalle = vi.fn();
 const mockFetchCorrecciones = vi.fn();
 const mockCorregirPago = vi.fn();
+const mockValidarPago = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: mockRouteId }),
@@ -61,6 +62,7 @@ vi.mock("@/services/api", async (importOriginal) => {
     fetchPagoDetalle: (id: number) => mockFetchPagoDetalle(id),
     fetchCorrecciones: (id: number) => mockFetchCorrecciones(id),
     corregirPago: (id: number, datos: unknown) => mockCorregirPago(id, datos),
+    validarPago: (id: number, datos: unknown) => mockValidarPago(id, datos),
   };
 });
 vi.mock("@/app/members/BeneficioSection", () => ({ default: () => <div /> }));
@@ -77,7 +79,7 @@ vi.mock("@/app/members/MigrarSocioAntiguoForm", () => ({
   default: ({ onBack }: { onBack: () => void }) => (
     <div>
       <p>formulario socio antiguo</p>
-      <button type="button" onClick={onBack}>volver</button>
+      <button type="button" onClick={onBack}>cancelar</button>
     </div>
   ),
 }));
@@ -186,15 +188,31 @@ describe("PagosPage — one plain state and ONE primary action each", () => {
     expect(screen.getByText("Primer pago pendiente")).toBeInTheDocument();
   });
 
-  it("pending review: leads to the review queue and says how to fix a wrong payment", async () => {
+  it("pending review: approve or reject right here, no trip to the review queue (S3-5)", async () => {
     loadStudent(studentWith({ membresia: membresia({ estado: "vencida", estadoBackend: "INACTIVA", cubiertoHasta: null }), ultimoPago: pagoUltimo("pendiente_validacion") }));
+    mockFetchPagos.mockResolvedValue([pagoDe({ id: 10, estadoPago: "PENDIENTE_VALIDACION", fechaValidacion: null, tipoPago: "EFECTIVO" })]);
+    mockValidarPago.mockResolvedValue(pagoDe({ id: 10 }));
     render(<PagosPage />);
 
     const primary = await primaryAction();
     expect(primary).toHaveAttribute("data-primary-action", "revisar-pago");
-    expect(within(primary).getByRole("link", { name: /revisar el pago/i })).toHaveAttribute("href", "/payments");
-    expect(screen.getByText("Pago pendiente de revisión")).toBeInTheDocument();
-    expect(screen.getByText(/recházalo en pagos pendientes y vuelve a registrarlo/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Pago pendiente de revisión").length).toBe(1);
+    expect(within(primary).queryByRole("link")).not.toBeInTheDocument();
+
+    fireEvent.click(await within(primary).findByRole("button", { name: "Aprobar pago" }));
+    await waitFor(() => expect(mockValidarPago).toHaveBeenCalledWith(10, { estadoPago: "APROBADO" }));
+    // the member and the history are refreshed after the decision
+    await waitFor(() => expect(mockFetchMember.mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it("pending review: when the payments fail to load, says so instead of loading forever", async () => {
+    loadStudent(studentWith({ membresia: membresia({ estado: "vencida", estadoBackend: "INACTIVA", cubiertoHasta: null }), ultimoPago: pagoUltimo("pendiente_validacion") }));
+    mockFetchPagos.mockRejectedValue(new Error("network"));
+    render(<PagosPage />);
+
+    const primary = await primaryAction();
+    expect(await within(primary).findByText("No se pudo cargar el pago pendiente. Recarga la página.")).toBeInTheDocument();
+    expect(within(primary).queryByText("Cargando el pago…")).not.toBeInTheDocument();
   });
 
   it("rejected: register the payment again", async () => {
@@ -206,13 +224,16 @@ describe("PagosPage — one plain state and ONE primary action each", () => {
     expect(screen.getByText("Último pago rechazado")).toBeInTheDocument();
   });
 
-  it("owes months: says how many and leads with registering them", async () => {
+  it("owes months: says how many, leads with registering and offers the catch-up", async () => {
     loadStudent(studentWith({ membresia: membresia({ estado: "vencida", cubiertoHasta: "2026-06-30", mesesAdeudados: 3, montoAdeudado: 75 }) }));
     render(<PagosPage />);
 
     const primary = await primaryAction();
-    expect(primary).toHaveAttribute("data-primary-action", "regularizar-deuda");
+    expect(primary).toHaveAttribute("data-primary-action", "registrar-pago");
+    expect(within(primary).getByRole("button", { name: "Registrar pago" })).toBeInTheDocument();
+    // the catch-up is offered, with its one-line explanation, only because months are owed
     expect(within(primary).getByRole("button", { name: "Cargar pagos atrasados" })).toBeInTheDocument();
+    expect(within(primary).getByText(/meses vencidos que no figuran pagados/i)).toBeInTheDocument();
     expect(screen.getAllByText("Debe 3 meses").length).toBeGreaterThan(0);
   });
 
@@ -224,6 +245,27 @@ describe("PagosPage — one plain state and ONE primary action each", () => {
     expect(primary).toHaveAttribute("data-primary-action", "registrar-pago");
     expect(screen.getAllByText("Al día").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /cargar pagos atrasados/i })).not.toBeInTheDocument();
+  });
+
+  it("shows the state ONCE: one chip, no «Estado» box, no «Sin membresía» contradiction (S3-2)", async () => {
+    loadStudent(studentWith({ membresia: null }));
+    render(<PagosPage />);
+
+    await primaryAction();
+    expect(screen.getAllByText("Primer pago pendiente")).toHaveLength(1);
+    expect(screen.queryByText("Sin membresía")).not.toBeInTheDocument();
+    expect(screen.queryByText(/crea una membresía para poder registrar pagos/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Estado")).not.toBeInTheDocument();
+  });
+
+  it("keeps plan, fee and coverage as a compact facts row", async () => {
+    loadStudent(studentWith({ membresia: membresia({ mesesAdeudados: 0 }), ultimoPago: pagoUltimo("aprobado") }));
+    render(<PagosPage />);
+
+    const facts = await screen.findByLabelText("Resumen de la membresía");
+    expect(within(facts).getByText("Mensual")).toBeInTheDocument();
+    expect(within(facts).getByText("$25,00")).toBeInTheDocument();
+    expect(within(facts).getByText(/hasta 01\/12\/2026/)).toBeInTheDocument();
   });
 
   it("suspended: reactivate first", async () => {
@@ -241,7 +283,7 @@ describe("PagosPage — ignores a stale response when the member changes", () =>
     mockFetchMember.mockImplementationOnce(() => new Promise<MemberAccount>((r) => { releaseOld = r; }));
     const { rerender } = render(<PagosPage />);
     mockRouteId = "451";
-    mockFetchMember.mockResolvedValueOnce({ ...accountWith(studentWith({ membresia: membresia() })), id: "451", nombres: "Nueva", apellidos: "Persona" });
+    mockFetchMember.mockResolvedValueOnce({ ...accountWith(studentWith({ membresia: membresia(), nombres: "Nueva", apellidos: "Persona" })), id: "451", nombres: "Nueva", apellidos: "Persona" });
     rerender(<PagosPage />);
     expect(await screen.findByText("Nueva Persona")).toBeInTheDocument();
 
@@ -253,25 +295,27 @@ describe("PagosPage — ignores a stale response when the member changes", () =>
 });
 
 describe("PagosPage — first payment and «socio nuevo / antiguo»", () => {
-  it("explains each choice in one sentence", async () => {
+  it("shows two large choice cards, each with one short sentence and no radios", async () => {
     loadStudent(studentWith({ membresia: null }));
     render(<PagosPage />);
 
-    expect(await screen.findByText(/se inscribe ahora/i)).toBeInTheDocument();
-    expect(screen.getByText(/ya pagaba antes de usar el sistema/i)).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /socio nuevo/i })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /socio antiguo/i })).toBeInTheDocument();
+    const nuevo = await screen.findByRole("button", { name: /^socio nuevo/i });
+    const antiguo = screen.getByRole("button", { name: /^socio antiguo/i });
+    expect(nuevo).toHaveTextContent("Es su primer mes en el club.");
+    expect(antiguo).toHaveTextContent("Ya pagaba antes de usar el sistema.");
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
   });
 
-  it("«Socio nuevo» shows the membership step with a «Cancelar» that returns to the choice (#1664)", async () => {
+  it("«Socio nuevo» opens the numbered membership step with a «Cancelar» that returns to the choice (#1664)", async () => {
     loadStudent(studentWith({ membresia: null }));
     render(<PagosPage />);
 
-    fireEvent.click(await screen.findByRole("radio", { name: /socio nuevo/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^socio nuevo/i }));
     expect(await screen.findByRole("button", { name: "Crear membresía" })).toBeInTheDocument();
+    expect(screen.getByText(/paso 1 de 2/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
-    expect(await screen.findByRole("radio", { name: /socio antiguo/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /^socio antiguo/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancelar" })).not.toBeInTheDocument();
   });
 
@@ -279,10 +323,10 @@ describe("PagosPage — first payment and «socio nuevo / antiguo»", () => {
     loadStudent(studentWith({ membresia: null }));
     render(<PagosPage />);
 
-    fireEvent.click(await screen.findByRole("radio", { name: /socio antiguo/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^socio antiguo/i }));
     expect(await screen.findByText("formulario socio antiguo")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "volver" }));
-    expect(await screen.findByRole("radio", { name: /socio nuevo/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "cancelar" }));
+    expect(await screen.findByRole("button", { name: /^socio nuevo/i })).toBeInTheDocument();
   });
 });
 
@@ -313,7 +357,7 @@ describe("PagosPage — correcting an approved payment (amount, months, dates)",
     mockFetchPagoDetalle.mockResolvedValue(pagoDe({}));
   });
 
-  it("offers «Corregir este pago» on approved payments only", async () => {
+  it("offers «Corregir monto o meses» on approved payments only, and says where mistakes are fixed (S3-6)", async () => {
     mockFetchPagos.mockResolvedValue([
       pagoDe({ id: 9 }),
       pagoDe({ id: 10, estadoPago: "PENDIENTE_VALIDACION", fechaValidacion: null }),
@@ -321,7 +365,11 @@ describe("PagosPage — correcting an approved payment (amount, months, dates)",
     ]);
     render(<PagosPage />);
 
-    expect(await screen.findAllByRole("button", { name: "Corregir este pago" })).toHaveLength(1);
+    expect(await screen.findAllByRole("button", { name: "Corregir monto o meses" })).toHaveLength(1);
+    const help = screen.getByRole("region", { name: "¿Algo está mal?" });
+    expect(help).toHaveTextContent("¿Registraste un monto equivocado o el mes equivocado?");
+    expect(help).toHaveTextContent("el monto, los meses y las fechas");
+    expect(help).toHaveTextContent("Recházalo y vuelve a registrarlo");
   });
 
   it("opens amount, months, dates and a required reason, with the correction history", async () => {
@@ -337,12 +385,14 @@ describe("PagosPage — correcting an approved payment (amount, months, dates)",
     ]);
     render(<PagosPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Corregir este pago" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Corregir monto o meses" }));
 
     expect(await screen.findByLabelText(/^monto/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/meses comprados/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/fecha inicio/i)).toHaveValue("2026-07-01");
-    expect(screen.getByLabelText(/fecha fin/i)).toHaveValue("2026-09-01");
+    expect(screen.getByRole("heading", { name: "Corregir el pago de $50,00 del 01/07 al 01/09" })).toBeInTheDocument();
+    expect(screen.getByLabelText(/^meses/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^desde/i)).toHaveValue("2026-07-01");
+    expect(screen.getByLabelText(/^hasta/i)).toHaveValue("2026-09-01");
+    expect(screen.getByText(/si te equivocaste de mes, cambia las fechas/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^motivo/i)).toBeRequired();
     expect(await screen.findByText(/faltaba un mes/i)).toBeInTheDocument();
     expect(screen.getByText(/meses: 2 → 3/i)).toBeInTheDocument();
@@ -353,15 +403,18 @@ describe("PagosPage — correcting an approved payment (amount, months, dates)",
     mockFetchPagos.mockResolvedValue([pagoDe({})]);
     mockCorregirPago.mockResolvedValue({ pago: pagoDe({ fechaFin: "2026-08-01" }), correccion: { id: 2 } });
     render(<PagosPage />);
-    fireEvent.click(await screen.findByRole("button", { name: "Corregir este pago" }));
-    await screen.findByLabelText(/fecha fin/i);
+    fireEvent.click(await screen.findByRole("button", { name: "Corregir monto o meses" }));
+    await screen.findByLabelText(/^hasta/i);
     const membersBefore = mockFetchMember.mock.calls.length;
     const pagosBefore = mockFetchPagos.mock.calls.length;
 
-    fireEvent.change(screen.getByLabelText(/fecha fin/i), { target: { value: "2026-08-01" } });
-    fireEvent.change(screen.getByLabelText(/meses comprados/i), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText(/^hasta/i), { target: { value: "2026-08-01" } });
+    fireEvent.change(screen.getByLabelText(/^meses/i), { target: { value: "1" } });
     fireEvent.change(screen.getByLabelText(/^monto/i), { target: { value: "25" } });
     fireEvent.change(screen.getByLabelText(/^motivo/i), { target: { value: "Se cobró un mes de más" } });
+    // before → after, shown before the admin confirms
+    expect(screen.getByText("Monto: $50,00 → $25,00")).toBeInTheDocument();
+    expect(screen.getByText("Hasta: 01/09/2026 → 01/08/2026")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /registrar corrección/i }));
 
     await waitFor(() =>
@@ -383,8 +436,8 @@ describe("PagosPage — correcting an approved payment (amount, months, dates)",
       new ApiClientError("El período corregido se superpone o rompe la continuidad con la cobertura de otro pago aprobado.", 400),
     );
     render(<PagosPage />);
-    fireEvent.click(await screen.findByRole("button", { name: "Corregir este pago" }));
-    fireEvent.change(await screen.findByLabelText(/fecha fin/i), { target: { value: "2026-12-01" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Corregir monto o meses" }));
+    fireEvent.change(await screen.findByLabelText(/^hasta/i), { target: { value: "2026-12-01" } });
     fireEvent.change(screen.getByLabelText(/^motivo/i), { target: { value: "Se extendió" } });
     fireEvent.click(screen.getByRole("button", { name: /registrar corrección/i }));
 
@@ -393,13 +446,52 @@ describe("PagosPage — correcting an approved payment (amount, months, dates)",
 });
 
 describe("PagosPage — a wrong PENDING payment: reject it and register it again", () => {
-  it("says so plainly on the pending row, with a way to the review queue and no correction button", async () => {
+  it("points the pending row to the decision above and offers no correction button", async () => {
     loadStudent(studentWith({ membresia: membresia({ estado: "vencida", estadoBackend: "INACTIVA", cubiertoHasta: null }), ultimoPago: pagoUltimo("pendiente_validacion") }));
     mockFetchPagos.mockResolvedValue([pagoDe({ id: 10, estadoPago: "PENDIENTE_VALIDACION", fechaValidacion: null })]);
     render(<PagosPage />);
 
-    const guidance = await screen.findByText(/si este pago está mal, recházalo y vuelve a registrarlo/i);
-    expect(within(guidance.closest("li") as HTMLElement).getByRole("link", { name: /ir a pagos pendientes/i })).toHaveAttribute("href", "/payments");
-    expect(screen.queryByRole("button", { name: "Corregir este pago" })).not.toBeInTheDocument();
+    expect(await screen.findByText(/apruébalo o recházalo en «siguiente paso»/i)).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "¿Algo está mal?" })).toHaveTextContent("Recházalo y vuelve a registrarlo");
+    expect(screen.queryByRole("button", { name: "Corregir monto o meses" })).not.toBeInTheDocument();
+  });
+
+  it("rejecting asks for a reason, then calls the validation endpoint", async () => {
+    loadStudent(studentWith({ membresia: membresia({ estado: "vencida", estadoBackend: "INACTIVA", cubiertoHasta: null }), ultimoPago: pagoUltimo("pendiente_validacion") }));
+    mockFetchPagos.mockResolvedValue([pagoDe({ id: 10, estadoPago: "PENDIENTE_VALIDACION", fechaValidacion: null, tipoPago: "EFECTIVO" })]);
+    mockValidarPago.mockResolvedValue(pagoDe({ id: 10, estadoPago: "RECHAZADO" }));
+    render(<PagosPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Rechazar pago…" }));
+    fireEvent.click(screen.getByRole("radio", { name: /el monto recibido no coincide/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Rechazar y avisar" }));
+
+    await waitFor(() =>
+      expect(mockValidarPago).toHaveBeenCalledWith(10, { estadoPago: "RECHAZADO", motivoRechazo: "El monto recibido no coincide" }),
+    );
+  });
+});
+
+describe("PagosPage — the history", () => {
+  it("shows no placeholder rows once loaded, and a real empty state when there are no payments (S3-3)", async () => {
+    loadStudent(studentWith({ membresia: membresia(), ultimoPago: pagoUltimo("aprobado") }));
+    mockFetchPagos.mockResolvedValue([pagoDe({})]);
+    const { container } = render(<PagosPage />);
+
+    await screen.findByRole("button", { name: "Corregir monto o meses" });
+    expect(container.querySelectorAll('li[aria-hidden="true"]')).toHaveLength(0);
+    expect(screen.getByText("1 jul – 1 sep 2026")).toBeInTheDocument();
+    // S3-1: helper text and rows use the app's body type; `text-2xs` is the letter-spaced caption step.
+    // The shared Badge chip keeps its own size; the page's own text must not use it.
+    expect(container.querySelector('[class*="text-2xs"]:not(.rounded-full)')).toBeNull();
+    expect(container.querySelector('[class*="tracking-wide"], [class*="tracking-caps"]')).toBeNull();
+  });
+
+  it("an empty history says so plainly", async () => {
+    loadStudent(studentWith({ membresia: null }));
+    render(<PagosPage />);
+
+    expect(await screen.findByText("Todavía no hay pagos registrados.")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "¿Algo está mal?" })).not.toBeInTheDocument();
   });
 });

@@ -521,7 +521,7 @@ export default function RegisterPaymentForm({
             placeholder="0.00"
           />
           {montoHint && (
-            <p id={montoHintId} className="mt-0.5 text-2xs text-state-bad">
+            <p id={montoHintId} className="mt-0.5 text-xs text-state-bad">
               {montoHint}
             </p>
           )}
@@ -578,7 +578,7 @@ export default function RegisterPaymentForm({
       </div>
 
       {previewMonths !== null && (
-        <p className="text-2xs tracking-flat text-ink-3">
+        <p className="text-xs text-ink-3">
           {previewMonths}{" "}
           {previewMonths === 1 ? "mes de vigencia" : "meses de vigencia"} (precio
           mensual: ${monthlyPrice})

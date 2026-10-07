@@ -20,6 +20,7 @@ import {
   getAccountStateBadge,
   getMembershipStatusBadge,
   describePaymentsState,
+  describePeriodoPago,
   isRepresentativePersonaRow,
   normalizeText,
   accountMatchesFlag,
@@ -1404,7 +1405,7 @@ describe("describePaymentsState", () => {
     [3, "Debe 3 meses"],
   ])("says how many months are owed (%i)", (meses, label) => {
     const student = { ...base, membresia: membresia({ estado: "vencida", cubiertoHasta: "2026-06-30", mesesAdeudados: meses }) };
-    expect(describePaymentsState(student)).toMatchObject({ key: "debe", label, primaryAction: "regularizar-deuda" });
+    expect(describePaymentsState(student)).toMatchObject({ key: "debe", label, primaryAction: "registrar-pago" });
   });
 
   it("never claims «Al día» over a lapsed membership whose debt could not be read", () => {
@@ -1433,5 +1434,25 @@ describe("describePaymentsState", () => {
     const state = describePaymentsState(student);
     expect(state).toMatchObject({ key: "al-dia", label: "Al día", primaryAction: "registrar-pago" });
     expect(state.detail).toContain("01/12/2026");
+  });
+});
+
+describe("describePeriodoPago — the period a payment covers, in words (#1668)", () => {
+  it("names a whole calendar month", () => {
+    expect(describePeriodoPago("2026-10-01", "2026-10-31")).toBe("octubre 2026");
+  });
+
+  it("names several whole calendar months", () => {
+    expect(describePeriodoPago("2026-10-01", "2026-12-31")).toBe("octubre – diciembre 2026");
+    expect(describePeriodoPago("2026-12-01", "2027-01-31")).toBe("diciembre 2026 – enero 2027");
+  });
+
+  it("falls back to day and month when the period does not follow the calendar", () => {
+    expect(describePeriodoPago("2026-08-22", "2026-09-21")).toBe("22 ago – 21 sep 2026");
+    expect(describePeriodoPago("2026-12-22", "2027-01-21")).toBe("22 dic 2026 – 21 ene 2027");
+  });
+
+  it("is empty when a date is missing", () => {
+    expect(describePeriodoPago("", "2026-09-21")).toBe("");
   });
 });

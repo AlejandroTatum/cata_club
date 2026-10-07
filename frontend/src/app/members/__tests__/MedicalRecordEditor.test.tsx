@@ -1063,3 +1063,90 @@ describe("MedicalRecordEditor — representative as emergency contact (#1667)", 
     expect(contacto).toHaveTextContent("Sin registrar");
   });
 });
+
+/**
+ * #1667 follow-up: the representative is the DEFAULT contact on a ficha that
+ * has none, so the form opens pre-filled (and still editable) instead of empty.
+ */
+describe("MedicalRecordEditor — representative as the default emergency contact", () => {
+  const SOFIA = { nombre: "Sofia Loor Zamora", telefono: "0900000004", esRepresentante: true };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetchFichaEmergencia.mockResolvedValue({ contactoEfectivo: null });
+    mockActualizarFichaMedica.mockResolvedValue({});
+  });
+
+  it("admin, new ficha of a represented minor: pre-fills name and phone, with a hint, and keeps them editable", async () => {
+    mockFetchFichaMedica.mockRejectedValue(notFound());
+    mockFetchFichaEmergencia.mockResolvedValue({ contactoEfectivo: SOFIA });
+
+    render(<MedicalRecordEditor personaId={177} studentName="Mateo Prueba Uno" />);
+
+    const nombre = await screen.findByLabelText<HTMLInputElement>("Contacto de emergencia");
+    await waitFor(() => expect(nombre.value).toBe("Sofia Loor Zamora"));
+    expect(screen.getByLabelText<HTMLInputElement>(/Teléfono de emergencia/).value).toBe("900000004");
+    expect(
+      screen.getByText("Por defecto es el representante: Sofia Loor Zamora · 0900000004. Puedes cambiarlo."),
+    ).toBeInTheDocument();
+
+    fireEvent.change(nombre, { target: { value: "Abuela Rosa" } });
+    expect(nombre.value).toBe("Abuela Rosa");
+  });
+
+  it("representative viewer, new ficha: uses the representative passed in, never calls the admin-only lookup", async () => {
+    mockFetchFichaMedica.mockRejectedValue(notFound());
+
+    render(
+      <MedicalRecordEditor
+        personaId={177}
+        studentName="Mateo"
+        withEmergencyCard
+        viewerIsOwner={false}
+        representanteContacto={{ nombre: "Sofia Loor Zamora", telefono: "0900000004" }}
+      />,
+    );
+
+    const nombre = await screen.findByLabelText<HTMLInputElement>("Contacto de emergencia");
+    expect(nombre.value).toBe("Sofia Loor Zamora");
+    expect(screen.getByLabelText<HTMLInputElement>(/Teléfono de emergencia/).value).toBe("900000004");
+    expect(mockFetchFichaEmergencia).not.toHaveBeenCalled();
+
+    const contacto = await within(screen.getByTestId("emergency-card")).findByTestId("emergency-card-contact");
+    expect(contacto).toHaveTextContent("Representante: Sofia Loor Zamora");
+    expect(contacto).toHaveTextContent("+593 900000004");
+    expect(contacto).not.toHaveTextContent("Sin registrar");
+  });
+
+  it("existing ficha with an empty contact: the edit form opens pre-filled with the representative", async () => {
+    mockFetchFichaMedica.mockResolvedValue({
+      tipoSangre: "O_POSITIVO",
+      enfermedades: [],
+      alergias: "Ninguna",
+      contactoEmergencia: null,
+      telefonoEmergencia: null,
+    });
+    mockFetchFichaEmergencia.mockResolvedValue({ contactoEfectivo: SOFIA });
+
+    render(<MedicalRecordEditor personaId={9} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText<HTMLInputElement>("Contacto de emergencia").value).toBe("Sofia Loor Zamora"),
+    );
+  });
+
+  it("adult without contact: stays empty, no hint, card still says «Sin registrar»", async () => {
+    mockFetchFichaMedica.mockRejectedValue(notFound());
+
+    render(<MedicalRecordEditor personaId={5} withEmergencyCard />);
+
+    const nombre = await screen.findByLabelText<HTMLInputElement>("Contacto de emergencia");
+    await waitFor(() => expect(mockFetchFichaEmergencia).toHaveBeenCalled());
+    expect(nombre.value).toBe("");
+    expect(screen.getByLabelText<HTMLInputElement>(/Teléfono de emergencia/).value).toBe("");
+    expect(screen.queryByText(/Por defecto es el representante/)).toBeNull();
+    const contacto = await within(screen.getByTestId("emergency-card")).findByTestId("emergency-card-contact");
+    expect(contacto).toHaveTextContent("Sin registrar");
+  });
+});

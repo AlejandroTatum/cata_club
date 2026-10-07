@@ -603,15 +603,18 @@ export function countActiveStudents(account: MemberAccount): number {
  * Issues #1661/#1669: is this account a player (someone who can be put in a
  * horario), as opposed to pure staff or a representative?
  *
- * A player has the ALUMNO role, an own membership that allows training
- * (ACTIVA or VENCIDA — the backend `puede_entrenar` rule), or no known role
- * at all (a represented minor has no `Usuario`, so the roles lookup yields
- * nothing for them). Accounts whose only roles are ADMINISTRADOR /
- * ENTRENADOR / REPRESENTANTE and that hold no such membership are not.
+ * The same rule as the backend horario player search
+ * (`GET /personas/buscar?jugador=true`): the ALUMNO role, or an own
+ * membership that allows training (ACTIVA or VENCIDA — the backend
+ * `puede_entrenar` rule). A represented minor has no `Usuario` and so no
+ * role; they count only once their membership allows training, otherwise
+ * «Sin grupo» would list someone the horario search cannot find (owner
+ * decision A, #1669). Staff and representatives without such a membership
+ * are not players.
  */
 export function isPlayerAccount(account: MemberAccount): boolean {
   const roles = account.backendRoles ?? [];
-  if (roles.length === 0 || roles.includes("ALUMNO")) return true;
+  if (roles.includes("ALUMNO")) return true;
   return account.estudiantes.some((student) => {
     const estado = student.membresia?.estadoBackend;
     return estado === "ACTIVA" || estado === "VENCIDA";
@@ -622,7 +625,8 @@ export function isPlayerAccount(account: MemberAccount): boolean {
  * Issue #1670: whether the admin may print this account's carnet — players
  * only (the #1661/#1669 rule via `isPlayerAccount`), and never the
  * representative's own row, which holds no player to put on a card. A
- * represented minor without an account of their own qualifies.
+ * represented minor without an account of their own qualifies once their
+ * membership allows training.
  */
 export function canPrintCarnet(account: MemberAccount): boolean {
   return isPlayerAccount(account) && !isRepresentativePersonaRow(account);
@@ -775,6 +779,37 @@ export interface PaymentsState {
   primaryAction: PaymentsPrimaryAction;
 }
 
+const MESES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+/**
+ * The period a payment covers, in words: «octubre 2026» for whole calendar
+ * months, «22 ago – 21 sep 2026» for a period that starts mid-month. Reads the
+ * ISO date as written (no timezone shift), so a payment never moves a day.
+ */
+export function describePeriodoPago(fechaInicio: string, fechaFin: string): string {
+  const parse = (iso: string): { y: number; m: number; d: number } | null => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+    return match ? { y: Number(match[1]), m: Number(match[2]) - 1, d: Number(match[3]) } : null;
+  };
+  const a = parse(fechaInicio);
+  const b = parse(fechaFin);
+  if (!a || !b) return "";
+  const lastDay = new Date(Date.UTC(b.y, b.m + 1, 0)).getUTCDate();
+  if (a.d === 1 && b.d === lastDay) {
+    if (a.y === b.y && a.m === b.m) return `${MESES[a.m]} ${a.y}`;
+    return a.y === b.y
+      ? `${MESES[a.m]} – ${MESES[b.m]} ${b.y}`
+      : `${MESES[a.m]} ${a.y} – ${MESES[b.m]} ${b.y}`;
+  }
+  const short = (m: number): string => MESES[m].slice(0, 3);
+  return a.y === b.y
+    ? `${a.d} ${short(a.m)} – ${b.d} ${short(b.m)} ${b.y}`
+    : `${a.d} ${short(a.m)} ${a.y} – ${b.d} ${short(b.m)} ${b.y}`;
+}
+
 /**
  * Where a member stands on the payments page (#1668), in the words the club
  * uses, and the ONE action that moves them forward. A pure read of the row's
@@ -814,7 +849,7 @@ export function describePaymentsState(
       label: "Pago pendiente de revisión",
       tone: "warn",
       detail:
-        "Hay un pago esperando aprobación. Si tiene un error, recházalo en Pagos pendientes y vuelve a registrarlo.",
+        "Hay un pago esperando aprobación. Apruébalo o recházalo aquí; si tiene un error, recházalo y vuelve a registrarlo.",
       primaryAction: "revisar-pago",
     };
   }
@@ -833,8 +868,8 @@ export function describePaymentsState(
       key: "debe",
       label: `Debe ${meses} ${meses === 1 ? "mes" : "meses"}`,
       tone: "bad",
-      detail: "Registra los pagos de los meses vencidos para dejarlo al día.",
-      primaryAction: "regularizar-deuda",
+      detail: "Registra su pago; si debe varios meses vencidos, cárgalos de una vez para dejarlo al día.",
+      primaryAction: "registrar-pago",
     };
   }
   if (membresia?.estado === "vencida") {

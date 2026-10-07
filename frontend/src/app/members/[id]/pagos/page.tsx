@@ -80,7 +80,6 @@ export default function MemberPaymentsPage(): React.ReactElement {
       <AppShell
         back={<BackLink href="/members" />}
         title="Pagos"
-        subtitle={account ? `${account.nombres} ${account.apellidos}` : undefined}
       >
         {state.status === "loading" && <LoadingState label="Cargando pagos…" />}
         {state.status === "error" && (
@@ -95,12 +94,7 @@ export default function MemberPaymentsPage(): React.ReactElement {
         {account && (
           <div className="grid gap-section">
             {account.estudiantes.map((student) => (
-              <section key={student.id} className="rounded-ctl border border-line bg-paper p-4">
-                {account.estudiantes.length > 1 && (
-                  <h2 className="mb-2 text-sm font-bold text-ink">
-                    {student.nombres} {student.apellidos}
-                  </h2>
-                )}
+              <section key={student.id} className="grid gap-section">
                 <StudentMembershipActions
                   personaId={Number(student.id)}
                   student={student}
