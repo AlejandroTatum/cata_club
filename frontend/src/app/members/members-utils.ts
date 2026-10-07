@@ -11,6 +11,7 @@ import type {
   BackendTipoRol,
 } from "@/types/domain";
 import { inactivaMembershipBadge, type BackendEstadoMembresia } from "@/lib/membership-status";
+import type { Periodicidad } from "@/lib/tarifa-periodo";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -77,6 +78,8 @@ export interface MemberStudentSummary {
      */
     cubiertoHasta?: string | null;
     monto: number;
+    /** The tariff's period (MENSUAL/SEMANAL/DIARIA); absent = MENSUAL. */
+    periodicidad?: Periodicidad;
     /** Backend `Membresia.id` — surfaced here so the admin can register
      *  a new payment (renewal) against the right membership. */
     id: number;

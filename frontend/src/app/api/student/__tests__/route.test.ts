@@ -107,7 +107,7 @@ describe("GET /api/student", () => {
     expect(body.representados).toHaveLength(0);
     expect(body.self).toMatchObject({ personaId: "5", nombres: "Sofia" });
     expect(body.self.membership).toMatchObject({ estado: "ACTIVA", categoria: "Mensual", modalidad: "MENSUAL" });
-    expect(body.membershipPlans).toEqual([{ id: "1", nombre: "Mensual", precio: 85, modalidad: "MENSUAL" }]);
+    expect(body.membershipPlans).toEqual([{ id: "1", nombre: "Mensual", precio: 85, modalidad: "MENSUAL", periodicidad: "MENSUAL" }]);
     expect(Object.keys(body).sort()).toEqual(["membershipPlans", "representados", "self"]);
   });
 

@@ -198,8 +198,9 @@ def test_get_tarifas_es_publico_y_devuelve_200(db_session, client_sin_token):
     assert respuesta.status_code == 200
 
 
-def test_get_tarifas_expone_exactamente_categoria_y_precio(db_session, client_sin_token):
-    """El catálogo público NUNCA debe filtrar `id` ni `modalidad`: son
+def test_get_tarifas_expone_exactamente_categoria_precio_y_periodicidad(db_session, client_sin_token):
+    """El catálogo público expone el período del precio (un precio sin su
+    período engaña) y NUNCA debe filtrar `id` ni `modalidad`: son
     detalles administrativos del plan, no parte del contrato público de
     tarifas (issue #331)."""
     crear_tipo_membresia_orm(db_session)
@@ -208,7 +209,7 @@ def test_get_tarifas_expone_exactamente_categoria_y_precio(db_session, client_si
 
     assert len(items) >= 1
     for item in items:
-        assert set(item.keys()) == {"categoria", "precio"}
+        assert set(item.keys()) == {"categoria", "precio", "periodicidad"}
 
 
 def test_get_tarifas_refleja_los_tipos_creados(db_session, client_sin_token):

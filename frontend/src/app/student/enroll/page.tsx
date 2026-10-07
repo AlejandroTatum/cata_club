@@ -23,6 +23,7 @@ import {
   fetchTarifas,
   type TarifaPublica,
 } from "@/services/api";
+import { periodSuffix } from "@/lib/tarifa-periodo";
 import { useAuth } from "@/contexts/AuthContext";
 import type { AuthSession, SessionOutcome } from "@/services/auth";
 import { backHrefForRole } from "@/lib/auth-utils";
@@ -775,7 +776,7 @@ function EnrollWizard(): React.ReactElement {
                 <p className="mt-field text-xl font-bold tabular-nums text-ink">
                   {formatCurrency(tarifa.precio)}
                 </p>
-                <p className="text-xs text-ink-3-strong">por mes</p>
+                <p className="text-xs text-ink-3-strong">{tarifa.periodicidad === "SEMANAL" || tarifa.periodicidad === "DIARIA" ? periodSuffix(tarifa.periodicidad) : "por mes"}</p>
               </li>
             ))}
           </ul>

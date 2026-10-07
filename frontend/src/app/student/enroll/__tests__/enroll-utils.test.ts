@@ -221,6 +221,11 @@ describe("QA4 REG-04 — email format is checked at step 2", () => {
 });
 
 describe("QA4 FAM-08 — option labels without internal codes", () => {
+  it("plan label states the period of weekly and daily plans", () => {
+    expect(planOptionLabel("Semana libre", 8, "SEMANAL")).toBe("Semana libre — $8,00 a la semana");
+    expect(planOptionLabel("Día suelto", 3, "DIARIA")).toBe("Día suelto — $3,00 por día");
+  });
+
   it("plan label drops the code and says «al mes»", () => {
     expect(planOptionLabel("Mensual Adultos", 40)).toBe("Mensual Adultos — $40,00 al mes");
   });

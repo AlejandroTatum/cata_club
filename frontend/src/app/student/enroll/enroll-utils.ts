@@ -20,6 +20,7 @@ import {
   requiredFichaTextError,
 } from "@/lib/ficha-declaration";
 import { formatCurrency } from "@/lib/format-utils";
+import { priceWithPeriod, type Periodicidad } from "@/lib/tarifa-periodo";
 import {
   cedulaRule,
   phoneRule,
@@ -672,8 +673,12 @@ function isEmail(value: string): boolean {
 }
 
 /** FAM-08: a plan option reads «Mensual Adultos — $40,00 al mes», never with its internal code. */
-export function planOptionLabel(nombre: string, precio: number | string | null | undefined): string {
-  return `${nombre} — ${formatCurrency(precio)} al mes`;
+export function planOptionLabel(
+  nombre: string,
+  precio: number | string | null | undefined,
+  periodicidad?: Periodicidad | null,
+): string {
+  return `${nombre} — ${priceWithPeriod(formatCurrency(precio), periodicidad)}`;
 }
 
 /** FAM-08: an institution option is its name only; the school-type code is internal. */

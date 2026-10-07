@@ -7,10 +7,11 @@ import { useToast } from "@/contexts/ToastContext";
 import { fetchPagosDePersona, subirVoucherPago, registrarPago, aplicarBeneficio } from "@/services/api";
 import type { PagoPersona, MembershipSummary, RegistrarPagoInput, BeneficioAsignado, CoberturaBonificada } from "@/services/api";
 import { Button, DataBox } from "@/components/ui";
-import { formatCurrency, formatDateRange } from "@/lib/format-utils";
+import { formatCurrency, formatDate, formatDateRange } from "@/lib/format-utils";
+import { normalizePeriodicidad, periodSuffix } from "@/lib/tarifa-periodo";
 import { calendarIsoDate, clubToday } from "@/lib/club-date";
 import { useLatestPick } from "@/lib/useLatestPick";
-import { addMonthsIso, estimateTotal, prepareVoucher } from "./payments-utils";
+import { addMonthsIso, addPeriodsIso, estimateTotal, prepareVoucher } from "./payments-utils";
 import { CreditCard, Loader2, Minus, Paperclip, Plus, Upload, X } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
@@ -412,6 +413,9 @@ function RenewPaymentForm({
   const { showSuccess, showWarning } = useToast();
 
   const monthlyPrice = Number(membership.montoAplicado ?? "") || 0;
+  /** SEMANAL/DIARIA: one period per payment, so there is nothing to count. */
+  const periodicidad = normalizePeriodicidad(membership.periodicidad);
+  const oneFixedPeriod = periodicidad !== "MENSUAL";
   /** What the checkpoint shows BEFORE confirming — a preview, not the authoritative total (see `estimateTotal`). */
   const estimatedTotal = estimateTotal(monthlyPrice, months, beneficioPorcentaje, beneficioMonto);
 
@@ -422,8 +426,8 @@ function RenewPaymentForm({
    * read, never reaches this client.
    */
   const fechaFin = useMemo(
-    () => (fechaInicio ? addMonthsIso(fechaInicio, months) : ""),
-    [fechaInicio, months],
+    () => (fechaInicio ? addPeriodsIso(fechaInicio, months, periodicidad) : ""),
+    [fechaInicio, months, periodicidad],
   );
 
   const seedForm = useCallback((): void => {
@@ -606,7 +610,7 @@ function RenewPaymentForm({
           {studentName ? `Registrar un pago de ${studentName}` : "Registrar un pago"}
         </Button>
         <p className="min-w-0 text-sm text-ink-3-strong">
-          Elige los meses y la forma de pago; el club valida cada pago y lo verás «Por validar» en
+          {oneFixedPeriod ? "Elige la forma de pago" : "Elige los meses y la forma de pago"}; el club valida cada pago y lo verás «Por validar» en
           el historial.
         </p>
       </div>
@@ -621,7 +625,9 @@ function RenewPaymentForm({
         </p>
       )}
       <div className="grid gap-3">
-        <MonthCountField value={months} onChange={setMonths} disabled={action.loading} locked={benefitLocksMonths} />
+        {!oneFixedPeriod && (
+          <MonthCountField value={months} onChange={setMonths} disabled={action.loading} locked={benefitLocksMonths} />
+        )}
         <label className="flex flex-col gap-1.5">
           <span className={FIELD_LABEL_CLASSES}>Forma de pago <span aria-hidden="true" className="text-state-bad">*</span></span>
           <select
@@ -655,10 +661,18 @@ function RenewPaymentForm({
           Período que cubre
         </p>
         <p className="mt-1 text-sm font-bold tabular-nums text-ink">
-          {fechaInicio && fechaFin ? formatDateRange(fechaInicio, fechaFin) : "—"}
+          {fechaInicio && fechaFin
+            ? periodicidad === "DIARIA"
+              ? formatDate(fechaInicio)
+              : formatDateRange(fechaInicio, fechaFin)
+            : "—"}
         </p>
         <p className="mt-0.5 text-xs text-ink-3-strong">
-          {months === 1 ? "1 mes" : `${months} meses`} a {formatCurrency(monthlyPrice)} por mes.
+          {oneFixedPeriod
+            ? `${periodicidad === "SEMANAL" ? "1 semana" : "1 día"} a ${formatCurrency(monthlyPrice)} ${periodSuffix(periodicidad)}. ${
+                periodicidad === "SEMANAL" ? "Cubre 7 días desde la fecha de pago." : "Cubre solo el día pagado."
+              }`
+            : `${months === 1 ? "1 mes" : `${months} meses`} a ${formatCurrency(monthlyPrice)} por mes.`}
         </p>
         {/* Issue #400 slice 06: labelled "estimado" on purpose — this is a
             client-side preview (`estimateTotal`), never what the backend

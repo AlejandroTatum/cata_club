@@ -22,6 +22,7 @@
 import { horarioLabel, ESTADO_ASISTENCIA_BACKEND_TO_FRONTEND, type BackendAsistencia, type BackendHorario } from "@/lib/server/attendance-adapter";
 import type { BackendPersonaFull } from "@/lib/server/members-adapter";
 import type { EstadoAsistencia } from "@/types/domain";
+import { normalizePeriodicidad, type Periodicidad } from "@/lib/tarifa-periodo";
 
 // ---------------------------------------------------------------------------
 // View shapes returned by the Route Handler
@@ -70,6 +71,8 @@ export interface BackendTipoMembresiaCatalogo {
   categoria: string;
   precio: string;
   modalidad: string;
+  /** Absent on older payloads, which count as MENSUAL. */
+  periodicidad?: string;
   /** `false` = hidden tariff. Absent on older payloads, which count as visible. */
   activo?: boolean;
 }
@@ -79,6 +82,7 @@ export interface MembershipPlanView {
   nombre: string;
   precio: number;
   modalidad: string;
+  periodicidad: Periodicidad;
 }
 
 /** Membership DTO returned by the JWT-scoped `/membresias/mias` contract. */
@@ -88,6 +92,8 @@ export interface BackendMembresiaPropia {
   personaId: number;
   montoAplicado?: string;
   tipoMembresiaId?: number;
+  /** `MembresiaResponseDTO.periodicidad` — the tariff's period; absent on older backends. */
+  periodicidad?: string;
   /**
    * Present on `MembresiaResponseDTO` (membresia_pago_schemas.py:33), which is
    * what `/membresias/mias` returns. It used to be dropped here, which is why
@@ -129,6 +135,8 @@ export interface MembershipView {
   montoAplicado: string | null;
   categoria: string | null;
   modalidad: string | null;
+  /** The tariff's period; MENSUAL when the backend omits it. */
+  periodicidad: Periodicidad;
   fechaActivacion: string | null;
   /** Normalized to `false` when the backend omits it — see `BackendMembresiaPropia.esGratuidadFamiliar`. */
   esGratuidadFamiliar: boolean;
@@ -150,6 +158,7 @@ export function buildMembershipView(
     montoAplicado: mem.montoAplicado ?? null,
     categoria: tipo?.categoria ?? null,
     modalidad: tipo?.modalidad ?? null,
+    periodicidad: normalizePeriodicidad(mem.periodicidad ?? tipo?.periodicidad),
     fechaActivacion: mem.fechaActivacion ?? null,
     esGratuidadFamiliar: mem.esGratuidadFamiliar ?? false,
     cubiertoHasta: mem.cubiertoHasta ?? null,
@@ -165,6 +174,7 @@ export function buildMembershipPlans(tipos: BackendTipoMembresiaCatalogo[]): Mem
     nombre: tipo.categoria,
     precio: Number(tipo.precio),
     modalidad: tipo.modalidad,
+    periodicidad: normalizePeriodicidad(tipo.periodicidad),
   }));
 }
 
