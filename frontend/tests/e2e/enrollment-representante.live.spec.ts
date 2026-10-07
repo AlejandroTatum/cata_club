@@ -21,7 +21,7 @@
  *   2. la frontera de autorización: un representante NO puede leer los
  *      datos del dependiente de otro representante.
  *
- * ## Por qué "el panel" se verifica contra el endpoint y no contra la página
+ * ## Por qué el vínculo se verifica contra `/personas/{id}/beneficio`
  *
  * `middleware.ts` bloquea `/student` (y toda ruta protegida) para cualquier
  * cuenta con el claim `activacion_completa: false` -- redirige, server-side,
@@ -31,37 +31,29 @@
  * condición depende de una `Membresia` histórica sobre la persona del
  * REPRESENTANTE -- no la del dependiente -- que solo un administrador crea
  * al registrar el primer pago). Es la misma limitación que ya documenta
- * `activacion.live.spec.ts` para la autoinscripción de un Jugador ("Por qué
- * NO llega a alta_presencial_completada"): forzarla a mano con una membresía
- * fabricada convertiría este spec en una prueba de otra cosa.
+ * `activacion.live.spec.ts` para la autoinscripción de un Jugador.
  *
- * `GET /api/student?personaId=<id>` en cambio NO está detrás de ese
- * middleware (su ruta es `/api/student`, no `/student`, y el matcher de
- * `middleware.ts` no la alcanza) -- es la MISMA llamada que la página real
- * hace para llenar el panel, y responde con los datos reales sin importar
- * el estado de activación. Por eso este archivo verifica "lo ve en su
- * panel" contra esa respuesta real, no contra el render de la página, y deja
- * documentado (sin fingir lo contrario) que la página en sí queda detrás de
- * la puerta de activación como cualquier alta pública nueva.
+ * Desde #1643 `GET /api/student` ya no sirve de sonda: llama a
+ * `GET /portal/alumno/{id}`, que el backend deja detrás del mismo gate de
+ * activación (`decodificar_token`, 403 "Tu cuenta aún no está habilitada...")
+ * y que, por tanto, un representante recién inscripto no puede leer. Solo
+ * `/personas*` queda fuera del gate para una cuenta pendiente (carve-out de
+ * autoservicio familiar, #790), y su ownership se impone por endpoint.
  *
- * ## El hallazgo de autorización (verificado, no asumido)
+ * La sonda es `GET /api/personas/{id}/beneficio` (BFF de
+ * `GET /personas/{id}/beneficio`): responde 200 solo al dueño de la persona,
+ * a su representante o a un administrador (`PoliticaAccesoPersona.
+ * exigir_acceso`) y 403 a cualquier otro. Así:
  *
- * Antes de escribir la aserción de la parte 2 se reprodujo a mano contra el
- * stack real (dos representantes reales, vía `curl`, ver la sesión que
- * escribió este archivo): `GET /api/student?personaId=<id>` reenvía
- * `personaId` -- un query param que el CLIENTE controla -- tal cual a
- * `GET /personas/{id}/representados` del lado del backend. Ese endpoint
- * exige `PoliticaAccesoPersona.exigir_acceso_directo` (dueño o
- * administrador, SIN la rama de representante), así que un representante B
- * que le cambia el número a `personaId` para apuntar al dependiente de A
- * recibe un 403 limpio ("Permisos insuficientes para esta operación"), no
- * los datos de A.
+ *   - parte 1: el representante A recibe 200 sobre el id de SU dependiente;
+ *   - parte 2: el representante B, con su propia sesión, recibe 403 sobre el
+ *     id del dependiente de A -- y, como control de que ese 403 viene de la
+ *     regla de ownership y no del gate de activación, 200 sobre el suyo.
  *
- * No es un hallazgo nuevo: es la misma superficie ("¿qué cadena de llamadas
- * legítimas lleva de un solicitante cualquiera a este dato?", auditoría de
- * producción #790) vuelta a probar después del arreglo, con un query param
- * libre en vez de un rol. El resultado es el esperado -- BLOQUEADO -- así
- * que el test de la parte 2 afirma eso, no lo contrario.
+ * El id del dependiente no viaja al cliente (`POST /api/enrollment/` solo
+ * devuelve `{ enrolled: true }`), así que se resuelve con una sesión de
+ * administrador buscando por un apellido único por alta (solo letras: un
+ * apellido no admite dígitos).
  *
  * ## Por qué la parte 1 y la parte 2 comparten un representante
  *
@@ -99,54 +91,55 @@
  * Igual que el resto de los `*.live.spec.ts`, solo lo recoge el proyecto
  * `e2e-live` cuando `E2E_LIVE=1`.
  */
-import { Buffer } from "node:buffer";
-import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import {
+  expect,
+  request as apiRequestModule,
+  test,
+  type Browser,
+  type BrowserContext,
+  type Page,
+} from "@playwright/test";
+import { E2E_BASE_URL } from "./e2e-target";
 import { enrollDependentViaWizard, newDependent, newRepresentative, type NewDependent } from "./helpers/enrollment";
 
-/** Forma mínima de lo que `GET /api/student` devuelve -- solo lo que este archivo lee. */
-interface StudentPortalProbe {
-  self: { personaId: string; nombres: string; apellidos: string } | null;
-  representados: Array<{ personaId: string; nombres: string; apellidos: string }>;
+const ADMIN_EMAIL = "admin@cataclub.com";
+const ADMIN_PASSWORD = "admin12345";
+
+/** Un apellido único por alta, solo letras (el backend rechaza dígitos en un apellido). */
+function uniqueSurname(): string {
+  const token = Array.from(`${Date.now()}`, (digit) => "abcdefghij"[Number(digit)]).join("");
+  return `Representante ${token.charAt(0).toUpperCase()}${token.slice(1)}`;
 }
 
 /**
- * El id de la cuenta detrás de la sesión real ya puesta por el alta (cookie
- * `access_token`, HttpOnly -- invisible para `page.evaluate`, pero legible
- * por la automatización, que no está sujeta a esa restricción de navegador).
- * Ningún endpoint del cliente devuelve este id directamente: `POST
- * /api/enrollment/` lo omite a propósito (`route.ts`: "Only { enrolled: true
- * } ever reaches client JS"), así que decodificar el claim `persona_id` del
- * propio JWT es la única vía. No se verifica la firma -- no hace falta para
- * leer un dato de un token que el mismo test acaba de recibir del backend.
+ * El id de la persona del dependiente, resuelto con una sesión de
+ * administrador DESCARTABLE (nunca la de un representante: el id no viaja al
+ * cliente). Falla si la búsqueda no devuelve exactamente una persona -- un id
+ * ambiguo haría vacía la sonda de ownership.
  */
-async function ownPersonaIdFromSession(page: Page): Promise<string> {
-  const cookies = await page.context().cookies();
-  const accessToken = cookies.find((cookie) => cookie.name === "access_token");
-  if (!accessToken) {
-    throw new Error("No hay cookie de sesión (access_token) en este contexto de navegador.");
+async function findDependentPersonaId(dependent: NewDependent): Promise<number> {
+  const admin = await apiRequestModule.newContext({ baseURL: E2E_BASE_URL });
+  try {
+    const login = await admin.post("/api/auth/login", { data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD } });
+    expect(login.ok(), `Login de admin para resolver el dependiente: ${login.status()}`).toBe(true);
+    const token = dependent.apellidos.split(" ").at(-1) ?? dependent.apellidos;
+    const search = await admin.get(`/api/personas/buscar?q=${encodeURIComponent(token)}&limit=50`);
+    expect(search.ok(), await search.text()).toBe(true);
+    const matches = (await search.json()) as Array<{ id: number }>;
+    expect(matches, `Se esperaba exactamente una persona con el apellido ${dependent.apellidos}`).toHaveLength(1);
+    return matches[0].id;
+  } finally {
+    await admin.dispose();
   }
-  const [, payloadSegment] = accessToken.value.split(".");
-  const base64 = payloadSegment.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-  const payload = JSON.parse(Buffer.from(padded, "base64").toString("utf8")) as { persona_id?: number };
-  if (typeof payload.persona_id !== "number") {
-    throw new Error("El token de sesión no trae el claim persona_id.");
-  }
-  return String(payload.persona_id);
 }
 
 /**
- * El mismo `GET /api/student?personaId=<id>` que llena el panel real,
- * pedido directo (sin pasar por la página `/student`, ver el comentario del
- * encabezado). El resultado es lo que el representante vería una vez que su
- * cuenta esté activada -- los datos son reales, la página que los pinta es
- * lo único fuera de alcance de un alta pública recién hecha.
+ * `GET /api/personas/{id}/beneficio` con la sesión real de `page`: la sonda de
+ * ownership descrita en el encabezado. Devuelve el status, nunca lanza.
  */
-async function fetchOwnStudentPortal(page: Page): Promise<StudentPortalProbe> {
-  const personaId = await ownPersonaIdFromSession(page);
-  const response = await page.request.get(`/api/student?personaId=${personaId}`);
-  expect(response.status(), await response.text()).toBe(200);
-  return response.json();
+async function probeBeneficioStatus(page: Page, personaId: number): Promise<{ status: number; body: string }> {
+  const response = await page.request.get(`/api/personas/${personaId}/beneficio`);
+  return { status: response.status(), body: await response.text() };
 }
 
 /** Un representante con un dependiente sin cuenta propia, en un contexto de navegador propio. */
@@ -154,25 +147,24 @@ async function enrollFreshRepresentative(
   browser: Browser,
   correoPrefix: string,
   dependentOverrides: Partial<NewDependent> = {},
-): Promise<{ context: BrowserContext; page: Page; portal: StudentPortalProbe; dependent: NewDependent }> {
+): Promise<{ context: BrowserContext; page: Page; dependentId: number; dependent: NewDependent }> {
   const context = await browser.newContext();
   const page = await context.newPage();
   const suffix = Date.now();
   const representative = newRepresentative(`${correoPrefix}-${suffix}@cataclub.com`);
-  const dependent = newDependent(dependentOverrides);
+  const dependent = newDependent({ apellidos: uniqueSurname(), ...dependentOverrides });
   await enrollDependentViaWizard(page, representative, dependent);
-  const portal = await fetchOwnStudentPortal(page);
-  return { context, page, portal, dependent };
+  const dependentId = await findDependentPersonaId(dependent);
+  return { context, page, dependentId, dependent };
 }
 
 test.describe.serial("Alta de un dependiente sin cuenta propia y frontera de autorización", () => {
   // Compartido entre las dos partes de este bloque -- ver "Por qué la parte
   // 1 y la parte 2 comparten un representante" en el encabezado del archivo:
   // una sola alta real, reusada, en vez de una por test.
-  let contextA: BrowserContext;
+  let contextA: BrowserContext | undefined;
   let pageA: Page;
-  let portalA: StudentPortalProbe;
-  let dependienteA: NewDependent;
+  let dependienteAId: number;
 
   test.beforeAll(async ({ browser }) => {
     // El backoff de `confirmEnrollmentWithRateLimitBackoff` (ver
@@ -183,22 +175,21 @@ test.describe.serial("Alta de un dependiente sin cuenta propia y frontera de aut
     const enrolled = await enrollFreshRepresentative(browser, "qa-rep-a");
     contextA = enrolled.context;
     pageA = enrolled.page;
-    portalA = enrolled.portal;
-    dependienteA = enrolled.dependent;
+    dependienteAId = enrolled.dependentId;
   });
 
   test.afterAll(async () => {
-    await contextA.close();
+    await contextA?.close();
   });
 
   test("un representante inscribe a un dependiente sin cuenta propia y lo ve en tu panel", async () => {
     // El dependiente existe y el representante -- con su propia sesión
-    // recién autenticada -- lo ve: un solo representado, el que acaba de
-    // inscribir. El nombre no se compara contra lo tipeado en el asistente
-    // porque el backend lo normaliza a título ("QA Dependiente" queda "Qa
-    // Dependiente"); el valor esperado sale siempre de la respuesta real.
-    expect(portalA.representados).toHaveLength(1);
-    expect(portalA.representados[0].apellidos).toBe(dependienteA.apellidos);
+    // recién autenticada -- tiene acceso a él: la sonda de ownership da 200
+    // sobre el id de SU dependiente (resuelto por un apellido único, ver el
+    // encabezado). Un dependiente que no quedó vinculado a este representante
+    // daría 403 acá.
+    const propio = await probeBeneficioStatus(pageA, dependienteAId);
+    expect(propio.status, propio.body).toBe(200);
 
     // Documentado, no fingido: la PÁGINA `/student` queda detrás de la
     // puerta de activación para cualquier alta pública recién hecha (ver el
@@ -212,26 +203,33 @@ test.describe.serial("Alta de un dependiente sin cuenta propia y frontera de aut
   test("un representante no puede leer los datos del dependiente de otro representante", async ({ browser }) => {
     // Mismo margen que el `beforeAll` de arriba -- ver su comentario.
     test.setTimeout(120_000);
-    const dependienteAId = portalA.representados[0].personaId;
 
     // Representante B, en un contexto de navegador SEPARADO -- ninguna
     // cookie de A sobrevive al cambio de contexto, así que lo único que B
-    // puede usar para cruzar es el id numérico que su propia sesión conoce.
-    const { context: contextB, page: pageB, portal: portalB } = await enrollFreshRepresentative(browser, "qa-rep-b");
+    // puede usar para cruzar es el id numérico del dependiente de A.
+    const {
+      context: contextB,
+      page: pageB,
+      dependentId: dependienteBId,
+    } = await enrollFreshRepresentative(browser, "qa-rep-b");
     try {
-      // Punto de partida sano: B ve a SU PROPIO dependiente, nunca al de A.
-      expect(portalB.representados).toHaveLength(1);
-      expect(portalB.representados[0].personaId).not.toBe(dependienteAId);
+      // Punto de partida sano: B tiene acceso a SU PROPIO dependiente (200) y
+      // ese dependiente no es el de A. Con esto el 403 de abajo no puede ser el
+      // gate de activación -- que bloquearía también esta lectura -- sino la
+      // regla de ownership.
+      expect(dependienteBId).not.toBe(dependienteAId);
+      const propio = await probeBeneficioStatus(pageB, dependienteBId);
+      expect(propio.status, propio.body).toBe(200);
 
-      // El cruce: B pide, con su PROPIA sesión autenticada, el portal del
+      // El cruce: B pide, con su PROPIA sesión autenticada, el recurso del
       // dependiente de A por id -- exactamente lo que un representante
-      // podría intentar cambiando el número en `?alumno=` de su propia URL.
-      // `pageB.request` comparte las cookies de `pageB` (la sesión real de
-      // B), a diferencia del fixture `request` suelto.
-      const cruce = await pageB.request.get(`/api/student?personaId=${dependienteAId}`);
-      expect(cruce.status()).toBe(403);
-      const cuerpoCruce = (await cruce.json()) as { message?: string };
-      expect(cuerpoCruce.message).toBe("Permisos insuficientes para esta operación");
+      // podría intentar cambiando el número de una URL propia.
+      const cruce = await probeBeneficioStatus(pageB, dependienteAId);
+      expect(cruce.status, cruce.body).toBe(403);
+      const cuerpoCruce = JSON.parse(cruce.body) as { message?: string };
+      expect(cuerpoCruce.message).toBe(
+        "Solo la propia persona, su representante, o un administrador pueden ver este beneficio",
+      );
     } finally {
       await contextB.close();
     }
