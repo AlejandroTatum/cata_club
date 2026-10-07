@@ -4866,6 +4866,17 @@ describe("MembersPage — role filter", () => {
     expect(names().sort()).toEqual([...expected].sort());
   });
 
+  it("counts each chip inside the selected role, so «Todos» matches the rows shown", async () => {
+    await renderList();
+    expect(screen.getByRole("button", { name: /^Todos\s*1$/ })).toBeInTheDocument();
+
+    chooseRole("Admin");
+    expect(screen.getByRole("button", { name: /^Todos\s*2$/ })).toBeInTheDocument();
+
+    chooseRole("Todos");
+    expect(screen.getByRole("button", { name: /^Todos\s*5$/ })).toBeInTheDocument();
+  });
+
   it("combines with the existing chips and the text search (AND)", async () => {
     const lapsed = (id: string, nombres: string, roles: MemberAccount["backendRoles"]): MemberAccount =>
       person(id, nombres, roles, {

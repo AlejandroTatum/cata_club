@@ -1199,8 +1199,11 @@ export default function MembersPage(): React.ReactElement {
   }, [searchTerm, activeFlag, roleFilter]);
 
   const stats = buildMemberStats(accounts);
-  const filteredAccounts = filterAccounts(accounts, searchTerm).filter(
-    (account) => accountMatchesRole(account, roleFilter) && accountMatchesFlag(account, activeFlag),
+  // The role is the view the admin is looking at: the chips count inside it,
+  // so «Todos N» always matches the rows the list can show.
+  const accountsInRole = accounts.filter((account) => accountMatchesRole(account, roleFilter));
+  const filteredAccounts = filterAccounts(accountsInRole, searchTerm).filter((account) =>
+    accountMatchesFlag(account, activeFlag),
   );
 
   const filtering = searchTerm !== "" || activeFlag !== "all" || roleFilter !== "todos";
@@ -1288,7 +1291,7 @@ export default function MembersPage(): React.ReactElement {
                 <FilterPill
                   key={chip.flag}
                   label={chip.label}
-                  count={countAccountsMatchingFlag(accounts, chip.flag)}
+                  count={countAccountsMatchingFlag(accountsInRole, chip.flag)}
                   active={activeFlag === chip.flag}
                   onClick={() => setActiveFlag(chip.flag)}
                 />
