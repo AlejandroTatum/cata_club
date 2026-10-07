@@ -67,7 +67,6 @@ import {
   X,
   Wallet,
   ChevronRight,
-  AlertTriangle,
   UserPlus,
   IdCard,
 } from "lucide-react";
@@ -122,10 +121,6 @@ const FILTER_CHIPS: { flag: MemberFilterFlag; label: string }[] = [
   { flag: "all", label: "Todos" },
   { flag: "vencida", label: "Membresía vencida" },
   { flag: "pendiente", label: "Pago por validar" },
-  // Issue #730. A count is not a worklist: the chip is both the number and
-  // the route to the rows behind it — and from each row, the edit dialog's
-  // medical-record editor is where it gets fixed.
-  { flag: "sin-emergencia", label: "Sin datos de emergencia" },
 ];
 
 // The per-state `PaymentStatusIcon` that used to prefix the payment badge is
@@ -1018,10 +1013,8 @@ function AttentionRow({
 
 function MembersRail({
   stats,
-  onFilter,
 }: {
   stats: ReturnType<typeof buildMemberStats>;
-  onFilter: (flag: MemberFilterFlag) => void;
 }): React.ReactElement {
   return (
     <div className="grid content-start gap-page" data-testid="members-rail">
@@ -1039,20 +1032,7 @@ function MembersRail({
               />
             </Link>
           </li>
-          <li>
-            <button type="button" className={RAIL_ROW} onClick={() => onFilter("sin-emergencia")}>
-              <AttentionRow
-                label="Sin datos de emergencia"
-                count={stats.sinDatosEmergencia}
-                tone={stats.sinDatosEmergencia > 0 ? "warn" : "neutral"}
-              />
-            </button>
-          </li>
         </ul>
-        <p className="flex items-start gap-1.5 text-xs text-ink-3">
-          <AlertTriangle size={ICON.sm} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
-          Sin datos de emergencia: no tiene representante ni ficha médica cargada.
-        </p>
       </InfoPanel>
 
       <InfoPanel title="Cómo usar el listado">
@@ -1410,10 +1390,7 @@ export default function MembersPage(): React.ReactElement {
         )}
           </div>
 
-          <MembersRail
-            stats={stats}
-            onFilter={setActiveFlag}
-          />
+          <MembersRail stats={stats} />
         </div>
 
         {/* One dialog for the whole page, keyed so switching accounts remounts

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { BonificacionesSection } from "../BonificacionesSection";
 
 function mockFetchOnce(body: unknown, ok = true) {
@@ -46,5 +46,44 @@ describe("BonificacionesSection (admin review)", () => {
     const { container } = render(<BonificacionesSection />);
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();
+  });
+
+  describe("pagination", () => {
+    const page = (from: number, count: number) =>
+      Array.from({ length: count }, (_, i) => ({ ...item, id: from + i, personaNombreCompleto: `Persona ${from + i}` }));
+
+    it("shows no load-more control when everything fits in the first page", async () => {
+      mockFetchOnce({ items: page(1, 50), total: 50 });
+      render(<BonificacionesSection />);
+      await screen.findByText("Persona 1");
+      expect(screen.queryByRole("button", { name: /cargar más/i })).not.toBeInTheDocument();
+    });
+
+    it("loads the next page and appends it while total exceeds what is shown", async () => {
+      mockFetchOnce({ items: page(1, 50), total: 60 });
+      mockFetchOnce({ items: page(51, 10), total: 60 });
+      render(<BonificacionesSection />);
+      await screen.findByText("Persona 1");
+
+      fireEvent.click(screen.getByRole("button", { name: /cargar más/i }));
+
+      expect(await screen.findByText("Persona 60")).toBeInTheDocument();
+      expect(screen.getByText("Persona 1")).toBeInTheDocument();
+      expect(global.fetch).toHaveBeenLastCalledWith("/api/membresias/coberturas/todas?skip=50&limit=50");
+      expect(screen.queryByRole("button", { name: /cargar más/i })).not.toBeInTheDocument();
+    });
+
+    it("keeps the list and offers a retry when loading more fails", async () => {
+      mockFetchOnce({ items: page(1, 50), total: 60 });
+      mockFetchOnce({ message: "boom" }, false);
+      render(<BonificacionesSection />);
+      await screen.findByText("Persona 1");
+
+      fireEvent.click(screen.getByRole("button", { name: /cargar más/i }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("No se pudieron cargar más bonificaciones. Intenta de nuevo.");
+      expect(screen.getByText("Persona 1")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /cargar más/i })).toBeEnabled();
+    });
   });
 });
