@@ -10,7 +10,7 @@ from app.servicios_negocio.consentimiento_legal_servicio import (
     TEXTOS_LEGALES_VIGENTES,
     VERSION_LEGAL_VIGENTE,
 )
-from tests.test_auth_activation import _crear_usuario, _token
+from tests.test_auth_activation import _crear_usuario
 from tests.test_consentimiento_legal_reaceptacion import (
     RUTA,
     RUTA_ACEPTAR,
