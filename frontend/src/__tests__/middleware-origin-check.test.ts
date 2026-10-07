@@ -64,6 +64,14 @@ describe("middleware → Origin check on mutating /api requests (#1653)", () => 
     expect(middleware(behindProxy).status).toBe(403);
   });
 
+  it("normalizes case and the scheme's default port on the public host", () => {
+    const behindProxy = new NextRequest("http://frontend:3000/api/payments", {
+      method: "POST",
+      headers: { origin: "https://cataclub.com", "x-forwarded-host": "CataClub.com:443", host: "frontend:3000" },
+    });
+    expect(middleware(behindProxy).status).toBe(200);
+  });
+
   it("exempts the browser-driven CSP report sink", () => {
     const response = middleware(apiRequest("/api/csp-report", "POST", { origin: "https://evil.example" }));
     expect(response.status).toBe(200);

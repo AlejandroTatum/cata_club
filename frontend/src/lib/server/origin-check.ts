@@ -59,7 +59,10 @@ export function isOriginAllowed(request: {
       request.headers.get("host") ??
       request.urlHost;
     try {
-      return new URL(origin).host === publicHost;
+      const originUrl = new URL(origin);
+      // Parse the public host under the origin's scheme so both sides get the
+      // same normalization: lowercased, default port dropped.
+      return originUrl.host === new URL(`${originUrl.protocol}//${publicHost}`).host;
     } catch {
       return false;
     }

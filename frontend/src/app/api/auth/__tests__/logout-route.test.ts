@@ -140,4 +140,18 @@ describe("POST /api/auth/logout", () => {
     expect(response.cookies.get(ACCESS_TOKEN_COOKIE)?.maxAge).toBe(0);
     expect(response.cookies.get(REFRESH_TOKEN_COOKIE)?.maxAge).toBe(0);
   });
+
+  it("still clears cookies when the refresh fallback throws (e.g. BACKEND_API_URL unset)", async () => {
+    delete process.env.BACKEND_API_URL;
+
+    const response = await POST(
+      logoutRequest(`${ACCESS_TOKEN_COOKIE}=${jwt(-60)}; ${REFRESH_TOKEN_COOKIE}=refresh-token`),
+    );
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true });
+    expect(response.cookies.get(ACCESS_TOKEN_COOKIE)?.maxAge).toBe(0);
+    expect(response.cookies.get(REFRESH_TOKEN_COOKIE)?.maxAge).toBe(0);
+  });
 });
