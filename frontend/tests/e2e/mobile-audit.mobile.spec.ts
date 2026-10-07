@@ -173,6 +173,44 @@ function isIgnorableConsoleError(text: string, url: string): boolean {
 /** React minified #418 / dev «Hydration failed»: a server/client markup mismatch. */
 const HYDRATION_ERROR = /Minified React error #418|Hydration failed|hydrat(?:ion|ed) .*(?:mismatch|didn't match)/i;
 
+/**
+ * What distinguishes a real server/client mismatch from stale build artifacts:
+ * the build id the page was rendered by, the build id on disk, and whether
+ * every script chunk the page references is actually served (a chunk from
+ * another build answers 404). Only computed once a hydration error reproduced.
+ */
+async function hydrationDiagnostics(page: Page): Promise<string> {
+  const NEXT_DIR = path.resolve(__dirname, "../../.next");
+  const readBuildId = (file: string): string => {
+    try {
+      return fs.readFileSync(file, "utf8").trim();
+    } catch {
+      return "unreadable";
+    }
+  };
+  const inPage = await page.evaluate(() => {
+    const flight = (self as unknown as { __next_f?: unknown[][] }).__next_f ?? [];
+    const match = /"b":"([^"]+)"/.exec(flight.map((chunk) => String(chunk[1] ?? "")).join(""));
+    return {
+      pageBuildId: match ? match[1] : "not in flight data",
+      scripts: Array.from(document.querySelectorAll<HTMLScriptElement>("script[src]")).map((el) => el.src),
+    };
+  });
+  const missingChunks: string[] = [];
+  for (const src of inPage.scripts) {
+    const res = await page.request.get(src);
+    if (!res.ok()) missingChunks.push(`${res.status()} ${src}`);
+  }
+  return JSON.stringify({
+    url: page.url(),
+    pageBuildId: inPage.pageBuildId,
+    buildIdOnDisk: readBuildId(path.join(NEXT_DIR, "BUILD_ID")),
+    buildIdStandalone: readBuildId(path.join(NEXT_DIR, "standalone/.next/BUILD_ID")),
+    scriptsReferenced: inPage.scripts.length,
+    missingChunks,
+  });
+}
+
 function fulfillJson(route: Route, body: unknown, status = 200): Promise<void> {
   return route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 }
@@ -390,7 +428,10 @@ for (const vp of VIEWPORTS) {
           const firstLoadErrors = consoleErrors;
           await load(true);
           const secondLoadHydration = consoleErrors.filter((e) => HYDRATION_ERROR.test(e));
-          expect.soft(secondLoadHydration, "(c) hydration error reproduced on 2 consecutive loads").toEqual([]);
+          const diagnostics = secondLoadHydration.length > 0 ? await hydrationDiagnostics(page) : "";
+          expect
+            .soft(secondLoadHydration, `(c) hydration error reproduced on 2 consecutive loads ${diagnostics}`)
+            .toEqual([]);
           hydrationNoise = firstLoadHydration;
           // The first load's non-hydration errors still count.
           consoleErrors = [...firstLoadErrors.filter((e) => !HYDRATION_ERROR.test(e)), ...consoleErrors.filter((e) => !HYDRATION_ERROR.test(e))];
