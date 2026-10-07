@@ -401,10 +401,17 @@ export default function AppShell({
     setNavMoreBelow(nav.scrollHeight - nav.clientHeight - nav.scrollTop > NAV_OVERFLOW_SLACK_PX);
   }, []);
   // Desktop-only collapse state, independent from the mobile drawer
-  // (`sidebarOpen` above). Initialized from localStorage so the preference
+  // (`sidebarOpen` above). Restored from localStorage so the preference
   // survives navigation/reload; scoped entirely via `lg:` classes so it has
-  // no effect on the mobile drawer's own open/close behavior.
-  const [collapsed, setCollapsed] = useState<boolean>(readCollapsedPreference);
+  // no effect on the mobile drawer's own open/close behavior. Applied in an
+  // effect, not as the initial state: the server cannot read storage, so a
+  // first client render that already says "collapsed" disagrees with the
+  // server HTML and React discards the hydration (see
+  // `usePersistentPreference`).
+  const [collapsed, setCollapsed] = useState<boolean>(false);
+  useEffect((): void => {
+    if (readCollapsedPreference()) setCollapsed(true);
+  }, []);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
