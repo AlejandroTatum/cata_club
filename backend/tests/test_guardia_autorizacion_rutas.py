@@ -429,6 +429,8 @@ RUTAS_ROLES_REQUERIDOS = {
     # el rol REPRESENTANTE y devuelve únicamente SUS menores.
     ("GET", "/co-representantes/mios"): frozenset({"REPRESENTANTE"}),
     ("POST", "/co-representantes/invitaciones"): frozenset({"ADMINISTRADOR", "REPRESENTANTE"}),
+    ("GET", "/co-representantes/invitaciones/recibidas"): frozenset({"REPRESENTANTE"}),
+    ("POST", "/co-representantes/invitaciones/{invitacion_id}/aceptar"): frozenset({"REPRESENTANTE"}),
     ("DELETE", "/co-representantes/persona/{persona_id}"): frozenset({"ADMINISTRADOR", "REPRESENTANTE"}),
     ("PUT", "/asistencias/horarios/{horario_id}"): frozenset({"ADMINISTRADOR"}),
 }
