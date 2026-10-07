@@ -75,6 +75,18 @@ class TipoModalidad(str, enum.Enum):
     MENSUAL = "MENSUAL"
 
 
+class PeriodicidadTarifa(str, enum.Enum):
+    """Cada cuánto se paga una tarifa y cuánta cobertura compra un pago.
+
+    MENSUAL (por defecto, toda tarifa previa): meses calendario, con deuda y
+    mora. SEMANAL: un pago cubre 7 días. DIARIA ("paga por día suelto"): un
+    pago cubre solo el día pagado. SEMANAL/DIARIA nunca acumulan deuda.
+    """
+    MENSUAL = "MENSUAL"
+    SEMANAL = "SEMANAL"
+    DIARIA = "DIARIA"
+
+
 class EstadoPago(str, enum.Enum):
     APROBADO = "APROBADO"
     PENDIENTE_VALIDACION = "PENDIENTE_VALIDACION"

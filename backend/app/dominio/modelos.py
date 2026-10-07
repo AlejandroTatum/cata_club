@@ -29,7 +29,7 @@ from app.dominio.invitacion_entrenador import invitacion_pendiente as _es_invita
 from app.dominio.nombre_propio import nombre_completo, normalizar_nombre_propio
 from app.dominio.telefono import es_telefono_valido
 from app.dominio.enums import (
-    TipoRol, EstadoMembresia, TipoModalidad, EstadoPago,
+    TipoRol, EstadoMembresia, TipoModalidad, PeriodicidadTarifa, EstadoPago,
     TipoPago, EstadoAsistencia, TipoEscuela, NivelTecnicoAlumno, TipoSangre, DiaSemana,
     TipoNotificacion,
     TipoManoDominante,
@@ -722,10 +722,29 @@ class TipoMembresia(Base):
     `app.dominio.categoria_metadata` -- la eliminó `d1a5f8c30b72`.
     """
     __tablename__ = "tipo_membresia"
+    __table_args__ = (
+        CheckConstraint(
+            "periodicidad IN ('MENSUAL', 'SEMANAL', 'DIARIA')",
+            name="ck_tipo_membresia_periodicidad",
+        ),
+    )
     id: Mapped[int] = mapped_column(primary_key=True)
     categoria: Mapped[str] = mapped_column(String(80))
     precio: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     modalidad: Mapped[TipoModalidad] = mapped_column(SAEnum(TipoModalidad))
+    # Cada cuánto se paga y cuánta cobertura da un pago (MENSUAL / SEMANAL /
+    # DIARIA). VARCHAR + CHECK a propósito, no un tipo enum de Postgres: evita
+    # `ALTER TYPE ... ADD VALUE` (ver docs/operations/provisioning.md).
+    periodicidad: Mapped[PeriodicidadTarifa] = mapped_column(
+        SAEnum(
+            PeriodicidadTarifa, native_enum=False, length=10,
+            create_constraint=False,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        default=PeriodicidadTarifa.MENSUAL,
+        server_default=PeriodicidadTarifa.MENSUAL.value,
+        nullable=False,
+    )
     # Baja SUAVE: una tarifa que deja de ofrecerse se OCULTA. Sale del catálogo
     # público y no admite altas nuevas, pero las membresías que ya la usan
     # siguen cobrando y renovando. Borrarla solo es posible si nunca se usó.
@@ -786,6 +805,12 @@ class Membresia(Base):
 
     tipo_membresia_id: Mapped[int] = mapped_column(ForeignKey("tipo_membresia.id"))
     tipo_membresia: Mapped["TipoMembresia"] = relationship(back_populates="membresias")
+
+    @property
+    def periodicidad(self) -> PeriodicidadTarifa:
+        """Periodicidad de la tarifa del plan (la membresía copia el precio, no
+        la periodicidad: cambiarla en el catálogo rige hacia adelante)."""
+        return self.tipo_membresia.periodicidad
 
     # Asociación simple (NO composición): el historial de pagos debe sobrevivir
     # aunque la membresía cambie de estado o se elimine.

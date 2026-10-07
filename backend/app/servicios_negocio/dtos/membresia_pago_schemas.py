@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 
 from app.dominio.nombres_catalogo import normalizar_nombre
 from app.dominio.enums import (
-    EstadoMembresia, TipoModalidad, EstadoPago, TipoPago, EfectoCoberturaCorreccion,
+    EstadoMembresia, TipoModalidad, PeriodicidadTarifa, EstadoPago, TipoPago, EfectoCoberturaCorreccion,
 )
 from app.servicios_negocio.dtos.base import ResponseBase
 from app.servicios_negocio.dtos.validadores import NombrePresentado
@@ -35,6 +35,8 @@ class TipoMembresiaCreateDTO(BaseModel):
         decimal_places=2,
     )
     modalidad: TipoModalidad
+    # MENSUAL (por defecto) / SEMANAL / DIARIA ("paga por día suelto").
+    periodicidad: PeriodicidadTarifa = PeriodicidadTarifa.MENSUAL
 
     @field_validator("categoria")
     @classmethod
@@ -73,9 +75,10 @@ class TipoMembresiaUpdateDTO(BaseModel):
         decimal_places=2,
     )
     modalidad: Optional[TipoModalidad] = None
+    periodicidad: Optional[PeriodicidadTarifa] = None
     activo: Optional[bool] = None
 
-    @field_validator("categoria", "precio", "modalidad", "activo", mode="before")
+    @field_validator("categoria", "precio", "modalidad", "periodicidad", "activo", mode="before")
     @classmethod
     def _rechazar_valor_vacio_explicito(cls, valor, info):
         if valor is None:
@@ -101,14 +104,16 @@ class TipoMembresiaResponseDTO(ResponseBase, TipoMembresiaCreateDTO):
 
 class TarifaPublicaDTO(ResponseBase, BaseModel):
     """Mitad pública del catálogo de tarifas (issue #394, contrato de issue
-    #331): SOLO `categoria` y `precio`. A propósito sin `id` ni `modalidad`
-    -- son detalles administrativos del plan (edición, agrupación interna),
+    #331): SOLO `categoria`, `precio` y `periodicidad` (un precio sin su
+    período -- al mes, a la semana, por día -- engaña al visitante). A
+    propósito sin `id` ni `modalidad` -- son detalles administrativos del plan (edición, agrupación interna),
     no parte de lo que un visitante anónimo necesita ver antes de
     inscribirse. `TipoMembresiaResponseDTO` de arriba sigue siendo el DTO
     completo para el admin autenticado; este es un catálogo aparte, no un
     subconjunto derivado en runtime."""
     categoria: str
     precio: Decimal
+    periodicidad: PeriodicidadTarifa = PeriodicidadTarifa.MENSUAL
 
 
 # --- Membresia ---
@@ -147,6 +152,10 @@ class MembresiaResponseDTO(ResponseBase, BaseModel):
     fecha_activacion: datetime
     persona_id: int
     tipo_membresia_id: int
+    # Periodicidad de la tarifa del plan (MENSUAL/SEMANAL/DIARIA): decide el
+    # texto del precio y si la membresía puede deber meses. Derivada de
+    # `Membresia.periodicidad`, no una columna propia.
+    periodicidad: PeriodicidadTarifa = PeriodicidadTarifa.MENSUAL
     # Issue #400 (slice 4c-a): expone el flag ya persistido (`Membresia.
     # es_gratuidad_familiar`, ver `_aplicar_regla_familiar_si_corresponde`) sin
     # cambiar nada de lo que se persiste. El frontend hoy INFIERE gratuidad de

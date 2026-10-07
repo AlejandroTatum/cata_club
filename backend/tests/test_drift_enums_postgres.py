@@ -67,7 +67,13 @@ _LABELS_HUERFANOS_CONOCIDOS: dict[str, set[str]] = {
 # pero ya NO gatea qué códigos acepta la API -- esa validación es
 # `AsistenciaServicio._validar_dia_y_derivar_horas` contra la tabla, no este
 # enum -- así que ya no hay ningún tipo Postgres que auditar acá.
-_ENUMS_SIN_COLUMNA_POSTGRES: set[str] = {"Categoria"}
+#
+# `PeriodicidadTarifa` tampoco respalda un tipo Postgres enum: la columna
+# `tipo_membresia.periodicidad` es VARCHAR + CHECK a propósito, para no depender
+# de `ALTER TYPE ... ADD VALUE` (no revertible en una transacción, ver
+# docs/operations/provisioning.md). El CHECK lo fija la migración
+# `y1tarifaperiodicidad`.
+_ENUMS_SIN_COLUMNA_POSTGRES: set[str] = {"Categoria", "PeriodicidadTarifa"}
 
 
 def _enums_del_dominio() -> dict[str, type[_enum.Enum]]:

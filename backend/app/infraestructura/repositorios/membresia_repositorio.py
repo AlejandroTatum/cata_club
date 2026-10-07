@@ -73,14 +73,15 @@ class MembresiaRepositorio:
 
     def listar_por_ids(self, membresia_ids: list[int]) -> List[Membresia]:
         """Trae varias membresías por id en una sola consulta (issue #326,
-        deuda en bloque). Sin `joinedload` a propósito, a diferencia de
-        `obtener_por_id`: la deuda en bloque solo necesita `estado`/
-        `monto_aplicado`, no `persona`/`tipo_membresia` precargados."""
+        deuda en bloque). Precarga `persona` (¿está activa?) y
+        `tipo_membresia` (su periodicidad decide si la membresía puede deber
+        meses) con un JOIN, para que la cantidad de consultas no crezca con
+        la cantidad de ids."""
         if not membresia_ids:
             return []
         stmt = (
             select(Membresia)
-            .options(joinedload(Membresia.persona))
+            .options(joinedload(Membresia.persona), joinedload(Membresia.tipo_membresia))
             .where(Membresia.id.in_(membresia_ids))
         )
         return list(self.db.execute(stmt).scalars().all())

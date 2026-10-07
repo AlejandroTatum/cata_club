@@ -28,8 +28,8 @@ from app.dominio.excepciones import (
     DestinatarioRechazadoPermanentemente,
     ServicioNoDisponible,
 )
-from app.dominio.modelos import Pago, Membresia, Persona, Notificacion, Rol, Usuario
-from app.dominio.enums import EstadoPago, EstadoMembresia, TipoNotificacion, TipoRol
+from app.dominio.modelos import Pago, Membresia, Persona, Notificacion, Rol, TipoMembresia, Usuario
+from app.dominio.enums import EstadoPago, EstadoMembresia, PeriodicidadTarifa, TipoNotificacion, TipoRol
 from app.dominio.nombre_propio import nombre_completo
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.membresia_pago_servicio import _meses_enteros_desde
@@ -609,6 +609,11 @@ def alertar_mora_diaria(self) -> dict:
                 # correo de mora de todos modos.
                 Membresia.estado != EstadoMembresia.SUSPENDIDA,
                 Persona.activo.is_(True),
+                # "No acumula deuda": solo las tarifas MENSUAL entran en mora;
+                # SEMANAL/DIARIA vencen sin aviso.
+                Membresia.tipo_membresia.has(
+                    TipoMembresia.periodicidad == PeriodicidadTarifa.MENSUAL
+                ),
                 ultimo_pago.c.rn == 1,
                 ultimo_pago.c.ultima_fecha_fin < hoy,
             )
