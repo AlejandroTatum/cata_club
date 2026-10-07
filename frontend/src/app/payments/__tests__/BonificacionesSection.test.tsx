@@ -81,7 +81,7 @@ describe("BonificacionesSection (admin review)", () => {
 
       fireEvent.click(screen.getByRole("button", { name: /cargar más/i }));
 
-      expect(await screen.findByRole("alert")).toHaveTextContent(/no se pudo cargar/i);
+      expect(await screen.findByRole("alert")).toHaveTextContent(/no se pudieron cargar más bonificaciones/i);
       expect(screen.getByText("Persona 1")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /cargar más/i })).toBeEnabled();
     });

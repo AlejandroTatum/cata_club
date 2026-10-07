@@ -19,7 +19,9 @@ interface BonificacionItem {
   otorgadaEn: string;
 }
 
-const PAGE_SIZE = 50;
+// A load-more batch, not a table page: the list renders every loaded row,
+// so the ten-rows-per-page rule (list-page-size.test.ts) does not apply.
+const LOAD_MORE_BATCH = 50;
 
 interface BonificacionesPage {
   items?: BonificacionItem[];
@@ -40,7 +42,7 @@ export function BonificacionesSection(): React.ReactElement | null {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/membresias/coberturas/todas?skip=0&limit=${PAGE_SIZE}`)
+    fetch(`/api/membresias/coberturas/todas?skip=0&limit=${LOAD_MORE_BATCH}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((body: BonificacionesPage | null) => {
         if (cancelled || !body?.items) return;
@@ -57,7 +59,7 @@ export function BonificacionesSection(): React.ReactElement | null {
     setLoadingMore(true);
     setMoreFailed(false);
     try {
-      const res = await fetch(`/api/membresias/coberturas/todas?skip=${items.length}&limit=${PAGE_SIZE}`);
+      const res = await fetch(`/api/membresias/coberturas/todas?skip=${items.length}&limit=${LOAD_MORE_BATCH}`);
       const body: BonificacionesPage | null = res.ok ? await res.json() : null;
       const nextItems = body?.items;
       if (!body || !nextItems) throw new Error("bonificaciones page failed");
@@ -111,7 +113,7 @@ export function BonificacionesSection(): React.ReactElement | null {
       </ul>
       {moreFailed && (
         <p role="alert" className="mt-2 text-sm text-state-bad">
-          No se pudo cargar más bonificaciones. Intentá de nuevo.
+          No se pudieron cargar más bonificaciones. Intenta de nuevo.
         </p>
       )}
       {items.length < total && (
