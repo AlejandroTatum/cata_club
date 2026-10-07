@@ -11,9 +11,11 @@ from sqlalchemy import case, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.dominio.invitacion_co_representante import PROPOSITO_INVITACION_CO_REPRESENTANTE
 from app.dominio.invitacion_entrenador import (
     PROPOSITO_INVITACION_ENTRENADOR, invitacion_pendiente,
 )
+from app.infraestructura.repositorios.co_representante_repositorio import CoRepresentanteRepositorio
 from app.dominio.modelos import (
     Persona, RecuperacionOutbox, Sesion, Usuario, VerificacionCorreoOutbox,
 )
@@ -992,10 +994,20 @@ class AuthServicio:
         if not usuario.activo or not usuario.persona.activo:
             raise CredencialesInvalidas("El enlace de recuperación es inválido o expiró")
 
-        es_invitacion = (
+        es_invitacion_entrenador = (
             payload.get("prp") == PROPOSITO_INVITACION_ENTRENADOR
             and invitacion_pendiente(usuario)
         )
+        # Issue #1666: el segundo guardián al que la invitación le creó la
+        # cuenta. Mismo token y mismo mecanismo; fijar la contraseña con ese
+        # enlace prueba el correo y ACEPTA la invitación.
+        invitaciones_co_representante = (
+            CoRepresentanteRepositorio(self.db).listar_pendientes_de_cuenta(usuario.persona_id)
+            if payload.get("prp") == PROPOSITO_INVITACION_CO_REPRESENTANTE
+            and not usuario.correo_verificado
+            else []
+        )
+        es_invitacion = es_invitacion_entrenador or bool(invitaciones_co_representante)
         if es_invitacion and not acepta_terminos:
             raise OperacionInvalida(MENSAJE_INVITACION_SIN_TERMINOS)
 
@@ -1006,6 +1018,9 @@ class AuthServicio:
         usuario.version_contrasenia += 1
         if es_invitacion:
             usuario.correo_verificado = True
+            if invitaciones_co_representante:
+                from app.servicios_negocio.co_representante_servicio import CoRepresentanteServicio
+                CoRepresentanteServicio(self.db).aceptar_invitaciones(usuario)
             documentos = ("TERMINOS", "PRIVACIDAD")
             ConsentimientoLegalServicio(self.db)._registrar_aceptacion_grupal_nucleo(
                 cuenta_id=usuario.id,
