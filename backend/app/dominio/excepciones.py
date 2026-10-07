@@ -88,6 +88,18 @@ class PermisosInsuficientes(ErrorDominio):
     pass
 
 
+class ReaceptacionLegalPendiente(PermisosInsuficientes):
+    """La cuenta aceptó una versión anterior de los términos y aún no acepta
+    la vigente (-> HTTP 403). Lleva `codigo` y `version`: el manejador global
+    los agrega al cuerpo para que el cliente abra el diálogo de aceptación."""
+
+    codigo = "reaceptacion_legal_pendiente"
+
+    def __init__(self, mensaje: str, version: str):
+        super().__init__(mensaje, seguro_mostrar=True)
+        self.version = version
+
+
 class ServicioNoDisponible(ErrorDominio):
     """Una dependencia necesaria para completar la operación no respondió,
     ej. el broker de tareas al encolar un envío de correo (-> HTTP 503)."""

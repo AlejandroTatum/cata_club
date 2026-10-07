@@ -1,6 +1,7 @@
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
+from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import (
@@ -73,6 +74,47 @@ class ConsentimientoLegalRepositorio:
             for clave, (revocada, representada_hoy) in ultima.items()
             if not revocada and (clave[1] is None or representada_hoy)
         }
+
+    def existe_clave_pendiente(self, cuenta_id: int, version_vigente: str) -> bool:
+        """Misma regla que `claves_activas_de_cuenta` menos `claves_de_cuenta`
+        (`version_vigente`), pero como un único `EXISTS` sobre el índice de
+        `cuenta_id`: es lo que consulta cada request autenticado, así que no
+        materializa los pares. Un par está pendiente si su última aceptación
+        no fue revocada, el representado (si lo hay) sigue a cargo de la
+        cuenta y no existe aceptación del mismo par en `version_vigente`."""
+        posterior = aliased(ConsentimientoLegal)
+        vigente = aliased(ConsentimientoLegal)
+        consulta = (
+            select(ConsentimientoLegal.id)
+            .join(Usuario, Usuario.id == ConsentimientoLegal.cuenta_id)
+            .outerjoin(Persona, Persona.id == ConsentimientoLegal.representado_persona_id)
+            .where(
+                ConsentimientoLegal.cuenta_id == cuenta_id,
+                ~exists().where(
+                    posterior.cuenta_id == cuenta_id,
+                    posterior.documento == ConsentimientoLegal.documento,
+                    posterior.representado_persona_id.is_not_distinct_from(
+                        ConsentimientoLegal.representado_persona_id
+                    ),
+                    posterior.id > ConsentimientoLegal.id,
+                ),
+                ~exists().where(
+                    vigente.cuenta_id == cuenta_id,
+                    vigente.documento == ConsentimientoLegal.documento,
+                    vigente.version_documento == version_vigente,
+                    vigente.representado_persona_id.is_not_distinct_from(
+                        ConsentimientoLegal.representado_persona_id
+                    ),
+                ),
+                ~exists().where(
+                    RevocacionConsentimientoLegal.consentimiento_id == ConsentimientoLegal.id
+                ),
+                (ConsentimientoLegal.representado_persona_id.is_(None))
+                | (Persona.representante_id == Usuario.persona_id),
+            )
+            .limit(1)
+        )
+        return self.db.execute(select(exists(consulta))).scalar_one()
 
     def guardar(self, registro: ConsentimientoLegal) -> ConsentimientoLegal:
         self.db.add(registro)

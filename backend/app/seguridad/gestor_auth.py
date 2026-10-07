@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Optional, TYPE_CHECKING
+from typing import Callable, Optional, TYPE_CHECKING
 
 import jwt
 from passlib.context import CryptContext
@@ -10,7 +10,11 @@ from sqlalchemy.orm import Session
 
 from app.soporte_transversal.configuracion import settings
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoRol
-from app.dominio.excepciones import CredencialesInvalidas, PermisosInsuficientes
+from app.dominio.excepciones import (
+    CredencialesInvalidas,
+    PermisosInsuficientes,
+    ReaceptacionLegalPendiente,
+)
 from app.dominio.modelos import HistorialEstadoMembresia, Membresia, Pago, Persona
 from app.infraestructura import presencia
 from app.infraestructura.db import obtener_sesion
@@ -34,6 +38,40 @@ _SUPERFICIES_LIMITADAS = (
     "/auth/consentimiento-legal",
     "/auth/consentimiento-legal/aceptar",
 )
+
+# Re-aceptación legal pendiente (T4): bloqueo inmediato de todo lo autenticado
+# salvo aceptar/leer el estado, el perfil mínimo (`/auth/me`, que el cliente
+# necesita para saber quién es y mostrar el diálogo), cerrar sesión y la
+# plomería de sesión/contraseña. Es una lista APARTE de `_SUPERFICIES_LIMITADAS`
+# a propósito: `/personas` y `/auth/correo` son carve-outs del gate de
+# ACTIVACIÓN, no hacen falta para aceptar y exponen datos familiares, así que
+# aquí quedan bloqueados. El refresh no pasa por `decodificar_token`.
+#
+# Método: `/auth/me` está exento SOLO para GET (leer el perfil mínimo); su PATCH
+# edita datos y es un módulo más. El resto de las rutas exentas se usa con su
+# único método real (POST aceptar/logout/invalidar/cambiar, GET estado/sesiones).
+_SUPERFICIES_EXENTAS_REACEPTACION = (
+    "/auth/logout",
+    "/auth/me/sesiones",
+    "/auth/sesiones/invalidar",
+    "/auth/contrasenia/cambiar",
+    "/auth/consentimiento-legal",
+    "/auth/consentimiento-legal/aceptar",
+)
+
+# Quién sabe si una cuenta tiene una re-aceptación pendiente es el servicio de
+# consentimiento legal (capa de negocio), y esta capa no puede importarlo
+# (contrato de import-linter: infraestructura -> seguridad). Se registra desde
+# `auth_router`; devuelve la versión vigente si hay re-aceptación pendiente o
+# `None`. Sin registrar, `decodificar_token` falla CERRADO: un olvido de
+# cableado nunca deja la app sin el bloqueo.
+ComprobadorReaceptacion = Callable[[Session, int], Optional[str]]
+_comprobador_reaceptacion: Optional[ComprobadorReaceptacion] = None
+
+
+def registrar_comprobador_reaceptacion(comprobador: ComprobadorReaceptacion) -> None:
+    global _comprobador_reaceptacion
+    _comprobador_reaceptacion = comprobador
 
 
 class GestorAutenticacion:
@@ -410,6 +448,21 @@ class GestorAutenticacion:
         # Carve-out de cambio de contraseña (FAM-17): autoservicio propio vía
         # `sub`, sin ids de path ni módulos del club; verifica la clave actual.
         ruta = request.url.path.rstrip("/")
+        # Re-aceptación legal (T4): una consulta indexada por request, antes
+        # del gate de activación. Aplica a todos los roles; quien nunca aceptó
+        # nada no tiene pares que renovar y pasa.
+        exenta_reaceptacion = ruta.endswith(_SUPERFICIES_EXENTAS_REACEPTACION) or (
+            ruta.endswith("/auth/me") and request.method == "GET"
+        )
+        if not exenta_reaceptacion:
+            if _comprobador_reaceptacion is None:
+                raise RuntimeError("comprobador de re-aceptación legal no registrado")
+            version_pendiente = _comprobador_reaceptacion(db, usuario.id)
+            if version_pendiente is not None:
+                raise ReaceptacionLegalPendiente(
+                    "Debes aceptar la versión vigente de los términos para continuar.",
+                    version_pendiente,
+                )
         es_superficie_limitada = (
             ruta.endswith(_SUPERFICIES_LIMITADAS)
             or ruta.startswith("/api/v1/personas")
