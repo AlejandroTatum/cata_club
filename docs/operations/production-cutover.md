@@ -662,6 +662,9 @@ en los resultados; no es un fallo. **Detente si:** Search Console reporta
     El primer release de producción **no tiene** SHA anterior en el ledger nuevo
     (el archivado del paso 2.5 es de staging): si el primer deploy falla, se corrige
     hacia adelante o se vuelve a empezar desde el paso 2.
+  - Si el rango a deshacer contiene un `ALTER TYPE ... ADD VALUE` (por ejemplo
+    `x1665diasinclase`), cuenta antes las filas con el valor nuevo: ver
+    "Backup y rollback" en `provisioning.md`.
   - Volver a staging por completo implica restaurar el snapshot del paso 1.4 y
     revertir el DNS; úsalo solo dentro de la ventana de retención del snapshot.
   - Datos: restore desde backup cifrado, con aprobación explícita del dueño.
