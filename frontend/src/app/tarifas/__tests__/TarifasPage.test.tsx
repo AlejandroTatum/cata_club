@@ -219,24 +219,36 @@ describe("TarifasPage — periodicidad", () => {
     });
   });
 
-  it("lets the admin change the periodicidad of an existing tariff", async () => {
-    mockActualizarTipoMembresia.mockResolvedValueOnce({ ...JUNIOR, periodicidad: "SEMANAL" });
+  it("lets the admin change the periodicidad of an unused tariff", async () => {
+    mockFetchTiposMembresia.mockResolvedValue([PRUEBA]);
+    mockActualizarTipoMembresia.mockResolvedValueOnce({ ...PRUEBA, periodicidad: "SEMANAL" });
     renderPage();
 
-    const row = await findTarifaRow("Junior");
+    const row = await findTarifaRow("Prueba");
     fireEvent.click(within(row).getByRole("button", { name: /^editar$/i }));
-    fireEvent.change(within(row).getByLabelText(/periodicidad de junior/i), {
+    fireEvent.change(within(row).getByLabelText(/periodicidad de prueba/i), {
       target: { value: "SEMANAL" },
     });
     fireEvent.click(within(row).getByRole("button", { name: /^guardar$/i }));
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/semanal/i)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/pagos futuros/i)).not.toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: /cambiar periodicidad/i }));
 
     await waitFor(() => {
-      expect(mockActualizarTipoMembresia).toHaveBeenCalledWith(1, { periodicidad: "SEMANAL" });
+      expect(mockActualizarTipoMembresia).toHaveBeenCalledWith(3, { periodicidad: "SEMANAL" });
     });
+  });
+
+  it("locks the periodicidad of a tariff already in use", async () => {
+    renderPage();
+
+    const row = await findTarifaRow("Junior");
+    fireEvent.click(within(row).getByRole("button", { name: /^editar$/i }));
+
+    expect(within(row).getByLabelText(/periodicidad de junior/i)).toBeDisabled();
+    expect(within(row).getByText(/crea una tarifa nueva/i)).toBeInTheDocument();
   });
 });
 

@@ -87,6 +87,32 @@ def test_admin_edita_la_periodicidad_de_una_tarifa(client):
     assert resp.json()["periodicidad"] == "SEMANAL"
 
 
+def test_periodicidad_de_una_tarifa_en_uso_no_se_puede_cambiar(client, db_session):
+    _persona, tipo, _membresia = _escenario(client, "MENSUAL")
+
+    resp = client.patch(f"{RUTA_TIPOS}/{tipo['id']}", json={"periodicidad": "SEMANAL"})
+
+    assert resp.status_code == 409, resp.text
+    assert "periodicidad" in resp.json()["detail"]
+    assert "Crea una tarifa nueva" in resp.json()["detail"]
+    db_session.expire_all()
+    assert db_session.get(TipoMembresia, tipo["id"]).periodicidad == "MENSUAL"
+
+
+def test_misma_periodicidad_en_una_tarifa_en_uso_es_aceptada(client):
+    _persona, tipo, _membresia = _escenario(client, "SEMANAL")
+    resp = client.patch(f"{RUTA_TIPOS}/{tipo['id']}", json={"periodicidad": "SEMANAL"})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["periodicidad"] == "SEMANAL"
+
+
+def test_otros_campos_de_una_tarifa_en_uso_siguen_editables(client):
+    _persona, tipo, _membresia = _escenario(client, "DIARIA")
+    resp = client.patch(f"{RUTA_TIPOS}/{tipo['id']}", json={"precio": "7.00"})
+    assert resp.status_code == 200, resp.text
+    assert Decimal(str(resp.json()["precio"])) == Decimal("7.00")
+
+
 def test_patch_con_periodicidad_nula_es_rechazado(client):
     tipo = _crear_tarifa(client, "MENSUAL")
     resp = client.patch(f"{RUTA_TIPOS}/{tipo['id']}", json={"periodicidad": None})

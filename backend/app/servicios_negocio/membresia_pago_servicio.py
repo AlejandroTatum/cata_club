@@ -360,6 +360,20 @@ class MembresiaServicio:
             raise EntidadNoEncontrada(f"Tipo de membresía con id {tipo_id} no encontrado")
 
         cambios = datos.model_dump(exclude_unset=True)
+        nueva_periodicidad = cambios.get("periodicidad")
+        if (
+            nueva_periodicidad is not None
+            and PeriodicidadTarifa(nueva_periodicidad) != PeriodicidadTarifa(tipo.periodicidad)
+            and self.repo_tipo.ids_en_uso([tipo.id])
+        ):
+            # La cobertura y la deuda de las membresías existentes se calculan
+            # con la periodicidad de su tarifa: cambiarla reinterpretaría el
+            # historial en silencio.
+            raise TarifaEnUso(
+                f"No se puede cambiar la periodicidad de la tarifa '{tipo.categoria}' "
+                "porque ya se usó en membresías. Crea una tarifa nueva con la "
+                "periodicidad que necesitas."
+            )
         if cambios.get("categoria"):
             cambios["categoria"] = normalizar_nombre(cambios["categoria"])
             self._exigir_tarifa_libre(cambios["categoria"], excluir_id=tipo.id)

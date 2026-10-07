@@ -360,7 +360,7 @@ export default function TarifasPage(): React.ReactElement {
     }
     if (pending.periodicidadNueva !== null) {
       parts.push(
-        `Vas a cambiar la periodicidad a ${PERIODICIDAD_LABEL[pending.periodicidadNueva].toLowerCase()}. Aplica solo a los pagos futuros; las semanas y días no generan deuda.`,
+        `Vas a cambiar la periodicidad a ${PERIODICIDAD_LABEL[pending.periodicidadNueva].toLowerCase()}. Las tarifas semanales y diarias no generan deuda.`,
       );
     }
     return parts.join(" ");
@@ -551,7 +551,7 @@ export default function TarifasPage(): React.ReactElement {
           onChange={(e) => setPeriodicidadInput(e.target.value as Periodicidad)}
           className={FIELD_CONTROL}
           aria-label={`Periodicidad de ${tarifa.categoria}`}
-          disabled={saving}
+          disabled={saving || tarifa.enUso}
         >
           {PERIODICIDADES.map((value) => (
             <option key={value} value={value}>
@@ -559,6 +559,11 @@ export default function TarifasPage(): React.ReactElement {
             </option>
           ))}
         </select>
+        {tarifa.enUso && (
+          <span className="text-xs font-normal text-muted-foreground">
+            No se puede cambiar: la tarifa ya tiene membresías. Crea una tarifa nueva.
+          </span>
+        )}
       </label>
     );
   }
