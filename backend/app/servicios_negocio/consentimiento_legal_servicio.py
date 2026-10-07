@@ -98,7 +98,9 @@ class ConsentimientoLegalServicio:
         )
 
     def reaceptacion_pendiente(self, cuenta_id: int) -> bool:
-        return bool(self._claves_pendientes(cuenta_id))
+        """Una sola consulta indexada (se evalúa en cada request autenticado);
+        equivale a `bool(self._claves_pendientes(cuenta_id))`."""
+        return self.repo.existe_clave_pendiente(cuenta_id, VERSION_LEGAL_VIGENTE)
 
     def aceptar_version_vigente(self, cuenta_id: int) -> None:
         """Re-registra, en la versión vigente, exactamente los documentos (y el

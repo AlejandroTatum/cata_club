@@ -10,11 +10,19 @@ from sqlalchemy.orm import Session
 
 from app.soporte_transversal.configuracion import settings
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoRol
-from app.dominio.excepciones import CredencialesInvalidas, PermisosInsuficientes
+from app.dominio.excepciones import (
+    CredencialesInvalidas,
+    PermisosInsuficientes,
+    ReaceptacionLegalPendiente,
+)
 from app.dominio.modelos import HistorialEstadoMembresia, Membresia, Pago, Persona
 from app.infraestructura import presencia
 from app.infraestructura.db import obtener_sesion
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
+from app.servicios_negocio.consentimiento_legal_servicio import (
+    ConsentimientoLegalServicio,
+    VERSION_LEGAL_VIGENTE,
+)
 
 if TYPE_CHECKING:
     from app.dominio.modelos import Usuario
@@ -30,6 +38,23 @@ _SUPERFICIES_LIMITADAS = (
     "/auth/me/sesiones",
     "/auth/sesiones/invalidar",
     "/auth/correo",
+    "/auth/contrasenia/cambiar",
+    "/auth/consentimiento-legal",
+    "/auth/consentimiento-legal/aceptar",
+)
+
+# Re-aceptación legal pendiente (T4): bloqueo inmediato de todo lo autenticado
+# salvo aceptar/leer el estado, el perfil mínimo (`/auth/me`, que el cliente
+# necesita para saber quién es y mostrar el diálogo), cerrar sesión y la
+# plomería de sesión/contraseña. Es una lista APARTE de `_SUPERFICIES_LIMITADAS`
+# a propósito: `/personas` y `/auth/correo` son carve-outs del gate de
+# ACTIVACIÓN, no hacen falta para aceptar y exponen datos familiares, así que
+# aquí quedan bloqueados. El refresh no pasa por `decodificar_token`.
+_SUPERFICIES_EXENTAS_REACEPTACION = (
+    "/auth/me",
+    "/auth/logout",
+    "/auth/me/sesiones",
+    "/auth/sesiones/invalidar",
     "/auth/contrasenia/cambiar",
     "/auth/consentimiento-legal",
     "/auth/consentimiento-legal/aceptar",
@@ -410,6 +435,16 @@ class GestorAutenticacion:
         # Carve-out de cambio de contraseña (FAM-17): autoservicio propio vía
         # `sub`, sin ids de path ni módulos del club; verifica la clave actual.
         ruta = request.url.path.rstrip("/")
+        # Re-aceptación legal (T4): una consulta indexada por request, antes
+        # del gate de activación. Aplica a todos los roles; quien nunca aceptó
+        # nada no tiene pares que renovar y pasa.
+        if not ruta.endswith(_SUPERFICIES_EXENTAS_REACEPTACION) and ConsentimientoLegalServicio(
+            db
+        ).reaceptacion_pendiente(usuario.id):
+            raise ReaceptacionLegalPendiente(
+                "Debes aceptar la versión vigente de los términos para continuar.",
+                VERSION_LEGAL_VIGENTE,
+            )
         es_superficie_limitada = (
             ruta.endswith(_SUPERFICIES_LIMITADAS)
             or ruta.startswith("/api/v1/personas")
