@@ -5,6 +5,7 @@
 import type { MembershipSummary } from "@/services/api";
 import { Badge, cn, type BadgeTone } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/format-utils";
+import { priceFactLabel } from "@/lib/tarifa-periodo";
 import { describeMembershipState, describePaymentSituation } from "../student-utils";
 
 /**
@@ -73,7 +74,7 @@ export function MembershipCard({
   // (`RenewPaymentForm` is replaced by an explanatory paragraph for this
   // case), not by this facts row.
   if (membership?.montoAplicado && !membership.esGratuidadFamiliar) {
-    facts.push({ label: "Valor mensual", value: formatCurrency(membership.montoAplicado) });
+    facts.push({ label: priceFactLabel(membership.periodicidad), value: formatCurrency(membership.montoAplicado) });
   }
   // Both already loaded: they sit beside the heading so the card's right side
   // carries the membership's facts instead of staying blank on a wide screen.

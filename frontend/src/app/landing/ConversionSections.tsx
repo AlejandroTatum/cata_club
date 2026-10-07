@@ -51,7 +51,10 @@ export function Prices(): React.ReactElement {
           {state.tarifas.map((tarifa): React.ReactElement => (
             <li key={tarifa.name} className="landing-price">
               <span className="landing-price-name">{tarifa.name}</span>
-              <strong className="landing-price-amount">{tarifa.price}</strong>
+              <strong className="landing-price-amount">
+                {tarifa.price}
+                {tarifa.period && <span className="landing-price-period"> {tarifa.period}</span>}
+              </strong>
             </li>
           ))}
         </ul>

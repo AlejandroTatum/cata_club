@@ -24,6 +24,9 @@ import {
   isRepresentativePersonaRow,
   normalizeText,
   accountMatchesFlag,
+  accountMatchesRole,
+  MEMBER_ROLE_FILTER_OPTIONS,
+  DEFAULT_MEMBER_ROLE_FILTER,
   countAccountsMatchingFlag,
   paginateAccounts,
   getTotalPages,
@@ -31,6 +34,7 @@ import {
   MEMBERSHIP_TYPE_LABELS,
   type AccountState,
   type MemberAccount,
+  type MemberFilterFlag,
 } from "../members-utils";
 import { formatCurrency, formatDate } from "../../../lib/format-utils";
 
@@ -46,7 +50,6 @@ describe("buildMemberStats", () => {
       totalStudents: 0,
       activeMemberships: 0,
       pendingPayments: 0,
-      sinDatosEmergencia: 0,
     });
   });
 
@@ -263,39 +266,6 @@ describe("buildMemberStats", () => {
     expect(stats.totalAccounts).toBe(15);
     expect(stats.totalStudents).toBe(8); // original 8 students with a membership on file
     expect(stats.activeMemberships).toBe(4);
-  });
-
-  // Issue #362: the "sin datos de emergencia" aggregate.
-  it("counts accounts flagged sinDatosEmergencia and ignores the rest", () => {
-    const flagged: MemberAccount = {
-      id: "gap-001",
-      role: "representante",
-      nombres: "Gap",
-      apellidos: "Case",
-      telefono: "+593 00 000 0001",
-      sinDatosEmergencia: true,
-      estudiantes: [],
-    };
-    const notFlagged: MemberAccount = {
-      id: "ok-001",
-      role: "representante",
-      nombres: "Ok",
-      apellidos: "Case",
-      telefono: "+593 00 000 0002",
-      sinDatosEmergencia: false,
-      estudiantes: [],
-    };
-    const unset: MemberAccount = {
-      id: "unset-001",
-      role: "representante",
-      nombres: "Unset",
-      apellidos: "Case",
-      telefono: "+593 00 000 0003",
-      estudiantes: [],
-    };
-
-    const stats = buildMemberStats([flagged, notFlagged, unset]);
-    expect(stats.sinDatosEmergencia).toBe(1);
   });
 });
 
@@ -1199,36 +1169,17 @@ describe("accountMatchesFlag", () => {
     expect(accountMatchesFlag(noPending, "pendiente")).toBe(false);
   });
 
-  /*
-   * Issue #730, mitad B. The "Sin datos de emergencia" stat tile has counted
-   * this population since issue #362, but a number is not a worklist: an
-   * admin could read "42" and had no way to reach the 42. The chip reuses the
-   * flag the adapter already computes, so the tile and the filter can never
-   * disagree about who is in the gap — which is exactly why this is a new
-   * `MemberFilterFlag` case and not a second predicate written next to it.
-   */
-  it('"sin-emergencia" matches exactly the accounts the stat tile counts', () => {
-    const enElHueco: MemberAccount = {
-      ...MOCK_MEMBER_ACCOUNTS[0],
-      sinDatosEmergencia: true,
-    };
-    expect(accountMatchesFlag(enElHueco, "sin-emergencia")).toBe(true);
-
-    const conFicha: MemberAccount = { ...enElHueco, sinDatosEmergencia: false };
-    expect(accountMatchesFlag(conFicha, "sin-emergencia")).toBe(false);
-  });
-
-  it('"sin-emergencia" treats an absent flag as not-in-the-gap', () => {
+  it("falls back to showing every account for a flag that no longer exists", () => {
     /*
-     * `sinDatosEmergencia` is optional: the adapter omits it (never
-     * fabricates `true`) when the bulk ficha lookup didn't resolve — see its
-     * doc comment in members-utils.ts. A filter that read `undefined` as "in
-     * the gap" would put every row of a degraded fetch on the worklist and
-     * send an admin chasing people who are fine.
+     * "sin-emergencia" was a chip until the ficha médica became mandatory
+     * (admins and trainers never carry one, so it flagged false alarms). A
+     * stale value from a bookmark or leftover state must read as the default
+     * filter, not as an empty list.
      */
-    const sinBandera: MemberAccount = { ...MOCK_MEMBER_ACCOUNTS[0] };
-    delete sinBandera.sinDatosEmergencia;
-    expect(accountMatchesFlag(sinBandera, "sin-emergencia")).toBe(false);
+    const stale = "sin-emergencia" as unknown as MemberFilterFlag;
+    const enElHueco: MemberAccount = { ...MOCK_MEMBER_ACCOUNTS[0], sinDatosEmergencia: true };
+    expect(accountMatchesFlag(enElHueco, stale)).toBe(true);
+    expect(countAccountsMatchingFlag(MOCK_MEMBER_ACCOUNTS, stale)).toBe(MOCK_MEMBER_ACCOUNTS.length);
   });
 });
 
@@ -1454,5 +1405,65 @@ describe("describePeriodoPago — the period a payment covers, in words (#1668)"
 
   it("is empty when a date is missing", () => {
     expect(describePeriodoPago("", "2026-09-21")).toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// accountMatchesRole — the members list's role filter
+// ---------------------------------------------------------------------------
+
+describe("accountMatchesRole", () => {
+  function roleAccount(overrides: Partial<MemberAccount>): MemberAccount {
+    return {
+      id: "acct",
+      role: "representante",
+      nombres: "Marta",
+      apellidos: "Reyes",
+      telefono: "+593 90 000 0001",
+      estudiantes: [],
+      ...overrides,
+    };
+  }
+  const activeStudent: MemberAccount["estudiantes"][number] = {
+    id: "acct", nombres: "Marta", apellidos: "Reyes", activo: true,
+    membresia: { id: 1, tipo: "Adultos", estado: "activa", fechaInicio: "", fechaFin: "", monto: 35 },
+    ultimoPago: null,
+  };
+
+  it("defaults to Jugador and offers Jugador, Admin, Entrenador, Representante and Todos", () => {
+    expect(DEFAULT_MEMBER_ROLE_FILTER).toBe("jugador");
+    expect(MEMBER_ROLE_FILTER_OPTIONS.map((o) => o.label)).toEqual([
+      "Jugador", "Admin", "Entrenador", "Representante", "Todos",
+    ]);
+  });
+
+  it("matches «todos» for any account, even one with no roles", () => {
+    expect(accountMatchesRole(roleAccount({}), "todos")).toBe(true);
+  });
+
+  it("matches each backend role by its own filter only", () => {
+    const admin = roleAccount({ backendRoles: ["ADMINISTRADOR"] });
+    const trainer = roleAccount({ backendRoles: ["ENTRENADOR"] });
+    const rep = roleAccount({ backendRoles: ["REPRESENTANTE"] });
+    expect(accountMatchesRole(admin, "admin")).toBe(true);
+    expect(accountMatchesRole(admin, "entrenador")).toBe(false);
+    expect(accountMatchesRole(trainer, "entrenador")).toBe(true);
+    expect(accountMatchesRole(trainer, "representante")).toBe(false);
+    expect(accountMatchesRole(rep, "representante")).toBe(true);
+    expect(accountMatchesRole(rep, "jugador")).toBe(false);
+  });
+
+  it("uses the club's «Jugador» rule: ALUMNO role or an own ACTIVA/VENCIDA membership", () => {
+    expect(accountMatchesRole(roleAccount({ backendRoles: ["ALUMNO"] }), "jugador")).toBe(true);
+    const repWithMembership = roleAccount({ backendRoles: ["REPRESENTANTE"], estudiantes: [activeStudent] });
+    expect(accountMatchesRole(repWithMembership, "jugador")).toBe(true);
+    expect(accountMatchesRole(repWithMembership, "representante")).toBe(true);
+  });
+
+  it("lists a person with several roles under each matching role", () => {
+    const both = roleAccount({ backendRoles: ["ADMINISTRADOR", "ENTRENADOR"] });
+    expect(accountMatchesRole(both, "admin")).toBe(true);
+    expect(accountMatchesRole(both, "entrenador")).toBe(true);
+    expect(accountMatchesRole(both, "representante")).toBe(false);
   });
 });

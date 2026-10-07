@@ -563,6 +563,7 @@ function ActivePortalView({
         hasMembership: selectedProfile.membership != null,
         planName: selectedProfile.membership?.categoria ?? null,
         monthlyPrice: selectedProfile.membership?.montoAplicado ?? null,
+        periodicidad: selectedProfile.membership?.periodicidad,
         coverageEnd,
         pendingCount: pendingPagos,
         esGratuidadFamiliar: selectedProfile.membership?.esGratuidadFamiliar ?? false,
@@ -916,6 +917,7 @@ function ActivePortalView({
               situation={paymentSituation}
               coverageEnd={coverageEnd}
               monthlyPrice={selectedProfile.membership?.montoAplicado ?? null}
+              periodicidad={selectedProfile.membership?.periodicidad}
               notice={rejectedNotice}
               viewPagosHref={withSelectedStudent("/student/payments", selectedPersonaId)}
               action={

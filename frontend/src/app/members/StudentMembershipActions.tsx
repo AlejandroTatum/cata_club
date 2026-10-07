@@ -13,6 +13,7 @@ import PagoPendienteRevision from "./PagoPendienteRevision";
 import { Badge, Button } from "@/components/ui";
 import type { PagoPersona } from "@/services/api";
 import { formatCurrency } from "@/lib/format-utils";
+import { tarifaFactLabel } from "@/lib/tarifa-periodo";
 import {
   describePaymentsState,
   formatMembershipCoverage,
@@ -39,7 +40,7 @@ function PagosHeader({
   const facts = membresia
     ? [
         ["Plan", membresia.tipo],
-        ["Tarifa mensual", membresia.esGratuidadFamiliar ? "Gratuidad familiar" : formatCurrency(membresia.monto)],
+        [tarifaFactLabel(membresia.periodicidad), membresia.esGratuidadFamiliar ? "Gratuidad familiar" : formatCurrency(membresia.monto)],
         ...(coverage ? [["Cobertura", coverage.replace(/^Hasta/, "hasta")]] : []),
       ]
     : [];
@@ -434,13 +435,21 @@ export default function StudentMembershipActions({
 
       {/* Everything else, quieter. Beneficio del club attaches to the PERSONA,
           not the membership (issue #398). `tarifaMensual` (issue #665) is the
-          pre-submit UX hint that mirrors the backend's own assign-time gate;
-          `undefined` when there is no membership yet. */}
+          pre-submit UX hint that mirrors the backend's own assign-time gate,
+          which only reads an ACTIVA or SUSPENDIDA membership; `undefined`
+          otherwise (none yet, or only a VENCIDA/INACTIVA fallback). */}
       <section aria-label="Otras acciones" className="grid gap-3">
         <h3 className="text-sm font-bold text-ink-2">Otras acciones</h3>
         <div className="grid items-start gap-3 md:grid-cols-3">
           <div className="rounded-ctl border border-line bg-paper p-3">
-            <BeneficioSection personaId={personaId} tarifaMensual={membresia?.monto} />
+            <BeneficioSection
+              personaId={personaId}
+              tarifaMensual={
+                membresia?.estado === "activa" || membresia?.estado === "suspendida"
+                  ? membresia.monto
+                  : undefined
+              }
+            />
           </div>
           {!preguntarTipoSocio && membresia && membresia.estado === "activa" && (
             <div className="rounded-ctl border border-line bg-paper p-3">

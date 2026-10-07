@@ -55,10 +55,11 @@ import { BackLink, InfoPanel, Select, Stepper, buttonClasses, cn, PAGE_RAIL } fr
 import { BLOOD_TYPE_LABELS, SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
 import { institutionOptionLabel, planOptionLabel } from "@/app/student/enroll/enroll-utils";
 import { useLatestPick } from "@/lib/useLatestPick";
-import { addMonthsIso, estimateTotal, prepareVoucher } from "@/app/student/payments/payments-utils";
+import { addPeriodsIso, estimateTotal, prepareVoucher } from "@/app/student/payments/payments-utils";
 import HowToPay from "@/components/payments/HowToPay";
 import { ProofPreview } from "@/app/student/payments/ProofPreview";
-import { formatCurrency, formatDateRange } from "@/lib/format-utils";
+import { formatCurrency, formatDate, formatDateRange } from "@/lib/format-utils";
+import { normalizePeriodicidad, periodSuffix } from "@/lib/tarifa-periodo";
 import { calendarIsoDate, clubToday } from "@/lib/club-date";
 import type { TipoSangre } from "@/types/domain";
 import {
@@ -120,7 +121,12 @@ function AddDependentContent(): React.ReactElement {
   const [pendingPaymentId, setPendingPaymentId] = useState<number | null>(null);
   const [plans, setPlans] = useState<TipoMembresiaCatalogo[]>([]);
   const [planId, setPlanId] = useState("");
-  const [months, setMonths] = useState(1);
+  const [monthsChoice, setMonths] = useState(1);
+  const selectedPlan = plans.find((p) => String(p.id) === planId);
+  const periodicidad = normalizePeriodicidad(selectedPlan?.periodicidad);
+  const oneFixedPeriod = periodicidad !== "MENSUAL";
+  // SEMANAL / DIARIA buy exactly one period per payment; only MENSUAL stacks months.
+  const months = oneFixedPeriod ? 1 : monthsChoice;
   const [method, setMethod] = useState<"EFECTIVO" | "TRANSFERENCIA">("TRANSFERENCIA");
   const [voucher, setVoucher] = useState<File | null>(null);
   const latestPick = useLatestPick();
@@ -750,20 +756,20 @@ function AddDependentContent(): React.ReactElement {
     // FAM-09: same consequence-before-commit block as the Pagos form — the
     // period and the estimated total, from the same helpers. Client preview
     // only; the backend resolves the real total.
-    const plan = plans.find((p) => String(p.id) === planId);
+    const plan = selectedPlan;
     const monthlyPrice = plan ? Number(plan.precio) : 0;
     const fechaInicio = calendarIsoDate(clubToday());
-    const fechaFin = addMonthsIso(fechaInicio, months);
+    const fechaFin = addPeriodsIso(fechaInicio, months, periodicidad);
     return (
       <div className="space-y-section">
         <p className="text-sm text-ink-2">{payForId !== null && createdDependentId === null ? "Elige el plan y registra el primer pago. Con él se crea la membresía; el club lo revisa y la activa." : "El jugador ya fue agregado. Selecciona el plan y registra el primer pago. Administración lo validará antes de activar la membresía."}</p>
         {method === "TRANSFERENCIA" && <HowToPay />}
         <label className="block text-sm text-ink-2" htmlFor="dependent-plan">Plan de membresía</label>
-        <Select id="dependent-plan" className="input-field" value={planId} onChange={(e) => setPlanId(e.target.value)} disabled={submitting}>
+        <Select id="dependent-plan" className="input-field" value={planId} onChange={(e) => { setPlanId(e.target.value); setMonths(1); }} disabled={submitting}>
           <option value="">Selecciona un plan</option>
-          {plans.map((p) => <option key={p.id} value={p.id}>{planOptionLabel(p.categoria, p.precio)}</option>)}
+          {plans.map((p) => <option key={p.id} value={p.id}>{planOptionLabel(p.categoria, p.precio, p.periodicidad)}</option>)}
         </Select>
-        <fieldset className="flex flex-col gap-1.5">
+        {!oneFixedPeriod && <fieldset className="flex flex-col gap-1.5">
           <legend className="text-sm text-ink-2">Meses a pagar</legend>
           <div className="inline-flex h-ctl w-fit items-center gap-1 rounded-ctl border border-line-2 bg-paper px-1.5">
             <button
@@ -786,7 +792,7 @@ function AddDependentContent(): React.ReactElement {
               <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             </button>
           </div>
-        </fieldset>
+        </fieldset>}
         <label className="block text-sm text-ink-2" htmlFor="dependent-method">Medio de pago</label>
         <Select id="dependent-method" className="input-field" value={method} onChange={(e) => { setMethod(e.target.value as typeof method); setPendingPaymentId(null); }} disabled={submitting || pendingPaymentId !== null}>
           <option value="TRANSFERENCIA">Transferencia</option>
@@ -795,8 +801,13 @@ function AddDependentContent(): React.ReactElement {
         <div className="rounded-ctl bg-sunken px-3.5 py-3">
           <p className="text-2xs font-bold uppercase text-ink-3-strong">Período que cubre</p>
           <p className="mt-1 text-sm font-bold tabular-nums text-ink">
-            {plan && fechaFin ? formatDateRange(fechaInicio, fechaFin) : "—"}
+            {plan && fechaFin ? (periodicidad === "DIARIA" ? formatDate(fechaInicio) : formatDateRange(fechaInicio, fechaFin)) : "—"}
           </p>
+          {plan && oneFixedPeriod && (
+            <p className="mt-0.5 text-xs text-ink-3-strong">
+              {periodicidad === "SEMANAL" ? "1 semana" : "1 día"} a {formatCurrency(monthlyPrice)} {periodSuffix(periodicidad)}. {periodicidad === "SEMANAL" ? "Cubre 7 días desde la fecha de pago." : "Cubre solo el día pagado."}
+            </p>
+          )}
           <p className="mt-1.5 text-sm font-bold tabular-nums text-ink">
             Total estimado: {formatCurrency(estimateTotal(monthlyPrice, months, null))}
           </p>

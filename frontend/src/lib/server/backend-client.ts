@@ -156,6 +156,7 @@ export async function passthroughBackendError(response: Response, fallback: stri
   let mensajeSeguro = false;
   let validationLoc: string[] | undefined;
   let membresiaId: number | undefined;
+  let codigo: string | undefined;
   try {
     const body: unknown = await response.json();
     if (typeof body === "object" && body !== null) {
@@ -164,6 +165,8 @@ export async function passthroughBackendError(response: Response, fallback: stri
       mensajeSeguro = b.mensaje_seguro === true;
       // QA3 ADM-08: the id of the existing membership, so the UI can link to it.
       if (typeof b.membresia_id === "number") membresiaId = b.membresia_id;
+      // Machine-readable reason (e.g. `reaceptacion_legal_pendiente`) so the browser can react to it.
+      if (typeof b.codigo === "string") codigo = b.codigo;
       if (response.status === 422 && Array.isArray(b.detail)) {
         const first = b.detail[0];
         if (typeof first === "object" && first !== null && Array.isArray((first as Record<string, unknown>).loc)) {
@@ -181,6 +184,7 @@ export async function passthroughBackendError(response: Response, fallback: stri
     mensaje_seguro: mensajeSeguro,
     ...(validationLoc ? { validation_loc: validationLoc } : {}),
     ...(membresiaId !== undefined ? { membresia_id: membresiaId } : {}),
+    ...(codigo !== undefined ? { codigo } : {}),
   }, { status: response.status, headers: response.headers.get("X-Request-ID") ? { "X-Request-ID": response.headers.get("X-Request-ID")! } : {} });
 }
 

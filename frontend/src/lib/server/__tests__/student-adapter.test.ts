@@ -130,8 +130,8 @@ describe("buildMembershipPlans", () => {
       { id: 2, categoria: "Personalizado", precio: "120.50", modalidad: "PERSONALIZADA" },
     ];
     expect(buildMembershipPlans(tipos)).toEqual([
-      { id: "1", nombre: "Mensual", precio: 85, modalidad: "MENSUAL" },
-      { id: "2", nombre: "Personalizado", precio: 120.5, modalidad: "PERSONALIZADA" },
+      { id: "1", nombre: "Mensual", precio: 85, modalidad: "MENSUAL", periodicidad: "MENSUAL" },
+      { id: "2", nombre: "Personalizado", precio: 120.5, modalidad: "PERSONALIZADA", periodicidad: "MENSUAL" },
     ]);
   });
 
@@ -167,6 +167,15 @@ describe("buildMembershipView", () => {
   it("passes esGratuidadFamiliar through when the backend membership is flagged", () => {
     const view = buildMembershipView({ ...mem, esGratuidadFamiliar: true }, tiposById);
     expect(view.esGratuidadFamiliar).toBe(true);
+  });
+
+  it("reads the periodicidad from the membership, falling back to the tariff and then to MENSUAL", () => {
+    expect(buildMembershipView({ ...mem, periodicidad: "SEMANAL" }, tiposById).periodicidad).toBe("SEMANAL");
+    const diaria = new Map<number, BackendTipoMembresiaCatalogo>([
+      [1, { id: 1, categoria: "Día", precio: "3.00", modalidad: "MENSUAL", periodicidad: "DIARIA" }],
+    ]);
+    expect(buildMembershipView(mem, diaria).periodicidad).toBe("DIARIA");
+    expect(buildMembershipView(mem, tiposById).periodicidad).toBe("MENSUAL");
   });
 
   it("defaults esGratuidadFamiliar to false when the backend omits it", () => {

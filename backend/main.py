@@ -205,10 +205,14 @@ for _excepcion, _codigo in _MAPA_EXCEPCIONES.items():
                     getattr(request.state, "request_id", "-"),
                     detalle,
                 )
-            membresia_id = getattr(exc, "membresia_id", None)
+            extra = {
+                campo: valor
+                for campo in ("membresia_id", "codigo", "version")
+                if (valor := getattr(exc, campo, None)) is not None
+            }
             return _respuesta_error(
                 codigo, mensaje_con_tamano_en_mb(exc.mensaje), mensaje_seguro=getattr(exc, "seguro_mostrar", False),
-                extra={"membresia_id": membresia_id} if membresia_id is not None else None,
+                extra=extra or None,
             )
         return _handler
     app.add_exception_handler(_excepcion, _crear_handler(_codigo))

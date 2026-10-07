@@ -8,6 +8,7 @@
 import type { PagoPersona } from "@/services/api";
 import type { BadgeTone } from "@/components/ui/Badge";
 import { formatCurrency } from "@/lib/format-utils";
+import type { Periodicidad } from "@/lib/tarifa-periodo";
 import { shrinkImage } from "@/lib/shrink-image";
 
 // ---------------------------------------------------------------------------
@@ -186,6 +187,22 @@ export function addMonthsIso(isoDate: string, months: number): string {
   const mm = String(target.getMonth() + 1).padStart(2, "0");
   const dd = String(target.getDate()).padStart(2, "0");
   return `${target.getFullYear()}-${mm}-${dd}`;
+}
+
+/**
+ * End (exclusive) of the coverage that `periods` periods of a tariff buy from
+ * `isoDate`: calendar months for MENSUAL (`addMonthsIso`), 7 days per period
+ * for SEMANAL, 1 day for DIARIA. Mirrors the backend `_fin_de_cobertura`; the
+ * backend stays the authority, this only previews it.
+ */
+export function addPeriodsIso(isoDate: string, periods: number, periodicidad: Periodicidad): string {
+  if (periodicidad === "MENSUAL") return addMonthsIso(isoDate, periods);
+  const start = new Date(`${isoDate}T12:00:00`);
+  if (Number.isNaN(start.getTime())) return "";
+  start.setDate(start.getDate() + periods * (periodicidad === "SEMANAL" ? 7 : 1));
+  const mm = String(start.getMonth() + 1).padStart(2, "0");
+  const dd = String(start.getDate()).padStart(2, "0");
+  return `${start.getFullYear()}-${mm}-${dd}`;
 }
 
 // ---------------------------------------------------------------------------

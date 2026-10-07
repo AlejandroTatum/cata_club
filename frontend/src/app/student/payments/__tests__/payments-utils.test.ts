@@ -9,6 +9,7 @@ import {
   countPagosByStatus,
   wholeMonthsFor,
   addMonthsIso,
+  addPeriodsIso,
   describePagoDescuento,
   estimateTotal,
   formatFileSize,
@@ -370,6 +371,21 @@ describe("MENSAJE_MESES_MAXIMO_EXCEDIDO", () => {
     expect(MENSAJE_MESES_MAXIMO_EXCEDIDO).toBe(
       "El pago no puede cubrir más de 12 meses. Reduce el monto ingresado.",
     );
+  });
+});
+
+describe("addPeriodsIso", () => {
+  it("adds calendar months for MENSUAL, exactly like addMonthsIso", () => {
+    expect(addPeriodsIso("2026-01-31", 1, "MENSUAL")).toBe(addMonthsIso("2026-01-31", 1));
+  });
+
+  it("adds seven days per period for SEMANAL, across month and year ends", () => {
+    expect(addPeriodsIso("2026-07-01", 1, "SEMANAL")).toBe("2026-07-08");
+    expect(addPeriodsIso("2026-12-28", 1, "SEMANAL")).toBe("2027-01-04");
+  });
+
+  it("adds one day for DIARIA", () => {
+    expect(addPeriodsIso("2026-07-31", 1, "DIARIA")).toBe("2026-08-01");
   });
 });
 

@@ -21,6 +21,7 @@
  */
 
 import type { ClubPaymentInfo } from "@/lib/club-payment-info";
+import type { Periodicidad } from "@/lib/tarifa-periodo";
 import type {
   UserRole,
   EstadoAsistencia,
@@ -1388,6 +1389,8 @@ export async function fetchInstituciones(): Promise<Institucion[]> {
 export interface TarifaPublica {
   categoria: string;
   precio: string;
+  /** A price without its period misleads: absent on older backends = MENSUAL. */
+  periodicidad?: Periodicidad;
 }
 
 function isTarifaPublica(value: unknown): value is TarifaPublica {
@@ -1476,6 +1479,8 @@ export interface MembershipSummary {
   montoAplicado: string | null;
   categoria: string | null;
   modalidad: string | null;
+  /** The tariff's period (MENSUAL/SEMANAL/DIARIA). Absent on older payloads = MENSUAL. */
+  periodicidad?: Periodicidad;
   /** Activation date, i.e. "socio desde". Null when the backend omits it. */
   fechaActivacion: string | null;
   /** End of the paid period — drives the "Vigente hasta"/"Venció" state. */
@@ -1967,6 +1972,8 @@ export interface MembresiaPorPersona {
   fechaActivacion: string;
   personaId: number;
   tipoMembresiaId: number;
+  /** The tariff's period; absent on older payloads = MENSUAL. */
+  periodicidad?: Periodicidad;
   tipo?: {
     id: number;
     categoria: string;
@@ -2509,6 +2516,8 @@ export interface TipoMembresiaCatalogo {
   categoria: string;
   precio: string;
   modalidad: "PERSONALIZADA" | "MENSUAL";
+  /** How often it is paid: MENSUAL (default), SEMANAL (7 days) or DIARIA (the paid day only). Absent on older payloads = MENSUAL. */
+  periodicidad?: Periodicidad;
   /** `false` = hidden: off the web and off enrollment, still valid for who already has it. */
   activo: boolean;
   /** `true` once any membresía used it — the backend refuses to delete it then. */
@@ -2535,6 +2544,7 @@ export interface ActualizarTipoMembresiaInput {
   categoria?: string;
   precio?: string;
   modalidad?: "PERSONALIZADA" | "MENSUAL";
+  periodicidad?: Periodicidad;
   /** `false` hides the tariff, `true` shows it again. */
   activo?: boolean;
 }
@@ -2574,6 +2584,8 @@ export interface CrearTipoMembresiaInput {
   categoria: string;
   precio: string;
   modalidad: "PERSONALIZADA" | "MENSUAL";
+  /** Omitted = MENSUAL (the backend default). */
+  periodicidad?: Periodicidad;
 }
 
 /**

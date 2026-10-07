@@ -138,6 +138,7 @@ describe("buildMemberAccounts", () => {
       fechaFin: "2026-07-31",
       cubiertoHasta: null,
       monto: 25,
+      periodicidad: "MENSUAL",
       esGratuidadFamiliar: false,
     });
     expect(student?.ultimoPago?.estado).toBe("aprobado");
@@ -197,6 +198,7 @@ describe("buildMemberAccounts", () => {
       fechaFin: "",
       cubiertoHasta: null,
       monto: 25,
+      periodicidad: "MENSUAL",
       // `membresia` fixture above carries no `esGratuidadFamiliar` — this
       // proves the adapter defaults an absent backend flag to `false`
       // instead of leaving it `undefined` (issue #400, slice 4c-a).

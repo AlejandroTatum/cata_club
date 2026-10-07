@@ -8,10 +8,17 @@
  * component only asks, shows the SAME terms the public page and the
  * enrolment review render (`LegalDocumentProse`), and posts the decision.
  *
+ * The backend enforces the re-acceptance: while it is pending every module
+ * request answers 403 with `codigo: reaceptacion_legal_pendiente`. This gate
+ * therefore fails closed for that case — the status check on mount AND any
+ * blocked request (see `reacceptance-signal`) open the dialog. After the
+ * acceptance the page reloads so everything that was blocked is refetched.
+ *
  * Mounted once in `AuthProviderWrapper`, above every route. Unlike
  * `LegalReviewDialog` it has no way to be dismissed: the only exits are
- * accepting and signing out. A failed status check does not lock anyone out
- * (the backend keeps the pending state, so the next session check asks again).
+ * accepting and signing out. A failed status check (network, 5xx) retries
+ * with a capped backoff, so it neither locks the account nor leaves it
+ * unchecked for the whole session.
  */
 
 "use client";
@@ -21,9 +28,14 @@ import Button from "@/components/ui/Button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModalFocusTrap } from "@/lib/focus-trap";
 import { LEGAL_REVIEW_DOCUMENTS, LegalDocumentProse } from "@/components/legal/LegalReviewDialog";
+import { watchForReacceptanceBlock } from "@/components/legal/reacceptance-signal";
+import { reloadPage } from "@/components/legal/reload-page";
 
 const STATUS_URL = "/api/auth/consentimiento-legal";
 const ACCEPT_URL = "/api/auth/consentimiento-legal/aceptar";
+
+const RETRY_BASE_MS = 2_000;
+const RETRY_MAX_MS = 30_000;
 
 interface LegalStatus {
   pendiente: boolean;
@@ -54,11 +66,27 @@ export default function LegalReacceptGate(): ReactElement | null {
       return undefined;
     }
     let cancelled = false;
-    void readPending(STATUS_URL).then((value) => {
-      if (!cancelled && value !== null) setPending(value);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const check = (attempt: number): void => {
+      void readPending(STATUS_URL).then((value) => {
+        if (cancelled) return;
+        if (value !== null) {
+          setPending(value);
+          return;
+        }
+        timer = setTimeout(() => check(attempt + 1), Math.min(RETRY_BASE_MS * 2 ** attempt, RETRY_MAX_MS));
+      });
+    };
+    check(0);
+    const stopWatching = watchForReacceptanceBlock({
+      onBlocked: () => setPending(true),
+      recheck: () => readPending(STATUS_URL),
+      statusUrl: STATUS_URL,
     });
     return (): void => {
       cancelled = true;
+      if (timer !== undefined) clearTimeout(timer);
+      stopWatching();
     };
   }, [isAuthenticated, userId]);
 
@@ -74,6 +102,7 @@ export default function LegalReacceptGate(): ReactElement | null {
       return;
     }
     setPending(false);
+    reloadPage();
   }, []);
 
   if (!pending) return null;

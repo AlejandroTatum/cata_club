@@ -15,7 +15,7 @@ import { cleanup, render, screen, fireEvent, waitFor, within } from "@testing-li
 import { getRowAction, getRowActionsTrigger } from "./row-actions";
 import MembersPage from "@/app/members/page";
 import PagosPage from "@/app/members/[id]/pagos/page";
-import type { MemberAccount, MemberStudentSummary } from "@/app/members/members-utils";
+import { MEMBER_ROLE_FILTER_OPTIONS, type MemberAccount, type MemberStudentSummary } from "@/app/members/members-utils";
 import type { DescuentoCatalogo } from "@/services/api";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { expectSharedNativeDialogChain } from "./native-dialog-shell.assertions";
@@ -250,6 +250,8 @@ const ACCOUNT: MemberAccount = {
   // and its own dedicated tests). A pure representative-only row, plus a
   // represented student's row (issue #1211), are covered separately below.
   role: "estudiante",
+  // The list opens filtered on «Jugador»; this ordinary row is a player.
+  backendRoles: ["ALUMNO"],
   nombres: "María",
   apellidos: "González",
   telefono: "0999999999",
@@ -276,6 +278,13 @@ async function findAccountRow(): Promise<HTMLElement> {
   const matches = await screen.findAllByText("María González");
   const row = matches.map((el) => el.closest("tr")).find(Boolean);
   return row as HTMLElement;
+}
+
+/** Picks an option of the page's «Rol» filter (it opens on «Jugador»). */
+function chooseRole(label: string): void {
+  fireEvent.change(screen.getByLabelText("Rol"), {
+    target: { value: MEMBER_ROLE_FILTER_OPTIONS.find((o) => o.label === label)?.value },
+  });
 }
 
 /** The account's card rendering (below `sm`). */
@@ -480,6 +489,8 @@ describe("MembersPage — Editar member modal", () => {
       .map((header) => header.textContent?.trim());
 
     expect(headers).not.toContain("Contacto");
+    // S2: the account (login) state column is gone from the list.
+    expect(headers).not.toContain("Cuenta");
     // Issue #388 made the person the row's unit, not the paying root — a
     // represented person's row is THEIR identity, not their representative's,
     // so "Responsable de pago" is no longer an accurate header for every row.
@@ -2694,9 +2705,34 @@ describe("MembersPage — counts live in the filter chips", () => {
     expect(document.querySelector(".min-h-stat")).toBeNull();
     expect(screen.queryByTestId("stat-track")).not.toBeInTheDocument();
     const chips = screen.getByRole("group", { name: "Filtrar miembros" });
-    for (const label of ["Todos", "Pago por validar", "Sin datos de emergencia", "Membresía vencida"]) {
+    for (const label of ["Todos", "Pago por validar", "Membresía vencida"]) {
       expect(within(chips).getByRole("button", { name: new RegExp(label) })).toBeInTheDocument();
     }
+  });
+
+  // Owner's false alarm: admins and trainers never carry a ficha, so they
+  // lit up «Sin datos de emergencia». The module no longer raises that signal.
+  it("raises no «sin datos de emergencia» chip, tile or legend for staff without a ficha", async () => {
+    const STAFF_SIN_FICHA: MemberAccount = {
+      ...ACCOUNT,
+      id: "30",
+      role: "representante",
+      backendRoles: ["ADMINISTRADOR", "ALUMNO"],
+      sinDatosEmergencia: true,
+      estudiantes: [],
+      dependientes: [],
+    };
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [STAFF_SIN_FICHA, ACCOUNT] });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    await findAccountRow();
+
+    expect(screen.queryByText(/sin datos de emergencia/i)).not.toBeInTheDocument();
+    const chips = screen.getByRole("group", { name: "Filtrar miembros" });
+    expect(within(chips).queryByRole("button", { name: /emergencia/i })).not.toBeInTheDocument();
   });
 });
 
@@ -3116,6 +3152,7 @@ describe("MembersPage — Representante legal (issue #460)", () => {
         <MembersPage />
       </ToastProvider>,
     );
+    chooseRole("Todos");
     const matches = await screen.findAllByText(`${account.nombres} ${account.apellidos}`);
     const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
     fireEvent.click(getEditButton(row));
@@ -3233,6 +3270,7 @@ describe("MembersPage — Reasignar representante (issue #1133)", () => {
         <MembersPage />
       </ToastProvider>,
     );
+    chooseRole("Todos");
     const matches = await screen.findAllByText("Menor ConRepresentante");
     const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
     fireEvent.click(getEditButton(row));
@@ -3395,6 +3433,7 @@ describe("MembersPage — Independizar (issue #1137)", () => {
         <MembersPage />
       </ToastProvider>,
     );
+    chooseRole("Todos");
     const matches = await screen.findAllByText(`${account.nombres} ${account.apellidos}`);
     const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
     fireEvent.click(getEditButton(row));
@@ -4067,15 +4106,16 @@ describe("MembersPage — the dialog follows the visual viewport (issue #767)", 
   // --- Cuenta badge (issue #869) --------------------------------------------
   // `accountState` is `Usuario.activo` (the login flag) — independent of
   // `Persona.activo` (the "Estado" badge inside each student panel) and of
-  // `Membresía`. Three states, tested on the desktop row, the mobile card and
-  // the edit dialog's own header badge (the "summary" the issue says used to
-  // read hardcoded-active).
+  // `Membresía`. The owner asked for the «Cuenta» column to leave the list
+  // (S2), so it is absent from the desktop row and the mobile card; the edit
+  // dialog's own header badge (the "summary" the issue says used to read
+  // hardcoded-active) stays.
   describe("Cuenta badge", () => {
     it.each<["active" | "inactive" | "none", string]>([
       ["active", "Activa"],
       ["inactive", "Inactiva"],
       ["none", "Sin cuenta"],
-    ])("shows %s as %s on the desktop row, the mobile card, and the edit dialog header", async (accountState, label) => {
+    ])("shows %s as %s only in the edit dialog header, never in the list row or card", async (accountState, label) => {
       mockFetchMembers.mockResolvedValue({ accounts: [{ ...ACCOUNT, accountState }] });
 
       render(
@@ -4085,10 +4125,10 @@ describe("MembersPage — the dialog follows the visual viewport (issue #767)", 
       );
 
       const row = await findAccountRow();
-      expect(within(row).getByText(label)).toBeInTheDocument();
+      expect(within(row).queryByText(label)).not.toBeInTheDocument();
 
       const card = await findAccountCard();
-      expect(within(card).getByText(label)).toBeInTheDocument();
+      expect(within(card).queryByText(label)).not.toBeInTheDocument();
 
       fireEvent.click(getEditButton(row));
       const dialog = screen.getByRole("dialog");
@@ -4124,7 +4164,7 @@ describe("MembersPage — the dialog follows the visual viewport (issue #767)", 
       expect(within(header).queryByText("Activo")).not.toBeInTheDocument();
     });
 
-    it("does not change the Membresía badge for an account with no login (accountState inactive)", async () => {
+    it("keeps the Membresía badge and shows no account-state badge in the row (accountState inactive)", async () => {
       mockFetchMembers.mockResolvedValue({ accounts: [{ ...ACCOUNT, accountState: "inactive" }] });
 
       render(
@@ -4137,7 +4177,7 @@ describe("MembersPage — the dialog follows the visual viewport (issue #767)", 
       // ACCOUNT's one student carries no membership either way — "Sin
       // membresía" (neutral) stays exactly that, alongside the new badge.
       expect(within(row).getByText("Sin membresía")).toBeInTheDocument();
-      expect(within(row).getByText("Inactiva")).toBeInTheDocument();
+      expect(within(row).queryByText("Inactiva")).not.toBeInTheDocument();
     });
   });
 });
@@ -4176,6 +4216,7 @@ describe("MembersPage — representative-only row actions (issue #1199, #1211)",
         <MembersPage />
       </ToastProvider>,
     );
+    chooseRole("Todos");
 
     const matches = await screen.findAllByText("Laura Suárez");
     const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
@@ -4239,6 +4280,7 @@ describe("MembersPage — representative-only row actions (issue #1199, #1211)",
         <MembersPage />
       </ToastProvider>,
     );
+    chooseRole("Todos");
 
     const matches = await screen.findAllByText("Sofía Suárez");
     const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
@@ -4342,6 +4384,7 @@ describe('MembersPage — "Jugadores a cargo" lists real dependents (issue #1221
           <MembersPage />
         </ToastProvider>,
       );
+    chooseRole("Todos");
       const matches = await screen.findAllByText("Carla Reyes");
       const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
       fireEvent.click(getEditButton(row));
@@ -4383,6 +4426,7 @@ describe('MembersPage — "Jugadores a cargo" lists real dependents (issue #1221
         <MembersPage />
       </ToastProvider>,
     );
+    chooseRole("Todos");
     const matches = await screen.findAllByText("Pablo Nuñez");
     const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
     fireEvent.click(getEditButton(row));
@@ -4410,6 +4454,7 @@ describe('MembersPage — "Jugadores a cargo" lists real dependents (issue #1221
         <MembersPage />
       </ToastProvider>,
     );
+    chooseRole("Todos");
     const matches = await screen.findAllByText("Diego Salas");
     const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
     fireEvent.click(getEditButton(row));
@@ -4436,6 +4481,7 @@ describe('MembersPage — "Jugadores a cargo" lists real dependents (issue #1221
         <MembersPage />
       </ToastProvider>,
     );
+    chooseRole("Todos");
     const matches = await screen.findAllByText("Elena Vera");
     const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
     fireEvent.click(getEditButton(row));
@@ -4464,7 +4510,7 @@ describe("MembersPage — rail (admin redesign v4)", () => {
 
     expect(document.querySelectorAll(".min-h-stat")).toHaveLength(0);
     const rail = screen.getByTestId("members-rail");
-    expect(within(rail).getByRole("button", { name: /sin datos de emergencia/i })).toBeInTheDocument();
+    expect(within(rail).queryByRole("button", { name: /emergencia/i })).not.toBeInTheDocument();
     expect(within(rail).getByRole("link", { name: /pagos por validar/i })).toHaveAttribute("href", "/payments");
   });
 
@@ -4481,32 +4527,6 @@ describe("MembersPage — rail (admin redesign v4)", () => {
     expect(rail.querySelector("details")).toBeNull();
   });
 
-  it("sends the attention shortcut to the matching filter chip", async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    await findAccountRow();
-
-    fireEvent.click(within(screen.getByTestId("members-rail")).getByRole("button", { name: /sin datos de emergencia/i }));
-
-    const chips = screen.getByRole("group", { name: "Filtrar miembros" });
-    expect(within(chips).getByRole("button", { name: /sin datos de emergencia/i })).toHaveAttribute("aria-pressed", "true");
-  });
-
-  it("pads a short result with decorative ghost rows that tests and assistive tech never see", async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    await findAccountRow();
-
-    const ghost = screen.getByTestId("members-ghost-rows");
-    expect(ghost).toHaveAttribute("aria-hidden", "true");
-    expect(ghost.children.length).toBeGreaterThan(0);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -4629,8 +4649,12 @@ describe("MembersPage — Nuevo entrenador (#1575)", () => {
     render(<ToastProvider><MembersPage /></ToastProvider>);
 
     const row = await findAccountRow();
-
-    expect(within(row).getByText("Invitación pendiente")).toBeInTheDocument();
+    // The list no longer carries the account-state column (S2): the pending
+    // invitation is read in the edit dialog's header.
+    expect(within(row).queryByText("Invitación pendiente")).not.toBeInTheDocument();
+    fireEvent.click(getEditButton(row));
+    const header = screen.getByRole("dialog").querySelector(".bg-sunken") as HTMLElement;
+    expect(within(header).getByText("Invitación pendiente")).toBeInTheDocument();
   });
 
   it("lets the admin resend the invitation from a pending account", async () => {
@@ -4740,6 +4764,7 @@ describe("MembersPage — Imprimir carnet (issue #1670)", () => {
       accounts: [{ ...MINOR_WITHOUT_ACCOUNT, estudiantes: [{ ...MINOR_WITHOUT_ACCOUNT.estudiantes[0], membresia: null }] }],
     });
     render(<MembersPage />);
+    chooseRole("Todos");
 
     const names = await menuItemNames("Mateo Menor");
     expect(names).not.toContain("Imprimir carnet de Mateo Menor");
@@ -4751,6 +4776,7 @@ describe("MembersPage — Imprimir carnet (issue #1670)", () => {
   ])("does not offer it for %s: staff and representatives hold no carnet", async (name, account) => {
     mockFetchMembers.mockResolvedValue({ accounts: [account] });
     render(<MembersPage />);
+    chooseRole("Todos");
 
     const names = await menuItemNames(name);
     expect(names.some((label) => /carnet/i.test(label))).toBe(false);
@@ -4761,5 +4787,148 @@ describe("MembersPage — Imprimir carnet (issue #1670)", () => {
     render(<MembersPage />);
 
     expect(await screen.findByRole("link", { name: /carnets por lote/i })).toHaveAttribute("href", "/members/carnets");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Role filter (owner polish S3) — the list opens on «Jugador»
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — role filter", () => {
+  const person = (id: string, nombres: string, backendRoles: MemberAccount["backendRoles"], extra: Partial<MemberAccount> = {}): MemberAccount => ({
+    id,
+    role: "estudiante",
+    nombres,
+    apellidos: "Prueba",
+    telefono: "0999999999",
+    backendRoles,
+    estudiantes: [],
+    ...extra,
+  });
+  const PLAYER = person("1", "Paula", ["ALUMNO"]);
+  const ADMIN = person("2", "Adriana", ["ADMINISTRADOR"]);
+  const TRAINER = person("3", "Tomas", ["ENTRENADOR"]);
+  const REP = person("4", "Rocio", ["REPRESENTANTE"]);
+  // Several roles: an admin who also trains.
+  const BOTH = person("5", "Bruno", ["ADMINISTRADOR", "ENTRENADOR"]);
+  const ALL = [PLAYER, ADMIN, TRAINER, REP, BOTH];
+
+  function names(): string[] {
+    return screen
+      .queryAllByRole("row")
+      .slice(1)
+      .map((row) => within(row).queryByText(/Prueba$/)?.textContent ?? "")
+      .filter(Boolean)
+      .map((n) => n.split(" ")[0]);
+  }
+
+  async function renderList(accounts: MemberAccount[] = ALL): Promise<void> {
+    mockFetchMembers.mockResolvedValue({ accounts });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    await screen.findByLabelText("Rol");
+    await waitFor(() => expect(screen.queryByText("Cargando miembros…")).not.toBeInTheDocument());
+  }
+
+  it("drops the «Cuenta» column from the list header", async () => {
+    await renderList();
+    const headers = screen.getAllByRole("columnheader").map((h) => h.textContent?.trim());
+    expect(headers).not.toContain("Cuenta");
+  });
+
+  it("offers Jugador, Admin, Entrenador, Representante and Todos, with Jugador selected by default", async () => {
+    await renderList();
+    const select = screen.getByLabelText("Rol") as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual([
+      "Jugador", "Admin", "Entrenador", "Representante", "Todos",
+    ]);
+    expect(select.selectedOptions[0].textContent).toBe("Jugador");
+  });
+
+  it("shows only players by default", async () => {
+    await renderList();
+    expect(names()).toEqual(["Paula"]);
+  });
+
+  it.each([
+    ["Admin", ["Adriana", "Bruno"]],
+    ["Entrenador", ["Tomas", "Bruno"]],
+    ["Representante", ["Rocio"]],
+    ["Jugador", ["Paula"]],
+    ["Todos", ["Paula", "Adriana", "Tomas", "Rocio", "Bruno"]],
+  ])("filters by %s, listing a multi-role person under each of their roles", async (label, expected) => {
+    await renderList();
+    chooseRole(label);
+    expect(names().sort()).toEqual([...expected].sort());
+  });
+
+  it("keeps a player whose membership lapsed under «Jugador», even without the ALUMNO role", async () => {
+    const lapsedMinor = person("7", "Mateo", [], {
+      estudiantes: [{
+        id: "7", nombres: "Mateo", apellidos: "Prueba", activo: true, ultimoPago: null,
+        membresia: { id: 7, tipo: "Infantil", estado: "vencida", estadoBackend: "VENCIDA", fechaInicio: "", fechaFin: "", monto: 30 },
+      }],
+    });
+    await renderList([lapsedMinor, PLAYER]);
+    expect(names().sort()).toEqual(["Mateo", "Paula"]);
+  });
+
+  it("lists a new player who has not paid yet (INACTIVA) under «Jugador»", async () => {
+    const pendingMinor = person("8", "Lucia", [], {
+      estudiantes: [{
+        id: "8", nombres: "Lucia", apellidos: "Prueba", activo: true, ultimoPago: null,
+        membresia: { id: 8, tipo: "Infantil", estado: "vencida", estadoBackend: "INACTIVA", fechaInicio: "", fechaFin: "", monto: 30 },
+      }],
+    });
+    await renderList([pendingMinor, PLAYER]);
+    expect(names().sort()).toEqual(["Lucia", "Paula"]);
+  });
+
+  it("draws no placeholder rows under a short list", async () => {
+    await renderList();
+    expect(screen.queryByTestId("members-ghost-rows")).not.toBeInTheDocument();
+  });
+
+  it("counts each chip inside the selected role, so «Todos» matches the rows shown", async () => {
+    await renderList();
+    expect(screen.getByRole("button", { name: /^Todos\s*1$/ })).toBeInTheDocument();
+
+    chooseRole("Admin");
+    expect(screen.getByRole("button", { name: /^Todos\s*2$/ })).toBeInTheDocument();
+
+    chooseRole("Todos");
+    expect(screen.getByRole("button", { name: /^Todos\s*5$/ })).toBeInTheDocument();
+  });
+
+  it("combines with the existing chips and the text search (AND)", async () => {
+    const lapsed = (id: string, nombres: string, roles: MemberAccount["backendRoles"]): MemberAccount =>
+      person(id, nombres, roles, {
+        estudiantes: [{
+          id, nombres, apellidos: "Prueba", activo: true, ultimoPago: null,
+          membresia: { id: Number(id), tipo: "Adultos", estado: "vencida", estadoBackend: "VENCIDA", fechaInicio: "", fechaFin: "", monto: 35 },
+        }],
+      });
+    await renderList([lapsed("1", "Vera", ["ALUMNO"]), lapsed("2", "Vito", ["ENTRENADOR"]), PLAYER]);
+    fireEvent.click(screen.getByRole("button", { name: /Membresía vencida/ }));
+    // Vito coaches but also holds his own (lapsed) membership: he plays too.
+    expect(names().sort()).toEqual(["Vera", "Vito"]);
+
+    chooseRole("Entrenador");
+    expect(names()).toEqual(["Vito"]);
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar miembros" }), { target: { value: "vera" } });
+    expect(names()).toEqual([]);
+  });
+
+  it("opens on Jugador again every time the page is opened", async () => {
+    await renderList();
+    chooseRole("Todos");
+    cleanup();
+    await renderList();
+    expect((screen.getByLabelText("Rol") as HTMLSelectElement).selectedOptions[0].textContent).toBe("Jugador");
+    expect(names()).toEqual(["Paula"]);
   });
 });
