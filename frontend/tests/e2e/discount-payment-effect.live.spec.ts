@@ -58,16 +58,21 @@
  * lado que nadie había probado (que el pago del alumno refleje el
  * descuento) — sigue siendo 100% UI real.
  *
- * ## Compartir a Pedro con `payments.live.spec.ts`
+ * ## Por qué el pago en efectivo vive en este archivo
  *
- * Ese spec ya usa a Pedro y corre DESPUÉS de este en orden alfabético
- * ("discount-" < "payments-"). No le importa el monto exacto de su propio
- * pago (solo el texto de estado), así que un beneficio parcial que este
- * archivo deje sin retirar no lo rompería — pero un beneficio del 100%
- * (test 3) SÍ reemplazaría su botón "Registrar un pago" por "Aplicar mi
- * beneficio". Por eso cada test que asigna un beneficio lo retira antes de
- * terminar, en un `finally`, pase o falle la aserción: Pedro queda sin
- * beneficio activo al salir de este archivo, siempre.
+ * El ciclo de vida de un pago en efectivo de Pedro (antes `payments.live.
+ * spec.ts`) es el primer test de este archivo, no un spec aparte. Desde #1649
+ * un beneficio del 100% deja pagado el mes en curso con descuento y el
+ * formulario de pago queda reemplazado por un aviso hasta el fin de esa
+ * cobertura. La cobertura bonificada no tiene baja (ver más abajo), así que
+ * ningún `finally` puede devolver a Pedro a "puede pagar": el pago en efectivo
+ * tiene que ocurrir ANTES del test del 100%. Como los specs corren en paralelo
+ * por archivo (`workers: 2` en CI), dos archivos no pueden garantizar ese
+ * orden; los tests de un mismo archivo sí corren en secuencia.
+ *
+ * Los tests de beneficios parciales retiran el suyo en un `finally`, pase o
+ * falle la aserción: Pedro queda sin beneficio activo salvo por la cobertura
+ * irreversible del último test.
  *
  * ## Cobertura bonificada: un concepto DISTINTO, no el mismo descuento
  *
@@ -158,7 +163,7 @@
  * stack, así que el `beforeEach` retira cualquier beneficio activo que haya
  * dejado una corrida anterior (una que se haya interrumpido antes de su
  * propio `finally`) y rechaza cualquier pago pendiente de Pedro — mismo
- * mecanismo que `payments.live.spec.ts` ya usa para él.
+ * mecanismo que el test de pago en efectivo de este archivo ya usa para él.
  *
  * ## El catálogo de descuentos también es basura acumulada — issue #1083
  *
@@ -229,7 +234,7 @@ function nombreUnico(prefijo: string): string {
 // Limpieza de estado vía API — no es el flujo bajo prueba, es higiene entre
 // corridas. `rejectPendingPayments` vive en `helpers/pending-payments.ts`
 // (issue de duplicación de SonarCloud, PR #1079): era casi un calco de la
-// versión local que tenía `payments.live.spec.ts`, así que ahora es una sola
+// versión local que tenía el spec de pagos en efectivo, así que ahora es una sola
 // copia que ambos specs reusan.
 // ---------------------------------------------------------------------------
 
@@ -395,6 +400,32 @@ async function leerTextoEstable(locator: Locator, timeoutMs = 20_000): Promise<s
   return anterior ?? "";
 }
 
+// Antes de cualquier descuento: ver "Por qué el pago en efectivo vive en este
+// archivo" en el encabezado. Primero, porque el test del 100% (más abajo)
+// deja a Pedro sin poder registrar pagos hasta el fin de su cobertura.
+test("un socio registra un pago en efectivo y el historial lo conserva tras recargar", async ({ page }) => {
+  // Un alumno mayor de edad aterriza en su portal, no en /dashboard.
+  await loginViaUi(page, PEDRO_EMAIL, PEDRO_PASSWORD, /\/student/);
+  await page.goto("/student/payments");
+  // Sin pago pendiente previo (el `beforeEach` lo garantiza) ni beneficio
+  // activo, el formulario ofrece "Registrar un pago". EFECTIVO es el único
+  // método sin comprobante.
+  await registerCashPayment(page);
+  await expect(page.getByText("Pago registrado y por validar")).toBeVisible({ timeout: 15_000 });
+
+  // Lo que importa es la recarga: sin ella, la fila visible podría venir del
+  // estado local del componente y no de la base de datos. Acotado a la tabla
+  // de historial: «Por validar» también aparece en la tarjeta de resumen y en
+  // el texto de ayuda, donde siempre está visible.
+  await page.reload();
+  const pendingRow = page
+    .getByTestId("student-payments-table")
+    .locator(":scope > li")
+    .filter({ hasText: "Por validar" })
+    .filter({ hasText: /Efectivo/ });
+  await expect(pendingRow.first()).toBeVisible({ timeout: 15_000 });
+});
+
 test("un beneficio asignado a un alumno reduce el monto que paga, y la reducción persiste tras recargar", async ({
   page,
   browser,
@@ -549,8 +580,8 @@ test("un beneficio del 100% aplica cobertura sin generar ningún pago, y la pant
     throw error;
   } finally {
     // Ver el encabezado del archivo: un beneficio del 100% le cambia a Pedro
-    // el botón de pago entero — `payments.live.spec.ts` corre después y
-    // necesita encontrarlo sin beneficio activo, pase o falle esta aserción.
+    // el botón de pago entero; se retira para no dejar el beneficio activo,
+    // pase o falle esta aserción.
     //
     // Reautenticar ANTES de retirar (issue #1341): la sesión de admin que
     // `page` abrió al principio del test puede quedar inválida si, mientras
