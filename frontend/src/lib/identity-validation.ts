@@ -624,6 +624,37 @@ export function studentBirthDateBounds(today: Date = new Date()): { min: string;
   };
 }
 
+/**
+ * A representative's birth date: an adult within the club's age policy. Shared
+ * by the enrollment wizard's representative step and the second-guardian
+ * invitation (issue #1666), so both reject the same dates with the same words.
+ */
+export function representativeBirthDateRule(value: string, today: Date = new Date()): string | null {
+  if (!value) return "Indica la fecha de nacimiento del representante.";
+  if (!isValidCalendarDate(value)) {
+    return "La fecha de nacimiento del representante no existe. Revisa el día, el mes y el año.";
+  }
+  const edad = calculatePersonAge(value, today);
+  return edad >= EDAD_MAYORIA_EDAD && edad <= EDAD_MAXIMA_ALUMNO
+    ? null
+    : `El representante debe tener entre ${EDAD_MAYORIA_EDAD} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a ${edad} ${edad === 1 ? "año" : "años"}. Revisa el año de nacimiento.`;
+}
+
+// ---------------------------------------------------------------------------
+// E-mail
+// ---------------------------------------------------------------------------
+
+/**
+ * A dotted local part, an `@`, at least one dotted domain label with no
+ * leading/trailing hyphen, and a TLD of two or more letters — so `a@b..com`
+ * and `a@b.c` fail in the form instead of at the server.
+ */
+const EMAIL_PATTERN = /^[^\s@.]+(?:\.[^\s@.]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
+
+export function isValidEmail(value: string): boolean {
+  return EMAIL_PATTERN.test(value.trim());
+}
+
 // ---------------------------------------------------------------------------
 // Password
 // ---------------------------------------------------------------------------

@@ -25,13 +25,24 @@
 
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Loader2, UserMinus, UserPlus } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Loader2, Mail, UserMinus, UserPlus } from "lucide-react";
 import LinkifiedText from "@/components/LinkifiedText";
 import { buttonClasses } from "@/components/ui";
+import { PersonIdentityFields, WizardInput, example } from "@/components/wizard-fields";
+import type { PersonIdentityErrors } from "@/components/wizard-fields";
 import { useToast } from "@/contexts/ToastContext";
 import { toUserMessage } from "@/lib/error-message";
 import { ICON } from "@/lib/icon-size";
+import {
+  cedulaRule,
+  isValidEmail,
+  normalizePersonName,
+  personNameRule,
+  phoneRule,
+  representativeBirthDateRule,
+  toStoredPhone,
+} from "@/lib/identity-validation";
 import {
   aceptarInvitacionRecibida,
   fetchInvitacionesRecibidas,
@@ -47,7 +58,38 @@ export const MENSAJE_TOPE_DOS_REPRESENTANTES =
 /** Same text whatever the backend decided: the card must not reveal whether the e-mail has an account. */
 export const MENSAJE_INVITACION_NEUTRO = "Si el correo es válido, enviaremos la invitación.";
 
-const INPUT_CLASS = "mt-0.5 h-ctl w-full rounded-lg border border-line bg-paper px-3 text-sm text-ink";
+/** Field ids are `invitar-<campo>`, the same `idPrefix-field` shape the wizards use. */
+const ID_PREFIX = "invitar";
+
+export const MENSAJE_REVISA_CAMPOS = "Revisa los campos marcados.";
+
+type CampoInvitacion = keyof PersonIdentityErrors | "correo";
+type ErroresInvitacion = Partial<Record<CampoInvitacion, string>>;
+
+const CAMPOS: CampoInvitacion[] = ["correo", "nombres", "apellidos", "fechaNacimiento", "cedula", "telefono"];
+
+/**
+ * The registration's own rules for a representative (`enroll-utils.ts`),
+ * applied to the invitee: an invitation can create the same kind of account,
+ * so it must accept and reject exactly what the registration does.
+ */
+function validarInvitacion(correo: string, datos: DatosInvitadoPayload): ErroresInvitacion {
+  const errores: Record<CampoInvitacion, string | null> = {
+    correo: !correo.trim()
+      ? "Escribe el correo de la persona a invitar."
+      : isValidEmail(correo)
+        ? null
+        : "El correo del representante no es válido. Revísalo; debe tener un formato como nombre@ejemplo.com.",
+    nombres: personNameRule(datos.nombres, "Los nombres del representante"),
+    apellidos: personNameRule(datos.apellidos, "Los apellidos del representante"),
+    fechaNacimiento: representativeBirthDateRule(datos.fechaNacimiento),
+    cedula: cedulaRule(datos.cedula, "La cédula del representante"),
+    telefono: phoneRule(datos.telefono, "El teléfono del representante"),
+  };
+  return Object.fromEntries(
+    Object.entries(errores).filter((entrada): entrada is [CampoInvitacion, string] => entrada[1] !== null),
+  );
+}
 
 const DATOS_VACIOS: DatosInvitadoPayload = {
   nombres: "",
@@ -70,32 +112,38 @@ interface InviteFormProps {
 
 function InviteForm({ elegibles, onCancel, onDone }: InviteFormProps): React.ReactElement {
   const { showSuccess } = useToast();
+  const formRef = useRef<HTMLDivElement>(null);
   const [correo, setCorreo] = useState("");
   const [seleccion, setSeleccion] = useState<number[]>(() => elegibles.map((m) => m.personaId));
   const [datos, setDatos] = useState<DatosInvitadoPayload>(DATOS_VACIOS);
+  const [touched, setTouched] = useState<Set<CampoInvitacion>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const errores = validarInvitacion(correo, datos);
+  // Same as the registration: a field's message appears once the visitor
+  // has left it (or tried to send), and disappears as soon as it is fixed.
+  const visibles: ErroresInvitacion = Object.fromEntries(
+    Object.entries(errores).filter(([campo]) => touched.has(campo as CampoInvitacion)),
+  );
+  const marcar = (campo: CampoInvitacion): void => setTouched((actual) => new Set(actual).add(campo));
+  const cambiar = (campo: keyof DatosInvitadoPayload) => (valor: string) => setDatos({ ...datos, [campo]: valor });
 
   const alternar = (personaId: number): void =>
     setSeleccion((actual) =>
       actual.includes(personaId) ? actual.filter((id) => id !== personaId) : [...actual, personaId],
     );
-  const campo = (nombre: keyof DatosInvitadoPayload) => ({
-    value: datos[nombre],
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDatos({ ...datos, [nombre]: e.target.value }),
-  });
 
   async function handleSubmit(): Promise<void> {
-    if (!correo.trim()) {
-      setError("Escribe el correo de la persona a invitar.");
+    if (Object.keys(errores).length > 0) {
+      setTouched(new Set(CAMPOS));
+      setError(MENSAJE_REVISA_CAMPOS);
+      // After the re-render that marks the fields, move focus to the first one.
+      requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>("[aria-invalid='true']")?.focus());
       return;
     }
     if (seleccion.length === 0) {
       setError("Elige al menos un hijo.");
-      return;
-    }
-    if (Object.values(datos).some((valor) => !valor.trim())) {
-      setError("Completa los datos de la persona a invitar.");
       return;
     }
     setLoading(true);
@@ -105,8 +153,8 @@ function InviteForm({ elegibles, onCancel, onDone }: InviteFormProps): React.Rea
         personaIds: seleccion,
         correo: correo.trim(),
         datos: {
-          nombres: datos.nombres.trim(),
-          apellidos: datos.apellidos.trim(),
+          nombres: normalizePersonName(datos.nombres),
+          apellidos: normalizePersonName(datos.apellidos),
           cedula: datos.cedula.trim(),
           fechaNacimiento: datos.fechaNacimiento,
           telefono: datos.telefono.trim(),
@@ -122,18 +170,22 @@ function InviteForm({ elegibles, onCancel, onDone }: InviteFormProps): React.Rea
   }
 
   return (
-    <div className="space-y-2 rounded-ctl border border-line bg-sunken p-3">
-      <label className="block text-sm font-semibold text-ink-2">
-        Correo de la persona a invitar
-        <input
-          type="email"
-          value={correo}
-          onChange={(e) => setCorreo(e.target.value)}
-          className={INPUT_CLASS}
-          placeholder="correo@ejemplo.com"
-          autoComplete="off"
-        />
-      </label>
+    <div ref={formRef} className="space-y-3 rounded-ctl border border-line bg-sunken p-3">
+      <WizardInput
+        idPrefix={ID_PREFIX}
+        field="correo"
+        label="Correo de la persona a invitar"
+        value={correo}
+        onChange={setCorreo}
+        onBlur={() => marcar("correo")}
+        error={visibles.correo}
+        disabled={loading}
+        type="email"
+        required
+        placeholder={example("correo@ejemplo.com")}
+        icon={<Mail size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
+        autoComplete="off"
+      />
       {elegibles.length > 1 && (
         <fieldset className="space-y-1">
           <legend className="text-sm font-semibold text-ink-2">¿De cuál hijo será representante?</legend>
@@ -152,33 +204,28 @@ function InviteForm({ elegibles, onCancel, onDone }: InviteFormProps): React.Rea
       {elegibles.length === 1 && (
         <p className="text-xs text-ink-3">Será representante de {nombreCompleto(elegibles[0])}.</p>
       )}
-      <div className="space-y-2">
-        <p className="text-xs text-ink-3">
-          Si todavía no tiene cuenta, la creamos con estos datos y le llega un enlace de un solo uso para
-          elegir su contraseña.
-        </p>
-          <label className="block text-sm font-semibold text-ink-2">
-            Nombres
-            <input type="text" className={INPUT_CLASS} {...campo("nombres")} />
-          </label>
-          <label className="block text-sm font-semibold text-ink-2">
-            Apellidos
-            <input type="text" className={INPUT_CLASS} {...campo("apellidos")} />
-          </label>
-          <label className="block text-sm font-semibold text-ink-2">
-            Cédula
-            <input type="text" inputMode="numeric" className={INPUT_CLASS} {...campo("cedula")} />
-          </label>
-          <label className="block text-sm font-semibold text-ink-2">
-            Fecha de nacimiento
-            <input type="date" className={INPUT_CLASS} {...campo("fechaNacimiento")} />
-          </label>
-          <label className="block text-sm font-semibold text-ink-2">
-            Teléfono
-            <input type="tel" className={INPUT_CLASS} {...campo("telefono")} />
-          </label>
-      </div>
-      {error && (
+      <p className="text-xs text-ink-3">
+        Si todavía no tiene cuenta, la creamos con estos datos y le llega un enlace de un solo uso para
+        elegir su contraseña.
+      </p>
+      <PersonIdentityFields
+        idPrefix={ID_PREFIX}
+        disabled={loading}
+        nombres={datos.nombres}
+        apellidos={datos.apellidos}
+        fechaNacimiento={datos.fechaNacimiento}
+        cedula={datos.cedula}
+        // `PhoneField` speaks the local digits after +593; the payload keeps the stored `0…` form.
+        telefono={datos.telefono.replace(/^0/, "")}
+        onNombresChange={cambiar("nombres")}
+        onApellidosChange={cambiar("apellidos")}
+        onFechaNacimientoChange={cambiar("fechaNacimiento")}
+        onCedulaChange={cambiar("cedula")}
+        onTelefonoChange={(digitos) => cambiar("telefono")(toStoredPhone(digitos))}
+        errors={visibles}
+        onFieldBlur={marcar}
+      />
+      {error && !(error === MENSAJE_REVISA_CAMPOS && Object.keys(errores).length === 0) && (
         <p className="text-xs text-state-bad" role="alert">
           <LinkifiedText text={error} />
         </p>

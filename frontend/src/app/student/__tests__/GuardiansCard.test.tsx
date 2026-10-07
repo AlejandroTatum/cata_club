@@ -12,6 +12,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import GuardiansCard, { MENSAJE_TOPE_DOS_REPRESENTANTES } from "@/app/student/GuardiansCard";
 import type { MenorConGuardianes } from "@/services/api";
+import { fillBirthDate } from "@/lib/__tests__/fill-birth-date";
+import {
+  cedulaRule,
+  personNameRule,
+  phoneRule,
+  representativeBirthDateRule,
+} from "@/lib/identity-validation";
 
 const mockFetch = vi.fn();
 const mockInvitar = vi.fn();
@@ -138,12 +145,22 @@ const DATOS_INVITADO = {
   telefono: "0991234567",
 };
 
+function campo(id: string): HTMLElement {
+  const el = document.getElementById(`invitar-${id}`);
+  if (el === null) throw new Error(`missing field invitar-${id}`);
+  return el;
+}
+
+function escribir(id: string, value: string): void {
+  fireEvent.change(campo(id), { target: { value } });
+}
+
 function llenarDatos(): void {
-  fireEvent.change(screen.getByLabelText("Nombres"), { target: { value: "Pablo" } });
-  fireEvent.change(screen.getByLabelText("Apellidos"), { target: { value: "Torres" } });
-  fireEvent.change(screen.getByLabelText("Cédula"), { target: { value: "1710034065" } });
-  fireEvent.change(screen.getByLabelText("Fecha de nacimiento"), { target: { value: "1982-04-04" } });
-  fireEvent.change(screen.getByLabelText("Teléfono"), { target: { value: "0991234567" } });
+  escribir("nombres", "Pablo");
+  escribir("apellidos", "Torres");
+  escribir("cedula", "1710034065");
+  fillBirthDate("invitar-fecha-nacimiento", "1982-04-04");
+  escribir("telefono", "991234567");
 }
 
 const MENSAJE_NEUTRO = "Si el correo es válido, enviaremos la invitación.";
@@ -155,9 +172,7 @@ describe("GuardiansCard — invite", () => {
     render(<GuardiansCard />);
 
     fireEvent.click(await screen.findByRole("button", { name: BOTON_INVITAR }));
-    fireEvent.change(screen.getByLabelText(/correo de la persona a invitar/i), {
-      target: { value: "  pablo@example.com " },
-    });
+    escribir("correo", "  pablo@example.com ");
     llenarDatos();
     fireEvent.click(screen.getByRole("button", { name: /enviar invitación/i }));
 
@@ -180,9 +195,7 @@ describe("GuardiansCard — invite", () => {
     render(<GuardiansCard />);
 
     fireEvent.click(await screen.findByRole("button", { name: BOTON_INVITAR }));
-    fireEvent.change(screen.getByLabelText(/correo de la persona a invitar/i), {
-      target: { value: "pablo@example.com" },
-    });
+    escribir("correo", "pablo@example.com");
     llenarDatos();
     fireEvent.click(screen.getByRole("button", { name: /enviar invitación/i }));
 
@@ -196,9 +209,7 @@ describe("GuardiansCard — invite", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: BOTON_INVITAR }));
     fireEvent.click(screen.getByRole("checkbox", { name: /Nico Torres/ }));
-    fireEvent.change(screen.getByLabelText(/correo de la persona a invitar/i), {
-      target: { value: "pablo@example.com" },
-    });
+    escribir("correo", "pablo@example.com");
     llenarDatos();
     fireEvent.click(screen.getByRole("button", { name: /enviar invitación/i }));
 
@@ -211,19 +222,66 @@ describe("GuardiansCard — invite", () => {
     );
   });
 
-  it("does not call the backend until every data field is filled", async () => {
+  it("marks every missing field with the registration's own message and sends nothing", async () => {
     mockFetch.mockResolvedValue([menor()]);
     render(<GuardiansCard />);
 
     fireEvent.click(await screen.findByRole("button", { name: BOTON_INVITAR }));
-    fireEvent.change(screen.getByLabelText(/correo de la persona a invitar/i), {
-      target: { value: "pablo@example.com" },
-    });
-    fireEvent.change(screen.getByLabelText("Nombres"), { target: { value: "Pablo" } });
+    escribir("correo", "pablo@example.com");
+    escribir("nombres", "Pablo");
     fireEvent.click(screen.getByRole("button", { name: /enviar invitación/i }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/completa los datos/i);
+    expect(await screen.findByText("Los apellidos del representante son obligatorios.")).toBeInTheDocument();
+    expect(screen.getByText("La cédula del representante es obligatoria.")).toBeInTheDocument();
+    expect(screen.getByText("Indica la fecha de nacimiento del representante.")).toBeInTheDocument();
+    expect(screen.getByText("El teléfono del representante es obligatorio.")).toBeInTheDocument();
+    expect(campo("apellidos")).toHaveAttribute("aria-invalid", "true");
+    expect(campo("nombres")).not.toHaveAttribute("aria-invalid");
+    expect(screen.getByRole("alert")).toHaveTextContent("Revisa los campos marcados.");
     expect(mockInvitar).not.toHaveBeenCalled();
+
+    llenarDatos();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("rejects the same invalid values the registration rejects", async () => {
+    mockFetch.mockResolvedValue([menor()]);
+    render(<GuardiansCard />);
+
+    fireEvent.click(await screen.findByRole("button", { name: BOTON_INVITAR }));
+    escribir("correo", "pablo@ejemplo");
+    escribir("nombres", "Pablo3");
+    escribir("apellidos", "Torres");
+    escribir("cedula", "1234567890");
+    fillBirthDate("invitar-fecha-nacimiento", "2015-04-04");
+    escribir("telefono", "12345");
+    fireEvent.click(screen.getByRole("button", { name: /enviar invitación/i }));
+
+    expect(
+      await screen.findByText(
+        "El correo del representante no es válido. Revísalo; debe tener un formato como nombre@ejemplo.com.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(personNameRule("Pablo3", "Los nombres del representante")!)).toBeInTheDocument();
+    expect(screen.getByText(cedulaRule("1234567890", "La cédula del representante")!)).toBeInTheDocument();
+    expect(screen.getByText(representativeBirthDateRule("2015-04-04")!)).toBeInTheDocument();
+    expect(screen.getByText(phoneRule("012345", "El teléfono del representante")!)).toBeInTheDocument();
+    expect(screen.queryByText(/apellidos del representante/)).not.toBeInTheDocument();
+    expect(mockInvitar).not.toHaveBeenCalled();
+  });
+
+  it("shows a field's message once the visitor leaves it, as in the registration", async () => {
+    mockFetch.mockResolvedValue([menor()]);
+    render(<GuardiansCard />);
+
+    fireEvent.click(await screen.findByRole("button", { name: BOTON_INVITAR }));
+    const mensaje = cedulaRule("1234567890", "La cédula del representante")!;
+    escribir("cedula", "1234567890");
+    expect(screen.queryByText(mensaje)).not.toBeInTheDocument();
+    fireEvent.blur(campo("cedula"));
+    expect(await screen.findByText(mensaje)).toBeInTheDocument();
+    escribir("cedula", "1710034065");
+    expect(screen.queryByText(mensaje)).not.toBeInTheDocument();
   });
 
   it("shows the backend's message when the invitation is refused", async () => {
@@ -232,9 +290,7 @@ describe("GuardiansCard — invite", () => {
     render(<GuardiansCard />);
 
     fireEvent.click(await screen.findByRole("button", { name: BOTON_INVITAR }));
-    fireEvent.change(screen.getByLabelText(/correo de la persona a invitar/i), {
-      target: { value: "pablo@example.com" },
-    });
+    escribir("correo", "pablo@example.com");
     llenarDatos();
     fireEvent.click(screen.getByRole("button", { name: /enviar invitación/i }));
 
@@ -247,9 +303,10 @@ describe("GuardiansCard — invite", () => {
     render(<GuardiansCard />);
 
     fireEvent.click(await screen.findByRole("button", { name: BOTON_INVITAR }));
+    llenarDatos();
     fireEvent.click(screen.getByRole("button", { name: /enviar invitación/i }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/escribe el correo/i);
+    expect(await screen.findByText("Escribe el correo de la persona a invitar.")).toBeInTheDocument();
     expect(mockInvitar).not.toHaveBeenCalled();
   });
 });

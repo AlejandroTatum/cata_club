@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { fillBirthDate } from "./helpers/birth-date";
 import { E2E_BASE_URL } from "./e2e-target";
 
 const SESSION = {
@@ -42,12 +43,12 @@ test("the primary representative invites a second guardian from the home", async
 
   await page.goto("/student");
   await page.getByRole("button", { name: /invitar a otro representante/i }).click();
-  await page.getByLabel(/correo de la persona a invitar/i).fill("pablo@cataclub.test");
-  await page.getByLabel("Nombres").fill("Pablo");
-  await page.getByLabel("Apellidos").fill("Torres");
-  await page.getByLabel("Cédula").fill("1710034065");
-  await page.getByLabel("Fecha de nacimiento").fill("1982-04-04");
-  await page.getByLabel("Teléfono").fill("0991234567");
+  await page.locator("#invitar-correo").fill("pablo@cataclub.test");
+  await page.locator("#invitar-nombres").fill("Pablo");
+  await page.locator("#invitar-apellidos").fill("Torres");
+  await page.locator("#invitar-cedula").fill("1710034065");
+  await fillBirthDate(page, "invitar-fecha-nacimiento", "1982-04-04");
+  await page.locator("#invitar-telefono").fill("991234567");
   const request = page.waitForRequest("**/api/co-representantes/invitaciones");
   await page.getByRole("button", { name: /enviar invitación/i }).click();
   await request;
