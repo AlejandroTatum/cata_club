@@ -85,10 +85,17 @@ export default defineConfig({
            `next/image` request answered "isn't a valid image ... received null"
            and specs failed for reasons that had nothing to do with the code.
            Written to be safe to re-run: copying the CONTENTS of each directory
-           never nests a second copy inside the previous one. */
+           never nests a second copy inside the previous one.
+
+           The copied directories are removed first: `next build` rewrites the
+           server files but never prunes `.next/standalone/.next/static`, so
+           chunks of an earlier build survived next to the new HTML and a page
+           could hydrate against the wrong build (intermittent React #418).
+           Only the two copied directories go — the fresh server is untouched. */
         command: process.env.CI
           ? "node .next/standalone/server.js"
           : "pnpm build"
+            + " && rm -rf .next/standalone/public .next/standalone/.next/static"
             + " && mkdir -p .next/standalone/public .next/standalone/.next/static"
             + " && cp -r public/. .next/standalone/public/"
             + " && cp -r .next/static/. .next/standalone/.next/static/"
