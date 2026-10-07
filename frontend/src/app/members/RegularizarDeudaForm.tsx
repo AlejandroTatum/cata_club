@@ -83,12 +83,21 @@ export default function RegularizarDeudaForm({
   const [deudaError, setDeudaError] = useState(false);
   const [fechaInicio, setFechaInicio] = useState<string>(() => clubIsoDate());
   const [fechaFin, setFechaFin] = useState<string>("");
-  const [cotizacion, setCotizacion] = useState<CotizacionRegularizacion | null>(null);
+  // The quote carries the inputs it was computed for (`clave`): the effect that
+  // clears it runs AFTER the render that changed the inputs, so submit must
+  // compare instead of trusting that a non-null quote is current.
+  const [cotizacionGuardada, setCotizacionGuardada] = useState<{
+    clave: string;
+    valor: CotizacionRegularizacion;
+  } | null>(null);
   const [cotizando, setCotizando] = useState(false);
   const [cotizacionError, setCotizacionError] = useState<string | null>(null);
   // S12: the admin picks the normal price or the member's discount (default: discount).
   const [aplicarDescuento, setAplicarDescuento] = useState(true);
   const [motivo, setMotivo] = useState<string>("");
+  const claveActual = `${membresiaId}|${fechaInicio}|${fechaFin}|${aplicarDescuento}`;
+  const cotizacion =
+    cotizacionGuardada && cotizacionGuardada.clave === claveActual ? cotizacionGuardada.valor : null;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [regularized, setRegularized] = useState(false);
@@ -112,7 +121,7 @@ export default function RegularizarDeudaForm({
     setRegularized(false);
     setFechaInicio(clubIsoDate());
     setFechaFin("");
-    setCotizacion(null);
+    setCotizacionGuardada(null);
     setCotizacionError(null);
     setAplicarDescuento(true);
     setMotivo("");
@@ -135,14 +144,15 @@ export default function RegularizarDeudaForm({
   // QA3 ADM-09: quote the amount whenever a valid period is set. `cancelado`
   // drops a stale answer when the dates change again mid-flight.
   useEffect(() => {
-    setCotizacion(null);
+    setCotizacionGuardada(null);
     setCotizacionError(null);
     if (!open || !fechaInicio || !fechaFin || fechaInicio >= fechaFin) return;
     let cancelado = false;
     setCotizando(true);
+    const clave = `${membresiaId}|${fechaInicio}|${fechaFin}|${aplicarDescuento}`;
     fetchCotizacionRegularizacion(membresiaId, fechaInicio, fechaFin, aplicarDescuento)
       .then((resultado) => {
-        if (!cancelado) setCotizacion(resultado);
+        if (!cancelado) setCotizacionGuardada({ clave, valor: resultado });
       })
       .catch((err: unknown) => {
         if (!cancelado) {
@@ -354,7 +364,7 @@ export default function RegularizarDeudaForm({
           <div className="mt-3 flex items-center gap-2">
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || cotizando}
               className={`inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-cata-red/90 disabled:opacity-50 ${MIN_TARGET_CLASS}`}
             >
               {loading ? (

@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import RegularizarDeudaForm from "../RegularizarDeudaForm";
 
 const mockFetchMembresiaDeuda = vi.fn();
@@ -176,6 +176,51 @@ describe("RegularizarDeudaForm — monto cotizado por el backend (ADM-09)", () =
 
     await waitFor(() => expect(mockFetchCotizacion).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: /^Cargar pagos$/ }));
+    expect(mockRegularizarDeuda).not.toHaveBeenCalled();
+  });
+});
+
+describe("RegularizarDeudaForm — cotización vigente", () => {
+  it("disables submit while a re-quote is pending and then sends the new amount, never the old one", async () => {
+    mockRegularizarDeuda.mockResolvedValue({ id: 99 });
+    await open();
+    fillRequiredFields();
+    await screen.findByText("$25,00");
+
+    let resolveSecond: (value: unknown) => void = () => {};
+    mockFetchCotizacion.mockReturnValueOnce(new Promise((resolve) => (resolveSecond = resolve)));
+    fireEvent.change(screen.getByLabelText(/^Fecha fin/), { target: { value: "2026-02-28" } });
+
+    const submit = screen.getByRole("button", { name: /^Cargar pagos$/ });
+    expect(submit).toBeDisabled();
+    fireEvent.click(submit);
+    expect(mockRegularizarDeuda).not.toHaveBeenCalled();
+
+    resolveSecond({ meses: 2, montoBase: "50.00", descuentoAplicado: "0.00", montoEsperado: "50.00" });
+    await screen.findByText("$50,00");
+    expect(screen.getByRole("button", { name: /^Cargar pagos$/ })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: /^Cargar pagos$/ }));
+
+    await waitFor(() => {
+      expect(mockRegularizarDeuda).toHaveBeenCalledWith(42, expect.objectContaining({ monto: 50, fechaFin: "2026-02-28" }));
+    });
+    expect(mockRegularizarDeuda).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not send a quote computed for other inputs when submitted in the render before the effect clears it", async () => {
+    mockRegularizarDeuda.mockResolvedValue({ id: 99 });
+    await open();
+    fillRequiredFields();
+    await screen.findByText("$25,00");
+
+    mockFetchCotizacion.mockReturnValue(new Promise(() => {}));
+    // Same act scope: the new render commits but its effect (which clears the
+    // old quote) has not run when the submit handler of that render fires.
+    act(() => {
+      fireEvent.change(screen.getByLabelText(/^Fecha fin/), { target: { value: "2026-02-28" } });
+      fireEvent.submit(screen.getByRole("form", { name: "Cargar pagos atrasados" }));
+    });
+
     expect(mockRegularizarDeuda).not.toHaveBeenCalled();
   });
 });
