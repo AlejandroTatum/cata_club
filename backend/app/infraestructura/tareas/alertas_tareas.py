@@ -29,7 +29,8 @@ from app.dominio.excepciones import (
     ServicioNoDisponible,
 )
 from app.dominio.modelos import Pago, Membresia, Persona, Notificacion, Rol, TipoMembresia, Usuario
-from app.dominio.enums import EstadoPago, EstadoMembresia, PeriodicidadTarifa, TipoNotificacion, TipoRol
+from app.dominio.enums import EstadoPago, EstadoMembresia, TipoNotificacion, TipoRol
+from app.dominio.periodicidad import PeriodicidadTarifa
 from app.dominio.nombre_propio import nombre_completo
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.membresia_pago_servicio import _meses_enteros_desde

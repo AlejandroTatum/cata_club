@@ -14,9 +14,9 @@ from app.dominio.modelos import (
     HistorialEstadoMembresia, CorreccionPago, HistorialCambioPlanMembresia, Persona,
 )
 from app.dominio.enums import (
-    EstadoPago, EstadoMembresia, PeriodicidadTarifa, TipoNotificacion, TipoPago, TipoRol,
-    EfectoCoberturaCorreccion,
+    EstadoPago, EstadoMembresia, TipoNotificacion, TipoPago, TipoRol, EfectoCoberturaCorreccion,
 )
+from app.dominio.periodicidad import PeriodicidadTarifa
 from app.dominio.etiquetas import estado_de_pago_en_castellano
 from app.dominio.nombres_catalogo import existe_nombre, normalizar_nombre
 from app.dominio.excepciones import (
@@ -862,11 +862,7 @@ class PagoServicio:
         precio_mensual = membresia.monto_aplicado
         meses = datos.meses
         periodicidad = membresia.tipo_membresia.periodicidad
-        # Tarifa SEMANAL/DIARIA: un período por pago. `meses` (nombre del
-        # contrato) cuenta períodos de la tarifa; el selector de cantidad solo
-        # existe para MENSUAL.
-        if periodicidad != PeriodicidadTarifa.MENSUAL and meses != 1:
-            raise OperacionInvalida(MENSAJE_PERIODICIDAD_UN_PERIODO)
+        self._exigir_un_periodo_si_corresponde(periodicidad, meses)
         monto_base = precio_mensual * meses
 
         # Fix período de cobertura (PAG-5): antes, `fecha_inicio`/`fecha_fin`
@@ -1702,6 +1698,14 @@ class PagoServicio:
             if "uq_membresia_activa_por_persona" in str(error.orig):
                 raise OperacionInvalida(MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA) from error
             raise
+
+    @staticmethod
+    def _exigir_un_periodo_si_corresponde(periodicidad: PeriodicidadTarifa, periodos: int) -> None:
+        """Tarifa SEMANAL/DIARIA: un período por pago. `meses` (nombre del
+        contrato) cuenta períodos de la tarifa; el selector de cantidad solo
+        existe para MENSUAL."""
+        if periodicidad != PeriodicidadTarifa.MENSUAL and periodos != 1:
+            raise OperacionInvalida(MENSAJE_PERIODICIDAD_UN_PERIODO)
 
     @staticmethod
     def _exigir_tarifa_con_deuda(membresia: Membresia) -> None:

@@ -6,8 +6,9 @@ from urllib.parse import urlparse
 
 from app.dominio.nombres_catalogo import normalizar_nombre
 from app.dominio.enums import (
-    EstadoMembresia, TipoModalidad, PeriodicidadTarifa, EstadoPago, TipoPago, EfectoCoberturaCorreccion,
+    EstadoMembresia, TipoModalidad, EstadoPago, TipoPago, EfectoCoberturaCorreccion,
 )
+from app.dominio.periodicidad import PeriodicidadTarifa
 from app.servicios_negocio.dtos.base import ResponseBase
 from app.servicios_negocio.dtos.validadores import NombrePresentado
 

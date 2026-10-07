@@ -28,8 +28,9 @@ from app.dominio.cedula import es_cedula_valida
 from app.dominio.invitacion_entrenador import invitacion_pendiente as _es_invitacion_pendiente
 from app.dominio.nombre_propio import nombre_completo, normalizar_nombre_propio
 from app.dominio.telefono import es_telefono_valido
+from app.dominio.periodicidad import PeriodicidadTarifa
 from app.dominio.enums import (
-    TipoRol, EstadoMembresia, TipoModalidad, PeriodicidadTarifa, EstadoPago,
+    TipoRol, EstadoMembresia, TipoModalidad, EstadoPago,
     TipoPago, EstadoAsistencia, TipoEscuela, NivelTecnicoAlumno, TipoSangre, DiaSemana,
     TipoNotificacion,
     TipoManoDominante,
