@@ -2,7 +2,7 @@ import calendar
 import logging
 from uuid import uuid4
 from dataclasses import dataclass
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
 from sqlalchemy import inspect as inspeccionar_orm
@@ -16,6 +16,7 @@ from app.dominio.modelos import (
 from app.dominio.enums import (
     EstadoPago, EstadoMembresia, TipoNotificacion, TipoPago, TipoRol, EfectoCoberturaCorreccion,
 )
+from app.dominio.periodicidad import PeriodicidadTarifa
 from app.dominio.etiquetas import estado_de_pago_en_castellano
 from app.dominio.nombres_catalogo import existe_nombre, normalizar_nombre
 from app.dominio.excepciones import (
@@ -69,6 +70,18 @@ def _sumar_meses(fecha: date, meses: int) -> date:
     mes = mes_total % 12 + 1
     ultimo_dia_mes_destino = calendar.monthrange(anio, mes)[1]
     return date(anio, mes, min(fecha.day, ultimo_dia_mes_destino))
+
+
+def _fin_de_cobertura(inicio: date, periodos: int, periodicidad: PeriodicidadTarifa) -> date:
+    """Fin (exclusivo, igual que los meses) de la cobertura que compran
+    `periodos` períodos de la tarifa desde `inicio`: meses calendario para
+    MENSUAL, 7 días por período para SEMANAL, 1 día para DIARIA (la cobertura
+    de un día suelto es SOLO el día pagado)."""
+    if periodicidad == PeriodicidadTarifa.SEMANAL:
+        return inicio + timedelta(days=7 * periodos)
+    if periodicidad == PeriodicidadTarifa.DIARIA:
+        return inicio + timedelta(days=periodos)
+    return _sumar_meses(inicio, periodos)
 
 
 def _meses_del_periodo(inicio: date, fin: date) -> int:
@@ -219,6 +232,14 @@ MENSAJE_BENEFICIO_SOLO_MES_A_MES = (
     "Con beneficio activo solo puedes pagar un mes a la vez."
 )
 
+# Tarifas semanales/diarias: un período por pago y sin deuda que regularizar.
+MENSAJE_PERIODICIDAD_UN_PERIODO = (
+    "Las tarifas semanales y diarias se pagan de a un período por vez."
+)
+MENSAJE_PERIODICIDAD_SIN_DEUDA = (
+    "Las tarifas semanales y diarias no acumulan deuda; no hay nada que regularizar."
+)
+
 logger = logging.getLogger("cataclub.servicios.pagos")
 
 
@@ -339,6 +360,20 @@ class MembresiaServicio:
             raise EntidadNoEncontrada(f"Tipo de membresía con id {tipo_id} no encontrado")
 
         cambios = datos.model_dump(exclude_unset=True)
+        nueva_periodicidad = cambios.get("periodicidad")
+        if (
+            nueva_periodicidad is not None
+            and PeriodicidadTarifa(nueva_periodicidad) != PeriodicidadTarifa(tipo.periodicidad)
+            and self.repo_tipo.ids_en_uso([tipo.id])
+        ):
+            # La cobertura y la deuda de las membresías existentes se calculan
+            # con la periodicidad de su tarifa: cambiarla reinterpretaría el
+            # historial en silencio.
+            raise TarifaEnUso(
+                f"No se puede cambiar la periodicidad de la tarifa '{tipo.categoria}' "
+                "porque ya se usó en membresías. Crea una tarifa nueva con la "
+                "periodicidad que necesitas."
+            )
         if cambios.get("categoria"):
             cambios["categoria"] = normalizar_nombre(cambios["categoria"])
             self._exigir_tarifa_libre(cambios["categoria"], excluir_id=tipo.id)
@@ -840,6 +875,8 @@ class PagoServicio:
         # dividiendo.
         precio_mensual = membresia.monto_aplicado
         meses = datos.meses
+        periodicidad = membresia.tipo_membresia.periodicidad
+        self._exigir_un_periodo_si_corresponde(periodicidad, meses)
         monto_base = precio_mensual * meses
 
         # Fix período de cobertura (PAG-5): antes, `fecha_inicio`/`fecha_fin`
@@ -862,7 +899,7 @@ class PagoServicio:
         ultima_fecha_fin = self._fecha_fin_maxima_combinada(datos.membresia_id)
         hoy = hoy_club()
         ancla = max(ultima_fecha_fin, hoy) if ultima_fecha_fin is not None else hoy
-        fecha_inicio, fecha_fin = ancla, _sumar_meses(ancla, meses)
+        fecha_inicio, fecha_fin = ancla, _fin_de_cobertura(ancla, meses, periodicidad)
 
         # Gratuidad familiar (E04-RF002, issue #400 slice 4c-b): el gate del
         # cobro es `membresia.es_gratuidad_familiar`, NUNCA
@@ -1279,6 +1316,7 @@ class PagoServicio:
         ultimo_fin: date | None,
         fecha_reactivacion: datetime | None,
         hoy: date,
+        periodicidad: PeriodicidadTarifa = PeriodicidadTarifa.MENSUAL,
     ) -> int:
         """Núcleo PURO de la deuda (issue #284/#400), con los datos YA
         resueltos en vez de leerlos de los repos -- las tres reglas de
@@ -1297,6 +1335,9 @@ class PagoServicio:
         anterior a este refactor, que solo cortaba en 0 cuando la
         membresía existía y estaba SUSPENDIDA."""
         if estado == EstadoMembresia.SUSPENDIDA:
+            return 0
+        # "No acumula deuda": SEMANAL/DIARIA nunca deben meses.
+        if periodicidad != PeriodicidadTarifa.MENSUAL:
             return 0
         if ultimo_fin is None:
             return 0
@@ -1366,6 +1407,10 @@ class PagoServicio:
             ultimo_fin=ultimo_fin,
             fecha_reactivacion=fecha_reactivacion,
             hoy=hoy_club(),
+            periodicidad=(
+                membresia.tipo_membresia.periodicidad
+                if membresia is not None else PeriodicidadTarifa.MENSUAL
+            ),
         )
 
     def obtener_deuda_bulk(self, membresia_ids: list[int]) -> list[dict]:
@@ -1412,6 +1457,7 @@ class PagoServicio:
                     ultimo_fin=ultimo_fin,
                     fecha_reactivacion=reactivaciones.get(membresia_id),
                     hoy=hoy,
+                    periodicidad=membresia.tipo_membresia.periodicidad,
                 ),
                 "ultima_cobertura_fin": ultimo_fin,
                 "monto_mensual": membresia.monto_aplicado,
@@ -1667,10 +1713,24 @@ class PagoServicio:
                 raise OperacionInvalida(MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA) from error
             raise
 
+    @staticmethod
+    def _exigir_un_periodo_si_corresponde(periodicidad: PeriodicidadTarifa, periodos: int) -> None:
+        """Tarifa SEMANAL/DIARIA: un período por pago. `meses` (nombre del
+        contrato) cuenta períodos de la tarifa; el selector de cantidad solo
+        existe para MENSUAL."""
+        if periodicidad != PeriodicidadTarifa.MENSUAL and periodos != 1:
+            raise OperacionInvalida(MENSAJE_PERIODICIDAD_UN_PERIODO)
+
+    @staticmethod
+    def _exigir_tarifa_con_deuda(membresia: Membresia) -> None:
+        if membresia.tipo_membresia.periodicidad != PeriodicidadTarifa.MENSUAL:
+            raise OperacionInvalida(MENSAJE_PERIODICIDAD_SIN_DEUDA)
+
     def _cotizar_regularizacion(
         self, membresia: Membresia, fecha_inicio: date, fecha_fin: date,
         aplicar_descuento: bool = True,
     ) -> "_CotizacionRegularizacion":
+        self._exigir_tarifa_con_deuda(membresia)
         meses = _meses_del_periodo(fecha_inicio, fecha_fin)
         monto_base = membresia.monto_aplicado * meses
         beneficio, monto_con_beneficio = self._congelar_beneficio_activo(
@@ -1746,6 +1806,7 @@ class PagoServicio:
             raise OperacionInvalida("Debes indicar el motivo de la regularización.")
 
         self._exigir_membresia_financieramente_operativa(membresia)
+        self._exigir_tarifa_con_deuda(membresia)
 
         hoy = hoy_club()
         if datos.fecha_inicio > hoy:
@@ -2004,9 +2065,16 @@ class PagoServicio:
         # nullable para pagos históricos pre-#400 sin snapshot -- no hay
         # nada que validar contra un valor ausente).
         if _tocado("meses_comprados") or _tocado("fecha_inicio") or _tocado("fecha_fin"):
+            membresia_del_pago = self.repo_membresia.obtener_por_id(pago.membresia_id)
+            periodicidad_del_pago = (
+                membresia_del_pago.tipo_membresia.periodicidad
+                if membresia_del_pago is not None else PeriodicidadTarifa.MENSUAL
+            )
             if (
                 nuevos["meses_comprados"] is not None
-                and nuevos["fecha_fin"] != _sumar_meses(nuevos["fecha_inicio"], nuevos["meses_comprados"])
+                and nuevos["fecha_fin"] != _fin_de_cobertura(
+                    nuevos["fecha_inicio"], nuevos["meses_comprados"], periodicidad_del_pago,
+                )
             ):
                 raise OperacionInvalida(
                     "La fecha de fin no coincide con la fecha de inicio más "
@@ -2236,7 +2304,10 @@ class PagoServicio:
         ultima_fecha_fin = self._fecha_fin_maxima_combinada(membresia_id)
         hoy = hoy_club()
         ancla = max(ultima_fecha_fin, hoy) if ultima_fecha_fin is not None else hoy
-        fecha_inicio, fecha_fin = ancla, _sumar_meses(ancla, meses)
+        fecha_inicio = ancla
+        fecha_fin = _fin_de_cobertura(
+            ancla, meses, PeriodicidadTarifa(membresia.tipo_membresia.periodicidad),
+        )
 
         if self._hay_cobertura_en_rango(
             membresia_id, fecha_inicio, fecha_fin, medio_abierto=True,

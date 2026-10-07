@@ -82,6 +82,8 @@ export interface BackendMembresia {
    * the admin actually validated.
    */
   montoAplicado?: string | null;
+  /** `MembresiaResponseDTO.periodicidad`; absent on older backends = MENSUAL. */
+  periodicidad?: string;
   /** Owner of the membership. Only present on `GET /membresias/` list items — used to group the bulk list by persona in `/api/members`. */
   personaId?: number;
   /**

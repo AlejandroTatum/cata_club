@@ -143,6 +143,115 @@ beforeEach(() => {
   mockEliminarTipoMembresia.mockReset();
 });
 
+const SEMANAL: TipoMembresiaCatalogo = {
+  id: 5,
+  categoria: "Semana libre",
+  precio: "8.00",
+  modalidad: "MENSUAL",
+  periodicidad: "SEMANAL",
+  activo: true,
+  enUso: false,
+};
+
+const DIARIA: TipoMembresiaCatalogo = {
+  id: 6,
+  categoria: "Día suelto",
+  precio: "3.00",
+  modalidad: "MENSUAL",
+  periodicidad: "DIARIA",
+  activo: true,
+  enUso: false,
+};
+
+describe("TarifasPage — periodicidad", () => {
+  it("labels each price with its period and badges the periodicity", async () => {
+    mockFetchTiposMembresia.mockResolvedValue([JUNIOR, SEMANAL, DIARIA]);
+    renderPage();
+
+    const mensual = await findTarifaRow("Junior");
+    const semanal = await findTarifaRow("Semana libre");
+    const diaria = await findTarifaRow("Día suelto");
+
+    expect(within(mensual).getByText("al mes")).toBeInTheDocument();
+    expect(within(mensual).getByText("$ 45.00")).toBeInTheDocument();
+    expect(within(semanal).getByText("a la semana")).toBeInTheDocument();
+    expect(within(semanal).getByText("Semanal")).toBeInTheDocument();
+    expect(within(diaria).getByText("por día")).toBeInTheDocument();
+    expect(within(diaria).getByText("Diaria")).toBeInTheDocument();
+  });
+
+  it("creates a weekly tariff sending its periodicidad", async () => {
+    mockCrearTipoMembresia.mockResolvedValueOnce({ ...SEMANAL });
+    renderPage();
+    await screen.findByTestId("tarifas-cards");
+
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
+    fireEvent.change(screen.getByLabelText(/nombre de la tarifa/i), { target: { value: "Semana libre" } });
+    fireEvent.change(screen.getByLabelText(/^precio/i), { target: { value: "8.00" } });
+    fireEvent.change(screen.getByLabelText(/periodicidad/i), { target: { value: "SEMANAL" } });
+    fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
+
+    await waitFor(() => {
+      expect(mockCrearTipoMembresia).toHaveBeenCalledWith({
+        categoria: "Semana libre",
+        precio: "8.00",
+        modalidad: "MENSUAL",
+        periodicidad: "SEMANAL",
+      });
+    });
+  });
+
+  it("creates a daily tariff sending its periodicidad", async () => {
+    mockCrearTipoMembresia.mockResolvedValueOnce({ ...DIARIA });
+    renderPage();
+    await screen.findByTestId("tarifas-cards");
+
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
+    fireEvent.change(screen.getByLabelText(/nombre de la tarifa/i), { target: { value: "Día suelto" } });
+    fireEvent.change(screen.getByLabelText(/^precio/i), { target: { value: "3.00" } });
+    fireEvent.change(screen.getByLabelText(/periodicidad/i), { target: { value: "DIARIA" } });
+    fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
+
+    await waitFor(() => {
+      expect(mockCrearTipoMembresia).toHaveBeenCalledWith(
+        expect.objectContaining({ periodicidad: "DIARIA" }),
+      );
+    });
+  });
+
+  it("lets the admin change the periodicidad of an unused tariff", async () => {
+    mockFetchTiposMembresia.mockResolvedValue([PRUEBA]);
+    mockActualizarTipoMembresia.mockResolvedValueOnce({ ...PRUEBA, periodicidad: "SEMANAL" });
+    renderPage();
+
+    const row = await findTarifaRow("Prueba");
+    fireEvent.click(within(row).getByRole("button", { name: /^editar$/i }));
+    fireEvent.change(within(row).getByLabelText(/periodicidad de prueba/i), {
+      target: { value: "SEMANAL" },
+    });
+    fireEvent.click(within(row).getByRole("button", { name: /^guardar$/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/semanal/i)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/pagos futuros/i)).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: /cambiar periodicidad/i }));
+
+    await waitFor(() => {
+      expect(mockActualizarTipoMembresia).toHaveBeenCalledWith(3, { periodicidad: "SEMANAL" });
+    });
+  });
+
+  it("locks the periodicidad of a tariff already in use", async () => {
+    renderPage();
+
+    const row = await findTarifaRow("Junior");
+    fireEvent.click(within(row).getByRole("button", { name: /^editar$/i }));
+
+    expect(within(row).getByLabelText(/periodicidad de junior/i)).toBeDisabled();
+    expect(within(row).getByText(/crea una tarifa nueva/i)).toBeInTheDocument();
+  });
+});
+
 describe("TarifasPage — listado", () => {
   it("lists every tariff with its category, price and modality", async () => {
     renderPage();

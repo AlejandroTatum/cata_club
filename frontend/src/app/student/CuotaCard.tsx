@@ -39,6 +39,7 @@ import { ICON } from "@/lib/icon-size";
 import { Badge, buttonClasses, cn } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/format-utils";
 import { MIN_TARGET_CLASS } from "@/lib/target-size";
+import { periodSuffix, type Periodicidad } from "@/lib/tarifa-periodo";
 import {
   COVERAGE_ENDING_SOON_DAYS,
   daysUntil,
@@ -53,6 +54,8 @@ export interface CuotaCardProps {
   coverageEnd: string | null;
   /** `Membresia.montoAplicado` — the plan's MONTHLY PRICE. Never a balance. */
   monthlyPrice: string | null;
+  /** The tariff's period, which words the price note; MENSUAL when absent. */
+  periodicidad?: Periodicidad;
   /** Where the CTA goes, or `null` when there is nothing to register from here. */
   action: { href: string; label: string } | null;
   /** The plain "see the history" destination, always available. */
@@ -102,6 +105,7 @@ export default function CuotaCard({
   situation,
   coverageEnd,
   monthlyPrice,
+  periodicidad,
   action,
   viewPagosHref,
   notice = null,
@@ -173,7 +177,7 @@ export default function CuotaCard({
               )}
             >
               {coverageEnd && <CuotaFigure label="Cubierta hasta" value={formatDate(coverageEnd)} />}
-              {monthlyPriceLabel && <CuotaFigure label="A pagar" value={monthlyPriceLabel} note="al mes" />}
+              {monthlyPriceLabel && <CuotaFigure label="A pagar" value={monthlyPriceLabel} note={periodSuffix(periodicidad)} />}
             </div>
           )}
         </div>

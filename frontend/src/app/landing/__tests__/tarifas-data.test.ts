@@ -27,6 +27,18 @@ describe("mapPublicTarifas", () => {
     ]);
   });
 
+  it("carries the period of weekly and daily plans, and nothing for monthly ones", () => {
+    expect(mapPublicTarifas([
+      { categoria: "Mensual", precio: "40.00", periodicidad: "MENSUAL" },
+      { categoria: "Semana", precio: "8.00", periodicidad: "SEMANAL" },
+      { categoria: "Día", precio: "3.00", periodicidad: "DIARIA" },
+    ])).toEqual([
+      { name: "Mensual", price: "$40,00" },
+      { name: "Semana", price: "$8,00", period: "a la semana" },
+      { name: "Día", price: "$3,00", period: "por día" },
+    ]);
+  });
+
   it("drops malformed entries and non-arrays", () => {
     expect(mapPublicTarifas([{ categoria: "", precio: "1" }, { categoria: "X" }, null, "x"])).toEqual([]);
     expect(mapPublicTarifas({ message: "error" })).toEqual([]);

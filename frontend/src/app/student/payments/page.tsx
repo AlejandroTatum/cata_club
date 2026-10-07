@@ -355,6 +355,7 @@ function PaymentsContent({
     hasMembership: selectedProfile?.membership != null,
     planName: selectedProfile?.membership?.categoria ?? null,
     monthlyPrice: selectedProfile?.membership?.montoAplicado ?? null,
+    periodicidad: selectedProfile?.membership?.periodicidad,
     coverageEnd,
     discountedCoverageEnd,
     pendingCount: pagos.filter((pago) => pago.estadoPago === "PENDIENTE_VALIDACION").length,
