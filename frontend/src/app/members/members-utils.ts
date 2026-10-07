@@ -581,6 +581,37 @@ export function accountMatchesFlag(
 }
 
 /**
+ * The members list's role filter. «Jugador» is the list's own notion
+ * (`accountDisplayRoles`: the ALUMNO role or an own ACTIVA membership), so the
+ * filter and the role badge on each row can never disagree.
+ */
+export type MemberRoleFilter = "jugador" | "admin" | "entrenador" | "representante" | "todos";
+
+export const MEMBER_ROLE_FILTER_OPTIONS: { value: MemberRoleFilter; label: string }[] = [
+  { value: "jugador", label: "Jugador" },
+  { value: "admin", label: "Admin" },
+  { value: "entrenador", label: "Entrenador" },
+  { value: "representante", label: "Representante" },
+  { value: "todos", label: "Todos" },
+];
+
+/** The list always opens on players. */
+export const DEFAULT_MEMBER_ROLE_FILTER: MemberRoleFilter = "jugador";
+
+const ROLE_FILTER_BACKEND_ROLE: Record<Exclude<MemberRoleFilter, "todos">, BackendTipoRol> = {
+  jugador: "ALUMNO",
+  admin: "ADMINISTRADOR",
+  entrenador: "ENTRENADOR",
+  representante: "REPRESENTANTE",
+};
+
+/** Does the account hold the picked role? A multi-role person matches each of theirs. */
+export function accountMatchesRole(account: MemberAccount, filter: MemberRoleFilter): boolean {
+  if (filter === "todos") return true;
+  return accountDisplayRoles(account).includes(ROLE_FILTER_BACKEND_ROLE[filter]);
+}
+
+/**
  * Count accounts matching a filter flag — powers the chip's count badge.
  */
 export function countAccountsMatchingFlag(
