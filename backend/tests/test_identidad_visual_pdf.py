@@ -153,7 +153,7 @@ def test_el_comprobante_deja_aire_para_el_membrete(monkeypatch):
 
     doc = capturado["doc"]
     alto_banner = doc.width * generador_pdf._MEMBRETE_PROPORCION
-    assert doc.topMargin >= alto_banner + 3 * generador_pdf._INTERLINEADO_MEMBRETE
+    assert doc.topMargin >= alto_banner + 2 * mm
     assert doc.bottomMargin >= 16 * mm
 
 
@@ -405,52 +405,76 @@ def test_el_banner_del_membrete_existe_y_conserva_la_proporcion_del_cliente():
     assert generador_pdf._MEMBRETE_PROPORCION == pytest.approx(alto / ancho)
 
 
-# --- #1655: el bloque de título va pegado al banner --------------------------
+# --- El bloque de título va DENTRO del banner, sobre la franja roja ---------
+#
+# Medido en el PNG del cliente (1166x253 px): la franja roja ocupa las filas
+# 159-200 y el logo las columnas 40-218 de la zona blanca superior. El dueño
+# pidió el título «arriba de la línea roja», a la derecha del logo.
+_FILA_SUPERIOR_FRANJA_PX = 159
+_COLUMNA_FIN_LOGO_PX = 218
+
 
 def _posiciones_del_membrete(monkeypatch, generar):
-    """Devuelve (y_base_del_banner, [y de cada línea del membrete], margen superior)."""
+    """Devuelve ((x, y, ancho, alto) del banner, {línea: (x, y)})."""
     from reportlab.pdfgen.canvas import Canvas
 
-    banner: list[float] = []
-    lineas: dict[str, float] = {}
+    banner: list[tuple[float, float, float, float]] = []
+    lineas: dict[str, tuple[float, float]] = {}
     imagen_original = Canvas.drawImage
     centrado_original = Canvas.drawCentredString
 
-    def _imagen(self, imagen, x, y, *a, **k):
-        banner.append(y)
-        return imagen_original(self, imagen, x, y, *a, **k)
+    def _imagen(self, imagen, x, y, width=None, height=None, *a, **k):
+        banner.append((x, y, width, height))
+        return imagen_original(self, imagen, x, y, width, height, *a, **k)
 
     def _centrado(self, x, y, texto, *a, **k):
         if texto in _LINEAS_MEMBRETE:
-            lineas[texto] = y
+            lineas[texto] = (x, y)
         return centrado_original(self, x, y, texto, *a, **k)
 
     monkeypatch.setattr(Canvas, "drawImage", _imagen)
     monkeypatch.setattr(Canvas, "drawCentredString", _centrado)
     generar()
-    return banner[0], [lineas[t] for t in _LINEAS_MEMBRETE]
+    return banner[0], lineas
 
 
 @pytest.mark.parametrize("generar", [_generar_comprobante, _generar_reporte])
-def test_el_titulo_del_membrete_queda_pegado_al_banner(monkeypatch, generar):
-    base_banner, lineas = _posiciones_del_membrete(monkeypatch, generar)
+def test_el_titulo_del_membrete_va_sobre_la_franja_roja(monkeypatch, generar):
+    from reportlab.pdfbase.pdfmetrics import stringWidth
 
-    # La primera línea arranca a menos de 4 mm de la base del banner (antes ~6,4 mm).
-    assert base_banner - lineas[0] < 4 * mm
-    assert lineas == sorted(lineas, reverse=True)
+    (x_banner, base_banner, ancho, alto), lineas = _posiciones_del_membrete(monkeypatch, generar)
+    escala = ancho / 1166
+    tope_franja = base_banner + (253 - _FILA_SUPERIOR_FRANJA_PX) * escala
+    tope_banner = base_banner + alto
+    fin_logo = x_banner + _COLUMNA_FIN_LOGO_PX * escala
+
+    ys = [lineas[t][1] for t in _LINEAS_MEMBRETE]
+    assert ys == sorted(ys, reverse=True)
+    # Todo el bloque cae en la zona blanca: sobre la franja y bajo el borde superior.
+    assert ys[-1] > tope_franja
+    assert ys[0] + generador_pdf._TAM_LINEA_MEMBRETE < tope_banner
+    for indice, texto in enumerate(_LINEAS_MEMBRETE):
+        x_centro, _ = lineas[texto]
+        fuente = (
+            generador_pdf._FUENTE_MEMBRETE_NEGRITA if indice == 0 else generador_pdf._FUENTE_MEMBRETE
+        )
+        medio_ancho = stringWidth(texto, fuente, generador_pdf._TAM_LINEA_MEMBRETE) / 2
+        # A la derecha del logo y dentro del banner.
+        assert x_centro - medio_ancho > fin_logo
+        assert x_centro + medio_ancho < x_banner + ancho
 
 
 @pytest.mark.parametrize(
     "generar, margen_lateral",
     [(_generar_comprobante, 18 * mm), (_generar_reporte, 14 * mm)],
 )
-def test_el_margen_superior_coincide_con_la_altura_del_membrete(
+def test_el_margen_superior_coincide_con_la_altura_del_banner(
     monkeypatch, generar, margen_lateral,
 ):
     from reportlab.lib.pagesizes import A4
 
-    _, lineas = _posiciones_del_membrete(monkeypatch, generar)
+    (_, base_banner, _, _), _ = _posiciones_del_membrete(monkeypatch, generar)
     inicio_del_cuerpo = A4[1] - generador_pdf._margen_superior(A4[0] - 2 * margen_lateral)
 
-    # El cuerpo arranca entre 2 y 6 mm bajo la última línea: sin solape ni hueco.
-    assert 2 * mm <= lineas[-1] - inicio_del_cuerpo <= 6 * mm
+    # Sin líneas bajo el banner, el cuerpo arranca entre 2 y 6 mm bajo su base.
+    assert 2 * mm <= base_banner - inicio_del_cuerpo <= 6 * mm

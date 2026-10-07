@@ -47,6 +47,13 @@ _PIE_TELEFONOS = "Tel\u00e9fonos: 0994219619 \u2013 0990288152"
 _TAM_LINEA_MEMBRETE = 10
 _INTERLINEADO_MEMBRETE = 4.2 * mm
 _MARGEN_PAPEL_MEMBRETE = 8 * mm
+# Zona blanca del PNG donde va el título (medida en píxeles sobre 1166x253):
+# la franja roja empieza en la fila 159 y el logo termina en la columna 218.
+# El título se centra entre el fin del logo (con aire) y el borde derecho, y
+# su última línea queda apenas sobre la franja.
+_FRACCION_TOPE_FRANJA = (253 - 159) / 253
+_FRACCION_INICIO_TITULO = 236 / 1166
+_AIRE_SOBRE_FRANJA = 2.5 * mm
 _ROJO_INSTITUCIONAL = "#D92128"
 _NEGRO_INSTITUCIONAL = "#111111"
 # Gris de las filas pares: el rojo institucional lavado hasta el punto en que
@@ -56,15 +63,12 @@ _GRIS_FILAS_ALTERNAS = "#F3F0F0"
 _NOMBRE_CLUB = "Cata Club - Tenis de Mesa"
 
 # Alto que se reserva arriba de la hoja: el banner (escalado al ancho del
-# contenido), las tres líneas del membrete (pegadas al banner) y un respiro. Ni el banner ni las
-# líneas son flowables, así que no empujan el contenido: si el margen superior
-# no los deja pasar, el texto les cae encima.
+# contenido, con las tres líneas del membrete dibujadas DENTRO, sobre la
+# franja roja) y un respiro. El banner no es un flowable, así que no empuja el
+# contenido: si el margen superior no lo deja pasar, el texto le cae encima.
 def _margen_superior(ancho_contenido: float) -> float:
     alto_banner = ancho_contenido * _MEMBRETE_PROPORCION
-    return (
-        _MARGEN_PAPEL_MEMBRETE + alto_banner
-        + len(_LINEAS_MEMBRETE) * _INTERLINEADO_MEMBRETE + 4 * mm
-    )
+    return _MARGEN_PAPEL_MEMBRETE + alto_banner + 4 * mm
 
 
 # Pie en cada hoja: teléfonos centrados a 10mm y, en reportes, «Página X de N»
@@ -590,28 +594,31 @@ def _dibujar_encabezado_pagina(canvas, doc) -> None:
     ancho_contenido = ancho_pagina - doc.leftMargin - doc.rightMargin
     y = alto_pagina - _MARGEN_PAPEL_MEMBRETE
 
+    alto_banner = ancho_contenido * _MEMBRETE_PROPORCION
+    base_banner = y - alto_banner
     if _MEMBRETE_PATH.exists():
-        alto_banner = ancho_contenido * _MEMBRETE_PROPORCION
-        y -= alto_banner
         canvas.drawImage(
             str(_MEMBRETE_PATH),
             doc.leftMargin,
-            y,
+            base_banner,
             width=ancho_contenido,
             height=alto_banner,
             mask="auto",
         )
 
+    # El dueño pidió el título «arriba de la línea roja»: en la zona blanca
+    # del banner, a la derecha del logo, con la última línea pegada a la franja.
     canvas.setFillColor(colors.HexColor(_NEGRO_INSTITUCIONAL))
-    # El PNG ya trae ~3 mm de blanco bajo el logo: el título arranca sin
-    # separación extra para quedar pegado al banner.
+    x_centro = doc.leftMargin + ancho_contenido * (1 + _FRACCION_INICIO_TITULO) / 2
+    y_linea = base_banner + alto_banner * _FRACCION_TOPE_FRANJA + _AIRE_SOBRE_FRANJA
+    y_linea += (len(_LINEAS_MEMBRETE) - 1) * _INTERLINEADO_MEMBRETE
     for indice, linea in enumerate(_LINEAS_MEMBRETE):
-        y -= _INTERLINEADO_MEMBRETE
         canvas.setFont(
             _FUENTE_MEMBRETE_NEGRITA if indice == 0 else _FUENTE_MEMBRETE,
             _TAM_LINEA_MEMBRETE,
         )
-        canvas.drawCentredString(ancho_pagina / 2, y + 1.2 * mm, linea)
+        canvas.drawCentredString(x_centro, y_linea, linea)
+        y_linea -= _INTERLINEADO_MEMBRETE
 
     canvas.setFont(_FUENTE_MEMBRETE, 9)
     canvas.drawCentredString(ancho_pagina / 2, 10 * mm, _PIE_TELEFONOS)
