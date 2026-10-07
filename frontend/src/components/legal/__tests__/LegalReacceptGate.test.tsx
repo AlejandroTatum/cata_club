@@ -160,4 +160,58 @@ describe("LegalReacceptGate", () => {
 
     expect(logout).toHaveBeenCalledTimes(1);
   });
+  it("re-checks the status after a 403 without the code and opens the dialog when pending", async () => {
+    fetchSpy
+      .mockResolvedValueOnce(json({ pendiente: false, version: "2.3" }))
+      .mockResolvedValueOnce(json({ message: "Forbidden" }, 403))
+      .mockResolvedValueOnce(json({ pendiente: true, version: "2.3" }));
+    render(<LegalReacceptGate />);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+
+    await window.fetch("/api/ranking/notificaciones/mias");
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(fetchSpy.mock.calls[2][0]).toBe("/api/auth/consentimiento-legal");
+  });
+
+  it("does not open the dialog nor re-check again within the cooldown when the status is not pending", async () => {
+    vi.useFakeTimers();
+    fetchSpy.mockImplementation(async (input) =>
+      String(input) === "/api/auth/consentimiento-legal"
+        ? json({ pendiente: false, version: "2.3" })
+        : json({ message: "Forbidden" }, 403),
+    );
+    render(<LegalReacceptGate />);
+    await vi.advanceTimersByTimeAsync(0);
+    const statusCalls = (): number =>
+      fetchSpy.mock.calls.filter(([url]) => String(url) === "/api/auth/consentimiento-legal").length;
+    expect(statusCalls()).toBe(1);
+
+    await Promise.all([window.fetch("/api/a"), window.fetch("/api/b"), window.fetch("/api/c")]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(statusCalls()).toBe(2);
+    await window.fetch("/api/d");
+    await vi.advanceTimersByTimeAsync(5_000);
+    await window.fetch("/api/e");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(statusCalls()).toBe(2);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await window.fetch("/api/f");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(statusCalls()).toBe(3);
+  });
+
+  it("never re-checks because of a 403 on the status endpoint itself", async () => {
+    vi.useFakeTimers();
+    fetchSpy.mockImplementation(async () => json({ message: "Forbidden" }, 403));
+    render(<LegalReacceptGate />);
+    await vi.advanceTimersByTimeAsync(0);
+    await window.fetch("/api/auth/consentimiento-legal");
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Only the mount check (a non-OK answer schedules a retry later), no extra immediate calls.
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
 });

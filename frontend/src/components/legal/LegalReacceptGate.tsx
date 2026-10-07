@@ -78,7 +78,11 @@ export default function LegalReacceptGate(): ReactElement | null {
       });
     };
     check(0);
-    const stopWatching = watchForReacceptanceBlock(() => setPending(true));
+    const stopWatching = watchForReacceptanceBlock({
+      onBlocked: () => setPending(true),
+      recheck: () => readPending(STATUS_URL),
+      statusUrl: STATUS_URL,
+    });
     return (): void => {
       cancelled = true;
       if (timer !== undefined) clearTimeout(timer);
