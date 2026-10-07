@@ -59,10 +59,11 @@ export function BonificacionesSection(): React.ReactElement | null {
     try {
       const res = await fetch(`/api/membresias/coberturas/todas?skip=${items.length}&limit=${PAGE_SIZE}`);
       const body: BonificacionesPage | null = res.ok ? await res.json() : null;
-      if (!body?.items) throw new Error("bonificaciones page failed");
+      const nextItems = body?.items;
+      if (!body || !nextItems) throw new Error("bonificaciones page failed");
       setItems((previous) => {
         const seen = new Set(previous.map((i) => i.id));
-        return [...previous, ...body.items.filter((i) => !seen.has(i.id))];
+        return [...previous, ...nextItems.filter((i) => !seen.has(i.id))];
       });
       setTotal(body.total ?? total);
     } catch {
