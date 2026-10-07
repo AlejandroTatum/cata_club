@@ -358,6 +358,10 @@ class CoRepresentanteServicio:
         transacción que fija la contraseña)."""
         ahora = datetime.now(timezone.utc)
         for invitacion in self.repo.listar_pendientes_de_cuenta(cuenta.persona_id):
+            if not self.repo.existe(invitacion.persona_id, cuenta.persona_id):
+                # Invitación posterior de otro principal: no creó vínculo, así
+                # que sigue pendiente y se acepta con la sesión de la cuenta.
+                continue
             invitacion.aceptada_en = ahora
             self._evento(
                 invitacion.persona_id, cuenta.persona_id, cuenta.persona_id,

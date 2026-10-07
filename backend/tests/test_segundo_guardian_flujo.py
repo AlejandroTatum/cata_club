@@ -395,6 +395,36 @@ def test_aceptar_con_el_enlace_verifica_el_correo_y_audita_la_aceptacion(client,
     assert login.status_code == 200, login.text
 
 
+def test_el_enlace_no_acepta_la_invitacion_de_otro_principal_a_la_misma_cuenta_nueva(client, db_session, fam):
+    """La cuenta que creo una invitacion solo consiente, al fijar la contrasenia,
+    los vinculos que esa invitacion ya creo. La invitacion posterior de OTRO
+    principal queda pendiente y se acepta con la sesion, como cualquier otra."""
+    otro = crear_persona_orm(db_session, cedula_valida(8210), nombres="Otra", apellidos="Familia")
+    menor3 = crear_persona_orm(
+        db_session, cedula_valida(8211), nombres="Nieta", apellidos="Familia", fecha_nacimiento=date(2016, 6, 6),
+    )
+    menor3.representante_id = otro.id
+    _cuenta(db_session, otro, "otra@x.com", TipoRol.REPRESENTANTE)
+    db_session.commit()
+    _invitar(client, fam)
+    _como(otro.id, ["REPRESENTANTE"], "otra@x.com")
+    _invitar(client, fam, persona_ids=[menor3.id])
+    cuenta = db_session.query(Usuario).filter_by(correo=CORREO_NUEVO).one()
+
+    assert _restablecer(client, _token_del_correo(cuenta), acepta_terminos=True).status_code == 204
+
+    db_session.expire_all()
+    assert db_session.query(CoRepresentante).filter_by(persona_id=menor3.id).count() == 0
+    assert db_session.query(CoRepresentanteInvitacion).filter_by(persona_id=menor3.id).one().aceptada_en is None
+    assert [e[0] for e in _eventos(db_session, menor3.id)] == ["INVITACION"]
+    assert [e[0] for e in _eventos(db_session, fam.menor.id)] == ["INVITACION", "ALTA", "ACEPTACION"]
+    _como(cuenta.persona_id, ["REPRESENTANTE"], CORREO_NUEVO)
+    recibidas = client.get(f"{BASE}/co-representantes/invitaciones/recibidas").json()
+    assert [r["nombreMenor"] for r in recibidas] == ["Nieta"]
+    assert client.post(f"{BASE}/co-representantes/invitaciones/{recibidas[0]['id']}/aceptar").status_code == 204
+    assert client.get(f"{BASE}/personas/{menor3.id}").status_code == 200
+
+
 def test_un_token_reutilizado_se_rechaza(client, db_session, fam):
     _invitar(client, fam)
     cuenta = db_session.query(Usuario).filter_by(correo=CORREO_NUEVO).one()
