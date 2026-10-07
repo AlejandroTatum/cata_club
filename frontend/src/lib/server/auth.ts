@@ -23,7 +23,10 @@
  *                         an Authorization header — a refresh token is
  *                         intentionally not a general bearer credential.
  *                         -> { access_token, token_type } (no refresh_token)
- *   POST /auth/logout   — informational only; does not revoke tokens server-side.
+ *   POST /auth/logout   — Authorization: Bearer <access_token>. Revokes the
+ *                         session server-side: bumps the user's session epoch,
+ *                         so every access AND refresh token issued before it
+ *                         stops working (TRA-10).
  *   Access tokens expire in 60 min, refresh tokens in 7 days.
  */
 
@@ -699,10 +702,10 @@ export async function backendRefresh(
 }
 
 /**
- * Best-effort logout call — failures are swallowed by design. The backend
- * contract states logout is informational only (it does not revoke tokens
- * server-side), so client-side cookie clearing is always authoritative
- * regardless of whether this call succeeds.
+ * Best-effort logout call — failures are swallowed by design. A successful
+ * call revokes the session server-side (session epoch bump); callers still
+ * clear the cookies regardless of whether it succeeds, so the browser is
+ * signed out even when the backend is unreachable.
  */
 export async function backendLogout(accessToken: string): Promise<void> {
   try {
