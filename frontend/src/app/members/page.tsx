@@ -42,6 +42,7 @@ import {
   InfoPanel,
   PAGE_RAIL,
   SearchInput,
+  Select,
   TableCell,
   TableHeaderCell,
   TableRow,
@@ -79,9 +80,12 @@ import {
   formatMembershipCoverage,
   filterAccounts,
   accountMatchesFlag,
+  accountMatchesRole,
+  MEMBER_ROLE_FILTER_OPTIONS,
+  DEFAULT_MEMBER_ROLE_FILTER,
+  type MemberRoleFilter,
   countAccountsMatchingFlag,
   getAccountStatusBadge,
-  getAccountStateBadge,
   getMembershipStatusBadge,
   getDebtSummary,
   isRepresentativePersonaRow,
@@ -494,7 +498,6 @@ function AccountRowActions({
 /** One account as a table row (`sm` and up). */
 function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemProps): React.ReactElement {
   const statusBadge = getAccountStatusBadge(account);
-  const accountBadge = getAccountStateBadge(account);
   const debtSummary = getDebtSummary(account);
   const fullName = `${account.nombres} ${account.apellidos}`;
   // Issue #1199/#1211: the representative/payer's own row (badge
@@ -527,11 +530,6 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
         {/* ADMA-24: how much is owed and since when, without opening the ficha. */}
         {debtSummary ? <p className="mt-1 text-2xs text-ink-3">{debtSummary}</p> : null}
       </TableCell>
-      {/* Issue #869: `Cuenta` — `Usuario.activo`, never derived from the
-          `Membresía` badge to its left. */}
-      <TableCell type="badge">
-        <Badge tone={accountBadge.tone}>{accountBadge.label}</Badge>
-      </TableCell>
       <TableCell type="action">
         <div className="flex items-center justify-end gap-1.5">
           <AccountRowActions
@@ -550,7 +548,6 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
 /** The same account below `sm`, where a five-column table cannot fit. */
 function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItemProps): React.ReactElement {
   const statusBadge = getAccountStatusBadge(account);
-  const accountBadge = getAccountStateBadge(account);
   const debtSummary = getDebtSummary(account);
   // Issue #1199: same rule as `AccountRow` above.
   const showStudentActions = !isRepresentativePersonaRow(account);
@@ -578,9 +575,6 @@ function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItem
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
           {debtSummary ? <span className="text-2xs text-ink-3">{debtSummary}</span> : null}
-          {/* Issue #869: `Cuenta`, the mobile row equivalent of the desktop
-              table's own column — never derived from the badge above. */}
-          <Badge tone={accountBadge.tone}>{accountBadge.label}</Badge>
         </div>
       }
       actions={
@@ -998,35 +992,8 @@ function MemberEditDialog({
 }
 
 // ---------------------------------------------------------------------------
-// List fill + rail
+// Rail
 // ---------------------------------------------------------------------------
-
-/** Rows the list card keeps drawn, so a short result does not leave a hole under it. */
-const MIN_LIST_ROWS = 6;
-
-/**
- * Placeholder rows below a short, single-page result. Purely decorative
- * (`aria-hidden`, not `<tr>`s), so row counts, roles and tests never see them;
- * they only keep the card as tall as a normal list instead of letting it
- * collapse to one or two rows beside a taller rail.
- */
-function GhostRows({ shown }: { shown: number }): React.ReactElement | null {
-  const missing = MIN_LIST_ROWS - shown;
-  if (missing <= 0) return null;
-  return (
-    <div aria-hidden="true" data-testid="members-ghost-rows" className="hidden sm:block">
-      {Array.from({ length: missing }, (_, index) => (
-        <div key={index} className="flex h-[60px] items-center gap-3 border-t border-line px-4">
-          <div className="h-9 w-9 rounded-full bg-sunken" />
-          <div className="grid gap-1.5">
-            <div className="h-2.5 w-40 rounded-full bg-sunken" />
-            <div className="h-2 w-24 rounded-full bg-sunken/70" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 const RAIL_ROW =
   "flex min-h-[44px] w-full items-center gap-3 rounded-ctl px-3 text-left text-sm text-ink transition-colors hover:bg-sunken";
@@ -1135,6 +1102,8 @@ export default function MembersPage(): React.ReactElement {
   const { session, isLoading } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [activeFlag, setActiveFlag] = useState<MemberFilterFlag>("all");
+  // Not persisted: the list opens on players every time.
+  const [roleFilter, setRoleFilter] = useState<MemberRoleFilter>(DEFAULT_MEMBER_ROLE_FILTER);
   const [accounts, setAccounts] = useState<MemberAccount[]>([]);
   /** At least one membership could not be read upstream — see `MembersResponse`. */
   const [loading, setLoading] = useState(true);
@@ -1200,12 +1169,17 @@ export default function MembersPage(): React.ReactElement {
   // paginator never gets stuck on a stale/out-of-range page.
   useEffect(() => {
     setPage(1);
-  }, [searchTerm, activeFlag]);
+  }, [searchTerm, activeFlag, roleFilter]);
 
   const stats = buildMemberStats(accounts);
-  const filteredAccounts = filterAccounts(accounts, searchTerm).filter((account) =>
+  // The role is the view the admin is looking at: the chips count inside it,
+  // so «Todos N» always matches the rows the list can show.
+  const accountsInRole = accounts.filter((account) => accountMatchesRole(account, roleFilter));
+  const filteredAccounts = filterAccounts(accountsInRole, searchTerm).filter((account) =>
     accountMatchesFlag(account, activeFlag),
   );
+
+  const filtering = searchTerm !== "" || activeFlag !== "all" || roleFilter !== "todos";
 
   const totalPages = useMemo(() => getTotalPages(filteredAccounts.length), [filteredAccounts]);
   const paginatedAccounts = useMemo(
@@ -1266,13 +1240,31 @@ export default function MembersPage(): React.ReactElement {
               onChange={setSearchTerm}
             />
           }
+          fields={
+            <div className="flex min-w-[150px] flex-col gap-1.5 sm:max-w-[220px]">
+              <label htmlFor="members-role-filter" className="text-xs font-semibold text-ink-2">
+                Rol
+              </label>
+              <Select
+                id="members-role-filter"
+                value={roleFilter}
+                onChange={(event) => setRoleFilter(event.target.value as MemberRoleFilter)}
+              >
+                {MEMBER_ROLE_FILTER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          }
           chips={
             <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar miembros">
               {FILTER_CHIPS.map((chip) => (
                 <FilterPill
                   key={chip.flag}
                   label={chip.label}
-                  count={countAccountsMatchingFlag(accounts, chip.flag)}
+                  count={countAccountsMatchingFlag(accountsInRole, chip.flag)}
                   active={activeFlag === chip.flag}
                   onClick={() => setActiveFlag(chip.flag)}
                 />
@@ -1340,9 +1332,6 @@ export default function MembersPage(): React.ReactElement {
                   <TableHeaderCell>Miembro</TableHeaderCell>
                   <TableHeaderCell className="hidden lg:table-cell">Representado por</TableHeaderCell>
                   <TableHeaderCell type="badge">Membresía</TableHeaderCell>
-                  {/* Issue #869: account (login) state, separate from
-                      Membresía to its left — never derived from it. */}
-                  <TableHeaderCell type="badge">Cuenta</TableHeaderCell>
                   {/* Named for what the column HOLDS, not for the button
                       inside it — a column called "Editar" is a heading that
                       reads the label of the control under it back to you.
@@ -1381,7 +1370,6 @@ export default function MembersPage(): React.ReactElement {
                 ) : undefined
               }
             />
-            {totalPages <= 1 && <GhostRows shown={paginatedAccounts.length} />}
           </div>
         ) : null}
 
@@ -1396,21 +1384,22 @@ export default function MembersPage(): React.ReactElement {
             fill
             icon={<Users size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
             title={
-              searchTerm || activeFlag !== "all"
+              filtering
                 ? "No se encontraron miembros"
                 : "Aún no hay miembros registrados"
             }
             description={
-              searchTerm || activeFlag !== "all"
+              filtering
                 ? "Ningún miembro coincide con la búsqueda y los filtros activos."
                 : "La primera cuenta registrada aparecerá en este listado."
             }
             action={
-              searchTerm || activeFlag !== "all" ? (
+              filtering ? (
                 <Button
                   onClick={() => {
                     setSearchTerm("");
                     setActiveFlag("all");
+                    setRoleFilter("todos");
                   }}
                 >
                   Limpiar búsqueda

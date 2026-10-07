@@ -581,6 +581,49 @@ export function accountMatchesFlag(
 }
 
 /**
+ * The members list's role filter. «Jugador» is the list's own notion
+ * (`accountDisplayRoles`: the ALUMNO role or an own ACTIVA membership), so the
+ * filter and the role badge on each row can never disagree.
+ */
+export type MemberRoleFilter = "jugador" | "admin" | "entrenador" | "representante" | "todos";
+
+export const MEMBER_ROLE_FILTER_OPTIONS: { value: MemberRoleFilter; label: string }[] = [
+  { value: "jugador", label: "Jugador" },
+  { value: "admin", label: "Admin" },
+  { value: "entrenador", label: "Entrenador" },
+  { value: "representante", label: "Representante" },
+  { value: "todos", label: "Todos" },
+];
+
+/** The list always opens on players. */
+export const DEFAULT_MEMBER_ROLE_FILTER: MemberRoleFilter = "jugador";
+
+const ROLE_FILTER_BACKEND_ROLE: Record<Exclude<MemberRoleFilter, "todos">, BackendTipoRol> = {
+  jugador: "ALUMNO",
+  admin: "ADMINISTRADOR",
+  entrenador: "ENTRENADOR",
+  representante: "REPRESENTANTE",
+};
+
+/**
+ * Does the account hold the picked role? A multi-role person matches each of
+ * theirs. «Jugador» is the club's player rule (`isPlayerAccount`, owner
+ * decision A in #1669) plus a new player whose first payment is still
+ * pending (INACTIVA): the admin opens this list precisely to register it
+ * (owner, 2026-10-06: "si que aparezca el chico que aun no paga").
+ */
+export function accountMatchesRole(account: MemberAccount, filter: MemberRoleFilter): boolean {
+  if (filter === "todos") return true;
+  const shown = accountDisplayRoles(account).includes(ROLE_FILTER_BACKEND_ROLE[filter]);
+  if (filter !== "jugador") return shown;
+  return (
+    shown ||
+    isPlayerAccount(account) ||
+    account.estudiantes.some((student) => student.membresia?.estadoBackend === "INACTIVA")
+  );
+}
+
+/**
  * Count accounts matching a filter flag — powers the chip's count badge.
  */
 export function countAccountsMatchingFlag(

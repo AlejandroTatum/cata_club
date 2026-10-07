@@ -54,6 +54,8 @@ const ZOOM_FLOOR_PX = 16;
 const ACCOUNT = {
   id: "1",
   role: "representante",
+  // The list opens on «Jugador»; a lapsed player still holds the ALUMNO role.
+  backendRoles: ["ALUMNO"],
   nombres: "María",
   apellidos: "González",
   email: "maria@example.test",

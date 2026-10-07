@@ -22,6 +22,8 @@ const MOCK_ACCESS_TOKEN = "mock-header.mock-payload.mock-signature";
 const ACCOUNT = {
   id: "1",
   role: "representante",
+  // The list opens on «Jugador»; a lapsed player still holds the ALUMNO role.
+  backendRoles: ["ALUMNO"],
   nombres: "María",
   apellidos: "González",
   email: "maria@example.test",

@@ -24,6 +24,9 @@ import {
   isRepresentativePersonaRow,
   normalizeText,
   accountMatchesFlag,
+  accountMatchesRole,
+  MEMBER_ROLE_FILTER_OPTIONS,
+  DEFAULT_MEMBER_ROLE_FILTER,
   countAccountsMatchingFlag,
   paginateAccounts,
   getTotalPages,
@@ -1454,5 +1457,65 @@ describe("describePeriodoPago — the period a payment covers, in words (#1668)"
 
   it("is empty when a date is missing", () => {
     expect(describePeriodoPago("", "2026-09-21")).toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// accountMatchesRole — the members list's role filter
+// ---------------------------------------------------------------------------
+
+describe("accountMatchesRole", () => {
+  function roleAccount(overrides: Partial<MemberAccount>): MemberAccount {
+    return {
+      id: "acct",
+      role: "representante",
+      nombres: "Marta",
+      apellidos: "Reyes",
+      telefono: "+593 90 000 0001",
+      estudiantes: [],
+      ...overrides,
+    };
+  }
+  const activeStudent: MemberAccount["estudiantes"][number] = {
+    id: "acct", nombres: "Marta", apellidos: "Reyes", activo: true,
+    membresia: { id: 1, tipo: "Adultos", estado: "activa", fechaInicio: "", fechaFin: "", monto: 35 },
+    ultimoPago: null,
+  };
+
+  it("defaults to Jugador and offers Jugador, Admin, Entrenador, Representante and Todos", () => {
+    expect(DEFAULT_MEMBER_ROLE_FILTER).toBe("jugador");
+    expect(MEMBER_ROLE_FILTER_OPTIONS.map((o) => o.label)).toEqual([
+      "Jugador", "Admin", "Entrenador", "Representante", "Todos",
+    ]);
+  });
+
+  it("matches «todos» for any account, even one with no roles", () => {
+    expect(accountMatchesRole(roleAccount({}), "todos")).toBe(true);
+  });
+
+  it("matches each backend role by its own filter only", () => {
+    const admin = roleAccount({ backendRoles: ["ADMINISTRADOR"] });
+    const trainer = roleAccount({ backendRoles: ["ENTRENADOR"] });
+    const rep = roleAccount({ backendRoles: ["REPRESENTANTE"] });
+    expect(accountMatchesRole(admin, "admin")).toBe(true);
+    expect(accountMatchesRole(admin, "entrenador")).toBe(false);
+    expect(accountMatchesRole(trainer, "entrenador")).toBe(true);
+    expect(accountMatchesRole(trainer, "representante")).toBe(false);
+    expect(accountMatchesRole(rep, "representante")).toBe(true);
+    expect(accountMatchesRole(rep, "jugador")).toBe(false);
+  });
+
+  it("uses the club's «Jugador» rule: ALUMNO role or an own ACTIVA/VENCIDA membership", () => {
+    expect(accountMatchesRole(roleAccount({ backendRoles: ["ALUMNO"] }), "jugador")).toBe(true);
+    const repWithMembership = roleAccount({ backendRoles: ["REPRESENTANTE"], estudiantes: [activeStudent] });
+    expect(accountMatchesRole(repWithMembership, "jugador")).toBe(true);
+    expect(accountMatchesRole(repWithMembership, "representante")).toBe(true);
+  });
+
+  it("lists a person with several roles under each matching role", () => {
+    const both = roleAccount({ backendRoles: ["ADMINISTRADOR", "ENTRENADOR"] });
+    expect(accountMatchesRole(both, "admin")).toBe(true);
+    expect(accountMatchesRole(both, "entrenador")).toBe(true);
+    expect(accountMatchesRole(both, "representante")).toBe(false);
   });
 });
