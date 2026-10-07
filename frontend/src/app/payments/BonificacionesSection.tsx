@@ -113,6 +113,7 @@ export function BonificacionesSection(): React.ReactElement | null {
       </ul>
       {moreFailed && (
         <p role="alert" className="mt-2 text-sm text-state-bad">
+          {/* App-wide tú register, enforced by lib/__tests__/usted-register.test.ts. */}
           No se pudieron cargar más bonificaciones. Intenta de nuevo.
         </p>
       )}
