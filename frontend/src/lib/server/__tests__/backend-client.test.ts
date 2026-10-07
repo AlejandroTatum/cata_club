@@ -257,6 +257,23 @@ describe("passthroughBackendError", () => {
     });
   });
 
+  it("forwards a string `codigo` so the browser can tell a 403 re-acceptance block apart", async () => {
+    const response = await passthroughBackendError(
+      jsonResponse(
+        { detail: "Debes aceptar.", message: "Debes aceptar.", mensaje_seguro: true, codigo: "reaceptacion_legal_pendiente", version: "2.3" },
+        403,
+      ),
+      "fallback",
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      message: "Debes aceptar.",
+      mensaje_seguro: true,
+      codigo: "reaceptacion_legal_pendiente",
+    });
+  });
+
   it("prefers `message` over `detail` when the backend sends both", async () => {
     const response = await passthroughBackendError(
       jsonResponse({ message: "Mensaje", detail: "Detalle" }, 400),

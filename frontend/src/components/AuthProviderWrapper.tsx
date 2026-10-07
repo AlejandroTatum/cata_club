@@ -22,7 +22,7 @@ export default function AuthProviderWrapper({
       {/* Issue #454 — needs to be INSIDE AuthProvider (reads useAuth()) and
           ABOVE every route, since it is not tied to any one shell. */}
       <ConnectivityBanner />
-      {/* S8 — blocks the app until the current terms are accepted. */}
+      {/* S8/T4 — blocks the app until the current terms are accepted; the backend enforces it too (403 `reaceptacion_legal_pendiente`). */}
       <LegalReacceptGate />
       {children}
     </AuthProvider>
