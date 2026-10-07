@@ -2705,9 +2705,34 @@ describe("MembersPage — counts live in the filter chips", () => {
     expect(document.querySelector(".min-h-stat")).toBeNull();
     expect(screen.queryByTestId("stat-track")).not.toBeInTheDocument();
     const chips = screen.getByRole("group", { name: "Filtrar miembros" });
-    for (const label of ["Todos", "Pago por validar", "Sin datos de emergencia", "Membresía vencida"]) {
+    for (const label of ["Todos", "Pago por validar", "Membresía vencida"]) {
       expect(within(chips).getByRole("button", { name: new RegExp(label) })).toBeInTheDocument();
     }
+  });
+
+  // Owner's false alarm: admins and trainers never carry a ficha, so they
+  // lit up «Sin datos de emergencia». The module no longer raises that signal.
+  it("raises no «sin datos de emergencia» chip, tile or legend for staff without a ficha", async () => {
+    const STAFF_SIN_FICHA: MemberAccount = {
+      ...ACCOUNT,
+      id: "30",
+      role: "representante",
+      backendRoles: ["ADMINISTRADOR", "ALUMNO"],
+      sinDatosEmergencia: true,
+      estudiantes: [],
+      dependientes: [],
+    };
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [STAFF_SIN_FICHA, ACCOUNT] });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    await findAccountRow();
+
+    expect(screen.queryByText(/sin datos de emergencia/i)).not.toBeInTheDocument();
+    const chips = screen.getByRole("group", { name: "Filtrar miembros" });
+    expect(within(chips).queryByRole("button", { name: /emergencia/i })).not.toBeInTheDocument();
   });
 });
 
@@ -4485,7 +4510,7 @@ describe("MembersPage — rail (admin redesign v4)", () => {
 
     expect(document.querySelectorAll(".min-h-stat")).toHaveLength(0);
     const rail = screen.getByTestId("members-rail");
-    expect(within(rail).getByRole("button", { name: /sin datos de emergencia/i })).toBeInTheDocument();
+    expect(within(rail).queryByRole("button", { name: /emergencia/i })).not.toBeInTheDocument();
     expect(within(rail).getByRole("link", { name: /pagos por validar/i })).toHaveAttribute("href", "/payments");
   });
 
@@ -4500,20 +4525,6 @@ describe("MembersPage — rail (admin redesign v4)", () => {
     const rail = screen.getByTestId("members-rail");
     expect(within(rail).getByRole("heading", { name: "Cómo usar el listado" })).toBeVisible();
     expect(rail.querySelector("details")).toBeNull();
-  });
-
-  it("sends the attention shortcut to the matching filter chip", async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    await findAccountRow();
-
-    fireEvent.click(within(screen.getByTestId("members-rail")).getByRole("button", { name: /sin datos de emergencia/i }));
-
-    const chips = screen.getByRole("group", { name: "Filtrar miembros" });
-    expect(within(chips).getByRole("button", { name: /sin datos de emergencia/i })).toHaveAttribute("aria-pressed", "true");
   });
 
 });

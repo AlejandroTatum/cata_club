@@ -176,7 +176,9 @@ export interface MemberAccount {
    * (`representanteId === null`) AND no ficha médica on file. Optional (not
    * required) for the same reason `representadoPor` is — fixtures and tests
    * that don't exercise the emergency-data gap can omit it and it reads as
-   * falsy, same as a persona the adapter never flagged.
+   * falsy, same as a persona the adapter never flagged. Only the ficha dialog
+   * reads it (a notice); the members list raises no chip, tile or legend from
+   * it, since staff never carry a ficha and read as false alarms.
    */
   sinDatosEmergencia?: boolean;
   /**
@@ -228,8 +230,6 @@ export interface MemberStats {
   totalStudents: number;
   activeMemberships: number;
   pendingPayments: number;
-  /** Issue #362: count of accounts with `sinDatosEmergencia: true`. */
-  sinDatosEmergencia: number;
 }
 
 // Mock data has moved to src/mocks/members.ts.
@@ -361,23 +361,6 @@ function isOperationalStudent(student: MemberAccount["estudiantes"][number]): bo
 }
 
 /**
- * Whether this row's own Persona is an archived (`activo: false`) account —
- * independent of whether it is, or has ever been, a player. Issue #362's
- * "sin datos de emergencia" gap is about THIS Persona having no one to call
- * (no representative and no ficha médica), which applies just as much to a
- * pure representative as to a player, so it deliberately does NOT filter on
- * `isOperationalStudent` (membership) — a representative with no membership
- * on file is exactly the account this stat exists to catch.
- */
-function isActiveAccountHolder(student: MemberAccount["estudiantes"][number]): boolean {
-  return student.activo;
-}
-
-function hasOperationalStudent(account: MemberAccount): boolean {
-  return account.estudiantes.length === 0 || account.estudiantes.some(isActiveAccountHolder);
-}
-
-/**
  * Whether this student has a payment currently awaiting admin validation —
  * the "por validar" definition shared by the KPI tile (`buildMemberStats`)
  * and the "Pago pendiente" filter chip (`accountMatchesFlag`).
@@ -411,9 +394,6 @@ export function buildMemberStats(accounts: MemberAccount[]): MemberStats {
     activeMemberships: operationalStudents.filter((student) => student.membresia?.estado === "activa").length,
     // Not filtered through `operationalStudents`: see `hasPaymentAwaitingValidation`'s doc comment.
     pendingPayments: allStudents.filter(hasPaymentAwaitingValidation).length,
-    sinDatosEmergencia: accounts.filter(
-      (account) => account.sinDatosEmergencia && hasOperationalStudent(account),
-    ).length,
   };
 }
 
@@ -539,7 +519,7 @@ export function filterAccounts(
  * Quick-filter chips shown above the members table
  * (design/admin-members-mockup-v1.html's `.chip-filters`).
  */
-export type MemberFilterFlag = "all" | "vencida" | "pendiente" | "sin-emergencia";
+export type MemberFilterFlag = "all" | "vencida" | "pendiente";
 
 /**
  * Does this account have at least one student matching the given filter
@@ -565,21 +545,10 @@ export function accountMatchesFlag(
       );
     case "pendiente":
       return account.estudiantes.some(hasPaymentAwaitingValidation);
-    /*
-     * Issue #730. Reads the SAME field the "Sin datos de emergencia" stat
-     * tile counts (`buildMemberStats`), so the tile and the chip can never
-     * report different populations — the number on the tile IS the list this
-     * returns. Writing a second predicate here (e.g. re-deriving "no
-     * representative and no ficha") would have been a copy of the adapter's
-     * rule that could drift from it silently.
-     *
-     * `=== true`, not a truthy read: the flag is optional and the adapter
-     * omits it rather than fabricating it when the bulk ficha lookup didn't
-     * resolve. `undefined` means "we don't know", and an unknown must not
-     * land on a worklist of people to go chase.
-     */
-    case "sin-emergencia":
-      return hasOperationalStudent(account) && account.sinDatosEmergencia === true;
+    default:
+      // A flag that no longer exists (the retired "sin-emergencia" chip, from
+      // stale state) reads as the default filter, never as an empty list.
+      return true;
   }
 }
 
