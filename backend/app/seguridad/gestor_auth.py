@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Optional, TYPE_CHECKING
+from typing import Callable, Optional, TYPE_CHECKING
 
 import jwt
 from passlib.context import CryptContext
@@ -19,10 +19,6 @@ from app.dominio.modelos import HistorialEstadoMembresia, Membresia, Pago, Perso
 from app.infraestructura import presencia
 from app.infraestructura.db import obtener_sesion
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
-from app.servicios_negocio.consentimiento_legal_servicio import (
-    ConsentimientoLegalServicio,
-    VERSION_LEGAL_VIGENTE,
-)
 
 if TYPE_CHECKING:
     from app.dominio.modelos import Usuario
@@ -59,6 +55,20 @@ _SUPERFICIES_EXENTAS_REACEPTACION = (
     "/auth/consentimiento-legal",
     "/auth/consentimiento-legal/aceptar",
 )
+
+# Quién sabe si una cuenta tiene una re-aceptación pendiente es el servicio de
+# consentimiento legal (capa de negocio), y esta capa no puede importarlo
+# (contrato de import-linter: infraestructura -> seguridad). Se registra desde
+# `auth_router`; devuelve la versión vigente si hay re-aceptación pendiente o
+# `None`. Sin registrar, `decodificar_token` falla CERRADO: un olvido de
+# cableado nunca deja la app sin el bloqueo.
+ComprobadorReaceptacion = Callable[[Session, int], Optional[str]]
+_comprobador_reaceptacion: Optional[ComprobadorReaceptacion] = None
+
+
+def registrar_comprobador_reaceptacion(comprobador: ComprobadorReaceptacion) -> None:
+    global _comprobador_reaceptacion
+    _comprobador_reaceptacion = comprobador
 
 
 class GestorAutenticacion:
@@ -438,13 +448,15 @@ class GestorAutenticacion:
         # Re-aceptación legal (T4): una consulta indexada por request, antes
         # del gate de activación. Aplica a todos los roles; quien nunca aceptó
         # nada no tiene pares que renovar y pasa.
-        if not ruta.endswith(_SUPERFICIES_EXENTAS_REACEPTACION) and ConsentimientoLegalServicio(
-            db
-        ).reaceptacion_pendiente(usuario.id):
-            raise ReaceptacionLegalPendiente(
-                "Debes aceptar la versión vigente de los términos para continuar.",
-                VERSION_LEGAL_VIGENTE,
-            )
+        if not ruta.endswith(_SUPERFICIES_EXENTAS_REACEPTACION):
+            if _comprobador_reaceptacion is None:
+                raise RuntimeError("comprobador de re-aceptación legal no registrado")
+            version_pendiente = _comprobador_reaceptacion(db, usuario.id)
+            if version_pendiente is not None:
+                raise ReaceptacionLegalPendiente(
+                    "Debes aceptar la versión vigente de los términos para continuar.",
+                    version_pendiente,
+                )
         es_superficie_limitada = (
             ruta.endswith(_SUPERFICIES_LIMITADAS)
             or ruta.startswith("/api/v1/personas")

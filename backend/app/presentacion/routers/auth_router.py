@@ -19,7 +19,7 @@ from app.servicios_negocio.dtos.auth_schemas import (
 from app.servicios_negocio.consentimiento_legal_servicio import (
     ConsentimientoLegalServicio, VERSION_LEGAL_VIGENTE,
 )
-from app.seguridad.gestor_auth import GestorAutenticacion
+from app.seguridad.gestor_auth import GestorAutenticacion, registrar_comprobador_reaceptacion
 from app.servicios_negocio.auth_servicio import AuthServicio, LoginEnEnfriamiento
 from app.soporte_transversal.lectura_archivos import leer_con_limite
 from app.soporte_transversal.rate_limit import limiter
@@ -149,6 +149,15 @@ async def obtener_perfil(
 
 
 # --- S8: re-aceptación de los términos vigentes (cualquier rol autenticado) --
+def _version_si_reaceptacion_pendiente(db: Session, usuario_id: int) -> str | None:
+    pendiente = ConsentimientoLegalServicio(db).reaceptacion_pendiente(usuario_id)
+    return VERSION_LEGAL_VIGENTE if pendiente else None
+
+
+# Cableado del bloqueo de `decodificar_token` (T4): ver `gestor_auth.py`.
+registrar_comprobador_reaceptacion(_version_si_reaceptacion_pendiente)
+
+
 def _estado_consentimiento(db: Session, usuario_id: int) -> dict:
     return {
         "pendiente": ConsentimientoLegalServicio(db).reaceptacion_pendiente(usuario_id),
