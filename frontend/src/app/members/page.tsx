@@ -992,35 +992,8 @@ function MemberEditDialog({
 }
 
 // ---------------------------------------------------------------------------
-// List fill + rail
+// Rail
 // ---------------------------------------------------------------------------
-
-/** Rows the list card keeps drawn, so a short result does not leave a hole under it. */
-const MIN_LIST_ROWS = 6;
-
-/**
- * Placeholder rows below a short, single-page result. Purely decorative
- * (`aria-hidden`, not `<tr>`s), so row counts, roles and tests never see them;
- * they only keep the card as tall as a normal list instead of letting it
- * collapse to one or two rows beside a taller rail.
- */
-function GhostRows({ shown }: { shown: number }): React.ReactElement | null {
-  const missing = MIN_LIST_ROWS - shown;
-  if (missing <= 0) return null;
-  return (
-    <div aria-hidden="true" data-testid="members-ghost-rows" className="hidden sm:block">
-      {Array.from({ length: missing }, (_, index) => (
-        <div key={index} className="flex h-[60px] items-center gap-3 border-t border-line px-4">
-          <div className="h-9 w-9 rounded-full bg-sunken" />
-          <div className="grid gap-1.5">
-            <div className="h-2.5 w-40 rounded-full bg-sunken" />
-            <div className="h-2 w-24 rounded-full bg-sunken/70" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 const RAIL_ROW =
   "flex min-h-[44px] w-full items-center gap-3 rounded-ctl px-3 text-left text-sm text-ink transition-colors hover:bg-sunken";
@@ -1397,7 +1370,6 @@ export default function MembersPage(): React.ReactElement {
                 ) : undefined
               }
             />
-            {totalPages <= 1 && <GhostRows shown={paginatedAccounts.length} />}
           </div>
         ) : null}
 

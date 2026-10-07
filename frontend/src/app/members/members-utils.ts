@@ -607,13 +607,20 @@ const ROLE_FILTER_BACKEND_ROLE: Record<Exclude<MemberRoleFilter, "todos">, Backe
 
 /**
  * Does the account hold the picked role? A multi-role person matches each of
- * theirs. «Jugador» is the club's one player rule (`isPlayerAccount`, owner
- * decision A in #1669): a lapsed represented minor has no role but still plays.
+ * theirs. «Jugador» is the club's player rule (`isPlayerAccount`, owner
+ * decision A in #1669) plus a new player whose first payment is still
+ * pending (INACTIVA): the admin opens this list precisely to register it
+ * (owner, 2026-10-06: "si que aparezca el chico que aun no paga").
  */
 export function accountMatchesRole(account: MemberAccount, filter: MemberRoleFilter): boolean {
   if (filter === "todos") return true;
   const shown = accountDisplayRoles(account).includes(ROLE_FILTER_BACKEND_ROLE[filter]);
-  return filter === "jugador" ? shown || isPlayerAccount(account) : shown;
+  if (filter !== "jugador") return shown;
+  return (
+    shown ||
+    isPlayerAccount(account) ||
+    account.estudiantes.some((student) => student.membresia?.estadoBackend === "INACTIVA")
+  );
 }
 
 /**

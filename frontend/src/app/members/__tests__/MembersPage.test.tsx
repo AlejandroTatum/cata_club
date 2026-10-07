@@ -4516,18 +4516,6 @@ describe("MembersPage — rail (admin redesign v4)", () => {
     expect(within(chips).getByRole("button", { name: /sin datos de emergencia/i })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("pads a short result with decorative ghost rows that tests and assistive tech never see", async () => {
-    render(
-      <ToastProvider>
-        <MembersPage />
-      </ToastProvider>,
-    );
-    await findAccountRow();
-
-    const ghost = screen.getByTestId("members-ghost-rows");
-    expect(ghost).toHaveAttribute("aria-hidden", "true");
-    expect(ghost.children.length).toBeGreaterThan(0);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -4875,6 +4863,22 @@ describe("MembersPage — role filter", () => {
     });
     await renderList([lapsedMinor, PLAYER]);
     expect(names().sort()).toEqual(["Mateo", "Paula"]);
+  });
+
+  it("lists a new player who has not paid yet (INACTIVA) under «Jugador»", async () => {
+    const pendingMinor = person("8", "Lucia", [], {
+      estudiantes: [{
+        id: "8", nombres: "Lucia", apellidos: "Prueba", activo: true, ultimoPago: null,
+        membresia: { id: 8, tipo: "Infantil", estado: "vencida", estadoBackend: "INACTIVA", fechaInicio: "", fechaFin: "", monto: 30 },
+      }],
+    });
+    await renderList([pendingMinor, PLAYER]);
+    expect(names().sort()).toEqual(["Lucia", "Paula"]);
+  });
+
+  it("draws no placeholder rows under a short list", async () => {
+    await renderList();
+    expect(screen.queryByTestId("members-ghost-rows")).not.toBeInTheDocument();
   });
 
   it("counts each chip inside the selected role, so «Todos» matches the rows shown", async () => {
