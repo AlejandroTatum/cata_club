@@ -1,7 +1,7 @@
 """Segundo guardián de un menor (issue #1666).
 
 Revision ID: x1666coguardian
-Revises: x1665diasinclase
+Revises: y1tarifaperiodicidad
 
 Aditiva: tres tablas nuevas y dos triggers. No toca `persona.representante_id`
 ni `vinculacion_representante`, así que los datos de representación existentes
@@ -21,7 +21,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision: str = "x1666coguardian"
-down_revision: Union[str, Sequence[str], None] = "x1665diasinclase"
+down_revision: Union[str, Sequence[str], None] = "y1tarifaperiodicidad"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
