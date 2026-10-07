@@ -24,6 +24,7 @@ from app.dominio.modelos import Membresia, Notificacion, Pago, TipoMembresia
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
 from tests.conftest import FECHA_CONGELADA_HOY
 from tests.fabricas_pagos import (
+    asignar_beneficio_api,
     crear_membresia_api,
     crear_persona_api,
     crear_persona_orm,
@@ -191,6 +192,31 @@ def test_pago_semanal_se_ancla_a_la_cobertura_vigente(client, db_session, monkey
 
     assert segundo["fechaInicio"] == primero["fechaFin"]
     assert segundo["fechaFin"] == (FECHA_CONGELADA_HOY + timedelta(days=14)).isoformat()
+
+
+@pytest.mark.parametrize("periodicidad,dias", [
+    ("SEMANAL", 7), ("DIARIA", 1), ("MENSUAL", None),
+])
+def test_beneficio_total_otorga_un_periodo_de_la_tarifa(
+    client, monkeypatch, periodicidad, dias,
+):
+    _congelar_hoy(monkeypatch)
+    persona, _tipo, membresia = _escenario(client, periodicidad)
+    descuento = client.post(
+        "/api/v1/descuentos/",
+        json={"nombre": "Becado", "porcentaje": "100.00", "activo": True},
+    ).json()
+    assert asignar_beneficio_api(client, persona["id"], descuento["id"]).status_code == 201
+
+    resp = client.post(f"/api/v1/membresias/{membresia['id']}/aplicar-beneficio", json={})
+
+    assert resp.status_code == 201, resp.text
+    esperado = (
+        FECHA_CONGELADA_HOY + timedelta(days=dias) if dias
+        else mps._sumar_meses(FECHA_CONGELADA_HOY, 1)
+    )
+    assert resp.json()["fechaInicio"] == FECHA_CONGELADA_HOY.isoformat()
+    assert resp.json()["fechaFin"] == esperado.isoformat()
 
 
 # --- Deuda -------------------------------------------------------------------

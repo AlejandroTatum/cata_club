@@ -2304,7 +2304,10 @@ class PagoServicio:
         ultima_fecha_fin = self._fecha_fin_maxima_combinada(membresia_id)
         hoy = hoy_club()
         ancla = max(ultima_fecha_fin, hoy) if ultima_fecha_fin is not None else hoy
-        fecha_inicio, fecha_fin = ancla, _sumar_meses(ancla, meses)
+        fecha_inicio = ancla
+        fecha_fin = _fin_de_cobertura(
+            ancla, meses, PeriodicidadTarifa(membresia.tipo_membresia.periodicidad),
+        )
 
         if self._hay_cobertura_en_rango(
             membresia_id, fecha_inicio, fecha_fin, medio_abierto=True,
