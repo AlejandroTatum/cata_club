@@ -1389,6 +1389,8 @@ export async function fetchInstituciones(): Promise<Institucion[]> {
 export interface TarifaPublica {
   categoria: string;
   precio: string;
+  /** A price without its period misleads: absent on older backends = MENSUAL. */
+  periodicidad?: Periodicidad;
 }
 
 function isTarifaPublica(value: unknown): value is TarifaPublica {
@@ -1477,6 +1479,8 @@ export interface MembershipSummary {
   montoAplicado: string | null;
   categoria: string | null;
   modalidad: string | null;
+  /** The tariff's period (MENSUAL/SEMANAL/DIARIA). Absent on older payloads = MENSUAL. */
+  periodicidad?: Periodicidad;
   /** Activation date, i.e. "socio desde". Null when the backend omits it. */
   fechaActivacion: string | null;
   /** End of the paid period — drives the "Vigente hasta"/"Venció" state. */
@@ -1880,6 +1884,8 @@ export interface MembresiaPorPersona {
   fechaActivacion: string;
   personaId: number;
   tipoMembresiaId: number;
+  /** The tariff's period; absent on older payloads = MENSUAL. */
+  periodicidad?: Periodicidad;
   tipo?: {
     id: number;
     categoria: string;

@@ -42,6 +42,18 @@ vi.mock("../RegisterPaymentForm", () => ({
   ),
 }));
 
+describe("StudentMembershipActions — periodicidad", () => {
+  it.each([
+    ["SEMANAL", "Tarifa semanal:"],
+    ["DIARIA", "Tarifa por día:"],
+    [undefined, "Tarifa mensual:"],
+  ] as const)("labels the %s tariff fact as «%s»", (periodicidad, label) => {
+    const base = student("activa", "ACTIVA");
+    renderActions({ ...base, membresia: { ...base.membresia!, periodicidad } });
+    expect(screen.getByText(label)).toBeInTheDocument();
+  });
+});
+
 function student(estado: "activa" | "suspendida" | "vencida", estadoBackend: string): MemberStudentSummary {
   return {
     id: "7",

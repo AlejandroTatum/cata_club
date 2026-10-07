@@ -722,6 +722,15 @@ describe("describePaymentSituation", () => {
     expect(result.priceNote).toBe("Plan Mensual Infantil · $25,00 al mes");
   });
 
+  it("labels a weekly or daily plan price with its own period", () => {
+    expect(
+      describePaymentSituation(situation({ periodicidad: "SEMANAL", monthlyPrice: "8.00" }), TODAY).priceNote,
+    ).toBe("Plan Mensual Infantil · $8,00 a la semana");
+    expect(
+      describePaymentSituation(situation({ periodicidad: "DIARIA", monthlyPrice: "3.00" }), TODAY).priceNote,
+    ).toBe("Plan Mensual Infantil · $3,00 por día");
+  });
+
   it("drops the plan name when the backend has none but keeps the price it can prove", () => {
     expect(describePaymentSituation(situation({ planName: null }), TODAY).priceNote).toBe(
       "$25,00 al mes",

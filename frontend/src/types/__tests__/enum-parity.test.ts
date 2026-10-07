@@ -61,6 +61,7 @@ const ENUM_TABLE: Record<string, FrontendMirror | null> = {
   // repeated across services/api.ts — no exported `type TipoModalidad` to
   // read a member list from.
   TipoModalidad: null,
+  PeriodicidadTarifa: { file: "lib/tarifa-periodo.ts", type: "Periodicidad" },
   EstadoPago: { file: "lib/server/payments-adapter.ts", type: "BackendEstadoPago" },
   TipoPago: { file: "lib/server/payments-adapter.ts", type: "BackendTipoPago" },
   EstadoAsistencia: { file: "lib/server/attendance-adapter.ts", type: "BackendEstadoAsistencia" },

@@ -151,7 +151,7 @@ export default function MigrarSocioAntiguoForm({
             <option value="">Seleccionar plan…</option>
             {tipos.map((tipo) => (
               <option key={tipo.id} value={tipo.id}>
-                {planOptionLabel(tipo.categoria, tipo.precio)}
+                {planOptionLabel(tipo.categoria, tipo.precio, tipo.periodicidad)}
               </option>
             ))}
           </select>

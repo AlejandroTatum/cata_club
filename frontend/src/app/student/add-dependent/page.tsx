@@ -761,7 +761,7 @@ function AddDependentContent(): React.ReactElement {
         <label className="block text-sm text-ink-2" htmlFor="dependent-plan">Plan de membresía</label>
         <Select id="dependent-plan" className="input-field" value={planId} onChange={(e) => setPlanId(e.target.value)} disabled={submitting}>
           <option value="">Selecciona un plan</option>
-          {plans.map((p) => <option key={p.id} value={p.id}>{planOptionLabel(p.categoria, p.precio)}</option>)}
+          {plans.map((p) => <option key={p.id} value={p.id}>{planOptionLabel(p.categoria, p.precio, p.periodicidad)}</option>)}
         </Select>
         <fieldset className="flex flex-col gap-1.5">
           <legend className="text-sm text-ink-2">Meses a pagar</legend>

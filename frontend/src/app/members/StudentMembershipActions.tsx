@@ -13,6 +13,7 @@ import PagoPendienteRevision from "./PagoPendienteRevision";
 import { Badge, Button } from "@/components/ui";
 import type { PagoPersona } from "@/services/api";
 import { formatCurrency } from "@/lib/format-utils";
+import { tarifaFactLabel } from "@/lib/tarifa-periodo";
 import {
   describePaymentsState,
   formatMembershipCoverage,
@@ -39,7 +40,7 @@ function PagosHeader({
   const facts = membresia
     ? [
         ["Plan", membresia.tipo],
-        ["Tarifa mensual", membresia.esGratuidadFamiliar ? "Gratuidad familiar" : formatCurrency(membresia.monto)],
+        [tarifaFactLabel(membresia.periodicidad), membresia.esGratuidadFamiliar ? "Gratuidad familiar" : formatCurrency(membresia.monto)],
         ...(coverage ? [["Cobertura", coverage.replace(/^Hasta/, "hasta")]] : []),
       ]
     : [];

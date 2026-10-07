@@ -13,6 +13,7 @@ import type {
   StudentSessionSummary,
 } from "@/services/api";
 import { CLUB_TIME_ZONE, calendarIsoDate, clubToday } from "@/lib/club-date";
+import { periodSuffix, type Periodicidad } from "@/lib/tarifa-periodo";
 import { calculatePersonAge, isMinorAge } from "@/lib/identity-validation";
 import { landingConfig, toWhatsAppLink } from "@/app/landing/landing-config";
 
@@ -734,6 +735,8 @@ export interface PaymentSituationInput {
   planName: string | null;
   /** `Membresia.montoAplicado` — the plan's MONTHLY PRICE. Never a balance. */
   monthlyPrice: string | null;
+  /** The tariff's period, which words the price («al mes» / «a la semana» / «por día»); MENSUAL when absent. */
+  periodicidad?: Periodicidad;
   /** The furthest `fechaFin` among APPROVED payments (`resolveCoverageEnd`). */
   coverageEnd: string | null;
   /** How many of this profile's payments are waiting on the club. */
@@ -799,7 +802,7 @@ function coverageClause(coverageEnd: string, past: boolean): string {
  */
 function describePrice(input: PaymentSituationInput): string | null {
   if (!input.monthlyPrice) return null;
-  const price = `${formatCurrency(input.monthlyPrice)} al mes`;
+  const price = `${formatCurrency(input.monthlyPrice)} ${periodSuffix(input.periodicidad)}`;
   return input.planName ? `Plan ${input.planName} · ${price}` : price;
 }
 

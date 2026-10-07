@@ -40,6 +40,30 @@ export function priceWithPeriod(
   return `${formattedPrice} ${periodSuffix(periodicidad)}`;
 }
 
+/** «Valor mensual» / «Valor semanal» / «Valor por día» — the plan-facts label. */
+export function priceFactLabel(periodicidad: Periodicidad | null | undefined): string {
+  switch (normalizePeriodicidad(periodicidad)) {
+    case "SEMANAL":
+      return "Valor semanal";
+    case "DIARIA":
+      return "Valor por día";
+    default:
+      return "Valor mensual";
+  }
+}
+
+/** «Tarifa mensual» / «Tarifa semanal» / «Tarifa por día» — the admin's plan-facts label. */
+export function tarifaFactLabel(periodicidad: Periodicidad | null | undefined): string {
+  switch (normalizePeriodicidad(periodicidad)) {
+    case "SEMANAL":
+      return "Tarifa semanal";
+    case "DIARIA":
+      return "Tarifa por día";
+    default:
+      return "Tarifa mensual";
+  }
+}
+
 /** SEMANAL/DIARIA never accrue debt: only MENSUAL tariffs owe months. */
 export function accruesDebt(periodicidad: Periodicidad | null | undefined): boolean {
   return normalizePeriodicidad(periodicidad) === "MENSUAL";
