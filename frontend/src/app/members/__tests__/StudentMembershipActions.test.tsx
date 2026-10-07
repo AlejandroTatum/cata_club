@@ -16,7 +16,13 @@ vi.mock("@/services/api", async (importOriginal) => {
   return { ...actual, fetchPagosDePersona: (id: string) => mockFetchPagos(id) };
 });
 
-vi.mock("../BeneficioSection", () => ({ default: () => <div /> }));
+const mockBeneficioProps = vi.fn();
+vi.mock("../BeneficioSection", () => ({
+  default: (props: { tarifaMensual?: number }) => {
+    mockBeneficioProps(props);
+    return <div />;
+  },
+}));
 vi.mock("../RegularizarDeudaForm", () => ({ default: () => <button type="button">Cargar pagos atrasados</button> }));
 vi.mock("../SuspenderReactivarForm", () => ({
   default: ({ estado, primary }: { estado: string; primary?: boolean }) => (
@@ -41,6 +47,26 @@ vi.mock("../RegisterPaymentForm", () => ({
     </button>
   ),
 }));
+
+describe("StudentMembershipActions — beneficio tariff hint", () => {
+  beforeEach(() => mockBeneficioProps.mockClear());
+
+  it.each([
+    ["activa", "ACTIVA"],
+    ["suspendida", "SUSPENDIDA"],
+  ] as const)("passes the tariff to the benefit gate for an %s membership", (estado, estadoBackend) => {
+    const base = student(estado, estadoBackend);
+    renderActions(base);
+    expect(mockBeneficioProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ tarifaMensual: base.membresia!.monto }),
+    );
+  });
+
+  it("passes no tariff for a VENCIDA membership, like the backend's assign-time gate", () => {
+    renderActions(student("vencida", "VENCIDA"));
+    expect(mockBeneficioProps).toHaveBeenLastCalledWith(expect.objectContaining({ tarifaMensual: undefined }));
+  });
+});
 
 describe("StudentMembershipActions — periodicidad", () => {
   it.each([

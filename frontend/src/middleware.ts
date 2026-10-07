@@ -22,6 +22,10 @@
  * redirects client-side, and /api/auth/session still does full,
  * server-validated session hydration.
  *
+ * Origin check: state-changing requests to the BFF (`/api/**`) must come from
+ * the app's own origin (issue #1653) — rules and exemptions live in
+ * src/lib/server/origin-check.ts.
+ *
  * Deliberately does NOT decode or verify the JWT here — see the doc comment
  * on `hasPlausibleAccessToken` in src/lib/middleware-utils.ts for why.
  */
@@ -30,6 +34,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/auth-cookies";
 import { robotsTagFor } from "@/lib/seo";
 import { loginPathWithNext } from "@/lib/safe-redirect";
+import { FORBIDDEN_ORIGIN_BODY, isOriginAllowed } from "@/lib/server/origin-check";
 import {
   isProtectedPath,
   hasPendingActivation,
@@ -40,6 +45,11 @@ import {
 
 export function middleware(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
+
+  // #1653: defense in depth on top of SameSite=Lax — see origin-check.ts.
+  if (!isOriginAllowed({ method: request.method, pathname, headers: request.headers, urlHost: request.nextUrl.host })) {
+    return NextResponse.json(FORBIDDEN_ORIGIN_BODY, { status: 403 });
+  }
 
   const nonce = generateNonce();
   const csp = buildContentSecurityPolicy(nonce);
