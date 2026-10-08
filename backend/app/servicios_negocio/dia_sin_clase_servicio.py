@@ -8,7 +8,8 @@ Decisión de producto: la campana se emite UNA vez, al crear, y el correo la
 víspera del inicio (issue #1709, ver `dia_sin_clase_tareas`). Editar o borrar
 no reenvía nada en el momento -- reenviar por cada retoque de un texto
 gastaría el cupo diario de correo del plan gratuito --; mover las fechas sí
-borra las marcas del correo, para que la víspera de la fecha nueva avise.
+borra las marcas del correo y vuelve a publicar el aviso: la tarea decide si
+el correo sale ya (la víspera de la fecha nueva ya pasó) o la víspera.
 """
 import logging
 from datetime import date
@@ -64,7 +65,8 @@ class DiaSinClaseServicio:
 
     def actualizar(self, dia_id: int, datos: DiaSinClaseUpdateDTO) -> DiaSinClase:
         dia = self._obtener(dia_id)
-        if (dia.fecha_inicio, dia.fecha_fin) != (datos.fecha_inicio, datos.fecha_fin):
+        mueve_fechas = (dia.fecha_inicio, dia.fecha_fin) != (datos.fecha_inicio, datos.fecha_fin)
+        if mueve_fechas:
             self.db.execute(
                 delete(DiaSinClaseCorreo).where(DiaSinClaseCorreo.dia_sin_clase_id == dia.id)
             )
@@ -74,6 +76,11 @@ class DiaSinClaseServicio:
         self.db.commit()
         if inspeccionar_orm(dia).expired:
             self.db.refresh(dia)
+        if mueve_fechas:
+            # Si la fecha nueva es hoy, o mañana pasadas las 08:00, la víspera
+            # ya no va a correr para ella: la tarea manda el correo ya. Si no,
+            # solo completa campanas y el correo queda para la víspera.
+            self._encolar_aviso(dia.id)
         return dia
 
     def eliminar(self, dia_id: int) -> None:

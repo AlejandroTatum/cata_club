@@ -46,7 +46,7 @@ describe("DiasSinClasePage (admin)", () => {
     render(<DiasSinClasePage />);
     expect(
       await screen.findByText(
-        "Al publicar, los socios reciben el aviso en la app. El correo les llega el día anterior, a las 08:00.",
+        "Al publicar, los socios reciben el aviso en la app. El correo les llega el día anterior a las 08:00 (o al momento, si el día empieza antes).",
       ),
     ).toBeInTheDocument();
   });
@@ -99,7 +99,7 @@ describe("DiasSinClasePage (admin)", () => {
     expect(screen.getByLabelText(/^Motivo/)).toHaveValue("Cancha cerrada");
     expect(
       screen.getByText(
-        "Editar no vuelve a enviar el aviso en la app. Si cambias la fecha, el correo sale el día anterior a la fecha nueva.",
+        "Editar no vuelve a enviar el aviso en la app. Si cambias la fecha, el correo sale el día anterior a la fecha nueva (o al momento, si ese día ya pasó).",
       ),
     ).toBeInTheDocument();
 

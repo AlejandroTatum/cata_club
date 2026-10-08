@@ -115,12 +115,15 @@ def _encolar_correos(db, dias: list[DiaSinClase], cuentas: dict[int, Persona]) -
     marca de cada uno (sin commit). Devuelve cuántos correos encoló."""
     if not dias or not cuentas:
         return 0
-    marcadas = set(db.execute(
-        select(DiaSinClaseCorreo.dia_sin_clase_id, DiaSinClaseCorreo.persona_id).where(
-            DiaSinClaseCorreo.dia_sin_clase_id.in_([d.id for d in dias]),
-            DiaSinClaseCorreo.persona_id.in_(cuentas.keys()),
+    marcadas = {
+        (fila.dia_sin_clase_id, fila.persona_id)
+        for fila in db.execute(
+            select(DiaSinClaseCorreo.dia_sin_clase_id, DiaSinClaseCorreo.persona_id).where(
+                DiaSinClaseCorreo.dia_sin_clase_id.in_([d.id for d in dias]),
+                DiaSinClaseCorreo.persona_id.in_(cuentas.keys()),
+            )
         )
-    ).tuples().all())
+    }
     servicio = ServicioNotificaciones(encolar_en=db)
     encolados = 0
     for cuenta_id in sorted(cuentas):
@@ -185,10 +188,18 @@ def avisar_dia_sin_clase(dia_id: int, con_correo: bool = True) -> dict:
 
 @celery_app.task(
     name="app.infraestructura.tareas.dia_sin_clase_tareas.enviar_correos_del_dia_anterior",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    max_retries=5,
 )
 def enviar_correos_del_dia_anterior() -> dict:
     """Víspera (#1709): encola el correo de todo día que empieza mañana, uno
-    por cuenta, y completa la campana de quien se activó después del alta."""
+    por cuenta, y completa la campana de quien se activó después del alta.
+
+    Con reintento: la corrida es UN commit para todo el lote, y si choca con
+    un alta simultánea que marcó la misma cuenta (clave de la marca) se
+    revierte entera. Las marcas hacen seguro repetirla: el reintento solo
+    escribe lo que falte."""
     manana = hoy_club(ahora_club()) + timedelta(days=1)
     with SessionLocal() as db:
         dias = db.execute(

@@ -177,17 +177,19 @@ def test_un_correo_fallido_no_deshace_la_campana_ni_corta_el_lote(sesion_inyecta
     assert _enviados(sesion_inyectada, smtp) == ["bueno@cataclub.test"]
 
 
-def test_crear_el_dia_por_la_api_encola_el_aviso_una_vez(client, monkeypatch):
+def test_crear_el_dia_por_la_api_encola_el_aviso_y_solo_mover_la_fecha_lo_republica(client, monkeypatch):
+    """Retocar el motivo o borrar no publica nada; mover la fecha sí (#1709):
+    la tarea decide si el correo sale ya o la víspera de la fecha nueva."""
     publicadas = []
     monkeypatch.setattr(celery_app, "send_task", lambda nombre, args=None, **_: publicadas.append((nombre, args)))
 
     creado = client.post("/api/v1/dias-sin-clase/", json={"fecha_inicio": "2029-07-04", "motivo": "Feriado"}).json()
+    client.put(f"/api/v1/dias-sin-clase/{creado['id']}", json={"fecha_inicio": "2029-07-04", "motivo": "Otro"})
     client.put(f"/api/v1/dias-sin-clase/{creado['id']}", json={"fecha_inicio": "2029-07-05", "motivo": "Otro"})
     client.delete(f"/api/v1/dias-sin-clase/{creado['id']}")
 
-    assert publicadas == [
-        ("app.infraestructura.tareas.dia_sin_clase_tareas.avisar_dia_sin_clase", [creado["id"]]),
-    ]
+    tarea = "app.infraestructura.tareas.dia_sin_clase_tareas.avisar_dia_sin_clase"
+    assert publicadas == [(tarea, [creado["id"]]), (tarea, [creado["id"]])]
 
 
 def test_la_tarea_esta_en_el_include_del_worker():

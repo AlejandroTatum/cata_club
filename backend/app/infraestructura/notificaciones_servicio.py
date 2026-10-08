@@ -99,20 +99,6 @@ def _parte_html_con_escudo(cuerpo_html: str) -> MIMEMultipart:
 # intentó usar. Antes de ponerlos en un log o en un detalle técnico, se eliminan
 # los valores configurados; el marcador conserva que hubo un error sin copiar
 # credenciales a un agregador de logs.
-def _cuando_dia_sin_clase(inicio: date, fin: date) -> str:
-    desde = inicio.strftime("%d/%m/%Y")
-    if fin == inicio:
-        return f"el {desde}"
-    return f"del {desde} al {fin.strftime('%d/%m/%Y')}"
-
-
-def _cuando_y_filas_dia_sin_clase(inicio: date, fin: date) -> tuple[str, list[tuple[str, str]]]:
-    desde = inicio.strftime("%d/%m/%Y")
-    if fin == inicio:
-        return f"el {desde}", [("Fecha", desde)]
-    return _cuando_dia_sin_clase(inicio, fin), [("Desde", desde), ("Hasta", fin.strftime("%d/%m/%Y"))]
-
-
 def _redactar_detalle_sensible(detalle: str) -> str:
     for valor in (settings.smtp_user, settings.smtp_password):
         if valor:
@@ -383,6 +369,20 @@ def _avisar_cupo_agotado(omitidos: int) -> None:
             "correos se agotó (%s)",
             type(exc).__name__,
         )
+
+
+def _cuando_dia_sin_clase(inicio: date, fin: date) -> str:
+    desde = inicio.strftime("%d/%m/%Y")
+    if fin == inicio:
+        return f"el {desde}"
+    return f"del {desde} al {fin.strftime('%d/%m/%Y')}"
+
+
+def _cuando_y_filas_dia_sin_clase(inicio: date, fin: date) -> tuple[str, list[tuple[str, str]]]:
+    desde = inicio.strftime("%d/%m/%Y")
+    if fin == inicio:
+        return f"el {desde}", [("Fecha", desde)]
+    return _cuando_dia_sin_clase(inicio, fin), [("Desde", desde), ("Hasta", fin.strftime("%d/%m/%Y"))]
 
 
 class ServicioNotificaciones:
@@ -926,7 +926,8 @@ class ServicioNotificaciones:
             saludo=saludo,
             parrafos=(
                 f"El club no tendrá clase {cuando}.",
-                "Retomamos las clases con normalidad después de esa fecha.",
+                "Retomamos las clases con normalidad después de "
+                + ("esa fecha." if len(dias) == 1 else "esas fechas."),
             ),
             filas=filas,
             cta_etiqueta="Ver mi panel",

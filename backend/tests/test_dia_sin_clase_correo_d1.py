@@ -17,10 +17,14 @@ import pytest
 import app.infraestructura.tareas.dia_sin_clase_tareas as tareas
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, TipoNotificacion
-from app.dominio.modelos import CorreoOutbox, DiaSinClase, Notificacion, Persona, Usuario
+from app.dominio.modelos import (
+    ContadorCorreoDiario, CorreoOutbox, DiaSinClase, Notificacion, Persona, Usuario,
+)
+from app.infraestructura import notificaciones_servicio as notificaciones_mod
 from app.infraestructura.tareas.celery_app import celery_app
 from app.servicios_negocio.dia_sin_clase_servicio import DiaSinClaseServicio
 from app.servicios_negocio.dtos.dia_sin_clase_schemas import DiaSinClaseUpdateDTO
+from app.soporte_transversal.configuracion import settings
 from app.soporte_transversal.tiempo import ZONA_HORARIA_CLUB
 from tests import arnes_outbox as arnes
 from tests.fabricas_pagos import crear_membresia_orm, crear_persona_orm, crear_tipo_membresia_orm
@@ -216,6 +220,58 @@ def test_mover_la_fecha_avisa_la_vispera_de_la_fecha_nueva(db_session, reloj):
     assert len(_correos(db_session)) == 2
 
 
+def test_mover_la_fecha_a_manana_pasadas_las_ocho_avisa_por_correo_al_instante(db_session, reloj, monkeypatch):
+    """La víspera de la fecha nueva ya pasó: si el correo esperara a la
+    víspera, no saldría nunca. Editar publica el aviso y la tarea lo manda."""
+    publicadas = []
+    monkeypatch.setattr(
+        celery_app, "send_task",
+        lambda nombre, args=None, kwargs=None, **_: publicadas.append((nombre, args, kwargs)),
+    )
+    _socio(db_session, 1714, "s1714@cataclub.test")
+    dia = _dia(db_session, inicio=date(2029, 7, 20))
+    reloj(_a_las(VISPERA, 9))
+
+    DiaSinClaseServicio(db_session).actualizar(
+        dia.id, DiaSinClaseUpdateDTO(fecha_inicio=FERIADO, motivo="Feriado"),
+    )
+    [(nombre, args, kwargs)] = publicadas
+    tareas.avisar_dia_sin_clase(*args, **(kwargs or {}))
+
+    assert nombre.endswith(".avisar_dia_sin_clase")
+    assert [c.destinatario for c in _correos(db_session)] == ["s1714@cataclub.test"]
+
+
+def test_la_vispera_cerca_de_medianoche_utc_usa_el_dia_del_club(db_session, reloj):
+    """01:00 UTC del 4 son las 20:00 del 3 en el club: "mañana" es el 4."""
+    _socio(db_session, 1715, "s1715@cataclub.test")
+    _dia(db_session)
+    reloj(datetime(2029, 7, 4, 1, 0, tzinfo=timezone.utc).astimezone(ZONA_HORARIA_CLUB))
+
+    resultado = tareas.enviar_correos_del_dia_anterior()
+
+    assert resultado["fecha"] == "2029-07-04" and resultado["correos"] == 1
+
+
+def test_el_correo_de_la_vispera_se_difiere_si_el_cupo_esta_agotado(db_session, reloj, monkeypatch):
+    arnes.configurar_smtp(monkeypatch)
+    monkeypatch.setattr(settings, "limite_correos_diario", 1)
+    db_session.query(ContadorCorreoDiario).delete()
+    db_session.add(ContadorCorreoDiario(fecha=datetime.now(timezone.utc).date(), enviados=1))
+    db_session.commit()
+    _socio(db_session, 1716, "s1716@cataclub.test")
+    _dia(db_session)
+    reloj(_a_las(VISPERA, 8))
+    tareas.enviar_correos_del_dia_anterior()
+
+    with patch("app.infraestructura.notificaciones_servicio.smtplib.SMTP", MagicMock()) as smtp:
+        with arnes.sesion_inyectada_en(notificaciones_mod, db_session, monkeypatch):
+            arnes.despachar_correos_encolados(db_session)
+        assert arnes.envios(smtp) == []
+    [fila] = _correos(db_session)
+    assert fila.status == "PENDIENTE" and fila.attempts == 0
+
+
 def test_el_reenvio_del_admin_es_solo_in_app(db_session, reloj):
     socio = _socio(db_session, 1713, "s1713@cataclub.test")
     reloj(_a_las(FERIADO, 6))
@@ -231,5 +287,6 @@ def test_el_beat_corre_el_envio_de_la_vispera_a_las_ocho_del_club():
     [entrada] = [
         v for v in celery_app.conf.beat_schedule.values() if v["task"] == TAREA_D1
     ]
-    assert entrada["schedule"].hour == {8} and entrada["schedule"].minute == {0}
+    assert entrada["schedule"].hour == {tareas.HORA_CORREO_VISPERA.hour}
+    assert entrada["schedule"].minute == {tareas.HORA_CORREO_VISPERA.minute}
     assert celery_app.conf.timezone == "America/Guayaquil"
