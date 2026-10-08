@@ -292,6 +292,10 @@ export default function GuardiansCard(): React.ReactElement | null {
 
   const comoPrincipal = menores.filter((m) => m.rol === "PRINCIPAL");
   const elegibles = comoPrincipal.filter((m) => !m.completo);
+  // The header button and the form below are two faces of one state: the form
+  // replaces the button while open, and only a primary ever sees either.
+  const esPrincipal = comoPrincipal.length > 0;
+  const formularioAbierto = formOpen && elegibles.length > 0;
 
   async function quitar(menor: MenorConGuardianes): Promise<void> {
     setQuitando(true);
@@ -327,7 +331,7 @@ export default function GuardiansCard(): React.ReactElement | null {
     <section aria-label="Representantes" className="card flex flex-col overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-5 py-3">
         <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Representantes</h2>
-        {comoPrincipal.length > 0 && !(formOpen && elegibles.length > 0) && (
+        {esPrincipal && !formularioAbierto && (
           <button
             type="button"
             onClick={() => setFormOpen(true)}
@@ -445,8 +449,8 @@ export default function GuardiansCard(): React.ReactElement | null {
           ))}
         </ul>
 
-        {comoPrincipal.length > 0 &&
-          (formOpen && elegibles.length > 0 ? (
+        {esPrincipal &&
+          (formularioAbierto ? (
             <InviteForm
               elegibles={elegibles}
               onCancel={() => setFormOpen(false)}

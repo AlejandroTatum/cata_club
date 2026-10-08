@@ -3207,6 +3207,19 @@ describe("StudentPage — «Representantes» card", () => {
     expect(await screen.findByRole("button", { name: /invitar a otro representante/i })).toBeEnabled();
   });
 
+  it("closes the page: the card comes after «Acciones de la cuenta» (#1707)", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue(GUARDIAN_PORTAL);
+    mockFetchMisMenoresConGuardianes.mockResolvedValue([
+      { personaId: 41, nombres: "Sofía", apellidos: "Vera", rol: "PRINCIPAL", segundoGuardian: null, completo: false },
+    ]);
+
+    render(<StudentPage />);
+
+    const card = await screen.findByRole("region", { name: "Representantes" });
+    const actions = await screen.findByRole("region", { name: "Acciones de la cuenta" });
+    expect(actions.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("does not show the invite button to a second guardian", async () => {
     mockFetchStudentPortal.mockReset().mockResolvedValue(GUARDIAN_PORTAL);
     mockFetchMisMenoresConGuardianes.mockResolvedValue([
