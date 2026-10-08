@@ -4932,3 +4932,96 @@ describe("MembersPage — role filter", () => {
     expect(names()).toEqual(["Paula"]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Role gating of membership data (issue #1682)
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — membership data by role (issue #1682)", () => {
+  const OWN_PERSONA = (id: string, nombres: string, apellidos: string): MemberStudentSummary => ({
+    id,
+    nombres,
+    apellidos,
+    activo: true,
+    membresia: null,
+    ultimoPago: null,
+  });
+  const ADMIN_ACCOUNT: MemberAccount = {
+    id: "adm",
+    role: "representante",
+    backendRoles: ["ADMINISTRADOR"],
+    nombres: "Ana",
+    apellidos: "Admin",
+    telefono: "0977777777",
+    estudiantes: [OWN_PERSONA("30", "Ana", "Admin")],
+  };
+  const CHILD: MemberStudentSummary = {
+    ...OWN_PERSONA("41", "Mateo", "Guardián"),
+    membresia: { id: 5, tipo: "Infantil", estado: "activa", estadoBackend: "ACTIVA", fechaInicio: "", fechaFin: "", monto: 40 },
+  };
+  const GUARDIAN_ACCOUNT: MemberAccount = {
+    id: "grd",
+    role: "representante",
+    backendRoles: ["REPRESENTANTE"],
+    nombres: "Gloria",
+    apellidos: "Guardián",
+    telefono: "0966666666",
+    estudiantes: [OWN_PERSONA("40", "Gloria", "Guardián")],
+    dependientes: [CHILD],
+  };
+
+  async function renderRow(account: MemberAccount): Promise<HTMLElement> {
+    mockFetchMembers.mockReset();
+    mockFetchMembers.mockResolvedValue({ accounts: [account] });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    chooseRole("Todos");
+    const matches = await screen.findAllByText(`${account.nombres} ${account.apellidos}`);
+    return matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
+  }
+
+  it("shows no membership or payment data for an admin-only account, in the list or the detail", async () => {
+    const row = await renderRow(ADMIN_ACCOUNT);
+
+    expect(within(row).queryByText(/membresía/i)).not.toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: /^pagos/i })).not.toBeInTheDocument();
+
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).queryByText(/membresía/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/último pago/i)).not.toBeInTheDocument();
+  });
+
+  it("shows a guardian-only account's dependants and their membership, nothing for the guardian", async () => {
+    const row = await renderRow(GUARDIAN_ACCOUNT);
+
+    expect(within(row).queryByText(/membresía/i)).not.toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: /^pagos/i })).not.toBeInTheDocument();
+
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Jugadores a cargo")).toBeInTheDocument();
+    expect(within(dialog).getByText("Mateo Guardián")).toBeInTheDocument();
+    expect(within(dialog).getAllByText("Membresía")).toHaveLength(1);
+  });
+
+  it("shows player fields for a guardian who enrolled themself", async () => {
+    const row = await renderRow({
+      ...GUARDIAN_ACCOUNT,
+      estudiantes: [{ ...GUARDIAN_ACCOUNT.estudiantes[0], membresia: { ...CHILD.membresia! } }],
+    });
+
+    expect(within(row).getByText("Activo")).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /^pagos/i })).toBeInTheDocument();
+  });
+
+  it("keeps the membership status for a regular player row", async () => {
+    const row = await renderRow({ ...ACCOUNT, estudiantes: [{ ...SOFIA_SUMMARY, membresia: null }] });
+
+    expect(within(row).getByText("Sin membresía")).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /^pagos/i })).toBeInTheDocument();
+  });
+});
