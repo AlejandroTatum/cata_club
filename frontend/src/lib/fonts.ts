@@ -1,65 +1,47 @@
 /**
- * The three type families the brand owns, self-hosted, for the WHOLE product.
+ * The three type families of the product, loaded once for every route and
+ * mapped onto `sans` / `display` / `serif` in `tailwind.config.ts`.
  *
- * Until now the product ran on two typographic systems at once. The public
- * landing (`app/page.tsx`) declared these same three `.woff2` files under
- * `--font-landing-*` variables, while everything behind the login rendered in
- * Inter, pulled in as four `@fontsource/inter` stylesheets in the root layout.
- * So the faces the club chose stopped at the front door: a visitor met Graduate
- * and Barlow, and the moment they became a member they were handed a different
- * product in a face nobody picked. This module is what the rest of the app now
- * loads, and `tailwind.config.ts` maps it onto `sans` / `display` / `serif`.
+ *  - Switzer (`sans`): self-hosted variable woff2 through `next/font/local`,
+ *    with its Fontshare license (`app/fonts/FFL.txt`) alongside.
+ *  - Anybody (`display`): variable font through `next/font/google`, which Next
+ *    downloads at build time and serves from our own origin.
+ *  - Playfair Display (`serif`): self-hosted, the editorial voice.
  *
- * Self-hosted through `next/font/local` rather than fetched from Google: the
- * files already sit in `public/fonts/`, and a local font is inlined into the
- * build with a preload link and a generated family name, so there is no
- * third-party request on the critical path and no layout shift from a stylesheet
- * that arrives late.
+ * `display: "swap"` on all three: the fallback renders immediately and the
+ * brand face repaints, so the screen is never blank. The fallback stacks in
+ * `tailwind.config.ts` keep that reflow small.
  *
- * `display: "swap"` on all three, deliberately. The alternative (`optional` /
- * `block`) either drops the brand face on a slow connection or blanks the text
- * while it loads; `swap` renders the fallback immediately and repaints. The
- * repaint is the cost of never showing an empty screen, and the fallback stacks
- * in `tailwind.config.ts` are chosen so the reflow is small.
- *
- * NOTE — the landing keeps its own `--font-landing-*` declarations of these
- * exact three files in `app/page.tsx`. That duplication is DELIBERATE and
- * TEMPORARY: the landing is being redesigned in parallel and owns its variables
- * while that work is in flight. `next/font/local` deduplicates identical font
- * files at build time, so the duplication costs variable names, not bytes. When
- * the redesign lands, `app/page.tsx` and `landing.css` should read these
- * variables and the `--font-landing-*` set should disappear.
+ * NOTE: the landing keeps its own `--font-landing-*` declarations in
+ * `app/page.tsx`; it owns those variables while it is redesigned in parallel.
  */
 
+import { Anybody } from "next/font/google";
 import localFont from "next/font/local";
 
 /**
- * Interface text — every label, cell, button, paragraph and form field in the
- * product. Five weights because the interface actually uses five: 400 body,
- * 500 controls, 600 titles, 700 table heads and badges, 800 the stat numbers
- * and the brand lockup.
+ * Interface text: every label, cell, button, paragraph and form field in the
+ * product. Switzer is a variable file, so the whole 100-900 weight range comes
+ * from one self-hosted woff2. It ships with its Fontshare license
+ * (`app/fonts/FFL.txt`), which has to stay next to the font file.
  */
-export const barlow = localFont({
-  src: [
-    { path: "../../public/fonts/barlow-400.woff2", weight: "400" },
-    { path: "../../public/fonts/barlow-500.woff2", weight: "500" },
-    { path: "../../public/fonts/barlow-600.woff2", weight: "600" },
-    { path: "../../public/fonts/barlow-700.woff2", weight: "700" },
-    { path: "../../public/fonts/barlow-800.woff2", weight: "800" },
-  ],
-  variable: "--font-barlow",
+export const switzer = localFont({
+  src: "../app/fonts/Switzer-Variable.woff2",
+  weight: "100 900",
+  variable: "--font-switzer",
   display: "swap",
 });
 
 /**
- * Display only, and only in uppercase. Graduate is a collegiate/athletic face
- * with no lowercase design intent and very little vertical range, so it holds a
- * headline and falls apart in a paragraph. One weight is all it ships and all
- * it needs — size and case carry its emphasis, not weight.
+ * Display and figures. Anybody is variable in weight and width; only the width
+ * axis is requested on top of weight, and no width signature is applied yet:
+ * the type scale keeps using it at its default width.
  */
-export const graduate = localFont({
-  src: "../../public/fonts/graduate-400.woff2",
-  variable: "--font-graduate",
+export const anybody = Anybody({
+  subsets: ["latin"],
+  weight: "variable",
+  axes: ["wdth"],
+  variable: "--font-anybody",
   display: "swap",
 });
 
@@ -81,4 +63,4 @@ export const playfair = localFont({
  * resolves to nothing, and that failure is invisible until someone opens the
  * screen that uses the missing family.
  */
-export const fontVariables = `${barlow.variable} ${graduate.variable} ${playfair.variable}`;
+export const fontVariables = `${switzer.variable} ${anybody.variable} ${playfair.variable}`;

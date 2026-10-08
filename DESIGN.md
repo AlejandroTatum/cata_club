@@ -35,43 +35,43 @@ colors:
   chart-absent: "#E34948"
 typography:
   display:
-    fontFamily: "Graduate, serif"
+    fontFamily: "Anybody, sans-serif"
     fontSize: "46px"
     fontWeight: 400
     lineHeight: "0.95"
     letterSpacing: "-0.05em"
   headline:
-    fontFamily: "Graduate, serif"
+    fontFamily: "Anybody, sans-serif"
     fontSize: "26px"
     fontWeight: 400
     lineHeight: "1.15"
     letterSpacing: "-0.03em"
   title:
-    fontFamily: "Graduate, serif"
+    fontFamily: "Anybody, sans-serif"
     fontSize: "20px"
     fontWeight: 400
     lineHeight: "1.2"
     letterSpacing: "-0.02em"
   stat:
-    fontFamily: "Graduate, serif"
+    fontFamily: "Anybody, sans-serif"
     fontSize: "32px"
     fontWeight: 400
     lineHeight: "1.05"
     letterSpacing: "-0.04em"
   body:
-    fontFamily: "Barlow, system-ui, sans-serif"
+    fontFamily: "Switzer, system-ui, sans-serif"
     fontSize: "15px"
     fontWeight: 400
     lineHeight: "1.45"
     letterSpacing: "-0.01em"
   dense:
-    fontFamily: "Barlow, system-ui, sans-serif"
+    fontFamily: "Switzer, system-ui, sans-serif"
     fontSize: "13.5px"
     fontWeight: 400
     lineHeight: "1.5"
     letterSpacing: "-0.005em"
   label:
-    fontFamily: "Barlow, system-ui, sans-serif"
+    fontFamily: "Switzer, system-ui, sans-serif"
     fontSize: "10.5px"
     fontWeight: 800
     lineHeight: "1.4"
@@ -253,13 +253,14 @@ rompe.
 
 ## Typography
 
-**Display Font:** Graduate (con serif de respaldo)
-**Body Font:** Barlow (con system-ui de respaldo)
+**Display Font:** Anybody (variable, `next/font/google`, con sans-serif de respaldo)
+**Body Font:** Switzer (variable, autoalojada en `frontend/src/app/fonts/` con su licencia `FFL.txt`, con system-ui de respaldo)
 **Voice Font:** Playfair Display (con Georgia de respaldo)
 
-**Character:** Graduate es una tipografía colegial de mayúsculas, ancha y plana — trae el gimnasio,
-el marcador y la camiseta. Barlow es su contrapeso: una grotesca ligeramente condensada que aguanta
-una tabla de doscientas filas sin cansar. Playfair aparece una vez por pantalla, cuando el club
+**Character:** Anybody es la voz de display y de las cifras: una grotesca variable en peso y ancho,
+pensada para titulares y marcadores. Switzer es su contrapeso: una grotesca neutra y variable que
+aguanta una tabla de doscientas filas sin cansar. Solo cambió la familia tipográfica; la escala,
+los tamaños y los pesos siguen siendo los mismos. Playfair aparece una vez por pantalla, cuando el club
 habla en primera persona.
 
 ### Hierarchy
@@ -281,8 +282,8 @@ tracking normal se lee como separación y a 10.5px se lee como mancha.
 
 ### Named Rules
 
-**La regla de Graduate.** Es display en mayúsculas: nunca por debajo de 15px y nunca dentro de un
-párrafo. Un `<p>` en Graduate es un defecto, no una decisión audaz.
+**La regla de la tipografía display.** Es display en mayúsculas: nunca por debajo de 15px y nunca dentro de un
+párrafo. Un `<p>` en Anybody es un defecto, no una decisión audaz.
 
 **La regla de la voz.** Playfair aparece **una vez por pantalla**. Una segunda frase en la misma
 pantalla significa que ninguna de las dos es énfasis.
@@ -404,7 +405,7 @@ Cápsulas de 26px con la tipografía de etiqueta, un punto de color y su par de 
 y ningún vocabulario paralelo: hubo cuatro familias de insignia en este producto y quedó una.
 
 ### Navigation
-Riel de caucho con el nombre del club en Graduate y la pelota con las iniciales. El ítem activo
+Riel de caucho con el nombre del club en Anybody y la pelota con las iniciales. El ítem activo
 lleva un marcador rojo al filo izquierdo. Cuando una persona tiene más de un rol, el riel **suma** las
 secciones con un rótulo por grupo — no hay selector de rol, porque un selector convierte los roles
 en modos y obliga a recordar en cuál estás parado.

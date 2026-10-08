@@ -214,12 +214,12 @@ describe("design tokens — the three brand type families", () => {
    * `next/font/local` generates the actual family name at build time, so the
    * variable is the only stable thing to hold a config to.
    */
-  it("makes Barlow the interface text, at the head of the fallback chain", () => {
-    expect(fontFamily.sans?.[0]).toBe("var(--font-barlow)");
+  it("makes Switzer the interface text, at the head of the fallback chain", () => {
+    expect(fontFamily.sans?.[0]).toBe("var(--font-switzer)");
   });
 
-  it("exposes Graduate as the display face", () => {
-    expect(fontFamily.display?.[0]).toBe("var(--font-graduate)");
+  it("exposes Anybody as the display face", () => {
+    expect(fontFamily.display?.[0]).toBe("var(--font-anybody)");
   });
 
   it("exposes Playfair as the serif voice", () => {
