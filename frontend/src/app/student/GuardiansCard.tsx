@@ -28,10 +28,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Mail, UserMinus, UserPlus } from "lucide-react";
 import LinkifiedText from "@/components/LinkifiedText";
-import { buttonClasses } from "@/components/ui";
+import { Badge, buttonClasses } from "@/components/ui";
 import { PersonIdentityFields, WizardInput, example } from "@/components/wizard-fields";
 import type { PersonIdentityErrors } from "@/components/wizard-fields";
 import { useToast } from "@/contexts/ToastContext";
+import { getUserInitials } from "@/lib/auth-utils";
 import { toUserMessage } from "@/lib/error-message";
 import { ICON } from "@/lib/icon-size";
 import {
@@ -54,6 +55,10 @@ import type { DatosInvitadoPayload, InvitacionRecibida, MenorConGuardianes } fro
 
 export const MENSAJE_TOPE_DOS_REPRESENTANTES =
   "Tus hijos ya tienen dos representantes. Quita al segundo para invitar a otra persona.";
+
+/** The initials avatar `IdentityCell` draws: coal accent, never the brand red. */
+const INICIALES =
+  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-coal/[0.08] text-xs font-bold text-coal";
 
 /** Same text whatever the backend decided: the card must not reveal whether the e-mail has an account. */
 export const MENSAJE_INVITACION_NEUTRO = "Si el correo es válido, enviaremos la invitación.";
@@ -309,7 +314,9 @@ export default function GuardiansCard(): React.ReactElement | null {
   }
 
   return (
-    <section aria-label="Representantes" className="card flex flex-col overflow-hidden">
+    // Issue #1707: the content is one short row per child, so on desktop the
+    // card is capped instead of stretching across the whole content column.
+    <section aria-label="Representantes" className="card flex w-full flex-col overflow-hidden lg:max-w-2xl">
       <div className="border-b border-line px-5 py-3">
         <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Representantes</h2>
       </div>
@@ -337,60 +344,78 @@ export default function GuardiansCard(): React.ReactElement | null {
             </ul>
           </div>
         )}
-        <ul className="flex flex-col gap-2">
+        <ul aria-label="Hijos representados" className="flex flex-col gap-2">
           {menores.map((menor) => (
-            <li key={menor.personaId} className="flex flex-col gap-1 text-sm text-ink-2">
-              <span className="font-semibold text-ink">{nombreCompleto(menor)}</span>
-              {menor.rol === "SEGUNDO" ? (
-                <span className="text-ink-3">
-                  Eres su segundo representante: puedes verlo todo y pagar. La ficha médica y los
-                  consentimientos los firma el representante principal.
-                </span>
-              ) : menor.segundoGuardian ? (
+            // Each child gets its own surface (#1707): initials, name and a
+            // status chip on top, the detail and the controls below.
+            <li
+              key={menor.personaId}
+              className="flex items-start gap-3 rounded-ctl border border-line bg-sunken p-3 text-sm text-ink-2"
+            >
+              <span aria-hidden="true" className={INICIALES}>
+                {getUserInitials(nombreCompleto(menor))}
+              </span>
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <span className="flex flex-wrap items-center gap-2">
-                  <span>
-                    {menor.segundoGuardian.estado === "PENDIENTE"
-                      ? `Invitación pendiente: ${menor.segundoGuardian.correo ?? ""}`
-                      : `Segundo representante: ${nombreCompleto(menor.segundoGuardian)}${
-                          menor.segundoGuardian.correo ? ` (${menor.segundoGuardian.correo})` : ""
-                        }`}
-                  </span>
-                  {confirmando === menor.personaId ? (
-                    <span className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-xs text-ink-3">
-                        Perderá el acceso de inmediato.
-                      </span>
-                      <button
-                        type="button"
-                        disabled={quitando}
-                        onClick={() => void quitar(menor)}
-                        className={buttonClasses("primary", "sm")}
-                      >
-                        Confirmar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmando(null)}
-                        className={buttonClasses("secondary", "sm")}
-                      >
-                        Cancelar
-                      </button>
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setConfirmando(menor.personaId)}
-                      className={buttonClasses("secondary", "sm")}
-                      aria-label={`Quitar al segundo representante de ${nombreCompleto(menor)}`}
-                    >
-                      <UserMinus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-                      Quitar
-                    </button>
-                  )}
+                  <span className="font-semibold text-ink">{nombreCompleto(menor)}</span>
+                  {menor.rol === "PRINCIPAL" &&
+                    (menor.segundoGuardian === null ? (
+                      <Badge>Sin segundo representante</Badge>
+                    ) : menor.segundoGuardian.estado === "PENDIENTE" ? (
+                      <Badge tone="warn">Invitación pendiente</Badge>
+                    ) : (
+                      <Badge tone="ok">Con segundo representante</Badge>
+                    ))}
                 </span>
-              ) : (
-                <span className="text-ink-3">Sin segundo representante.</span>
-              )}
+                {menor.rol === "SEGUNDO" ? (
+                  <span className="text-ink-3">
+                    Eres su segundo representante: puedes verlo todo y pagar. La ficha médica y los
+                    consentimientos los firma el representante principal.
+                  </span>
+                ) : menor.segundoGuardian ? (
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span>
+                      {menor.segundoGuardian.estado === "PENDIENTE"
+                        ? (menor.segundoGuardian.correo ?? "")
+                        : `${nombreCompleto(menor.segundoGuardian)}${
+                            menor.segundoGuardian.correo ? ` (${menor.segundoGuardian.correo})` : ""
+                          }`}
+                    </span>
+                    {confirmando === menor.personaId ? (
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-xs text-ink-3">
+                          Perderá el acceso de inmediato.
+                        </span>
+                        <button
+                          type="button"
+                          disabled={quitando}
+                          onClick={() => void quitar(menor)}
+                          className={buttonClasses("primary", "sm")}
+                        >
+                          Confirmar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmando(null)}
+                          className={buttonClasses("secondary", "sm")}
+                        >
+                          Cancelar
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmando(menor.personaId)}
+                        className={buttonClasses("secondary", "sm")}
+                        aria-label={`Quitar al segundo representante de ${nombreCompleto(menor)}`}
+                      >
+                        <UserMinus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                        Quitar
+                      </button>
+                    )}
+                  </span>
+                ) : null}
+              </div>
             </li>
           ))}
         </ul>
@@ -406,12 +431,13 @@ export default function GuardiansCard(): React.ReactElement | null {
               }}
             />
           ) : (
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col items-start gap-1">
+              {/* A secondary action sized to its label, not a full-width bar (#1707). */}
               <button
                 type="button"
                 onClick={() => setFormOpen(true)}
                 disabled={elegibles.length === 0}
-                className={buttonClasses("secondary")}
+                className={buttonClasses("secondary", "sm")}
               >
                 <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
                 Invitar a otro representante

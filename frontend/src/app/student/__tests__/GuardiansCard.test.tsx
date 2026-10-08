@@ -9,7 +9,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import GuardiansCard, { MENSAJE_TOPE_DOS_REPRESENTANTES } from "@/app/student/GuardiansCard";
 import type { MenorConGuardianes } from "@/services/api";
 import { fillBirthDate } from "@/lib/__tests__/fill-birth-date";
@@ -99,7 +99,7 @@ describe("GuardiansCard — who sees what", () => {
 
     const boton = await screen.findByRole("button", { name: BOTON_INVITAR });
     expect(boton).toBeEnabled();
-    expect(screen.getByText("Sin segundo representante.")).toBeInTheDocument();
+    expect(screen.getByText("Sin segundo representante")).toBeInTheDocument();
   });
 
   it("shows no invite or remove control to a second guardian", async () => {
@@ -317,13 +317,14 @@ describe("GuardiansCard — remove", () => {
     mockQuitar.mockResolvedValue(undefined);
     render(<GuardiansCard />);
 
-    expect(await screen.findByText(/Segundo representante: Pablo Torres \(pablo@example.com\)/)).toBeInTheDocument();
+    expect(await screen.findByText("Con segundo representante")).toBeInTheDocument();
+    expect(screen.getByText("Pablo Torres (pablo@example.com)")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /quitar al segundo representante de Nico Torres/i }));
     expect(mockQuitar).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
 
     await waitFor(() => expect(mockQuitar).toHaveBeenCalledWith(10));
-    await waitFor(() => expect(screen.getByText("Sin segundo representante.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Sin segundo representante")).toBeInTheDocument());
     expect(mockShowSuccess).toHaveBeenCalled();
   });
 
@@ -338,18 +339,35 @@ describe("GuardiansCard — remove", () => {
     expect(screen.getByRole("button", { name: /quitar al segundo representante/i })).toBeInTheDocument();
   });
 
-  it("shows a pending second guardian as «Invitación pendiente: correo» with the remove action", async () => {
+  it("shows a pending second guardian as an «Invitación pendiente» chip plus the e-mail, with the remove action", async () => {
     mockFetch.mockResolvedValueOnce([PENDIENTE]).mockResolvedValueOnce([menor()]);
     mockQuitar.mockResolvedValue(undefined);
     render(<GuardiansCard />);
 
-    expect(await screen.findByText("Invitación pendiente: luis@example.com")).toBeInTheDocument();
+    expect(await screen.findByText("Invitación pendiente")).toBeInTheDocument();
+    expect(screen.getByText("luis@example.com")).toBeInTheDocument();
     expect(screen.queryByText(/null/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /quitar al segundo representante de Nico Torres/i }));
     fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
 
     await waitFor(() => expect(mockQuitar).toHaveBeenCalledWith(10));
-    await waitFor(() => expect(screen.getByText("Sin segundo representante.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Sin segundo representante")).toBeInTheDocument());
+  });
+});
+
+describe("GuardiansCard — per-child rows (#1707)", () => {
+  it("renders one list item per child, each with its own status chip", async () => {
+    mockFetch.mockResolvedValue([
+      menor(),
+      { ...PENDIENTE, personaId: 11, nombres: "Ana", apellidos: "Torres" },
+    ]);
+    render(<GuardiansCard />);
+
+    await screen.findByText("Sin segundo representante");
+    const filas = within(screen.getByRole("list", { name: "Hijos representados" })).getAllByRole("listitem");
+    expect(filas).toHaveLength(2);
+    expect(within(filas[0]).getByText("Sin segundo representante")).toBeInTheDocument();
+    expect(within(filas[1]).getByText("Invitación pendiente")).toBeInTheDocument();
   });
 });
 
@@ -399,7 +417,7 @@ describe("GuardiansCard — received invitations", () => {
     mockFetch.mockResolvedValue([menor()]);
     render(<GuardiansCard />);
 
-    await screen.findByText("Sin segundo representante.");
+    await screen.findByText("Sin segundo representante");
     expect(screen.queryByText("Invitaciones recibidas")).not.toBeInTheDocument();
   });
 
