@@ -34,6 +34,7 @@ from app.infraestructura.plantillas_correo import ID_CONTENIDO_ESCUDO
 from app.servicios_negocio.dtos.membresia_pago_schemas import PagoValidarDTO
 from app.servicios_negocio.membresia_pago_servicio import PagoServicio
 from app.soporte_transversal.configuracion import settings
+from tests import arnes_outbox as arnes
 from tests.fabricas_pagos import crear_membresia_orm, crear_persona_orm, crear_tipo_membresia_orm
 
 CORREO_FICTICIO = "socio.ficticio@cataclub.test"
@@ -256,6 +257,7 @@ def test_validar_pago_aprobado_manda_el_correo_junto_con_el_aviso_in_app(db_sess
     PagoServicio(db_session).validar_pago(
         pago.id, PagoValidarDTO(estado_pago=EstadoPago.APROBADO), actor_persona_id=admin.id,
     )
+    arnes.despachar_correos_encolados(db_session)
 
     assert [envio["destinatario"] for envio in smtp_capturado] == [CORREO_FICTICIO]
     texto = _texto(smtp_capturado[0])
@@ -367,6 +369,7 @@ def test_validar_pago_rechazado_manda_el_correo_junto_con_el_aviso_in_app(db_ses
         PagoValidarDTO(estado_pago=EstadoPago.RECHAZADO, motivo_rechazo=MOTIVO_RECHAZO),
         actor_persona_id=admin.id,
     )
+    arnes.despachar_correos_encolados(db_session)
 
     assert [envio["destinatario"] for envio in smtp_capturado] == [CORREO_FICTICIO]
     mensaje = smtp_capturado[0]["mensaje"]
@@ -442,6 +445,7 @@ def test_validar_pago_aprobado_de_representado_avisa_al_representante(
     resultado = PagoServicio(db_session).validar_pago(
         pago.id, PagoValidarDTO(estado_pago=EstadoPago.APROBADO), actor_persona_id=admin.id,
     )
+    arnes.despachar_correos_encolados(db_session)
 
     assert resultado.estado_pago == EstadoPago.APROBADO
     assert [envio["destinatario"] for envio in smtp_capturado] == [CORREO_REPRESENTANTE]
@@ -473,6 +477,7 @@ def test_validar_pago_rechazado_de_representado_avisa_al_representante(
         PagoValidarDTO(estado_pago=EstadoPago.RECHAZADO, motivo_rechazo=MOTIVO_RECHAZO),
         actor_persona_id=admin.id,
     )
+    arnes.despachar_correos_encolados(db_session)
 
     assert resultado.estado_pago == EstadoPago.RECHAZADO
     assert [envio["destinatario"] for envio in smtp_capturado] == [CORREO_REPRESENTANTE]
@@ -551,6 +556,7 @@ def test_validar_pago_rechazado_pasa_monto_periodo_y_alumno(db_session, smtp_cap
         PagoValidarDTO(estado_pago=EstadoPago.RECHAZADO, motivo_rechazo=MOTIVO_RECHAZO),
         actor_persona_id=admin.id,
     )
+    arnes.despachar_correos_encolados(db_session)
 
     texto = _texto(smtp_capturado[0])
     assert "Monto: $30,00" in texto
@@ -580,6 +586,7 @@ def test_validar_pago_aprobado_pasa_monto_y_nombre_completo(db_session, smtp_cap
     PagoServicio(db_session).validar_pago(
         pago.id, PagoValidarDTO(estado_pago=EstadoPago.APROBADO), actor_persona_id=admin.id,
     )
+    arnes.despachar_correos_encolados(db_session)
 
     texto = _texto(smtp_capturado[0])
     assert "Monto: $30,00" in texto

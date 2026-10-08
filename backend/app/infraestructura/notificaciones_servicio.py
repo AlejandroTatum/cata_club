@@ -21,6 +21,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import NamedTuple, Optional
 
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.dominio.enums import TipoNotificacion, TipoRol
@@ -31,6 +32,7 @@ from app.dominio.excepciones import (
 )
 from app.dominio.modelos import (
     ContadorCorreoDiario,
+    CorreoOutbox,
     Notificacion,
     Rol,
     Usuario,
@@ -65,6 +67,15 @@ logger = logging.getLogger("cataclub.notificaciones")
 # Identidad de remitente de las cuatro superficies de correo transaccional
 # (issue #898). Ronda 2: solo texto -- no cambia estructura MIME ni maquetado.
 NOMBRE_REMITENTE = "Cata Club"
+
+# Cuánto puede esperar un correo encolado antes de retirarse sin salir. Una
+# semana cubre varios días seguidos de tope agotado; `diferir_hasta_manana`
+# corre el vencimiento mientras la fila espera por el cupo.
+VIGENCIA_CORREO_ENCOLADO = timedelta(days=7)
+
+TAREA_DESPACHO_CORREOS = (
+    "app.infraestructura.tareas.correo_outbox_tareas.despachar_correos_pendientes"
+)
 
 
 def _parte_html_con_escudo(cuerpo_html: str) -> MIMEMultipart:
@@ -363,11 +374,15 @@ def _avisar_cupo_agotado(omitidos: int) -> None:
 class ServicioNotificaciones:
     """Adaptador SMTP para el envío de correos transaccionales."""
 
-    def __init__(self, levantar_si_cupo_agotado: bool = False) -> None:
+    def __init__(self, levantar_si_cupo_agotado: bool = False, encolar_en=None) -> None:
         # Las colas de salida lo activan: con el cupo agotado necesitan saber
         # que el correo NO salió para diferir la fila (ver `outbox_cupo`). El
         # resto de los llamadores sigue con el contrato de omitir sin levantar.
         self._levantar_si_cupo_agotado = levantar_si_cupo_agotado
+        # Con una sesión, `enviar_correo` no abre SMTP: deja el correo armado
+        # en `correo_outbox` dentro de ESA transacción (issue #1710). El que
+        # llama decide el commit; un rollback no deja nada encolado.
+        self._encolar_en = encolar_en
         self._host = settings.smtp_host
         self._port = settings.smtp_port
         self._user = settings.smtp_user
@@ -398,6 +413,23 @@ class ServicioNotificaciones:
         asunto: str,
         cuerpo_texto: str,
         cuerpo_html: Optional[str] = None,
+    ) -> None:
+        """Punto único de salida de todo correo del club.
+
+        Construido con `encolar_en`, el correo se encola (`_encolar`, issue
+        #1710) y el despachador vuelve a llamar a este método, sin sesión,
+        cuando le toca salir. Sin ella, se envía ya (`_enviar_por_smtp`)."""
+        if self._encolar_en is not None:
+            self._encolar(destinatario, asunto, cuerpo_texto, cuerpo_html)
+        else:
+            self._enviar_por_smtp(destinatario, asunto, cuerpo_texto, cuerpo_html)
+
+    def _enviar_por_smtp(
+        self,
+        destinatario: str,
+        asunto: str,
+        cuerpo_texto: str,
+        cuerpo_html: Optional[str],
     ) -> None:
         """Envía un correo vía SMTP. Falla explícitamente si no hay broker
         configurado.
@@ -531,6 +563,33 @@ class ServicioNotificaciones:
             "Correo enviado a %s con asunto '%s'",
             _enmascarar_correo(destinatario), asunto,
         )
+
+    def _encolar(
+        self, destinatario: str, asunto: str, cuerpo_texto: str, cuerpo_html: Optional[str],
+    ) -> None:
+        """Agrega la fila sin commitear y publica el despacho tras el commit.
+
+        La cuenta se resuelve por dirección y no se pide al llamador: los
+        avisos ya reciben solo el correo, y la fila necesita la cuenta para
+        que borrarla -- o suprimir sus datos -- se lleve lo pendiente."""
+        from app.infraestructura.tareas.outbox_despacho import encolar_despacho_tras_commit
+
+        db = self._encolar_en
+        usuario_id = db.execute(
+            # Misma forma que el índice canónico de `usuario.correo` (f1023).
+            select(Usuario.id).where(
+                func.lower(func.btrim(Usuario.correo)) == destinatario.strip().lower()
+            )
+        ).scalar_one_or_none()
+        db.add(CorreoOutbox(
+            usuario_id=usuario_id,
+            destinatario=destinatario,
+            asunto=asunto,
+            cuerpo_texto=cuerpo_texto,
+            cuerpo_html=cuerpo_html,
+            expires_at=datetime.now(timezone.utc) + VIGENCIA_CORREO_ENCOLADO,
+        ))
+        encolar_despacho_tras_commit(db, TAREA_DESPACHO_CORREOS)
 
     def enviar_recuperacion_contrasenia(self, correo: str, token: str) -> None:
         """Envía el enlace de restablecimiento de contraseña al usuario.

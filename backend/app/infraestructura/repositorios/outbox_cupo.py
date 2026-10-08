@@ -18,14 +18,14 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 
-from app.dominio.modelos import RecuperacionOutbox, VerificacionCorreoOutbox
+from app.dominio.modelos import CorreoOutbox, RecuperacionOutbox, VerificacionCorreoOutbox
 from app.infraestructura.repositorios import outbox_auditoria_entrega as auditoria
 
 MARCA_CUPO_AGOTADO = "CupoCorreoDiarioAgotado"
 
 VIGENCIA_TRAS_DIFERIR = timedelta(hours=24)
 
-_COLAS_CON_CUPO = (RecuperacionOutbox, VerificacionCorreoOutbox)
+_COLAS_CON_CUPO = (RecuperacionOutbox, VerificacionCorreoOutbox, CorreoOutbox)
 
 
 def inicio_del_dia_siguiente_utc(ahora: datetime | None = None) -> datetime:
