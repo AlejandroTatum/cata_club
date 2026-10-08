@@ -387,7 +387,7 @@ const config: Config = {
           "Arial",
           "sans-serif",
         ],
-        display: ["var(--font-anybody)", "serif"],
+        display: ["var(--font-anybody)", "system-ui", "sans-serif"],
         serif: ["var(--font-playfair)", "Georgia", "serif"],
       },
       // ---------------------------------------------------------------------

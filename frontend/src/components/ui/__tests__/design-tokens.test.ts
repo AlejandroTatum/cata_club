@@ -222,6 +222,10 @@ describe("design tokens — the three brand type families", () => {
     expect(fontFamily.display?.[0]).toBe("var(--font-anybody)");
   });
 
+  it("falls back to a sans-serif face while Anybody loads", () => {
+    expect(fontFamily.display?.at(-1)).toBe("sans-serif");
+  });
+
   it("exposes Playfair as the serif voice", () => {
     expect(fontFamily.serif?.[0]).toBe("var(--font-playfair)");
   });
