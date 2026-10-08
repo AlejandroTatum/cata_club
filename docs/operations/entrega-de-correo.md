@@ -225,8 +225,9 @@ idempotencia.
 ## La cola de correos ya armados (issue #1710)
 
 `correo_outbox` lleva los avisos que antes salían por SMTP dentro de la
-petición: pago aprobado, pago rechazado, deuda regularizada y el aviso de
-invitación a segundo representante. El 2026-10-08 el tope diario de correos
+petición o en la tarea: pago aprobado, pago rechazado, deuda regularizada, el
+aviso de invitación a segundo representante y las alertas de vencimiento y de
+mora. El 2026-10-08 el tope diario de correos
 (`limite_correos_diario`) se agotó y esos correos se perdieron, porque
 `enviar_correo` los omitía y nadie los reintentaba.
 
@@ -238,6 +239,21 @@ invitación a segundo representante. El 2026-10-08 el tope diario de correos
 - Con el tope agotado, la fila queda `PENDIENTE` hasta el día siguiente (UTC)
   sin gastar intentos (`outbox_cupo.diferir_hasta_manana`), y cuenta en
   `contar_en_espera_por_cupo`.
+- Las alertas de vencimiento y de mora (`alertas_tareas`) encolan sus correos
+  en la misma sesión y commit que las `Notificacion` del lote: ya no abren
+  SMTP, así que el circuito SMTP abierto no aborta el lote y no hay
+  `rechazos_permanentes` en su resumen.
+- Un rechazo permanente del destinatario (5xx por dirección,
+  `DestinatarioRechazadoPermanentemente`) cierra la fila `AGOTADO` en el
+  primer intento, en TODAS las colas de correo: reintentar una dirección muerta
+  solo gasta cupo. `last_error_redacted` guarda el código y la frase del
+  proveedor sin la dirección, y el log tampoco la lleva. Para encontrarlas:
+
+  ```sql
+  SELECT id, attempts, last_error_redacted FROM correo_outbox
+  WHERE status = 'AGOTADO' AND last_error_redacted LIKE 'DestinatarioRechazadoPermanentemente%';
+  ```
+
 - Vigencia de una semana. `limpiar_correos_vencidos` retira las filas
   vencidas y avisa las que nunca salieron. La supresión de datos borra las
   filas de la cuenta en cualquier estado, porque el cuerpo es dato personal.

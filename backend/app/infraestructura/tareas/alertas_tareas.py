@@ -18,16 +18,14 @@ Notificaciones:
 """
 from datetime import date, datetime, time, timedelta
 import logging
+from typing import Sequence
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 
 from app.infraestructura.db import SessionLocal
+from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
 from app.infraestructura.tareas.celery_app import celery_app
-from app.dominio.excepciones import (
-    DestinatarioRechazadoPermanentemente,
-    ServicioNoDisponible,
-)
 from app.dominio.modelos import CoRepresentante, Pago, Membresia, Persona, Notificacion, Rol, TipoMembresia, Usuario
 from app.dominio.guardianes import guardianes_de
 from app.dominio.enums import EstadoPago, EstadoMembresia, TipoNotificacion, TipoRol
@@ -36,7 +34,6 @@ from app.dominio.nombre_propio import nombre_completo
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.membresia_pago_servicio import _meses_enteros_desde
 from app.soporte_transversal.formato import formatear_monto_usd
-from app.soporte_transversal.resiliencia import CIRCUITO_SMTP_COOLDOWN_SEGUNDOS
 from app.soporte_transversal.tiempo import ZONA_HORARIA_CLUB, hoy_club
 
 
@@ -63,17 +60,6 @@ DIAS_MORA_MIN_DIA_1 = 1
 DIAS_MORA_MAX_DIA_1 = 7  # tope: no pisar la ventana del aviso de día 8
 DIAS_MORA_MIN_DIA_8 = 8
 DIAS_MORA_MAX_DIA_8 = 14  # tope: respeta el silencio del día 15 (issue #285)
-
-
-def _auditoria_de_rechazo(exc: DestinatarioRechazadoPermanentemente) -> str:
-    """Texto que se persiste en `Notificacion.last_error_redacted`.
-
-    `detalle_tecnico` es el código y la frase del proveedor, ya redactados por
-    `notificaciones_servicio._redactar_detalle_sensible` (un mensaje SMTP
-    puede repetir el usuario o la contraseña del relay). Si por lo que sea
-    viniera vacío se guarda el mensaje: quedarse sin rastro sería peor que
-    guardar poco."""
-    return (exc.detalle_tecnico or exc.mensaje)[:Notificacion.ULTIMO_ERROR_MAX]
 
 
 def _responsables_de_pago(persona: Persona) -> list[Persona]:
@@ -149,12 +135,6 @@ def alertar_vencimientos_hoy_mas_5(self) -> dict:
     fecha_objetivo = hoy + timedelta(days=DIAS_ANTICIPACION_VENCIMIENTO)
 
     alertas_enviadas: list[dict] = []
-    # Destinatarios cuyo CORREO fue rechazado de forma definitiva (issue
-    # #837). Su aviso in-app sí se emitió -- por eso también cuentan en
-    # `alertas_enviadas`: el correo es un canal, la alerta es la fila. Esta
-    # lista existe para que la corrida no diga "todo bien" cuando hay
-    # direcciones que hay que corregir a mano.
-    rechazos_permanentes: list[dict] = []
 
     with SessionLocal() as db:
         stmt = (
@@ -213,97 +193,63 @@ def alertar_vencimientos_hoy_mas_5(self) -> dict:
         ya_notificados = _notificaciones_existentes(db, claves_dedup)
 
         # Una sola sesión de escritura para TODO el lote, no una por fila
-        # (issue #833): se acumula y se persiste con `_persistir_lote`, ANTES
-        # de propagar un aborto para no perder a los ya enviados con éxito.
+        # (issue #833): se acumula y `_persistir_lote` lo guarda junto con los
+        # correos que le corresponden.
         lote_a_persistir: list[Notificacion] = []
+        correos_a_encolar: list[CorreoPendiente] = []
         for pago, membresia, persona in filas:
-            try:
-                # `pago.fecha_fin`, NO `fecha_objetivo`: dentro de la ventana
-                # de recuperación cada pago puede vencer en cualquier día
-                # entre `hoy` y `fecha_objetivo`, y el aviso debe nombrar la
-                # fecha REAL de ESE pago -- `fecha_objetivo` es solo el borde
-                # de la ventana escaneada por el lote, no la fecha de vencimiento
-                # de ninguna membresía en particular.
-                nuevas, rechazo = _construir_notificacion_vencimiento(
-                    ya_notificados, persona, membresia, pago, pago.fecha_fin
-                )
-            except ServicioNoDisponible as exc:
-                # Decisión B del diseño: el circuito SMTP ABIERTO hace fallar
-                # rápido a `enviar_correo`. Sin este override, el backoff
-                # exponencial por defecto de Celery (`retry_backoff=True`,
-                # 0-1s/0-2s/0-4s -- ~7s peor caso) agotaría los 3 reintentos
-                # DENTRO del cooldown del circuito y el lote del día se
-                # perdería. `self.retry(countdown=...)` alinea el reintento
-                # al cooldown en vez del backoff exponencial; `max_retries`
-                # no cambia -- el decorador lo sigue fijando en 3, y
-                # `autoretry_for` re-lanza un `Retry` sin tocarlo (ver
-                # `celery/app/autoretry.py`), así que `test_celery_tope_de_
-                # reintentos.py` queda intacto. La dedup en lote hace que
-                # el reintento retome donde el intento anterior se quedó.
-                logger.warning(
-                    "Circuito SMTP abierto durante el lote (pago_id=%s); "
-                    "reintentando en %.0fs",
-                    pago.id, CIRCUITO_SMTP_COOLDOWN_SEGUNDOS,
-                )
-                _persistir_lote(lote_a_persistir)
-                raise self.retry(exc=exc, countdown=CIRCUITO_SMTP_COOLDOWN_SEGUNDOS)
-            except Exception:
-                logger.exception(
-                    "Fallo notificando vencimiento (pago_id=%s)", pago.id
-                )
-                _persistir_lote(lote_a_persistir)
-                raise
-
+            # `pago.fecha_fin`, NO `fecha_objetivo`: dentro de la ventana
+            # de recuperación cada pago puede vencer en cualquier día
+            # entre `hoy` y `fecha_objetivo`, y el aviso debe nombrar la
+            # fecha REAL de ESE pago -- `fecha_objetivo` es solo el borde
+            # de la ventana escaneada por el lote, no la fecha de vencimiento
+            # de ninguna membresía en particular.
+            nuevas, correos = _construir_notificacion_vencimiento(
+                ya_notificados, persona, membresia, pago, pago.fecha_fin
+            )
             lote_a_persistir.extend(nuevas)
-            if rechazo is not None:
-                # Issue #837: un 5xx por destinatario es terminal -- la fila
-                # ya está en `lote_a_persistir` (con su auditoría), y el lote
-                # sigue con el siguiente en vez de reprogramarse entero.
-                logger.warning(
-                    "Correo rechazado de forma permanente (pago_id=%s): %s; "
-                    "el lote continúa",
-                    pago.id, rechazo.detalle_tecnico,
-                )
-                rechazos_permanentes.append({
-                    "pago_id": pago.id,
-                    "persona_id": persona.id,
-                })
-
-            # Envío exitoso o rechazo permanente: en los dos casos el aviso
-            # in-app quedó armado.
+            correos_a_encolar.extend(correos)
             alertas_enviadas.append({
                 "pago_id": pago.id,
                 "membresia_id": membresia.id,
                 "persona_id": persona.id,
                 "vence": pago.fecha_fin.isoformat(),
             })
-        _persistir_lote(lote_a_persistir)
+        _persistir_lote(lote_a_persistir, correos_a_encolar)
 
     logger.info(
-        "Alertas vencimiento %s -> %d notificaciones enviadas "
-        "(%d con correo rechazado de forma permanente)",
+        "Alertas vencimiento %s -> %d notificaciones enviadas",
         fecha_objetivo.isoformat(),
         len(alertas_enviadas),
-        len(rechazos_permanentes),
     )
     return {
         "fecha_objetivo": fecha_objetivo.isoformat(),
         "total_alertas": len(alertas_enviadas),
         "alertas": alertas_enviadas,
-        "total_rechazos_permanentes": len(rechazos_permanentes),
-        "rechazos_permanentes": rechazos_permanentes,
     }
 
 
-def _persistir_lote(filas: list[Notificacion]) -> None:
+CorreoPendiente = tuple[str, str, str]  # (destinatario, asunto, cuerpo_texto)
+
+
+def _persistir_lote(
+    filas: list[Notificacion], correos: Sequence[CorreoPendiente] = (),
+) -> None:
     """Persiste el lote acumulado en UNA sola sesión corta, no una por fila
-    (issue #833): siempre DESPUÉS del bucle de envío, o antes de propagar un
-    aborto -- nunca durante un `enviar_correo`. Compartida entre los tres
-    sitios de escritura (vencimiento, mora, resumen de administradores)."""
+    (issue #833). Los correos del lote se encolan en `correo_outbox` en ESA
+    sesión (issue #1710): salen con el commit de las `Notificacion` o no
+    salen, y el despachador los entrega con su cupo y sus reintentos.
+    Compartida entre los tres sitios de escritura (vencimiento, mora, resumen
+    de administradores)."""
     if not filas:
         return
     with SessionLocal() as db_escritura:
         db_escritura.add_all(filas)
+        servicio = ServicioNotificaciones(encolar_en=db_escritura)
+        for destinatario, asunto, cuerpo in correos:
+            servicio.enviar_correo(
+                destinatario=destinatario, asunto=asunto, cuerpo_texto=cuerpo,
+            )
         db_escritura.commit()
 
 
@@ -337,61 +283,36 @@ def _notificaciones_existentes(
     return {(fila.tipo, fila.persona_id, fila.entidad_relacionada_id) for fila in filas}
 
 
-def _enviar_aviso_a_responsable(
-    responsable: Persona, fila: Notificacion, render, *render_args,
-) -> DestinatarioRechazadoPermanentemente | None:
-    """Envía el correo de `fila` a `responsable` si tiene cuenta. Mismo manejo
-    de errores que antes: sin SMTP se omite; un rechazo DEFINITIVO (issue #837)
-    se anota en la fila y se devuelve; `ServicioNoDisponible` se propaga."""
+def _correo_para_responsable(
+    responsable: Persona, render, *render_args,
+) -> list[CorreoPendiente]:
+    """El correo de aviso de `responsable`, listo para encolar; vacío si no
+    tiene cuenta."""
     if not responsable.usuario:
         logger.warning(
             "persona_id=%s (responsable de pago) no tiene usuario vinculado — "
             "email omitido", responsable.id
         )
-        return None
+        return []
     asunto, cuerpo = render(*render_args)
-    try:
-        from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
-        ServicioNotificaciones().enviar_correo(
-            destinatario=responsable.usuario.correo, asunto=asunto, cuerpo_texto=cuerpo,
-        )
-    except RuntimeError:
-        logger.warning(
-            "SMTP no configurado — email no enviado para persona_id=%s", responsable.id
-        )
-    except DestinatarioRechazadoPermanentemente as exc:
-        # Issue #837: el correo NO va a llegar a esa dirección, ni ahora ni
-        # reintentando. La notificación in-app, en cambio, sí tiene que
-        # existir -- es el otro canal, el que la familia ve al entrar -- y el
-        # rechazo queda en la misma fila para que alguien pueda corregir la
-        # dirección.
-        fila.last_error_redacted = _auditoria_de_rechazo(exc)
-        return exc
-    return None
+    return [(responsable.usuario.correo, asunto, cuerpo)]
 
 
 def _construir_notificacion_vencimiento(
     ya_notificados: set[tuple[TipoNotificacion, int, int]],
     persona: Persona, membresia: Membresia, pago: Pago, vence: date,
-) -> tuple[list[Notificacion], DestinatarioRechazadoPermanentemente | None]:
+) -> tuple[list[Notificacion], list[CorreoPendiente]]:
     """Arma la `Notificacion` pendiente de CADA responsable de pago (issue
-    #905; desde #1666 son ambos guardianes, ver `_responsables_de_pago`) y
-    envía el correo si SMTP está configurado. NO escribe en la base -- el
-    llamador persiste el lote entero junto, en una sola sesión, después del
-    bucle de envío (issue #833); acá solo se arma el objeto en memoria. El
-    dedup llega resuelto en `ya_notificados` (una consulta por lote, ver
-    `_notificaciones_existentes`), por responsable.
+    #905; desde #1666 son ambos guardianes, ver `_responsables_de_pago`) y su
+    correo. NO escribe en la base ni envía nada -- el llamador persiste el
+    lote entero junto, en una sola sesión (issue #833), y encola los correos
+    en ella (issue #1710). El dedup llega resuelto en `ya_notificados` (una
+    consulta por lote, ver `_notificaciones_existentes`), por responsable.
 
-    Devuelve `(filas_pendientes, rechazo_terminal)`. Si `enviar_correo`
-    levanta `ServicioNoDisponible` (circuito abierto), la excepción NO se
-    atrapa acá: se propaga y el llamador aborta el lote, sin construir la
-    fila en curso. Issue #837: un rechazo DEFINITIVO (5xx) sí arma la fila,
-    con `last_error_redacted`, y se devuelve como `rechazo_terminal` (el
-    primero, si hubo más de uno) en vez de levantarse -- el llamador decide
-    cuándo seguir con el siguiente."""
+    Devuelve `(filas_pendientes, correos_pendientes)`."""
     tipo = TipoNotificacion.MIEMBRESIA_VENCIMIENTO_PROXIMO
     filas: list[Notificacion] = []
-    rechazo_terminal: DestinatarioRechazadoPermanentemente | None = None
+    correos: list[CorreoPendiente] = []
     for responsable in _responsables_de_pago(persona):
         if (tipo, responsable.id, pago.id) in ya_notificados:
             continue  # ya procesado por completo en un intento anterior
@@ -408,12 +329,11 @@ def _construir_notificacion_vencimiento(
             tipo=tipo, mensaje=mensaje,
             persona_id=responsable.id, entidad_relacionada_id=pago.id,
         )
-        rechazo = _enviar_aviso_a_responsable(
-            responsable, fila, _render_vencimiento, responsable.nombres, mensaje,
+        correos += _correo_para_responsable(
+            responsable, _render_vencimiento, responsable.nombres, mensaje,
         )
-        rechazo_terminal = rechazo_terminal or rechazo
         filas.append(fila)
-    return filas, rechazo_terminal
+    return filas, correos
 
 
 def _rango_dia_club(hoy: date) -> tuple[datetime, datetime]:
@@ -430,14 +350,12 @@ def _rango_dia_club(hoy: date) -> tuple[datetime, datetime]:
 def _construir_notificaciones_mora(
     ya_notificados: set[tuple[TipoNotificacion, int, int]],
     persona: Persona, pago_id: int, fecha_vencimiento: date, tipo: TipoNotificacion,
-) -> tuple[list[Notificacion], DestinatarioRechazadoPermanentemente | None]:
+) -> tuple[list[Notificacion], list[CorreoPendiente]]:
     """Arma la `Notificacion` de mora de CADA responsable de pago (issue #905;
-    desde #1666 ambos guardianes) y envía un correo real si SMTP está
-    configurado. NO escribe en la base -- el llamador persiste el lote entero
-    junto (issue #833). Mismo criterio que `_construir_notificacion_
-    vencimiento`: dedup resuelto en `ya_notificados`, `ServicioNoDisponible`
-    se propaga sin atraparse, y un rechazo permanente (issue #837) se arma con
-    su auditoría y se devuelve como `rechazo_terminal` en vez de levantarse."""
+    desde #1666 ambos guardianes) y su correo. NO escribe en la base -- el
+    llamador persiste el lote entero junto (issue #833). Mismo criterio que
+    `_construir_notificacion_vencimiento`: dedup resuelto en
+    `ya_notificados`."""
     fecha_str = fecha_vencimiento.strftime("%d/%m/%Y")
     if tipo == TipoNotificacion.MIEMBRESIA_MORA_DIA_1:
         base = (
@@ -452,7 +370,7 @@ def _construir_notificaciones_mora(
         base = "Tu membresía sigue vencida y este es el último aviso automático que recibirás."
 
     filas: list[Notificacion] = []
-    rechazo_terminal: DestinatarioRechazadoPermanentemente | None = None
+    correos: list[CorreoPendiente] = []
     for responsable in _responsables_de_pago(persona):
         if (tipo, responsable.id, pago_id) in ya_notificados:
             continue
@@ -468,12 +386,11 @@ def _construir_notificaciones_mora(
             tipo=tipo, mensaje=mensaje,
             persona_id=responsable.id, entidad_relacionada_id=pago_id,
         )
-        rechazo = _enviar_aviso_a_responsable(
-            responsable, fila, _render_mora, tipo, responsable.nombres, mensaje,
+        correos += _correo_para_responsable(
+            responsable, _render_mora, tipo, responsable.nombres, mensaje,
         )
-        rechazo_terminal = rechazo_terminal or rechazo
         filas.append(fila)
-    return filas, rechazo_terminal
+    return filas, correos
 
 
 def _listar_administradores(db) -> list[Usuario]:
@@ -563,12 +480,6 @@ def alertar_mora_diaria(self) -> dict:
     hoy = hoy_club()
     avisos_familia: list[dict] = []
     resumen_admin_enviado = False
-    # Correos de familia rechazados de forma definitiva (issue #837). El
-    # aviso in-app de cada uno sí se emitió; esta lista existe para que la
-    # corrida no informe una entrega limpia cuando hay direcciones que hay
-    # que corregir a mano. El resumen al administrador es exclusivamente
-    # in-app (issue #905) y no tiene correo que pueda rechazarse.
-    rechazos_permanentes: list[dict] = []
 
     with SessionLocal() as db:
         # Último pago APROBADO por membresía (su id y su fecha_fin), resolviendo
@@ -661,42 +572,14 @@ def alertar_mora_diaria(self) -> dict:
         # fila (issue #833) -- mismo criterio que `alertar_vencimientos_hoy_
         # mas_5`.
         lote_familia: list[Notificacion] = []
+        correos_familia: list[CorreoPendiente] = []
         for membresia, persona, pago_id, ultima_fecha_fin, dias, tipo in candidatos:
-            try:
-                nuevas, rechazo = _construir_notificaciones_mora(
-                    ya_notificados, persona, pago_id, ultima_fecha_fin, tipo
-                )
-            except ServicioNoDisponible as exc:
-                logger.warning(
-                    "Circuito SMTP abierto durante el lote de mora (pago_id=%s); "
-                    "reintentando en %.0fs",
-                    pago_id, CIRCUITO_SMTP_COOLDOWN_SEGUNDOS,
-                )
-                _persistir_lote(lote_familia)
-                raise self.retry(exc=exc, countdown=CIRCUITO_SMTP_COOLDOWN_SEGUNDOS)
-            except Exception:
-                logger.exception("Fallo notificando mora (pago_id=%s)", pago_id)
-                _persistir_lote(lote_familia)
-                raise
-
+            nuevas, correos = _construir_notificaciones_mora(
+                ya_notificados, persona, pago_id, ultima_fecha_fin, tipo
+            )
             lote_familia.extend(nuevas)
-            enviado = bool(nuevas)
-            if rechazo is not None:
-                # Issue #837, mismo criterio que el lote de vencimientos: la
-                # familia figura igual en el resumen al administrador -- la
-                # mora es real aunque el correo haya rebotado.
-                logger.warning(
-                    "Correo de mora rechazado de forma permanente (pago_id=%s): "
-                    "%s; el lote continúa",
-                    pago_id, rechazo.detalle_tecnico,
-                )
-                rechazos_permanentes.append({
-                    "pago_id": pago_id,
-                    "persona_id": persona.id,
-                })
-                enviado = True
-
-            if enviado:
+            correos_familia.extend(correos)
+            if nuevas:
                 avisos_familia.append({
                     "pago_id": pago_id,
                     "membresia_id": membresia.id,
@@ -707,7 +590,7 @@ def alertar_mora_diaria(self) -> dict:
                     "monto_mensual": formatear_monto_usd(membresia.monto_aplicado),
                     "nombre": nombre_completo(persona.nombres, persona.apellidos),
                 })
-        _persistir_lote(lote_familia)
+        _persistir_lote(lote_familia, correos_familia)
 
         # Resumen diario al administrador SOLO si hoy cayó al menos un aviso.
         if avisos_familia:
@@ -735,16 +618,12 @@ def alertar_mora_diaria(self) -> dict:
             _persistir_lote(lote_admin)
 
     logger.info(
-        "Mora %s -> %d avisos de familia (resumen admin: %s, "
-        "%d correos rechazados de forma permanente)",
+        "Mora %s -> %d avisos de familia (resumen admin: %s)",
         hoy.isoformat(), len(avisos_familia), resumen_admin_enviado,
-        len(rechazos_permanentes),
     )
     return {
         "fecha": hoy.isoformat(),
         "total_avisos_familia": len(avisos_familia),
         "resumen_admin_enviado": resumen_admin_enviado,
         "avisos": avisos_familia,
-        "total_rechazos_permanentes": len(rechazos_permanentes),
-        "rechazos_permanentes": rechazos_permanentes,
     }
