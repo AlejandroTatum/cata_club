@@ -43,6 +43,7 @@ from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRe
 from app.infraestructura.repositorios.vinculacion_representante_repositorio import (
     VinculacionRepresentanteRepositorio,
 )
+from app.servicios_negocio.co_representante_vinculo import retirar_del_menor
 from app.servicios_negocio.auth_servicio import AuthServicio
 from app.servicios_negocio.rol_servicio import RolServicio
 from app.soporte_transversal.tiempo import hoy_club
@@ -206,8 +207,12 @@ class RelacionRepresentacionServicio:
         # 5. Capacidad #762: insertar, reusar o reemplazar explícitamente.
         RolServicio(self.db).establecer_capacidad_representante(usuario)
 
-        # 6. Cortar el vínculo.
+        # 6. Cortar el vínculo. Sin representante no hay segundo guardián
+        #    (issue #1666): se retira con su evidencia.
         self.repo_persona.actualizar(persona, {"representante_id": None})
+        retirar_del_menor(
+            self.db, persona_id, actor_persona_id=admin_actor_id, origen="ADMIN",
+        )
 
         # 7. Epochs: el ex representante pierde acceso a la ficha al instante;
         #    la cuenta legada del adulto también se revoca (cambiaron
@@ -439,6 +444,12 @@ class RelacionRepresentacionServicio:
         #    acceso por el vínculo recién comiteado: no hay token previo que
         #    revocar) y evidencia con la clave como recibo de replay.
         self.repo_persona.actualizar(persona, {"representante_id": destino.id})
+        # Issue #1666: toda reasignación del principal retira al segundo
+        # guardián (el vínculo no guarda bajo qué principal nació); el nuevo
+        # principal re-invita si hace falta.
+        retirar_del_menor(
+            self.db, persona_id, actor_persona_id=admin_actor_id, origen="ADMIN",
+        )
 
         usuario_viejo = (
             self.repo_usuario.obtener_por_persona_id(representante_anterior_id)

@@ -34,6 +34,7 @@ import {
   withSelectedStudent,
 } from "./ManagedStudentPicker";
 import FamilyStrip from "./FamilyStrip";
+import GuardiansCard from "./GuardiansCard";
 import CuotaCard from "./CuotaCard";
 import MemberCard from "./MemberCard";
 import NoClassDays from "./NoClassDays";
@@ -315,8 +316,12 @@ function MembershipPlansGrid({ data }: { data: StudentPortalSummary }): React.Re
 function PendingEnrollmentView({
   data,
   accountPersonaId,
+  hasRepresentanteRole,
 }: {
   data: StudentPortalSummary;
+  /** Issue #1666: an invited guardian with no child yet lands here and must
+   *  still find the invitations waiting for them. */
+  hasRepresentanteRole: boolean;
   /** The SESSION's own persona id (independent-verification fix, issue
    *  #1132): a pure representative with zero representados and no own
    *  membership lands here, and their "Inscribirme como jugador" CTA used
@@ -328,6 +333,7 @@ function PendingEnrollmentView({
 }): React.ReactElement {
   return (
     <>
+      {hasRepresentanteRole && <GuardiansCard />}
       <section className="card p-6">
         <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Bienvenido a Cata Club</h2>
         {/* Capped at a readable measure inside a full-width card, rather than
@@ -360,6 +366,7 @@ function ActivePortalView({
   data,
   isPlayer,
   accountPersonaId,
+  hasRepresentanteRole,
   onPhotoUploaded,
   onOwnPhotoUploaded,
 }: {
@@ -375,6 +382,8 @@ function ActivePortalView({
   isPlayer: boolean;
   /** The persona behind the SESSION — not the profile currently selected. */
   accountPersonaId: string;
+  /** The session carries the REPRESENTANTE role (even with no child linked yet). */
+  hasRepresentanteRole: boolean;
   onPhotoUploaded: () => void;
   /** Extra refresh for the SESSION avatar, fired only when the OWN profile uploaded. */
   onOwnPhotoUploaded?: () => void;
@@ -977,6 +986,11 @@ function ActivePortalView({
         </>
       )}
 
+      {/* Issue #1666: the primary invites / removes the second guardian here;
+          the second guardian sees the same card read-only. #1707: account
+          management, so it closes the page below the player's own blocks, and
+          sits outside the profile branch so a pending invitee still sees it. */}
+      {(representative || hasRepresentanteRole) && <GuardiansCard />}
     </>
   );
 }
@@ -989,6 +1003,7 @@ function StudentPortalContent(): React.ReactElement {
   const { session, refreshSession } = useAuth();
   const personaId = session?.user.id ?? "";
   const hasAlumnoRole = session?.roles.includes("ALUMNO") ?? false;
+  const hasRepresentanteRole = session?.roles.includes("REPRESENTANTE") ?? false;
 
   const [state, setState] = useState<LoadState>({ status: "loading" });
   // FAM-01: ANY own membership counts, INACTIVA included. A representative who
@@ -1062,12 +1077,17 @@ function StudentPortalContent(): React.ReactElement {
       )}
       {state.status === "ready" &&
         (portalMode === "pending" ? (
-          <PendingEnrollmentView data={state.data} accountPersonaId={personaId} />
+          <PendingEnrollmentView
+            data={state.data}
+            accountPersonaId={personaId}
+            hasRepresentanteRole={hasRepresentanteRole}
+          />
         ) : (
           <ActivePortalView
             data={state.data}
             isPlayer={isPlayer}
             accountPersonaId={personaId}
+            hasRepresentanteRole={hasRepresentanteRole}
             onPhotoUploaded={() => setReloadToken((n) => n + 1)}
             onOwnPhotoUploaded={() => void refreshSession()}
           />

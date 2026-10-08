@@ -33,10 +33,9 @@ import {
   passwordRule,
   studentBirthDateRule,
   calculatePersonAge,
-  isValidCalendarDate,
   isMinorAge,
-  EDAD_MAYORIA_EDAD,
-  EDAD_MAXIMA_ALUMNO,
+  isValidEmail,
+  representativeBirthDateRule,
 } from "@/lib/identity-validation";
 
 // ---------------------------------------------------------------------------
@@ -483,7 +482,7 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
   correo: (d) =>
     d.correo.trim().length === 0
       ? "Escribe tu correo electrónico: lo usarás para iniciar sesión."
-      : isEmail(d.correo)
+      : isValidEmail(d.correo)
         ? null
         : "El correo electrónico no es válido. Revísalo; debe tener un formato como nombre@ejemplo.com.",
   contrasenia: (d) =>
@@ -501,23 +500,12 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
     // backend answers the same collision with the mirrored message.
     cedulaRule(d.cedulaRepresentante, "La cédula del representante") ??
     representativeCedulaDiffersRule(d.cedulaRepresentante, d.cedula),
-  fechaNacimientoRepresentante: (d) => {
-    if (!d.fechaNacimientoRepresentante) {
-      return "Indica la fecha de nacimiento del representante.";
-    }
-    if (!isValidCalendarDate(d.fechaNacimientoRepresentante)) {
-      return "La fecha de nacimiento del representante no existe. Revisa el día, el mes y el año.";
-    }
-    const edad = calculatePersonAge(d.fechaNacimientoRepresentante);
-    return edad >= EDAD_MAYORIA_EDAD && edad <= EDAD_MAXIMA_ALUMNO
-      ? null
-      : `El representante debe tener entre ${EDAD_MAYORIA_EDAD} y ${EDAD_MAXIMA_ALUMNO} años; la fecha ingresada corresponde a ${edad} ${edad === 1 ? "año" : "años"}. Revisa el año de nacimiento.`;
-  },
+  fechaNacimientoRepresentante: (d) => representativeBirthDateRule(d.fechaNacimientoRepresentante),
   telefonoRepresentante: (d) => phoneRule(d.telefonoRepresentante, "El teléfono del representante"),
   correoRepresentante: (d) =>
     d.correoRepresentante.trim().length === 0
       ? "Escribe el correo electrónico del representante: lo usarás para iniciar sesión."
-      : isEmail(d.correoRepresentante)
+      : isValidEmail(d.correoRepresentante)
         ? null
         : "El correo del representante no es válido. Revísalo; debe tener un formato como nombre@ejemplo.com.",
   contraseniaRepresentante: (d) =>
@@ -661,16 +649,6 @@ function validateRepresentative(data: EnrollFormData): string[] {
   return collect(REPRESENTATIVE_FIELDS, data);
 }
 
-/**
- * Mirrors the format the server accepts (REG-04): no empty or doubled dots in
- * the local part or the domain, and a TLD of two or more letters — so
- * `a@b..com` and `a@b.c` fail at the step instead of at the final submit.
- */
-const EMAIL_PATTERN = /^[^\s@.]+(?:\.[^\s@.]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
-
-function isEmail(value: string): boolean {
-  return EMAIL_PATTERN.test(value.trim());
-}
 
 /** FAM-08: a plan option reads «Mensual Adultos — $40,00 al mes», never with its internal code. */
 export function planOptionLabel(

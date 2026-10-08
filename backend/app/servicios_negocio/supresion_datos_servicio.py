@@ -69,6 +69,9 @@ from app.infraestructura.repositorios.reporte_error_repositorio import ReporteEr
 from app.infraestructura.repositorios.supresion_datos_repositorio import (
     SolicitudSupresionDatosRepositorio,
 )
+from app.servicios_negocio.co_representante_vinculo import (
+    retirar_de_co_representante, retirar_del_menor,
+)
 from app.soporte_transversal.configuracion import settings
 
 # D8: plazo de gracia para retractarse antes de la ejecución.
@@ -215,6 +218,13 @@ class SupresionDatosServicio:
             )
 
         # A partir de acá: UNA transacción de base, sin red.
+        # Issue #1666: sin identidad no hay guardián ni menor vinculado. Se
+        # retiran los vínculos de segundo guardián en los que participa, con su
+        # evidencia, antes de borrar los datos que los explican.
+        retirar_del_menor(self.db, persona.id, actor_persona_id=admin_persona_id, origen="ADMIN")
+        retirar_de_co_representante(
+            self.db, persona.id, actor_persona_id=admin_persona_id, origen="ADMIN",
+        )
         resumen = self._suprimir_en_base(persona, residuos)
 
         solicitud.estado = ESTADO_EJECUTADA

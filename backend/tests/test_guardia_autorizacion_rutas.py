@@ -421,6 +421,17 @@ RUTAS_ROLES_REQUERIDOS = {
     # REPRESENTANTE (ver `test_vincular_representado.py`), no el rol de la
     # ruta -- un administrador sigue pudiendo vincular por cualquiera.
     ("POST", "/personas/{persona_id}/vincular-representado"): frozenset({"ADMINISTRADOR", "REPRESENTANTE"}),
+    # Issue #1666 (segundo guardián): el rol del token solo es la puerta de
+    # entrada; QUIÉN puede invitar o quitar lo decide `PoliticaAccesoPersona`
+    # (alcance FIRMA_LEGAL: el representante PRINCIPAL del menor o un
+    # administrador -- el segundo guardián recibe 403 -- ver
+    # `tests/test_segundo_guardian_flujo.py`). `mios` es solo de quien tiene
+    # el rol REPRESENTANTE y devuelve únicamente SUS menores.
+    ("GET", "/co-representantes/mios"): frozenset({"REPRESENTANTE"}),
+    ("POST", "/co-representantes/invitaciones"): frozenset({"ADMINISTRADOR", "REPRESENTANTE"}),
+    ("GET", "/co-representantes/invitaciones/recibidas"): frozenset({"REPRESENTANTE"}),
+    ("POST", "/co-representantes/invitaciones/{invitacion_id}/aceptar"): frozenset({"REPRESENTANTE"}),
+    ("DELETE", "/co-representantes/persona/{persona_id}"): frozenset({"ADMINISTRADOR", "REPRESENTANTE"}),
     ("PUT", "/asistencias/horarios/{horario_id}"): frozenset({"ADMINISTRADOR"}),
 }
 

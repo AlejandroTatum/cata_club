@@ -46,6 +46,7 @@ from app.presentacion.routers import (
     reporte_error_router,
     actividad_router,
     portal_router,
+    co_representante_router,
     dias_sin_clase_router,
 )
 from app.dominio.excepciones import (
@@ -436,6 +437,7 @@ app.include_router(auth_router.router, prefix="/api/v1")
 app.include_router(personas_router.router, prefix="/api/v1")
 app.include_router(membresias_pagos_router.router, prefix="/api/v1")
 app.include_router(portal_router.router, prefix="/api/v1")
+app.include_router(co_representante_router.router, prefix="/api/v1")
 app.include_router(descuentos_router.router, prefix="/api/v1")
 app.include_router(asistencias_router.router, prefix="/api/v1")
 app.include_router(ficha_medica_router.router, prefix="/api/v1")

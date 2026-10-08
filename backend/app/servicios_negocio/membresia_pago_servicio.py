@@ -38,6 +38,7 @@ from app.infraestructura.repositorios.descuento_repositorio import (
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
 from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
 from app.servicios_negocio.persona_servicio import _calcular_edad
+from app.dominio.guardianes import destinatarios_de_aviso
 from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.soporte_transversal.formato import formatear_monto_usd
@@ -697,7 +698,9 @@ class PagoServicio:
             persona = self.db.query(Persona).filter(
                 Persona.id == datos.persona_id,
             ).with_for_update().one_or_none()
-            if persona is None or persona.representante_id != representante_id:
+            if persona is None or not PoliticaAccesoPersona(self.db).es_guardian(
+                persona, representante_id,
+            ):
                 raise PermisosInsuficientes("Solo el representante puede inscribir a su representado")
             if _calcular_edad(persona.fecha_nacimiento) >= 18:
                 raise OperacionInvalida("Esta inscripción directa requiere un menor de edad")
@@ -2255,18 +2258,14 @@ class PagoServicio:
         roles_solicitante = roles_solicitante or []
         membresia = self.repo_membresia.obtener_por_id_con_bloqueo(membresia_id)
 
-        es_duenio = (
-            membresia is not None
-            and persona_id_solicitante is not None
-            and persona_id_solicitante == membresia.persona_id
+        # Titular o guardián (principal o segundo, issue #1666), SIN la rama
+        # de admin: roles vacíos a propósito.
+        autorizado = membresia is not None and PoliticaAccesoPersona(self.db).puede_acceder(
+            persona_id_objetivo=membresia.persona_id,
+            persona_id_solicitante=persona_id_solicitante,
+            roles_solicitante=[],
         )
-        es_representante = False
-        if membresia is not None and not es_duenio and persona_id_solicitante is not None:
-            persona_objetivo = self.repo_persona.obtener_por_id(membresia.persona_id)
-            es_representante = bool(
-                persona_objetivo and persona_objetivo.representante_id == persona_id_solicitante
-            )
-        if not (es_duenio or es_representante):
+        if not autorizado:
             raise PermisosInsuficientes(
                 "Solo el titular de la membresía, o su representante, "
                 "pueden aplicar su beneficio bonificado"
@@ -3009,24 +3008,20 @@ class PagoServicio:
             id_para_log=f"pago {pago.id}",
         )
 
-    def _responsable_del_correo_de_pago(self, persona: Persona) -> Optional[Persona]:
-        """Cuenta que recibe el aviso de un pago: la de la persona, o la de su
-        representante cuando la persona no tiene cuenta propia.
+    def _responsables_del_correo_de_pago(self, persona: Persona) -> list[Persona]:
+        """Cuentas que reciben el aviso de un pago: la de la persona, o -- si
+        no tiene cuenta propia -- las de sus guardianes (el representante
+        principal y el segundo guardián, issue #1666; decisión del dueño:
+        ambos).
 
         Un menor representado NUNCA tiene `Usuario` (issue #1137, invariante
         B, con candado de base): hasta acá eso significaba quedarse sin
-        correo. La resolución del titular es la misma que ya usa
-        `alertas_tareas._responsable_de_pago` -- el representante manda si
-        `persona.representante_id` está seteado -- con un requisito extra:
-        ese representante tiene que TENER cuenta con correo. Devuelve `None`
-        cuando no hay ninguna cuenta alcanzable; el llamador loguea y omite,
-        nunca inventa una dirección."""
-        if persona.usuario is not None:
-            return persona
-        representante = persona.representante if persona.representante_id else None
-        if representante is not None and representante.usuario is not None:
-            return representante
-        return None
+        correo. Los guardianes salen de `dominio.guardianes`, el mismo criterio
+        que `alertas_tareas._responsables_de_pago`, con un requisito extra:
+        cada uno tiene que TENER cuenta con correo. Devuelve `[]` cuando no hay
+        ninguna cuenta alcanzable; el llamador loguea y omite, nunca inventa
+        una dirección."""
+        return destinatarios_de_aviso(persona)
 
     def _enviar_correo_de_validacion_pago(
         self, pago: Pago, tipo: TipoNotificacion, regularizacion: bool = False,
@@ -3051,16 +3046,27 @@ class PagoServicio:
         (issue #1066): el mensaje de `ServicioNoDisponible` trae el
         destinatario en su texto, así que solo se registra el tipo."""
         persona = self.repo_persona.obtener_por_id(pago.persona_id)
-        destinatario = (
-            self._responsable_del_correo_de_pago(persona) if persona is not None else None
+        destinatarios = (
+            self._responsables_del_correo_de_pago(persona) if persona is not None else []
         )
-        if destinatario is None:
+        if not destinatarios:
             logger.warning(
                 "Correo de %s omitido: persona_id=%s no tiene cuenta con correo "
                 "ni representante alcanzable",
                 tipo.value, pago.persona_id,
             )
             return
+        for destinatario in destinatarios:
+            self._enviar_correo_de_pago_a(
+                destinatario, persona, pago, tipo, regularizacion=regularizacion,
+            )
+
+    def _enviar_correo_de_pago_a(
+        self, destinatario: Persona, persona: Persona, pago: Pago, tipo: TipoNotificacion,
+        *, regularizacion: bool,
+    ) -> None:
+        """Un correo de pago a UN destinatario; un fallo de uno no frena al
+        otro guardián (best-effort, nunca levanta)."""
         # Solo cuando el aviso va a OTRA persona el cuerpo nombra al alumno;
         # si el destinatario es el propio alumno, el texto de siempre queda
         # correcto y no cambia.
