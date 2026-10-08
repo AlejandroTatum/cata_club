@@ -18,7 +18,7 @@ from app.dominio.enums import (
 from app.dominio.excepciones import OperacionInvalida, ServicioNoDisponible
 from app.dominio.modelos import (
     Asistencia, ComprobantePago, ConsentimientoLegal, ConsultaFichaEmergencia,
-    Enfermedades, EnrollmentNotificacionOutbox, FichaMedica, HorarioEntrenamiento,
+    CorreoOutbox, Enfermedades, EnrollmentNotificacionOutbox, FichaMedica, HorarioEntrenamiento,
     Membresia, Pago, Persona, RecuperacionOutbox, ReporteError, Rol, Sesion,
     SolicitudSupresionDatos, TipoMembresia, Usuario,
 )
@@ -549,6 +549,29 @@ def test_outbox_pendiente_de_recuperacion_se_elimina(db_session, cloudinary_fals
         id=ids["enrollment_pendiente"]).first() is None
     assert db_session.query(EnrollmentNotificacionOutbox).filter_by(
         id=ids["enrollment_enviado"]).first() is not None
+
+
+def test_la_cola_de_correos_de_la_cuenta_se_elimina_en_cualquier_estado(db_session, cloudinary_falso):
+    """Issue #1710: `correo_outbox` guarda la dirección y el cuerpo ya armado
+    (nombre, montos). Una fila ya ENVIADA sigue siendo dato personal, así que
+    se borra igual que la pendiente."""
+    _crear_admin(db_session)
+    persona = _crear_persona(db_session, cedula="1710034321")
+    usuario = _crear_usuario(db_session, persona)
+    expira = datetime.now(timezone.utc) + timedelta(days=7)
+    for status in ("PENDIENTE", "ENVIADO"):
+        db_session.add(CorreoOutbox(
+            usuario_id=usuario.id, destinatario=usuario.correo, asunto="Cata Club | Pago aprobado",
+            cuerpo_texto="Hola Ana", status=status, expires_at=expira,
+        ))
+    db_session.commit()
+    servicio = SupresionDatosServicio(db_session)
+    solicitud = _solicitud_aprobada_y_vencida(db_session, servicio, persona)
+
+    servicio.ejecutar(solicitud.id, admin_persona_id=1)
+
+    db_session.expire_all()
+    assert db_session.query(CorreoOutbox).count() == 0
 
 
 # --- Idempotencia de ejecución (nivel servicio) ------------------------------------

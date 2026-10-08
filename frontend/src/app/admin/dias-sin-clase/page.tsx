@@ -132,8 +132,8 @@ export default function DiasSinClasePage(): React.ReactElement {
             />
             <p className="text-xs text-ink-2">
               {editando
-                ? "Editar no vuelve a enviar el aviso a los socios."
-                : "Al publicar, los socios reciben el aviso en la app y por correo, una sola vez."}
+                ? "Editar no vuelve a enviar el aviso en la app. Si cambias la fecha, el correo sale el día anterior a la fecha nueva (o al momento, si ese día ya pasó)."
+                : "Al publicar, los socios reciben el aviso en la app. El correo les llega el día anterior a las 08:00 (o al momento, si el día empieza antes)."}
             </p>
             {error && <p ref={errorRef} role="alert" tabIndex={-1} className="text-sm text-state-bad">{error}</p>}
             <div className="flex gap-2">

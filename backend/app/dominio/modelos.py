@@ -18,7 +18,7 @@ from typing import List, Optional
 
 from sqlalchemy import (
     String, CHAR, ForeignKey, Numeric, DateTime, Date, Time, Boolean, Integer, SmallInteger, Float, LargeBinary, Table, Column,
-    CheckConstraint, Index, UniqueConstraint, text, func, event,
+    CheckConstraint, Index, Text, UniqueConstraint, text, func, event,
     Enum as SAEnum, inspect as inspeccionar_orm,
 )
 from sqlalchemy.dialects.postgresql import ExcludeConstraint, JSONB
@@ -2291,6 +2291,27 @@ class DiaSinClase(Base):
     )
 
 
+class DiaSinClaseCorreo(Base):
+    """Marca de que el correo de un día sin clase ya se encoló para una cuenta
+    (issue #1709). Es lo que hace idempotente el envío de la víspera: una
+    segunda corrida no vuelve a escribirle a quien ya tiene su marca.
+
+    Mover la fecha del día borra sus marcas, para que se avise de nuevo la
+    víspera de la fecha nueva; borrar el día se las lleva en cascada."""
+    __tablename__ = "dia_sin_clase_correo"
+    __table_args__ = (Index("ix_dia_sin_clase_correo_persona_id", "persona_id"),)
+
+    dia_sin_clase_id: Mapped[int] = mapped_column(
+        ForeignKey("dia_sin_clase.id", ondelete="CASCADE"), primary_key=True,
+    )
+    persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True,
+    )
+    encolado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_ahora_utc,
+    )
+
+
 class VinculacionRepresentante(Base):
     """Ledger append-only de la relación de representación (issue #1133).
 
@@ -2523,7 +2544,44 @@ class InscripcionIdempotencia(Base):
     )
 
 
-class RecuperacionOutbox(Base):
+class _ColumnasDeColaDeCorreo:
+    """Columnas de reintento y auditoría de entrega de las colas de correo
+    (recuperación, verificación y la cola genérica del #1710). Viven una sola
+    vez para que las tres no se separen; la política que las usa está en
+    `outbox_lease_repositorio`."""
+
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="PENDIENTE")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_ahora_utc
+    )
+    claimed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_ahora_utc
+    )
+    sent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error_redacted: Mapped[Optional[str]] = mapped_column(
+        String(500), nullable=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Auditoría del paso de entrega (issue #839). Ver
+    # `app/infraestructura/repositorios/outbox_auditoria_entrega.py`.
+    entregas_intentadas: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, default=0
+    )
+    entrega_iniciada_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    entrega_resuelta_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class RecuperacionOutbox(_ColumnasDeColaDeCorreo, Base):
     """Intención durable de mandarle a una cuenta su enlace de recuperación.
 
     La entrega es AT-LEAST-ONCE, no exactly-once, y la fila lo refleja
@@ -2555,39 +2613,10 @@ class RecuperacionOutbox(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     usuario_id: Mapped[int] = mapped_column(ForeignKey("usuario.id"), nullable=False)
-    status: Mapped[str] = mapped_column(String(12), nullable=False, default="PENDIENTE")
-    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    next_attempt_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=_ahora_utc
-    )
-    claimed_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=_ahora_utc
-    )
-    sent_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    last_error_redacted: Mapped[Optional[str]] = mapped_column(
-        String(500), nullable=True
-    )
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    # Auditoría del paso de entrega (issue #839). Ver
-    # `app/infraestructura/repositorios/outbox_auditoria_entrega.py`.
-    entregas_intentadas: Mapped[Optional[int]] = mapped_column(
-        Integer, nullable=True, default=0
-    )
-    entrega_iniciada_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    entrega_resuelta_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
     usuario: Mapped["Usuario"] = relationship()
 
 
-class VerificacionCorreoOutbox(Base):
+class VerificacionCorreoOutbox(_ColumnasDeColaDeCorreo, Base):
     """Intención durable de enviarle a una cuenta su enlace de verificación.
 
     Misma forma que `RecuperacionOutbox` a propósito (issue #790): un segundo
@@ -2619,36 +2648,41 @@ class VerificacionCorreoOutbox(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     usuario_id: Mapped[int] = mapped_column(ForeignKey("usuario.id"), nullable=False)
-    status: Mapped[str] = mapped_column(String(12), nullable=False, default="PENDIENTE")
-    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    next_attempt_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=_ahora_utc
-    )
-    claimed_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=_ahora_utc
-    )
-    sent_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    last_error_redacted: Mapped[Optional[str]] = mapped_column(
-        String(500), nullable=True
-    )
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    # Auditoría del paso de entrega (issue #839). Ver
-    # `app/infraestructura/repositorios/outbox_auditoria_entrega.py`.
-    entregas_intentadas: Mapped[Optional[int]] = mapped_column(
-        Integer, nullable=True, default=0
-    )
-    entrega_iniciada_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    entrega_resuelta_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
     usuario: Mapped["Usuario"] = relationship()
+
+
+class CorreoOutbox(_ColumnasDeColaDeCorreo, Base):
+    """Correo transaccional ya armado, a la espera de salir (issue #1710).
+
+    Las otras colas guardan solo A QUIÉN escribir porque el correo lleva un
+    token que se acuña al enviar. Los avisos de esta cola -- pago aprobado o
+    rechazado, deuda regularizada, aviso de segundo representante -- no llevan
+    nada que envejezca, así que se guarda el mensaje completo tal como se
+    armó en la operación de negocio: el despachador no necesita volver a
+    leer pagos ni membresías que pudieron cambiar mientras la fila esperaba.
+
+    Asunto y cuerpos son dato personal (nombre, montos): `limpiar_correos_
+    vencidos` retira la fila al vencer y la supresión de datos la borra en
+    cualquier estado. La misma mecánica de entrega que las otras colas
+    (at-least-once, issue #839) vive en `outbox_despacho`.
+    """
+
+    __tablename__ = "correo_outbox"
+    __table_args__ = (
+        Index("ix_correo_outbox_pending_next", "status", "next_attempt_at"),
+        Index("ix_correo_outbox_usuario_id", "usuario_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # Nulo cuando la dirección no pertenece a ninguna cuenta: el aviso sale
+    # igual. Con cuenta, borrarla se lleva sus correos pendientes.
+    usuario_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("usuario.id", ondelete="CASCADE"), nullable=True
+    )
+    destinatario: Mapped[str] = mapped_column(String(320), nullable=False)
+    asunto: Mapped[str] = mapped_column(String(300), nullable=False)
+    cuerpo_texto: Mapped[str] = mapped_column(Text, nullable=False)
+    cuerpo_html: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
 class SolicitudSupresionDatos(Base):

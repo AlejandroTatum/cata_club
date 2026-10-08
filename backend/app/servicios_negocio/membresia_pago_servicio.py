@@ -20,7 +20,7 @@ from app.dominio.periodicidad import PeriodicidadTarifa
 from app.dominio.etiquetas import estado_de_pago_en_castellano
 from app.dominio.nombres_catalogo import existe_nombre, normalizar_nombre
 from app.dominio.excepciones import (
-    EntidadNoEncontrada, MembresiaPendienteDePago, NombreDuplicado, OperacionInvalida, PermisosInsuficientes, RecursoEnUso, ServicioNoDisponible,
+    EntidadNoEncontrada, MembresiaPendienteDePago, NombreDuplicado, OperacionInvalida, PermisosInsuficientes, RecursoEnUso,
 )
 from app.dominio.nombre_propio import nombre_completo
 from app.infraestructura.correo_deuda_regularizada import enviar_deuda_regularizada
@@ -3044,7 +3044,11 @@ class PagoServicio:
 
         Ni el log ni el detalle de la excepción escriben el correo completo
         (issue #1066): el mensaje de `ServicioNoDisponible` trae el
-        destinatario en su texto, así que solo se registra el tipo."""
+        destinatario en su texto, así que solo se registra el tipo.
+
+        Issue #1710: los correos se ENCOLAN en `correo_outbox` y se commitean
+        juntos acá; los entrega el despachador. Con el tope diario agotado
+        esperan al día siguiente en vez de perderse."""
         persona = self.repo_persona.obtener_por_id(pago.persona_id)
         destinatarios = (
             self._responsables_del_correo_de_pago(persona) if persona is not None else []
@@ -3059,6 +3063,14 @@ class PagoServicio:
         for destinatario in destinatarios:
             self._enviar_correo_de_pago_a(
                 destinatario, persona, pago, tipo, regularizacion=regularizacion,
+            )
+        try:
+            self.db.commit()
+        except Exception as exc:
+            self.db.rollback()
+            logger.warning(
+                "Correo de %s no encolado para persona_id=%s: %s",
+                tipo.value, pago.persona_id, type(exc).__name__,
             )
 
     def _enviar_correo_de_pago_a(
@@ -3076,7 +3088,7 @@ class PagoServicio:
             else None
         )
         try:
-            servicio = ServicioNotificaciones()
+            servicio = ServicioNotificaciones(encolar_en=self.db)
             if regularizacion:
                 enviar_deuda_regularizada(
                     servicio,
@@ -3116,9 +3128,12 @@ class PagoServicio:
                     fecha_fin=pago.fecha_fin,
                     alumno_id=persona.id,
                 )
-        except (RuntimeError, ServicioNoDisponible) as exc:
+        except Exception as exc:
+            # Encolar solo puede fallar en la base (issue #1710), y el pago ya
+            # está commiteado: se loguea y el commit del llamador revierte lo
+            # que haya quedado a medias. Nunca un 5xx por el aviso.
             logger.warning(
-                "Correo de %s no enviado a persona_id=%s: %s",
+                "Correo de %s no encolado para persona_id=%s: %s",
                 tipo.value, pago.persona_id, type(exc).__name__,
             )
 

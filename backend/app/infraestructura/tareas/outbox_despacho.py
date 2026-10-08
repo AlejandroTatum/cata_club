@@ -32,12 +32,16 @@ sigan inyectando una sesión con `monkeypatch.setattr(modulo, "SessionLocal",
 sin que ningún test lo dijera hasta que fallara la entrega en producción.
 """
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
 from sqlalchemy import delete, event, func, or_, select
 
-from app.dominio.excepciones import CupoCorreoDiarioAgotado
+from app.dominio.excepciones import (
+    CupoCorreoDiarioAgotado,
+    DestinatarioRechazadoPermanentemente,
+)
 from app.infraestructura.repositorios import outbox_auditoria_entrega as auditoria
 from app.infraestructura.repositorios import outbox_cupo
 from app.infraestructura.tareas.celery_app import celery_app
@@ -46,6 +50,16 @@ from app.soporte_transversal.configuracion import settings
 _log = logging.getLogger("cataclub.tareas.outbox_despacho")
 
 _CLAVE_PENDIENTES = "_despachos_tras_commit"
+
+_DIRECCION = re.compile(r"\S+@\S+")
+_AUDITORIA_MAX = 500  # ancho de `last_error_redacted` en las tres colas
+
+
+def _auditoria_de_rechazo(error: DestinatarioRechazadoPermanentemente) -> str:
+    """Código y frase del proveedor, sin la dirección: `detalle_tecnico` la
+    repite completa y esta columna no tiene política de retención."""
+    detalle = _DIRECCION.sub("[address]", error.detalle_tecnico or "")
+    return f"{type(error).__name__}: {detalle}".strip(": ")[:_AUDITORIA_MAX]
 
 
 def encolar_despacho_tras_commit(db, nombre_tarea: str) -> None:
@@ -286,6 +300,21 @@ def entregar_fila(
                 etiqueta, evento_id, usuario_id,
             )
             return {"evento_id": evento_id, "enviado": False, "diferido_por_cupo": True}
+        except DestinatarioRechazadoPermanentemente as error:
+            # 5xx por destinatario: reintentar la misma dirección solo gasta
+            # cupo diario. Se cierra aquí y no por `requeue`, que reintentaría.
+            evento.status, evento.claimed_at = "AGOTADO", None
+            evento.last_error_redacted = _auditoria_de_rechazo(error)
+            auditoria.marcar_entrega_resuelta(evento)
+            usuario_id = evento.usuario_id
+            db.commit()
+            # Sin `exception`: el traceback de la causa lleva la dirección.
+            logger.error(
+                "%s AGOTADO sin reintentar: la dirección de la fila %s del "
+                "usuario %s fue rechazada de forma permanente",
+                etiqueta, evento_id, usuario_id,
+            )
+            return {"evento_id": evento_id, "enviado": False, "agotado": True}
         except Exception as error:
             repositorio(db).requeue(evento, error)
             # `requeue` decide entre PENDIENTE y AGOTADO; se leen antes del
