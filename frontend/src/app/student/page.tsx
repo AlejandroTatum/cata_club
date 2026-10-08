@@ -603,9 +603,6 @@ function ActivePortalView({
           next without leaving the page. */}
       <FamilyStrip profiles={managedProfiles} value={selectedId} onChange={setSelectedId} />
 
-      {/* Issue #1666: the primary invites / removes the second guardian here;
-          the second guardian sees the same card read-only. */}
-      {(representative || hasRepresentanteRole) && <GuardiansCard />}
       {/* Club-wide no-class days (issue #1665): members only, never the landing. */}
       <NoClassDays />
 
@@ -989,6 +986,11 @@ function ActivePortalView({
         </>
       )}
 
+      {/* Issue #1666: the primary invites / removes the second guardian here;
+          the second guardian sees the same card read-only. #1707: account
+          management, so it closes the page below the player's own blocks, and
+          sits outside the profile branch so a pending invitee still sees it. */}
+      {(representative || hasRepresentanteRole) && <GuardiansCard />}
     </>
   );
 }

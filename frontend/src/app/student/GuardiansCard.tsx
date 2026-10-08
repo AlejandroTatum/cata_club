@@ -28,7 +28,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Mail, UserMinus, UserPlus } from "lucide-react";
 import LinkifiedText from "@/components/LinkifiedText";
-import { Badge, buttonClasses } from "@/components/ui";
+import { Badge, buttonClasses, cn } from "@/components/ui";
 import { PersonIdentityFields, WizardInput, example } from "@/components/wizard-fields";
 import type { PersonIdentityErrors } from "@/components/wizard-fields";
 import { useToast } from "@/contexts/ToastContext";
@@ -55,6 +55,13 @@ import type { DatosInvitadoPayload, InvitacionRecibida, MenorConGuardianes } fro
 
 export const MENSAJE_TOPE_DOS_REPRESENTANTES =
   "Tus hijos ya tienen dos representantes. Quita al segundo para invitar a otra persona.";
+
+/** `FamilyStrip`'s columns (static, so Tailwind sees them); a single child takes the full row. */
+const LG_COLUMNS: Record<number, string> = {
+  2: "lg:grid-cols-2",
+  3: "lg:grid-cols-3",
+  4: "lg:grid-cols-4",
+};
 
 /** The initials avatar `IdentityCell` draws: coal accent, never the brand red. */
 const INICIALES =
@@ -314,11 +321,23 @@ export default function GuardiansCard(): React.ReactElement | null {
   }
 
   return (
-    // Issue #1707: the content is one short row per child, so on desktop the
-    // card is capped instead of stretching across the whole content column.
-    <section aria-label="Representantes" className="card flex w-full flex-col overflow-hidden lg:max-w-2xl">
-      <div className="border-b border-line px-5 py-3">
+    // Issue #1707: full content width like every other block on the page, with
+    // the children laid out on the same columns as `FamilyStrip` above it and
+    // the invite action in the header, like «Ver pagos» and «Imprimir carnet».
+    <section aria-label="Representantes" className="card flex flex-col overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-5 py-3">
         <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Representantes</h2>
+        {comoPrincipal.length > 0 && !(formOpen && elegibles.length > 0) && (
+          <button
+            type="button"
+            onClick={() => setFormOpen(true)}
+            disabled={elegibles.length === 0}
+            className={buttonClasses("secondary", "sm")}
+          >
+            <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+            Invitar a otro representante
+          </button>
+        )}
       </div>
       <div className="flex flex-col gap-3 px-5 py-4">
         {recibidas.length > 0 && (
@@ -344,7 +363,13 @@ export default function GuardiansCard(): React.ReactElement | null {
             </ul>
           </div>
         )}
-        <ul aria-label="Hijos representados" className="flex flex-col gap-2">
+        <ul
+          aria-label="Hijos representados"
+          className={cn(
+            "grid grid-cols-1 gap-3",
+            menores.length > 1 && `sm:grid-cols-2 ${LG_COLUMNS[Math.min(menores.length, 4)]}`,
+          )}
+        >
           {menores.map((menor) => (
             // Each child gets its own surface (#1707): initials, name and a
             // status chip on top, the detail and the controls below.
@@ -431,19 +456,8 @@ export default function GuardiansCard(): React.ReactElement | null {
               }}
             />
           ) : (
-            <div className="flex flex-col items-start gap-1">
-              {/* A secondary action sized to its label, not a full-width bar (#1707). */}
-              <button
-                type="button"
-                onClick={() => setFormOpen(true)}
-                disabled={elegibles.length === 0}
-                className={buttonClasses("secondary", "sm")}
-              >
-                <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-                Invitar a otro representante
-              </button>
-              {elegibles.length === 0 && <p className="text-xs text-ink-3">{MENSAJE_TOPE_DOS_REPRESENTANTES}</p>}
-            </div>
+            // The invite button lives in the header; its disabled reason stays here.
+            elegibles.length === 0 && <p className="text-xs text-ink-3">{MENSAJE_TOPE_DOS_REPRESENTANTES}</p>
           ))}
       </div>
     </section>
