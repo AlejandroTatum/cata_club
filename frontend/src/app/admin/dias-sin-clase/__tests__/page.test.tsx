@@ -42,6 +42,15 @@ describe("DiasSinClasePage (admin)", () => {
     expect(screen.getByText("Cancha cerrada")).toBeInTheDocument();
   });
 
+  it("tells the admin the email goes out the day before at 08:00, not on publish", async () => {
+    render(<DiasSinClasePage />);
+    expect(
+      await screen.findByText(
+        "Al publicar, los socios reciben el aviso en la app. El correo les llega el día anterior, a las 08:00.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("creates a single day without sending a final date, then reloads", async () => {
     render(<DiasSinClasePage />);
     await screen.findByText("Feriado");
@@ -88,7 +97,11 @@ describe("DiasSinClasePage (admin)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Editar 10/07/2999 – 12/07/2999" }));
     expect(screen.getByLabelText(/^Desde/)).toHaveValue("2999-07-10");
     expect(screen.getByLabelText(/^Motivo/)).toHaveValue("Cancha cerrada");
-    expect(screen.getByText("Editar no vuelve a enviar el aviso a los socios.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Editar no vuelve a enviar el aviso en la app. Si cambias la fecha, el correo sale el día anterior a la fecha nueva.",
+      ),
+    ).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/^Motivo/), { target: { value: "Torneo" } });
     fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));

@@ -3,7 +3,7 @@
 Datos ficticios. La tarea real corre sobre la transacción del test y el correo
 pasa por el clasificador real de `notificaciones_servicio` (SMTP falso)."""
 from contextlib import contextmanager
-from datetime import date, time
+from datetime import date, datetime, time
 
 import pytest
 
@@ -16,6 +16,8 @@ from app.dominio.modelos import (
     HorarioEntrenamiento, Notificacion, Persona, Usuario,
 )
 from app.infraestructura.tareas.celery_app import celery_app
+from app.soporte_transversal.tiempo import ZONA_HORARIA_CLUB
+from tests import arnes_outbox as arnes
 from tests.fabricas_pagos import crear_membresia_orm, crear_persona_orm, crear_tipo_membresia_orm
 from tests.smtp_falso import configurar_smtp_falso
 
@@ -29,8 +31,19 @@ def sesion_inyectada(db_session, monkeypatch):
         yield db_session
 
     monkeypatch.setattr(tareas, "SessionLocal", _factory)
-    monkeypatch.setattr(tareas, "hoy_club", lambda: HOY)
+    # El reloj del club en el MISMO día del feriado de `_dia`: el correo sale
+    # al crear (#1709), así que estas pruebas siguen mirando a quién le llega.
+    # El envío de la víspera tiene su propio archivo.
+    monkeypatch.setattr(tareas, "ahora_club", lambda: datetime.combine(
+        date(2029, 7, 4), time(6, 0), tzinfo=ZONA_HORARIA_CLUB,
+    ))
     return db_session
+
+
+def _enviados(db, smtp) -> list[str]:
+    """Despacha la cola de correos (#1710) y devuelve lo que salió por SMTP."""
+    arnes.despachar_correos_encolados(db)
+    return smtp.enviados
 
 
 def _dia(db, inicio=date(2029, 7, 4), fin=None, motivo="Feriado") -> DiaSinClase:
@@ -76,7 +89,7 @@ def test_socio_activo_recibe_campana_y_un_correo(sesion_inyectada, monkeypatch):
     assert aviso.entidad_relacionada_id == dia.id
     assert aviso.leida is False
     assert aviso.mensaje == "Sin clases el 04/07/2029: Feriado."
-    assert smtp.enviados == ["socio910@cataclub.test"]
+    assert _enviados(sesion_inyectada, smtp) == ["socio910@cataclub.test"]
 
 
 def test_rango_nombra_las_dos_fechas(sesion_inyectada, monkeypatch):
@@ -100,7 +113,7 @@ def test_socio_sin_membresia_vigente_no_recibe_nada(sesion_inyectada, monkeypatc
     assert tareas.avisar_dia_sin_clase(dia.id)["avisados"] == 0
 
     assert _avisos(sesion_inyectada) == []
-    assert smtp.enviados == []
+    assert _enviados(sesion_inyectada, smtp) == []
 
 
 def test_representado_sin_cuenta_avisa_una_vez_al_representante(sesion_inyectada, monkeypatch):
@@ -113,7 +126,7 @@ def test_representado_sin_cuenta_avisa_una_vez_al_representante(sesion_inyectada
     tareas.avisar_dia_sin_clase(dia.id)
 
     assert [a.persona_id for a in _avisos(sesion_inyectada)] == [representante.id]
-    assert smtp.enviados == ["rep913@cataclub.test"]
+    assert _enviados(sesion_inyectada, smtp) == ["rep913@cataclub.test"]
 
 
 def test_socio_sin_ninguna_cuenta_alcanzable_se_omite(sesion_inyectada, monkeypatch):
@@ -124,7 +137,7 @@ def test_socio_sin_ninguna_cuenta_alcanzable_se_omite(sesion_inyectada, monkeypa
     resultado = tareas.avisar_dia_sin_clase(dia.id)
 
     assert resultado["avisados"] == 0 and resultado["sin_cuenta_alcanzable"] == 1
-    assert _avisos(sesion_inyectada) == [] and smtp.enviados == []
+    assert _avisos(sesion_inyectada) == [] and _enviados(sesion_inyectada, smtp) == []
 
 
 def test_un_reintento_no_duplica_campana_ni_correo(sesion_inyectada, monkeypatch):
@@ -137,7 +150,7 @@ def test_un_reintento_no_duplica_campana_ni_correo(sesion_inyectada, monkeypatch
 
     assert segunda["avisados"] == 0
     assert len(_avisos(sesion_inyectada)) == 1
-    assert smtp.enviados == ["socio917@cataclub.test"]
+    assert _enviados(sesion_inyectada, smtp) == ["socio917@cataclub.test"]
 
 
 def test_dia_que_ya_paso_o_inexistente_no_avisa(sesion_inyectada, monkeypatch):
@@ -147,7 +160,7 @@ def test_dia_que_ya_paso_o_inexistente_no_avisa(sesion_inyectada, monkeypatch):
 
     assert tareas.avisar_dia_sin_clase(pasado.id)["avisados"] == 0
     assert tareas.avisar_dia_sin_clase(999999)["avisados"] == 0
-    assert _avisos(sesion_inyectada) == [] and smtp.enviados == []
+    assert _avisos(sesion_inyectada) == [] and _enviados(sesion_inyectada, smtp) == []
 
 
 def test_un_correo_fallido_no_deshace_la_campana_ni_corta_el_lote(sesion_inyectada, monkeypatch):
@@ -161,7 +174,7 @@ def test_un_correo_fallido_no_deshace_la_campana_ni_corta_el_lote(sesion_inyecta
     tareas.avisar_dia_sin_clase(dia.id)
 
     assert len(_avisos(sesion_inyectada)) == 2
-    assert smtp.enviados == ["bueno@cataclub.test"]
+    assert _enviados(sesion_inyectada, smtp) == ["bueno@cataclub.test"]
 
 
 def test_crear_el_dia_por_la_api_encola_el_aviso_una_vez(client, monkeypatch):
@@ -245,14 +258,18 @@ def test_si_el_encolado_falla_el_dia_se_guarda_y_se_informa(client, monkeypatch,
 
 def test_el_admin_reenvia_el_aviso_y_se_encola_la_tarea(client, monkeypatch):
     publicadas = []
-    monkeypatch.setattr(celery_app, "send_task", lambda n, args=None, **_: publicadas.append((n, args)))
+    monkeypatch.setattr(
+        celery_app, "send_task",
+        lambda n, args=None, kwargs=None, **_: publicadas.append((n, args, kwargs)),
+    )
     dia_id = client.post(RUTA_API, json={"fecha_inicio": "2999-07-04", "motivo": "Feriado"}).json()["id"]
     publicadas.clear()
 
     response = client.post(f"{RUTA_API}{dia_id}/avisar")
 
     assert response.status_code == 202
-    assert publicadas == [(TAREA, [dia_id])]
+    # El reenvío es solo campana (#1709): el correo lo manda la víspera.
+    assert publicadas == [(TAREA, [dia_id], {"con_correo": False})]
 
 
 def test_reenviar_es_solo_del_administrador(client_sin_permisos, db_session, monkeypatch):
@@ -297,4 +314,5 @@ def test_reenviar_tras_un_envio_parcial_avisa_solo_a_quien_falta(sesion_inyectad
 
     assert resultado["avisados"] == 1
     assert [a.persona_id for a in _avisos(sesion_inyectada)] == [primero.id, segundo.id]
-    assert smtp.enviados == ["primero930@cataclub.test", "segundo931@cataclub.test"]
+    # 2999 queda lejos: el correo lo manda la víspera, no el alta (#1709).
+    assert _enviados(sesion_inyectada, smtp) == []
