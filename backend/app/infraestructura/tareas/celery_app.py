@@ -171,6 +171,13 @@ celery_app.conf.beat_schedule = {
         "task": "app.infraestructura.tareas.correo_outbox_tareas.limpiar_correos_vencidos",
         "schedule": crontab(minute=15),
     },
+    # Issue #1709: el correo de los días sin clase sale la víspera a las
+    # 08:00 del club (decisión del dueño), no al crearlos. Debe coincidir con
+    # `dia_sin_clase_tareas.HORA_CORREO_VISPERA`.
+    "correos-dias-sin-clase-vispera": {
+        "task": "app.infraestructura.tareas.dia_sin_clase_tareas.enviar_correos_del_dia_anterior",
+        "schedule": _parsear_hora_crontab("08:00"),
+    },
     # 03:00 del club, no 02:30: la retención del contador de correos no depende
     # de ninguna otra tarea nocturna -- solo borra filas viejas -- así que se
     # corre cuando la banda diaria ya terminó, para no sumarle trabajo al mismo

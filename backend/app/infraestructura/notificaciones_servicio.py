@@ -371,6 +371,20 @@ def _avisar_cupo_agotado(omitidos: int) -> None:
         )
 
 
+def _cuando_dia_sin_clase(inicio: date, fin: date) -> str:
+    desde = inicio.strftime("%d/%m/%Y")
+    if fin == inicio:
+        return f"el {desde}"
+    return f"del {desde} al {fin.strftime('%d/%m/%Y')}"
+
+
+def _cuando_y_filas_dia_sin_clase(inicio: date, fin: date) -> tuple[str, list[tuple[str, str]]]:
+    desde = inicio.strftime("%d/%m/%Y")
+    if fin == inicio:
+        return f"el {desde}", [("Fecha", desde)]
+    return _cuando_dia_sin_clase(inicio, fin), [("Desde", desde), ("Hasta", fin.strftime("%d/%m/%Y"))]
+
+
 class ServicioNotificaciones:
     """Adaptador SMTP para el envío de correos transaccionales."""
 
@@ -886,33 +900,34 @@ class ServicioNotificaciones:
         self,
         correo: str,
         nombre: Optional[str],
-        fecha_inicio: date,
-        fecha_fin: date,
-        motivo: str,
+        dias: list[tuple[date, date, str]],
     ) -> None:
         """Avisa al socio (o a su representante) que el club no tendrá clase
         (issue #1665). Informa nada más: fechas y motivo, sin botón de pago ni
         nada que cobrar -- un día sin clase no toca cobertura ni cuotas.
 
+        `dias` son `(inicio, fin, motivo)`: el envío de la víspera (#1709)
+        junta en UN correo todos los días que empiezan mañana. Con uno solo
+        el correo es el de siempre.
+
         `motivo` es texto libre de administración: viaja escapado en el HTML
         por el layout compartido."""
         saludo = f"Hola {nombre}," if nombre else "Hola,"
-        inicio = fecha_inicio.strftime("%d/%m/%Y")
-        if fecha_fin == fecha_inicio:
-            cuando = f"el {inicio}"
-            filas = [("Fecha", inicio)]
+        if len(dias) == 1:
+            inicio, fin, motivo = dias[0]
+            cuando, filas = _cuando_y_filas_dia_sin_clase(inicio, fin)
+            filas.append(("Motivo", motivo))
         else:
-            fin = fecha_fin.strftime("%d/%m/%Y")
-            cuando = f"del {inicio} al {fin}"
-            filas = [("Desde", inicio), ("Hasta", fin)]
-        filas.append(("Motivo", motivo))
+            cuando = "en estas fechas"
+            filas = [(_cuando_dia_sin_clase(i, f), motivo) for i, f, motivo in dias]
         texto, html = construir_correo(
             titulo="Día sin clase",
             preheader=f"El club no tendrá clase {cuando}.",
             saludo=saludo,
             parrafos=(
                 f"El club no tendrá clase {cuando}.",
-                "Retomamos las clases con normalidad después de esa fecha.",
+                "Retomamos las clases con normalidad después de "
+                + ("esa fecha." if len(dias) == 1 else "esas fechas."),
             ),
             filas=filas,
             cta_etiqueta="Ver mi panel",

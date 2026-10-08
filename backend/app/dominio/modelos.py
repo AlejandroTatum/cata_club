@@ -2291,6 +2291,27 @@ class DiaSinClase(Base):
     )
 
 
+class DiaSinClaseCorreo(Base):
+    """Marca de que el correo de un día sin clase ya se encoló para una cuenta
+    (issue #1709). Es lo que hace idempotente el envío de la víspera: una
+    segunda corrida no vuelve a escribirle a quien ya tiene su marca.
+
+    Mover la fecha del día borra sus marcas, para que se avise de nuevo la
+    víspera de la fecha nueva; borrar el día se las lleva en cascada."""
+    __tablename__ = "dia_sin_clase_correo"
+    __table_args__ = (Index("ix_dia_sin_clase_correo_persona_id", "persona_id"),)
+
+    dia_sin_clase_id: Mapped[int] = mapped_column(
+        ForeignKey("dia_sin_clase.id", ondelete="CASCADE"), primary_key=True,
+    )
+    persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True,
+    )
+    encolado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_ahora_utc,
+    )
+
+
 class VinculacionRepresentante(Base):
     """Ledger append-only de la relación de representación (issue #1133).
 
