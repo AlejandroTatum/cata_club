@@ -22,6 +22,7 @@ celery_app = Celery(
         "app.infraestructura.tareas.comprobante_tareas",
         "app.infraestructura.tareas.recuperacion_tareas",
         "app.infraestructura.tareas.verificacion_correo_tareas",
+        "app.infraestructura.tareas.correo_outbox_tareas",
         "app.infraestructura.tareas.enrollment_notificacion_tareas",
         "app.infraestructura.tareas.vencimientos_tareas",
         "app.infraestructura.tareas.contador_correo_tareas",
@@ -159,6 +160,16 @@ celery_app.conf.beat_schedule = {
     "limpiar-verificaciones-expiradas": {
         "task": "app.infraestructura.tareas.verificacion_correo_tareas.limpiar_verificaciones_expiradas",
         "schedule": crontab(minute=10),
+    },
+    # Issue #1710: cola de correos ya armados (pagos, avisos). Mismo respaldo
+    # de 5 min que las otras colas; el despacho normal sale tras el commit.
+    "despachar-correos-pendientes": {
+        "task": "app.infraestructura.tareas.correo_outbox_tareas.despachar_correos_pendientes",
+        "schedule": crontab(minute="*/5"),
+    },
+    "limpiar-correos-vencidos": {
+        "task": "app.infraestructura.tareas.correo_outbox_tareas.limpiar_correos_vencidos",
+        "schedule": crontab(minute=15),
     },
     # 03:00 del club, no 02:30: la retención del contador de correos no depende
     # de ninguna otra tarea nocturna -- solo borra filas viejas -- así que se

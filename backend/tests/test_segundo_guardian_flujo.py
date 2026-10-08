@@ -18,7 +18,7 @@ from app.dominio.cedula import cedula_valida
 from app.dominio.enums import TipoRol
 from app.dominio.modelos import (
     CoRepresentante, CoRepresentanteEvento, CoRepresentanteInvitacion, ConsentimientoLegal,
-    Persona, RecuperacionOutbox, Usuario,
+    CorreoOutbox, Persona, RecuperacionOutbox, Usuario,
 )
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
 from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
@@ -216,6 +216,19 @@ def test_invitar_a_un_representante_existente_deja_una_invitacion_pendiente_sin_
     _como(fam.existente.id, ["REPRESENTANTE"], "existente@x.com")
     assert client.get(f"{BASE}/personas/{fam.menor.id}").status_code == 403
     assert client.get(f"{BASE}/co-representantes/mios").json() == []
+
+
+def test_el_aviso_a_un_representante_existente_se_encola_en_la_cola_de_correos(client, db_session, fam):
+    """Issue #1710: el aviso no sale en la petición; queda en `correo_outbox`
+    para que un tope diario agotado lo difiera en vez de perderlo."""
+    respuesta = _invitar(client, fam, correo="Existente@X.com")
+
+    assert respuesta.status_code == 202
+    db_session.expire_all()
+    [fila] = db_session.query(CorreoOutbox).all()
+    assert fila.destinatario == "existente@x.com"
+    assert fila.status == "PENDIENTE"
+    assert "token=" not in fila.cuerpo_texto
 
 
 def test_la_respuesta_es_identica_exista_o_no_el_correo(client, db_session, fam):

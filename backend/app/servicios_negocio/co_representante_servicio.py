@@ -153,11 +153,12 @@ class CoRepresentanteServicio:
         if motivo is not None:
             _log.info("Invitación de segundo representante descartada: %s", motivo)
             return
-        avisar = None
         try:
             avisar = self._aplicar_invitacion(
                 menores, cuenta, correo, datos, actor_persona_id, origen, reenvio=reenvio,
             )
+            if avisar is not None:
+                self._avisar_invitacion_pendiente(*avisar)
             self.db.commit()
         except (IntegrityError, _InvitacionDescartada) as error:
             self.db.rollback()
@@ -166,8 +167,6 @@ class CoRepresentanteServicio:
         except Exception:
             self.db.rollback()
             raise
-        if avisar is not None:
-            self._avisar_invitacion_pendiente(*avisar)
 
     def _aplicar_invitacion(
         self, menores: list[Persona], cuenta: Optional[Usuario], correo: str, datos: DatosInvitadoDTO,
@@ -259,16 +258,19 @@ class CoRepresentanteServicio:
             ))
             self._evento(menor.id, cuenta.persona_id, actor_persona_id, "ALTA", origen, invitacion.id)
 
-    @staticmethod
-    def _avisar_invitacion_pendiente(correo: str, nombre: str, menores: str, invitante: str) -> None:
+    def _avisar_invitacion_pendiente(self, correo: str, nombre: str, menores: str, invitante: str) -> None:
         """Aviso sin enlace secreto: la invitación se acepta con la sesión de la
-        propia cuenta. Best-effort: un fallo de correo no cambia la respuesta."""
-        try:
-            ServicioNotificaciones().enviar_aviso_invitacion_co_representante(
-                correo, nombre, nombre_menor=menores, nombre_invitante=invitante,
-            )
-        except Exception:
-            _log.warning("No se pudo enviar el aviso de invitación de segundo representante")
+        propia cuenta. Se encola en `correo_outbox` dentro de la MISMA
+        transacción que la invitación (issue #1710): sale si y solo si la
+        invitación quedó, y un tope diario agotado lo difiere.
+
+        Sin `try` a propósito: encolar ya no habla SMTP, y lo único que puede
+        fallar acá es la base -- por ejemplo, el autoflush de la invitación
+        chocando una unicidad --, que `invitar` tiene que ver para descartar
+        la invitación con su respuesta neutra."""
+        ServicioNotificaciones(encolar_en=self.db).enviar_aviso_invitacion_co_representante(
+            correo, nombre, nombre_menor=menores, nombre_invitante=invitante,
+        )
 
     # --- Aceptar una invitación recibida (cuenta existente) --------------------
     def aceptar_invitacion_recibida(self, invitacion_id: int, persona_id: int) -> None:

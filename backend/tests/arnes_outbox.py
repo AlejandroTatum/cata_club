@@ -52,6 +52,20 @@ def celery_en_proceso(modulo, monkeypatch) -> None:
     monkeypatch.setattr(modulo.celery_app.conf, "task_eager_propagates", True)
 
 
+def despachar_correos_encolados(db_session) -> dict:
+    """Corre UNA vez el despachador de `correo_outbox` sobre la sesión del
+    test (issue #1710): los correos de pago ya no salen en la petición, sino
+    cuando el despachador entrega la fila, igual que en producción."""
+    import pytest
+
+    from app.infraestructura.tareas import correo_outbox_tareas
+
+    with pytest.MonkeyPatch.context() as mp:
+        with sesion_inyectada_en(correo_outbox_tareas, db_session, mp):
+            celery_en_proceso(correo_outbox_tareas, mp)
+            return correo_outbox_tareas.despachar_correos_pendientes()
+
+
 def configurar_smtp(monkeypatch) -> None:
     """Credenciales SMTP falsas pero no vacías: `enviar_correo` exige un host
     configurado antes de intentar nada, y el socket se mockea aparte."""

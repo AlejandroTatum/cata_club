@@ -48,6 +48,7 @@ from app.dominio.modelos import (
     ComprobantePago,
     ConsentimientoLegal,
     ConsultaFichaEmergencia,
+    CorreoOutbox,
     EnrollmentNotificacionOutbox,
     FichaMedica,
     Enfermedades,
@@ -434,6 +435,12 @@ class SupresionDatosServicio:
                     VerificacionCorreoOutbox.usuario_id == usuario_id,
                     VerificacionCorreoOutbox.status.in_(("PENDIENTE", "ENVIANDO")),
                 )
+            )
+            # Issue #1710: estas filas guardan el correo YA ARMADO (nombre,
+            # montos), así que una enviada también es dato personal: se borran
+            # en cualquier estado.
+            self.db.execute(
+                delete(CorreoOutbox).where(CorreoOutbox.usuario_id == usuario_id)
             )
 
         # (e) Cuenta: borrada, salvo que `ConsentimientoLegal` la retenga.

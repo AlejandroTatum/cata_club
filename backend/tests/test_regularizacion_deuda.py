@@ -19,7 +19,7 @@ import app.infraestructura.tareas.alertas_tareas as alertas_mod
 import app.servicios_negocio.membresia_pago_servicio as mps
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoPago
 from app.dominio.enums import TipoNotificacion
-from app.dominio.modelos import Notificacion, Pago, Persona, Usuario
+from app.dominio.modelos import CorreoOutbox, Notificacion, Pago, Persona, Usuario
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
 from app.servicios_negocio.membresia_pago_servicio import PagoServicio
@@ -671,6 +671,25 @@ def test_regularizar_notifica_al_socio_en_la_app_y_por_correo(client, db_session
     assert correos[0]["asunto"] == "Cata Club | Deuda regularizada"
     assert "Deuda regularizada" in correos[0]["cuerpo_texto"]
     assert "Pago aprobado" not in correos[0]["cuerpo_texto"]
+
+
+def test_regularizar_encola_el_correo_en_la_cola_de_correos(client, db_session, monkeypatch):
+    """Issue #1710: el 2026-10-08 dos "Deuda regularizada" se perdieron con el
+    tope diario agotado. Ahora el correo queda en `correo_outbox` y sale con
+    el despachador, o espera al día siguiente."""
+    monkeypatch.setattr(mps, "hoy_club", lambda: date(2026, 8, 15))
+    persona, membresia = _crear_persona_membresia(db_session)
+    db_session.add(Usuario(correo="socio@cataclub.test", contrasenia="hash", persona_id=persona.id))
+    db_session.flush()
+
+    resp = _regularizar_monto(client, membresia.id, "60.00")
+
+    assert resp.status_code == 201, resp.text
+    db_session.expire_all()
+    [fila] = db_session.query(CorreoOutbox).all()
+    assert fila.destinatario == "socio@cataclub.test"
+    assert fila.asunto == "Cata Club | Deuda regularizada"
+    assert fila.status == "PENDIENTE"
 
 
 def test_regularizar_a_un_menor_avisa_al_representante(client, db_session, monkeypatch):

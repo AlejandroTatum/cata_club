@@ -11,6 +11,7 @@ from app.infraestructura.notificaciones_servicio import ServicioNotificaciones  
 from app.servicios_negocio.dtos.membresia_pago_schemas import PagoValidarDTO
 from app.servicios_negocio.membresia_pago_servicio import PagoServicio
 from app.servicios_negocio.notificacion_servicio import NotificacionServicio
+from tests import arnes_outbox as arnes
 import tests.test_alertas_vencimiento as venc
 from tests.test_alertas_vencimiento import (  # noqa: F401  (fixture de módulo)
     _crear_membresia_con_pago, _crear_persona, _crear_usuario, _mock_envio, sesion_inyectada,
@@ -51,6 +52,7 @@ def test_pago_aprobado_avisa_a_los_dos_guardianes(db_session, smtp_capturado):
     PagoServicio(db_session).validar_pago(
         pago.id, PagoValidarDTO(estado_pago=EstadoPago.APROBADO), actor_persona_id=admin.id,
     )
+    arnes.despachar_correos_encolados(db_session)
 
     assert sorted(envio["destinatario"] for envio in smtp_capturado) == sorted(
         [CORREO_REPRESENTANTE, CORREO_SEGUNDO]
@@ -70,6 +72,7 @@ def test_pago_rechazado_avisa_a_los_dos_guardianes(db_session, smtp_capturado):
         PagoValidarDTO(estado_pago=EstadoPago.RECHAZADO, motivo_rechazo=MOTIVO_RECHAZO),
         actor_persona_id=admin.id,
     )
+    arnes.despachar_correos_encolados(db_session)
 
     assert sorted(envio["destinatario"] for envio in smtp_capturado) == sorted(
         [CORREO_REPRESENTANTE, CORREO_SEGUNDO]
@@ -84,6 +87,7 @@ def test_un_segundo_guardian_sin_cuenta_no_afecta_al_principal(db_session, smtp_
     PagoServicio(db_session).validar_pago(
         pago.id, PagoValidarDTO(estado_pago=EstadoPago.APROBADO), actor_persona_id=admin.id,
     )
+    arnes.despachar_correos_encolados(db_session)
 
     assert [envio["destinatario"] for envio in smtp_capturado] == [CORREO_REPRESENTANTE]
 
@@ -98,6 +102,7 @@ def test_el_segundo_guardian_retirado_deja_de_recibir_correos(db_session, smtp_c
     PagoServicio(db_session).validar_pago(
         pago.id, PagoValidarDTO(estado_pago=EstadoPago.APROBADO), actor_persona_id=admin.id,
     )
+    arnes.despachar_correos_encolados(db_session)
 
     assert [envio["destinatario"] for envio in smtp_capturado] == [CORREO_REPRESENTANTE]
 
