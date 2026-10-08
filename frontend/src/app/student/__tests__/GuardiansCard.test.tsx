@@ -371,6 +371,33 @@ describe("GuardiansCard — per-child rows (#1707)", () => {
   });
 });
 
+describe("GuardiansCard — columns (#1707)", () => {
+  const lista = async () => {
+    await screen.findAllByText("Sin segundo representante");
+    return screen.getByRole("list", { name: "Hijos representados" });
+  };
+
+  it("gives a single child the whole row", async () => {
+    mockFetch.mockResolvedValue([menor()]);
+    render(<GuardiansCard />);
+
+    expect((await lista()).className).not.toMatch(/grid-cols-[2-4]/);
+  });
+
+  it("lays three children on three columns, like FamilyStrip", async () => {
+    mockFetch.mockResolvedValue([
+      menor(),
+      menor({ personaId: 11, nombres: "Ana" }),
+      menor({ personaId: 12, nombres: "Leo" }),
+    ]);
+    render(<GuardiansCard />);
+
+    const clases = (await lista()).className;
+    expect(clases).toMatch(/\bsm:grid-cols-2\b/);
+    expect(clases).toMatch(/\blg:grid-cols-3\b/);
+  });
+});
+
 describe("GuardiansCard — received invitations", () => {
   const RECIBIDA = { id: 7, nombreMenor: "Nico", nombreInvitante: "Marta Torres" };
 

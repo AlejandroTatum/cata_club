@@ -635,9 +635,17 @@ export default function GroupsPage(): React.ReactElement {
    */
   const [personasPorHorario, setPersonasPorHorario] = useState<PersonasPorHorario>({});
 
+  // One timer at a time: a new notification restarts the 4s, so an older
+  // timer cannot hide it early, and unmounting cancels it instead of setting
+  // state on a page that is gone.
+  const notificationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (notificationTimer.current) clearTimeout(notificationTimer.current);
+  }, []);
   const showNotification = useCallback((type: "success" | "error", message: string): void => {
     setNotification({ type, message });
-    setTimeout(() => setNotification(null), 4000);
+    if (notificationTimer.current) clearTimeout(notificationTimer.current);
+    notificationTimer.current = setTimeout(() => setNotification(null), 4000);
   }, []);
 
   /**
