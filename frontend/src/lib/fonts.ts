@@ -4,8 +4,10 @@
  *
  *  - Switzer (`sans`): self-hosted variable woff2 through `next/font/local`,
  *    with its Fontshare license (`app/fonts/FFL.txt`) alongside.
- *  - Anybody (`display`): variable font through `next/font/google`, which Next
- *    downloads at build time and serves from our own origin.
+ *  - Anybody (`display`): self-hosted variable woff2 (weight + width axes)
+ *    through `next/font/local`, with its SIL OFL license
+ *    (`app/fonts/OFL-Anybody.txt`) alongside. Nothing is fetched from a font
+ *    CDN at build time.
  *
  * The club's voice (the auth motto, the enrolment welcome line) is NOT a third
  * family: it is Anybody at a different weight and width (`.font-voice`). The
@@ -19,7 +21,6 @@
  * `app/page.tsx`, Playfair included; it owns those variables.
  */
 
-import { Anybody } from "next/font/google";
 import localFont from "next/font/local";
 
 /**
@@ -36,14 +37,19 @@ export const switzer = localFont({
 });
 
 /**
- * Display and figures. Anybody is variable in weight and width; only the width
- * axis is requested on top of weight, and no width signature is applied yet:
- * the type scale keeps using it at its default width.
+ * Display and figures. Anybody is variable in weight (100-900) and width
+ * (`wdth` 50-150). The file is the Latin subset (Spanish included) that Google
+ * Fonts serves for Anybody v1.113 to the build's user agent, i.e. what the app
+ * loaded before it was vendored; the license
+ * (`app/fonts/OFL-Anybody.txt`) has to stay next to it. The `font-stretch`
+ * range is declared so the generated @font-face covers the whole width axis;
+ * the type scale then drives it with `font-variation-settings` (see
+ * `.font-display` in `globals.css`).
  */
-export const anybody = Anybody({
-  subsets: ["latin"],
-  weight: "variable",
-  axes: ["wdth"],
+export const anybody = localFont({
+  src: "../app/fonts/Anybody-Variable.woff2",
+  weight: "100 900",
+  declarations: [{ prop: "font-stretch", value: "50% 150%" }],
   variable: "--font-anybody",
   display: "swap",
 });
