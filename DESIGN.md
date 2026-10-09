@@ -37,25 +37,25 @@ typography:
   display:
     fontFamily: "Anybody, sans-serif"
     fontSize: "46px"
-    fontWeight: 400
+    fontWeight: 800
     lineHeight: "0.95"
     letterSpacing: "-0.05em"
   headline:
     fontFamily: "Anybody, sans-serif"
     fontSize: "26px"
-    fontWeight: 400
+    fontWeight: 800
     lineHeight: "1.15"
     letterSpacing: "-0.03em"
   title:
     fontFamily: "Anybody, sans-serif"
     fontSize: "20px"
-    fontWeight: 400
+    fontWeight: 800
     lineHeight: "1.2"
     letterSpacing: "-0.02em"
   stat:
     fontFamily: "Anybody, sans-serif"
     fontSize: "32px"
-    fontWeight: 400
+    fontWeight: 800
     lineHeight: "1.05"
     letterSpacing: "-0.04em"
   body:
@@ -259,8 +259,11 @@ rompe.
 
 **Character:** Anybody es la voz de display y de las cifras: una grotesca variable en peso y ancho,
 pensada para titulares y marcadores. Switzer es su contrapeso: una grotesca neutra y variable que
-aguanta una tabla de doscientas filas sin cansar. Solo cambió la familia tipográfica; la escala,
-los tamaños y los pesos siguen siendo los mismos. Playfair aparece una vez por pantalla, cuando el club
+aguanta una tabla de doscientas filas sin cansar. Los tamaños de la escala no cambian; lo que
+firma al producto es el eje de Anybody: peso 800 siempre, **estrecho en los títulos** (ancho 72,
+como los titulares de la landing) y **ancho en las cifras** (ancho 112). Títulos angostos junto a
+números anchos es el contraste que reconoce a CataClub. Los ejes se fijan en un solo lugar, la
+regla `.font-display` de `globals.css`. Playfair aparece una vez por pantalla, cuando el club
 habla en primera persona.
 
 ### Hierarchy

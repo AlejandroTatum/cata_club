@@ -43,6 +43,35 @@
 
 @layer components {
   /*
+   * THE DISPLAY SIGNATURE: Anybody drawn heavy, and narrow or wide by job.
+   *
+   * `font-display` only picks the family; Anybody is variable in weight and
+   * width, and untuned it renders as a regular-weight, regular-width face that
+   * reads lighter than the landing's heavy uppercase headings. This pair of
+   * rules is the one place the axes are set, so no call site spells them.
+   *
+   *  · Titles (page, card, dialog): weight 800, width 72 — condensed, the
+   *    landing headline proportion, which also keeps long Spanish titles on
+   *    one line at the same size.
+   *  · Figures (`tabular-nums`: KPI and stat numbers): weight 800, width 112 —
+   *    the wide cut. Narrow titles beside wide numbers is the contrast the
+   *    system is recognised by.
+   *
+   * The axis is set with `font-variation-settings`, not `font-stretch`, so it
+   * does not depend on the generated @font-face declaring a stretch range.
+   * This sits in `components`, below the utilities layer, so an explicit
+   * `font-bold` or weight at a call site still wins. Sizes are untouched.
+   */
+  .font-display {
+    font-weight: 800;
+    font-variation-settings: "wdth" 72;
+  }
+
+  .font-display.tabular-nums {
+    font-variation-settings: "wdth" 112;
+  }
+
+  /*
    * ELEVATION IS A SYSTEM RULE, NOT A PER-SCREEN DECISION.
    *
    * A card in this product is written as `rounded-card bg-paper` plus a
