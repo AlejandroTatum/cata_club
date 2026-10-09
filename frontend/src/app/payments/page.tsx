@@ -1470,12 +1470,15 @@ export default function PaymentsPage(): React.ReactElement {
               const fields = buildRowFields(req);
               return (
                 <TableRow>
-                  {/* `min-w-52`: with six columns in the two-thirds beside the
-                      rail, the name used to take whatever the others left
+                  {/* `min-w-[12.5rem]`: with six columns in the two-thirds beside
+                      the rail, the name used to take whatever the others left
                       (102px at 1440), so "Isabella Pilay Sabando" broke into
-                      four lines and the row doubled in height. */}
+                      four lines and the row doubled in height. 200px, not
+                      208: the micro step grew to 11.5px (T14 RC16), the Estado
+                      badge with it, and the table needs those 8px back to
+                      stay inside its column. */}
                   <TableNameCell
-                    className="min-w-52"
+                    className="min-w-[12.5rem]"
                     name={<span id={desktopNameId}>{fields.studentName}</span>}
                     sub={fields.payer}
                   />

@@ -106,7 +106,6 @@ describe("the micro text step", () => {
     "app/student/MemberCard.tsx",
     "app/trainer/RecentSessionsList.tsx",
     "app/trainer/attendance/AttendanceRosterRow.tsx",
-    "components/ui/Table.tsx",
     "components/ui/ActivityList.tsx",
     "components/shell/AccountMenu.tsx",
     "app/profile/SessionsCard.tsx",
