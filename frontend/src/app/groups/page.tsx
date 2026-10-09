@@ -1795,6 +1795,7 @@ export default function GroupsPage(): React.ReactElement {
 
         <InfoPanel
           title="Sin grupo"
+          collapsible={false}
           className={sinGrupoAlumnos.length > 0 ? "border-state-warn/30" : undefined}
         >
           <div id="sin-grupo" className="scroll-mt-24" />

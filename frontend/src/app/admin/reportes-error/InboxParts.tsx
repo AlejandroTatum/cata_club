@@ -41,7 +41,7 @@ export function EmptyInbox(): ReactElement {
 
 /** Shown in the rail until a report is selected. */
 export function SelectPrompt({ total }: { total: number }): ReactElement {
-  return <InfoPanel as="div" title="Detalle del reporte">
+  return <InfoPanel as="div" title="Detalle del reporte" collapsible={false}>
     <p>Selecciona un reporte de la lista para ver su detalle.</p>
     <p>
       Cada aviso trae lo que escribió la persona, la ruta afectada y el dispositivo; si

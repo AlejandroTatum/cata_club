@@ -1550,7 +1550,7 @@ export default function PaymentsPage(): React.ReactElement {
           </div>
 
           <div className="grid min-w-0 content-start gap-page">
-            <InfoPanel title="Pagos por revisar">
+            <InfoPanel title="Pagos por revisar" collapsible={false}>
               <p>
                 {pendingAllError
                   ? "No se pudo leer la lista de pendientes."

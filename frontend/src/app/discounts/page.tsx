@@ -369,7 +369,7 @@ export default function DiscountsPage(): React.ReactElement {
     const activos = descuentos.filter((d) => d.activo).length;
     const ocultos = descuentos.length - activos;
     return (
-      <InfoPanel title="Resumen del catálogo">
+      <InfoPanel title="Resumen del catálogo" collapsible={false}>
         <dl className="grid grid-cols-2 gap-section">
           <div>
             <dt className="text-2xs font-bold uppercase tracking-caps text-ink-3">Activos</dt>
