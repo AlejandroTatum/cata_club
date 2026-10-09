@@ -232,11 +232,11 @@ describe("CarnetsPage — picking a batch", () => {
     expect(screen.getByRole("checkbox", { name: "Elegir a Mateo Menor" })).toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: /Tito/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: /Lia Pendiente/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /ver e imprimir/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /generar/i })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Elegir a Ana Jugadora" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Elegir a Mateo Menor" }));
-    fireEvent.click(screen.getByRole("button", { name: /ver e imprimir/i }));
+    fireEvent.click(screen.getByRole("button", { name: /generar/i }));
 
     expect(mockPush).toHaveBeenCalledWith("/members/carnets?ids=11%2C13");
   });

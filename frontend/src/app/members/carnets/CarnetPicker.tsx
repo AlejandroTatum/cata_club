@@ -5,19 +5,27 @@
  * and representatives hold no carnet, and a represented minor with no account
  * of their own is on it. A whole category is printed from «Grupos y
  * horarios», which links here with the roster already chosen.
+ *
+ * Shape (T14B): one flat toolbar (search + bulk choose/clear), ONE card for the
+ * list, and a selection bar that says how many are chosen and why printing is
+ * not available yet. The bar is pinned to the bottom edge on a phone — above
+ * the tab bar, flagged `data-bottom-bar` so the report launcher steps over it —
+ * and a sticky side panel from `lg`. The list scrolls with the page: a second
+ * scrollbar inside the page hid the bar's own rows on a phone.
  */
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, EmptyState, ErrorState, FilterPanel, LoadingState, SearchInput } from "@/components/ui";
+import { Button, EmptyState, ErrorState, LoadingState, SearchInput } from "@/components/ui";
 import { toUserMessage } from "@/lib/error-message";
 import { fetchMembers } from "@/services/api";
 import { canPrintCarnet, carnetsHref, filterAccounts, type MemberAccount } from "../members-utils";
 import { MAX_CARNETS } from "./carnet-sheet-utils";
 
 export default function CarnetPicker(): React.ReactElement {
+  const reasonId = useId();
   const router = useRouter();
   const [accounts, setAccounts] = useState<MemberAccount[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,70 +51,132 @@ export default function CarnetPicker(): React.ReactElement {
   if (error) return <ErrorState title="No se pudieron cargar los jugadores" message={error} />;
   if (!accounts) return <LoadingState label="Cargando jugadores…" />;
 
-  const atLimit = selected.length >= MAX_CARNETS;
+  const total = accounts.length;
+  const count = selected.length;
+  const atLimit = count >= MAX_CARNETS;
+  const unchosenVisible = visible.filter((account) => !selected.includes(account.id));
 
   function toggle(id: string): void {
     setSelected((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
   }
 
+  function chooseVisible(): void {
+    setSelected((current) => [...current, ...unchosenVisible.map((account) => account.id)].slice(0, MAX_CARNETS));
+  }
+
+  if (total === 0) {
+    return (
+      <EmptyState
+        title="Aún no hay jugadores"
+        description="Cuando haya jugadores inscritos podrás imprimir sus carnets desde aquí."
+      />
+    );
+  }
+
   return (
-    <div className="card overflow-hidden" data-testid="carnet-picker">
-      <div className="flex flex-col gap-3 border-b border-line px-4 py-3">
-        <FilterPanel
-          label="Filtros de jugadores"
-          search={
-            <SearchInput
-              label="Buscar jugadores"
-              placeholder="Buscar por nombre o cédula…"
-              value={search}
-              onChange={setSearch}
-            />
-          }
-        />
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p role="status" className="text-xs text-ink-2">
-            {selected.length === 0
-              ? "Ningún jugador elegido."
-              : `${selected.length} ${selected.length === 1 ? "jugador elegido" : "jugadores elegidos"}`}
-            {atLimit ? ` (máximo ${MAX_CARNETS})` : ""}
-          </p>
+    <div
+      data-testid="carnet-picker"
+      className="grid items-start gap-4 max-lg:pb-24 lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,1fr)_20rem]"
+    >
+      <div className="flex min-w-0 flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchInput
+            label="Buscar jugadores"
+            placeholder="Buscar por nombre o cédula…"
+            value={search}
+            onChange={setSearch}
+            className="w-full sm:w-auto sm:min-w-64 sm:flex-1 sm:max-w-md"
+          />
           <Button
-            variant="primary"
-            disabled={selected.length === 0}
-            onClick={() => router.push(carnetsHref(selected))}
+            variant="secondary"
+            size="sm"
+            disabled={unchosenVisible.length === 0 || atLimit}
+            onClick={chooseVisible}
           >
-            Ver e imprimir carnets
+            Elegir visibles ({visible.length})
+          </Button>
+          <Button variant="tertiary" size="sm" disabled={count === 0} onClick={() => setSelected([])}>
+            Quitar selección
           </Button>
         </div>
+        {visible.length === 0 ? (
+          <EmptyState
+            title="Sin resultados"
+            description="Ningún jugador coincide con la búsqueda."
+            action={
+              <Button variant="secondary" size="sm" onClick={() => setSearch("")}>
+                Limpiar búsqueda
+              </Button>
+            }
+          />
+        ) : (
+          <ul className="card divide-y divide-line overflow-hidden" aria-label="Jugadores">
+            {visible.map((account) => {
+              const name = `${account.nombres} ${account.apellidos}`;
+              const checked = selected.includes(account.id);
+              const blocked = !checked && atLimit;
+              return (
+                <li key={account.id}>
+                  <label
+                    className={`flex min-h-11 items-center gap-3 px-4 py-2.5 text-ink ${
+                      blocked ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-sunken"
+                    } ${checked ? "bg-sunken" : ""}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={blocked}
+                      onChange={() => toggle(account.id)}
+                      aria-label={`Elegir a ${name}`}
+                      className="h-5 w-5 flex-none accent-ink"
+                    />
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-sm font-semibold">{name}</span>
+                      {account.representadoPor ? (
+                        <span className="truncate text-xs text-ink-2">Representado por {account.representadoPor}</span>
+                      ) : null}
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
-      {visible.length === 0 ? (
-        <EmptyState surface="inset" title="Sin jugadores" description="Ningún jugador coincide con la búsqueda." />
-      ) : (
-        <ul className="max-h-[32rem] divide-y divide-line overflow-y-auto" aria-label="Jugadores">
-          {visible.map((account) => {
-            const name = `${account.nombres} ${account.apellidos}`;
-            const checked = selected.includes(account.id);
-            return (
-              <li key={account.id}>
-                <label className="flex cursor-pointer items-center gap-3 px-4 py-2.5 text-sm text-ink">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    disabled={!checked && atLimit}
-                    onChange={() => toggle(account.id)}
-                    aria-label={`Elegir a ${name}`}
-                    className="h-4 w-4"
-                  />
-                  <span className="min-w-0 flex-1 truncate font-semibold">{name}</span>
-                  {account.representadoPor ? (
-                    <span className="hidden text-2xs text-ink-3 sm:inline">Representado por {account.representadoPor}</span>
-                  ) : null}
-                </label>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+
+      <div
+        data-testid="carnet-selection-bar"
+        data-bottom-bar
+        className={
+          "flex items-center justify-between gap-3 bg-paper px-4 py-2.5 " +
+          "max-lg:fixed max-lg:inset-x-0 max-lg:bottom-[62px] max-lg:z-20 max-lg:border-t-2 max-lg:border-edge " +
+          "lg:sticky lg:top-4 lg:flex-col lg:items-stretch lg:gap-4 lg:rounded-[14px] lg:border-2 lg:border-edge lg:p-5 lg:shadow-sticker"
+        }
+      >
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <p role="status" className="text-sm text-ink-2">
+            <span className="font-display text-xl font-extrabold tabular-nums text-ink lg:text-3xl">{count}</span>{" "}
+            de {total} seleccionados
+          </p>
+          {count === 0 ? (
+            <p id={reasonId} className="text-xs text-ink-2">
+              Elige al menos un jugador.
+            </p>
+          ) : null}
+          <p className="text-xs text-ink-2">
+            {atLimit ? `Llegaste al máximo de ${MAX_CARNETS} por impresión.` : `Máximo ${MAX_CARNETS} por impresión.`}
+          </p>
+        </div>
+        <Button
+          variant="primary"
+          disabled={count === 0}
+          aria-describedby={count === 0 ? reasonId : undefined}
+          className="min-h-11 flex-none lg:w-full"
+          onClick={() => router.push(carnetsHref(selected))}
+        >
+          {count === 0 ? "Generar carnets" : `Generar ${count} ${count === 1 ? "carnet" : "carnets"}`}
+        </Button>
+      </div>
     </div>
   );
 }
