@@ -108,8 +108,8 @@ describe("WhatsNewDialog", () => {
     expect(bulletTexts()[0]).toBe("Modo oscuro: actívalo desde tu menú de cuenta, también en el inicio de sesión.");
     const strong = screen.getAllByRole("listitem")[0].querySelector("strong");
     expect(strong?.textContent).toBe("Modo oscuro:");
-    // The "¿Algo no anda?" bullet has no colon, so nothing is bold.
-    expect(screen.getAllByRole("listitem")[4].querySelector("strong")).toBeNull();
+    // The approved copy bolds the leading question too.
+    expect(screen.getAllByRole("listitem")[4].querySelector("strong")?.textContent).toBe("¿Algo no anda?");
   });
 
   it("lists the entrenador bullets for a trainer", () => {

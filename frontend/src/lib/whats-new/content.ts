@@ -65,9 +65,13 @@ export function whatsNewAudienceFor(roles: readonly UserRole[]): WhatsNewAudienc
   return null;
 }
 
-/** The text before the first colon is the bold lead; a bullet without one has none. */
+/**
+ * The bold lead: the text up to the first colon, or a leading «¿…?» question
+ * (the approved copy bolds «¿Algo no anda?»). A bullet with neither has none.
+ */
 export function splitLead(item: string): { lead: string | null; rest: string } {
-  const colon = item.indexOf(":");
-  if (colon === -1) return { lead: null, rest: item };
-  return { lead: item.slice(0, colon + 1), rest: item.slice(colon + 1) };
+  const question = item.startsWith("¿") ? item.indexOf("?") : -1;
+  const end = question !== -1 ? question : item.indexOf(":");
+  if (end === -1) return { lead: null, rest: item };
+  return { lead: item.slice(0, end + 1), rest: item.slice(end + 1) };
 }

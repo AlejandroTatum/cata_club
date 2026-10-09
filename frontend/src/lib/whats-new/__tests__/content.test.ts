@@ -71,8 +71,14 @@ describe("splitLead", () => {
     });
   });
 
-  it("leaves a bullet without a colon unbolded", () => {
-    const text = WHATS_NEW_ITEMS.admin[4];
-    expect(splitLead(text)).toEqual({ lead: null, rest: text });
+  it("bolds a leading question, as the approved copy does for «¿Algo no anda?»", () => {
+    expect(splitLead(WHATS_NEW_ITEMS.admin[4])).toEqual({
+      lead: "¿Algo no anda?",
+      rest: " El botón para reportar un problema está siempre arriba, en la barra.",
+    });
+  });
+
+  it("leaves a bullet with neither a colon nor a leading question unbolded", () => {
+    expect(splitLead("Sin pausa en el texto.")).toEqual({ lead: null, rest: "Sin pausa en el texto." });
   });
 });
