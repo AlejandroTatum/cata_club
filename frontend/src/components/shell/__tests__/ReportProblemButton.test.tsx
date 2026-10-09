@@ -84,7 +84,7 @@ describe("ReportProblemButton — never covers content (T14 RC4)", (): void => {
     render(<ReportProblemButton />);
     const button = screen.getByRole("button", { name: "Reportar un problema" });
     expect(button).toHaveAttribute("title", "Reportar un problema");
-    expect(button.className).toMatch(/max-lg:w-11/);
+    expect(button.className).toMatch(/max-lg:h-11 max-lg:w-11/);
     expect(button.querySelector("span")?.className).toMatch(/max-lg:sr-only/);
   });
 });

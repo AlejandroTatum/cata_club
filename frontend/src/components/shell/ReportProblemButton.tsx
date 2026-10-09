@@ -35,7 +35,7 @@ export default function ReportProblemButton(): React.ReactElement | null {
         onClick={(): void => report.open()}
         disabled={report.busy}
         title="Reportar un problema"
-        className="touch-target flex h-ctl items-center justify-center gap-2 rounded-ctl border border-line-2 bg-paper px-3 text-xs font-semibold text-ink-2 transition-colors hover:border-ink-3 hover:text-ink disabled:opacity-70 max-lg:w-11 max-lg:px-0"
+        className="touch-target flex h-ctl items-center justify-center gap-2 rounded-ctl border border-line-2 bg-paper px-3 text-xs font-semibold text-ink-2 transition-colors hover:border-ink-3 hover:text-ink disabled:opacity-70 max-lg:h-11 max-lg:w-11 max-lg:px-0"
       >
         <Flag size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         {/* Icon-only below `lg` so the row fits a phone; the name stays for

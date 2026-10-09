@@ -69,7 +69,7 @@ test.describe("Shell batch A", () => {
       await expect(button).toBeVisible({ timeout: 20_000 });
       expect(await button.evaluate((el) => getComputedStyle(el).position)).toBe("static");
       const box = (await button.boundingBox())!;
-      expect(box.height).toBeGreaterThanOrEqual(44 - (words ? 4 : 0));
+      expect(box.height).toBeGreaterThanOrEqual(words ? 40 : 44);
       expect(box.width >= 120).toBe(words);
       await expect(button).toHaveAccessibleName("Reportar un problema");
 
