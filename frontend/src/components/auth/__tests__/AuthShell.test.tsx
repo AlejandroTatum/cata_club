@@ -54,6 +54,20 @@ describe("AuthShell", () => {
     expect(landmarks[0]).toHaveAttribute("data-testid", "auth-panel-light");
   });
 
+  it("offers the theme toggle at the top of the form column, inside the main landmark (S11)", (): void => {
+    // The owner reached /login in dark with no way to switch: the toggle only
+    // lived in the authenticated shell. It sits in the form pane, not on the
+    // always-dark brand rail, because it must read against the surface that
+    // changes with the theme.
+    renderShell();
+
+    const toggle = screen.getByRole("button", { name: "Modo oscuro" });
+    const main = screen.getByRole("main");
+    expect(main).toContainElement(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getAllByRole("button", { name: "Modo oscuro" })).toHaveLength(1);
+  });
+
   it("fills the viewport instead of floating as a bounded, centred artboard", () => {
     renderShell();
 

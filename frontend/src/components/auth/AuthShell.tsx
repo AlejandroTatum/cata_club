@@ -35,11 +35,13 @@
  * speaking in first person) and carries no weight class: the 600 cut is the
  * only one loaded, and a CSS weight would synthesise a bold on top of it.
  *
- * No client-only APIs are used here, so this stays server-safe.
+ * No client-only APIs are used here, so this stays server-safe (the theme
+ * toggle is its own client component).
  */
 
 import Image from "next/image";
 import { BackLink } from "@/components/ui";
+import ThemeToggle from "@/components/theme/ThemeToggle";
 import {
   FOUNDING_DATE,
   landingConfig,
@@ -327,6 +329,11 @@ export default function AuthShell({
          * One column, one axis: the form and the help footer share the same 448px column (same max-width, same left edge).
          */}
         <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
+        {/* The theme choice, top-right of the form column. It lives here and
+            not on the brand rail because the rail is coal in both themes. */}
+        <div className="flex justify-end">
+          <ThemeToggle variant="bar" />
+        </div>
         {/* Centred in the column. From `split` it is nudged up by
             the bottom padding so the form sits in the upper-middle; on a phone
             the help footer anchors the foot, so the form centres in the room
