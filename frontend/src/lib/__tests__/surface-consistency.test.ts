@@ -68,3 +68,22 @@ describe("row actions stay quiet", () => {
     }
   });
 });
+
+/**
+ * Category rows are one compact block, not a 220px slab with a dead middle
+ * (T14 RC9): the headcount and the actions share the second line of the
+ * two-column band, and no row pads itself by 48px at the widest breakpoint.
+ * The rendered height is measured in `e2e/surface-batch-g.spec.ts`.
+ */
+describe("groups rows are compact", () => {
+  const source = code("app/groups/page.tsx");
+
+  it("never spends the 2xl:py-12 padding the slab had", () => {
+    expect(source).not.toMatch(/2xl:py-12/);
+  });
+
+  it("puts the actions beside the headcount, not on a line of their own", () => {
+    expect(source).not.toMatch(/md:col-span-2 md:justify-end/);
+    expect(source).toMatch(/md:col-start-2 md:self-end md:justify-end/);
+  });
+});
