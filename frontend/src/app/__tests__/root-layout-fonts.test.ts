@@ -1,6 +1,6 @@
 /**
- * The app fonts are Switzer (sans) and Anybody (display), with Playfair kept as
- * the serif voice. The root layout puts the CSS variables from `lib/fonts.ts`
+ * The app fonts are Switzer (sans) and Anybody (display); the club's voice is
+ * Anybody at another weight and width, so no third family is mounted. The root layout puts the CSS variables from `lib/fonts.ts`
  * on `<html>`, and the Tailwind stacks must start with those same variables, or
  * the family resolves to nothing.
  */
@@ -18,11 +18,10 @@ import { fontVariables } from "@/lib/fonts";
 import tailwindConfig from "../../../tailwind.config";
 
 describe("root layout font variables", () => {
-  it("exposes Switzer, Anybody and Playfair, and no longer Barlow or Graduate", () => {
+  it("exposes Switzer and Anybody only: no Playfair, Barlow or Graduate", () => {
     expect(fontVariables.split(" ")).toEqual([
       "--font-switzer",
       "--font-anybody",
-      "--font-playfair",
     ]);
   });
 
@@ -30,6 +29,6 @@ describe("root layout font variables", () => {
     const fontFamily = tailwindConfig.theme?.extend?.fontFamily as Record<string, string[]>;
     expect(fontFamily.sans[0]).toBe("var(--font-switzer)");
     expect(fontFamily.display[0]).toBe("var(--font-anybody)");
-    expect(fontFamily.serif[0]).toBe("var(--font-playfair)");
+    expect(fontFamily.serif).toBeUndefined();
   });
 });

@@ -439,7 +439,7 @@ const config: Config = {
     extend: {
       colors: themedColors(LIGHT_COLORS as unknown as ColorTree),
       // ---------------------------------------------------------------------
-      // Three families, three jobs. Declared in `lib/fonts.ts` and mounted as
+      // Two families, two jobs; the club's voice is a weight/width of Anybody. Declared in `lib/fonts.ts` and mounted as
       // CSS variables on `<html>` by the root layout, which is why each stack
       // starts with a `var()` and not with a family name: `next/font/local`
       // generates the real family name at build time, so the variable is the
@@ -460,10 +460,13 @@ const config: Config = {
       //   · `sans` (Switzer) carries ALL interface text: every label, cell,
       //     button, field, helper line and paragraph. If a screen has to ask
       //     which family a string takes, the answer is this one.
-      //   · `serif` (Playfair) is the voice, and it is rationed: at most ONE
-      //     phrase per screen — a pull quote, a motto, the single line meant to
-      //     be read rather than scanned. A second one on the same screen means
-      //     neither is emphasis any more.
+      //   · The voice is NOT a third family (T14I: the owner moved the auth
+      //     motto from Playfair to Anybody). It is `font-display font-voice`
+      //     at the `text-voice` step: Anybody at weight 700 and regular width,
+      //     uppercase, rationed to at most ONE phrase per screen — the club
+      //     talking in first person. A second one on the same screen means
+      //     neither is emphasis any more. Playfair survives only on the
+      //     landing, which loads it under its own variable.
       //
       // The tail of each stack is what the user actually sees while the woff2
       // is in flight (`display: "swap"`), so each one degrades to a face with
@@ -482,7 +485,6 @@ const config: Config = {
           "sans-serif",
         ],
         display: ["var(--font-anybody)", "system-ui", "sans-serif"],
-        serif: ["var(--font-playfair)", "Georgia", "serif"],
       },
       // ---------------------------------------------------------------------
       // The type scale. Eight steps, in Tailwind's tuple form
@@ -533,7 +535,8 @@ const config: Config = {
         display: ["46px", { lineHeight: "0.95", letterSpacing: "-0.05em" }],
         /**
          * The club speaking in first person — `DESIGN.md`'s `typography.voice`,
-         * transcribed. At most ONE phrase per screen, in Playfair.
+         * transcribed. At most ONE phrase per screen, in Anybody
+         * (`font-display font-voice uppercase`).
          *
          * It is the ninth step and the only fluid one, and both facts have the
          * same cause: the voice is a single line of copy that has to hold its
@@ -541,12 +544,11 @@ const config: Config = {
          * read as a hero on a phone and as a caption at 2560. The brand
          * cluster's own measure is a clamp for the same reason.
          *
-         * `letterSpacing: normal` contradicts every step above `base`, which
-         * all tighten: those are Barlow and Graduate, drawn to be scanned.
-         * Playfair's stroke contrast needs its own sidebearings, and this is
-         * the one step meant to be READ.
+         * Tracking is flat: the voice is uppercase Anybody at a regular
+         * width, which already carries its own sidebearings, and it is the one
+         * step meant to be READ rather than scanned.
          */
-        voice: ["clamp(20px, 2.4vw, 31px)", { lineHeight: "1.3", letterSpacing: "normal" }],
+        voice: ["clamp(20px, 2.4vw, 31px)", { lineHeight: "1.3", letterSpacing: "0em" }],
       },
       // Four tracking steps for the cases where a value has to CONTRADICT the
       // default its size step carries — an uppercase run at body size, or a

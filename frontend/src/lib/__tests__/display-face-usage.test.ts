@@ -110,7 +110,9 @@ export function displayFaceViolations(code: string): string[] {
     if (!/\bfont-display\b/.test(text)) continue;
     const where = text.replace(/\s+/g, " ");
     if (BELOW_FLOOR.test(text)) offences.push(`below the 15px floor: ${where}`);
-    if (PROSE_ELEMENTS.test(tag)) offences.push(`on a <${tag}>: ${where}`);
+    // The club's one voice phrase per screen (`font-voice`, T14I) is the declared exception.
+    const isVoice = /\bfont-voice\b/.test(text);
+    if (PROSE_ELEMENTS.test(tag) && !isVoice) offences.push(`on a <${tag}>: ${where}`);
     if (!DECLARED_TRACKING.test(text)) offences.push(`no declared tracking step: ${where}`);
   }
   return offences;

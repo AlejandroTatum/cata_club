@@ -189,6 +189,19 @@ html[data-theme="dark"] {
   }
 
   /*
+   * THE CLUB'S VOICE, in the same family: Anybody at weight 700 and its
+   * regular width (100). Titles are 800 and condensed (72) and figures are 800
+   * and wide (112); a phrase the club says in first person sits between them,
+   * lighter and open enough to be read as a sentence. Written as
+   * `font-display font-voice uppercase text-voice`; it comes after
+   * `.font-display` so it wins the tie.
+   */
+  .font-display.font-voice {
+    font-weight: 700;
+    font-variation-settings: "wdth" 100;
+  }
+
+  /*
    * ELEVATION IS A SYSTEM RULE, NOT A PER-SCREEN DECISION.
    *
    * A card in this product is written as `rounded-card bg-paper` plus a

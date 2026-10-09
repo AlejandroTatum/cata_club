@@ -1,19 +1,22 @@
 /**
- * The three type families of the product, loaded once for every route and
- * mapped onto `sans` / `display` / `serif` in `tailwind.config.ts`.
+ * The two type families of the product, loaded once for every route and
+ * mapped onto `sans` / `display` in `tailwind.config.ts`.
  *
  *  - Switzer (`sans`): self-hosted variable woff2 through `next/font/local`,
  *    with its Fontshare license (`app/fonts/FFL.txt`) alongside.
  *  - Anybody (`display`): variable font through `next/font/google`, which Next
  *    downloads at build time and serves from our own origin.
- *  - Playfair Display (`serif`): self-hosted, the editorial voice.
  *
- * `display: "swap"` on all three: the fallback renders immediately and the
+ * The club's voice (the auth motto, the enrolment welcome line) is NOT a third
+ * family: it is Anybody at a different weight and width (`.font-voice`). The
+ * landing still loads Playfair for its own motto, declared in `app/page.tsx`.
+ *
+ * `display: "swap"` on both: the fallback renders immediately and the
  * brand face repaints, so the screen is never blank. The fallback stacks in
  * `tailwind.config.ts` keep that reflow small.
  *
  * NOTE: the landing keeps its own `--font-landing-*` declarations in
- * `app/page.tsx`; it owns those variables while it is redesigned in parallel.
+ * `app/page.tsx`, Playfair included; it owns those variables.
  */
 
 import { Anybody } from "next/font/google";
@@ -46,21 +49,9 @@ export const anybody = Anybody({
 });
 
 /**
- * The editorial voice: a pull quote, a motto, the one line on a screen that is
- * meant to be read slowly rather than scanned. 600 rather than 400 because it
- * always appears large, where Playfair's high stroke contrast thins out the
- * regular weight.
- */
-export const playfair = localFont({
-  src: "../../public/fonts/playfair-display-600.woff2",
-  variable: "--font-playfair",
-  display: "swap",
-});
-
-/**
- * The three variable classes, in the order they go on `<html>`. Exported as one
- * string because a layout that mounts two of the three ships a `var()` that
+ * The variable classes, in the order they go on `<html>`. Exported as one
+ * string because a layout that mounts one of the two ships a `var()` that
  * resolves to nothing, and that failure is invisible until someone opens the
  * screen that uses the missing family.
  */
-export const fontVariables = `${switzer.variable} ${anybody.variable} ${playfair.variable}`;
+export const fontVariables = `${switzer.variable} ${anybody.variable}`;
