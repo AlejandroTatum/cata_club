@@ -360,6 +360,19 @@ describe("MedicalRecordEditor legacy records (#643)", () => {
     expect(screen.getByText("DESCONOCIDO")).toBeInTheDocument();
   });
 
+  // Owner (2026-10-09): bare label/value pairs read as loose text; each read
+  // value sits in the same box as the control it stands in for.
+  it("boxes every read-mode value like its field", async () => {
+    mockFetchFichaMedica.mockResolvedValue(LEGACY);
+
+    render(<MedicalRecordEditor personaId={7} />);
+
+    await screen.findByRole("button", { name: "Editar" });
+    const values = document.querySelectorAll("dd");
+    expect(values.length).toBeGreaterThan(0);
+    values.forEach((dd) => expect(dd).toHaveClass("field-readonly"));
+  });
+
   it("drops a legacy DESCONOCIDO to an unchosen select on entering edit mode", async () => {
     mockFetchFichaMedica.mockResolvedValue(LEGACY);
 

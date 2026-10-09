@@ -57,6 +57,14 @@ describe("EmergencyCard — hierarchy (QA R2 S8)", () => {
     expect(link).toHaveAttribute("href", "tel:0991234567");
   });
 
+  it("boxes the contact name and phone together", () => {
+    const card = renderCard(FULL);
+    const value = within(card).getByTestId("emergency-card-contact-value");
+    expect(value).toHaveClass("field-readonly");
+    expect(within(value).getByText("María Pérez")).toBeInTheDocument();
+    expect(within(value).getByRole("link", { name: /099 123 4567/ })).toBeInTheDocument();
+  });
+
   it("keeps a +country phone dialable and renders plain text when there is no phone", () => {
     const card = renderCard({ ...FULL, telefonoEmergencia: "+593 99 123 4567" });
     expect(within(card).getByRole("link", { name: /\+593 99 123 4567/ })).toHaveAttribute("href", "tel:+593991234567");

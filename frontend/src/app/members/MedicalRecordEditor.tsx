@@ -126,7 +126,7 @@ function CampoLectura({
   return (
     <div className={wide ? "sm:col-span-2" : undefined}>
       <dt className="mb-1 text-xs font-semibold text-ink-2">{label}</dt>
-      <dd className="min-h-10 py-2 text-sm font-semibold text-ink">{value || "—"}</dd>
+      <dd className="field-readonly font-semibold">{value || "—"}</dd>
     </div>
   );
 }
