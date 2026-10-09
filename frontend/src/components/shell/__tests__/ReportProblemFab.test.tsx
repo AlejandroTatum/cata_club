@@ -81,3 +81,15 @@ describe("ReportProblemFab", (): void => {
     });
   });
 });
+
+describe("ReportProblemFab — never covers content (T14 RC4)", (): void => {
+  it("is an icon on a phone and keeps its accessible name", (): void => {
+    render(<ReportProblemFab />);
+    const button = screen.getByRole("button", { name: "Reportar un problema" });
+    expect(button).toHaveAttribute("title", "Reportar un problema");
+    expect(button.className).toMatch(/max-md:w-11/);
+    expect(button.className).toMatch(/max-md:px-0/);
+    // The words are screen-reader-only below `md`, not removed.
+    expect(button.querySelector("span")?.className).toMatch(/max-md:sr-only/);
+  });
+});
