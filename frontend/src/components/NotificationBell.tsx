@@ -69,9 +69,9 @@ export interface NotificationBellProps {
 }
 
 const TRIGGER_VARIANT_CLASSES: Record<"dark" | "light", string> = {
-  dark: "touch-target relative inline-flex items-center justify-center rounded-xl p-2 text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white",
+  dark: "touch-target max-md:min-h-11 max-md:min-w-11 relative inline-flex items-center justify-center rounded-xl p-2 text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white",
   light:
-    "touch-target relative inline-flex items-center justify-center rounded-xl p-2 text-cata-text/65 transition-colors hover:bg-cata-bg hover:text-cata-text",
+    "touch-target max-md:min-h-11 max-md:min-w-11 relative inline-flex items-center justify-center rounded-xl p-2 text-cata-text/65 transition-colors hover:bg-cata-bg hover:text-cata-text",
 };
 
 export default function NotificationBell({

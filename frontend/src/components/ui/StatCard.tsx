@@ -357,9 +357,14 @@ export default function StatCard({
           request for a bold the face cannot draw. `tracking-flat` cancels the
           -0.04em `text-2xl` carries for Barlow; Graduate's digits are already
           wide and flat, and tightening them runs them together. */}
+      {/* The figure is fluid, 22px on a 390px phone up to the 32px `text-2xl`
+          step from ~580px: two tiles per row leave ~134px of ink, and a
+          currency value such as "$1.330,00" at a fixed 32px was wider than that
+          and pushed the page sideways (T14 RC5). `min-w-0 break-words` is the
+          backstop for a longer figure. */}
       <span
         className={cn(
-          "font-display text-2xl leading-none tabular-nums tracking-flat",
+          "min-w-0 break-words font-display text-[clamp(1.375rem,5.5vw,2rem)] leading-none tabular-nums tracking-flat",
           hot ? "text-white" : "text-ink",
         )}
       >

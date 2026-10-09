@@ -185,3 +185,16 @@ describe("buttonClasses", () => {
     expect(link).toHaveClass("bg-ball");
   });
 });
+
+describe("Button — thumb floor on a narrow window (T14 RC5)", () => {
+  it("raises the compact size to 44px below md and leaves md alone", () => {
+    render(
+      <>
+        <Button size="sm">Pequeño</Button>
+        <Button>Normal</Button>
+      </>,
+    );
+    expect(screen.getByRole("button", { name: "Pequeño" }).className).toMatch(/max-md:min-h-11/);
+    expect(screen.getByRole("button", { name: "Normal" }).className).not.toMatch(/max-md:min-h-11/);
+  });
+});

@@ -476,3 +476,13 @@ describe("StatCard — the sticker frame and the brand blocks", () => {
     expect(STAT_BLOCK.coal.surface).toContain("text-white");
   });
 });
+
+describe("StatCard — the figure never overflows its tile (T14 RC5)", () => {
+  it("is fluid, 22px on a phone up to the 32px step, and may break", () => {
+    render(<StatCard label="Miembros" value="$1.330,00" />);
+    const figure = screen.getByText("$1.330,00");
+    expect(figure.className).toContain("text-[clamp(1.375rem,5.5vw,2rem)]");
+    expect(figure.className).toMatch(/\bmin-w-0\b/);
+    expect(figure.className).toMatch(/break-words/);
+  });
+});

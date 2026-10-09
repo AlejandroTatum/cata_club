@@ -59,7 +59,10 @@ const BASE =
 // button.
 const SIZE: Record<ButtonSize, string> = {
   md: "h-ctl rounded-ctl px-4 text-sm",
-  sm: "h-ctl-sm rounded-ctl px-3 text-xs",
+  // `max-md:min-h-11`: a narrow window gets the thumb floor by viewport too,
+  // because the coarse-pointer rule in `globals.css` never fires on a desktop
+  // browser resized to a phone (and that is how the owner reviews).
+  sm: "h-ctl-sm rounded-ctl px-3 text-xs max-md:min-h-11",
 };
 
 const VARIANT: Record<ButtonVariant, string> = {
