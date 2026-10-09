@@ -117,17 +117,14 @@ function BotonFichaMedica({
   alumno,
   onAbrir,
   seleccionado,
-  destacado = false,
 }: {
   alumno: AlumnoDelClub;
   onAbrir: () => void;
   seleccionado?: boolean;
-  /** Desktop: the ficha is the point of the screen, so it wears the primary skin. */
-  destacado?: boolean;
 }): React.ReactElement {
   return (
     <Button
-      variant={destacado ? "primary" : "secondary"}
+      variant="secondary"
       className="flex-none"
       onClick={(event) => {
         event.currentTarget.focus();
@@ -498,7 +495,6 @@ export default function TrainerStudentsPage(): React.ReactElement {
                               alumno={alumno}
                               onAbrir={() => abrirFicha(alumno)}
                               seleccionado={esEscritorio && seleccionadoId === alumno.personaId}
-                              destacado={esEscritorio}
                             />
                             <BotonHorario
                               alumno={alumno}

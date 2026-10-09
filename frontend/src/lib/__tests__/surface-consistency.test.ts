@@ -45,3 +45,26 @@ describe("surface consistency", () => {
     expect(source).toMatch(/divide-/);
   });
 });
+
+/**
+ * One primary action per screen (S3, T14 RC10). A button repeated on every row
+ * of a list is never the primary skin: fifty yellow «Ficha médica» buttons or
+ * five black «Agregar jugadores» blocks made the page's one primary
+ * indistinguishable from its rows.
+ */
+describe("row actions stay quiet", () => {
+  it("the trainer roster has no primary-skinned button in a row", () => {
+    expect(code("app/trainer/students/page.tsx")).not.toMatch(/variant=\{?"(primary|dark)"/);
+  });
+
+  it("the groups rows have no dark or primary button besides the form's own", () => {
+    const rows = code("app/groups/page.tsx").match(/aria-label=\{`Agregar jugadores a[\s\S]{0,40}/g) ?? [];
+    expect(rows.length).toBeGreaterThan(0);
+    const source = code("app/groups/page.tsx");
+    for (const label of ["Agregar jugadores a ${cardTitle(card)}", "Definir horarios de ${entry.label}"]) {
+      const at = source.indexOf(label);
+      expect(at, label).toBeGreaterThan(-1);
+      expect(source.slice(Math.max(0, at - 400), at)).not.toMatch(/variant="(primary|dark)"/);
+    }
+  });
+});

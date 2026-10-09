@@ -2079,7 +2079,7 @@ export default function GroupsPage(): React.ReactElement {
                       <div className="flex gap-2 md:col-span-2 md:justify-end 2xl:col-span-1 2xl:justify-end">
                         <span className="sr-only">{COLUMNS[3]}</span>
                         <Button
-                          variant="dark"
+                          variant="secondary"
                           size="sm"
                           className="flex-1 md:flex-none"
                           onClick={() => openAlumnosTab(card, true)}
@@ -2090,7 +2090,7 @@ export default function GroupsPage(): React.ReactElement {
                           Agregar jugadores
                         </Button>
                         <Button
-                          variant="secondary"
+                          variant="tertiary"
                           size="sm"
                           className="flex-1 md:flex-none"
                           onClick={() => (editOpen ? closeExpanded() : openEditForm(card))}
@@ -2164,7 +2164,7 @@ export default function GroupsPage(): React.ReactElement {
                     <div className="flex gap-2 md:col-span-2 md:justify-end 2xl:col-span-1 2xl:justify-end">
                       <span className="sr-only">{COLUMNS[3]}</span>
                       <Button
-                        variant="dark"
+                        variant="secondary"
                         size="sm"
                         className="flex-1 md:flex-none"
                         onClick={() => openCatalogoEditForm(entry)}
