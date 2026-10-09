@@ -172,9 +172,11 @@ html[data-theme="dark"] {
    * wins from the utilities layer.
    */
   /* The sticker card: 2px coal outline and a hard offset shadow, no blur.
-     The compound selector keeps catching the five `rounded-card bg-paper`
-     containers that never adopted `.card`. */
-  .rounded-card.bg-paper,
+     The `rounded-card bg-paper` spelling is caught too, but inside `:where()`
+     so it carries NO specificity: a screen that gives such an element its own
+     border colour or shadow (a selected choice card in cata-red, a modal's
+     `shadow-elevated`) still wins from the utilities layer. */
+  :where(.rounded-card.bg-paper),
   .card,
   .card-hover {
     @apply border-2 border-edge shadow-sticker;

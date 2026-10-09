@@ -254,10 +254,10 @@ export const STAT_BLOCK: Record<
   StatBlock,
   { surface: string; label: string; muted: string; rule: string }
 > = {
-  red: { surface: "bg-cata-red text-white", label: "text-white", muted: "text-white", rule: "bg-white/60" },
-  ball: { surface: "bg-ball text-coal", label: "text-coal", muted: "text-coal/80", rule: "bg-coal/50" },
-  coal: { surface: "bg-coal text-white", label: "text-white/70", muted: "text-white/70", rule: "bg-white/30" },
-  paper: { surface: "bg-paper text-ink", label: "text-ink-3-strong", muted: "text-ink-3-strong", rule: "bg-line-2" },
+  red: { surface: "bg-cata-red text-white", label: "text-white", muted: "text-white", rule: "border-white/60" },
+  ball: { surface: "bg-ball text-coal", label: "text-coal", muted: "text-coal/80", rule: "border-coal/50" },
+  coal: { surface: "bg-coal text-white", label: "text-white/70", muted: "text-white/70", rule: "border-white/30" },
+  paper: { surface: "bg-paper text-ink", label: "text-ink-3-strong", muted: "text-ink-3-strong", rule: "border-line-2" },
 };
 
 /** Every block wears the same sticker frame. */

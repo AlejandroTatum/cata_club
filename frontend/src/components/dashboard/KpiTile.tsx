@@ -83,14 +83,15 @@ export default function KpiTile({
         className,
       )}
     >
-      {/* Figure | divider | label — the landing's stat tile. */}
-      <div className="flex items-stretch gap-3">
+      {/* Figure | divider | label — the landing's stat tile. The divider is the
+          label's own left border and the row wraps, so in a narrow tile the
+          label drops under the figure instead of pushing the grid wider. */}
+      <div className="flex flex-wrap items-stretch gap-x-3 gap-y-2">
         <span className="font-display text-display leading-none tabular-nums tracking-flat">
           {value}
           {unit ? <small className={cn("ml-[3px] font-sans text-sm font-semibold", skin.muted)}>{unit}</small> : null}
         </span>
-        <span aria-hidden="true" className={cn("w-0.5 flex-none self-stretch rounded-full", skin.rule)} />
-        <span className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+        <span className={cn("flex min-w-[6.5rem] flex-1 flex-col justify-center gap-1 border-l-2 pl-3", skin.rule)}>
           <span className={cn("text-2xs font-bold uppercase tracking-caps", skin.label)}>{label}</span>
           {status ? (
             <span data-testid="kpi-status" className="flex items-center gap-1.5 text-xs font-semibold">

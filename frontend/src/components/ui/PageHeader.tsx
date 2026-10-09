@@ -83,7 +83,7 @@ export default function PageHeader({
           <p
             aria-hidden="true"
             data-testid="page-kicker"
-            className="mb-1.5 flex items-center gap-2 text-2xs font-bold uppercase tracking-caps-wide text-state-bad"
+            className="mb-1 flex items-center gap-2 text-2xs font-bold uppercase leading-none tracking-caps-wide text-state-bad"
           >
             <span className="h-0.5 w-6 rounded-full bg-cata-red" />
             {kicker}
@@ -95,7 +95,7 @@ export default function PageHeader({
             legibility. */}
         <h1 className="font-display text-xl uppercase tracking-flat text-ink">
           {highlight ? (
-            <span className="box-decoration-clone rounded-[6px] border-2 border-edge bg-ball px-2 py-0.5 text-coal shadow-sticker-sm">
+            <span className="box-decoration-clone rounded-[6px] border-2 border-edge bg-ball px-2 text-coal shadow-sticker-sm">
               {title}
             </span>
           ) : (
