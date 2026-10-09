@@ -232,6 +232,22 @@ class AsistenciaRepositorio:
         )
         return self.db.execute(stmt).scalar_one()
 
+    def contar_por_personas(self, persona_ids: List[int]) -> dict[int, int]:
+        """Total del historial de CADA persona en UNA consulta agrupada -- el
+        mismo filtro que `contar_por_persona`, para el portal (que recorta el
+        historial a una ventana pero debe decir cuánto hay en total)."""
+        totales: dict[int, int] = {pid: 0 for pid in persona_ids}
+        if not persona_ids:
+            return totales
+        stmt = (
+            select(Asistencia.persona_id, func.count())
+            .where(Asistencia.persona_id.in_(persona_ids))
+            .group_by(Asistencia.persona_id)
+        )
+        for persona_id, total in self.db.execute(stmt).all():
+            totales[persona_id] = total
+        return totales
+
     def listar_reporte(
         self,
         horario_id: Optional[int] = None,

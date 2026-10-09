@@ -19,6 +19,9 @@ class PortalPerfilDTO(ResponseBase, BaseModel):
     persona: PersonaResponseDTO
     representante: Optional[PortalRepresentanteDTO] = None
     historial: List[AsistenciaResponseDTO]
+    # Total del historial completo: `historial` es solo la ventana reciente,
+    # y el cliente pagina el resto con `GET /asistencias/persona/{id}`.
+    historial_total: int = 0
     membresias: List[MembresiaResponseDTO]
 
 

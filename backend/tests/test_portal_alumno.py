@@ -177,3 +177,23 @@ def test_portal_historial_limite_acota_el_historial_de_cada_perfil(client, db_se
 
     for perfil in (cuerpo["titular"], *cuerpo["representados"]):
         assert [a["fechaEntrenamiento"] for a in perfil["historial"]] == ["2026-07-27", "2026-07-20"]
+
+
+def test_portal_historial_total_cuenta_todo_el_historial_aunque_el_limite_lo_recorte(client, db_session):
+    padre, hijos, _, horario = _familia(db_session, base=7500)
+    # `_familia` ya siembra una asistencia por persona: el titular termina con 5.
+    for dia in (13, 20, 27, 28):
+        db_session.add(Asistencia(
+            fecha_entrenamiento=date(2026, 7, dia), estado=EstadoAsistencia.PRESENTE,
+            persona_id=padre.id, horario_id=horario.id,
+        ))
+    db_session.commit()
+    _como(padre.id, ["REPRESENTANTE"])
+
+    cuerpo = client.get(f"{URL}/{padre.id}?historial_limite=2").json()
+
+    assert len(cuerpo["titular"]["historial"]) == 2
+    assert cuerpo["titular"]["historialTotal"] == 5
+    for hijo in cuerpo["representados"]:
+        assert hijo["historialTotal"] == len(hijo["historial"]) == 1
+

@@ -35,6 +35,8 @@ class PerfilPortal:
     persona: Persona
     representante: Persona | None
     historial: list[Asistencia]
+    #: Filas del historial COMPLETO; `historial` es solo la ventana reciente.
+    historial_total: int = 0
     membresias: list[Membresia] = field(default_factory=list)
 
 
@@ -62,6 +64,7 @@ class PortalServicio:
         historiales = AsistenciaRepositorio(self.db).listar_recientes_por_personas(
             ids, historial_limite
         )
+        totales = AsistenciaRepositorio(self.db).contar_por_personas(ids)
         membresias = MembresiaRepositorio(self.db).listar_por_personas(ids)
         representantes = PersonaRepositorio(self.db).listar_por_ids(
             sorted({p.representante_id for p in personas if p.representante_id})
@@ -71,6 +74,7 @@ class PortalServicio:
                 persona=p,
                 representante=representantes.get(p.representante_id),
                 historial=historiales[p.id],
+                historial_total=totales[p.id],
                 membresias=membresias[p.id],
             )
             for p in personas
