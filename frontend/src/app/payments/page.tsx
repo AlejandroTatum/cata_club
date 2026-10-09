@@ -1430,11 +1430,12 @@ export default function PaymentsPage(): React.ReactElement {
                 // a proof. The way out is the screen where a payment gets
                 // registered, which is the same destination the rest of the
                 // panel already names.
-                <Link href="/members" className={buttonClasses("secondary")}>
+                <Link href="/members" className={buttonClasses("secondary", "md", "max-md:min-h-11")}>
                   Ir a Miembros
                 </Link>
               ) : (
                 <Button
+                  className="max-md:min-h-11"
                   onClick={() => {
                     setActiveFilter("all");
                     setQuery("");
@@ -1579,6 +1580,7 @@ export default function PaymentsPage(): React.ReactElement {
               </p>
               <Button
                 variant="primary"
+                className="max-md:min-h-11"
                 disabled={pending.length === 0}
                 onClick={() => setSelectedId(pending[0]?.id ?? null)}
               >

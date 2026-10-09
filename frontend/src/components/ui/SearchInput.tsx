@@ -38,7 +38,8 @@ export default function SearchInput({
   return (
     <label
       className={cn(
-        "h-ctl flex items-center gap-2 rounded-ctl border border-line-2 bg-paper px-3",
+        // `max-md:min-h-11`: see `Button` `sm` — the thumb floor by viewport.
+        "h-ctl max-md:min-h-11 flex items-center gap-2 rounded-ctl border border-line-2 bg-paper px-3",
         "focus-within:border-ink-3",
         className,
       )}

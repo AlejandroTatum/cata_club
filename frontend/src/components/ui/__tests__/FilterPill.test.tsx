@@ -22,6 +22,13 @@ describe("FilterPill — committed dimensions", () => {
   });
 });
 
+describe("FilterPill — thumb floor on a narrow window", () => {
+  it("grows to 44px below md without touching the 40px desktop height", () => {
+    render(<FilterPill label="Todos" />);
+    expect(screen.getByRole("button").className).toMatch(/max-md:min-h-11/);
+  });
+});
+
 describe("FilterPill — active state is coal + ball, never red", () => {
   it("fills with coal when active", () => {
     render(<FilterPill label="Pendientes" active />);
