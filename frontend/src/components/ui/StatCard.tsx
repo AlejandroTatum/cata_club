@@ -14,7 +14,7 @@
  * still holds the row's tiles level with each other — and lets the rare long
  * one grow the row instead of overflowing its own box.
  *
- * Non-negotiable: the number is ALWAYS ink. Color lives in badges and pills,
+ * Non-negotiable: the number is never a state color. It takes its face's own ink (ink, white or coal). Color lives in the face, badges and pills,
  * never in a stat value — a green "17" is a defect, not a nicety.
  *
  * The `hot` variant inverts the tile onto coal for the one priority stat per
@@ -222,20 +222,14 @@ export const STATUS_INK: Record<StatCardTone, string> = {
   neutral: "text-ink-3-strong",
 };
 
-export const STAT_TONE: Record<StatCardTone, { icon: string; accent: string }> = {
-  ball: { icon: "bg-ball/25 text-ink", accent: "border-t-ball bg-ball/5" },
-  ok: { icon: "bg-state-ok-bg text-state-ok", accent: "border-t-state-ok bg-state-ok-bg/30" },
-  info: {
-    icon: "bg-cuenta-representante-bg text-cuenta-representante",
-    accent: "border-t-cuenta-representante bg-cuenta-representante-bg/30",
-  },
-  warn: { icon: "bg-state-warn-bg text-state-warn", accent: "border-t-state-warn bg-state-warn-bg/30" },
-  bad: { icon: "bg-state-bad-bg text-state-bad", accent: "border-t-state-bad bg-state-bad-bg/30" },
-  trainer: {
-    icon: "bg-cuenta-entrenador-bg text-cuenta-entrenador",
-    accent: "border-t-cuenta-entrenador bg-cuenta-entrenador-bg/30",
-  },
-  neutral: { icon: "bg-state-neutral-bg text-state-neutral", accent: "border-t-ink-3 bg-sunken/50" },
+export const STAT_TONE: Record<StatCardTone, { icon: string }> = {
+  ball: { icon: "bg-ball/25 text-ink" },
+  ok: { icon: "bg-state-ok-bg text-state-ok" },
+  info: { icon: "bg-cuenta-representante-bg text-cuenta-representante" },
+  warn: { icon: "bg-state-warn-bg text-state-warn" },
+  bad: { icon: "bg-state-bad-bg text-state-bad" },
+  trainer: { icon: "bg-cuenta-entrenador-bg text-cuenta-entrenador" },
+  neutral: { icon: "bg-state-neutral-bg text-state-neutral" },
 };
 
 /**
@@ -273,6 +267,11 @@ export const STAT_BLOCK_FOR_TONE: Record<StatCardTone, StatBlock> = {
   ball: "ball",
   neutral: "paper",
 };
+
+/** The status word reads at full strength on a solid face (`white/70` labels go to white). */
+function statusInkOnFace(label: string): string {
+  return label === "text-white/70" ? "text-white" : label;
+}
 
 export type StatCardProps = StatCardToneProps & StatCardBaseProps;
 
@@ -315,13 +314,19 @@ export default function StatCard({
 }: StatCardProps): ReactElement {
   const hot = variant === "hot";
   const showIcon = icon != null && !hot;
+  // One surface language for every role (T14 RC12): a toned or hot tile is the
+  // admin dashboard's solid brand block, a neutral one the quiet white sticker.
+  const solid = hot || tone !== "neutral";
+  const skin = STAT_BLOCK[hot ? "coal" : STAT_BLOCK_FOR_TONE[tone]];
 
   const tile = (
     <div
       data-tone={hot ? "action" : tone}
       className={cn(
-        "relative min-h-stat rounded-card border-2 border-edge shadow-sticker px-[18px] py-4 flex flex-col justify-between",
-        hot ? "bg-coal dark:border-edge-hot dark:bg-kpi-coal" : showIcon ? cn("border-t-[3px]", STAT_TONE[tone].accent) : "bg-paper",
+        "relative min-h-stat px-[18px] py-4 flex flex-col justify-between",
+        STAT_BLOCK_FRAME,
+        skin.surface,
+        solid && "dark:border-edge-hot",
         href && "h-full transition-[transform,box-shadow] hover:-translate-x-px hover:-translate-y-px hover:shadow-sticker-lg motion-reduce:transition-none motion-reduce:hover:translate-x-0 motion-reduce:hover:translate-y-0",
         className,
       )}
@@ -332,7 +337,8 @@ export default function StatCard({
           aria-hidden="true"
           className={cn(
             "absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-ctl",
-            STAT_TONE[tone].icon,
+            // On a solid face the chip is a paper inset, as the KPI tile's picture is.
+            solid ? "border-2 border-edge bg-paper text-ink" : STAT_TONE[tone].icon,
           )}
         >
           {icon}
@@ -342,7 +348,7 @@ export default function StatCard({
       <span
         className={cn(
           "text-2xs font-bold uppercase tracking-caps",
-          hot ? "text-white/45" : "text-ink-3-strong",
+          skin.label,
           showIcon && "pr-11",
         )}
       >
@@ -366,7 +372,8 @@ export default function StatCard({
       <span
         className={cn(
           "flex min-w-0 flex-wrap items-baseline whitespace-nowrap font-display text-[clamp(1.125rem,5vw,2rem)] leading-none tabular-nums tracking-flat",
-          hot ? "text-white" : "text-ink",
+          // The figure takes its face's ink: ink on paper, white on red/coal, coal on ball.
+          hot ? "text-white" : tone === "neutral" ? "text-ink" : null,
         )}
       >
         {value}
@@ -383,7 +390,7 @@ export default function StatCard({
           <small
             className={cn(
               "ml-[3px] font-sans text-sm font-semibold",
-              hot ? "text-white/60" : "text-ink-3-strong",
+              skin.muted,
             )}
           >
             {unit}
@@ -398,7 +405,7 @@ export default function StatCard({
               data-testid="statcard-status"
               className={cn(
                 "flex items-center gap-1.5 font-semibold",
-                hot ? "text-white" : STATUS_INK[tone],
+                solid ? statusInkOnFace(skin.label) : STATUS_INK[tone],
               )}
             >
               <span
@@ -410,7 +417,7 @@ export default function StatCard({
             </span>
           ) : null}
           {hint ? (
-            <span className={cn("flex items-center gap-2", hot ? "text-white/60" : "text-ink-3-strong")}>
+            <span className={cn("flex items-center gap-2", skin.muted)}>
               {hot && !status ? (
                 <span
                   data-testid="statcard-ball-dot"
