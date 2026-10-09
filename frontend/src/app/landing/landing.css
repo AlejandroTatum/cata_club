@@ -76,7 +76,15 @@
      `--landing-action`), `line` the sticker edge and `drop` / `drop-red`
      the hard offset shadows. */
   --landing-card: var(--landing-surface-base);
-  --landing-action-ink: var(--landing-brand-red);
+  /* Red as TEXT. A step deeper than the fill (#d92128 reaches only 4.32:1 on the
+     warm stats band, #d11f26 4.61:1) so the eyebrows clear AA on every band. */
+  --landing-action-ink: #d11f26;
+  /* Quiet text on the warm bands (the empty-schedule note): 4.57:1 on
+     #f1eee9, where --landing-text-muted-base reaches 4.18:1. */
+  --landing-text-muted-strong: #656c79;
+  /* Pale yellow wash: the FAQ band, the hover fill, the schedule help tile. */
+  --landing-tint: var(--landing-brand-yellow-pale);
+  --landing-wash: var(--landing-brand-yellow-pale);
   --landing-line: var(--landing-brand-black);
   --landing-drop: var(--landing-brand-black);
   --landing-drop-red: var(--landing-brand-red);
@@ -193,7 +201,7 @@ html[data-theme="dark"] .landing-page {
 .landing-ticker-track:hover { animation-play-state: paused; }
 .landing-ticker-copy { display: flex; width: max-content; min-width: 100vw; flex: none; justify-content: space-around; gap: 44px; padding-inline: 22px; }
 .landing-ticker-item { display: inline-flex; align-items: center; gap: 18px; white-space: nowrap; font-size: 13px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; }
-.landing-ticker-item b { color: var(--landing-action-ink); font-size: 16px; }
+.landing-ticker-item b { color: var(--landing-brand-red); font-size: 16px; }
 @keyframes landing-ticker-marquee { to { transform: translateX(-50%); } }
 
 /* The carousel is the hero's right-hand stage: absolutely positioned so the
@@ -511,7 +519,7 @@ html[data-theme="dark"] .landing-page {
 .landing-carousel-wrap::before { left: 0; background: linear-gradient(90deg, var(--landing-background), transparent); }
 .landing-carousel-wrap::after { right: 0; background: linear-gradient(270deg, var(--landing-background), transparent); }
 .landing-schedule { background: var(--landing-card); }
-.landing-schedule-status { margin: 0; color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 17px; }
+.landing-schedule-status { margin: 0; color: var(--landing-text-muted-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: 17px; }
 
 /* Proposal C, "todo lado a lado": every category is a card on screen at once,
    led by the age of its players. The age bar draws each category's ages on
@@ -910,7 +918,7 @@ html[data-theme="dark"] .landing-page {
    summary, the answer sits in the SAME card, a chevron shows open/close) in
    CataClub colours. Nothing here clips or fixes a height: the answer is plain
    flow content inside the <details>, whatever its length or the viewport. */
-.landing-faq { display: grid; grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr); align-items: start; gap: 32px 48px; background: var(--landing-brand-yellow-pale); }
+.landing-faq { display: grid; grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr); align-items: start; gap: 32px 48px; background: var(--landing-tint); }
 .landing-faq .landing-section-header { position: relative; padding: 28px; overflow: hidden; border: 2px solid var(--landing-line); border-radius: 22px; background: var(--landing-card); box-shadow: 6px 6px 0 var(--landing-drop-red); }
 /* Decorative question mark; the empty alt keeps it out of the accessibility tree. */
 .landing-faq .landing-section-header::after { content: "?" / ""; position: absolute; right: 18px; top: 50%; transform: translateY(-50%); color: var(--landing-brand-yellow); font-family: var(--font-landing-barlow), sans-serif; font-size: 150px; font-weight: 800; line-height: 1; pointer-events: none; }
@@ -920,7 +928,7 @@ html[data-theme="dark"] .landing-page {
 .landing-faq-list details[open] { box-shadow: 4px 4px 0 var(--landing-drop-red); }
 .landing-faq-list summary { display: flex; min-height: 64px; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px 14px 20px; border-radius: 16px; color: var(--landing-text-strong); font-size: 19px; font-weight: 700; line-height: 1.25; list-style: none; cursor: pointer; }
 .landing-faq-list summary::-webkit-details-marker { display: none; }
-.landing-faq-list summary:hover { background: var(--landing-brand-yellow-pale); }
+.landing-faq-list summary:hover { background: var(--landing-wash); }
 .landing-faq-list summary:focus-visible { outline: 3px solid var(--landing-focus); outline-offset: 2px; }
 .landing-faq-list details[open] summary { border-bottom-right-radius: 0; border-bottom-left-radius: 0; }
 .landing-faq-list summary::after { content: ""; flex: none; width: 36px; height: 36px; border: 2px solid var(--landing-line); border-radius: 50%; background: var(--landing-highlight) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23111111' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / 20px 20px no-repeat; }
@@ -1064,7 +1072,7 @@ html[data-theme="dark"] .landing-page {
 .landing-schedule-time { font-weight: 800; }
 .landing-schedule-cta { border: var(--landing-sticker-edge); box-shadow: 3px 3px 0 var(--landing-drop); }
 .landing-schedule-cta:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--landing-drop); }
-.landing-schedule-tile.landing-schedule-help { border: var(--landing-sticker-edge); background: var(--landing-brand-yellow-pale); box-shadow: var(--landing-sticker-lift); }
+.landing-schedule-tile.landing-schedule-help { border: var(--landing-sticker-edge); background: var(--landing-wash); box-shadow: var(--landing-sticker-lift); }
 .landing-schedule-help h3 { padding: 0; border: 0; background: none; color: var(--landing-text-strong); box-shadow: none; font-size: 28px; }
 .landing-schedule-help a { border: var(--landing-sticker-edge); background: var(--landing-third-party-whatsapp); color: var(--landing-ink); box-shadow: 3px 3px 0 var(--landing-drop); }
 
@@ -1095,7 +1103,7 @@ html[data-theme="dark"] .landing-page {
 .landing-contact-numbers, .landing-contact-social { flex-direction: column; align-items: flex-start; gap: 10px; }
 .landing-contact a { text-decoration: none; }
 .landing-contact-numbers a, .landing-contact-social a { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: var(--landing-sticker-edge); border-radius: 12px; background: var(--landing-card); font-size: 16px; box-shadow: 3px 3px 0 var(--landing-drop); transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease; }
-.landing-contact-numbers a:hover, .landing-contact-social a:hover { color: var(--landing-text-strong); background: var(--landing-brand-yellow-pale); transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--landing-drop); }
+.landing-contact-numbers a:hover, .landing-contact-social a:hover { color: var(--landing-text-strong); background: var(--landing-wash); transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--landing-drop); }
 .landing-contact a.landing-contact-action { min-height: 48px; padding: 0 20px; border: var(--landing-sticker-edge); border-radius: 999px; background: var(--kind-bg); color: var(--kind-ink); font-size: 13px; box-shadow: 4px 4px 0 var(--landing-drop); transition: transform 160ms ease, box-shadow 160ms ease; }
 .landing-contact a.landing-contact-action svg { width: 19px; height: 19px; }
 .landing-contact a.landing-contact-action:hover { color: var(--kind-ink); transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--landing-drop); }

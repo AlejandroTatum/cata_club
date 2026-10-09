@@ -104,11 +104,6 @@ test.describe("public pages meet the contrast bar in both themes", () => {
   for (const mode of ["light", "dark"] as const) {
     for (const [label, path] of [["landing", "/"], ["login", "/login"]] as const) {
       test(`${label} (${mode})`, async ({ page }) => {
-        // The approved light landing has five AA misses of its own (red eyebrows and
-        // the ticker glyph on the warm band, the empty-schedule note). They predate
-        // the dark palette and S11 requires light to stay identical, so light is
-        // not asserted here; the dark landing is held to the bar.
-        test.skip(label === "landing" && mode === "light", "pre-existing light-landing misses; light must not change");
         await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [STORAGE_KEY, mode]);
         await page.setViewportSize({ width: 1440, height: 900 });
         await page.goto(path);

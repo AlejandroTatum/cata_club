@@ -116,7 +116,11 @@ describe("landing dark palette", (): void => {
     expect(LIGHT["--landing-surface-base"]).toBe("#ffffff");
     expect(LIGHT["--landing-text-base"]).toBe("#1f2937");
     expect(LIGHT["--landing-card"]).toBe("var(--landing-surface-base)");
-    expect(LIGHT["--landing-action-ink"]).toBe("var(--landing-brand-red)");
+    // Red as text is one step deeper than the fill, the smallest change that
+    // clears AA on the warm stats band (S15); the fill itself is untouched.
+    expect(LIGHT["--landing-action-ink"]).toBe("#d11f26");
+    expect(contrastRatio("#d11f26", "#f1eee9")).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(LIGHT["--landing-text-muted-strong"], "#f1eee9")).toBeGreaterThanOrEqual(4.5);
     expect(LIGHT["--landing-line"]).toBe("var(--landing-brand-black)");
     expect(LIGHT["--landing-drop"]).toBe("var(--landing-brand-black)");
   });
