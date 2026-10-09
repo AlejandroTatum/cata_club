@@ -104,7 +104,7 @@ async function mockRuntime(page: Page, scenario: Scenario): Promise<void> {
   }));
   await page.route("**/api/dashboard", (route: Route) => fulfillJson(route, {}));
   await page.route("**/api/members/1", (route: Route) => fulfillJson(route, { account: scenario.account }));
-  await page.route("**/api/ranking/notificaciones/mias", (route: Route) =>
+  await page.route("**/api/ranking/notificaciones/mias*", (route: Route) =>
     fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }),
   );
   await page.route("**/api/personas/*/beneficio", (route: Route) => fulfillJson(route, null));

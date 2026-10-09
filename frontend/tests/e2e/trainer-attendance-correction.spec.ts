@@ -82,7 +82,7 @@ async function mockCorrectionRuntime(page: Page): Promise<CorrectionRuntime> {
     url: BASE_URL,
   }]);
   await page.route("**/api/auth/session", (route: Route) => fulfillJson(route, MOCK_SESSION));
-  await page.route("**/api/ranking/notificaciones/mias", (route: Route) =>
+  await page.route("**/api/ranking/notificaciones/mias*", (route: Route) =>
     fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }),
   );
   // AppShell's admin-only pending-payments badge calls this on every screen.

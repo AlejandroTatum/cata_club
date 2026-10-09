@@ -55,7 +55,7 @@ test.describe("legal pages and a live session (issue #782)", () => {
     });
     // Polled by the header once a session exists; answered here so the page
     // under test never waits on a backend it does not need.
-    await page.route("**/api/ranking/notificaciones/mias", (route: Route): Promise<void> =>
+    await page.route("**/api/ranking/notificaciones/mias*", (route: Route): Promise<void> =>
       route.fulfill({
         status: 200,
         contentType: "application/json",
