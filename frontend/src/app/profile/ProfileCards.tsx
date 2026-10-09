@@ -169,7 +169,7 @@ export function IdentityCard({
     <section
       data-testid="profile-hero"
       aria-label={`Identidad de la cuenta de ${name}`}
-      className="relative min-w-0 overflow-hidden rounded-2xl border border-line-2 bg-paper px-5 shadow-elevated"
+      className="relative min-w-0 overflow-hidden rounded-card border-2 border-edge bg-paper px-5 shadow-sticker"
     >
       {/* The asymmetric institutional-red field: the card's one colour gesture. */}
       <span
@@ -305,19 +305,19 @@ const TICKET_TONE: Record<
   { card: string; word: string; on: string; off: string }
 > = {
   ok: {
-    card: "border-t-state-ok bg-state-ok-bg/55",
+    card: "bg-paper",
     word: "text-state-ok",
     on: "bg-state-ok",
     off: "bg-state-ok/25",
   },
   warn: {
-    card: "border-t-state-warn bg-state-warn-bg/55",
+    card: "bg-paper",
     word: "text-state-warn",
     on: "bg-state-warn",
     off: "bg-state-warn/25",
   },
   bad: {
-    card: "border-t-state-bad bg-state-bad-bg/55",
+    card: "bg-paper",
     word: "text-state-bad",
     on: "bg-state-bad",
     off: "bg-state-bad/25",
@@ -360,9 +360,10 @@ export function MembershipTicket({
   return (
     <section
       data-testid="profile-membership"
+      data-tone={tone}
       aria-label="Tu membresía"
       className={cn(
-        "grid items-center gap-x-5 gap-y-3 rounded-card border border-line border-t-[3px] px-5 py-4 sm:grid-cols-[auto_minmax(0,1fr)]",
+        "grid items-center gap-x-5 gap-y-3 rounded-card border-2 border-edge shadow-sticker px-5 py-4 sm:grid-cols-[auto_minmax(0,1fr)]",
         skin.card,
       )}
     >

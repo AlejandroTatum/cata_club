@@ -900,7 +900,7 @@ describe("MedicalRecordEditor page mode — two cards beside the emergency card"
     expect(salud.contains(screen.getByLabelText("Alergias"))).toBe(true);
     expect(salud.contains(screen.getByLabelText(/enfermedades/i))).toBe(true);
     expect(contacto.contains(screen.getByLabelText("Contacto de emergencia"))).toBe(true);
-    expect(salud.className).toMatch(/border-t-cuenta-representante/);
+    expect(salud.className).toMatch(/shadow-sticker/);
   });
 
   it("splits the page 7/5 so the form and the emergency card are even columns", async () => {

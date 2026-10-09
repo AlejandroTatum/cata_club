@@ -131,10 +131,10 @@ function CampoLectura({
   );
 }
 
-/** One group of the page-mode form: a card with the health blue on its top edge. */
+/** One group of the page-mode form: a sticker card, like every other card in the panel. */
 function RecordSection({ title, children }: { title: string; children: ReactNode }): React.ReactElement {
   return (
-    <section className="rounded-2xl border border-line border-t-[3px] border-t-cuenta-representante bg-paper">
+    <section className="rounded-card border-2 border-edge bg-paper shadow-sticker">
       <h4 className="border-b border-line px-4 py-3 text-sm font-bold text-ink">{title}</h4>
       <div className="p-4">{children}</div>
     </section>
