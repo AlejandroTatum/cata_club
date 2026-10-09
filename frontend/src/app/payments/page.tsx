@@ -147,6 +147,7 @@ import {
   FilterPill,
   InfoPanel,
   LoadingState,
+  PAGE_RAIL_XL,
   ResponsiveList,
   SearchInput,
   STAT_GRID,
@@ -575,12 +576,6 @@ function CashConfirmationPanel({
 
 /** Marks a queue row's action button so focus can find it again on the way back. */
 /** Phone stat tiles: label + figure only, so the first pending card clears the fold. */
-/**
- * `PAGE_RAIL` splits at `lg`, where the sidebar leaves a ~750px canvas: a 340px
- * rail then hands the six-column queue ~390px and the name column ends up a
- * sliver. The queue keeps its rail for `xl` and above and stacks it below.
- */
-const QUEUE_RAIL = "grid gap-page xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start";
 const STAT_COMPACT = "max-lg:min-h-0 max-lg:gap-1 max-lg:px-3 max-lg:py-2.5";
 
 const REVIEWED_KEY = "revisado";
@@ -1309,7 +1304,7 @@ export default function PaymentsPage(): React.ReactElement {
           />
         </div>
 
-        <div className={QUEUE_RAIL}>
+        <div className={PAGE_RAIL_XL}>
           <div className="flex min-w-0 flex-col gap-page xl:min-h-[calc(100dvh-23rem)]">
         {/* This screen used to read the other way round — chips first, search
             on its own line underneath — which was the exact inverse of

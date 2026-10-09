@@ -46,7 +46,7 @@ export type { FilterPillProps } from "./FilterPill";
 export { default as IdentityCell, MEMBER_ROLE_LABELS } from "./IdentityCell";
 export type { IdentityCellProps, MemberRole } from "./IdentityCell";
 
-export { PAGE_RAIL } from "./layout";
+export { PAGE_RAIL, PAGE_RAIL_XL } from "./layout";
 
 export { default as InfoPanel } from "./InfoPanel";
 export type { InfoPanelProps } from "./InfoPanel";
