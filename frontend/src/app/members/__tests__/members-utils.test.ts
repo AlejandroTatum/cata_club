@@ -825,7 +825,7 @@ describe("isRepresentativePersonaRow", () => {
     expect(isRepresentativePersonaRow(account)).toBe(false);
   });
 
-  it.each(["ADMINISTRADOR", "ENTRENADOR"])(
+  it.each(["ADMINISTRADOR", "ENTRENADOR"] as const)(
     "is false for a %s row without a membership: staff can be given their own",
     (rol) => {
       const account: MemberAccount = {

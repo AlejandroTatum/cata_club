@@ -4290,7 +4290,7 @@ describe("MembersPage — representative-only row actions (issue #1199, #1211)",
     expect(getRowAction(row, /^editar/i)).toBeInTheDocument();
   });
 
-  it.each(["ADMINISTRADOR", "ENTRENADOR"])(
+  it.each(["ADMINISTRADOR", "ENTRENADOR"] as const)(
     'offers "Ficha médica" and "Pagos" on a %s row without a membership, so the admin can give staff one',
     async (rol) => {
       mockFetchMembers.mockResolvedValue({
