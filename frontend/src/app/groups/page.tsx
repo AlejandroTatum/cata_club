@@ -773,8 +773,10 @@ export default function GroupsPage(): React.ReactElement {
    * the figure the club plans around.
    */
   const summary = useMemo(() => {
+    // No categories (once loaded) means nobody can be enrolled yet: the figures
+    // are real zeros, not a roster that is still being fetched.
     const rostersLoaded =
-      horarios.length > 0 && horarios.every((horario) => personasPorHorario[horario.id] !== undefined);
+      !loading && horarios.every((horario) => personasPorHorario[horario.id] !== undefined);
     if (!rostersLoaded) return { inscriptos: null, sinGrupo: null, sinGrupoAlumnos: [] as StudentRef[], activos: 0 };
     const assigned = new Set<number>();
     for (const horario of horarios) {
@@ -787,7 +789,7 @@ export default function GroupsPage(): React.ReactElement {
       sinGrupoAlumnos,
       activos: allStudents.filter((student) => student.activo).length,
     };
-  }, [horarios, personasPorHorario, allStudents]);
+  }, [horarios, personasPorHorario, allStudents, loading]);
 
   /**
    * Catalog categorías with no schedules yet, shown as their own cards.
@@ -1798,6 +1800,8 @@ export default function GroupsPage(): React.ReactElement {
           <div id="sin-grupo" className="scroll-mt-24" />
           {summary.sinGrupo === null ? (
             <p>Calculando jugadores sin horario…</p>
+          ) : summary.activos === 0 ? (
+            <p>Aún no hay jugadores activos.</p>
           ) : sinGrupoAlumnos.length === 0 ? (
             <p>Todos los jugadores activos tienen un horario asignado.</p>
           ) : (
