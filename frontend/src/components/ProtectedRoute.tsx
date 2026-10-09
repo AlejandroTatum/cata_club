@@ -36,6 +36,12 @@ interface ProtectedRouteProps {
    * to their own home, and the backend still decides what data they get.
    */
   allowStaffPlayer?: boolean;
+  /**
+   * Also admit an admin/trainer whose own membership is still INACTIVA
+   * (`session.staffAwaitsFirstPayment`). Set ONLY on `/student/payments`, where
+   * they submit their first payment; the other player routes do not opt in.
+   */
+  allowStaffFirstPayment?: boolean;
 }
 
 export default function ProtectedRoute({
@@ -43,6 +49,7 @@ export default function ProtectedRoute({
   allowedRoles,
   redirectTo = "/login",
   allowStaffPlayer = false,
+  allowStaffFirstPayment = false,
 }: ProtectedRouteProps) {
   const { isAuthenticated, session, isLoading, hydrationOutage, retryHydration, sessionExpired } = useAuth();
   const router = useRouter();
@@ -56,7 +63,8 @@ export default function ProtectedRoute({
   const admitted = (): boolean =>
     session !== null &&
     (canAccess(session.user.role, allowedRoles) ||
-      (allowStaffPlayer && session.isStaffPlayer === true));
+      (allowStaffPlayer && session.isStaffPlayer === true) ||
+      (allowStaffFirstPayment && session.staffAwaitsFirstPayment === true));
 
   useEffect(() => {
     if (isLoading) return;
@@ -82,7 +90,7 @@ export default function ProtectedRoute({
       router.replace(getDefaultRoute(session.user.role));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- allowedRolesKey is the stable, content-derived substitute for allowedRoles (see comment above).
-  }, [isLoading, hydrationOutage, isAuthenticated, sessionExpired, session, allowedRolesKey, allowStaffPlayer, redirectTo, router]);
+  }, [isLoading, hydrationOutage, isAuthenticated, sessionExpired, session, allowedRolesKey, allowStaffPlayer, allowStaffFirstPayment, redirectTo, router]);
 
   // --- Loading state ---
   if (isLoading) {

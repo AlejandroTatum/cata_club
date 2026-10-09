@@ -225,6 +225,57 @@ describe("ProtectedRoute", () => {
     },
   );
 
+  it("admits staff awaiting their first payment only to the route that opts in to it", () => {
+    mockUseAuth.mockReturnValue(
+      createAuthenticatedAuth("admin", "Test User", {
+        session: createMockSession({ staffAwaitsFirstPayment: true }),
+      }),
+    );
+
+    renderProtected(
+      <ProtectedRoute allowedRoles={["representante", "estudiante"]} allowStaffPlayer allowStaffFirstPayment>
+        {CONTENT}
+      </ProtectedRoute>,
+    );
+
+    expect(screen.getByText("Protected content")).toBeInTheDocument();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it("keeps staff awaiting their first payment out of the other player routes", () => {
+    mockUseAuth.mockReturnValue(
+      createAuthenticatedAuth("trainer", "Test User", {
+        session: createMockSession({
+          user: { id: "t1", name: "T", email: "t@t.com", role: "trainer", representanteId: null },
+          roles: ["ENTRENADOR"],
+          staffAwaitsFirstPayment: true,
+        }),
+      }),
+    );
+
+    renderProtected(
+      <ProtectedRoute allowedRoles={["representante", "estudiante"]} allowStaffPlayer>
+        {CONTENT}
+      </ProtectedRoute>,
+    );
+
+    expect(mockReplace).toHaveBeenCalledWith("/trainer");
+    expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
+  });
+
+  it("redirects staff with no membership away from the first-payment route", () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin"));
+
+    renderProtected(
+      <ProtectedRoute allowedRoles={["representante", "estudiante"]} allowStaffPlayer allowStaffFirstPayment>
+        {CONTENT}
+      </ProtectedRoute>,
+    );
+
+    expect(mockReplace).toHaveBeenCalledWith("/dashboard");
+    expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
+  });
+
   it("keeps a staff player out of a route that does not opt in", () => {
     mockUseAuth.mockReturnValue(
       createAuthenticatedAuth("trainer", "Test User", {

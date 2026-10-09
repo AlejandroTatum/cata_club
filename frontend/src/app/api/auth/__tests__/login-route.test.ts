@@ -106,6 +106,7 @@ describe("POST /api/auth/login", () => {
       activacionCompleta: true,
       primerPago: null,
       isStaffPlayer: false,
+      staffAwaitsFirstPayment: false,
       loggedInAt: expect.any(String),
     });
   });

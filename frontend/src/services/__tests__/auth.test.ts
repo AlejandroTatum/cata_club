@@ -352,6 +352,12 @@ describe("isValidAuthSession", () => {
     expect(isValidAuthSession({ ...validSession, isStaffPlayer: "yes" })).toBe(false);
   });
 
+  it("accepts staffAwaitsFirstPayment as a boolean and rejects any other type", () => {
+    expect(isValidAuthSession({ ...validSession, staffAwaitsFirstPayment: true })).toBe(true);
+    expect(isValidAuthSession({ ...validSession, staffAwaitsFirstPayment: false })).toBe(true);
+    expect(isValidAuthSession({ ...validSession, staffAwaitsFirstPayment: "yes" })).toBe(false);
+  });
+
   it("rejects null", () => {
     expect(isValidAuthSession(null)).toBe(false);
   });
