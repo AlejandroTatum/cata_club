@@ -155,6 +155,33 @@ export const LIGHT_COLORS = {
    * changing with it.
    */
   edge: "#131316",
+  /**
+   * The hard offset shadow of the sticker language, split from `edge` so the
+   * two can part ways in dark: the outline softens to a quiet line while the
+   * shadow turns pure black. In light all three are the same coal.
+   */
+  "edge-shadow": "#131316",
+  /**
+   * The bright rim reserved for the highlighted pieces (the primary action,
+   * the title highlight, the KPI slabs). Coal in light, ball yellow in dark.
+   */
+  "edge-hot": "#131316",
+  /** The focus outline. Coal in light, near-white in dark. */
+  "edge-focus": "#131316",
+  /** The sidebar rail. The coal brand constant in light; the deepest rung in dark. */
+  rail: "#131316",
+  /** Menus, dropdowns and dialogs: white in light, a step above `paper` in dark. */
+  popover: "#FFFFFF",
+  /** The empty part of a ring or progress bar. The hairline in light. */
+  track: "#DEDEE6",
+  /** Data ink drawn over a track or a chart: coal in light, ball in dark. */
+  mark: "#131316",
+  /** The KPI slabs' fills: brand constants in light, a step deeper in dark. */
+  kpi: {
+    red: "#D92128",
+    ball: "#FFD600",
+    coal: "#131316",
+  },
   /** Card/control surface. */
   paper: "#FFFFFF",
   /**
@@ -652,9 +679,9 @@ const config: Config = {
          * buttons, `lg` for the hover lift — plus the red and ball variants
          * the logo tile and the active nav pill use.
          */
-        "sticker-sm": "2px 2px 0 0 rgb(var(--c-edge))",
-        sticker: "3px 3px 0 0 rgb(var(--c-edge))",
-        "sticker-lg": "5px 5px 0 0 rgb(var(--c-edge))",
+        "sticker-sm": "2px 2px 0 0 rgb(var(--c-edge-shadow))",
+        sticker: "3px 3px 0 0 rgb(var(--c-edge-shadow))",
+        "sticker-lg": "5px 5px 0 0 rgb(var(--c-edge-shadow))",
         "sticker-red": "3px 3px 0 0 #D92128",
         "sticker-ball": "2px 2px 0 0 #FFD600",
         soft: "0 1px 2px rgba(19, 19, 22, 0.04), 0 2px 8px -2px rgba(19, 19, 22, 0.05)",

@@ -24,6 +24,16 @@ html[data-theme="dark"] .landing-page {
   --c-line: 222 222 230;
   --c-line-2: 207 207 218;
   --c-edge: 19 19 22;
+  --c-edge-shadow: 19 19 22;
+  --c-edge-hot: 19 19 22;
+  --c-edge-focus: 19 19 22;
+  --c-rail: 19 19 22;
+  --c-popover: 255 255 255;
+  --c-track: 222 222 230;
+  --c-mark: 19 19 22;
+  --c-kpi-red: 217 33 40;
+  --c-kpi-ball: 255 214 0;
+  --c-kpi-coal: 19 19 22;
   --c-ink: 23 24 28;
   --c-ink-2: 74 74 85;
   --c-ink-3: 116 116 127;
@@ -53,26 +63,36 @@ html[data-theme="dark"] .landing-page {
 }
 
 html[data-theme="dark"] {
-  --c-canvas: 11 11 14;
-  --c-paper: 28 28 34;
-  --c-sunken: 38 38 45;
-  --c-line: 45 45 53;
-  --c-line-2: 61 61 71;
-  --c-edge: 212 212 220;
-  --c-ink: 236 236 240;
-  --c-ink-2: 191 191 202;
-  --c-ink-3: 154 154 167;
-  --c-ink-3-strong: 168 168 181;
+  --c-rail: 12 12 14;
+  --c-canvas: 21 21 25;
+  --c-paper: 33 33 40;
+  --c-sunken: 43 43 51;
+  --c-popover: 49 49 59;
+  --c-line: 47 47 56;
+  --c-line-2: 71 71 82;
+  --c-edge: 47 47 54;
+  --c-edge-shadow: 0 0 0;
+  --c-edge-hot: 255 214 0;
+  --c-edge-focus: 242 242 245;
+  --c-track: 63 63 75;
+  --c-mark: 255 214 0;
+  --c-kpi-red: 168 22 29;
+  --c-kpi-ball: 217 176 0;
+  --c-kpi-coal: 12 12 14;
+  --c-ink: 237 237 241;
+  --c-ink-2: 207 207 216;
+  --c-ink-3: 176 176 189;
+  --c-ink-3-strong: 189 189 201;
   --c-ball-ink: 255 214 0;
   --c-cata-fuchsia-ink: 255 125 176;
-  --c-enroll-wash: 38 27 29;
-  --c-state-ok: 91 210 138;
+  --c-enroll-wash: 42 30 32;
+  --c-state-ok: 98 216 146;
   --c-state-ok-bg: 20 48 31;
-  --c-state-warn: 242 161 84;
+  --c-state-warn: 245 174 107;
   --c-state-warn-bg: 58 38 18;
-  --c-state-neutral: 168 168 181;
+  --c-state-neutral: 182 182 194;
   --c-state-neutral-bg: 42 42 49;
-  --c-state-bad: 255 122 128;
+  --c-state-bad: 255 144 150;
   --c-state-bad-bg: 63 27 30;
   --c-cuenta-representante: 143 176 255;
   --c-cuenta-representante-bg: 27 39 69;
@@ -80,11 +100,11 @@ html[data-theme="dark"] {
   --c-cuenta-menor-bg: 46 31 71;
   --c-cuenta-entrenador: 79 214 164;
   --c-cuenta-entrenador-bg: 18 58 46;
-  --c-cata-border: 45 45 53;
-  --c-cata-bg: 38 38 45;
-  --c-cata-surface: 28 28 34;
+  --c-cata-border: 47 47 56;
+  --c-cata-bg: 43 43 51;
+  --c-cata-surface: 33 33 40;
   --c-cata-text: 228 228 234;
-  --c-cata-state-ok: 91 210 138;
+  --c-cata-state-ok: 98 216 146;
   color-scheme: dark;
 }
 
@@ -330,6 +350,29 @@ html[data-theme="dark"] {
     border-color: #B45309;
     color: #FFFFFF;
   }
+
+  /* Dark: the same solid fills one step deeper, with a lighter rim, so a toast
+     still outranks the page without the full-saturation glare. White text on
+     each is >= 8:1. */
+  html[data-theme="dark"] .toast-error {
+    background-color: #5E1B21;
+    border-color: #C2454E;
+  }
+
+  html[data-theme="dark"] .toast-success {
+    background-color: #17452A;
+    border-color: #3C9A63;
+  }
+
+  html[data-theme="dark"] .toast-info {
+    background-color: #1E3A8A;
+    border-color: #5B7FE0;
+  }
+
+  html[data-theme="dark"] .toast-warning {
+    background-color: #6B3A07;
+    border-color: #D68A2A;
+  }
 }
 
 /* Subtle background texture — premium spa/Swiss aesthetic */
@@ -460,7 +503,7 @@ html[data-theme="dark"] {
     [contenteditable="true"],
     [tabindex]:not([tabindex="-1"])
   ):not([class*="focus-visible:shadow-"], .landing-page *):focus-visible {
-  outline: 2px solid rgb(var(--c-edge));
+  outline: 2px solid rgb(var(--c-edge-focus));
   outline-offset: 2px;
   box-shadow: 0 0 0 2px #FFD600;
 }

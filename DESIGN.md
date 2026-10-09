@@ -349,8 +349,9 @@ y todas llevan un desplazamiento vertical real: el juego anterior era un halo ca
 La profundidad de los contenedores ya no es difusa: es el lenguaje de la landing — **contorno de 2px
 y sombra dura desplazada, sin desenfoque**. Tres escalones (`sticker-sm` 2px, `sticker` 3px,
 `sticker-lg` 5px, este último solo al pasar el cursor) más las variantes roja (el logo) y pelota (la
-píldora activa del riel). El contorno y la sombra salen del token `edge`: caucho en claro, un gris
-claro en oscuro, de modo que el sticker se lee en los dos temas. El sticker va en **contenedores y
+píldora activa del riel). El contorno sale del token `edge` y la sombra de `edge-shadow`: caucho los dos
+en claro; en oscuro, un contorno tenue (`#2F2F36`) y una sombra negra pura, más oscura que la página, para
+que la profundidad se lea sin destello. Los bordes brillantes (`edge-hot`) se reservan para lo resaltado. El sticker va en **contenedores y
 resaltes**, nunca en cada fila: una tabla dentro de una tarjeta conserva sus divisores de hairline.
 `soft`, `card`, `elevated` y `hero` quedan para lo que flota (modales, popovers).
 
@@ -469,8 +470,21 @@ elección se guarda en `localStorage` y, sin elección, manda `prefers-color-sch
 nonce en el `<head>` la aplica antes de pintar, así que no hay destello (la CSP estricta no cambia).
 Los tokens semánticos (superficies, tinta, líneas, estados, `edge`) son variables CSS de canales RGB
 declaradas en `:root` y redefinidas bajo `html[data-theme="dark"]`, así `bg-paper/50` sigue
-funcionando. Lo oscuro es **caucho subido de luminosidad**, no una inversión de grises: el contorno
-sticker pasa a un gris claro y los pares de contraste se miden con los mismos umbrales que en claro.
+funcionando. Lo oscuro es **caucho subido de luminosidad**, no una inversión de grises, y se rige por
+cuatro reglas:
+
+- **Escalera de elevación:** riel `#0C0C0E` < lienzo `#151519` < papel (tarjetas) `#212128` < hundido
+  `#2B2B33` < popover (menús, diálogos) `#31313B`. El riel lateral se lee como una pieza aparte.
+- **Sticker sereno:** contorno `#2F2F36`, sombra dura `#000000`. Rojo, pelota y borde brillante
+  (`edge-hot`, la pelota) solo en lo resaltado: píldora activa, acción primaria, resalte del título,
+  losas KPI y filtros activos.
+- **Texto:** tinta `#EDEDF1` (nunca `#FFF`); secundaria y apagada a 7:1 o más sobre riel, lienzo y
+  papel, y nunca por debajo de 4.5:1 en popover y hundido.
+- **Losas KPI:** conservan la identidad de marca pero un paso más hondas (rojo `#A8161D`, pelota
+  `#D9B000`, caucho `#0C0C0E`), con borde de pelota. Blanco sobre rojo 7.5:1, caucho sobre pelota 9:1.
+
+Las pistas de gráficos (`track` `#3F3F4B`) y la tinta de datos (`mark`, la pelota) hacen visibles anillos,
+barras y sparklines. La acción primaria es la misma en ambos temas: relleno pelota con texto caucho.
 Las constantes de marca (caucho, rojo, pelota) no cambian. **La landing nunca es oscura.**
 
 ## Do's and Don'ts
