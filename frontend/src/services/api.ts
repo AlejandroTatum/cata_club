@@ -3404,10 +3404,18 @@ export async function subirFotoPersona(personaId: string, archivo: File): Promis
 // removed along with those features).
 // ---------------------------------------------------------------------------
 
-/** List the logged-in persona's own in-app notifications — `GET /ranking/notificaciones/mias` (paginated, issue #281). */
-export async function fetchNotificaciones(): Promise<PaginatedResponse<Notificacion>> {
+/** A page of the notification feed plus the unread count of the WHOLE feed (absent on older backends). */
+export type NotificacionesPage = PaginatedResponse<Notificacion> & { noLeidas?: number };
+
+/**
+ * List the logged-in persona's own in-app notifications — `GET
+ * /ranking/notificaciones/mias` (paginated, issue #281). Without `params` the
+ * backend's first page is returned; pass `skip`/`limit` to reach older ones.
+ */
+export async function fetchNotificaciones(params?: { skip: number; limit: number }): Promise<NotificacionesPage> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
-  return request<PaginatedResponse<Notificacion>>(apiEndpoint("/ranking/notificaciones/mias"), {
+  const qs = params ? `?skip=${params.skip}&limit=${params.limit}` : "";
+  return request<NotificacionesPage>(apiEndpoint(`/ranking/notificaciones/mias${qs}`), {
     headers: mockHeaders,
   });
 }

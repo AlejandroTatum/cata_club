@@ -712,6 +712,14 @@ describe("fetchNotificaciones", () => {
     expect(global.fetch).toHaveBeenCalledWith("/api/ranking/notificaciones/mias", expect.anything());
     expect(result).toEqual(body);
   });
+
+  it("forwards skip and limit so older notifications are reachable", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(okResponse({ items: [], total: 45, skip: 20, limit: 20 }));
+
+    await fetchNotificaciones({ skip: 20, limit: 20 });
+
+    expect(global.fetch).toHaveBeenCalledWith("/api/ranking/notificaciones/mias?skip=20&limit=20", expect.anything());
+  });
 });
 
 describe("marcarNotificacionLeida", () => {
