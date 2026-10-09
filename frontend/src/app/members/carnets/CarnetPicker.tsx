@@ -153,8 +153,8 @@ export default function CarnetPicker(): React.ReactElement {
           "lg:sticky lg:top-4 lg:flex-col lg:items-stretch lg:gap-4 lg:rounded-[14px] lg:border-2 lg:border-edge lg:p-5 lg:shadow-sticker"
         }
       >
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <p role="status" className="text-sm text-ink-2">
+        <div className="flex min-w-0 flex-col gap-0.5 lg:gap-1">
+          <p role="status" className="text-xs text-ink-2 lg:text-sm">
             <span className="font-display text-xl font-extrabold tabular-nums text-ink lg:text-3xl">{count}</span>{" "}
             de {total} seleccionados
           </p>
@@ -164,7 +164,7 @@ export default function CarnetPicker(): React.ReactElement {
             </p>
           ) : null}
           <p className="text-xs text-ink-2">
-            {atLimit ? `Llegaste al máximo de ${MAX_CARNETS} por impresión.` : `Máximo ${MAX_CARNETS} por impresión.`}
+            {atLimit ? `Llegaste al máximo de ${MAX_CARNETS}.` : `Máximo ${MAX_CARNETS} por impresión.`}
           </p>
         </div>
         <Button
