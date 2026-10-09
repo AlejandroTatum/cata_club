@@ -215,3 +215,27 @@ describe("LegalReacceptGate", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("LegalReacceptGate status signal", () => {
+  it("publishes pending, then clear once the account has accepted", async () => {
+    const { getLegalGateStatus } = await import("@/components/legal/legal-gate-status");
+    fetchSpy
+      .mockResolvedValueOnce(json({ pendiente: true, version: "2.3" }))
+      .mockResolvedValueOnce(json({ pendiente: false, version: "2.3" }));
+    render(<LegalReacceptGate />);
+    expect(getLegalGateStatus()).toBe("unknown");
+    await screen.findByRole("dialog");
+    expect(getLegalGateStatus()).toBe("pending");
+
+    fireEvent.click(screen.getByRole("button", { name: /acepto/i }));
+    await waitFor(() => expect(getLegalGateStatus()).toBe("clear"));
+  });
+
+  it("stays unknown while the status check keeps failing", async () => {
+    const { getLegalGateStatus } = await import("@/components/legal/legal-gate-status");
+    fetchSpy.mockResolvedValue(json({}, 503));
+    render(<LegalReacceptGate />);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    expect(getLegalGateStatus()).toBe("unknown");
+  });
+});

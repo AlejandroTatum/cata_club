@@ -30,6 +30,7 @@ import { useModalFocusTrap } from "@/lib/focus-trap";
 import { LEGAL_REVIEW_DOCUMENTS, LegalDocumentProse } from "@/components/legal/LegalReviewDialog";
 import { watchForReacceptanceBlock } from "@/components/legal/reacceptance-signal";
 import { reloadPage } from "@/components/legal/reload-page";
+import { publishLegalGateStatus } from "@/components/legal/legal-gate-status";
 
 const STATUS_URL = "/api/auth/consentimiento-legal";
 const ACCEPT_URL = "/api/auth/consentimiento-legal/aceptar";
@@ -55,12 +56,16 @@ export default function LegalReacceptGate(): ReactElement | null {
   const { isAuthenticated, session, logout } = useAuth();
   const userId = session?.user.id ?? null;
   const [pending, setPending] = useState(false);
+  // Whether the status check has answered for this account. Published below so
+  // the what's-new dialog can wait for a definite "nothing pending".
+  const [checked, setChecked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [failed, setFailed] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const acceptRef = useRef<HTMLButtonElement>(null);
 
   useEffect((): undefined | (() => void) => {
+    setChecked(false);
     if (!isAuthenticated) {
       setPending(false);
       return undefined;
@@ -72,6 +77,7 @@ export default function LegalReacceptGate(): ReactElement | null {
         if (cancelled) return;
         if (value !== null) {
           setPending(value);
+          setChecked(true);
           return;
         }
         timer = setTimeout(() => check(attempt + 1), Math.min(RETRY_BASE_MS * 2 ** attempt, RETRY_MAX_MS));
@@ -89,6 +95,11 @@ export default function LegalReacceptGate(): ReactElement | null {
       stopWatching();
     };
   }, [isAuthenticated, userId]);
+
+  useEffect((): (() => void) => {
+    publishLegalGateStatus(!isAuthenticated ? "unknown" : pending ? "pending" : checked ? "clear" : "unknown");
+    return (): void => publishLegalGateStatus("unknown");
+  }, [isAuthenticated, pending, checked]);
 
   useModalFocusTrap({ open: pending, onClose: () => undefined, panelRef, initialFocusRef: acceptRef });
 
