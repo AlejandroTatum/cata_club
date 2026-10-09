@@ -12,11 +12,12 @@
  * sets before first paint. The values mirror `LIGHT_COLORS` and `DARK_COLORS`
  * (`lib/theme-tokens.ts`); `theme-tokens-parity.test.ts` fails if they drift.
  *
- * The landing is never dark: `.landing-page` (and the body around it)
- * re-declare the light values, so its own `--landing-*` palette is untouched.
+ * The landing paints itself from its own `--landing-*` variables (with a dark
+ * set in `landing/landing.css`), but `.landing-page` re-declares the light app
+ * values so nothing in it that still reads an app token can turn half dark.
+ * The body around it follows the theme, so overscroll matches the page.
  */
 :root,
-html[data-theme="dark"] body:has(.landing-page),
 html[data-theme="dark"] .landing-page {
   --c-canvas: 232 232 238;
   --c-paper: 255 255 255;

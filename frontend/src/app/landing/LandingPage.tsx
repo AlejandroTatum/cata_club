@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import ThemeToggle from "@/components/theme/ThemeToggle";
 import {
   ArrowRight,
   AtSign,
@@ -191,9 +192,12 @@ function Navbar(): React.ReactElement {
       </div>
       {/* Deliberately quiet: existing members already know where to log in, so
           this must not compete with the hero's registration CTA. */}
-      <Link className="landing-button-quiet landing-nav-cta" href="/login">
-        ENTRAR <ArrowRight aria-hidden="true" />
-      </Link>
+      <div className="landing-nav-actions">
+        <ThemeToggle variant="landing" />
+        <Link className="landing-button-quiet landing-nav-cta" href="/login">
+          ENTRAR <ArrowRight aria-hidden="true" />
+        </Link>
+      </div>
     </nav>
   );
 }

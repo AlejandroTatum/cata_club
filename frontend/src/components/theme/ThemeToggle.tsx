@@ -6,9 +6,11 @@
  * the same way every time. The icon shows what the page is NOT yet (a moon in
  * light, a sun in dark) — the thing a press will give you.
  *
- * Two variants share one behaviour: `bar` is the 40px control that sits next to
- * the notifications bell in the top bar, `menu` is the row inside the account
- * menu.
+ * Three variants share one behaviour: `bar` is the 40px control that sits next to
+ * the notifications bell in the top bar (and on the public auth screens),
+ * `menu` is the row inside the account menu, and `landing` is the same button
+ * wearing the landing's sticker skin (`.landing-theme-toggle`, landing.css),
+ * whose colours come from the `--landing-*` variables.
  */
 
 "use client";
@@ -18,7 +20,7 @@ import { ICON } from "@/lib/icon-size";
 import { useTheme } from "./useTheme";
 
 interface ThemeToggleProps {
-  variant: "bar" | "menu";
+  variant: "bar" | "menu" | "landing";
 }
 
 const BAR_CLASSES =
@@ -26,6 +28,8 @@ const BAR_CLASSES =
 
 const MENU_CLASSES =
   "flex h-ctl w-full items-center gap-2.5 rounded-ctl px-3 text-sm font-semibold text-white/80 transition-colors hover:bg-white/[0.08] hover:text-white";
+
+const VARIANT_CLASSES = { bar: BAR_CLASSES, menu: MENU_CLASSES, landing: "landing-theme-toggle" } as const;
 
 export default function ThemeToggle({ variant }: ThemeToggleProps): React.ReactElement {
   const { theme, toggle } = useTheme();
@@ -39,7 +43,7 @@ export default function ThemeToggle({ variant }: ThemeToggleProps): React.ReactE
       aria-pressed={dark}
       aria-label="Modo oscuro"
       title={dark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
-      className={variant === "bar" ? BAR_CLASSES : MENU_CLASSES}
+      className={VARIANT_CLASSES[variant]}
     >
       <Icon size={ICON.base} strokeWidth={2} aria-hidden="true" />
       {variant === "menu" ? <span>{dark ? "Modo claro" : "Modo oscuro"}</span> : null}
