@@ -162,6 +162,19 @@ describe("landing dark palette", (): void => {
   });
 });
 
+describe("landing dark, beyond the palette", (): void => {
+  it("dims the bright map tiles so the map does not glare on the dark page", (): void => {
+    expect(css).toMatch(/html\[data-theme="dark"\] \.landing-map \.leaflet-tile-pane \{ filter: brightness\(0\.[0-9]+\)/);
+  });
+
+  it("keeps the lockup, toggle and ENTRAR on one row on a phone by tightening, not by hiding the toggle", (): void => {
+    const phone = css.slice(css.indexOf("The toggle takes ~50px"), css.indexOf("/* ── Launch curtain"));
+    expect(phone).toContain(".landing-nav-cta { padding-inline: 12px; }");
+    expect(phone).toContain(".landing-logo small { letter-spacing: 2px; }");
+    expect(phone).not.toMatch(/landing-theme-toggle[^}]*display: none/);
+  });
+});
+
 describe("landing sticker layer reads the themed tokens", (): void => {
   it("draws edges and hard shadows from --landing-line / --landing-drop, never from the fixed coal", (): void => {
     const sticker = css.slice(css.indexOf("Plan prices (LAN-03)"));

@@ -1189,6 +1189,9 @@ html[data-theme="dark"] .landing-logo img { background: var(--landing-surface); 
 html[data-theme="dark"] .landing-values { background: color-mix(in srgb, var(--landing-highlight) 12%, var(--landing-bg-base)); }
 html[data-theme="dark"] .landing-gallery::before, html[data-theme="dark"] .landing-schedule::before { background-image: radial-gradient(circle, color-mix(in srgb, var(--landing-surface) 7%, transparent) 1.4px, transparent 1.4px); }
 
+/* The map is the one bright, unthemed block on the page: dim its tiles a step so it sits in the dark ladder instead of glaring (the pins and labels stay legible). */
+html[data-theme="dark"] .landing-map .leaflet-tile-pane { filter: brightness(0.72) contrast(1.05) saturate(0.8); }
+
 /* Theme toggle: the navbar's second sticker, same 44px target as the nav links. */
 .landing-nav-actions { display: flex; align-items: center; gap: 12px; }
 /* @touch-target 44px, the floor every landing control keeps. */
@@ -1196,6 +1199,18 @@ html[data-theme="dark"] .landing-gallery::before, html[data-theme="dark"] .landi
 .landing-theme-toggle:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--landing-drop-red); }
 .landing-theme-toggle:focus-visible { outline: 3px solid var(--landing-focus); outline-offset: 3px; }
 .landing-theme-toggle svg { width: 20px; height: 20px; }
+/* The toggle takes ~50px from the navbar's first row, where the lockup and ENTRAR
+   already filled a 390px phone: tighten both so the row stays one row (the link
+   strip is the second). At 380px and below the arrow gives way as well. */
+@media (max-width: 480px) {
+  .landing-nav-actions { gap: 8px; }
+  .landing-nav-cta { padding-inline: 12px; }
+  .landing-logo { gap: 10px; font-size: 15px; }
+  .landing-logo small { letter-spacing: 2px; }
+}
+@media (max-width: 380px) {
+  .landing-nav-cta svg { display: none; }
+}
 
 /* ── Launch curtain (home only, removed after the launch instant) ───────── */
 html.launch-locked, html.launch-locked body { overflow: hidden; }
