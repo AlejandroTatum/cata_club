@@ -6,6 +6,10 @@
  * side by side: the count on the left, a ring / a few bars / a split on the
  * right, and one caption line that can be a link into the module.
  *
+ * It is a solid brand block (see `STAT_BLOCK`): red, ball or coal with the
+ * landing's sticker frame, the figure big, a vertical divider and the
+ * letter-spaced label beside it. A neutral tile is the quiet white sticker.
+ *
  * The tile is NOT one big link: its picture holds focusable parts (columns,
  * segments) and a link cannot contain those. The way into the module is the
  * caption link instead.
@@ -15,13 +19,20 @@ import type { ReactElement, ReactNode } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { STAT_TONE, STATUS_INK, cn, type StatCardToneProps } from "@/components/ui";
+import {
+  STAT_BLOCK,
+  STAT_BLOCK_FOR_TONE,
+  STAT_BLOCK_FRAME,
+  cn,
+  type StatCardToneProps,
+} from "@/components/ui";
 
 /**
  * The colour rule is the one `StatCard` states: the tone is the meaning of
- * the datum (never the viewer's role), the figure stays ink, and a toned tile
- * says its state in a word. `variant="hot"` is the single coal «needs action»
- * tile of a row — its picture sits on a paper inset, drawn for a light surface.
+ * the datum (never the viewer's role), and a toned tile says its state in a
+ * word. The tone picks the block's face; `variant="hot"` is the single coal
+ * «needs action» tile of a row. The picture is drawn for a light surface, so
+ * on any solid face it sits on a paper inset.
  */
 export type KpiTileProps = KpiTileBaseProps & StatCardToneProps & { variant?: "default" | "hot" };
 
@@ -58,54 +69,68 @@ export default function KpiTile({
   status,
 }: KpiTileProps): ReactElement {
   const hot = variant === "hot";
-  const toned = !hot && tone !== "neutral";
+  const skin = STAT_BLOCK[hot ? "coal" : STAT_BLOCK_FOR_TONE[tone]];
+  const solid = hot || tone !== "neutral";
 
   return (
     <div
       data-testid="kpi-tile"
       data-tone={hot ? "action" : tone}
       className={cn(
-        "flex min-h-stat flex-col justify-between gap-3 rounded-card border px-[18px] py-4",
-        hot ? "border-coal bg-coal" : toned ? cn("border-line border-t-[3px]", STAT_TONE[tone].accent) : "border-line bg-paper",
+        "flex min-h-stat flex-col justify-between gap-3 px-[18px] py-4",
+        STAT_BLOCK_FRAME,
+        skin.surface,
         className,
       )}
     >
-      <span className={cn("text-2xs font-bold uppercase", hot ? "text-white/60" : "text-ink-3")}>{label}</span>
-
-      <div className={cn("flex gap-3", visualPlacement === "side" ? "flex-wrap items-center justify-between" : "flex-col")}>
-        <span className={cn("font-display text-2xl leading-none tabular-nums tracking-flat", hot ? "text-white" : "text-ink")}>
+      {/* Figure | divider | label — the landing's stat tile. */}
+      <div className="flex items-stretch gap-3">
+        <span className="font-display text-display leading-none tabular-nums tracking-flat">
           {value}
-          {unit ? <small className={cn("ml-[3px] font-sans text-sm font-semibold", hot ? "text-white/60" : "text-ink-3")}>{unit}</small> : null}
+          {unit ? <small className={cn("ml-[3px] font-sans text-sm font-semibold", skin.muted)}>{unit}</small> : null}
         </span>
-        {/* The picture is drawn for a light surface, so on the coal tile it
-            keeps its own paper inset instead of being redrawn. */}
-        {visual ? (
-          <div className={cn(visualPlacement === "side" ? "w-28 flex-none" : "w-full", hot && "rounded-ctl bg-paper p-2")}>
-            {visual}
-          </div>
-        ) : null}
+        <span aria-hidden="true" className={cn("w-0.5 flex-none self-stretch rounded-full", skin.rule)} />
+        <span className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+          <span className={cn("text-2xs font-bold uppercase tracking-caps", skin.label)}>{label}</span>
+          {status ? (
+            <span data-testid="kpi-status" className="flex items-center gap-1.5 text-xs font-semibold">
+              <span
+                data-testid={hot ? "kpi-ball-dot" : undefined}
+                aria-hidden="true"
+                className={cn("h-1.5 w-1.5 flex-none rounded-full", hot ? "bg-ball" : "bg-current")}
+              />
+              {status}
+            </span>
+          ) : null}
+        </span>
       </div>
 
-      {status ? (
-        <span
-          data-testid="kpi-status"
-          className={cn("flex items-center gap-1.5 text-xs font-semibold", hot ? "text-white" : STATUS_INK[tone])}
+      {visual ? (
+        <div
+          className={cn(
+            "flex flex-wrap gap-3",
+            visualPlacement === "side" ? "items-center justify-between" : "flex-col",
+          )}
         >
-          <span
-            data-testid={hot ? "kpi-ball-dot" : undefined}
-            aria-hidden="true"
-            className={cn("h-1.5 w-1.5 flex-none rounded-full", hot ? "bg-ball" : "bg-current")}
-          />
-          {status}
-        </span>
+          {/* The picture is drawn for a light surface, so on a solid tile it
+              keeps its own paper inset instead of being redrawn. */}
+          <div
+            className={cn(
+              visualPlacement === "side" ? "w-28 flex-none" : "w-full",
+              solid && "rounded-ctl border-2 border-edge bg-paper p-2 text-ink",
+            )}
+          >
+            {visual}
+          </div>
+        </div>
       ) : null}
 
       {href ? (
         <Link
           href={href}
           className={cn(
-            "touch-target-row inline-flex items-center gap-1.5 text-xs font-semibold underline-offset-2 hover:underline",
-            hot ? "text-white/80 hover:text-white" : "text-ink-2 hover:text-ink",
+            "touch-target-row inline-flex items-center gap-1.5 text-xs font-bold underline-offset-2 hover:underline",
+            skin.label === "text-white/70" ? "text-white" : skin.label,
             captionClassName,
           )}
         >
@@ -113,7 +138,7 @@ export default function KpiTile({
           <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         </Link>
       ) : (
-        <span className={cn("text-xs", hot ? "text-white/60" : "text-ink-3")}>{caption}</span>
+        <span className={cn("text-xs", skin.muted)}>{caption}</span>
       )}
     </div>
   );

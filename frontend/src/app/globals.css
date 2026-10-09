@@ -87,27 +87,34 @@
    * (`shadow-elevated` on a modal, `shadow-none` on an inset panel) still
    * wins from the utilities layer.
    */
+  /* The sticker card: 2px coal outline and a hard offset shadow, no blur.
+     The compound selector keeps catching the five `rounded-card bg-paper`
+     containers that never adopted `.card`. */
   .rounded-card.bg-paper,
   .card,
   .card-hover {
-    @apply shadow-card;
+    @apply border-2 border-edge shadow-sticker;
   }
 
   .card {
     background-color: #FFFFFF;
-    border: 1px solid #DEDEE6;
     border-radius: 14px;
   }
 
   .card-hover {
     background-color: #FFFFFF;
-    border: 1px solid #DEDEE6;
     border-radius: 14px;
-    transition: all 0.2s ease;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
   }
 
   .card-hover:hover {
-    @apply shadow-elevated;
+    @apply -translate-x-px -translate-y-px shadow-sticker-lg;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card-hover:hover {
+      @apply translate-x-0 translate-y-0;
+    }
   }
 
   /* The focus ring these three controls used to declare (`focus:ring-2

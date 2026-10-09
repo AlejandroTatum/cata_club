@@ -908,8 +908,14 @@ describe("AppShell — the page header row", (): void => {
     expect(heading).toBeInTheDocument();
     expect(heading).not.toHaveClass("sr-only");
     expect(screen.getByText("Todo el club")).not.toHaveClass("sr-only");
-    // No eyebrow/kicker above the title — the h1 opens its block.
-    expect(heading.parentElement?.firstElementChild).toBe(heading);
+    // The red kicker above the title is decoration (it repeats the rail's own
+    // group), hidden from assistive technology: the h1 opens the block for
+    // anyone who is not looking at it.
+    const visibleChildren = Array.from(heading.parentElement?.children ?? []).filter(
+      (child) => child.getAttribute("aria-hidden") !== "true",
+    );
+    expect(visibleChildren[0]).toBe(heading);
+    expect(screen.getByTestId("page-kicker")).toHaveAttribute("aria-hidden", "true");
   });
 
   it("draws exactly one main landmark", (): void => {
@@ -1336,7 +1342,8 @@ describe("AppShell — the rail of a person with several roles", (): void => {
   it("names the area from the same roles the rail is drawn from", (): void => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Entrenador"));
     const { unmount } = render(<AppShell title="Mi día">{null}</AppShell>);
-    expect(screen.getByText("Panel de gestión")).toBeInTheDocument();
+    // The brand block's second line (the page kicker repeats it, aria-hidden).
+    expect(screen.getByText("Panel de gestión", { selector: "span.text-2xs" })).toBeInTheDocument();
     unmount();
 
     mockUseAuth.mockReturnValue(

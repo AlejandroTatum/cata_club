@@ -168,6 +168,15 @@ const config: Config = {
         // 4.43/4.46:1 and fails. Going darker therefore requires re-deriving
         // the state ramp first — do not nudge this value alone.
         // ---------------------------------------------------------------------
+        /**
+         * The sticker outline — the 2px line and the hard offset shadow every
+         * card, outlined button and stat block wears, lifted from the
+         * landing's own sticker language. It is coal on light surfaces; a
+         * dedicated token (not `coal`) so the outline can change colour
+         * without the coal rail, the coal block and the text-on-yellow ink
+         * changing with it.
+         */
+        edge: "#131316",
         /** Card/control surface. */
         paper: "#FFFFFF",
         /**
@@ -604,6 +613,18 @@ const config: Config = {
       // control cannot have two — so a ring and a resting shadow have to be
       // spelled as one value, which is exactly what `focus-duo-float` is.
       boxShadow: {
+        /**
+         * The sticker shadows: a hard offset, no blur, the landing's depth
+         * system (a button, a stat tile and the logo tile all carry one). Three
+         * steps — `sm` for compact controls, the default for cards and
+         * buttons, `lg` for the hover lift — plus the red and ball variants
+         * the logo tile and the active nav pill use.
+         */
+        "sticker-sm": "2px 2px 0 0 #131316",
+        sticker: "3px 3px 0 0 #131316",
+        "sticker-lg": "5px 5px 0 0 #131316",
+        "sticker-red": "3px 3px 0 0 #D92128",
+        "sticker-ball": "2px 2px 0 0 #FFD600",
         soft: "0 1px 2px rgba(19, 19, 22, 0.04), 0 2px 8px -2px rgba(19, 19, 22, 0.05)",
         card: "0 1px 2px rgba(19, 19, 22, 0.06), 0 4px 10px -3px rgba(19, 19, 22, 0.08)",
         elevated:

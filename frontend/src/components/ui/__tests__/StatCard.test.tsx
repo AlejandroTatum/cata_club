@@ -7,7 +7,13 @@
 
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import StatCard, { STAT_GRID, StatSpark, StatTrack } from "@/components/ui/StatCard";
+import StatCard, {
+  STAT_BLOCK,
+  STAT_BLOCK_FOR_TONE,
+  STAT_GRID,
+  StatSpark,
+  StatTrack,
+} from "@/components/ui/StatCard";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { committedMinHeight, committedRadius } from "./ui-test-utils";
@@ -451,5 +457,22 @@ describe("StatCard — tone is the meaning of the datum, said in a word", () => 
     // @ts-expect-error — «ok» without `status`
     const bad = <StatCard label="Miembros" value={1} tone="ok" icon={<svg />} />;
     expect(bad).toBeTruthy();
+  });
+});
+
+describe("StatCard — the sticker frame and the brand blocks", () => {
+  it("wears the 2px outline and the hard offset shadow", () => {
+    render(<StatCard label="Miembros" value={86} />);
+    const tile = screen.getByText("Miembros").parentElement as HTMLElement;
+    expect(tile).toHaveClass("border-2", "border-edge", "shadow-sticker");
+  });
+
+  it("gives every tone a block face, with ink chosen for contrast", () => {
+    for (const block of Object.values(STAT_BLOCK_FOR_TONE)) {
+      expect(STAT_BLOCK[block].surface).toBeTruthy();
+    }
+    expect(STAT_BLOCK.ball.surface).toContain("text-coal");
+    expect(STAT_BLOCK.red.surface).toContain("text-white");
+    expect(STAT_BLOCK.coal.surface).toContain("text-white");
   });
 });

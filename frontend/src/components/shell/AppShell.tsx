@@ -69,6 +69,14 @@ export interface AppShellProps {
   /** Optional supporting line below the title. */
   subtitle?: string;
   /**
+   * The red section marker above the title. Defaults to the rail's own group
+   * for the current page ("Operación", "Catálogo y tarifas"…), or the area
+   * label for a one-group role; pass `null` to draw none.
+   */
+  kicker?: string | null;
+  /** The ball block behind the title (the landing's key-word highlight). On by default. */
+  highlightTitle?: boolean;
+  /**
    * The screen's PRIMARY action, and the one place it is allowed to live.
    *
    * ## The rule
@@ -363,21 +371,19 @@ const NAV_ITEM_CLASSES =
   "relative flex h-ctl items-center gap-2.5 rounded-ctl px-3 text-sm font-semibold transition-colors";
 const NAV_ITEM_IDLE_CLASSES = "text-white/[0.62] hover:bg-white/[0.07] hover:text-white";
 /**
- * `.nav-i.on` — coal highlight, never a red fill: red is reserved for CTA and
- * destructive.
- *
- * `_sistema.css:140-145` separates the active row from an idle one on five
- * channels: the `rgba(255,255,255,.08)` fill, full-white text against the
- * idle 62%, the 3px red bar at the left edge, the `--ball` dot at the right,
- * and 600 against 500. The fifth channel closed when `medium` retired — both
- * rows are 600 now — so the weight is no longer declared here. The four that
- * remain are the loud ones, and each is drawn below.
+ * `.nav-i.on` — the landing's active nav pill: red, white label, and a hard
+ * ball-yellow offset shadow (the landing's is coal, which would vanish on the
+ * coal rail). White on `cata-red` is 5.0:1. Replaces the previous quiet white
+ * wash with a red bar and a yellow dot: one loud mark per rail instead of
+ * four small ones.
  */
-const NAV_ITEM_ACTIVE_CLASSES = "bg-white/[0.1] text-white";
+const NAV_ITEM_ACTIVE_CLASSES = "bg-cata-red text-white shadow-sticker-ball";
 
 export default function AppShell({
   title,
   subtitle,
+  kicker,
+  highlightTitle = true,
   actions,
   back,
   measure = "default",
@@ -510,6 +516,11 @@ export default function AppShell({
     [navLinks, pathname],
   );
   const pendingPayments = usePendingPaymentsCount(role === "admin");
+  const pageKicker =
+    kicker === undefined
+      ? (navGroups.find((group) => group.links.some((link) => link.href === activeHref))?.heading ??
+        areaLabel)
+      : kicker;
 
   // Re-measure when the rail's content or width can change: first paint, the
   // role's group set, the desktop collapse, the drawer, and window resizes.
@@ -573,32 +584,16 @@ export default function AppShell({
           isActive ? NAV_ITEM_ACTIVE_CLASSES : NAV_ITEM_IDLE_CLASSES
         }`}
       >
-        {isActive && (
-          // `.nav-i.on::before` — 3px red bar pinned to the row's left edge.
-          <span
-            className="absolute inset-y-[8px] left-0 w-1 rounded-r-[4px] bg-cata-red"
-            aria-hidden="true"
-          />
-        )}
         <Icon size={ICON.base} strokeWidth={2} className="shrink-0" aria-hidden="true" />
         <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>{link.label}</span>
         {showBadge && (
           // `.nav-i .cnt` — count is already in the accessible name above.
           <span
-            className="ml-auto inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-cata-red px-1.5 text-2xs tracking-flat font-bold text-white"
+            className="ml-auto inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full border-2 border-edge bg-ball px-1.5 text-2xs tracking-flat font-bold text-coal"
             aria-hidden="true"
           >
             {badge}
           </span>
-        )}
-        {isActive && !showBadge && (
-          // `.nav-i.on::after` — the yellow ball marks the current row.
-          <span
-            className={`ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-ball ${
-              collapsed ? "lg:hidden" : ""
-            }`}
-            aria-hidden="true"
-          />
         )}
       </Link>
     );
@@ -742,13 +737,14 @@ export default function AppShell({
         {/* `.side .brand` — logo on a white disc, club name, area label. */}
         <div className="flex items-center gap-[11px] border-b border-white/[0.08] px-[18px] pb-3 pt-4">
           <Link href="/" className="flex min-w-0 flex-1 items-center gap-[11px]">
-            <span className="relative block h-9 w-9 shrink-0 overflow-hidden rounded-full bg-white">
+            {/* The landing's logo tile: white, a 2px outline and a hard red offset. */}
+            <span className="relative mr-[3px] block h-10 w-10 shrink-0 overflow-hidden rounded-[10px] border-2 border-white bg-white shadow-sticker-red">
               <Image
                 src="/brand/cata-club-logo.jpeg"
                 alt="Cata Club"
                 fill
-                className="object-cover"
-                sizes="36px"
+                className="object-contain p-0.5"
+                sizes="40px"
               />
             </span>
             <span className={`min-w-0 leading-tight ${collapsed ? "lg:hidden" : ""}`}>
@@ -1007,7 +1003,13 @@ export default function AppShell({
               is drawn in the page's own document order: back control, then
               the title row, then the content. */}
           {back}
-          <PageHeader title={title} subtitle={subtitle} actions={actions} />
+          <PageHeader
+            title={title}
+            subtitle={subtitle}
+            kicker={pageKicker ?? undefined}
+            highlight={highlightTitle}
+            actions={actions}
+          />
           {/* `tabIndex={-1}` so the skip link actually MOVES focus here rather
               than only scrolling: a `<main>` is not focusable by default, and
               a fragment jump to a non-focusable target leaves the caret where

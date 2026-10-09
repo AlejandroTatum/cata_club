@@ -88,7 +88,8 @@ describe("ButtonVariant offers a filled third level and no ghost", () => {
     // surviving entry in the map.
     const classes = buttonClasses("ghost" as ButtonVariant);
     expect(classes).not.toMatch(/\bbg-\S+/);
-    expect(classes).not.toMatch(/\bborder-\S+/);
+    // `border-2` is the shared base width; a colour is what would be a skin.
+    expect(classes).not.toMatch(/(^|\s)border-(?!2(\s|$))\S+/);
   });
 });
 

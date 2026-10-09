@@ -22,6 +22,14 @@ export interface PageHeaderProps {
   title: string;
   /** One short sentence. Optional — most screens do not need it. */
   subtitle?: string;
+  /**
+   * The landing's section marker: a short red rule and a letter-spaced red
+   * label ("— NUESTRA ACADEMIA"). Decorative orientation only, so it is hidden
+   * from assistive technology — whatever it says, the title already says.
+   */
+  kicker?: string;
+  /** The landing's key-word treatment: a ball block behind the title, coal ink. */
+  highlight?: boolean;
   /** Trailing controls, typically a single primary or dark button. */
   actions?: ReactNode;
   className?: string;
@@ -30,6 +38,8 @@ export interface PageHeaderProps {
 export default function PageHeader({
   title,
   subtitle,
+  kicker,
+  highlight = false,
   actions,
   className,
 }: PageHeaderProps): ReactElement {
@@ -69,11 +79,28 @@ export default function PageHeader({
             and flat enough that tightening it closes the counters. The leading
             stays at the step's own 1.15 (DESIGN.md `headline`) — the face has
             almost no vertical range, so a wrapped title needs no extra room. */}
-        {/* The brand tick: a short ball-yellow bar over the title (`before:`),
-            the landing's highlight spent once per screen. A pseudo-element, so
-            it adds no node and no text for assistive technology. */}
-        <h1 className="relative pt-3 font-display text-xl uppercase tracking-flat text-ink before:absolute before:left-0 before:top-0 before:h-1 before:w-9 before:rounded-full before:bg-ball">
-          {title}
+        {kicker ? (
+          <p
+            aria-hidden="true"
+            data-testid="page-kicker"
+            className="mb-1.5 flex items-center gap-2 text-2xs font-bold uppercase tracking-caps-wide text-state-bad"
+          >
+            <span className="h-0.5 w-6 rounded-full bg-cata-red" />
+            {kicker}
+          </p>
+        ) : null}
+        {/* With `highlight` the title sits on a ball block (the landing's
+            "CAMPEONES"): `box-decoration-clone` keeps the block whole when the
+            title wraps, and coal on the ball is 14:1, so the block never costs
+            legibility. */}
+        <h1 className="font-display text-xl uppercase tracking-flat text-ink">
+          {highlight ? (
+            <span className="box-decoration-clone rounded-[6px] border-2 border-edge bg-ball px-2 py-0.5 text-coal shadow-sticker-sm">
+              {title}
+            </span>
+          ) : (
+            title
+          )}
         </h1>
         {/* `ink-3-strong`, not `ink-3`: 13px/400 `ink-3` on the `canvas` grey
             the shell paints behind the header is 4.24:1, and the subtitle is
