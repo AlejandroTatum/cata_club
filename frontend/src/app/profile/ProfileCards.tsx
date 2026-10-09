@@ -177,7 +177,11 @@ export function IdentityCard({
         className="pointer-events-none absolute inset-x-0 top-0 h-[132px] bg-cata-red"
         style={{ clipPath: "polygon(0 0, 100% 0, 100% 58%, 68% 100%, 0 84%)" }}
       />
-      <div className="relative flex h-[100px] items-start pt-4 text-white">
+      {/* The red field is a clipped sibling, so the contrast sweep is told the ground the white copy sits on. */}
+      <div
+        data-contrast-backdrop="#d92128"
+        className="relative flex h-[100px] items-start pt-4 text-white"
+      >
         <span className="text-2xs font-bold uppercase tracking-caps-wide">Cata Club</span>
         {/* The role is the first thing read; the ball is its full stop. */}
         <div
