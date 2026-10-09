@@ -825,6 +825,39 @@ describe("isRepresentativePersonaRow", () => {
     expect(isRepresentativePersonaRow(account)).toBe(false);
   });
 
+  it.each(["ADMINISTRADOR", "ENTRENADOR"])(
+    "is false for a %s row without a membership: staff can be given their own",
+    (rol) => {
+      const account: MemberAccount = {
+        id: "staff-sin-membresia",
+        role: "representante",
+        backendRoles: [rol],
+        nombres: "Diego",
+        apellidos: "Mora",
+        telefono: "+593 90 000 0000",
+        estudiantes: [
+          { id: "staff-sin-membresia", nombres: "Diego", apellidos: "Mora", activo: true, membresia: null, ultimoPago: null },
+        ],
+      };
+      expect(isRepresentativePersonaRow(account)).toBe(false);
+    },
+  );
+
+  it("stays true for a REPRESENTANTE-role row without a membership", () => {
+    const account: MemberAccount = {
+      id: "rep-con-rol",
+      role: "representante",
+      backendRoles: ["REPRESENTANTE"],
+      nombres: "Marta",
+      apellidos: "Reyes",
+      telefono: "+593 90 000 0000",
+      estudiantes: [
+        { id: "rep-con-rol", nombres: "Marta", apellidos: "Reyes", activo: true, membresia: null, ultimoPago: null },
+      ],
+    };
+    expect(isRepresentativePersonaRow(account)).toBe(true);
+  });
+
   it("is false for a self-enrolled player's row even with no membership yet", () => {
     const account: MemberAccount = {
       id: "estudiante-sin-membresia",

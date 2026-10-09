@@ -938,9 +938,17 @@ export function describePaymentsState(
  * `role === "estudiante"` accounts are never hidden here even before their
  * first membership exists — that is exactly the account the "Pagos" entry
  * point's `CreateMembershipForm` fallback exists for.
+ *
+ * ADMINISTRADOR/ENTRENADOR accounts (which the adapter also files under
+ * "representante") are never hidden either: staff who play get their own
+ * membership from the same entry point, the admin creating it for them.
  */
 export function isRepresentativePersonaRow(account: MemberAccount): boolean {
+  const isStaff = (account.backendRoles ?? []).some(
+    (role) => role === "ADMINISTRADOR" || role === "ENTRENADOR",
+  );
   return (
+    !isStaff &&
     account.role === "representante" &&
     account.representadoPor === undefined &&
     !account.estudiantes.some((s) => s.membresia !== null)

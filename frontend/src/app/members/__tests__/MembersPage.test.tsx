@@ -4290,6 +4290,29 @@ describe("MembersPage — representative-only row actions (issue #1199, #1211)",
     expect(getRowAction(row, /^editar/i)).toBeInTheDocument();
   });
 
+  it.each(["ADMINISTRADOR", "ENTRENADOR"])(
+    'offers "Ficha médica" and "Pagos" on a %s row without a membership, so the admin can give staff one',
+    async (rol) => {
+      mockFetchMembers.mockResolvedValue({
+        accounts: [{ ...REPRESENTATIVE_ONLY_ACCOUNT, backendRoles: [rol] }],
+      });
+
+      render(
+        <ToastProvider>
+          <MembersPage />
+        </ToastProvider>,
+      );
+      chooseRole("Todos");
+
+      const matches = await screen.findAllByText("Laura Suárez");
+      const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
+
+      expect(getRowAction(row, /^ficha médica/i)).toBeInTheDocument();
+      expect(within(row).getByRole("button", { name: /^pagos/i })).toBeInTheDocument();
+      expect(getRowAction(row, /^editar/i)).toBeInTheDocument();
+    },
+  );
+
   it("offers \"Ficha médica\" and \"Pagos\" on a represented student that already has a membership", async () => {
     mockFetchMembers.mockResolvedValue({
       accounts: [
