@@ -51,6 +51,12 @@ export interface StudentProfileView {
   cedula: string | null;
   fechaNacimiento: string;
   recentSessions: StudentSessionView[];
+  /**
+   * Rows in the persona's WHOLE attendance history. `recentSessions` is only
+   * the newest window, so the screen compares the two to know whether older
+   * sessions exist to page through.
+   */
+  historialTotal: number;
   membership: MembershipView | null;
   representante: { nombres: string; apellidos: string } | null;
   representanteId: number | null;
@@ -202,14 +208,13 @@ export interface StudentPortalView {
  */
 const RECENT_SESSIONS_LIMIT = 30;
 
-/** Most recent attendance records first, capped — real activity used as an honest substitute for "upcoming sessions" (see attendance-adapter.ts's doc comment: Horario has no link to which persona it serves, so a real future schedule can't be derived per-student). */
-export function buildRecentSessions(
+/** Attendance records as sessions, newest first, with no cap — what one page of history is shown as. */
+export function buildSessionViews(
   historial: BackendAsistencia[],
   horariosById: Map<number, BackendHorario>,
 ): StudentSessionView[] {
   return [...historial]
     .sort((a, b) => (a.fechaEntrenamiento < b.fechaEntrenamiento ? 1 : a.fechaEntrenamiento > b.fechaEntrenamiento ? -1 : 0))
-    .slice(0, RECENT_SESSIONS_LIMIT)
     .map((asistencia) => {
       const horario = horariosById.get(asistencia.horarioId);
       return {
@@ -220,11 +225,20 @@ export function buildRecentSessions(
     });
 }
 
+/** Most recent attendance records first, capped — real activity used as an honest substitute for "upcoming sessions" (see attendance-adapter.ts's doc comment: Horario has no link to which persona it serves, so a real future schedule can't be derived per-student). */
+export function buildRecentSessions(
+  historial: BackendAsistencia[],
+  horariosById: Map<number, BackendHorario>,
+): StudentSessionView[] {
+  return buildSessionViews(historial, horariosById).slice(0, RECENT_SESSIONS_LIMIT);
+}
+
 export function buildStudentProfileView(
   persona: BackendPersonaFull,
   recentSessions: StudentSessionView[],
   membership: MembershipView | null = null,
   representante: { nombres: string; apellidos: string } | null = null,
+  historialTotal: number = recentSessions.length,
 ): StudentProfileView {
   return {
     personaId: String(persona.id),
@@ -236,6 +250,7 @@ export function buildStudentProfileView(
     cedula: persona.cedula ?? null,
     fechaNacimiento: persona.fechaNacimiento,
     recentSessions,
+    historialTotal: Math.max(historialTotal, recentSessions.length),
     membership,
     representante,
     representanteId: persona.representanteId,
@@ -253,6 +268,8 @@ export interface BackendPortalPerfil {
   persona: BackendPersonaFull;
   representante: { nombres: string; apellidos: string } | null;
   historial: BackendAsistencia[];
+  /** Rows in the whole history; `historial` is only the recent window. Absent on an older backend. */
+  historialTotal?: number;
   membresias: BackendMembresiaPropia[];
 }
 
@@ -269,7 +286,7 @@ export function buildPortalProfile(
   const representante = perfil.representante
     ? { nombres: perfil.representante.nombres, apellidos: perfil.representante.apellidos }
     : null;
-  return buildStudentProfileView(perfil.persona, recentSessions, membership, representante);
+  return buildStudentProfileView(perfil.persona, recentSessions, membership, representante, perfil.historialTotal);
 }
 
 /**

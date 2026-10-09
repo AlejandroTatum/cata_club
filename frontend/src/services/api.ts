@@ -1465,6 +1465,8 @@ export interface StudentProfileSummary {
   cedula?: string | null;
   fechaNacimiento: string;
   recentSessions: StudentSessionSummary[];
+  /** Rows in the persona's whole attendance history (`recentSessions` is only the newest window). */
+  historialTotal?: number;
   membership: MembershipSummary | null;
   representante: { nombres: string; apellidos: string } | null;
   representanteId: number | null;
@@ -1531,6 +1533,19 @@ export interface StudentPortalSummary {
 /** Fetch the logged-in persona's own portal data — `GET /api/student`. */
 export async function fetchStudentPortal(personaId: string): Promise<StudentPortalSummary> {
   return request<StudentPortalSummary>(apiEndpoint(`/student?personaId=${encodeURIComponent(personaId)}`));
+}
+
+/**
+ * One page of a persona's attendance history, newest first — `GET
+ * /api/student/attendance`. Reaches the sessions older than the portal's
+ * recent window.
+ */
+export async function fetchStudentAttendancePage(
+  personaId: string,
+  params: { skip: number; limit: number },
+): Promise<PaginatedResponse<StudentSessionSummary>> {
+  const qs = `personaId=${encodeURIComponent(personaId)}&skip=${params.skip}&limit=${params.limit}`;
+  return request<PaginatedResponse<StudentSessionSummary>>(apiEndpoint(`/student/attendance?${qs}`));
 }
 
 /** One persona's carnet data for the admin's printing — `GET /api/carnets`. */

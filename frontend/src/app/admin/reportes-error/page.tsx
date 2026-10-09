@@ -8,8 +8,8 @@ import { fetchReportesError, fetchReporteError, type ReporteError } from "@/serv
 import { EmptyInbox, GhostRows, HowItWorks, SelectPrompt, SummaryStrip } from "./InboxParts";
 import { NO_DISPONIBLE, applyFilter, buildChips, formatFecha, resumirNavegador, summarize, type InboxFilter } from "./inbox";
 
-/** Reports per server page (the backend's default). */
-const PAGE_SIZE = 20;
+/** Reports per server page — the one list page size (lib/__tests__/list-page-size.test.ts). */
+const PAGE_SIZE = 10;
 
 /** Both columns reach the bottom of the screen (page header and padding above, ~24px margin below), so no dead band is left under a short inbox. */
 const FILL_SCREEN = "lg:min-h-[calc(100dvh-10rem)]";

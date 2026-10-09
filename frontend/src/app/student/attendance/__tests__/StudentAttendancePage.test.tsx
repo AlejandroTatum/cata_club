@@ -67,8 +67,10 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 
 const mockFetchStudentPortal = vi.fn();
+const mockFetchAttendancePage = vi.fn();
 vi.mock("@/services/api", () => ({
   fetchStudentPortal: () => mockFetchStudentPortal(),
+  fetchStudentAttendancePage: (...args: unknown[]) => mockFetchAttendancePage(...args),
 }));
 
 function sessionFor(role: "estudiante" | "representante") {
@@ -119,6 +121,7 @@ beforeEach(() => {
   window.sessionStorage.clear();
   mockUseAuth.mockReset().mockReturnValue(sessionFor("estudiante"));
   mockFetchStudentPortal.mockReset().mockResolvedValue(portalWith(FIVE_SESSIONS));
+  mockFetchAttendancePage.mockReset();
 });
 
 /**
@@ -277,12 +280,13 @@ describe("StudentAttendancePage — the record", () => {
     expect(screen.queryByText("2026-07-23")).not.toBeInTheDocument();
   });
 
-  it("states the window it is showing, so the capped list is not read as the whole record", async () => {
+  it("states the window the summary counts, so the tiles are not read as the whole record", async () => {
     render(<StudentAttendancePage />);
 
     expect(
-      await screen.findByText(/tu portal recibe las 30 sesiones más recientes/i),
+      await screen.findByText(/el resumen cuenta las 30 sesiones más recientes/i),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/pídelo al club/i)).not.toBeInTheDocument();
   });
 
   it("never claims a next training session — the API cannot derive one per student", async () => {
@@ -493,5 +497,85 @@ describe("StudentAttendancePage — the representative with her own membership (
     expect(within(strip).getByRole("button", { name: /Marta Reyes/ })).toBeInTheDocument();
     expect(within(strip).getByRole("button", { name: /Sofía Vera/ })).toBeInTheDocument();
     expect(screen.queryByLabelText("Estudiante")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The record used to stop at the portal window (30) with a "ask the club"
+ * footnote. Older sessions are now reachable page by page.
+ */
+describe("StudentAttendancePage — older sessions", () => {
+  const WINDOW = Array.from({ length: 30 }, (_, i) => ({
+    fecha: `2026-07-${String(30 - i).padStart(2, "0")}`,
+    horario: "Jueves 15:00 — 16:00",
+    estado: "present" as const,
+  }));
+  const portalWithTotal = (historialTotal: number): StudentPortalSummary => ({
+    self: { ...BASE_PROFILE, recentSessions: WINDOW, historialTotal },
+    representados: [],
+    membershipPlans: [],
+  });
+
+  it("offers a pager with the real total when the history is longer than the window", async () => {
+    mockFetchStudentPortal.mockResolvedValue(portalWithTotal(95));
+    render(<StudentAttendancePage />);
+
+    expect(await screen.findByText("Página 1 de 4")).toBeInTheDocument();
+    expect(screen.getByText(/1–30 de 95 sesiones/)).toBeInTheDocument();
+    expect(mockFetchAttendancePage).not.toHaveBeenCalled();
+  });
+
+  it("requests the next page for this persona and shows its sessions instead of the first", async () => {
+    mockFetchStudentPortal.mockResolvedValue(portalWithTotal(95));
+    mockFetchAttendancePage.mockResolvedValue({
+      items: [{ fecha: "2026-05-14", horario: "Martes 15:00 — 16:00", estado: "absent" }],
+      total: 95, skip: 30, limit: 30,
+    });
+    render(<StudentAttendancePage />);
+    await screen.findByText("Página 1 de 4");
+
+    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+
+    expect(await screen.findByText("14/05/2026")).toBeInTheDocument();
+    expect(mockFetchAttendancePage).toHaveBeenCalledWith("9", { skip: 30, limit: 30 });
+    expect(screen.getByText("Página 2 de 4")).toBeInTheDocument();
+    expect(screen.queryByText("30/07/2026")).not.toBeInTheDocument();
+  });
+
+  it("returns to the first page from the data already in hand, without another request", async () => {
+    mockFetchStudentPortal.mockResolvedValue(portalWithTotal(95));
+    mockFetchAttendancePage.mockResolvedValue({
+      items: [{ fecha: "2026-05-14", horario: "Martes 15:00 — 16:00", estado: "absent" }],
+      total: 95, skip: 30, limit: 30,
+    });
+    render(<StudentAttendancePage />);
+    await screen.findByText("Página 1 de 4");
+    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+    await screen.findByText("14/05/2026");
+
+    fireEvent.click(screen.getByRole("button", { name: "Página anterior" }));
+
+    expect(await screen.findByText("30/07/2026")).toBeInTheDocument();
+    expect(mockFetchAttendancePage).toHaveBeenCalledTimes(1);
+  });
+
+  it("says so when an older page cannot be loaded, keeping the pager usable", async () => {
+    mockFetchStudentPortal.mockResolvedValue(portalWithTotal(95));
+    mockFetchAttendancePage.mockRejectedValue(new Error("boom"));
+    render(<StudentAttendancePage />);
+    await screen.findByText("Página 1 de 4");
+
+    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+
+    expect(await screen.findByText("No se pudo cargar esta página del historial.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Página anterior" })).toBeEnabled();
+  });
+
+  it("shows no pager when the whole history fits in the window", async () => {
+    mockFetchStudentPortal.mockResolvedValue(portalWithTotal(30));
+    render(<StudentAttendancePage />);
+
+    await screen.findByText("23/07/2026".replace("23", "30"));
+    expect(screen.queryByText(/Página 1 de/)).not.toBeInTheDocument();
   });
 });

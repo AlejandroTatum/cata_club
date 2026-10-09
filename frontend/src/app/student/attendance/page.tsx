@@ -27,20 +27,21 @@
  *   screen is what made the old portal print a past session under a heading a
  *   family reads as the next one.
  *
- * ## The window, and why it is stated on screen
+ * ## The window, and the pages behind it
  *
  * `buildRecentSessions` (src/lib/server/student-adapter.ts) slices the backend
- * history to `RECENT_SESSIONS_LIMIT` records — 30, since that module's cap was
- * raised from 5 — which is the number `PORTAL_SESSION_WINDOW` below and the
- * footnote at the foot of this screen both state. `GET
- * /asistencias/persona/{id}` is itself paginated (TRA-6), but the BFF route
- * already requests a page well above this window (`HISTORIAL_PAGE_LIMIT`, 200
- * in src/app/api/student/route.ts), so page 1 always contains it and the cap
- * remains a frontend decision.
+ * history to `RECENT_SESSIONS_LIMIT` records — 30 — which is the number
+ * `PORTAL_SESSION_WINDOW` below and the footnote at the foot of this screen
+ * both state. The summary tiles count that window and say so.
+ *
+ * The record itself is NOT capped: the portal also carries `historialTotal`
+ * (the whole history) and, when it is longer than the window, the list gets a
+ * pager. Page 1 is the window already in hand; later pages come from `GET
+ * /api/student/attendance` (the paginated `GET /asistencias/persona/{id}`), so
+ * no session is ever hidden behind "ask the club".
  *
  * Three numbers, one fact: the adapter's slice, the page's constant and the
- * sentence the student reads. The footnote exists so a capped list is not
- * read as the whole record, and `__tests__/attendance-window.test.ts` fails if
+ * sentence the student reads. `__tests__/attendance-window.test.ts` fails if
  * those three ever stop agreeing.
  */
 
@@ -51,8 +52,8 @@ import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
-import { fetchStudentPortal } from "@/services/api";
-import type { StudentPortalSummary, StudentProfileSummary } from "@/services/api";
+import { fetchStudentAttendancePage, fetchStudentPortal } from "@/services/api";
+import type { StudentPortalSummary, StudentProfileSummary, StudentSessionSummary } from "@/services/api";
 import { getAttendanceBadgeTone, getAttendanceLabel } from "@/app/attendance/attendance-utils";
 import { formatDate } from "@/lib/format-utils";
 import type { EstadoAsistencia } from "@/types/domain";
@@ -61,6 +62,7 @@ import {
   Badge,
   EmptyState,
   LoadingState,
+  Pagination,
   STAT_GRID,
   StatCard,
   StatTrack,
@@ -88,6 +90,9 @@ import { toUserMessage } from "@/lib/error-message";
  * compared by `__tests__/attendance-window.test.ts`.
  */
 const PORTAL_SESSION_WINDOW = 30;
+
+/** Sessions per older page: the window itself, so page 1 is the data already loaded. */
+const HISTORY_PAGE_SIZE = PORTAL_SESSION_WINDOW;
 
 // ---------------------------------------------------------------------------
 // Load state
@@ -214,8 +219,34 @@ function SessionList({
   profile: StudentProfileSummary;
   studentName: string | null;
 }): React.ReactElement {
-  const sessions = profile.recentSessions;
-  const empty = sessions.length === 0;
+  const [page, setPage] = useState(1);
+  const [older, setOlder] = useState<{ status: "loading" } | { status: "error" } | { status: "ready"; items: StudentSessionSummary[] }>(
+    { status: "loading" },
+  );
+  const total = Math.max(profile.historialTotal ?? 0, profile.recentSessions.length);
+  const totalPages = Math.max(1, Math.ceil(total / HISTORY_PAGE_SIZE));
+
+  // Page 1 is the window the portal already carries; every later page is its
+  // own round trip, so the record is never capped at the window.
+  useEffect(() => {
+    if (page === 1) return;
+    let cancelled = false;
+    setOlder({ status: "loading" });
+    fetchStudentAttendancePage(profile.personaId, { skip: (page - 1) * HISTORY_PAGE_SIZE, limit: HISTORY_PAGE_SIZE })
+      .then((data) => {
+        if (!cancelled) setOlder({ status: "ready", items: data.items });
+      })
+      .catch(() => {
+        if (!cancelled) setOlder({ status: "error" });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [page, profile.personaId]);
+
+  const showingOlder = page > 1;
+  const sessions = showingOlder ? (older.status === "ready" ? older.items : []) : profile.recentSessions;
+  const empty = !showingOlder && sessions.length === 0;
 
   return (
     <section
@@ -230,10 +261,8 @@ function SessionList({
         <h2 id="sessions-title" className="flex-1 text-sm font-bold text-ink">
           {studentName ? `Sesiones registradas de ${studentName}` : "Sesiones registradas"}
         </h2>
-        {sessions.length > 0 && (
-          <span className="text-xs font-semibold tabular-nums text-ink-3-strong">
-            {sessions.length}
-          </span>
+        {total > 0 && (
+          <span className="text-xs font-semibold tabular-nums text-ink-3-strong">{total}</span>
         )}
       </div>
 
@@ -260,6 +289,12 @@ function SessionList({
             </p>
           </div>
         </div>
+      ) : showingOlder && older.status === "loading" ? (
+        <LoadingState label="Cargando sesiones…" />
+      ) : showingOlder && older.status === "error" ? (
+        <p role="alert" className="px-5 py-6 text-sm text-ink-3-strong">
+          No se pudo cargar esta página del historial.
+        </p>
       ) : (
         <ul className="flex flex-col">
           {sessions.map((session) => (
@@ -277,6 +312,19 @@ function SessionList({
             </li>
           ))}
         </ul>
+      )}
+
+      {total > HISTORY_PAGE_SIZE && (
+        <Pagination
+          variant="footer"
+          page={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          totalItems={total}
+          pageSize={HISTORY_PAGE_SIZE}
+          itemNoun="sesión"
+          itemNounPlural="sesiones"
+        />
       )}
 
       <AttendanceLegend />
@@ -315,11 +363,11 @@ function AttendanceLegend(): React.ReactElement {
  * of the same sentence — the drift that put four different spellings of the
  * same fact into this product before.
  */
-function PortalWindowNote(): React.ReactElement {
+function PortalWindowNote({ hasOlder }: { hasOlder: boolean }): React.ReactElement {
   return (
     <p className="max-w-[68ch] text-xs leading-relaxed text-ink-3-strong">
-      Tu portal recibe las {PORTAL_SESSION_WINDOW} sesiones más recientes que el club registró. Si
-      necesitas un período anterior, pídelo al club.
+      El resumen cuenta las {PORTAL_SESSION_WINDOW} sesiones más recientes que el club registró.
+      {hasOlder ? " Las anteriores están en el listado, por páginas." : ""}
     </p>
   );
 }
@@ -441,8 +489,9 @@ function AttendanceView({
         <div className="flex min-w-0 flex-col gap-page">
           <AttendanceSummary profile={selectedProfile} studentName={studentName} />
           <div className="flex min-w-0 flex-col gap-section">
-            <SessionList profile={selectedProfile} studentName={studentName} />
-            <PortalWindowNote />
+            {/* Keyed by persona: switching dependent restarts at page 1. */}
+            <SessionList key={selectedProfile.personaId} profile={selectedProfile} studentName={studentName} />
+            <PortalWindowNote hasOlder={(selectedProfile.historialTotal ?? 0) > PORTAL_SESSION_WINDOW} />
           </div>
         </div>
       )}
