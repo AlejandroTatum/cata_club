@@ -8,7 +8,7 @@
  * the point.
  */
 
-import tailwindConfig from "../../../../tailwind.config";
+import tailwindConfig, { LIGHT_COLORS } from "../../../../tailwind.config";
 
 type Scale = Record<string, string>;
 
@@ -17,7 +17,7 @@ const extend = tailwindConfig.theme?.extend ?? {};
 export const HEIGHT_TOKENS = (extend.height ?? {}) as Scale;
 export const MIN_HEIGHT_TOKENS = (extend.minHeight ?? {}) as Scale;
 export const RADIUS_TOKENS = (extend.borderRadius ?? {}) as Scale;
-export const COLOR_TOKENS = (extend.colors ?? {}) as Record<string, unknown>;
+export const COLOR_TOKENS = LIGHT_COLORS as unknown as Record<string, unknown>;
 
 /** The pixel height the element's `h-*` token commits to, if it wears one. */
 export function committedHeight(element: Element): string | undefined {

@@ -9,10 +9,11 @@
  */
 
 import { describe, it, expect } from "vitest";
-import tailwindConfig from "../../../../tailwind.config";
+import tailwindConfig, { LIGHT_COLORS } from "../../../../tailwind.config";
 
 const extend = tailwindConfig.theme?.extend ?? {};
-const colors = (extend.colors ?? {}) as Record<string, Record<string, string> | string>;
+// The palette as written (light values); Tailwind itself sees CSS variables.
+const colors = LIGHT_COLORS as unknown as Record<string, Record<string, string> | string>;
 const heights = (extend.height ?? {}) as Record<string, string>;
 const minHeights = (extend.minHeight ?? {}) as Record<string, string>;
 const radii = (extend.borderRadius ?? {}) as Record<string, string>;

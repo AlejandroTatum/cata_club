@@ -71,7 +71,7 @@ export default function FileDropZone({ id, label, hint, accept, file, onFile, ch
         {file ? (
           <>
             <span className="max-w-full truncate text-sm font-semibold text-ink">{file.name}</span>
-            <span className="text-xs font-semibold text-cata-red">Cambiar</span>
+            <span className="text-xs font-semibold text-state-bad">Cambiar</span>
           </>
         ) : (
           <>

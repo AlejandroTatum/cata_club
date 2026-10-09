@@ -15,7 +15,7 @@
 
 import { describe, it, expect } from "vitest";
 import { contrastRatio } from "@/lib/color-contrast";
-import tailwindConfig from "../../../../../tailwind.config";
+import { LIGHT_COLORS } from "../../../../../tailwind.config";
 
 const AA_NORMAL_TEXT = 4.5;
 /** WCAG 1.4.11 — a border, ring or icon needs 3:1 against its neighbour. */
@@ -24,7 +24,8 @@ const AA_NON_TEXT = 3;
 const CARD_LIFT_FLOOR = 1.2;
 const SUNKEN_ON_PAPER_FLOOR = 1.09;
 
-const colors = tailwindConfig.theme?.extend?.colors as Record<string, unknown>;
+// The palette as written (light values); Tailwind itself sees CSS variables.
+const colors = LIGHT_COLORS as unknown as Record<string, unknown>;
 const group = (key: string): Record<string, string> => colors[key] as Record<string, string>;
 
 const ink = group("ink");
