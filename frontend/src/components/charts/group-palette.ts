@@ -55,10 +55,10 @@ const BALL: GroupTone = {
 };
 const COAL: GroupTone = {
   solid: "border-coal bg-coal text-white",
-  border: "border-coal",
+  border: "border-coal dark:border-mark",
   tint: "bg-sunken",
   text: "text-ink",
-  dot: "bg-coal",
+  dot: "bg-coal dark:bg-mark",
 };
 
 const PALETTE: readonly GroupTone[] = [BLUE, PURPLE, GREEN, BALL, COAL];

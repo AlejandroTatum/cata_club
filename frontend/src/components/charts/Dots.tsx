@@ -29,7 +29,7 @@ export interface DotsProps {
 }
 
 const RING_TONE: Record<ChartTone, string> = {
-  coal: "border-coal",
+  coal: "border-coal dark:border-mark",
   ok: "border-state-ok",
   warn: "border-state-warn",
   bad: "border-state-bad",

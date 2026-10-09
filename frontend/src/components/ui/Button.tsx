@@ -69,14 +69,14 @@ const VARIANT: Record<ButtonVariant, string> = {
   // (`state-bad`). Hover lifts it a step along the shadow's own diagonal and
   // press sinks it onto the page, so the shadow reads as depth, not decoration.
   primary:
-    "font-bold bg-ball border-edge text-coal shadow-sticker-sm " +
+    "font-bold bg-ball border-edge text-coal shadow-sticker-sm dark:border-edge-hot " +
     "hover:-translate-x-px hover:-translate-y-px hover:shadow-sticker " +
     "active:translate-x-px active:translate-y-px active:shadow-none " +
     "motion-reduce:hover:translate-x-0 motion-reduce:hover:translate-y-0",
   // `.btn` bare — the outlined sticker: paper, coal outline, no shadow. Hover
   // is `sunken`, not `canvas`: a white button standing ON the canvas that
   // hovers TO the canvas dissolves into the page instead of responding.
-  secondary: "font-semibold bg-paper border-edge text-ink hover:bg-sunken",
+  secondary: "font-semibold bg-paper border-edge text-ink hover:bg-sunken dark:border-line-2",
   // `.btn.dark` — coal. Secondary-but-emphatic actions ("+ Nuevo miembro").
   dark: "font-bold bg-coal border-coal text-white hover:bg-coal-2 hover:border-coal-2 dark:border-edge dark:hover:border-edge",
   // The third level (D5). It replaces `ghost`, which was `bg-transparent

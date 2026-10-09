@@ -590,7 +590,7 @@ export default function AppShell({
         {showBadge && (
           // `.nav-i .cnt` — count is already in the accessible name above.
           <span
-            className="ml-auto inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full border-2 border-edge bg-ball px-1.5 text-2xs tracking-flat font-bold text-coal"
+            className="ml-auto inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full border-2 border-edge bg-ball dark:border-edge-hot px-1.5 text-2xs tracking-flat font-bold text-coal"
             aria-hidden="true"
           >
             {badge}
@@ -729,7 +729,7 @@ export default function AppShell({
       <aside
         data-report-ignore={!isDesktopViewport || undefined}
         aria-hidden={drawerHidden || undefined}
-        className={`fixed inset-y-0 left-0 z-40 flex w-[236px] flex-col bg-coal text-white transition-[transform,visibility] duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-[236px] flex-col bg-coal text-white dark:border-r dark:border-line dark:bg-rail transition-[transform,visibility] duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
           collapsed ? "lg:w-[76px]" : ""
         } ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} ${
           drawerHidden ? "invisible" : ""
@@ -784,7 +784,7 @@ export default function AppShell({
         <button
           type="button"
           onClick={toggleCollapsed}
-          className="absolute -right-3 top-6 z-10 hidden h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-coal text-white/60 shadow-card transition-colors hover:bg-white/10 hover:text-white lg:flex"
+          className="absolute -right-3 top-6 z-10 hidden h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-coal dark:bg-rail text-white/60 shadow-card transition-colors hover:bg-white/10 hover:text-white lg:flex"
           aria-label={collapsed ? "Expandir menú" : "Colapsar menú"}
         >
           {collapsed ? (
@@ -1122,7 +1122,7 @@ export default function AppShell({
             aria-modal="true"
             aria-label="Buscador de secciones"
             onClick={(e): void => e.stopPropagation()}
-            className="w-full max-w-md overflow-hidden rounded-card bg-paper shadow-elevated"
+            className="w-full max-w-md overflow-hidden rounded-card bg-paper shadow-elevated dark:bg-popover"
           >
             <div className="flex items-center gap-2.5 border-b border-line px-4 py-3.5">
               <Search size={ICON.sm} strokeWidth={2} className="shrink-0 text-ink-3" aria-hidden="true" />

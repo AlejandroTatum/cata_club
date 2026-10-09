@@ -111,7 +111,7 @@ export default function AccountMenu({
           id={menuId}
           role="dialog"
           aria-label="Menú de cuenta"
-          className="absolute bottom-full left-0 z-50 mb-2 w-[212px] rounded-card border-2 border-white bg-coal-2 p-1.5 shadow-sticker-red"
+          className="absolute bottom-full left-0 z-50 mb-2 w-[212px] rounded-card border-2 border-white bg-coal-2 p-1.5 shadow-sticker-red dark:border-line-2 dark:bg-popover dark:shadow-sticker"
         >
           <Link href="/profile" onClick={choose} className={ITEM_CLASSES}>
             <User size={ICON.base} strokeWidth={2} aria-hidden="true" />

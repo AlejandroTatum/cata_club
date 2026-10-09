@@ -56,18 +56,18 @@ const LANE_GAP = 6;
 
 /** Hairline border in a deeper tint of the state's hue. */
 const STATUS_BORDER: Record<TimelineStatus, string> = {
-  done: "border-state-ok/30",
-  live: "border-cuenta-representante/30",
-  pending: "border-cuenta-menor/25",
-  missing: "border-state-bad/30",
+  done: "border-state-ok/30 dark:border-state-ok/70",
+  live: "border-cuenta-representante/30 dark:border-cuenta-representante/70",
+  pending: "border-cuenta-menor/25 dark:border-cuenta-menor/70",
+  missing: "border-state-bad/30 dark:border-state-bad/70",
 };
 
 /** Soft pastel tint by state; always laid over an opaque `bg-paper` base. */
 const STATUS_TINT: Record<TimelineStatus, string> = {
-  done: "bg-state-ok/15",
-  live: "bg-cuenta-representante/15",
-  pending: "bg-cuenta-menor/10",
-  missing: "bg-state-bad/15",
+  done: "bg-state-ok/15 dark:bg-state-ok/25",
+  live: "bg-cuenta-representante/15 dark:bg-cuenta-representante/25",
+  pending: "bg-cuenta-menor/10 dark:bg-cuenta-menor/25",
+  missing: "bg-state-bad/15 dark:bg-state-bad/25",
 };
 
 function sentence(item: TimelineItem): string {

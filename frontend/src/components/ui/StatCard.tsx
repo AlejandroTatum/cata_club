@@ -102,9 +102,9 @@ export function StatTrack({ value, total, className }: StatTrackProps): ReactEle
     <span
       aria-hidden="true"
       data-testid="stat-track"
-      className={cn("block h-1.5 w-full overflow-hidden rounded-full bg-line", className)}
+      className={cn("block h-1.5 w-full overflow-hidden rounded-full bg-line dark:bg-track", className)}
     >
-      <i className="block h-full rounded-full bg-coal" style={{ width: `${percent}%` }} />
+      <i className="block h-full rounded-full bg-coal dark:bg-mark" style={{ width: `${percent}%` }} />
     </span>
   );
 }
@@ -175,7 +175,7 @@ export function StatSpark({ values, className }: StatSparkProps): ReactElement |
               "block flex-1 rounded-[2px]",
               // The newest period is the one the figure above reports; the
               // earlier ones are the context it is being read against.
-              index === last ? "bg-coal" : "bg-line-2",
+              index === last ? "bg-coal dark:bg-mark" : "bg-line-2 dark:bg-track",
             )}
             style={{ height: share > 0 ? `${Math.round(share * 1000) / 10}%` : "2px" }}
           />
@@ -254,9 +254,9 @@ export const STAT_BLOCK: Record<
   StatBlock,
   { surface: string; label: string; muted: string; rule: string }
 > = {
-  red: { surface: "bg-cata-red text-white", label: "text-white", muted: "text-white", rule: "border-white/60" },
-  ball: { surface: "bg-ball text-coal", label: "text-coal", muted: "text-coal/80", rule: "border-coal/50" },
-  coal: { surface: "bg-coal text-white", label: "text-white/70", muted: "text-white/70", rule: "border-white/30" },
+  red: { surface: "bg-cata-red text-white dark:bg-kpi-red", label: "text-white", muted: "text-white", rule: "border-white/60" },
+  ball: { surface: "bg-ball text-coal dark:bg-kpi-ball", label: "text-coal", muted: "text-coal/80", rule: "border-coal/50" },
+  coal: { surface: "bg-coal text-white dark:bg-kpi-coal", label: "text-white/70", muted: "text-white/70", rule: "border-white/30" },
   paper: { surface: "bg-paper text-ink", label: "text-ink-3-strong", muted: "text-ink-3-strong", rule: "border-line-2" },
 };
 
@@ -321,7 +321,7 @@ export default function StatCard({
       data-tone={hot ? "action" : tone}
       className={cn(
         "relative min-h-stat rounded-card border-2 border-edge shadow-sticker px-[18px] py-4 flex flex-col justify-between",
-        hot ? "bg-coal" : showIcon ? cn("border-t-[3px]", STAT_TONE[tone].accent) : "bg-paper",
+        hot ? "bg-coal dark:border-edge-hot dark:bg-kpi-coal" : showIcon ? cn("border-t-[3px]", STAT_TONE[tone].accent) : "bg-paper",
         href && "h-full transition-[transform,box-shadow] hover:-translate-x-px hover:-translate-y-px hover:shadow-sticker-lg motion-reduce:transition-none motion-reduce:hover:translate-x-0 motion-reduce:hover:translate-y-0",
         className,
       )}

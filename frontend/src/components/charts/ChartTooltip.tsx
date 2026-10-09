@@ -23,7 +23,7 @@ export default function ChartTooltip({ left, children, className }: ChartTooltip
       data-testid="chart-tooltip"
       aria-hidden="true"
       className={cn(
-        "pointer-events-none absolute top-0 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-coal px-2.5 py-1.5 text-xs text-white",
+        "pointer-events-none absolute top-0 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-coal dark:border dark:border-line-2 dark:bg-popover px-2.5 py-1.5 text-xs text-white",
         className,
       )}
       style={{ left }}
