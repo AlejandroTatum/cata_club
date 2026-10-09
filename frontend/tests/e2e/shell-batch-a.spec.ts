@@ -1,8 +1,8 @@
 /**
  * Shell fixes from the T14 audit, batch A (S13, S9, S4), measured in a browser.
  *
- *  - RC4  the «Reportar un problema» launcher is icon-only on a phone and never
- *         sits on the last thing on the page;
+ *  - RC4  the «Reportar un problema» button is part of the top row (icon-only
+ *         on a phone), never a floating pill over the data;
  *  - RC14 the `/ayuda` shortcut tiles do not clip their own text;
  *  - RC13 `/student/enroll` for a signed-in visitor lives in the app shell and
  *         its two buttons stay inside their card;
@@ -59,37 +59,29 @@ async function noHorizontalOverflow(page: Page): Promise<void> {
 }
 
 test.describe("Shell batch A", () => {
-  test("RC4: the launcher is an icon on a phone and clears the last row", async ({ page }) => {
-    await page.setViewportSize(PHONE);
-    await signIn(page, "admin");
-    await page.goto("/ayuda");
+  for (const [label, viewport, words] of [["phone", PHONE, false], ["desktop", DESKTOP, true]] as const) {
+    test(`RC4 (${label}): the report button lives in the top row and covers nothing`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await signIn(page, "admin");
+      await page.goto("/ayuda");
 
-    const fab = page.locator("button[data-report-ignore]");
-    await expect(fab).toBeVisible({ timeout: 20_000 });
-    const box = (await fab.boundingBox())!;
-    expect(box.width).toBeGreaterThanOrEqual(44);
-    expect(box.width).toBeLessThanOrEqual(48);
-    expect(box.height).toBeGreaterThanOrEqual(44);
+      const button = page.locator("button[data-report-ignore]");
+      await expect(button).toBeVisible({ timeout: 20_000 });
+      expect(await button.evaluate((el) => getComputedStyle(el).position)).toBe("static");
+      const box = (await button.boundingBox())!;
+      expect(box.height).toBeGreaterThanOrEqual(44 - (words ? 4 : 0));
+      expect(box.width >= 120).toBe(words);
+      await expect(button).toHaveAccessibleName("Reportar un problema");
 
-    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-    const fabAtEnd = (await fab.boundingBox())!;
-    const lastBottom = await page.evaluate(() => {
-      const main = document.querySelector("main");
-      const last = main?.lastElementChild as HTMLElement | null;
-      return last ? last.getBoundingClientRect().bottom : 0;
+      // Scrolled to the end, the button is not on screen over the data: it
+      // belongs to the page, above `<main>`, not to the viewport.
+      const mainTop = await page.evaluate(() => document.querySelector("main")!.getBoundingClientRect().top + window.scrollY);
+      expect(box.y + box.height).toBeLessThanOrEqual(mainTop);
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      const after = (await button.boundingBox())!;
+      expect(after.y + after.height).toBeLessThanOrEqual(0 + 1);
     });
-    // At the end of the scroll the last block of the page ends above the launcher.
-    expect(lastBottom).toBeLessThanOrEqual(fabAtEnd.y);
-  });
-
-  test("RC4: the launcher keeps its words from md up", async ({ page }) => {
-    await page.setViewportSize(DESKTOP);
-    await signIn(page, "admin");
-    await page.goto("/ayuda");
-    const fab = page.locator("button[data-report-ignore]");
-    await expect(fab).toBeVisible({ timeout: 20_000 });
-    expect((await fab.boundingBox())!.width).toBeGreaterThan(120);
-  });
+  }
 
   for (const viewport of [DESKTOP, PHONE]) {
     test(`RC14: /ayuda shortcut tiles do not clip their text at ${viewport.width}px`, async ({ page }) => {

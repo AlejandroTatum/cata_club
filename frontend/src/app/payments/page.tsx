@@ -1864,7 +1864,7 @@ export default function PaymentsPage(): React.ReactElement {
                     {/* Below `lg` the decision lives in a bar pinned above the
                         admin tab bar (62px, `AppShell`), so the buttons stay
                         reachable however long the checklist is. The shell's
-                        `pb-[142px]` already keeps the end of the page clear of
+                        `pb-[96px]` already keeps the end of the page clear of
                         both. From `lg` it is the plain inline row. */}
                     <div
                       data-testid="payment-decision-bar"

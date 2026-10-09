@@ -1097,11 +1097,11 @@ describe("AppShell — Ayuda", (): void => {
     openAccountMenu();
     expect(screen.getAllByRole("link", { name: "Ayuda" })).toHaveLength(1);
     expect(screen.queryByRole("link", { name: "Preguntas frecuentes" })).not.toBeInTheDocument();
-    // The floating launcher is the one report entry point inside the shell.
+    // The utility-row button is the one report entry point inside the shell.
     expect(screen.getAllByRole("button", { name: "Reportar un problema" })).toHaveLength(1);
   });
 
-  it("omits the floating report button when there is no session", (): void => {
+  it("omits the report button when there is no session", (): void => {
     mockUseAuth.mockReturnValue({ ...createAuthenticatedAuth("admin", "Admin Cata Club"), session: null });
     render(<AppShell title="Panel de Control">{null}</AppShell>);
 

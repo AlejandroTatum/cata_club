@@ -9,7 +9,7 @@
  * Shape (T14B): one flat toolbar (search + bulk choose/clear), ONE card for the
  * list, and a selection bar that says how many are chosen and why printing is
  * not available yet. The bar is pinned to the bottom edge on a phone — above
- * the tab bar, flagged `data-bottom-bar` so the report launcher steps over it —
+ * the tab bar —
  * and a sticky side panel from `lg`. The list scrolls with the page: a second
  * scrollbar inside the page hid the bar's own rows on a phone.
  */
