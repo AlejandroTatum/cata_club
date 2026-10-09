@@ -38,7 +38,7 @@ import type { ReactElement, ReactNode } from "react";
 import { cn } from "./cn";
 
 /** The small-caps caption used for every group inside the panel. */
-export const FILTER_LABEL = "text-2xs font-bold uppercase text-ink-3";
+export const FILTER_LABEL = "text-2xs font-bold uppercase tracking-caps text-ink-3";
 
 /** What makes the panel read as a panel, on either axis. See the note on margins above. */
 const PANEL = "gap-4 card p-[18px]";

@@ -85,7 +85,7 @@ const FIELD_CONTROL =
   "h-ctl w-full rounded-ctl border border-line-2 bg-paper px-3 text-sm text-ink outline-none focus:border-cata-red";
 
 /** The caption above a field — the system's micro-label, at the field step. */
-const FIELD_LABEL = "flex flex-col gap-field text-2xs font-bold uppercase text-ink-3";
+const FIELD_LABEL = "flex flex-col gap-field text-2xs font-bold uppercase tracking-caps text-ink-3";
 
 /** The text-only "Eliminar" at the right edge of a card's actions: red text
  *  without a box until hovered, so it reads as the one irreversible action. */
@@ -122,7 +122,7 @@ function GhostCards(): React.ReactElement {
             <Badge>{example.tipo}</Badge>
           </div>
           <p className="text-4xl font-extrabold tabular-nums text-ink-3">{example.valor}</p>
-          <span className="mt-auto text-2xs font-bold uppercase text-ink-3">Ejemplo</span>
+          <span className="mt-auto text-2xs font-bold uppercase tracking-caps text-ink-3">Ejemplo</span>
         </li>
       ))}
     </ul>
@@ -409,11 +409,11 @@ export default function DiscountsPage(): React.ReactElement {
       <InfoPanel title="Resumen del catálogo">
         <dl className="grid grid-cols-2 gap-section">
           <div>
-            <dt className="text-2xs font-bold uppercase text-ink-3">Activos</dt>
+            <dt className="text-2xs font-bold uppercase tracking-caps text-ink-3">Activos</dt>
             <dd className="text-2xl font-extrabold tabular-nums text-ink">{activos}</dd>
           </div>
           <div>
-            <dt className="text-2xs font-bold uppercase text-ink-3">Ocultos</dt>
+            <dt className="text-2xs font-bold uppercase tracking-caps text-ink-3">Ocultos</dt>
             <dd className="text-2xl font-extrabold tabular-nums text-ink">{ocultos}</dd>
           </div>
         </dl>

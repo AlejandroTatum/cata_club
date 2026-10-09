@@ -139,7 +139,7 @@ export default function TimePicker24({
           aria-label={label}
           className="absolute left-0 top-[46px] z-10 w-[300px] max-w-[calc(100vw-3rem)] rounded-xl border border-line bg-paper p-3.5 shadow-elevated"
         >
-          <p className="mb-1.5 text-2xs font-bold uppercase text-ink-3">Hora</p>
+          <p className="mb-1.5 text-2xs font-bold uppercase tracking-caps text-ink-3">Hora</p>
           <div role="group" aria-label="Hora" className="mb-3 grid grid-cols-6 gap-1">
             {hours.map((h) => (
               <button
@@ -153,7 +153,7 @@ export default function TimePicker24({
               </button>
             ))}
           </div>
-          <p className="mb-1.5 text-2xs font-bold uppercase text-ink-3">Minutos</p>
+          <p className="mb-1.5 text-2xs font-bold uppercase tracking-caps text-ink-3">Minutos</p>
           <div role="group" aria-label="Minutos" className="grid grid-cols-6 gap-1">
             {minutes.map((m) => (
               <button

@@ -341,7 +341,7 @@ export default function StatCard({
 
       <span
         className={cn(
-          "text-2xs font-bold uppercase",
+          "text-2xs font-bold uppercase tracking-caps",
           hot ? "text-white/45" : "text-ink-3-strong",
           showIcon && "pr-11",
         )}

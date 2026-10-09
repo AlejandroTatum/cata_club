@@ -129,7 +129,7 @@ export function TableHeaderCell({
       scope="col"
       className={cn(
         "h-thead whitespace-nowrap border-b border-line bg-sunken px-4",
-        "text-2xs font-bold uppercase text-ink-3-strong",
+        "text-2xs font-bold uppercase tracking-caps text-ink-3-strong",
         resolvedAlign === "right" ? "text-right" : "text-left",
         className,
       )}

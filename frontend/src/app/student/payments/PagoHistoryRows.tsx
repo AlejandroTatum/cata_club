@@ -80,7 +80,7 @@ function PagoDetailPanel({ pago }: { pago: PagoPersona }): React.ReactElement {
        * lo que genera el reclamo. */}
       {descuento && (
         <div data-testid="pago-descuento" className="rounded-ctl bg-sunken px-3.5 py-2.5">
-          <p className="text-2xs font-bold uppercase text-ink-3-strong">
+          <p className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
             Descuento aplicado por el club
           </p>
           <dl className="mt-1.5 flex flex-wrap gap-x-6 gap-y-field">
@@ -118,7 +118,7 @@ function PagoDetailPanel({ pago }: { pago: PagoPersona }): React.ReactElement {
           socio deba resolver. */}
       {pago.motivoExcepcionSinComprobante && (
         <div className="rounded-ctl bg-sunken px-3.5 py-2.5">
-          <p className="text-2xs font-bold uppercase text-ink-3-strong">
+          <p className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
             Aprobado sin comprobante (excepción)
           </p>
           <p className="mt-0.5 text-sm text-ink-2">{pago.motivoExcepcionSinComprobante}</p>

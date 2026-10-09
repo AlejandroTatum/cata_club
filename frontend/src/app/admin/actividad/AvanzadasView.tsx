@@ -151,7 +151,7 @@ function Service({ service, now }: { service: ServiceMetrics | null; now: string
           const value = service.latencyMs[key];
           return (
             <div key={key} className="flex flex-col gap-field">
-              <dt className="flex items-center gap-2 text-2xs font-bold uppercase text-ink-3-strong">
+              <dt className="flex items-center gap-2 text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
                 <span>{key}</span>
                 {key === "p95" && toneP95 !== "ok" ? <Badge tone={toneP95}>Atención</Badge> : null}
               </dt>
@@ -356,7 +356,7 @@ function Users({ users, range, now }: { users: UsersMetrics | null; range: Avanz
         </Row>
       </dl>
       <div className="border-t border-line">
-        <h3 className="m-0 px-[18px] pt-4 text-2xs font-bold uppercase text-ink-3-strong">Sesiones activas por rol</h3>
+        <h3 className="m-0 px-[18px] pt-4 text-2xs font-bold uppercase tracking-caps text-ink-3-strong">Sesiones activas por rol</h3>
         {sessionsByRole ? (
           <dl className="m-0 divide-y divide-line">
             {ROLE_ROWS.map(({ key, label }) => (

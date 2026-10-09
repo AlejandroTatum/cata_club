@@ -140,7 +140,7 @@ function AttendanceSummary({
       {/* A guardian with one dependent never sees the switcher (it hides below
           two profiles), so this kicker is the only place that names whose
           record this is. */}
-      <p className="text-2xs font-bold uppercase text-ink-3-strong">
+      <p className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
         {studentName ? `Asistencia de ${studentName}` : "Tu asistencia"}
       </p>
       <div className={STAT_GRID}>
@@ -302,7 +302,7 @@ function SessionList({
               key={`${session.fecha}-${session.horario}`}
               className="flex min-h-drow flex-wrap items-center gap-x-4 gap-y-field border-b border-line px-5 py-2 last:border-b-0"
             >
-              <span className="w-[92px] flex-none text-2xs font-bold uppercase tabular-nums text-ink-3-strong">
+              <span className="w-[92px] flex-none text-2xs font-bold uppercase tracking-caps tabular-nums text-ink-3-strong">
                 {formatDate(session.fecha)}
               </span>
               <span className="min-w-0 flex-1 text-sm font-semibold text-ink">{session.horario}</span>

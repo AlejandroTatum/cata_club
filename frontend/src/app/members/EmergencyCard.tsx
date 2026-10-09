@@ -33,7 +33,7 @@ const FIELD_LABELS: { key: keyof EmergencyCardValues; label: string }[] = [
 function Line({ label, value, emptyText }: { label: string; value: string; emptyText: string }): React.ReactElement {
   return (
     <div className="flex items-baseline justify-between gap-3 border-b border-line py-2.5 last:border-b-0">
-      <dt className="flex-none text-2xs font-bold uppercase text-ink-3-strong">{label}</dt>
+      <dt className="flex-none text-2xs font-bold uppercase tracking-caps text-ink-3-strong">{label}</dt>
       <dd className={value ? "min-w-0 break-words text-right text-sm font-semibold text-ink" : "text-right text-sm text-ink-3-strong"}>{value || emptyText}</dd>
     </div>
   );
@@ -42,7 +42,7 @@ function Line({ label, value, emptyText }: { label: string; value: string; empty
 function Alert({ label, value }: { label: string; value: string }): React.ReactElement {
   return (
     <div>
-      <dt className="text-2xs font-bold uppercase text-state-warn">{label}</dt>
+      <dt className="text-2xs font-bold uppercase tracking-caps text-state-warn">{label}</dt>
       <dd className="break-words text-base font-bold text-ink">{value}</dd>
     </div>
   );
@@ -99,7 +99,7 @@ export default function EmergencyCard({
               data-testid="emergency-card-health"
               className="flex flex-col gap-2.5 rounded-ctl border border-state-warn/30 bg-state-warn-bg p-3"
             >
-              <div className="flex items-center gap-1.5 text-2xs font-bold uppercase text-state-warn">
+              <div className="flex items-center gap-1.5 text-2xs font-bold uppercase tracking-caps text-state-warn">
                 <TriangleAlert size={ICON.sm} strokeWidth={1.75} aria-hidden="true" />
                 Atención médica
               </div>
@@ -117,7 +117,7 @@ export default function EmergencyCard({
             </dl>
           ) : null}
           <div data-testid="emergency-card-contact" className="rounded-ctl border border-line p-3">
-            <div className="flex items-center gap-1.5 text-2xs font-bold uppercase text-ink-3-strong">
+            <div className="flex items-center gap-1.5 text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
               <Phone size={ICON.sm} strokeWidth={1.75} aria-hidden="true" />
               Contacto de emergencia
             </div>
@@ -146,7 +146,7 @@ export default function EmergencyCard({
 
       <section className="card p-4" aria-labelledby="emergency-completeness-title">
         <div className="flex items-baseline justify-between gap-2">
-          <h3 id="emergency-completeness-title" className="text-2xs font-bold uppercase text-ink-3-strong">
+          <h3 id="emergency-completeness-title" className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
             Ficha completa
           </h3>
           <span className="text-sm font-bold tabular-nums text-ink">{pct}%</span>
@@ -169,7 +169,7 @@ export default function EmergencyCard({
       </section>
 
       <section className="card p-4" aria-labelledby="emergency-visibility-title">
-        <h3 id="emergency-visibility-title" className="flex items-center gap-1.5 text-2xs font-bold uppercase text-ink-3-strong">
+        <h3 id="emergency-visibility-title" className="flex items-center gap-1.5 text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
           <ShieldCheck size={ICON.sm} strokeWidth={1.75} aria-hidden="true" />
           Quién puede ver estos datos
         </h3>

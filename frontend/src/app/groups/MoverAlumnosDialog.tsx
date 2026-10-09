@@ -54,7 +54,7 @@ interface MoverAlumnosDialogProps {
 
 const FIELD_CONTROL =
   "h-ctl w-full rounded-ctl border border-line-2 bg-paper px-3 text-sm text-ink outline-none focus:border-cata-red";
-const FIELD_LABEL = "flex flex-col gap-field text-2xs font-bold uppercase text-ink-3";
+const FIELD_LABEL = "flex flex-col gap-field text-2xs font-bold uppercase tracking-caps text-ink-3";
 
 function DestinoSelect({
   label,
