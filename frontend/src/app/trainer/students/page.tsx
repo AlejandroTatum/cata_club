@@ -483,7 +483,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
                           <div className="flex flex-wrap items-center gap-1.5">
                             {alumno.categorias.map((c) => (
                               <Badge key={c.codigo} tone="ok">
-                                Categoría {c.etiqueta}
+                                {c.etiqueta}
                               </Badge>
                             ))}
                             <Badge>{alumno.horariosCompactos ?? "Sin horario"}</Badge>

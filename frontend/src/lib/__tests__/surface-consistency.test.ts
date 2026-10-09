@@ -129,3 +129,14 @@ describe("the micro text step", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+/** Copy that repeated what its own column or heading already said (T14 RC18). */
+describe("copy says each thing once", () => {
+  it("the roster's category badge does not repeat «Categoría» under the «Categoría y horario» header", () => {
+    expect(code("app/trainer/students/page.tsx")).not.toMatch(/<Badge[^>]*>\s*Categoría \{c\.etiqueta\}/);
+  });
+
+  it("a partly-filled session's «N de M registrados» is its own line, not wrapped mid-sentence beside the time", () => {
+    expect(code("components/attendance/AttendancePeriodRail.tsx")).not.toMatch(/ml-2 text-xs font-semibold text-state-warn/);
+  });
+});

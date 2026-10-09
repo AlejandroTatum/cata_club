@@ -241,7 +241,7 @@ export default function AttendancePeriodRail({
                       </span>
                       {m.registrados !== undefined &&
                         m.inscritos !== undefined && (
-                          <span className="ml-2 text-xs font-semibold text-state-warn">
+                          <span className="block text-xs font-semibold text-state-warn">
                             {m.registrados} de {m.inscritos} registrados
                           </span>
                         )}
