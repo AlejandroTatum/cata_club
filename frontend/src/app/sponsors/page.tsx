@@ -5,10 +5,9 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { Handshake, Trash2 } from "lucide-react";
-import EmptyGrid from "@/app/galeria/EmptyGrid";
 import PublishGuide from "@/app/galeria/PublishGuide";
 import SponsorsStripPreview from "./SponsorsStripPreview";
-import { Button, ErrorState, FileDropZone, LoadingState, PAGE_RAIL } from "@/components/ui";
+import { Button, EmptyState, ErrorState, FileDropZone, LoadingState, PAGE_RAIL } from "@/components/ui";
 import { ICON } from "@/lib/icon-size";
 import { useToast } from "@/contexts/ToastContext";
 import { imageFileError, uploadErrorMessage } from "@/app/galeria/uploadError";
@@ -82,15 +81,12 @@ export default function SponsorsPage(): React.ReactElement {
     catch { showError("No se pudo eliminar el patrocinador."); }
   }
 
-  // With no sponsors the main column stretches to the composer's height and the ghost grid takes the slack.
-  const vacio = !cargando && !errorCarga && sponsors.length === 0;
-
   return <ProtectedRoute allowedRoles={["admin"]}><AppShell
     title="Patrocinadores"
     subtitle="Sube el logo y el nombre que se leerá como texto alternativo en la landing."
   >
     <>
-      <div className={`${PAGE_RAIL} ${vacio ? "lg:flex-1" : ""}`}>
+      <div className={PAGE_RAIL}>
         <div className="flex min-w-0 flex-col gap-page max-lg:contents lg:col-start-2 lg:row-start-1">
         <form onSubmit={submit} className="card flex max-lg:order-1 min-w-0 flex-col gap-4 p-4 lg:order-2">
           <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Agregar patrocinador</h2>
@@ -128,11 +124,17 @@ export default function SponsorsPage(): React.ReactElement {
           { term: "Al eliminar", detail: "El logo deja de mostrarse en la landing y no se puede recuperar." },
         ]} />
         </div>
-        <div className={`flex min-w-0 flex-col gap-page max-lg:order-2 lg:col-start-1 lg:row-start-1 ${vacio ? "lg:self-stretch" : ""}`}>
-        <section aria-label="Logos cargados" className={`flex min-w-0 flex-col ${vacio ? "lg:flex-1" : ""}`}>
+        <div className="flex min-w-0 flex-col gap-page max-lg:order-2 lg:col-start-1 lg:row-start-1">
+        <section aria-label="Logos cargados" className="flex min-w-0 flex-col">
           {cargando ? <LoadingState label="Cargando patrocinadores…" />
             : errorCarga ? <ErrorState message="No se pudieron cargar los patrocinadores." onRetry={() => void load()} />
-            : sponsors.length === 0 ? <EmptyGrid icon={<Handshake size={ICON.lg} />} title="Aún no hay patrocinadores cargados" description="Los logos cargados aparecen aquí y en la landing." tileRatio="5 / 2" tiles={32} compact wide />
+            : sponsors.length === 0 ? <EmptyState
+              layout="row"
+              icon={<Handshake size={ICON.lg} />}
+              title="Aún no hay patrocinadores cargados"
+              description="Los logos cargados aparecen aquí y en la landing."
+              action={<Button variant="primary" onClick={() => document.getElementById("sponsor-nombre")?.focus()}>Subir el primer logo</Button>}
+            />
             : <div className="card p-4"><ul className={`grid grid-cols-2 content-start gap-3 lg:gap-4 ${sponsors.length <= FEW_SPONSORS ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}>{sponsors.map((sponsor) => <li key={sponsor.id} className="flex flex-col gap-2 rounded-card border border-line p-2">
               <div style={TILE_STYLE} className={TILE}>
                 {/* eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset */}
@@ -146,7 +148,7 @@ export default function SponsorsPage(): React.ReactElement {
               </div>
             </li>)}</ul></div>}
         </section>
-        {!cargando && !errorCarga && <SponsorsStripPreview sponsors={sponsors} few={sponsors.length <= FEW_SPONSORS} />}
+        {!cargando && !errorCarga && sponsors.length > 0 && <SponsorsStripPreview sponsors={sponsors} few={sponsors.length <= FEW_SPONSORS} />}
         </div>
       </div>
       <ConfirmDialog

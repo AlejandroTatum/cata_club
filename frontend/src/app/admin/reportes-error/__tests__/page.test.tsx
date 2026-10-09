@@ -67,6 +67,16 @@ describe("bandeja de reportes", () => {
     vi.mocked(fetchReportesError).mockResolvedValue(pagina([]));
     render(<ReportesErrorPage />);
     expect(await screen.findByText("Aún no hay reportes de error")).toBeInTheDocument();
+    // RC1: no skeleton rows, and no action: reports are filed by users, not by the admin.
+    expect(screen.queryByTestId("ghost-rows")).not.toBeInTheDocument();
+    const region = screen.getByRole("region", { name: "Reportes recibidos" });
+    expect(within(region).queryByRole("button")).not.toBeInTheDocument();
+    expect(region.className).not.toMatch(/min-h-/);
+  });
+  it("does not continue a short list with skeleton rows", async () => {
+    render(<ReportesErrorPage />);
+    await screen.findByRole("button", { name: /Reporte #7/ });
+    expect(screen.queryByTestId("ghost-rows")).not.toBeInTheDocument();
   });
   it("shows an inbox error with retry, without the empty copy", async () => {
     vi.mocked(fetchReportesError).mockRejectedValueOnce(new Error("unavailable"));

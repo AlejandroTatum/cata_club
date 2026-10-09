@@ -303,8 +303,20 @@ describe("GaleriaPage", () => {
     render(<GaleriaPage />);
     expect(await screen.findByText("Aún no hay fotos en la galería")).toBeInTheDocument();
     expect(screen.getByText("Las fotos publicadas aparecen aquí y en la galería del sitio.")).toBeInTheDocument();
-    expect(screen.getByTestId("empty-grid-tiles").firstElementChild).toHaveStyle({ aspectRatio: "3 / 2" });
-    expect(screen.getByRole("region", { name: "Fotos publicadas" })).toHaveClass("lg:self-stretch");
+    // RC1: one compact block, no placeholder grid, and the page's primary action inside it.
+    expect(screen.queryByTestId("empty-grid-tiles")).not.toBeInTheDocument();
+    const region = screen.getByRole("region", { name: "Fotos publicadas" });
+    expect(region).not.toHaveClass("lg:self-stretch");
+    expect(region.querySelectorAll("[class*='border-dashed']")).toHaveLength(0);
+  });
+  it("wires the empty state's action to the file picker of the upload form", async () => {
+    fetchGaleria.mockResolvedValue([]);
+    const open = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => undefined);
+    render(<GaleriaPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Subir la primera foto" }));
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open.mock.contexts[0]).toBe(document.getElementById("galeria-foto"));
+    open.mockRestore();
   });
   it("shows a loading state, not the empty copy, while the list loads", async () => {
     let resolver: (v: unknown[]) => void = () => undefined;
