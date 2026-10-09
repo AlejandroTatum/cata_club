@@ -163,7 +163,7 @@ export default function SessionsCard({ refreshKey = 0, embedded = false }: Sessi
           >
             <p className="m-0 break-words text-sm font-semibold text-ink">{sesion.dispositivo}</p>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="text-2xs tracking-flat text-ink-3-strong">
+              <span className="text-xs tracking-flat text-ink-3-strong">
                 {formatDateTime(sesion.iniciadaEn)}
               </span>
               {/* "Este equipo" es lo que vuelve legible la lista: con varios

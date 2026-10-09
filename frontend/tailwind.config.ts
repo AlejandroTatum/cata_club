@@ -509,7 +509,7 @@ const config: Config = {
       // ---------------------------------------------------------------------
       fontSize: {
         /** Micro text: table head, kicker, badge text. Size only; uppercase labels ask for `tracking-caps`. */
-        "2xs": ["10.5px", { lineHeight: "1.4" }],
+        "2xs": ["11.5px", { lineHeight: "1.4" }],
         /** Secondary metadata: helper text, timestamps, chip text. */
         xs: ["12.5px", { lineHeight: "1.5", letterSpacing: "0em" }],
         /** Dense interface text: table cells, form labels, list rows. */

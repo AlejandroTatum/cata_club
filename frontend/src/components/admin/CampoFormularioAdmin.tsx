@@ -38,8 +38,8 @@ interface CampoFormularioAdminProps {
   numberInputMode?: "decimal" | "numeric";
   /** Only `type="textarea"` cares — every motivo field has its own example text. */
   placeholder?: string;
-  /** `"mt-2 block text-2xs text-ink-3"` when this field stacks under other
-   *  fields in the same form; `"block text-2xs text-ink-3"` (no top margin)
+  /** `"mt-2 block text-xs text-ink-3"` when this field stacks under other
+   *  fields in the same form; `"block text-xs text-ink-3"` (no top margin)
    *  when it is the first/only field. */
   labelClassName?: string;
 }
@@ -56,7 +56,7 @@ export default function CampoFormularioAdmin({
   numberMax,
   numberInputMode = "decimal",
   placeholder,
-  labelClassName = "block text-2xs text-ink-3",
+  labelClassName = "block text-xs text-ink-3",
 }: CampoFormularioAdminProps): React.ReactElement {
   const inputClassName = "mt-0.5 w-full rounded-md border border-line bg-bg px-2 py-1 text-xs text-ink";
 

@@ -211,7 +211,7 @@ function LabeledDataBox({
 }): React.ReactElement {
   return (
     <span className="inline-flex flex-col items-start gap-0.5">
-      <span className="text-2xs text-ink-3">{label}</span>
+      <span className="text-xs text-ink-3">{label}</span>
       <DataBox>{children}</DataBox>
     </span>
   );
@@ -518,7 +518,7 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
         <IdentityCell name={fullName} roles={accountDisplayRoles(account)} />
         {/* ADMA-03: on a tablet the column below does not fit, so the name moves under the person. */}
         {account.representadoPor ? (
-          <p className="mt-1 text-2xs text-ink-3 lg:hidden">Representado por {account.representadoPor}</p>
+          <p className="mt-1 text-xs text-ink-3 lg:hidden">Representado por {account.representadoPor}</p>
         ) : null}
       </TableCell>
       <TableCell className="hidden lg:table-cell">{account.representadoPor ?? "—"}</TableCell>
@@ -529,7 +529,7 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
           <>
             <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
             {/* ADMA-24: how much is owed and since when, without opening the ficha. */}
-            {debtSummary ? <p className="mt-1 text-2xs text-ink-3">{debtSummary}</p> : null}
+            {debtSummary ? <p className="mt-1 text-xs text-ink-3">{debtSummary}</p> : null}
           </>
         ) : (
           "—"
@@ -582,7 +582,7 @@ function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItem
         showPlayerColumns ? (
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
-            {debtSummary ? <span className="text-2xs text-ink-3">{debtSummary}</span> : null}
+            {debtSummary ? <span className="text-xs text-ink-3">{debtSummary}</span> : null}
           </div>
         ) : undefined
       }

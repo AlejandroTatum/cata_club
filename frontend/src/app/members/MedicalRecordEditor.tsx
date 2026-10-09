@@ -542,7 +542,7 @@ export default function MedicalRecordEditor({
             {fieldErrors.alergias}
           </p>
         ) : (
-          <p id={`alergias-help-${personaId}`} className="mt-1 text-2xs tracking-flat text-ink-3">
+          <p id={`alergias-help-${personaId}`} className="mt-1 text-xs tracking-flat text-ink-3">
             {NINGUNO_HELP}
           </p>
         )}
@@ -574,7 +574,7 @@ export default function MedicalRecordEditor({
             {fieldErrors.enfermedades}
           </p>
         ) : (
-          <p id={`enfermedades-help-${personaId}`} className="mt-1 text-2xs tracking-flat text-ink-3">
+          <p id={`enfermedades-help-${personaId}`} className="mt-1 text-xs tracking-flat text-ink-3">
             {NINGUNO_HELP} Al guardar se reemplaza la lista completa.
           </p>
         )}
@@ -624,7 +624,7 @@ export default function MedicalRecordEditor({
         />
       </div>
       {mostrarPorDefecto && (
-        <p className="text-2xs tracking-flat text-ink-3 sm:col-span-2">
+        <p className="text-xs tracking-flat text-ink-3 sm:col-span-2">
           Por defecto es el representante: {representante.nombre}
           {representante.telefono ? ` · ${representante.telefono}` : ""}. Puedes cambiarlo.
         </p>

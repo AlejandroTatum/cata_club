@@ -87,3 +87,45 @@ describe("groups rows are compact", () => {
     expect(source).toMatch(/md:col-start-2 md:self-end md:justify-end/);
   });
 });
+
+/**
+ * The micro step is for uppercase tracked labels, chips and counters (T14
+ * RC16). Sentence-case helper text — hints, secondary lines, form sub-labels —
+ * is read, not scanned, so it sits on `text-xs`; and the step itself is
+ * 11.5px, not the 10.5px that was hard to scan at 1440 and cramped at 390.
+ */
+describe("the micro text step", () => {
+  const SENTENCE_CASE_HELPERS = [
+    "app/members/page.tsx",
+    "app/members/MedicalRecordEditor.tsx",
+    "components/wizard-fields.tsx",
+    "components/NotificationBell.tsx",
+    "components/admin/CampoFormularioAdmin.tsx",
+    "app/admin/dias-sin-clase/page.tsx",
+    "app/attendance/AttendanceCorrectionAction.tsx",
+    "app/student/MemberCard.tsx",
+    "app/trainer/RecentSessionsList.tsx",
+    "app/trainer/attendance/AttendanceRosterRow.tsx",
+    "components/ui/Table.tsx",
+    "components/ui/ActivityList.tsx",
+    "components/shell/AccountMenu.tsx",
+    "app/profile/SessionsCard.tsx",
+  ];
+
+  it("is at least 11.5px", async () => {
+    const config = (await import("../../../tailwind.config")).default;
+    const fontSize = config.theme?.extend?.fontSize as Record<string, [string, unknown]>;
+    expect(parseFloat(fontSize["2xs"][0])).toBeGreaterThanOrEqual(11.5);
+  });
+
+  it.each(SENTENCE_CASE_HELPERS)("%s sets its helper text on text-xs, not text-2xs", (path) => {
+    // These files still use `text-2xs` for chips, badges and initials; what
+    // must be gone is the sentence-case use, i.e. a line with `text-2xs` and
+    // no `uppercase`, no fixed box (`h-`/`w-`) and no `font-bold` chip look.
+    const offenders = code(path)
+      .split("\n")
+      .filter((line) => /(?<![\w-])text-2xs(?![\w-])/.test(line))
+      .filter((line) => !/uppercase|\bh-\d|\bh-\[|\bw-\d|rounded-full|kbd|font-bold|font-extrabold|h-badge/.test(line));
+    expect(offenders).toEqual([]);
+  });
+});

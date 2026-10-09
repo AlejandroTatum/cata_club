@@ -186,7 +186,7 @@ export function TableNameCell({ name, sub, className }: TableNameCellProps): Rea
   return (
     <TableCell className={className}>
       <span className="block text-sm font-semibold text-ink">{name}</span>
-      {sub ? <span className="mt-px block text-2xs tracking-flat text-ink-3">{sub}</span> : null}
+      {sub ? <span className="mt-px block text-xs tracking-flat text-ink-3">{sub}</span> : null}
     </TableCell>
   );
 }

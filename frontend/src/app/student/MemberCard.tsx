@@ -478,7 +478,7 @@ export default function MemberCard({
           </>
         )}
         {fotoError && (
-          <p role="alert" className="w-full text-2xs text-state-bad">
+          <p role="alert" className="w-full text-xs text-state-bad">
             {fotoError}
           </p>
         )}

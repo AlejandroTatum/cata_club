@@ -473,7 +473,7 @@ export function BirthDateField(opts: BirthDateFieldProps): ReactElement {
       </legend>
       <div className="grid grid-cols-[4.5rem_minmax(7.5rem,1fr)_5.5rem] gap-2">
         <div>
-          <label htmlFor={partIds.day} className="mb-1 block text-2xs font-semibold text-ink-3">
+          <label htmlFor={partIds.day} className="mb-1 block text-xs font-semibold text-ink-3">
             Día
           </label>
           <input
@@ -491,7 +491,7 @@ export function BirthDateField(opts: BirthDateFieldProps): ReactElement {
           />
         </div>
         <div>
-          <label htmlFor={partIds.month} className="mb-1 block text-2xs font-semibold text-ink-3">
+          <label htmlFor={partIds.month} className="mb-1 block text-xs font-semibold text-ink-3">
             Mes
           </label>
           <Select
@@ -513,7 +513,7 @@ export function BirthDateField(opts: BirthDateFieldProps): ReactElement {
           </Select>
         </div>
         <div>
-          <label htmlFor={partIds.year} className="mb-1 block text-2xs font-semibold text-ink-3">
+          <label htmlFor={partIds.year} className="mb-1 block text-xs font-semibold text-ink-3">
             Año
           </label>
           <input

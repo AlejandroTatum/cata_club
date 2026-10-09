@@ -416,7 +416,7 @@ function ProofViewer({
             name, so the badge renders only when a proof does; a transfer
             with a voucher, or cash with a receipt, keeps it unchanged. */}
         {request.proofPreviewUrl && (
-          <span className="shrink-0 text-2xs tracking-flat text-ink-3-strong">
+          <span className="shrink-0 text-xs tracking-flat text-ink-3-strong">
             {request.proofFileType === "pdf" ? "PDF" : "Imagen"}
           </span>
         )}
@@ -1514,7 +1514,7 @@ export default function PaymentsPage(): React.ReactElement {
                     <p id={mobileNameId} className="truncate text-sm font-semibold text-ink">
                       {fields.studentName}
                     </p>
-                    <p className="truncate text-2xs tracking-flat text-ink-3-strong">{fields.payer}</p>
+                    <p className="truncate text-xs tracking-flat text-ink-3-strong">{fields.payer}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-field text-xs text-ink-2">
                     <span>{fields.period}</span>

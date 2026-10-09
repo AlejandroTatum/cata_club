@@ -139,7 +139,7 @@ export default function NotificationBell({
               Notificaciones
             </p>
             {unreadCount > 0 && (
-              <span className="flex items-center gap-1 text-2xs tracking-flat font-semibold text-cata-red">
+              <span className="flex items-center gap-1 text-xs tracking-flat font-semibold text-cata-red">
                 <CheckCheck
                   size={ICON.sm}
                   strokeWidth={1.5}
@@ -157,7 +157,7 @@ export default function NotificationBell({
                 onClick={onMarkAllRead}
                 disabled={marcandoTodas}
                 aria-busy={marcandoTodas}
-                className="flex items-center gap-1 text-2xs tracking-flat font-semibold text-cata-text/65 transition-colors hover:text-cata-text disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex items-center gap-1 text-xs tracking-flat font-semibold text-cata-text/65 transition-colors hover:text-cata-text disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <CheckCheck
                   size={ICON.sm}
@@ -175,7 +175,7 @@ export default function NotificationBell({
             <p
               role="status"
               aria-live="polite"
-              className="px-2 pb-1.5 text-2xs text-cata-red"
+              className="px-2 pb-1.5 text-xs text-cata-red"
             >
               No se pudieron marcar todas las notificaciones como leídas.
             </p>
@@ -220,7 +220,7 @@ export default function NotificationBell({
                       <p className="mt-0.5 text-xs text-cata-text/65">
                         {regularizacion?.body ?? n.mensaje}
                       </p>
-                      <p className="mt-1 text-2xs tracking-flat text-ink-3">
+                      <p className="mt-1 text-xs tracking-flat text-ink-3">
                         {formatDateTime(n.fechaCreacion)}
                       </p>
                     </button>
