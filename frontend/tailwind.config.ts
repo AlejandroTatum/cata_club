@@ -687,12 +687,12 @@ const config: Config = {
         },
       },
       animation: {
-        "overlay-in": "fade-in var(--motion-overlay) var(--ease-out) both",
-        "dialog-in": "land var(--motion-overlay) var(--ease-out) both",
-        "sheet-in": "sheet-in var(--motion-overlay) var(--ease-out) both",
-        "toast-in": "toast-in var(--motion-overlay) var(--ease-out) both",
-        reveal: "reveal var(--motion-base) var(--ease-out) both",
-        disclose: "disclose var(--motion-base) var(--ease-out) both",
+        "overlay-in": "fade-in var(--motion-overlay) var(--ease-out)",
+        "dialog-in": "land var(--motion-overlay) var(--ease-out)",
+        "sheet-in": "sheet-in var(--motion-overlay) var(--ease-out)",
+        "toast-in": "toast-in var(--motion-overlay) var(--ease-out)",
+        reveal: "reveal var(--motion-base) var(--ease-out)",
+        disclose: "disclose var(--motion-base) var(--ease-out)",
       },
       borderRadius: {
         card: "14px",

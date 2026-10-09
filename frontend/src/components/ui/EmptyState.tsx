@@ -102,7 +102,7 @@ export default function EmptyState({
     return (
       <div
         className={cn(
-          "flex flex-wrap items-center gap-x-4 gap-y-3 px-5 py-4 text-left",
+          "flex animate-reveal flex-wrap items-center gap-x-4 gap-y-3 px-5 py-4 text-left",
           surface === "card" && "card",
           className,
         )}
@@ -125,7 +125,7 @@ export default function EmptyState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center gap-2.5 px-6 py-11 text-center",
+        "flex animate-reveal flex-col items-center gap-2.5 px-6 py-11 text-center",
         fill && "flex-1 justify-center",
         surface === "card" && "card",
         className,

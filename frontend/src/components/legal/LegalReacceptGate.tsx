@@ -109,13 +109,13 @@ export default function LegalReacceptGate(): ReactElement | null {
 
   const document_ = LEGAL_REVIEW_DOCUMENTS.terminos;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-cata-black/60 px-4 pt-4 sm:items-center sm:pb-4">
+    <div className="fixed inset-0 z-50 flex animate-overlay-in items-end justify-center bg-cata-black/60 px-4 pt-4 sm:items-center sm:pb-4">
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="legal-reaccept-title"
-        className="card relative flex max-h-[85dvh] w-full max-w-measure flex-col overflow-hidden p-0 shadow-elevated"
+        className="card relative flex max-h-[85dvh] w-full max-w-measure animate-sheet-in flex-col overflow-hidden p-0 shadow-elevated sm:animate-dialog-in"
       >
         <header className="flex-none border-b border-line px-page pb-section pt-page">
           <p className="mb-4 text-xs font-extrabold uppercase tracking-caps-wide text-cata-red-dark">

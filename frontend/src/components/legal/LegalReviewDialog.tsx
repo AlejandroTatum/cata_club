@@ -172,14 +172,14 @@ export default function LegalReviewDialog({
         aria-hidden="true"
         data-testid="legal-review-backdrop"
         onClick={onClose}
-        className="absolute inset-0 bg-cata-black/40"
+        className="absolute inset-0 animate-overlay-in bg-cata-black/40"
       />
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="legal-review-title"
-        className="card relative flex max-h-[85dvh] w-full max-w-measure flex-col overflow-hidden p-0 shadow-elevated"
+        className="card relative flex max-h-[85dvh] w-full max-w-measure animate-sheet-in flex-col overflow-hidden p-0 shadow-elevated sm:animate-dialog-in"
       >
         {/*
          * The public page's heading group, transcribed: red rule, uppercase

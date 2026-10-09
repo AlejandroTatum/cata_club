@@ -128,3 +128,51 @@ describe("motion kit", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("motion kit placement", () => {
+  const read = (path: string): string => stripComments(readFileSync(join(SRC, path), "utf8"));
+  const OVERLAYS = [
+    "components/ConfirmDialog.tsx",
+    "components/PhotoViewerDialog.tsx",
+    "components/ReportProblemDialog.tsx",
+    "components/legal/LegalReviewDialog.tsx",
+    "components/legal/LegalReacceptGate.tsx",
+    "components/shell/AppShell.tsx",
+    "app/groups/MoverAlumnosDialog.tsx",
+    "app/payments/page.tsx",
+    "app/trainer/attendance/AttendanceCorrectionDialog.tsx",
+    "app/trainer/attendance/EmergencyCardDialog.tsx",
+    "app/trainer/students/ScheduleDialog.tsx",
+  ];
+
+  it("every modal backdrop fades in and every panel lands or slides in", () => {
+    for (const path of OVERLAYS) {
+      const code = read(path);
+      expect(code, path).toContain("animate-overlay-in");
+      expect(code, path).toMatch(/animate-(?:dialog|sheet)-in/);
+    }
+  });
+
+  it("the toast, the empty and error states and both disclosures use the kit", () => {
+    expect(read("components/ToastContainer.tsx")).toContain("animate-toast-in");
+    expect(read("components/ui/EmptyState.tsx").match(/animate-reveal/g)).toHaveLength(2);
+    expect(read("components/ui/ErrorState.tsx")).toContain("animate-reveal");
+    expect(read("components/ui/InfoPanel.tsx")).toContain("animate-disclose");
+    expect(read("components/ui/Accordion.tsx")).toContain("animate-disclose");
+  });
+
+  it("data tables never animate: no kit class, no transition on rows while paging", () => {
+    for (const path of ["components/ui/Table.tsx", "components/ui/ResponsiveListTable.tsx", "components/ui/ScrollableTable.tsx", "components/ui/Pagination.tsx"]) {
+      expect(read(path), path).not.toMatch(/animate-(?:overlay-in|dialog-in|sheet-in|toast-in|reveal|disclose)/);
+    }
+  });
+
+  it("the press travels on transform only and gives the travel back under reduced motion", () => {
+    const button = read("components/ui/Button.tsx");
+    expect(button).toContain("transition-[color,background-color,border-color,transform] duration-fast ease-out-expo");
+    expect(button).not.toMatch(/box-shadow\]|duration-\d/);
+    expect(button).toContain("motion-reduce:active:translate-x-0");
+    expect(GLOBALS).toMatch(/\.card-hover:active\s*\{/);
+    expect(GLOBALS).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*\.card-hover:hover,\s*\.card-hover:active/);
+  });
+});

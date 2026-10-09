@@ -22,13 +22,13 @@ export default function ScheduleDialog({ student, onClose }: ScheduleDialogProps
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-      <div aria-hidden="true" onClick={onClose} className="absolute inset-0 bg-cata-black/40" />
+      <div aria-hidden="true" onClick={onClose} className="absolute inset-0 animate-overlay-in bg-cata-black/40" />
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="student-schedule-title"
-        className="card relative w-full max-w-md p-0"
+        className="card relative w-full max-w-md animate-dialog-in p-0"
       >
         <div className="flex items-center gap-3 border-b border-line px-5 py-4">
           <Clock size={ICON.base} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />

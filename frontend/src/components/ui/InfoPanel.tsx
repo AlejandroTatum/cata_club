@@ -69,11 +69,11 @@ export default function InfoPanel({
             size={ICON.base}
             strokeWidth={2}
             aria-hidden="true"
-            className={cn("transition-transform motion-reduce:transition-none", open && "rotate-180")}
+            className={cn("transition-transform duration-fast ease-out-expo", open && "rotate-180")}
           />
         </button>
       )}
-      <div className={cn("flex flex-col gap-2 text-sm text-ink-2 lg:flex", hidden && "max-lg:hidden")}>
+      <div className={cn("flex flex-col gap-2 text-sm text-ink-2 lg:flex", hidden && "max-lg:hidden", open && "max-lg:animate-disclose")}>
         {children}
       </div>
     </Tag>

@@ -101,14 +101,14 @@ export default function AttendanceCorrectionDialog({
         aria-hidden="true"
         data-testid="attendance-correction-backdrop"
         onClick={onCancel}
-        className="absolute inset-0 bg-cata-black/40"
+        className="absolute inset-0 animate-overlay-in bg-cata-black/40"
       />
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="card relative flex w-full max-w-md flex-col gap-3 p-5"
+        className="card relative flex w-full max-w-md animate-dialog-in flex-col gap-3 p-5"
       >
         <h2 id={titleId} className="text-base font-bold text-ink">
           {copy.title} {studentName}

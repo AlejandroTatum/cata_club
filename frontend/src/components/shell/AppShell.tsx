@@ -882,7 +882,7 @@ export default function AppShell({
       {sidebarOpen && (
         <div
           data-report-ignore
-          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+          className="fixed inset-0 z-30 animate-overlay-in bg-black/40 lg:hidden"
           onClick={(): void => setSidebarOpen(false)}
           aria-hidden="true"
         />
@@ -1113,7 +1113,7 @@ export default function AppShell({
       {/* Command palette — "go to" navigation search, role-aware */}
       {paletteOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 px-4 pt-24"
+          className="fixed inset-0 z-50 flex animate-overlay-in items-start justify-center bg-black/50 px-4 pt-24"
           onClick={(): void => setPaletteOpen(false)}
         >
           <div
@@ -1122,7 +1122,7 @@ export default function AppShell({
             aria-modal="true"
             aria-label="Buscador de secciones"
             onClick={(e): void => e.stopPropagation()}
-            className="w-full max-w-md overflow-hidden rounded-card bg-paper shadow-elevated dark:bg-popover"
+            className="w-full max-w-md animate-dialog-in overflow-hidden rounded-card bg-paper shadow-elevated dark:bg-popover"
           >
             <div className="flex items-center gap-2.5 border-b border-line px-4 py-3.5">
               <Search size={ICON.sm} strokeWidth={2} className="shrink-0 text-ink-3" aria-hidden="true" />
