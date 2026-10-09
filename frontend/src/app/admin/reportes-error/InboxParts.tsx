@@ -16,12 +16,14 @@ function veces(count: number): string {
   return count === 1 ? "1 reporte" : `${count} reportes`;
 }
 
-export function SummaryStrip({ summary }: { summary: InboxSummary }): ReactElement {
+/** `parcial`: the list spans several pages, so the figures other than the total describe the page on screen. */
+export function SummaryStrip({ summary, parcial = false }: { summary: InboxSummary; parcial?: boolean }): ReactElement {
+  const alcance = parcial ? " · esta página" : "";
   return <dl aria-label="Resumen de reportes" className="card grid grid-cols-2 divide-line lg:grid-cols-4 lg:divide-x">
     <Cell label="Reportes" value={String(summary.total)} hint="recibidos en total" />
-    <Cell label="Últimos 7 días" value={String(summary.lastWeek)} hint="avisos recientes" />
-    <Cell label="Ruta más reportada" value={summary.topRoute?.value ?? "—"} hint={summary.topRoute ? veces(summary.topRoute.count) : "sin ruta indicada"} />
-    <Cell label="Dispositivo frecuente" value={summary.topDevice?.value ?? "—"} hint={summary.topDevice ? veces(summary.topDevice.count) : "sin datos"} />
+    <Cell label="Últimos 7 días" value={String(summary.lastWeek)} hint={`avisos recientes${alcance}`} />
+    <Cell label="Ruta más reportada" value={summary.topRoute?.value ?? "—"} hint={summary.topRoute ? `${veces(summary.topRoute.count)}${alcance}` : "sin ruta indicada"} />
+    <Cell label="Dispositivo frecuente" value={summary.topDevice?.value ?? "—"} hint={summary.topDevice ? `${veces(summary.topDevice.count)}${alcance}` : "sin datos"} />
   </dl>;
 }
 

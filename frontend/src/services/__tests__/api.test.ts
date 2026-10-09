@@ -139,6 +139,15 @@ afterEach(() => {
   delete process.env.NEXT_PUBLIC_USE_MOCKS;
 });
 
+describe("fetchReportesError paging", () => {
+  it("sends skip and limit and returns the {items,total} envelope", async () => {
+    const body = { items: [], total: 45, skip: 20, limit: 20 };
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(body));
+    await expect(fetchReportesError({ skip: 20, limit: 20 })).resolves.toEqual(body);
+    expect(global.fetch).toHaveBeenCalledWith("/api/reportes-error?skip=20&limit=20", expect.anything());
+  });
+});
+
 describe("error-report correlation", () => {
   it("retains the failed request ID for the report dialog", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(new Response(JSON.stringify({ message: "Falló" }), {

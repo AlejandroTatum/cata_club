@@ -3354,8 +3354,14 @@ export interface ReporteError {
   fecha_creacion: string;
 }
 
-export async function fetchReportesError(): Promise<ReporteError[]> {
-  return request<ReporteError[]>(apiEndpoint("/reportes-error"));
+/**
+ * One page of the admin error-report inbox — `GET /reportes-error/` returns
+ * the `{items, total, skip, limit}` envelope (`total` counts the whole inbox).
+ * Without `params` the backend's first page is returned.
+ */
+export async function fetchReportesError(params?: { skip: number; limit: number }): Promise<PaginatedResponse<ReporteError>> {
+  const qs = params ? `?skip=${params.skip}&limit=${params.limit}` : "";
+  return request<PaginatedResponse<ReporteError>>(apiEndpoint(`/reportes-error${qs}`));
 }
 
 export async function fetchReporteError(id: number): Promise<ReporteError> {

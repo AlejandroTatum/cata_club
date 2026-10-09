@@ -3,10 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import { ErrorState, FilterPanel, FilterPill, LoadingState, PAGE_RAIL, cn } from "@/components/ui";
+import { ErrorState, FilterPanel, FilterPill, LoadingState, PAGE_RAIL, Pagination, cn } from "@/components/ui";
 import { fetchReportesError, fetchReporteError, type ReporteError } from "@/services/api";
 import { EmptyInbox, GhostRows, HowItWorks, SelectPrompt, SummaryStrip } from "./InboxParts";
 import { NO_DISPONIBLE, applyFilter, buildChips, formatFecha, resumirNavegador, summarize, type InboxFilter } from "./inbox";
+
+/** Reports per server page (the backend's default). */
+const PAGE_SIZE = 20;
 
 /** Both columns reach the bottom of the screen (page header and padding above, ~24px margin below), so no dead band is left under a short inbox. */
 const FILL_SCREEN = "lg:min-h-[calc(100dvh-10rem)]";
@@ -19,6 +22,8 @@ const GHOST_FILL = 14;
 
 export default function ReportesErrorPage(): React.ReactElement {
   const [reports, setReports] = useState<ReporteError[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [cargando, setCargando] = useState(true);
   const [errorLista, setErrorLista] = useState(false);
   const [filtro, setFiltro] = useState<InboxFilter>("todos");
@@ -32,9 +37,12 @@ export default function ReportesErrorPage(): React.ReactElement {
 
   const load = useCallback(async (): Promise<void> => {
     setCargando(true); setErrorLista(false);
-    try { setReports(await fetchReportesError()); } catch { setErrorLista(true); }
+    try {
+      const data = await fetchReportesError({ skip: (page - 1) * PAGE_SIZE, limit: PAGE_SIZE });
+      setReports(data.items); setTotal(data.total);
+    } catch { setErrorLista(true); }
     finally { setCargando(false); }
-  }, []);
+  }, [page]);
   useEffect(() => { void load(); }, [load]);
 
   const select = useCallback(async (id: number): Promise<void> => {
@@ -54,10 +62,13 @@ export default function ReportesErrorPage(): React.ReactElement {
   const navegador = detalle ? resumirNavegador(detalle.user_agent) : null;
   // "Now" is fixed per load so the 7-day window does not shift between renders.
   const ahora = useMemo(() => Date.now(), [reports]); // eslint-disable-line react-hooks/exhaustive-deps
-  const summary = useMemo(() => summarize(reports, ahora), [reports, ahora]);
+  // Counts and rankings describe the loaded page; only the total spans the whole inbox.
+  const parcial = total > reports.length;
+  const summary = useMemo(() => ({ ...summarize(reports, ahora), total }), [reports, ahora, total]);
   const chips = useMemo(() => buildChips(reports, ahora), [reports, ahora]);
   const visibles = useMemo(() => applyFilter(reports, filtro, ahora), [reports, filtro, ahora]);
-  const vacia = !cargando && !errorLista && reports.length === 0;
+  const vacia = !cargando && !errorLista && total === 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return <ProtectedRoute allowedRoles={["admin"]}><AppShell title="Errores reportados" subtitle="Avisos enviados por usuarios del club">
     {cargando ? <LoadingState label="Cargando reportes…" />
@@ -66,7 +77,7 @@ export default function ReportesErrorPage(): React.ReactElement {
         <div className="relative min-w-0 lg:self-stretch">
           <div className="flex min-w-0 flex-col gap-page lg:absolute lg:inset-0">
             {vacia ? <EmptyInbox /> : <>
-              <SummaryStrip summary={summary} />
+              <SummaryStrip summary={summary} parcial={parcial} />
               <FilterPanel label="Filtrar reportes" chips={<div className="flex flex-wrap gap-2">
                 {chips.map((chip) => <FilterPill key={chip.key} label={chip.label} count={chip.count} active={chip.key === filtro} onClick={() => setFiltro(chip.key)} />)}
               </div>} />
@@ -96,12 +107,13 @@ export default function ReportesErrorPage(): React.ReactElement {
                   {/* A short list keeps the card the rail's height: skeleton rows continue it. */}
                   {visibles.length < GHOST_BELOW && <GhostRows count={GHOST_FILL} className="hidden min-h-0 flex-1 border-t border-line lg:flex" />}
                 </div>
+                {total > PAGE_SIZE && <Pagination variant="footer" page={page} totalPages={totalPages} onPageChange={setPage} totalItems={total} pageSize={PAGE_SIZE} itemNoun="reporte" />}
               </section>
             </>}
           </div>
         </div>
         <aside ref={detalleRef} aria-label="Detalle" className="flex min-w-0 flex-col gap-page lg:self-stretch">
-          {selectedId === null ? vacia ? null : <SelectPrompt total={reports.length} />
+          {selectedId === null ? vacia ? null : <SelectPrompt total={total} />
             : cargandoDetalle ? <LoadingState label="Cargando reporte…" />
             : errorDetalle ? <ErrorState message="No se pudo cargar el reporte." onRetry={() => void select(selectedId)} />
             : detalle && <section aria-label={`Detalle del reporte ${detalle.id}`} className="card p-5">
