@@ -17,7 +17,7 @@ const report = {
 };
 const other = { ...report, id: 8, descripcion: "Otro problema", ruta: null, request_id: null, user_agent: null, captura_mime: null };
 
-const pagina = (items: typeof report[], total = items.length, skip = 0) => ({ items, total, skip, limit: 10 });
+const pagina = (items: (typeof report | typeof other)[], total = items.length, skip = 0) => ({ items, total, skip, limit: 10 });
 const lote = (desde: number, cantidad: number) =>
   Array.from({ length: cantidad }, (_, i) => ({ ...report, id: desde + i, descripcion: `Problema ${desde + i}` }));
 
