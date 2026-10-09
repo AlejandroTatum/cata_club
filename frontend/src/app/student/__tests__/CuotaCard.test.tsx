@@ -152,20 +152,20 @@ describe("CuotaCard", () => {
         { coverageEnd: "2026-10-30", today: TODAY },
       );
       const cta = screen.getByRole("link", { name: /Registrar un pago/ });
-      expect(cta.className).not.toMatch(/bg-cata-red/);
+      expect(cta.className).not.toMatch(/bg-ball/);
     });
 
-    it("turns the primary button red at 7 days or fewer", () => {
+    it("turns the primary button to the ball fill at 7 days or fewer", () => {
       renderCard(
         situation({ kind: "ending-soon", figure: { value: 7, unit: "días de cobertura" } }),
         { coverageEnd: "2026-10-29", today: TODAY },
       );
-      expect(screen.getByRole("link", { name: /Registrar un pago/ }).className).toMatch(/bg-cata-red/);
+      expect(screen.getByRole("link", { name: /Registrar un pago/ }).className).toMatch(/bg-ball/);
     });
 
-    it("stays red and says how long ago it expired", () => {
+    it("keeps the ball primary and says how long ago it expired", () => {
       renderCard(situation({}), { coverageEnd: "2026-10-19", monthlyPrice: "25.00", today: TODAY });
-      expect(screen.getByRole("link", { name: /Registrar un pago/ }).className).toMatch(/bg-cata-red/);
+      expect(screen.getByRole("link", { name: /Registrar un pago/ }).className).toMatch(/bg-ball/);
       expect(screen.getByTestId("cuota-next-step")).toHaveTextContent(
         "Venció hace 3 días (19/10/2026). Paga $25,00 y sube el comprobante",
       );

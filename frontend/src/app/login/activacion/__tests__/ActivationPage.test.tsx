@@ -212,12 +212,12 @@ describe("ActivationPage — the email screen", () => {
     expect(resendButton).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ya verifiqué mi correo" })).toBeInTheDocument();
 
-    // "bg-cata-red" is the token `buttonClasses("primary")` adds and no
+    // "bg-ball" is the token `buttonClasses("primary")` adds and no
     // other variant shares as a standalone class — see `Button.tsx`'s
     // `VARIANT` map. Exactly one button on this screen should carry it.
     const primaryButtons = screen
       .getAllByRole("button")
-      .filter((button) => button.className.split(/\s+/).includes("bg-cata-red"));
+      .filter((button) => button.className.split(/\s+/).includes("bg-ball"));
     expect(primaryButtons).toEqual([resendButton]);
   });
 
@@ -249,7 +249,7 @@ describe("ActivationPage — the email screen", () => {
     expect(recheck.className).toBe(correct.className);
     expect(signOut.className).not.toBe(recheck.className);
     expect(signOut).toHaveClass("bg-sunken", "border-transparent");
-    expect(recheck).toHaveClass("bg-paper", "border-line-2");
+    expect(recheck).toHaveClass("bg-paper", "border-edge");
   });
 
   // Issue #1295: the card used to carry its own "Necesito ayuda" link right

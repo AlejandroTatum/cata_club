@@ -3006,7 +3006,7 @@ describe("MembersPage — the repeated row actions are one consistent set", () =
     // Pagos is the one visible row action, so it is drawn as a box (admin
     // redesign v4: a borderless fill read as "flat, confusing"). The overflow
     // stays quieter; the slot keeps every row's buttons aligned.
-    expect(trigger).toHaveClass("bg-paper", "border-line-2", "w-full");
+    expect(trigger).toHaveClass("bg-paper", "border-edge", "w-full");
     expect((trigger.parentElement as HTMLElement).className).toContain("w-20");
   });
 });
@@ -3644,7 +3644,7 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     );
     const row = await findAccountRow();
 
-    expect(getRowButton(row, /^pagos/i).className).toContain("border-line-2");
+    expect(getRowButton(row, /^pagos/i).className).toContain("border-edge");
     expect(within(row).queryByRole("button", { name: /^ficha médica/i })).not.toBeInTheDocument();
     expect(within(row).queryByRole("button", { name: /^editar/i })).not.toBeInTheDocument();
     const menu = getRowActionsTrigger(row);
@@ -4599,7 +4599,7 @@ describe("MembersPage — Pagos page hierarchy (admin redesign v4, now #1668)", 
     const next = within(dialog).getByRole("region", { name: "Siguiente paso" });
     const others = within(dialog).getByRole("region", { name: "Otras acciones" });
 
-    expect(within(next).getByRole("button", { name: "Registrar pago" })).toHaveClass("bg-cata-red", "h-ctl");
+    expect(within(next).getByRole("button", { name: "Registrar pago" })).toHaveClass("bg-ball", "h-ctl");
     for (const name of ["Suspender membresía", "Cambiar plan", "Asignar beneficio"]) {
       const trigger = await within(others).findByRole("button", { name });
       expect(trigger, name).toHaveClass("bg-paper", "h-ctl", "w-full");
@@ -4626,9 +4626,9 @@ describe("MembersPage — Pagos page hierarchy (admin redesign v4, now #1668)", 
     });
     const dialog = await openPagosPage();
 
-    expect(within(dialog).getByRole("button", { name: "Registrar pago" })).toHaveClass("bg-cata-red");
-    expect(within(dialog).getByRole("button", { name: "Cargar pagos atrasados" })).not.toHaveClass("bg-cata-red");
-    expect(dialog.querySelectorAll("button.bg-cata-red")).toHaveLength(1);
+    expect(within(dialog).getByRole("button", { name: "Registrar pago" })).toHaveClass("bg-ball");
+    expect(within(dialog).getByRole("button", { name: "Cargar pagos atrasados" })).not.toHaveClass("bg-ball");
+    expect(dialog.querySelectorAll("button.bg-ball")).toHaveLength(1);
   });
 });
 

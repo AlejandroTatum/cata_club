@@ -1584,7 +1584,7 @@ describe("ProfilePage — the type and colour rules the screen was breaking", ()
     // until it takes focus, which nobody sees while deciding what to press.
     const red = [...document.querySelectorAll("button, a")].filter(
       (el) =>
-        el.className.toString().includes("bg-cata-red") &&
+        el.className.toString().includes("bg-ball") &&
         !el.className.toString().includes("top-[-100px]"),
     );
     expect(red).toHaveLength(1);
