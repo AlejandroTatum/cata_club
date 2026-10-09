@@ -124,6 +124,9 @@ test.describe("Carnet picker", () => {
   test("desktop: the selection panel sits beside the list and stays in view while scrolling", async ({ page }) => {
     await openPicker(page, DESKTOP, 154);
 
+    // The placeholder is the instruction: it must not be clipped by the buttons beside it.
+    const search = page.getByRole("searchbox");
+    expect((await search.boundingBox())!.width).toBeGreaterThanOrEqual(220);
     const bar = page.getByTestId("carnet-selection-bar");
     const list = (await page.getByRole("list", { name: "Jugadores" }).boundingBox())!;
     const before = (await bar.boundingBox())!;

@@ -82,7 +82,7 @@ export default function CarnetPicker(): React.ReactElement {
         <FilterPanel
           bare
           label="Buscar y elegir jugadores"
-          className="sm:flex-row sm:flex-wrap sm:items-center sm:gap-2"
+          className="sm:flex-row sm:flex-wrap sm:items-center sm:gap-2 sm:[&>div:first-child]:min-w-[17rem] sm:[&>div:first-child]:flex-1"
           search={
             <SearchInput
               label="Buscar jugadores"
