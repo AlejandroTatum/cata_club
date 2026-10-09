@@ -157,8 +157,9 @@ export const LIGHT_COLORS = {
   edge: "#131316",
   /**
    * The hard offset shadow of the sticker language, split from `edge` so the
-   * two can part ways in dark: the outline softens to a quiet line while the
-   * shadow turns pure black. In light all three are the same coal.
+   * two can part ways in dark: the outline is a 3:1 slate and the shadow a
+   * lifted block between page and outline, so the offset stays visible on a
+   * near-black canvas. In light all three are the same coal.
    */
   "edge-shadow": "#131316",
   /**
@@ -166,6 +167,12 @@ export const LIGHT_COLORS = {
    * the title highlight, the KPI slabs). Coal in light, ball yellow in dark.
    */
   "edge-hot": "#131316",
+  /**
+   * The outline of a solid brand fill (the red and yellow KPI slabs). The same
+   * coal in light, and in dark too: a slate edge on a saturated fill is what
+   * reads as glare, while the fill itself already separates from the page.
+   */
+  "edge-fill": "#131316",
   /** The focus outline. Coal in light, near-white in dark. */
   "edge-focus": "#131316",
   /** The sidebar rail. The coal brand constant in light; the deepest rung in dark. */

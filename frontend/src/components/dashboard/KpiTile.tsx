@@ -81,9 +81,10 @@ export default function KpiTile({
         visual ? "justify-between" : "justify-center",
         STAT_BLOCK_FRAME,
         skin.surface,
-        // The slab's rim is the one bright outline besides the primary action
-        // (dark only; in light `edge-hot` is the coal outline already).
-        solid && "dark:border-edge-hot",
+        // The coal slab's rim is the one bright outline besides the primary
+        // action; the red and yellow fills wear a coal edge (dark only; in
+        // light both are the coal outline already).
+        skin === STAT_BLOCK.coal ? "dark:border-edge-hot" : solid && "dark:border-edge-fill",
         className,
       )}
     >

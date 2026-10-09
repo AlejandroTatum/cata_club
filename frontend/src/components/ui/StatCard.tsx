@@ -326,7 +326,8 @@ export default function StatCard({
         "relative min-h-stat px-[18px] py-4 flex flex-col justify-between",
         STAT_BLOCK_FRAME,
         skin.surface,
-        solid && "dark:border-edge-hot",
+        // Dark: the coal slab keeps the bright rim; the red and yellow fills a coal edge.
+        skin === STAT_BLOCK.coal ? "dark:border-edge-hot" : solid && "dark:border-edge-fill",
         href && "h-full transition-[transform,box-shadow] hover:-translate-x-px hover:-translate-y-px hover:shadow-sticker-lg motion-reduce:transition-none motion-reduce:hover:translate-x-0 motion-reduce:hover:translate-y-0",
         className,
       )}
