@@ -30,7 +30,7 @@ describe("InfoPanel as a div", () => {
 });
 
 describe("InfoPanel is quiet help, not a second data card (T14 RC3)", () => {
-  it("drops the sticker outline and shadow for a flat sunken surface", () => {
+  it("drops the sticker outline and shadow for a flat surface", () => {
     render(
       <InfoPanel title="Cómo funciona">
         <p>Texto</p>
@@ -39,7 +39,7 @@ describe("InfoPanel is quiet help, not a second data card (T14 RC3)", () => {
     const panel = screen.getByRole("complementary", { name: "Cómo funciona" });
     expect(panel.className).not.toMatch(/(^|\s)card(\s|$)/);
     expect(panel.className).not.toMatch(/shadow/);
-    expect(panel.className).toMatch(/bg-sunken/);
+    expect(panel.className).toMatch(/bg-paper/);
     expect(panel.className).toMatch(/border-line/);
     expect(screen.getByRole("heading", { name: "Cómo funciona" }).className).toMatch(/text-base/);
   });

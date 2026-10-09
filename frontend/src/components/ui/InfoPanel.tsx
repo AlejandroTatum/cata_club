@@ -33,8 +33,8 @@ export interface InfoPanelProps {
 }
 
 /**
- * The panel is the quiet voice of the screen (T14 RC3): a flat sunken surface
- * with a hairline, no sticker outline or shadow, so the data card beside it is
+ * The panel is the quiet voice of the screen (T14 RC3): a flat surface
+ * with a 1px hairline, no sticker outline or shadow, so the data card beside it is
  * the one thing that carries the weight. Whether the body is hidden is a pure
  * CSS matter from `lg` (`lg:flex`), so a desktop never waits for a hydration
  * pass to see the help it always had.
@@ -52,7 +52,7 @@ export default function InfoPanel({
   return (
     <Tag
       aria-label={Tag === "aside" ? title : undefined}
-      className={cn("relative flex flex-col gap-3 rounded-card border border-line bg-sunken p-4", className)}
+      className={cn("relative flex flex-col gap-3 rounded-card border border-line bg-paper p-4", className)}
     >
       <h2 className="font-display text-base leading-tight tracking-flat text-ink max-lg:pr-9">{title}</h2>
       {collapsible && (
