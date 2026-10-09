@@ -18,7 +18,7 @@ import { mockClubPaymentInfo } from "./helpers/club-payment-info";
 
 const MOCK_ACCESS_TOKEN = "mock-header.mock-payload.mock-signature";
 
-function adminSession(isStaffPlayer: boolean) {
+function adminSession(isStaffPlayer: boolean, staffAwaitsFirstPayment = false) {
   return {
     user: {
       id: "9",
@@ -30,6 +30,7 @@ function adminSession(isStaffPlayer: boolean) {
     },
     roles: ["ADMINISTRADOR"],
     isStaffPlayer,
+    staffAwaitsFirstPayment,
     correoVerificado: true,
     altaPresencialCompletada: true,
     activacionCompleta: true,
@@ -67,14 +68,18 @@ async function fulfillJson(route: Route, body: unknown, status = 200): Promise<v
   await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 }
 
-async function mockSession(page: Page, isStaffPlayer: boolean): Promise<void> {
+async function mockSession(
+  page: Page,
+  isStaffPlayer: boolean,
+  { staffAwaitsFirstPayment = false, membership = OWN_MEMBERSHIP }: { staffAwaitsFirstPayment?: boolean; membership?: object } = {},
+): Promise<void> {
   await page.context().addCookies([{ name: "access_token", value: MOCK_ACCESS_TOKEN, url: E2E_BASE_URL }]);
   // Registered first, so every specific route below wins over it: any call the
   // admin home makes that this spec does not care about fails softly (500),
   // never as a 401 that would bounce the session to /login mid-assertion.
   await page.route("**/api/**", (route: Route) => fulfillJson(route, { message: "not mocked" }, 500));
-  await page.route("**/api/auth/session", (route: Route) => fulfillJson(route, adminSession(isStaffPlayer)));
-  await page.route("**/api/student?*", (route: Route) => fulfillJson(route, PORTAL));
+  await page.route("**/api/auth/session", (route: Route) => fulfillJson(route, adminSession(isStaffPlayer, staffAwaitsFirstPayment)));
+  await page.route("**/api/student?*", (route: Route) => fulfillJson(route, { ...PORTAL, self: { ...PORTAL.self, membership } }));
   await page.route("**/api/membresias/pagos/persona/*", (route: Route) => fulfillJson(route, []));
   await page.route("**/api/membresias/coberturas/persona/*", (route: Route) => fulfillJson(route, []));
   await page.route("**/api/personas/*/beneficio", (route: Route) => fulfillJson(route, null));
@@ -113,4 +118,27 @@ test("an admin who is not a player gets no player section and is sent home from 
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(sidebar(page).locator('a[href="/members"]')).toBeVisible();
   await expect(sidebar(page).locator('a[href^="/student"]')).toHaveCount(0);
+});
+
+test("an admin whose own membership awaits its first payment gets only Pagos", async ({ page }) => {
+  await mockSession(page, false, {
+    staffAwaitsFirstPayment: true,
+    membership: { ...OWN_MEMBERSHIP, estado: "INACTIVA", fechaFin: null },
+  });
+
+  await page.goto("/student/payments");
+
+  await expect(page).toHaveURL(/\/student\/payments(\?alumno=9)?$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Pagos" })).toBeVisible();
+  await expect(sidebar(page).locator('a[href="/members"]')).toBeVisible();
+  await expect(sidebar(page).locator('a[href="/student/payments"]')).toBeVisible();
+  for (const href of ["/student", "/student/attendance", "/student/medical-record"]) {
+    await expect(sidebar(page).locator(`a[href="${href}"]`)).toHaveCount(0);
+  }
+
+  // The other player pages stay closed: back to the dashboard.
+  await page.goto("/student");
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await page.goto("/student/attendance");
+  await expect(page).toHaveURL(/\/dashboard$/);
 });
