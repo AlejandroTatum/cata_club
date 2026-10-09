@@ -209,6 +209,14 @@ MENSAJE_PAGO_PRESENCIAL_NO_PRIMERA_INSCRIPCION = (
     "por el flujo regular y apruébalas desde la cola de validación."
 )
 
+# --- Staff que también juega: nadie revisa su propio pago -------------------
+# Un ADMINISTRADOR con membresía propia paga como cualquier socio, pero la
+# revisión (aprobar o rechazar) la hace otro administrador.
+MENSAJE_VALIDACION_PAGO_PROPIO = (
+    "No puedes validar el pago de tu propia membresía; pide a otro "
+    "administrador que lo revise."
+)
+
 # --- Issue #400 (slice 4d): cobertura bonificada -----------------------------
 MENSAJE_COBERTURA_YA_APLICADA = (
     "El período indicado ya tiene cobertura (un pago aprobado, o un "
@@ -2762,6 +2770,15 @@ class PagoServicio:
             if membresia is None:
                 raise EntidadNoEncontrada(f"Membresía con id {pago.membresia_id} no encontrada")
             self._exigir_membresia_financieramente_operativa(membresia)
+
+        # Nadie revisa su propio pago (staff que también juega): ni aprobar
+        # ni rechazar. Va antes de tocar el pago, así la negativa no deja
+        # ningún efecto a medias. El pago de OTRA persona sigue igual.
+        if pago.persona_id == actor_persona_id:
+            raise OperacionInvalida(
+                MENSAJE_VALIDACION_PAGO_PROPIO,
+                detalle_tecnico=f"pago_id={pago_id} persona_id={pago.persona_id} es el actor",
+            )
 
         requiere_motivo_excepcion = (
             datos.estado_pago == EstadoPago.APROBADO

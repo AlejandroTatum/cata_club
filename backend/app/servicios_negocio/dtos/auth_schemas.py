@@ -92,6 +92,11 @@ class UsuarioMeResponseDTO(ResponseBase, BaseModel):
     # segunda cuenta; el frontend lo consume para mostrar el lado jugador.
     # Sin default: el router SIEMPRE lo fija, como `activacion_completa`.
     puede_entrenar: bool
+    # La Persona de la cuenta tiene una membresía INACTIVA (creada, sin primer
+    # pago aprobado). Con esto un ADMINISTRADOR/ENTRENADOR abre solo su
+    # pantalla de pagos para registrar ese primer pago; no habilita entrenar.
+    # Sin default, por la misma razón que `puede_entrenar`.
+    espera_primer_pago: bool
 
     @field_serializer("foto_url")
     def _firmar_foto_url(self, valor: Optional[str]) -> Optional[str]:

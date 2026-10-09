@@ -127,6 +127,13 @@ class GestorAutenticacion:
         return MembresiaRepositorio(db).puede_entrenar(persona_id)
 
     @staticmethod
+    def espera_primer_pago(db: Session, persona_id: int) -> bool:
+        """Hecho que `/auth/me` entrega al frontend: la Persona de la cuenta
+        tiene una membresía INACTIVA (esperando su primer pago). Solo de la
+        Persona de quien llama; no habilita entrenar."""
+        return MembresiaRepositorio(db).espera_primer_pago(persona_id)
+
+    @staticmethod
     def puede_acceder_modulos(db: Session, usuario: "Usuario") -> bool:
         """Aplica el gate solo a cuentas públicas, nunca a admin/trainer."""
         roles = {rol.tipo_rol for rol in usuario.roles}
