@@ -218,6 +218,19 @@ export const LIGHT_COLORS = {
    * comfortably AA, so the wash never has to trade legibility for tone.
    */
   "enroll-wash": "#FFF7F7",
+  /**
+   * Icon chips (the tinted tile behind a header icon). A chip's fill and its ink
+   * are ONE themed pair: pairing a themed ink with a brand-constant fill
+   * (`cata-yellow-soft`, `cata-red/15`) is how "Para empezar" ended up light on
+   * pale in dark (1.22:1). `ball` is the yellow chip (ink: `ball-ink`), `red`
+   * the red one (ink: `red-ink`); light values are the previous fills as they
+   * composited on `paper`, so light does not move.
+   */
+  chip: {
+    ball: "#FFEF9E",
+    red: "#F9DEDF",
+    "red-ink": "#D92128",
+  },
 
   // Status pairs (foreground + `-bg` fill). Namespaced under `state-` so
   // `neutral` does not shadow Tailwind's built-in neutral scale.

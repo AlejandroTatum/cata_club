@@ -32,6 +32,7 @@ import { LIGHT_COLORS } from "../../../tailwind.config";
 
 import { contrastRatio, compositeOver, lightness } from "../color-contrast";
 import { DARK_COLORS } from "../theme-tokens";
+import { SECTION_ACCENT } from "@/app/ayuda/section-accent";
 
 const AA_NORMAL_TEXT = 4.5;
 const AAA_NORMAL_TEXT = 7;
@@ -1145,5 +1146,76 @@ describe("dark theme — the same WCAG thresholds as light", () => {
       expect(contrastRatio(D.mark, D.track)).toBeGreaterThanOrEqual(AA_NON_TEXT);
       expect(contrastRatio(D.mark, D.paper)).toBeGreaterThanOrEqual(AA_NON_TEXT);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Icon chips — non-text UI (WCAG 1.4.11), both themes
+// ---------------------------------------------------------------------------
+
+/**
+ * Owner feedback (design-identity L21, S8): the "Para empezar" card header
+ * showed a light icon on a pale chip in dark mode. The root class: the chip's
+ * FILL was a brand constant (`cata-yellow-soft`, `cata-red/15` — a constant
+ * stays the same hex in both themes) while its INK was a themed token
+ * (`ball-ink` turns #FFD600 in dark), so the pair was only ever measured in
+ * light. 1.22:1 in dark, and the sweep found a second one (`cata-red` on its
+ * /15 tint, 2.91:1).
+ *
+ * The fix is a pair of tokens per chip that change TOGETHER (`chip-*`), and this
+ * block is the instrument: it resolves the Tailwind classes a chip is written
+ * with to hex in each theme and holds the icon to 3:1 on its chip, and the chip
+ * to the card it sits on, so a new accent cannot ship measured in one theme.
+ */
+describe("icon chips — the icon holds 3:1 on its chip in light and dark", () => {
+  /** `ball-ink` → `ball.ink`, `cuenta-representante-bg` → `cuenta.representante-bg`. */
+  function tokenPath(name: string): string {
+    const lookup = (dotted: string): unknown =>
+      dotted.split(".").reduce<unknown>((node, key) => (node as Record<string, unknown> | undefined)?.[key], colors);
+    const parts = name.split("-");
+    for (let split = parts.length; split >= 1; split--) {
+      const head = parts.slice(0, split).join("-");
+      const tail = parts.slice(split).join("-");
+      for (const dotted of tail ? [`${head}.${tail}`] : [head, `${head}.DEFAULT`]) {
+        if (typeof lookup(dotted) === "string") return dotted;
+      }
+    }
+    throw new Error(`"${name}" is not a colour token`);
+  }
+
+  function resolve(utility: string, theme: "light" | "dark", under: string): string {
+    const match = /^(?:bg|text)-([a-z0-9-]+?)(?:\/(\d+))?$/.exec(utility);
+    if (!match) throw new Error(`cannot read "${utility}"`);
+    const path = tokenPath(match[1]);
+    const light = path.split(".").reduce<unknown>((node, key) => (node as Record<string, unknown>)[key], colors) as string;
+    const hex = theme === "dark" ? (DARK_COLORS[path] ?? light) : light;
+    return match[2] ? compositeOver(hex, under, Number(match[2]) / 100) : hex;
+  }
+
+  const paper = (theme: "light" | "dark"): string => (theme === "dark" ? DARK_COLORS.paper : PAPER);
+
+  for (const [section, accent] of Object.entries(SECTION_ACCENT)) {
+    for (const theme of ["light", "dark"] as const) {
+      it(`${section} (${theme}): icon on chip >= 3:1, chip visible on the card`, () => {
+        const chip = resolve(accent.iconBg, theme, paper(theme));
+        const ink = resolve(accent.iconFg, theme, chip);
+        expect(contrastRatio(ink, chip), `${accent.iconFg} on ${accent.iconBg}`).toBeGreaterThanOrEqual(AA_NON_TEXT);
+        expect(contrastRatio(chip, paper(theme)), `${accent.iconBg} on paper`).toBeGreaterThanOrEqual(1.05);
+      });
+    }
+  }
+
+  it("never fills a chip with a brand constant that stays pale in dark", () => {
+    const offenders = sourceFiles(SRC)
+      .map((path) => ({ path: path.slice(SRC.length + 1), code: stripComments(readFileSync(path, "utf8")) }))
+      .flatMap(({ path, code }) => (code.match(/\bbg-cata-yellow-soft\b/g) ?? []).map((value) => `${path}: ${value}`));
+    expect(offenders).toEqual([]);
+  });
+
+  it("themes the chip tokens: a dark value exists for every chip, and none is the light hex", () => {
+    for (const path of ["chip.ball", "chip.red", "chip.red-ink"]) {
+      expect(DARK_COLORS[path], path).toBeDefined();
+      expect(DARK_COLORS[path]).not.toBe(path.split(".").reduce<unknown>((node, key) => (node as Record<string, unknown>)[key], colors));
+    }
   });
 });
