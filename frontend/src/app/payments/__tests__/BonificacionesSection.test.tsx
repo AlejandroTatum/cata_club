@@ -53,28 +53,37 @@ describe("BonificacionesSection (admin review)", () => {
       Array.from({ length: count }, (_, i) => ({ ...item, id: from + i, personaNombreCompleto: `Persona ${from + i}` }));
 
     it("shows no load-more control when everything fits in the first page", async () => {
-      mockFetchOnce({ items: page(1, 50), total: 50 });
+      mockFetchOnce({ items: page(1, 10), total: 10 });
       render(<BonificacionesSection />);
       await screen.findByText("Persona 1");
       expect(screen.queryByRole("button", { name: /cargar más/i })).not.toBeInTheDocument();
     });
 
+    it("states how many of the total are on screen and keeps the receipt link quiet", async () => {
+      mockFetchOnce({ items: page(1, 10), total: 15 });
+      render(<BonificacionesSection />);
+      await screen.findByText("Persona 1");
+
+      expect(screen.getByRole("status")).toHaveTextContent("10 de 15");
+      expect(screen.getAllByRole("link", { name: /recibo oficial/i })[0].className).not.toMatch(/bg-coal/);
+    });
+
     it("loads the next page and appends it while total exceeds what is shown", async () => {
-      mockFetchOnce({ items: page(1, 50), total: 60 });
-      mockFetchOnce({ items: page(51, 10), total: 60 });
+      mockFetchOnce({ items: page(1, 10), total: 15 });
+      mockFetchOnce({ items: page(11, 5), total: 15 });
       render(<BonificacionesSection />);
       await screen.findByText("Persona 1");
 
       fireEvent.click(screen.getByRole("button", { name: /cargar más/i }));
 
-      expect(await screen.findByText("Persona 60")).toBeInTheDocument();
+      expect(await screen.findByText("Persona 15")).toBeInTheDocument();
       expect(screen.getByText("Persona 1")).toBeInTheDocument();
-      expect(global.fetch).toHaveBeenLastCalledWith("/api/membresias/coberturas/todas?skip=50&limit=50");
+      expect(global.fetch).toHaveBeenLastCalledWith("/api/membresias/coberturas/todas?skip=10&limit=10");
       expect(screen.queryByRole("button", { name: /cargar más/i })).not.toBeInTheDocument();
     });
 
     it("keeps the list and offers a retry when loading more fails", async () => {
-      mockFetchOnce({ items: page(1, 50), total: 60 });
+      mockFetchOnce({ items: page(1, 10), total: 15 });
       mockFetchOnce({ message: "boom" }, false);
       render(<BonificacionesSection />);
       await screen.findByText("Persona 1");
