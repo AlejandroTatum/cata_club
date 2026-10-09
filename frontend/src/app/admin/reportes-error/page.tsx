@@ -133,7 +133,7 @@ export default function ReportesErrorPage(): React.ReactElement {
               <div className="mt-4 flex items-start justify-between gap-4 text-sm">
                 <details className="min-w-0">
                   <summary className="cursor-pointer text-xs font-semibold text-ink-2">Código de seguimiento</summary>
-                  <p className="mt-1 break-all font-mono text-xs">{detalle.request_id ?? NO_DISPONIBLE}</p>
+                  <p className="mt-1 break-all tabular-nums text-xs">{detalle.request_id ?? NO_DISPONIBLE}</p>
                 </details>
                 {detalle.captura_mime
                   ? <a href={`/api/reportes-error/${detalle.id}/captura`} target="_blank" rel="noopener noreferrer" className="shrink-0 underline">Ver captura</a>

@@ -43,10 +43,10 @@ describe("DataBox — default variant", () => {
 });
 
 describe("DataBox — numeric variant", () => {
-  it("switches to a monospaced, tabular-nums, centered figure in ink", () => {
+  it("switches to a tabular-nums, centered figure in ink", () => {
     render(<DataBox variant="numeric">86</DataBox>);
     const box = screen.getByText("86");
-    expect(box).toHaveClass("font-mono", "tabular-nums", "text-ink", "justify-center");
+    expect(box).toHaveClass("tabular-nums", "text-ink", "justify-center");
   });
 
   it("keeps the box's own fill and border — the variant changes the figure, not the box", () => {
