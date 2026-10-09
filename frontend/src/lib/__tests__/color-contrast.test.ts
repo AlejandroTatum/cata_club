@@ -1219,3 +1219,26 @@ describe("icon chips — the icon holds 3:1 on its chip in light and dark", () =
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Red link/eyebrow ink on public screens — dark
+// ---------------------------------------------------------------------------
+
+/**
+ * `cata-red-dark` is the product's red TEXT ink (auth links, legal eyebrows,
+ * the wizard's step title): it is never a fill, so it can follow the theme.
+ * Left as a constant it printed #A11D22 on the dark card at 2.07:1 on /login,
+ * a page no role sweep reaches. The theme-toggle spec measures it in a browser;
+ * this pins the values.
+ */
+describe("cata-red-dark — red text ink, themed", () => {
+  it("is the same light hex as before and a lighter red in dark", () => {
+    expect(cata["red-dark"]).toBe("#A11D22");
+    expect(DARK_COLORS["cata.red-dark"]).toBeDefined();
+    expect(lightness(DARK_COLORS["cata.red-dark"])).toBeGreaterThan(lightness("#A11D22"));
+  });
+
+  it.each(["canvas", "paper", "sunken", "popover"] as const)("holds AA as text on dark %s", (surface) => {
+    expect(contrastRatio(DARK_COLORS["cata.red-dark"], DARK_COLORS[surface])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+});
