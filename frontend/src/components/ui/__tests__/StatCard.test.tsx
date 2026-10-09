@@ -477,12 +477,21 @@ describe("StatCard — the sticker frame and the brand blocks", () => {
   });
 });
 
-describe("StatCard — the figure never overflows its tile (T14 RC5)", () => {
-  it("is fluid, 22px on a phone up to the 32px step, and may break", () => {
+describe("StatCard — the figure never overflows its tile (T14 RC5, L42)", () => {
+  it("is fluid: 18px on a phone up to the 32px step", () => {
     render(<StatCard label="Miembros" value="$1.330,00" />);
-    const figure = screen.getByText("$1.330,00");
-    expect(figure.className).toContain("text-[clamp(1.375rem,5.5vw,2rem)]");
+    expect(screen.getByText("$1.330,00").className).toContain("text-[clamp(1.125rem,5vw,2rem)]");
+  });
+
+  it("never breaks a currency figure mid-number", () => {
+    // "$18.711,00" used to wrap after the thousands dot on a 390px phone. The
+    // number stays on one line (the size step shrinks to fit); only the unit
+    // beside it may drop to the next line.
+    render(<StatCard label="Monto pendiente" value="$18.711,00" unit="USD" />);
+    const figure = screen.getByText("$18.711,00");
+    expect(figure.className).toMatch(/\bwhitespace-nowrap\b/);
     expect(figure.className).toMatch(/\bmin-w-0\b/);
-    expect(figure.className).toMatch(/break-words/);
+    expect(figure.className).toMatch(/\bflex-wrap\b/);
+    expect(figure.className).not.toMatch(/break-words|break-all/);
   });
 });
