@@ -160,7 +160,7 @@ export const PHONE_FORMAT_HINT =
  * The hint for every phone field that carries the visual `+593` prefix
  * (`PhoneField`/`EcuadorPhonePrefix` in `wizard-fields.tsx`, issue #1028 —
  * unified across every site by issue #1296). The field itself already shows
- * the country — 🇪🇨 and the code — so this line only says which LOCAL digits
+ * the country — the fixed code — so this line only says which LOCAL digits
  * to type, with the example the placeholder shows; it deliberately does not
  * repeat the accepted formats the way `PHONE_FORMAT_HINT` does. Same
  * numbering plan, one instruction shorter.
@@ -204,7 +204,7 @@ export function phoneRule(value: string, subject: string): string | null {
 
 /**
  * The single canonicalization pair every `+593`-prefixed phone field shares
- * (issue #1296): the field itself shows the fixed `🇪🇨 +593`, so the visitor's
+ * (issue #1296): the field itself shows the fixed `+593`, so the visitor's
  * job — and what the field's `value`/`onChange` carry — is only the LOCAL
  * digits that follow, with the trunk `0` never typed. The wire contract (and
  * every other phone field that still shows the full local number) keeps the

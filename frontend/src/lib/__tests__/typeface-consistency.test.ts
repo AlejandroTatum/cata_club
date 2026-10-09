@@ -117,4 +117,15 @@ describe("typeface consistency", () => {
     }
     expect(users.sort()).toEqual(["app/student/enroll/EnrollConfirmation.tsx", "components/auth/AuthShell.tsx"]);
   });
+
+  it("draws no flag emoji and names no emoji font: an OS-dependent glyph is another typeface (RC15)", () => {
+    const offenders: string[] = [];
+    for (const file of sourceFiles(SRC)) {
+      const code = stripComments(readFileSync(file, "utf8"));
+      if (/[\u{1F1E6}-\u{1F1FF}]/u.test(code) || /(?:Noto|Apple|Segoe)[ _]\w*[ _]?Emoji/i.test(code)) {
+        offenders.push(relative(SRC, file));
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
 });

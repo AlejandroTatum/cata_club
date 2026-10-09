@@ -640,34 +640,23 @@ export const CEDULA_HINT = `${CEDULA_DIGITS} dígitos, sin guiones.`;
 export const PHONE_HINT = PHONE_FORMAT_HINT;
 
 /**
- * #1028 — the Ecuador prefix that rides INSIDE a phone field: the native
- * 🇪🇨 symbol and the fixed `+593`.
+ * #1028 — the Ecuador prefix that rides INSIDE a phone field: the fixed
+ * `+593`.
  *
- * The native emoji, not a hand-drawn tricolor: the first attempt drew
- * yellow/blue/red bands, which is also (to the pixel band-for-band) the flag
- * of Colombia — the one country it must not be mistaken for. The emoji is the
- * platform's own Ecuador mark, crest and all, wherever color emoji fonts
- * exist; where they don't (older Windows), it degrades to the letters "EC",
- * which still name Ecuador. A font stack of the common color-emoji families
- * keeps it in color on Linux. The code is FIXED: the enrollment flow's
- * editable value is only the nine digits that follow (+593 991 234 567), and
- * the dependent flow keeps its local-digits entry — in both, the code names
- * the country rather than duplicating anything the visitor types. The whole
- * thing is aria-hidden: the label stays the control's single accessible name,
- * and each flow's hint carries what the picture cannot.
+ * Text only. The native 🇪🇨 emoji this used to lead with is an OS-dependent
+ * glyph (Noto on Linux, Apple's or Segoe's elsewhere, bare "EC" letters on
+ * older Windows), i.e. a different typeface in the middle of a Switzer form
+ * (T14 RC15), and a hand-drawn tricolor is also Colombia's flag. The code
+ * names the country by itself. It is FIXED: the enrollment flow's editable
+ * value is only the nine digits that follow (+593 991 234 567), and the
+ * dependent flow keeps its local-digits entry. The whole thing is aria-hidden:
+ * the label stays the control's single accessible name.
  */
 export function EcuadorPhonePrefix(): ReactElement {
   return (
-    <>
-      <span
-        role="img"
-        aria-hidden="true"
-        className="text-base leading-none [font-family:'Noto_Color_Emoji','Apple_Color_Emoji','Segoe_UI_Emoji',sans-serif]"
-      >
-        🇪🇨
-      </span>
-      <span className="text-xs font-semibold leading-none text-ink-2">+593</span>
-    </>
+    <span aria-hidden="true" className="text-xs font-semibold leading-none text-ink-2">
+      +593
+    </span>
   );
 }
 
@@ -696,7 +685,7 @@ const PHONE_FIELD_MAX_DIGITS = 9;
 
 /**
  * Issue #1296 — the ONE phone field every screen that collects an Ecuadorian
- * phone now shares: the fixed `🇪🇨 +593` prefix, the local digits with no
+ * phone now shares: the fixed `+593` prefix, the local digits with no
  * trunk `0`, one hint, and the same paste/autofill cleanup
  * (`toPhoneFieldDigits`) on every keystroke — not only a pasted chunk, so a
  * duplicated `593` or a habitually-typed leading `0` never has to be
