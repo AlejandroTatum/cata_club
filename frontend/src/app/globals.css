@@ -128,6 +128,42 @@ html[data-theme="dark"] {
   padding: 0;
 }
 
+/*
+ * THE MOTION BUDGET (T4, S3/S4) — durations and the one easing, declared once.
+ *
+ * Tailwind reads them as `duration-fast|base|overlay`, `ease-out-expo` and the
+ * `animate-*` kit in `tailwind.config.ts`, so no component spells a time.
+ * Everything moves on `transform` and `opacity` only, short enough to read as
+ * feedback rather than latency: `fast` for press and hover, `base` for a
+ * reveal or a disclosure, `overlay` for a dialog, sheet or toast arriving.
+ *
+ * REDUCED MOTION is one switch: under `prefers-reduced-motion: reduce` every
+ * duration token is 0ms, so each transition and animation built from them
+ * resolves instantly and lands on its final state. State changes (colour,
+ * shadow) still happen, they just do not travel. `motion-kit.test.ts` fails if
+ * a token is added without being zeroed here.
+ */
+:root {
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --motion-overlay: 240ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+    --motion-overlay: 0ms;
+  }
+
+  /* A skeleton pulse is a loop and decoration; the spinner is the one
+     indicator that stays (it is progress, not ornament). */
+  .animate-pulse {
+    animation: none;
+  }
+}
+
 /* Global base styles — Cata Club Admin Light Theme */
 
 @layer base {
@@ -236,15 +272,23 @@ html[data-theme="dark"] {
   .card-hover {
     background-color: rgb(var(--c-paper));
     border-radius: 14px;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    transition: transform var(--motion-fast) var(--ease-out);
   }
 
+  /* The sticker press: it lifts a step up its own shadow's diagonal on hover
+     and sinks onto the page on press. Only the transform travels; the shadow
+     steps are state and swap instantly. */
   .card-hover:hover {
     @apply -translate-x-px -translate-y-px shadow-sticker-lg;
   }
 
+  .card-hover:active {
+    @apply translate-x-px translate-y-px shadow-sticker-sm;
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .card-hover:hover {
+    .card-hover:hover,
+    .card-hover:active {
       @apply translate-x-0 translate-y-0;
     }
   }
@@ -258,7 +302,7 @@ html[data-theme="dark"] {
     background-color: #D92128;
     color: #FFFFFF;
     border-radius: 0.75rem;
-    transition: all 0.2s ease;
+    transition: transform var(--motion-fast) var(--ease-out);
     @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50;
   }
 
@@ -271,6 +315,12 @@ html[data-theme="dark"] {
     box-shadow: 0 4px 16px rgba(217,33,40,0.3);
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    .btn-primary:hover {
+      transform: none;
+    }
+  }
+
   .btn-secondary {
     background-color: rgb(var(--c-paper));
     color: rgb(var(--c-ink));
@@ -278,7 +328,7 @@ html[data-theme="dark"] {
        hairline reads as a table cell, not as something you can press. */
     border: 1px solid rgb(var(--c-line-2));
     border-radius: 0.75rem;
-    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-all duration-200 hover:bg-cata-bg disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors duration-fast hover:bg-cata-bg disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   /* `.btn-ghost` used to live here — a control with no fill and no border,
@@ -305,7 +355,7 @@ html[data-theme="dark"] {
     /* `line-2` — same reason as `.btn-secondary`: a field needs an edge. */
     border: 1px solid rgb(var(--c-line-2));
     color: rgb(var(--c-ink));
-    @apply w-full min-h-ctl rounded-ctl px-4 py-2 text-sm transition-all duration-200 placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply w-full min-h-ctl rounded-ctl px-4 py-2 text-sm transition-colors duration-fast placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .input-field::placeholder {
@@ -405,21 +455,6 @@ html[data-theme="dark"] {
 @layer utilities {
   .bg-logo-glow {
     background: radial-gradient(ellipse 50% 60% at 50% 40%, rgba(217, 33, 40, 0.04) 0%, transparent 70%);
-  }
-
-  @keyframes toast-in {
-    from {
-      opacity: 0;
-      transform: translateY(-0.5rem);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .animate-toast-in {
-    animation: toast-in 0.2s ease-out;
   }
 
   /*

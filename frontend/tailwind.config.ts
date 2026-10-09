@@ -640,6 +640,60 @@ const config: Config = {
         stat: "116px",
         drow: "56px",
       },
+      // THE MOTION KIT (T4). Durations and the easing are the CSS variables
+      // declared in `globals.css` (zeroed under `prefers-reduced-motion`), so
+      // `duration-fast|base|overlay` and `ease-out-expo` are the only motion
+      // words a component may use. Every keyframe moves `opacity` and
+      // `transform` and nothing else: no layout property, no layout shift.
+      //
+      // The signature is the sticker landing: a card, dialog or toast arrives
+      // along the diagonal of its own hard shadow (down and to the right) and
+      // settles, the same axis the hover lift and the press use. Overlays are
+      // 240ms, in-page reveals 180ms, press and hover 120ms.
+      transitionDuration: {
+        fast: "var(--motion-fast)",
+        base: "var(--motion-base)",
+        overlay: "var(--motion-overlay)",
+      },
+      transitionTimingFunction: {
+        "out-expo": "var(--ease-out)",
+      },
+      keyframes: {
+        // Backdrop of a dialog or sheet.
+        "fade-in": { from: { opacity: "0" }, to: { opacity: "1" } },
+        // Dialog panel and toast: lands along the shadow diagonal.
+        land: {
+          from: { opacity: "0", transform: "translate(4px, 6px)" },
+          to: { opacity: "1", transform: "translate(0, 0)" },
+        },
+        // Bottom sheet on a phone (a dialog panel from `sm`).
+        "sheet-in": {
+          from: { opacity: "0", transform: "translateY(24px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        // Empty state, error state, a block that appears after load.
+        reveal: {
+          from: { opacity: "0", transform: "translateY(6px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        // Body of a disclosure opening (InfoPanel, Accordion).
+        disclose: {
+          from: { opacity: "0", transform: "translateY(-4px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        "toast-in": {
+          from: { opacity: "0", transform: "translate(6px, -8px)" },
+          to: { opacity: "1", transform: "translate(0, 0)" },
+        },
+      },
+      animation: {
+        "overlay-in": "fade-in var(--motion-overlay) var(--ease-out) both",
+        "dialog-in": "land var(--motion-overlay) var(--ease-out) both",
+        "sheet-in": "sheet-in var(--motion-overlay) var(--ease-out) both",
+        "toast-in": "toast-in var(--motion-overlay) var(--ease-out) both",
+        reveal: "reveal var(--motion-base) var(--ease-out) both",
+        disclose: "disclose var(--motion-base) var(--ease-out) both",
+      },
       borderRadius: {
         card: "14px",
         ctl: "10px",
