@@ -167,14 +167,17 @@ describe("DiasSinClasePage (admin)", () => {
     expect(screen.getByText(/no se pudo enviar el aviso/)).toBeInTheDocument();
   });
 
-  it("offers «Reenviar aviso» on upcoming days only", async () => {
+  // Owner decision: a manual resend on a published day risks another email
+  // burst, so rows offer only edit and delete. A failed first notice keeps its
+  // own «Reintentar aviso» (covered above).
+  it("offers no «Reenviar aviso» on any published day", async () => {
     fetchDiasSinClase.mockResolvedValue([FERIADO, { id: 3, fechaInicio: "2000-01-01", fechaFin: "2000-01-01", motivo: "Viejo" }]);
     render(<DiasSinClasePage />);
     await screen.findByText("Viejo");
 
-    expect(screen.getAllByRole("button", { name: /^Reenviar aviso/ })).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: "Reenviar aviso 04/07/2999" }));
-    await waitFor(() => expect(reenviarAvisoDiaSinClase).toHaveBeenCalledWith(1));
-    expect(showSuccess).toHaveBeenCalledWith("Aviso reenviado a los socios.");
+    expect(screen.queryAllByRole("button", { name: /reenviar aviso/i })).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Editar 04/07/2999" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar 04/07/2999" })).toBeInTheDocument();
+    expect(reenviarAvisoDiaSinClase).not.toHaveBeenCalled();
   });
 });
