@@ -393,6 +393,13 @@ describe("StatCard — icon and tone", () => {
     expect(card().className).not.toMatch(/border-t-/);
   });
 
+  it("hides the decorative chip on a phone so a one-word label is not clipped by it", () => {
+    render(<StatCard label="Entrenamientos" value={5} tone="ball" icon={<svg />} />);
+    expect(screen.getByTestId("statcard-icon").className).toMatch(/max-sm:hidden/);
+    expect(screen.getByText("Entrenamientos").className).toMatch(/sm:pr-11/);
+    expect(screen.getByText("Entrenamientos").className).not.toMatch(/(^|\s)pr-11/);
+  });
+
   it("ignores the icon on the hot variant", () => {
     render(<StatCard label="Miembros" value={86} variant="hot" icon={<svg />} />);
     expect(screen.queryByTestId("statcard-icon")).toBeNull();

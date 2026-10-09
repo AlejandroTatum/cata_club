@@ -336,7 +336,7 @@ export default function StatCard({
           data-testid="statcard-icon"
           aria-hidden="true"
           className={cn(
-            "absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-ctl",
+            "absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-ctl max-sm:hidden",
             // On a solid face the chip is a paper inset, as the KPI tile's picture is.
             solid ? "border-2 border-edge bg-paper text-ink" : STAT_TONE[tone].icon,
           )}
@@ -349,7 +349,9 @@ export default function StatCard({
         className={cn(
           "text-2xs font-bold uppercase tracking-caps",
           skin.label,
-          showIcon && "pr-11",
+          // The chip is decorative and hidden on a phone: two tiles per row leave
+          // no room for it beside a one-word label such as "Entrenamientos".
+          showIcon && "sm:pr-11",
         )}
       >
         {label}
