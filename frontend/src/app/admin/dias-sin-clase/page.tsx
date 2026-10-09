@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { CalendarOff, Pencil, Send, Trash2 } from "lucide-react";
+import { CalendarOff, Pencil, Trash2 } from "lucide-react";
 import CampoFormularioAdmin from "@/components/admin/CampoFormularioAdmin";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -10,7 +10,6 @@ import { Button, EmptyState, ErrorState, LoadingState, PAGE_RAIL } from "@/compo
 import { useToast } from "@/contexts/ToastContext";
 import { toUserMessage } from "@/lib/error-message";
 import { ICON } from "@/lib/icon-size";
-import { clubIsoDate } from "@/lib/club-date";
 import { formatNoClassRange } from "@/lib/no-class-days";
 import {
   actualizarDiaSinClase,
@@ -107,8 +106,6 @@ export default function DiasSinClasePage(): React.ReactElement {
     } catch { showError("No se pudo eliminar el día sin clase."); }
   }
 
-  const hoy = clubIsoDate();
-
   return <ProtectedRoute allowedRoles={["admin"]}><AppShell
     title="Días sin clase"
     subtitle="Feriados, eventos del club o cancha cerrada: avisa a los socios y esos días dejan de contar como clase."
@@ -163,11 +160,8 @@ export default function DiasSinClasePage(): React.ReactElement {
                   <p className="break-words text-sm text-ink-2">{dia.motivo}</p>
                 </div>
                 <div className="flex shrink-0 gap-1">
-                  {dia.fechaFin >= hoy && (
-                    <Button size="sm" aria-label={`Reenviar aviso ${formatNoClassRange(dia)}`} title="Reenviar aviso" onClick={() => void reenviarAviso(dia)}>
-                      <Send size={ICON.sm} aria-hidden="true" />
-                    </Button>
-                  )}
+                  {/* No manual resend here (owner decision): it risked another
+                      email burst. A failed first notice keeps its retry above. */}
                   <Button size="sm" aria-label={`Editar ${formatNoClassRange(dia)}`} onClick={() => empezarEdicion(dia)}>
                     <Pencil size={ICON.sm} aria-hidden="true" />
                   </Button>
