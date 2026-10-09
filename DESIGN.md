@@ -367,12 +367,13 @@ control donde esté.
 
 ### Buttons
 - **Shape:** control (`{rounded.ctl}`), 40px de alto, o 32px en su versión compacta.
-- **Primary:** relleno rojo, texto blanco. Una por pantalla.
-- **Secondary:** papel con borde de control.
+- **Primary:** relleno rojo, texto blanco, peso 700. Una por pantalla.
+- **Secondary:** papel con borde de control; al pasar el cursor el borde oscurece a tinta, no a rojo,
+  para que el rojo siga siendo solo la acción principal.
 - **Tertiary:** relleno hundido, **sin borde**. El tercer nivel se distingue por relleno, no por
   ausencia: tres niveles que sumaran cada uno una línea se diferenciarían solo en cuán oscura es esa
   línea, mientras que relleno contra no-relleno se lee sin comparar.
-- **Dark:** caucho, para la acción enfática que no debe ser roja.
+- **Dark:** caucho, peso 700, para la acción enfática que no debe ser roja.
 - **On coal:** contorno translúcido blanco, para la acción secundaria dentro de una tarjeta de
   caucho.
 - **Hover:** cada variante sube un escalón de su propia familia. La terciaria pasa de hundido a
@@ -385,6 +386,15 @@ nombrando archivo y línea, si vuelve a aparecer.
 Lo que **navega** no es un botón: es un enlace subrayado en rojo, con flecha cuando apunta a otra
 pantalla. Un enlace disfrazado de botón es lo que hace que una pantalla tenga cinco cosas iguales
 que se comportan distinto.
+
+### Page header
+Título en Anybody estrecho y pesado, precedido por una **marca de pelota**: una barra amarilla de
+36×4px sobre el título. Es el resaltado de la landing gastado una vez por pantalla; el rojo queda
+para la acción. La barra es un pseudo-elemento: no suma nodos ni texto para lectores de pantalla.
+
+### Empty state
+Disco de caucho con el ícono en amarillo pelota, y el título en Anybody en mayúsculas. Es la misma
+pareja caucho-y-pelota de la landing y del riel lateral.
 
 ### Cards / Containers
 - **Corner Style:** radio de tarjeta.
@@ -408,8 +418,8 @@ Cápsulas de 26px con la tipografía de etiqueta, un punto de color y su par de 
 y ningún vocabulario paralelo: hubo cuatro familias de insignia en este producto y quedó una.
 
 ### Navigation
-Riel de caucho con el nombre del club en Anybody y la pelota con las iniciales. El ítem activo
-lleva un marcador rojo al filo izquierdo. Cuando una persona tiene más de un rol, el riel **suma** las
+Riel de caucho con el nombre del club en Anybody en mayúsculas y la pelota con las iniciales. El
+ítem activo lleva un marcador rojo de 4px al filo izquierdo y un relleno blanco al 10%. Cuando una persona tiene más de un rol, el riel **suma** las
 secciones con un rótulo por grupo — no hay selector de rol, porque un selector convierte los roles
 en modos y obliga a recordar en cuál estás parado.
 

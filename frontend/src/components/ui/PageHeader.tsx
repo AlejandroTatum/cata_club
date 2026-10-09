@@ -69,7 +69,12 @@ export default function PageHeader({
             and flat enough that tightening it closes the counters. The leading
             stays at the step's own 1.15 (DESIGN.md `headline`) — the face has
             almost no vertical range, so a wrapped title needs no extra room. */}
-        <h1 className="font-display text-xl uppercase tracking-flat text-ink">{title}</h1>
+        {/* The brand tick: a short ball-yellow bar over the title (`before:`),
+            the landing's highlight spent once per screen. A pseudo-element, so
+            it adds no node and no text for assistive technology. */}
+        <h1 className="relative pt-3 font-display text-xl uppercase tracking-flat text-ink before:absolute before:left-0 before:top-0 before:h-1 before:w-9 before:rounded-full before:bg-ball">
+          {title}
+        </h1>
         {/* `ink-3-strong`, not `ink-3`: 13px/400 `ink-3` on the `canvas` grey
             the shell paints behind the header is 4.24:1, and the subtitle is
             normal-size text, so AA asks for the full 4.5:1 here. */}

@@ -374,7 +374,7 @@ const NAV_ITEM_IDLE_CLASSES = "text-white/[0.62] hover:bg-white/[0.07] hover:tex
  * rows are 600 now — so the weight is no longer declared here. The four that
  * remain are the loud ones, and each is drawn below.
  */
-const NAV_ITEM_ACTIVE_CLASSES = "bg-white/[0.08] text-white";
+const NAV_ITEM_ACTIVE_CLASSES = "bg-white/[0.1] text-white";
 
 export default function AppShell({
   title,
@@ -577,7 +577,7 @@ export default function AppShell({
         {isActive && (
           // `.nav-i.on::before` — 3px red bar pinned to the row's left edge.
           <span
-            className="absolute inset-y-[9px] left-0 w-[3px] rounded-r-[3px] bg-cata-red"
+            className="absolute inset-y-[8px] left-0 w-1 rounded-r-[4px] bg-cata-red"
             aria-hidden="true"
           />
         )}
@@ -753,7 +753,7 @@ export default function AppShell({
               />
             </span>
             <span className={`min-w-0 leading-tight ${collapsed ? "lg:hidden" : ""}`}>
-              <span className="block truncate text-sm font-bold">
+              <span className="block truncate font-display text-base uppercase tracking-flat">
                 Cata Club
               </span>
               {/* 50%, not the spec's 42%: white at 0.42 over `coal` composites

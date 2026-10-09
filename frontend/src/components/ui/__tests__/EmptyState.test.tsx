@@ -60,12 +60,12 @@ describe("EmptyState — content", () => {
 });
 
 describe("EmptyState — icon", () => {
-  it("puts the icon in a neutral disc", () => {
+  it("puts the icon in a coal disc", () => {
     const { container } = render(
       <EmptyState icon={<Calendar size={ICON.lg} />} title="Sin registros" />,
     );
     const disc = container.querySelector("span[aria-hidden='true']");
-    expect(disc).toHaveClass("bg-state-neutral-bg", "rounded-full");
+    expect(disc).toHaveClass("bg-coal", "text-ball", "rounded-full");
   });
 
   it("keeps the icon out of the accessibility tree", () => {
