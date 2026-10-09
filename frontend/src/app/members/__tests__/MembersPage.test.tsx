@@ -4956,6 +4956,103 @@ describe("MembersPage — role filter", () => {
   });
 });
 
+// Owner (2026-10-09): only players carry a membership and a representative.
+// Staff and representatives listed under «Todos» showed a «Sin membresía»
+// badge and a «—» in «Representado por» on every row — noise with no meaning.
+describe("MembersPage — membership and representative only on player rows", () => {
+  const TRAINER: MemberAccount = {
+    id: "2",
+    role: "representante",
+    backendRoles: ["ENTRENADOR"],
+    nombres: "Carlos",
+    apellidos: "Paredes",
+    telefono: "0988888888",
+    estudiantes: [{ ...SOFIA_SUMMARY, id: "20", nombres: "Carlos", apellidos: "Paredes" }],
+    dependientes: [],
+  };
+  const NEW_MINOR: MemberAccount = {
+    id: "3",
+    role: "representante",
+    backendRoles: [],
+    nombres: "Tomás",
+    apellidos: "Vera",
+    telefono: "0977777777",
+    representadoPor: "Lucía Vera",
+    representadoPorId: 40,
+    estudiantes: [
+      {
+        ...SOFIA_SUMMARY,
+        id: "30",
+        nombres: "Tomás",
+        apellidos: "Vera",
+        membresia: {
+          tipo: "Mensual (Tarde)",
+          estado: "vencida",
+          estadoBackend: "INACTIVA",
+          fechaInicio: "2026-10-01",
+          fechaFin: "2026-10-31",
+          monto: 85,
+          id: 77,
+        },
+      },
+    ],
+    dependientes: [],
+  };
+
+  beforeEach(() => {
+    mockFetchMembers.mockReset();
+    mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT, TRAINER, NEW_MINOR] });
+  });
+
+  async function renderAll(): Promise<void> {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    chooseRole("Todos");
+    await screen.findAllByText("Carlos Paredes");
+  }
+
+  function rowOf(name: string): HTMLElement {
+    return screen.getAllByText(name).map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
+  }
+
+  function cardOf(name: string): HTMLElement {
+    return screen.getAllByText(name).map((el) => el.closest("li")).find(Boolean) as HTMLElement;
+  }
+
+  it("shows no membership badge and no representative dash on a staff row or card", async () => {
+    await renderAll();
+    const row = rowOf("Carlos Paredes");
+    const cells = within(row).getAllByRole("cell");
+
+    expect(within(row).queryByText(/sin membresía/i)).not.toBeInTheDocument();
+    expect(cells[1].textContent?.trim()).toBe("");
+    expect(cells[2].textContent?.trim()).toBe("");
+    expect(within(cardOf("Carlos Paredes")).queryByText(/sin membresía/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps both on a represented minor whose first membership is not active yet", async () => {
+    await renderAll();
+    const row = rowOf("Tomás Vera");
+
+    expect(within(row).getByText("Sin activar")).toBeInTheDocument();
+    expect(within(row).getAllByText(/Lucía Vera/).length).toBeGreaterThan(0);
+    expect(within(cardOf("Tomás Vera")).getByText("Sin activar")).toBeInTheDocument();
+  });
+
+  it("keeps the membership badge and the dash on an ordinary player row", async () => {
+    await renderAll();
+    const row = rowOf("María González");
+    const cells = within(row).getAllByRole("cell");
+
+    expect(within(row).getByText("Sin membresía")).toBeInTheDocument();
+    expect(cells[1].textContent?.trim()).toBe("—");
+    expect(within(cardOf("María González")).getByText("Sin membresía")).toBeInTheDocument();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Role gating of membership data (issue #1682)
 // ---------------------------------------------------------------------------

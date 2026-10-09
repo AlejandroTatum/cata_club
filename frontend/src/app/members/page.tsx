@@ -521,19 +521,19 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
           <p className="mt-1 text-xs text-ink-3 lg:hidden">Representado por {account.representadoPor}</p>
         ) : null}
       </TableCell>
-      <TableCell className="hidden lg:table-cell">{account.representadoPor ?? "—"}</TableCell>
+      {/* Staff and representatives have no membership or representative:
+          their cells stay empty rather than repeating «—» and «Sin membresía». */}
+      <TableCell className="hidden lg:table-cell">
+        {showPlayerColumns ? (account.representadoPor ?? "—") : null}
+      </TableCell>
       <TableCell type="badge">
-        {/* Issue #1682: an admin or guardian holds no membership of their own
-            (a guardian's dependants' state lives in the edit dialog). */}
         {showPlayerColumns ? (
           <>
             <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
             {/* ADMA-24: how much is owed and since when, without opening the ficha. */}
             {debtSummary ? <p className="mt-1 text-xs text-ink-3">{debtSummary}</p> : null}
           </>
-        ) : (
-          "—"
-        )}
+        ) : null}
       </TableCell>
       <TableCell type="action">
         <div className="flex items-center justify-end gap-1.5">
@@ -556,6 +556,7 @@ function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItem
   const debtSummary = getDebtSummary(account);
   // Issue #1199: same rule as `AccountRow` above.
   const showStudentActions = !isRepresentativePersonaRow(account);
+  // Same rule as `AccountRow`: no membership badge for staff or representatives.
   const showPlayerColumns = showsPlayerColumns(account);
 
   return (
@@ -578,7 +579,6 @@ function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItem
         </>
       }
       status={
-        // Issue #1682: same rule as `AccountRow` — no own membership, no status.
         showPlayerColumns ? (
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
