@@ -217,7 +217,7 @@ export const MAIN_CONTENT_ID = "contenido-principal";
 /** The one nav entry that carries a count badge (prototype `_nav-admin.html`). */
 const COUNT_BADGE_HREF = "/payments";
 
-/** The drawer slide-out is `duration-200`; the capture waits slightly longer. */
+/** The drawer slide-out is `duration-base`; the capture waits slightly longer. */
 const DRAWER_CLOSE_MS = 280;
 
 /** Tailwind's `lg` breakpoint — where the sidebar stops being a mobile drawer. */
@@ -710,7 +710,7 @@ export default function AppShell({
       <a
         data-report-ignore
         href={`#${MAIN_CONTENT_ID}`}
-        className="fixed left-4 top-[-100px] z-50 inline-flex min-h-[48px] items-center rounded-ctl bg-cata-red px-5 text-sm font-bold text-white transition-[top] duration-150 focus-visible:top-4"
+        className="fixed left-4 top-[-100px] z-50 inline-flex min-h-[48px] items-center rounded-ctl bg-cata-red px-5 text-sm font-bold text-white transition-[top] duration-fast focus-visible:top-4"
       >
         Saltar al contenido
       </a>
@@ -729,7 +729,7 @@ export default function AppShell({
       <aside
         data-report-ignore={!isDesktopViewport || undefined}
         aria-hidden={drawerHidden || undefined}
-        className={`fixed inset-y-0 left-0 z-40 flex w-[236px] flex-col bg-coal text-white dark:border-r dark:border-line dark:bg-rail transition-[transform,visibility] duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-[236px] flex-col bg-coal text-white dark:border-r dark:border-line dark:bg-rail transition-[transform,visibility] duration-base lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
           collapsed ? "lg:w-[76px]" : ""
         } ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} ${
           drawerHidden ? "invisible" : ""

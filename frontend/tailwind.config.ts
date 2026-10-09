@@ -651,6 +651,9 @@ const config: Config = {
       // settles, the same axis the hover lift and the press use. Overlays are
       // 240ms, in-page reveals 180ms, press and hover 120ms.
       transitionDuration: {
+        // A bare `transition-*` utility (68 call sites) takes the fast token
+        // instead of Tailwind's 150ms, so it follows the reduced-motion switch.
+        DEFAULT: "var(--motion-fast)",
         fast: "var(--motion-fast)",
         base: "var(--motion-base)",
         overlay: "var(--motion-overlay)",

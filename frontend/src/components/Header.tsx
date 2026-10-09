@@ -231,7 +231,7 @@ function InstitutionalAccount(): React.ReactElement {
   return (
     <Link
       href="/login"
-      className="flex min-h-ctl items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white/65 transition-all duration-200 hover:text-white"
+      className="flex min-h-ctl items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white/65 transition-colors duration-base hover:text-white"
     >
       <User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
       Iniciar sesión
@@ -335,7 +335,7 @@ export function InstitutionalHeader({ minimal = false }: InstitutionalHeaderProp
               <li key={link.label}>
                 <Link
                   href={link.href}
-                  className="rounded-xl px-3.5 py-2 text-sm font-semibold text-white/65 transition-all duration-200 hover:text-white"
+                  className="rounded-xl px-3.5 py-2 text-sm font-semibold text-white/65 transition-colors duration-base hover:text-white"
                 >
                   {link.label}
                 </Link>
@@ -372,7 +372,7 @@ export function InstitutionalHeader({ minimal = false }: InstitutionalHeaderProp
                 <Link
                   href={link.href}
                   onClick={closeMenu}
-                  className="flex items-center rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white/65 transition-all duration-200 hover:bg-white/[0.08] hover:text-white"
+                  className="flex items-center rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white/65 transition-colors duration-base hover:bg-white/[0.08] hover:text-white"
                 >
                   {link.label}
                 </Link>
@@ -511,7 +511,7 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
                 <Link
                   href={link.href}
                   aria-current={isActive ? "page" : undefined}
-                  className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition-all duration-200 ${
+                  className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors duration-base ${
                     isActive
                       ? "bg-cata-red/15 text-white"
                       : "text-white/65 hover:bg-white/[0.08] hover:text-white"
@@ -569,7 +569,7 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
                     href={link.href}
                     aria-current={isActive ? "page" : undefined}
                     onClick={(): void => setMenuOpen(false)}
-                    className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-all duration-200 ${
+                    className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-colors duration-base ${
                       isActive
                         ? "bg-cata-red/15 text-white"
                         : "text-white/65 hover:bg-white/[0.08] hover:text-white"

@@ -47,7 +47,7 @@ export default function FilterPill({
         // `max-md:min-h-11`: the thumb floor by viewport, as `Button` `sm` does
         // — a phone-width window gets no help from the coarse-pointer rule.
         "h-ctl max-md:min-h-11 inline-flex items-center gap-2 rounded-full border px-[15px] text-xs font-semibold",
-        "transition-colors duration-150",
+        "transition-colors duration-fast",
         // No focus ring here — see `Button`: the shared system ring in
         // `globals.css` carries it, because the bare ball fails on the light
         // surfaces a filter row sits on.

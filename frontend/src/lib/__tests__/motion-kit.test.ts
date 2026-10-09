@@ -75,6 +75,7 @@ describe("motion tokens", () => {
 
   it("exposes the tokens to Tailwind as the only duration and easing words", () => {
     expect(extend.transitionDuration).toEqual({
+      DEFAULT: "var(--motion-fast)",
       fast: "var(--motion-fast)",
       base: "var(--motion-base)",
       overlay: "var(--motion-overlay)",
@@ -159,6 +160,18 @@ describe("motion kit placement", () => {
     expect(read("components/ui/ErrorState.tsx")).toContain("animate-reveal");
     expect(read("components/ui/InfoPanel.tsx")).toContain("animate-disclose");
     expect(read("components/ui/Accordion.tsx")).toContain("animate-disclose");
+  });
+
+  it("names no literal duration and no transition-all anywhere in the panel", () => {
+    const offenders: string[] = [];
+    for (const file of sourceFiles(SRC)) {
+      for (const literal of classLiterals(stripComments(readFileSync(file, "utf8")))) {
+        for (const [cls] of literal.matchAll(/(?<![\w-])(?:[\w-]+:)*(?:duration-\[?\d+|delay-\d+|transition-all)/g)) {
+          offenders.push(`${file.slice(SRC.length + 1)}: ${cls}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 
   it("data tables never animate: no kit class, no transition on rows while paging", () => {

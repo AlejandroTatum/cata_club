@@ -171,7 +171,7 @@ function PagoDetailToggle({
         size={ICON.sm}
         strokeWidth={2}
         aria-hidden="true"
-        className={cn("flex-none transition-transform duration-200", isOpen && "rotate-180")}
+        className={cn("flex-none transition-transform duration-base", isOpen && "rotate-180")}
       />
     </button>
   );
