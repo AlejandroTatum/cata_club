@@ -31,6 +31,7 @@ import { LIGHT_COLORS } from "../../../tailwind.config";
 // ---------------------------------------------------------------------------
 
 import { contrastRatio, compositeOver, lightness } from "../color-contrast";
+import { DARK_COLORS } from "../theme-tokens";
 
 const AA_NORMAL_TEXT = 4.5;
 /** WCAG 1.4.11 — a focus indicator must clear 3:1 against its adjacent colours. */
@@ -944,5 +945,104 @@ describe("D9's two shared pieces — the identity cell's role chips and the week
     // which are measured above.
     expect(contrastRatio(line.DEFAULT, SUNKEN)).toBeLessThan(AA_NON_TEXT);
     expect(contrastRatio(line["2"], SUNKEN)).toBeLessThan(AA_NON_TEXT);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DARK THEME — `html[data-theme="dark"]` (`lib/theme-tokens.ts`).
+//
+// Same instrument, same thresholds as the light pairs above: a theme that only
+// looked right would be a regression in the one thing the light tokens spent
+// this file proving. Each foreground is measured on the surfaces it can land
+// on in dark, and each status/account pair on its own tint.
+// ---------------------------------------------------------------------------
+
+describe("dark theme — the same WCAG thresholds as light", () => {
+  const D = DARK_COLORS;
+  const DARK_SURFACES = { canvas: D.canvas, paper: D.paper, sunken: D.sunken };
+  const BALL = (colors.ball as Record<string, string>).DEFAULT;
+
+  it("keeps the surface ladder in order, each step visible", () => {
+    expect(lightness(D.canvas)).toBeLessThan(lightness(D.paper));
+    expect(lightness(D.paper)).toBeLessThan(lightness(D.sunken));
+    expect(contrastRatio(D.paper, D.canvas)).toBeGreaterThanOrEqual(1.15);
+    expect(contrastRatio(D.sunken, D.paper)).toBeGreaterThanOrEqual(1.1);
+  });
+
+  it("draws hairlines that are visible on the dark surfaces they border", () => {
+    expect(contrastRatio(D["line.DEFAULT"], D.canvas)).toBeGreaterThanOrEqual(1.3);
+    expect(contrastRatio(D["line.DEFAULT"], D.paper)).toBeGreaterThanOrEqual(1.2);
+    expect(contrastRatio(D["line.2"], D.paper)).toBeGreaterThan(contrastRatio(D["line.DEFAULT"], D.paper));
+    expect(contrastRatio(D["line.2"], D.paper)).toBeGreaterThanOrEqual(1.5);
+  });
+
+  it.each(Object.entries(DARK_SURFACES))("meets AA for the ink ramp on %s", (_name, surface) => {
+    for (const token of ["ink.DEFAULT", "ink.2", "ink.3-strong"]) {
+      expect(contrastRatio(D[token], surface), `${token} on ${_name}`).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    }
+  });
+
+  it("keeps ink-3 for paper and the canvas, as in light", () => {
+    for (const surface of [D.paper, D.canvas, D.sunken]) {
+      expect(contrastRatio(D["ink.3"], surface)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    }
+  });
+
+  it.each(["state.ok", "state.warn", "state.bad", "state.neutral"])(
+    "meets AA for %s on every dark surface and on its own tint",
+    (token) => {
+      for (const surface of Object.values(DARK_SURFACES)) {
+        expect(contrastRatio(D[token], surface)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      }
+      expect(contrastRatio(D[token], D[`${token}-bg`])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    },
+  );
+
+  it.each(["representante", "menor", "entrenador"])(
+    "meets AA for the %s account accent on paper and on its own tint",
+    (kind) => {
+      expect(contrastRatio(D[`cuenta.${kind}`], D.paper)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      expect(contrastRatio(D[`cuenta.${kind}`], D[`cuenta.${kind}-bg`])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    },
+  );
+
+  it("meets AA for the yellow and pink inks on every dark surface", () => {
+    for (const surface of Object.values(DARK_SURFACES)) {
+      expect(contrastRatio(D["ball.ink"], surface)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      expect(contrastRatio(D["cata.fuchsia-ink"], surface)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    }
+  });
+
+  it("meets AA for the ink on the enrollment wash", () => {
+    expect(contrastRatio(D["ink.DEFAULT"], D["enroll-wash"])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    expect(contrastRatio(D["ink.3-strong"], D["enroll-wash"])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("keeps the sticker outline readable (3:1) on every dark surface", () => {
+    // The outline is what makes a card a sticker; at 3:1 it also clears the
+    // non-text bar for a control boundary.
+    for (const surface of [...Object.values(DARK_SURFACES), D["enroll-wash"]]) {
+      expect(contrastRatio(D.edge, surface)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+    }
+  });
+
+  it("keeps the system focus ring visible in dark: the outline AND the ball band clear 3:1", () => {
+    // `globals.css` draws the outline in `edge` (light in dark) and the ball
+    // band hugs the control. Either is enough on its own on a dark surface.
+    for (const surface of Object.values(DARK_SURFACES)) {
+      expect(contrastRatio(D.edge, surface)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+      expect(contrastRatio(BALL, surface)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+    }
+  });
+
+  it("keeps the brand fills that do not change: white on red, coal on the ball", () => {
+    expect(contrastRatio("#FFFFFF", cata.red)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    expect(contrastRatio(coal.DEFAULT, BALL)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("keeps the coal stat block distinguishable from the dark page it sits on", () => {
+    // The coal block is the same coal in both themes; its edge is what separates it.
+    expect(contrastRatio(D.edge, coal.DEFAULT)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+    expect(contrastRatio("#FFFFFF", coal.DEFAULT)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
   });
 });

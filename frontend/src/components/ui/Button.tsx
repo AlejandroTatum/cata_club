@@ -78,7 +78,7 @@ const VARIANT: Record<ButtonVariant, string> = {
   // hovers TO the canvas dissolves into the page instead of responding.
   secondary: "font-semibold bg-paper border-edge text-ink hover:bg-sunken",
   // `.btn.dark` — coal. Secondary-but-emphatic actions ("+ Nuevo miembro").
-  dark: "font-bold bg-coal border-coal text-white hover:bg-coal-2 hover:border-coal-2",
+  dark: "font-bold bg-coal border-coal text-white hover:bg-coal-2 hover:border-coal-2 dark:border-edge dark:hover:border-edge",
   // The third level (D5). It replaces `ghost`, which was `bg-transparent
   // border-transparent` — "no chrome at all" — and was rejected for exactly
   // that: "no me gustan los botones vacíos o sin box".

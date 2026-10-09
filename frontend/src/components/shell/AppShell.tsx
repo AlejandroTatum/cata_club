@@ -34,6 +34,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import ReportProblemFab from "./ReportProblemFab";
 import AccountMenu from "./AccountMenu";
+import ThemeToggle from "@/components/theme/ThemeToggle";
 import {
   Menu,
   X,
@@ -855,7 +856,9 @@ export default function AppShell({
               collapsed={collapsed}
               onLogout={logout}
               onNavigate={(): void => setSidebarOpen(false)}
-            />
+            >
+              <ThemeToggle variant="menu" />
+            </AccountMenu>
           ) : (
             <Link
               href="/ayuda"
@@ -968,6 +971,9 @@ export default function AppShell({
               Ctrl K
             </kbd>
           </button>
+          {/* The dark-mode control sits right beside the bell, on every screen
+              and for every role — and again inside the account menu. */}
+          <ThemeToggle variant="bar" />
           {session && (
             <NotificationBell
               notificaciones={notificaciones}

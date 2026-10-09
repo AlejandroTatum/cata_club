@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { fontVariables } from "@/lib/fonts";
 import { SITE_DESCRIPTION, resolveSiteUrl, socialMetadata } from "@/lib/seo";
 import Header from "@/components/Header";
 import AuthProviderWrapper from "@/components/AuthProviderWrapper";
 import { ToastProvider } from "@/contexts/ToastContext";
 import ToastContainer from "@/components/ToastContainer";
+import ThemeScript from "@/components/theme/ThemeScript";
 import "./globals.css";
 
 // The strict Content-Security-Policy (issue #1069, phase 3) is generated
@@ -58,9 +60,12 @@ export function generateMetadata(): Metadata {
   };
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
-}: RootLayoutProps): React.ReactElement {
+}: RootLayoutProps): Promise<React.ReactElement> {
+  // The per-request CSP nonce (set by `middleware.ts`). The theme script below
+  // is inline, so it only runs when it carries it.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   /*
    * The three brand families are mounted on `<html>` below, on the element
    * every route in the product inherits from, and not in the shells or pages.
@@ -80,7 +85,11 @@ export default function RootLayout({
    * `--font-landing-*` copies of these same three files.
    */
   return (
-    <html lang="es-EC" className={fontVariables}>
+    <html lang="es-EC" className={fontVariables} suppressHydrationWarning>
+      <head>
+        {/* Applies the saved or OS theme before first paint — no light flash. */}
+        <ThemeScript nonce={nonce} />
+      </head>
       <body className="min-h-screen bg-cata-bg font-sans text-cata-text antialiased">
         <ToastProvider>
           <ToastContainer />

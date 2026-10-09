@@ -51,7 +51,7 @@ export default function FilterPill({
         // surfaces a filter row sits on.
         "disabled:cursor-not-allowed disabled:opacity-45",
         active
-          ? "bg-coal border-coal text-white"
+          ? "bg-coal border-coal text-white dark:border-edge"
           // `sunken`, not `canvas` — see `Button`: pills sit on the page
           // field, so hovering to the page field is not a hover.
           : "bg-paper border-line-2 text-ink-2 hover:bg-sunken",

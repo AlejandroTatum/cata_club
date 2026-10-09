@@ -17,6 +17,7 @@ colors:
   canvas: "#E8E8EE"
   line: "#DEDEE6"
   line-2: "#CFCFDA"
+  edge: "#131316"
   ink: "#17181C"
   ink-2: "#4A4A55"
   ink-3: "#74747F"
@@ -344,11 +345,20 @@ y todas llevan un desplazamiento vertical real: el juego anterior era un halo ca
 - **hero** (`0 8px 34px rgba(19,19,22,.07)`): una tarjeta sola sobre el canvas sin cromo alrededor.
   Existen exactamente dos en el producto.
 
+### El idioma sticker (la landing en el panel)
+La profundidad de los contenedores ya no es difusa: es el lenguaje de la landing — **contorno de 2px
+y sombra dura desplazada, sin desenfoque**. Tres escalones (`sticker-sm` 2px, `sticker` 3px,
+`sticker-lg` 5px, este último solo al pasar el cursor) más las variantes roja (el logo) y pelota (la
+píldora activa del riel). El contorno y la sombra salen del token `edge`: caucho en claro, un gris
+claro en oscuro, de modo que el sticker se lee en los dos temas. El sticker va en **contenedores y
+resaltes**, nunca en cada fila: una tabla dentro de una tarjeta conserva sus divisores de hairline.
+`soft`, `card`, `elevated` y `hero` quedan para lo que flota (modales, popovers).
+
 ### Named Rules
 
 **La regla de la tarjeta.** Radio de tarjeta más superficie de papel **es** una tarjeta, y la sombra
-llega sola desde la capa compartida. Pedirle a veinte archivos de pantalla que se acuerden de la
-sombra garantiza que la mitad no lo haga.
+llega sola desde la capa compartida — ahora el contorno `edge` de 2px y la sombra `sticker`. Pedirle
+a veinte archivos de pantalla que se acuerden de la sombra garantiza que la mitad no lo haga.
 
 ## Shapes
 
@@ -367,9 +377,11 @@ control donde esté.
 
 ### Buttons
 - **Shape:** control (`{rounded.ctl}`), 40px de alto, o 32px en su versión compacta.
-- **Primary:** relleno rojo, texto blanco, peso 700. Una por pantalla.
-- **Secondary:** papel con borde de control; al pasar el cursor el borde oscurece a tinta, no a rojo,
-  para que el rojo siga siendo solo la acción principal.
+- **Primary:** relleno **pelota** con contorno `edge` de 2px y sombra dura, texto caucho, peso 700 —
+  el «INSCRÍBETE» de la landing. Una por pantalla. Al pasar el cursor sube un escalón por la
+  diagonal de su sombra; al presionar se hunde. El rojo queda para lo destructivo.
+- **Secondary:** papel con contorno `edge` de 2px, sin sombra; al pasar el cursor se rellena de
+  hundido.
 - **Tertiary:** relleno hundido, **sin borde**. El tercer nivel se distingue por relleno, no por
   ausencia: tres niveles que sumaran cada uno una línea se diferenciarían solo en cuán oscura es esa
   línea, mientras que relleno contra no-relleno se lee sin comparar.
@@ -388,9 +400,11 @@ pantalla. Un enlace disfrazado de botón es lo que hace que una pantalla tenga c
 que se comportan distinto.
 
 ### Page header
-Título en Anybody estrecho y pesado, precedido por una **marca de pelota**: una barra amarilla de
-36×4px sobre el título. Es el resaltado de la landing gastado una vez por pantalla; el rojo queda
-para la acción. La barra es un pseudo-elemento: no suma nodos ni texto para lectores de pantalla.
+Título en Anybody estrecho y pesado. Encima, el **antetítulo** de la landing: una regla roja corta y
+texto rojo en mayúsculas con espaciado ancho («— OPERACIÓN»). Por defecto el shell lo toma del grupo
+del riel al que pertenece la pantalla; es decorativo (`aria-hidden`), porque el título ya nombra el
+lugar. El título puede llevar el **bloque pelota** detrás (`highlight`, el «CAMPEONES» de la landing):
+contorno `edge`, tinta caucho, una vez por pantalla.
 
 ### Empty state
 Disco de caucho con el ícono en amarillo pelota, y el título en Anybody en mayúsculas. Es la misma
@@ -399,9 +413,15 @@ pareja caucho-y-pelota de la landing y del riel lateral.
 ### Cards / Containers
 - **Corner Style:** radio de tarjeta.
 - **Background:** papel, sobre el campo de canvas.
-- **Border:** hairline de divisor.
-- **Shadow Strategy:** `card`, automática — ver Elevation.
+- **Border:** contorno `edge` de 2px.
+- **Shadow Strategy:** `sticker`, automática — ver Elevation.
 - **Internal Padding:** el escalón de sección o el de página, según la densidad.
+- **Bloque de cifra (`StatBlock`, `KpiTile`):** cara sólida **roja, pelota o caucho** con el marco
+  sticker, la cifra grande en Anybody, un divisor vertical y la etiqueta en mayúsculas espaciadas.
+  El color es marca, no significado: el estado sigue dicho en una palabra con la tinta del propio
+  bloque (blanco sobre rojo 5.0:1, caucho sobre pelota 14:1). Sin nada que decir, el bloque es un
+  sticker blanco. La imagen de un gráfico, dibujada para superficie clara, va sobre un recuadro de
+  papel dentro del bloque.
 - **Signature:** una tarjeta que **pide acción** lleva un **hombro de caucho** — una barra superior
   con su antetítulo en amarillo. Como mucho una por fila: si lo llevan las cuatro, no marca nada.
 - Toda tarjeta de dato lleva un **pie con punto de estado**. Un número solo no dice nada: doce
@@ -418,8 +438,12 @@ Cápsulas de 26px con la tipografía de etiqueta, un punto de color y su par de 
 y ningún vocabulario paralelo: hubo cuatro familias de insignia en este producto y quedó una.
 
 ### Navigation
-Riel de caucho con el nombre del club en Anybody en mayúsculas y la pelota con las iniciales. El
-ítem activo lleva un marcador rojo de 4px al filo izquierdo y un relleno blanco al 10%. Cuando una persona tiene más de un rol, el riel **suma** las
+Riel de caucho con el nombre del club en Anybody en mayúsculas y el logo en un **azulejo blanco con
+desplazamiento rojo**, como en la landing. El ítem activo es una **píldora roja con sombra dura de
+pelota** (la de la landing es caucho, que sobre el riel se perdería). El riel **no tiene scroll
+propio**: Ayuda, Perfil, Cerrar sesión y el modo oscuro viven en el **menú de cuenta** que abre la
+tarjeta de usuario del pie (botón con `aria-expanded`, Escape cierra y devuelve el foco), así el rol
+con más ítems entra completo en 1366×768 con filas de 40px. Cuando una persona tiene más de un rol, el riel **suma** las
 secciones con un rótulo por grupo — no hay selector de rol, porque un selector convierte los roles
 en modos y obliga a recordar en cuál estás parado.
 
@@ -438,6 +462,16 @@ ausencia.
 Siete casillas fijas, siempre las siete, siempre de lunes a domingo, las activas en rojo. Reemplaza
 al texto libre, que en una columna producía cuatro largos distintos y hacía imposible comparar dos
 filas. Es un `role="img"` cuya etiqueta accesible dice los días en palabras completas.
+
+### Dark mode
+Un botón sol/luna con `aria-pressed` junto a la campana (y otra copia en el menú de cuenta). La
+elección se guarda en `localStorage` y, sin elección, manda `prefers-color-scheme`; un script con
+nonce en el `<head>` la aplica antes de pintar, así que no hay destello (la CSP estricta no cambia).
+Los tokens semánticos (superficies, tinta, líneas, estados, `edge`) son variables CSS de canales RGB
+declaradas en `:root` y redefinidas bajo `html[data-theme="dark"]`, así `bg-paper/50` sigue
+funcionando. Lo oscuro es **caucho subido de luminosidad**, no una inversión de grises: el contorno
+sticker pasa a un gris claro y los pares de contraste se miden con los mismos umbrales que en claro.
+Las constantes de marca (caucho, rojo, pelota) no cambian. **La landing nunca es oscura.**
 
 ## Do's and Don'ts
 
