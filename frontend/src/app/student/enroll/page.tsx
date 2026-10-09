@@ -1541,6 +1541,22 @@ function EnrollWizard(): React.ReactElement {
   // with the final box, so the page is never blank and nothing shifts. It sits
   // inside the same single landmark as the wizard.
   const showSkeleton = !ready && !settled;
+  const showSignedInNotice = isAuthenticated && !confirmed && !submitting;
+
+  // The signed-in notice is drawn by `AppShell`, which owns its own `<main>`;
+  // nesting the wizard's landmark around it would put one `<main>` in another.
+  if (!showSkeleton && showSignedInNotice) {
+    return (
+      <EnrollSignedInNotice
+        backHref={backHrefForRole(session?.user.role)}
+        loggingOut={loggingOut}
+        onLogout={() => {
+          setLoggingOut(true);
+          void logout().finally(() => setLoggingOut(false));
+        }}
+      />
+    );
+  }
 
   return (
     // The public enrolment wizard reaches the user through no shell, so the
@@ -1555,16 +1571,7 @@ function EnrollWizard(): React.ReactElement {
         {/* REG-11: a signed-in user must not get the new-account wizard. The
             confirmation screen is exempt: the auto-login that enrolling performs
             makes the visitor "signed in" at exactly that moment. */}
-        {isAuthenticated && !confirmed && !submitting ? (
-          <EnrollSignedInNotice
-            backHref={backHrefForRole(session?.user.role)}
-            loggingOut={loggingOut}
-            onLogout={() => {
-              setLoggingOut(true);
-              void logout().finally(() => setLoggingOut(false));
-            }}
-          />
-        ) : confirmed ? (
+        {confirmed ? (
           <EnrollConfirmation
             studentName={`${formData.nombres} ${formData.apellidos}`}
             isSelf={formData.enrollmentType === "self"}

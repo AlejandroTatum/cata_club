@@ -44,6 +44,19 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+// The signed-in notice is drawn inside the real shell in the app; the shell's
+// own behavior is covered by AppShell.test.tsx, so here it is a landmark stub
+// that keeps what the page hands it (title, back control, body).
+vi.mock("@/components/shell/AppShell", () => ({
+  default: ({ title, back, children }: { title: string; back?: React.ReactNode; children: React.ReactNode }) => (
+    <div className="app-shell">
+      {back}
+      <h1>{title}</h1>
+      <main>{children}</main>
+    </div>
+  ),
+}));
+
 let mockIsAuthenticated = false;
 
 let mockAuthRole: "admin" | "trainer" | "representante" | "estudiante" | "unsupported" | null = null;
@@ -146,6 +159,21 @@ describe("EnrollPage — back link", () => {
       "href",
       "/student/add-dependent",
     );
+  });
+
+  it("draws the signed-in notice inside the app shell, with both actions allowed to wrap (T14 RC13)", () => {
+    mockIsAuthenticated = true;
+    mockAuthRole = "estudiante";
+
+    const { container } = render(<EnrollPage />);
+
+    expect(container.querySelector(".app-shell")).not.toBeNull();
+    expect(screen.getByRole("heading", { level: 1, name: "Ya tienes una sesión iniciada" })).toBeInTheDocument();
+    for (const name of ["Agregar jugador (menor de edad)", "Cerrar sesión para inscribir a otra persona"]) {
+      const control = screen.getByText(name);
+      expect(control.className).toMatch(/!whitespace-normal/);
+      expect(control.className).toMatch(/\bw-full\b/);
+    }
   });
 
   it("signs the user out from the notice's second action (REG-11)", () => {
