@@ -26,21 +26,21 @@ export interface GroupTone {
 }
 
 const BLUE: GroupTone = {
-  solid: "border-cuenta-representante bg-cuenta-representante text-white",
+  solid: "border-cuenta-representante bg-cuenta-representante text-on-solid",
   border: "border-cuenta-representante",
   tint: "bg-cuenta-representante-bg",
   text: "text-cuenta-representante",
   dot: "bg-cuenta-representante",
 };
 const PURPLE: GroupTone = {
-  solid: "border-cuenta-menor bg-cuenta-menor text-white",
+  solid: "border-cuenta-menor bg-cuenta-menor text-on-solid",
   border: "border-cuenta-menor",
   tint: "bg-cuenta-menor-bg",
   text: "text-cuenta-menor",
   dot: "bg-cuenta-menor",
 };
 const GREEN: GroupTone = {
-  solid: "border-cuenta-entrenador bg-cuenta-entrenador text-white",
+  solid: "border-cuenta-entrenador bg-cuenta-entrenador text-on-solid",
   border: "border-cuenta-entrenador",
   tint: "bg-cuenta-entrenador-bg",
   text: "text-cuenta-entrenador",

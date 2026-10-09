@@ -1076,6 +1076,23 @@ describe("dark theme — the same WCAG thresholds as light", () => {
     }
   });
 
+  it("prints `on-solid` text on every solid themed fill in both themes (WeekPlan chips, Now pill, group chips)", () => {
+    const cuenta = group("cuenta");
+    const fills: Record<string, { light: string; dark: string }> = {
+      ink: { light: ink.DEFAULT, dark: D["ink.DEFAULT"] },
+      "state-ok": { light: state.ok, dark: D["state.ok"] },
+      "state-warn": { light: state.warn, dark: D["state.warn"] },
+      "state-bad": { light: state.bad, dark: D["state.bad"] },
+      "cuenta-representante": { light: cuenta.representante, dark: D["cuenta.representante"] },
+      "cuenta-menor": { light: cuenta.menor, dark: D["cuenta.menor"] },
+      "cuenta-entrenador": { light: cuenta.entrenador, dark: D["cuenta.entrenador"] },
+    };
+    for (const [name, fill] of Object.entries(fills)) {
+      expect(contrastRatio(colors["on-solid"] as string, fill.light), `${name} in light`).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      expect(contrastRatio(D["on-solid"], fill.dark), `${name} in dark`).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    }
+  });
+
   it("keeps the primary action the same in both themes: coal text on the ball fill", () => {
     // `Button` fills the primary with the brand ball constant (never themed)
     // and prints coal on it; only the rim changes in dark.

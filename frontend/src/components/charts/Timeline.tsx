@@ -197,7 +197,7 @@ export default function Timeline({
                 data-testid="timeline-now-label"
                 data-align={nowAlign ?? undefined}
                 className={cn(
-                  "absolute top-0 z-10 rounded-full bg-state-bad px-2 py-px font-bold text-white",
+                  "absolute top-0 z-10 rounded-full bg-state-bad px-2 py-px font-bold text-on-solid",
                   layout.nowPercent !== null
                     ? nowAlign === "start"
                       ? ""

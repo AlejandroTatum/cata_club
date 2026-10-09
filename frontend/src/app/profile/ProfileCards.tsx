@@ -62,7 +62,7 @@ interface IdentityCardProps {
  * sit on an 84px avatar; `touch-target-reach` gives a thumb its 44px anyway.
  */
 const PENCIL_BADGE =
-  "touch-target-reach absolute -bottom-0.5 -right-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-paper bg-coal text-white shadow-card hover:bg-ink-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cata-red disabled:opacity-80";
+  "touch-target-reach absolute -bottom-0.5 -right-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-paper bg-coal text-white shadow-card hover:bg-ink-2 hover:text-on-solid focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cata-red disabled:opacity-80";
 
 /**
  * The avatar with its pencil. With a photo, the pencil offers «Ver foto» and

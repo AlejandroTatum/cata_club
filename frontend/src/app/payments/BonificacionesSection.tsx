@@ -103,7 +103,7 @@ export function BonificacionesSection(): React.ReactElement | null {
               target="_blank"
               rel="noopener noreferrer"
               aria-label={`Descargar recibo oficial de ${item.personaNombreCompleto}`}
-              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-ctl bg-coal px-3 text-xs font-semibold text-white hover:bg-ink md:w-48"
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-ctl bg-coal px-3 text-xs font-semibold text-white hover:bg-ink hover:text-on-solid md:w-48"
             >
               <Download size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               Recibo oficial

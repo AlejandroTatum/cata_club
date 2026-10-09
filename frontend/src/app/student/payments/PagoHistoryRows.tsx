@@ -130,7 +130,7 @@ function PagoDetailPanel({ pago }: { pago: PagoPersona }): React.ReactElement {
 
 const ACTION_BASE =
   "inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-ctl px-3 text-xs font-semibold";
-const ACTION_PRIMARY = cn(ACTION_BASE, "bg-coal text-white hover:bg-ink");
+const ACTION_PRIMARY = cn(ACTION_BASE, "bg-coal text-white hover:bg-ink hover:text-on-solid");
 const ACTION_SECONDARY = cn(ACTION_BASE, "border border-line-2 bg-paper text-ink hover:bg-sunken");
 const ACTION_DISABLED = cn(
   ACTION_BASE,

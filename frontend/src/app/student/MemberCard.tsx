@@ -97,7 +97,7 @@ function TrainingDayChips({ days }: { days: readonly DiaSemana[] }): React.React
             aria-hidden="true"
             className={cn(
               "flex h-7 min-w-0 flex-1 items-center justify-center rounded-[5px] text-2xs font-extrabold print:h-5",
-              active ? "bg-state-ok text-white" : "bg-white/[0.03] text-white/70",
+              active ? "bg-state-ok text-on-solid" : "bg-white/[0.03] text-white/70",
             )}
           >
             {DIA_SEMANA_LABELS[day].charAt(0)}

@@ -112,13 +112,13 @@ export default function WeekPlan({ sessions, now = new Date() }: WeekPlanProps):
               aria-label={name}
               className={cn(
                 "relative flex flex-col items-center justify-center gap-0.5 rounded-ctl border px-1 py-2.5 text-center",
-                // The days that train are green: white on `state-ok` is 5.64:1.
+                // The days that train are green: `on-solid` on `state-ok` clears AA in both themes.
                 // The next session is coal so it still reads first. A
                 // training day already gone drops to the `state-ok` pair the
                 // Badge spends instead of fading with opacity, which would take
                 // the text under AA. Rest days stay on the quiet sunken fill.
-                state === "next" && "border-ink bg-ink text-white",
-                state === "active" && !isPast && "border-state-ok bg-state-ok text-white",
+                state === "next" && "border-ink bg-ink text-on-solid",
+                state === "active" && !isPast && "border-state-ok bg-state-ok text-on-solid",
                 state === "active" && isPast && "border-state-ok/25 bg-state-ok-bg text-state-ok",
                 state === "idle" && "border-transparent bg-sunken text-ink-3-strong",
                 isToday && "ring-2 ring-ink ring-offset-2 ring-offset-paper",

@@ -105,7 +105,7 @@ function GhostCards(): React.ReactElement {
   return (
     <ul
       aria-hidden="true"
-      className="grid auto-rows-fr gap-page opacity-50 sm:grid-cols-2 2xl:grid-cols-3"
+      className="grid auto-rows-fr gap-page opacity-50 dark:opacity-85 sm:grid-cols-2 2xl:grid-cols-3"
     >
       {GHOST_EXAMPLES.map((example, index) => (
         <li

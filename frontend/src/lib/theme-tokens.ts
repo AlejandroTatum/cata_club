@@ -51,6 +51,9 @@ export const DARK_COLORS: Readonly<Record<string, string>> = {
   // Chart tracks (rings, progress bars) and the data ink drawn on them.
   "track": "#3F3F4B",
   "mark": "#FFD600",
+  // Text on a solid themed fill: those fills are pale in dark, so the text is
+  // the canvas colour (>= 8:1 on every fill it sits on).
+  "on-solid": "#151519",
   // KPI slabs: the brand fills one step deeper so they hold their identity on
   // a dark page without glaring; white on the red and coal on the yellow
   // stay above 7:1.

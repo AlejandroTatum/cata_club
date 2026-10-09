@@ -176,6 +176,12 @@ export const LIGHT_COLORS = {
   track: "#DEDEE6",
   /** Data ink drawn over a track or a chart: coal in light, ball in dark. */
   mark: "#131316",
+  /**
+   * Text drawn ON a solid themed fill (`bg-ink`, `bg-state-*`, `bg-cuenta-*`).
+   * White in light; in dark those fills turn pale, so the text turns to the
+   * canvas. A literal `text-white` on them is the bug this token replaces.
+   */
+  "on-solid": "#FFFFFF",
   /** The KPI slabs' fills: brand constants in light, a step deeper in dark. */
   kpi: {
     red: "#D92128",
