@@ -18,7 +18,7 @@
 
 import { useEffect, useId, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, EmptyState, ErrorState, LoadingState, SearchInput } from "@/components/ui";
+import { Button, EmptyState, ErrorState, FilterPanel, LoadingState, PAGE_RAIL, SearchInput } from "@/components/ui";
 import { toUserMessage } from "@/lib/error-message";
 import { fetchMembers } from "@/services/api";
 import { canPrintCarnet, carnetsHref, filterAccounts, type MemberAccount } from "../members-utils";
@@ -76,29 +76,37 @@ export default function CarnetPicker(): React.ReactElement {
   return (
     <div
       data-testid="carnet-picker"
-      className="grid items-start gap-4 max-lg:pb-24 lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,1fr)_20rem]"
+      className={`${PAGE_RAIL} max-lg:pb-24`}
     >
       <div className="flex min-w-0 flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <SearchInput
-            label="Buscar jugadores"
-            placeholder="Buscar por nombre o cédula…"
-            value={search}
-            onChange={setSearch}
-            className="w-full sm:w-auto sm:min-w-64 sm:flex-1 sm:max-w-md"
-          />
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={unchosenVisible.length === 0 || atLimit}
-            onClick={chooseVisible}
-          >
-            Elegir visibles ({visible.length})
-          </Button>
-          <Button variant="tertiary" size="sm" disabled={count === 0} onClick={() => setSelected([])}>
-            Quitar selección
-          </Button>
-        </div>
+        <FilterPanel
+          bare
+          label="Buscar y elegir jugadores"
+          className="sm:flex-row sm:flex-wrap sm:items-center sm:gap-2"
+          search={
+            <SearchInput
+              label="Buscar jugadores"
+              placeholder="Buscar por nombre o cédula…"
+              value={search}
+              onChange={setSearch}
+            />
+          }
+          fields={
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={unchosenVisible.length === 0 || atLimit}
+                onClick={chooseVisible}
+              >
+                Elegir visibles ({visible.length})
+              </Button>
+              <Button variant="tertiary" size="sm" disabled={count === 0} onClick={() => setSelected([])}>
+                Quitar selección
+              </Button>
+            </div>
+          }
+        />
         {visible.length === 0 ? (
           <EmptyState
             title="Sin resultados"
@@ -155,7 +163,7 @@ export default function CarnetPicker(): React.ReactElement {
       >
         <div className="flex min-w-0 flex-col gap-0.5 lg:gap-1">
           <p role="status" className="text-xs text-ink-2 lg:text-sm">
-            <span className="font-display text-xl font-extrabold tabular-nums text-ink lg:text-3xl">{count}</span>{" "}
+            <span className="font-display text-xl font-extrabold tabular-nums tracking-flat text-ink lg:text-3xl">{count}</span>{" "}
             de {total} seleccionados
           </p>
           {count === 0 ? (
