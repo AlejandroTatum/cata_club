@@ -93,21 +93,15 @@ class NotificacionServicio:
         hijos_ids = [h.id for h in self._listar_dependientes_activos(persona_id)]
         return [persona_id] + hijos_ids
 
-    def listar_para_persona_y_hijos(
-        self, persona_id: int, skip: int = 0, limit: Optional[int] = None
-    ) -> tuple[list[Notificacion], int]:
-        """Para representantes: incluye notificaciones propias y de sus
-        hijos. Payment rows belong to the child (#1227); registration now
-        also addresses the representative directly (#1370). A matching child
-        event is hidden before counting/pagination. On read, prepend
-        "Para <nombre acortado>: " to the `mensaje` of every row whose
-        `persona_id` no sea el de quien pide el feed. Un solo query resuelve
-        los nombres de los dependientes (nunca uno por fila -- `contar_
-        selects` en `conftest.py` lo mide)."""
+    def _alcance_representante(self, persona_id: int):
+        """Filtro de las filas visibles en el feed del representante y los
+        nombres de sus dependientes, o `None` si la persona no existe. Lo usan
+        el listado y el conteo de no leídas, así que el badge nunca puede
+        contar filas que el feed oculta."""
         from app.dominio.modelos import Persona
         persona = self.db.get(Persona, persona_id)
         if not persona:
-            return [], 0
+            return None
         hijos = self._listar_dependientes_activos(persona_id)
         nombres_hijos = {
             h.id: nombre_completo(h.nombres, h.apellidos) for h in hijos
@@ -128,6 +122,38 @@ class NotificacionServicio:
                 Notificacion.entidad_relacionada_id.is_(None),
                 not_(duplicada)),
         )
+        return visible, nombres_hijos
+
+    def contar_no_leidas(self, persona_id: int, es_representante: bool = False) -> int:
+        """Pendientes de TODO el feed que `persona_id` ve (no solo de una
+        página), con el mismo alcance que el listado correspondiente."""
+        if not es_representante:
+            return self.repo.contar_no_leidas_por_persona(persona_id)
+        alcance = self._alcance_representante(persona_id)
+        if alcance is None:
+            return 0
+        visible, _ = alcance
+        return (
+            self.db.query(func.count(Notificacion.id))
+            .filter(visible, Notificacion.leida.is_(False))
+            .scalar()
+        )
+
+    def listar_para_persona_y_hijos(
+        self, persona_id: int, skip: int = 0, limit: Optional[int] = None
+    ) -> tuple[list[Notificacion], int]:
+        """Para representantes: incluye notificaciones propias y de sus
+        hijos. Payment rows belong to the child (#1227); registration now
+        also addresses the representative directly (#1370). A matching child
+        event is hidden before counting/pagination. On read, prepend
+        "Para <nombre acortado>: " to the `mensaje` of every row whose
+        `persona_id` no sea el de quien pide el feed. Un solo query resuelve
+        los nombres de los dependientes (nunca uno por fila -- `contar_
+        selects` en `conftest.py` lo mide)."""
+        alcance = self._alcance_representante(persona_id)
+        if alcance is None:
+            return [], 0
+        visible, nombres_hijos = alcance
         query = (
             self.db.query(Notificacion)
             .filter(visible)
