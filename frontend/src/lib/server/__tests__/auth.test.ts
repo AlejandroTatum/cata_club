@@ -737,6 +737,47 @@ describe("buildSession", () => {
     expect(JSON.stringify(session)).not.toMatch(/token/i);
   });
 
+  // Staff who also play: the role stays single (admin/trainer), the player
+  // side comes from the backend fact `puedeEntrenar` (own membership ACTIVA or
+  // VENCIDA), computed server-side and never inferred from the role.
+  it.each([
+    ["ADMINISTRADOR", "admin"],
+    ["ENTRENADOR", "trainer"],
+  ])("flags a %s with a training-allowed membership as a staff player", (rol, role) => {
+    const session = sessionFrom({
+      correo: "staff-jugador@cataclub.com",
+      personaId: 50,
+      nombres: "Diego",
+      apellidos: "Mora",
+      roles: [rol],
+      puedeEntrenar: true,
+      fechaNacimiento: "1990-05-01",
+    });
+
+    expect(session.isStaffPlayer).toBe(true);
+    expect(session.user.role).toBe(role);
+    expect(session.roles).toEqual([rol]);
+    // The adult gate for the medical-record row needs the birth date.
+    expect(session.user).toMatchObject({ fechaNacimiento: "1990-05-01" });
+  });
+
+  it.each(["ADMINISTRADOR", "ENTRENADOR"])(
+    "does not flag a %s without a membership (or on a backend that predates the field)",
+    (rol) => {
+      const base = { correo: "staff@cataclub.com", personaId: 51, nombres: "Rita", apellidos: "Mora", roles: [rol] };
+      expect(sessionFrom({ ...base, puedeEntrenar: false }).isStaffPlayer).toBe(false);
+      expect(sessionFrom(base).isStaffPlayer).toBe(false);
+    },
+  );
+
+  it.each(["REPRESENTANTE", "ALUMNO"])("never flags a %s: the flag is for staff only", (rol) => {
+    const session = sessionFrom({
+      correo: "portal@cataclub.com", personaId: 52, nombres: "Ana", apellidos: "Mora",
+      roles: [rol], puedeEntrenar: true,
+    });
+    expect(session.isStaffPlayer).toBe(false);
+  });
+
   it("carries both activation states through the token-free session", () => {
     const session = sessionFrom({
       correo: "pendiente@cataclub.com",

@@ -1098,7 +1098,7 @@ function StudentPortalContent(): React.ReactElement {
 
 export default function StudentPage(): React.ReactElement {
   return (
-    <ProtectedRoute allowedRoles={["representante", "estudiante", "unsupported"]}>
+    <ProtectedRoute allowedRoles={["representante", "estudiante", "unsupported"]} allowStaffPlayer>
       {/* `useManagedProfiles` reads `?alumno=` through `useSearchParams`, which
           needs a boundary to fall back to during prerender — the same wrapper
           `/student/payments` and `/reset-password` use for the same reason. */}

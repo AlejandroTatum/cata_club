@@ -226,6 +226,9 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
   const searchParams = useSearchParams();
   const role = session?.user.role;
   const personaId = session?.user.id ?? "";
+  // A staff player (admin/trainer with their own membership) reads their OWN
+  // record exactly like an adult estudiante: same endpoint, same age gate.
+  const ownsRecord = role === "estudiante" || session?.isStaffPlayer === true;
 
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [reloadToken, setReloadToken] = useState(0);
@@ -255,7 +258,7 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
   // backstop. A representante session is never minor-gated: that check is
   // meaningless for a guardian's own access grant.
   const selfIsMinor =
-    role === "estudiante" && state.status === "ready" && isMinor(state.data.self?.fechaNacimiento);
+    ownsRecord && state.status === "ready" && isMinor(state.data.self?.fechaNacimiento);
 
   useEffect(() => {
     if (selfIsMinor) {
@@ -273,7 +276,7 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
   // representante view normalizes `?alumno=` itself). Their record is always
   // their own, so a hand-edited `?alumno=` must not stay in the address bar
   // pointing at someone else.
-  const ownId = role === "estudiante" && state.status === "ready" ? state.data.self?.personaId : undefined;
+  const ownId = ownsRecord && state.status === "ready" ? state.data.self?.personaId : undefined;
   const alumnoParam = searchParams.get("alumno");
   useEffect(() => {
     if (!ownId || alumnoParam === null || alumnoParam === ownId || selfIsMinor) return;
@@ -305,7 +308,7 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
       {state.status === "ready" && role === "representante" && (
         <RepresentanteMedicalRecordView data={state.data} accountPersonaId={personaId} />
       )}
-      {state.status === "ready" && role === "estudiante" && state.data.self && (
+      {state.status === "ready" && ownsRecord && state.data.self && (
         <>
           <MedicalRecordEditor
             personaId={Number(state.data.self.personaId)}
@@ -315,7 +318,7 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
           />
         </>
       )}
-      {state.status === "ready" && role === "estudiante" && !state.data.self && (
+      {state.status === "ready" && ownsRecord && !state.data.self && (
         <ErrorState
           message="No se pudo cargar tu perfil. Intenta de nuevo en unos minutos."
           onRetry={() => setReloadToken((n) => n + 1)}
@@ -331,7 +334,7 @@ export default function StudentMedicalRecordPage(): React.ReactElement {
     // representante's access to a REPRESENTADO and an adult estudiante's
     // access to their OWN record are independent and unrelated to each
     // other's condition (a role vs. an age check).
-    <ProtectedRoute allowedRoles={["representante", "estudiante"]}>
+    <ProtectedRoute allowedRoles={["representante", "estudiante"]} allowStaffPlayer>
       {/* `useManagedProfiles` reads `?alumno=` through `useSearchParams` —
           the same boundary `/student`, `/student/payments` and
           `/student/attendance` use for the same reason. */}

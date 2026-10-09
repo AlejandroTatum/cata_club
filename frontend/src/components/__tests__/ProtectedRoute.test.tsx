@@ -40,6 +40,7 @@ import {
   createAuthenticatedAuth,
   createLoadingAuth,
   createHydrationOutageAuth,
+  createMockSession,
 } from "./test-utils";
 
 const mockUseAuth = vi.mocked(useAuth);
@@ -188,6 +189,60 @@ describe("ProtectedRoute", () => {
   });
 
   // --- Wrong role ---
+
+  // --- Staff who also play ---
+
+  it("admits a staff player to a player route that opts in, without changing their home", () => {
+    mockUseAuth.mockReturnValue(
+      createAuthenticatedAuth("admin", "Test User", {
+        session: createMockSession({ isStaffPlayer: true }),
+      }),
+    );
+
+    renderProtected(
+      <ProtectedRoute allowedRoles={["representante", "estudiante"]} allowStaffPlayer>
+        {CONTENT}
+      </ProtectedRoute>,
+    );
+
+    expect(screen.getByText("Protected content")).toBeInTheDocument();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it.each(["admin", "trainer"] as const)(
+    "redirects a %s who is not a player away from a player route that opts in",
+    (role) => {
+      mockUseAuth.mockReturnValue(createAuthenticatedAuth(role));
+
+      renderProtected(
+        <ProtectedRoute allowedRoles={["representante", "estudiante"]} allowStaffPlayer>
+          {CONTENT}
+        </ProtectedRoute>,
+      );
+
+      expect(mockReplace).toHaveBeenCalledWith(role === "admin" ? "/dashboard" : "/trainer");
+      expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
+    },
+  );
+
+  it("keeps a staff player out of a route that does not opt in", () => {
+    mockUseAuth.mockReturnValue(
+      createAuthenticatedAuth("trainer", "Test User", {
+        session: createMockSession({
+          user: { id: "t1", name: "T", email: "t@t.com", role: "trainer", representanteId: null },
+          roles: ["ENTRENADOR"],
+          isStaffPlayer: true,
+        }),
+      }),
+    );
+
+    renderProtected(
+      <ProtectedRoute allowedRoles={["representante", "estudiante"]}>{CONTENT}</ProtectedRoute>,
+    );
+
+    expect(mockReplace).toHaveBeenCalledWith("/trainer");
+    expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
+  });
 
   it("redirects users with an insufficient role to their default route", () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer"));

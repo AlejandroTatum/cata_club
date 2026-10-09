@@ -29,12 +29,20 @@ interface ProtectedRouteProps {
   allowedRoles: UserRole[];
   /** Where to redirect unauthenticated users (default: /login). */
   redirectTo?: string;
+  /**
+   * Also admit an admin/trainer whose own Persona holds a membership that
+   * allows training (`session.isStaffPlayer`, computed by the BFF). Set only on
+   * the player routes (`/student*`): every other staff account stays redirected
+   * to their own home, and the backend still decides what data they get.
+   */
+  allowStaffPlayer?: boolean;
 }
 
 export default function ProtectedRoute({
   children,
   allowedRoles,
   redirectTo = "/login",
+  allowStaffPlayer = false,
 }: ProtectedRouteProps) {
   const { isAuthenticated, session, isLoading, hydrationOutage, retryHydration, sessionExpired } = useAuth();
   const router = useRouter();
@@ -45,6 +53,10 @@ export default function ProtectedRoute({
   // infinite synchronous loop (#334). `canAccess` below
   // still receives the real `allowedRoles` array unchanged.
   const allowedRolesKey = allowedRoles.join(",");
+  const admitted = (): boolean =>
+    session !== null &&
+    (canAccess(session.user.role, allowedRoles) ||
+      (allowStaffPlayer && session.isStaffPlayer === true));
 
   useEffect(() => {
     if (isLoading) return;
@@ -64,13 +76,13 @@ export default function ProtectedRoute({
       return;
     }
 
-    if (session && !canAccess(session.user.role, allowedRoles)) {
+    if (session && !admitted()) {
       // ENT-13: silent on purpose — landing on the role home is the answer;
       // a "no tiene permiso" toast would accuse someone who followed a link.
       router.replace(getDefaultRoute(session.user.role));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- allowedRolesKey is the stable, content-derived substitute for allowedRoles (see comment above).
-  }, [isLoading, hydrationOutage, isAuthenticated, sessionExpired, session, allowedRolesKey, redirectTo, router]);
+  }, [isLoading, hydrationOutage, isAuthenticated, sessionExpired, session, allowedRolesKey, allowStaffPlayer, redirectTo, router]);
 
   // --- Loading state ---
   if (isLoading) {
@@ -99,7 +111,7 @@ export default function ProtectedRoute({
     return null;
   }
 
-  if (session && !canAccess(session.user.role, allowedRoles)) {
+  if (session && !admitted()) {
     return null;
   }
 
