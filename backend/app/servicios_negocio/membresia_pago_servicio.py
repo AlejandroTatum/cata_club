@@ -37,6 +37,7 @@ from app.infraestructura.repositorios.descuento_repositorio import (
 )
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
 from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
+from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.dominio.guardianes import destinatarios_de_aviso
 from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
@@ -647,6 +648,7 @@ class PagoServicio:
         self.repo_asignacion = AsignacionDescuentoRepositorio(db)
         self.repo_cobertura_bonificada = CoberturaBonificadaRepositorio(db)
         self.repo_rol = RolRepositorio(db)
+        self.repo_usuario = UsuarioRepositorio(db)
         # Issue #400 (slice 5a): `repo_tipo` resincroniza la tarifa al
         # reactivar (`TipoMembresia.precio` vigente, no el congelado);
         # `repo_historial_estado` lee la última reactivación para el reloj
@@ -2773,8 +2775,14 @@ class PagoServicio:
 
         # Nadie revisa su propio pago (staff que también juega): ni aprobar
         # ni rechazar. Va antes de tocar el pago, así la negativa no deja
-        # ningún efecto a medias. El pago de OTRA persona sigue igual.
-        if pago.persona_id == actor_persona_id:
+        # ningún efecto a medias. El pago de OTRA persona sigue igual. El
+        # revisor es una CUENTA: se compara la persona del pago con la del
+        # actor solo si esa persona tiene `Usuario` (siempre, para un token
+        # real; un `persona_id` sin cuenta no puede estar revisando nada).
+        if (
+            pago.persona_id == actor_persona_id
+            and self.repo_usuario.obtener_por_persona_id(actor_persona_id) is not None
+        ):
             raise OperacionInvalida(
                 MENSAJE_VALIDACION_PAGO_PROPIO,
                 detalle_tecnico=f"pago_id={pago_id} persona_id={pago.persona_id} es el actor",

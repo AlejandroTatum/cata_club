@@ -10,8 +10,9 @@ propia membresía se rechaza en el servicio.
 import pytest
 
 from app.dominio.cedula import cedula_valida
-from app.dominio.enums import EstadoMembresia, EstadoPago
-from app.dominio.modelos import Membresia, Pago
+from app.dominio.enums import EstadoMembresia, EstadoPago, TipoRol
+from app.dominio.modelos import Membresia, Pago, Rol, Usuario
+from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.membresia_pago_servicio import MENSAJE_VALIDACION_PAGO_PROPIO
 from tests.fabricas_pagos import (
     crear_membresia_orm, crear_persona_orm, crear_tipo_membresia_orm,
@@ -24,8 +25,19 @@ APROBAR = {
 }
 
 
-def _staff_inactivo(db_session, base):
+def _con_cuenta(db_session, persona, rol: TipoRol):
+    """La cuenta del staff: el revisor es una cuenta, no solo una persona."""
+    db_session.add(Usuario(
+        correo=f"staff-{persona.id}@cataclub.test",
+        contrasenia=GestorAutenticacion.obtener_hash_contrasenia("Clave-de-prueba-1"),
+        persona_id=persona.id, correo_verificado=True,
+        roles=[Rol(tipo_rol=rol, descripcion=rol.value)],
+    ))
+
+
+def _staff_inactivo(db_session, base, rol=TipoRol.ADMINISTRADOR):
     persona = crear_persona_orm(db_session, cedula_valida(base), nombres="Staff", apellidos="Nuevo")
+    _con_cuenta(db_session, persona, rol)
     tipo = crear_tipo_membresia_orm(db_session)
     membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.INACTIVA)
     db_session.commit()
@@ -90,6 +102,7 @@ def test_admin_no_valida_el_pago_de_su_propia_membresia(client, db_session):
 def test_otro_admin_valida_el_primer_pago_y_la_membresia_se_activa(client, db_session):
     persona, membresia = _staff_inactivo(db_session, 9230)
     otro_admin = crear_persona_orm(db_session, cedula_valida(9231), nombres="Otro", apellidos="Admin")
+    _con_cuenta(db_session, otro_admin, TipoRol.ADMINISTRADOR)
     db_session.commit()
     _como(persona.id, "ENTRENADOR")
     pago_id = _pagar(client, persona, membresia).json()["id"]
@@ -108,6 +121,7 @@ def test_otro_admin_valida_el_primer_pago_y_la_membresia_se_activa(client, db_se
 def test_admin_sigue_validando_pagos_ajenos(client, db_session):
     """La cola de revisión no cambia: el guard solo mira a la persona dueña."""
     admin = crear_persona_orm(db_session, cedula_valida(9240), nombres="Admin", apellidos="Revisor")
+    _con_cuenta(db_session, admin, TipoRol.ADMINISTRADOR)
     persona, membresia = _staff_inactivo(db_session, 9241)
     _como(persona.id, "ENTRENADOR")
     pago_id = _pagar(client, persona, membresia).json()["id"]
