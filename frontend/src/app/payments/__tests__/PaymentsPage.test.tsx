@@ -745,8 +745,11 @@ describe("PaymentsPage — age and method filter (ADMA-25)", () => {
     renderPage();
     await screen.findByTestId("payments-table");
 
-    expect(within(queueTable()).getByRole("columnheader", { name: /subido/i })).toBeInTheDocument();
-    expect(await within(queueTable()).findByText("Hace 3 días")).toBeInTheDocument();
+    // RC6: no column of its own — the age rides under the period so the name
+    // column keeps its width.
+    expect(within(queueTable()).queryByRole("columnheader", { name: /subido/i })).not.toBeInTheDocument();
+    const age = await within(queueTable()).findByText("Hace 3 días");
+    expect(age.closest("td")).toHaveTextContent(humanizePaymentPeriod(PENDING_REQUEST.membershipPeriod));
   });
 
   it("filters the queue by method and brings every row back with «Cualquier método»", async () => {

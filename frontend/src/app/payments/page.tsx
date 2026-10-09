@@ -147,7 +147,6 @@ import {
   FilterPill,
   InfoPanel,
   LoadingState,
-  PAGE_RAIL,
   ResponsiveList,
   SearchInput,
   STAT_GRID,
@@ -576,6 +575,12 @@ function CashConfirmationPanel({
 
 /** Marks a queue row's action button so focus can find it again on the way back. */
 /** Phone stat tiles: label + figure only, so the first pending card clears the fold. */
+/**
+ * `PAGE_RAIL` splits at `lg`, where the sidebar leaves a ~750px canvas: a 340px
+ * rail then hands the six-column queue ~390px and the name column ends up a
+ * sliver. The queue keeps its rail for `xl` and above and stacks it below.
+ */
+const QUEUE_RAIL = "grid gap-page xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start";
 const STAT_COMPACT = "max-lg:min-h-0 max-lg:gap-1 max-lg:px-3 max-lg:py-2.5";
 
 const REVIEWED_KEY = "revisado";
@@ -1304,8 +1309,8 @@ export default function PaymentsPage(): React.ReactElement {
           />
         </div>
 
-        <div className={PAGE_RAIL}>
-          <div className="flex min-w-0 flex-col gap-page lg:min-h-[calc(100dvh-23rem)]">
+        <div className={QUEUE_RAIL}>
+          <div className="flex min-w-0 flex-col gap-page xl:min-h-[calc(100dvh-23rem)]">
         {/* This screen used to read the other way round — chips first, search
             on its own line underneath — which was the exact inverse of
             Members. `FilterPanel` renders the slots in one fixed order, so the
@@ -1448,6 +1453,9 @@ export default function PaymentsPage(): React.ReactElement {
             breakpoint="md"
             order="tableFirst"
             tableTestId="payments-table"
+            // Six columns beside a 340px rail: 12px cell padding instead of 16
+            // is what lets the name keep 208px without a scroller of its own.
+            tableClassName="[&_td]:px-3 [&_th]:px-3"
             cardsTestId="payments-cards"
             items={visibleItems}
             getKey={(req) => req.id}
@@ -1456,7 +1464,6 @@ export default function PaymentsPage(): React.ReactElement {
               <TableHeaderCell key="periodo" type="text">Período</TableHeaderCell>,
               <TableHeaderCell key="monto" type="number">Monto</TableHeaderCell>,
               <TableHeaderCell key="metodo" type="text">Método</TableHeaderCell>,
-              <TableHeaderCell key="subido" type="text">Subido</TableHeaderCell>,
                   <TableHeaderCell key="estado" type="text">Estado</TableHeaderCell>,
               <TableHeaderCell key="accion" type="action">
                 <span className="sr-only">Acción</span>
@@ -1467,16 +1474,28 @@ export default function PaymentsPage(): React.ReactElement {
               const fields = buildRowFields(req);
               return (
                 <TableRow>
+                  {/* `min-w-52`: with six columns in the two-thirds beside the
+                      rail, the name used to take whatever the others left
+                      (102px at 1440), so "Isabella Pilay Sabando" broke into
+                      four lines and the row doubled in height. */}
                   <TableNameCell
+                    className="min-w-52"
                     name={<span id={desktopNameId}>{fields.studentName}</span>}
                     sub={fields.payer}
                   />
-                  <TableCell type="text">{fields.period}</TableCell>
+                  {/* How long it has waited rides under the period: it is a
+                      property of the same payment, and its own column was the
+                      one squeezing the name. */}
+                  <TableCell type="text">
+                    <span className="block">{fields.period}</span>
+                    {fields.waiting ? (
+                      <span className="mt-px block text-xs text-ink-3-strong">{fields.waiting}</span>
+                    ) : null}
+                  </TableCell>
                   <TableCell type="number">{fields.amount}</TableCell>
                   <TableCell type="text">
                     <MethodTag method={fields.method} />
                   </TableCell>
-                  <TableCell type="text">{fields.waiting}</TableCell>
                       <TableCell type="text">
                         <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
                           {VALIDATION_STATUS_LABELS[req.validationStatus]}
