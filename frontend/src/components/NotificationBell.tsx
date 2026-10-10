@@ -231,7 +231,7 @@ export default function NotificationBell({
           )}
 
           {errorCargarMas && (
-            <p role="status" aria-live="polite" className="px-2 pt-1.5 text-2xs text-cata-red">
+            <p role="status" aria-live="polite" className="px-2 pt-1.5 text-xs text-cata-red">
               No se pudieron cargar más notificaciones.
             </p>
           )}
@@ -243,7 +243,7 @@ export default function NotificationBell({
                 onClick={onLoadMore}
                 disabled={cargandoMas}
                 aria-busy={cargandoMas}
-                className="w-full rounded-lg py-1.5 text-center text-2xs font-semibold tracking-flat text-cata-text/65 transition-colors hover:bg-cata-bg hover:text-cata-text disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-lg py-1.5 text-center text-xs font-semibold tracking-flat text-cata-text/65 transition-colors hover:bg-cata-bg hover:text-cata-text disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Ver más notificaciones
               </button>
