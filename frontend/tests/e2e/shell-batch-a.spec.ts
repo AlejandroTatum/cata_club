@@ -41,7 +41,7 @@ async function signIn(page: Page, role: keyof typeof SESSIONS): Promise<void> {
   await page.route("**/api/**", (route) =>
     route.request().method() === "GET" ? fulfillJson(route, []) : fulfillJson(route, {}),
   );
-  await page.route("**/api/ranking/notificaciones/mias", (route) => fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }));
+  await page.route("**/api/ranking/notificaciones/mias*", (route) => fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }));
   await page.route("**/api/dashboard", (route) =>
     fulfillJson(route, { totalPersonas: 120, totalAlumnos: 98, activeMemberships: 80, pendingPayments: 7, todaySchedules: 4, personasSinMembresia: 12 }),
   );
