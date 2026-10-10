@@ -48,11 +48,12 @@ their own data. `backend/tests/test_staff_jugador_portal.py` pins that through t
 1. Seeded accounts (`make seed`, dev only): `admin@cataclub.com` / `admin12345`, `entrenador@cataclub.com` / `trainer12345`.
 2. Log in as the admin, open **Miembros**, set the role filter to *Todos*, find the trainer (or the admin) row.
    It now offers **Ficha médica** and **Pagos**.
-3. **Pagos** on that row → create the membership. It stays INACTIVA until its first payment is approved. An admin cannot
-   record an in-person payment for their own membership (that refusal stays); the owner pays it themselves instead.
+3. **Pagos** on that row → create the membership. It stays INACTIVA until its first payment is approved. On their own
+   row an admin may record that first payment in person (approved at once); to check the online path, skip it.
 4. Log in as the owner (INACTIVA): the rail shows the staff sections plus only **Pagos** under *Mi cuenta*; `/student`
    and the other player pages redirect to their home. Submit the first payment there.
-5. Log in as a **different** admin and approve it from the payments queue. The owner cannot approve or reject it (400).
+5. Approve it from the payments queue as any admin, including the payment's owner; `validado_por_persona_id` records
+   who approved it.
 6. Once the membership is ACTIVA or VENCIDA, log in as that account. The rail shows its staff sections plus **Mi cuenta** (panel, Pagos, Asistencias, Ficha médica).
    `/student/payments` opens their own payments.
 7. Log in as an admin/trainer **without** a membership: no *Mi cuenta* section, and `/student` redirects to their home.
