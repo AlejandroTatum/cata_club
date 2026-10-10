@@ -27,7 +27,7 @@ async function fulfillJson(route: Route, body: unknown): Promise<void> {
 async function signInAsAdmin(page: Page): Promise<void> {
   await page.context().addCookies([{ name: "access_token", value: "mock-header.mock-payload.mock-signature", url: E2E_BASE_URL }]);
   await page.route("**/api/**", (route) => (route.request().method() === "GET" ? fulfillJson(route, []) : fulfillJson(route, {})));
-  await page.route("**/api/ranking/notificaciones/mias", (route) => fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }));
+  await page.route("**/api/ranking/notificaciones/mias*", (route) => fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }));
   await page.route("**/api/descuentos**", (route) => fulfillJson(route, { items: [], total: 0 }));
   await page.route("**/api/payments*", (route) => fulfillJson(route, { items: [], total: 0 }));
   await page.route("**/api/membresias/coberturas/todas*", (route) => fulfillJson(route, { items: [], total: 0 }));
