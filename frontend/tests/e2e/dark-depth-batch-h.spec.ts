@@ -48,7 +48,7 @@ async function openPayments(page: Page, theme: "light" | "dark"): Promise<void> 
       loggedInAt: new Date().toISOString(),
     }),
   );
-  await page.route("**/api/ranking/notificaciones/mias", (route) => fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }));
+  await page.route("**/api/ranking/notificaciones/mias*", (route) => fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }));
   await page.route("**/api/payments*", (route) => {
     const params = new URL(route.request().url()).searchParams;
     const estado = params.get("estadoPago");
