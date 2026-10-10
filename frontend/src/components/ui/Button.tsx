@@ -44,8 +44,9 @@ export type ButtonSize = (typeof BUTTON_SIZES)[number];
 // actually live. The ball survives as the inner band of the system ring in
 // `globals.css`, which dresses every focusable element in the product.
 const BASE =
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap border " +
-  "transition-colors duration-150 " +
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap border-2 " +
+  "transition-[color,background-color,border-color,box-shadow,transform] duration-150 " +
+  "motion-reduce:transition-none " +
   // `.btn[disabled], .btn.off` (:176) — the fade lives in `DISABLED` below.
   "disabled:cursor-not-allowed";
 
@@ -62,12 +63,20 @@ const SIZE: Record<ButtonSize, string> = {
 };
 
 const VARIANT: Record<ButtonVariant, string> = {
-  // `.btn.pri` — the only red button. Hover is `--red-dark`.
-  primary: "font-bold bg-cata-red border-cata-red text-white hover:bg-cata-red-dark hover:border-cata-red-dark",
-  // `.btn` bare — white surface, `--line-2` border. Hover is `sunken`, not
-  // `canvas`: a white button standing ON the canvas that hovers TO the canvas
-  // dissolves into the page instead of responding.
-  secondary: "font-semibold bg-paper border-line-2 text-ink hover:border-ink-3 hover:bg-sunken",
+  // The one primary action: the ball with a coal outline and a hard offset
+  // shadow — the landing's "INSCRÍBETE" button. Coal on the ball is 14:1; the
+  // white-on-red CTA of the previous pass survives as `danger` territory only
+  // (`state-bad`). Hover lifts it a step along the shadow's own diagonal and
+  // press sinks it onto the page, so the shadow reads as depth, not decoration.
+  primary:
+    "font-bold bg-ball border-edge text-coal shadow-sticker-sm " +
+    "hover:-translate-x-px hover:-translate-y-px hover:shadow-sticker " +
+    "active:translate-x-px active:translate-y-px active:shadow-none " +
+    "motion-reduce:hover:translate-x-0 motion-reduce:hover:translate-y-0",
+  // `.btn` bare — the outlined sticker: paper, coal outline, no shadow. Hover
+  // is `sunken`, not `canvas`: a white button standing ON the canvas that
+  // hovers TO the canvas dissolves into the page instead of responding.
+  secondary: "font-semibold bg-paper border-edge text-ink hover:bg-sunken",
   // `.btn.dark` — coal. Secondary-but-emphatic actions ("+ Nuevo miembro").
   dark: "font-bold bg-coal border-coal text-white hover:bg-coal-2 hover:border-coal-2",
   // The third level (D5). It replaces `ghost`, which was `bg-transparent
@@ -114,7 +123,7 @@ const NEUTRAL_DISABLED =
   "disabled:hover:bg-sunken disabled:hover:border-line-2";
 
 const DISABLED: Record<ButtonVariant, string> = {
-  primary: NEUTRAL_DISABLED,
+  primary: NEUTRAL_DISABLED + " disabled:shadow-none disabled:hover:translate-x-0 disabled:hover:translate-y-0",
   secondary: "disabled:opacity-45",
   dark: NEUTRAL_DISABLED,
   tertiary: "disabled:opacity-45",

@@ -238,6 +238,42 @@ export const STAT_TONE: Record<StatCardTone, { icon: string; accent: string }> =
   neutral: { icon: "bg-state-neutral-bg text-state-neutral", accent: "border-t-ink-3 bg-sunken/50" },
 };
 
+/**
+ * The solid brand blocks — the landing's stat tiles: a flat red, ball or coal
+ * face, a 2px outline, a hard offset shadow, the figure big, a vertical
+ * divider and a letter-spaced label. A block is brand, not meaning: the
+ * datum's state is still said in a word (`status`), in the block's own ink.
+ *
+ * `paper` is the quiet block — a white sticker — for a tile with nothing to
+ * say. Ink on each face is chosen for the gate in `color-contrast.test.ts`:
+ * white on red (5.0:1), coal on ball (14:1), white on coal.
+ */
+export type StatBlock = "red" | "ball" | "coal" | "paper";
+
+export const STAT_BLOCK: Record<
+  StatBlock,
+  { surface: string; label: string; muted: string; rule: string }
+> = {
+  red: { surface: "bg-cata-red text-white", label: "text-white", muted: "text-white", rule: "border-white/60" },
+  ball: { surface: "bg-ball text-coal", label: "text-coal", muted: "text-coal/80", rule: "border-coal/50" },
+  coal: { surface: "bg-coal text-white", label: "text-white/70", muted: "text-white/70", rule: "border-white/30" },
+  paper: { surface: "bg-paper text-ink", label: "text-ink-3-strong", muted: "text-ink-3-strong", rule: "border-line-2" },
+};
+
+/** Every block wears the same sticker frame. */
+export const STAT_BLOCK_FRAME = "rounded-card border-2 border-edge shadow-sticker";
+
+/** Which face a tone wears. `hot` (needs action) is the coal block. */
+export const STAT_BLOCK_FOR_TONE: Record<StatCardTone, StatBlock> = {
+  ok: "ball",
+  info: "red",
+  warn: "ball",
+  bad: "red",
+  trainer: "coal",
+  ball: "ball",
+  neutral: "paper",
+};
+
 export type StatCardProps = StatCardToneProps & StatCardBaseProps;
 
 interface StatCardBaseProps {
@@ -284,9 +320,9 @@ export default function StatCard({
     <div
       data-tone={hot ? "action" : tone}
       className={cn(
-        "relative min-h-stat rounded-card border px-[18px] py-4 flex flex-col justify-between",
-        hot ? "bg-coal border-coal" : showIcon ? cn("border-line border-t-[3px]", STAT_TONE[tone].accent) : "bg-paper border-line",
-        href && "h-full transition-colors hover:border-ink-3",
+        "relative min-h-stat rounded-card border-2 border-edge shadow-sticker px-[18px] py-4 flex flex-col justify-between",
+        hot ? "bg-coal" : showIcon ? cn("border-t-[3px]", STAT_TONE[tone].accent) : "bg-paper",
+        href && "h-full transition-[transform,box-shadow] hover:-translate-x-px hover:-translate-y-px hover:shadow-sticker-lg motion-reduce:transition-none motion-reduce:hover:translate-x-0 motion-reduce:hover:translate-y-0",
         className,
       )}
     >

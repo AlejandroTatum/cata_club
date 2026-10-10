@@ -136,4 +136,28 @@ describe("PageHeader — structure", () => {
     expect(header).toHaveClass("flex-col");
     expect(header.className).toMatch(/\bsm:flex-row\b/);
   });
+
+  it("draws the kicker as a red rule and a letter-spaced red label, hidden from assistive technology", () => {
+    render(<PageHeader title="Miembros" kicker="Operación" />);
+    const kicker = screen.getByTestId("page-kicker");
+    expect(kicker).toHaveTextContent("Operación");
+    expect(kicker).toHaveAttribute("aria-hidden", "true");
+    expect(kicker).toHaveClass("uppercase", "tracking-caps-wide", "text-state-bad");
+    expect(kicker.firstElementChild).toHaveClass("bg-cata-red");
+  });
+
+  it("draws no kicker unless one is given", () => {
+    render(<PageHeader title="Miembros" />);
+    expect(screen.queryByTestId("page-kicker")).toBeNull();
+  });
+
+  it("puts the title on a ball block with coal ink only when asked to highlight it", () => {
+    const { rerender } = render(<PageHeader title="Miembros" />);
+    expect(screen.getByRole("heading", { level: 1 }).querySelector(".bg-ball")).toBeNull();
+
+    rerender(<PageHeader title="Miembros" highlight />);
+    const block = screen.getByRole("heading", { level: 1, name: "Miembros" }).querySelector(".bg-ball");
+    expect(block).not.toBeNull();
+    expect(block).toHaveClass("text-coal", "border-edge", "box-decoration-clone");
+  });
 });

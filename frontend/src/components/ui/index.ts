@@ -94,7 +94,17 @@ export { default as SearchInput } from "./SearchInput";
 export type { SearchInputProps } from "./SearchInput";
 
 export { default as StatCard } from "./StatCard";
-export { STAT_GRID, STAT_TONE, STATUS_INK, StatSpark, StatTrack } from "./StatCard";
+export {
+  STAT_BLOCK,
+  STAT_BLOCK_FOR_TONE,
+  STAT_BLOCK_FRAME,
+  STAT_GRID,
+  STAT_TONE,
+  STATUS_INK,
+  StatSpark,
+  StatTrack,
+} from "./StatCard";
+export type { StatBlock } from "./StatCard";
 export { ActivityList, ActivityListHeader, ActivityItem } from "./ActivityList";
 export type { ActivityItemProps } from "./ActivityList";
 export type { StatCardProps, StatCardToneProps, StatCardVariant, StatSparkProps, StatTrackProps } from "./StatCard";

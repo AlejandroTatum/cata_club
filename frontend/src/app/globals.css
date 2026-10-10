@@ -4,6 +4,90 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * THEME TOKENS — the RGB channels behind the semantic colours in
+ * `tailwind.config.ts` (`rgb(var(--c-paper) / <alpha-value>)`), so opacity
+ * modifiers keep working. Light values sit on `:root`; dark overrides them
+ * under `html[data-theme="dark"]`, which the nonce'd script in the root layout
+ * sets before first paint. The values mirror `LIGHT_COLORS` and `DARK_COLORS`
+ * (`lib/theme-tokens.ts`); `theme-tokens-parity.test.ts` fails if they drift.
+ *
+ * The landing is never dark: `.landing-page` (and the body around it)
+ * re-declare the light values, so its own `--landing-*` palette is untouched.
+ */
+:root,
+html[data-theme="dark"] body:has(.landing-page),
+html[data-theme="dark"] .landing-page {
+  --c-canvas: 232 232 238;
+  --c-paper: 255 255 255;
+  --c-sunken: 244 244 247;
+  --c-line: 222 222 230;
+  --c-line-2: 207 207 218;
+  --c-edge: 19 19 22;
+  --c-ink: 23 24 28;
+  --c-ink-2: 74 74 85;
+  --c-ink-3: 116 116 127;
+  --c-ink-3-strong: 99 99 110;
+  --c-ball-ink: 110 87 0;
+  --c-cata-fuchsia-ink: 158 17 79;
+  --c-enroll-wash: 255 247 247;
+  --c-state-ok: 19 119 57;
+  --c-state-ok-bg: 231 244 236;
+  --c-state-warn: 169 77 8;
+  --c-state-warn-bg: 251 240 226;
+  --c-state-neutral: 99 99 110;
+  --c-state-neutral-bg: 239 239 242;
+  --c-state-bad: 197 27 34;
+  --c-state-bad-bg: 251 233 234;
+  --c-cuenta-representante: 29 78 216;
+  --c-cuenta-representante-bg: 239 246 255;
+  --c-cuenta-menor: 126 34 206;
+  --c-cuenta-menor-bg: 250 245 255;
+  --c-cuenta-entrenador: 4 120 87;
+  --c-cuenta-entrenador-bg: 236 253 245;
+  --c-cata-border: 222 222 230;
+  --c-cata-bg: 244 244 247;
+  --c-cata-surface: 255 255 255;
+  --c-cata-text: 31 41 55;
+  --c-cata-state-ok: 21 128 61;
+}
+
+html[data-theme="dark"] {
+  --c-canvas: 11 11 14;
+  --c-paper: 28 28 34;
+  --c-sunken: 38 38 45;
+  --c-line: 45 45 53;
+  --c-line-2: 61 61 71;
+  --c-edge: 212 212 220;
+  --c-ink: 236 236 240;
+  --c-ink-2: 191 191 202;
+  --c-ink-3: 154 154 167;
+  --c-ink-3-strong: 168 168 181;
+  --c-ball-ink: 255 214 0;
+  --c-cata-fuchsia-ink: 255 125 176;
+  --c-enroll-wash: 38 27 29;
+  --c-state-ok: 91 210 138;
+  --c-state-ok-bg: 20 48 31;
+  --c-state-warn: 242 161 84;
+  --c-state-warn-bg: 58 38 18;
+  --c-state-neutral: 168 168 181;
+  --c-state-neutral-bg: 42 42 49;
+  --c-state-bad: 255 122 128;
+  --c-state-bad-bg: 63 27 30;
+  --c-cuenta-representante: 143 176 255;
+  --c-cuenta-representante-bg: 27 39 69;
+  --c-cuenta-menor: 201 155 255;
+  --c-cuenta-menor-bg: 46 31 71;
+  --c-cuenta-entrenador: 79 214 164;
+  --c-cuenta-entrenador-bg: 18 58 46;
+  --c-cata-border: 45 45 53;
+  --c-cata-bg: 38 38 45;
+  --c-cata-surface: 28 28 34;
+  --c-cata-text: 228 228 234;
+  --c-cata-state-ok: 91 210 138;
+  color-scheme: dark;
+}
+
 .app-main:has(.landing-page),
 .app-main:has(.auth-shell),
 .app-main:has(.app-shell) {
@@ -24,8 +108,8 @@
      to be #F9FAFB while the shell painted #F5F5F7 over it, so the app ran on
      two page greys that differed by 1.5 L* and neither of them was a token. */
   body {
-    background-color: #E8E8EE;
-    color: #17181C;
+    background-color: rgb(var(--c-canvas));
+    color: rgb(var(--c-ink));
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -87,27 +171,36 @@
    * (`shadow-elevated` on a modal, `shadow-none` on an inset panel) still
    * wins from the utilities layer.
    */
-  .rounded-card.bg-paper,
+  /* The sticker card: 2px coal outline and a hard offset shadow, no blur.
+     The `rounded-card bg-paper` spelling is caught too, but inside `:where()`
+     so it carries NO specificity: a screen that gives such an element its own
+     border colour or shadow (a selected choice card in cata-red, a modal's
+     `shadow-elevated`) still wins from the utilities layer. */
+  :where(.rounded-card.bg-paper),
   .card,
   .card-hover {
-    @apply shadow-card;
+    @apply border-2 border-edge shadow-sticker;
   }
 
   .card {
-    background-color: #FFFFFF;
-    border: 1px solid #DEDEE6;
+    background-color: rgb(var(--c-paper));
     border-radius: 14px;
   }
 
   .card-hover {
-    background-color: #FFFFFF;
-    border: 1px solid #DEDEE6;
+    background-color: rgb(var(--c-paper));
     border-radius: 14px;
-    transition: all 0.2s ease;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
   }
 
   .card-hover:hover {
-    @apply shadow-elevated;
+    @apply -translate-x-px -translate-y-px shadow-sticker-lg;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card-hover:hover {
+      @apply translate-x-0 translate-y-0;
+    }
   }
 
   /* The focus ring these three controls used to declare (`focus:ring-2
@@ -133,11 +226,11 @@
   }
 
   .btn-secondary {
-    background-color: #FFFFFF;
-    color: #17181C;
+    background-color: rgb(var(--c-paper));
+    color: rgb(var(--c-ink));
     /* `line-2`, the control border — a button outlined in the divider
        hairline reads as a table cell, not as something you can press. */
-    border: 1px solid #CFCFDA;
+    border: 1px solid rgb(var(--c-line-2));
     border-radius: 0.75rem;
     @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-all duration-200 hover:bg-cata-bg disabled:cursor-not-allowed disabled:opacity-50;
   }
@@ -162,15 +255,15 @@
    * `min-h-ctl` rather than `h-ctl` so a field that wraps can still grow.
    */
   .input-field {
-    background-color: #FFFFFF;
+    background-color: rgb(var(--c-paper));
     /* `line-2` — same reason as `.btn-secondary`: a field needs an edge. */
-    border: 1px solid #CFCFDA;
-    color: #17181C;
+    border: 1px solid rgb(var(--c-line-2));
+    color: rgb(var(--c-ink));
     @apply w-full min-h-ctl rounded-ctl px-4 py-2 text-sm transition-all duration-200 placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .input-field::placeholder {
-    color: rgba(31,41,55,0.35);
+    color: rgb(var(--c-ink) / 0.4);
   }
 
   /* The border still darkens to the CTA red on focus — that is the field
@@ -367,7 +460,7 @@
     [contenteditable="true"],
     [tabindex]:not([tabindex="-1"])
   ):not([class*="focus-visible:shadow-"], .landing-page *):focus-visible {
-  outline: 2px solid #131316;
+  outline: 2px solid rgb(var(--c-edge));
   outline-offset: 2px;
   box-shadow: 0 0 0 2px #FFD600;
 }

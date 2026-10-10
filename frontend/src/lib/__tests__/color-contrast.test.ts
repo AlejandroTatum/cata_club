@@ -18,7 +18,7 @@
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import tailwindConfig from "../../../tailwind.config";
+import { LIGHT_COLORS } from "../../../tailwind.config";
 
 // ---------------------------------------------------------------------------
 // WCAG relative luminance / contrast ratio (https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio)
@@ -40,7 +40,8 @@ const AA_NON_TEXT = 3;
 // Token values under test
 // ---------------------------------------------------------------------------
 
-const colors = tailwindConfig.theme?.extend?.colors as Record<string, unknown>;
+// The palette as written (light values); Tailwind itself sees CSS variables.
+const colors = LIGHT_COLORS as unknown as Record<string, unknown>;
 const group = (key: string): Record<string, string> => colors[key] as Record<string, string>;
 
 const cata = group("cata");
