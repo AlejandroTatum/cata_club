@@ -78,7 +78,7 @@ export default function CarnetPicker(): React.ReactElement {
       data-testid="carnet-picker"
       className={`${PAGE_RAIL} max-lg:pb-24`}
     >
-      <div className="flex min-w-0 flex-col gap-3">
+      <div className="flex min-w-0 flex-col gap-2">
         <FilterPanel
           bare
           label="Buscar y elegir jugadores"
