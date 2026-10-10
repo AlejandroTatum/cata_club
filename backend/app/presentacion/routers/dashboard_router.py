@@ -36,12 +36,14 @@ async def dashboard_stats(db: Session = Depends(obtener_sesion)) -> DashboardSta
     # Población que puede tener membresía: alumnos. Con Usuario, el rol ALUMNO
     # decide; SIN Usuario también es alumno (un menor representado sin
     # credenciales no recibe Usuario — `PersonaServicio.crear_representado` —
-    # pero entrena y paga membresía). Solo administrador y entrenador quedan
-    # fuera: nunca tienen membresía y distorsionan el denominador de
-    # "MEMBRESÍAS ACTIVAS · X de Y".
-    es_alumno = Persona.usuario.has(
-        Usuario.roles.any(Rol.tipo_rol == TipoRol.ALUMNO)
-    ) | ~Persona.usuario.has()
+    # pero entrena y paga membresía). Un administrador o entrenador sin
+    # membresía queda fuera; con membresía propia (staff que también juega)
+    # es jugador, o "MEMBRESÍAS ACTIVAS · X de Y" pasaría de 100%.
+    es_alumno = (
+        Persona.usuario.has(Usuario.roles.any(Rol.tipo_rol == TipoRol.ALUMNO))
+        | ~Persona.usuario.has()
+        | Persona.membresias.any()
+    )
 
     total_alumnos = db.query(func.count(Persona.id)).filter(persona_activa, es_alumno).scalar() or 0
 

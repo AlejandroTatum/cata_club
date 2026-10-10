@@ -4,8 +4,8 @@ Una cuenta ADMINISTRADOR/ENTRENADOR cuya membresía propia todavía está INACTI
 (creada por un admin, sin ningún pago aprobado) registra su primer pago por el
 mismo endpoint que cualquier socio (`POST /membresias/pagos`, que autoriza por
 titular, no por rol). El pago queda PENDIENTE_VALIDACION y lo revisa un admin
-por la cola normal -- nunca el propio titular: aprobar o rechazar el pago de la
-propia membresía se rechaza en el servicio.
+por la cola normal; cualquier administrador, incluido el propio titular, puede
+aprobarlo o rechazarlo (decisión del dueño: el revisor queda registrado).
 """
 import pytest
 
@@ -13,7 +13,6 @@ from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoRol
 from app.dominio.modelos import Membresia, Pago, Rol, Usuario
 from app.seguridad.gestor_auth import GestorAutenticacion
-from app.servicios_negocio.membresia_pago_servicio import MENSAJE_VALIDACION_PAGO_PROPIO
 from tests.fabricas_pagos import (
     crear_membresia_orm, crear_persona_orm, crear_tipo_membresia_orm,
 )
@@ -78,24 +77,37 @@ def test_staff_con_membresia_inactiva_no_paga_por_otra_persona(client, db_sessio
     assert db_session.query(Pago).count() == 0
 
 
-def test_admin_no_valida_el_pago_de_su_propia_membresia(client, db_session):
+def test_admin_valida_el_pago_de_su_propia_membresia(client, db_session):
+    """Owner decision: any admin may approve their own payment; the reviewer is recorded."""
     persona, membresia = _staff_inactivo(db_session, 9220)
     _como(persona.id, "ADMINISTRADOR")
     pago_id = _pagar(client, persona, membresia).json()["id"]
 
-    aprobar = client.patch(f"{API}/membresias/pagos/{pago_id}/validar", json=APROBAR)
-    rechazar = client.patch(
+    respuesta = client.patch(f"{API}/membresias/pagos/{pago_id}/validar", json=APROBAR)
+
+    assert respuesta.status_code == 200, respuesta.text
+    db_session.expire_all()
+    pago = db_session.get(Pago, pago_id)
+    assert pago.estado_pago == EstadoPago.APROBADO
+    assert pago.validado_por_persona_id == persona.id
+    assert db_session.get(Membresia, membresia.id).estado == EstadoMembresia.ACTIVA
+
+
+def test_admin_rechaza_el_pago_de_su_propia_membresia(client, db_session):
+    persona, membresia = _staff_inactivo(db_session, 9225)
+    _como(persona.id, "ADMINISTRADOR")
+    pago_id = _pagar(client, persona, membresia).json()["id"]
+
+    respuesta = client.patch(
         f"{API}/membresias/pagos/{pago_id}/validar",
         json={"estado_pago": "RECHAZADO", "motivo_rechazo": "Me equivoqué"},
     )
 
-    for respuesta in (aprobar, rechazar):
-        assert respuesta.status_code == 400, respuesta.text
-        assert MENSAJE_VALIDACION_PAGO_PROPIO in respuesta.text
+    assert respuesta.status_code == 200, respuesta.text
     db_session.expire_all()
     pago = db_session.get(Pago, pago_id)
-    assert pago.estado_pago == EstadoPago.PENDIENTE_VALIDACION
-    assert pago.validado_por_persona_id is None
+    assert pago.estado_pago == EstadoPago.RECHAZADO
+    assert pago.validado_por_persona_id == persona.id
     assert db_session.get(Membresia, membresia.id).estado == EstadoMembresia.INACTIVA
 
 

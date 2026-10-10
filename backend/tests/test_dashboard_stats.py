@@ -173,6 +173,31 @@ def test_total_alumnos_es_el_denominador_y_total_personas_cuenta_a_todos(
     assert stats["activeMemberships"] == 1
 
 
+def test_staff_con_membresia_propia_cuenta_como_jugador(client, db_session):
+    """Staff that also plays (staff-player-side): an admin or trainer with an
+    own membership is a player, so the denominator includes them and active
+    memberships never exceed it ("8 de 7" / 114%)."""
+    alumno = _crear_alumno(db_session, cedula_valida(210), "denom.sp1@cataclub.test")
+    admin = _crear_persona_con_rol(
+        db_session, cedula_valida(211), "admin.sp@cataclub.test", TipoRol.ADMINISTRADOR
+    )
+    coach = _crear_persona_con_rol(
+        db_session, cedula_valida(212), "coach.sp@cataclub.test", TipoRol.ENTRENADOR
+    )
+    _crear_persona_con_rol(
+        db_session, cedula_valida(213), "coach.sinm@cataclub.test", TipoRol.ENTRENADOR
+    )
+    _crear_membresia(db_session, alumno, EstadoMembresia.ACTIVA)
+    _crear_membresia(db_session, admin, EstadoMembresia.ACTIVA)
+    _crear_membresia(db_session, coach, EstadoMembresia.VENCIDA)
+
+    stats = _stats(client)
+    assert stats["totalPersonas"] == 4
+    assert stats["totalAlumnos"] == 3
+    assert stats["activeMemberships"] == 2
+    assert stats["personasSinMembresia"] == 1
+
+
 def test_dashboard_excludes_archived_and_does_not_regularize_paused(client, db_session):
     archived = _crear_alumno(db_session, cedula_valida(211), "archived@cataclub.test")
     paused = _crear_alumno(db_session, cedula_valida(212), "paused@cataclub.test")

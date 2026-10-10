@@ -37,7 +37,6 @@ from app.infraestructura.repositorios.descuento_repositorio import (
 )
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
 from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
-from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.dominio.guardianes import destinatarios_de_aviso
 from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
@@ -197,25 +196,13 @@ MENSAJE_FECHA_EFECTIVA_RETROCEDE = (
 
 # --- Issue #1402: pago presencial de primera inscripción --------------------
 # El admin anota en el club el PRIMER pago de inscripción de una membresía.
-# El endpoint es admin-only; estos mensajes cubren las dos guardias que la
-# ruta no puede resolver sola (necesitan leer el payload y la base).
-MENSAJE_PAGO_PRESENCIAL_PROPIO = (
-    "El pago presencial de primera inscripción se registra para el socio "
-    "presente en el club; para un pago propio usa el flujo regular, que "
-    "queda por validar."
-)
+# El endpoint es admin-only; este mensaje cubre la guardia que la ruta no
+# puede resolver sola (necesita leer la base). Un admin puede registrar su
+# propio pago presencial (decisión del dueño; queda como aprobador).
 MENSAJE_PAGO_PRESENCIAL_NO_PRIMERA_INSCRIPCION = (
     "La aprobación inmediata presencial solo aplica a la primera inscripción: "
     "una membresía inactiva sin ningún pago aprobado. Registra renovaciones "
     "por el flujo regular y apruébalas desde la cola de validación."
-)
-
-# --- Staff que también juega: nadie revisa su propio pago -------------------
-# Un ADMINISTRADOR con membresía propia paga como cualquier socio, pero la
-# revisión (aprobar o rechazar) la hace otro administrador.
-MENSAJE_VALIDACION_PAGO_PROPIO = (
-    "No puedes validar el pago de tu propia membresía; pide a otro "
-    "administrador que lo revise."
 )
 
 # --- Issue #400 (slice 4d): cobertura bonificada -----------------------------
@@ -648,7 +635,6 @@ class PagoServicio:
         self.repo_asignacion = AsignacionDescuentoRepositorio(db)
         self.repo_cobertura_bonificada = CoberturaBonificadaRepositorio(db)
         self.repo_rol = RolRepositorio(db)
-        self.repo_usuario = UsuarioRepositorio(db)
         # Issue #400 (slice 5a): `repo_tipo` resincroniza la tarifa al
         # reactivar (`TipoMembresia.precio` vigente, no el congelado);
         # `repo_historial_estado` lee la última reactivación para el reloj
@@ -1075,13 +1061,7 @@ class PagoServicio:
                 detalle_tecnico="pago presencial: token sin persona_id",
             )
 
-        # Guardia 1: en persona, nunca autoservicio. `GestorPermisos` ya
-        # garantiza el rol; esto evita que un admin use el camino de
-        # aprobación inmediata para su propia membresía.
-        if persona_id_solicitante == datos.persona_id:
-            raise OperacionInvalida(MENSAJE_PAGO_PRESENCIAL_PROPIO)
-
-        # Guardia 2: primera inscripción (membresía inicial INACTIVA, sin
+        # Guardia: primera inscripción (membresía inicial INACTIVA, sin
         # ningún pago aprobado). La lectura es `FOR UPDATE` (hallazgo del
         # revisor de #1402): con la lectura sin lock, dos peticiones
         # concurrentes (o una presencial y una aprobación de la cola que se
@@ -2772,21 +2752,6 @@ class PagoServicio:
             if membresia is None:
                 raise EntidadNoEncontrada(f"Membresía con id {pago.membresia_id} no encontrada")
             self._exigir_membresia_financieramente_operativa(membresia)
-
-        # Nadie revisa su propio pago (staff que también juega): ni aprobar
-        # ni rechazar. Va antes de tocar el pago, así la negativa no deja
-        # ningún efecto a medias. El pago de OTRA persona sigue igual. El
-        # revisor es una CUENTA: se compara la persona del pago con la del
-        # actor solo si esa persona tiene `Usuario` (siempre, para un token
-        # real; un `persona_id` sin cuenta no puede estar revisando nada).
-        if (
-            pago.persona_id == actor_persona_id
-            and self.repo_usuario.obtener_por_persona_id(actor_persona_id) is not None
-        ):
-            raise OperacionInvalida(
-                MENSAJE_VALIDACION_PAGO_PROPIO,
-                detalle_tecnico=f"pago_id={pago_id} persona_id={pago.persona_id} es el actor",
-            )
 
         requiere_motivo_excepcion = (
             datos.estado_pago == EstadoPago.APROBADO

@@ -1576,17 +1576,17 @@ def test_presencial_transferencia_queda_pendiente_y_finaliza_admin_con_voucher(
     assert client.get(f"/api/v1/membresias/{membresia['id']}").json()["estado"] == "ACTIVA"
 
 
-def test_presencial_pago_propio_del_admin_no_se_autoaprueba(client):
-    """Autoservicio jamás: ni siquiera el admin aprueba su propio pago por el
-    camino presencial -- ese es exactamente el agujero que #1402 cierra."""
+def test_presencial_pago_propio_del_admin_se_aprueba(client):
+    """Owner decision: an admin may register and approve their own in-person
+    first payment; the club has a few trusted admins and the approver is recorded."""
     persona = crear_persona_api(client, cedula=cedula_valida(703))  # id=1 == token admin
     tipo = crear_tipo_membresia_api(client)
     membresia = crear_membresia_api(client, persona["id"], tipo["id"])
 
     resp = _presencial(client, persona["id"], membresia["id"])
-    assert resp.status_code == 400, resp.text
-    assert "flujo regular" in resp.json()["detail"]
-    assert client.get(f"/api/v1/membresias/{membresia['id']}").json()["estado"] == "INACTIVA"
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["estadoPago"] == "APROBADO"
+    assert client.get(f"/api/v1/membresias/{membresia['id']}").json()["estado"] == "ACTIVA"
 
 
 def test_presencial_renovacion_o_pago_posterior_se_rechaza(client, db_session):
