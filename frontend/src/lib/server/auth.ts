@@ -233,6 +233,18 @@ export interface BackendMeResponse {
    * APROBADO. Optional for a pre-#1228 backend.
    */
   primerPago?: BackendPrimerPago | null;
+  /**
+   * The account's own Persona holds a membership that allows training
+   * (ACTIVA or VENCIDA — backend `puede_entrenar`). The fact behind
+   * `ServerSession.isStaffPlayer`. Optional for a backend that predates it.
+   */
+  puedeEntrenar?: boolean;
+  /**
+   * The account's own Persona holds an INACTIVA membership (created, no first
+   * payment approved yet — backend `espera_primer_pago`). The fact behind
+   * `ServerSession.staffAwaitsFirstPayment`. Optional for an older backend.
+   */
+  esperaPrimerPago?: boolean;
 }
 
 export interface BackendPrimerPago {
@@ -276,6 +288,8 @@ function isBackendMeResponse(value: unknown): value is BackendMeResponse {
     (v.correoVerificado === undefined || typeof v.correoVerificado === "boolean") &&
     (v.altaPresencialCompletada === undefined || typeof v.altaPresencialCompletada === "boolean") &&
     (v.activacionCompleta === undefined || typeof v.activacionCompleta === "boolean") &&
+    (v.puedeEntrenar === undefined || typeof v.puedeEntrenar === "boolean") &&
+    (v.esperaPrimerPago === undefined || typeof v.esperaPrimerPago === "boolean") &&
     (v.primerPago === undefined || v.primerPago === null || isBackendPrimerPago(v.primerPago))
   );
 }
@@ -815,6 +829,21 @@ export interface ServerSession {
   activacionCompleta: boolean;
   /** Issue #1228: see `BackendMeResponse.primerPago`. */
   primerPago: BackendPrimerPago | null;
+  /**
+   * An ADMINISTRADOR/ENTRENADOR whose own Persona holds a membership that
+   * allows training: the player section (`/student*`) is offered to them in
+   * addition to their staff sections. One role per account is unchanged — this
+   * is a fact about the membership, computed here from the backend, never
+   * granted by a role. Always false for a non-staff role.
+   */
+  isStaffPlayer: boolean;
+  /**
+   * An ADMINISTRADOR/ENTRENADOR whose own membership is still INACTIVA (never
+   * paid) and who is not yet a staff player. They get ONLY their own payments
+   * screen, to submit that first payment; every other player page still needs
+   * a membership that allows training. Always false for a non-staff role.
+   */
+  staffAwaitsFirstPayment: boolean;
   loggedInAt: string;
 }
 
@@ -845,10 +874,16 @@ export function buildSession(me: BackendMeResponse): SessionBuildResult {
     fotoUrl: me.fotoUrl ?? null,
   };
 
+  const isStaff = role === "admin" || role === "trainer";
+  const isStaffPlayer = isStaff && me.puedeEntrenar === true;
+  const staffAwaitsFirstPayment = isStaff && !isStaffPlayer && me.esperaPrimerPago === true;
+
   const user: Usuario =
     role === "estudiante"
       ? { ...base, role: "estudiante", activo: true, fechaNacimiento: me.fechaNacimiento }
-      : { ...base, role };
+      : isStaffPlayer
+        ? { ...base, role, fechaNacimiento: me.fechaNacimiento }
+        : { ...base, role };
 
   // Missing fields are an explicit compatibility path for a BFF talking to
   // a pre-#858 backend. The current backend always sends both booleans.
@@ -871,6 +906,8 @@ export function buildSession(me: BackendMeResponse): SessionBuildResult {
       // so nothing changes until it does.
       activacionCompleta: me.activacionCompleta ?? (correoVerificado && altaPresencialCompletada),
       primerPago: me.primerPago ?? null,
+      isStaffPlayer,
+      staffAwaitsFirstPayment,
       loggedInAt: new Date().toISOString(),
     },
   };

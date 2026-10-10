@@ -199,6 +199,76 @@ function everyRoleCombination(): UserRole[][] {
 }
 
 describe("getNavGroupsForRoles", () => {
+  // Staff who also play (issue: one role per account, player side from an own
+  // membership). The player section is ADDITIVE and comes last, where the rail
+  // keeps everything personal; the staff sections do not change.
+  describe("staff player", () => {
+    const playerHrefs = ["/student", "/student/payments", "/student/attendance"];
+
+    it.each(["admin", "trainer"] as const)("adds the player section after the %s sections", (role) => {
+      const without = getNavGroupsForRoles([role]);
+      const groups = getNavGroupsForRoles([role], true, true);
+      expect(groups.slice(0, without.length)).toEqual(without);
+      expect(groups.slice(without.length)).toEqual([
+        {
+          heading: "Mi cuenta",
+          links: [
+            { href: "/student", label: "Mi cuenta" },
+            { href: "/student/payments", label: "Pagos" },
+            { href: "/student/attendance", label: "Asistencias" },
+          ],
+        },
+        { heading: "Salud y familia", links: [{ href: "/student/medical-record", label: "Ficha médica" }] },
+      ]);
+    });
+
+    it.each(["admin", "trainer"] as const)("offers a %s without the flag no player row", (role) => {
+      const hrefs = sectionHrefs(getNavGroupsForRoles([role], true, false));
+      for (const href of playerHrefs) expect(hrefs).not.toContain(href);
+      expect(getNavGroupsForRoles([role], true)).toEqual(getNavGroupsForRoles([role]));
+    });
+
+    it("withholds the medical-record row from a staff player who is not an adult", () => {
+      const hrefs = sectionHrefs(getNavGroupsForRoles(["admin"], false, true));
+      expect(hrefs).toEqual(expect.arrayContaining(playerHrefs));
+      expect(hrefs).not.toContain("/student/medical-record");
+    });
+
+    it.each(["admin", "trainer"] as const)(
+      "gives a %s awaiting their first payment only the Pagos row, after the staff sections",
+      (role) => {
+        const without = getNavGroupsForRoles([role]);
+        const groups = getNavGroupsForRoles([role], true, false, true);
+        expect(groups.slice(0, without.length)).toEqual(without);
+        expect(groups.slice(without.length)).toEqual([
+          { heading: "Mi cuenta", links: [{ href: "/student/payments", label: "Pagos" }] },
+        ]);
+        const hrefs = sectionHrefs(groups);
+        for (const href of ["/student", "/student/attendance", "/student/medical-record"]) {
+          expect(hrefs).not.toContain(href);
+        }
+      },
+    );
+
+    it("gives a staff player the full section, not a second Pagos row, when both flags are set", () => {
+      expect(getNavGroupsForRoles(["admin"], true, true, true)).toEqual(getNavGroupsForRoles(["admin"], true, true));
+    });
+
+    it("ignores the first-payment flag for roles that are not staff", () => {
+      expect(getNavGroupsForRoles(["representante"], false, false, true)).toEqual(
+        getNavGroupsForRoles(["representante"]),
+      );
+      expect(getNavGroupsForRoles(["estudiante"], true, false, true)).toEqual(
+        getNavGroupsForRoles(["estudiante"], true),
+      );
+    });
+
+    it("ignores the flag for roles that are not staff", () => {
+      expect(getNavGroupsForRoles(["representante"], false, true)).toEqual(getNavGroupsForRoles(["representante"]));
+      expect(getNavGroupsForRoles(["estudiante"], true, true)).toEqual(getNavGroupsForRoles(["estudiante"], true));
+    });
+  });
+
   it("returns the unauthenticated rows, under no heading, when roles is null", () => {
     const groups = getNavGroupsForRoles(null);
     expect(groups).toHaveLength(1);

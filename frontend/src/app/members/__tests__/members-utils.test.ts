@@ -22,6 +22,7 @@ import {
   describePaymentsState,
   describePeriodoPago,
   isRepresentativePersonaRow,
+  showsPlayerColumns,
   normalizeText,
   accountMatchesFlag,
   accountMatchesRole,
@@ -825,6 +826,39 @@ describe("isRepresentativePersonaRow", () => {
     expect(isRepresentativePersonaRow(account)).toBe(false);
   });
 
+  it.each(["ADMINISTRADOR", "ENTRENADOR"] as const)(
+    "is false for a %s row without a membership: staff can be given their own",
+    (rol) => {
+      const account: MemberAccount = {
+        id: "staff-sin-membresia",
+        role: "representante",
+        backendRoles: [rol],
+        nombres: "Diego",
+        apellidos: "Mora",
+        telefono: "+593 90 000 0000",
+        estudiantes: [
+          { id: "staff-sin-membresia", nombres: "Diego", apellidos: "Mora", activo: true, membresia: null, ultimoPago: null },
+        ],
+      };
+      expect(isRepresentativePersonaRow(account)).toBe(false);
+    },
+  );
+
+  it("stays true for a REPRESENTANTE-role row without a membership", () => {
+    const account: MemberAccount = {
+      id: "rep-con-rol",
+      role: "representante",
+      backendRoles: ["REPRESENTANTE"],
+      nombres: "Marta",
+      apellidos: "Reyes",
+      telefono: "+593 90 000 0000",
+      estudiantes: [
+        { id: "rep-con-rol", nombres: "Marta", apellidos: "Reyes", activo: true, membresia: null, ultimoPago: null },
+      ],
+    };
+    expect(isRepresentativePersonaRow(account)).toBe(true);
+  });
+
   it("is false for a self-enrolled player's row even with no membership yet", () => {
     const account: MemberAccount = {
       id: "estudiante-sin-membresia",
@@ -844,6 +878,47 @@ describe("isRepresentativePersonaRow", () => {
       ],
     };
     expect(isRepresentativePersonaRow(account)).toBe(false);
+  });
+});
+
+describe("showsPlayerColumns", () => {
+  const base: MemberAccount = {
+    id: "p1",
+    role: "representante",
+    nombres: "Diego",
+    apellidos: "Mora",
+    telefono: "+593 90 000 0000",
+    estudiantes: [
+      { id: "p1", nombres: "Diego", apellidos: "Mora", activo: true, membresia: null, ultimoPago: null },
+    ],
+  };
+
+  it.each(["ADMINISTRADOR", "ENTRENADOR"] as const)(
+    "is false for a %s without a membership: no status, but Pagos stays to create one",
+    (rol) => {
+      expect(showsPlayerColumns({ ...base, backendRoles: [rol] })).toBe(false);
+    },
+  );
+
+  it("is true once the staff account has a membership on file, even a first INACTIVA one", () => {
+    const account: MemberAccount = {
+      ...base,
+      backendRoles: ["ADMINISTRADOR"],
+      estudiantes: [
+        {
+          ...base.estudiantes[0],
+          membresia: { estadoBackend: "INACTIVA" } as unknown as NonNullable<
+            MemberAccount["estudiantes"][number]["membresia"]
+          >,
+        },
+      ],
+    };
+    expect(showsPlayerColumns(account)).toBe(true);
+  });
+
+  it("is true for a represented person and for an ALUMNO", () => {
+    expect(showsPlayerColumns({ ...base, representadoPor: "Marta Reyes" })).toBe(true);
+    expect(showsPlayerColumns({ ...base, backendRoles: ["ALUMNO"] })).toBe(true);
   });
 });
 

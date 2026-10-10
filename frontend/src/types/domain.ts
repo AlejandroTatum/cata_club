@@ -76,6 +76,11 @@ export interface UsuarioEstudiante extends UsuarioBase {
 /** Staff account, a pure representante account with no student profile of its own, or an authenticated-but-unsupported-role account. */
 export interface UsuarioStaff extends UsuarioBase {
   role: "admin" | "trainer" | "representante" | "unsupported";
+  /**
+   * Only set on an admin/trainer who is also a player (`ServerSession.isStaffPlayer`):
+   * the player side's adult gate (medical-record row) needs the birth date.
+   */
+  fechaNacimiento?: string;
 }
 
 export type Usuario = UsuarioEstudiante | UsuarioStaff;

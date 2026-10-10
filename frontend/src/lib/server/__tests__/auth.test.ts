@@ -737,6 +737,72 @@ describe("buildSession", () => {
     expect(JSON.stringify(session)).not.toMatch(/token/i);
   });
 
+  // Staff who also play: the role stays single (admin/trainer), the player
+  // side comes from the backend fact `puedeEntrenar` (own membership ACTIVA or
+  // VENCIDA), computed server-side and never inferred from the role.
+  it.each([
+    ["ADMINISTRADOR", "admin"],
+    ["ENTRENADOR", "trainer"],
+  ])("flags a %s with a training-allowed membership as a staff player", (rol, role) => {
+    const session = sessionFrom({
+      correo: "staff-jugador@cataclub.com",
+      personaId: 50,
+      nombres: "Diego",
+      apellidos: "Mora",
+      roles: [rol],
+      puedeEntrenar: true,
+      fechaNacimiento: "1990-05-01",
+    });
+
+    expect(session.isStaffPlayer).toBe(true);
+    expect(session.user.role).toBe(role);
+    expect(session.roles).toEqual([rol]);
+    // The adult gate for the medical-record row needs the birth date.
+    expect(session.user).toMatchObject({ fechaNacimiento: "1990-05-01" });
+  });
+
+  it.each(["ADMINISTRADOR", "ENTRENADOR"])(
+    "does not flag a %s without a membership (or on a backend that predates the field)",
+    (rol) => {
+      const base = { correo: "staff@cataclub.com", personaId: 51, nombres: "Rita", apellidos: "Mora", roles: [rol] };
+      expect(sessionFrom({ ...base, puedeEntrenar: false }).isStaffPlayer).toBe(false);
+      expect(sessionFrom(base).isStaffPlayer).toBe(false);
+    },
+  );
+
+  it.each(["ADMINISTRADOR", "ENTRENADOR"])(
+    "flags a %s whose own membership is INACTIVA as awaiting their first payment, not as a player",
+    (rol) => {
+      const session = sessionFrom({
+        correo: "staff@cataclub.com", personaId: 53, nombres: "Rita", apellidos: "Mora",
+        roles: [rol], puedeEntrenar: false, esperaPrimerPago: true,
+      });
+      expect(session.staffAwaitsFirstPayment).toBe(true);
+      expect(session.isStaffPlayer).toBe(false);
+    },
+  );
+
+  it("does not flag awaiting-first-payment on a staff player, a staff without the fact, or non-staff", () => {
+    const base = { correo: "x@cataclub.com", personaId: 54, nombres: "Rita", apellidos: "Mora" };
+    expect(
+      sessionFrom({ ...base, roles: ["ADMINISTRADOR"], puedeEntrenar: true, esperaPrimerPago: true })
+        .staffAwaitsFirstPayment,
+    ).toBe(false);
+    expect(sessionFrom({ ...base, roles: ["ENTRENADOR"], esperaPrimerPago: false }).staffAwaitsFirstPayment).toBe(false);
+    expect(sessionFrom({ ...base, roles: ["ENTRENADOR"] }).staffAwaitsFirstPayment).toBe(false);
+    expect(
+      sessionFrom({ ...base, roles: ["ALUMNO"], esperaPrimerPago: true }).staffAwaitsFirstPayment,
+    ).toBe(false);
+  });
+
+  it.each(["REPRESENTANTE", "ALUMNO"])("never flags a %s: the flag is for staff only", (rol) => {
+    const session = sessionFrom({
+      correo: "portal@cataclub.com", personaId: 52, nombres: "Ana", apellidos: "Mora",
+      roles: [rol], puedeEntrenar: true,
+    });
+    expect(session.isStaffPlayer).toBe(false);
+  });
+
   it("carries both activation states through the token-free session", () => {
     const session = sessionFrom({
       correo: "pendiente@cataclub.com",

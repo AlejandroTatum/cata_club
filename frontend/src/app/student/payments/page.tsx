@@ -879,7 +879,9 @@ function PaymentsPageContent(): React.ReactElement {
       // so a back control among the children lands after the title by
       // construction. The finding that put a named way back on this screen
       // (issue #316 hallazgo #70) stands; only its placement moves.
-      back={<BackLink href="/student" />}
+      // A staff member still awaiting their first payment has no /student to go
+      // back to (that page needs a membership that allows training).
+      back={session?.staffAwaitsFirstPayment ? undefined : <BackLink href="/student" />}
     >
 
       {state.status === "loading" && (
@@ -905,7 +907,11 @@ function PaymentsPageContent(): React.ReactElement {
 
 export default function StudentPaymentsPage(): React.ReactElement {
   return (
-    <ProtectedRoute allowedRoles={["representante", "estudiante", "unsupported"]}>
+    <ProtectedRoute
+      allowedRoles={["representante", "estudiante", "unsupported"]}
+      allowStaffPlayer
+      allowStaffFirstPayment
+    >
       {/* `useSearchParams` needs a boundary to fall back to during prerender
           — the same wrapper `/reset-password` uses for the same reason. */}
       <Suspense>

@@ -145,6 +145,8 @@ async def obtener_perfil(
             None if activacion_completa
             else GestorAutenticacion.primer_pago_gate(db, usuario.persona_id)
         ),
+        "puede_entrenar": GestorAutenticacion.puede_entrenar(db, usuario.persona_id),
+        "espera_primer_pago": GestorAutenticacion.espera_primer_pago(db, usuario.persona_id),
     }
 
 

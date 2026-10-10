@@ -637,6 +637,22 @@ export function isPlayerAccount(account: MemberAccount): boolean {
 }
 
 /**
+ * Owner (2026-10-09): only players carry a membership, so the members list
+ * shows its «Membresía» status only for them. Wider than `isPlayerAccount` on
+ * purpose: a represented person or an account with any membership on file (a
+ * first one still INACTIVA, a suspended one) is a player in the making, and
+ * its badge is the admin's next step. Staff and representatives with neither
+ * show no status — yet keep «Pagos», the entry point that creates one.
+ */
+export function showsPlayerColumns(account: MemberAccount): boolean {
+  return (
+    isPlayerAccount(account) ||
+    account.representadoPor !== undefined ||
+    account.estudiantes.some((student) => student.membresia !== null)
+  );
+}
+
+/**
  * Issue #1670: whether the admin may print this account's carnet — players
  * only (the #1661/#1669 rule via `isPlayerAccount`), and never the
  * representative's own row, which holds no player to put on a card. A
@@ -938,9 +954,17 @@ export function describePaymentsState(
  * `role === "estudiante"` accounts are never hidden here even before their
  * first membership exists — that is exactly the account the "Pagos" entry
  * point's `CreateMembershipForm` fallback exists for.
+ *
+ * ADMINISTRADOR/ENTRENADOR accounts (which the adapter also files under
+ * "representante") are never hidden either: staff who play get their own
+ * membership from the same entry point, the admin creating it for them.
  */
 export function isRepresentativePersonaRow(account: MemberAccount): boolean {
+  const isStaff = (account.backendRoles ?? []).some(
+    (role) => role === "ADMINISTRADOR" || role === "ENTRENADOR",
+  );
   return (
+    !isStaff &&
     account.role === "representante" &&
     account.representadoPor === undefined &&
     !account.estudiantes.some((s) => s.membresia !== null)

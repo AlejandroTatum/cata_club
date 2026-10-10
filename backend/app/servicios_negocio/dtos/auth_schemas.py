@@ -86,6 +86,17 @@ class UsuarioMeResponseDTO(ResponseBase, BaseModel):
     # cuando la activación ya está completa o el pago más reciente fue
     # APROBADO -- ver `GestorAutenticacion.primer_pago_gate`.
     primer_pago: Optional[PrimerPagoDTO] = None
+    # La Persona de la cuenta tiene una membresía que habilita entrenar
+    # (`MembresiaRepositorio.puede_entrenar`: ACTIVA o VENCIDA). Es lo que
+    # vuelve "jugador" a un ADMINISTRADOR/ENTRENADOR sin segundo rol ni
+    # segunda cuenta; el frontend lo consume para mostrar el lado jugador.
+    # Sin default: el router SIEMPRE lo fija, como `activacion_completa`.
+    puede_entrenar: bool
+    # La Persona de la cuenta tiene una membresía INACTIVA (creada, sin primer
+    # pago aprobado). Con esto un ADMINISTRADOR/ENTRENADOR abre solo su
+    # pantalla de pagos para registrar ese primer pago; no habilita entrenar.
+    # Sin default, por la misma razón que `puede_entrenar`.
+    espera_primer_pago: bool
 
     @field_serializer("foto_url")
     def _firmar_foto_url(self, valor: Optional[str]) -> Optional[str]:

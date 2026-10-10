@@ -18,6 +18,7 @@ from app.dominio.excepciones import (
 from app.dominio.modelos import HistorialEstadoMembresia, Membresia, Pago
 from app.infraestructura import presencia
 from app.infraestructura.db import obtener_sesion
+from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
 
@@ -117,6 +118,20 @@ class GestorAutenticacion:
                 HistorialEstadoMembresia.estado_anterior == EstadoMembresia.ACTIVA,
             ),
         ).first() is not None
+
+    @staticmethod
+    def puede_entrenar(db: Session, persona_id: int) -> bool:
+        """Hecho que `/auth/me` entrega al frontend: la Persona de la cuenta
+        tiene una membresía ACTIVA o VENCIDA. Delega en la regla única
+        `MembresiaRepositorio.puede_entrenar`; el rol de la cuenta no entra."""
+        return MembresiaRepositorio(db).puede_entrenar(persona_id)
+
+    @staticmethod
+    def espera_primer_pago(db: Session, persona_id: int) -> bool:
+        """Hecho que `/auth/me` entrega al frontend: la Persona de la cuenta
+        tiene una membresía INACTIVA (esperando su primer pago). Solo de la
+        Persona de quien llama; no habilita entrenar."""
+        return MembresiaRepositorio(db).espera_primer_pago(persona_id)
 
     @staticmethod
     def puede_acceder_modulos(db: Session, usuario: "Usuario") -> bool:

@@ -31,8 +31,8 @@ import type { StudentPortalSummary, StudentProfileSummary } from "@/services/api
 
 const mockProtectedRoute = vi.fn();
 vi.mock("@/components/ProtectedRoute", () => ({
-  default: (props: { children: React.ReactNode; allowedRoles: string[] }) => {
-    mockProtectedRoute(props.allowedRoles);
+  default: (props: { children: React.ReactNode; allowedRoles: string[]; allowStaffPlayer?: boolean }) => {
+    mockProtectedRoute(props.allowedRoles, props.allowStaffPlayer);
     return <>{props.children}</>;
   },
 }));
@@ -88,6 +88,26 @@ function estudianteSession(personaId = "70") {
   };
 }
 
+function staffPlayerSession(role: "admin" | "trainer", personaId = "70") {
+  const base = estudianteSession(personaId);
+  return {
+    ...base,
+    session: {
+      ...base.session,
+      user: {
+        id: personaId,
+        name: "Staff Jugador",
+        email: "staff@cataclub.com",
+        role,
+        representanteId: null,
+        fechaNacimiento: "1990-01-01",
+      },
+      roles: [role === "admin" ? "ADMINISTRADOR" : "ENTRENADOR"],
+      isStaffPlayer: true,
+    },
+  };
+}
+
 const ADULT_SELF: StudentProfileSummary = {
   personaId: "70",
   nombres: "Alumno",
@@ -128,8 +148,32 @@ describe("StudentOwnMedicalRecordPage", () => {
     mockUseAuth.mockReturnValue(estudianteSession());
     mockFetchStudentPortal.mockResolvedValue(portal(ADULT_SELF));
     render(<StudentOwnMedicalRecordPage />);
-    expect(mockProtectedRoute).toHaveBeenCalledWith(["representante", "estudiante"]);
+    // Opts in to staff players: a flagged admin/trainer reads their own record.
+    expect(mockProtectedRoute).toHaveBeenCalledWith(["representante", "estudiante"], true);
     await waitFor(() => expect(mockFetchFichaMedica).toHaveBeenCalled());
+  });
+
+  // Staff who also play: one role per account, so the session role is
+  // admin/trainer and `isStaffPlayer` says the own record is theirs to read.
+  it.each(["admin", "trainer"] as const)(
+    "renders the editor for a %s who is a player, on their OWN persona",
+    async (role) => {
+      mockUseAuth.mockReturnValue(staffPlayerSession(role, "70"));
+      mockFetchStudentPortal.mockResolvedValue(portal(ADULT_SELF));
+      render(<StudentOwnMedicalRecordPage />);
+
+      await waitFor(() => expect(mockFetchFichaMedica).toHaveBeenCalledWith(70));
+      expect(mockReplace).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps a staff player who is a minor out, like any minor titular", async () => {
+    mockUseAuth.mockReturnValue(staffPlayerSession("trainer", "80"));
+    mockFetchStudentPortal.mockResolvedValue(portal(MINOR_SELF));
+    render(<StudentOwnMedicalRecordPage />);
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/student"));
+    expect(mockFetchFichaMedica).not.toHaveBeenCalled();
   });
 
   it("renders the editor for the session's OWN persona when the titular is an adult", async () => {

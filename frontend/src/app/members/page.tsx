@@ -88,6 +88,7 @@ import {
   getMembershipStatusBadge,
   getDebtSummary,
   isRepresentativePersonaRow,
+  showsPlayerColumns,
   canPrintCarnet,
   carnetsHref,
   CARNETS_PATH,
@@ -501,6 +502,7 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
   // action offered. A represented student's own row is never affected, with
   // or without a membership on file — see `isRepresentativePersonaRow`.
   const showStudentActions = !isRepresentativePersonaRow(account);
+  const showPlayerColumns = showsPlayerColumns(account);
 
   return (
     <TableRow>
@@ -523,7 +525,7 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
       <TableCell type="badge">
         {/* Issue #1682: an admin or guardian holds no membership of their own
             (a guardian's dependants' state lives in the edit dialog). */}
-        {showStudentActions ? (
+        {showPlayerColumns ? (
           <>
             <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
             {/* ADMA-24: how much is owed and since when, without opening the ficha. */}
@@ -554,6 +556,7 @@ function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItem
   const debtSummary = getDebtSummary(account);
   // Issue #1199: same rule as `AccountRow` above.
   const showStudentActions = !isRepresentativePersonaRow(account);
+  const showPlayerColumns = showsPlayerColumns(account);
 
   return (
     <DataRow
@@ -576,7 +579,7 @@ function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItem
       }
       status={
         // Issue #1682: same rule as `AccountRow` — no own membership, no status.
-        showStudentActions ? (
+        showPlayerColumns ? (
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
             {debtSummary ? <span className="text-2xs text-ink-3">{debtSummary}</span> : null}
