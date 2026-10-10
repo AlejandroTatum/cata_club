@@ -146,7 +146,7 @@ function RegisterRow({
         ruled && "border-t border-white/[0.12]",
       )}
     >
-      <span className="flex flex-none items-center gap-[var(--carnet-field)] text-2xs font-extrabold uppercase tracking-caps leading-none text-white/60">
+      <span className="flex flex-none items-center gap-[var(--carnet-field)] text-2xs font-extrabold uppercase tracking-caps print:tracking-wide leading-none text-white/60">
         <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-white/10 text-white/80 print:h-5 print:w-5">
           <Icon size={ICON.sm} strokeWidth={1.75} aria-hidden="true" />
         </span>
