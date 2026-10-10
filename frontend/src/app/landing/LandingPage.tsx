@@ -230,8 +230,10 @@ function Stats(): React.ReactElement {
     <section className="landing-stats" aria-label="Datos del club" data-motion-section data-testid="motion-section">
       {buildLandingStats().map((stat): React.ReactElement => (
         <div className="landing-stat" key={stat.label} data-reveal>
-          {/* Text, never a count-up target: see buildLandingStats. */}
-          <strong className="landing-display">{stat.value}</strong>
+          {/* Text, never a count-up target: see buildLandingStats. The years
+              figure reads each side's clock, so server and browser can disagree
+              around the anniversary (UTC vs. local date); the browser wins. */}
+          <strong className="landing-display" suppressHydrationWarning>{stat.value}</strong>
           <span>{stat.label}</span>
         </div>
       ))}
