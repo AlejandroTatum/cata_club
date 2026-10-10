@@ -21,6 +21,7 @@ import { render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import "./landing-render-mocks";
 import LandingPage from "../LandingPage";
+import { yearsSinceFounding } from "../landing-config";
 
 interface MockedMediaQueryList extends MediaQueryList {
   addEventListener: Mock;
@@ -102,7 +103,7 @@ describe("landing stats mobile cards (#1399)", (): void => {
     expect(stats).toHaveLength(3);
     expect(stats.map((stat): string => stat.querySelector("strong")?.textContent ?? "")).toEqual([
       "2013",
-      "12",
+      String(yearsSinceFounding()),
       "Loja",
     ]);
     expect(stats.map((stat): string => stat.querySelector("span")?.textContent ?? "")).toEqual([
