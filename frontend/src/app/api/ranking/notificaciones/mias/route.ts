@@ -6,9 +6,10 @@
  * ranking_router.py — `listar_mis_notificaciones` derives the persona from
  * the token itself via `token_payload.get("persona_id")`, same pattern as
  * `/auth/me`; no query param needed). Returns the paginated envelope
- * `{items, total, skip, limit}` (issue #281), already camelCase via
+ * `{items, total, skip, limit, noLeidas}` (issue #281), already camelCase via
  * `ResponseBase`'s alias_generator (see ranking_schemas.py) — passed through
- * unmodified.
+ * unmodified. Optional `skip` / `limit` query params are forwarded so older
+ * notifications are reachable page by page.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -22,10 +23,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ message: "No autenticado." }, { status: 401 });
   }
 
+  const { searchParams } = request.nextUrl;
+  const backendQuery = new URLSearchParams();
+  for (const name of ["skip", "limit"]) {
+    const value = searchParams.get(name);
+    if (value === null) continue;
+    if (!/^\d+$/.test(value)) {
+      return NextResponse.json({ message: "Los parámetros de paginación no son válidos." }, { status: 400 });
+    }
+    backendQuery.set(name, value);
+  }
+  const queryString = backendQuery.size > 0 ? `?${backendQuery.toString()}` : "";
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), BACKEND_TIMEOUT_MS);
   try {
-    const response = await fetch(`${getBackendApiUrl()}/ranking/notificaciones/mias`, {
+    const response = await fetch(`${getBackendApiUrl()}/ranking/notificaciones/mias${queryString}`, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${accessToken}`,

@@ -33,7 +33,7 @@ async function mockAdminAndDays(page: Page, days: Day[]): Promise<void> {
   await page.route("**/api/**", (route) =>
     route.request().method() === "GET" ? fulfillJson(route, []) : fulfillJson(route, {}),
   );
-  await page.route("**/api/ranking/notificaciones/mias", (route) =>
+  await page.route("**/api/ranking/notificaciones/mias*", (route) =>
     fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }),
   );
   await page.route("**/api/auth/session", (route) => fulfillJson(route, ADMIN_SESSION));

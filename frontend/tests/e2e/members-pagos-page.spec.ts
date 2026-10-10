@@ -90,7 +90,7 @@ async function mockMembersRuntime(page: Page): Promise<void> {
       ? fulfillJson(route, { account: ACCOUNT })
       : fulfillJson(route, { message: "No se encontró a este miembro." }, 404);
   });
-  await page.route("**/api/ranking/notificaciones/mias", (route: Route) =>
+  await page.route("**/api/ranking/notificaciones/mias*", (route: Route) =>
     fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }),
   );
   await page.route("**/api/personas/*/beneficio", (route: Route) => fulfillJson(route, null));

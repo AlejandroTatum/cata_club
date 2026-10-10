@@ -252,4 +252,37 @@ describe("NotificationBell", () => {
     expect(trigger).toHaveClass("text-cata-text/65");
     expect(trigger).not.toHaveClass("text-white/65");
   });
+
+  describe("paging older notifications", () => {
+    it("badges the server's unread count even when fewer rows are loaded", () => {
+      renderBell({ notificaciones: [makeNotificacion()], unreadCount: 37 });
+
+      expect(screen.getByRole("button", { name: "Notificaciones — 37 sin leer" })).toBeInTheDocument();
+    });
+
+    it("offers 'Ver más' only while there are older notifications, and asks for them", () => {
+      const onLoadMore = vi.fn();
+      renderBell({ notificaciones: [makeNotificacion()], hasMore: true, onLoadMore });
+      fireEvent.click(screen.getByRole("button", { name: /notificaciones/i }));
+
+      fireEvent.click(screen.getByRole("button", { name: "Ver más notificaciones" }));
+
+      expect(onLoadMore).toHaveBeenCalledTimes(1);
+    });
+
+    it("hides 'Ver más' when everything is loaded", () => {
+      renderBell({ notificaciones: [makeNotificacion()], hasMore: false, onLoadMore: vi.fn() });
+      fireEvent.click(screen.getByRole("button", { name: /notificaciones/i }));
+
+      expect(screen.queryByRole("button", { name: "Ver más notificaciones" })).not.toBeInTheDocument();
+    });
+
+    it("disables the button while loading and reports a failed load", () => {
+      renderBell({ notificaciones: [makeNotificacion()], hasMore: true, onLoadMore: vi.fn(), cargandoMas: true, errorCargarMas: true });
+      fireEvent.click(screen.getByRole("button", { name: /notificaciones/i }));
+
+      expect(screen.getByRole("button", { name: "Ver más notificaciones" })).toBeDisabled();
+      expect(screen.getByText("No se pudieron cargar más notificaciones.")).toBeInTheDocument();
+    });
+  });
 });

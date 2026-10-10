@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Optional
 
 from app.dominio.enums import TipoNotificacion
-from app.servicios_negocio.dtos.base import ResponseBase
+from app.servicios_negocio.dtos.base import PaginatedResponse, ResponseBase
 
 
 class NotificacionResponseDTO(ResponseBase, BaseModel):
@@ -27,3 +27,10 @@ class MarcarTodasLeidasResponseDTO(ResponseBase, BaseModel):
     cuántas filas cambió el UPDATE, no las filas en sí -- el cliente ya tiene
     su propia copia optimista de la lista."""
     actualizadas: int
+
+
+class NotificacionesPaginadasDTO(PaginatedResponse[NotificacionResponseDTO]):
+    """Página del feed más `no_leidas`: las pendientes de TODO el feed, no solo
+    de la página, para que el badge de la campana no dependa de cuántas
+    páginas cargó el cliente."""
+    no_leidas: int

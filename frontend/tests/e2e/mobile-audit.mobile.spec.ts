@@ -274,7 +274,8 @@ async function mockBackend(page: Page, role: Role): Promise<void> {
     await page.context().addCookies([{ name: "access_token", value: "mock-header.mock-payload.mock-signature", url: E2E_BASE_URL }]);
     await page.route("**/api/auth/session", (route) => fulfillJson(route, SESSIONS[role]));
   }
-  await page.route("**/api/ranking/notificaciones/mias", (route) => fulfillJson(route, PAGE_OF([])));
+  await page.route("**/api/ranking/notificaciones/mias*", (route) => fulfillJson(route, PAGE_OF([])));
+  await page.route("**/api/reportes-error*", (route) => fulfillJson(route, PAGE_OF([])));
   await page.route("**/api/club/payment-info", (route) => fulfillJson(route, MOCK_CLUB_PAYMENT_INFO));
   await page.route("**/api/payments*", (route) => fulfillJson(route, PAGE_OF([PAYMENT])));
   await page.route("**/api/members", (route) => fulfillJson(route, { accounts: [ACCOUNT], personasCapped: false }));

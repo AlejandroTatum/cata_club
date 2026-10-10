@@ -1465,6 +1465,8 @@ export interface StudentProfileSummary {
   cedula?: string | null;
   fechaNacimiento: string;
   recentSessions: StudentSessionSummary[];
+  /** Rows in the persona's whole attendance history (`recentSessions` is only the newest window). */
+  historialTotal?: number;
   membership: MembershipSummary | null;
   representante: { nombres: string; apellidos: string } | null;
   representanteId: number | null;
@@ -1531,6 +1533,19 @@ export interface StudentPortalSummary {
 /** Fetch the logged-in persona's own portal data — `GET /api/student`. */
 export async function fetchStudentPortal(personaId: string): Promise<StudentPortalSummary> {
   return request<StudentPortalSummary>(apiEndpoint(`/student?personaId=${encodeURIComponent(personaId)}`));
+}
+
+/**
+ * One page of a persona's attendance history, newest first — `GET
+ * /api/student/attendance`. Reaches the sessions older than the portal's
+ * recent window.
+ */
+export async function fetchStudentAttendancePage(
+  personaId: string,
+  params: { skip: number; limit: number },
+): Promise<PaginatedResponse<StudentSessionSummary>> {
+  const qs = `personaId=${encodeURIComponent(personaId)}&skip=${params.skip}&limit=${params.limit}`;
+  return request<PaginatedResponse<StudentSessionSummary>>(apiEndpoint(`/student/attendance?${qs}`));
 }
 
 /** One persona's carnet data for the admin's printing — `GET /api/carnets`. */
@@ -3354,8 +3369,14 @@ export interface ReporteError {
   fecha_creacion: string;
 }
 
-export async function fetchReportesError(): Promise<ReporteError[]> {
-  return request<ReporteError[]>(apiEndpoint("/reportes-error"));
+/**
+ * One page of the admin error-report inbox — `GET /reportes-error/` returns
+ * the `{items, total, skip, limit}` envelope (`total` counts the whole inbox).
+ * Without `params` the backend's first page is returned.
+ */
+export async function fetchReportesError(params?: { skip: number; limit: number }): Promise<PaginatedResponse<ReporteError>> {
+  const qs = params ? `?skip=${params.skip}&limit=${params.limit}` : "";
+  return request<PaginatedResponse<ReporteError>>(apiEndpoint(`/reportes-error${qs}`));
 }
 
 export async function fetchReporteError(id: number): Promise<ReporteError> {
@@ -3404,10 +3425,18 @@ export async function subirFotoPersona(personaId: string, archivo: File): Promis
 // removed along with those features).
 // ---------------------------------------------------------------------------
 
-/** List the logged-in persona's own in-app notifications — `GET /ranking/notificaciones/mias` (paginated, issue #281). */
-export async function fetchNotificaciones(): Promise<PaginatedResponse<Notificacion>> {
+/** A page of the notification feed plus the unread count of the WHOLE feed (absent on older backends). */
+export type NotificacionesPage = PaginatedResponse<Notificacion> & { noLeidas?: number };
+
+/**
+ * List the logged-in persona's own in-app notifications — `GET
+ * /ranking/notificaciones/mias` (paginated, issue #281). Without `params` the
+ * backend's first page is returned; pass `skip`/`limit` to reach older ones.
+ */
+export async function fetchNotificaciones(params?: { skip: number; limit: number }): Promise<NotificacionesPage> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
-  return request<PaginatedResponse<Notificacion>>(apiEndpoint("/ranking/notificaciones/mias"), {
+  const qs = params ? `?skip=${params.skip}&limit=${params.limit}` : "";
+  return request<NotificacionesPage>(apiEndpoint(`/ranking/notificaciones/mias${qs}`), {
     headers: mockHeaders,
   });
 }

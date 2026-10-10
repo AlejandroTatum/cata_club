@@ -38,6 +38,13 @@ class NotificacionRepositorio:
             .scalar()
         )
 
+    def contar_no_leidas_por_persona(self, persona_id: int) -> int:
+        return (
+            self.db.query(func.count(Notificacion.id))
+            .filter(Notificacion.persona_id == persona_id, Notificacion.leida.is_(False))
+            .scalar()
+        )
+
     def marcar_leida(self, notificacion: Notificacion) -> Notificacion:
         notificacion.leida = True
         self.db.flush()

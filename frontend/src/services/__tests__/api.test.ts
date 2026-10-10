@@ -25,6 +25,7 @@ import {
   fetchDashboardStats,
   updatePaymentValidation,
   fetchNotificaciones,
+  fetchStudentAttendancePage,
   marcarNotificacionLeida,
   marcarTodasNotificacionesLeidas,
   fetchInvitacionesRecibidas,
@@ -137,6 +138,25 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   delete process.env.NEXT_PUBLIC_USE_MOCKS;
+});
+
+describe("fetchReportesError paging", () => {
+  it("sends skip and limit and returns the {items,total} envelope", async () => {
+    const body = { items: [], total: 45, skip: 20, limit: 20 };
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(body));
+    await expect(fetchReportesError({ skip: 20, limit: 20 })).resolves.toEqual(body);
+    expect(global.fetch).toHaveBeenCalledWith("/api/reportes-error?skip=20&limit=20", expect.anything());
+  });
+});
+
+describe("fetchStudentAttendancePage", () => {
+  it("GETs one page of the persona's history from the BFF", async () => {
+    const body = { items: [], total: 95, skip: 30, limit: 30 };
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(body));
+
+    await expect(fetchStudentAttendancePage("9", { skip: 30, limit: 30 })).resolves.toEqual(body);
+    expect(global.fetch).toHaveBeenCalledWith("/api/student/attendance?personaId=9&skip=30&limit=30", expect.anything());
+  });
 });
 
 describe("error-report correlation", () => {
@@ -711,6 +731,14 @@ describe("fetchNotificaciones", () => {
 
     expect(global.fetch).toHaveBeenCalledWith("/api/ranking/notificaciones/mias", expect.anything());
     expect(result).toEqual(body);
+  });
+
+  it("forwards skip and limit so older notifications are reachable", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(okResponse({ items: [], total: 45, skip: 20, limit: 20 }));
+
+    await fetchNotificaciones({ skip: 20, limit: 20 });
+
+    expect(global.fetch).toHaveBeenCalledWith("/api/ranking/notificaciones/mias?skip=20&limit=20", expect.anything());
   });
 });
 

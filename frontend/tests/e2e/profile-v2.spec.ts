@@ -113,7 +113,7 @@ async function mockBackend(page: Page, role: Role): Promise<void> {
       { id: 2, dispositivo: "Android · Chrome", iniciadaEn: "2026-10-03T10:00:00Z", actual: false, vigente: true },
     ]),
   );
-  await page.route("**/api/ranking/notificaciones/mias", (route) => fulfillJson(route, { items: [], total: 0, skip: 0, limit: 10 }));
+  await page.route("**/api/ranking/notificaciones/mias*", (route) => fulfillJson(route, { items: [], total: 0, skip: 0, limit: 10 }));
   await page.route("**/api/club/payment-info", (route) => fulfillJson(route, MOCK_CLUB_PAYMENT_INFO));
   if (role === "representante" || role === "estudiante") {
     await page.route("**/api/student?*", (route) => fulfillJson(route, PORTAL[role]));

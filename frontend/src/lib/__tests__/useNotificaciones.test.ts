@@ -16,7 +16,7 @@ const mockMarcarNotificacionLeida = vi.fn();
 const mockMarcarTodasNotificacionesLeidas = vi.fn();
 
 vi.mock("@/services/api", () => ({
-  fetchNotificaciones: () => mockFetchNotificaciones(),
+  fetchNotificaciones: (params?: unknown) => mockFetchNotificaciones(params),
   marcarNotificacionLeida: (id: number) => mockMarcarNotificacionLeida(id),
   marcarTodasNotificacionesLeidas: () => mockMarcarTodasNotificacionesLeidas(),
 }));
@@ -165,5 +165,95 @@ describe("useNotificaciones", (): void => {
     await waitFor(() => expect(result.current.notificaciones[0]?.leida).toBe(false));
     expect(result.current.marcandoTodas).toBe(false);
     expect(result.current.errorMarcarTodas).toBe(true);
+  });
+
+  describe("older pages and unread count", (): void => {
+    const pageOf = (ids: number[], total: number, noLeidas: number, skip = 0) => ({
+      items: ids.map((id) => makeNotificacion({ id, leida: false })),
+      total,
+      skip,
+      limit: 20,
+      noLeidas,
+    });
+    const range = (from: number, to: number): number[] =>
+      Array.from({ length: to - from + 1 }, (_, i) => from + i);
+
+    it("asks for the first page explicitly and reports there is more to load", async (): Promise<void> => {
+      mockFetchNotificaciones.mockResolvedValue(pageOf(range(1, 20), 45, 45));
+
+      const { result } = renderHook(() => useNotificaciones(true));
+
+      await waitFor(() => expect(result.current.notificaciones).toHaveLength(20));
+      expect(mockFetchNotificaciones).toHaveBeenCalledWith({ skip: 0, limit: 20 });
+      expect(result.current.hasMore).toBe(true);
+    });
+
+    it("loadMore requests the next page and appends it, until nothing is left", async (): Promise<void> => {
+      mockFetchNotificaciones
+        .mockResolvedValueOnce(pageOf(range(1, 20), 25, 25))
+        .mockResolvedValueOnce(pageOf(range(21, 25), 25, 25, 20));
+
+      const { result } = renderHook(() => useNotificaciones(true));
+      await waitFor(() => expect(result.current.notificaciones).toHaveLength(20));
+
+      await act(async () => {
+        result.current.loadMore();
+      });
+
+      await waitFor(() => expect(result.current.notificaciones).toHaveLength(25));
+      expect(mockFetchNotificaciones).toHaveBeenLastCalledWith({ skip: 20, limit: 20 });
+      expect(result.current.notificaciones.map((n) => n.id)).toEqual(range(1, 25));
+      expect(result.current.hasMore).toBe(false);
+    });
+
+    it("keeps older pages that were loaded when the poll refreshes the first page", async (): Promise<void> => {
+      vi.useFakeTimers();
+      try {
+        mockFetchNotificaciones
+          .mockResolvedValueOnce(pageOf(range(1, 20), 25, 25))
+          .mockResolvedValueOnce(pageOf(range(21, 25), 25, 25, 20))
+          .mockResolvedValue(pageOf(range(1, 20), 25, 24));
+
+        const { result } = renderHook(() => useNotificaciones(true));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(0);
+        });
+        await act(async () => {
+          result.current.loadMore();
+          await vi.advanceTimersByTimeAsync(0);
+        });
+        expect(result.current.notificaciones).toHaveLength(25);
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(60_000);
+        });
+
+        expect(result.current.notificaciones).toHaveLength(25);
+        expect(result.current.noLeidas).toBe(24);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("uses the server's unread count, not the loaded rows, and keeps it right on mark-read", async (): Promise<void> => {
+      mockFetchNotificaciones.mockResolvedValue(pageOf(range(1, 20), 45, 45));
+
+      const { result } = renderHook(() => useNotificaciones(true));
+      await waitFor(() => expect(result.current.noLeidas).toBe(45));
+
+      act(() => {
+        result.current.markRead(1);
+      });
+
+      expect(result.current.noLeidas).toBe(44);
+    });
+
+    it("falls back to counting loaded rows when the server sends no unread count", async (): Promise<void> => {
+      mockFetchNotificaciones.mockResolvedValue(makePaginated([makeNotificacion({ id: 1 }), makeNotificacion({ id: 2, leida: true })]));
+
+      const { result } = renderHook(() => useNotificaciones(true));
+
+      await waitFor(() => expect(result.current.noLeidas).toBe(1));
+    });
   });
 });

@@ -20,14 +20,14 @@ from app.servicios_negocio.notificacion_servicio import NotificacionServicio
 from app.presentacion.schemas.notificacion_schemas import (
     MarcarTodasLeidasResponseDTO,
     NotificacionResponseDTO,
+    NotificacionesPaginadasDTO,
 )
-from app.servicios_negocio.dtos.base import PaginatedResponse
 
 router = APIRouter(prefix="/ranking/notificaciones", tags=["notificaciones"])
 
 
 @router.get(
-    "/mias", response_model=PaginatedResponse[NotificacionResponseDTO],
+    "/mias", response_model=NotificacionesPaginadasDTO,
     dependencies=[Depends(GestorAutenticacion.decodificar_token)],
 )
 async def listar_mis_notificaciones(
@@ -45,7 +45,10 @@ async def listar_mis_notificaciones(
         )
     else:
         items, total = servicio.listar_propias(persona_id, skip=skip, limit=limit)
-    return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
+    return NotificacionesPaginadasDTO(
+        items=items, total=total, skip=skip, limit=limit,
+        no_leidas=servicio.contar_no_leidas(persona_id, es_representante="REPRESENTANTE" in roles),
+    )
 
 
 @router.patch(

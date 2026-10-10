@@ -13,8 +13,8 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
-function getRequest(cookie = ""): NextRequest {
-  return new NextRequest("http://localhost/api/ranking/notificaciones/mias", {
+function getRequest(cookie = "", search = ""): NextRequest {
+  return new NextRequest(`http://localhost/api/ranking/notificaciones/mias${search}`, {
     headers: cookie ? { cookie } : {},
   });
 }
@@ -68,6 +68,24 @@ describe("GET /api/ranking/notificaciones/mias", () => {
     );
     expect(response.status).toBe(200);
     expect(body).toEqual(paginatedBody);
+  });
+
+  it("forwards skip and limit to the backend page", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(paginatedBody));
+
+    await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=abc123`, "?skip=20&limit=20"));
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/ranking/notificaciones/mias?skip=20&limit=20",
+      expect.anything(),
+    );
+  });
+
+  it("rejects non-numeric paging params without calling the backend", async () => {
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=abc123`, "?skip=-1&limit=x"));
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("propagates a backend error status and message", async () => {

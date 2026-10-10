@@ -46,7 +46,7 @@ async function loginAsAdmin(page: Page): Promise<void> {
   // The catch-all above answers every GET with `[]`, but the bell (issue #281)
   // reads `data.items` — an array breaks it. Last-registered wins, so this
   // specific route overrides the catch-all.
-  await page.route("**/api/ranking/notificaciones/mias", (route: Route) =>
+  await page.route("**/api/ranking/notificaciones/mias*", (route: Route) =>
     fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }),
   );
   await page.route("**/api/members", (route) =>

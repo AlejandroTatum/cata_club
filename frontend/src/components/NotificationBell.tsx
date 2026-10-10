@@ -46,6 +46,19 @@ export interface NotificationBellProps {
   /** `true` when the last "marcar todas" attempt failed and was rolled back. */
   errorMarcarTodas: boolean;
   /**
+   * Unread count of the WHOLE feed. Falls back to counting `notificaciones`
+   * when absent, which undercounts once older pages are not loaded.
+   */
+  unreadCount?: number;
+  /** `true` while older notifications remain on the server. */
+  hasMore?: boolean;
+  /** Loads the next older page; the "Ver más" button calls it. */
+  onLoadMore?: () => void;
+  /** `true` while the next page is in flight — disables the button. */
+  cargandoMas?: boolean;
+  /** `true` when the last "load more" attempt failed. */
+  errorCargarMas?: boolean;
+  /**
    * Trigger button theme. `"dark"` (default) matches `Header.tsx`'s dark
    * `bg-cata-dark/95` topbar — its original and only host until `AppShell`
    * hoisted this component onto its light `bg-cata-surface` topbar, where
@@ -68,13 +81,18 @@ export default function NotificationBell({
   onMarkAllRead,
   marcandoTodas,
   errorMarcarTodas,
+  unreadCount: unreadCountProp,
+  hasMore = false,
+  onLoadMore,
+  cargandoMas = false,
+  errorCargarMas = false,
   variant = "dark",
 }: NotificationBellProps): React.ReactElement {
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
-  const unreadCount = notificaciones.filter((n) => !n.leida).length;
+  const unreadCount = unreadCountProp ?? notificaciones.filter((n) => !n.leida).length;
 
   const close = useCallback((): void => setOpen(false), []);
   useDismissablePopup({ open, onClose: close, panelRef, triggerRef });
@@ -210,6 +228,26 @@ export default function NotificationBell({
                 );
               })}
             </ul>
+          )}
+
+          {errorCargarMas && (
+            <p role="status" aria-live="polite" className="px-2 pt-1.5 text-2xs text-cata-red">
+              No se pudieron cargar más notificaciones.
+            </p>
+          )}
+
+          {hasMore && onLoadMore && (
+            <div className="px-2 pt-1.5">
+              <button
+                type="button"
+                onClick={onLoadMore}
+                disabled={cargandoMas}
+                aria-busy={cargandoMas}
+                className="w-full rounded-lg py-1.5 text-center text-2xs font-semibold tracking-flat text-cata-text/65 transition-colors hover:bg-cata-bg hover:text-cata-text disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Ver más notificaciones
+              </button>
+            </div>
           )}
         </div>
       )}

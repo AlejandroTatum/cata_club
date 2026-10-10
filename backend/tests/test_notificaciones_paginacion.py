@@ -83,7 +83,7 @@ class TestFeedNotificacionesPaginado:
 
         assert respuesta.status_code == 200
         body = respuesta.json()
-        assert set(body.keys()) == {"items", "total", "skip", "limit"}
+        assert set(body.keys()) == {"items", "total", "skip", "limit", "noLeidas"}
         assert body["total"] == 2
         assert body["skip"] == 0
         assert body["limit"] == 20
@@ -263,3 +263,37 @@ class TestFeedNotificacionesRepresentante:
         assert ids1 == [4, 3]
         assert ids2 == [2, 1]
         assert set(ids1).isdisjoint(ids2)
+
+
+class TestConteoNoLeidasDelFeed:
+    """El badge de la campana cuenta TODO el feed, no solo la página cargada."""
+
+    def test_no_leidas_cuenta_mas_alla_de_la_pagina(self, client, db_session):
+        persona = _crear_persona(db_session)
+        _crear_notificaciones(db_session, persona.id, [f"n{i}" for i in range(25)])
+        db_session.add(Notificacion(
+            tipo=TipoNotificacion.PAGO_APROBADO, mensaje="vieja leída", persona_id=persona.id,
+            leida=True, fecha_creacion=FECHA,
+        ))
+        db_session.commit()
+
+        cliente = _client_como(db_session, persona.id, ["ESTUDIANTE"])
+        cuerpo = cliente.get("/api/v1/ranking/notificaciones/mias?limit=10").json()
+
+        assert len(cuerpo["items"]) == 10
+        assert cuerpo["total"] == 26
+        assert cuerpo["noLeidas"] == 25
+
+    def test_no_leidas_del_representante_incluye_hijos_sin_duplicados(self, client, db_session):
+        padre = _crear_persona(db_session)
+        hijo = _crear_persona(db_session, cedula="1710034073", fecha_nacimiento=date(2015, 1, 1))
+        hijo.representante_id = padre.id
+        db_session.commit()
+        _crear_notificaciones(db_session, padre.id, ["p1", "p2"])
+        _crear_notificaciones(db_session, hijo.id, ["h1", "h2", "h3"])
+
+        cliente = _client_como(db_session, padre.id, ["REPRESENTANTE"])
+        cuerpo = cliente.get("/api/v1/ranking/notificaciones/mias?limit=1").json()
+
+        assert cuerpo["total"] == 5
+        assert cuerpo["noLeidas"] == 5

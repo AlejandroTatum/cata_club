@@ -401,7 +401,10 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
   // Header fired the same request `AppShell`'s own `NotificationBell` was
   // already firing, and the feed loaded twice per page load. The condition
   // has to name the same routes the render check does, not just "signed in".
-  const { notificaciones, loadError, markRead, marcarTodasLeidas, marcandoTodas, errorMarcarTodas } =
+  const {
+    notificaciones, loadError, noLeidas, hasMore, loadMore, cargandoMas, errorCargarMas,
+    markRead, marcarTodasLeidas, marcandoTodas, errorMarcarTodas,
+  } =
     useNotificaciones(
       isAuthenticated && !!session && isActivationComplete(session) && !hidesTopHeader(pathname),
     );
@@ -525,6 +528,11 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
                 onMarkAllRead={marcarTodasLeidas}
                 marcandoTodas={marcandoTodas}
                 errorMarcarTodas={errorMarcarTodas}
+                unreadCount={noLeidas}
+                hasMore={hasMore}
+                onLoadMore={loadMore}
+                cargandoMas={cargandoMas}
+                errorCargarMas={errorCargarMas}
               />
               <AccountMenu userName={session.user.name} onLogout={logout} />
             </li>
@@ -583,6 +591,11 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
                 onMarkAllRead={marcarTodasLeidas}
                 marcandoTodas={marcandoTodas}
                 errorMarcarTodas={errorMarcarTodas}
+                unreadCount={noLeidas}
+                hasMore={hasMore}
+                onLoadMore={loadMore}
+                cargandoMas={cargandoMas}
+                errorCargarMas={errorCargarMas}
               />
                 </div>
                 <AccountMobileItems onNavigate={closeMenu} onLogout={logout} />

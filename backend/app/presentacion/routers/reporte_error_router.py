@@ -12,6 +12,7 @@ from app.dominio.modelos import Notificacion, ReporteError, Rol, Usuario
 from app.infraestructura.db import obtener_sesion
 from app.infraestructura.repositorios.reporte_error_repositorio import ReporteErrorRepositorio
 from app.seguridad.gestor_auth import GestorAutenticacion
+from app.servicios_negocio.dtos.base import PaginatedResponse
 from app.servicios_negocio.gestor_permisos import GestorPermisos
 from app.servicios_negocio.reporte_error_servicio import MAX_CAPTURA, validar_captura, validar_request_id
 from app.soporte_transversal.lectura_archivos import leer_con_limite
@@ -79,9 +80,10 @@ async def crear_reporte(
     return reporte
 
 
-@router.get("/", response_model=list[ReporteDTO], dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))])
+@router.get("/", response_model=PaginatedResponse[ReporteDTO], dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))])
 def listar_reportes(skip: int = Query(0, ge=0), limit: int = Query(20, ge=1, le=100), db: Session = Depends(obtener_sesion)):
-    return ReporteErrorRepositorio(db).listar(skip, limit)
+    repo = ReporteErrorRepositorio(db)
+    return PaginatedResponse(items=repo.listar(skip, limit), total=repo.contar(), skip=skip, limit=limit)
 
 
 @router.get("/{reporte_id}", response_model=ReporteDTO, dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))])

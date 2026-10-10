@@ -94,9 +94,17 @@ describe("buildStudentProfileView", () => {
       representante: null,
       representanteId: null,
       recentSessions: [],
+      historialTotal: 0,
       membership: null,
       fotoUrl: null,
     });
+  });
+
+  it("carries the whole-history total so the screen knows older sessions exist", () => {
+    const sessions = [{ fecha: "2026-07-01", horario: "Jueves", estado: "present" as const }];
+    expect(buildStudentProfileView(persona, sessions, null, null, 95).historialTotal).toBe(95);
+    // Never below what is already listed, e.g. an older backend that sends no total.
+    expect(buildStudentProfileView(persona, sessions, null, null, 0).historialTotal).toBe(1);
   });
 
   // The carnet prints the cédula, so the adapter has to stop dropping it.

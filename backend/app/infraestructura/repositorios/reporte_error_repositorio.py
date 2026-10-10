@@ -1,7 +1,7 @@
 """Persistencia de reportes sensibles (#1401)."""
 from datetime import datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import ReporteError
@@ -20,6 +20,10 @@ class ReporteErrorRepositorio:
         return list(self.db.scalars(select(ReporteError).order_by(
             ReporteError.fecha_creacion.desc(), ReporteError.id.desc()
         ).offset(skip).limit(limit)))
+
+    def contar(self) -> int:
+        """Total de la bandeja completa, para el `total` del envelope paginado."""
+        return self.db.scalar(select(func.count()).select_from(ReporteError)) or 0
 
     def obtener(self, reporte_id: int) -> ReporteError | None:
         return self.db.get(ReporteError, reporte_id)

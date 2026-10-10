@@ -387,7 +387,10 @@ export default function AppShell({
   const pathname = usePathname();
   const router = useRouter();
   const { session, logout } = useAuth();
-  const { notificaciones, loadError, markRead, marcarTodasLeidas, marcandoTodas, errorMarcarTodas } =
+  const {
+    notificaciones, loadError, noLeidas, hasMore, loadMore, cargandoMas, errorCargarMas,
+    markRead, marcarTodasLeidas, marcandoTodas, errorMarcarTodas,
+  } =
     useNotificaciones(!!session);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isDesktopViewport = useIsDesktopViewport();
@@ -1026,6 +1029,11 @@ export default function AppShell({
               onMarkAllRead={marcarTodasLeidas}
               marcandoTodas={marcandoTodas}
               errorMarcarTodas={errorMarcarTodas}
+              unreadCount={noLeidas}
+              hasMore={hasMore}
+              onLoadMore={loadMore}
+              cargandoMas={cargandoMas}
+              errorCargarMas={errorCargarMas}
               variant="light"
             />
           )}

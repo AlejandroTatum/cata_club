@@ -69,7 +69,7 @@ async function mockAdminRuntime(page: Page): Promise<void> {
       loggedInAt: "2026-07-21T00:00:00.000Z",
     }),
   );
-  await page.route("**/api/ranking/notificaciones/mias", (route: Route) =>
+  await page.route("**/api/ranking/notificaciones/mias*", (route: Route) =>
     fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }),
   );
   await page.route("**/api/membresias/tipos", (route: Route) => fulfillJson(route, TARIFAS));

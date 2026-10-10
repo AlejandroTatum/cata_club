@@ -59,6 +59,7 @@ def _a_dto(perfil: PerfilPortal, membresias_dto: dict) -> PortalPerfilDTO:
             "persona": perfil.persona,
             "representante": perfil.representante,
             "historial": perfil.historial,
+            "historial_total": perfil.historial_total,
             "membresias": [membresias_dto[m.id] for m in perfil.membresias],
         }
     )

@@ -17,10 +17,14 @@ const report = {
 };
 const other = { ...report, id: 8, descripcion: "Otro problema", ruta: null, request_id: null, user_agent: null, captura_mime: null };
 
+const pagina = (items: (typeof report | typeof other)[], total = items.length, skip = 0) => ({ items, total, skip, limit: 10 });
+const lote = (desde: number, cantidad: number) =>
+  Array.from({ length: cantidad }, (_, i) => ({ ...report, id: desde + i, descripcion: `Problema ${desde + i}` }));
+
 describe("bandeja de reportes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(fetchReportesError).mockResolvedValue([report, other]);
+    vi.mocked(fetchReportesError).mockResolvedValue(pagina([report, other]));
     vi.mocked(fetchReporteError).mockImplementation(async (id) => (id === 7 ? report : other));
   });
   it("shows a loading state first and never the empty copy", async () => {
@@ -60,7 +64,7 @@ describe("bandeja de reportes", () => {
     expect(screen.getByRole("button", { name: /Reporte #7/ })).not.toHaveAttribute("aria-current");
   });
   it("shows a guiding empty state", async () => {
-    vi.mocked(fetchReportesError).mockResolvedValue([]);
+    vi.mocked(fetchReportesError).mockResolvedValue(pagina([]));
     render(<ReportesErrorPage />);
     expect(await screen.findByText("Aún no hay reportes de error")).toBeInTheDocument();
   });
@@ -108,7 +112,7 @@ describe("bandeja de reportes", () => {
     expect(screen.getByRole("button", { name: /Reporte #8/ })).toBeInTheDocument();
   });
   it("explains how reports arrive, also when the inbox is empty", async () => {
-    vi.mocked(fetchReportesError).mockResolvedValue([]);
+    vi.mocked(fetchReportesError).mockResolvedValue(pagina([]));
     render(<ReportesErrorPage />);
     expect(await screen.findByText("Cómo llegan los reportes")).toBeInTheDocument();
     expect(screen.getByText(/solo la administración del club las ve/)).toBeInTheDocument();
@@ -123,5 +127,40 @@ describe("bandeja de reportes", () => {
     await screen.findByRole("region", { name: "Detalle del reporte 7" });
     expect(screen.queryByTestId("ghost-detail")).not.toBeInTheDocument();
     expect(screen.getByText("Cómo llegan los reportes")).toBeInTheDocument();
+  });
+  it("asks for the first page explicitly and shows the real total in the strip", async () => {
+    vi.mocked(fetchReportesError).mockResolvedValue(pagina(lote(100, 10), 25));
+    render(<ReportesErrorPage />);
+    await screen.findByRole("button", { name: /Reporte #100/ });
+    expect(fetchReportesError).toHaveBeenCalledWith({ skip: 0, limit: 10 });
+    expect(screen.getByLabelText("Resumen de reportes")).toHaveTextContent("25");
+  });
+  it("renders a pager when there are more reports than one page and reaches the next page", async () => {
+    vi.mocked(fetchReportesError)
+      .mockResolvedValueOnce(pagina(lote(100, 10), 25))
+      .mockResolvedValueOnce(pagina(lote(200, 10), 25, 10));
+    render(<ReportesErrorPage />);
+    await screen.findByRole("button", { name: /Reporte #100/ });
+    expect(screen.getByText("Página 1 de 3")).toBeInTheDocument();
+    expect(screen.getByText(/1–10 de 25 reportes/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+    expect(await screen.findByRole("button", { name: /Reporte #200/ })).toBeInTheDocument();
+    expect(fetchReportesError).toHaveBeenLastCalledWith({ skip: 10, limit: 10 });
+    expect(screen.getByText("Página 2 de 3")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Reporte #100/ })).not.toBeInTheDocument();
+  });
+  it("shows no pager when everything fits in one page", async () => {
+    render(<ReportesErrorPage />);
+    await screen.findByRole("button", { name: /Reporte #7/ });
+    expect(screen.queryByText(/Página 1 de/)).not.toBeInTheDocument();
+  });
+  it("keeps the current page and shows a retry when a page change fails", async () => {
+    vi.mocked(fetchReportesError)
+      .mockResolvedValueOnce(pagina(lote(100, 10), 25))
+      .mockRejectedValueOnce(new Error("boom"));
+    render(<ReportesErrorPage />);
+    await screen.findByRole("button", { name: /Reporte #100/ });
+    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+    expect(await screen.findByText("No se pudo cargar la bandeja.")).toBeInTheDocument();
   });
 });
