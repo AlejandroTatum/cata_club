@@ -476,7 +476,7 @@ export default function DashboardPage(): React.ReactElement {
                       items={timelineItems}
                       nowMinutes={clubNowMinutes()}
                       ariaLabel={`Clases de hoy: ${timelineItems.length} ${plural(timelineItems.length, "sesión", "sesiones")}, ${listsTaken} con lista tomada`}
-                      className="max-lg:[&_[role=group]]:hidden [&_[data-testid=timeline-now-label]]:bg-coal [&_[data-testid=timeline-now-label]]:text-white"
+                      className="max-lg:[&_[role=group]]:hidden"
                     />
                     <TimelineDayList items={timelineItems} className="lg:hidden" />
                   </>

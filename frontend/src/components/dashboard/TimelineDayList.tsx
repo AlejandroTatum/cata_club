@@ -1,17 +1,18 @@
 /**
- * TimelineDayList — the phone's version of the "Hoy en el club" track.
+ * TimelineDayList - the phone's version of the "Hoy en el club" track.
  *
  * The timeline proportions each block by its duration, so on a 390px screen a
- * short session gets a chip too narrow to read ("Pendie…"). Below `lg` the
+ * short session gets a chip too narrow to read ("Pendie..."). Below `lg` the
  * dashboard hides that track and shows the same sessions here instead: one
- * full-width row each, with the time, group and state written out. Colours come
- * from the same `groupTone` so a group looks the same in both drawings.
+ * full-width row each, with the time, group and state written out. The rows
+ * wear the track's own stickers (`TIMELINE_FACE` + glyph), so a state looks the
+ * same in both drawings.
  */
 
 import type { ReactElement } from "react";
 import Link from "next/link";
 import { cn } from "@/components/ui";
-import { groupTone } from "@/components/charts/group-palette";
+import { TIMELINE_FACE, TimelineGlyph } from "@/components/charts/Timeline";
 import type { TimelineItem } from "@/components/charts/timeline-layout";
 
 export interface TimelineDayListProps {
@@ -20,20 +21,10 @@ export interface TimelineDayListProps {
 }
 
 const ROW =
-  "flex min-h-[44px] flex-col justify-center gap-0.5 rounded-xl border-2 px-3 py-2 text-left text-ink";
+  "flex min-h-[44px] flex-col justify-center gap-0.5 rounded-ctl border-2 px-3 py-2 text-left shadow-sticker-sm";
 
 function rowClasses(item: TimelineItem): string {
-  const tone = groupTone(item.group ?? item.title);
-  switch (item.status) {
-    case "done":
-      return cn(ROW, tone.solid);
-    case "live":
-      return cn(ROW, "bg-paper shadow-card ring-2 ring-coal/15", tone.border);
-    case "missing":
-      return cn(ROW, "border-dashed border-state-warn bg-state-warn-bg");
-    default:
-      return cn(ROW, "border-dashed", tone.border, tone.tint);
-  }
+  return cn(ROW, TIMELINE_FACE[item.status]);
 }
 
 export default function TimelineDayList({ items, className }: TimelineDayListProps): ReactElement {
@@ -42,11 +33,14 @@ export default function TimelineDayList({ items, className }: TimelineDayListPro
       {items.map((item) => {
         const body = (
           <>
-            <b className="text-sm font-bold tabular-nums">
-              {item.start} – {item.end}
-            </b>
+            <span className="flex items-center gap-1.5">
+              <TimelineGlyph status={item.status} />
+              <b className="text-sm font-extrabold tabular-nums">
+                {item.start} – {item.end}
+              </b>
+            </span>
             <span className="text-sm font-semibold">{item.title}</span>
-            <span className="text-xs font-semibold">
+            <span className="text-xs font-bold">
               {item.statusLabel}
               {item.note ? ` · ${item.note}` : ""}
             </span>

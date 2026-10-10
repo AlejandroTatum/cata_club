@@ -6,16 +6,17 @@
  * so it asks for nothing role-specific: items in, blocks out. Two things are
  * said at once without words:
  *
- *   - WHAT state its list is in: a soft pastel fill by status (green = lista
- *     tomada, blue = en curso, lavender = pendiente, rose = sin lista). The
- *     state is also in each block's accessible name, so colour is never the
- *     only carrier;
- *   - WHEN: a line crosses the track at the current minute with its time, and
- *     what already happened is muted. A day seen outside its hours pins the
- *     "Ahora" chip to the edge it lies beyond.
+ *   - WHAT state its list is in: a sticker per status, the KPI tiles' language
+ *     (2px outline, hard offset shadow, solid brand face) - coal = lista
+ *     tomada, ball = en curso, red = sin lista, a dashed white sticker =
+ *     pendiente. Colour is never the only carrier: every block also wears a
+ *     glyph and the status word, and the state is in its accessible name;
+ *   - WHEN: a coal line crosses the track at the current minute with an
+ *     "Ahora" sticker, and what already happened lies flat (no shadow). A day
+ *     seen outside its hours pins the chip to the edge it lies beyond.
  *
  * A header states the day's progress (ring + "N de M listas") and a legend
- * explains the fills. Each block is a real link when it has an `href` (the
+ * shows the four stickers in miniature. Each block is a real link when it has an `href` (the
  * session's attendance), so keyboard and screen-reader users get the same door
  * the pointer does, and its accessible name is the whole sentence the tooltip
  * shows. The hour grid behind the blocks is an `aria-hidden` SVG. On a phone
@@ -27,7 +28,9 @@
 
 import type { ReactElement } from "react";
 import Link from "next/link";
+import { Check, Clock, Play, TriangleAlert, type LucideIcon } from "lucide-react";
 import { cn } from "@/components/ui";
+import { ICON } from "@/lib/icon-size";
 import ChartTooltip from "./ChartTooltip";
 import Ring from "./Ring";
 import { useActiveIndex } from "./chart-utils";
@@ -51,24 +54,50 @@ export interface TimelineProps {
   className?: string;
 }
 
-const LANE_HEIGHT = 64;
-const LANE_GAP = 6;
+const LANE_HEIGHT = 68;
+const LANE_GAP = 8;
 
-/** Hairline border in a deeper tint of the state's hue. */
-const STATUS_BORDER: Record<TimelineStatus, string> = {
-  done: "border-state-ok/30 dark:border-state-ok/70",
-  live: "border-cuenta-representante/30 dark:border-cuenta-representante/70",
-  pending: "border-cuenta-menor/25 dark:border-cuenta-menor/70",
-  missing: "border-state-bad/30 dark:border-state-bad/70",
+/**
+ * The sticker face of each state. Same recipe as the KPI slabs (`StatCard`):
+ * a 2px coal outline on a solid brand fill, with the dark-mode rims the slabs
+ * use (the coal slab keeps the bright rim, the saturated fills a coal one).
+ * Pending is the quiet one: a white sticker with a dashed outline, so the
+ * state still reads in a greyscale print.
+ */
+export const TIMELINE_FACE: Record<TimelineStatus, string> = {
+  done: "border-edge bg-coal text-white dark:border-edge-hot dark:bg-kpi-coal",
+  live: "border-edge bg-ball text-coal dark:border-edge-fill dark:bg-kpi-ball",
+  missing: "border-edge bg-cata-red text-white dark:border-edge-fill dark:bg-kpi-red",
+  pending: "border-dashed border-edge bg-paper text-ink",
 };
 
-/** Soft pastel tint by state; always laid over an opaque `bg-paper` base. */
-const STATUS_TINT: Record<TimelineStatus, string> = {
-  done: "bg-state-ok/15 dark:bg-state-ok/25",
-  live: "bg-cuenta-representante/15 dark:bg-cuenta-representante/25",
-  pending: "bg-cuenta-menor/10 dark:bg-cuenta-menor/25",
-  missing: "bg-state-bad/15 dark:bg-state-bad/25",
+const STATUS_GLYPH: Record<TimelineStatus, LucideIcon> = {
+  done: Check,
+  live: Play,
+  missing: TriangleAlert,
+  pending: Clock,
 };
+
+/** The state's glyph: the non-colour cue next to the status word. */
+export function TimelineGlyph({
+  status,
+  className,
+}: {
+  status: TimelineStatus;
+  className?: string;
+}): ReactElement {
+  const Glyph = STATUS_GLYPH[status];
+  return (
+    <Glyph
+      aria-hidden="true"
+      data-testid="timeline-glyph"
+      data-glyph={status}
+      size={ICON.sm}
+      strokeWidth={3}
+      className={cn("flex-none", className)}
+    />
+  );
+}
 
 function sentence(item: TimelineItem): string {
   return [
@@ -142,7 +171,7 @@ export default function Timeline({
         <div className="flex items-center gap-3">
           <Ring value={done} total={total} label="Listas tomadas hoy" />
           <p className="m-0 text-sm text-ink-2">
-            <b className="font-semibold text-ink">
+            <b className="font-extrabold text-ink">
               {done} de {total} {total === 1 ? "lista" : "listas"}
             </b>{" "}
             {total === 1 ? "tomada" : "tomadas"}
@@ -152,15 +181,20 @@ export default function Timeline({
         </div>
         <ul
           aria-label="Leyenda"
-          className="m-0 grid min-w-[22rem] flex-1 list-none grid-cols-2 gap-x-4 gap-y-1.5 p-0 text-xs text-ink-2 sm:grid-cols-4"
+          className="m-0 grid min-w-[22rem] flex-1 list-none grid-cols-2 gap-x-4 gap-y-2 p-0 text-xs font-semibold text-ink sm:grid-cols-4"
         >
           {LEGEND.map((entry) => (
-            <li key={entry.status} className="flex items-center gap-1.5">
+            <li key={entry.status} className="flex items-center gap-2">
               <span
                 aria-hidden="true"
-                className={cn("h-3 w-5 flex-none rounded border bg-paper", STATUS_BORDER[entry.status])}
+                data-testid="timeline-legend-swatch"
+                data-status={entry.status}
+                className={cn(
+                  "flex h-6 w-8 flex-none items-center justify-center rounded-md border-2 shadow-sticker-sm",
+                  TIMELINE_FACE[entry.status],
+                )}
               >
-                <span className={cn("block h-full w-full rounded-[inherit]", STATUS_TINT[entry.status])} />
+                <TimelineGlyph status={entry.status} />
               </span>
               {entry.label}
             </li>
@@ -169,10 +203,10 @@ export default function Timeline({
       </div>
 
       <div role="group" aria-label={ariaLabel} className="overflow-x-auto">
-        <div className="relative flex min-w-[640px] flex-col gap-1.5">
+        <div className="relative flex min-w-[640px] flex-col gap-1.5 pb-1 pr-1">
           <div
             aria-hidden="true"
-            className="relative h-5 text-2xs font-semibold tabular-nums text-ink-3-strong"
+            className="relative h-6 text-2xs font-semibold tabular-nums text-ink-3-strong"
           >
             {layout.ticks
               .filter((tick) => !(beyond === "before" && tick.percent <= 0))
@@ -180,7 +214,7 @@ export default function Timeline({
                 <span
                   key={tick.label}
                   className={cn(
-                    "absolute top-0.5",
+                    "absolute top-1",
                     tick.percent <= 0
                       ? ""
                       : tick.percent >= 100
@@ -197,7 +231,7 @@ export default function Timeline({
                 data-testid="timeline-now-label"
                 data-align={nowAlign ?? undefined}
                 className={cn(
-                  "absolute top-0 z-10 rounded-full bg-state-bad px-2 py-px font-bold text-on-solid",
+                  "absolute top-0 z-10 rounded-md border-2 border-edge bg-mark px-2 text-2xs font-extrabold uppercase leading-4 tracking-caps text-on-solid shadow-sticker-sm dark:border-edge-fill",
                   layout.nowPercent !== null
                     ? nowAlign === "start"
                       ? ""
@@ -248,12 +282,15 @@ export default function Timeline({
                 "data-status": block.item.status,
                 "data-group": group,
                 className: cn(
-                  "group/block absolute flex flex-col justify-center gap-0.5 overflow-hidden rounded-xl border bg-paper px-2.5 text-left text-ink",
-                  STATUS_BORDER[block.item.status],
+                  "group/block absolute flex min-w-0 flex-col justify-center gap-0.5 overflow-hidden rounded-ctl border-2 px-2.5 text-left",
+                  "motion-safe:transition-[transform,box-shadow] hover:-translate-x-px hover:-translate-y-px hover:shadow-sticker motion-reduce:transition-none motion-reduce:hover:translate-x-0 motion-reduce:hover:translate-y-0",
+                  TIMELINE_FACE[block.item.status],
+                  // What already happened lies flat; what is still ahead stands off the track.
+                  past ? "shadow-none" : "shadow-sticker-sm",
                 ),
                 style: {
                   left: `calc(${block.leftPercent}% + 1px)`,
-                  width: `calc(${block.widthPercent}% - 2px)`,
+                  width: `calc(${block.widthPercent}% - 5px)`,
                   top: block.lane * (LANE_HEIGHT + LANE_GAP),
                   height: LANE_HEIGHT,
                 },
@@ -264,22 +301,20 @@ export default function Timeline({
               };
               const body = (
                 <>
-                  <span
-                    aria-hidden="true"
-                    className={cn("absolute inset-0", STATUS_TINT[block.item.status])}
-                  />
-                  <span
-                    className={cn(
-                      "relative flex flex-col gap-0.5 motion-safe:transition-opacity",
-                      past && "opacity-70 group-hover/block:opacity-100",
-                    )}
-                  >
-                    <b className="block truncate text-xs font-bold tabular-nums">
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <TimelineGlyph status={block.item.status} />
+                    <b className="block truncate text-xs font-extrabold tabular-nums">
                       {block.item.start} – {block.item.end}
                     </b>
-                    <span className="block truncate text-xs font-semibold">
-                      {block.item.title}
-                    </span>
+                  </span>
+                  <span className="block truncate text-xs font-semibold">
+                    {block.item.title}
+                  </span>
+                  <span
+                    data-testid="timeline-block-status"
+                    className="block truncate text-2xs font-bold uppercase tracking-caps"
+                  >
+                    {block.item.statusLabel}
                   </span>
                 </>
               );
@@ -298,7 +333,7 @@ export default function Timeline({
               <span
                 data-testid="timeline-now"
                 aria-hidden="true"
-                className="pointer-events-none absolute -bottom-1 -top-1 z-10 w-0.5 -translate-x-1/2 rounded-full bg-state-bad"
+                className="pointer-events-none absolute -bottom-1 -top-1 z-10 w-[3px] -translate-x-1/2 rounded-full bg-mark ring-1 ring-paper"
                 style={{ left: `${layout.nowPercent}%` }}
               />
             )}
