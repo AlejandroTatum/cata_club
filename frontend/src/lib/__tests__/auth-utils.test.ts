@@ -234,6 +234,35 @@ describe("getNavGroupsForRoles", () => {
       expect(hrefs).not.toContain("/student/medical-record");
     });
 
+    it.each(["admin", "trainer"] as const)(
+      "gives a %s awaiting their first payment only the Pagos row, after the staff sections",
+      (role) => {
+        const without = getNavGroupsForRoles([role]);
+        const groups = getNavGroupsForRoles([role], true, false, true);
+        expect(groups.slice(0, without.length)).toEqual(without);
+        expect(groups.slice(without.length)).toEqual([
+          { heading: "Mi cuenta", links: [{ href: "/student/payments", label: "Pagos" }] },
+        ]);
+        const hrefs = sectionHrefs(groups);
+        for (const href of ["/student", "/student/attendance", "/student/medical-record"]) {
+          expect(hrefs).not.toContain(href);
+        }
+      },
+    );
+
+    it("gives a staff player the full section, not a second Pagos row, when both flags are set", () => {
+      expect(getNavGroupsForRoles(["admin"], true, true, true)).toEqual(getNavGroupsForRoles(["admin"], true, true));
+    });
+
+    it("ignores the first-payment flag for roles that are not staff", () => {
+      expect(getNavGroupsForRoles(["representante"], false, false, true)).toEqual(
+        getNavGroupsForRoles(["representante"]),
+      );
+      expect(getNavGroupsForRoles(["estudiante"], true, false, true)).toEqual(
+        getNavGroupsForRoles(["estudiante"], true),
+      );
+    });
+
     it("ignores the flag for roles that are not staff", () => {
       expect(getNavGroupsForRoles(["representante"], false, true)).toEqual(getNavGroupsForRoles(["representante"]));
       expect(getNavGroupsForRoles(["estudiante"], true, true)).toEqual(getNavGroupsForRoles(["estudiante"], true));

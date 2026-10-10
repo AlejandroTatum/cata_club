@@ -770,6 +770,31 @@ describe("buildSession", () => {
     },
   );
 
+  it.each(["ADMINISTRADOR", "ENTRENADOR"])(
+    "flags a %s whose own membership is INACTIVA as awaiting their first payment, not as a player",
+    (rol) => {
+      const session = sessionFrom({
+        correo: "staff@cataclub.com", personaId: 53, nombres: "Rita", apellidos: "Mora",
+        roles: [rol], puedeEntrenar: false, esperaPrimerPago: true,
+      });
+      expect(session.staffAwaitsFirstPayment).toBe(true);
+      expect(session.isStaffPlayer).toBe(false);
+    },
+  );
+
+  it("does not flag awaiting-first-payment on a staff player, a staff without the fact, or non-staff", () => {
+    const base = { correo: "x@cataclub.com", personaId: 54, nombres: "Rita", apellidos: "Mora" };
+    expect(
+      sessionFrom({ ...base, roles: ["ADMINISTRADOR"], puedeEntrenar: true, esperaPrimerPago: true })
+        .staffAwaitsFirstPayment,
+    ).toBe(false);
+    expect(sessionFrom({ ...base, roles: ["ENTRENADOR"], esperaPrimerPago: false }).staffAwaitsFirstPayment).toBe(false);
+    expect(sessionFrom({ ...base, roles: ["ENTRENADOR"] }).staffAwaitsFirstPayment).toBe(false);
+    expect(
+      sessionFrom({ ...base, roles: ["ALUMNO"], esperaPrimerPago: true }).staffAwaitsFirstPayment,
+    ).toBe(false);
+  });
+
   it.each(["REPRESENTANTE", "ALUMNO"])("never flags a %s: the flag is for staff only", (rol) => {
     const session = sessionFrom({
       correo: "portal@cataclub.com", personaId: 52, nombres: "Ana", apellidos: "Mora",

@@ -239,6 +239,12 @@ export interface BackendMeResponse {
    * `ServerSession.isStaffPlayer`. Optional for a backend that predates it.
    */
   puedeEntrenar?: boolean;
+  /**
+   * The account's own Persona holds an INACTIVA membership (created, no first
+   * payment approved yet — backend `espera_primer_pago`). The fact behind
+   * `ServerSession.staffAwaitsFirstPayment`. Optional for an older backend.
+   */
+  esperaPrimerPago?: boolean;
 }
 
 export interface BackendPrimerPago {
@@ -283,6 +289,7 @@ function isBackendMeResponse(value: unknown): value is BackendMeResponse {
     (v.altaPresencialCompletada === undefined || typeof v.altaPresencialCompletada === "boolean") &&
     (v.activacionCompleta === undefined || typeof v.activacionCompleta === "boolean") &&
     (v.puedeEntrenar === undefined || typeof v.puedeEntrenar === "boolean") &&
+    (v.esperaPrimerPago === undefined || typeof v.esperaPrimerPago === "boolean") &&
     (v.primerPago === undefined || v.primerPago === null || isBackendPrimerPago(v.primerPago))
   );
 }
@@ -830,6 +837,13 @@ export interface ServerSession {
    * granted by a role. Always false for a non-staff role.
    */
   isStaffPlayer: boolean;
+  /**
+   * An ADMINISTRADOR/ENTRENADOR whose own membership is still INACTIVA (never
+   * paid) and who is not yet a staff player. They get ONLY their own payments
+   * screen, to submit that first payment; every other player page still needs
+   * a membership that allows training. Always false for a non-staff role.
+   */
+  staffAwaitsFirstPayment: boolean;
   loggedInAt: string;
 }
 
@@ -860,7 +874,9 @@ export function buildSession(me: BackendMeResponse): SessionBuildResult {
     fotoUrl: me.fotoUrl ?? null,
   };
 
-  const isStaffPlayer = (role === "admin" || role === "trainer") && me.puedeEntrenar === true;
+  const isStaff = role === "admin" || role === "trainer";
+  const isStaffPlayer = isStaff && me.puedeEntrenar === true;
+  const staffAwaitsFirstPayment = isStaff && !isStaffPlayer && me.esperaPrimerPago === true;
 
   const user: Usuario =
     role === "estudiante"
@@ -891,6 +907,7 @@ export function buildSession(me: BackendMeResponse): SessionBuildResult {
       activacionCompleta: me.activacionCompleta ?? (correoVerificado && altaPresencialCompletada),
       primerPago: me.primerPago ?? null,
       isStaffPlayer,
+      staffAwaitsFirstPayment,
       loggedInAt: new Date().toISOString(),
     },
   };

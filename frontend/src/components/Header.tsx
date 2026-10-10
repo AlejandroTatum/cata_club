@@ -157,7 +157,12 @@ function useNavLinks(): NavLink[] {
     // worth the space. The GROUPING is the sidebar's answer to more than one
     // role; the destinations are the same either way, which is what the helper
     // guarantees and what a flat strip needs from it.
-    const defs: NavLinkDef[] = getNavGroupsForRoles(roles, studentIsAdult, isStaffPlayer).flatMap(
+    const defs: NavLinkDef[] = getNavGroupsForRoles(
+      roles,
+      studentIsAdult,
+      isStaffPlayer,
+      session?.staffAwaitsFirstPayment === true,
+    ).flatMap(
       (group) => group.links,
     );
     return defs.map((def): NavLink => ({

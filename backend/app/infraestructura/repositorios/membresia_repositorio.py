@@ -190,6 +190,21 @@ class MembresiaRepositorio:
         )
         return self.db.execute(stmt).first() is not None
 
+    def espera_primer_pago(self, persona_id: int) -> bool:
+        """True si la persona tiene una `Membresia` INACTIVA: creada y todavía
+        sin su primer pago aprobado. Es el complemento de `puede_entrenar`
+        (que exige ACTIVA o VENCIDA): lo único que abre al staff su pantalla
+        de pagos para que registre ese primer pago, sin habilitarle entrenar."""
+        stmt = (
+            select(Membresia.id)
+            .where(
+                Membresia.persona_id == persona_id,
+                Membresia.estado == EstadoMembresia.INACTIVA,
+            )
+            .limit(1)
+        )
+        return self.db.execute(stmt).first() is not None
+
     def crear(self, membresia: Membresia) -> Membresia:
         self.db.add(membresia)
         self.db.flush()

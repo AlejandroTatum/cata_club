@@ -276,11 +276,18 @@ function sectionsForRole(role: UserRole, studentIsAdult: boolean): NavLinkDef[] 
  * that allows training (`ServerSession.isStaffPlayer`). Their account still
  * holds one role; the player section is ADDED after their staff sections, the
  * same rows a "estudiante" gets. Ignored for any role that is not staff.
+ * @param staffAwaitsFirstPayment — An admin/trainer whose own membership is
+ * still INACTIVA (`ServerSession.staffAwaitsFirstPayment`). They get ONE extra
+ * row, Pagos, so they can submit that first payment; the rest of the player
+ * section waits for a membership that allows training. Ignored when
+ * `isStaffPlayer` is set (the full section already has Pagos) and for any
+ * role that is not staff.
  */
 export function getNavGroupsForRoles(
   roles: readonly UserRole[] | null,
   studentIsAdult = false,
   isStaffPlayer = false,
+  staffAwaitsFirstPayment = false,
 ): NavGroup[] {
   if (roles === null) {
     return [{ heading: null, links: [row("/"), row("/login")] }];
@@ -308,6 +315,10 @@ export function getNavGroupsForRoles(
     // A group with no rows is not drawn empty — it is not drawn at all, which
     // is also what keeps a single-role person at exactly one group.
     if (links.length > 0) groups.push({ heading: group.heading, links });
+  }
+
+  if (staffAwaitsFirstPayment && !isStaffPlayer && (held.has("admin") || held.has("trainer"))) {
+    groups.push({ heading: "Mi cuenta", links: [row("/student/payments")] });
   }
 
   return groups;

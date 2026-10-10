@@ -448,6 +448,7 @@ export default function AppShell({
   // estudiante wanting their own ficha, which needs the session to carry the
   // date for every account: behavior, and issue #269.
   const isStaffPlayer = session?.isStaffPlayer === true;
+  const staffAwaitsFirstPayment = session?.staffAwaitsFirstPayment === true;
   const studentIsAdult =
     session?.user.role === "estudiante" || isStaffPlayer ? !isMinor(session?.user.fechaNacimiento) : false;
   /**
@@ -467,10 +468,10 @@ export default function AppShell({
   );
   const navGroups = useMemo<NavGroup[]>(
     () =>
-      getNavGroupsForRoles(heldRoles, studentIsAdult, isStaffPlayer)
+      getNavGroupsForRoles(heldRoles, studentIsAdult, isStaffPlayer, staffAwaitsFirstPayment)
         .map((group) => ({ ...group, links: group.links.filter((link) => link.href !== "/") }))
         .filter((group) => group.links.length > 0),
-    [heldRoles, studentIsAdult, isStaffPlayer],
+    [heldRoles, studentIsAdult, isStaffPlayer, staffAwaitsFirstPayment],
   );
   /** The brand block's area line — same roles, same source as the rail. */
   const areaLabel = getAreaLabel(heldRoles);
