@@ -47,7 +47,7 @@ async function openPicker(page: Page, size: { width: number; height: number }, c
   await page.setViewportSize(size);
   await page.context().addCookies([{ name: "access_token", value: "mock-header.mock-payload.mock-signature", url: E2E_BASE_URL }]);
   await page.route("**/api/**", (route) => fulfillJson(route, []));
-  await page.route("**/api/ranking/notificaciones/mias", (route) => fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }));
+  await page.route("**/api/ranking/notificaciones/mias*", (route) => fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }));
   await page.route("**/api/dashboard", (route) => fulfillJson(route, {}));
   await page.route("**/api/members", (route) => fulfillJson(route, { accounts: accounts(count), stats: {} }));
   await page.route("**/api/auth/session", (route) => fulfillJson(route, { ...SESSION, loggedInAt: new Date().toISOString() }));
@@ -144,7 +144,7 @@ test.describe("Carnet picker", () => {
     await page.setViewportSize(PHONE);
     await page.context().addCookies([{ name: "access_token", value: "mock-header.mock-payload.mock-signature", url: E2E_BASE_URL }]);
     await page.route("**/api/**", (route) => fulfillJson(route, []));
-    await page.route("**/api/ranking/notificaciones/mias", (route) => fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }));
+    await page.route("**/api/ranking/notificaciones/mias*", (route) => fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }));
     await page.route("**/api/dashboard", (route) => fulfillJson(route, {}));
     await page.route("**/api/members", (route) => fulfillJson(route, { accounts: [], stats: {} }));
     await page.route("**/api/auth/session", (route) => fulfillJson(route, { ...SESSION, loggedInAt: new Date().toISOString() }));
