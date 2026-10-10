@@ -57,7 +57,7 @@
         },
         {
           "pregunta": "¿Por qué mi pantalla no se parece a la de otra persona del club?",
-          "respuesta": "Cada persona ve las funciones que corresponden a su rol: administrador, entrenador o familia."
+          "respuesta": "Cada persona ve las funciones que corresponden a su rol: administrador, entrenador o familia. Si tu cuenta de administrador o entrenador también tiene una membresía propia, además ves la sección Mi cuenta."
         }
       ]
     },
@@ -98,6 +98,10 @@
         {
           "pregunta": "¿Dónde veo lo que ya cargué?",
           "respuesta": "En Pasar lista → Historial puedes consultar las listas registradas."
+        },
+        {
+          "pregunta": "También juego en el club. ¿Dónde veo mis pagos y mi asistencia?",
+          "respuesta": "Si tienes una membresía propia, en el menú aparece Mi cuenta con tu panel, tus pagos, tu asistencia y tu ficha médica, además de tus pantallas de trabajo. Si todavía no la ves, pide a administración que registre tu membresía."
         }
       ]
     },
@@ -124,6 +128,10 @@
         {
           "pregunta": "¿Dónde genero los informes del club?",
           "respuesta": "En Informes puedes generar los informes con los datos registrados."
+        },
+        {
+          "pregunta": "Un administrador o un entrenador también juega. ¿Cómo le doy su membresía?",
+          "respuesta": "En Miembros, abre Pagos en la fila de esa persona y crea su membresía. Cuando esté activa o vencida, esa persona ve además la sección Mi cuenta, con sus propios pagos, asistencia y ficha médica. Su cuenta sigue con un solo rol."
         },
         {
           "pregunta": "¿Qué pasa si oculto una tarifa?",

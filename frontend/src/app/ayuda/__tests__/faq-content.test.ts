@@ -75,6 +75,18 @@ describe("FAQ_SECTIONS", () => {
     expect(titles("unsupported")).toEqual(["Para empezar"]);
   });
 
+  it("tells staff who also play where their own account is, and how an admin gives them a membership", () => {
+    const questions = (role: Parameters<typeof faqSectionsFor>[0]): string[] =>
+      faqSectionsFor(role).flatMap((s) => s.entries.map((e) => e.question));
+
+    expect(questions("trainer")).toContain("También juego en el club. ¿Dónde veo mis pagos y mi asistencia?");
+    expect(questions("admin")).toContain(
+      "Un administrador o un entrenador también juega. ¿Cómo le doy su membresía?",
+    );
+    // Neither entry is for the family audience.
+    expect(questions("estudiante").join("|")).not.toMatch(/también juego|también juega/i);
+  });
+
   it("asks a question in every entry, and answers it", () => {
     for (const section of FAQ_SECTIONS) {
       expect(section.entries.length).toBeGreaterThan(0);

@@ -4290,6 +4290,29 @@ describe("MembersPage — representative-only row actions (issue #1199, #1211)",
     expect(getRowAction(row, /^editar/i)).toBeInTheDocument();
   });
 
+  it.each(["ADMINISTRADOR", "ENTRENADOR"] as const)(
+    'offers "Ficha médica" and "Pagos" on a %s row without a membership, so the admin can give staff one',
+    async (rol) => {
+      mockFetchMembers.mockResolvedValue({
+        accounts: [{ ...REPRESENTATIVE_ONLY_ACCOUNT, backendRoles: [rol] }],
+      });
+
+      render(
+        <ToastProvider>
+          <MembersPage />
+        </ToastProvider>,
+      );
+      chooseRole("Todos");
+
+      const matches = await screen.findAllByText("Laura Suárez");
+      const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
+
+      expect(getRowAction(row, /^ficha médica/i)).toBeInTheDocument();
+      expect(within(row).getByRole("button", { name: /^pagos/i })).toBeInTheDocument();
+      expect(getRowAction(row, /^editar/i)).toBeInTheDocument();
+    },
+  );
+
   it("offers \"Ficha médica\" and \"Pagos\" on a represented student that already has a membership", async () => {
     mockFetchMembers.mockResolvedValue({
       accounts: [
@@ -4983,11 +5006,11 @@ describe("MembersPage — membership data by role (issue #1682)", () => {
     return matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
   }
 
-  it("shows no membership or payment data for an admin-only account, in the list or the detail", async () => {
+  it("shows no membership data for an admin-only account, but keeps Pagos to create one (staff-player-side S3)", async () => {
     const row = await renderRow(ADMIN_ACCOUNT);
 
     expect(within(row).queryByText(/membresía/i)).not.toBeInTheDocument();
-    expect(within(row).queryByRole("button", { name: /^pagos/i })).not.toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /^pagos/i })).toBeInTheDocument();
 
     fireEvent.click(getEditButton(row));
     const dialog = screen.getByRole("dialog");
