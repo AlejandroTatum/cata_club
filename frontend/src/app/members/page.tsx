@@ -521,9 +521,17 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
       </TableCell>
       <TableCell className="hidden lg:table-cell">{account.representadoPor ?? "—"}</TableCell>
       <TableCell type="badge">
-        <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
-        {/* ADMA-24: how much is owed and since when, without opening the ficha. */}
-        {debtSummary ? <p className="mt-1 text-2xs text-ink-3">{debtSummary}</p> : null}
+        {/* Issue #1682: an admin or guardian holds no membership of their own
+            (a guardian's dependants' state lives in the edit dialog). */}
+        {showStudentActions ? (
+          <>
+            <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
+            {/* ADMA-24: how much is owed and since when, without opening the ficha. */}
+            {debtSummary ? <p className="mt-1 text-2xs text-ink-3">{debtSummary}</p> : null}
+          </>
+        ) : (
+          "—"
+        )}
       </TableCell>
       <TableCell type="action">
         <div className="flex items-center justify-end gap-1.5">
@@ -567,10 +575,13 @@ function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItem
         </>
       }
       status={
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
-          {debtSummary ? <span className="text-2xs text-ink-3">{debtSummary}</span> : null}
-        </div>
+        // Issue #1682: same rule as `AccountRow` — no own membership, no status.
+        showStudentActions ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
+            {debtSummary ? <span className="text-2xs text-ink-3">{debtSummary}</span> : null}
+          </div>
+        ) : undefined
       }
       actions={
         <>
