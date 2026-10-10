@@ -5006,11 +5006,11 @@ describe("MembersPage — membership data by role (issue #1682)", () => {
     return matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
   }
 
-  it("shows no membership or payment data for an admin-only account, in the list or the detail", async () => {
+  it("shows no membership data for an admin-only account, but keeps Pagos to create one (staff-player-side S3)", async () => {
     const row = await renderRow(ADMIN_ACCOUNT);
 
     expect(within(row).queryByText(/membresía/i)).not.toBeInTheDocument();
-    expect(within(row).queryByRole("button", { name: /^pagos/i })).not.toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /^pagos/i })).toBeInTheDocument();
 
     fireEvent.click(getEditButton(row));
     const dialog = screen.getByRole("dialog");
