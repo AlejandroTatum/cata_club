@@ -69,7 +69,7 @@ async function mockAdminRuntime(page: Page): Promise<void> {
       loggedInAt: new Date().toISOString(),
     }),
   );
-  await page.route("**/api/ranking/notificaciones/mias", (route) => fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }));
+  await page.route("**/api/ranking/notificaciones/mias*", (route) => fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }));
   await page.route("**/api/payments*", (route) => {
     const estado = new URL(route.request().url()).searchParams.get("estadoPago");
     const all = estado && estado !== "PENDIENTE_VALIDACION" ? [] : PENDING;
