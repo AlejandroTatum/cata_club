@@ -828,7 +828,7 @@ export default function AppShell({
                     with the labels when the rail collapses to 76px: a rótulo
                     over a column of bare icons titles nothing. */}
                 <p
-                  className={`px-3 pb-0.5 pt-2.5 text-2xs font-bold uppercase tracking-caps text-white/50 first:pt-1 ${
+                  className={`px-3 pb-1 pt-2.5 text-2xs font-bold uppercase leading-none tracking-caps text-white/50 first:pt-1 ${
                     collapsed ? "lg:hidden" : ""
                   }`}
                 >
