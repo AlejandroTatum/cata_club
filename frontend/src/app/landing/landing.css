@@ -1205,7 +1205,7 @@ html[data-theme="dark"] .landing-map .leaflet-tile-pane { filter: brightness(0.7
 @media (max-width: 480px) {
   .landing-nav-actions { gap: 8px; }
   .landing-nav-cta { padding-inline: 12px; }
-  .landing-logo { gap: 10px; font-size: 15px; }
+  .landing-logo { gap: 8px; font-size: 16px; letter-spacing: 0.4px; }
   .landing-logo small { letter-spacing: 2px; }
 }
 @media (max-width: 380px) {
