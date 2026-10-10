@@ -101,7 +101,7 @@
         },
         {
           "pregunta": "También juego en el club. ¿Dónde veo mis pagos y mi asistencia?",
-          "respuesta": "Si tienes una membresía propia, en el menú aparece Mi cuenta con tu panel, tus pagos, tu asistencia y tu ficha médica, además de tus pantallas de trabajo. Si tu membresía todavía espera su primer pago, solo ves Pagos: envía ahí tu primer pago y otro administrador lo valida; el resto de Mi cuenta aparece cuando la membresía queda activa. Si todavía no ves nada, pide a administración que registre tu membresía."
+          "respuesta": "Si tienes una membresía propia, en el menú aparece Mi cuenta con tu panel, tus pagos, tu asistencia y tu ficha médica, además de tus pantallas de trabajo. Si tu membresía todavía espera su primer pago, solo ves Pagos: envía ahí tu primer pago y un administrador lo valida (puedes ser tú); el resto de Mi cuenta aparece cuando la membresía queda activa. Si todavía no ves nada, pide a administración que registre tu membresía."
         }
       ]
     },
@@ -131,7 +131,7 @@
         },
         {
           "pregunta": "Un administrador o un entrenador también juega. ¿Cómo le doy su membresía?",
-          "respuesta": "En Miembros, abre Pagos en la fila de esa persona y crea su membresía. Mientras esté inactiva, esa persona solo ve Pagos y envía ahí su primer pago; otro administrador lo valida desde la cola de pagos (nadie valida su propio pago). Cuando la membresía queda activa o vencida, ve además la sección Mi cuenta, con sus propios pagos, asistencia y ficha médica. Su cuenta sigue con un solo rol."
+          "respuesta": "En Miembros, abre Pagos en la fila de esa persona y crea su membresía. Mientras esté inactiva, esa persona solo ve Pagos y envía ahí su primer pago; un administrador lo valida desde la cola de pagos (un administrador también puede validar su propio pago). Cuando la membresía queda activa o vencida, ve además la sección Mi cuenta, con sus propios pagos, asistencia y ficha médica. Su cuenta sigue con un solo rol."
         },
         {
           "pregunta": "¿Qué pasa si oculto una tarifa?",

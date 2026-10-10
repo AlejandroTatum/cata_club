@@ -22,12 +22,13 @@ search and attendance already use (`MembresiaRepositorio.puede_entrenar`, `front
 A membership an admin has just created is INACTIVA until its first payment is approved, so the owner is not yet a
 player. Rather than make a lone admin depend on the in-person shortcut (which refuses a payment for oneself,
 `MENSAJE_PAGO_PRESENCIAL_PROPIO`), the staff member opens **only** `/student/payments` and submits the payment like any
-member (`POST /membresias/pagos`, authorized by owner). It lands as pending validation. Another administrator approves
-it from the normal queue and the membership becomes ACTIVA, which unlocks the rest of *Mi cuenta*.
+member (`POST /membresias/pagos`, authorized by owner). It lands as pending validation. Any administrator approves it
+from the normal queue, including the payment's owner, and the membership becomes ACTIVA, which unlocks the rest of
+*Mi cuenta*.
 
-Nobody validates their own payment: `PagoServicio.validar_pago` refuses approving **or** rejecting a payment whose
-`persona_id` is the reviewer's (`MENSAJE_VALIDACION_PAGO_PROPIO`, HTTP 400, nothing changes). Payments of other people
-are reviewed exactly as before. `backend/tests/test_staff_jugador_primer_pago.py` pins all of it through the API.
+An administrator may approve or reject their own payment (owner decision: the club has a few trusted admins). The
+reviewer is still recorded in `validado_por_persona_id`. Payments of other people are reviewed exactly as before.
+`backend/tests/test_staff_jugador_primer_pago.py` pins all of it through the API.
 
 ## What the backend already guaranteed
 
