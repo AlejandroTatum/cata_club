@@ -33,6 +33,12 @@ export interface AuthSession {
    * through the frontend's own vocabulary.
    */
   roles: string[];
+  /**
+   * An admin/trainer who is also a player (own membership that allows
+   * training), computed by the BFF from the backend — see
+   * `ServerSession.isStaffPlayer`. Missing reads as false.
+   */
+  isStaffPlayer?: boolean;
   /** ISO timestamp of the login/hydration event. */
   loggedInAt: string;
 }
@@ -113,6 +119,7 @@ export function isValidAuthSession(data: unknown): data is AuthSession {
 
   if (!Array.isArray(candidate.roles) || !candidate.roles.every((r) => typeof r === "string")) return false;
   if (typeof candidate.loggedInAt !== "string") return false;
+  if (candidate.isStaffPlayer !== undefined && typeof candidate.isStaffPlayer !== "boolean") return false;
 
   // Issue #762: at most ONE recognized role, or this is not a session.
   //

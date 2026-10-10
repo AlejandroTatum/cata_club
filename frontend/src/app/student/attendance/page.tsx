@@ -505,7 +505,7 @@ function AttendanceView({
 
 export default function StudentAttendancePage(): React.ReactElement {
   return (
-    <ProtectedRoute allowedRoles={["representante", "estudiante", "unsupported"]}>
+    <ProtectedRoute allowedRoles={["representante", "estudiante", "unsupported"]} allowStaffPlayer>
       {/* `useManagedProfiles` reads `?alumno=` through `useSearchParams` — see
           the same boundary on `/student` and `/student/payments`. */}
       <Suspense>

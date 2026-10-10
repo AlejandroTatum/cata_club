@@ -149,14 +149,15 @@ function useNavLinks(): NavLink[] {
     // UsuarioEstudiante in src/types/domain.ts) — `getNavGroupsForRoles` itself
     // ignores this flag for every other role, so computing it unconditionally
     // here is safe.
+    const isStaffPlayer = session?.isStaffPlayer === true;
     const studentIsAdult =
-      session?.user.role === "estudiante" ? !isMinor(session.user.fechaNacimiento) : false;
+      session?.user.role === "estudiante" || isStaffPlayer ? !isMinor(session?.user.fechaNacimiento) : false;
     // Flattened: this bar is one horizontal strip on the public routes, with
     // no second line to hang a rótulo on and no vertical room to make one
     // worth the space. The GROUPING is the sidebar's answer to more than one
     // role; the destinations are the same either way, which is what the helper
     // guarantees and what a flat strip needs from it.
-    const defs: NavLinkDef[] = getNavGroupsForRoles(roles, studentIsAdult).flatMap(
+    const defs: NavLinkDef[] = getNavGroupsForRoles(roles, studentIsAdult, isStaffPlayer).flatMap(
       (group) => group.links,
     );
     return defs.map((def): NavLink => ({

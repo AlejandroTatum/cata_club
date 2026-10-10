@@ -447,8 +447,9 @@ export default function AppShell({
   // date. What remains outside this gate is a person whose role is not
   // estudiante wanting their own ficha, which needs the session to carry the
   // date for every account: behavior, and issue #269.
+  const isStaffPlayer = session?.isStaffPlayer === true;
   const studentIsAdult =
-    session?.user.role === "estudiante" ? !isMinor(session.user.fechaNacimiento) : false;
+    session?.user.role === "estudiante" || isStaffPlayer ? !isMinor(session?.user.fechaNacimiento) : false;
   /**
    * The rail: every section this PERSON holds, grouped and titled. Read off
    * `session.roles` — the backend role array the BFF puts on the session
@@ -466,10 +467,10 @@ export default function AppShell({
   );
   const navGroups = useMemo<NavGroup[]>(
     () =>
-      getNavGroupsForRoles(heldRoles, studentIsAdult)
+      getNavGroupsForRoles(heldRoles, studentIsAdult, isStaffPlayer)
         .map((group) => ({ ...group, links: group.links.filter((link) => link.href !== "/") }))
         .filter((group) => group.links.length > 0),
-    [heldRoles, studentIsAdult],
+    [heldRoles, studentIsAdult, isStaffPlayer],
   );
   /** The brand block's area line — same roles, same source as the rail. */
   const areaLabel = getAreaLabel(heldRoles);

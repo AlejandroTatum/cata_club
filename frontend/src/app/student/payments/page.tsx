@@ -905,7 +905,7 @@ function PaymentsPageContent(): React.ReactElement {
 
 export default function StudentPaymentsPage(): React.ReactElement {
   return (
-    <ProtectedRoute allowedRoles={["representante", "estudiante", "unsupported"]}>
+    <ProtectedRoute allowedRoles={["representante", "estudiante", "unsupported"]} allowStaffPlayer>
       {/* `useSearchParams` needs a boundary to fall back to during prerender
           — the same wrapper `/reset-password` uses for the same reason. */}
       <Suspense>

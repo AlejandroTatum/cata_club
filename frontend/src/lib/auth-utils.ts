@@ -267,21 +267,27 @@ function sectionsForRole(role: UserRole, studentIsAdult: boolean): NavLinkDef[] 
  * unauthenticated (Inicio + Iniciar sesión); an empty array means an
  * authenticated account whose roles the frontend does not recognise, which
  * gets Inicio and nothing else — the same rail `"unsupported"` has always had.
- * @param studentIsAdult — Only meaningful for `"estudiante"`: true when that
- * self-managed student is 18+. Ignored for every other role — in particular a
- * `"representante"` gets no Ficha médica row from this flag, because that
- * access (a guardian correcting a DEPENDENT's record) is a separate, role-only
- * grant unrelated to the caller's own age.
+ * @param studentIsAdult — Only meaningful for `"estudiante"` and for a staff
+ * player: true when that self-managed player is 18+. Ignored for every other
+ * role — in particular a `"representante"` gets no Ficha médica row from this
+ * flag, because that access (a guardian correcting a DEPENDENT's record) is a
+ * separate, role-only grant unrelated to the caller's own age.
+ * @param isStaffPlayer — An admin/trainer whose own Persona holds a membership
+ * that allows training (`ServerSession.isStaffPlayer`). Their account still
+ * holds one role; the player section is ADDED after their staff sections, the
+ * same rows a "estudiante" gets. Ignored for any role that is not staff.
  */
 export function getNavGroupsForRoles(
   roles: readonly UserRole[] | null,
   studentIsAdult = false,
+  isStaffPlayer = false,
 ): NavGroup[] {
   if (roles === null) {
     return [{ heading: null, links: [row("/"), row("/login")] }];
   }
 
   const held = new Set(roles);
+  if (isStaffPlayer && (held.has("admin") || held.has("trainer"))) held.add("estudiante");
   const groups: NavGroup[] = [{ heading: null, links: [row("/")] }];
   // Every href already placed. This is what makes the rail a union rather than
   // a concatenation: two roles that grant the same destination spend one row on

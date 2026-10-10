@@ -346,6 +346,12 @@ describe("isValidAuthSession", () => {
     expect(isValidAuthSession(validSession)).toBe(true);
   });
 
+  it("accepts isStaffPlayer as a boolean and rejects any other type", () => {
+    expect(isValidAuthSession({ ...validSession, isStaffPlayer: true })).toBe(true);
+    expect(isValidAuthSession({ ...validSession, isStaffPlayer: false })).toBe(true);
+    expect(isValidAuthSession({ ...validSession, isStaffPlayer: "yes" })).toBe(false);
+  });
+
   it("rejects null", () => {
     expect(isValidAuthSession(null)).toBe(false);
   });
