@@ -71,7 +71,7 @@ describe("design tokens — ink and surfaces (_sistema.css:29-35)", () => {
     // #E9E9EC / #D8D8DE were drawn for a #F5F5F7 page. On the reworked canvas
     // the divider hairline was 1.01:1 — a card outline the same luminance as
     // the page under it.
-    expect(nested("line")).toMatchObject({ DEFAULT: "#DEDEE6", "2": "#CFCFDA" });
+    expect(nested("line")).toMatchObject({ DEFAULT: "#C9C9D3", "2": "#B9B9C6" });
   });
 
   it("carries the three-surface ladder, not two near-white sheets", () => {

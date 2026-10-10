@@ -3,7 +3,7 @@
  *
  * The product had two, and they rendered pixel for pixel the same thing:
  * `.card` (`globals.css:67-71`) and the utility string `rounded-card border
- * border-line bg-paper`. Same white, same `#DEDEE6` hairline, same 14px radius,
+ * border-line bg-paper`. Same white, same `#C9C9D3` hairline, same 14px radius,
  * same shadow. Forty call sites used the first, twenty-one the second, and the
  * split ran exactly along "screen written before the redesign" / "screen
  * written after it" — which is to say it was not a decision, it was a seam.
