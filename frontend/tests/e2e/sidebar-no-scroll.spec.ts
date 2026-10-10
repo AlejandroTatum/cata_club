@@ -39,7 +39,7 @@ async function signInAsAdmin(page: Page): Promise<void> {
   await page.route("**/api/**", (route: Route) =>
     route.request().method() === "GET" ? fulfillJson(route, []) : fulfillJson(route, {}),
   );
-  await page.route("**/api/ranking/notificaciones/mias", (route: Route) =>
+  await page.route("**/api/ranking/notificaciones/mias*", (route: Route) =>
     fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }),
   );
   await page.route("**/api/payments*", (route: Route) => fulfillJson(route, { items: [], total: 0 }));
