@@ -33,6 +33,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import ReportProblemFab from "./ReportProblemFab";
+import AccountMenu from "./AccountMenu";
 import {
   Menu,
   X,
@@ -41,7 +42,6 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleHelp,
-  LogOut,
   MoreHorizontal,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -60,7 +60,6 @@ import { normalizeText } from "@/app/members/members-utils";
 import { useNotificaciones } from "@/lib/useNotificaciones";
 import { usePendingPaymentsCount } from "@/lib/usePendingPayments";
 import { NAV_ICON_MAP } from "@/components/Header";
-import AvatarPhoto from "@/components/AvatarPhoto";
 import NotificationBell from "@/components/NotificationBell";
 import { PageHeader, useBodyScrollLock } from "@/components/ui";
 
@@ -374,7 +373,7 @@ const NAV_ITEM_IDLE_CLASSES = "text-white/[0.62] hover:bg-white/[0.07] hover:tex
  * rows are 600 now — so the weight is no longer declared here. The four that
  * remain are the loud ones, and each is drawn below.
  */
-const NAV_ITEM_ACTIVE_CLASSES = "bg-white/[0.08] text-white";
+const NAV_ITEM_ACTIVE_CLASSES = "bg-white/[0.1] text-white";
 
 export default function AppShell({
   title,
@@ -577,7 +576,7 @@ export default function AppShell({
         {isActive && (
           // `.nav-i.on::before` — 3px red bar pinned to the row's left edge.
           <span
-            className="absolute inset-y-[9px] left-0 w-[3px] rounded-r-[3px] bg-cata-red"
+            className="absolute inset-y-[8px] left-0 w-1 rounded-r-[4px] bg-cata-red"
             aria-hidden="true"
           />
         )}
@@ -741,7 +740,7 @@ export default function AppShell({
         }`}
       >
         {/* `.side .brand` — logo on a white disc, club name, area label. */}
-        <div className="flex items-center gap-[11px] border-b border-white/[0.08] px-[18px] pb-4 pt-[18px]">
+        <div className="flex items-center gap-[11px] border-b border-white/[0.08] px-[18px] pb-3 pt-4">
           <Link href="/" className="flex min-w-0 flex-1 items-center gap-[11px]">
             <span className="relative block h-9 w-9 shrink-0 overflow-hidden rounded-full bg-white">
               <Image
@@ -753,7 +752,7 @@ export default function AppShell({
               />
             </span>
             <span className={`min-w-0 leading-tight ${collapsed ? "lg:hidden" : ""}`}>
-              <span className="block truncate text-sm font-bold">
+              <span className="block truncate font-display text-base uppercase tracking-flat">
                 Cata Club
               </span>
               {/* 50%, not the spec's 42%: white at 0.42 over `coal` composites
@@ -802,7 +801,7 @@ export default function AppShell({
           ref={navRef}
           onScroll={updateNavOverflow}
           data-more-below={navMoreBelow ? "true" : "false"}
-          className={`flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 py-3 ${
+          className={`flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 py-2 ${
             navMoreBelow ? NAV_FADE_CLASSES : ""
           }`}
           aria-label="Navegación principal"
@@ -832,7 +831,7 @@ export default function AppShell({
                     with the labels when the rail collapses to 76px: a rótulo
                     over a column of bare icons titles nothing. */}
                 <p
-                  className={`px-3 pb-0.5 pt-3 text-2xs font-bold uppercase text-white/50 ${
+                  className={`px-3 pb-0.5 pt-2.5 text-2xs font-bold uppercase text-white/50 first:pt-1 ${
                     collapsed ? "lg:hidden" : ""
                   }`}
                 >
@@ -844,88 +843,38 @@ export default function AppShell({
           })}
         </nav>
 
-        {/* `.side .foot-nav` — help, then account rows, then the user card. */}
+        {/*
+         * `.side .foot-nav` — the user card, and nothing else. Ayuda, Perfil
+         * and Cerrar sesión live in the account menu it opens (see
+         * `AccountMenu`): three permanent rows here is what pushed the admin
+         * rail past a 1366x768 viewport.
+         */}
         <div className="flex shrink-0 flex-col gap-2 border-t border-white/[0.08] p-2.5">
-          {/* ADMB-15: help is ONE row (it used to be two, which pushed the last
-              menu items under the footer). /ayuda hosts "Reportar un problema". */}
-          <Link
-            href="/ayuda"
-            title="Ayuda"
-            aria-label="Ayuda"
-            className={`${NAV_ITEM_CLASSES} ${NAV_ITEM_IDLE_CLASSES}`}
-          >
-            <CircleHelp
-              size={ICON.base}
-              strokeWidth={1.75}
-              className="shrink-0"
-              aria-hidden="true"
+          {session ? (
+            <AccountMenu
+              name={session.user.name}
+              roleLabel={getRoleLabel(session.user.role)}
+              initials={getUserInitials(session.user.name)}
+              fotoUrl={session.user.fotoUrl}
+              collapsed={collapsed}
+              onLogout={logout}
+              onNavigate={(): void => setSidebarOpen(false)}
             />
-            <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>Ayuda</span>
-          </Link>
-
-          {session && (
-            <Fragment>
-              {/*
-               * Perfil and Cerrar sesión (#852) used to live inside a popup
-               * only the user card below opened — nothing about the card
-               * looked interactive, and older users could not find how to
-               * log out. They are now permanent rows, right here, drawn with
-               * the same primitive as every destination above so they are
-               * pixel-consistent with the rail. A divider on the rail's own
-               * border token separates them from the help group above,
-               * exactly as the footer itself is separated from the nav.
-               */}
-              <div className="flex flex-col gap-2 border-t border-white/[0.08] pt-2">
-                {renderNavRow({ href: "/profile", label: "Perfil" })}
-                <button
-                  type="button"
-                  onClick={(): void => {
-                    logout();
-                    setSidebarOpen(false);
-                  }}
-                  title="Cerrar sesión"
-                  aria-label="Cerrar sesión"
-                  // Same row tone as every other entry, not the destructive
-                  // red: clear enough to find, not loud enough to dominate.
-                  className={`${NAV_ITEM_CLASSES} ${NAV_ITEM_IDLE_CLASSES} w-full text-left`}
-                >
-                  <LogOut size={ICON.base} strokeWidth={2} className="shrink-0" aria-hidden="true" />
-                  <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>Cerrar sesión</span>
-                </button>
-              </div>
-
-              {/*
-               * The account info block. It used to be the only way to reach
-               * Perfil/Cerrar sesión — a button that opened a popup — which is
-               * exactly what nobody could tell by looking at it (#852). Both
-               * destinations now live above as their own rows, so the card
-               * goes back to being what it looks like: plain account info.
-               */}
-              <div
-                className={`flex w-full items-center gap-2.5 rounded-ctl bg-white/[0.06] px-2.5 py-2 ${
-                  collapsed ? "lg:justify-center lg:px-0" : ""
-                }`}
-              >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-cata-red/[0.28] text-2xs tracking-flat font-bold">
-                  <AvatarPhoto
-                    fotoUrl={session.user.fotoUrl}
-                    initials={getUserInitials(session.user.name)}
-                    className="h-8 w-8 rounded-full object-cover"
-                  />
-                </span>
-                <span className={`min-w-0 flex-1 leading-tight ${collapsed ? "lg:hidden" : ""}`}>
-                  <span className="block truncate text-xs font-semibold">
-                    {session.user.name}
-                  </span>
-                  {/* Same correction as the brand's area label: the user card
-                      sits on `bg-white/[0.06]` over `coal` (#212124), where
-                      white at 0.45 is 4.35:1. At 0.50 it measures 5.04:1. */}
-                  <span className="block truncate text-2xs tracking-flat text-white/50">
-                    {getRoleLabel(session.user.role)}
-                  </span>
-                </span>
-              </div>
-            </Fragment>
+          ) : (
+            <Link
+              href="/ayuda"
+              title="Ayuda"
+              aria-label="Ayuda"
+              className={`${NAV_ITEM_CLASSES} ${NAV_ITEM_IDLE_CLASSES}`}
+            >
+              <CircleHelp
+                size={ICON.base}
+                strokeWidth={1.75}
+                className="shrink-0"
+                aria-hidden="true"
+              />
+              <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>Ayuda</span>
+            </Link>
           )}
         </div>
       </aside>

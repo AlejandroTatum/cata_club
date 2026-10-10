@@ -35,43 +35,43 @@ colors:
   chart-absent: "#E34948"
 typography:
   display:
-    fontFamily: "Graduate, serif"
+    fontFamily: "Anybody, sans-serif"
     fontSize: "46px"
-    fontWeight: 400
+    fontWeight: 800
     lineHeight: "0.95"
     letterSpacing: "-0.05em"
   headline:
-    fontFamily: "Graduate, serif"
+    fontFamily: "Anybody, sans-serif"
     fontSize: "26px"
-    fontWeight: 400
+    fontWeight: 800
     lineHeight: "1.15"
     letterSpacing: "-0.03em"
   title:
-    fontFamily: "Graduate, serif"
+    fontFamily: "Anybody, sans-serif"
     fontSize: "20px"
-    fontWeight: 400
+    fontWeight: 800
     lineHeight: "1.2"
     letterSpacing: "-0.02em"
   stat:
-    fontFamily: "Graduate, serif"
+    fontFamily: "Anybody, sans-serif"
     fontSize: "32px"
-    fontWeight: 400
+    fontWeight: 800
     lineHeight: "1.05"
     letterSpacing: "-0.04em"
   body:
-    fontFamily: "Barlow, system-ui, sans-serif"
+    fontFamily: "Switzer, system-ui, sans-serif"
     fontSize: "15px"
     fontWeight: 400
     lineHeight: "1.45"
     letterSpacing: "-0.01em"
   dense:
-    fontFamily: "Barlow, system-ui, sans-serif"
+    fontFamily: "Switzer, system-ui, sans-serif"
     fontSize: "13.5px"
     fontWeight: 400
     lineHeight: "1.5"
     letterSpacing: "-0.005em"
   label:
-    fontFamily: "Barlow, system-ui, sans-serif"
+    fontFamily: "Switzer, system-ui, sans-serif"
     fontSize: "10.5px"
     fontWeight: 800
     lineHeight: "1.4"
@@ -253,13 +253,17 @@ rompe.
 
 ## Typography
 
-**Display Font:** Graduate (con serif de respaldo)
-**Body Font:** Barlow (con system-ui de respaldo)
+**Display Font:** Anybody (variable, `next/font/google`, con sans-serif de respaldo)
+**Body Font:** Switzer (variable, autoalojada en `frontend/src/app/fonts/` con su licencia `FFL.txt`, con system-ui de respaldo)
 **Voice Font:** Playfair Display (con Georgia de respaldo)
 
-**Character:** Graduate es una tipografía colegial de mayúsculas, ancha y plana — trae el gimnasio,
-el marcador y la camiseta. Barlow es su contrapeso: una grotesca ligeramente condensada que aguanta
-una tabla de doscientas filas sin cansar. Playfair aparece una vez por pantalla, cuando el club
+**Character:** Anybody es la voz de display y de las cifras: una grotesca variable en peso y ancho,
+pensada para titulares y marcadores. Switzer es su contrapeso: una grotesca neutra y variable que
+aguanta una tabla de doscientas filas sin cansar. Los tamaños de la escala no cambian; lo que
+firma al producto es el eje de Anybody: peso 800 siempre, **estrecho en los títulos** (ancho 72,
+como los titulares de la landing) y **ancho en las cifras** (ancho 112). Títulos angostos junto a
+números anchos es el contraste que reconoce a CataClub. Los ejes se fijan en un solo lugar, la
+regla `.font-display` de `globals.css`. Playfair aparece una vez por pantalla, cuando el club
 habla en primera persona.
 
 ### Hierarchy
@@ -281,8 +285,8 @@ tracking normal se lee como separación y a 10.5px se lee como mancha.
 
 ### Named Rules
 
-**La regla de Graduate.** Es display en mayúsculas: nunca por debajo de 15px y nunca dentro de un
-párrafo. Un `<p>` en Graduate es un defecto, no una decisión audaz.
+**La regla de la tipografía display.** Es display en mayúsculas: nunca por debajo de 15px y nunca dentro de un
+párrafo. Un `<p>` en Anybody es un defecto, no una decisión audaz.
 
 **La regla de la voz.** Playfair aparece **una vez por pantalla**. Una segunda frase en la misma
 pantalla significa que ninguna de las dos es énfasis.
@@ -363,12 +367,13 @@ control donde esté.
 
 ### Buttons
 - **Shape:** control (`{rounded.ctl}`), 40px de alto, o 32px en su versión compacta.
-- **Primary:** relleno rojo, texto blanco. Una por pantalla.
-- **Secondary:** papel con borde de control.
+- **Primary:** relleno rojo, texto blanco, peso 700. Una por pantalla.
+- **Secondary:** papel con borde de control; al pasar el cursor el borde oscurece a tinta, no a rojo,
+  para que el rojo siga siendo solo la acción principal.
 - **Tertiary:** relleno hundido, **sin borde**. El tercer nivel se distingue por relleno, no por
   ausencia: tres niveles que sumaran cada uno una línea se diferenciarían solo en cuán oscura es esa
   línea, mientras que relleno contra no-relleno se lee sin comparar.
-- **Dark:** caucho, para la acción enfática que no debe ser roja.
+- **Dark:** caucho, peso 700, para la acción enfática que no debe ser roja.
 - **On coal:** contorno translúcido blanco, para la acción secundaria dentro de una tarjeta de
   caucho.
 - **Hover:** cada variante sube un escalón de su propia familia. La terciaria pasa de hundido a
@@ -381,6 +386,15 @@ nombrando archivo y línea, si vuelve a aparecer.
 Lo que **navega** no es un botón: es un enlace subrayado en rojo, con flecha cuando apunta a otra
 pantalla. Un enlace disfrazado de botón es lo que hace que una pantalla tenga cinco cosas iguales
 que se comportan distinto.
+
+### Page header
+Título en Anybody estrecho y pesado, precedido por una **marca de pelota**: una barra amarilla de
+36×4px sobre el título. Es el resaltado de la landing gastado una vez por pantalla; el rojo queda
+para la acción. La barra es un pseudo-elemento: no suma nodos ni texto para lectores de pantalla.
+
+### Empty state
+Disco de caucho con el ícono en amarillo pelota, y el título en Anybody en mayúsculas. Es la misma
+pareja caucho-y-pelota de la landing y del riel lateral.
 
 ### Cards / Containers
 - **Corner Style:** radio de tarjeta.
@@ -404,8 +418,8 @@ Cápsulas de 26px con la tipografía de etiqueta, un punto de color y su par de 
 y ningún vocabulario paralelo: hubo cuatro familias de insignia en este producto y quedó una.
 
 ### Navigation
-Riel de caucho con el nombre del club en Graduate y la pelota con las iniciales. El ítem activo
-lleva un marcador rojo al filo izquierdo. Cuando una persona tiene más de un rol, el riel **suma** las
+Riel de caucho con el nombre del club en Anybody en mayúsculas y la pelota con las iniciales. El
+ítem activo lleva un marcador rojo de 4px al filo izquierdo y un relleno blanco al 10%. Cuando una persona tiene más de un rol, el riel **suma** las
 secciones con un rótulo por grupo — no hay selector de rol, porque un selector convierte los roles
 en modos y obliga a recordar en cuál estás parado.
 

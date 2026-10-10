@@ -358,12 +358,12 @@ const config: Config = {
       //
       // THE THREE RULES, and they are not stylistic preferences:
       //
-      //   · `display` (Graduate) is DISPLAY, uppercase, and never smaller than
+      //   · `display` (Anybody) is DISPLAY, uppercase, and never smaller than
       //     15px. It is a collegiate face with no lowercase design intent and
       //     almost no vertical range, so it reads as texture rather than as
       //     words the moment it drops into a sentence. It never enters a
       //     paragraph — a Graduate <p> is a bug, not a bold choice.
-      //   · `sans` (Barlow) carries ALL interface text: every label, cell,
+      //   · `sans` (Switzer) carries ALL interface text: every label, cell,
       //     button, field, helper line and paragraph. If a screen has to ask
       //     which family a string takes, the answer is this one.
       //   · `serif` (Playfair) is the voice, and it is rationed: at most ONE
@@ -378,7 +378,7 @@ const config: Config = {
       // ---------------------------------------------------------------------
       fontFamily: {
         sans: [
-          "var(--font-barlow)",
+          "var(--font-switzer)",
           "system-ui",
           "-apple-system",
           "Segoe UI",
@@ -387,7 +387,7 @@ const config: Config = {
           "Arial",
           "sans-serif",
         ],
-        display: ["var(--font-graduate)", "serif"],
+        display: ["var(--font-anybody)", "system-ui", "sans-serif"],
         serif: ["var(--font-playfair)", "Georgia", "serif"],
       },
       // ---------------------------------------------------------------------

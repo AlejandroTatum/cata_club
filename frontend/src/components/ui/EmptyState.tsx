@@ -102,12 +102,12 @@ export default function EmptyState({
       {icon ? (
         <span
           aria-hidden="true"
-          className="flex h-[46px] w-[46px] items-center justify-center rounded-full bg-state-neutral-bg text-ink-3"
+          className="flex h-[46px] w-[46px] items-center justify-center rounded-full bg-coal text-ball"
         >
           {icon}
         </span>
       ) : null}
-      <b className="text-base font-bold text-ink">{title}</b>
+      <b className="font-display text-base uppercase tracking-flat text-ink">{title}</b>
       {description ? (
         <p className="max-w-[44ch] text-sm text-ink-3">{description}</p>
       ) : null}

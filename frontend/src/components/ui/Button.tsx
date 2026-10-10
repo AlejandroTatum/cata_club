@@ -44,7 +44,7 @@ export type ButtonSize = (typeof BUTTON_SIZES)[number];
 // actually live. The ball survives as the inner band of the system ring in
 // `globals.css`, which dresses every focusable element in the product.
 const BASE =
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap border font-semibold " +
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap border " +
   "transition-colors duration-150 " +
   // `.btn[disabled], .btn.off` (:176) — the fade lives in `DISABLED` below.
   "disabled:cursor-not-allowed";
@@ -63,13 +63,13 @@ const SIZE: Record<ButtonSize, string> = {
 
 const VARIANT: Record<ButtonVariant, string> = {
   // `.btn.pri` — the only red button. Hover is `--red-dark`.
-  primary: "bg-cata-red border-cata-red text-white hover:bg-cata-red-dark hover:border-cata-red-dark",
+  primary: "font-bold bg-cata-red border-cata-red text-white hover:bg-cata-red-dark hover:border-cata-red-dark",
   // `.btn` bare — white surface, `--line-2` border. Hover is `sunken`, not
   // `canvas`: a white button standing ON the canvas that hovers TO the canvas
   // dissolves into the page instead of responding.
-  secondary: "bg-paper border-line-2 text-ink hover:bg-sunken",
+  secondary: "font-semibold bg-paper border-line-2 text-ink hover:border-ink-3 hover:bg-sunken",
   // `.btn.dark` — coal. Secondary-but-emphatic actions ("+ Nuevo miembro").
-  dark: "bg-coal border-coal text-white hover:bg-coal-2 hover:border-coal-2",
+  dark: "font-bold bg-coal border-coal text-white hover:bg-coal-2 hover:border-coal-2",
   // The third level (D5). It replaces `ghost`, which was `bg-transparent
   // border-transparent` — "no chrome at all" — and was rejected for exactly
   // that: "no me gustan los botones vacíos o sin box".
@@ -88,14 +88,14 @@ const VARIANT: Record<ButtonVariant, string> = {
   // arriving fill) and ink at 13.26:1 once settled. The fill itself clears the
   // ladder's own 1.09:1 rung on both neighbours it can stand on: 1.098:1 on
   // `paper`, 1.112:1 on `canvas`.
-  tertiary: "bg-sunken border-transparent text-ink-2 hover:bg-line hover:text-ink",
+  tertiary: "font-semibold bg-sunken border-transparent text-ink-2 hover:bg-line hover:text-ink",
   // `.btn.oncoal` (prototype 31) — the secondary action INSIDE a coal card
   // (the trainer dashboard's immediate-session card). `secondary`'s white
   // fill would read as a second block competing with the coal surface it
   // sits on, so this is a translucent outline instead: transparent fill,
   // a white-tinted border, white text — the same language `dark` speaks in
   // reverse, for the one surface that is already coal.
-  onCoal: "bg-transparent border-white/25 text-white hover:bg-white/10 hover:border-white/45",
+  onCoal: "font-semibold bg-transparent border-white/25 text-white hover:bg-white/10 hover:border-white/45",
 };
 
 /**
