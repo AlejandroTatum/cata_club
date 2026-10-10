@@ -112,7 +112,7 @@ async function mockAdminRuntime(page: Page): Promise<void> {
       loggedInAt: new Date().toISOString(),
     }),
   );
-  await page.route("**/api/ranking/notificaciones/mias", (route) => fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }));
+  await page.route("**/api/ranking/notificaciones/mias*", (route) => fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }));
   await page.route("**/api/dashboard", (route) =>
     fulfillJson(route, { totalPersonas: 120, totalAlumnos: 98, activeMemberships: 80, pendingPayments: 14, todaySchedules: 4, personasSinMembresia: 12 }),
   );
