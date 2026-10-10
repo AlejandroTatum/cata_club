@@ -201,15 +201,15 @@ def test_presencial_efectivo_admin_registra_y_queda_aprobado(client):
     assert resp.json()["estadoPago"] == "APROBADO"
 
 
-def test_presencial_efectivo_del_propio_admin_da_400(client):
-    """El pago propio de un admin es autoservicio: el camino presencial lo
-    rechaza y el pago deberá pasar por el flujo regular con su cola."""
+def test_presencial_efectivo_del_propio_admin_se_aprueba(client):
+    """Owner decision: an admin's own in-person cash payment is approved like anyone else's."""
     persona = crear_persona_api(client, cedula="1710034073")  # id=1 == token admin
     tipo = crear_tipo_membresia_api(client)
     membresia = crear_membresia_api(client, persona["id"], tipo["id"])
 
     resp = _presencial(client, persona["id"], membresia["id"])
-    assert resp.status_code == 400, resp.text
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["estadoPago"] == "APROBADO"
 
 
 def test_presencial_sin_rol_admin_da_403(client):

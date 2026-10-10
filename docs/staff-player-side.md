@@ -20,9 +20,9 @@ search and attendance already use (`MembresiaRepositorio.puede_entrenar`, `front
 ## First payment of an INACTIVA membership
 
 A membership an admin has just created is INACTIVA until its first payment is approved, so the owner is not yet a
-player. Rather than make a lone admin depend on the in-person shortcut (which refuses a payment for oneself,
-`MENSAJE_PAGO_PRESENCIAL_PROPIO`), the staff member opens **only** `/student/payments` and submits the payment like any
-member (`POST /membresias/pagos`, authorized by owner). It lands as pending validation. Any administrator approves it
+player. An administrator can record their own first payment in person from their Miembros row (approved at once, with
+themselves recorded as the approver), or the staff member opens **only** `/student/payments` and submits the payment
+like any member (`POST /membresias/pagos`, authorized by owner). It lands as pending validation. Any administrator approves it
 from the normal queue, including the payment's owner, and the membership becomes ACTIVA, which unlocks the rest of
 *Mi cuenta*.
 

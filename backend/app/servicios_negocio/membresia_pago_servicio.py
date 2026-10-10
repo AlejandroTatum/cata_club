@@ -196,13 +196,9 @@ MENSAJE_FECHA_EFECTIVA_RETROCEDE = (
 
 # --- Issue #1402: pago presencial de primera inscripción --------------------
 # El admin anota en el club el PRIMER pago de inscripción de una membresía.
-# El endpoint es admin-only; estos mensajes cubren las dos guardias que la
-# ruta no puede resolver sola (necesitan leer el payload y la base).
-MENSAJE_PAGO_PRESENCIAL_PROPIO = (
-    "El pago presencial de primera inscripción se registra para el socio "
-    "presente en el club; para un pago propio usa el flujo regular, que "
-    "queda por validar."
-)
+# El endpoint es admin-only; este mensaje cubre la guardia que la ruta no
+# puede resolver sola (necesita leer la base). Un admin puede registrar su
+# propio pago presencial (decisión del dueño; queda como aprobador).
 MENSAJE_PAGO_PRESENCIAL_NO_PRIMERA_INSCRIPCION = (
     "La aprobación inmediata presencial solo aplica a la primera inscripción: "
     "una membresía inactiva sin ningún pago aprobado. Registra renovaciones "
@@ -1065,13 +1061,7 @@ class PagoServicio:
                 detalle_tecnico="pago presencial: token sin persona_id",
             )
 
-        # Guardia 1: en persona, nunca autoservicio. `GestorPermisos` ya
-        # garantiza el rol; esto evita que un admin use el camino de
-        # aprobación inmediata para su propia membresía.
-        if persona_id_solicitante == datos.persona_id:
-            raise OperacionInvalida(MENSAJE_PAGO_PRESENCIAL_PROPIO)
-
-        # Guardia 2: primera inscripción (membresía inicial INACTIVA, sin
+        # Guardia: primera inscripción (membresía inicial INACTIVA, sin
         # ningún pago aprobado). La lectura es `FOR UPDATE` (hallazgo del
         # revisor de #1402): con la lectura sin lock, dos peticiones
         # concurrentes (o una presencial y una aprobación de la cola que se
