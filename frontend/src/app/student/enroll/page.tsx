@@ -831,7 +831,7 @@ function EnrollWizard(): React.ReactElement {
                 tabIndex={selected ? 0 : -1}
                 onKeyDown={(e) => handleChoiceKeyDown(e, index)}
                 onClick={() => updateField("enrollmentType", choice.value)}
-                className={`flex h-full flex-col gap-field rounded-card border p-page text-left transition-colors duration-150 ${
+                className={`flex h-full flex-col gap-field rounded-card border p-page text-left transition-colors duration-fast ${
                   selected
                     ? "border-cata-red bg-paper ring-1 ring-cata-red"
                     : "border-line-2 bg-paper hover:bg-sunken"

@@ -76,7 +76,7 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
               strokeWidth={isHovered ? STROKE_WIDTH + 3 : STROKE_WIDTH}
               strokeDasharray={arcs[i].dashArray}
               strokeDashoffset={arcs[i].dashOffset}
-              className="transition-[stroke-width] duration-150"
+              className="transition-[stroke-width] duration-fast"
               onMouseEnter={() => setHovered(segment.estado)}
               onMouseLeave={() => setHovered((prev) => (prev === segment.estado ? null : prev))}
               onFocus={() => setHovered(segment.estado)}

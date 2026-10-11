@@ -62,7 +62,7 @@ export default function Ring({
           transform={`rotate(-90 ${centre} ${centre})`}
           className={cn(
             TONE_FILL[tone].replaceAll("fill-", "stroke-"),
-            "motion-safe:transition-[stroke-dasharray] motion-safe:duration-300",
+            "motion-safe:transition-[stroke-dasharray] motion-safe:duration-overlay",
           )}
         />
       )}

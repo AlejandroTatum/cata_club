@@ -78,7 +78,7 @@ export default function PhotoViewerDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-coal/95"
+      className="fixed inset-0 z-50 flex animate-overlay-in flex-col bg-coal/95"
       onClick={onClose}
     >
       <div
@@ -86,7 +86,7 @@ export default function PhotoViewerDialog({
         aria-modal="true"
         aria-label="Foto de perfil"
         onClick={(event) => event.stopPropagation()}
-        className="m-auto flex w-full max-w-lg flex-col gap-4 px-4 py-6"
+        className="m-auto flex w-full max-w-lg animate-dialog-in flex-col gap-4 px-4 py-6"
       >
         <div className="flex items-center justify-between gap-3 text-white">
           <h2 className="text-sm font-bold uppercase tracking-caps">Foto de perfil</h2>

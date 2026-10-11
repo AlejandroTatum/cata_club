@@ -227,8 +227,8 @@ describe("design tokens — the three brand type families", () => {
     expect(fontFamily.display?.at(-1)).toBe("sans-serif");
   });
 
-  it("exposes Playfair as the serif voice", () => {
-    expect(fontFamily.serif?.[0]).toBe("var(--font-playfair)");
+  it("has no serif family: the club's voice is Anybody (T14I)", () => {
+    expect(fontFamily.serif).toBeUndefined();
   });
 
   /**
@@ -250,17 +250,16 @@ describe("design tokens — the three brand type families", () => {
     const [size, meta] = fontSize.voice as [string, { lineHeight: string; letterSpacing: string }];
     expect(size).toBe("clamp(20px, 2.4vw, 31px)");
     expect(meta.lineHeight).toBe("1.3");
-    // Normal, not the tightening every other step above `base` carries:
-    // Playfair's high stroke contrast needs its own sidebearings to stay
-    // readable, and this step is read rather than scanned.
-    expect(meta.letterSpacing).toBe("normal");
+    // Flat, not the tightening every other step above `base` carries: the
+    // voice is read rather than scanned.
+    expect(meta.letterSpacing).toBe("0em");
   });
 
-  it("keeps a system fallback behind each of the three", () => {
+  it("keeps a system fallback behind each family", () => {
     // A `var()` that never resolves — a font file that 404s, a variable the
     // layout forgot to mount — falls through to nothing and the browser picks
     // its own default. Each stack has to name what it degrades TO.
-    for (const key of ["sans", "display", "serif"]) {
+    for (const key of ["sans", "display"]) {
       expect(fontFamily[key]?.length, `${key} has no fallback behind the variable`)
         .toBeGreaterThan(1);
     }

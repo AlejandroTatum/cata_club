@@ -13,11 +13,11 @@
  *     be no max-width cap and no bounded min-height on the composition.
  *  2. The headline uses TYPOGRAPHIC DOUBLE QUOTES, never guillemets —
  *     *"esos signos de mayor y menor se ven muy mal"*.
- *  3. The motto is the club's VOICE — Playfair, on the `voice` step. It first
+ *  3. The motto is the club's VOICE — Anybody, on the `voice` step. It first
  *     shipped at 21px (half its intended size, which is what made the screen
  *     read as broken), was corrected to the 46px `display` step, and was still
  *     in the wrong FAMILY: Barlow ExtraBold is the interface face, and this
- *     line is the club talking. Its measure is re-derived from Playfair's own
+ *     line is the club talking. Its measure was derived from the earlier Playfair
  *     widths — see the measure block near the foot of this file.
  *  4. The coal panel is WIDER than the form panel (`flex:1.1` vs `flex:1`),
  *     not an equal half.
@@ -90,43 +90,28 @@ describe("AuthShell", () => {
   });
 
   /**
-   * This assertion changes families, and the reason is that the old one was
-   * measuring the wrong thing correctly.
-   *
-   * It pinned the motto to `display`/`2xl` — the Graduate hero steps — because
-   * the prototype wrote 42px and the scale's nearest neighbours were 46 and
-   * 32. What nobody asked was which FACE. "Formando campeones para la vida" is
-   * the club speaking in first person, which is the one job `DESIGN.md` gives
-   * Playfair (*"la frase que el club le dice a la persona"*), and Playfair was
-   * used in exactly zero files under `src/` — a whole brand family shipped,
-   * loaded on every route, and spent nowhere. The motto was Barlow ExtraBold,
-   * i.e. the interface face shouting.
-   *
-   * `font-normal` is not an oversight either: `playfair-display-600.woff2` is
-   * a single 600 cut declared with no weight descriptor, so a CSS `600` makes
-   * the browser synthesise a bold ON TOP of one that is already there and
-   * thickens the strokes. `StatCard` learned the same lesson for Graduate.
-   *
-   * The size is now one fluid step instead of two fixed ones, which is why
-   * there is no `split:` variant left to assert.
+   * The motto is the club's VOICE and it is Anybody (T14I, owner choice
+   * "Pasarlo a Anybody"): the voice comes from weight and width
+   * (`font-voice`: 700, regular width), not from a second family. It sits on
+   * the fluid `text-voice` step and carries no explicit weight class.
    */
-  it("sets the motto in the club's own voice — Playfair, on the voice step", () => {
+  it("sets the motto in the club's voice — Anybody, on the voice step", () => {
     renderShell();
 
     const headline = screen.getByTestId("auth-headline");
-    expect(headline.className).toContain("font-serif");
+    expect(headline.className).toContain("font-display");
+    expect(headline.className).toContain("font-voice");
     expect(headline.className).toContain("text-voice");
+    expect(headline.className).not.toContain("font-serif");
     expect(headline.className).not.toContain("font-extrabold");
     expect(headline.className).not.toContain("text-display");
     expect(headline).toHaveTextContent("Formando");
   });
 
   it("spends the voice exactly once on the screen", () => {
-    // *"Playfair aparece una vez por pantalla. Una segunda frase en la misma
-    // pantalla significa que ninguna de las dos es énfasis."*
     renderShell();
 
-    expect(document.querySelectorAll(".font-serif")).toHaveLength(1);
+    expect(document.querySelectorAll(".font-voice")).toHaveLength(1);
   });
 
   /**

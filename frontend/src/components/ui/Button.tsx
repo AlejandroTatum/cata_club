@@ -45,8 +45,7 @@ export type ButtonSize = (typeof BUTTON_SIZES)[number];
 // `globals.css`, which dresses every focusable element in the product.
 const BASE =
   "inline-flex items-center justify-center gap-2 whitespace-nowrap border-2 " +
-  "transition-[color,background-color,border-color,box-shadow,transform] duration-150 " +
-  "motion-reduce:transition-none " +
+  "transition-[color,background-color,border-color,transform] duration-fast ease-out-expo " +
   // `.btn[disabled], .btn.off` (:176) — the fade lives in `DISABLED` below.
   "disabled:cursor-not-allowed";
 
@@ -75,13 +74,14 @@ const VARIANT: Record<ButtonVariant, string> = {
     "font-bold bg-ball border-edge text-coal shadow-sticker-sm dark:border-edge-hot " +
     "hover:-translate-x-px hover:-translate-y-px hover:shadow-sticker " +
     "active:translate-x-px active:translate-y-px active:shadow-none " +
-    "motion-reduce:hover:translate-x-0 motion-reduce:hover:translate-y-0",
+    "motion-reduce:hover:translate-x-0 motion-reduce:hover:translate-y-0 " +
+    "motion-reduce:active:translate-x-0 motion-reduce:active:translate-y-0",
   // `.btn` bare — the outlined sticker: paper, coal outline, no shadow. Hover
   // is `sunken`, not `canvas`: a white button standing ON the canvas that
   // hovers TO the canvas dissolves into the page instead of responding.
-  secondary: "font-semibold bg-paper border-edge text-ink hover:bg-sunken dark:border-line-2",
+  secondary: "font-semibold bg-paper border-edge text-ink hover:bg-sunken active:translate-y-px motion-reduce:active:translate-y-0 dark:border-line-2",
   // `.btn.dark` — coal. Secondary-but-emphatic actions ("+ Nuevo miembro").
-  dark: "font-bold bg-coal border-coal text-white hover:bg-coal-2 hover:border-coal-2 dark:border-edge dark:hover:border-edge",
+  dark: "font-bold bg-coal border-coal text-white hover:bg-coal-2 hover:border-coal-2 active:translate-y-px motion-reduce:active:translate-y-0 dark:border-edge dark:hover:border-edge",
   // The third level (D5). It replaces `ghost`, which was `bg-transparent
   // border-transparent` — "no chrome at all" — and was rejected for exactly
   // that: "no me gustan los botones vacíos o sin box".

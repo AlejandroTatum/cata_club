@@ -95,8 +95,8 @@ export default function ReportProblemDialog({ onClose, requestId, capture }: Rep
   }
 
   return (
-    <div role="presentation" data-report-ignore className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/60 sm:items-center sm:p-4">
-      <section role="dialog" aria-modal="true" aria-label="Reportar un problema" className={`flex h-full w-full ${sent ? "max-w-md" : "max-w-5xl"} flex-col overflow-hidden bg-cata-surface text-cata-text shadow-elevated sm:h-auto sm:max-h-[92vh] sm:rounded-xl`}>
+    <div role="presentation" data-report-ignore className="fixed inset-0 z-50 flex animate-overlay-in items-stretch justify-center bg-black/60 sm:items-center sm:p-4">
+      <section role="dialog" aria-modal="true" aria-label="Reportar un problema" className={`flex h-full w-full animate-sheet-in sm:animate-dialog-in ${sent ? "max-w-md" : "max-w-5xl"} flex-col overflow-hidden bg-cata-surface text-cata-text shadow-elevated sm:h-auto sm:max-h-[92vh] sm:rounded-xl`}>
         <header className="flex items-center justify-between border-b border-cata-border px-5 py-3">
           <h2 className="text-xl font-semibold">Reportar un problema</h2>
           <button type="button" onClick={onClose} aria-label="Cerrar" className="rounded-lg p-2 hover:bg-sunken"><X size={ICON.base} aria-hidden="true" /></button>
@@ -187,7 +187,7 @@ export default function ReportProblemDialog({ onClose, requestId, capture }: Rep
         )}
       </section>
       {enlarged && previewUrl && (
-        <div role="presentation" onClick={() => setEnlarged(false)} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4">
+        <div role="presentation" onClick={() => setEnlarged(false)} className="fixed inset-0 z-[60] flex animate-overlay-in items-center justify-center bg-black/80 p-4">
           {/* eslint-disable-next-line @next/next/no-img-element -- local blob: preview */}
           <img src={previewUrl} alt="Captura ampliada" className="max-h-full max-w-full object-contain" />
         </div>

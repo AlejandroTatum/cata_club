@@ -1,22 +1,26 @@
 /**
- * The three type families of the product, loaded once for every route and
- * mapped onto `sans` / `display` / `serif` in `tailwind.config.ts`.
+ * The two type families of the product, loaded once for every route and
+ * mapped onto `sans` / `display` in `tailwind.config.ts`.
  *
  *  - Switzer (`sans`): self-hosted variable woff2 through `next/font/local`,
  *    with its Fontshare license (`app/fonts/FFL.txt`) alongside.
- *  - Anybody (`display`): variable font through `next/font/google`, which Next
- *    downloads at build time and serves from our own origin.
- *  - Playfair Display (`serif`): self-hosted, the editorial voice.
+ *  - Anybody (`display`): self-hosted variable woff2 (weight + width axes)
+ *    through `next/font/local`, with its SIL OFL license
+ *    (`app/fonts/OFL-Anybody.txt`) alongside. Nothing is fetched from a font
+ *    CDN at build time.
  *
- * `display: "swap"` on all three: the fallback renders immediately and the
+ * The club's voice (the auth motto, the enrolment welcome line) is NOT a third
+ * family: it is Anybody at a different weight and width (`.font-voice`). The
+ * landing still loads Playfair for its own motto, declared in `app/page.tsx`.
+ *
+ * `display: "swap"` on both: the fallback renders immediately and the
  * brand face repaints, so the screen is never blank. The fallback stacks in
  * `tailwind.config.ts` keep that reflow small.
  *
  * NOTE: the landing keeps its own `--font-landing-*` declarations in
- * `app/page.tsx`; it owns those variables while it is redesigned in parallel.
+ * `app/page.tsx`, Playfair included; it owns those variables.
  */
 
-import { Anybody } from "next/font/google";
 import localFont from "next/font/local";
 
 /**
@@ -33,34 +37,27 @@ export const switzer = localFont({
 });
 
 /**
- * Display and figures. Anybody is variable in weight and width; only the width
- * axis is requested on top of weight, and no width signature is applied yet:
- * the type scale keeps using it at its default width.
+ * Display and figures. Anybody is variable in weight (100-900) and width
+ * (`wdth` 50-150). The file is the Latin subset (Spanish included) that Google
+ * Fonts serves for Anybody v1.113 to the build's user agent, i.e. what the app
+ * loaded before it was vendored; the license
+ * (`app/fonts/OFL-Anybody.txt`) has to stay next to it. The `font-stretch`
+ * range is declared so the generated @font-face covers the whole width axis;
+ * the type scale then drives it with `font-variation-settings` (see
+ * `.font-display` in `globals.css`).
  */
-export const anybody = Anybody({
-  subsets: ["latin"],
-  weight: "variable",
-  axes: ["wdth"],
+export const anybody = localFont({
+  src: "../app/fonts/Anybody-Variable.woff2",
+  weight: "100 900",
+  declarations: [{ prop: "font-stretch", value: "50% 150%" }],
   variable: "--font-anybody",
   display: "swap",
 });
 
 /**
- * The editorial voice: a pull quote, a motto, the one line on a screen that is
- * meant to be read slowly rather than scanned. 600 rather than 400 because it
- * always appears large, where Playfair's high stroke contrast thins out the
- * regular weight.
- */
-export const playfair = localFont({
-  src: "../../public/fonts/playfair-display-600.woff2",
-  variable: "--font-playfair",
-  display: "swap",
-});
-
-/**
- * The three variable classes, in the order they go on `<html>`. Exported as one
- * string because a layout that mounts two of the three ships a `var()` that
+ * The variable classes, in the order they go on `<html>`. Exported as one
+ * string because a layout that mounts one of the two ships a `var()` that
  * resolves to nothing, and that failure is invisible until someone opens the
  * screen that uses the missing family.
  */
-export const fontVariables = `${switzer.variable} ${anybody.variable} ${playfair.variable}`;
+export const fontVariables = `${switzer.variable} ${anybody.variable}`;

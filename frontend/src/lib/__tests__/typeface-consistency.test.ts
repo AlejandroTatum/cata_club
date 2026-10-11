@@ -9,7 +9,7 @@
  *
  *  · the `2xs` step is size + leading only; tracking is always asked for;
  *  · wide tracking is only written together with `uppercase`;
- *  · no monospace or serif face is reachable outside the declared exceptions.
+ *  · no monospace or serif face is reachable: the club's voice is Anybody.
  *
  * The landing has its own sheet and its own `--font-landing-*` faces.
  */
@@ -42,6 +42,21 @@ function stripComments(text: string): string {
 /** Every string literal that could hold a class list. */
 function classLiterals(code: string): string[] {
   return [...code.matchAll(/"([^"\n]*)"|'([^'\n]*)'|`([^`]*)`/g)].map((m) => m[1] ?? m[2] ?? m[3] ?? "");
+}
+
+/** Stylesheets of the panel (the landing owns its own). */
+function styleFiles(dir: string): string[] {
+  const found: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) {
+      if (entry === "__tests__" || entry === "landing") continue;
+      found.push(...styleFiles(full));
+      continue;
+    }
+    if (/\.css$/.test(entry)) found.push(full);
+  }
+  return found;
 }
 
 const WIDE_TRACKING = /(?<![\w-])tracking-(?:wide|wider|widest|caps|caps-wide)(?![\w-])/;
@@ -104,18 +119,34 @@ describe("typeface consistency", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("the serif face is spent only on the club's voice phrase", () => {
-    const users: string[] = [];
-    for (const file of sourceFiles(SRC)) {
+  it("no serif face is reachable from an authenticated or auth page: the club's voice is Anybody (T14I)", () => {
+    // The landing (app/landing/**, app/page.tsx) loads its own Playfair under
+    // `--font-landing-playfair`; everything else is one sans and one display.
+    const LANDING_ENTRY = "app/page.tsx";
+    const offenders: string[] = [];
+    for (const file of [...sourceFiles(SRC), ...styleFiles(SRC)]) {
+      const path = relative(SRC, file);
+      if (path === LANDING_ENTRY) continue;
       const code = stripComments(readFileSync(file, "utf8"));
-      for (const literal of classLiterals(code)) {
-        if (/(?<![\w-])font-serif(?![\w-])/.test(literal)) {
-          expect(literal).toMatch(/(?<![\w-])text-voice(?![\w-])/);
-          users.push(relative(SRC, file));
-        }
+      if (/playfair|(?<![\w-])font-serif(?![\w-])|\bGeorgia\b|\bserif\b(?!-)/i.test(code.replace(/sans-serif/gi, ""))) {
+        offenders.push(path);
       }
     }
-    expect(users.sort()).toEqual(["app/student/enroll/EnrollConfirmation.tsx", "components/auth/AuthShell.tsx"]);
+    expect(offenders).toEqual([]);
+
+    const families = tailwindConfig.theme?.extend?.fontFamily as Record<string, string[]>;
+    expect(Object.keys(families).sort()).toEqual(["display", "sans"]);
+    expect(JSON.stringify(families)).not.toMatch(/playfair/i);
+  });
+
+  it("the motto and the enrolment welcome line take their voice from Anybody weight and width", () => {
+    for (const path of ["components/auth/AuthShell.tsx", "app/student/enroll/EnrollConfirmation.tsx"]) {
+      const code = stripComments(readFileSync(join(SRC, path), "utf8"));
+      const voice = classLiterals(code).filter((l) => /(?<![\w-])text-voice(?![\w-])/.test(l));
+      expect(voice, path).toHaveLength(1);
+      expect(voice[0], path).toMatch(/(?<![\w-])font-display(?![\w-])/);
+      expect(voice[0], path).toMatch(/(?<![\w-])font-voice(?![\w-])/);
+    }
   });
 
   it("draws no flag emoji and names no emoji font: an OS-dependent glyph is another typeface (RC15)", () => {

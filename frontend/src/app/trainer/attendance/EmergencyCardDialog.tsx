@@ -237,14 +237,14 @@ export default function EmergencyCardDialog({
         aria-hidden="true"
         data-testid="emergency-card-backdrop"
         onClick={onClose}
-        className="absolute inset-0 bg-cata-black/40"
+        className="absolute inset-0 animate-overlay-in bg-cata-black/40"
       />
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="emergency-card-title"
-        className="card relative w-full max-w-md overflow-hidden p-0"
+        className="card relative w-full max-w-md animate-dialog-in overflow-hidden p-0"
       >
         <div className="flex items-center gap-3 border-b border-line bg-state-bad-bg px-5 py-4">
           <span

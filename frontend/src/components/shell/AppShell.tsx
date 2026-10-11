@@ -217,7 +217,7 @@ export const MAIN_CONTENT_ID = "contenido-principal";
 /** The one nav entry that carries a count badge (prototype `_nav-admin.html`). */
 const COUNT_BADGE_HREF = "/payments";
 
-/** The drawer slide-out is `duration-200`; the capture waits slightly longer. */
+/** The drawer slide-out is `duration-base`; the capture waits slightly longer. */
 const DRAWER_CLOSE_MS = 280;
 
 /** Tailwind's `lg` breakpoint — where the sidebar stops being a mobile drawer. */
@@ -710,7 +710,7 @@ export default function AppShell({
       <a
         data-report-ignore
         href={`#${MAIN_CONTENT_ID}`}
-        className="fixed left-4 top-[-100px] z-50 inline-flex min-h-[48px] items-center rounded-ctl bg-cata-red px-5 text-sm font-bold text-white transition-[top] duration-150 focus-visible:top-4"
+        className="fixed left-4 top-[-100px] z-50 inline-flex min-h-[48px] items-center rounded-ctl bg-cata-red px-5 text-sm font-bold text-white transition-[top] duration-fast focus-visible:top-4"
       >
         Saltar al contenido
       </a>
@@ -729,7 +729,7 @@ export default function AppShell({
       <aside
         data-report-ignore={!isDesktopViewport || undefined}
         aria-hidden={drawerHidden || undefined}
-        className={`fixed inset-y-0 left-0 z-40 flex w-[236px] flex-col bg-coal text-white dark:border-r dark:border-line dark:bg-rail transition-[transform,visibility] duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-[236px] flex-col bg-coal text-white dark:border-r dark:border-line dark:bg-rail transition-[transform,visibility] duration-base lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
           collapsed ? "lg:w-[76px]" : ""
         } ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} ${
           drawerHidden ? "invisible" : ""
@@ -882,7 +882,7 @@ export default function AppShell({
       {sidebarOpen && (
         <div
           data-report-ignore
-          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+          className="fixed inset-0 z-30 animate-overlay-in bg-black/40 lg:hidden"
           onClick={(): void => setSidebarOpen(false)}
           aria-hidden="true"
         />
@@ -1113,7 +1113,7 @@ export default function AppShell({
       {/* Command palette — "go to" navigation search, role-aware */}
       {paletteOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 px-4 pt-24"
+          className="fixed inset-0 z-50 flex animate-overlay-in items-start justify-center bg-black/50 px-4 pt-24"
           onClick={(): void => setPaletteOpen(false)}
         >
           <div
@@ -1122,7 +1122,7 @@ export default function AppShell({
             aria-modal="true"
             aria-label="Buscador de secciones"
             onClick={(e): void => e.stopPropagation()}
-            className="w-full max-w-md overflow-hidden rounded-card bg-paper shadow-elevated dark:bg-popover"
+            className="w-full max-w-md animate-dialog-in overflow-hidden rounded-card bg-paper shadow-elevated dark:bg-popover"
           >
             <div className="flex items-center gap-2.5 border-b border-line px-4 py-3.5">
               <Search size={ICON.sm} strokeWidth={2} className="shrink-0 text-ink-3" aria-hidden="true" />

@@ -2129,14 +2129,14 @@ export default function PaymentsPage(): React.ReactElement {
               // #465, so the backdrop stays decorative instead of gaining
               // fake button semantics (role/tabIndex/onKeyDown) for a
               // non-essential interaction.
-              className="fixed inset-0 z-50 flex items-center justify-center bg-coal/60 backdrop-blur-sm"
+              className="fixed inset-0 z-50 flex animate-overlay-in items-center justify-center bg-coal/60 backdrop-blur-sm"
               role="dialog"
               aria-modal="true"
               aria-label="Visor de comprobante"
             >
               <div
                 ref={voucherPanelRef}
-                className="relative mx-4 flex h-[90vh] w-full max-w-4xl flex-col card overflow-hidden shadow-elevated"
+                className="relative mx-4 flex h-[90vh] w-full max-w-4xl animate-dialog-in flex-col card overflow-hidden shadow-elevated"
                 /* The panel is a layout box, not a control: its only handler
                    keeps a click INSIDE the sheet from reaching the backdrop's
                    close handler above. `role="none"` says that out loud, so
