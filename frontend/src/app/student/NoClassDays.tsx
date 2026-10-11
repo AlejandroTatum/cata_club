@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { CalendarOff } from "lucide-react";
-import { InfoPanel } from "@/components/ui";
 import { clubIsoDate } from "@/lib/club-date";
 import { ICON } from "@/lib/icon-size";
 import { formatNoClassRange, upcomingNoClassDays } from "@/lib/no-class-days";
 import { fetchDiasSinClase, type DiaSinClase } from "@/services/api";
+import CardHeader from "./CardHeader";
 
 /**
  * The club's upcoming no-class days (issue #1665), for signed-in members only.
@@ -37,10 +37,11 @@ export default function NoClassDays(): React.ReactElement | null {
   if (days.length === 0) return null;
 
   return (
-    <InfoPanel title="Días sin clase" collapsible={false}>
-      <ul className="flex flex-col gap-2">
+    <section aria-label="Días sin clase" className="card flex flex-col overflow-hidden">
+      <CardHeader title="Días sin clase" subtitle="Feriados y suspensiones publicados por el club." />
+      <ul>
         {days.map((day) => (
-          <li key={day.id} className="flex items-start gap-2">
+          <li key={day.id} className="flex items-start gap-2 border-t border-line px-5 py-3.5 text-sm text-ink-2">
             <CalendarOff size={ICON.sm} className="mt-0.5 shrink-0 text-ink-3" aria-hidden="true" />
             <span className="min-w-0">
               <span className="font-semibold text-ink">{formatNoClassRange(day)}</span>
@@ -50,6 +51,6 @@ export default function NoClassDays(): React.ReactElement | null {
           </li>
         ))}
       </ul>
-    </InfoPanel>
+    </section>
   );
 }
