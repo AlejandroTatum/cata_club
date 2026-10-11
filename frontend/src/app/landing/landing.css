@@ -76,7 +76,15 @@
      `--landing-action`), `line` the sticker edge and `drop` / `drop-red`
      the hard offset shadows. */
   --landing-card: var(--landing-surface-base);
-  --landing-action-ink: var(--landing-brand-red);
+  /* Red as TEXT. A step deeper than the fill (#d92128 reaches only 4.32:1 on the
+     warm stats band, #d11f26 4.61:1) so the eyebrows clear AA on every band. */
+  --landing-action-ink: #d11f26;
+  /* Quiet text on the warm bands (the empty-schedule note): 4.57:1 on
+     #f1eee9, where --landing-text-muted-base reaches 4.18:1. */
+  --landing-text-muted-strong: #656c79;
+  /* Pale yellow wash: the FAQ band, the hover fill, the schedule help tile. */
+  --landing-tint: var(--landing-brand-yellow-pale);
+  --landing-wash: var(--landing-brand-yellow-pale);
   --landing-line: var(--landing-brand-black);
   --landing-drop: var(--landing-brand-black);
   --landing-drop-red: var(--landing-brand-red);
@@ -88,36 +96,43 @@
   font-family: var(--font-landing-barlow), system-ui, sans-serif;
 }
 
-/* Dark landing (S11). The same names, a second set of values, applied while the
-   root layout's nonce'd script has put `data-theme="dark"` on <html> (the app
-   shares the `cata_theme` key, so the choice follows the visitor between the
-   landing and the panel). Same principles as the app's dark palette:
-   - an elevation ladder, coal < page < band < card, so a box is told apart by
-     its surface and not by a bright outline;
-   - quiet edges: the 2px sticker outline stays, but in a dim slate, and the
-     hard offset shadows go near-black (and a deeper red) instead of white;
-   - no glare on saturated blocks: the red and yellow FILLS are one step
-     calmer, while red and yellow used as TEXT are lifted to clear AA;
+/* Dark landing (S11, redone for S14). The same names, a second set of values,
+   applied while the root layout's nonce'd script has put `data-theme="dark"` on
+   <html> (the app shares the `cata_theme` key). The first pass only swapped
+   tokens and lost the sticker identity; this one keeps the language and changes
+   its materials, the way a night match keeps the same hall:
+   - an elevation ladder, coal < page < band < card, and the sections alternate
+     page / band so no ground is also a card;
+   - the sticker edge stays a real 2px outline, in slate (>=3:1 on page, band
+     and card), never white; where a box is a brand FILL its edge is coal (see
+     part 2), because a slate edge on red or yellow is what read as glare;
+   - the hard offset shadow stays graphic: a lifted slate block under dark
+     surfaces, a deeper brand red where the light page uses red;
+   - the brand does not swap: the yellow is the same #ffd600 as in light, the
+     red one step calmer on the big blocks only. Large yellow AREAS become dark
+     cards with a yellow edge and number, so the yellow is a signal, not a wall;
    - `--landing-surface` (white) and the coal fills are untouched: they are the
      "text on a brand block" and "inverse block" colours in both themes. */
 html[data-theme="dark"] .landing-page {
-  --landing-brand-red: #b81d24;
-  --landing-brand-red-strong: #8f1519;
-  --landing-brand-yellow: #d9b000;
-  --landing-brand-yellow-pale: #2e2a14;
+  --landing-brand-red: #c9212a;
+  --landing-brand-red-strong: #a11d22;
   --landing-brand-fuchsia-strong: #ff7db0;
-  --landing-bg-base: #151519;
-  --landing-stats-bg: #1c1c22;
+  --landing-bg-base: #131316;
+  --landing-band: #1a1a1f;
+  --landing-stats-bg: #1a1a1f;
+  --landing-tint: #131316;
+  --landing-wash: #30303a;
   --landing-text-base: #e4e4ea;
   --landing-text-muted-base: #b0b0bd;
-  --landing-border-base: #2f2f38;
-  --landing-text-strong: #ededf1;
+  --landing-text-muted-strong: #b0b0bd;
+  --landing-border-base: #34343e;
+  --landing-text-strong: #f2f2f5;
   --landing-focus: #f2f2f5;
-  --landing-card: #212128;
-  --landing-action-ink: #ff7b82;
-  --landing-line: #34343d;
-  --landing-drop: #08080a;
-  --landing-drop-red: #7d1317;
+  --landing-card: #24242b;
+  --landing-action-ink: #ff6b72;
+  --landing-line: #777785;
+  --landing-drop: #3d3d49;
+  --landing-drop-red: #a11d22;
 }
 
 .landing-page *, .landing-page *::before, .landing-page *::after { box-sizing: border-box; }
@@ -193,7 +208,7 @@ html[data-theme="dark"] .landing-page {
 .landing-ticker-track:hover { animation-play-state: paused; }
 .landing-ticker-copy { display: flex; width: max-content; min-width: 100vw; flex: none; justify-content: space-around; gap: 44px; padding-inline: 22px; }
 .landing-ticker-item { display: inline-flex; align-items: center; gap: 18px; white-space: nowrap; font-size: 13px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; }
-.landing-ticker-item b { color: var(--landing-action-ink); font-size: 16px; }
+.landing-ticker-item b { color: var(--landing-brand-red); font-size: 16px; }
 @keyframes landing-ticker-marquee { to { transform: translateX(-50%); } }
 
 /* The carousel is the hero's right-hand stage: absolutely positioned so the
@@ -511,7 +526,7 @@ html[data-theme="dark"] .landing-page {
 .landing-carousel-wrap::before { left: 0; background: linear-gradient(90deg, var(--landing-background), transparent); }
 .landing-carousel-wrap::after { right: 0; background: linear-gradient(270deg, var(--landing-background), transparent); }
 .landing-schedule { background: var(--landing-card); }
-.landing-schedule-status { margin: 0; color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 17px; }
+.landing-schedule-status { margin: 0; color: var(--landing-text-muted-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: 17px; }
 
 /* Proposal C, "todo lado a lado": every category is a card on screen at once,
    led by the age of its players. The age bar draws each category's ages on
@@ -910,7 +925,7 @@ html[data-theme="dark"] .landing-page {
    summary, the answer sits in the SAME card, a chevron shows open/close) in
    CataClub colours. Nothing here clips or fixes a height: the answer is plain
    flow content inside the <details>, whatever its length or the viewport. */
-.landing-faq { display: grid; grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr); align-items: start; gap: 32px 48px; background: var(--landing-brand-yellow-pale); }
+.landing-faq { display: grid; grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr); align-items: start; gap: 32px 48px; background: var(--landing-tint); }
 .landing-faq .landing-section-header { position: relative; padding: 28px; overflow: hidden; border: 2px solid var(--landing-line); border-radius: 22px; background: var(--landing-card); box-shadow: 6px 6px 0 var(--landing-drop-red); }
 /* Decorative question mark; the empty alt keeps it out of the accessibility tree. */
 .landing-faq .landing-section-header::after { content: "?" / ""; position: absolute; right: 18px; top: 50%; transform: translateY(-50%); color: var(--landing-brand-yellow); font-family: var(--font-landing-barlow), sans-serif; font-size: 150px; font-weight: 800; line-height: 1; pointer-events: none; }
@@ -920,7 +935,7 @@ html[data-theme="dark"] .landing-page {
 .landing-faq-list details[open] { box-shadow: 4px 4px 0 var(--landing-drop-red); }
 .landing-faq-list summary { display: flex; min-height: 64px; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px 14px 20px; border-radius: 16px; color: var(--landing-text-strong); font-size: 19px; font-weight: 700; line-height: 1.25; list-style: none; cursor: pointer; }
 .landing-faq-list summary::-webkit-details-marker { display: none; }
-.landing-faq-list summary:hover { background: var(--landing-brand-yellow-pale); }
+.landing-faq-list summary:hover { background: var(--landing-wash); }
 .landing-faq-list summary:focus-visible { outline: 3px solid var(--landing-focus); outline-offset: 2px; }
 .landing-faq-list details[open] summary { border-bottom-right-radius: 0; border-bottom-left-radius: 0; }
 .landing-faq-list summary::after { content: ""; flex: none; width: 36px; height: 36px; border: 2px solid var(--landing-line); border-radius: 50%; background: var(--landing-highlight) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23111111' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / 20px 20px no-repeat; }
@@ -1064,7 +1079,7 @@ html[data-theme="dark"] .landing-page {
 .landing-schedule-time { font-weight: 800; }
 .landing-schedule-cta { border: var(--landing-sticker-edge); box-shadow: 3px 3px 0 var(--landing-drop); }
 .landing-schedule-cta:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--landing-drop); }
-.landing-schedule-tile.landing-schedule-help { border: var(--landing-sticker-edge); background: var(--landing-brand-yellow-pale); box-shadow: var(--landing-sticker-lift); }
+.landing-schedule-tile.landing-schedule-help { border: var(--landing-sticker-edge); background: var(--landing-wash); box-shadow: var(--landing-sticker-lift); }
 .landing-schedule-help h3 { padding: 0; border: 0; background: none; color: var(--landing-text-strong); box-shadow: none; font-size: 28px; }
 .landing-schedule-help a { border: var(--landing-sticker-edge); background: var(--landing-third-party-whatsapp); color: var(--landing-ink); box-shadow: 3px 3px 0 var(--landing-drop); }
 
@@ -1095,7 +1110,7 @@ html[data-theme="dark"] .landing-page {
 .landing-contact-numbers, .landing-contact-social { flex-direction: column; align-items: flex-start; gap: 10px; }
 .landing-contact a { text-decoration: none; }
 .landing-contact-numbers a, .landing-contact-social a { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: var(--landing-sticker-edge); border-radius: 12px; background: var(--landing-card); font-size: 16px; box-shadow: 3px 3px 0 var(--landing-drop); transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease; }
-.landing-contact-numbers a:hover, .landing-contact-social a:hover { color: var(--landing-text-strong); background: var(--landing-brand-yellow-pale); transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--landing-drop); }
+.landing-contact-numbers a:hover, .landing-contact-social a:hover { color: var(--landing-text-strong); background: var(--landing-wash); transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--landing-drop); }
 .landing-contact a.landing-contact-action { min-height: 48px; padding: 0 20px; border: var(--landing-sticker-edge); border-radius: 999px; background: var(--kind-bg); color: var(--kind-ink); font-size: 13px; box-shadow: 4px 4px 0 var(--landing-drop); transition: transform 160ms ease, box-shadow 160ms ease; }
 .landing-contact a.landing-contact-action svg { width: 19px; height: 19px; }
 .landing-contact a.landing-contact-action:hover { color: var(--kind-ink); transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--landing-drop); }
@@ -1184,10 +1199,40 @@ html[data-theme="dark"] .landing-page {
   .landing-mobile-bar { border-top: var(--landing-sticker-edge); }
 }
 
-/* Dark landing, part 2: the few places that name a light-only colour. */
+/* Dark landing, part 2: where a rule names a light-only colour, and the
+   places that need a different answer on a brand fill than on a dark surface. */
 html[data-theme="dark"] .landing-logo img { background: var(--landing-surface); }
-html[data-theme="dark"] .landing-values { background: color-mix(in srgb, var(--landing-highlight) 12%, var(--landing-bg-base)); }
+
+/* Alternate page / band so a section's ground is never also a card's surface. */
+html[data-theme="dark"] :is(.landing-section#nosotros, .landing-stats, .landing-schedule, .landing-steps, .landing-location) { background: var(--landing-bg-base); }
+html[data-theme="dark"] :is(.landing-values, .landing-gallery, .landing-prices, .landing-faq, .landing-sponsors) { background: var(--landing-band); }
+html[data-theme="dark"] .landing-gallery .landing-carousel-wrap::before { background: linear-gradient(90deg, var(--landing-band), transparent); }
+html[data-theme="dark"] .landing-gallery .landing-carousel-wrap::after { background: linear-gradient(270deg, var(--landing-band), transparent); }
 html[data-theme="dark"] .landing-gallery::before, html[data-theme="dark"] .landing-schedule::before { background-image: radial-gradient(circle, color-mix(in srgb, var(--landing-surface) 7%, transparent) 1.4px, transparent 1.4px); }
+html[data-theme="dark"] .landing-sponsors { border-top-color: var(--landing-highlight); }
+/* The sponsors copy was coal-on-yellow; on the dark band it reads as quiet text and a yellow rule. */
+html[data-theme="dark"] .landing-sponsors-head { color: var(--landing-text-muted); }
+html[data-theme="dark"] .landing-sponsors-head::before { background: var(--landing-highlight); }
+html[data-theme="dark"] .landing-sponsors-status { color: var(--landing-text-muted); }
+html[data-theme="dark"] .landing-sponsor { box-shadow: 0 0 0 2px var(--landing-line), 6px 6px 0 var(--landing-drop); }
+
+/* On the red hero and the red motto band every edge and shadow is coal, as in light. */
+html[data-theme="dark"] :is(.landing-hero, .landing-motto) { --landing-line: var(--landing-brand-black); --landing-drop: var(--landing-brand-black); }
+/* A brand FILL (red, yellow, white, green) keeps a coal edge on a dark page. */
+html[data-theme="dark"] :is(.landing-hero-accent, .landing-hero-badge, .landing-pillars .landing-index, .landing-stat:nth-child(3n + 1), .landing-price:nth-child(3n + 1), .landing-contact-icon, .landing-contact a.landing-contact-action, .landing-slide-title, .landing-gallery-nav button, .landing-schedule-cta, .landing-schedule-tile h3, .landing-schedule-help a, .landing-footer-social a, .landing-nav-links a.active, .landing-button, .landing-logo img, .landing-footer-brand > div > span:first-child) { --landing-line: var(--landing-brand-black); }
+html[data-theme="dark"] .landing-steps-list li:not(:nth-child(3n))::before, html[data-theme="dark"] .landing-faq-list summary::after { --landing-line: var(--landing-brand-black); }
+
+/* The big yellow blocks become dark cards with a yellow edge and a yellow number. */
+html[data-theme="dark"] .landing-stat:nth-child(3n + 2) { --stat-bg: var(--landing-card); --stat-fg: var(--landing-text-strong); --stat-accent: var(--landing-highlight); --stat-shadow: #7a6400; --landing-line: var(--landing-highlight); }
+html[data-theme="dark"] .landing-stats .landing-stat:nth-child(3n + 2) strong { color: var(--stat-accent); }
+html[data-theme="dark"] .landing-price:nth-child(3n + 2) { --price-bg: var(--landing-card); --price-fg: var(--landing-text-strong); --price-accent: var(--landing-highlight); --price-shadow: #7a6400; --landing-line: var(--landing-highlight); }
+
+/* The coal scoreboard tiles get the slate edge a dark surface needs. */
+html[data-theme="dark"] .landing-tablero-tile { box-shadow: inset 0 0 0 2px var(--landing-line); }
+html[data-theme="dark"] .landing-slide { box-shadow: 8px 8px 0 #7a6400; }
+html[data-theme="dark"] .landing-map { border-color: var(--landing-line); }
+/* A hard yellow offset behind dark-surface headings buzzes; the red offset keeps the sticker without the glare. */
+html[data-theme="dark"] :is(.landing-gallery, .landing-schedule) .landing-section-header h2 { text-shadow: 3px 3px 0 var(--landing-drop-red); }
 
 /* The map is the one bright, unthemed block on the page: dim its tiles a step so it sits in the dark ladder instead of glaring (the pins and labels stay legible). */
 html[data-theme="dark"] .landing-map .leaflet-tile-pane { filter: brightness(0.72) contrast(1.05) saturate(0.8); }

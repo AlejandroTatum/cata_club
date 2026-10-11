@@ -152,3 +152,10 @@ describe("BackLink — optional onClick", () => {
     expect(() => render(<BackLink href="/members" />)).not.toThrow();
   });
 });
+
+describe("BackLink — thumb floor on a narrow window (T14 RC5)", () => {
+  it("is 44px tall below md by viewport, not only for a coarse pointer", () => {
+    render(<BackLink href="/payments" />);
+    expect(screen.getByRole("link", { name: /volver a pagos/i }).className).toMatch(/max-md:min-h-11/);
+  });
+});

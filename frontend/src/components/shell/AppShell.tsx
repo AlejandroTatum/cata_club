@@ -993,8 +993,10 @@ export default function AppShell({
         </div>
 
         {/* `.canvas` — the page header row belongs to the shell, above `<main>`.
-            The extra bottom padding clears the fixed tab bar; without it the
-            last row of every admin list sits under it.
+            The extra bottom padding clears the fixed tab bar (62px) AND the
+            report launcher above it (16px gap + 44px + 16px, see
+            `ReportProblemFab`); without it the last row of every list sits
+            under one of them. 142px = 62 + 16 + 44 + 16 + 4; 80px without tabs.
 
             `pt-3`, was `pt-6`: with the divider removed the title no longer
             opens a second slab, so it only needs to clear the utility row —
@@ -1002,7 +1004,7 @@ export default function AppShell({
             margin. */}
         <div
           className={`flex flex-1 flex-col gap-page px-4 pt-3 sm:px-[26px] ${
-            showMobileTabs ? "pb-[78px] lg:pb-8" : "pb-8"
+            showMobileTabs ? "pb-[142px] lg:pb-20" : "pb-20"
           }`}
         >
           {/* The page's back control (#1396) — see `AppShellProps.back`. It

@@ -116,7 +116,11 @@ describe("landing dark palette", (): void => {
     expect(LIGHT["--landing-surface-base"]).toBe("#ffffff");
     expect(LIGHT["--landing-text-base"]).toBe("#1f2937");
     expect(LIGHT["--landing-card"]).toBe("var(--landing-surface-base)");
-    expect(LIGHT["--landing-action-ink"]).toBe("var(--landing-brand-red)");
+    // Red as text is one step deeper than the fill, the smallest change that
+    // clears AA on the warm stats band (S15); the fill itself is untouched.
+    expect(LIGHT["--landing-action-ink"]).toBe("#d11f26");
+    expect(contrastRatio("#d11f26", "#f1eee9")).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(LIGHT["--landing-text-muted-strong"], "#f1eee9")).toBeGreaterThanOrEqual(4.5);
     expect(LIGHT["--landing-line"]).toBe("var(--landing-brand-black)");
     expect(LIGHT["--landing-drop"]).toBe("var(--landing-brand-black)");
   });
@@ -148,17 +152,45 @@ describe("landing dark palette", (): void => {
     expect(contrastRatio(hex("--landing-brand-yellow"), hex("--landing-brand-red"))).toBeGreaterThanOrEqual(3);
   });
 
-  it("does not glare: the saturated fills are quieter than their light-mode versions", (): void => {
-    expect(lightness(hex("--landing-brand-yellow"))).toBeLessThan(lightness(hex("--landing-brand-yellow", LIGHT)));
-    expect(lightness(hex("--landing-brand-red"))).toBeLessThan(lightness(hex("--landing-brand-red", LIGHT)));
+  it("does not swap the brand: same yellow in both themes, red only a step calmer on the big blocks", (): void => {
+    expect(hex("--landing-brand-yellow")).toBe(hex("--landing-brand-yellow", LIGHT));
+    const red = hex("--landing-brand-red");
+    expect(red).not.toBe(hex("--landing-brand-red", LIGHT));
+    // Still unmistakably the brand red: close to the light value, never a maroon.
+    expect(lightness(red)).toBeGreaterThan(lightness(hex("--landing-brand-red", LIGHT)) * 0.85);
   });
 
-  it("makes the sticker edge quiet and the hard shadow darker than the page", (): void => {
-    const page = lightness(hex("--landing-bg-base"));
-    expect(lightness(hex("--landing-drop"))).toBeLessThan(page);
-    // A quiet edge: visible against the card, never a bright outline.
-    expect(contrastRatio(hex("--landing-line"), hex("--landing-card"))).toBeLessThan(2);
-    expect(lightness(hex("--landing-line"))).toBeLessThan(lightness(hex("--landing-text-base")) / 2);
+  it("keeps the sticker edge a real outline (3:1 on page, band and card) and the shadow a visible block", (): void => {
+    for (const ground of ["--landing-bg-base", "--landing-stats-bg", "--landing-card"]) {
+      expect(contrastRatio(hex("--landing-line"), hex(ground)), `edge on ${ground}`).toBeGreaterThanOrEqual(3);
+    }
+    // ...but quieter than the text: an outline, not a white glare.
+    expect(lightness(hex("--landing-line"))).toBeLessThan(lightness(hex("--landing-text-base")) * 0.7);
+    // The hard shadow is a lifted slate block, lighter than the page it falls on.
+    expect(lightness(hex("--landing-drop"))).toBeGreaterThan(lightness(hex("--landing-bg-base")));
+    expect(lightness(hex("--landing-drop"))).toBeLessThan(lightness(hex("--landing-card")) * 2);
+    expect(contrastRatio(hex("--landing-drop-red"), hex("--landing-bg-base"))).toBeGreaterThanOrEqual(2);
+  });
+
+  it("never lets a section ground be the card's own surface or an olive yellow wash", (): void => {
+    const dark = cssNoComments.slice(cssNoComments.indexOf('html[data-theme="dark"] .landing-logo img'));
+    const rule = (selector: string): string => dark.slice(dark.indexOf(selector), dark.indexOf("}", dark.indexOf(selector)));
+    expect(rule('html[data-theme="dark"] :is(.landing-section#nosotros')).toContain("background: var(--landing-bg-base)");
+    expect(rule('html[data-theme="dark"] :is(.landing-values')).toContain("background: var(--landing-band)");
+    // The sponsors, values and FAQ bands are not a wall of yellow (or a brown mix of it) any more.
+    expect(rule('html[data-theme="dark"] :is(.landing-values')).not.toMatch(/highlight|yellow/);
+    expect(cssNoComments).not.toMatch(/html\[data-theme="dark"\] \.landing-values \{[^}]*color-mix/);
+    expect(rule('html[data-theme="dark"] .landing-sponsors-status')).toContain("color: var(--landing-text-muted)");
+    expect(DARK["--landing-brand-yellow-pale"]).toBeUndefined();
+    expect(DARK["--landing-card"]).not.toBe(DARK["--landing-bg-base"]);
+  });
+
+  it("turns the big yellow blocks into dark cards with a yellow edge, and keeps a coal edge on brand fills", (): void => {
+    expect(cssNoComments).toMatch(/html\[data-theme="dark"\] \.landing-stat:nth-child\(3n \+ 2\) \{[^}]*--stat-bg: var\(--landing-card\)[^}]*--landing-line: var\(--landing-highlight\)/);
+    expect(cssNoComments).toMatch(/html\[data-theme="dark"\] \.landing-price:nth-child\(3n \+ 2\) \{[^}]*--price-bg: var\(--landing-card\)/);
+    expect(cssNoComments).toMatch(/html\[data-theme="dark"\] :is\([^{]*\.landing-stat:nth-child\(3n \+ 1\)[^{]*\.landing-button[^{]*\) \{ --landing-line: var\(--landing-brand-black\); \}/);
+    // The yellow on a card and the white on the calmer red both clear the bar.
+    expect(contrastRatio(hex("--landing-brand-yellow"), hex("--landing-card"))).toBeGreaterThanOrEqual(7);
   });
 });
 

@@ -128,6 +128,11 @@ const NO_HEADER_ACTION: Record<string, string> = {
   // que imprimir, y «Imprimir N carnets» solo existe con la hoja cargada, junto
   // a la cuenta de hojas que anuncia. Un botón en el encabezado faltaría la
   // mayor parte del tiempo (selector, carga, error) y apuntaría lejos de ella.
+  // The notice a signed-in visitor gets instead of the wizard (REG-11, T14
+  // RC13): its two buttons are one either/or decision, explained by the
+  // sentence above them. Lifting "Agregar jugador" to the header would separate
+  // it from the logout alternative it is being chosen against.
+  "app/student/enroll/EnrollSignedInNotice.tsx": "the two buttons are one either/or decision explained by the notice's own copy",
   "app/members/carnets/page.tsx": "the print action needs the loaded sheet and sits beside its sheet count (#1670)",
 };
 

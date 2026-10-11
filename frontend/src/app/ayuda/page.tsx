@@ -274,7 +274,7 @@ export default function AyudaPage(): React.ReactElement {
           </ul>
         </InfoPanel>
         <InfoPanel title="Accesos rápidos">
-          <RoleShortcuts shortcuts={quickLinks} label="Accesos rápidos" className="sm:grid-cols-1" />
+          <RoleShortcuts shortcuts={quickLinks} label="Accesos rápidos" columns={1} />
         </InfoPanel>
       </div>
       </div>
