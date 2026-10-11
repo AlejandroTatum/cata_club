@@ -22,7 +22,14 @@
  *   POST /auth/refresh  — application/json { refresh_token } in the BODY, NOT
  *                         an Authorization header — a refresh token is
  *                         intentionally not a general bearer credential.
- *                         -> { access_token, token_type } (no refresh_token)
+ *                         -> { access_token, refresh_token, token_type }
+ *                         The refresh token is ROTATED on every use: the one
+ *                         just sent stops working shortly after (a short grace
+ *                         window covers concurrent requests), so every caller
+ *                         MUST persist the returned `refresh_token` cookie
+ *                         together with the new access cookie (see
+ *                         `refreshedTokenCookies`). An older backend omits
+ *                         `refresh_token`; then the existing cookie is kept.
  *   POST /auth/logout   — Authorization: Bearer <access_token>. Revokes the
  *                         session server-side: bumps the user's session epoch,
  *                         so every access AND refresh token issued before it
@@ -92,18 +99,69 @@ function baseCookieOptions(maxAge: number): {
  * Max-Age is derived from each token's own `exp` claim when decodable,
  * falling back to the documented lifetime otherwise. Tokens are never
  * echoed into the JSON body — only set as HttpOnly cookies.
+ *
+ * An absent `refreshToken` leaves the browser's refresh cookie exactly as it
+ * is (no Set-Cookie at all — neither overwritten nor cleared).
  */
 export function setAuthCookies(
   response: NextResponse,
   tokens: { accessToken: string; refreshToken?: string },
 ): void {
+  writeAuthCookies(response.cookies, tokens);
+}
+
+/** Anything with a `cookies.set`-shaped method: a `NextResponse`'s cookies or the `next/headers` request store. */
+export interface AuthCookieJar {
+  set(name: string, value: string, options: ReturnType<typeof baseCookieOptions>): unknown;
+}
+
+/** The cookie writes behind `setAuthCookies`, for any jar (see `AuthCookieJar`). */
+export function writeAuthCookies(jar: AuthCookieJar, tokens: { accessToken: string; refreshToken?: string }): void {
   const accessMaxAge = maxAgeFromExp(tokens.accessToken) ?? ACCESS_TOKEN_MAX_AGE_SECONDS;
-  response.cookies.set(ACCESS_TOKEN_COOKIE, tokens.accessToken, baseCookieOptions(accessMaxAge));
+  jar.set(ACCESS_TOKEN_COOKIE, tokens.accessToken, baseCookieOptions(accessMaxAge));
 
   if (tokens.refreshToken) {
     const refreshMaxAge = maxAgeFromExp(tokens.refreshToken) ?? REFRESH_TOKEN_MAX_AGE_SECONDS;
-    response.cookies.set(REFRESH_TOKEN_COOKIE, tokens.refreshToken, baseCookieOptions(refreshMaxAge));
+    jar.set(REFRESH_TOKEN_COOKIE, tokens.refreshToken, baseCookieOptions(refreshMaxAge));
   }
+}
+
+/** A refreshed access token and the refresh token rotated by the same backend call. */
+export interface RefreshedTokens {
+  refreshedAccessToken?: string;
+  refreshedRefreshToken?: string;
+}
+
+/**
+ * The refreshed pair of the first source that actually refreshed, or `{}`.
+ * Routes that fan out several `backendFetchAuthed` calls use it so the access
+ * and refresh cookies always come from ONE backend response, never mixed.
+ */
+export function pickRefreshed(...sources: Array<RefreshedTokens | false | null | undefined>): RefreshedTokens {
+  for (const source of sources) {
+    if (source && source.refreshedAccessToken) {
+      return { refreshedAccessToken: source.refreshedAccessToken, refreshedRefreshToken: source.refreshedRefreshToken };
+    }
+  }
+  return {};
+}
+
+/**
+ * Cookie payload for a response that carries a token refreshed by
+ * `backendFetchAuthed` (or any `backendRefresh` caller): the new access token
+ * plus the rotated refresh token when the backend sent one. Spread it into
+ * `setAuthCookies` so both cookies land in the same response — the refresh
+ * token rotates on every use, so dropping it would strand the browser with a
+ * refresh token that stops working. `refreshToken` stays undefined for an
+ * older backend that does not rotate, which keeps the existing cookie.
+ *
+ * Call it only once `refreshedAccessToken` is known to be set.
+ */
+export function refreshedTokenCookies(refreshed: RefreshedTokens): { accessToken: string; refreshToken?: string } {
+  if (!refreshed.refreshedAccessToken) {
+    throw new Error("refreshedTokenCookies requires a refreshed access token.");
+  }
+  return { accessToken: refreshed.refreshedAccessToken, refreshToken: refreshed.refreshedRefreshToken };
 }
 
 /** Clear both auth cookies (Max-Age 0). Always safe to call, even if they were never set. */
@@ -254,6 +312,8 @@ export interface BackendPrimerPago {
 
 export interface BackendRefreshResponse {
   access_token: string;
+  /** The rotated refresh token. Absent when talking to a backend that does not rotate yet. */
+  refresh_token?: string;
   token_type: string;
 }
 
@@ -712,7 +772,17 @@ export async function backendRefresh(
   if (!isBackendRefreshResponse(json)) {
     return { ok: false, error: { code: "invalid_response", message: "Respuesta de actualización con forma inesperada." } };
   }
-  return { ok: true, data: json };
+  // Only a non-empty string counts as a rotated token; anything else is
+  // treated as "not rotated" so the existing refresh cookie is kept.
+  const rotated = json.refresh_token;
+  return {
+    ok: true,
+    data: {
+      access_token: json.access_token,
+      token_type: json.token_type,
+      ...(typeof rotated === "string" && rotated.length > 0 ? { refresh_token: rotated } : {}),
+    },
+  };
 }
 
 /**

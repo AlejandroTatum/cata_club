@@ -24,6 +24,7 @@
 
 import type { NextRequest } from "next/server";
 import { backendFetchAuthed, type BackendProxyResult } from "@/lib/server/backend-client";
+import { pickRefreshed, type RefreshedTokens } from "@/lib/server/auth";
 
 /**
  * Hard bound on pages drained from one source. At the backend's 200-row cap
@@ -43,11 +44,11 @@ export interface PaginatedPage<T> {
  * a non-2xx page), so a caller that must surface the cause — `/api/members`
  * answers with the backend's own status for the persona list — can do so.
  * It is absent when the drain failed for the bound alone.
- * `refreshedAccessToken` is the last refreshed access token any page saw; a
- * caller that sets cookies from its own response must forward it.
+ * `refreshedAccessToken`/`refreshedRefreshToken` are the last refreshed pair any
+ * page saw; a caller that sets cookies from its own response must forward them.
  */
 export type PagedFetchResult<T> =
-  | { ok: true; items: T[]; refreshedAccessToken?: string }
+  | ({ ok: true; items: T[] } & RefreshedTokens)
   | { ok: false; failure?: BackendProxyResult };
 
 export async function fetchAllPages<T>(
@@ -58,17 +59,17 @@ export async function fetchAllPages<T>(
   const separator = path.includes("?") ? "&" : "?";
   const items: T[] = [];
   let skip = 0;
-  let refreshedAccessToken: string | undefined;
+  let refreshed: RefreshedTokens = {};
 
   for (let page = 0; page < MAX_PAGES_PER_SOURCE; page += 1) {
     const result = await backendFetchAuthed(request, `${path}${separator}skip=${skip}&limit=${limit}`);
     if (!result.ok || !result.response.ok) return { ok: false, failure: result };
-    if (result.refreshedAccessToken) refreshedAccessToken = result.refreshedAccessToken;
+    refreshed = pickRefreshed(result, refreshed);
 
     const body = (await result.response.json()) as PaginatedPage<T>;
     items.push(...body.items);
     if (body.items.length < limit || items.length >= body.total) {
-      return { ok: true, items, refreshedAccessToken };
+      return { ok: true, items, ...refreshed };
     }
     skip += limit;
   }

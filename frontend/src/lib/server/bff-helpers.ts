@@ -13,7 +13,7 @@
  */
 
 import { NextResponse, type NextRequest } from "next/server";
-import { ACCESS_TOKEN_COOKIE, backendFetch, getBackendApiUrl, setAuthCookies } from "@/lib/server/auth";
+import { ACCESS_TOKEN_COOKIE, backendFetch, getBackendApiUrl, refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 import type { RepresentadoCreatePayload } from "@/services/api";
 
@@ -491,7 +491,7 @@ export async function patchCatalogResource<Field extends string>(
   const data = await result.response.json();
   const response = NextResponse.json(data);
   if (result.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+    setAuthCookies(response, refreshedTokenCookies(result));
   }
   return response;
 }
@@ -532,7 +532,7 @@ export async function deleteCatalogResource(
 
   const response = new NextResponse(null, { status: 204 });
   if (result.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+    setAuthCookies(response, refreshedTokenCookies(result));
   }
   return response;
 }
@@ -589,7 +589,7 @@ export async function postCatalogResource<Field extends string>(
   const data = await result.response.json();
   const response = NextResponse.json(data, { status: 201 });
   if (result.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+    setAuthCookies(response, refreshedTokenCookies(result));
   }
   return response;
 }

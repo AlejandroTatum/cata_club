@@ -9,6 +9,7 @@
  * this is server-only — import it only from Route Handlers.
  */
 
+import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import {
   ACCESS_TOKEN_COOKIE,
@@ -18,7 +19,9 @@ import {
   backendFetch,
   backendRefresh,
   isNearExpiry,
+  refreshedTokenCookies,
   setAuthCookies,
+  writeAuthCookies,
   type AuthErrorCode,
   type BackendFetchOptions,
 } from "@/lib/server/auth";
@@ -30,6 +33,8 @@ interface ResolvedToken {
   token: string;
   /** Set when this resolution itself refreshed the token — skips a redundant retry-refresh below. */
   refreshedAccessToken?: string;
+  /** The rotated refresh token that came with `refreshedAccessToken`; absent if the backend did not rotate. */
+  refreshedRefreshToken?: string;
 }
 
 /** Resolve a usable access token from cookies, refreshing first if missing or near expiry. Null when unrecoverable. */
@@ -46,9 +51,13 @@ async function resolveAccessToken(request: NextRequest, deadline: number): Promi
   const needsRefresh = accessCookie !== undefined && isNearExpiry(accessCookie, PROACTIVE_REFRESH_THRESHOLD_SECONDS);
 
   if ((!accessCookie || needsRefresh) && refreshCookie) {
-    const refreshResult = await backendRefresh(refreshCookie, remainingTimeout(deadline));
+    const refreshResult = await refreshForRequest(request, refreshCookie, remainingTimeout(deadline));
     if (refreshResult.ok) {
-      return { token: refreshResult.data.access_token, refreshedAccessToken: refreshResult.data.access_token };
+      return {
+        token: refreshResult.data.access_token,
+        refreshedAccessToken: refreshResult.data.access_token,
+        refreshedRefreshToken: refreshResult.data.refresh_token,
+      };
     }
     if (!accessCookie) return null;
     // Proactive refresh failed but the current token might still be valid for a bit longer — try it as-is.
@@ -58,7 +67,7 @@ async function resolveAccessToken(request: NextRequest, deadline: number): Promi
 }
 
 export type BackendProxyResult =
-  | { ok: true; response: Response; refreshedAccessToken?: string }
+  | { ok: true; response: Response; refreshedAccessToken?: string; refreshedRefreshToken?: string }
   | { ok: false; status: number; error: AuthErrorCode };
 
 const STATUS_BY_ERROR: Record<AuthErrorCode, number> = {
@@ -84,9 +93,12 @@ const STATUS_BY_ERROR: Record<AuthErrorCode, number> = {
  * decide how to shape their own `NextResponse` (passthrough JSON, or
  * translate the DTO into a frontend-specific shape).
  *
- * Callers that receive `refreshedAccessToken` MUST call `setAuthCookies`
- * (from `src/lib/server/auth.ts`) on their own `NextResponse` before
- * returning, or the refreshed token is silently dropped on this request.
+ * A refreshed pair is persisted in the request's cookie store here (see
+ * `persistInRequestScope`), so every branch of every Route Handler carries it,
+ * error branches included. Callers that build their own `NextResponse` still
+ * write it explicitly with `setAuthCookies(response, refreshedTokenCookies(result))`:
+ * that keeps the cookies on responses produced outside Next's request scope
+ * and documents the intent at the call site.
  *
  * `options.timeoutMs` is one absolute budget for this complete authenticated
  * operation: token resolution, the first resource attempt, refresh after a
@@ -116,13 +128,15 @@ export async function backendFetchAuthed(
 
   let result = await attempt(resolved.token);
   let refreshedAccessToken = resolved.refreshedAccessToken;
+  let refreshedRefreshToken = resolved.refreshedRefreshToken;
 
   if (result.ok && result.data.status === 401 && !refreshedAccessToken) {
     const refreshCookie = request.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
     if (refreshCookie) {
-      const refreshResult = await backendRefresh(refreshCookie, remainingTimeout(deadline));
+      const refreshResult = await refreshForRequest(request, refreshCookie, remainingTimeout(deadline));
       if (refreshResult.ok) {
         refreshedAccessToken = refreshResult.data.access_token;
+        refreshedRefreshToken = refreshResult.data.refresh_token;
         result = await attempt(refreshedAccessToken);
       }
     }
@@ -132,7 +146,58 @@ export async function backendFetchAuthed(
     return { ok: false, status: STATUS_BY_ERROR[result.error.code], error: result.error.code };
   }
 
-  return { ok: true, response: result.data, refreshedAccessToken };
+  return { ok: true, response: result.data, refreshedAccessToken, refreshedRefreshToken };
+}
+
+type RefreshResult = Awaited<ReturnType<typeof backendRefresh>>;
+
+/** One refresh per incoming request (see `refreshForRequest`). */
+const refreshesByRequest = new WeakMap<NextRequest, Promise<RefreshResult>>();
+
+/**
+ * #1653: the ONE way a Route Handler refreshes. Memoized per incoming request,
+ * so every `backendFetchAuthed` of a handler -- concurrent fan-outs and long
+ * paginated drains alike -- shares a single backend refresh instead of each
+ * replaying the old refresh cookie (one DB write each, and past the backend's
+ * 30 s grace window a later replay reads as reuse and revokes the session).
+ * A successful refresh is persisted into the request's cookie store at once,
+ * so the rotated pair survives whatever the caller answers next.
+ */
+export function refreshForRequest(
+  request: NextRequest,
+  refreshCookie: string,
+  options: BackendFetchOptions = {},
+): Promise<RefreshResult> {
+  let pending = refreshesByRequest.get(request);
+  if (!pending) {
+    pending = backendRefresh(refreshCookie, options).then(async (result) => {
+      if (result.ok) {
+        await persistInRequestScope({ accessToken: result.data.access_token, refreshToken: result.data.refresh_token });
+      }
+      return result;
+    });
+    refreshesByRequest.set(request, pending);
+  }
+  return pending;
+}
+
+/**
+ * #1653: write a refreshed pair into the request's cookie store, whatever the
+ * caller does next. The refresh token rotates on every use, so a route that
+ * refreshes and then answers without the cookies (an error branch, or a route
+ * that never wrote them) would strand the browser with a stale refresh token;
+ * its next refresh, past the backend's 30 s grace window, reads as reuse and
+ * revokes the session. Next merges this store into the Route Handler's
+ * response as fallbacks, so a cookie the route sets itself still wins (the
+ * logout route clearing both, for one). Outside a request scope there is no
+ * store to write to; the caller's explicit `setAuthCookies` still applies.
+ */
+async function persistInRequestScope(tokens: { accessToken: string; refreshToken?: string }): Promise<void> {
+  try {
+    writeAuthCookies(await cookies(), tokens);
+  } catch {
+    // Not in a Route Handler (unit tests, scripts): nothing to persist into.
+  }
 }
 
 /**
@@ -204,7 +269,7 @@ export async function proxyBackendGet(request: NextRequest, path: string, errorM
   }
   const response = NextResponse.json(await result.response.json());
   if (result.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+    setAuthCookies(response, refreshedTokenCookies(result));
   }
   return response;
 }
@@ -225,7 +290,7 @@ export async function proxyBackendJsonGet(request: NextRequest, path: string, er
 
   const response = NextResponse.json(await result.response.json());
   if (result.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+    setAuthCookies(response, refreshedTokenCookies(result));
   }
   return response;
 }
@@ -260,7 +325,7 @@ export async function proxyBackendPdfGet(request: NextRequest, path: string, err
     },
   });
   if (result.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+    setAuthCookies(response, refreshedTokenCookies(result));
   }
   return response;
 }
