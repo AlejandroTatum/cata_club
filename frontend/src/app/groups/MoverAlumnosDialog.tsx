@@ -54,7 +54,7 @@ interface MoverAlumnosDialogProps {
 
 const FIELD_CONTROL =
   "h-ctl w-full rounded-ctl border border-line-2 bg-paper px-3 text-sm text-ink outline-none focus:border-cata-red";
-const FIELD_LABEL = "flex flex-col gap-field text-2xs font-bold uppercase text-ink-3";
+const FIELD_LABEL = "flex flex-col gap-field text-2xs font-bold uppercase tracking-caps text-ink-3";
 
 function DestinoSelect({
   label,
@@ -169,7 +169,7 @@ export default function MoverAlumnosDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-cata-black/40 px-4"
+      className="fixed inset-0 z-50 flex animate-overlay-in items-center justify-center bg-cata-black/40 px-4"
       onClick={() => onClose(movidos.size > 0)}
     >
       <div
@@ -178,7 +178,7 @@ export default function MoverAlumnosDialog({
         aria-labelledby="mover-alumnos-title"
         aria-describedby="mover-alumnos-message"
         onClick={(event) => event.stopPropagation()}
-        className="card flex max-h-[90vh] w-full max-w-lg flex-col gap-4 overflow-y-auto p-6"
+        className="card flex max-h-[90vh] w-full max-w-lg animate-dialog-in flex-col gap-4 overflow-y-auto p-6"
       >
         <div>
           <h2 id="mover-alumnos-title" className="text-base font-semibold text-cata-red">{title}</h2>

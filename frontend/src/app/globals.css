@@ -4,11 +4,164 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * THEME TOKENS — the RGB channels behind the semantic colours in
+ * `tailwind.config.ts` (`rgb(var(--c-paper) / <alpha-value>)`), so opacity
+ * modifiers keep working. Light values sit on `:root`; dark overrides them
+ * under `html[data-theme="dark"]`, which the nonce'd script in the root layout
+ * sets before first paint. The values mirror `LIGHT_COLORS` and `DARK_COLORS`
+ * (`lib/theme-tokens.ts`); `theme-tokens-parity.test.ts` fails if they drift.
+ *
+ * The landing paints itself from its own `--landing-*` variables (with a dark
+ * set in `landing/landing.css`), but `.landing-page` re-declares the light app
+ * values so nothing in it that still reads an app token can turn half dark.
+ * The body around it follows the theme, so overscroll matches the page.
+ */
+:root,
+html[data-theme="dark"] .landing-page {
+  --c-canvas: 232 232 238;
+  --c-paper: 255 255 255;
+  --c-sunken: 244 244 247;
+  --c-line: 201 201 211;
+  --c-line-2: 185 185 198;
+  --c-edge: 19 19 22;
+  --c-edge-shadow: 19 19 22;
+  --c-edge-hot: 19 19 22;
+  --c-edge-fill: 19 19 22;
+  --c-edge-focus: 19 19 22;
+  --c-rail: 19 19 22;
+  --c-popover: 255 255 255;
+  --c-track: 222 222 230;
+  --c-mark: 19 19 22;
+  --c-on-solid: 255 255 255;
+  --c-kpi-red: 217 33 40;
+  --c-kpi-ball: 255 214 0;
+  --c-kpi-coal: 19 19 22;
+  --c-ink: 23 24 28;
+  --c-ink-2: 74 74 85;
+  --c-ink-3: 116 116 127;
+  --c-ink-3-strong: 99 99 110;
+  --c-ball-ink: 110 87 0;
+  --c-cata-fuchsia-ink: 158 17 79;
+  --c-cata-red-dark: 161 29 34;
+  --c-enroll-wash: 255 247 247;
+  --c-chip-ball: 255 239 158;
+  --c-chip-red: 249 222 223;
+  --c-chip-red-ink: 217 33 40;
+  --c-state-ok: 19 119 57;
+  --c-state-ok-bg: 231 244 236;
+  --c-state-warn: 169 77 8;
+  --c-state-warn-bg: 251 240 226;
+  --c-state-neutral: 99 99 110;
+  --c-state-neutral-bg: 239 239 242;
+  --c-state-bad: 197 27 34;
+  --c-state-bad-bg: 251 233 234;
+  --c-cuenta-representante: 29 78 216;
+  --c-cuenta-representante-bg: 239 246 255;
+  --c-cuenta-menor: 126 34 206;
+  --c-cuenta-menor-bg: 250 245 255;
+  --c-cuenta-entrenador: 4 120 87;
+  --c-cuenta-entrenador-bg: 236 253 245;
+  --c-cata-border: 222 222 230;
+  --c-cata-bg: 244 244 247;
+  --c-cata-surface: 255 255 255;
+  --c-cata-text: 31 41 55;
+  --c-cata-state-ok: 21 128 61;
+}
+
+html[data-theme="dark"] {
+  --c-rail: 12 12 14;
+  --c-canvas: 21 21 25;
+  --c-paper: 33 33 40;
+  --c-sunken: 43 43 51;
+  --c-popover: 49 49 59;
+  --c-line: 47 47 56;
+  --c-line-2: 71 71 82;
+  --c-edge: 110 110 124;
+  --c-edge-shadow: 61 61 73;
+  --c-edge-hot: 255 214 0;
+  --c-edge-fill: 19 19 22;
+  --c-edge-focus: 242 242 245;
+  --c-track: 63 63 75;
+  --c-mark: 255 214 0;
+  --c-on-solid: 21 21 25;
+  --c-kpi-red: 201 33 42;
+  --c-kpi-ball: 255 214 0;
+  --c-kpi-coal: 40 40 48;
+  --c-ink: 237 237 241;
+  --c-ink-2: 207 207 216;
+  --c-ink-3: 176 176 189;
+  --c-ink-3-strong: 189 189 201;
+  --c-ball-ink: 255 214 0;
+  --c-cata-fuchsia-ink: 255 125 176;
+  --c-cata-red-dark: 255 144 150;
+  --c-enroll-wash: 42 30 32;
+  --c-chip-ball: 58 50 16;
+  --c-chip-red: 63 27 30;
+  --c-chip-red-ink: 255 144 150;
+  --c-state-ok: 98 216 146;
+  --c-state-ok-bg: 20 48 31;
+  --c-state-warn: 245 174 107;
+  --c-state-warn-bg: 58 38 18;
+  --c-state-neutral: 182 182 194;
+  --c-state-neutral-bg: 42 42 49;
+  --c-state-bad: 255 144 150;
+  --c-state-bad-bg: 63 27 30;
+  --c-cuenta-representante: 143 176 255;
+  --c-cuenta-representante-bg: 27 39 69;
+  --c-cuenta-menor: 201 155 255;
+  --c-cuenta-menor-bg: 46 31 71;
+  --c-cuenta-entrenador: 79 214 164;
+  --c-cuenta-entrenador-bg: 18 58 46;
+  --c-cata-border: 47 47 56;
+  --c-cata-bg: 43 43 51;
+  --c-cata-surface: 33 33 40;
+  --c-cata-text: 228 228 234;
+  --c-cata-state-ok: 98 216 146;
+  color-scheme: dark;
+}
+
 .app-main:has(.landing-page),
 .app-main:has(.auth-shell),
 .app-main:has(.app-shell) {
   max-width: none;
   padding: 0;
+}
+
+/*
+ * THE MOTION BUDGET (T4, S3/S4) — durations and the one easing, declared once.
+ *
+ * Tailwind reads them as `duration-fast|base|overlay`, `ease-out-expo` and the
+ * `animate-*` kit in `tailwind.config.ts`, so no component spells a time.
+ * Everything moves on `transform` and `opacity` only, short enough to read as
+ * feedback rather than latency: `fast` for press and hover, `base` for a
+ * reveal or a disclosure, `overlay` for a dialog, sheet or toast arriving.
+ *
+ * REDUCED MOTION is one switch: under `prefers-reduced-motion: reduce` every
+ * duration token is 0ms, so each transition and animation built from them
+ * resolves instantly and lands on its final state. State changes (colour,
+ * shadow) still happen, they just do not travel. `motion-kit.test.ts` fails if
+ * a token is added without being zeroed here.
+ */
+:root {
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --motion-overlay: 240ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+    --motion-overlay: 0ms;
+  }
+
+  /* A skeleton pulse is a loop and decoration; the spinner is the one
+     indicator that stays (it is progress, not ornament). */
+  .animate-pulse {
+    animation: none;
+  }
 }
 
 /* Global base styles — Cata Club Admin Light Theme */
@@ -24,8 +177,8 @@
      to be #F9FAFB while the shell painted #F5F5F7 over it, so the app ran on
      two page greys that differed by 1.5 L* and neither of them was a token. */
   body {
-    background-color: #E8E8EE;
-    color: #17181C;
+    background-color: rgb(var(--c-canvas));
+    color: rgb(var(--c-ink));
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -43,6 +196,48 @@
 
 @layer components {
   /*
+   * THE DISPLAY SIGNATURE: Anybody drawn heavy, and narrow or wide by job.
+   *
+   * `font-display` only picks the family; Anybody is variable in weight and
+   * width, and untuned it renders as a regular-weight, regular-width face that
+   * reads lighter than the landing's heavy uppercase headings. This pair of
+   * rules is the one place the axes are set, so no call site spells them.
+   *
+   *  · Titles (page, card, dialog): weight 800, width 72 — condensed, the
+   *    landing headline proportion, which also keeps long Spanish titles on
+   *    one line at the same size.
+   *  · Figures (`tabular-nums`: KPI and stat numbers): weight 800, width 112 —
+   *    the wide cut. Narrow titles beside wide numbers is the contrast the
+   *    system is recognised by.
+   *
+   * The axis is set with `font-variation-settings`, not `font-stretch`, so it
+   * does not depend on the generated @font-face declaring a stretch range.
+   * This sits in `components`, below the utilities layer, so an explicit
+   * `font-bold` or weight at a call site still wins. Sizes are untouched.
+   */
+  .font-display {
+    font-weight: 800;
+    font-variation-settings: "wdth" 72;
+  }
+
+  .font-display.tabular-nums {
+    font-variation-settings: "wdth" 112;
+  }
+
+  /*
+   * THE CLUB'S VOICE, in the same family: Anybody at weight 700 and its
+   * regular width (100). Titles are 800 and condensed (72) and figures are 800
+   * and wide (112); a phrase the club says in first person sits between them,
+   * lighter and open enough to be read as a sentence. Written as
+   * `font-display font-voice uppercase text-voice`; it comes after
+   * `.font-display` so it wins the tie.
+   */
+  .font-display.font-voice {
+    font-weight: 700;
+    font-variation-settings: "wdth" 100;
+  }
+
+  /*
    * ELEVATION IS A SYSTEM RULE, NOT A PER-SCREEN DECISION.
    *
    * A card in this product is written as `rounded-card bg-paper` plus a
@@ -58,27 +253,44 @@
    * (`shadow-elevated` on a modal, `shadow-none` on an inset panel) still
    * wins from the utilities layer.
    */
-  .rounded-card.bg-paper,
+  /* The sticker card: 2px coal outline and a hard offset shadow, no blur.
+     The `rounded-card bg-paper` spelling is caught too, but inside `:where()`
+     so it carries NO specificity: a screen that gives such an element its own
+     border colour or shadow (a selected choice card in cata-red, a modal's
+     `shadow-elevated`) still wins from the utilities layer. */
+  :where(.rounded-card.bg-paper),
   .card,
   .card-hover {
-    @apply shadow-card;
+    @apply border-2 border-edge shadow-sticker;
   }
 
   .card {
-    background-color: #FFFFFF;
-    border: 1px solid #DEDEE6;
+    background-color: rgb(var(--c-paper));
     border-radius: 14px;
   }
 
   .card-hover {
-    background-color: #FFFFFF;
-    border: 1px solid #DEDEE6;
+    background-color: rgb(var(--c-paper));
     border-radius: 14px;
-    transition: all 0.2s ease;
+    transition: transform var(--motion-fast) var(--ease-out);
   }
 
+  /* The sticker press: it lifts a step up its own shadow's diagonal on hover
+     and sinks onto the page on press. Only the transform travels; the shadow
+     steps are state and swap instantly. */
   .card-hover:hover {
-    @apply shadow-elevated;
+    @apply -translate-x-px -translate-y-px shadow-sticker-lg;
+  }
+
+  .card-hover:active {
+    @apply translate-x-px translate-y-px shadow-sticker-sm;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card-hover:hover,
+    .card-hover:active {
+      @apply translate-x-0 translate-y-0;
+    }
   }
 
   /* The focus ring these three controls used to declare (`focus:ring-2
@@ -90,7 +302,7 @@
     background-color: #D92128;
     color: #FFFFFF;
     border-radius: 0.75rem;
-    transition: all 0.2s ease;
+    transition: transform var(--motion-fast) var(--ease-out);
     @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50;
   }
 
@@ -103,14 +315,20 @@
     box-shadow: 0 4px 16px rgba(217,33,40,0.3);
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    .btn-primary:hover {
+      transform: none;
+    }
+  }
+
   .btn-secondary {
-    background-color: #FFFFFF;
-    color: #17181C;
+    background-color: rgb(var(--c-paper));
+    color: rgb(var(--c-ink));
     /* `line-2`, the control border — a button outlined in the divider
        hairline reads as a table cell, not as something you can press. */
-    border: 1px solid #CFCFDA;
+    border: 1px solid rgb(var(--c-line-2));
     border-radius: 0.75rem;
-    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-all duration-200 hover:bg-cata-bg disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors duration-fast hover:bg-cata-bg disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   /* `.btn-ghost` used to live here — a control with no fill and no border,
@@ -133,15 +351,25 @@
    * `min-h-ctl` rather than `h-ctl` so a field that wraps can still grow.
    */
   .input-field {
-    background-color: #FFFFFF;
+    background-color: rgb(var(--c-paper));
     /* `line-2` — same reason as `.btn-secondary`: a field needs an edge. */
-    border: 1px solid #CFCFDA;
-    color: #17181C;
-    @apply w-full min-h-ctl rounded-ctl px-4 py-2 text-sm transition-all duration-200 placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-50;
+    border: 1px solid rgb(var(--c-line-2));
+    color: rgb(var(--c-ink));
+    @apply w-full min-h-ctl rounded-ctl px-4 py-2 text-sm transition-colors duration-fast placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* A read-only value in the box of the field it stands in for: same paper,
+     edge, height and radius as `.input-field`, so read and edit modes line up.
+     Owner (2026-10-09): bare label/value pairs read as loose text. */
+  .field-readonly {
+    background-color: rgb(var(--c-paper));
+    border: 1px solid rgb(var(--c-line-2));
+    color: rgb(var(--c-ink));
+    @apply flex min-h-ctl w-full min-w-0 items-center rounded-ctl px-4 py-2 text-sm break-words;
   }
 
   .input-field::placeholder {
-    color: rgba(31,41,55,0.35);
+    color: rgb(var(--c-ink) / 0.4);
   }
 
   /* The border still darkens to the CTA red on focus — that is the field
@@ -208,27 +436,35 @@
     border-color: #B45309;
     color: #FFFFFF;
   }
+
+  /* Dark: the same solid fills one step deeper, with a lighter rim, so a toast
+     still outranks the page without the full-saturation glare. White text on
+     each is >= 8:1. */
+  html[data-theme="dark"] .toast-error {
+    background-color: #5E1B21;
+    border-color: #C2454E;
+  }
+
+  html[data-theme="dark"] .toast-success {
+    background-color: #17452A;
+    border-color: #3C9A63;
+  }
+
+  html[data-theme="dark"] .toast-info {
+    background-color: #1E3A8A;
+    border-color: #5B7FE0;
+  }
+
+  html[data-theme="dark"] .toast-warning {
+    background-color: #6B3A07;
+    border-color: #D68A2A;
+  }
 }
 
 /* Subtle background texture — premium spa/Swiss aesthetic */
 @layer utilities {
   .bg-logo-glow {
     background: radial-gradient(ellipse 50% 60% at 50% 40%, rgba(217, 33, 40, 0.04) 0%, transparent 70%);
-  }
-
-  @keyframes toast-in {
-    from {
-      opacity: 0;
-      transform: translateY(-0.5rem);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .animate-toast-in {
-    animation: toast-in 0.2s ease-out;
   }
 
   /*
@@ -338,7 +574,7 @@
     [contenteditable="true"],
     [tabindex]:not([tabindex="-1"])
   ):not([class*="focus-visible:shadow-"], .landing-page *):focus-visible {
-  outline: 2px solid #131316;
+  outline: 2px solid rgb(var(--c-edge-focus));
   outline-offset: 2px;
   box-shadow: 0 0 0 2px #FFD600;
 }

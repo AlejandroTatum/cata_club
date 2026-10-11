@@ -123,6 +123,31 @@ describe("TimelineDayList", () => {
     expect(rows[1]).toHaveTextContent("Lista tomada · 12 inscritos");
     expect(within(rows[1]).queryByRole("link")).toBeNull();
   });
+
+  it("wears the track's stickers with a glyph per state, in light and dark", () => {
+    render(
+      <TimelineDayList
+        items={[
+          { id: "a", start: "15:00", end: "16:00", title: "Formativo", status: "pending", statusLabel: "Pendiente", href: "/x" },
+          { id: "b", start: "16:00", end: "17:00", title: "Avanzado", status: "done", statusLabel: "Lista tomada", href: "/y" },
+          { id: "c", start: "17:00", end: "18:00", title: "Infantil", status: "live", statusLabel: "En curso", href: "/z" },
+          { id: "d", start: "18:00", end: "19:00", title: "Juvenil", status: "missing", statusLabel: "Sin lista", href: "/w" },
+        ]}
+      />,
+    );
+    const rows = within(screen.getByTestId("timeline-day-list")).getAllByRole("link");
+    expect(rows[0].className).toContain("border-dashed");
+    expect(rows[1].className).toContain("bg-coal");
+    expect(rows[1].className).toContain("dark:bg-kpi-coal");
+    expect(rows[2].className).toContain("bg-ball");
+    expect(rows[3].className).toContain("bg-cata-red");
+    for (const row of rows) {
+      expect(row.className).toContain("border-2");
+      expect(row.className).toContain("shadow-sticker-sm");
+      expect(within(row).getByTestId("timeline-glyph")).toBeInTheDocument();
+    }
+    expect(new Set(rows.map((row) => within(row).getByTestId("timeline-glyph").getAttribute("data-glyph"))).size).toBe(4);
+  });
 });
 
 describe("KpiTile caption link", () => {
@@ -133,20 +158,24 @@ describe("KpiTile caption link", () => {
 });
 
 describe("KpiTile — tone is the meaning of the datum, said in a word", () => {
-  it("tints the tile and states the status word in the tone's ink", () => {
+  it("paints the tone's brand block and states the status word on it", () => {
     render(<KpiTile label="Miembros" value={176} caption="ver" tone="info" status="Registrados" />);
 
     const tile = screen.getByTestId("kpi-tile");
     expect(tile.dataset.tone).toBe("info");
-    expect(tile.className).toMatch(/border-t-cuenta-representante/);
+    // `info` wears the red block: white ink on `cata-red`, with the sticker frame.
+    expect(tile.className).toMatch(/\bbg-cata-red\b/);
+    expect(tile.className).toMatch(/\bborder-edge\b/);
+    expect(tile.className).toMatch(/\bshadow-sticker\b/);
     expect(screen.getByTestId("kpi-status")).toHaveTextContent("Registrados");
-    expect(screen.getByTestId("kpi-status").className).toMatch(/text-cuenta-representante/);
   });
 
-  it("keeps the figure in ink on a toned tile", () => {
+  it("puts coal ink on the ball block, so the figure stays legible", () => {
     render(<KpiTile label="Asistencia" value={69} caption="ver" tone="warn" status="Bajo la meta de 75%" />);
 
-    expect(screen.getByText("69").className).toMatch(/\btext-ink\b/);
+    const tile = screen.getByTestId("kpi-tile");
+    expect(tile.className).toMatch(/\bbg-ball\b/);
+    expect(tile.className).toMatch(/\btext-coal\b/);
   });
 
   it("stays a plain white tile with no status when no tone is given", () => {
@@ -154,7 +183,8 @@ describe("KpiTile — tone is the meaning of the datum, said in a word", () => {
 
     const tile = screen.getByTestId("kpi-tile");
     expect(tile.dataset.tone).toBe("neutral");
-    expect(tile.className).not.toMatch(/border-t-\[3px\]/);
+    // The quiet block: a white sticker.
+    expect(tile.className).toMatch(/\bbg-paper\b/);
     expect(screen.queryByTestId("kpi-status")).toBeNull();
   });
 
@@ -164,7 +194,7 @@ describe("KpiTile — tone is the meaning of the datum, said in a word", () => {
     const tile = screen.getByTestId("kpi-tile");
     expect(tile.dataset.tone).toBe("action");
     expect(tile.className).toMatch(/bg-coal/);
-    expect(screen.getByText("37").className).toMatch(/text-white/);
+    expect(tile.className).toMatch(/text-white/);
     expect(screen.getByTestId("kpi-status")).toHaveTextContent("Por validar");
     expect(screen.getByTestId("kpi-ball-dot")).toBeInTheDocument();
     // The picture is drawn for a light surface: on coal it keeps a paper inset.

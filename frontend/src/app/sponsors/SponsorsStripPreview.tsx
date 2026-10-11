@@ -10,8 +10,6 @@ interface SponsorsStripPreviewProps {
 /** Same ~5:2 tile the landing strip draws (landing.css `.landing-sponsor`). */
 const TILE_STYLE = { aspectRatio: "5 / 2" } as const;
 const TILE = "w-full overflow-hidden rounded-card border bg-sunken";
-/** Ghost tiles shown while the roster is empty: enough to show the strip's rhythm. */
-const GHOST_TILES = 4;
 
 /**
  * Static mirror of the landing's sponsors strip: the same roster in the same
@@ -22,7 +20,9 @@ const GHOST_TILES = 4;
 export default function SponsorsStripPreview({
   sponsors,
   few = false,
-}: SponsorsStripPreviewProps): ReactElement {
+}: SponsorsStripPreviewProps): ReactElement | null {
+  // Nothing to mirror yet: the page's empty block says so, a ghost strip would only repeat it.
+  if (sponsors.length === 0) return null;
   return (
     <section
       aria-labelledby="sponsors-strip-title"
@@ -33,26 +33,14 @@ export default function SponsorsStripPreview({
           Así se ve en el sitio
         </h2>
         <p className="text-xs text-ink-2">
-          {sponsors.length === 0
-            ? "Cuando subas el primer logo, aparecerá aquí tal como lo verá el público."
-            : "La franja de patrocinadores de la landing: los mismos logos, en este mismo orden."}
+          La franja de patrocinadores de la landing: los mismos logos, en este mismo orden.
         </p>
       </div>
       <div
         data-testid="sponsors-strip"
-        className={`grid grid-cols-2 gap-3 ${sponsors.length === 0 ? "sm:grid-cols-4" : few ? "sm:grid-cols-3" : "sm:grid-cols-4 2xl:grid-cols-6"}`}
+        className={`grid grid-cols-2 gap-3 ${few ? "sm:grid-cols-3" : "sm:grid-cols-4 2xl:grid-cols-6"}`}
       >
-        {sponsors.length === 0
-          ? Array.from({ length: GHOST_TILES }, (_, tile) => (
-              <div
-                key={tile}
-                aria-hidden="true"
-                data-testid="sponsors-strip-ghost"
-                style={TILE_STYLE}
-                className={`${TILE} border-dashed border-line opacity-60`}
-              />
-            ))
-          : sponsors.map((sponsor) => (
+        {sponsors.map((sponsor) => (
               <div
                 key={sponsor.id}
                 style={TILE_STYLE}
@@ -68,7 +56,7 @@ export default function SponsorsStripPreview({
                   className="size-full object-contain p-2"
                 />
               </div>
-            ))}
+          ))}
       </div>
     </section>
   );

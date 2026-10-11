@@ -38,7 +38,8 @@ export default function SearchInput({
   return (
     <label
       className={cn(
-        "h-ctl flex items-center gap-2 rounded-ctl border border-line-2 bg-paper px-3",
+        // `max-md:min-h-11`: see `Button` `sm` — the thumb floor by viewport.
+        "h-ctl max-md:min-h-11 flex items-center gap-2 rounded-ctl border border-line-2 bg-paper px-3",
         "focus-within:border-ink-3",
         className,
       )}
@@ -59,7 +60,7 @@ export default function SearchInput({
         className="min-w-0 flex-1 bg-transparent text-xs text-ink outline-none placeholder:text-ink-3"
       />
       {shortcut ? (
-        <kbd className="flex-none rounded-[5px] border border-line-2 px-[5px] py-[2px] text-2xs tracking-flat font-bold text-ink-3">
+        <kbd className="flex-none font-sans rounded-[5px] border border-line-2 px-[5px] py-[2px] text-2xs tracking-flat font-bold text-ink-3">
           {shortcut}
         </kbd>
       ) : null}

@@ -1584,7 +1584,7 @@ describe("ProfilePage — the type and colour rules the screen was breaking", ()
     // until it takes focus, which nobody sees while deciding what to press.
     const red = [...document.querySelectorAll("button, a")].filter(
       (el) =>
-        el.className.toString().includes("bg-cata-red") &&
+        el.className.toString().includes("bg-ball") &&
         !el.className.toString().includes("top-[-100px]"),
     );
     expect(red).toHaveLength(1);
@@ -1847,7 +1847,7 @@ describe("ProfilePage — v2: the block of each role", () => {
   it("jugador: the ticket warns in the last week and shows lapsed coverage as such", async () => {
     await renderStudent(SELF, { pagos: [pago(daysFromToday(5))] });
     const warn = await screen.findByTestId("profile-membership");
-    expect(warn.className).toContain("border-t-state-warn");
+    expect(warn).toHaveAttribute("data-tone", "warn");
     expect(within(warn).getByText(/Vence pronto/)).toBeInTheDocument();
   });
 
@@ -1855,7 +1855,7 @@ describe("ProfilePage — v2: the block of each role", () => {
     const hero = await renderStudent(SELF, { pagos: [pago(daysFromToday(-3))] });
 
     const ticket = await screen.findByTestId("profile-membership");
-    expect(ticket.className).toContain("border-t-state-bad");
+    expect(ticket).toHaveAttribute("data-tone", "bad");
     expect(within(ticket).getByText("Venció hace 3 días")).toBeInTheDocument();
     expect(within(ticket).getByText(/Venció · hasta/)).toBeInTheDocument();
     expect(within(hero).getByText("Cobertura vencida")).toBeInTheDocument();
@@ -1869,7 +1869,7 @@ describe("ProfilePage — v2: the block of each role", () => {
     expect(within(ticket).queryByRole("progressbar")).not.toBeInTheDocument();
     expect(within(ticket).getByText("Mensual Adultos")).toBeInTheDocument();
     expect(within(hero).getByText("Sin pagos aprobados")).toBeInTheDocument();
-    expect(ticket.className).toContain("border-t-state-warn");
+    expect(ticket).toHaveAttribute("data-tone", "warn");
   });
 
   it("jugador: with no membership there is no ticket, no board and no filler sentence", async () => {

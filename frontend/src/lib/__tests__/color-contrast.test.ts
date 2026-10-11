@@ -18,7 +18,7 @@
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import tailwindConfig from "../../../tailwind.config";
+import { LIGHT_COLORS } from "../../../tailwind.config";
 
 // ---------------------------------------------------------------------------
 // WCAG relative luminance / contrast ratio (https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio)
@@ -31,8 +31,11 @@ import tailwindConfig from "../../../tailwind.config";
 // ---------------------------------------------------------------------------
 
 import { contrastRatio, compositeOver, lightness } from "../color-contrast";
+import { DARK_COLORS } from "../theme-tokens";
+import { SECTION_ACCENT } from "@/app/ayuda/section-accent";
 
 const AA_NORMAL_TEXT = 4.5;
+const AAA_NORMAL_TEXT = 7;
 /** WCAG 1.4.11 — a focus indicator must clear 3:1 against its adjacent colours. */
 const AA_NON_TEXT = 3;
 
@@ -40,7 +43,8 @@ const AA_NON_TEXT = 3;
 // Token values under test
 // ---------------------------------------------------------------------------
 
-const colors = tailwindConfig.theme?.extend?.colors as Record<string, unknown>;
+// The palette as written (light values); Tailwind itself sees CSS variables.
+const colors = LIGHT_COLORS as unknown as Record<string, unknown>;
 const group = (key: string): Record<string, string> => colors[key] as Record<string, string>;
 
 const cata = group("cata");
@@ -943,5 +947,317 @@ describe("D9's two shared pieces — the identity cell's role chips and the week
     // which are measured above.
     expect(contrastRatio(line.DEFAULT, SUNKEN)).toBeLessThan(AA_NON_TEXT);
     expect(contrastRatio(line["2"], SUNKEN)).toBeLessThan(AA_NON_TEXT);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DARK THEME — `html[data-theme="dark"]` (`lib/theme-tokens.ts`).
+//
+// Same instrument, same thresholds as the light pairs above: a theme that only
+// looked right would be a regression in the one thing the light tokens spent
+// this file proving. Each foreground is measured on the surfaces it can land
+// on in dark, and each status/account pair on its own tint.
+// ---------------------------------------------------------------------------
+
+describe("dark theme — the same WCAG thresholds as light", () => {
+  const D = DARK_COLORS;
+  const DARK_SURFACES = { canvas: D.canvas, paper: D.paper, sunken: D.sunken, popover: D.popover };
+  const BALL = (colors.ball as Record<string, string>).DEFAULT;
+  /** Opaque stand-in for `text-coal/80`, the muted ink the ball slab prints. */
+  const mix = (fg: string, bg: string, alpha: number): string => {
+    const channel = (hex: string, i: number): number => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+    return `#${[0, 1, 2]
+      .map((i) => Math.round(channel(fg, i) * alpha + channel(bg, i) * (1 - alpha)).toString(16).padStart(2, "0"))
+      .join("")}`;
+  };
+
+  it("keeps the elevation ladder in order, each rung visible", () => {
+    // rail (sidebar) < canvas < paper (cards) < sunken < popover (menus).
+    const ladder = [D.rail, D.canvas, D.paper, D.sunken, D.popover];
+    for (let i = 1; i < ladder.length; i += 1) {
+      expect(lightness(ladder[i - 1])).toBeLessThan(lightness(ladder[i]));
+    }
+    expect(contrastRatio(D.canvas, D.rail)).toBeGreaterThanOrEqual(1.06);
+    expect(contrastRatio(D.paper, D.canvas)).toBeGreaterThanOrEqual(1.12);
+    expect(contrastRatio(D.sunken, D.paper)).toBeGreaterThanOrEqual(1.12);
+    expect(contrastRatio(D.popover, D.paper)).toBeGreaterThanOrEqual(1.2);
+  });
+
+  it("draws hairlines that are visible on the dark surfaces they border", () => {
+    expect(contrastRatio(D["line.DEFAULT"], D.canvas)).toBeGreaterThanOrEqual(1.3);
+    expect(contrastRatio(D["line.DEFAULT"], D.paper)).toBeGreaterThanOrEqual(1.1);
+    expect(contrastRatio(D["line.2"], D.paper)).toBeGreaterThan(contrastRatio(D["line.DEFAULT"], D.paper));
+    expect(contrastRatio(D["line.2"], D.paper)).toBeGreaterThanOrEqual(1.5);
+  });
+
+  it.each(Object.entries(DARK_SURFACES))("meets AA for the ink ramp on %s", (_name, surface) => {
+    for (const token of ["ink.DEFAULT", "ink.2", "ink.3", "ink.3-strong"]) {
+      expect(contrastRatio(D[token], surface), `${token} on ${_name}`).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    }
+  });
+
+  it("prints the primary text near-white, not pure white", () => {
+    expect(D["ink.DEFAULT"].toUpperCase()).not.toBe("#FFFFFF");
+    expect(contrastRatio(D["ink.DEFAULT"], D.canvas)).toBeGreaterThanOrEqual(AAA_NORMAL_TEXT);
+  });
+
+  it("keeps the secondary and muted ink at AAA (7:1) on the page, the rail and the cards", () => {
+    // Labels, kickers and captions are printed in these. On a menu (popover)
+    // and the inset (sunken) AA is the floor, asserted above.
+    for (const surface of [D.rail, D.canvas, D.paper]) {
+      for (const token of ["ink.2", "ink.3", "ink.3-strong"]) {
+        expect(contrastRatio(D[token], surface), `${token} on ${surface}`).toBeGreaterThanOrEqual(AAA_NORMAL_TEXT);
+      }
+    }
+  });
+
+  it.each(["state.ok", "state.warn", "state.bad", "state.neutral"])(
+    "meets AA for the %s chip text on every dark surface and on its own tint",
+    (token) => {
+      for (const surface of Object.values(DARK_SURFACES)) {
+        expect(contrastRatio(D[token], surface)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      }
+      expect(contrastRatio(D[token], D[`${token}-bg`])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    },
+  );
+
+  it.each(["state.ok", "state.warn", "state.bad", "state.neutral"])(
+    "keeps the %s chip tint distinguishable from the card it sits on",
+    (token) => {
+      expect(contrastRatio(D[`${token}-bg`], D.paper)).toBeGreaterThanOrEqual(1.05);
+    },
+  );
+
+  it.each(["representante", "menor", "entrenador"])(
+    "meets AA for the %s account accent on paper and on its own tint",
+    (kind) => {
+      expect(contrastRatio(D[`cuenta.${kind}`], D.paper)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      expect(contrastRatio(D[`cuenta.${kind}`], D[`cuenta.${kind}-bg`])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    },
+  );
+
+  it("meets AA for the yellow and pink inks on every dark surface", () => {
+    for (const surface of Object.values(DARK_SURFACES)) {
+      expect(contrastRatio(D["ball.ink"], surface)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      expect(contrastRatio(D["cata.fuchsia-ink"], surface)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    }
+  });
+
+  it("meets AA for the ink on the enrollment wash", () => {
+    expect(contrastRatio(D["ink.DEFAULT"], D["enroll-wash"])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    expect(contrastRatio(D["ink.3-strong"], D["enroll-wash"])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("draws the sticker outline as a real 3:1 slate edge, never a white frame", () => {
+    // RC8 (T14H): at ~1.3:1 the 2px outline vanished into the page and the
+    // cards read as flat grey panels. The landing's dark answer (L33) is a
+    // slate edge that clears the non-text threshold on both surfaces a card
+    // borders, and stops well short of the bright rim reserved for `edge-hot`.
+    for (const surface of [D.canvas, D.paper]) {
+      expect(contrastRatio(D.edge, surface)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+      expect(contrastRatio(D.edge, surface)).toBeLessThan(6);
+    }
+    expect(contrastRatio(D.edge, D["edge-focus"])).toBeGreaterThan(3);
+  });
+
+  it("lifts the hard shadow above the page so the offset block is visible, and under the edge", () => {
+    // A pure-black offset on a near-black canvas is invisible; the sticker's
+    // depth needs a block lighter than the page and quieter than the outline.
+    expect(contrastRatio(D["edge-shadow"], D.canvas)).toBeGreaterThanOrEqual(1.5);
+    expect(lightness(D["edge-shadow"])).toBeLessThan(lightness(D.edge));
+  });
+
+  it("gives a brand fill a coal edge of its own, so one edge token never has to serve fills and cards", () => {
+    expect(D["edge-fill"].toUpperCase()).toBe(coal.DEFAULT.toUpperCase());
+    expect(colors["edge-fill"]).toBe(coal.DEFAULT);
+  });
+
+  it("spends the bright rim only on the highlighted pieces, and keeps it at 3:1", () => {
+    for (const surface of [D.canvas, D.paper, D.rail]) {
+      expect(contrastRatio(D["edge-hot"], surface)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+    }
+    // The rim is the brand ball, the same colour the primary action fills with.
+    expect(D["edge-hot"].toUpperCase()).toBe(BALL);
+  });
+
+  it("keeps the system focus ring visible in dark: the outline AND the ball band clear 3:1", () => {
+    // `globals.css` draws the outline in `edge-focus` (near-white in dark) and
+    // the ball band hugs the control. Either is enough on its own.
+    for (const surface of Object.values(DARK_SURFACES)) {
+      expect(contrastRatio(D["edge-focus"], surface)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+      expect(contrastRatio(BALL, surface)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+    }
+  });
+
+  it("prints `on-solid` text on every solid themed fill in both themes (WeekPlan chips, Now pill, group chips)", () => {
+    const cuenta = group("cuenta");
+    const fills: Record<string, { light: string; dark: string }> = {
+      ink: { light: ink.DEFAULT, dark: D["ink.DEFAULT"] },
+      "state-ok": { light: state.ok, dark: D["state.ok"] },
+      "state-warn": { light: state.warn, dark: D["state.warn"] },
+      "state-bad": { light: state.bad, dark: D["state.bad"] },
+      "cuenta-representante": { light: cuenta.representante, dark: D["cuenta.representante"] },
+      "cuenta-menor": { light: cuenta.menor, dark: D["cuenta.menor"] },
+      "cuenta-entrenador": { light: cuenta.entrenador, dark: D["cuenta.entrenador"] },
+    };
+    for (const [name, fill] of Object.entries(fills)) {
+      expect(contrastRatio(colors["on-solid"] as string, fill.light), `${name} in light`).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      expect(contrastRatio(D["on-solid"], fill.dark), `${name} in dark`).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    }
+  });
+
+  it("keeps the primary action the same in both themes: coal text on the ball fill", () => {
+    // `Button` fills the primary with the brand ball constant (never themed)
+    // and prints coal on it; only the rim changes in dark.
+    expect(contrastRatio(coal.DEFAULT, BALL)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    expect(contrastRatio(BALL, D.canvas)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+    expect(contrastRatio(BALL, D.paper)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+  });
+
+  it("keeps the brand fills that do not change: white on red, coal on the ball", () => {
+    expect(contrastRatio("#FFFFFF", cata.red)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    expect(contrastRatio(coal.DEFAULT, BALL)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  describe("KPI slabs", () => {
+    it("prints white on the red slab at AA", () => {
+      expect(contrastRatio("#FFFFFF", D["kpi.red"])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    });
+
+    it("prints coal on the yellow slab, label and muted line included, at AAA", () => {
+      expect(contrastRatio(coal.DEFAULT, D["kpi.ball"])).toBeGreaterThanOrEqual(AAA_NORMAL_TEXT);
+      expect(contrastRatio(mix(coal.DEFAULT, D["kpi.ball"], 0.8), D["kpi.ball"])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    });
+
+    it("prints white (and its 70% label) on the coal slab", () => {
+      expect(contrastRatio("#FFFFFF", D["kpi.coal"])).toBeGreaterThanOrEqual(AAA_NORMAL_TEXT);
+      expect(contrastRatio(mix("#FFFFFF", D["kpi.coal"], 0.7), D["kpi.coal"])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    });
+
+    it("keeps the yellow the brand yellow and the red a clean step under the brand red", () => {
+      // RC8: the dimmed mustard (#D9B000) and maroon (#A8161D) read as dirty
+      // fills. The yellow is the same ball in both themes; only the big red
+      // block is calmed, and it stays red (hue within a few degrees of brand).
+      expect(D["kpi.ball"].toUpperCase()).toBe(BALL.toUpperCase());
+      expect(lightness(D["kpi.red"])).toBeLessThan(lightness(cata.red));
+      expect(lightness(D["kpi.red"])).toBeGreaterThan(lightness("#A8161D"));
+    });
+
+    it("separates every slab from the page it sits on", () => {
+      for (const slab of ["kpi.red", "kpi.ball"]) {
+        expect(contrastRatio(D[slab], D.canvas), slab).toBeGreaterThanOrEqual(2);
+      }
+      // The coal slab is dark like the rail; its bright rim is what frames it.
+      expect(contrastRatio(D["edge-hot"], D["kpi.coal"])).toBeGreaterThanOrEqual(AA_NON_TEXT);
+      // RC8: and it is a raised surface, not a hole in the page.
+      expect(lightness(D["kpi.coal"])).toBeGreaterThan(lightness(D.canvas));
+      expect(contrastRatio(D["kpi.coal"], D.canvas)).toBeGreaterThanOrEqual(1.2);
+    });
+  });
+
+  describe("charts", () => {
+    it("draws the ring, bar and segment tracks visibly on the card and on the page", () => {
+      expect(contrastRatio(D.track, D.paper)).toBeGreaterThanOrEqual(1.4);
+      expect(contrastRatio(D.track, D.canvas)).toBeGreaterThanOrEqual(1.4);
+    });
+
+    it("draws the data ink over its track at 3:1 or better", () => {
+      expect(contrastRatio(D.mark, D.track)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+      expect(contrastRatio(D.mark, D.paper)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Icon chips — non-text UI (WCAG 1.4.11), both themes
+// ---------------------------------------------------------------------------
+
+/**
+ * Owner feedback (design-identity L21, S8): the "Para empezar" card header
+ * showed a light icon on a pale chip in dark mode. The root class: the chip's
+ * FILL was a brand constant (`cata-yellow-soft`, `cata-red/15` — a constant
+ * stays the same hex in both themes) while its INK was a themed token
+ * (`ball-ink` turns #FFD600 in dark), so the pair was only ever measured in
+ * light. 1.22:1 in dark, and the sweep found a second one (`cata-red` on its
+ * /15 tint, 2.91:1).
+ *
+ * The fix is a pair of tokens per chip that change TOGETHER (`chip-*`), and this
+ * block is the instrument: it resolves the Tailwind classes a chip is written
+ * with to hex in each theme and holds the icon to 3:1 on its chip, and the chip
+ * to the card it sits on, so a new accent cannot ship measured in one theme.
+ */
+describe("icon chips — the icon holds 3:1 on its chip in light and dark", () => {
+  /** `ball-ink` → `ball.ink`, `cuenta-representante-bg` → `cuenta.representante-bg`. */
+  function tokenPath(name: string): string {
+    const lookup = (dotted: string): unknown =>
+      dotted.split(".").reduce<unknown>((node, key) => (node as Record<string, unknown> | undefined)?.[key], colors);
+    const parts = name.split("-");
+    for (let split = parts.length; split >= 1; split--) {
+      const head = parts.slice(0, split).join("-");
+      const tail = parts.slice(split).join("-");
+      for (const dotted of tail ? [`${head}.${tail}`] : [head, `${head}.DEFAULT`]) {
+        if (typeof lookup(dotted) === "string") return dotted;
+      }
+    }
+    throw new Error(`"${name}" is not a colour token`);
+  }
+
+  function resolve(utility: string, theme: "light" | "dark", under: string): string {
+    const match = /^(?:bg|text)-([a-z0-9-]+?)(?:\/(\d+))?$/.exec(utility);
+    if (!match) throw new Error(`cannot read "${utility}"`);
+    const path = tokenPath(match[1]);
+    const light = path.split(".").reduce<unknown>((node, key) => (node as Record<string, unknown>)[key], colors) as string;
+    const hex = theme === "dark" ? (DARK_COLORS[path] ?? light) : light;
+    return match[2] ? compositeOver(hex, under, Number(match[2]) / 100) : hex;
+  }
+
+  const paper = (theme: "light" | "dark"): string => (theme === "dark" ? DARK_COLORS.paper : PAPER);
+
+  for (const [section, accent] of Object.entries(SECTION_ACCENT)) {
+    for (const theme of ["light", "dark"] as const) {
+      it(`${section} (${theme}): icon on chip >= 3:1, chip visible on the card`, () => {
+        const chip = resolve(accent.iconBg, theme, paper(theme));
+        const ink = resolve(accent.iconFg, theme, chip);
+        expect(contrastRatio(ink, chip), `${accent.iconFg} on ${accent.iconBg}`).toBeGreaterThanOrEqual(AA_NON_TEXT);
+        expect(contrastRatio(chip, paper(theme)), `${accent.iconBg} on paper`).toBeGreaterThanOrEqual(1.05);
+      });
+    }
+  }
+
+  it("never fills a chip with a brand constant that stays pale in dark", () => {
+    const offenders = sourceFiles(SRC)
+      .map((path) => ({ path: path.slice(SRC.length + 1), code: stripComments(readFileSync(path, "utf8")) }))
+      .flatMap(({ path, code }) => (code.match(/\bbg-cata-yellow-soft\b/g) ?? []).map((value) => `${path}: ${value}`));
+    expect(offenders).toEqual([]);
+  });
+
+  it("themes the chip tokens: a dark value exists for every chip, and none is the light hex", () => {
+    for (const path of ["chip.ball", "chip.red", "chip.red-ink"]) {
+      expect(DARK_COLORS[path], path).toBeDefined();
+      expect(DARK_COLORS[path]).not.toBe(path.split(".").reduce<unknown>((node, key) => (node as Record<string, unknown>)[key], colors));
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Red link/eyebrow ink on public screens — dark
+// ---------------------------------------------------------------------------
+
+/**
+ * `cata-red-dark` is the product's red TEXT ink (auth links, legal eyebrows,
+ * the wizard's step title): it is never a fill, so it can follow the theme.
+ * Left as a constant it printed #A11D22 on the dark card at 2.07:1 on /login,
+ * a page no role sweep reaches. The theme-toggle spec measures it in a browser;
+ * this pins the values.
+ */
+describe("cata-red-dark — red text ink, themed", () => {
+  it("is the same light hex as before and a lighter red in dark", () => {
+    expect(cata["red-dark"]).toBe("#A11D22");
+    expect(DARK_COLORS["cata.red-dark"]).toBeDefined();
+    expect(lightness(DARK_COLORS["cata.red-dark"])).toBeGreaterThan(lightness("#A11D22"));
+  });
+
+  it.each(["canvas", "paper", "sunken", "popover"] as const)("holds AA as text on dark %s", (surface) => {
+    expect(contrastRatio(DARK_COLORS["cata.red-dark"], DARK_COLORS[surface])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
   });
 });

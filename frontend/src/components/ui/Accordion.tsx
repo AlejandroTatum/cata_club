@@ -81,13 +81,13 @@ export default function Accordion({ items, idPrefix, label, className }: Accordi
                   strokeWidth={2}
                   aria-hidden="true"
                   className={cn(
-                    "flex-none text-ink-3 transition-transform duration-200",
+                    "flex-none text-ink-3 transition-transform duration-fast ease-out-expo",
                     isOpen && "rotate-180 text-ink",
                   )}
                 />
               </button>
             </h3>
-            <div id={panelId} hidden={!isOpen} className="mt-2 text-xs leading-prose text-ink-2">
+            <div id={panelId} hidden={!isOpen} className={cn("mt-2 text-xs leading-prose text-ink-2", isOpen && "animate-disclose")}>
               {item.answer}
             </div>
           </div>

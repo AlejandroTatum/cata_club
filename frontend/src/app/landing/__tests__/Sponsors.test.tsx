@@ -114,7 +114,7 @@ describe("Sponsors", (): void => {
     const css = landingCss();
     expect(css).toMatch(/\.landing-sponsors \{[^}]*background: var\(--landing-highlight\)/);
     expect(css).toMatch(/\.landing-location \{ background: var\(--landing-stats-bg\); \}/);
-    expect(css.match(/\.landing-sponsor \{[^}]*\}/)?.[0]).toMatch(/background: var\(--landing-surface\);.*box-shadow/);
+    expect(css.match(/\.landing-sponsor \{[^}]*\}/)?.[0]).toMatch(/background: var\(--landing-card\);.*box-shadow/);
   });
 
   it("renders each sponsor logo at ~double the previous size while preserving aspect via contain", async (): Promise<void> => {
@@ -231,8 +231,8 @@ describe("Sponsors", (): void => {
 
   it("applies the section colour rhythm from brand tokens (Horarios white, Misión/Visión white, Valores yellow)", (): void => {
     const css = landingCss();
-    expect(css).toMatch(/\.landing-schedule \{[^}]*var\(--landing-surface\)/);
-    expect(css).toMatch(/\.landing-section#nosotros \{[^}]*var\(--landing-surface\)/);
+    expect(css).toMatch(/\.landing-schedule \{[^}]*var\(--landing-card\)/);
+    expect(css).toMatch(/\.landing-section#nosotros \{[^}]*var\(--landing-card\)/);
     expect(css).toMatch(/\.landing-values \{[^}]*var\(--landing-highlight\)/);
   });
 

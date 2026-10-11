@@ -894,15 +894,17 @@ describe("GroupsPage — categoria title + labeled Ver alumnos button (PR1 layou
     expect(within(card()).queryByText(/nivel intermedio/i)).not.toBeInTheDocument();
   });
 
-  it("renders 'Agregar alumnos' as the most prominent (carbon, not red) row action and opens the roster on the add selector", async () => {
+  it("renders 'Agregar jugadores' as a quiet outline row action and opens the roster on the add selector", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
     const agregar = within(card()).getByRole("button", { name: /agregar jugadores/i });
     expect(agregar).toHaveTextContent(/agregar jugadores/i);
-    // Repeated per-row actions are carbon: red is reserved for one primary.
-    expect(agregar.className).toContain("bg-coal");
+    // Repeated per-row actions are quiet: the page's one primary is not repeated
+    // per row (T14 RC10), so neither a red/yellow nor a coal fill.
+    expect(agregar.className).not.toContain("bg-coal");
     expect(agregar.className).not.toContain("bg-cata-red");
+    expect(agregar.className).not.toContain("bg-ball");
     // Editar is secondary: no red fill.
     expect(within(card()).getByRole("button", { name: /^editar/i }).className).not.toContain("bg-cata-red");
 
@@ -2694,6 +2696,31 @@ describe("GroupsPage — rail", () => {
     expect(within(screen.getByTestId("sin-grupo-list")).getAllByRole("listitem")).toHaveLength(2);
     expect(screen.getByText("6–7 de 7")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /siguiente/i })).toBeDisabled();
+  });
+});
+
+describe("GroupsPage — zero categories (RC17)", () => {
+  it("shows the real zero figure, not a loader that never resolves", async () => {
+    mockFetchHorarios.mockReset().mockResolvedValue([]);
+    mockFetchMembers.mockReset().mockResolvedValue({
+      accounts: [{ estudiantes: [{ id: 1, nombres: "Ana", apellidos: "Paz", activo: true, membresia: TRAINING }] }],
+    });
+    mockFetchCategoriasCatalogo.mockResolvedValue(DEFAULT_CATEGORIA_CATALOG);
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+
+    const rail = await screen.findByTestId("groups-rail");
+    expect(await within(rail).findByTestId("sin-grupo-list")).toHaveTextContent("Ana Paz");
+  });
+
+  it("says there are no players yet when there are neither categories nor players", async () => {
+    mockFetchHorarios.mockReset().mockResolvedValue([]);
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [] });
+    mockFetchCategoriasCatalogo.mockResolvedValue(DEFAULT_CATEGORIA_CATALOG);
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+
+    const rail = await screen.findByTestId("groups-rail");
+    expect(await within(rail).findByText("Aún no hay jugadores activos.")).toBeInTheDocument();
+    expect(within(rail).queryByText(/calculando/i)).not.toBeInTheDocument();
   });
 });
 

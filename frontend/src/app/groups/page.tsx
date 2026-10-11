@@ -216,7 +216,7 @@ const ROW_COLUMNS =
   "2xl:items-center 2xl:gap-x-5";
 
 /** `.tbl thead th` typography — the header strip and the stacked cell labels. */
-const CELL_LABEL = "text-2xs font-bold uppercase text-ink-3-strong";
+const CELL_LABEL = "text-2xs font-bold uppercase tracking-caps text-ink-3-strong";
 
 /**
  * The four column names, declared ONCE.
@@ -440,7 +440,7 @@ function duracionLabel(inicio: string, fin: string): string | null {
 }
 
 /** Field skin shared with the tarifas/discounts forms. */
-const FIELD_LABEL = "block text-2xs font-bold uppercase text-ink-3";
+const FIELD_LABEL = "block text-2xs font-bold uppercase tracking-caps text-ink-3";
 const FIELD_CONTROL =
   "h-ctl w-full rounded-ctl border border-line-2 bg-paper px-3 text-sm text-ink outline-none focus:border-cata-red";
 const MAXIMO_DIAS_POR_CATEGORIA = 6;
@@ -773,8 +773,10 @@ export default function GroupsPage(): React.ReactElement {
    * the figure the club plans around.
    */
   const summary = useMemo(() => {
+    // No categories (once loaded) means nobody can be enrolled yet: the figures
+    // are real zeros, not a roster that is still being fetched.
     const rostersLoaded =
-      horarios.length > 0 && horarios.every((horario) => personasPorHorario[horario.id] !== undefined);
+      !loading && horarios.every((horario) => personasPorHorario[horario.id] !== undefined);
     if (!rostersLoaded) return { inscriptos: null, sinGrupo: null, sinGrupoAlumnos: [] as StudentRef[], activos: 0 };
     const assigned = new Set<number>();
     for (const horario of horarios) {
@@ -787,7 +789,7 @@ export default function GroupsPage(): React.ReactElement {
       sinGrupoAlumnos,
       activos: allStudents.filter((student) => student.activo).length,
     };
-  }, [horarios, personasPorHorario, allStudents]);
+  }, [horarios, personasPorHorario, allStudents, loading]);
 
   /**
    * Catalog categorías with no schedules yet, shown as their own cards.
@@ -1793,11 +1795,14 @@ export default function GroupsPage(): React.ReactElement {
 
         <InfoPanel
           title="Sin grupo"
+          collapsible={false}
           className={sinGrupoAlumnos.length > 0 ? "border-state-warn/30" : undefined}
         >
           <div id="sin-grupo" className="scroll-mt-24" />
           {summary.sinGrupo === null ? (
             <p>Calculando jugadores sin horario…</p>
+          ) : summary.activos === 0 ? (
+            <p>Aún no hay jugadores activos.</p>
           ) : sinGrupoAlumnos.length === 0 ? (
             <p>Todos los jugadores activos tienen un horario asignado.</p>
           ) : (
@@ -2008,12 +2013,15 @@ export default function GroupsPage(): React.ReactElement {
                   <li
                     key={card.categoria}
                     data-testid="horario-card"
-                    className="min-h-drow px-5 py-4 2xl:py-12"
+                    className="min-h-drow px-5 py-4"
                   >
                     {/* Three shapes, one row: a stack on a phone, two columns
-                        on the tablet/small-laptop band where the five tracks do
+                        on the tablet/small-laptop band where the four tracks do
                         not fit but a single column wastes half the width, and
-                        the full five-column row from `xl` up. */}
+                        the full four-column row from `2xl` up. In the two-column
+                        band the headcount and the actions share the second
+                        line instead of one line each, so a row is about 140px
+                        and not 220 (T14 RC9). */}
                     <div className={`flex flex-col gap-3.5 md:grid md:grid-cols-2 md:items-start md:gap-x-6 ${ROW_COLUMNS}`}>
                       <div className="min-w-0">
                         <CellLabel>{COLUMNS[0]}</CellLabel>
@@ -2071,10 +2079,10 @@ export default function GroupsPage(): React.ReactElement {
                         )}
                       </div>
 
-                      <div className="flex gap-2 md:col-span-2 md:justify-end 2xl:col-span-1 2xl:justify-end">
+                      <div className="flex gap-2 md:col-start-2 md:self-end md:justify-end 2xl:col-start-auto 2xl:self-center 2xl:justify-end">
                         <span className="sr-only">{COLUMNS[3]}</span>
                         <Button
-                          variant="dark"
+                          variant="secondary"
                           size="sm"
                           className="flex-1 md:flex-none"
                           onClick={() => openAlumnosTab(card, true)}
@@ -2085,7 +2093,7 @@ export default function GroupsPage(): React.ReactElement {
                           Agregar jugadores
                         </Button>
                         <Button
-                          variant="secondary"
+                          variant="tertiary"
                           size="sm"
                           className="flex-1 md:flex-none"
                           onClick={() => (editOpen ? closeExpanded() : openEditForm(card))}
@@ -2123,7 +2131,7 @@ export default function GroupsPage(): React.ReactElement {
                 <li
                   key={entry.categoria}
                   data-testid="catalogo-pendiente-card"
-                  className="min-h-drow px-5 py-4 2xl:py-12"
+                  className="min-h-drow px-5 py-4"
                 >
                   <div className={`flex flex-col gap-3.5 md:grid md:grid-cols-2 md:items-start md:gap-x-6 ${ROW_COLUMNS}`}>
                     <div className="min-w-0">
@@ -2156,10 +2164,10 @@ export default function GroupsPage(): React.ReactElement {
                         above at `xl`. */}
                     <div className="hidden min-w-0 2xl:block" />
 
-                    <div className="flex gap-2 md:col-span-2 md:justify-end 2xl:col-span-1 2xl:justify-end">
+                    <div className="flex gap-2 md:col-start-2 md:self-end md:justify-end 2xl:col-start-auto 2xl:self-center 2xl:justify-end">
                       <span className="sr-only">{COLUMNS[3]}</span>
                       <Button
-                        variant="dark"
+                        variant="secondary"
                         size="sm"
                         className="flex-1 md:flex-none"
                         onClick={() => openCatalogoEditForm(entry)}

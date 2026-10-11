@@ -3,7 +3,7 @@
  *
  *   · one coal hero over a real club photograph — the student's name carries
  *     the screen, the success state is a quiet line above it, the club's voice
- *     (the one Playfair phrase) sits under it, and the primary action is the
+ *     (the one voice phrase, Anybody) sits under it, and the primary action is the
  *     only filled control; "Nueva inscripción" is an outline on coal; and
  *   · "Qué sigue" as a connected sequence: one rail runs through the four
  *     steps (left to right on desktop, top to bottom on a phone), the first
@@ -93,7 +93,7 @@ export default function EnrollConfirmation(props: EnrollConfirmationProps): Reac
               <CheckCircle size={ICON.sm} className="text-ball" strokeWidth={1.75} aria-hidden="true" />
               Inscripción completada
             </h1>
-            <p className="text-2xs font-bold uppercase text-ball">
+            <p className="text-2xs font-bold uppercase tracking-caps text-ball">
               ¡Te damos la bienvenida a Cata Club!
             </p>
             <h2 className="font-display text-3xl uppercase tracking-flat text-white [text-wrap:balance] lg:text-5xl">
@@ -102,9 +102,9 @@ export default function EnrollConfirmation(props: EnrollConfirmationProps): Reac
           </div>
 
           {/* #877: a contained emotional line, not a second claim — it says
-              nothing about membership, payment or session. The one Playfair
-              phrase on the screen. */}
-          <p className="max-w-[28ch] font-serif text-voice text-white [text-wrap:balance]">
+              nothing about membership, payment or session. The one voice
+              phrase on the screen, in Anybody. */}
+          <p className="max-w-[28ch] font-display font-voice text-voice uppercase tracking-flat text-white [text-wrap:balance]">
             Tu camino en el tenis de mesa comienza aquí.
           </p>
 

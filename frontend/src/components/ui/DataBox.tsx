@@ -12,7 +12,7 @@
  * so the corner is written as an explicit arbitrary value on purpose — it is
  * the box's own scale, not a step borrowed from the card/control ladder.
  *
- * `numeric` variant: monospaced, `tabular-nums`, centered, minimum width so a
+ * `numeric` variant: in the sans face, `tabular-nums`, centered, minimum width so a
  * single digit and a double digit line up, text in `ink`. Never a state or
  * brand color — same rule `StatCard` already states: a colored number implies
  * a judgment ("is 86 good?") that a plain count never carries. Where a value
@@ -41,7 +41,7 @@ export default function DataBox({
       className={cn(
         "inline-flex items-center rounded-[3px] border border-line bg-sunken px-2 py-0.5 text-xs text-ink-2",
         variant === "numeric" &&
-          "min-w-[2.5ch] justify-center font-mono tabular-nums text-ink",
+          "min-w-[2.5ch] justify-center tabular-nums text-ink",
         className,
       )}
     >

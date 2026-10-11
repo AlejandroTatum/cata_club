@@ -101,7 +101,7 @@ export default function AttendanceRosterRow({
             // The detail is visible text: a `title` never shows on a phone.
             <>
               <Badge tone="warn">Anterior a su inscripción</Badge>
-              <span className="text-2xs font-normal text-ink-3">
+              <span className="text-xs font-normal text-ink-3">
                 Se registrará y quedará marcada para revisión.
               </span>
             </>

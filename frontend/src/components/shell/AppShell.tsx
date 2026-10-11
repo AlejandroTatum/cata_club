@@ -32,7 +32,10 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import ReportProblemFab from "./ReportProblemFab";
+import ReportProblemButton from "./ReportProblemButton";
+import WhatsNewDialog from "@/components/WhatsNewDialog";
+import AccountMenu from "./AccountMenu";
+import ThemeToggle from "@/components/theme/ThemeToggle";
 import {
   Menu,
   X,
@@ -41,7 +44,6 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleHelp,
-  LogOut,
   MoreHorizontal,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -60,7 +62,6 @@ import { normalizeText } from "@/app/members/members-utils";
 import { useNotificaciones } from "@/lib/useNotificaciones";
 import { usePendingPaymentsCount } from "@/lib/usePendingPayments";
 import { NAV_ICON_MAP } from "@/components/Header";
-import AvatarPhoto from "@/components/AvatarPhoto";
 import NotificationBell from "@/components/NotificationBell";
 import { PageHeader, useBodyScrollLock } from "@/components/ui";
 
@@ -69,6 +70,14 @@ export interface AppShellProps {
   title: string;
   /** Optional supporting line below the title. */
   subtitle?: string;
+  /**
+   * The red section marker above the title. Defaults to the rail's own group
+   * for the current page ("Operación", "Catálogo y tarifas"…), or the area
+   * label for a one-group role; pass `null` to draw none.
+   */
+  kicker?: string | null;
+  /** The ball block behind the title (the landing's key-word highlight). On by default. */
+  highlightTitle?: boolean;
   /**
    * The screen's PRIMARY action, and the one place it is allowed to live.
    *
@@ -209,7 +218,7 @@ export const MAIN_CONTENT_ID = "contenido-principal";
 /** The one nav entry that carries a count badge (prototype `_nav-admin.html`). */
 const COUNT_BADGE_HREF = "/payments";
 
-/** The drawer slide-out is `duration-200`; the capture waits slightly longer. */
+/** The drawer slide-out is `duration-base`; the capture waits slightly longer. */
 const DRAWER_CLOSE_MS = 280;
 
 /** Tailwind's `lg` breakpoint — where the sidebar stops being a mobile drawer. */
@@ -364,21 +373,19 @@ const NAV_ITEM_CLASSES =
   "relative flex h-ctl items-center gap-2.5 rounded-ctl px-3 text-sm font-semibold transition-colors";
 const NAV_ITEM_IDLE_CLASSES = "text-white/[0.62] hover:bg-white/[0.07] hover:text-white";
 /**
- * `.nav-i.on` — coal highlight, never a red fill: red is reserved for CTA and
- * destructive.
- *
- * `_sistema.css:140-145` separates the active row from an idle one on five
- * channels: the `rgba(255,255,255,.08)` fill, full-white text against the
- * idle 62%, the 3px red bar at the left edge, the `--ball` dot at the right,
- * and 600 against 500. The fifth channel closed when `medium` retired — both
- * rows are 600 now — so the weight is no longer declared here. The four that
- * remain are the loud ones, and each is drawn below.
+ * `.nav-i.on` — the landing's active nav pill: red, white label, and a hard
+ * ball-yellow offset shadow (the landing's is coal, which would vanish on the
+ * coal rail). White on `cata-red` is 5.0:1. Replaces the previous quiet white
+ * wash with a red bar and a yellow dot: one loud mark per rail instead of
+ * four small ones.
  */
-const NAV_ITEM_ACTIVE_CLASSES = "bg-white/[0.08] text-white";
+const NAV_ITEM_ACTIVE_CLASSES = "bg-cata-red text-white shadow-sticker-ball";
 
 export default function AppShell({
   title,
   subtitle,
+  kicker,
+  highlightTitle = true,
   actions,
   back,
   measure = "default",
@@ -511,6 +518,11 @@ export default function AppShell({
     [navLinks, pathname],
   );
   const pendingPayments = usePendingPaymentsCount(role === "admin");
+  const pageKicker =
+    kicker === undefined
+      ? (navGroups.find((group) => group.links.some((link) => link.href === activeHref))?.heading ??
+        areaLabel)
+      : kicker;
 
   // Re-measure when the rail's content or width can change: first paint, the
   // role's group set, the desktop collapse, the drawer, and window resizes.
@@ -574,32 +586,16 @@ export default function AppShell({
           isActive ? NAV_ITEM_ACTIVE_CLASSES : NAV_ITEM_IDLE_CLASSES
         }`}
       >
-        {isActive && (
-          // `.nav-i.on::before` — 3px red bar pinned to the row's left edge.
-          <span
-            className="absolute inset-y-[9px] left-0 w-[3px] rounded-r-[3px] bg-cata-red"
-            aria-hidden="true"
-          />
-        )}
         <Icon size={ICON.base} strokeWidth={2} className="shrink-0" aria-hidden="true" />
         <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>{link.label}</span>
         {showBadge && (
           // `.nav-i .cnt` — count is already in the accessible name above.
           <span
-            className="ml-auto inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-cata-red px-1.5 text-2xs tracking-flat font-bold text-white"
+            className="ml-auto inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full border-2 border-edge bg-ball dark:border-edge-hot px-1.5 text-2xs tracking-flat font-bold text-coal"
             aria-hidden="true"
           >
             {badge}
           </span>
-        )}
-        {isActive && !showBadge && (
-          // `.nav-i.on::after` — the yellow ball marks the current row.
-          <span
-            className={`ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-ball ${
-              collapsed ? "lg:hidden" : ""
-            }`}
-            aria-hidden="true"
-          />
         )}
       </Link>
     );
@@ -715,7 +711,7 @@ export default function AppShell({
       <a
         data-report-ignore
         href={`#${MAIN_CONTENT_ID}`}
-        className="fixed left-4 top-[-100px] z-50 inline-flex min-h-[48px] items-center rounded-ctl bg-cata-red px-5 text-sm font-bold text-white transition-[top] duration-150 focus-visible:top-4"
+        className="fixed left-4 top-[-100px] z-50 inline-flex min-h-[48px] items-center rounded-ctl bg-cata-red px-5 text-sm font-bold text-white transition-[top] duration-fast focus-visible:top-4"
       >
         Saltar al contenido
       </a>
@@ -734,33 +730,34 @@ export default function AppShell({
       <aside
         data-report-ignore={!isDesktopViewport || undefined}
         aria-hidden={drawerHidden || undefined}
-        className={`fixed inset-y-0 left-0 z-40 flex w-[236px] flex-col bg-coal text-white transition-[transform,visibility] duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-[236px] flex-col bg-coal text-white dark:border-r dark:border-line dark:bg-rail transition-[transform,visibility] duration-base lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
           collapsed ? "lg:w-[76px]" : ""
         } ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} ${
           drawerHidden ? "invisible" : ""
         }`}
       >
         {/* `.side .brand` — logo on a white disc, club name, area label. */}
-        <div className="flex items-center gap-[11px] border-b border-white/[0.08] px-[18px] pb-4 pt-[18px]">
+        <div className="flex items-center gap-[11px] border-b border-white/[0.08] px-[18px] pb-3 pt-4">
           <Link href="/" className="flex min-w-0 flex-1 items-center gap-[11px]">
-            <span className="relative block h-9 w-9 shrink-0 overflow-hidden rounded-full bg-white">
+            {/* The landing's logo tile: white, a 2px outline and a hard red offset. */}
+            <span className="relative mr-[3px] block h-10 w-10 shrink-0 overflow-hidden rounded-[10px] border-2 border-white bg-white shadow-sticker-red">
               <Image
                 src="/brand/cata-club-logo.jpeg"
                 alt="Cata Club"
                 fill
-                className="object-cover"
-                sizes="36px"
+                className="object-contain p-0.5"
+                sizes="40px"
               />
             </span>
             <span className={`min-w-0 leading-tight ${collapsed ? "lg:hidden" : ""}`}>
-              <span className="block truncate text-sm font-bold">
+              <span className="block truncate font-display text-base uppercase tracking-flat">
                 Cata Club
               </span>
               {/* 50%, not the spec's 42%: white at 0.42 over `coal` composites
                   to 4.10:1, under AA. At 0.50 it measures 5.36:1 and still
                   reads as the quieter second line under the club name. */}
               {areaLabel && (
-                <span className="mt-px block truncate text-2xs font-bold uppercase text-white/50">
+                <span className="mt-px block truncate text-2xs font-bold uppercase tracking-caps text-white/50">
                   {areaLabel}
                 </span>
               )}
@@ -788,7 +785,7 @@ export default function AppShell({
         <button
           type="button"
           onClick={toggleCollapsed}
-          className="absolute -right-3 top-6 z-10 hidden h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-coal text-white/60 shadow-card transition-colors hover:bg-white/10 hover:text-white lg:flex"
+          className="absolute -right-3 top-6 z-10 hidden h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-coal dark:bg-rail text-white/60 shadow-card transition-colors hover:bg-white/10 hover:text-white lg:flex"
           aria-label={collapsed ? "Expandir menú" : "Colapsar menú"}
         >
           {collapsed ? (
@@ -802,7 +799,7 @@ export default function AppShell({
           ref={navRef}
           onScroll={updateNavOverflow}
           data-more-below={navMoreBelow ? "true" : "false"}
-          className={`flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 py-3 ${
+          className={`flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 py-2 ${
             navMoreBelow ? NAV_FADE_CLASSES : ""
           }`}
           aria-label="Navegación principal"
@@ -832,7 +829,7 @@ export default function AppShell({
                     with the labels when the rail collapses to 76px: a rótulo
                     over a column of bare icons titles nothing. */}
                 <p
-                  className={`px-3 pb-0.5 pt-3 text-2xs font-bold uppercase text-white/50 ${
+                  className={`px-3 pb-1 pt-2.5 text-2xs font-bold uppercase leading-none tracking-caps text-white/50 first:pt-1 ${
                     collapsed ? "lg:hidden" : ""
                   }`}
                 >
@@ -844,88 +841,40 @@ export default function AppShell({
           })}
         </nav>
 
-        {/* `.side .foot-nav` — help, then account rows, then the user card. */}
+        {/*
+         * `.side .foot-nav` — the user card, and nothing else. Ayuda, Perfil
+         * and Cerrar sesión live in the account menu it opens (see
+         * `AccountMenu`): three permanent rows here is what pushed the admin
+         * rail past a 1366x768 viewport.
+         */}
         <div className="flex shrink-0 flex-col gap-2 border-t border-white/[0.08] p-2.5">
-          {/* ADMB-15: help is ONE row (it used to be two, which pushed the last
-              menu items under the footer). /ayuda hosts "Reportar un problema". */}
-          <Link
-            href="/ayuda"
-            title="Ayuda"
-            aria-label="Ayuda"
-            className={`${NAV_ITEM_CLASSES} ${NAV_ITEM_IDLE_CLASSES}`}
-          >
-            <CircleHelp
-              size={ICON.base}
-              strokeWidth={1.75}
-              className="shrink-0"
-              aria-hidden="true"
-            />
-            <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>Ayuda</span>
-          </Link>
-
-          {session && (
-            <Fragment>
-              {/*
-               * Perfil and Cerrar sesión (#852) used to live inside a popup
-               * only the user card below opened — nothing about the card
-               * looked interactive, and older users could not find how to
-               * log out. They are now permanent rows, right here, drawn with
-               * the same primitive as every destination above so they are
-               * pixel-consistent with the rail. A divider on the rail's own
-               * border token separates them from the help group above,
-               * exactly as the footer itself is separated from the nav.
-               */}
-              <div className="flex flex-col gap-2 border-t border-white/[0.08] pt-2">
-                {renderNavRow({ href: "/profile", label: "Perfil" })}
-                <button
-                  type="button"
-                  onClick={(): void => {
-                    logout();
-                    setSidebarOpen(false);
-                  }}
-                  title="Cerrar sesión"
-                  aria-label="Cerrar sesión"
-                  // Same row tone as every other entry, not the destructive
-                  // red: clear enough to find, not loud enough to dominate.
-                  className={`${NAV_ITEM_CLASSES} ${NAV_ITEM_IDLE_CLASSES} w-full text-left`}
-                >
-                  <LogOut size={ICON.base} strokeWidth={2} className="shrink-0" aria-hidden="true" />
-                  <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>Cerrar sesión</span>
-                </button>
-              </div>
-
-              {/*
-               * The account info block. It used to be the only way to reach
-               * Perfil/Cerrar sesión — a button that opened a popup — which is
-               * exactly what nobody could tell by looking at it (#852). Both
-               * destinations now live above as their own rows, so the card
-               * goes back to being what it looks like: plain account info.
-               */}
-              <div
-                className={`flex w-full items-center gap-2.5 rounded-ctl bg-white/[0.06] px-2.5 py-2 ${
-                  collapsed ? "lg:justify-center lg:px-0" : ""
-                }`}
-              >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-cata-red/[0.28] text-2xs tracking-flat font-bold">
-                  <AvatarPhoto
-                    fotoUrl={session.user.fotoUrl}
-                    initials={getUserInitials(session.user.name)}
-                    className="h-8 w-8 rounded-full object-cover"
-                  />
-                </span>
-                <span className={`min-w-0 flex-1 leading-tight ${collapsed ? "lg:hidden" : ""}`}>
-                  <span className="block truncate text-xs font-semibold">
-                    {session.user.name}
-                  </span>
-                  {/* Same correction as the brand's area label: the user card
-                      sits on `bg-white/[0.06]` over `coal` (#212124), where
-                      white at 0.45 is 4.35:1. At 0.50 it measures 5.04:1. */}
-                  <span className="block truncate text-2xs tracking-flat text-white/50">
-                    {getRoleLabel(session.user.role)}
-                  </span>
-                </span>
-              </div>
-            </Fragment>
+          {session ? (
+            <AccountMenu
+              name={session.user.name}
+              roleLabel={getRoleLabel(session.user.role)}
+              initials={getUserInitials(session.user.name)}
+              fotoUrl={session.user.fotoUrl}
+              collapsed={collapsed}
+              onLogout={logout}
+              onNavigate={(): void => setSidebarOpen(false)}
+            >
+              <ThemeToggle variant="menu" />
+            </AccountMenu>
+          ) : (
+            <Link
+              href="/ayuda"
+              title="Ayuda"
+              aria-label="Ayuda"
+              className={`${NAV_ITEM_CLASSES} ${NAV_ITEM_IDLE_CLASSES}`}
+            >
+              <CircleHelp
+                size={ICON.base}
+                strokeWidth={1.75}
+                className="shrink-0"
+                aria-hidden="true"
+              />
+              <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>Ayuda</span>
+            </Link>
           )}
         </div>
       </aside>
@@ -934,7 +883,7 @@ export default function AppShell({
       {sidebarOpen && (
         <div
           data-report-ignore
-          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+          className="fixed inset-0 z-30 animate-overlay-in bg-black/40 lg:hidden"
           onClick={(): void => setSidebarOpen(false)}
           aria-hidden="true"
         />
@@ -1019,10 +968,14 @@ export default function AppShell({
           >
             <Search size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             <span className="hidden sm:inline">Buscar una sección…</span>
-            <kbd className="ml-1 hidden rounded-[5px] border border-line-2 px-[5px] py-0.5 text-2xs tracking-flat font-bold text-ink-3 sm:inline">
+            <kbd className="ml-1 font-sans hidden rounded-[5px] border border-line-2 px-[5px] py-0.5 text-2xs tracking-flat font-bold text-ink-3 sm:inline">
               Ctrl K
             </kbd>
           </button>
+          <ReportProblemButton />
+          {/* The dark-mode control sits right beside the bell, on every screen
+              and for every role — and again inside the account menu. */}
+          <ThemeToggle variant="bar" />
           {session && (
             <NotificationBell
               notificaciones={notificaciones}
@@ -1042,8 +995,9 @@ export default function AppShell({
         </div>
 
         {/* `.canvas` — the page header row belongs to the shell, above `<main>`.
-            The extra bottom padding clears the fixed tab bar; without it the
-            last row of every admin list sits under it.
+            The extra bottom padding clears the fixed tab bar (62px); without it
+            the last row of every list sits under it. 96px = 62 + 34; 80px
+            without tabs.
 
             `pt-3`, was `pt-6`: with the divider removed the title no longer
             opens a second slab, so it only needs to clear the utility row —
@@ -1051,14 +1005,20 @@ export default function AppShell({
             margin. */}
         <div
           className={`flex flex-1 flex-col gap-page px-4 pt-3 sm:px-[26px] ${
-            showMobileTabs ? "pb-[78px] lg:pb-8" : "pb-8"
+            showMobileTabs ? "pb-[96px] lg:pb-20" : "pb-20"
           }`}
         >
           {/* The page's back control (#1396) — see `AppShellProps.back`. It
               is drawn in the page's own document order: back control, then
               the title row, then the content. */}
           {back}
-          <PageHeader title={title} subtitle={subtitle} actions={actions} />
+          <PageHeader
+            title={title}
+            subtitle={subtitle}
+            kicker={pageKicker ?? undefined}
+            highlight={highlightTitle}
+            actions={actions}
+          />
           {/* `tabIndex={-1}` so the skip link actually MOVES focus here rather
               than only scrolling: a `<main>` is not focusable by default, and
               a fragment jump to a non-focusable target leaves the caret where
@@ -1085,6 +1045,9 @@ export default function AppShell({
             {children}
           </main>
         </div>
+
+        {/* Release note after login; waits for the legal re-accept gate. */}
+        <WhatsNewDialog />
 
         {/* `.phone .tabs2` — 62px, paper, hairline on top. Phone only. */}
         {showMobileTabs && (
@@ -1151,12 +1114,10 @@ export default function AppShell({
         )}
       </div>
 
-      <ReportProblemFab />
-
       {/* Command palette — "go to" navigation search, role-aware */}
       {paletteOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 px-4 pt-24"
+          className="fixed inset-0 z-50 flex animate-overlay-in items-start justify-center bg-black/50 px-4 pt-24"
           onClick={(): void => setPaletteOpen(false)}
         >
           <div
@@ -1165,7 +1126,7 @@ export default function AppShell({
             aria-modal="true"
             aria-label="Buscador de secciones"
             onClick={(e): void => e.stopPropagation()}
-            className="w-full max-w-md overflow-hidden rounded-card bg-paper shadow-elevated"
+            className="w-full max-w-md animate-dialog-in overflow-hidden rounded-card bg-paper shadow-elevated dark:bg-popover"
           >
             <div className="flex items-center gap-2.5 border-b border-line px-4 py-3.5">
               <Search size={ICON.sm} strokeWidth={2} className="shrink-0 text-ink-3" aria-hidden="true" />

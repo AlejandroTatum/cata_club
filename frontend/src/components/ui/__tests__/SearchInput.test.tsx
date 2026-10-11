@@ -21,6 +21,11 @@ describe("SearchInput — committed dimensions", () => {
     expect(committedHeight(frameOf(screen.getByRole("searchbox")))).toBe("40px");
   });
 
+  it("grows to 44px below md without touching the 40px desktop height", () => {
+    render(<SearchInput label="Buscar miembros" value="" onChange={vi.fn()} />);
+    expect(frameOf(screen.getByRole("searchbox")).className).toMatch(/max-md:min-h-11/);
+  });
+
   it("uses the 10px control radius", () => {
     render(<SearchInput label="Buscar miembros" value="" onChange={vi.fn()} />);
     expect(committedRadius(frameOf(screen.getByRole("searchbox")))).toBe("10px");

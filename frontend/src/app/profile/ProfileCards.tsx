@@ -62,7 +62,7 @@ interface IdentityCardProps {
  * sit on an 84px avatar; `touch-target-reach` gives a thumb its 44px anyway.
  */
 const PENCIL_BADGE =
-  "touch-target-reach absolute -bottom-0.5 -right-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-paper bg-coal text-white shadow-card hover:bg-ink-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cata-red disabled:opacity-80";
+  "touch-target-reach absolute -bottom-0.5 -right-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-paper bg-coal text-white shadow-card hover:bg-ink-2 hover:text-on-solid focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cata-red disabled:opacity-80";
 
 /**
  * The avatar with its pencil. With a photo, the pencil offers «Ver foto» and
@@ -169,7 +169,7 @@ export function IdentityCard({
     <section
       data-testid="profile-hero"
       aria-label={`Identidad de la cuenta de ${name}`}
-      className="relative min-w-0 overflow-hidden rounded-2xl border border-line-2 bg-paper px-5 shadow-elevated"
+      className="relative min-w-0 overflow-hidden rounded-card border-2 border-edge bg-paper px-5 shadow-sticker"
     >
       {/* The asymmetric institutional-red field: the card's one colour gesture. */}
       <span
@@ -177,7 +177,11 @@ export function IdentityCard({
         className="pointer-events-none absolute inset-x-0 top-0 h-[132px] bg-cata-red"
         style={{ clipPath: "polygon(0 0, 100% 0, 100% 58%, 68% 100%, 0 84%)" }}
       />
-      <div className="relative flex h-[100px] items-start pt-4 text-white">
+      {/* The red field is a clipped sibling, so the contrast sweep is told the ground the white copy sits on. */}
+      <div
+        data-contrast-backdrop="#d92128"
+        className="relative flex h-[100px] items-start pt-4 text-white"
+      >
         <span className="text-2xs font-bold uppercase tracking-caps-wide">Cata Club</span>
         {/* The role is the first thing read; the ball is its full stop. */}
         <div
@@ -301,19 +305,19 @@ const TICKET_TONE: Record<
   { card: string; word: string; on: string; off: string }
 > = {
   ok: {
-    card: "border-t-state-ok bg-state-ok-bg/55",
+    card: "bg-paper",
     word: "text-state-ok",
     on: "bg-state-ok",
     off: "bg-state-ok/25",
   },
   warn: {
-    card: "border-t-state-warn bg-state-warn-bg/55",
+    card: "bg-paper",
     word: "text-state-warn",
     on: "bg-state-warn",
     off: "bg-state-warn/25",
   },
   bad: {
-    card: "border-t-state-bad bg-state-bad-bg/55",
+    card: "bg-paper",
     word: "text-state-bad",
     on: "bg-state-bad",
     off: "bg-state-bad/25",
@@ -356,9 +360,10 @@ export function MembershipTicket({
   return (
     <section
       data-testid="profile-membership"
+      data-tone={tone}
       aria-label="Tu membresía"
       className={cn(
-        "grid items-center gap-x-5 gap-y-3 rounded-card border border-line border-t-[3px] px-5 py-4 sm:grid-cols-[auto_minmax(0,1fr)]",
+        "grid items-center gap-x-5 gap-y-3 rounded-card border-2 border-edge shadow-sticker px-5 py-4 sm:grid-cols-[auto_minmax(0,1fr)]",
         skin.card,
       )}
     >

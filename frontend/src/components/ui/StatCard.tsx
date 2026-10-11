@@ -14,7 +14,7 @@
  * still holds the row's tiles level with each other — and lets the rare long
  * one grow the row instead of overflowing its own box.
  *
- * Non-negotiable: the number is ALWAYS ink. Color lives in badges and pills,
+ * Non-negotiable: the number is never a state color. It takes its face's own ink (ink, white or coal). Color lives in the face, badges and pills,
  * never in a stat value — a green "17" is a defect, not a nicety.
  *
  * The `hot` variant inverts the tile onto coal for the one priority stat per
@@ -102,9 +102,9 @@ export function StatTrack({ value, total, className }: StatTrackProps): ReactEle
     <span
       aria-hidden="true"
       data-testid="stat-track"
-      className={cn("block h-1.5 w-full overflow-hidden rounded-full bg-line", className)}
+      className={cn("block h-1.5 w-full overflow-hidden rounded-full bg-line dark:bg-track", className)}
     >
-      <i className="block h-full rounded-full bg-coal" style={{ width: `${percent}%` }} />
+      <i className="block h-full rounded-full bg-coal dark:bg-mark" style={{ width: `${percent}%` }} />
     </span>
   );
 }
@@ -175,7 +175,7 @@ export function StatSpark({ values, className }: StatSparkProps): ReactElement |
               "block flex-1 rounded-[2px]",
               // The newest period is the one the figure above reports; the
               // earlier ones are the context it is being read against.
-              index === last ? "bg-coal" : "bg-line-2",
+              index === last ? "bg-coal dark:bg-mark" : "bg-line-2 dark:bg-track",
             )}
             style={{ height: share > 0 ? `${Math.round(share * 1000) / 10}%` : "2px" }}
           />
@@ -222,21 +222,56 @@ export const STATUS_INK: Record<StatCardTone, string> = {
   neutral: "text-ink-3-strong",
 };
 
-export const STAT_TONE: Record<StatCardTone, { icon: string; accent: string }> = {
-  ball: { icon: "bg-ball/25 text-ink", accent: "border-t-ball bg-ball/5" },
-  ok: { icon: "bg-state-ok-bg text-state-ok", accent: "border-t-state-ok bg-state-ok-bg/30" },
-  info: {
-    icon: "bg-cuenta-representante-bg text-cuenta-representante",
-    accent: "border-t-cuenta-representante bg-cuenta-representante-bg/30",
-  },
-  warn: { icon: "bg-state-warn-bg text-state-warn", accent: "border-t-state-warn bg-state-warn-bg/30" },
-  bad: { icon: "bg-state-bad-bg text-state-bad", accent: "border-t-state-bad bg-state-bad-bg/30" },
-  trainer: {
-    icon: "bg-cuenta-entrenador-bg text-cuenta-entrenador",
-    accent: "border-t-cuenta-entrenador bg-cuenta-entrenador-bg/30",
-  },
-  neutral: { icon: "bg-state-neutral-bg text-state-neutral", accent: "border-t-ink-3 bg-sunken/50" },
+export const STAT_TONE: Record<StatCardTone, { icon: string }> = {
+  ball: { icon: "bg-ball/25 text-ink" },
+  ok: { icon: "bg-state-ok-bg text-state-ok" },
+  info: { icon: "bg-cuenta-representante-bg text-cuenta-representante" },
+  warn: { icon: "bg-state-warn-bg text-state-warn" },
+  bad: { icon: "bg-state-bad-bg text-state-bad" },
+  trainer: { icon: "bg-cuenta-entrenador-bg text-cuenta-entrenador" },
+  neutral: { icon: "bg-state-neutral-bg text-state-neutral" },
 };
+
+/**
+ * The solid brand blocks — the landing's stat tiles: a flat red, ball or coal
+ * face, a 2px outline, a hard offset shadow, the figure big, a vertical
+ * divider and a letter-spaced label. A block is brand, not meaning: the
+ * datum's state is still said in a word (`status`), in the block's own ink.
+ *
+ * `paper` is the quiet block — a white sticker — for a tile with nothing to
+ * say. Ink on each face is chosen for the gate in `color-contrast.test.ts`:
+ * white on red (5.0:1), coal on ball (14:1), white on coal.
+ */
+export type StatBlock = "red" | "ball" | "coal" | "paper";
+
+export const STAT_BLOCK: Record<
+  StatBlock,
+  { surface: string; label: string; muted: string; rule: string }
+> = {
+  red: { surface: "bg-cata-red text-white dark:bg-kpi-red", label: "text-white", muted: "text-white", rule: "border-white/60" },
+  ball: { surface: "bg-ball text-coal dark:bg-kpi-ball", label: "text-coal", muted: "text-coal/80", rule: "border-coal/50" },
+  coal: { surface: "bg-coal text-white dark:bg-kpi-coal", label: "text-white/70", muted: "text-white/70", rule: "border-white/30" },
+  paper: { surface: "bg-paper text-ink", label: "text-ink-3-strong", muted: "text-ink-3-strong", rule: "border-line-2" },
+};
+
+/** Every block wears the same sticker frame. */
+export const STAT_BLOCK_FRAME = "rounded-card border-2 border-edge shadow-sticker";
+
+/** Which face a tone wears. `hot` (needs action) is the coal block. */
+export const STAT_BLOCK_FOR_TONE: Record<StatCardTone, StatBlock> = {
+  ok: "ball",
+  info: "red",
+  warn: "ball",
+  bad: "red",
+  trainer: "coal",
+  ball: "ball",
+  neutral: "paper",
+};
+
+/** The status word reads at full strength on a solid face (`white/70` labels go to white). */
+function statusInkOnFace(label: string): string {
+  return label === "text-white/70" ? "text-white" : label;
+}
 
 export type StatCardProps = StatCardToneProps & StatCardBaseProps;
 
@@ -279,14 +314,21 @@ export default function StatCard({
 }: StatCardProps): ReactElement {
   const hot = variant === "hot";
   const showIcon = icon != null && !hot;
+  // One surface language for every role (T14 RC12): a toned or hot tile is the
+  // admin dashboard's solid brand block, a neutral one the quiet white sticker.
+  const solid = hot || tone !== "neutral";
+  const skin = STAT_BLOCK[hot ? "coal" : STAT_BLOCK_FOR_TONE[tone]];
 
   const tile = (
     <div
       data-tone={hot ? "action" : tone}
       className={cn(
-        "relative min-h-stat rounded-card border px-[18px] py-4 flex flex-col justify-between",
-        hot ? "bg-coal border-coal" : showIcon ? cn("border-line border-t-[3px]", STAT_TONE[tone].accent) : "bg-paper border-line",
-        href && "h-full transition-colors hover:border-ink-3",
+        "relative min-h-stat px-[18px] py-4 flex flex-col justify-between",
+        STAT_BLOCK_FRAME,
+        skin.surface,
+        // Dark: the coal slab keeps the bright rim; the red and yellow fills a coal edge.
+        skin === STAT_BLOCK.coal ? "dark:border-edge-hot" : solid && "dark:border-edge-fill",
+        href && "h-full transition-[transform,box-shadow] hover:-translate-x-px hover:-translate-y-px hover:shadow-sticker-lg motion-reduce:transition-none motion-reduce:hover:translate-x-0 motion-reduce:hover:translate-y-0",
         className,
       )}
     >
@@ -295,8 +337,9 @@ export default function StatCard({
           data-testid="statcard-icon"
           aria-hidden="true"
           className={cn(
-            "absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-ctl",
-            STAT_TONE[tone].icon,
+            "absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-ctl max-sm:hidden",
+            // On a solid face the chip is a paper inset, as the KPI tile's picture is.
+            solid ? "border-2 border-edge bg-paper text-ink" : STAT_TONE[tone].icon,
           )}
         >
           {icon}
@@ -305,9 +348,11 @@ export default function StatCard({
 
       <span
         className={cn(
-          "text-2xs font-bold uppercase",
-          hot ? "text-white/45" : "text-ink-3-strong",
-          showIcon && "pr-11",
+          "text-2xs font-bold uppercase tracking-caps",
+          skin.label,
+          // The chip is decorative and hidden on a phone: two tiles per row leave
+          // no room for it beside a one-word label such as "Entrenamientos".
+          showIcon && "sm:pr-11",
         )}
       >
         {label}
@@ -321,10 +366,17 @@ export default function StatCard({
           request for a bold the face cannot draw. `tracking-flat` cancels the
           -0.04em `text-2xl` carries for Barlow; Graduate's digits are already
           wide and flat, and tightening them runs them together. */}
+      {/* The figure is fluid, 18px on a 390px phone up to the 32px `text-2xl`
+          step from ~640px: two tiles per row leave ~134px of ink, and a
+          currency value such as "$18.711,00" is wider than that at 22px (T14
+          RC5, L42). A number never breaks mid-figure, so the size step shrinks
+          to fit and `whitespace-nowrap` forbids the break; the row is a
+          wrapping flex so only the unit may drop to a second line. */}
       <span
         className={cn(
-          "font-display text-2xl leading-none tabular-nums tracking-flat",
-          hot ? "text-white" : "text-ink",
+          "flex min-w-0 flex-wrap items-baseline whitespace-nowrap font-display text-[clamp(1.125rem,5vw,2rem)] leading-none tabular-nums tracking-flat",
+          // The figure takes its face's ink: ink on paper, white on red/coal, coal on ball.
+          hot ? "text-white" : tone === "neutral" ? "text-ink" : null,
         )}
       >
         {value}
@@ -341,7 +393,7 @@ export default function StatCard({
           <small
             className={cn(
               "ml-[3px] font-sans text-sm font-semibold",
-              hot ? "text-white/60" : "text-ink-3-strong",
+              skin.muted,
             )}
           >
             {unit}
@@ -356,7 +408,7 @@ export default function StatCard({
               data-testid="statcard-status"
               className={cn(
                 "flex items-center gap-1.5 font-semibold",
-                hot ? "text-white" : STATUS_INK[tone],
+                solid ? statusInkOnFace(skin.label) : STATUS_INK[tone],
               )}
             >
               <span
@@ -368,7 +420,7 @@ export default function StatCard({
             </span>
           ) : null}
           {hint ? (
-            <span className={cn("flex items-center gap-2", hot ? "text-white/60" : "text-ink-3-strong")}>
+            <span className={cn("flex items-center gap-2", skin.muted)}>
               {hot && !status ? (
                 <span
                   data-testid="statcard-ball-dot"

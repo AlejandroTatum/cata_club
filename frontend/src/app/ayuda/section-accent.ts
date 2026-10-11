@@ -11,9 +11,10 @@ import type { LucideIcon } from "lucide-react";
  *
  * The icon/text pairs mirror the ones `/admin/crear-cuenta` already ships for
  * the same "estudiante" (`cuenta-representante`) and "entrenador"
- * (`cuenta-entrenador`) accounts, and reuse `cata-red` at the same `/15` tint
- * that screen uses for its own red card — both are icon-only usages (3:1,
- * not the 4.5:1 body-text floor), matching how those tokens already ship.
+ * (`cuenta-entrenador`) accounts. The yellow and red chips are themed PAIRS
+ * (`chip-*`): fill and ink change together, so the icon holds 3:1 (WCAG 1.4.11,
+ * not the 4.5:1 body-text floor) in light and in dark. A brand-constant fill
+ * under a themed ink is what put a light icon on a pale chip in dark.
  *
  * Keyed by section title rather than folded into `faq-content.ts`: that file
  * is the copy that is tested against the club's knowledge snapshot, and
@@ -22,7 +23,7 @@ import type { LucideIcon } from "lucide-react";
 export const SECTION_ACCENT: Record<string, { icon: LucideIcon; iconBg: string; iconFg: string }> = {
   "Para empezar": {
     icon: Rocket,
-    iconBg: "bg-cata-yellow-soft",
+    iconBg: "bg-chip-ball",
     iconFg: "text-ball-ink",
   },
   "Si eres jugador o representante": {
@@ -37,7 +38,7 @@ export const SECTION_ACCENT: Record<string, { icon: LucideIcon; iconBg: string; 
   },
   "Si eres administrador": {
     icon: ShieldCheck,
-    iconBg: "bg-cata-red/15",
-    iconFg: "text-cata-red",
+    iconBg: "bg-chip-red",
+    iconFg: "text-chip-red-ink",
   },
 };

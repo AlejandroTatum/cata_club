@@ -97,7 +97,7 @@ function TrainingDayChips({ days }: { days: readonly DiaSemana[] }): React.React
             aria-hidden="true"
             className={cn(
               "flex h-7 min-w-0 flex-1 items-center justify-center rounded-[5px] text-2xs font-extrabold print:h-5",
-              active ? "bg-state-ok text-white" : "bg-white/[0.03] text-white/70",
+              active ? "bg-state-ok text-on-solid" : "bg-white/[0.03] text-white/70",
             )}
           >
             {DIA_SEMANA_LABELS[day].charAt(0)}
@@ -146,7 +146,7 @@ function RegisterRow({
         ruled && "border-t border-white/[0.12]",
       )}
     >
-      <span className="flex flex-none items-center gap-[var(--carnet-field)] text-2xs font-extrabold uppercase leading-none text-white/60">
+      <span className="flex flex-none items-center gap-[var(--carnet-field)] text-2xs font-extrabold uppercase tracking-caps print:tracking-wide leading-none text-white/60">
         <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-white/10 text-white/80 print:h-5 print:w-5">
           <Icon size={ICON.sm} strokeWidth={1.75} aria-hidden="true" />
         </span>
@@ -278,7 +278,7 @@ export function MemberCardCredential({
         <b className="font-display text-base uppercase leading-none tracking-flat">Cata Club</b>
         <span
           data-testid="carnet-role"
-          className="ml-auto border-l border-white/[0.12] pl-[var(--carnet-field)] text-2xs font-extrabold uppercase leading-none text-ball"
+          className="ml-auto border-l border-white/[0.12] pl-[var(--carnet-field)] text-2xs font-extrabold uppercase tracking-caps leading-none text-ball"
         >
           Jugador
         </span>
@@ -332,7 +332,7 @@ export function MemberCardCredential({
           {/* Absent cédula means the row is not drawn, never a blank. */}
           {profile.cedula && (
             <div className="mt-[var(--carnet-field)]">
-              <span className="block text-2xs font-extrabold uppercase leading-none text-white/60">
+              <span className="block text-2xs font-extrabold uppercase tracking-caps leading-none text-white/60">
                 Cédula
               </span>
               {/* Barlow, tracked WIDE: a document number, not a score. */}
@@ -478,7 +478,7 @@ export default function MemberCard({
           </>
         )}
         {fotoError && (
-          <p role="alert" className="w-full text-2xs text-state-bad">
+          <p role="alert" className="w-full text-xs text-state-bad">
             {fotoError}
           </p>
         )}

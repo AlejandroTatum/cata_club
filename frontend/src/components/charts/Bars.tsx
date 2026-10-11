@@ -85,7 +85,7 @@ export default function Bars({
                 height={height}
                 className={cn(
                   current ? TONE_FILL[tone] : TONE_FILL.muted,
-                  "motion-safe:transition-[height,y] motion-safe:duration-300",
+                  "motion-safe:transition-[height,y] motion-safe:duration-overlay",
                 )}
               />
             );

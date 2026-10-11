@@ -153,7 +153,7 @@ export interface IdentityCellProps {
  * the system's own `h-ctl-sm`.
  */
 const INITIALS =
-  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-coal/[0.08] text-xs font-bold text-coal";
+  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink/[0.08] text-xs font-bold text-ink";
 
 export default function IdentityCell({
   name,

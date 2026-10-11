@@ -46,18 +46,18 @@ export default function TarifaUsage(): React.ReactElement {
           El precio de cada tarifa interviene en tres momentos del ciclo de una membresía.
         </p>
       </div>
-      <ul className="grid gap-page sm:grid-cols-3">
+      <ul className="grid divide-y divide-line sm:grid-cols-3 sm:divide-x sm:divide-y-0">
         {USES.map(({ key, icon: Icon, title, what, note }) => (
           <li
             key={key}
-            className="flex min-w-0 flex-col gap-section rounded-card border border-line bg-sunken p-[18px]"
+            className="flex min-w-0 flex-col gap-section py-4 first:pt-0 last:pb-0 sm:px-[18px] sm:py-0 sm:first:pl-0 sm:last:pr-0"
           >
-            <span className="flex h-ctl w-10 items-center justify-center rounded-ctl bg-paper text-ink-2">
+            <span className="flex h-ctl w-10 items-center justify-center rounded-ctl bg-sunken text-ink-2">
               <Icon size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />
             </span>
             <h3 className="text-sm font-bold text-ink">{title}</h3>
             <p className="text-sm text-ink-2">{what}</p>
-            <p className="mt-auto border-t border-line pt-3 text-xs text-ink-3">{note}</p>
+            <p className="mt-auto border-t border-line pt-3 text-xs text-ink-3-strong">{note}</p>
           </li>
         ))}
       </ul>

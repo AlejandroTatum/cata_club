@@ -9,10 +9,11 @@
  */
 
 import { describe, it, expect } from "vitest";
-import tailwindConfig from "../../../../tailwind.config";
+import tailwindConfig, { LIGHT_COLORS } from "../../../../tailwind.config";
 
 const extend = tailwindConfig.theme?.extend ?? {};
-const colors = (extend.colors ?? {}) as Record<string, Record<string, string> | string>;
+// The palette as written (light values); Tailwind itself sees CSS variables.
+const colors = LIGHT_COLORS as unknown as Record<string, Record<string, string> | string>;
 const heights = (extend.height ?? {}) as Record<string, string>;
 const minHeights = (extend.minHeight ?? {}) as Record<string, string>;
 const radii = (extend.borderRadius ?? {}) as Record<string, string>;
@@ -70,7 +71,7 @@ describe("design tokens — ink and surfaces (_sistema.css:29-35)", () => {
     // #E9E9EC / #D8D8DE were drawn for a #F5F5F7 page. On the reworked canvas
     // the divider hairline was 1.01:1 — a card outline the same luminance as
     // the page under it.
-    expect(nested("line")).toMatchObject({ DEFAULT: "#DEDEE6", "2": "#CFCFDA" });
+    expect(nested("line")).toMatchObject({ DEFAULT: "#C9C9D3", "2": "#B9B9C6" });
   });
 
   it("carries the three-surface ladder, not two near-white sheets", () => {
@@ -214,16 +215,20 @@ describe("design tokens — the three brand type families", () => {
    * `next/font/local` generates the actual family name at build time, so the
    * variable is the only stable thing to hold a config to.
    */
-  it("makes Barlow the interface text, at the head of the fallback chain", () => {
-    expect(fontFamily.sans?.[0]).toBe("var(--font-barlow)");
+  it("makes Switzer the interface text, at the head of the fallback chain", () => {
+    expect(fontFamily.sans?.[0]).toBe("var(--font-switzer)");
   });
 
-  it("exposes Graduate as the display face", () => {
-    expect(fontFamily.display?.[0]).toBe("var(--font-graduate)");
+  it("exposes Anybody as the display face", () => {
+    expect(fontFamily.display?.[0]).toBe("var(--font-anybody)");
   });
 
-  it("exposes Playfair as the serif voice", () => {
-    expect(fontFamily.serif?.[0]).toBe("var(--font-playfair)");
+  it("falls back to a sans-serif face while Anybody loads", () => {
+    expect(fontFamily.display?.at(-1)).toBe("sans-serif");
+  });
+
+  it("has no serif family: the club's voice is Anybody (T14I)", () => {
+    expect(fontFamily.serif).toBeUndefined();
   });
 
   /**
@@ -245,17 +250,16 @@ describe("design tokens — the three brand type families", () => {
     const [size, meta] = fontSize.voice as [string, { lineHeight: string; letterSpacing: string }];
     expect(size).toBe("clamp(20px, 2.4vw, 31px)");
     expect(meta.lineHeight).toBe("1.3");
-    // Normal, not the tightening every other step above `base` carries:
-    // Playfair's high stroke contrast needs its own sidebearings to stay
-    // readable, and this step is read rather than scanned.
-    expect(meta.letterSpacing).toBe("normal");
+    // Flat, not the tightening every other step above `base` carries: the
+    // voice is read rather than scanned.
+    expect(meta.letterSpacing).toBe("0em");
   });
 
-  it("keeps a system fallback behind each of the three", () => {
+  it("keeps a system fallback behind each family", () => {
     // A `var()` that never resolves — a font file that 404s, a variable the
     // layout forgot to mount — falls through to nothing and the browser picks
     // its own default. Each stack has to name what it degrades TO.
-    for (const key of ["sans", "display", "serif"]) {
+    for (const key of ["sans", "display"]) {
       expect(fontFamily[key]?.length, `${key} has no fallback behind the variable`)
         .toBeGreaterThan(1);
     }

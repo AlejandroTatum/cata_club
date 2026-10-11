@@ -85,49 +85,12 @@ const FIELD_CONTROL =
   "h-ctl w-full rounded-ctl border border-line-2 bg-paper px-3 text-sm text-ink outline-none focus:border-cata-red";
 
 /** The caption above a field — the system's micro-label, at the field step. */
-const FIELD_LABEL = "flex flex-col gap-field text-2xs font-bold uppercase text-ink-3";
+const FIELD_LABEL = "flex flex-col gap-field text-2xs font-bold uppercase tracking-caps text-ink-3";
 
 /** The text-only "Eliminar" at the right edge of a card's actions: red text
  *  without a box until hovered, so it reads as the one irreversible action. */
 const ELIMINAR_CLASS =
   "ml-auto inline-flex h-ctl-sm items-center justify-center gap-2 whitespace-nowrap rounded-ctl border border-transparent px-3 text-xs font-semibold text-state-bad transition-colors hover:bg-state-bad-bg disabled:cursor-not-allowed disabled:opacity-45";
-
-/** Ghost example cards under the empty state: show what a catalog card looks
- *  like without pretending any discount exists. Purely decorative. */
-const GHOST_EXAMPLES = [
-  { nombre: "Beca deportiva", valor: "50 %", tipo: "Porcentaje" },
-  { nombre: "Convenio familiar", valor: "$ 10,00", tipo: "Monto fijo" },
-  { nombre: "Pago anticipado", valor: "15 %", tipo: "Porcentaje" },
-  { nombre: "Hermanos", valor: "$ 5,00", tipo: "Monto fijo" },
-];
-
-function GhostCards(): React.ReactElement {
-  return (
-    <ul
-      aria-hidden="true"
-      className="grid auto-rows-fr gap-page opacity-50 sm:grid-cols-2 2xl:grid-cols-3"
-    >
-      {GHOST_EXAMPLES.map((example, index) => (
-        <li
-          key={example.nombre}
-          className={cn(
-            "flex min-h-56 min-w-0 flex-col gap-section rounded-card border border-dashed border-line-2 p-[18px]",
-            index === 3 && "2xl:hidden",
-          )}
-        >
-          <div className="flex items-start justify-between gap-2">
-            <span className="font-display text-lg uppercase leading-tight tracking-flat text-ink-2">
-              {example.nombre}
-            </span>
-            <Badge>{example.tipo}</Badge>
-          </div>
-          <p className="text-4xl font-extrabold tabular-nums text-ink-3">{example.valor}</p>
-          <span className="mt-auto text-2xs font-bold uppercase text-ink-3">Ejemplo</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 /** A field caption with its required mark inline. The label is a flex column,
  *  so a bare sibling mark would drop to its own line (ADMB-28): both live in
@@ -406,14 +369,14 @@ export default function DiscountsPage(): React.ReactElement {
     const activos = descuentos.filter((d) => d.activo).length;
     const ocultos = descuentos.length - activos;
     return (
-      <InfoPanel title="Resumen del catálogo">
+      <InfoPanel title="Resumen del catálogo" collapsible={false}>
         <dl className="grid grid-cols-2 gap-section">
           <div>
-            <dt className="text-2xs font-bold uppercase text-ink-3">Activos</dt>
+            <dt className="text-2xs font-bold uppercase tracking-caps text-ink-3">Activos</dt>
             <dd className="text-2xl font-extrabold tabular-nums text-ink">{activos}</dd>
           </div>
           <div>
-            <dt className="text-2xs font-bold uppercase text-ink-3">Ocultos</dt>
+            <dt className="text-2xs font-bold uppercase tracking-caps text-ink-3">Ocultos</dt>
             <dd className="text-2xl font-extrabold tabular-nums text-ink">{ocultos}</dd>
           </div>
         </dl>
@@ -674,35 +637,30 @@ export default function DiscountsPage(): React.ReactElement {
                 <LoadingState label="Cargando descuentos…" />
               </section>
             ) : !loadError && filteredDescuentos.length === 0 ? (
-              <>
-                <section className="card flex min-w-0 flex-col overflow-hidden">
-                  <EmptyState
-                    surface="inset"
-                    icon={<Percent size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-                    title={searchTerm ? "No se encontraron descuentos" : "Sin descuentos en el catálogo"}
-                    description={
-                      searchTerm
-                        ? "Ningún descuento coincide con la búsqueda."
-                        : "Crea el primer descuento para poder aplicarlo al registrar pagos."
-                    }
-                    action={
-                      searchTerm ? (
-                        <Button onClick={() => setSearchTerm("")}>Limpiar búsqueda</Button>
-                      ) : (
-                        // Worded distinctly from the header's "Nuevo descuento" —
-                        // same "Nueva categoría" / "Crear primera categoría" split
-                        // Groups already draws — so the two controls read as one
-                        // clear action for this moment, not a duplicate (issue #199).
-                        <Button variant="dark" onClick={openCreateForm}>
-                          <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                          Crear primer descuento
-                        </Button>
-                      )
-                    }
-                  />
-                </section>
-                {!searchTerm ? <GhostCards /> : null}
-              </>
+              <EmptyState
+            layout="row"
+            icon={<Percent size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+            title={searchTerm ? "No se encontraron descuentos" : "Sin descuentos en el catálogo"}
+            description={
+              searchTerm
+                ? "Ningún descuento coincide con la búsqueda."
+                : "Crea el primer descuento para poder aplicarlo al registrar pagos."
+            }
+            action={
+              searchTerm ? (
+                <Button onClick={() => setSearchTerm("")}>Limpiar búsqueda</Button>
+              ) : (
+                // Worded distinctly from the header's "Nuevo descuento" —
+                // same "Nueva categoría" / "Crear primera categoría" split
+                // Groups already draws — so the two controls read as one
+                // clear action for this moment, not a duplicate (issue #199).
+                <Button variant="dark" onClick={openCreateForm}>
+                  <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                  Crear primer descuento
+                </Button>
+              )
+            }
+              />
             ) : filteredDescuentos.length > 0 ? (
               <ul
                 data-testid="discounts-cards"

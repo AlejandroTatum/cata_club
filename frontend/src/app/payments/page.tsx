@@ -147,7 +147,7 @@ import {
   FilterPill,
   InfoPanel,
   LoadingState,
-  PAGE_RAIL,
+  PAGE_RAIL_XL,
   ResponsiveList,
   SearchInput,
   STAT_GRID,
@@ -340,7 +340,7 @@ function MethodTag({ method }: { method: string }): React.ReactElement {
 /** The one label style the detail card uses, in both of its shapes. */
 function DetailLabel({ children }: { children: React.ReactNode }): React.ReactElement {
   return (
-    <span className="text-2xs font-bold uppercase text-ink-3-strong">{children}</span>
+    <span className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">{children}</span>
   );
 }
 
@@ -416,7 +416,7 @@ function ProofViewer({
             name, so the badge renders only when a proof does; a transfer
             with a voucher, or cash with a receipt, keeps it unchanged. */}
         {request.proofPreviewUrl && (
-          <span className="shrink-0 text-2xs tracking-flat text-ink-3-strong">
+          <span className="shrink-0 text-xs tracking-flat text-ink-3-strong">
             {request.proofFileType === "pdf" ? "PDF" : "Imagen"}
           </span>
         )}
@@ -1304,8 +1304,8 @@ export default function PaymentsPage(): React.ReactElement {
           />
         </div>
 
-        <div className={PAGE_RAIL}>
-          <div className="flex min-w-0 flex-col gap-page lg:min-h-[calc(100dvh-23rem)]">
+        <div className={PAGE_RAIL_XL}>
+          <div className="flex min-w-0 flex-col gap-page xl:min-h-[calc(100dvh-23rem)]">
         {/* This screen used to read the other way round — chips first, search
             on its own line underneath — which was the exact inverse of
             Members. `FilterPanel` renders the slots in one fixed order, so the
@@ -1425,11 +1425,12 @@ export default function PaymentsPage(): React.ReactElement {
                 // a proof. The way out is the screen where a payment gets
                 // registered, which is the same destination the rest of the
                 // panel already names.
-                <Link href="/members" className={buttonClasses("secondary")}>
+                <Link href="/members" className={buttonClasses("secondary", "md", "max-md:min-h-11")}>
                   Ir a Miembros
                 </Link>
               ) : (
                 <Button
+                  className="max-md:min-h-11"
                   onClick={() => {
                     setActiveFilter("all");
                     setQuery("");
@@ -1448,6 +1449,9 @@ export default function PaymentsPage(): React.ReactElement {
             breakpoint="md"
             order="tableFirst"
             tableTestId="payments-table"
+            // Six columns beside a 340px rail: 12px cell padding instead of 16
+            // is what lets the name keep 208px without a scroller of its own.
+            tableClassName="[&_td]:px-3 [&_th]:px-3"
             cardsTestId="payments-cards"
             items={visibleItems}
             getKey={(req) => req.id}
@@ -1456,7 +1460,6 @@ export default function PaymentsPage(): React.ReactElement {
               <TableHeaderCell key="periodo" type="text">Período</TableHeaderCell>,
               <TableHeaderCell key="monto" type="number">Monto</TableHeaderCell>,
               <TableHeaderCell key="metodo" type="text">Método</TableHeaderCell>,
-              <TableHeaderCell key="subido" type="text">Subido</TableHeaderCell>,
                   <TableHeaderCell key="estado" type="text">Estado</TableHeaderCell>,
               <TableHeaderCell key="accion" type="action">
                 <span className="sr-only">Acción</span>
@@ -1467,16 +1470,31 @@ export default function PaymentsPage(): React.ReactElement {
               const fields = buildRowFields(req);
               return (
                 <TableRow>
+                  {/* `min-w-[12.5rem]`: with six columns in the two-thirds beside
+                      the rail, the name used to take whatever the others left
+                      (102px at 1440), so "Isabella Pilay Sabando" broke into
+                      four lines and the row doubled in height. 200px, not
+                      208: the micro step grew to 11.5px (T14 RC16), the Estado
+                      badge with it, and the table needs those 8px back to
+                      stay inside its column. */}
                   <TableNameCell
+                    className="min-w-[12.5rem]"
                     name={<span id={desktopNameId}>{fields.studentName}</span>}
                     sub={fields.payer}
                   />
-                  <TableCell type="text">{fields.period}</TableCell>
+                  {/* How long it has waited rides under the period: it is a
+                      property of the same payment, and its own column was the
+                      one squeezing the name. */}
+                  <TableCell type="text">
+                    <span className="block">{fields.period}</span>
+                    {fields.waiting ? (
+                      <span className="mt-px block text-xs text-ink-3-strong">{fields.waiting}</span>
+                    ) : null}
+                  </TableCell>
                   <TableCell type="number">{fields.amount}</TableCell>
                   <TableCell type="text">
                     <MethodTag method={fields.method} />
                   </TableCell>
-                  <TableCell type="text">{fields.waiting}</TableCell>
                       <TableCell type="text">
                         <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
                           {VALIDATION_STATUS_LABELS[req.validationStatus]}
@@ -1499,7 +1517,7 @@ export default function PaymentsPage(): React.ReactElement {
                     <p id={mobileNameId} className="truncate text-sm font-semibold text-ink">
                       {fields.studentName}
                     </p>
-                    <p className="truncate text-2xs tracking-flat text-ink-3-strong">{fields.payer}</p>
+                    <p className="truncate text-xs tracking-flat text-ink-3-strong">{fields.payer}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-field text-xs text-ink-2">
                     <span>{fields.period}</span>
@@ -1550,7 +1568,7 @@ export default function PaymentsPage(): React.ReactElement {
           </div>
 
           <div className="grid min-w-0 content-start gap-page">
-            <InfoPanel title="Pagos por revisar">
+            <InfoPanel title="Pagos por revisar" collapsible={false}>
               <p>
                 {pendingAllError
                   ? "No se pudo leer la lista de pendientes."
@@ -1560,6 +1578,7 @@ export default function PaymentsPage(): React.ReactElement {
               </p>
               <Button
                 variant="primary"
+                className="max-md:min-h-11"
                 disabled={pending.length === 0}
                 onClick={() => setSelectedId(pending[0]?.id ?? null)}
               >
@@ -1653,7 +1672,7 @@ export default function PaymentsPage(): React.ReactElement {
             <MethodIcon size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-2xs font-bold uppercase text-ink-3-strong">
+            <p className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
               {paymentKind === "efectivo"
                 ? "Pago en efectivo"
                 : paymentKind === "transferencia"
@@ -1786,7 +1805,7 @@ export default function PaymentsPage(): React.ReactElement {
                 </div>
 
                 <div className="flex flex-col gap-4 px-[18px] py-4">
-                  <h3 id="antes-de-aprobar" className="text-2xs font-bold uppercase text-ink-3-strong">
+                  <h3 id="antes-de-aprobar" className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
                     Antes de aprobar
                   </h3>
                   {/* `checklist.note` no se dibuja: las preguntas ya dicen qué
@@ -1833,7 +1852,7 @@ export default function PaymentsPage(): React.ReactElement {
                         POR QUÉ se aprueba sin la evidencia habitual. */}
                     {needsExceptionReason && (
                       <label className="flex flex-col gap-1.5">
-                        <span className="flex items-baseline justify-between text-2xs font-bold uppercase text-ink-3-strong">
+                        <span className="flex items-baseline justify-between text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
                           <span>
                             Motivo de la excepción (transferencia sin comprobante){" "}
                             <span className="text-state-bad">*</span>
@@ -1864,7 +1883,7 @@ export default function PaymentsPage(): React.ReactElement {
                     {/* Below `lg` the decision lives in a bar pinned above the
                         admin tab bar (62px, `AppShell`), so the buttons stay
                         reachable however long the checklist is. The shell's
-                        `pb-[78px]` already keeps the end of the page clear of
+                        `pb-[96px]` already keeps the end of the page clear of
                         both. From `lg` it is the plain inline row. */}
                     <div
                       data-testid="payment-decision-bar"
@@ -1925,7 +1944,7 @@ export default function PaymentsPage(): React.ReactElement {
                     </p>
 
                     <fieldset className="flex flex-col gap-2">
-                      <legend className="mb-1 text-2xs font-bold uppercase text-ink-3-strong">
+                      <legend className="mb-1 text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
                         Motivo <span className="text-state-bad">*</span>
                       </legend>
                       {rejectionReasonsFor(paymentKind).map((reason) => (
@@ -1960,7 +1979,7 @@ export default function PaymentsPage(): React.ReactElement {
                     </fieldset>
 
                     <label className="flex flex-col gap-1.5">
-                      <span className="flex items-baseline justify-between text-2xs font-bold uppercase text-ink-3-strong">
+                      <span className="flex items-baseline justify-between text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
                         <span>Nota para el responsable (opcional)</span>
                         <span
                           className={`font-normal normal-case tabular-nums ${
@@ -2110,14 +2129,14 @@ export default function PaymentsPage(): React.ReactElement {
               // #465, so the backdrop stays decorative instead of gaining
               // fake button semantics (role/tabIndex/onKeyDown) for a
               // non-essential interaction.
-              className="fixed inset-0 z-50 flex items-center justify-center bg-coal/60 backdrop-blur-sm"
+              className="fixed inset-0 z-50 flex animate-overlay-in items-center justify-center bg-coal/60 backdrop-blur-sm"
               role="dialog"
               aria-modal="true"
               aria-label="Visor de comprobante"
             >
               <div
                 ref={voucherPanelRef}
-                className="relative mx-4 flex h-[90vh] w-full max-w-4xl flex-col card overflow-hidden shadow-elevated"
+                className="relative mx-4 flex h-[90vh] w-full max-w-4xl animate-dialog-in flex-col card overflow-hidden shadow-elevated"
                 /* The panel is a layout box, not a control: its only handler
                    keeps a click INSIDE the sheet from reaching the backdrop's
                    close handler above. `role="none"` says that out loud, so

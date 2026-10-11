@@ -32,7 +32,7 @@ function session(day: number, overrides: Partial<SessionSummary> = {}): SessionS
 const EMPTY_ACTION = <a href="/x">Pasar lista</a>;
 
 describe("SessionHistoryList", () => {
-  it("renders one row per session with taker, result bar and ghost rows up to a page", async () => {
+  it("renders one row per session with taker and result bar, and no filler rows under a short list", async () => {
     render(<SessionHistoryList pageSize={10} sessions={[session(2), session(1)]} rangeInvalid={false} emptyAction={EMPTY_ACTION} />);
 
     const rows = (await screen.findAllByRole("row")).slice(1);
@@ -40,7 +40,7 @@ describe("SessionHistoryList", () => {
     expect(rows[0]).toHaveTextContent("02/06/2026");
     expect(rows[0]).toHaveTextContent("Carlos Mendoza");
     expect(screen.getAllByRole("img", { name: /3 presentes/i }).length).toBeGreaterThan(0);
-    expect(screen.getByTestId("history-ghost-rows").querySelectorAll("li")).toHaveLength(8);
+    expect(screen.queryByTestId("history-ghost-rows")).not.toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Acciones" })).not.toBeInTheDocument();
   });
 
@@ -101,10 +101,12 @@ describe("SessionHistoryList", () => {
     expect(screen.getByText("Ajuste el rango de fechas para ver las listas.")).toBeInTheDocument();
   });
 
-  it("hides the duplicate empty-state CTA and caps ghost rows on phones", () => {
-    render(<SessionHistoryList pageSize={10} sessions={[]} rangeInvalid={false} emptyAction={EMPTY_ACTION} />);
+  it("hides the duplicate empty-state CTA on phones and draws no skeleton rows (RC1)", () => {
+    const { container } = render(<SessionHistoryList pageSize={10} sessions={[]} rangeInvalid={false} emptyAction={EMPTY_ACTION} />);
     expect(screen.getByRole("link", { name: "Pasar lista" }).parentElement).toHaveClass("max-lg:hidden");
-    expect(screen.getByTestId("history-ghost-rows")).toHaveClass("max-lg:[&>li:nth-child(n+3)]:hidden");
+    expect(screen.queryByTestId("history-ghost-rows")).not.toBeInTheDocument();
+    // The card is the empty block alone: it keeps no viewport-tall minimum height.
+    expect(container.firstElementChild?.className).not.toMatch(/min-h-/);
   });
 
   it("paginates by session and returns to page 1 when the result set changes", () => {

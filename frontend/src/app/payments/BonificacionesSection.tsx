@@ -7,6 +7,7 @@ import { Download } from "lucide-react";
 import { formatDate, formatDateRange } from "@/lib/format-utils";
 import { formatCurrency } from "@/lib/format-utils";
 import { ICON } from "@/lib/icon-size";
+import { Button, buttonClasses } from "@/components/ui";
 
 interface BonificacionItem {
   id: number;
@@ -19,9 +20,10 @@ interface BonificacionItem {
   otorgadaEn: string;
 }
 
-// A load-more batch, not a table page: the list renders every loaded row,
-// so the ten-rows-per-page rule (list-page-size.test.ts) does not apply.
-const LOAD_MORE_BATCH = 50;
+// A load-more batch, not a table page: the list renders every loaded row. Ten
+// is the size of every other list's page, so sixty coverages are six short
+// steps instead of one 4,000px column.
+const LOAD_MORE_BATCH = 10;
 
 interface BonificacionesPage {
   items?: BonificacionItem[];
@@ -78,14 +80,21 @@ export function BonificacionesSection(): React.ReactElement | null {
   if (items.length === 0) return null;
 
   return (
-    <section aria-labelledby="bonificaciones-title" className="mt-8" data-testid="bonificaciones-section">
-      <h2 id="bonificaciones-title" className="text-base font-bold text-ink">
-        Bonificaciones
-      </h2>
-      <p className="mt-0.5 text-sm text-ink-3-strong">
-        Coberturas otorgadas con un beneficio del 100%. No generan cobro.
-      </p>
-      <ul className="mt-3 flex flex-col divide-y divide-line rounded-ctl border border-line">
+    <section aria-labelledby="bonificaciones-title" className="card mt-8 overflow-hidden" data-testid="bonificaciones-section">
+      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line px-5 py-4">
+        <div className="min-w-0">
+          <h2 id="bonificaciones-title" className="text-base font-bold text-ink">
+            Bonificaciones
+          </h2>
+          <p className="mt-0.5 text-sm text-ink-3-strong">
+            Coberturas otorgadas con un beneficio del 100%. No generan cobro.
+          </p>
+        </div>
+        <p role="status" className="flex-none text-xs font-semibold tabular-nums text-ink-2">
+          {items.length} de {total}
+        </p>
+      </header>
+      <ul className="divide-y divide-line">
         {items.map((item) => (
           <li key={item.id} className="flex flex-col gap-2 px-5 py-4 md:flex-row md:items-center md:gap-5">
             <div className="min-w-0 flex-1">
@@ -98,12 +107,14 @@ export function BonificacionesSection(): React.ReactElement | null {
             <p className="flex-none text-lg font-extrabold tabular-nums text-ink md:w-24 md:text-right">
               {formatCurrency(item.monto)}
             </p>
+            {/* One quiet link per row: the page's weight stays on the queue
+                above, and sixty black blocks were sixty "primary" actions. */}
             <a
               href={`/api/membresias/coberturas/${item.id}/comprobante`}
               target="_blank"
               rel="noopener noreferrer"
               aria-label={`Descargar recibo oficial de ${item.personaNombreCompleto}`}
-              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-ctl bg-coal px-3 text-xs font-semibold text-white hover:bg-ink md:w-48"
+              className={buttonClasses("tertiary", "sm", "gap-1.5 md:w-40")}
             >
               <Download size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               Recibo oficial
@@ -112,20 +123,17 @@ export function BonificacionesSection(): React.ReactElement | null {
         ))}
       </ul>
       {moreFailed && (
-        <p role="alert" className="mt-2 text-sm text-state-bad">
+        <p role="alert" className="border-t border-line px-5 py-3 text-sm text-state-bad">
           {/* App-wide tú register, enforced by lib/__tests__/usted-register.test.ts. */}
           No se pudieron cargar más bonificaciones. Intenta de nuevo.
         </p>
       )}
       {items.length < total && (
-        <button
-          type="button"
-          onClick={() => void loadMore()}
-          disabled={loadingMore}
-          className="mt-3 h-9 rounded-ctl border border-line px-4 text-sm font-semibold text-ink-2 hover:text-ink disabled:opacity-60"
-        >
-          Cargar más
-        </button>
+        <footer className="border-t border-line px-5 py-3">
+          <Button size="sm" onClick={() => void loadMore()} disabled={loadingMore} className="max-md:w-full">
+            Cargar más
+          </Button>
+        </footer>
       )}
     </section>
   );

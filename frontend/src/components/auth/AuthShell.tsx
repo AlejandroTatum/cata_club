@@ -31,15 +31,17 @@
  * (`FOUNDING_DATE`, `yearsSinceFounding()`) and the venue, the same ones
  * `buildLandingStats` publishes.
  *
- * The motto is the one use of Playfair on the screen (`DESIGN.md`: the club
- * speaking in first person) and carries no weight class: the 600 cut is the
- * only one loaded, and a CSS weight would synthesise a bold on top of it.
+ * The motto is the one voice phrase on the screen (the club speaking in first
+ * person). It is Anybody, not a second family: `font-voice` sets weight 700 and
+ * regular width (T14I, owner choice "Pasarlo a Anybody").
  *
- * No client-only APIs are used here, so this stays server-safe.
+ * No client-only APIs are used here, so this stays server-safe (the theme
+ * toggle is its own client component).
  */
 
 import Image from "next/image";
 import { BackLink } from "@/components/ui";
+import ThemeToggle from "@/components/theme/ThemeToggle";
 import {
   FOUNDING_DATE,
   landingConfig,
@@ -275,14 +277,14 @@ export default function AuthShell({
               className="hidden h-1 w-12 rounded-full bg-ball split:block"
             />
             {/*
-             * THE VOICE: the club talking in first person, the one Playfair use
-             * on the screen. Kept as a <p>: the page's single <h1> is the form
+             * THE VOICE: the club talking in first person, the one voice phrase
+             * on the screen, in Anybody (`font-voice`). Kept as a <p>: the page's single <h1> is the form
              * title. The typographic double quotes are the 14-view prototype's
              * (guillemets were rejected by the product owner).
              */}
             <p
               data-testid="auth-headline"
-              className="font-serif text-voice [text-wrap:balance]"
+              className="font-display font-voice text-voice uppercase tracking-flat [text-wrap:balance]"
             >
               “Formando <em className="not-italic text-ball">campeones</em> para
               la vida”
@@ -327,6 +329,11 @@ export default function AuthShell({
          * One column, one axis: the form and the help footer share the same 448px column (same max-width, same left edge).
          */}
         <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
+        {/* The theme choice, top-right of the form column. It lives here and
+            not on the brand rail because the rail is coal in both themes. */}
+        <div className="flex justify-end">
+          <ThemeToggle variant="bar" />
+        </div>
         {/* Centred in the column. From `split` it is nudged up by
             the bottom padding so the form sits in the upper-middle; on a phone
             the help footer anchors the foot, so the form centres in the room

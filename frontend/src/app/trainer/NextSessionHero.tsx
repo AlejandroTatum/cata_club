@@ -92,7 +92,7 @@ export default function NextSessionHero({
       <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
         <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex items-center gap-2">
-            <span className="text-2xs font-bold uppercase text-ink-3">{live ? "Sesión en curso" : "Próxima sesión"}</span>
+            <span className="text-2xs font-bold uppercase tracking-caps text-ink-3">{live ? "Sesión en curso" : "Próxima sesión"}</span>
             {live && <Badge tone="ok">En curso</Badge>}
           </div>
           <span className="font-display text-display leading-none tabular-nums tracking-flat text-ink">{schedule.horaInicio}</span>

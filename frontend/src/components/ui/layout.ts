@@ -55,3 +55,10 @@
  * actually worth there.
  */
 export const PAGE_RAIL = "grid gap-page lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start";
+
+/**
+ * The same rail, split one breakpoint later. `PAGE_RAIL` hands the main column
+ * ~390px at `lg` (the sidebar leaves ~750px), which a wide table cannot live
+ * in; below `xl` the rail stacks under the table instead. Same 340px measure.
+ */
+export const PAGE_RAIL_XL = "grid gap-page xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start";

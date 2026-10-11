@@ -16,6 +16,7 @@
  */
 import { defineConfig, devices } from "@playwright/test";
 import { E2E_BASE_URL, E2E_PORT, E2E_SERVER_IS_MANAGED } from "./tests/e2e/e2e-target";
+import { WHATS_NEW_SEEN_STORAGE_STATE } from "./tests/e2e/whats-new-seen";
 
 /**
  * Habilita el proyecto `e2e-live`, que recoge los `*.live.spec.ts`: los specs
@@ -71,6 +72,9 @@ export default defineConfig({
   use: {
     baseURL: E2E_BASE_URL,
     trace: "on-first-retry",
+    /* Every context starts as a returning user, so the release-notes dialog
+       (T18) never covers the screen a spec is measuring. See the helper. */
+    storageState: WHATS_NEW_SEEN_STORAGE_STATE,
   },
 
   /* Omitted entirely when PLAYWRIGHT_BASE_URL names an external target, so the

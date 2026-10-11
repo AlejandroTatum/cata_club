@@ -12,7 +12,7 @@ export type ChartTone = "coal" | "ok" | "warn" | "bad" | "neutral" | "muted";
 
 /** SVG fill classes, one per tone. */
 export const TONE_FILL: Record<ChartTone, string> = {
-  coal: "fill-coal",
+  coal: "fill-coal dark:fill-mark",
   ok: "fill-state-ok",
   warn: "fill-state-warn",
   bad: "fill-state-bad",
@@ -22,7 +22,7 @@ export const TONE_FILL: Record<ChartTone, string> = {
 
 /** HTML background classes, one per tone (legend dots, segments, blocks). */
 export const TONE_BG: Record<ChartTone, string> = {
-  coal: "bg-coal",
+  coal: "bg-coal dark:bg-mark",
   ok: "bg-state-ok",
   warn: "bg-state-warn",
   bad: "bg-state-bad",

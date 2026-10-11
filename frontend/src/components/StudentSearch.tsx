@@ -169,7 +169,7 @@ export default function StudentSearch({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
-          className="w-full rounded-lg border border-cata-border bg-white py-2.5 pl-9 pr-9 text-sm text-cata-text placeholder:text-ink-3 focus:border-cata-red focus:outline-none focus:ring-1 focus:ring-cata-red disabled:opacity-50"
+          className="w-full rounded-lg border border-cata-border bg-white dark:bg-paper py-2.5 pl-9 pr-9 text-sm text-cata-text placeholder:text-ink-3 focus:border-cata-red focus:outline-none focus:ring-1 focus:ring-cata-red disabled:opacity-50"
           aria-label={ariaLabel}
           aria-autocomplete="list"
           aria-expanded={isOpen}
@@ -184,7 +184,7 @@ export default function StudentSearch({
         )}
       </div>
       {isOpen && (
-        <div id="student-search-listbox" role="listbox" className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-cata-border bg-white shadow-elevated">
+        <div id="student-search-listbox" role="listbox" className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-cata-border bg-white shadow-elevated dark:bg-popover">
           {loading ? (
             <p role="status" aria-label="Buscando jugadores" className="px-4 py-3 text-sm text-ink-2">Buscando jugadores…</p>
           ) : error ? (

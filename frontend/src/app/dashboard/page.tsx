@@ -476,7 +476,7 @@ export default function DashboardPage(): React.ReactElement {
                       items={timelineItems}
                       nowMinutes={clubNowMinutes()}
                       ariaLabel={`Clases de hoy: ${timelineItems.length} ${plural(timelineItems.length, "sesión", "sesiones")}, ${listsTaken} con lista tomada`}
-                      className="max-lg:[&_[role=group]]:hidden [&_[data-testid=timeline-now-label]]:bg-coal"
+                      className="max-lg:[&_[role=group]]:hidden"
                     />
                     <TimelineDayList items={timelineItems} className="lg:hidden" />
                   </>
@@ -894,7 +894,7 @@ export default function DashboardPage(): React.ReactElement {
               )}
             </DashboardSection>
 
-            <InfoPanel title="Qué hacer hoy" as="div">
+            <InfoPanel title="Qué hacer hoy" collapsible={false} as="div">
               <p>Revisa en este orden; cada punto abre su pantalla.</p>
               <div className="grid gap-3">
                 {todoItems.map((item) => (

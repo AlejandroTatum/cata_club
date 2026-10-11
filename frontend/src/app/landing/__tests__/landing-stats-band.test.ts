@@ -40,7 +40,7 @@ describe("landing stats band separation", (): void => {
 
   it("keeps ENTRENAMIENTOS on the white surface token", (): void => {
     const css = landingCss();
-    expect(css).toContain(".landing-schedule { background: var(--landing-surface); }");
+    expect(css).toContain(".landing-schedule { background: var(--landing-card); }");
   });
 
   it("declares a warm-toned stats background token, distinct in hue from the cool base token", (): void => {

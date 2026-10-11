@@ -83,7 +83,7 @@ export default function PasswordGuidance({
 
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
-      <p className="text-2xs font-bold uppercase text-ink-3">{PASSWORD_GUIDANCE_HEADING}</p>
+      <p className="text-2xs font-bold uppercase tracking-caps text-ink-3">{PASSWORD_GUIDANCE_HEADING}</p>
       {/*
        * `role="status"` so a screen reader hears a recommendation tick over
        * while typing — the same live-readout contract the reset screen's

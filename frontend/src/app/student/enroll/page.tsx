@@ -831,7 +831,7 @@ function EnrollWizard(): React.ReactElement {
                 tabIndex={selected ? 0 : -1}
                 onKeyDown={(e) => handleChoiceKeyDown(e, index)}
                 onClick={() => updateField("enrollmentType", choice.value)}
-                className={`flex h-full flex-col gap-field rounded-card border p-page text-left transition-colors duration-150 ${
+                className={`flex h-full flex-col gap-field rounded-card border p-page text-left transition-colors duration-fast ${
                   selected
                     ? "border-cata-red bg-paper ring-1 ring-cata-red"
                     : "border-line-2 bg-paper hover:bg-sunken"
@@ -1306,7 +1306,7 @@ function EnrollWizard(): React.ReactElement {
         {/* Label above the datum: the review is two columns now, and a fixed
             label column would leave the value half a card to wrap in. */}
         <div className="min-w-0 flex-1">
-          <p className="text-2xs font-bold uppercase text-ink-3-strong">{label}</p>
+          <p className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">{label}</p>
           <p className="break-words text-sm font-semibold text-ink">{value}</p>
         </div>
         {/* The flag is a STATUS, so it is the badge the system already has —
@@ -1541,6 +1541,22 @@ function EnrollWizard(): React.ReactElement {
   // with the final box, so the page is never blank and nothing shifts. It sits
   // inside the same single landmark as the wizard.
   const showSkeleton = !ready && !settled;
+  const showSignedInNotice = isAuthenticated && !confirmed && !submitting;
+
+  // The signed-in notice is drawn by `AppShell`, which owns its own `<main>`;
+  // nesting the wizard's landmark around it would put one `<main>` in another.
+  if (!showSkeleton && showSignedInNotice) {
+    return (
+      <EnrollSignedInNotice
+        backHref={backHrefForRole(session?.user.role)}
+        loggingOut={loggingOut}
+        onLogout={() => {
+          setLoggingOut(true);
+          void logout().finally(() => setLoggingOut(false));
+        }}
+      />
+    );
+  }
 
   return (
     // The public enrolment wizard reaches the user through no shell, so the
@@ -1555,16 +1571,7 @@ function EnrollWizard(): React.ReactElement {
         {/* REG-11: a signed-in user must not get the new-account wizard. The
             confirmation screen is exempt: the auto-login that enrolling performs
             makes the visitor "signed in" at exactly that moment. */}
-        {isAuthenticated && !confirmed && !submitting ? (
-          <EnrollSignedInNotice
-            backHref={backHrefForRole(session?.user.role)}
-            loggingOut={loggingOut}
-            onLogout={() => {
-              setLoggingOut(true);
-              void logout().finally(() => setLoggingOut(false));
-            }}
-          />
-        ) : confirmed ? (
+        {confirmed ? (
           <EnrollConfirmation
             studentName={`${formData.nombres} ${formData.apellidos}`}
             isSelf={formData.enrollmentType === "self"}

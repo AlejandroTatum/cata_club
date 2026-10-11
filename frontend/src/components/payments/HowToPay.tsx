@@ -24,7 +24,7 @@ type CopyState = "idle" | "copied" | "failed";
 function Row({ label, children }: { label: string; children: React.ReactNode }): React.ReactElement {
   return (
     <div className="min-w-0">
-      <dt className="text-2xs font-bold uppercase text-ink-3-strong">{label}</dt>
+      <dt className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">{label}</dt>
       <dd className="mt-0.5 break-words text-sm font-bold text-ink">{children}</dd>
     </div>
   );

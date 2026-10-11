@@ -120,7 +120,7 @@ function SessionRow({ session }: { session: RecentAttendanceSession }): React.Re
 
       <div className="col-start-2 row-start-1 text-right sm:col-start-4">
         <b className="block text-lg font-extrabold tabular-nums text-ink">{session.total}</b>
-        <span className="block text-2xs text-ink-3">registros</span>
+        <span className="block text-xs text-ink-3">registros</span>
       </div>
     </div>
   );

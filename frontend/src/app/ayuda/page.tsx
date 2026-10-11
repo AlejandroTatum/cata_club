@@ -255,13 +255,13 @@ export default function AyudaPage(): React.ReactElement {
           <p>Los horarios y precios vigentes se consultan en la página principal del club.</p>
         </InfoPanel>
         <HowToPay />
-        <InfoPanel title="¿No encontraste tu respuesta?">
+        <InfoPanel title="¿No encontraste tu respuesta?" collapsible={false}>
           <p>Cuéntanos qué pasó y lo revisamos: se envía junto con una captura de esta pantalla.</p>
           <Button variant="secondary" onClick={() => report.open()} disabled={report.busy}>
             Reportar un problema
           </Button>
         </InfoPanel>
-        <InfoPanel title="Qué encontrarás aquí">
+        <InfoPanel title="Qué encontrarás aquí" collapsible={false}>
           <ul className="grid gap-2">
             {roleSections.map((section) => (
               <li key={section.title} className="flex items-center justify-between gap-3">
@@ -273,8 +273,8 @@ export default function AyudaPage(): React.ReactElement {
             ))}
           </ul>
         </InfoPanel>
-        <InfoPanel title="Accesos rápidos">
-          <RoleShortcuts shortcuts={quickLinks} label="Accesos rápidos" className="sm:grid-cols-1" />
+        <InfoPanel title="Accesos rápidos" collapsible={false}>
+          <RoleShortcuts shortcuts={quickLinks} label="Accesos rápidos" columns={1} />
         </InfoPanel>
       </div>
       </div>

@@ -95,8 +95,16 @@ describe("SponsorsPage", () => {
     render(<SponsorsPage />);
     expect(await screen.findByText("Aún no hay patrocinadores cargados")).toBeInTheDocument();
     expect(screen.getByText("Los logos cargados aparecen aquí y en la landing.")).toBeInTheDocument();
-    expect(screen.getByTestId("empty-grid-tiles").firstElementChild).toHaveStyle({ aspectRatio: "5 / 2" });
-    expect(screen.getByRole("region", { name: "Logos cargados" })).not.toHaveClass("lg:self-stretch");
+    // RC1: one compact block; the ghost grid and the ghost strip preview are gone.
+    expect(screen.queryByTestId("empty-grid-tiles")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("sponsors-strip")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("sponsors-strip-ghost")).not.toBeInTheDocument();
+  });
+  it("wires the empty state's action to the name field of the upload form", async () => {
+    fetchSponsors.mockResolvedValue([]);
+    render(<SponsorsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Subir el primer logo" }));
+    expect(screen.getByLabelText("Nombre corto")).toHaveFocus();
   });
   it("shows an error with retry on load failure, without the empty copy", async () => {
     fetchSponsors.mockRejectedValueOnce(new Error("boom"));

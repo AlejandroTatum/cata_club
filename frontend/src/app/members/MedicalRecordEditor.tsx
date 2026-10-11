@@ -126,15 +126,15 @@ function CampoLectura({
   return (
     <div className={wide ? "sm:col-span-2" : undefined}>
       <dt className="mb-1 text-xs font-semibold text-ink-2">{label}</dt>
-      <dd className="min-h-10 py-2 text-sm font-semibold text-ink">{value || "—"}</dd>
+      <dd className="field-readonly font-semibold">{value || "—"}</dd>
     </div>
   );
 }
 
-/** One group of the page-mode form: a card with the health blue on its top edge. */
+/** One group of the page-mode form: a sticker card, like every other card in the panel. */
 function RecordSection({ title, children }: { title: string; children: ReactNode }): React.ReactElement {
   return (
-    <section className="rounded-2xl border border-line border-t-[3px] border-t-cuenta-representante bg-paper">
+    <section className="rounded-card border-2 border-edge bg-paper shadow-sticker">
       <h4 className="border-b border-line px-4 py-3 text-sm font-bold text-ink">{title}</h4>
       <div className="p-4">{children}</div>
     </section>
@@ -542,7 +542,7 @@ export default function MedicalRecordEditor({
             {fieldErrors.alergias}
           </p>
         ) : (
-          <p id={`alergias-help-${personaId}`} className="mt-1 text-2xs tracking-flat text-ink-3">
+          <p id={`alergias-help-${personaId}`} className="mt-1 text-xs tracking-flat text-ink-3">
             {NINGUNO_HELP}
           </p>
         )}
@@ -574,7 +574,7 @@ export default function MedicalRecordEditor({
             {fieldErrors.enfermedades}
           </p>
         ) : (
-          <p id={`enfermedades-help-${personaId}`} className="mt-1 text-2xs tracking-flat text-ink-3">
+          <p id={`enfermedades-help-${personaId}`} className="mt-1 text-xs tracking-flat text-ink-3">
             {NINGUNO_HELP} Al guardar se reemplaza la lista completa.
           </p>
         )}
@@ -624,7 +624,7 @@ export default function MedicalRecordEditor({
         />
       </div>
       {mostrarPorDefecto && (
-        <p className="text-2xs tracking-flat text-ink-3 sm:col-span-2">
+        <p className="text-xs tracking-flat text-ink-3 sm:col-span-2">
           Por defecto es el representante: {representante.nombre}
           {representante.telefono ? ` · ${representante.telefono}` : ""}. Puedes cambiarlo.
         </p>

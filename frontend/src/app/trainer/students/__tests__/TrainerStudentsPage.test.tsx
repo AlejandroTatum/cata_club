@@ -716,7 +716,7 @@ describe("maestro–detalle en escritorio", () => {
       "Acciones",
     ]);
     const fila = within(tabla).getByTestId("student-row-3");
-    expect(within(fila).getByText("Categoría Cat 17")).toBeInTheDocument();
+    expect(within(fila).getByText("Cat 17")).toBeInTheDocument();
   });
 
   it("la guía menciona el botón Ficha médica", async () => {

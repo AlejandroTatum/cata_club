@@ -49,7 +49,7 @@ export default function DiscountTypes({
             </span>
             <h3 className="text-sm font-bold text-ink">{title}</h3>
             <p className="text-sm text-ink-2">{what}</p>
-            <p className="mt-auto flex items-center justify-between gap-2 border-t border-line pt-3 text-xs tabular-nums text-ink-3">
+            <p className="mt-auto flex items-center justify-between gap-2 border-t border-line pt-3 text-xs tabular-nums text-ink-3-strong">
               <span>Ejemplo: {example.base}</span>
               <span>{example.rule}</span>
               <strong className="text-ink">{example.result}</strong>

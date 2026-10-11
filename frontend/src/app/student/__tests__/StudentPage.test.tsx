@@ -2292,7 +2292,7 @@ describe("StudentPage — the carnet as the club's identity object", () => {
 
     const boton = screen.getByRole("button", { name: /cambiar foto/i });
     // The `secondary` skin, verbatim from `Button.tsx`.
-    expect(boton.className).toContain("border-line-2");
+    expect(boton.className).toContain("border-edge");
     expect(boton.className).not.toContain("border-white/25");
     // A capsule is a badge; a control wears the control radius at the compact
     // control height (32px).
@@ -2502,7 +2502,7 @@ describe("StudentPage — the credential inside the panel (Funda)", () => {
    * maps them back to the px the config assigns them.
    */
   const FONT_SIZE_PX: Record<string, number> = {
-    "2xs": 10.5,
+    "2xs": 11.5,
     xs: 12.5,
     sm: 13.5,
     base: 15,
@@ -2982,7 +2982,7 @@ describe("StudentPage — second-pass organisation", () => {
     const cuota = await screen.findByTestId("student-cuota-card");
     const link = within(cuota).getByText("Registrar un pago").closest("a")!;
     expect(link.className).not.toMatch(/\bw-full\b/);
-    expect(link.className).toMatch(/\bbg-cata-red\b/);
+    expect(link.className).toMatch(/\bbg-ball\b/);
     expect(within(cuota).getByTestId("cuota-verdict")).toHaveAttribute("data-urgent", "true");
   });
 

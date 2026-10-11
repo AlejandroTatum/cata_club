@@ -68,10 +68,15 @@ describe("Button — committed dimensions", () => {
 });
 
 describe("Button — variants", () => {
-  it("paints primary with the brand red", () => {
-    expect(renderButton({ children: "Revisar ahora", variant: "primary" })).toHaveClass(
-      "bg-cata-red",
-    );
+  it("paints primary as the landing's sticker: ball, coal outline, hard shadow", () => {
+    const button = renderButton({ children: "Revisar ahora", variant: "primary" });
+    expect(button).toHaveClass("bg-ball", "border-2", "border-edge", "text-coal", "shadow-sticker-sm");
+  });
+
+  it("paints secondary as an outlined sticker with no fill of its own", () => {
+    const button = renderButton({ children: "Ver todo", variant: "secondary" });
+    expect(button).toHaveClass("bg-paper", "border-2", "border-edge");
+    expect(button.className).not.toMatch(/\bshadow-sticker/);
   });
 
   it("paints dark with coal, not red", () => {
@@ -86,14 +91,16 @@ describe("Button — variants", () => {
     expect(button).not.toHaveClass("bg-cata-red");
   });
 
-  it("reserves red for primary alone", () => {
-    // Red means "the one CTA" or "this is destructive". Any other variant
-    // wearing it would dilute both meanings. The list comes from the type, so
-    // a sixth variant is covered the moment it exists.
+  it("reserves the ball fill for primary alone", () => {
+    // The ball means "the one primary action". Any other variant wearing it
+    // would dilute the meaning, and red is left to destructive intent. The
+    // list comes from the type, so a sixth variant is covered the moment it
+    // exists.
     for (const variant of NON_PRIMARY) {
+      expect(buttonClasses(variant)).not.toContain("bg-ball");
       expect(buttonClasses(variant)).not.toContain("bg-cata-red");
     }
-    expect(buttonClasses("primary")).toContain("bg-cata-red");
+    expect(buttonClasses("primary")).toContain("bg-ball");
   });
 
   /**
@@ -175,6 +182,19 @@ describe("buttonClasses", () => {
     );
     const link = screen.getByRole("link");
     expect(committedHeight(link)).toBe("40px");
-    expect(link).toHaveClass("bg-cata-red");
+    expect(link).toHaveClass("bg-ball");
+  });
+});
+
+describe("Button — thumb floor on a narrow window (T14 RC5)", () => {
+  it("raises the compact size to 44px below md and leaves md alone", () => {
+    render(
+      <>
+        <Button size="sm">Pequeño</Button>
+        <Button>Normal</Button>
+      </>,
+    );
+    expect(screen.getByRole("button", { name: "Pequeño" }).className).toMatch(/max-md:min-h-11/);
+    expect(screen.getByRole("button", { name: "Normal" }).className).not.toMatch(/max-md:min-h-11/);
   });
 });

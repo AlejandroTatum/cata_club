@@ -44,14 +44,16 @@ export default function FilterPill({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "h-ctl inline-flex items-center gap-2 rounded-full border px-[15px] text-xs font-semibold",
-        "transition-colors duration-150",
+        // `max-md:min-h-11`: the thumb floor by viewport, as `Button` `sm` does
+        // — a phone-width window gets no help from the coarse-pointer rule.
+        "h-ctl max-md:min-h-11 inline-flex items-center gap-2 rounded-full border px-[15px] text-xs font-semibold",
+        "transition-colors duration-fast",
         // No focus ring here — see `Button`: the shared system ring in
         // `globals.css` carries it, because the bare ball fails on the light
         // surfaces a filter row sits on.
         "disabled:cursor-not-allowed disabled:opacity-45",
         active
-          ? "bg-coal border-coal text-white"
+          ? "bg-coal border-coal text-white dark:border-edge-hot"
           // `sunken`, not `canvas` — see `Button`: pills sit on the page
           // field, so hovering to the page field is not a hover.
           : "bg-paper border-line-2 text-ink-2 hover:bg-sunken",

@@ -113,8 +113,8 @@ export interface BackLinkProps {
  * the same top edge.
  */
 const SHAPE =
-  "inline-flex h-ctl-sm items-center justify-center gap-1.5 self-start whitespace-nowrap " +
-  "rounded-ctl border px-3 text-xs font-semibold transition-colors duration-150";
+  "inline-flex h-ctl-sm max-md:min-h-11 items-center justify-center gap-1.5 self-start whitespace-nowrap " +
+  "rounded-ctl border px-3 text-xs font-semibold transition-colors duration-fast";
 
 /**
  * The light skin IS `Button`'s `tertiary`, taken from the primitive rather than

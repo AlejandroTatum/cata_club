@@ -116,7 +116,7 @@ export default function Stepper({
             // tinted text — the pill itself has to read as "done" before
             // anyone reads the label inside it.
             done && "border-state-ok/30 bg-state-ok-bg text-state-ok",
-            active && "border-coal bg-coal text-white",
+            active && "border-coal bg-coal text-white dark:border-edge-hot",
             // #874: pending steps sit on `sunken`, not `paper` — a step
             // nobody has reached yet is the one pill that should read as
             // recessed, not as another white surface next to the wash and

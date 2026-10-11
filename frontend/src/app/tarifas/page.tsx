@@ -100,7 +100,7 @@ const CATEGORIA_INPUT_CLASS =
 
 /** The new-tariff form's field skin — same tokens `discounts/page.tsx` draws
  *  its own "Nuevo descuento" form with, spelled once. */
-const FIELD_LABEL = "flex flex-col gap-field text-2xs font-bold uppercase text-ink-3";
+const FIELD_LABEL = "flex flex-col gap-field text-2xs font-bold uppercase tracking-caps text-ink-3";
 const FIELD_CONTROL =
   "h-ctl w-full rounded-ctl border border-line-2 bg-paper px-3 text-sm text-ink outline-none focus:border-cata-red";
 
@@ -639,14 +639,14 @@ export default function TarifasPage(): React.ReactElement {
           ? `$ ${min.toFixed(2)}`
           : `$ ${min.toFixed(2)} – $ ${max.toFixed(2)}`;
     return (
-      <InfoPanel title="Resumen del catálogo">
+      <InfoPanel title="Resumen del catálogo" collapsible={false}>
         <dl className="grid grid-cols-2 gap-section">
           <div>
-            <dt className="text-2xs font-bold uppercase text-ink-3">Tarifas</dt>
+            <dt className="text-2xs font-bold uppercase tracking-caps text-ink-3">Tarifas</dt>
             <dd className="text-2xl font-extrabold tabular-nums text-ink">{visibles.length}</dd>
           </div>
           <div>
-            <dt className="text-2xs font-bold uppercase text-ink-3">Rango de precios</dt>
+            <dt className="text-2xs font-bold uppercase tracking-caps text-ink-3">Rango de precios</dt>
             <dd className="text-sm font-bold tabular-nums text-ink">{range}</dd>
           </div>
         </dl>

@@ -30,6 +30,7 @@ import { useModalFocusTrap } from "@/lib/focus-trap";
 import { LEGAL_REVIEW_DOCUMENTS, LegalDocumentProse } from "@/components/legal/LegalReviewDialog";
 import { watchForReacceptanceBlock } from "@/components/legal/reacceptance-signal";
 import { reloadPage } from "@/components/legal/reload-page";
+import { publishLegalGateStatus } from "@/components/legal/legal-gate-status";
 
 const STATUS_URL = "/api/auth/consentimiento-legal";
 const ACCEPT_URL = "/api/auth/consentimiento-legal/aceptar";
@@ -55,12 +56,16 @@ export default function LegalReacceptGate(): ReactElement | null {
   const { isAuthenticated, session, logout } = useAuth();
   const userId = session?.user.id ?? null;
   const [pending, setPending] = useState(false);
+  // Whether the status check has answered for this account. Published below so
+  // the what's-new dialog can wait for a definite "nothing pending".
+  const [checked, setChecked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [failed, setFailed] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const acceptRef = useRef<HTMLButtonElement>(null);
 
   useEffect((): undefined | (() => void) => {
+    setChecked(false);
     if (!isAuthenticated) {
       setPending(false);
       return undefined;
@@ -72,6 +77,7 @@ export default function LegalReacceptGate(): ReactElement | null {
         if (cancelled) return;
         if (value !== null) {
           setPending(value);
+          setChecked(true);
           return;
         }
         timer = setTimeout(() => check(attempt + 1), Math.min(RETRY_BASE_MS * 2 ** attempt, RETRY_MAX_MS));
@@ -89,6 +95,11 @@ export default function LegalReacceptGate(): ReactElement | null {
       stopWatching();
     };
   }, [isAuthenticated, userId]);
+
+  useEffect((): (() => void) => {
+    publishLegalGateStatus(!isAuthenticated ? "unknown" : pending ? "pending" : checked ? "clear" : "unknown");
+    return (): void => publishLegalGateStatus("unknown");
+  }, [isAuthenticated, pending, checked]);
 
   useModalFocusTrap({ open: pending, onClose: () => undefined, panelRef, initialFocusRef: acceptRef });
 
@@ -109,13 +120,13 @@ export default function LegalReacceptGate(): ReactElement | null {
 
   const document_ = LEGAL_REVIEW_DOCUMENTS.terminos;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-cata-black/60 px-4 pt-4 sm:items-center sm:pb-4">
+    <div className="fixed inset-0 z-50 flex animate-overlay-in items-end justify-center bg-cata-black/60 px-4 pt-4 sm:items-center sm:pb-4">
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="legal-reaccept-title"
-        className="card relative flex max-h-[85dvh] w-full max-w-measure flex-col overflow-hidden p-0 shadow-elevated"
+        className="card relative flex max-h-[85dvh] w-full max-w-measure animate-sheet-in flex-col overflow-hidden p-0 shadow-elevated sm:animate-dialog-in"
       >
         <header className="flex-none border-b border-line px-page pb-section pt-page">
           <p className="mb-4 text-xs font-extrabold uppercase tracking-caps-wide text-cata-red-dark">

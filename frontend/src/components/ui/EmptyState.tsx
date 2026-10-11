@@ -78,6 +78,13 @@ export interface EmptyStateProps {
    * whatever happens to be beside it.
    */
   fill?: boolean;
+  /**
+   * `column` (default) is the centred statement. `row` is the compact block for
+   * a screen whose whole content is empty (T14C, RC1): disc, statement and
+   * action on one line, wrapping on a phone — the dashboard's zero blocks. It
+   * never stretches (`fill` is ignored): there is nothing to pad out.
+   */
+  layout?: "column" | "row";
   className?: string;
 }
 
@@ -88,12 +95,37 @@ export default function EmptyState({
   action,
   surface = "card",
   fill = false,
+  layout = "column",
   className,
 }: EmptyStateProps): ReactElement {
+  if (layout === "row")
+    return (
+      <div
+        className={cn(
+          "flex animate-reveal flex-wrap items-center gap-x-4 gap-y-3 px-5 py-4 text-left",
+          surface === "card" && "card",
+          className,
+        )}
+      >
+        {icon ? (
+          <span
+            aria-hidden="true"
+            className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-coal text-ball"
+          >
+            {icon}
+          </span>
+        ) : null}
+        <div className="min-w-0 flex-1 basis-64">
+          <b className="block font-display text-base uppercase tracking-flat text-ink">{title}</b>
+          {description ? <p className="mt-0.5 max-w-[60ch] text-sm text-ink-3">{description}</p> : null}
+        </div>
+        {action ? <div className="flex-none">{action}</div> : null}
+      </div>
+    );
   return (
     <div
       className={cn(
-        "flex flex-col items-center gap-2.5 px-6 py-11 text-center",
+        "flex animate-reveal flex-col items-center gap-2.5 px-6 py-11 text-center",
         fill && "flex-1 justify-center",
         surface === "card" && "card",
         className,
@@ -102,12 +134,12 @@ export default function EmptyState({
       {icon ? (
         <span
           aria-hidden="true"
-          className="flex h-[46px] w-[46px] items-center justify-center rounded-full bg-state-neutral-bg text-ink-3"
+          className="flex h-[46px] w-[46px] items-center justify-center rounded-full bg-coal text-ball"
         >
           {icon}
         </span>
       ) : null}
-      <b className="text-base font-bold text-ink">{title}</b>
+      <b className="font-display text-base uppercase tracking-flat text-ink">{title}</b>
       {description ? (
         <p className="max-w-[44ch] text-sm text-ink-3">{description}</p>
       ) : null}

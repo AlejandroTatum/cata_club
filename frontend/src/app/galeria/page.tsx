@@ -5,10 +5,9 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { ImageIcon } from "lucide-react";
-import { Button, ErrorState, FileDropZone, LoadingState, PAGE_RAIL } from "@/components/ui";
+import { Button, EmptyState, ErrorState, FileDropZone, LoadingState, PAGE_RAIL } from "@/components/ui";
 import { ICON } from "@/lib/icon-size";
 import { useToast } from "@/contexts/ToastContext";
-import EmptyGrid from "./EmptyGrid";
 import GaleriaPreview from "./GaleriaPreview";
 import PublishGuide from "./PublishGuide";
 import {
@@ -235,10 +234,16 @@ export default function GaleriaPage(): React.ReactElement {
           { term: "Al eliminar", detail: "La foto deja de mostrarse en la landing y no se puede recuperar." },
         ]} />
         </div>
-        <section aria-label="Fotos publicadas" className="flex min-w-0 flex-col max-lg:order-2 lg:col-start-1 lg:row-start-1 lg:self-stretch">
+        <section aria-label="Fotos publicadas" className="flex min-w-0 flex-col max-lg:order-2 lg:col-start-1 lg:row-start-1 lg:self-start">
           {cargando ? <LoadingState label="Cargando fotos…" />
             : errorCarga ? <ErrorState message="No se pudo cargar la galería." onRetry={() => void load()} />
-            : entradas.length === 0 ? <EmptyGrid icon={<ImageIcon size={ICON.lg} />} title="Aún no hay fotos en la galería" description="Las fotos publicadas aparecen aquí y en la galería del sitio." tileRatio="3 / 2" tiles={15} />
+            : entradas.length === 0 ? <EmptyState
+              layout="row"
+              icon={<ImageIcon size={ICON.lg} />}
+              title="Aún no hay fotos en la galería"
+              description="Las fotos publicadas aparecen aquí y en la galería del sitio."
+              action={<Button variant="primary" onClick={() => document.getElementById("galeria-foto")?.click()}>Subir la primera foto</Button>}
+            />
             : <>
               <p className="mb-3 text-xs text-ink-2">Mover antes y Mover después cambian el orden en que se muestran las fotos en la landing.</p>
               <ul className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">

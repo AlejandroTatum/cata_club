@@ -105,6 +105,12 @@ const MOBILE_NAV_TRIGGER = "Más secciones";
 
 const mockUseAuth = vi.mocked(useAuth);
 
+/** The user card at the foot of the rail: it opens the account menu. */
+function openAccountMenu(): HTMLElement {
+  fireEvent.click(screen.getByRole("button", { name: /Menú de cuenta de/i }));
+  return screen.getByRole("dialog", { name: "Menú de cuenta" });
+}
+
 describe("AppShell", (): void => {
   beforeEach((): void => {
     mockPush.mockReset();
@@ -347,35 +353,73 @@ describe("AppShell", (): void => {
     expect(screen.getByRole("button", { name: /notificaciones/i })).toBeInTheDocument();
   });
 
-  // Perfil and Cerrar sesión used to live behind a popup only the user card
-  // opened (issue #852): nothing about the card looked interactive, and
-  // older users reported not finding how to log out. Both are now permanent
-  // rows in the sidebar's bottom sector — no interaction required to see them.
-  it("shows Perfil and Cerrar sesión as permanent rows, without opening anything", (): void => {
+  // --- Dark mode (S6): the control is visible, next to the bell, and again in the menu ---
+
+  it("shows the dark-mode toggle in the topbar, right before the notifications bell", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 
-    expect(screen.getByRole("link", { name: "Perfil" })).toHaveAttribute("href", "/profile");
-    expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeInTheDocument();
+    const toggle = screen.getByRole("button", { name: "Modo oscuro" });
+    const bell = screen.getByRole("button", { name: /notificaciones/i });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(toggle.compareDocumentPosition(bell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("calls logout when Cerrar sesión is clicked, and the row stays visible", (): void => {
+  it("offers the same toggle inside the account menu", (): void => {
+    render(<AppShell title="Dashboard">{null}</AppShell>);
+
+    const menu = openAccountMenu();
+    expect(within(menu).getByRole("button", { name: "Modo oscuro" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("shows the toggle even with no session — the public shell paints the same tokens", (): void => {
+    mockUseAuth.mockReturnValue({ ...createAuthenticatedAuth("admin", "Admin"), session: null });
+    render(<AppShell title="Dashboard">{null}</AppShell>);
+
+    expect(screen.getByRole("button", { name: "Modo oscuro" })).toBeInTheDocument();
+  });
+
+  // Perfil, Ayuda and Cerrar sesión live in the account menu the user card
+  // opens (S5): three permanent rows under the nav is what gave the admin rail
+  // its own scrollbar at 1366x768.
+  it("keeps Perfil, Ayuda and Cerrar sesión out of the rail until the menu is opened", (): void => {
+    render(<AppShell title="Dashboard">{null}</AppShell>);
+
+    expect(screen.queryByRole("link", { name: "Perfil" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Ayuda" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cerrar sesión" })).not.toBeInTheDocument();
+
+    const menu = openAccountMenu();
+    expect(within(menu).getByRole("link", { name: "Perfil" })).toHaveAttribute("href", "/profile");
+    expect(within(menu).getByRole("link", { name: "Ayuda" })).toHaveAttribute("href", "/ayuda");
+    expect(within(menu).getByRole("button", { name: "Cerrar sesión" })).toBeInTheDocument();
+  });
+
+  it("calls logout when Cerrar sesión is chosen from the account menu", (): void => {
     const mockLogout = vi.fn();
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin", { logout: mockLogout }));
 
     render(<AppShell title="Dashboard">{null}</AppShell>);
-
-    fireEvent.click(screen.getByRole("button", { name: "Cerrar sesión" }));
+    fireEvent.click(within(openAccountMenu()).getByRole("button", { name: "Cerrar sesión" }));
 
     expect(mockLogout).toHaveBeenCalledTimes(1);
-    // Unlike the retired popup, this row never unmounts itself on click.
-    expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Menú de cuenta" })).not.toBeInTheDocument();
   });
 
-  it("no longer offers the user card as a popup trigger", (): void => {
+  it("exposes the user card as a menu button: aria-expanded, Escape closes and returns focus", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 
-    expect(screen.queryByRole("button", { name: /Menú de cuenta/i })).not.toBeInTheDocument();
+    const trigger = screen.getByRole("button", { name: /Menú de cuenta de/i });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
+
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(trigger).toHaveAttribute("aria-controls", screen.getByRole("dialog", { name: "Menú de cuenta" }).id);
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("dialog", { name: "Menú de cuenta" })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
   });
 
   it("opens and closes the mobile sidebar", (): void => {
@@ -556,10 +600,10 @@ describe("AppShell", (): void => {
     expect(mockPush).toHaveBeenCalledWith("/ayuda");
   });
 
-  it("uses the circle-question glyph on the sidebar footer's Ayuda", (): void => {
+  it("uses the circle-question glyph on the account menu's Ayuda", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 
-    const faq = screen.getByRole("link", { name: "Ayuda" });
+    const faq = within(openAccountMenu()).getByRole("link", { name: "Ayuda" });
     expect(faq.querySelector(".lucide-circle-question-mark")).not.toBeNull();
     expect(faq.querySelector(".lucide-book-open")).toBeNull();
   });
@@ -889,8 +933,14 @@ describe("AppShell — the page header row", (): void => {
     expect(heading).toBeInTheDocument();
     expect(heading).not.toHaveClass("sr-only");
     expect(screen.getByText("Todo el club")).not.toHaveClass("sr-only");
-    // No eyebrow/kicker above the title — the h1 opens its block.
-    expect(heading.parentElement?.firstElementChild).toBe(heading);
+    // The red kicker above the title is decoration (it repeats the rail's own
+    // group), hidden from assistive technology: the h1 opens the block for
+    // anyone who is not looking at it.
+    const visibleChildren = Array.from(heading.parentElement?.children ?? []).filter(
+      (child) => child.getAttribute("aria-hidden") !== "true",
+    );
+    expect(visibleChildren[0]).toBe(heading);
+    expect(screen.getByTestId("page-kicker")).toHaveAttribute("aria-hidden", "true");
   });
 
   it("draws exactly one main landmark", (): void => {
@@ -1031,7 +1081,7 @@ describe("AppShell — Ayuda", (): void => {
   it("navigates to /ayuda, and mounts no assistant of its own", (): void => {
     render(<AppShell title="Panel de Control">{null}</AppShell>);
 
-    const help = screen.getByRole("link", { name: "Ayuda" });
+    const help = within(openAccountMenu()).getByRole("link", { name: "Ayuda" });
     expect(help).toHaveAttribute("href", "/ayuda");
     // The launcher and the panel are gone for good; nothing may answer in
     // their place.
@@ -1044,13 +1094,14 @@ describe("AppShell — Ayuda", (): void => {
   it("folds Reportar un problema and Preguntas frecuentes into the single Ayuda row", (): void => {
     render(<AppShell title="Panel de Control">{null}</AppShell>);
 
+    openAccountMenu();
     expect(screen.getAllByRole("link", { name: "Ayuda" })).toHaveLength(1);
     expect(screen.queryByRole("link", { name: "Preguntas frecuentes" })).not.toBeInTheDocument();
-    // The floating launcher is the one report entry point inside the shell.
+    // The utility-row button is the one report entry point inside the shell.
     expect(screen.getAllByRole("button", { name: "Reportar un problema" })).toHaveLength(1);
   });
 
-  it("omits the floating report button when there is no session", (): void => {
+  it("omits the report button when there is no session", (): void => {
     mockUseAuth.mockReturnValue({ ...createAuthenticatedAuth("admin", "Admin Cata Club"), session: null });
     render(<AppShell title="Panel de Control">{null}</AppShell>);
 
@@ -1074,7 +1125,7 @@ describe("AppShell — Ayuda", (): void => {
 const OUT_OF_FLOW_UTILITY =
   /^-?(?:absolute|fixed|sticky|inset(?:$|-)|top-|bottom-|left-|right-|start-|end-)/;
 
-describe("AppShell — Perfil y Cerrar sesión, filas permanentes del pie", (): void => {
+describe("AppShell — Perfil, Ayuda y Cerrar sesión en el menú de cuenta", (): void => {
   beforeEach((): void => {
     stubViewport(true);
     mockUseAuth.mockReset();
@@ -1082,21 +1133,23 @@ describe("AppShell — Perfil y Cerrar sesión, filas permanentes del pie", (): 
     vi.stubGlobal("localStorage", createMemoryStorage());
   });
 
-  it("shows Perfil and Cerrar sesión next to Ayuda, on a plain render", (): void => {
+  it("shows the three entries once the account menu is open", (): void => {
     render(<AppShell title="Panel de Control">{null}</AppShell>);
 
-    expect(screen.getByRole("link", { name: "Ayuda" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Perfil" })).toHaveAttribute("href", "/profile");
-    expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeInTheDocument();
+    const menu = openAccountMenu();
+    expect(within(menu).getByRole("link", { name: "Ayuda" })).toBeInTheDocument();
+    expect(within(menu).getByRole("link", { name: "Perfil" })).toHaveAttribute("href", "/profile");
+    expect(within(menu).getByRole("button", { name: "Cerrar sesión" })).toBeInTheDocument();
   });
 
-  it("keeps every row in flow, so none of them can paint over another", (): void => {
+  it("keeps every entry in flow, so none of them can paint over another", (): void => {
     render(<AppShell title="Panel de Control">{null}</AppShell>);
 
+    const menu = openAccountMenu();
     const rows = [
-      screen.getByRole("link", { name: "Ayuda" }),
-      screen.getByRole("link", { name: "Perfil" }),
-      screen.getByRole("button", { name: "Cerrar sesión" }),
+      within(menu).getByRole("link", { name: "Ayuda" }),
+      within(menu).getByRole("link", { name: "Perfil" }),
+      within(menu).getByRole("button", { name: "Cerrar sesión" }),
     ];
 
     for (const row of rows) {
@@ -1110,18 +1163,17 @@ describe("AppShell — Perfil y Cerrar sesión, filas permanentes del pie", (): 
     }
   });
 
-  it("keeps the reading order: ayuda, perfil, cerrar sesión", (): void => {
+  it("keeps the reading order: perfil, ayuda, cerrar sesión", (): void => {
     render(<AppShell title="Panel de Control">{null}</AppShell>);
 
-    const faq = screen.getByRole("link", { name: "Ayuda" });
-    const perfil = screen.getByRole("link", { name: "Perfil" });
-    const cerrarSesion = screen.getByRole("button", { name: "Cerrar sesión" });
+    const menu = openAccountMenu();
+    const perfil = within(menu).getByRole("link", { name: "Perfil" });
+    const faq = within(menu).getByRole("link", { name: "Ayuda" });
+    const cerrarSesion = within(menu).getByRole("button", { name: "Cerrar sesión" });
 
-    // Guards the fix from being "solved" by shuffling the footer: this is
-    // also the tab order, so nothing gets reordered for a keyboard user.
     for (const [before, after] of [
-      [faq, perfil],
-      [perfil, cerrarSesion],
+      [perfil, faq],
+      [faq, cerrarSesion],
     ] as const) {
       expect(
         before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -1129,14 +1181,15 @@ describe("AppShell — Perfil y Cerrar sesión, filas permanentes del pie", (): 
     }
   });
 
-  it("also offers both rows inside the mobile drawer", (): void => {
+  it("also offers the account menu inside the mobile drawer", (): void => {
     stubViewport(false);
     render(<AppShell title="Panel de Control">{null}</AppShell>);
 
     fireEvent.click(screen.getByRole("button", { name: MOBILE_NAV_TRIGGER }));
+    const menu = openAccountMenu();
 
-    expect(screen.getByRole("link", { name: "Perfil" })).toHaveAttribute("href", "/profile");
-    expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeInTheDocument();
+    expect(within(menu).getByRole("link", { name: "Perfil" })).toHaveAttribute("href", "/profile");
+    expect(within(menu).getByRole("button", { name: "Cerrar sesión" })).toBeInTheDocument();
   });
 });
 
@@ -1314,7 +1367,8 @@ describe("AppShell — the rail of a person with several roles", (): void => {
   it("names the area from the same roles the rail is drawn from", (): void => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Entrenador"));
     const { unmount } = render(<AppShell title="Mi día">{null}</AppShell>);
-    expect(screen.getByText("Panel de gestión")).toBeInTheDocument();
+    // The brand block's second line (the page kicker repeats it, aria-hidden).
+    expect(screen.getByText("Panel de gestión", { selector: "span.text-2xs" })).toBeInTheDocument();
     unmount();
 
     mockUseAuth.mockReturnValue(

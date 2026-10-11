@@ -832,7 +832,7 @@ function ActivePortalView({
                   <User size={ICON.base} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-2xs font-bold uppercase text-ink-3-strong">
+                  <span className="block text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
                     Su representante
                   </span>
                   <span className="block text-sm font-semibold text-ink">

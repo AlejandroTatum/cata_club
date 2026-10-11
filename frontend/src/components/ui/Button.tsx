@@ -44,8 +44,8 @@ export type ButtonSize = (typeof BUTTON_SIZES)[number];
 // actually live. The ball survives as the inner band of the system ring in
 // `globals.css`, which dresses every focusable element in the product.
 const BASE =
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap border font-semibold " +
-  "transition-colors duration-150 " +
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap border-2 " +
+  "transition-[color,background-color,border-color,transform] duration-fast ease-out-expo " +
   // `.btn[disabled], .btn.off` (:176) — the fade lives in `DISABLED` below.
   "disabled:cursor-not-allowed";
 
@@ -58,18 +58,30 @@ const BASE =
 // button.
 const SIZE: Record<ButtonSize, string> = {
   md: "h-ctl rounded-ctl px-4 text-sm",
-  sm: "h-ctl-sm rounded-ctl px-3 text-xs",
+  // `max-md:min-h-11`: a narrow window gets the thumb floor by viewport too,
+  // because the coarse-pointer rule in `globals.css` never fires on a desktop
+  // browser resized to a phone (and that is how the owner reviews).
+  sm: "h-ctl-sm rounded-ctl px-3 text-xs max-md:min-h-11",
 };
 
 const VARIANT: Record<ButtonVariant, string> = {
-  // `.btn.pri` — the only red button. Hover is `--red-dark`.
-  primary: "bg-cata-red border-cata-red text-white hover:bg-cata-red-dark hover:border-cata-red-dark",
-  // `.btn` bare — white surface, `--line-2` border. Hover is `sunken`, not
-  // `canvas`: a white button standing ON the canvas that hovers TO the canvas
-  // dissolves into the page instead of responding.
-  secondary: "bg-paper border-line-2 text-ink hover:bg-sunken",
+  // The one primary action: the ball with a coal outline and a hard offset
+  // shadow — the landing's "INSCRÍBETE" button. Coal on the ball is 14:1; the
+  // white-on-red CTA of the previous pass survives as `danger` territory only
+  // (`state-bad`). Hover lifts it a step along the shadow's own diagonal and
+  // press sinks it onto the page, so the shadow reads as depth, not decoration.
+  primary:
+    "font-bold bg-ball border-edge text-coal shadow-sticker-sm dark:border-edge-hot " +
+    "hover:-translate-x-px hover:-translate-y-px hover:shadow-sticker " +
+    "active:translate-x-px active:translate-y-px active:shadow-none " +
+    "motion-reduce:hover:translate-x-0 motion-reduce:hover:translate-y-0 " +
+    "motion-reduce:active:translate-x-0 motion-reduce:active:translate-y-0",
+  // `.btn` bare — the outlined sticker: paper, coal outline, no shadow. Hover
+  // is `sunken`, not `canvas`: a white button standing ON the canvas that
+  // hovers TO the canvas dissolves into the page instead of responding.
+  secondary: "font-semibold bg-paper border-edge text-ink hover:bg-sunken active:translate-y-px motion-reduce:active:translate-y-0 dark:border-line-2",
   // `.btn.dark` — coal. Secondary-but-emphatic actions ("+ Nuevo miembro").
-  dark: "bg-coal border-coal text-white hover:bg-coal-2 hover:border-coal-2",
+  dark: "font-bold bg-coal border-coal text-white hover:bg-coal-2 hover:border-coal-2 active:translate-y-px motion-reduce:active:translate-y-0 dark:border-edge dark:hover:border-edge",
   // The third level (D5). It replaces `ghost`, which was `bg-transparent
   // border-transparent` — "no chrome at all" — and was rejected for exactly
   // that: "no me gustan los botones vacíos o sin box".
@@ -88,14 +100,14 @@ const VARIANT: Record<ButtonVariant, string> = {
   // arriving fill) and ink at 13.26:1 once settled. The fill itself clears the
   // ladder's own 1.09:1 rung on both neighbours it can stand on: 1.098:1 on
   // `paper`, 1.112:1 on `canvas`.
-  tertiary: "bg-sunken border-transparent text-ink-2 hover:bg-line hover:text-ink",
+  tertiary: "font-semibold bg-sunken border-transparent text-ink-2 hover:bg-line hover:text-ink",
   // `.btn.oncoal` (prototype 31) — the secondary action INSIDE a coal card
   // (the trainer dashboard's immediate-session card). `secondary`'s white
   // fill would read as a second block competing with the coal surface it
   // sits on, so this is a translucent outline instead: transparent fill,
   // a white-tinted border, white text — the same language `dark` speaks in
   // reverse, for the one surface that is already coal.
-  onCoal: "bg-transparent border-white/25 text-white hover:bg-white/10 hover:border-white/45",
+  onCoal: "font-semibold bg-transparent border-white/25 text-white hover:bg-white/10 hover:border-white/45",
 };
 
 /**
@@ -114,7 +126,7 @@ const NEUTRAL_DISABLED =
   "disabled:hover:bg-sunken disabled:hover:border-line-2";
 
 const DISABLED: Record<ButtonVariant, string> = {
-  primary: NEUTRAL_DISABLED,
+  primary: NEUTRAL_DISABLED + " disabled:shadow-none disabled:hover:translate-x-0 disabled:hover:translate-y-0",
   secondary: "disabled:opacity-45",
   dark: NEUTRAL_DISABLED,
   tertiary: "disabled:opacity-45",

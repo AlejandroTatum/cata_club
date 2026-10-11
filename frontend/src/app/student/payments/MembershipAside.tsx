@@ -95,7 +95,7 @@ export function MembershipCard({
           fact the reader came for. */}
       <div className="px-5 py-[18px]">
         <div className="mb-2 flex flex-wrap items-center gap-2.5">
-          <p className="text-2xs font-bold uppercase text-ink-3-strong">
+          <p className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
             {studentName ? `Membresía de ${studentName}` : "Tu membresía"}
           </p>
           <Badge tone={state.tone}>{state.label}</Badge>
@@ -131,7 +131,7 @@ export function MembershipCard({
           <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-line pt-4">
             {facts.map((fact) => (
               <div key={fact.label} className="min-w-0">
-                <dt className="text-2xs font-bold uppercase text-ink-3-strong">{fact.label}</dt>
+                <dt className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">{fact.label}</dt>
                 <dd className="mt-0.5 truncate text-sm font-bold tabular-nums text-ink">{fact.value}</dd>
               </div>
             ))}
@@ -143,7 +143,7 @@ export function MembershipCard({
         <div className="flex flex-col gap-3 border-t border-line bg-sunken/40 px-5 py-4">
           <span className="flex items-center gap-1.5">
             <span aria-hidden="true" className={cn("h-1.5 w-1.5 flex-none rounded-full bg-current", STATUS_DOT_TEXT[state.tone])} />
-            <span className={cn("text-2xs font-bold uppercase", STATUS_DOT_TEXT[state.tone])}>{state.label}</span>
+            <span className={cn("text-2xs font-bold uppercase tracking-caps", STATUS_DOT_TEXT[state.tone])}>{state.label}</span>
           </span>
           <div className="min-w-0">{children}</div>
         </div>

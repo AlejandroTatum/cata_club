@@ -95,8 +95,8 @@ export default function ReportProblemDialog({ onClose, requestId, capture }: Rep
   }
 
   return (
-    <div role="presentation" data-report-ignore className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/60 sm:items-center sm:p-4">
-      <section role="dialog" aria-modal="true" aria-label="Reportar un problema" className={`flex h-full w-full ${sent ? "max-w-md" : "max-w-5xl"} flex-col overflow-hidden bg-cata-surface text-cata-text shadow-elevated sm:h-auto sm:max-h-[92vh] sm:rounded-xl`}>
+    <div role="presentation" data-report-ignore className="fixed inset-0 z-50 flex animate-overlay-in items-stretch justify-center bg-black/60 sm:items-center sm:p-4">
+      <section role="dialog" aria-modal="true" aria-label="Reportar un problema" className={`flex h-full w-full animate-sheet-in sm:animate-dialog-in ${sent ? "max-w-md" : "max-w-5xl"} flex-col overflow-hidden bg-cata-surface text-cata-text shadow-elevated sm:h-auto sm:max-h-[92vh] sm:rounded-xl`}>
         <header className="flex items-center justify-between border-b border-cata-border px-5 py-3">
           <h2 className="text-xl font-semibold">Reportar un problema</h2>
           <button type="button" onClick={onClose} aria-label="Cerrar" className="rounded-lg p-2 hover:bg-sunken"><X size={ICON.base} aria-hidden="true" /></button>
@@ -125,7 +125,7 @@ export default function ReportProblemDialog({ onClose, requestId, capture }: Rep
                   <span className="text-xs font-normal text-ink-2" aria-live="polite">{description.length}/{MAX_DESCRIPTION}</span>
                 </label>
                 <label className="flex flex-col gap-2 text-sm font-semibold">¿Dónde ocurrió?
-                  <input readOnly value={route} className="rounded-lg border border-cata-border bg-sunken p-2 font-mono text-sm font-normal" />
+                  <input readOnly value={route} className="rounded-lg border border-cata-border bg-sunken p-2 tabular-nums text-sm font-normal" />
                 </label>
                 {isAuto ? (
                   <div className="flex flex-col gap-1">
@@ -171,7 +171,7 @@ export default function ReportProblemDialog({ onClose, requestId, capture }: Rep
                   <h3 className="font-semibold">Así llegará tu reporte</h3>
                   <dl className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-3 gap-y-1.5">
                     <dt className="text-xs font-bold uppercase text-ink-2">Descripción</dt><dd data-testid="report-preview-description" className="whitespace-pre-wrap break-words">{description.trim() || "—"}</dd>
-                    <dt className="text-xs font-bold uppercase text-ink-2">Ruta</dt><dd className="break-all font-mono text-xs">{route || "—"}</dd>
+                    <dt className="text-xs font-bold uppercase text-ink-2">Ruta</dt><dd className="break-all tabular-nums text-xs">{route || "—"}</dd>
                     <dt className="text-xs font-bold uppercase text-ink-2">Navegador</dt><dd className="break-words text-xs">{browser || "—"}</dd>
                     <dt className="text-xs font-bold uppercase text-ink-2">Captura</dt><dd>{attached ? "Con captura" : screenshot ? "Sin captura (falta tu autorización)" : "Sin captura"}</dd>
                   </dl>
@@ -187,7 +187,7 @@ export default function ReportProblemDialog({ onClose, requestId, capture }: Rep
         )}
       </section>
       {enlarged && previewUrl && (
-        <div role="presentation" onClick={() => setEnlarged(false)} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4">
+        <div role="presentation" onClick={() => setEnlarged(false)} className="fixed inset-0 z-[60] flex animate-overlay-in items-center justify-center bg-black/80 p-4">
           {/* eslint-disable-next-line @next/next/no-img-element -- local blob: preview */}
           <img src={previewUrl} alt="Captura ampliada" className="max-h-full max-w-full object-contain" />
         </div>

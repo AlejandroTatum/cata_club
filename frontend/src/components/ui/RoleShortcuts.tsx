@@ -26,6 +26,12 @@ export interface RoleShortcutsProps {
   tone?: RoleShortcutTone;
   /** Accessible name of the list. */
   label?: string;
+  /**
+   * `1` for a narrow rail, where two tiles side by side clip their own text;
+   * `2` (default) from `sm` up for a card that has the width. Always one
+   * column on a phone.
+   */
+  columns?: 1 | 2;
   className?: string;
 }
 
@@ -41,15 +47,16 @@ export default function RoleShortcuts({
   shortcuts,
   tone = "ball",
   label,
+  columns = 2,
   className,
 }: RoleShortcutsProps): ReactElement {
   return (
-    <ul aria-label={label} className={cn("grid gap-3 sm:grid-cols-2", className)}>
+    <ul aria-label={label} className={cn("grid grid-cols-1 gap-3", columns === 2 && "sm:grid-cols-2", className)}>
       {shortcuts.map((shortcut) => (
-        <li key={shortcut.href + shortcut.title} className="flex">
+        <li key={shortcut.href + shortcut.title} className="flex min-w-0">
           <Link
             href={shortcut.href}
-            className="flex w-full items-center gap-3 rounded-ctl border border-line-2 bg-paper p-3.5 text-sm transition-colors hover:border-coal hover:bg-ball/10"
+            className="flex w-full min-w-0 items-center gap-3 rounded-ctl border border-line-2 bg-paper p-3.5 text-sm transition-colors hover:border-coal hover:bg-ball/10"
           >
             <span
               aria-hidden="true"
@@ -58,8 +65,8 @@ export default function RoleShortcuts({
               <ArrowRight size={ICON.sm} strokeWidth={1.5} />
             </span>
             <span className="grid min-w-0 flex-1 gap-0.5">
-              <span className="font-bold text-ink">{shortcut.title}</span>
-              <span className="text-xs text-ink-3-strong">{shortcut.description}</span>
+              <span className="break-words font-bold text-ink">{shortcut.title}</span>
+              <span className="break-words text-xs text-ink-3-strong">{shortcut.description}</span>
             </span>
           </Link>
         </li>

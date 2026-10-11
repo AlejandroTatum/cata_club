@@ -69,9 +69,9 @@ export interface NotificationBellProps {
 }
 
 const TRIGGER_VARIANT_CLASSES: Record<"dark" | "light", string> = {
-  dark: "touch-target relative inline-flex items-center justify-center rounded-xl p-2 text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white",
+  dark: "touch-target max-md:min-h-11 max-md:min-w-11 relative inline-flex items-center justify-center rounded-xl p-2 text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white",
   light:
-    "touch-target relative inline-flex items-center justify-center rounded-xl p-2 text-cata-text/65 transition-colors hover:bg-cata-bg hover:text-cata-text",
+    "touch-target max-md:min-h-11 max-md:min-w-11 relative inline-flex items-center justify-center rounded-xl p-2 text-cata-text/65 transition-colors hover:bg-cata-bg hover:text-cata-text",
 };
 
 export default function NotificationBell({
@@ -132,14 +132,14 @@ export default function NotificationBell({
           id={panelId}
           role="dialog"
           aria-label="Notificaciones"
-          className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[90vw] rounded-xl border border-cata-border bg-cata-surface p-2 shadow-elevated"
+          className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[90vw] rounded-xl border border-cata-border bg-cata-surface p-2 shadow-elevated dark:bg-popover"
         >
           <div className="flex items-center justify-between px-2 py-1.5">
             <p className="text-xs font-bold uppercase tracking-wider text-ink-3">
               Notificaciones
             </p>
             {unreadCount > 0 && (
-              <span className="flex items-center gap-1 text-2xs tracking-flat font-semibold text-cata-red">
+              <span className="flex items-center gap-1 text-xs tracking-flat font-semibold text-cata-red">
                 <CheckCheck
                   size={ICON.sm}
                   strokeWidth={1.5}
@@ -157,7 +157,7 @@ export default function NotificationBell({
                 onClick={onMarkAllRead}
                 disabled={marcandoTodas}
                 aria-busy={marcandoTodas}
-                className="flex items-center gap-1 text-2xs tracking-flat font-semibold text-cata-text/65 transition-colors hover:text-cata-text disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex items-center gap-1 text-xs tracking-flat font-semibold text-cata-text/65 transition-colors hover:text-cata-text disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <CheckCheck
                   size={ICON.sm}
@@ -175,7 +175,7 @@ export default function NotificationBell({
             <p
               role="status"
               aria-live="polite"
-              className="px-2 pb-1.5 text-2xs text-cata-red"
+              className="px-2 pb-1.5 text-xs text-cata-red"
             >
               No se pudieron marcar todas las notificaciones como leídas.
             </p>
@@ -220,7 +220,7 @@ export default function NotificationBell({
                       <p className="mt-0.5 text-xs text-cata-text/65">
                         {regularizacion?.body ?? n.mensaje}
                       </p>
-                      <p className="mt-1 text-2xs tracking-flat text-ink-3">
+                      <p className="mt-1 text-xs tracking-flat text-ink-3">
                         {formatDateTime(n.fechaCreacion)}
                       </p>
                     </button>
@@ -231,7 +231,7 @@ export default function NotificationBell({
           )}
 
           {errorCargarMas && (
-            <p role="status" aria-live="polite" className="px-2 pt-1.5 text-2xs text-cata-red">
+            <p role="status" aria-live="polite" className="px-2 pt-1.5 text-xs text-cata-red">
               No se pudieron cargar más notificaciones.
             </p>
           )}
@@ -243,7 +243,7 @@ export default function NotificationBell({
                 onClick={onLoadMore}
                 disabled={cargandoMas}
                 aria-busy={cargandoMas}
-                className="w-full rounded-lg py-1.5 text-center text-2xs font-semibold tracking-flat text-cata-text/65 transition-colors hover:bg-cata-bg hover:text-cata-text disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-lg py-1.5 text-center text-xs font-semibold tracking-flat text-cata-text/65 transition-colors hover:bg-cata-bg hover:text-cata-text disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Ver más notificaciones
               </button>

@@ -138,7 +138,7 @@ describe("WeekPlan — colour carries the training days (QA R2 S6)", () => {
   it("fills upcoming training days with green, mutes rest days and marks only today", () => {
     const { cells } = renderAt("2026-09-30T12:00:00-05:00");
     const [mon, , wed, thu, fri, sat] = cells;
-    expect(thu).toHaveClass("bg-state-ok", "text-white");
+    expect(thu).toHaveClass("bg-state-ok", "text-on-solid");
     expect(thu).not.toHaveClass("bg-cata-red");
     expect(fri).toHaveClass("bg-state-ok");
     // A training day already gone is tinted, not faded, so its text keeps AA contrast.

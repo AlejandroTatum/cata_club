@@ -24,6 +24,7 @@
 import { Fragment, type ReactElement, type ReactNode } from "react";
 import { Table, TableBody, TableHead, TableRow } from "./Table";
 import Pagination from "./Pagination";
+import { cn } from "./cn";
 
 interface ResponsiveListPagination {
   page: number;
@@ -74,6 +75,9 @@ interface ResponsiveListProps<T> {
   renderRow: (item: T) => ReactNode;
   cardsTestId?: string;
   tableTestId?: string;
+  /** Extra classes for the desktop table's scroll wrapper, e.g. a denser cell
+   *  padding for a screen whose columns do not fit its canvas. */
+  tableClassName?: string;
   /** Omitted (or `totalPages <= 1`): no pager renders — same as the old
    *  `totalPages > 1 && <Pagination .../>` each caller used to write. */
   pagination?: ResponsiveListPagination;
@@ -90,6 +94,7 @@ export default function ResponsiveList<T>({
   renderRow,
   cardsTestId,
   tableTestId,
+  tableClassName,
   pagination,
 }: ResponsiveListProps<T>): ReactElement {
   const cardsHiddenClass = breakpoint === "sm" ? "sm:hidden" : "md:hidden";
@@ -105,7 +110,7 @@ export default function ResponsiveList<T>({
   );
 
   const tableBlock = (
-    <div data-testid={tableTestId} className={tableVisibleClass}>
+    <div data-testid={tableTestId} className={cn(tableVisibleClass, tableClassName)}>
       <Table>
         <TableHead>
           <TableRow>{columns}</TableRow>

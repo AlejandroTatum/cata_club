@@ -52,7 +52,7 @@ export default function ErrorState({
     <div
       role="alert"
       className={cn(
-        "flex flex-col items-center gap-2.5 rounded-card border border-state-bad/25 bg-state-bad-bg px-6 py-9 text-center",
+        "flex animate-reveal flex-col items-center gap-2.5 rounded-card border border-state-bad/25 bg-state-bad-bg px-6 py-9 text-center",
         className,
       )}
     >
