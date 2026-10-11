@@ -22,8 +22,8 @@ html[data-theme="dark"] .landing-page {
   --c-canvas: 232 232 238;
   --c-paper: 255 255 255;
   --c-sunken: 244 244 247;
-  --c-line: 222 222 230;
-  --c-line-2: 207 207 218;
+  --c-line: 201 201 211;
+  --c-line-2: 185 185 198;
   --c-edge: 19 19 22;
   --c-edge-shadow: 19 19 22;
   --c-edge-hot: 19 19 22;
@@ -356,6 +356,16 @@ html[data-theme="dark"] {
     border: 1px solid rgb(var(--c-line-2));
     color: rgb(var(--c-ink));
     @apply w-full min-h-ctl rounded-ctl px-4 py-2 text-sm transition-colors duration-fast placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* A read-only value in the box of the field it stands in for: same paper,
+     edge, height and radius as `.input-field`, so read and edit modes line up.
+     Owner (2026-10-09): bare label/value pairs read as loose text. */
+  .field-readonly {
+    background-color: rgb(var(--c-paper));
+    border: 1px solid rgb(var(--c-line-2));
+    color: rgb(var(--c-ink));
+    @apply flex min-h-ctl w-full min-w-0 items-center rounded-ctl px-4 py-2 text-sm break-words;
   }
 
   .input-field::placeholder {

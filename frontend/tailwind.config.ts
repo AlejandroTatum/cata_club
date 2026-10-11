@@ -111,17 +111,15 @@ export const LIGHT_COLORS = {
    * Hairlines. `--line` draws the card edge AND the dividers inside it;
    * `--line-2` is the heavier border every interactive control wears.
    *
-   * Both are one step darker than `_sistema.css` shipped them
-   * (#E9E9EC / #D8D8DE). The old `line` measured 1.01:1 against the new
-   * `canvas` — a card outline literally the same luminance as the page
-   * it sat on. At #DEDEE6 the same hairline is 1.10:1 on `canvas` and
-   * 1.34:1 on `paper`, so one value draws a real edge on both surfaces.
-   * `line-2` goes from 1.42:1 to 1.55:1 on `paper`, which is what makes
-   * an input read as a field rather than as a ghost.
+   * Darkened twice. `_sistema.css` shipped #E9E9EC / #D8D8DE (1.01:1 on
+   * `canvas`); #DEDEE6 / #CFCFDA still read as no line at all in light mode
+   * (owner, 2026-10-09: list dividers "casi ni se notan"). At #C9C9D3 the
+   * hairline is ~1.3:1 on `canvas` and ~1.6:1 on `paper`, a visible edge
+   * that stays quiet; `line-2` #B9B9C6 gives controls ~1.9:1 on `paper`.
    */
   line: {
-    DEFAULT: "#DEDEE6",
-    "2": "#CFCFDA",
+    DEFAULT: "#C9C9D3",
+    "2": "#B9B9C6",
   },
   // ---------------------------------------------------------------------
   // The three-surface ladder. Everything else in the product sits on one

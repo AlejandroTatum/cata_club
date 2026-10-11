@@ -406,6 +406,28 @@ describe("TrainerPage — Mi día", () => {
     expect(today.getByTestId("today-list")).toHaveClass("sm:hidden");
   });
 
+  it("draws the day in the sticker identity, on the track and on the phone list alike", async () => {
+    render(<TrainerPage />);
+
+    const today = within(await screen.findByTestId("trainer-today"));
+    for (const block of today.getAllByTestId("timeline-block")) {
+      expect(block.className).toContain("border-2");
+      expect(block.className).toContain("shadow-sticker");
+      expect(within(block).getByTestId("timeline-glyph")).toBeInTheDocument();
+      expect(within(block).getByTestId("timeline-block-status")).not.toBeEmptyDOMElement();
+    }
+    const [taken, ahead] = today.getAllByTestId("today-list-row");
+    expect(taken).toHaveAttribute("data-status", "done");
+    expect(taken.className).toContain("bg-coal");
+    expect(ahead.className).toContain("border-dashed");
+    for (const row of today.getAllByTestId("today-list-row")) {
+      expect(row.className).toContain("border-2");
+      expect(row.className).toContain("shadow-sticker-sm");
+      expect(within(row).getByTestId("timeline-glyph")).toBeInTheDocument();
+    }
+    expect(today.getByTestId("timeline-now-label").className).toContain("bg-mark");
+  });
+
   it("colours the blocks by group and marks the clock with the 'ahora' line", async () => {
     render(<TrainerPage />);
 

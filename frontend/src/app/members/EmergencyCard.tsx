@@ -124,7 +124,7 @@ export default function EmergencyCard({
             {values.contactoEmergencia.trim() === "" && values.telefonoEmergencia.trim() === "" ? (
               <p className="mt-1.5 text-sm text-ink-3-strong">Sin registrar</p>
             ) : (
-              <div className="mt-1.5 flex flex-col gap-1">
+              <div data-testid="emergency-card-contact-value" className="field-readonly mt-1.5 flex-col items-start gap-1">
                 <p className={values.contactoEmergencia ? "break-words text-sm font-semibold text-ink" : "text-sm text-ink-3-strong"}>
                   {values.contactoEmergencia || "Sin registrar"}
                 </p>

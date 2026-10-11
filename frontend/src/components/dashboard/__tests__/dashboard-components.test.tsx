@@ -123,6 +123,31 @@ describe("TimelineDayList", () => {
     expect(rows[1]).toHaveTextContent("Lista tomada · 12 inscritos");
     expect(within(rows[1]).queryByRole("link")).toBeNull();
   });
+
+  it("wears the track's stickers with a glyph per state, in light and dark", () => {
+    render(
+      <TimelineDayList
+        items={[
+          { id: "a", start: "15:00", end: "16:00", title: "Formativo", status: "pending", statusLabel: "Pendiente", href: "/x" },
+          { id: "b", start: "16:00", end: "17:00", title: "Avanzado", status: "done", statusLabel: "Lista tomada", href: "/y" },
+          { id: "c", start: "17:00", end: "18:00", title: "Infantil", status: "live", statusLabel: "En curso", href: "/z" },
+          { id: "d", start: "18:00", end: "19:00", title: "Juvenil", status: "missing", statusLabel: "Sin lista", href: "/w" },
+        ]}
+      />,
+    );
+    const rows = within(screen.getByTestId("timeline-day-list")).getAllByRole("link");
+    expect(rows[0].className).toContain("border-dashed");
+    expect(rows[1].className).toContain("bg-coal");
+    expect(rows[1].className).toContain("dark:bg-kpi-coal");
+    expect(rows[2].className).toContain("bg-ball");
+    expect(rows[3].className).toContain("bg-cata-red");
+    for (const row of rows) {
+      expect(row.className).toContain("border-2");
+      expect(row.className).toContain("shadow-sticker-sm");
+      expect(within(row).getByTestId("timeline-glyph")).toBeInTheDocument();
+    }
+    expect(new Set(rows.map((row) => within(row).getByTestId("timeline-glyph").getAttribute("data-glyph"))).size).toBe(4);
+  });
 });
 
 describe("KpiTile caption link", () => {

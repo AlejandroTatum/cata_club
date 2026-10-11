@@ -33,6 +33,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import ReportProblemButton from "./ReportProblemButton";
+import WhatsNewDialog from "@/components/WhatsNewDialog";
 import AccountMenu from "./AccountMenu";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import {
@@ -1044,6 +1045,9 @@ export default function AppShell({
             {children}
           </main>
         </div>
+
+        {/* Release note after login; waits for the legal re-accept gate. */}
+        <WhatsNewDialog />
 
         {/* `.phone .tabs2` — 62px, paper, hairline on top. Phone only. */}
         {showMobileTabs && (

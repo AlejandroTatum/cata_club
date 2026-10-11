@@ -228,25 +228,82 @@ describe("Timeline", () => {
     expect(tip).toHaveTextContent("8 inscritos");
   });
 
-  it("paints each block a solid pastel by status, never dashed", () => {
+  it("dresses each block as a sticker: outline, hard shadow and a solid face by status", () => {
     render4(null);
-    const blocks = screen.getAllByTestId("timeline-block");
-    const tint = (block: HTMLElement): string =>
-      block.querySelector("span[aria-hidden]")?.className ?? "";
-    expect(tint(blocks[1])).toContain("bg-state-ok/15");
-    expect(tint(blocks[2])).toContain("bg-cuenta-representante/15");
-    expect(tint(blocks[3])).toContain("bg-cuenta-menor/10");
-    expect(tint(blocks[0])).toContain("bg-state-bad/15");
-    // Opaque base, so the hour grid never shows through a block.
-    for (const block of blocks) expect(block.className).toContain("bg-paper");
-    for (const block of blocks) expect(block.className).not.toContain("dashed");
+    const [missing, done, live, pending] = screen.getAllByTestId("timeline-block");
+    // The KPI slabs' faces: red = sin lista, coal = lista tomada, ball = en curso.
+    expect(missing.className).toContain("bg-cata-red");
+    expect(done.className).toContain("bg-coal");
+    expect(live.className).toContain("bg-ball");
+    // Pending is the quiet sticker: white with a dashed outline.
+    expect(pending.className).toContain("bg-paper");
+    expect(pending.className).toContain("border-dashed");
+    for (const block of [missing, done, live, pending]) {
+      expect(block.className).toContain("border-2");
+      expect(block.className).toContain("border-edge");
+      expect(block.className).toContain("shadow-sticker");
+      // No pastel tint or thin tinted hairline survives.
+      expect(block.className).not.toMatch(/bg-(state|cuenta)-[a-z]+\/\d+/);
+      expect(block.className).not.toMatch(/border-(state|cuenta)-/);
+    }
+    // Dark mode swaps in the KPI slabs' own rims and fills.
+    expect(done.className).toContain("dark:bg-kpi-coal");
+    expect(done.className).toContain("dark:border-edge-hot");
+    expect(missing.className).toContain("dark:bg-kpi-red");
   });
 
-  it("explains the fills in a legend", () => {
+  it("says the state in a glyph and a word on every block, not by colour alone", () => {
+    render4(null);
+    const blocks = screen.getAllByTestId("timeline-block");
+    const expected = [
+      ["missing", "Sin lista"],
+      ["done", "Lista tomada"],
+      ["live", "En curso"],
+      ["pending", "Pendiente"],
+    ];
+    blocks.forEach((block, index) => {
+      const [status, word] = expected[index];
+      expect(within(block).getByTestId("timeline-glyph")).toHaveAttribute("data-glyph", status);
+      expect(within(block).getByTestId("timeline-block-status")).toHaveTextContent(word);
+    });
+    // Four different glyphs: each state is told apart without its fill.
+    const glyphs = blocks.map((block) => within(block).getByTestId("timeline-glyph").getAttribute("data-glyph"));
+    expect(new Set(glyphs).size).toBe(4);
+  });
+
+  it("lays what already happened flat and keeps the rest standing off the track", () => {
+    render4(15 * 60 + 30);
+    const [adultos, formativo, infantil] = screen.getAllByTestId("timeline-block");
+    expect(adultos.className).toContain("shadow-none");
+    expect(formativo.className).toContain("shadow-sticker-sm");
+    expect(infantil.className).toContain("shadow-sticker-sm");
+    // Muted by depth, never by opacity: the ink keeps its contrast.
+    for (const block of screen.getAllByTestId("timeline-block")) expect(block.innerHTML).not.toContain("opacity-");
+  });
+
+  it("draws the Ahora marker as a coal sticker with a coal line, not a pastel pill", () => {
+    render4(16 * 60 + 30);
+    const label = screen.getByTestId("timeline-now-label");
+    expect(label.className).toContain("border-2");
+    expect(label.className).toContain("bg-mark");
+    expect(label.className).toContain("shadow-sticker-sm");
+    expect(label.className).not.toContain("rounded-full");
+    expect(label.className).not.toContain("bg-state-bad");
+    expect(screen.getByTestId("timeline-now").className).toContain("bg-mark");
+  });
+
+  it("explains the fills in a legend of miniature stickers, glyph included", () => {
     render4(null);
     const legend = screen.getByRole("list", { name: "Leyenda" });
     for (const word of ["Lista tomada", "En curso", "Pendiente", "Sin lista"]) {
       expect(within(legend).getByText(word)).toBeInTheDocument();
+    }
+    const swatches = within(legend).getAllByTestId("timeline-legend-swatch");
+    expect(swatches.map((swatch) => swatch.getAttribute("data-status"))).toEqual(["done", "live", "pending", "missing"]);
+    for (const swatch of swatches) {
+      expect(swatch.className).toContain("border-2");
+      expect(swatch.className).toContain("shadow-sticker-sm");
+      expect(within(swatch).getByTestId("timeline-glyph")).toBeInTheDocument();
     }
   });
 
