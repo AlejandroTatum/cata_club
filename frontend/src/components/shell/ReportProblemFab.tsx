@@ -71,7 +71,7 @@ export default function ReportProblemFab(): React.ReactElement | null {
           onClick={(): void => report.open()}
           disabled={report.busy}
           style={style}
-          className="fixed right-4 z-20 inline-flex min-h-[44px] items-center gap-2 rounded-full bg-ink px-4 text-sm font-bold text-white shadow-elevated transition-colors hover:bg-ink/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cata-red disabled:opacity-70 sm:right-6"
+          className="fixed right-4 z-20 inline-flex min-h-[44px] items-center gap-2 rounded-full border-2 border-edge bg-coal px-4 text-sm font-bold text-white shadow-sticker transition-colors hover:bg-coal-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cata-red disabled:opacity-70 sm:right-6"
         >
           <Flag size={ICON.sm} strokeWidth={2} aria-hidden="true" />
           Reportar un problema

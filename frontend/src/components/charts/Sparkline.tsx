@@ -48,7 +48,7 @@ export interface SparklineProps {
 }
 
 const TONE_STROKE: Record<ChartTone, string> = {
-  coal: "stroke-coal",
+  coal: "stroke-coal dark:stroke-mark",
   ok: "stroke-state-ok",
   warn: "stroke-state-warn",
   bad: "stroke-state-bad",

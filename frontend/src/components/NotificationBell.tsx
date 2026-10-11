@@ -132,7 +132,7 @@ export default function NotificationBell({
           id={panelId}
           role="dialog"
           aria-label="Notificaciones"
-          className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[90vw] rounded-xl border border-cata-border bg-cata-surface p-2 shadow-elevated"
+          className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[90vw] rounded-xl border border-cata-border bg-cata-surface p-2 shadow-elevated dark:bg-popover"
         >
           <div className="flex items-center justify-between px-2 py-1.5">
             <p className="text-xs font-bold uppercase tracking-wider text-ink-3">

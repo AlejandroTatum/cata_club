@@ -229,7 +229,7 @@ export default function RowActionsMenu({
               aria-label={label}
               onKeyDown={onMenuKeyDown}
               style={{ position: "fixed", top: position.top, left: position.left, right: position.right }}
-              className="card z-50 flex min-w-44 flex-col p-1"
+              className="card z-50 flex min-w-44 flex-col p-1 dark:bg-popover"
             >
               {items.map((item) => (
                 <button

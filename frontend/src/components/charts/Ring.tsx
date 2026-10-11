@@ -48,7 +48,7 @@ export default function Ring({
       viewBox={`0 0 ${size} ${size}`}
       className={cn("flex-none", className)}
     >
-      <circle cx={centre} cy={centre} r={radius} fill="none" strokeWidth={STROKE} className="stroke-line" />
+      <circle cx={centre} cy={centre} r={radius} fill="none" strokeWidth={STROKE} className="stroke-line dark:stroke-track" />
       {share > 0 && (
         <circle
           data-testid="ring-arc"
@@ -61,7 +61,7 @@ export default function Ring({
           strokeDasharray={`${share * circumference} ${circumference}`}
           transform={`rotate(-90 ${centre} ${centre})`}
           className={cn(
-            TONE_FILL[tone].replace("fill-", "stroke-"),
+            TONE_FILL[tone].replaceAll("fill-", "stroke-"),
             "motion-safe:transition-[stroke-dasharray] motion-safe:duration-300",
           )}
         />

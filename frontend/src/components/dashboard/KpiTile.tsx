@@ -77,9 +77,13 @@ export default function KpiTile({
       data-testid="kpi-tile"
       data-tone={hot ? "action" : tone}
       className={cn(
-        "flex min-h-stat flex-col justify-between gap-3 px-[18px] py-4",
+        "flex min-h-stat flex-col gap-3 px-[18px] py-4",
+        visual ? "justify-between" : "justify-center",
         STAT_BLOCK_FRAME,
         skin.surface,
+        // The slab's rim is the one bright outline besides the primary action
+        // (dark only; in light `edge-hot` is the coal outline already).
+        solid && "dark:border-edge-hot",
         className,
       )}
     >

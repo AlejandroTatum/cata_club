@@ -95,7 +95,7 @@ export default function PageHeader({
             legibility. */}
         <h1 className="font-display text-xl uppercase tracking-flat text-ink">
           {highlight ? (
-            <span className="box-decoration-clone rounded-[6px] border-2 border-edge bg-ball px-2 text-coal shadow-sticker-sm">
+            <span className="box-decoration-clone rounded-[6px] border-2 border-edge bg-ball dark:border-edge-hot px-2 text-coal shadow-sticker-sm">
               {title}
             </span>
           ) : (

@@ -353,6 +353,31 @@ describe("AppShell", (): void => {
     expect(screen.getByRole("button", { name: /notificaciones/i })).toBeInTheDocument();
   });
 
+  // --- Dark mode (S6): the control is visible, next to the bell, and again in the menu ---
+
+  it("shows the dark-mode toggle in the topbar, right before the notifications bell", (): void => {
+    render(<AppShell title="Dashboard">{null}</AppShell>);
+
+    const toggle = screen.getByRole("button", { name: "Modo oscuro" });
+    const bell = screen.getByRole("button", { name: /notificaciones/i });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(toggle.compareDocumentPosition(bell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("offers the same toggle inside the account menu", (): void => {
+    render(<AppShell title="Dashboard">{null}</AppShell>);
+
+    const menu = openAccountMenu();
+    expect(within(menu).getByRole("button", { name: "Modo oscuro" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("shows the toggle even with no session — the public shell paints the same tokens", (): void => {
+    mockUseAuth.mockReturnValue({ ...createAuthenticatedAuth("admin", "Admin"), session: null });
+    render(<AppShell title="Dashboard">{null}</AppShell>);
+
+    expect(screen.getByRole("button", { name: "Modo oscuro" })).toBeInTheDocument();
+  });
+
   // Perfil, Ayuda and Cerrar sesión live in the account menu the user card
   // opens (S5): three permanent rows under the nav is what gave the admin rail
   // its own scrollbar at 1366x768.

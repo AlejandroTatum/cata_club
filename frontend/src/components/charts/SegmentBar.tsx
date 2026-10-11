@@ -52,7 +52,7 @@ export default function SegmentBar({
   return (
     <div role="group" aria-label={ariaLabel} data-testid="segment-bar" className={cn("flex flex-col gap-2.5", className)}>
       <div className="relative">
-        <div className="flex h-3 w-full gap-0.5 overflow-hidden rounded-full bg-line">
+        <div className="flex h-3 w-full gap-0.5 overflow-hidden rounded-full bg-line dark:bg-track">
           {drawn.map(({ segment, index }) => {
             const shared = {
               "aria-label": describe(segment, total),

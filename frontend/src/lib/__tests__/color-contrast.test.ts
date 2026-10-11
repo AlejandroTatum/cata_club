@@ -31,8 +31,10 @@ import { LIGHT_COLORS } from "../../../tailwind.config";
 // ---------------------------------------------------------------------------
 
 import { contrastRatio, compositeOver, lightness } from "../color-contrast";
+import { DARK_COLORS } from "../theme-tokens";
 
 const AA_NORMAL_TEXT = 4.5;
+const AAA_NORMAL_TEXT = 7;
 /** WCAG 1.4.11 — a focus indicator must clear 3:1 against its adjacent colours. */
 const AA_NON_TEXT = 3;
 
@@ -944,5 +946,204 @@ describe("D9's two shared pieces — the identity cell's role chips and the week
     // which are measured above.
     expect(contrastRatio(line.DEFAULT, SUNKEN)).toBeLessThan(AA_NON_TEXT);
     expect(contrastRatio(line["2"], SUNKEN)).toBeLessThan(AA_NON_TEXT);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DARK THEME — `html[data-theme="dark"]` (`lib/theme-tokens.ts`).
+//
+// Same instrument, same thresholds as the light pairs above: a theme that only
+// looked right would be a regression in the one thing the light tokens spent
+// this file proving. Each foreground is measured on the surfaces it can land
+// on in dark, and each status/account pair on its own tint.
+// ---------------------------------------------------------------------------
+
+describe("dark theme — the same WCAG thresholds as light", () => {
+  const D = DARK_COLORS;
+  const DARK_SURFACES = { canvas: D.canvas, paper: D.paper, sunken: D.sunken, popover: D.popover };
+  const BALL = (colors.ball as Record<string, string>).DEFAULT;
+  /** Opaque stand-in for `text-coal/80`, the muted ink the ball slab prints. */
+  const mix = (fg: string, bg: string, alpha: number): string => {
+    const channel = (hex: string, i: number): number => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+    return `#${[0, 1, 2]
+      .map((i) => Math.round(channel(fg, i) * alpha + channel(bg, i) * (1 - alpha)).toString(16).padStart(2, "0"))
+      .join("")}`;
+  };
+
+  it("keeps the elevation ladder in order, each rung visible", () => {
+    // rail (sidebar) < canvas < paper (cards) < sunken < popover (menus).
+    const ladder = [D.rail, D.canvas, D.paper, D.sunken, D.popover];
+    for (let i = 1; i < ladder.length; i += 1) {
+      expect(lightness(ladder[i - 1])).toBeLessThan(lightness(ladder[i]));
+    }
+    expect(contrastRatio(D.canvas, D.rail)).toBeGreaterThanOrEqual(1.06);
+    expect(contrastRatio(D.paper, D.canvas)).toBeGreaterThanOrEqual(1.12);
+    expect(contrastRatio(D.sunken, D.paper)).toBeGreaterThanOrEqual(1.12);
+    expect(contrastRatio(D.popover, D.paper)).toBeGreaterThanOrEqual(1.2);
+  });
+
+  it("draws hairlines that are visible on the dark surfaces they border", () => {
+    expect(contrastRatio(D["line.DEFAULT"], D.canvas)).toBeGreaterThanOrEqual(1.3);
+    expect(contrastRatio(D["line.DEFAULT"], D.paper)).toBeGreaterThanOrEqual(1.1);
+    expect(contrastRatio(D["line.2"], D.paper)).toBeGreaterThan(contrastRatio(D["line.DEFAULT"], D.paper));
+    expect(contrastRatio(D["line.2"], D.paper)).toBeGreaterThanOrEqual(1.5);
+  });
+
+  it.each(Object.entries(DARK_SURFACES))("meets AA for the ink ramp on %s", (_name, surface) => {
+    for (const token of ["ink.DEFAULT", "ink.2", "ink.3", "ink.3-strong"]) {
+      expect(contrastRatio(D[token], surface), `${token} on ${_name}`).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    }
+  });
+
+  it("prints the primary text near-white, not pure white", () => {
+    expect(D["ink.DEFAULT"].toUpperCase()).not.toBe("#FFFFFF");
+    expect(contrastRatio(D["ink.DEFAULT"], D.canvas)).toBeGreaterThanOrEqual(AAA_NORMAL_TEXT);
+  });
+
+  it("keeps the secondary and muted ink at AAA (7:1) on the page, the rail and the cards", () => {
+    // Labels, kickers and captions are printed in these. On a menu (popover)
+    // and the inset (sunken) AA is the floor, asserted above.
+    for (const surface of [D.rail, D.canvas, D.paper]) {
+      for (const token of ["ink.2", "ink.3", "ink.3-strong"]) {
+        expect(contrastRatio(D[token], surface), `${token} on ${surface}`).toBeGreaterThanOrEqual(AAA_NORMAL_TEXT);
+      }
+    }
+  });
+
+  it.each(["state.ok", "state.warn", "state.bad", "state.neutral"])(
+    "meets AA for the %s chip text on every dark surface and on its own tint",
+    (token) => {
+      for (const surface of Object.values(DARK_SURFACES)) {
+        expect(contrastRatio(D[token], surface)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      }
+      expect(contrastRatio(D[token], D[`${token}-bg`])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    },
+  );
+
+  it.each(["state.ok", "state.warn", "state.bad", "state.neutral"])(
+    "keeps the %s chip tint distinguishable from the card it sits on",
+    (token) => {
+      expect(contrastRatio(D[`${token}-bg`], D.paper)).toBeGreaterThanOrEqual(1.05);
+    },
+  );
+
+  it.each(["representante", "menor", "entrenador"])(
+    "meets AA for the %s account accent on paper and on its own tint",
+    (kind) => {
+      expect(contrastRatio(D[`cuenta.${kind}`], D.paper)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      expect(contrastRatio(D[`cuenta.${kind}`], D[`cuenta.${kind}-bg`])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    },
+  );
+
+  it("meets AA for the yellow and pink inks on every dark surface", () => {
+    for (const surface of Object.values(DARK_SURFACES)) {
+      expect(contrastRatio(D["ball.ink"], surface)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      expect(contrastRatio(D["cata.fuchsia-ink"], surface)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    }
+  });
+
+  it("meets AA for the ink on the enrollment wash", () => {
+    expect(contrastRatio(D["ink.DEFAULT"], D["enroll-wash"])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    expect(contrastRatio(D["ink.3-strong"], D["enroll-wash"])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("keeps the ordinary sticker outline quiet: visible, but never a bright frame", () => {
+    // The outline of every card is a low-contrast line; a bright 2px frame on
+    // each container was the glare the redesign removed. The hard shadow is
+    // darker than the page so depth reads without light.
+    for (const surface of [D.canvas, D.paper]) {
+      expect(contrastRatio(D.edge, surface)).toBeGreaterThanOrEqual(1.15);
+      expect(contrastRatio(D.edge, surface)).toBeLessThan(2);
+    }
+    expect(lightness(D["edge-shadow"])).toBeLessThan(lightness(D.rail));
+    expect(lightness(D["edge-shadow"])).toBeLessThan(lightness(D.canvas));
+  });
+
+  it("spends the bright rim only on the highlighted pieces, and keeps it at 3:1", () => {
+    for (const surface of [D.canvas, D.paper, D.rail]) {
+      expect(contrastRatio(D["edge-hot"], surface)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+    }
+    // The rim is the brand ball, the same colour the primary action fills with.
+    expect(D["edge-hot"].toUpperCase()).toBe(BALL);
+  });
+
+  it("keeps the system focus ring visible in dark: the outline AND the ball band clear 3:1", () => {
+    // `globals.css` draws the outline in `edge-focus` (near-white in dark) and
+    // the ball band hugs the control. Either is enough on its own.
+    for (const surface of Object.values(DARK_SURFACES)) {
+      expect(contrastRatio(D["edge-focus"], surface)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+      expect(contrastRatio(BALL, surface)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+    }
+  });
+
+  it("prints `on-solid` text on every solid themed fill in both themes (WeekPlan chips, Now pill, group chips)", () => {
+    const cuenta = group("cuenta");
+    const fills: Record<string, { light: string; dark: string }> = {
+      ink: { light: ink.DEFAULT, dark: D["ink.DEFAULT"] },
+      "state-ok": { light: state.ok, dark: D["state.ok"] },
+      "state-warn": { light: state.warn, dark: D["state.warn"] },
+      "state-bad": { light: state.bad, dark: D["state.bad"] },
+      "cuenta-representante": { light: cuenta.representante, dark: D["cuenta.representante"] },
+      "cuenta-menor": { light: cuenta.menor, dark: D["cuenta.menor"] },
+      "cuenta-entrenador": { light: cuenta.entrenador, dark: D["cuenta.entrenador"] },
+    };
+    for (const [name, fill] of Object.entries(fills)) {
+      expect(contrastRatio(colors["on-solid"] as string, fill.light), `${name} in light`).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      expect(contrastRatio(D["on-solid"], fill.dark), `${name} in dark`).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    }
+  });
+
+  it("keeps the primary action the same in both themes: coal text on the ball fill", () => {
+    // `Button` fills the primary with the brand ball constant (never themed)
+    // and prints coal on it; only the rim changes in dark.
+    expect(contrastRatio(coal.DEFAULT, BALL)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    expect(contrastRatio(BALL, D.canvas)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+    expect(contrastRatio(BALL, D.paper)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+  });
+
+  it("keeps the brand fills that do not change: white on red, coal on the ball", () => {
+    expect(contrastRatio("#FFFFFF", cata.red)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    expect(contrastRatio(coal.DEFAULT, BALL)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  describe("KPI slabs", () => {
+    it("prints white on the deeper red slab at AAA", () => {
+      expect(contrastRatio("#FFFFFF", D["kpi.red"])).toBeGreaterThanOrEqual(AAA_NORMAL_TEXT);
+    });
+
+    it("prints coal on the deeper yellow slab, label and muted line included, at AAA", () => {
+      expect(contrastRatio(coal.DEFAULT, D["kpi.ball"])).toBeGreaterThanOrEqual(AAA_NORMAL_TEXT);
+      expect(contrastRatio(mix(coal.DEFAULT, D["kpi.ball"], 0.8), D["kpi.ball"])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    });
+
+    it("prints white (and its 70% label) on the coal slab", () => {
+      expect(contrastRatio("#FFFFFF", D["kpi.coal"])).toBeGreaterThanOrEqual(AAA_NORMAL_TEXT);
+      expect(contrastRatio(mix("#FFFFFF", D["kpi.coal"], 0.7), D["kpi.coal"])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    });
+
+    it("keeps the slabs deeper than the brand fills, so they glare less", () => {
+      expect(lightness(D["kpi.red"])).toBeLessThan(lightness(cata.red));
+      expect(lightness(D["kpi.ball"])).toBeLessThan(lightness(BALL));
+    });
+
+    it("separates every slab from the page it sits on", () => {
+      for (const slab of ["kpi.red", "kpi.ball"]) {
+        expect(contrastRatio(D[slab], D.canvas), slab).toBeGreaterThanOrEqual(2);
+      }
+      // The coal slab is dark like the rail; its bright rim is what frames it.
+      expect(contrastRatio(D["edge-hot"], D["kpi.coal"])).toBeGreaterThanOrEqual(AA_NON_TEXT);
+    });
+  });
+
+  describe("charts", () => {
+    it("draws the ring, bar and segment tracks visibly on the card and on the page", () => {
+      expect(contrastRatio(D.track, D.paper)).toBeGreaterThanOrEqual(1.4);
+      expect(contrastRatio(D.track, D.canvas)).toBeGreaterThanOrEqual(1.4);
+    });
+
+    it("draws the data ink over its track at 3:1 or better", () => {
+      expect(contrastRatio(D.mark, D.track)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+      expect(contrastRatio(D.mark, D.paper)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+    });
   });
 });

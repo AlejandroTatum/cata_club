@@ -20,8 +20,8 @@ export default function EnrollSignedInNotice(props: EnrollSignedInNoticeProps): 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-6 px-4 py-10">
       <BackLink href={props.backHref} />
-      <section className="flex flex-col gap-4 rounded-card border border-line bg-white p-page shadow-elevated">
-        <h1 className="font-display text-2xl uppercase tracking-flat text-coal">
+      <section className="flex flex-col gap-4 rounded-card border border-line bg-white dark:bg-paper p-page shadow-elevated">
+        <h1 className="font-display text-2xl uppercase tracking-flat text-coal dark:text-ink">
           Ya tienes una sesión iniciada
         </h1>
         <p className="text-sm text-ink-2">

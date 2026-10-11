@@ -65,7 +65,7 @@ const LG_COLUMNS: Record<number, string> = {
 
 /** The initials avatar `IdentityCell` draws: coal accent, never the brand red. */
 const INICIALES =
-  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-coal/[0.08] text-xs font-bold text-coal";
+  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-coal/[0.08] text-xs font-bold text-coal dark:bg-ink/[0.14] dark:text-ink";
 
 /** Same text whatever the backend decided: the card must not reveal whether the e-mail has an account. */
 export const MENSAJE_INVITACION_NEUTRO = "Si el correo es válido, enviaremos la invitación.";
