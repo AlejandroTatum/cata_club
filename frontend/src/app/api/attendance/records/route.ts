@@ -25,7 +25,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookies } from "@/lib/server/auth";
+import { pickRefreshed, refreshedTokenCookies, setAuthCookies, type RefreshedTokens } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 import {
   buildAttendanceRecord,
@@ -56,12 +56,12 @@ interface PaginatedAsistencias {
 }
 
 type ReportesResult =
-  | { ok: true; items: BackendAsistencia[]; refreshedAccessToken?: string }
+  | ({ ok: true; items: BackendAsistencia[] } & RefreshedTokens)
   | { ok: false; status: number; response?: Response };
 
 async function fetchAllReportes(request: NextRequest, baseQuery: URLSearchParams): Promise<ReportesResult> {
   const items: BackendAsistencia[] = [];
-  let refreshedAccessToken: string | undefined;
+  let refreshed: RefreshedTokens = {};
   let skip = 0;
   while (true) {
     const pageQs = new URLSearchParams(baseQuery);
@@ -70,14 +70,14 @@ async function fetchAllReportes(request: NextRequest, baseQuery: URLSearchParams
     const result = await backendFetchAuthed(request, `/asistencias/reportes?${pageQs.toString()}`);
     if (!result.ok) return { ok: false, status: result.status };
     if (!result.response.ok) return { ok: false, status: result.response.status, response: result.response };
-    refreshedAccessToken = result.refreshedAccessToken ?? refreshedAccessToken;
+    refreshed = pickRefreshed(result, refreshed);
 
     const page = (await result.response.json()) as PaginatedAsistencias;
     items.push(...page.items);
     if (page.items.length < REPORTES_PAGE_LIMIT || items.length >= page.total) break;
     skip += REPORTES_PAGE_LIMIT;
   }
-  return { ok: true, items, refreshedAccessToken };
+  return { ok: true, items, ...refreshed };
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -113,7 +113,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const response = NextResponse.json(records);
   if (reportesResult.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: reportesResult.refreshedAccessToken });
+    setAuthCookies(response, refreshedTokenCookies(reportesResult));
   }
   return response;
 }
@@ -231,7 +231,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { status },
     );
     if (result.ok && result.refreshedAccessToken) {
-      setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+      setAuthCookies(response, refreshedTokenCookies(result));
     }
     return response;
   }
@@ -259,7 +259,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     { status: 201 },
   );
   if (result.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+    setAuthCookies(response, refreshedTokenCookies(result));
   }
   return response;
 }

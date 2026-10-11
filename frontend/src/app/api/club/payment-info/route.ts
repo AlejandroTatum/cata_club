@@ -8,7 +8,7 @@
  * or network failure is a 502/503. Never cached: `private, no-store`.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookies } from "@/lib/server/auth";
+import { refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed } from "@/lib/server/backend-client";
 import { unauthorizedResponse } from "@/lib/server/bff-helpers";
 import { getServerClubPaymentInfo } from "@/lib/server/club-payment-info";
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const response = withNoStore(NextResponse.json(getServerClubPaymentInfo()));
   if (session.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: session.refreshedAccessToken });
+    setAuthCookies(response, refreshedTokenCookies(session));
   }
   return response;
 }

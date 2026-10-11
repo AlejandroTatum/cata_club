@@ -26,7 +26,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookies } from "@/lib/server/auth";
+import { refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 import { parseNumericIdOrBadRequest } from "@/lib/server/bff-helpers";
 import { buildMemberAccounts, type BackendPersonaFull } from "@/lib/server/members-adapter";
@@ -112,7 +112,7 @@ export async function GET(request: NextRequest, context: RouteContext): Promise<
 
   const response = NextResponse.json({ account });
   if (personaResult.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: personaResult.refreshedAccessToken });
+    setAuthCookies(response, refreshedTokenCookies(personaResult));
   }
   return response;
 }

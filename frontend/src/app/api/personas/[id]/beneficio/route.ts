@@ -25,7 +25,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookies } from "@/lib/server/auth";
+import { refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
 import {
   backendFetchAuthed,
   passthroughBackendError,
@@ -61,7 +61,7 @@ async function respondFromProxy(
   const data = await result.response.json();
   const response = NextResponse.json(data, { status: successStatus });
   if (result.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+    setAuthCookies(response, refreshedTokenCookies(result));
   }
   return response;
 }
