@@ -2697,6 +2697,31 @@ describe("GroupsPage — rail", () => {
   });
 });
 
+describe("GroupsPage — zero categories (RC17)", () => {
+  it("shows the real zero figure, not a loader that never resolves", async () => {
+    mockFetchHorarios.mockReset().mockResolvedValue([]);
+    mockFetchMembers.mockReset().mockResolvedValue({
+      accounts: [{ estudiantes: [{ id: 1, nombres: "Ana", apellidos: "Paz", activo: true, membresia: TRAINING }] }],
+    });
+    mockFetchCategoriasCatalogo.mockResolvedValue(DEFAULT_CATEGORIA_CATALOG);
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+
+    const rail = await screen.findByTestId("groups-rail");
+    expect(await within(rail).findByTestId("sin-grupo-list")).toHaveTextContent("Ana Paz");
+  });
+
+  it("says there are no players yet when there are neither categories nor players", async () => {
+    mockFetchHorarios.mockReset().mockResolvedValue([]);
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [] });
+    mockFetchCategoriasCatalogo.mockResolvedValue(DEFAULT_CATEGORIA_CATALOG);
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+
+    const rail = await screen.findByTestId("groups-rail");
+    expect(await within(rail).findByText("Aún no hay jugadores activos.")).toBeInTheDocument();
+    expect(within(rail).queryByText(/calculando/i)).not.toBeInTheDocument();
+  });
+});
+
 describe("GroupsPage — move players before deleting (QA4 ADMB-04)", () => {
   const GROUP_ROWS = [
     { id: 701, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },

@@ -740,14 +740,11 @@ describe("TrainerAttendanceHistoryPage — las tres cifras del período", () => 
     expect(screen.queryByRole("heading", { name: "Cómo leer el historial" })).not.toBeInTheDocument();
   });
 
-  it("rellena una lista corta con filas fantasma en vez de dejar el vacío bajo la tabla", async () => {
+  it("no rellena una lista corta con filas fantasma: parecen una carga que no termina", async () => {
     render(<TrainerAttendanceHistoryPage />);
 
     await screen.findAllByRole("row");
-    // Three sessions on the page -> seven ghost rows up to a full page of ten.
-    const ghost = screen.getByTestId("history-ghost-rows");
-    expect(ghost.querySelectorAll("li")).toHaveLength(7);
-    expect(ghost).toHaveAttribute("aria-hidden", "true");
+    expect(screen.queryByTestId("history-ghost-rows")).not.toBeInTheDocument();
   });
 
   it("declara la estimación con una palabra que se lee, no con un asterisco", async () => {

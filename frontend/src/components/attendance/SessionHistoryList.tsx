@@ -1,7 +1,8 @@
 /**
  * The attendance history card: one row per SESSION, with the proportional
- * result bar and its counts, a "Registró" column, ghost rows that keep a short
- * list the shape of a full page, and the footer pagination.
+ * result bar and its counts, a "Registró" column and the footer pagination.
+ * An empty period is one compact block, and a short list ends where its rows
+ * end: skeleton rows under either read as a list that never finished loading.
  *
  * Shared by the trainer's `/trainer/attendance/history` and the admin's
  * `/attendance` so the two screens cannot drift apart again. The admin's extra
@@ -25,6 +26,7 @@ import { formatDate } from "@/lib/format-utils";
 import {
   Badge,
   Button,
+  EmptyState,
   Pagination,
   ResponsiveListTable,
   TableCell,
@@ -52,40 +54,6 @@ export function sessionKey(
   return `${session.fecha}|${session.horarioId}`;
 }
 
-/** A row-shaped placeholder: the shape of a session not yet filed, not a void under the table. */
-function GhostSessionRows({
-  count,
-  caption,
-}: {
-  count: number;
-  caption?: string;
-}): React.ReactElement | null {
-  if (count <= 0) return null;
-  return (
-    <ul
-      aria-hidden="true"
-      data-testid="history-ghost-rows"
-      // Phones keep two ghost rows: ten placeholders are ~550px of nothing.
-      className="flex flex-1 flex-col max-lg:[&>li:nth-child(n+3)]:hidden"
-    >
-      {Array.from({ length: count }, (_, i) => (
-        <li
-          key={i}
-          className="flex flex-1 items-center gap-6 border-t border-dashed border-line px-4 py-3.5"
-        >
-          <span className="flex w-28 flex-none flex-col gap-1.5">
-            <span className="h-3 w-20 rounded bg-line/70" />
-            <span className="h-2.5 w-14 rounded bg-line/50" />
-          </span>
-          <span className="h-3 w-28 flex-none rounded bg-line/50" />
-          <span className="h-2.5 flex-1 rounded-full bg-line/50" />
-          {i === 0 && caption && <span className="sr-only">{caption}</span>}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 /** `ResponsiveListTable` switches from cards to the table at Tailwind's `sm`. */
 const DESKTOP_QUERY = "(min-width: 640px)";
 
@@ -104,7 +72,7 @@ function useIsDesktop(): boolean {
 
 export interface SessionHistoryListProps {
   sessions: readonly SessionSummary[];
-  /** Sessions per page; short lists are padded with ghost rows up to it. */
+  /** Sessions per page. */
   pageSize: number;
   /** The date range is unusable (one end missing or inverted) — changes the empty copy. */
   rangeInvalid: boolean;
@@ -231,37 +199,25 @@ export default function SessionHistoryList({
   };
 
   return (
-    <div className="card flex flex-col overflow-hidden lg:min-h-[calc(100dvh-21rem)]">
+    <div className="card flex flex-col overflow-hidden">
       {sessions.length === 0 ? (
-        <>
-          {/* One row, not a centred column in a tall card: the period having
-              no lists is one sentence and one way out. */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-section px-5 py-4">
-            <ClipboardList
-              size={ICON.lg}
-              strokeWidth={1.5}
-              aria-hidden="true"
-              className="flex-none text-ink-3"
-            />
-            <div className="min-w-0 flex-1 basis-64">
-              <p className="text-sm font-bold text-ink">
-                No hay listas en este período
-              </p>
-              <p className="mt-0.5 text-sm text-ink-3">
-                {rangeInvalid
-                  ? // Covers both unusable states — one end missing, or the two
-                    // ends inverted — because "complete las dos fechas" is wrong
-                    // advice when both are already filled in.
-                    "Ajuste el rango de fechas para ver las listas."
-                  : "Cambia el rango o los filtros, o pasa lista para que aparezca aquí."}
-              </p>
-            </div>
-            {/* The page header already carries the CTA on a phone; the empty
-                state repeats it only where the header is far away. */}
-            <div className="max-lg:hidden">{emptyAction}</div>
-          </div>
-          <GhostSessionRows count={pageSize - 1} />
-        </>
+        <EmptyState
+          layout="row"
+          surface="inset"
+          icon={<ClipboardList size={ICON.lg} strokeWidth={1.5} />}
+          title="No hay listas en este período"
+          description={
+            rangeInvalid
+              ? // Covers both unusable states — one end missing, or the two
+                // ends inverted — because "complete las dos fechas" is wrong
+                // advice when both are already filled in.
+                "Ajuste el rango de fechas para ver las listas."
+              : "Cambia el rango o los filtros, o pasa lista para que aparezca aquí."
+          }
+          // The page header already carries the CTA on a phone; the empty
+          // state repeats it only where the header is far away.
+          action={<div className="max-lg:hidden">{emptyAction}</div>}
+        />
       ) : (
         <ResponsiveListTable
           items={visible}
@@ -346,12 +302,6 @@ export default function SessionHistoryList({
               )}
             </>
           }
-        />
-      )}
-      {sessions.length > 0 && totalPages <= 1 && (
-        <GhostSessionRows
-          count={pageSize - visible.length}
-          caption="Las próximas listas aparecerán aquí."
         />
       )}
     </div>

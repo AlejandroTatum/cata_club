@@ -11,7 +11,7 @@ import { useReportProblem } from "../report-problem/useReportProblem";
 /** Gap kept between the launcher and whatever is pinned to the bottom edge. */
 const EDGE_GAP_PX = 16;
 const MOBILE_TAB_BAR_SELECTOR = 'nav[aria-label="Navegación principal (móvil)"]';
-const COMMIT_BAR_SELECTOR = '[data-testid="attendance-commit-bar"]';
+const COMMIT_BAR_SELECTOR = '[data-testid="attendance-commit-bar"], [data-bottom-bar]';
 const MODAL_SELECTOR = '[role="dialog"][aria-modal="true"]';
 
 /**

@@ -287,7 +287,7 @@ describe("AttendancePage — session history (same format as the trainer's)", ()
     renderPage();
 
     expect(await screen.findByText("No hay listas en este período")).toBeInTheDocument();
-    expect(screen.getByTestId("history-ghost-rows")).toBeInTheDocument();
+    expect(screen.queryByTestId("history-ghost-rows")).not.toBeInTheDocument();
   });
 });
 
@@ -330,10 +330,11 @@ describe("AttendancePage — session pagination", () => {
     expect(await screen.findByText((_content, element) => element?.textContent === "Página 1 de 2")).toBeInTheDocument();
   });
 
-  it("pads a short list with ghost rows and drops them once it paginates", async () => {
+  it("never pads a short list with skeleton rows (they read as a perpetual load)", async () => {
     mockFetchAttendanceRecords.mockResolvedValue(buildRecords(5));
     renderPage();
-    expect(await screen.findByTestId("history-ghost-rows")).toBeInTheDocument();
+    await sessionRows();
+    expect(screen.queryByTestId("history-ghost-rows")).not.toBeInTheDocument();
 
     mockFetchAttendanceRecords.mockResolvedValue(manySessions(15));
     fireEvent.click(screen.getByRole("button", { name: /^hoy$/i }));

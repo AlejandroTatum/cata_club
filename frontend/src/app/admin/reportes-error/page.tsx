@@ -5,20 +5,14 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { ErrorState, FilterPanel, FilterPill, LoadingState, PAGE_RAIL, Pagination, cn } from "@/components/ui";
 import { fetchReportesError, fetchReporteError, type ReporteError } from "@/services/api";
-import { EmptyInbox, GhostRows, HowItWorks, SelectPrompt, SummaryStrip } from "./InboxParts";
+import { EmptyInbox, HowItWorks, SelectPrompt, SummaryStrip } from "./InboxParts";
 import { NO_DISPONIBLE, applyFilter, buildChips, formatFecha, resumirNavegador, summarize, type InboxFilter } from "./inbox";
 
 /** Reports per server page — the one list page size (lib/__tests__/list-page-size.test.ts). */
 const PAGE_SIZE = 10;
 
-/** Both columns reach the bottom of the screen (page header and padding above, ~24px margin below), so no dead band is left under a short inbox. */
+/** With reports, both columns reach the bottom of the screen (page header and padding above, ~24px margin below) and the list scrolls inside its card. An empty inbox is one compact block and keeps its natural height. */
 const FILL_SCREEN = "lg:min-h-[calc(100dvh-10rem)]";
-
-/** Below this many visible rows the list card is continued with skeleton rows. */
-const GHOST_BELOW = 5;
-
-/** Skeleton rows drawn to continue a short list; the card clips whatever exceeds its height. */
-const GHOST_FILL = 14;
 
 export default function ReportesErrorPage(): React.ReactElement {
   const [reports, setReports] = useState<ReporteError[]>([]);
@@ -73,9 +67,9 @@ export default function ReportesErrorPage(): React.ReactElement {
   return <ProtectedRoute allowedRoles={["admin"]}><AppShell title="Errores reportados" subtitle="Avisos enviados por usuarios del club">
     {cargando ? <LoadingState label="Cargando reportes…" />
       : errorLista ? <ErrorState message="No se pudo cargar la bandeja." onRetry={() => void load()} />
-      : <div className={cn(PAGE_RAIL, FILL_SCREEN)}>
-        <div className="relative min-w-0 lg:self-stretch">
-          <div className="flex min-w-0 flex-col gap-page lg:absolute lg:inset-0">
+      : <div className={cn(PAGE_RAIL, !vacia && FILL_SCREEN)}>
+        <div className={cn("min-w-0", !vacia && "relative lg:self-stretch")}>
+          <div className={cn("flex min-w-0 flex-col gap-page", !vacia && "lg:absolute lg:inset-0")}>
             {vacia ? <EmptyInbox /> : <>
               <SummaryStrip summary={summary} parcial={parcial} />
               <FilterPanel label="Filtrar reportes" chips={<div className="flex flex-wrap gap-2">
@@ -104,8 +98,6 @@ export default function ReportesErrorPage(): React.ReactElement {
                     </li>)}
                   </ul>
                   {visibles.length === 0 && <p className="px-5 py-6 text-sm text-ink-2">Ningún reporte coincide con este filtro.</p>}
-                  {/* A short list keeps the card the rail's height: skeleton rows continue it. */}
-                  {visibles.length < GHOST_BELOW && <GhostRows count={GHOST_FILL} className="hidden min-h-0 flex-1 border-t border-line lg:flex" />}
                 </div>
                 {total > PAGE_SIZE && <Pagination variant="footer" page={page} totalPages={totalPages} onPageChange={setPage} totalItems={total} pageSize={PAGE_SIZE} itemNoun="reporte" />}
               </section>

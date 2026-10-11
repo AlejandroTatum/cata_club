@@ -31,12 +31,8 @@ describe("SponsorsStripPreview", () => {
     expect(images[0].parentElement?.style.aspectRatio).toBe("5 / 2");
   });
 
-  it("shows ghost tiles and a one-line note when there are no sponsors", () => {
-    render(<SponsorsStripPreview sponsors={[]} />);
-    expect(screen.queryByRole("img")).not.toBeInTheDocument();
-    expect(
-      screen.getAllByTestId("sponsors-strip-ghost").length,
-    ).toBeGreaterThan(0);
-    expect(screen.getByText(/Cuando subas el primer logo/)).toBeInTheDocument();
+  it("draws nothing at all when there are no sponsors", () => {
+    const { container } = render(<SponsorsStripPreview sponsors={[]} />);
+    expect(container).toBeEmptyDOMElement();
   });
 });

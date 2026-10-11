@@ -194,6 +194,56 @@ describe("EmptyState — the stretched card (D11b)", () => {
   });
 });
 
+/**
+ * T14C / RC1: a screen with nothing on it says so in ONE compact block (what is
+ * missing, the way out) instead of a 900px column of placeholder tiles with a
+ * card floating on top. The dashboard's zero blocks are the template: icon,
+ * statement and action on one line, wrapping on a phone.
+ */
+describe("EmptyState — the compact row (RC1)", () => {
+  it("lays icon, statement and action in a row that wraps, left-aligned", () => {
+    const { container } = render(
+      <EmptyState layout="row" icon={<Calendar size={ICON.lg} />} title="Aún no hay fotos" action={<Button>Subir foto</Button>} />,
+    );
+    const root = container.firstElementChild;
+    expect(root).toHaveClass("card", "flex", "flex-wrap", "items-center", "text-left");
+    expect(root).not.toHaveClass("flex-col");
+    expect(root).not.toHaveClass("text-center");
+  });
+
+  it("keeps the content intact: title, description and a clickable action", () => {
+    const onClick = vi.fn();
+    render(
+      <EmptyState
+        layout="row"
+        title="Aún no hay fotos"
+        description="Las fotos publicadas aparecen aquí."
+        action={<Button onClick={onClick}>Subir foto</Button>}
+      />,
+    );
+    expect(screen.getByText("Aún no hay fotos")).toBeInTheDocument();
+    expect(screen.getByText("Las fotos publicadas aparecen aquí.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Subir foto" }));
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("is short: no stretch and none of the centred column's 44px padding", () => {
+    const { container } = render(<EmptyState layout="row" title="Sin registros" />);
+    expect(container.firstElementChild).not.toHaveClass("py-11");
+    expect(container.firstElementChild).not.toHaveClass("flex-1");
+  });
+
+  it("renders without an action for roles that have none", () => {
+    render(<EmptyState layout="row" title="Aún no hay reportes" description="Aparecerán aquí." />);
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("can sit inside a card the screen already opened", () => {
+    const { container } = render(<EmptyState layout="row" surface="inset" title="Sin registros" />);
+    expect(container.firstElementChild).not.toHaveClass("card");
+  });
+});
+
 function sourceFiles(dir: string): string[] {
   const found: string[] = [];
   for (const entry of readdirSync(dir)) {

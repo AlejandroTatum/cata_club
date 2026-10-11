@@ -654,14 +654,16 @@ describe("DiscountsPage — el catálogo vacío conserva el riel de indicaciones
     expect(within(rail).getByRole("heading", { name: /cómo funcionan los descuentos/i })).toBeInTheDocument();
   });
 
-  it("stays compact: ghost example cards instead of a stretched card", async () => {
+  it("stays compact: one empty block and no invented example cards (RC1)", async () => {
     mockFetchDescuentos.mockResolvedValue([]);
     renderPage();
     const title = await screen.findByText(/sin descuentos en el catálogo/i);
 
-    const statement = title.parentElement as HTMLElement;
+    const statement = title.parentElement?.parentElement as HTMLElement;
     expect(statement.className).not.toContain("flex-1");
-    expect(screen.getAllByText("Ejemplo")).toHaveLength(4);
+    expect(statement.className).toContain("flex-wrap");
+    expect(screen.queryByText("Ejemplo")).not.toBeInTheDocument();
+    expect(screen.queryByText("Beca deportiva")).not.toBeInTheDocument();
   });
 });
 
@@ -863,17 +865,6 @@ describe("DiscountsPage — tarjetas sin estirar", () => {
     const types = screen.getByTestId("discounts-types");
     expect(types.querySelector("ul")?.className).not.toContain("flex-1");
     const column = types.parentElement as HTMLElement;
-    expect(column.className).not.toContain("grid-rows-");
-    expect(column.className).not.toContain("min-h-[calc");
-  });
-
-  it("lets the empty-catalog ghost cards keep their natural height", async () => {
-    mockFetchDescuentos.mockResolvedValue([]);
-    renderPage();
-    await screen.findByText(/sin descuentos en el catálogo/i);
-
-    const ghost = screen.getAllByText("Ejemplo")[0].closest("ul") as HTMLElement;
-    const column = ghost.parentElement as HTMLElement;
     expect(column.className).not.toContain("grid-rows-");
     expect(column.className).not.toContain("min-h-[calc");
   });
