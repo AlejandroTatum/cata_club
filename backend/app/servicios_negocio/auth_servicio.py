@@ -338,7 +338,9 @@ class AuthServicio:
         actividad.registrar_sin_fallar(self.db, usuario.id)
         return tokens
 
-    def _registrar_sesion(self, usuario: Usuario, user_agent: str | None) -> Sesion:
+    def _registrar_sesion(
+        self, usuario: Usuario, user_agent: str | None, iniciada_en: datetime | None = None,
+    ) -> Sesion:
         """Abre la sesión de un par de tokens: la fila nace con el `jti` del
         primer refresh y su actividad en este instante (ver `Sesion`).
 
@@ -350,6 +352,9 @@ class AuthServicio:
         La fila guarda el epoch vigente (`version_sesion`) para que después se
         pueda DERIVAR si sigue viva. Nada se limpia acá: revocar todas las
         sesiones bombea el epoch y no toca esta tabla.
+
+        `iniciada_en` solo lo pasa la adopción de un refresh legacy sin `sid`:
+        la sesión empezó en el login original, no ahora (ver `refrescar_sesion`).
         """
         sesion = Sesion(
             usuario_id=usuario.id,
@@ -358,6 +363,8 @@ class AuthServicio:
             refresh_jti=uuid.uuid4().hex,
             ultimo_uso_en=datetime.now(timezone.utc),
         )
+        if iniciada_en is not None:
+            sesion.iniciada_en = iniciada_en
         self.db.add(sesion)
         self.db.commit()
         self.db.refresh(sesion)
@@ -734,8 +741,14 @@ class AuthServicio:
         sid = payload.get("sid")
         jti = payload.get("jti")
         if sid is None and jti is None:
-            # Legacy sin `sid`: no hay fila que adoptar, se abre una.
-            sesion = self._registrar_sesion(usuario, None)
+            # Legacy sin `sid`: no hay fila que adoptar, se abre una. Sin `iat`,
+            # el login original se deriva del `exp` (emisión + vida del refresh):
+            # así el tope absoluto sigue contando desde ese login y no desde el
+            # deploy.
+            emitido_en = datetime.fromtimestamp(payload["exp"], tz=timezone.utc) - timedelta(
+                days=settings.jwt_refresh_expira_dias
+            )
+            sesion = self._registrar_sesion(usuario, None, iniciada_en=min(emitido_en, ahora))
         else:
             sesion = self._sesion_bloqueada(usuario, sid)
             if sesion is None or sesion.revocada_en is not None:

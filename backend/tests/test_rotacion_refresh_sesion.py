@@ -254,6 +254,49 @@ def test_legacy_sin_sid_abre_una_sesion_y_rota(client_sin_token, usuario, db_ses
     assert fila.refresh_jti == claims_refresh["jti"]
 
 
+def test_legacy_sin_sid_conserva_el_tope_absoluto_del_login_original(
+    client_sin_token, usuario, db_session
+):
+    """El refresh legacy no trae `iat`, pero su `exp` es la emisión + 7 días:
+    la fila que se abre hereda ESE inicio, así el deploy no le regala al
+    token una semana nueva de tope absoluto."""
+    emitido = _ahora() - timedelta(days=5)
+    legacy = jwt.encode(
+        {
+            "sub": usuario.correo,
+            "persona_id": usuario.persona_id,
+            "type": "refresh",
+            "sver": usuario.version_sesion,
+            "exp": emitido + timedelta(days=settings.jwt_refresh_expira_dias),
+        },
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algoritmo,
+    )
+
+    respuesta = _refrescar(client_sin_token, legacy)
+
+    assert respuesta.status_code == 200
+    fila = _fila(db_session, _claims(respuesta.json()["refresh_token"])["sid"])
+    assert abs(fila.iniciada_en - emitido) < timedelta(minutes=1)
+
+
+def test_legacy_con_sid_sobre_una_fila_revocada_se_rechaza_sin_tocarla(
+    client_sin_token, usuario, db_session
+):
+    par = _login(db_session)
+    sid = _claims(par["access_token"])["sid"]
+    fila = _fila(db_session, sid)
+    revocada_en = _ahora() - timedelta(minutes=5)
+    fila.revocada_en = revocada_en
+    jti_antes = fila.refresh_jti
+    db_session.commit()
+
+    assert _refrescar(client_sin_token, _refresh_legacy(usuario, sid=sid)).status_code == 401
+    fila = _fila(db_session, sid)
+    assert fila.revocada_en == revocada_en
+    assert fila.refresh_jti == jti_antes
+
+
 # --- S1: el lado access -----------------------------------------------------
 def test_access_de_una_sesion_revocada_recibe_401(client_sin_token, usuario, db_session):
     par = _login(db_session)
