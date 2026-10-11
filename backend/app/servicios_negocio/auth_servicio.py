@@ -745,7 +745,10 @@ class AuthServicio:
             # el login original se deriva del `exp` (emisión + vida del refresh):
             # así el tope absoluto sigue contando desde ese login y no desde el
             # deploy.
-            emitido_en = datetime.fromtimestamp(payload["exp"], tz=timezone.utc) - timedelta(
+            exp = payload.get("exp")
+            if not isinstance(exp, (int, float)) or isinstance(exp, bool):
+                raise CredencialesInvalidas("Refresh token inválido o expirado")
+            emitido_en = datetime.fromtimestamp(exp, tz=timezone.utc) - timedelta(
                 days=settings.jwt_refresh_expira_dias
             )
             sesion = self._registrar_sesion(usuario, None, iniciada_en=min(emitido_en, ahora))

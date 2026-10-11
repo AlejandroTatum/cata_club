@@ -280,6 +280,21 @@ def test_legacy_sin_sid_conserva_el_tope_absoluto_del_login_original(
     assert abs(fila.iniciada_en - emitido) < timedelta(minutes=1)
 
 
+def test_legacy_sin_sid_ni_exp_se_rechaza_con_401(client_sin_token, usuario, db_session):
+    """Ningún emisor produjo jamás un refresh sin `exp`, pero uno firmado así
+    tiene que ser un 401 y no un 500, y no abre ninguna sesión."""
+    antes = db_session.query(Sesion).filter(Sesion.usuario_id == usuario.id).count()
+    sin_exp = jwt.encode(
+        {"sub": usuario.correo, "type": "refresh", "sver": usuario.version_sesion},
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algoritmo,
+    )
+
+    assert _refrescar(client_sin_token, sin_exp).status_code == 401
+    db_session.expire_all()
+    assert db_session.query(Sesion).filter(Sesion.usuario_id == usuario.id).count() == antes
+
+
 def test_legacy_con_sid_sobre_una_fila_revocada_se_rechaza_sin_tocarla(
     client_sin_token, usuario, db_session
 ):
