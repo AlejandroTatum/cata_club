@@ -1,0 +1,90 @@
+name: Contrast sweep (QA stack)
+
+# Barrido de contraste de las rutas autenticadas (4 roles, texto + no-texto,
+# oscuro y claro): frontend/tests/e2e/dark-contrast-sweep.spec.ts. Necesita el
+# backend sembrado, asi que reutiliza el stack de QA exactamente como
+# e2e-live.yml (`make qa-up`, sin secretos). Cuesta ~20 min de stack mas ~5 min
+# por tema, por eso NO corre en pull_request: nocturno, en push a main y a
+# demanda.
+on:
+  schedule:
+    # 06:47 UTC, lejos de :17 de e2e-live.yml y fuera del minuto en punto.
+    - cron: "47 6 * * *"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# No cancelar a mitad: dejaria contenedores y puertos de QA a medio construir.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  contrast-sweep:
+    name: QA stack + contrast sweep (dark, light)
+    runs-on: ubuntu-latest
+    # ~25 min de stack en frio + 2 temas x ~5 min (presupuesto del spec: 300 s).
+    timeout-minutes: 60
+    env:
+      # Ver e2e-live.yml: el builder clasico respeta `network: host`.
+      COMPOSE_BAKE: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # `make qa-up` ejecuta scripts/qa_verify_build_sha.py, que recorre
+          # ancestros contra origin/main.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          package_json_file: frontend/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Browsers
+        working-directory: frontend
+        run: pnpm exec playwright install chromium
+
+      - name: Bring up the QA stack
+        run: make qa-up
+
+      - name: Contrast sweep (dark)
+        id: dark
+        run: make qa-contrast-sweep THEMES=dark
+
+      # Corre aunque dark falle, para ver ambos temas en una sola corrida.
+      - name: Contrast sweep (light)
+        if: ${{ !cancelled() && steps.dark.conclusion != 'skipped' }}
+        run: make qa-contrast-sweep THEMES=light
+
+      - name: Dump bounded QA logs (on failure)
+        if: failure()
+        run: |
+          docker compose -p cataclub-qa ps -a || true
+          docker compose -p cataclub-qa logs --tail=200 --no-color || true
+
+      # Solo el reporte HTML (sin test-results/: los trazos llevan cookies de
+      # sesion). Mismo criterio que e2e-live.yml.
+      - name: Upload Playwright Report (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-contrast-sweep
+          path: frontend/playwright-report/
+          retention-days: 7
+
+      - name: Tear down
+        if: always()
+        run: make qa-down

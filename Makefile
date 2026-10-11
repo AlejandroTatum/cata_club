@@ -8,7 +8,7 @@
        install install-backend install-frontend \
        docker-up docker-down docker-build \
        migrate migrate-create db-reset seed seed-bulk clean \
-       qa-up qa-down qa-seed qa-reset qa-live qa-logs qa-pdf-delivery-check \
+       qa-up qa-down qa-seed qa-reset qa-live qa-contrast-sweep qa-logs qa-pdf-delivery-check \
        feature-start slice-start slice-pr slice-merge feature-sync feature-pr
 
 # ─── Default ────────────────────────────────────────────────────────────────
@@ -396,6 +396,21 @@ qa-live: ## Correr los specs E2E que atraviesan el backend real de QA
 	cloudinary=$${salida##*=}; \
 	cd frontend && E2E_LIVE=1 E2E_CLOUDINARY_CONFIGURED=$$cloudinary PLAYWRIGHT_BASE_URL=http://localhost:3000 \
 		pnpm exec playwright test --project=e2e-live
+
+# Barrido de contraste (WCAG 1.4.3 texto + 1.4.11 no-texto) sobre TODAS las
+# rutas autenticadas de los 4 roles, en oscuro y en claro
+# (`frontend/tests/e2e/dark-contrast-sweep.spec.ts`). Es un spec comun (no
+# `.live.`), asi que corre en el proyecto `chromium`; `E2E_THEME_SWEEP=1` lo
+# habilita y `E2E_SWEEP_THEME` elige el tema. Necesita el stack sembrado de
+# `make qa-up`. `THEMES` acepta uno solo: `make qa-contrast-sweep THEMES=light`.
+# Corre todos los temas aunque uno falle y sale con error si alguno fallo.
+THEMES ?= dark light
+qa-contrast-sweep: ## Barrido de contraste de rutas autenticadas (oscuro y claro) contra QA
+	@cd frontend && rc=0; for theme in $(THEMES); do \
+		echo "==> contrast sweep: $$theme"; \
+		E2E_THEME_SWEEP=1 E2E_SWEEP_THEME=$$theme PLAYWRIGHT_BASE_URL=http://localhost:3000 \
+			pnpm exec playwright test --project=chromium tests/e2e/dark-contrast-sweep.spec.ts || rc=1; \
+	done; exit $$rc
 
 qa-logs: ## Ver los logs del entorno de QA
 	$(QA_ENV) $(QA_COMPOSE) logs -f

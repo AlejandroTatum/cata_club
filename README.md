@@ -307,6 +307,12 @@ entorno de QA de la sección anterior; con el stack listo, ejecutá `make qa-liv
 Quedan fuera de la suite por defecto a propósito: `playwright.config.ts` solo
 declara el proyecto `e2e-live` cuando `E2E_LIVE=1`.
 
+Con el mismo stack, `make qa-contrast-sweep` recorre todas las rutas
+autenticadas de los 4 roles y mide el contraste de texto e íconos (WCAG
+1.4.3 / 1.4.11) en oscuro y en claro; `THEMES=light` corre uno solo. En CI lo
+ejecuta `.github/workflows/contrast-sweep.yml` (nocturno, en cada push a
+`main` y a demanda; nunca en pull requests).
+
 ## Modelo de Dominio
 
 El sistema gestiona un club de tenis de mesa con:
