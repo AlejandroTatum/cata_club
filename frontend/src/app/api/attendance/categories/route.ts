@@ -16,7 +16,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookies } from "@/lib/server/auth";
+import { refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 import { DIA_SEMANA_BACKEND_TO_FRONTEND, trimSeconds, type BackendDiaSemana } from "@/lib/server/attendance-adapter";
 import type { DiaSemana } from "@/types/domain";
@@ -85,7 +85,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const response = NextResponse.json(categorias);
   if (categoriasResult.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: categoriasResult.refreshedAccessToken });
+    setAuthCookies(response, refreshedTokenCookies(categoriasResult));
   }
   return response;
 }

@@ -26,7 +26,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookies } from "@/lib/server/auth";
+import { pickRefreshed, refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 import { enrichSinglePago, type BackendPagoCore } from "@/lib/server/payments-adapter";
 
@@ -112,16 +112,16 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
   }
 
   const pago = (await validarResult.response.json()) as BackendPagoCore;
-  const { item, refreshedAccessToken: enrichRefreshedToken } = await enrichSinglePago(request, pago);
+  const enriched = await enrichSinglePago(request, pago);
 
-  const response = NextResponse.json(item);
+  const response = NextResponse.json(enriched.item);
   // Either the validar call or any of the three enrichment lookups may have
   // independently refreshed the token (each resolves/refreshes off the same
   // request cookies) — propagate whichever one actually did, same as GET
   // /api/payments.
-  const refreshedAccessToken = validarResult.refreshedAccessToken ?? enrichRefreshedToken;
-  if (refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: refreshedAccessToken });
+  const refreshed = pickRefreshed(validarResult, enriched);
+  if (refreshed.refreshedAccessToken) {
+    setAuthCookies(response, refreshedTokenCookies(refreshed));
   }
   return response;
 }
@@ -145,12 +145,12 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
   }
 
   const pago = (await pagoResult.response.json()) as BackendPagoCore;
-  const { item, refreshedAccessToken: enrichRefreshedToken } = await enrichSinglePago(request, pago);
+  const enriched = await enrichSinglePago(request, pago);
 
-  const response = NextResponse.json(item);
-  const refreshedAccessToken = pagoResult.refreshedAccessToken ?? enrichRefreshedToken;
-  if (refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: refreshedAccessToken });
+  const response = NextResponse.json(enriched.item);
+  const refreshed = pickRefreshed(pagoResult, enriched);
+  if (refreshed.refreshedAccessToken) {
+    setAuthCookies(response, refreshedTokenCookies(refreshed));
   }
   return response;
 }

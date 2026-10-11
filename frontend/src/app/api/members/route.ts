@@ -13,7 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookies } from "@/lib/server/auth";
+import { refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 import { buildMemberAccounts, type BackendPersonaFull } from "@/lib/server/members-adapter";
 import {
@@ -163,7 +163,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const response = NextResponse.json({ accounts, membresiasDegraded });
   if (personasFetch.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: personasFetch.refreshedAccessToken });
+    setAuthCookies(response, refreshedTokenCookies(personasFetch));
   }
   return response;
 }
