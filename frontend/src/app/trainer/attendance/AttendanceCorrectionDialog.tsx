@@ -139,7 +139,7 @@ export default function AttendanceCorrectionDialog({
 
         {variant === "request" && (
           <label className="flex flex-col gap-1">
-            <span className="text-2xs font-bold uppercase text-ink-3">
+            <span className="text-2xs font-bold uppercase tracking-caps text-ink-3">
               Motivo <span aria-hidden="true" className="text-state-bad">*</span>
             </span>
             <textarea

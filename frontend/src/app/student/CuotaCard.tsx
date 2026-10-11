@@ -92,7 +92,7 @@ function describeNextStep(daysLeft: number, coverageEnd: string, price: string):
 function CuotaFigure({ label, value, note }: { label: string; value: string; note?: string }): React.ReactElement {
   return (
     <div className="min-w-0">
-      <p className="text-2xs font-bold uppercase text-ink-3-strong">{label}</p>
+      <p className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">{label}</p>
       <p className="mt-0.5 flex items-baseline gap-1.5 text-xl font-bold tabular-nums tracking-tight text-ink">
         {value}
         {note ? <span className="text-xs font-normal text-ink-3-strong">{note}</span> : null}

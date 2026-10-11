@@ -12,11 +12,12 @@
  * sets before first paint. The values mirror `LIGHT_COLORS` and `DARK_COLORS`
  * (`lib/theme-tokens.ts`); `theme-tokens-parity.test.ts` fails if they drift.
  *
- * The landing is never dark: `.landing-page` (and the body around it)
- * re-declare the light values, so its own `--landing-*` palette is untouched.
+ * The landing paints itself from its own `--landing-*` variables (with a dark
+ * set in `landing/landing.css`), but `.landing-page` re-declares the light app
+ * values so nothing in it that still reads an app token can turn half dark.
+ * The body around it follows the theme, so overscroll matches the page.
  */
 :root,
-html[data-theme="dark"] body:has(.landing-page),
 html[data-theme="dark"] .landing-page {
   --c-canvas: 232 232 238;
   --c-paper: 255 255 255;
@@ -41,7 +42,11 @@ html[data-theme="dark"] .landing-page {
   --c-ink-3-strong: 99 99 110;
   --c-ball-ink: 110 87 0;
   --c-cata-fuchsia-ink: 158 17 79;
+  --c-cata-red-dark: 161 29 34;
   --c-enroll-wash: 255 247 247;
+  --c-chip-ball: 255 239 158;
+  --c-chip-red: 249 222 223;
+  --c-chip-red-ink: 217 33 40;
   --c-state-ok: 19 119 57;
   --c-state-ok-bg: 231 244 236;
   --c-state-warn: 169 77 8;
@@ -87,7 +92,11 @@ html[data-theme="dark"] {
   --c-ink-3-strong: 189 189 201;
   --c-ball-ink: 255 214 0;
   --c-cata-fuchsia-ink: 255 125 176;
+  --c-cata-red-dark: 255 144 150;
   --c-enroll-wash: 42 30 32;
+  --c-chip-ball: 58 50 16;
+  --c-chip-red: 63 27 30;
+  --c-chip-red-ink: 255 144 150;
   --c-state-ok: 98 216 146;
   --c-state-ok-bg: 20 48 31;
   --c-state-warn: 245 174 107;

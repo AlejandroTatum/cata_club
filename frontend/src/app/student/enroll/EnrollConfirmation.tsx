@@ -93,7 +93,7 @@ export default function EnrollConfirmation(props: EnrollConfirmationProps): Reac
               <CheckCircle size={ICON.sm} className="text-ball" strokeWidth={1.75} aria-hidden="true" />
               Inscripción completada
             </h1>
-            <p className="text-2xs font-bold uppercase text-ball">
+            <p className="text-2xs font-bold uppercase tracking-caps text-ball">
               ¡Te damos la bienvenida a Cata Club!
             </p>
             <h2 className="font-display text-3xl uppercase tracking-flat text-white [text-wrap:balance] lg:text-5xl">

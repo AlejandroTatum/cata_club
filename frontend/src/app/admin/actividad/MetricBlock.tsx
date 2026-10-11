@@ -46,7 +46,7 @@ export default function MetricBlock({
   return (
     <div data-testid={testId} className="flex min-w-0 flex-col gap-section rounded-card bg-sunken p-4">
       <div className="flex items-start justify-between gap-2">
-        <span className="text-2xs font-bold uppercase text-ink-3-strong">{label}</span>
+        <span className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">{label}</span>
         {tone !== "ok" && statusLabel ? <Badge tone={tone}>{statusLabel}</Badge> : null}
       </div>
       <span className="font-display text-2xl leading-none tabular-nums tracking-flat text-ink">

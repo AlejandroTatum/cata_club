@@ -125,7 +125,7 @@ export default function ReportProblemDialog({ onClose, requestId, capture }: Rep
                   <span className="text-xs font-normal text-ink-2" aria-live="polite">{description.length}/{MAX_DESCRIPTION}</span>
                 </label>
                 <label className="flex flex-col gap-2 text-sm font-semibold">¿Dónde ocurrió?
-                  <input readOnly value={route} className="rounded-lg border border-cata-border bg-sunken p-2 font-mono text-sm font-normal" />
+                  <input readOnly value={route} className="rounded-lg border border-cata-border bg-sunken p-2 tabular-nums text-sm font-normal" />
                 </label>
                 {isAuto ? (
                   <div className="flex flex-col gap-1">
@@ -171,7 +171,7 @@ export default function ReportProblemDialog({ onClose, requestId, capture }: Rep
                   <h3 className="font-semibold">Así llegará tu reporte</h3>
                   <dl className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-3 gap-y-1.5">
                     <dt className="text-xs font-bold uppercase text-ink-2">Descripción</dt><dd data-testid="report-preview-description" className="whitespace-pre-wrap break-words">{description.trim() || "—"}</dd>
-                    <dt className="text-xs font-bold uppercase text-ink-2">Ruta</dt><dd className="break-all font-mono text-xs">{route || "—"}</dd>
+                    <dt className="text-xs font-bold uppercase text-ink-2">Ruta</dt><dd className="break-all tabular-nums text-xs">{route || "—"}</dd>
                     <dt className="text-xs font-bold uppercase text-ink-2">Navegador</dt><dd className="break-words text-xs">{browser || "—"}</dd>
                     <dt className="text-xs font-bold uppercase text-ink-2">Captura</dt><dd>{attached ? "Con captura" : screenshot ? "Sin captura (falta tu autorización)" : "Sin captura"}</dd>
                   </dl>

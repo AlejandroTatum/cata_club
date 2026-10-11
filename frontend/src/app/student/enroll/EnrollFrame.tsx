@@ -58,7 +58,7 @@ export default function EnrollFrame(props: EnrollFrameProps): ReactElement {
         </div>
 
         <div data-enroll-panel-block>
-          <p className="mb-field text-2xs font-bold uppercase text-white/75">
+          <p className="mb-field text-2xs font-bold uppercase tracking-caps text-white/75">
             {props.eyebrow}
           </p>
           <h1 className="font-display text-lg uppercase tracking-flat text-white lg:text-xl">

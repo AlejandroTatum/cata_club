@@ -40,7 +40,7 @@ function declarationsOf(selector: string): Record<string, string> {
 }
 
 const paths = Object.keys(DARK_COLORS);
-const LIGHT_BLOCK = declarationsOf(":root,\nhtml[data-theme=\"dark\"] body:has(.landing-page)");
+const LIGHT_BLOCK = declarationsOf(":root,\nhtml[data-theme=\"dark\"] .landing-page");
 const DARK_BLOCK = declarationsOf('html[data-theme="dark"] {');
 
 describe("theme tokens — one colour, three copies, no drift", () => {
@@ -82,8 +82,8 @@ describe("theme tokens — one colour, three copies, no drift", () => {
     expect(tailwindConfig.darkMode).toEqual(["selector", 'html[data-theme="dark"]']);
   });
 
-  it("re-declares the light values for the landing, which is never dark", () => {
+  it("re-declares the light app values inside the landing, which paints from its own --landing-* set", () => {
     expect(CSS).toContain('html[data-theme="dark"] .landing-page');
-    expect(CSS).toContain('html[data-theme="dark"] body:has(.landing-page)');
+    expect(CSS).not.toContain('body:has(.landing-page)');
   });
 });

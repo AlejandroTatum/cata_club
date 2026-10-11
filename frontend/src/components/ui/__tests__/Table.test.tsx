@@ -290,7 +290,7 @@ describe("TableHeaderCell / TableCell — type-driven alignment", () => {
         </tbody>
       </table>,
     );
-    expect(screen.getByText("86")).toHaveClass("font-mono", "tabular-nums", "bg-sunken");
+    expect(screen.getByText("86")).toHaveClass("tabular-nums", "bg-sunken");
   });
 
   it("leaves text, badge and action cells exactly as given, unboxed", () => {

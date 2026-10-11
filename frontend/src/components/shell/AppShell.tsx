@@ -756,7 +756,7 @@ export default function AppShell({
                   to 4.10:1, under AA. At 0.50 it measures 5.36:1 and still
                   reads as the quieter second line under the club name. */}
               {areaLabel && (
-                <span className="mt-px block truncate text-2xs font-bold uppercase text-white/50">
+                <span className="mt-px block truncate text-2xs font-bold uppercase tracking-caps text-white/50">
                   {areaLabel}
                 </span>
               )}
@@ -828,7 +828,7 @@ export default function AppShell({
                     with the labels when the rail collapses to 76px: a rótulo
                     over a column of bare icons titles nothing. */}
                 <p
-                  className={`px-3 pb-0.5 pt-2.5 text-2xs font-bold uppercase text-white/50 first:pt-1 ${
+                  className={`px-3 pb-0.5 pt-2.5 text-2xs font-bold uppercase tracking-caps text-white/50 first:pt-1 ${
                     collapsed ? "lg:hidden" : ""
                   }`}
                 >
@@ -967,7 +967,7 @@ export default function AppShell({
           >
             <Search size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             <span className="hidden sm:inline">Buscar una sección…</span>
-            <kbd className="ml-1 hidden rounded-[5px] border border-line-2 px-[5px] py-0.5 text-2xs tracking-flat font-bold text-ink-3 sm:inline">
+            <kbd className="ml-1 font-sans hidden rounded-[5px] border border-line-2 px-[5px] py-0.5 text-2xs tracking-flat font-bold text-ink-3 sm:inline">
               Ctrl K
             </kbd>
           </button>

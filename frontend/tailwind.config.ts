@@ -218,6 +218,19 @@ export const LIGHT_COLORS = {
    * comfortably AA, so the wash never has to trade legibility for tone.
    */
   "enroll-wash": "#FFF7F7",
+  /**
+   * Icon chips (the tinted tile behind a header icon). A chip's fill and its ink
+   * are ONE themed pair: pairing a themed ink with a brand-constant fill
+   * (`cata-yellow-soft`, `cata-red/15`) is how "Para empezar" ended up light on
+   * pale in dark (1.22:1). `ball` is the yellow chip (ink: `ball-ink`), `red`
+   * the red one (ink: `red-ink`); light values are the previous fills as they
+   * composited on `paper`, so light does not move.
+   */
+  chip: {
+    ball: "#FFEF9E",
+    red: "#F9DEDF",
+    "red-ink": "#D92128",
+  },
 
   // Status pairs (foreground + `-bg` fill). Namespaced under `state-` so
   // `neutral` does not shadow Tailwind's built-in neutral scale.
@@ -481,8 +494,10 @@ const config: Config = {
       // glance; the top is airy because a headline only competes with itself.
       //
       // Tracking follows size, as it must: at 46px a normal tracking reads as
-      // a gap between letters, and at 10.5px a normal tracking reads as a
-      // smudge. Hence -0.05em at the top and +0.12em at the bottom.
+      // a gap between letters. Hence -0.05em at the top. The `2xs` step is the
+      // exception: it carries NO tracking, because it is used on sentence-case
+      // text as often as on uppercase labels, and wide gaps on lowercase read
+      // as a different typeface. Uppercase labels add `tracking-caps`.
       //
       // NOTE — these six names (`xs`…`2xl`) REDEFINE Tailwind's stock steps,
       // so every existing `text-sm` resolves here from now on. The three that
@@ -493,8 +508,8 @@ const config: Config = {
       // Full rationale: `docs/ux/escala-tipografica.md`.
       // ---------------------------------------------------------------------
       fontSize: {
-        /** Uppercase micro-label: table head, kicker, badge text. */
-        "2xs": ["10.5px", { lineHeight: "1.4", letterSpacing: "0.12em" }],
+        /** Micro text: table head, kicker, badge text. Size only; uppercase labels ask for `tracking-caps`. */
+        "2xs": ["10.5px", { lineHeight: "1.4" }],
         /** Secondary metadata: helper text, timestamps, chip text. */
         xs: ["12.5px", { lineHeight: "1.5", letterSpacing: "0em" }],
         /** Dense interface text: table cells, form labels, list rows. */
@@ -540,7 +555,7 @@ const config: Config = {
         dense: "-0.02em",
         /** Cancel an inherited negative tracking (tabular data, code, IDs). */
         flat: "0em",
-        /** Uppercase at small size. The `2xs` default, reusable elsewhere. */
+        /** Uppercase at small size. Written next to `uppercase`, never inherited from a size step. */
         caps: "0.12em",
         /** Uppercase that has to read as a rule, not as a word. */
         "caps-wide": "0.2em",

@@ -216,7 +216,7 @@ const ROW_COLUMNS =
   "2xl:items-center 2xl:gap-x-5";
 
 /** `.tbl thead th` typography — the header strip and the stacked cell labels. */
-const CELL_LABEL = "text-2xs font-bold uppercase text-ink-3-strong";
+const CELL_LABEL = "text-2xs font-bold uppercase tracking-caps text-ink-3-strong";
 
 /**
  * The four column names, declared ONCE.
@@ -440,7 +440,7 @@ function duracionLabel(inicio: string, fin: string): string | null {
 }
 
 /** Field skin shared with the tarifas/discounts forms. */
-const FIELD_LABEL = "block text-2xs font-bold uppercase text-ink-3";
+const FIELD_LABEL = "block text-2xs font-bold uppercase tracking-caps text-ink-3";
 const FIELD_CONTROL =
   "h-ctl w-full rounded-ctl border border-line-2 bg-paper px-3 text-sm text-ink outline-none focus:border-cata-red";
 const MAXIMO_DIAS_POR_CATEGORIA = 6;

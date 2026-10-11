@@ -664,12 +664,12 @@ function AddDependentContent(): React.ReactElement {
           flagged ? "bg-state-warn-bg" : ""
         }`}
       >
-        <span className="w-[150px] flex-none text-2xs font-bold uppercase text-ink-3">
+        <span className="w-[150px] flex-none text-2xs font-bold uppercase tracking-caps text-ink-3">
           {label}
         </span>
         <span className="flex-1 text-sm font-semibold text-ink">{value}</span>
         {flagged && (
-          <span className="flex-none text-2xs font-bold uppercase text-state-warn">Revisar</span>
+          <span className="flex-none text-2xs font-bold uppercase tracking-caps text-state-warn">Revisar</span>
         )}
         <button
           type="button"
@@ -799,7 +799,7 @@ function AddDependentContent(): React.ReactElement {
           <option value="EFECTIVO">Efectivo</option>
         </Select>
         <div className="rounded-ctl bg-sunken px-3.5 py-3">
-          <p className="text-2xs font-bold uppercase text-ink-3-strong">Período que cubre</p>
+          <p className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">Período que cubre</p>
           <p className="mt-1 text-sm font-bold tabular-nums text-ink">
             {plan && fechaFin ? (periodicidad === "DIARIA" ? formatDate(fechaInicio) : formatDateRange(fechaInicio, fechaFin)) : "—"}
           </p>
@@ -862,11 +862,11 @@ function AddDependentContent(): React.ReactElement {
       <div data-testid="dependent-added" className="space-y-section">
         <div className="rounded-card border border-line">
           <div className="flex min-h-drow items-center gap-4 border-b border-line px-5 py-2">
-            <span className="w-[150px] flex-none text-2xs font-bold uppercase text-ink-3">Jugador</span>
+            <span className="w-[150px] flex-none text-2xs font-bold uppercase tracking-caps text-ink-3">Jugador</span>
             <span className="flex-1 text-sm font-semibold text-ink">{addedName}</span>
           </div>
           <div className="flex min-h-drow items-center gap-4 px-5 py-2">
-            <span className="w-[150px] flex-none text-2xs font-bold uppercase text-ink-3">Membresía</span>
+            <span className="w-[150px] flex-none text-2xs font-bold uppercase tracking-caps text-ink-3">Membresía</span>
             <span className="flex-1 text-sm font-semibold text-ink">Sin membresía todavía</span>
           </div>
         </div>

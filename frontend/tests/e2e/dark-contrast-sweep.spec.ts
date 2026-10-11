@@ -14,6 +14,11 @@
  * runnable in any checkout. `E2E_SWEEP_THEME=light` runs the same crawl in
  * light mode, which is the regression proof that a dark fix did not move light.
  *
+ * Non-text UI (WCAG 1.4.11, owner feedback L21: the "Para empezar" icon chip,
+ * a light icon on a pale chip): every visible Lucide icon is measured too, its
+ * stroke colour against the backdrop it is drawn on, at >= 3:1. An icon that
+ * sits on a gradient or image is skipped, like text is.
+ *
  * Failures are reported as route + selector + colors + ratio.
  */
 
@@ -94,7 +99,7 @@ interface Failure {
 }
 
 /** Runs in the page: returns every text node whose contrast is below its bar. */
-function scanContrast(): { failures: Failure[]; checked: number; skipped: number } {
+function scanContrast(): { failures: Failure[]; checked: number; skipped: number; iconsChecked: number } {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 1;
   const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
@@ -227,7 +232,47 @@ function scanContrast(): { failures: Failure[]; checked: number; skipped: number
       font: `${px}px/${cs.fontWeight}`,
     });
   }
-  return { failures, checked, skipped };
+
+  // Non-text UI: Lucide icons draw with `currentColor` strokes, so the element's
+  // computed colour is the ink and the same backdrop walk finds its ground.
+  let iconsChecked = 0;
+  for (const icon of Array.from(document.querySelectorAll<SVGElement>("svg.lucide"))) {
+    const cs = getComputedStyle(icon);
+    if (cs.visibility !== "visible" || cs.display === "none") continue;
+    const rect = icon.getBoundingClientRect();
+    if (rect.width < 8 || rect.height < 8) continue;
+    if (icon.closest(":disabled, [aria-disabled='true'], next-route-announcer, nextjs-portal")) continue;
+    let opacity = 1;
+    for (let a: Element | null = icon; a; a = a.parentElement) opacity *= Number(getComputedStyle(a).opacity);
+    if (opacity < 0.05) continue;
+    const { rgb: bg, unknown } = backdrop(icon);
+    if (unknown) {
+      skipped++;
+      continue;
+    }
+    const stroke = cs.stroke === "currentcolor" || cs.stroke === "currentColor" || cs.stroke === "none" ? cs.color : cs.stroke;
+    const fgRaw = parse(stroke);
+    const fgRgb = blend([fgRaw[0], fgRaw[1], fgRaw[2], fgRaw[3] * opacity], bg);
+    const l1 = lum(fgRgb);
+    const l2 = lum(bg);
+    const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+    iconsChecked++;
+    if (ratio + 1e-6 >= 3) continue;
+    const selector = describe(icon);
+    const key = "icon" + selector + hex(fgRgb) + hex(bg);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    failures.push({
+      selector,
+      text: "(icon)",
+      fg: hex(fgRgb),
+      bg: hex(bg),
+      ratio: Math.round(ratio * 100) / 100,
+      required: 3,
+      font: `${Math.round(rect.width)}px icon`,
+    });
+  }
+  return { failures, checked, skipped, iconsChecked };
 }
 
 async function settle(page: Page): Promise<void> {
@@ -289,10 +334,12 @@ test.describe(`${THEME} contrast sweep across every role`, () => {
       let total = 0;
       let checkedTotal = 0;
       let skippedTotal = 0;
+      let iconsTotal = 0;
 
       async function scanHere(label: string): Promise<void> {
-        const { failures, checked, skipped } = await page.evaluate(scanContrast);
+        const { failures, checked, skipped, iconsChecked } = await page.evaluate(scanContrast);
         checkedTotal += checked;
+        iconsTotal += iconsChecked;
         skippedTotal += skipped;
         total += failures.length;
         for (const f of failures) {
@@ -325,7 +372,7 @@ test.describe(`${THEME} contrast sweep across every role`, () => {
       }
 
       console.log(
-        `${THEME} sweep ${role.name}: ${routes.size} routes, ${checkedTotal} text nodes checked, ${skippedTotal} on gradients/images skipped, ${total} failures`,
+        `${THEME} sweep ${role.name}: ${routes.size} routes, ${checkedTotal} text nodes and ${iconsTotal} icons checked, ${skippedTotal} on gradients/images skipped, ${total} failures`,
       );
       expect(report, `${total} contrast failures for ${role.name}:\n${report.join("\n")}`).toEqual([]);
     });

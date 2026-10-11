@@ -69,12 +69,55 @@
   --landing-space-section: 76px;
   --landing-space-chapter: 112px;
   --landing-footer: var(--landing-brand-black);
+  /* Themed roles. Light values alias the brand tokens above, so the light page
+     is untouched; the dark block below re-points them. `card` is the surface a
+     box sits on (`--landing-surface` stays white: it is the "white" of text and
+     tiles on coal), `action-ink` is red used as TEXT (the red FILL is
+     `--landing-action`), `line` the sticker edge and `drop` / `drop-red`
+     the hard offset shadows. */
+  --landing-card: var(--landing-surface-base);
+  --landing-action-ink: var(--landing-brand-red);
+  --landing-line: var(--landing-brand-black);
+  --landing-drop: var(--landing-brand-black);
+  --landing-drop-red: var(--landing-brand-red);
   color: var(--landing-text);
   /* `clip` (not `hidden`) so the page never becomes a scroll container —
      `overflow: hidden` here silently disabled `position: sticky` on the navbar. */
   overflow-x: clip;
   background: var(--landing-background);
   font-family: var(--font-landing-barlow), system-ui, sans-serif;
+}
+
+/* Dark landing (S11). The same names, a second set of values, applied while the
+   root layout's nonce'd script has put `data-theme="dark"` on <html> (the app
+   shares the `cata_theme` key, so the choice follows the visitor between the
+   landing and the panel). Same principles as the app's dark palette:
+   - an elevation ladder, coal < page < band < card, so a box is told apart by
+     its surface and not by a bright outline;
+   - quiet edges: the 2px sticker outline stays, but in a dim slate, and the
+     hard offset shadows go near-black (and a deeper red) instead of white;
+   - no glare on saturated blocks: the red and yellow FILLS are one step
+     calmer, while red and yellow used as TEXT are lifted to clear AA;
+   - `--landing-surface` (white) and the coal fills are untouched: they are the
+     "text on a brand block" and "inverse block" colours in both themes. */
+html[data-theme="dark"] .landing-page {
+  --landing-brand-red: #b81d24;
+  --landing-brand-red-strong: #8f1519;
+  --landing-brand-yellow: #d9b000;
+  --landing-brand-yellow-pale: #2e2a14;
+  --landing-brand-fuchsia-strong: #ff7db0;
+  --landing-bg-base: #151519;
+  --landing-stats-bg: #1c1c22;
+  --landing-text-base: #e4e4ea;
+  --landing-text-muted-base: #b0b0bd;
+  --landing-border-base: #2f2f38;
+  --landing-text-strong: #ededf1;
+  --landing-focus: #f2f2f5;
+  --landing-card: #212128;
+  --landing-action-ink: #ff7b82;
+  --landing-line: #34343d;
+  --landing-drop: #08080a;
+  --landing-drop-red: #7d1317;
 }
 
 .landing-page *, .landing-page *::before, .landing-page *::after { box-sizing: border-box; }
@@ -92,20 +135,20 @@
 
    @touch-target Quieter than the CTA, tapped just as often. */
 .landing-button-quiet { display: inline-flex; min-height: 48px; align-items: center; justify-content: center; gap: 10px; border: 1px solid var(--landing-border); border-radius: 10px; padding: 14px 28px; background: transparent; color: var(--landing-text); font-size: 14px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; transition: border-color 160ms ease, color 160ms ease; }
-.landing-button-quiet:hover { border-color: var(--landing-action); color: var(--landing-action); }
+.landing-button-quiet:hover { border-color: var(--landing-action); color: var(--landing-action-ink); }
 .landing-button-quiet svg { width: 17px; height: 17px; }
 /* @touch-target The 48px the shell's own skip link matches. */
 .landing-skip-link { position: fixed; left: 16px; top: -100px; z-index: 100; display: inline-flex; min-height: 48px; align-items: center; border-radius: 10px; padding: 12px 20px; background: var(--landing-action); color: var(--landing-on-action); font-size: 14px; font-weight: 700; transition: top 160ms ease; }
 .landing-skip-link:focus-visible { top: 16px; }
-.landing-eyebrow { color: var(--landing-action); font-size: 14px; font-weight: 800; letter-spacing: 4px; text-transform: uppercase; }
+.landing-eyebrow { color: var(--landing-action-ink); font-size: 14px; font-weight: 800; letter-spacing: 4px; text-transform: uppercase; }
 .landing-halftone { position: absolute; inset: 0; pointer-events: none; background-image: radial-gradient(circle, color-mix(in srgb, var(--landing-surface) 14%, transparent) 1.6px, transparent 1.6px); background-size: 15px 15px; mask-image: radial-gradient(circle at 90% 5%, var(--landing-brand-black), transparent 43%); }
 .landing-stars { display: flex; gap: 10px; color: var(--landing-highlight); }
 .landing-stars svg { width: 17px; height: 17px; }
 
-.landing-navbar { position: sticky; top: 0; z-index: 50; height: 100px; display: flex; align-items: center; justify-content: space-between; padding: 0 5.55vw; border-bottom: 1px solid var(--landing-border); background: var(--landing-surface); }
+.landing-navbar { position: sticky; top: 0; z-index: 50; height: 100px; display: flex; align-items: center; justify-content: space-between; padding: 0 5.55vw; border-bottom: 1px solid var(--landing-border); background: var(--landing-card); }
 .landing-logo { display: flex; align-items: center; gap: 14px; color: var(--landing-text-strong); font-size: 21px; letter-spacing: 0.8px; }
 .landing-logo img { width: auto; height: clamp(64px, 7vw, 84px); border-radius: 12px; padding: 8px; background: var(--landing-bg-base); box-shadow: inset 0 0 0 1px var(--landing-border), 0 8px 18px color-mix(in srgb, var(--landing-brand-black) 12%, transparent); }
-.landing-logo small, .landing-footer-brand small { display: block; color: var(--landing-action); font-family: var(--font-landing-barlow); font-size: 12px; font-weight: 700; letter-spacing: 3px; }
+.landing-logo small, .landing-footer-brand small { display: block; color: var(--landing-action-ink); font-family: var(--font-landing-barlow); font-size: 12px; font-weight: 700; letter-spacing: 3px; }
 .landing-nav-links { display: flex; gap: 8px; }
 /* @touch-target Declares `touch-action: manipulation`; a thumb is the pointer. */
 .landing-nav-links a { display: inline-flex; white-space: nowrap; min-height: 44px; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: 999px; padding: 10px 18px; color: var(--landing-text); font-size: 15px; font-weight: 600; touch-action: manipulation; transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease; }
@@ -150,7 +193,7 @@
 .landing-ticker-track:hover { animation-play-state: paused; }
 .landing-ticker-copy { display: flex; width: max-content; min-width: 100vw; flex: none; justify-content: space-around; gap: 44px; padding-inline: 22px; }
 .landing-ticker-item { display: inline-flex; align-items: center; gap: 18px; white-space: nowrap; font-size: 13px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; }
-.landing-ticker-item b { color: var(--landing-action); font-size: 16px; }
+.landing-ticker-item b { color: var(--landing-action-ink); font-size: 16px; }
 @keyframes landing-ticker-marquee { to { transform: translateX(-50%); } }
 
 /* The carousel is the hero's right-hand stage: absolutely positioned so the
@@ -264,7 +307,7 @@
    on a phone. */
 .landing-pillar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: start; border-top: 1px solid var(--landing-text-strong); padding-top: 28px; }
 .landing-index { color: var(--landing-text-muted); font-family: var(--font-landing-barlow); font-size: 15px; letter-spacing: 3px; }
-.landing-pillars .landing-index { display: block; margin: 0; font-weight: 800; font-size: 60px; line-height: 1; letter-spacing: normal; color: var(--landing-action); }
+.landing-pillars .landing-index { display: block; margin: 0; font-weight: 800; font-size: 60px; line-height: 1; letter-spacing: normal; color: var(--landing-action-ink); }
 /* The label sits on the numeral's baseline instead of under it, so the row
    beside "01" carries text rather than a blank band. */
 .landing-pillar-copy { display: block; min-width: 0; }
@@ -385,7 +428,7 @@
    white token Horarios uses (`--landing-surface`) and needs no colour
    overrides of its own — every child already defaults to a colour that
    reads on white. */
-.landing-section#nosotros { background: var(--landing-surface); color: var(--landing-text-strong); }
+.landing-section#nosotros { background: var(--landing-card); color: var(--landing-text-strong); }
 
 /* The base eyebrow is brand red, which only reaches ~3.5:1 on this yellow
    ground (black reaches ~14.9:1), so Valores overrides it to brand black. The
@@ -458,8 +501,8 @@
    reduced-motion block below drops them with the clones. */
 .landing-gallery-nav { position: absolute; inset-inline: 0; top: 0; bottom: 0; z-index: 4; display: flex; align-items: center; justify-content: space-between; padding-inline: clamp(16px, 2.2vw, 44px); pointer-events: none; }
 /* @touch-target Photo browsing is a tap gesture; 48px, like the CTA. */
-.landing-gallery-nav button { pointer-events: auto; display: grid; place-items: center; width: 48px; min-height: 48px; border: 1px solid var(--landing-border); border-radius: 50%; background: var(--landing-surface); color: var(--landing-text-strong); cursor: pointer; box-shadow: 0 8px 20px color-mix(in srgb, var(--landing-brand-black) 18%, transparent); transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease; }
-.landing-gallery-nav button:hover { border-color: var(--landing-action); color: var(--landing-action); transform: translateY(-2px); }
+.landing-gallery-nav button { pointer-events: auto; display: grid; place-items: center; width: 48px; min-height: 48px; border: 1px solid var(--landing-border); border-radius: 50%; background: var(--landing-card); color: var(--landing-text-strong); cursor: pointer; box-shadow: 0 8px 20px color-mix(in srgb, var(--landing-brand-black) 18%, transparent); transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease; }
+.landing-gallery-nav button:hover { border-color: var(--landing-action); color: var(--landing-action-ink); transform: translateY(-2px); }
 .landing-gallery-nav button:focus-visible { outline: 3px solid var(--landing-focus); outline-offset: 3px; }
 .landing-gallery-nav svg { width: 18px; height: 18px; }
 
@@ -467,7 +510,7 @@
 .landing-carousel-wrap::before, .landing-carousel-wrap::after { content: ""; position: absolute; z-index: 3; top: 0; bottom: 0; width: var(--landing-gutter); pointer-events: none; }
 .landing-carousel-wrap::before { left: 0; background: linear-gradient(90deg, var(--landing-background), transparent); }
 .landing-carousel-wrap::after { right: 0; background: linear-gradient(270deg, var(--landing-background), transparent); }
-.landing-schedule { background: var(--landing-surface); }
+.landing-schedule { background: var(--landing-card); }
 .landing-schedule-status { margin: 0; color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 17px; }
 
 /* Proposal C, "todo lado a lado": every category is a card on screen at once,
@@ -556,7 +599,7 @@
 /* A band of its own: brand yellow ground between the warm contact sheet above
    and the black footer below, so the white cards read as lit tiles, not as one
    more white area. */
-.landing-sponsors { padding: 56px 0 64px; overflow: hidden; border-top: 4px solid var(--landing-brand-black); background: var(--landing-highlight); }
+.landing-sponsors { padding: 56px 0 64px; overflow: hidden; border-top: 4px solid var(--landing-line); background: var(--landing-highlight); }
 .landing-sponsors-head { display: flex; align-items: center; gap: 14px; margin: 0 var(--landing-gutter) 28px; color: var(--landing-on-highlight); font-size: 11.5px; font-weight: 800; letter-spacing: 3.4px; text-transform: uppercase; }
 .landing-sponsors-head::before { content: ""; width: 30px; height: 2px; background: var(--landing-on-highlight); }
 .landing-sponsors-viewport { padding-block: 6px 22px; overflow: hidden; }
@@ -572,7 +615,7 @@
    between three logos on a 1920px screen — issue #765. */
 .landing-sponsors-copy { --landing-sponsor-gap: 18px; display: flex; width: max-content; min-width: 100vw; box-sizing: border-box; flex: none; gap: var(--landing-sponsor-gap); padding-right: var(--landing-sponsor-gap); }
 .landing-sponsors-item { display: block; width: clamp(300px, 30vw, 416px); flex: none; }
-.landing-sponsor { display: flex; width: 100%; height: 168px; align-items: center; justify-content: center; border-radius: 16px; background: var(--landing-surface); box-shadow: 0 0 0 2px var(--landing-brand-black), 0 10px 0 -2px color-mix(in srgb, var(--landing-brand-black) 85%, transparent); }
+.landing-sponsor { display: flex; width: 100%; height: 168px; align-items: center; justify-content: center; border-radius: 16px; background: var(--landing-card); box-shadow: 0 0 0 2px var(--landing-brand-black), 0 10px 0 -2px color-mix(in srgb, var(--landing-brand-black) 85%, transparent); }
 /* A logo that fails to load leaves its name on the tile instead of a broken-image icon. */
 .landing-sponsor-name { padding: 0 24px; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(24px, 2.4vw, 32px); font-weight: 700; line-height: 1.05; letter-spacing: 1px; text-align: center; text-transform: uppercase; overflow-wrap: anywhere; }
 /* Full colour, never grayscale or dimmed: sponsors pay to be seen in their
@@ -828,7 +871,7 @@
    the hard offset shadow is the same "sticker" edge the steps and the FAQ use.
    Contrast: white on red 4.9:1; coal on yellow 14:1; yellow on coal 14:1;
    yellow on red 3.7:1 is only used for the 40px+ amount (large text, 3:1). */
-.landing-prices { background: var(--landing-surface); }
+.landing-prices { background: var(--landing-card); }
 .landing-prices-list { display: grid; width: 100%; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; margin: 0; padding: 0; list-style: none; }
 /* One or two plans would stretch into half-width banners with the label and
    price lost in a corner: cap the cards and centre the list. Three or more
@@ -836,9 +879,9 @@
 @media (min-width: 769px) {
   .landing-prices-list:has(> .landing-price:first-child:nth-last-child(-n + 2)) { grid-template-columns: repeat(auto-fit, minmax(240px, 420px)); justify-content: center; }
 }
-.landing-price { --price-bg: var(--landing-brand-red); --price-fg: var(--landing-on-action); --price-accent: var(--landing-brand-yellow); --price-shadow: var(--landing-brand-black); position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 40px; min-height: 190px; padding: 24px 26px 26px; overflow: hidden; border: 2px solid var(--landing-brand-black); border-radius: 20px; background: var(--price-bg); color: var(--price-fg); box-shadow: 6px 6px 0 var(--price-shadow); }
+.landing-price { --price-bg: var(--landing-brand-red); --price-fg: var(--landing-on-action); --price-accent: var(--landing-brand-yellow); --price-shadow: var(--landing-drop); position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 40px; min-height: 190px; padding: 24px 26px 26px; overflow: hidden; border: 2px solid var(--landing-line); border-radius: 20px; background: var(--price-bg); color: var(--price-fg); box-shadow: 6px 6px 0 var(--price-shadow); }
 .landing-price:nth-child(3n + 2) { --price-bg: var(--landing-brand-yellow); --price-fg: var(--landing-brand-black); --price-accent: var(--landing-brand-black); }
-.landing-price:nth-child(3n) { --price-bg: var(--landing-brand-black); --price-fg: var(--landing-on-action); --price-accent: var(--landing-brand-yellow); --price-shadow: var(--landing-brand-red); }
+.landing-price:nth-child(3n) { --price-bg: var(--landing-brand-black); --price-fg: var(--landing-on-action); --price-accent: var(--landing-brand-yellow); --price-shadow: var(--landing-drop-red); }
 /* A tennis-ball seam, drawn, behind the figures. */
 .landing-price::after { content: ""; position: absolute; right: -46px; bottom: -58px; width: 150px; height: 150px; border: 12px solid currentColor; border-radius: 50%; opacity: 0.14; pointer-events: none; }
 .landing-price-name { position: relative; z-index: 1; display: flex; align-items: center; gap: 10px; color: inherit; font-size: 14px; font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase; }
@@ -854,10 +897,10 @@
    one brand colour (red, yellow, coal) and the card's left edge repeats it. */
 .landing-steps { background: var(--landing-stats-bg); }
 .landing-steps-list { display: grid; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin: 0; padding: 0; list-style: none; counter-reset: landing-step; }
-.landing-steps-list li { --step-bg: var(--landing-brand-red); --step-fg: var(--landing-on-action); display: flex; align-items: center; gap: 18px; padding: 22px 24px; border: 2px solid var(--landing-brand-black); border-left: 10px solid var(--step-bg); border-radius: 18px; background: var(--landing-surface); box-shadow: 5px 5px 0 var(--landing-brand-black); color: var(--landing-text-strong); font-size: 20px; font-weight: 700; line-height: 1.2; counter-increment: landing-step; }
+.landing-steps-list li { --step-bg: var(--landing-brand-red); --step-fg: var(--landing-on-action); display: flex; align-items: center; gap: 18px; padding: 22px 24px; border: 2px solid var(--landing-line); border-left: 10px solid var(--step-bg); border-radius: 18px; background: var(--landing-card); box-shadow: 5px 5px 0 var(--landing-drop); color: var(--landing-text-strong); font-size: 20px; font-weight: 700; line-height: 1.2; counter-increment: landing-step; }
 .landing-steps-list li:nth-child(3n + 2) { --step-bg: var(--landing-brand-yellow); --step-fg: var(--landing-brand-black); }
 .landing-steps-list li:nth-child(3n) { --step-bg: var(--landing-brand-black); --step-fg: var(--landing-brand-yellow); }
-.landing-steps-list li::before { content: counter(landing-step); display: grid; flex: none; place-items: center; width: 56px; height: 56px; border: 2px solid var(--landing-brand-black); border-radius: 50%; background: var(--step-bg); color: var(--step-fg); font-family: var(--font-landing-barlow), sans-serif; font-size: 30px; font-weight: 800; line-height: 1; }
+.landing-steps-list li::before { content: counter(landing-step); display: grid; flex: none; place-items: center; width: 56px; height: 56px; border: 2px solid var(--landing-line); border-radius: 50%; background: var(--step-bg); color: var(--step-fg); font-family: var(--font-landing-barlow), sans-serif; font-size: 30px; font-weight: 800; line-height: 1; }
 .landing-steps-actions { display: flex; flex-wrap: wrap; gap: 12px; width: 100%; }
 .landing-steps-actions .landing-button-outline { border-color: var(--landing-text-strong); color: var(--landing-text-strong); }
 .landing-steps-actions .landing-button-outline:hover { background: var(--landing-brand-black); color: var(--landing-surface); }
@@ -868,19 +911,19 @@
    CataClub colours. Nothing here clips or fixes a height: the answer is plain
    flow content inside the <details>, whatever its length or the viewport. */
 .landing-faq { display: grid; grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr); align-items: start; gap: 32px 48px; background: var(--landing-brand-yellow-pale); }
-.landing-faq .landing-section-header { position: relative; padding: 28px; overflow: hidden; border: 2px solid var(--landing-brand-black); border-radius: 22px; background: var(--landing-surface); box-shadow: 6px 6px 0 var(--landing-brand-red); }
+.landing-faq .landing-section-header { position: relative; padding: 28px; overflow: hidden; border: 2px solid var(--landing-line); border-radius: 22px; background: var(--landing-card); box-shadow: 6px 6px 0 var(--landing-drop-red); }
 /* Decorative question mark; the empty alt keeps it out of the accessibility tree. */
 .landing-faq .landing-section-header::after { content: "?" / ""; position: absolute; right: 18px; top: 50%; transform: translateY(-50%); color: var(--landing-brand-yellow); font-family: var(--font-landing-barlow), sans-serif; font-size: 150px; font-weight: 800; line-height: 1; pointer-events: none; }
 .landing-faq .landing-section-header > * { position: relative; z-index: 1; }
 .landing-faq-list { display: flex; width: 100%; flex-direction: column; gap: 14px; }
-.landing-faq-list details { border: 2px solid var(--landing-brand-black); border-radius: 18px; background: var(--landing-surface); box-shadow: 4px 4px 0 var(--landing-brand-black); }
-.landing-faq-list details[open] { box-shadow: 4px 4px 0 var(--landing-brand-red); }
+.landing-faq-list details { border: 2px solid var(--landing-line); border-radius: 18px; background: var(--landing-card); box-shadow: 4px 4px 0 var(--landing-drop); }
+.landing-faq-list details[open] { box-shadow: 4px 4px 0 var(--landing-drop-red); }
 .landing-faq-list summary { display: flex; min-height: 64px; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px 14px 20px; border-radius: 16px; color: var(--landing-text-strong); font-size: 19px; font-weight: 700; line-height: 1.25; list-style: none; cursor: pointer; }
 .landing-faq-list summary::-webkit-details-marker { display: none; }
 .landing-faq-list summary:hover { background: var(--landing-brand-yellow-pale); }
 .landing-faq-list summary:focus-visible { outline: 3px solid var(--landing-focus); outline-offset: 2px; }
 .landing-faq-list details[open] summary { border-bottom-right-radius: 0; border-bottom-left-radius: 0; }
-.landing-faq-list summary::after { content: ""; flex: none; width: 36px; height: 36px; border: 2px solid var(--landing-brand-black); border-radius: 50%; background: var(--landing-highlight) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23111111' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / 20px 20px no-repeat; }
+.landing-faq-list summary::after { content: ""; flex: none; width: 36px; height: 36px; border: 2px solid var(--landing-line); border-radius: 50%; background: var(--landing-highlight) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23111111' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / 20px 20px no-repeat; }
 .landing-faq-list details[open] summary::after { background: var(--landing-brand-red) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / 20px 20px no-repeat; transform: rotate(180deg); }
 .landing-faq-list p { margin: 0; padding: 4px 20px 20px; color: var(--landing-text); font-size: 17px; line-height: 1.6; }
 @media (prefers-reduced-motion: no-preference) {
@@ -905,7 +948,7 @@
 /* Fixed bottom bar, phones only (LAN-14). */
 .landing-mobile-bar { display: none; }
 @media (max-width: 768px) {
-  .landing-mobile-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; display: flex; align-items: center; gap: 12px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--landing-border); background: var(--landing-surface); box-shadow: 0 -6px 18px color-mix(in srgb, var(--landing-brand-black) 14%, transparent); }
+  .landing-mobile-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; display: flex; align-items: center; gap: 12px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--landing-border); background: var(--landing-card); box-shadow: 0 -6px 18px color-mix(in srgb, var(--landing-brand-black) 14%, transparent); }
   .landing-mobile-bar .landing-button { flex: 1; }
   /* @touch-target 48px, the same as every landing CTA. */
   .landing-mobile-bar-whatsapp { display: grid; flex: none; place-items: center; width: 48px; min-height: 48px; height: 48px; border-radius: 50%; background: var(--landing-third-party-whatsapp); color: var(--landing-brand-black); }
@@ -926,46 +969,46 @@
    have overridden. */
 .landing-page {
   --landing-ink: var(--landing-brand-black);
-  --landing-sticker-edge: 2px solid var(--landing-ink);
-  --landing-sticker-lift: 6px 6px 0 var(--landing-ink);
-  --landing-sticker-lift-sm: 4px 4px 0 var(--landing-ink);
-  --landing-sticker-lift-red: 6px 6px 0 var(--landing-brand-red);
+  --landing-sticker-edge: 2px solid var(--landing-line);
+  --landing-sticker-lift: 6px 6px 0 var(--landing-drop);
+  --landing-sticker-lift-sm: 4px 4px 0 var(--landing-drop);
+  --landing-sticker-lift-red: 6px 6px 0 var(--landing-drop-red);
 }
 
 /* Buttons: every CTA is a sticker that lifts towards its shadow. */
 .landing-button { border: var(--landing-sticker-edge); border-radius: 12px; box-shadow: var(--landing-sticker-lift-sm); }
-.landing-button:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--landing-ink); }
+.landing-button:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--landing-drop); }
 .landing-button-outline { border: var(--landing-sticker-edge); box-shadow: var(--landing-sticker-lift-sm); }
-.landing-hero .landing-button-outline { border-color: var(--landing-on-action); box-shadow: 4px 4px 0 var(--landing-ink); }
-.landing-button-quiet { border: var(--landing-sticker-edge); border-radius: 12px; color: var(--landing-text-strong); box-shadow: 3px 3px 0 var(--landing-ink); transition: transform 160ms ease, box-shadow 160ms ease, color 160ms ease; }
-.landing-button-quiet:hover { border-color: var(--landing-ink); color: var(--landing-action); transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--landing-brand-red); }
+.landing-hero .landing-button-outline { border-color: var(--landing-on-action); box-shadow: 4px 4px 0 var(--landing-drop); }
+.landing-button-quiet { border: var(--landing-sticker-edge); border-radius: 12px; color: var(--landing-text-strong); box-shadow: 3px 3px 0 var(--landing-drop); transition: transform 160ms ease, box-shadow 160ms ease, color 160ms ease; }
+.landing-button-quiet:hover { border-color: var(--landing-line); color: var(--landing-action-ink); transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--landing-drop-red); }
 
 /* Navbar: ink rule, stickered crest, active pill with an ink edge. */
 .landing-navbar { border-bottom: var(--landing-sticker-edge); }
-.landing-logo img { border: var(--landing-sticker-edge); border-radius: 14px; box-shadow: 4px 4px 0 var(--landing-brand-red); }
-.landing-nav-links a.active { border: var(--landing-sticker-edge); box-shadow: 3px 3px 0 var(--landing-ink); }
-.landing-nav-links a.active:hover { border-color: var(--landing-ink); }
+.landing-logo img { border: var(--landing-sticker-edge); border-radius: 14px; box-shadow: 4px 4px 0 var(--landing-drop-red); }
+.landing-nav-links a.active { border: var(--landing-sticker-edge); box-shadow: 3px 3px 0 var(--landing-drop); }
+.landing-nav-links a.active:hover { border-color: var(--landing-line); }
 
 /* Hero: heavy display type with a hard ink drop, the accent word as a tilted
    yellow sticker, a yellow-and-ink tape along the photo's diagonal seam and a
    "since 2013" seal on the photo. The tape is two copies of the carousel's own
    polygon slid out from under it, so it follows the seam at every breakpoint. */
-.landing-hero h1 { font-weight: 800; font-size: clamp(50px, 5vw, 96px); letter-spacing: -0.03em; line-height: 0.98; text-shadow: 5px 5px 0 var(--landing-ink); }
-.landing-hero-accent { display: inline-block; margin: 0.08em 0 0.1em -0.06em; padding: 0.02em 0.14em 0; border: 3px solid var(--landing-ink); border-radius: 12px; background: var(--landing-highlight); color: var(--landing-ink); text-shadow: none; box-shadow: 6px 6px 0 var(--landing-ink); transform: rotate(-2.5deg); }
+.landing-hero h1 { font-weight: 800; font-size: clamp(50px, 5vw, 96px); letter-spacing: -0.03em; line-height: 0.98; text-shadow: 5px 5px 0 var(--landing-drop); }
+.landing-hero-accent { display: inline-block; margin: 0.08em 0 0.1em -0.06em; padding: 0.02em 0.14em 0; border: 3px solid var(--landing-line); border-radius: 12px; background: var(--landing-highlight); color: var(--landing-ink); text-shadow: none; box-shadow: 6px 6px 0 var(--landing-drop); transform: rotate(-2.5deg); }
 .landing-hero-copy > p { font-weight: 500; }
 .landing-hero::before, .landing-hero::after { content: ""; position: absolute; inset: 0 0 0 44%; z-index: 2; clip-path: polygon(0 0, 100% 0, 100% 100%, 14% 100%); pointer-events: none; }
 .landing-hero::before { background: var(--landing-ink); transform: translateX(-30px); }
 .landing-hero::after { background: var(--landing-highlight); transform: translateX(-24px); }
-.landing-hero-badge { position: absolute; right: calc(var(--landing-gutter) - 12px); bottom: 44px; z-index: 15; display: grid; place-items: center; align-content: center; width: 128px; height: 128px; border: 3px solid var(--landing-ink); border-radius: 50%; background: var(--landing-highlight); color: var(--landing-ink); box-shadow: 6px 6px 0 var(--landing-ink); font-size: 12px; font-weight: 800; letter-spacing: 2.4px; line-height: 1; text-transform: uppercase; transform: rotate(10deg); pointer-events: none; }
+.landing-hero-badge { position: absolute; right: calc(var(--landing-gutter) - 12px); bottom: 44px; z-index: 15; display: grid; place-items: center; align-content: center; width: 128px; height: 128px; border: 3px solid var(--landing-line); border-radius: 50%; background: var(--landing-highlight); color: var(--landing-ink); box-shadow: 6px 6px 0 var(--landing-drop); font-size: 12px; font-weight: 800; letter-spacing: 2.4px; line-height: 1; text-transform: uppercase; transform: rotate(10deg); pointer-events: none; }
 .landing-hero-badge b { font-size: 40px; letter-spacing: -0.02em; }
 .landing-hero-counter { padding: 0 14px; border: var(--landing-sticker-edge); border-radius: 999px; background: var(--landing-ink); color: var(--landing-highlight); }
-.landing-hero-nav { border: var(--landing-sticker-edge); background: var(--landing-surface); color: var(--landing-ink); box-shadow: 3px 3px 0 var(--landing-ink); }
-.landing-hero-nav:hover { border-color: var(--landing-ink); }
+.landing-hero-nav { border: var(--landing-sticker-edge); background: var(--landing-card); color: var(--landing-text-strong); box-shadow: 3px 3px 0 var(--landing-drop); }
+.landing-hero-nav:hover { border-color: var(--landing-line); }
 .landing-credentials-ticker { border-bottom: var(--landing-sticker-edge); }
 
 /* Mission / Vision: each pillar is a white card; the photo is a framed print. */
 .landing-pillars { gap: 40px; }
-.landing-pillar { padding: 28px; border: var(--landing-sticker-edge); border-radius: 22px; background: var(--landing-surface); box-shadow: var(--landing-sticker-lift-red); }
+.landing-pillar { padding: 28px; border: var(--landing-sticker-edge); border-radius: 22px; background: var(--landing-card); box-shadow: var(--landing-sticker-lift-red); }
 .landing-pillar + .landing-pillar { box-shadow: var(--landing-sticker-lift); }
 .landing-pillars .landing-index { display: inline-grid; place-items: center; min-width: 76px; height: 76px; padding-inline: 10px; border: var(--landing-sticker-edge); border-radius: 50%; background: var(--landing-brand-red); color: var(--landing-highlight); font-size: 38px; }
 .landing-pillar + .landing-pillar .landing-index { background: var(--landing-highlight); color: var(--landing-ink); }
@@ -974,16 +1017,16 @@
 /* Values: the numeral tiles become stickers and each value sits on its own card. */
 .landing-tablero { column-gap: 22px; }
 .landing-tablero-tile { border: var(--landing-sticker-edge); border-radius: 18px; box-shadow: var(--landing-sticker-lift-red); transition: transform 180ms ease; }
-.landing-tablero-item { align-self: stretch; padding: 20px 22px; border: var(--landing-sticker-edge); border-radius: 18px; background: var(--landing-surface); box-shadow: var(--landing-sticker-lift-sm); }
+.landing-tablero-item { align-self: stretch; padding: 20px 22px; border: var(--landing-sticker-edge); border-radius: 18px; background: var(--landing-card); box-shadow: var(--landing-sticker-lift-sm); }
 .landing-tablero-item p { color: var(--landing-text); }
 
 /* Stats: three cards in the prices' red / yellow / coal rotation. */
 .landing-stats { gap: 24px; padding-block: 56px; border-bottom: var(--landing-sticker-edge); }
-.landing-stat { --stat-bg: var(--landing-brand-red); --stat-fg: var(--landing-on-action); --stat-accent: var(--landing-highlight); --stat-shadow: var(--landing-ink); padding: 24px 26px; border: var(--landing-sticker-edge); border-radius: 20px; background: var(--stat-bg); box-shadow: 6px 6px 0 var(--stat-shadow); }
+.landing-stat { --stat-bg: var(--landing-brand-red); --stat-fg: var(--landing-on-action); --stat-accent: var(--landing-highlight); --stat-shadow: var(--landing-drop); padding: 24px 26px; border: var(--landing-sticker-edge); border-radius: 20px; background: var(--stat-bg); box-shadow: 6px 6px 0 var(--stat-shadow); }
 .landing-stat:first-child { padding-left: 26px; }
 .landing-stat + .landing-stat { border-left: var(--landing-sticker-edge); }
 .landing-stat:nth-child(3n + 2) { --stat-bg: var(--landing-highlight); --stat-fg: var(--landing-ink); --stat-accent: var(--landing-brand-red); }
-.landing-stat:nth-child(3n) { --stat-bg: var(--landing-ink); --stat-fg: var(--landing-on-action); --stat-accent: var(--landing-highlight); --stat-shadow: var(--landing-brand-red); }
+.landing-stat:nth-child(3n) { --stat-bg: var(--landing-ink); --stat-fg: var(--landing-on-action); --stat-accent: var(--landing-highlight); --stat-shadow: var(--landing-drop-red); }
 .landing-stats .landing-stat strong { color: var(--stat-fg); font-size: clamp(48px, 4.4vw, 76px); }
 .landing-stats .landing-stat:nth-child(3n + 1) strong, .landing-stats .landing-stat:nth-child(3n) strong { color: var(--stat-accent); }
 .landing-stat span { border-left-color: var(--stat-accent); color: var(--stat-fg); }
@@ -991,17 +1034,17 @@
 /* Gallery: a photo wall on a light dotted ground. Each print wears an ink
    frame and casts a yellow or red shadow, alternating; the caption title
    becomes a yellow chip. */
-.landing-gallery { background: var(--landing-surface); }
+.landing-gallery { background: var(--landing-card); }
 .landing-gallery::before, .landing-schedule::before { background-image: radial-gradient(circle, color-mix(in srgb, var(--landing-ink) 9%, transparent) 1.4px, transparent 1.4px); background-size: 18px 18px; }
 .landing-gallery .landing-section-header h2, .landing-schedule .landing-section-header h2 { text-shadow: 3px 3px 0 var(--landing-highlight); }
-.landing-gallery .landing-carousel-wrap::before { background: linear-gradient(90deg, var(--landing-surface), transparent); }
-.landing-gallery .landing-carousel-wrap::after { background: linear-gradient(270deg, var(--landing-surface), transparent); }
-.landing-slide { border: 3px solid var(--landing-ink); border-radius: 18px; box-shadow: 8px 8px 0 var(--landing-highlight); }
-.landing-gallery .landing-sponsors-item:nth-child(even) > .landing-slide { box-shadow: 8px 8px 0 var(--landing-brand-red); }
-.landing-slide-title { align-self: flex-start; padding: 4px 10px; border: var(--landing-sticker-edge); border-radius: 8px; background: var(--landing-highlight); color: var(--landing-ink); box-shadow: 3px 3px 0 var(--landing-ink); }
+.landing-gallery .landing-carousel-wrap::before { background: linear-gradient(90deg, var(--landing-card), transparent); }
+.landing-gallery .landing-carousel-wrap::after { background: linear-gradient(270deg, var(--landing-card), transparent); }
+.landing-slide { border: 3px solid var(--landing-line); border-radius: 18px; box-shadow: 8px 8px 0 var(--landing-highlight); }
+.landing-gallery .landing-sponsors-item:nth-child(even) > .landing-slide { box-shadow: 8px 8px 0 var(--landing-drop-red); }
+.landing-slide-title { align-self: flex-start; padding: 4px 10px; border: var(--landing-sticker-edge); border-radius: 8px; background: var(--landing-highlight); color: var(--landing-ink); box-shadow: 3px 3px 0 var(--landing-drop); }
 .landing-slide-description { color: var(--landing-surface); }
-.landing-gallery-nav button { border: var(--landing-sticker-edge); background: var(--landing-highlight); color: var(--landing-ink); box-shadow: 4px 4px 0 var(--landing-brand-red); }
-.landing-gallery-nav button:hover { border-color: var(--landing-ink); color: var(--landing-ink); transform: translate(-2px, -2px); }
+.landing-gallery-nav button { border: var(--landing-sticker-edge); background: var(--landing-highlight); color: var(--landing-ink); box-shadow: 4px 4px 0 var(--landing-drop-red); }
+.landing-gallery-nav button:hover { border-color: var(--landing-line); color: var(--landing-ink); transform: translate(-2px, -2px); }
 
 /* Schedule: a light warm band where the category tiles — red, yellow, white,
    yellow from `CARD_PALETTE`, a four-step cycle so no column of the three-up
@@ -1012,18 +1055,18 @@
 .landing-schedule-grid { gap: 28px; }
 .landing-schedule-tile { border: var(--landing-sticker-edge); border-radius: 22px; box-shadow: var(--landing-sticker-lift); rotate: -0.8deg; transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 260ms cubic-bezier(0.22, 1, 0.36, 1), rotate 260ms ease; }
 .landing-schedule-tile:nth-child(even) { rotate: 0.8deg; }
-.landing-schedule-tile:focus-within { transform: translate(-3px, -3px); box-shadow: 10px 10px 0 var(--landing-ink); rotate: 0deg; }
+.landing-schedule-tile:focus-within { transform: translate(-3px, -3px); box-shadow: 10px 10px 0 var(--landing-drop); rotate: 0deg; }
 @media (hover: hover) {
-  .landing-schedule-tile:hover { transform: translate(-3px, -3px); box-shadow: 10px 10px 0 var(--landing-ink); rotate: 0deg; }
+  .landing-schedule-tile:hover { transform: translate(-3px, -3px); box-shadow: 10px 10px 0 var(--landing-drop); rotate: 0deg; }
 }
-.landing-schedule-tile h3 { align-self: flex-start; padding: 6px 12px 4px; border: var(--landing-sticker-edge); border-radius: 10px; background: var(--landing-tile-ink); color: var(--landing-tile); font-size: 22px; font-weight: 800; letter-spacing: 1.4px; box-shadow: 3px 3px 0 var(--landing-ink); }
+.landing-schedule-tile h3 { align-self: flex-start; padding: 6px 12px 4px; border: var(--landing-sticker-edge); border-radius: 10px; background: var(--landing-tile-ink); color: var(--landing-tile); font-size: 22px; font-weight: 800; letter-spacing: 1.4px; box-shadow: 3px 3px 0 var(--landing-drop); }
 .landing-schedule-ages { margin-top: 14px; font-weight: 800; }
 .landing-schedule-time { font-weight: 800; }
-.landing-schedule-cta { border: var(--landing-sticker-edge); box-shadow: 3px 3px 0 var(--landing-ink); }
-.landing-schedule-cta:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--landing-ink); }
+.landing-schedule-cta { border: var(--landing-sticker-edge); box-shadow: 3px 3px 0 var(--landing-drop); }
+.landing-schedule-cta:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--landing-drop); }
 .landing-schedule-tile.landing-schedule-help { border: var(--landing-sticker-edge); background: var(--landing-brand-yellow-pale); box-shadow: var(--landing-sticker-lift); }
 .landing-schedule-help h3 { padding: 0; border: 0; background: none; color: var(--landing-text-strong); box-shadow: none; font-size: 28px; }
-.landing-schedule-help a { border: var(--landing-sticker-edge); background: var(--landing-third-party-whatsapp); color: var(--landing-ink); box-shadow: 3px 3px 0 var(--landing-ink); }
+.landing-schedule-help a { border: var(--landing-sticker-edge); background: var(--landing-third-party-whatsapp); color: var(--landing-ink); box-shadow: 3px 3px 0 var(--landing-drop); }
 
 /* Visit: framed arrival photo and map, contact sheet on a white card. */
 .landing-arrival { border: var(--landing-sticker-edge); border-radius: 20px; box-shadow: var(--landing-sticker-lift); }
@@ -1034,31 +1077,31 @@
    card's shadow and its action button take that same colour, and every number,
    address and handle is a tappable pill. */
 .landing-contact { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 26px; border-top: 0; }
-.landing-contact-row { --kind-bg: var(--landing-brand-red); --kind-ink: var(--landing-on-action); --kind-shadow: var(--landing-brand-red); display: flex; flex-direction: column; align-items: flex-start; gap: 16px; padding: 24px; border: var(--landing-sticker-edge); border-radius: 22px; background: var(--landing-surface); box-shadow: 6px 6px 0 var(--kind-shadow); transition: transform 180ms ease, box-shadow 180ms ease; }
+.landing-contact-row { --kind-bg: var(--landing-brand-red); --kind-ink: var(--landing-on-action); --kind-shadow: var(--landing-drop-red); display: flex; flex-direction: column; align-items: flex-start; gap: 16px; padding: 24px; border: var(--landing-sticker-edge); border-radius: 22px; background: var(--landing-card); box-shadow: 6px 6px 0 var(--kind-shadow); transition: transform 180ms ease, box-shadow 180ms ease; }
 @media (hover: hover) {
   .landing-contact-row:hover { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 var(--kind-shadow); }
 }
-.landing-contact-row[data-kind="hours"] { --kind-bg: var(--landing-brand-yellow); --kind-ink: var(--landing-ink); --kind-shadow: var(--landing-ink); }
+.landing-contact-row[data-kind="hours"] { --kind-bg: var(--landing-brand-yellow); --kind-ink: var(--landing-ink); --kind-shadow: var(--landing-drop); }
 .landing-contact-row[data-kind="whatsapp"] { --kind-bg: var(--landing-third-party-whatsapp); --kind-ink: var(--landing-ink); --kind-shadow: var(--landing-third-party-whatsapp); }
-.landing-contact-row[data-kind="phone"] { --kind-bg: var(--landing-ink); --kind-ink: var(--landing-highlight); --kind-shadow: var(--landing-ink); }
+.landing-contact-row[data-kind="phone"] { --kind-bg: var(--landing-ink); --kind-ink: var(--landing-highlight); --kind-shadow: var(--landing-drop); }
 .landing-contact-row[data-kind="mail"] { --kind-bg: var(--landing-brand-fuchsia); --kind-ink: var(--landing-surface); --kind-shadow: var(--landing-brand-fuchsia); }
-.landing-contact-row[data-kind="social"] { --kind-bg: linear-gradient(135deg, var(--landing-brand-amber), var(--landing-third-party-instagram) 55%, var(--landing-brand-fuchsia-strong)); --kind-ink: var(--landing-surface); --kind-shadow: var(--landing-ink); }
-.landing-contact dt { display: flex; align-items: center; gap: 14px; color: var(--landing-ink); font-size: 15px; letter-spacing: 2.4px; }
-.landing-contact-icon { display: grid; flex: none; place-items: center; width: 56px; height: 56px; border: var(--landing-sticker-edge); border-radius: 16px; background: var(--kind-bg); color: var(--kind-ink); box-shadow: 3px 3px 0 var(--landing-ink); transform: rotate(-4deg); }
+.landing-contact-row[data-kind="social"] { --kind-bg: linear-gradient(135deg, var(--landing-brand-amber), var(--landing-third-party-instagram) 55%, var(--landing-brand-fuchsia-strong)); --kind-ink: var(--landing-surface); --kind-shadow: var(--landing-drop); }
+.landing-contact dt { display: flex; align-items: center; gap: 14px; color: var(--landing-text-strong); font-size: 15px; letter-spacing: 2.4px; }
+.landing-contact-icon { display: grid; flex: none; place-items: center; width: 56px; height: 56px; border: var(--landing-sticker-edge); border-radius: 16px; background: var(--kind-bg); color: var(--kind-ink); box-shadow: 3px 3px 0 var(--landing-drop); transform: rotate(-4deg); }
 .landing-contact-icon svg { width: 28px; height: 28px; stroke-width: 2.4; }
 .landing-contact dd { font-size: 18px; font-weight: 700; line-height: 1.45; }
 .landing-contact dd[aria-hidden="true"] { display: none; }
 .landing-contact dd:nth-of-type(2) { margin-top: auto; padding-top: 4px; }
 .landing-contact-numbers, .landing-contact-social { flex-direction: column; align-items: flex-start; gap: 10px; }
 .landing-contact a { text-decoration: none; }
-.landing-contact-numbers a, .landing-contact-social a { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: var(--landing-sticker-edge); border-radius: 12px; background: var(--landing-surface); font-size: 16px; box-shadow: 3px 3px 0 var(--landing-ink); transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease; }
-.landing-contact-numbers a:hover, .landing-contact-social a:hover { color: var(--landing-ink); background: var(--landing-brand-yellow-pale); transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--landing-ink); }
-.landing-contact a.landing-contact-action { min-height: 48px; padding: 0 20px; border: var(--landing-sticker-edge); border-radius: 999px; background: var(--kind-bg); color: var(--kind-ink); font-size: 13px; box-shadow: 4px 4px 0 var(--landing-ink); transition: transform 160ms ease, box-shadow 160ms ease; }
+.landing-contact-numbers a, .landing-contact-social a { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: var(--landing-sticker-edge); border-radius: 12px; background: var(--landing-card); font-size: 16px; box-shadow: 3px 3px 0 var(--landing-drop); transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease; }
+.landing-contact-numbers a:hover, .landing-contact-social a:hover { color: var(--landing-text-strong); background: var(--landing-brand-yellow-pale); transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--landing-drop); }
+.landing-contact a.landing-contact-action { min-height: 48px; padding: 0 20px; border: var(--landing-sticker-edge); border-radius: 999px; background: var(--kind-bg); color: var(--kind-ink); font-size: 13px; box-shadow: 4px 4px 0 var(--landing-drop); transition: transform 160ms ease, box-shadow 160ms ease; }
 .landing-contact a.landing-contact-action svg { width: 19px; height: 19px; }
-.landing-contact a.landing-contact-action:hover { color: var(--kind-ink); transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--landing-ink); }
+.landing-contact a.landing-contact-action:hover { color: var(--kind-ink); transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--landing-drop); }
 
 /* Motto and brand lockup in the same heavy voice as every heading. */
-.landing-motto .landing-motto-lead { font-family: var(--font-landing-barlow), sans-serif; font-weight: 800; line-height: 1.15; letter-spacing: -0.01em; text-transform: uppercase; text-shadow: 4px 4px 0 var(--landing-ink); }
+.landing-motto .landing-motto-lead { font-family: var(--font-landing-barlow), sans-serif; font-weight: 800; line-height: 1.15; letter-spacing: -0.01em; text-transform: uppercase; text-shadow: 4px 4px 0 var(--landing-drop); }
 .landing-logo .landing-display { font-weight: 800; white-space: nowrap; }
 /* The heavier lockup costs the nine-link row the room it had up to 1440px, so
    the compact pills main applies below 1366px reach a little further. */
@@ -1092,14 +1135,14 @@
 .landing-footer-brand { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px 32px; padding-bottom: 28px; border-bottom: 2px solid color-mix(in srgb, var(--landing-surface) 16%, transparent); }
 .landing-footer-brand > div:first-child { gap: 16px; }
 .landing-footer-brand .landing-stars { margin-left: 8px; padding: 0; background: none; }
-.landing-footer-brand > div > span:first-child { border: 2px solid var(--landing-ink); box-shadow: 4px 4px 0 var(--landing-brand-red); }
+.landing-footer-brand > div > span:first-child { border: 2px solid var(--landing-line); box-shadow: 4px 4px 0 var(--landing-drop-red); }
 .landing-footer-brand b { font-size: 22px; font-weight: 800; }
 .landing-footer-brand p { margin: 0; font-size: 15px; }
 .landing-footer-brand > p:not(.landing-footer-place) { grid-column: 1; font-size: 17px; font-weight: 600; }
 .landing-footer-place { grid-column: 2; grid-row: 2; justify-self: end; }
 .landing-footer-social { grid-column: 2; grid-row: 1; gap: 12px; margin-top: 0; }
-.landing-footer-social a { flex: none; width: 52px; height: 52px; border: var(--landing-sticker-edge); background: var(--landing-highlight); color: var(--landing-ink); box-shadow: 4px 4px 0 var(--landing-brand-red); transition: transform 160ms ease, box-shadow 160ms ease; }
-.landing-footer-social a:hover { border-color: var(--landing-ink); background: var(--landing-surface); transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--landing-brand-red); }
+.landing-footer-social a { flex: none; width: 52px; height: 52px; border: var(--landing-sticker-edge); background: var(--landing-highlight); color: var(--landing-ink); box-shadow: 4px 4px 0 var(--landing-drop-red); transition: transform 160ms ease, box-shadow 160ms ease; }
+.landing-footer-social a:hover { border-color: var(--landing-line); background: var(--landing-card); transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--landing-drop-red); }
 .landing-footer nav { padding: 20px 22px 14px; border: 2px solid color-mix(in srgb, var(--landing-surface) 22%, transparent); border-radius: 20px; background: color-mix(in srgb, var(--landing-surface) 5%, var(--landing-ink)); }
 .landing-footer nav h2 { align-self: flex-start; margin-bottom: 12px; padding: 5px 12px; border-radius: 999px; background: var(--landing-highlight); color: var(--landing-ink); font-size: 11.5px; font-weight: 800; letter-spacing: 2px; }
 .landing-footer nav a { flex: none; justify-content: space-between; gap: 12px; min-height: 44px; border-top: 0; font-weight: 600; line-height: 1.3; transition: color 160ms ease, transform 160ms ease; }
@@ -1139,6 +1182,34 @@
   .landing-footer-social a { flex: 1; width: auto; padding-inline: 10px; border-radius: 999px; }
   .landing-footer::after { -webkit-text-stroke-width: 1.5px; }
   .landing-mobile-bar { border-top: var(--landing-sticker-edge); }
+}
+
+/* Dark landing, part 2: the few places that name a light-only colour. */
+html[data-theme="dark"] .landing-logo img { background: var(--landing-surface); }
+html[data-theme="dark"] .landing-values { background: color-mix(in srgb, var(--landing-highlight) 12%, var(--landing-bg-base)); }
+html[data-theme="dark"] .landing-gallery::before, html[data-theme="dark"] .landing-schedule::before { background-image: radial-gradient(circle, color-mix(in srgb, var(--landing-surface) 7%, transparent) 1.4px, transparent 1.4px); }
+
+/* The map is the one bright, unthemed block on the page: dim its tiles a step so it sits in the dark ladder instead of glaring (the pins and labels stay legible). */
+html[data-theme="dark"] .landing-map .leaflet-tile-pane { filter: brightness(0.72) contrast(1.05) saturate(0.8); }
+
+/* Theme toggle: the navbar's second sticker, same 44px target as the nav links. */
+.landing-nav-actions { display: flex; align-items: center; gap: 12px; }
+/* @touch-target 44px, the floor every landing control keeps. */
+.landing-theme-toggle { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; padding: 0; border: var(--landing-sticker-edge); border-radius: 12px; background: var(--landing-card); color: var(--landing-text-strong); box-shadow: 3px 3px 0 var(--landing-drop); cursor: pointer; touch-action: manipulation; transition: transform 160ms ease, box-shadow 160ms ease; }
+.landing-theme-toggle:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--landing-drop-red); }
+.landing-theme-toggle:focus-visible { outline: 3px solid var(--landing-focus); outline-offset: 3px; }
+.landing-theme-toggle svg { width: 20px; height: 20px; }
+/* The toggle takes ~50px from the navbar's first row, where the lockup and ENTRAR
+   already filled a 390px phone: tighten both so the row stays one row (the link
+   strip is the second). At 380px and below the arrow gives way as well. */
+@media (max-width: 480px) {
+  .landing-nav-actions { gap: 8px; }
+  .landing-nav-cta { padding-inline: 12px; }
+  .landing-logo { gap: 8px; font-size: 16px; letter-spacing: 0.4px; }
+  .landing-logo small { letter-spacing: 2px; }
+}
+@media (max-width: 380px) {
+  .landing-nav-cta svg { display: none; }
 }
 
 /* ── Launch curtain (home only, removed after the launch instant) ───────── */

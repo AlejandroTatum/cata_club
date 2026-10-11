@@ -55,7 +55,7 @@ export function ProofPreview({
           className="flex h-16 w-16 flex-none flex-col items-center justify-center gap-0.5 rounded-ctl border border-line bg-paper text-state-bad"
         >
           <FileText size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />
-          <span className="text-2xs font-bold uppercase">PDF</span>
+          <span className="text-2xs font-bold uppercase tracking-caps">PDF</span>
         </span>
       )}
       <div className="min-w-0 flex-1">

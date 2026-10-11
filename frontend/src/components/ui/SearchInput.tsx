@@ -59,7 +59,7 @@ export default function SearchInput({
         className="min-w-0 flex-1 bg-transparent text-xs text-ink outline-none placeholder:text-ink-3"
       />
       {shortcut ? (
-        <kbd className="flex-none rounded-[5px] border border-line-2 px-[5px] py-[2px] text-2xs tracking-flat font-bold text-ink-3">
+        <kbd className="flex-none font-sans rounded-[5px] border border-line-2 px-[5px] py-[2px] text-2xs tracking-flat font-bold text-ink-3">
           {shortcut}
         </kbd>
       ) : null}

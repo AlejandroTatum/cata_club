@@ -201,7 +201,7 @@ const ROSTER: readonly (readonly [string, number])[] = [
   // `max-width: 768px` override that once shrank a link to 40px and the mobile
   // bar's WhatsApp button. (The Valores tablero's scroll cue into Logros left
   // with the section in issue #1372.)
-  ["app/landing/landing.css", 9],
+  ["app/landing/landing.css", 10],
 ];
 
 describe("a promised touch surface stays at 44px", () => {

@@ -23,7 +23,7 @@ export const FIELD_CLASSES =
   "h-ctl w-full rounded-ctl border border-line-2 bg-paper px-3.5 text-sm text-ink " +
   "placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-45";
 
-const FIELD_LABEL_CLASSES = "text-2xs font-bold uppercase text-ink-3-strong";
+const FIELD_LABEL_CLASSES = "text-2xs font-bold uppercase tracking-caps text-ink-3-strong";
 
 /** Parse an ISO date at local noon — the same anchoring `format-utils` uses, for the same reason. */
 export function fromIsoDate(iso: string): Date {
@@ -657,7 +657,7 @@ function RenewPaymentForm({
 
       {/* The consequence of the months chosen, stated before the reader commits to it. */}
       <div className="rounded-ctl bg-sunken px-3.5 py-3">
-        <p className="text-2xs font-bold uppercase text-ink-3-strong">
+        <p className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
           Período que cubre
         </p>
         <p className="mt-1 text-sm font-bold tabular-nums text-ink">
@@ -743,7 +743,7 @@ function RenewPaymentForm({
            screen and still editable above it. A modal would have dimmed
            exactly the numbers the reader is being asked to check. */
         <div data-testid="renew-confirm" className="rounded-ctl border border-line-2 bg-sunken px-4 py-4">
-          <p className="text-2xs font-bold uppercase text-ink-3-strong">
+          <p className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
             Confirma antes de registrar
           </p>
           <p id="renew-confirm-summary" className="mt-1.5 max-w-[68ch] text-sm leading-relaxed text-ink">
@@ -906,7 +906,7 @@ function ApplyBenefitForm({
       )}
 
       <div className="rounded-ctl bg-sunken px-3.5 py-3">
-        <p className="text-2xs font-bold uppercase text-ink-3-strong">Período que cubre</p>
+        <p className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">Período que cubre</p>
         <p className="mt-1 text-sm font-bold tabular-nums text-ink">
           {fechaInicio && fechaFin ? formatDateRange(fechaInicio, fechaFin) : "—"}
         </p>
@@ -923,7 +923,7 @@ function ApplyBenefitForm({
 
       {action.confirming ? (
         <div data-testid="benefit-confirm" className="rounded-ctl border border-line-2 bg-sunken px-4 py-4">
-          <p className="text-2xs font-bold uppercase text-ink-3-strong">Confirma antes de aplicar</p>
+          <p className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">Confirma antes de aplicar</p>
           <p id="benefit-confirm-summary" className="mt-1.5 max-w-[68ch] text-sm leading-relaxed text-ink">
             Vas a aplicar tu beneficio del 100%{" "}
             {studentName ? (

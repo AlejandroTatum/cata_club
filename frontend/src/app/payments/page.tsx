@@ -340,7 +340,7 @@ function MethodTag({ method }: { method: string }): React.ReactElement {
 /** The one label style the detail card uses, in both of its shapes. */
 function DetailLabel({ children }: { children: React.ReactNode }): React.ReactElement {
   return (
-    <span className="text-2xs font-bold uppercase text-ink-3-strong">{children}</span>
+    <span className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">{children}</span>
   );
 }
 
@@ -1653,7 +1653,7 @@ export default function PaymentsPage(): React.ReactElement {
             <MethodIcon size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-2xs font-bold uppercase text-ink-3-strong">
+            <p className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
               {paymentKind === "efectivo"
                 ? "Pago en efectivo"
                 : paymentKind === "transferencia"
@@ -1786,7 +1786,7 @@ export default function PaymentsPage(): React.ReactElement {
                 </div>
 
                 <div className="flex flex-col gap-4 px-[18px] py-4">
-                  <h3 id="antes-de-aprobar" className="text-2xs font-bold uppercase text-ink-3-strong">
+                  <h3 id="antes-de-aprobar" className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
                     Antes de aprobar
                   </h3>
                   {/* `checklist.note` no se dibuja: las preguntas ya dicen qué
@@ -1833,7 +1833,7 @@ export default function PaymentsPage(): React.ReactElement {
                         POR QUÉ se aprueba sin la evidencia habitual. */}
                     {needsExceptionReason && (
                       <label className="flex flex-col gap-1.5">
-                        <span className="flex items-baseline justify-between text-2xs font-bold uppercase text-ink-3-strong">
+                        <span className="flex items-baseline justify-between text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
                           <span>
                             Motivo de la excepción (transferencia sin comprobante){" "}
                             <span className="text-state-bad">*</span>
@@ -1925,7 +1925,7 @@ export default function PaymentsPage(): React.ReactElement {
                     </p>
 
                     <fieldset className="flex flex-col gap-2">
-                      <legend className="mb-1 text-2xs font-bold uppercase text-ink-3-strong">
+                      <legend className="mb-1 text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
                         Motivo <span className="text-state-bad">*</span>
                       </legend>
                       {rejectionReasonsFor(paymentKind).map((reason) => (
@@ -1960,7 +1960,7 @@ export default function PaymentsPage(): React.ReactElement {
                     </fieldset>
 
                     <label className="flex flex-col gap-1.5">
-                      <span className="flex items-baseline justify-between text-2xs font-bold uppercase text-ink-3-strong">
+                      <span className="flex items-baseline justify-between text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
                         <span>Nota para el responsable (opcional)</span>
                         <span
                           className={`font-normal normal-case tabular-nums ${

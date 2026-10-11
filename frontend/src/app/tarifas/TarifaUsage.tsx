@@ -57,7 +57,7 @@ export default function TarifaUsage(): React.ReactElement {
             </span>
             <h3 className="text-sm font-bold text-ink">{title}</h3>
             <p className="text-sm text-ink-2">{what}</p>
-            <p className="mt-auto border-t border-line pt-3 text-xs text-ink-3">{note}</p>
+            <p className="mt-auto border-t border-line pt-3 text-xs text-ink-3-strong">{note}</p>
           </li>
         ))}
       </ul>

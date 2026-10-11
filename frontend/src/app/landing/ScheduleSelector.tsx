@@ -17,7 +17,7 @@ import ScheduleReveal from "./ScheduleReveal";
 const CARD_PALETTE = [
   { ground: "var(--landing-brand-red)", ink: "var(--landing-surface)", ctaGround: "var(--landing-brand-yellow)", ctaInk: "var(--landing-brand-black)" },
   { ground: "var(--landing-brand-yellow)", ink: "var(--landing-brand-black)", ctaGround: "var(--landing-brand-black)", ctaInk: "var(--landing-surface)" },
-  { ground: "var(--landing-surface)", ink: "var(--landing-brand-black)", ctaGround: "var(--landing-brand-red)", ctaInk: "var(--landing-surface)" },
+  { ground: "var(--landing-card)", ink: "var(--landing-text-strong)", ctaGround: "var(--landing-brand-red)", ctaInk: "var(--landing-surface)" },
   { ground: "var(--landing-brand-yellow)", ink: "var(--landing-brand-black)", ctaGround: "var(--landing-brand-black)", ctaInk: "var(--landing-surface)" },
 ] as const;
 

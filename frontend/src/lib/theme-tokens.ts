@@ -68,7 +68,13 @@ export const DARK_COLORS: Readonly<Record<string, string>> = {
   // The text-weight yellow and pink companions.
   "ball.ink": "#FFD600",
   "cata.fuchsia-ink": "#FF7DB0",
+  // The red text ink (auth links, legal eyebrows): never a fill, so it follows the theme.
+  "cata.red-dark": "#FF9096",
   "enroll-wash": "#2A1E20",
+  // Icon chips: a dark tint of the hue with the hue itself as the ink.
+  "chip.ball": "#3A3210",
+  "chip.red": "#3F1B1E",
+  "chip.red-ink": "#FF9096",
   // Status pairs: a light foreground on its own dark tint.
   "state.ok": "#62D892",
   "state.ok-bg": "#14301F",
