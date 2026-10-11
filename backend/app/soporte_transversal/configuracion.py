@@ -193,6 +193,8 @@ _CAMPOS_EXCLUIDOS_A_PROPOSITO: dict[str, str] = {
     "jwt_algoritmo": "constante de la aplicación (HS256), no un valor por despliegue",
     "jwt_expira_minutos": "política de sesión con default seguro; int, nunca queda vacío",
     "jwt_refresh_expira_dias": "idem jwt_expira_minutos: política de sesión con default seguro",
+    "sesion_inactividad_horas": "idem jwt_expira_minutos: política de sesión con default seguro",
+    "sesion_gracia_rotacion_segundos": "idem jwt_expira_minutos: política de sesión con default seguro",
     "redis_url": (
         "coordenada de red interna fijada en docker-compose.yml "
         "(redis://redis:6379/0), no un secreto por despliegue"
@@ -448,6 +450,11 @@ class Settings(BaseSettings):
     jwt_algoritmo: str = "HS256"
     jwt_expira_minutos: int = 60
     jwt_refresh_expira_dias: int = 7
+    # Sesión (#1653): ventana inactiva deslizante y gracia de la rotación del
+    # refresh. El tope absoluto es `jwt_refresh_expira_dias`, contado desde
+    # `Sesion.iniciada_en`.
+    sesion_inactividad_horas: int = 24
+    sesion_gracia_rotacion_segundos: int = 30
 
     @field_validator("jwt_secret_key")
     @classmethod
