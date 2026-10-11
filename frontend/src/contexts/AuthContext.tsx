@@ -332,6 +332,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // discardInFlightAuthRequests's own doc comment for why this is a
     // client-side mitigation, not a full guarantee).
     loggingOutRef.current = true;
+    // An explicit logout ends the session on purpose: nothing is left to
+    // "expire". A data request already in flight when the button was clicked
+    // 401s once the logout route clears the cookies, its refresh fails, and
+    // `subscribeAuthFailure` below would label the redirect `sesion-expirada`
+    // (flaky logout.live.spec.ts). Clearing `hadSessionRef` here -- until the
+    // next `login()` sets it again -- keeps that late failure silent whether
+    // it lands before or after this logout settles.
+    hadSessionRef.current = false;
+    setSessionExpired(false);
     // Bumped here, not in the `finally` below: any `revalidate()` whose
     // `await` straddles this point — already in flight when the click
     // landed — must find a DIFFERENT epoch than the one it captured, no
