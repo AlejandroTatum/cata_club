@@ -51,9 +51,9 @@ async def login(
     password: str = Form(...),
     db: Session = Depends(obtener_sesion),
 ):
-    # El user-agent alimenta SOLO el registro observacional de sesiones (ver
-    # `AuthServicio._registrar_sesion`). No participa de la autenticación: un
-    # cliente que no lo manda entra igual.
+    # El user-agent solo etiqueta el dispositivo de la fila `sesion` que abre
+    # el login (ver `AuthServicio._registrar_sesion`). No participa de la
+    # autenticación: un cliente que no lo manda entra igual.
     #
     # `username`/`password` sueltos en vez de `OAuth2PasswordRequestForm`:
     # ese DTO de FastAPI no expone un tope de longitud configurable en
