@@ -9,7 +9,7 @@
  * Shape (T14B): one flat toolbar (search + bulk choose/clear), ONE card for the
  * list, and a selection bar that says how many are chosen and why printing is
  * not available yet. The bar is pinned to the bottom edge on a phone — above
- * the tab bar, flagged `data-bottom-bar` so the report launcher steps over it —
+ * the tab bar —
  * and a sticky side panel from `lg`. The list scrolls with the page: a second
  * scrollbar inside the page hid the bar's own rows on a phone.
  */
@@ -78,7 +78,7 @@ export default function CarnetPicker(): React.ReactElement {
       data-testid="carnet-picker"
       className={`${PAGE_RAIL} max-lg:pb-24`}
     >
-      <div className="flex min-w-0 flex-col gap-3">
+      <div className="flex min-w-0 flex-col gap-2">
         <FilterPanel
           bare
           label="Buscar y elegir jugadores"

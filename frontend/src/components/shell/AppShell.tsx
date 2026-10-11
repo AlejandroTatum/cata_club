@@ -32,7 +32,7 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import ReportProblemFab from "./ReportProblemFab";
+import ReportProblemButton from "./ReportProblemButton";
 import AccountMenu from "./AccountMenu";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import {
@@ -971,6 +971,7 @@ export default function AppShell({
               Ctrl K
             </kbd>
           </button>
+          <ReportProblemButton />
           {/* The dark-mode control sits right beside the bell, on every screen
               and for every role — and again inside the account menu. */}
           <ThemeToggle variant="bar" />
@@ -993,10 +994,9 @@ export default function AppShell({
         </div>
 
         {/* `.canvas` — the page header row belongs to the shell, above `<main>`.
-            The extra bottom padding clears the fixed tab bar (62px) AND the
-            report launcher above it (16px gap + 44px + 16px, see
-            `ReportProblemFab`); without it the last row of every list sits
-            under one of them. 142px = 62 + 16 + 44 + 16 + 4; 80px without tabs.
+            The extra bottom padding clears the fixed tab bar (62px); without it
+            the last row of every list sits under it. 96px = 62 + 34; 80px
+            without tabs.
 
             `pt-3`, was `pt-6`: with the divider removed the title no longer
             opens a second slab, so it only needs to clear the utility row —
@@ -1004,7 +1004,7 @@ export default function AppShell({
             margin. */}
         <div
           className={`flex flex-1 flex-col gap-page px-4 pt-3 sm:px-[26px] ${
-            showMobileTabs ? "pb-[142px] lg:pb-20" : "pb-20"
+            showMobileTabs ? "pb-[96px] lg:pb-20" : "pb-20"
           }`}
         >
           {/* The page's back control (#1396) — see `AppShellProps.back`. It
@@ -1109,8 +1109,6 @@ export default function AppShell({
           </nav>
         )}
       </div>
-
-      <ReportProblemFab />
 
       {/* Command palette — "go to" navigation search, role-aware */}
       {paletteOpen && (

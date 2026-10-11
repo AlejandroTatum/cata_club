@@ -639,7 +639,7 @@ export default function TarifasPage(): React.ReactElement {
           ? `$ ${min.toFixed(2)}`
           : `$ ${min.toFixed(2)} – $ ${max.toFixed(2)}`;
     return (
-      <InfoPanel title="Resumen del catálogo">
+      <InfoPanel title="Resumen del catálogo" collapsible={false}>
         <dl className="grid grid-cols-2 gap-section">
           <div>
             <dt className="text-2xs font-bold uppercase tracking-caps text-ink-3">Tarifas</dt>

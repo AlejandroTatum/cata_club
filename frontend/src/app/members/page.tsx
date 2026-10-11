@@ -1034,6 +1034,7 @@ function MembersRail({
     <div className="grid content-start gap-page" data-testid="members-rail">
       <InfoPanel
         title="Requiere atención"
+        collapsible={false}
         className="border-state-warn/30"
       >
         <ul className="-mx-3 grid gap-1">

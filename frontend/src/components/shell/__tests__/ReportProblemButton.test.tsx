@@ -1,7 +1,7 @@
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import ReportProblemFab from "../ReportProblemFab";
+import ReportProblemButton from "../ReportProblemButton";
 import { keepNode } from "../../report-problem/capture";
 
 const mockPathname = vi.hoisted(() => ({ value: "/dashboard" }));
@@ -22,12 +22,12 @@ afterEach((): void => {
   document.body.innerHTML = "";
 });
 
-describe("ReportProblemFab", (): void => {
+describe("ReportProblemButton", (): void => {
   it.each(["/dashboard", "/student", "/trainer/attendance", "/admin/reportes-error", "/profile"])(
     "shows the named button on signed-in app route %s",
     (route): void => {
       mockPathname.value = route;
-      render(<ReportProblemFab />);
+      render(<ReportProblemButton />);
       expect(screen.getByRole("button", { name: "Reportar un problema" })).toBeInTheDocument();
     },
   );
@@ -36,7 +36,7 @@ describe("ReportProblemFab", (): void => {
     "is absent on non-app route %s",
     (route): void => {
       mockPathname.value = route;
-      render(<ReportProblemFab />);
+      render(<ReportProblemButton />);
       expect(screen.queryByRole("button", { name: "Reportar un problema" })).not.toBeInTheDocument();
     },
   );
@@ -44,52 +44,47 @@ describe("ReportProblemFab", (): void => {
   it("is absent without a session, even on an app route", (): void => {
     mockSession.value = null;
     mockPathname.value = "/ayuda";
-    render(<ReportProblemFab />);
+    render(<ReportProblemButton />);
     expect(screen.queryByRole("button", { name: "Reportar un problema" })).not.toBeInTheDocument();
   });
 
   it("captures the screen, then opens the report dialog", async (): Promise<void> => {
     captureViewport.mockResolvedValue(new File(["x"], "captura-pantalla.jpg", { type: "image/jpeg" }));
-    render(<ReportProblemFab />);
+    render(<ReportProblemButton />);
     fireEvent.click(screen.getByRole("button", { name: "Reportar un problema" }));
     expect(await screen.findByRole("dialog", { name: "Reportar un problema" })).toBeInTheDocument();
     expect(captureViewport).toHaveBeenCalledTimes(1);
-    // The launcher steps aside while the dialog is up.
-    expect(screen.queryByRole("button", { name: "Reportar un problema" })).not.toBeInTheDocument();
   });
 
-  it("is excluded from the screen capture and meets the touch target", (): void => {
-    render(<ReportProblemFab />);
+  it("is excluded from the screen capture and meets the touch-target floor", (): void => {
+    render(<ReportProblemButton />);
     const button = screen.getByRole("button", { name: "Reportar un problema" });
     expect(keepNode(button)).toBe(false);
-    expect(button.className).toMatch(/min-h-\[44px\]/);
-    expect(button.className).toMatch(/focus-visible:/);
+    expect(button.className).toMatch(/touch-target/);
   });
 
-  it("hides while another modal dialog is open and returns when it closes", async (): Promise<void> => {
-    render(<ReportProblemFab />);
-    const modal = document.createElement("div");
-    modal.setAttribute("role", "dialog");
-    modal.setAttribute("aria-modal", "true");
-    await act(async (): Promise<void> => { document.body.appendChild(modal); });
-    await waitFor((): void => {
-      expect(screen.queryByRole("button", { name: "Reportar un problema" })).not.toBeInTheDocument();
-    });
-    await act(async (): Promise<void> => { modal.remove(); });
-    await waitFor((): void => {
-      expect(screen.getByRole("button", { name: "Reportar un problema" })).toBeInTheDocument();
-    });
+  it("stays mounted while the dialog is up, so focus can return to it", async (): Promise<void> => {
+    captureViewport.mockResolvedValue(new File(["x"], "captura-pantalla.jpg", { type: "image/jpeg" }));
+    render(<ReportProblemButton />);
+    fireEvent.click(screen.getByRole("button", { name: "Reportar un problema" }));
+    await screen.findByRole("dialog", { name: "Reportar un problema" });
+    expect(screen.getAllByRole("button", { name: "Reportar un problema" }).length).toBeGreaterThan(0);
   });
 });
 
-describe("ReportProblemFab — never covers content (T14 RC4)", (): void => {
-  it("is an icon on a phone and keeps its accessible name", (): void => {
-    render(<ReportProblemFab />);
+describe("ReportProblemButton — never covers content (T14 RC4)", (): void => {
+  it("sits in the flow, not fixed over the page", (): void => {
+    render(<ReportProblemButton />);
+    const button = screen.getByRole("button", { name: "Reportar un problema" });
+    expect(button.className).not.toMatch(/\b(fixed|absolute|sticky)\b/);
+    expect(button.style.bottom).toBe("");
+  });
+
+  it("is an icon below lg and keeps its accessible name", (): void => {
+    render(<ReportProblemButton />);
     const button = screen.getByRole("button", { name: "Reportar un problema" });
     expect(button).toHaveAttribute("title", "Reportar un problema");
-    expect(button.className).toMatch(/max-md:w-11/);
-    expect(button.className).toMatch(/max-md:px-0/);
-    // The words are screen-reader-only below `md`, not removed.
-    expect(button.querySelector("span")?.className).toMatch(/max-md:sr-only/);
+    expect(button.className).toMatch(/max-lg:h-11 max-lg:w-11/);
+    expect(button.querySelector("span")?.className).toMatch(/max-lg:sr-only/);
   });
 });

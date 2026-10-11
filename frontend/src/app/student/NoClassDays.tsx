@@ -37,7 +37,7 @@ export default function NoClassDays(): React.ReactElement | null {
   if (days.length === 0) return null;
 
   return (
-    <InfoPanel title="Días sin clase">
+    <InfoPanel title="Días sin clase" collapsible={false}>
       <ul className="flex flex-col gap-2">
         {days.map((day) => (
           <li key={day.id} className="flex items-start gap-2">

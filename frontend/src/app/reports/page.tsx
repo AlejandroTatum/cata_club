@@ -885,7 +885,7 @@ function ReportsContent(): React.ReactElement {
         </div>
 
         <div data-testid="reports-rail" className="grid content-start gap-page lg:sticky lg:top-4">
-          <InfoPanel title="Resumen del informe">
+          <InfoPanel title="Resumen del informe" collapsible={false}>
             <p data-testid="report-summary" className="font-bold text-ink">
               {summary}
             </p>

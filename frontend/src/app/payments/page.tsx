@@ -147,7 +147,7 @@ import {
   FilterPill,
   InfoPanel,
   LoadingState,
-  PAGE_RAIL,
+  PAGE_RAIL_XL,
   ResponsiveList,
   SearchInput,
   STAT_GRID,
@@ -1304,8 +1304,8 @@ export default function PaymentsPage(): React.ReactElement {
           />
         </div>
 
-        <div className={PAGE_RAIL}>
-          <div className="flex min-w-0 flex-col gap-page lg:min-h-[calc(100dvh-23rem)]">
+        <div className={PAGE_RAIL_XL}>
+          <div className="flex min-w-0 flex-col gap-page xl:min-h-[calc(100dvh-23rem)]">
         {/* This screen used to read the other way round — chips first, search
             on its own line underneath — which was the exact inverse of
             Members. `FilterPanel` renders the slots in one fixed order, so the
@@ -1425,11 +1425,12 @@ export default function PaymentsPage(): React.ReactElement {
                 // a proof. The way out is the screen where a payment gets
                 // registered, which is the same destination the rest of the
                 // panel already names.
-                <Link href="/members" className={buttonClasses("secondary")}>
+                <Link href="/members" className={buttonClasses("secondary", "md", "max-md:min-h-11")}>
                   Ir a Miembros
                 </Link>
               ) : (
                 <Button
+                  className="max-md:min-h-11"
                   onClick={() => {
                     setActiveFilter("all");
                     setQuery("");
@@ -1448,6 +1449,9 @@ export default function PaymentsPage(): React.ReactElement {
             breakpoint="md"
             order="tableFirst"
             tableTestId="payments-table"
+            // Six columns beside a 340px rail: 12px cell padding instead of 16
+            // is what lets the name keep 208px without a scroller of its own.
+            tableClassName="[&_td]:px-3 [&_th]:px-3"
             cardsTestId="payments-cards"
             items={visibleItems}
             getKey={(req) => req.id}
@@ -1456,7 +1460,6 @@ export default function PaymentsPage(): React.ReactElement {
               <TableHeaderCell key="periodo" type="text">Período</TableHeaderCell>,
               <TableHeaderCell key="monto" type="number">Monto</TableHeaderCell>,
               <TableHeaderCell key="metodo" type="text">Método</TableHeaderCell>,
-              <TableHeaderCell key="subido" type="text">Subido</TableHeaderCell>,
                   <TableHeaderCell key="estado" type="text">Estado</TableHeaderCell>,
               <TableHeaderCell key="accion" type="action">
                 <span className="sr-only">Acción</span>
@@ -1467,16 +1470,28 @@ export default function PaymentsPage(): React.ReactElement {
               const fields = buildRowFields(req);
               return (
                 <TableRow>
+                  {/* `min-w-52`: with six columns in the two-thirds beside the
+                      rail, the name used to take whatever the others left
+                      (102px at 1440), so "Isabella Pilay Sabando" broke into
+                      four lines and the row doubled in height. */}
                   <TableNameCell
+                    className="min-w-52"
                     name={<span id={desktopNameId}>{fields.studentName}</span>}
                     sub={fields.payer}
                   />
-                  <TableCell type="text">{fields.period}</TableCell>
+                  {/* How long it has waited rides under the period: it is a
+                      property of the same payment, and its own column was the
+                      one squeezing the name. */}
+                  <TableCell type="text">
+                    <span className="block">{fields.period}</span>
+                    {fields.waiting ? (
+                      <span className="mt-px block text-xs text-ink-3-strong">{fields.waiting}</span>
+                    ) : null}
+                  </TableCell>
                   <TableCell type="number">{fields.amount}</TableCell>
                   <TableCell type="text">
                     <MethodTag method={fields.method} />
                   </TableCell>
-                  <TableCell type="text">{fields.waiting}</TableCell>
                       <TableCell type="text">
                         <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
                           {VALIDATION_STATUS_LABELS[req.validationStatus]}
@@ -1550,7 +1565,7 @@ export default function PaymentsPage(): React.ReactElement {
           </div>
 
           <div className="grid min-w-0 content-start gap-page">
-            <InfoPanel title="Pagos por revisar">
+            <InfoPanel title="Pagos por revisar" collapsible={false}>
               <p>
                 {pendingAllError
                   ? "No se pudo leer la lista de pendientes."
@@ -1560,6 +1575,7 @@ export default function PaymentsPage(): React.ReactElement {
               </p>
               <Button
                 variant="primary"
+                className="max-md:min-h-11"
                 disabled={pending.length === 0}
                 onClick={() => setSelectedId(pending[0]?.id ?? null)}
               >
@@ -1864,7 +1880,7 @@ export default function PaymentsPage(): React.ReactElement {
                     {/* Below `lg` the decision lives in a bar pinned above the
                         admin tab bar (62px, `AppShell`), so the buttons stay
                         reachable however long the checklist is. The shell's
-                        `pb-[142px]` already keeps the end of the page clear of
+                        `pb-[96px]` already keeps the end of the page clear of
                         both. From `lg` it is the plain inline row. */}
                     <div
                       data-testid="payment-decision-bar"
