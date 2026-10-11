@@ -3,9 +3,9 @@
 Revision ID: y1653sesionrotacion
 Revises: x1709diasinclased1
 
-Aditiva y compatible hacia atrás: cinco columnas NULLABLE en `sesion`
+Aditiva y compatible hacia atrás: seis columnas NULLABLE en `sesion`
 (`refresh_jti`, `refresh_jti_anterior`, `rotado_en`, `ultimo_uso_en`,
-`revocada_en`). Sin backfill: una fila con `refresh_jti` nulo es una sesión
+`revocada_en`, `legacy_huella` con índice único). Sin backfill: una fila con `refresh_jti` nulo es una sesión
 anterior al despliegue, y su refresh sin `jti` se acepta una vez y se migra al
 esquema nuevo (S3). El código anterior ignora las columnas.
 """
@@ -26,9 +26,13 @@ def upgrade() -> None:
     op.add_column("sesion", sa.Column("rotado_en", sa.DateTime(timezone=True), nullable=True))
     op.add_column("sesion", sa.Column("ultimo_uso_en", sa.DateTime(timezone=True), nullable=True))
     op.add_column("sesion", sa.Column("revocada_en", sa.DateTime(timezone=True), nullable=True))
+    op.add_column("sesion", sa.Column("legacy_huella", sa.String(length=64), nullable=True))
+    op.create_index("uq_sesion_legacy_huella", "sesion", ["legacy_huella"], unique=True)
 
 
 def downgrade() -> None:
+    op.drop_index("uq_sesion_legacy_huella", table_name="sesion")
+    op.drop_column("sesion", "legacy_huella")
     op.drop_column("sesion", "revocada_en")
     op.drop_column("sesion", "ultimo_uso_en")
     op.drop_column("sesion", "rotado_en")

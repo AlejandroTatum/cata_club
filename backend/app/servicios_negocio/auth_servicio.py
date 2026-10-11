@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import math
 import time
@@ -340,6 +341,7 @@ class AuthServicio:
 
     def _registrar_sesion(
         self, usuario: Usuario, user_agent: str | None, iniciada_en: datetime | None = None,
+        legacy_huella: str | None = None, rotado_en: datetime | None = None,
     ) -> Sesion:
         """Abre la sesión de un par de tokens: la fila nace con el `jti` del
         primer refresh y su actividad en este instante (ver `Sesion`).
@@ -353,8 +355,8 @@ class AuthServicio:
         pueda DERIVAR si sigue viva. Nada se limpia acá: revocar todas las
         sesiones bombea el epoch y no toca esta tabla.
 
-        `iniciada_en` solo lo pasa la adopción de un refresh legacy sin `sid`:
-        la sesión empezó en el login original, no ahora (ver `refrescar_sesion`).
+        `iniciada_en`, `legacy_huella` y `rotado_en` solo los pasa la adopción
+        de un refresh legacy sin `sid` (ver `_sesion_de_legacy_sin_sid`).
         """
         sesion = Sesion(
             usuario_id=usuario.id,
@@ -365,6 +367,8 @@ class AuthServicio:
         )
         if iniciada_en is not None:
             sesion.iniciada_en = iniciada_en
+        sesion.legacy_huella = legacy_huella
+        sesion.rotado_en = rotado_en
         self.db.add(sesion)
         self.db.commit()
         self.db.refresh(sesion)
@@ -698,7 +702,9 @@ class AuthServicio:
              reemite un par con el `jti` VIGENTE, sin rotar de nuevo, para que
              el deploy no desloguee a nadie. Fuera de la gracia, o sobre una
              fila nacida de un login (`rotado_en` nulo), es reuso y revoca.
-             Sin `sid` se abre una sesión nueva.
+             Sin `sid`, el primer uso abre una sesión con la huella del token
+             (índice único) y los siguientes caen en esa fila con las mismas
+             reglas de adopción: gracia o reuso (`_sesion_de_legacy_sin_sid`).
 
         La fila se bloquea (`FOR UPDATE`) mientras se decide: dos refresh
         simultáneos con el mismo `jti` se serializan y el segundo ve el estado
@@ -740,20 +746,12 @@ class AuthServicio:
         ahora = datetime.now(timezone.utc)
         sid = payload.get("sid")
         jti = payload.get("jti")
+        recien_abierta = False
         if sid is None and jti is None:
-            # Legacy sin `sid`: no hay fila que adoptar, se abre una. Sin `iat`,
-            # el login original se deriva del `exp` (emisión + vida del refresh):
-            # así el tope absoluto sigue contando desde ese login y no desde el
-            # deploy.
-            exp = payload.get("exp")
-            if not isinstance(exp, (int, float)) or isinstance(exp, bool):
-                raise CredencialesInvalidas("Refresh token inválido o expirado")
-            emitido_en = datetime.fromtimestamp(exp, tz=timezone.utc) - timedelta(
-                days=settings.jwt_refresh_expira_dias
-            )
-            sesion = self._registrar_sesion(usuario, None, iniciada_en=min(emitido_en, ahora))
+            sesion, recien_abierta = self._sesion_de_legacy_sin_sid(usuario, refresh_token, payload, ahora)
         else:
             sesion = self._sesion_bloqueada(usuario, sid)
+        if not recien_abierta:
             if sesion is None or sesion.revocada_en is not None:
                 raise CredencialesInvalidas("Refresh token inválido o expirado")
             if ahora - sesion.iniciada_en > timedelta(days=settings.jwt_refresh_expira_dias):
@@ -767,6 +765,44 @@ class AuthServicio:
         tokens = self._armar_par_tokens(usuario, sesion.id, sesion.refresh_jti)
         actividad.registrar_sin_fallar(self.db, usuario.id)
         return tokens
+
+    def _sesion_de_legacy_sin_sid(
+        self, usuario: Usuario, refresh_token: str, payload: dict, ahora: datetime,
+    ) -> tuple[Sesion, bool]:
+        """S3, refresh legacy SIN `sid`: la fila de su primer uso guarda la
+        huella del token (índice único); un uso posterior cae en ella y sigue
+        `_adoptar_legacy` (gracia o reuso), y un primer uso simultáneo que
+        choca en el índice lee la del ganador. Sin `iat`, el inicio se deriva
+        del `exp`, así el tope absoluto cuenta desde el login original."""
+        huella = hashlib.sha256(refresh_token.encode()).hexdigest()
+        existente = self._sesion_legacy_bloqueada(usuario, huella)
+        if existente is not None:
+            return existente, False
+        exp = payload.get("exp")
+        if not isinstance(exp, (int, float)) or isinstance(exp, bool):
+            raise CredencialesInvalidas("Refresh token inválido o expirado")
+        emitido_en = datetime.fromtimestamp(exp, tz=timezone.utc) - timedelta(
+            days=settings.jwt_refresh_expira_dias
+        )
+        try:
+            sesion = self._registrar_sesion(
+                usuario, None, iniciada_en=min(emitido_en, ahora), legacy_huella=huella, rotado_en=ahora,
+            )
+        except IntegrityError:
+            self.db.rollback()
+            ganadora = self._sesion_legacy_bloqueada(usuario, huella)
+            if ganadora is None:
+                raise
+            return ganadora, False
+        return sesion, True
+
+    def _sesion_legacy_bloqueada(self, usuario: Usuario, huella: str) -> Sesion | None:
+        return (
+            self.db.query(Sesion)
+            .filter(Sesion.legacy_huella == huella, Sesion.usuario_id == usuario.id)
+            .with_for_update()
+            .one_or_none()
+        )
 
     def _sesion_bloqueada(self, usuario: Usuario, sid: object) -> Sesion | None:
         """La fila `sesion` de `sid`, bloqueada, solo si es de `usuario`."""

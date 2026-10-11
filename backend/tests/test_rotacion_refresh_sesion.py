@@ -11,7 +11,8 @@ Reglas (un test por regla):
   S2  ventana inactiva de 24 h deslizante y tope absoluto de 7 d desde
       `iniciada_en`: ambos revocan y rechazan.
   S3  transición: un refresh legacy (sin `jti`) se acepta UNA vez; con `sid`
-      adopta la fila, sin `sid` abre una sesión. El segundo uso es reuso.
+      adopta la fila, sin `sid` abre una sesión con la huella del token. El
+      segundo uso, pasada la gracia, es reuso.
 
 El tiempo se congela escribiendo las marcas de la fila `sesion`
 (`ultimo_uso_en`, `iniciada_en`, `rotado_en`): las reglas se leen de la fila,
@@ -252,6 +253,43 @@ def test_legacy_sin_sid_abre_una_sesion_y_rota(client_sin_token, usuario, db_ses
     fila = db_session.get(Sesion, claims_refresh["sid"])
     assert fila.usuario_id == usuario.id
     assert fila.refresh_jti == claims_refresh["jti"]
+
+
+def test_legacy_sin_sid_pasada_la_gracia_el_segundo_uso_es_reuso(
+    client_sin_token, usuario, db_session
+):
+    """S3: aceptado UNA vez. El segundo uso del mismo token sin `sid` no abre
+    otra sesión: es reuso y revoca la que abrió el primero."""
+    legacy = _refresh_legacy(usuario)
+    primero = _refrescar(client_sin_token, legacy)
+    assert primero.status_code == 200
+    sid = _claims(primero.json()["refresh_token"])["sid"]
+    fila = _fila(db_session, sid)
+    fila.rotado_en = _ahora() - timedelta(seconds=settings.sesion_gracia_rotacion_segundos + 5)
+    db_session.commit()
+    antes = db_session.query(Sesion).filter(Sesion.usuario_id == usuario.id).count()
+
+    assert _refrescar(client_sin_token, legacy).status_code == 401
+    db_session.expire_all()
+    assert db_session.query(Sesion).filter(Sesion.usuario_id == usuario.id).count() == antes
+    assert _fila(db_session, sid).revocada_en is not None
+
+
+def test_legacy_sin_sid_dentro_de_la_gracia_reemite_la_misma_sesion(
+    client_sin_token, usuario, db_session
+):
+    """Dos refresh paralelos del BFF con la misma cookie legacy al deploy: el
+    segundo es la carrera benigna, reemite el `jti` vigente de la MISMA fila."""
+    legacy = _refresh_legacy(usuario)
+    primero = _refrescar(client_sin_token, legacy)
+    segundo = _refrescar(client_sin_token, legacy)
+
+    assert segundo.status_code == 200
+    claims_1 = _claims(primero.json()["refresh_token"])
+    claims_2 = _claims(segundo.json()["refresh_token"])
+    assert claims_2["sid"] == claims_1["sid"]
+    assert claims_2["jti"] == claims_1["jti"]
+    assert _fila(db_session, claims_1["sid"]).revocada_en is None
 
 
 def test_legacy_sin_sid_conserva_el_tope_absoluto_del_login_original(

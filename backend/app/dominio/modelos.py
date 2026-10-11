@@ -488,6 +488,9 @@ class Sesion(Base):
         # El acceso real es siempre "las sesiones de este usuario, la más
         # reciente primero" -- el índice cubre las dos mitades de esa consulta.
         Index("ix_sesion_usuario_iniciada", "usuario_id", "iniciada_en"),
+        # Un refresh legacy sin `sid` se acepta UNA vez: su huella, única, es lo
+        # que hace que el segundo uso encuentre esta fila en vez de abrir otra.
+        Index("uq_sesion_legacy_huella", "legacy_huella", unique=True),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -506,6 +509,8 @@ class Sesion(Base):
     rotado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ultimo_uso_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revocada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # sha256 del refresh legacy sin `sid` que abrió esta fila (S3); nulo en el resto.
+    legacy_huella: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     usuario: Mapped["Usuario"] = relationship()
 
