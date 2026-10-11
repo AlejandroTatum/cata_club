@@ -219,6 +219,16 @@ class _ReservaCupo(NamedTuple):
     omitidos_hoy: int
 
 
+def dia_del_contador(ahora: Optional[datetime] = None) -> date:
+    """Día UTC de la fila de `contador_correo_diario` que corresponde a `ahora`.
+
+    Es la ÚNICA definición de esa clave: la reserva del cupo y la tarjeta
+    "Correos de hoy" de las métricas avanzadas la usan, para que el contador y
+    lo que se muestra no puedan discrepar.
+    """
+    return (ahora or datetime.now(timezone.utc)).astimezone(timezone.utc).date()
+
+
 def _reservar_cupo_de_envio_diario() -> _ReservaCupo:
     """Reserva un cupo del límite diario de envíos.
 
@@ -255,7 +265,7 @@ def _reservar_cupo_de_envio_diario() -> _ReservaCupo:
         return _ReservaCupo(True, 0)
     try:
         with SessionLocal() as db:
-            hoy = datetime.now(timezone.utc).date()
+            hoy = dia_del_contador()
             sentencia = (
                 pg_insert(ContadorCorreoDiario)
                 .values(fecha=hoy, enviados=1)
