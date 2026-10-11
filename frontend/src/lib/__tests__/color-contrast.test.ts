@@ -1048,16 +1048,28 @@ describe("dark theme — the same WCAG thresholds as light", () => {
     expect(contrastRatio(D["ink.3-strong"], D["enroll-wash"])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
   });
 
-  it("keeps the ordinary sticker outline quiet: visible, but never a bright frame", () => {
-    // The outline of every card is a low-contrast line; a bright 2px frame on
-    // each container was the glare the redesign removed. The hard shadow is
-    // darker than the page so depth reads without light.
+  it("draws the sticker outline as a real 3:1 slate edge, never a white frame", () => {
+    // RC8 (T14H): at ~1.3:1 the 2px outline vanished into the page and the
+    // cards read as flat grey panels. The landing's dark answer (L33) is a
+    // slate edge that clears the non-text threshold on both surfaces a card
+    // borders, and stops well short of the bright rim reserved for `edge-hot`.
     for (const surface of [D.canvas, D.paper]) {
-      expect(contrastRatio(D.edge, surface)).toBeGreaterThanOrEqual(1.15);
-      expect(contrastRatio(D.edge, surface)).toBeLessThan(2);
+      expect(contrastRatio(D.edge, surface)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+      expect(contrastRatio(D.edge, surface)).toBeLessThan(6);
     }
-    expect(lightness(D["edge-shadow"])).toBeLessThan(lightness(D.rail));
-    expect(lightness(D["edge-shadow"])).toBeLessThan(lightness(D.canvas));
+    expect(contrastRatio(D.edge, D["edge-focus"])).toBeGreaterThan(3);
+  });
+
+  it("lifts the hard shadow above the page so the offset block is visible, and under the edge", () => {
+    // A pure-black offset on a near-black canvas is invisible; the sticker's
+    // depth needs a block lighter than the page and quieter than the outline.
+    expect(contrastRatio(D["edge-shadow"], D.canvas)).toBeGreaterThanOrEqual(1.5);
+    expect(lightness(D["edge-shadow"])).toBeLessThan(lightness(D.edge));
+  });
+
+  it("gives a brand fill a coal edge of its own, so one edge token never has to serve fills and cards", () => {
+    expect(D["edge-fill"].toUpperCase()).toBe(coal.DEFAULT.toUpperCase());
+    expect(colors["edge-fill"]).toBe(coal.DEFAULT);
   });
 
   it("spends the bright rim only on the highlighted pieces, and keeps it at 3:1", () => {
@@ -1108,11 +1120,11 @@ describe("dark theme — the same WCAG thresholds as light", () => {
   });
 
   describe("KPI slabs", () => {
-    it("prints white on the deeper red slab at AAA", () => {
-      expect(contrastRatio("#FFFFFF", D["kpi.red"])).toBeGreaterThanOrEqual(AAA_NORMAL_TEXT);
+    it("prints white on the red slab at AA", () => {
+      expect(contrastRatio("#FFFFFF", D["kpi.red"])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
     });
 
-    it("prints coal on the deeper yellow slab, label and muted line included, at AAA", () => {
+    it("prints coal on the yellow slab, label and muted line included, at AAA", () => {
       expect(contrastRatio(coal.DEFAULT, D["kpi.ball"])).toBeGreaterThanOrEqual(AAA_NORMAL_TEXT);
       expect(contrastRatio(mix(coal.DEFAULT, D["kpi.ball"], 0.8), D["kpi.ball"])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
     });
@@ -1122,9 +1134,13 @@ describe("dark theme — the same WCAG thresholds as light", () => {
       expect(contrastRatio(mix("#FFFFFF", D["kpi.coal"], 0.7), D["kpi.coal"])).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
     });
 
-    it("keeps the slabs deeper than the brand fills, so they glare less", () => {
+    it("keeps the yellow the brand yellow and the red a clean step under the brand red", () => {
+      // RC8: the dimmed mustard (#D9B000) and maroon (#A8161D) read as dirty
+      // fills. The yellow is the same ball in both themes; only the big red
+      // block is calmed, and it stays red (hue within a few degrees of brand).
+      expect(D["kpi.ball"].toUpperCase()).toBe(BALL.toUpperCase());
       expect(lightness(D["kpi.red"])).toBeLessThan(lightness(cata.red));
-      expect(lightness(D["kpi.ball"])).toBeLessThan(lightness(BALL));
+      expect(lightness(D["kpi.red"])).toBeGreaterThan(lightness("#A8161D"));
     });
 
     it("separates every slab from the page it sits on", () => {
@@ -1133,6 +1149,9 @@ describe("dark theme — the same WCAG thresholds as light", () => {
       }
       // The coal slab is dark like the rail; its bright rim is what frames it.
       expect(contrastRatio(D["edge-hot"], D["kpi.coal"])).toBeGreaterThanOrEqual(AA_NON_TEXT);
+      // RC8: and it is a raised surface, not a hole in the page.
+      expect(lightness(D["kpi.coal"])).toBeGreaterThan(lightness(D.canvas));
+      expect(contrastRatio(D["kpi.coal"], D.canvas)).toBeGreaterThanOrEqual(1.2);
     });
   });
 

@@ -637,12 +637,12 @@ export function isPlayerAccount(account: MemberAccount): boolean {
 }
 
 /**
- * Owner (2026-10-09): only players carry a membership, so the members list
- * shows its «Membresía» status only for them. Wider than `isPlayerAccount` on
- * purpose: a represented person or an account with any membership on file (a
- * first one still INACTIVA, a suspended one) is a player in the making, and
- * its badge is the admin's next step. Staff and representatives with neither
- * show no status — yet keep «Pagos», the entry point that creates one.
+ * Owner (2026-10-09): only players carry a membership and a representative,
+ * so the members list shows its «Representado por» and «Membresía» cells only
+ * for them. Wider than `isPlayerAccount` on purpose: a represented person or
+ * an account with any membership on file (a first one still INACTIVA, a
+ * suspended one) is a player in the making, and its badge is the admin's
+ * next step. Staff and representatives with neither show empty cells.
  */
 export function showsPlayerColumns(account: MemberAccount): boolean {
   return (

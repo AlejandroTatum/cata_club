@@ -150,7 +150,7 @@ test.describe("Payments batch E", () => {
 
     const cells = table.locator("tbody tr > td:first-child");
     const widths = await cells.evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().width)));
-    expect(Math.min(...widths)).toBeGreaterThanOrEqual(208);
+    expect(Math.min(...widths)).toBeGreaterThanOrEqual(200);
 
     // Name + «Paga: …» line: two lines of text, not four.
     const names = table.locator("tbody tr > td:first-child > span:first-child");

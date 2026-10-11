@@ -19,8 +19,8 @@
  *
  * Dark is coal-based, not a grey inversion: the surfaces are an elevation
  * ladder (rail, canvas, paper, sunken, popover), the ink ramp is its mirror,
- * and the sticker outline (`edge`) drops to a quiet line with a pure-black
- * hard shadow (`edge-shadow`), reserving bright rims (`edge-hot`) for the
+ * and the sticker outline (`edge`) is a 3:1 slate with a lifted hard shadow
+ * (`edge-shadow`), reserving bright rims (`edge-hot`) for the
  * highlighted pieces. Every foreground/background pair is measured in
  * `color-contrast.test.ts` against the same WCAG thresholds as light.
  */
@@ -40,13 +40,16 @@ export const DARK_COLORS: Readonly<Record<string, string>> = {
   "popover": "#31313B",
   "line.DEFAULT": "#2F2F38",
   "line.2": "#474752",
-  // STICKER LANGUAGE IN DARK. Every container wears a quiet outline and a hard
-  // shadow in pure black, darker than the page, so depth reads without glare.
-  // Bright outlines are spent only on the highlighted pieces (`edge-hot`: the
-  // primary action, the title highlight, the KPI slabs) and on focus.
-  "edge": "#2F2F36",
-  "edge-shadow": "#000000",
+  // STICKER LANGUAGE IN DARK (RC8, as the landing's L33). Every container wears
+  // a 2px slate edge at 3:1 and a hard shadow lifted above the page, so the
+  // sticker still reads as a sticker; a brand fill keeps a coal edge
+  // (`edge-fill`) because slate on red or yellow is what read as glare. Bright
+  // rims are spent only on the highlighted pieces (`edge-hot`: the primary
+  // action, the title highlight, the coal KPI slab) and on focus.
+  "edge": "#6E6E7C",
+  "edge-shadow": "#3D3D49",
   "edge-hot": "#FFD600",
+  "edge-fill": "#131316",
   "edge-focus": "#F2F2F5",
   // Chart tracks (rings, progress bars) and the data ink drawn on them.
   "track": "#3F3F4B",
@@ -54,12 +57,12 @@ export const DARK_COLORS: Readonly<Record<string, string>> = {
   // Text on a solid themed fill: those fills are pale in dark, so the text is
   // the canvas colour (>= 8:1 on every fill it sits on).
   "on-solid": "#151519",
-  // KPI slabs: the brand fills one step deeper so they hold their identity on
-  // a dark page without glaring; white on the red and coal on the yellow
-  // stay above 7:1.
-  "kpi.red": "#A8161D",
-  "kpi.ball": "#D9B000",
-  "kpi.coal": "#0C0C0E",
+  // KPI slabs: the yellow is the brand ball, unchanged (a dimmed mustard read
+  // as dirt); the red is one calm step under the brand red; the coal slab is a
+  // raised surface above the canvas, framed by the yellow rim, not a hole.
+  "kpi.red": "#C9212A",
+  "kpi.ball": "#FFD600",
+  "kpi.coal": "#282830",
   // Ink ramp: primary near-white (never #FFF), every step >= 7:1 on paper.
   "ink.DEFAULT": "#EDEDF1",
   "ink.2": "#CFCFD8",

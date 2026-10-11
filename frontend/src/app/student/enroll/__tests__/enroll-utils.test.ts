@@ -17,7 +17,7 @@ import {
 
 // ---------------------------------------------------------------------------
 // Issue #1028, unified across every phone field by #1296 — the public
-// self-service enrollment's phone shows 🇪🇨 + a fixed `+593`, and the
+// self-service enrollment's phone shows a fixed `+593`, and the
 // editable value is ONLY the local digits that follow. It now shares
 // `phoneFieldRule` (`@/lib/identity-validation`) with every other phone
 // field: a `593`/`+593`/leading-0 shape is CLEANED to the same digits by the

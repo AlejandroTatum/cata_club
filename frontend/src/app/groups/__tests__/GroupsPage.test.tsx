@@ -894,15 +894,17 @@ describe("GroupsPage — categoria title + labeled Ver alumnos button (PR1 layou
     expect(within(card()).queryByText(/nivel intermedio/i)).not.toBeInTheDocument();
   });
 
-  it("renders 'Agregar alumnos' as the most prominent (carbon, not red) row action and opens the roster on the add selector", async () => {
+  it("renders 'Agregar jugadores' as a quiet outline row action and opens the roster on the add selector", async () => {
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
     const agregar = within(card()).getByRole("button", { name: /agregar jugadores/i });
     expect(agregar).toHaveTextContent(/agregar jugadores/i);
-    // Repeated per-row actions are carbon: red is reserved for one primary.
-    expect(agregar.className).toContain("bg-coal");
+    // Repeated per-row actions are quiet: the page's one primary is not repeated
+    // per row (T14 RC10), so neither a red/yellow nor a coal fill.
+    expect(agregar.className).not.toContain("bg-coal");
     expect(agregar.className).not.toContain("bg-cata-red");
+    expect(agregar.className).not.toContain("bg-ball");
     // Editar is secondary: no red fill.
     expect(within(card()).getByRole("button", { name: /^editar/i }).className).not.toContain("bg-cata-red");
 

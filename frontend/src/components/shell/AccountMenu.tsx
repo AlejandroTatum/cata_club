@@ -93,7 +93,7 @@ export default function AccountMenu({
         <span className={`min-w-0 flex-1 leading-tight ${collapsed ? "lg:hidden" : ""}`}>
           <span className="block truncate text-xs font-semibold">{name}</span>
           {/* White at 0.50 over the card's `coal` composite is 5.04:1. */}
-          <span className="block truncate text-2xs tracking-flat text-white/50">{roleLabel}</span>
+          <span className="block truncate text-xs tracking-flat text-white/50">{roleLabel}</span>
         </span>
         <ChevronUp
           size={ICON.sm}

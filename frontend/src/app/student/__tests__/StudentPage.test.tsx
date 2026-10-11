@@ -2502,7 +2502,7 @@ describe("StudentPage — the credential inside the panel (Funda)", () => {
    * maps them back to the px the config assigns them.
    */
   const FONT_SIZE_PX: Record<string, number> = {
-    "2xs": 10.5,
+    "2xs": 11.5,
     xs: 12.5,
     sm: 13.5,
     base: 15,

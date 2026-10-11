@@ -2013,12 +2013,15 @@ export default function GroupsPage(): React.ReactElement {
                   <li
                     key={card.categoria}
                     data-testid="horario-card"
-                    className="min-h-drow px-5 py-4 2xl:py-12"
+                    className="min-h-drow px-5 py-4"
                   >
                     {/* Three shapes, one row: a stack on a phone, two columns
-                        on the tablet/small-laptop band where the five tracks do
+                        on the tablet/small-laptop band where the four tracks do
                         not fit but a single column wastes half the width, and
-                        the full five-column row from `xl` up. */}
+                        the full four-column row from `2xl` up. In the two-column
+                        band the headcount and the actions share the second
+                        line instead of one line each, so a row is about 140px
+                        and not 220 (T14 RC9). */}
                     <div className={`flex flex-col gap-3.5 md:grid md:grid-cols-2 md:items-start md:gap-x-6 ${ROW_COLUMNS}`}>
                       <div className="min-w-0">
                         <CellLabel>{COLUMNS[0]}</CellLabel>
@@ -2076,10 +2079,10 @@ export default function GroupsPage(): React.ReactElement {
                         )}
                       </div>
 
-                      <div className="flex gap-2 md:col-span-2 md:justify-end 2xl:col-span-1 2xl:justify-end">
+                      <div className="flex gap-2 md:col-start-2 md:self-end md:justify-end 2xl:col-start-auto 2xl:self-center 2xl:justify-end">
                         <span className="sr-only">{COLUMNS[3]}</span>
                         <Button
-                          variant="dark"
+                          variant="secondary"
                           size="sm"
                           className="flex-1 md:flex-none"
                           onClick={() => openAlumnosTab(card, true)}
@@ -2090,7 +2093,7 @@ export default function GroupsPage(): React.ReactElement {
                           Agregar jugadores
                         </Button>
                         <Button
-                          variant="secondary"
+                          variant="tertiary"
                           size="sm"
                           className="flex-1 md:flex-none"
                           onClick={() => (editOpen ? closeExpanded() : openEditForm(card))}
@@ -2128,7 +2131,7 @@ export default function GroupsPage(): React.ReactElement {
                 <li
                   key={entry.categoria}
                   data-testid="catalogo-pendiente-card"
-                  className="min-h-drow px-5 py-4 2xl:py-12"
+                  className="min-h-drow px-5 py-4"
                 >
                   <div className={`flex flex-col gap-3.5 md:grid md:grid-cols-2 md:items-start md:gap-x-6 ${ROW_COLUMNS}`}>
                     <div className="min-w-0">
@@ -2161,10 +2164,10 @@ export default function GroupsPage(): React.ReactElement {
                         above at `xl`. */}
                     <div className="hidden min-w-0 2xl:block" />
 
-                    <div className="flex gap-2 md:col-span-2 md:justify-end 2xl:col-span-1 2xl:justify-end">
+                    <div className="flex gap-2 md:col-start-2 md:self-end md:justify-end 2xl:col-start-auto 2xl:self-center 2xl:justify-end">
                       <span className="sr-only">{COLUMNS[3]}</span>
                       <Button
-                        variant="dark"
+                        variant="secondary"
                         size="sm"
                         className="flex-1 md:flex-none"
                         onClick={() => openCatalogoEditForm(entry)}

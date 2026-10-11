@@ -112,7 +112,7 @@ interface AxisRule {
  * names rather than redefined.
  */
 const TEXT_SCALE: readonly Step[] = [
-  { token: "text-2xs", value: 10.5 },
+  { token: "text-2xs", value: 11.5 },
   { token: "text-xs", value: 12.5 },
   { token: "text-sm", value: 13.5 },
   { token: "text-base", value: 15 },

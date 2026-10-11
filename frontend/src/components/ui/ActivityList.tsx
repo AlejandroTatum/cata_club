@@ -74,7 +74,7 @@ export function ActivityItem({
       <span className="min-w-0 flex-1 text-sm text-ink-2">
         <b className="font-semibold text-ink">{subject}</b> {detail}
       </span>
-      <span className="flex-none text-2xs tracking-flat text-ink-3">{at}</span>
+      <span className="flex-none text-xs tracking-flat text-ink-3">{at}</span>
     </li>
   );
 }

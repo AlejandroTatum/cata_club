@@ -357,26 +357,47 @@ describe("StatCard — icon and tone", () => {
     expect(screen.queryByTestId("statcard-icon")).toBeNull();
   });
 
-  it("draws a decorative tinted tile and keeps the figure in ink", () => {
+  it("draws a decorative paper chip on the solid face and keeps the figure out of state colors", () => {
     render(
       <StatCard label="Miembros" value={86} tone="ok" status="Al día" icon={<svg data-testid="glyph" />} />,
     );
     const tile = screen.getByTestId("statcard-icon");
     expect(tile).toHaveAttribute("aria-hidden", "true");
-    expect(tile.className).toMatch(/bg-state-ok-bg/);
+    expect(tile.className).toMatch(/\bbg-paper\b/);
     expect(tile).toContainElement(screen.getByTestId("glyph"));
-    expect(screen.getByText("86").className).toMatch(/\btext-ink\b/);
+    expect(screen.getByText("86").className).not.toMatch(/text-(state-|cata-red)/);
     expect(card()).toContainElement(tile);
   });
 
-  it("adds a tone-tinted top accent border only when an icon is given", () => {
-    const { rerender } = render(
-      <StatCard label="Miembros" value={86} tone="warn" status="Pendiente" icon={<svg />} />,
-    );
-    expect(card().className).toMatch(/border-t-\[3px\]/);
-    expect(card().className).toMatch(/border-t-state-warn/);
-    rerender(<StatCard label="Miembros" value={86} />);
+  it("wears the same solid brand face the admin KPI tile wears, for every role (T14 RC12)", () => {
+    // ok/warn -> ball (coal ink), info/bad -> red (white ink), trainer -> coal,
+    // neutral -> the quiet paper sticker. No tinted pastel tile with a 3px top
+    // border: that was a second surface language next to the admin's.
+    const faces = {
+      ok: ["bg-ball", "text-coal"],
+      warn: ["bg-ball", "text-coal"],
+      info: ["bg-cata-red", "text-white"],
+      bad: ["bg-cata-red", "text-white"],
+      trainer: ["bg-coal", "text-white"],
+    } as const;
+    for (const [tone, classes] of Object.entries(faces)) {
+      const { unmount } = render(
+        <StatCard label="Miembros" value={1} tone={tone as "ok"} status="Estado" icon={<svg />} />,
+      );
+      for (const c of classes) expect(card()).toHaveClass(c);
+      expect(card().className).not.toMatch(/border-t-/);
+      unmount();
+    }
+    render(<StatCard label="Miembros" value={1} icon={<svg />} />);
+    expect(card()).toHaveClass("bg-paper");
     expect(card().className).not.toMatch(/border-t-/);
+  });
+
+  it("hides the decorative chip on a phone so a one-word label is not clipped by it", () => {
+    render(<StatCard label="Entrenamientos" value={5} tone="ball" icon={<svg />} />);
+    expect(screen.getByTestId("statcard-icon").className).toMatch(/max-sm:hidden/);
+    expect(screen.getByText("Entrenamientos").className).toMatch(/sm:pr-11/);
+    expect(screen.getByText("Entrenamientos").className).not.toMatch(/(^|\s)pr-11/);
   });
 
   it("ignores the icon on the hot variant", () => {
@@ -400,13 +421,13 @@ describe("StatCard — label and hint contrast (FAM-14)", () => {
  * its state in a word (WCAG 1.4.1).
  */
 describe("StatCard — tone is the meaning of the datum, said in a word", () => {
-  it("draws the status word with a dot in the tone's own colour", () => {
+  it("draws the status word with a dot in its face's ink", () => {
     render(
       <StatCard label="Miembros" value={86} tone="ok" icon={<svg />} status="Al día" />,
     );
     const word = screen.getByTestId("statcard-status");
     expect(word).toHaveTextContent("Al día");
-    expect(word.className).toMatch(/\btext-state-ok\b/);
+    expect(word.className).toMatch(/\btext-coal\b/);
     expect(word.querySelector("[aria-hidden=true]")).not.toBeNull();
     expect(card().dataset.tone).toBe("ok");
   });
@@ -415,17 +436,16 @@ describe("StatCard — tone is the meaning of the datum, said in a word", () => 
     render(
       <StatCard label="Miembros" value={1} tone="bad" icon={<svg />} status="Sin justificar" />,
     );
-    expect(screen.getByTestId("statcard-icon").className).toMatch(/bg-state-bad-bg/);
-    expect(card().className).toMatch(/border-t-state-bad/);
-    expect(screen.getByTestId("statcard-status").className).toMatch(/\btext-state-bad\b/);
+    expect(card()).toHaveClass("bg-cata-red");
+    expect(screen.getByTestId("statcard-status").className).toMatch(/\btext-white\b/);
   });
 
-  it("keeps the figure in ink on every tone", () => {
+  it("never colors the figure with a state color on any tone", () => {
     for (const tone of ["ok", "info", "warn", "bad"] as const) {
       const { unmount } = render(
         <StatCard label="Miembros" value={86} tone={tone} icon={<svg />} status="Estado" />,
       );
-      expect(screen.getByText("86").className).toMatch(/\btext-ink\b/);
+      expect(screen.getByText("86").className).not.toMatch(/text-(state-|cata-red|ball)/);
       unmount();
     }
   });
@@ -477,12 +497,21 @@ describe("StatCard — the sticker frame and the brand blocks", () => {
   });
 });
 
-describe("StatCard — the figure never overflows its tile (T14 RC5)", () => {
-  it("is fluid, 22px on a phone up to the 32px step, and may break", () => {
+describe("StatCard — the figure never overflows its tile (T14 RC5, L42)", () => {
+  it("is fluid: 18px on a phone up to the 32px step", () => {
     render(<StatCard label="Miembros" value="$1.330,00" />);
-    const figure = screen.getByText("$1.330,00");
-    expect(figure.className).toContain("text-[clamp(1.375rem,5.5vw,2rem)]");
+    expect(screen.getByText("$1.330,00").className).toContain("text-[clamp(1.125rem,5vw,2rem)]");
+  });
+
+  it("never breaks a currency figure mid-number", () => {
+    // "$18.711,00" used to wrap after the thousands dot on a 390px phone. The
+    // number stays on one line (the size step shrinks to fit); only the unit
+    // beside it may drop to the next line.
+    render(<StatCard label="Monto pendiente" value="$18.711,00" unit="USD" />);
+    const figure = screen.getByText("$18.711,00");
+    expect(figure.className).toMatch(/\bwhitespace-nowrap\b/);
     expect(figure.className).toMatch(/\bmin-w-0\b/);
-    expect(figure.className).toMatch(/break-words/);
+    expect(figure.className).toMatch(/\bflex-wrap\b/);
+    expect(figure.className).not.toMatch(/break-words|break-all/);
   });
 });

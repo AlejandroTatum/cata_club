@@ -120,12 +120,12 @@ export default function DiasSinClasePage(): React.ReactElement {
             <CampoFormularioAdmin label="Desde" type="date" value={fechaInicio} onChange={setFechaInicio} required />
             <CampoFormularioAdmin
               label="Hasta (opcional, si son varios días)" type="date" value={fechaFin} onChange={setFechaFin}
-              labelClassName="mt-2 block text-2xs text-ink-3"
+              labelClassName="mt-2 block text-xs text-ink-3"
             />
             <CampoFormularioAdmin
               label="Motivo" type="textarea" value={motivo} onChange={(v) => setMotivo(v.slice(0, MOTIVO_MAX))} required
               placeholder="Ej.: Feriado nacional"
-              labelClassName="mt-2 block text-2xs text-ink-3"
+              labelClassName="mt-2 block text-xs text-ink-3"
             />
             <p className="text-xs text-ink-2">
               {editando

@@ -117,17 +117,14 @@ function BotonFichaMedica({
   alumno,
   onAbrir,
   seleccionado,
-  destacado = false,
 }: {
   alumno: AlumnoDelClub;
   onAbrir: () => void;
   seleccionado?: boolean;
-  /** Desktop: the ficha is the point of the screen, so it wears the primary skin. */
-  destacado?: boolean;
 }): React.ReactElement {
   return (
     <Button
-      variant={destacado ? "primary" : "secondary"}
+      variant="secondary"
       className="flex-none"
       onClick={(event) => {
         event.currentTarget.focus();
@@ -486,7 +483,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
                           <div className="flex flex-wrap items-center gap-1.5">
                             {alumno.categorias.map((c) => (
                               <Badge key={c.codigo} tone="ok">
-                                Categoría {c.etiqueta}
+                                {c.etiqueta}
                               </Badge>
                             ))}
                             <Badge>{alumno.horariosCompactos ?? "Sin horario"}</Badge>
@@ -498,7 +495,6 @@ export default function TrainerStudentsPage(): React.ReactElement {
                               alumno={alumno}
                               onAbrir={() => abrirFicha(alumno)}
                               seleccionado={esEscritorio && seleccionadoId === alumno.personaId}
-                              destacado={esEscritorio}
                             />
                             <BotonHorario
                               alumno={alumno}
