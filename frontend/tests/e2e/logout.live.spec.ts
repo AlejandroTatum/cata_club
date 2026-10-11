@@ -61,10 +61,16 @@ test("un admin cierra sesión y el backend deja de reconocer la sesión", async 
   await page.getByRole("button", { name: /iniciar sesión/i }).click();
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 20_000 });
 
-  // ── El logout real: el botón permanente del riel lateral (issue #852), no
-  // un menú emergente. `AuthContext.logout` llama a `POST /api/auth/logout`
-  // (que bombea `version_sesion` server-side) antes de navegar. ──
-  await page.getByRole("button", { name: "Cerrar sesión" }).click();
+  // ── El logout real: desde design-identity (#1739) "Cerrar sesión" vive en
+  // el menú de cuenta que abre la tarjeta de usuario al pie del riel, ya no
+  // como fila permanente. `AuthContext.logout` llama a
+  // `POST /api/auth/logout` (que bombea `version_sesion` server-side) antes
+  // de navegar. ──
+  await page.getByRole("button", { name: /^Menú de cuenta de / }).click();
+  await page
+    .getByRole("dialog", { name: "Menú de cuenta" })
+    .getByRole("button", { name: "Cerrar sesión" })
+    .click();
   await expect(page).toHaveURL(/\/login$/, { timeout: 20_000 });
 
   // ── Lo que ningún spec mockeado podía comprobar: que la cookie de acceso
