@@ -24,7 +24,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookies } from "@/lib/server/auth";
+import { refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 import type { PerfilPropio } from "@/types/domain";
 
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const data = (await result.response.json()) as PerfilPropio;
   const response = NextResponse.json(data);
   if (result.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+    setAuthCookies(response, refreshedTokenCookies(result));
   }
   return response;
 }
@@ -96,7 +96,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   } else if (result.refreshedAccessToken) {
     // No correo change, but backendFetchAuthed's own proactive/retry refresh
     // rotated the caller's access token — persist that instead.
-    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+    setAuthCookies(response, refreshedTokenCookies(result));
   }
 
   return response;

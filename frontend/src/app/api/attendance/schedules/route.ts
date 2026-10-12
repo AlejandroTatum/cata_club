@@ -9,7 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookies } from "@/lib/server/auth";
+import { refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 import { buildTrainingSchedule, type BackendHorario } from "@/lib/server/attendance-adapter";
 
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const response = NextResponse.json(schedules);
   if (horariosResult.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: horariosResult.refreshedAccessToken });
+    setAuthCookies(response, refreshedTokenCookies(horariosResult));
   }
   return response;
 }

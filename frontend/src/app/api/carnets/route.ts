@@ -14,7 +14,7 @@
  * `missing` rather than failing the whole sheet.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookies } from "@/lib/server/auth";
+import { pickRefreshed, refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed } from "@/lib/server/backend-client";
 import { requireAdmin } from "@/lib/server/require-admin";
 import {
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  let refreshedAccessToken = admin.refreshedAccessToken;
+  let refreshed = pickRefreshed(admin);
 
   async function load(personaId: number): Promise<CarnetView | null> {
     const [portal, horarios] = await Promise.all([
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       backendFetchAuthed(request, `/asistencias/alumnos/${personaId}/horarios`),
     ]);
     for (const result of [portal, horarios]) {
-      if (result.ok && result.refreshedAccessToken) refreshedAccessToken = result.refreshedAccessToken;
+      refreshed = pickRefreshed(result.ok && result, refreshed);
     }
     // A schedule that failed to load is not "no training days": printing it so
     // would put wrong data on a physical card, so the persona is reported as missing.
@@ -90,6 +90,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     carnets: ids.flatMap((id) => loaded.get(id) ?? []),
     missing: ids.filter((id) => !loaded.get(id)),
   });
-  if (refreshedAccessToken) setAuthCookies(response, { accessToken: refreshedAccessToken });
+  if (refreshed.refreshedAccessToken) setAuthCookies(response, refreshedTokenCookies(refreshed));
   return response;
 }

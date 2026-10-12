@@ -15,7 +15,7 @@ from app.dominio.excepciones import (
     PermisosInsuficientes,
     ReaceptacionLegalPendiente,
 )
-from app.dominio.modelos import HistorialEstadoMembresia, Membresia, Pago
+from app.dominio.modelos import HistorialEstadoMembresia, Membresia, Pago, Sesion
 from app.infraestructura import presencia
 from app.infraestructura.db import obtener_sesion
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
@@ -244,14 +244,13 @@ class GestorAutenticacion:
         # el endpoint /auth/refresh valida que lo que recibe sea `type=refresh`.
         payload["type"] = "access"
         payload["sver"] = version_sesion
-        expira = datetime.now(timezone.utc) + timedelta(
-            minutes=expiracion_minutos or settings.jwt_expira_minutos
-        )
-        payload.update({"exp": expira})
+        ahora = datetime.now(timezone.utc)
+        expira = ahora + timedelta(minutes=expiracion_minutos or settings.jwt_expira_minutos)
+        payload.update({"iat": ahora, "exp": expira})
         return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algoritmo)
 
     @staticmethod
-    def crear_token_refresco(datos: dict, version_sesion: int) -> str:
+    def crear_token_refresco(datos: dict, version_sesion: int, jti: Optional[str] = None) -> str:
         """Emite un refresh token (vida larga, type=refresh). Sirve únicamente
         para pedir un nuevo access token vía /auth/refresh; NO se usa para
         autenticar requests a endpoints de negocio (eso requiere access token).
@@ -259,12 +258,20 @@ class GestorAutenticacion:
         `version_sesion` obligatorio por el mismo motivo que en
         `crear_token_acceso`: el claim `sver` debe viajar en AMBOS tokens del
         par para que la invalidación de sesión pueda cerrar también el lado
-        refresh (ver nota de `epoch_valido`)."""
+        refresh (ver nota de `epoch_valido`).
+
+        `jti` identifica ESTE refresh dentro de su sesión: la fila `sesion`
+        guarda el vigente y cada uso lo rota (ver `AuthServicio.refrescar_sesion`).
+        Es opcional solo porque los refresh anteriores a la rotación no lo
+        llevan; todo emisor actual lo pasa."""
         payload = datos.copy()
         payload["type"] = "refresh"
         payload["sver"] = version_sesion
-        expira = datetime.now(timezone.utc) + timedelta(days=settings.jwt_refresh_expira_dias)
-        payload.update({"exp": expira})
+        ahora = datetime.now(timezone.utc)
+        expira = ahora + timedelta(days=settings.jwt_refresh_expira_dias)
+        payload.update({"iat": ahora, "exp": expira})
+        if jti is not None:
+            payload["jti"] = jti
         return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algoritmo)
 
     # --- E01-RF003: recuperación de contraseña -------------------------------
@@ -396,6 +403,18 @@ class GestorAutenticacion:
         return usuario.activo and GestorAutenticacion.epoch_valido(sver_claim, usuario)
 
     @staticmethod
+    def sesion_viva(db: Session, usuario: "Usuario", sid: object) -> bool:
+        """¿La fila `sesion` de `sid` existe, es de `usuario` y no está
+        revocada? Es la mitad "por sesión" de la vigencia de un access token;
+        el epoch (`sesion_vigente`) sigue siendo la mitad "todas a la vez".
+        Un `sid` que no sea un entero (token malformado pero con firma válida)
+        no resuelve a ninguna fila."""
+        if not isinstance(sid, int) or isinstance(sid, bool):
+            return False
+        sesion = db.get(Sesion, sid)
+        return sesion is not None and sesion.usuario_id == usuario.id and sesion.revocada_en is None
+
+    @staticmethod
     def decodificar_token(
         request: Request,
         token: str = Depends(oauth2_scheme),
@@ -432,6 +451,11 @@ class GestorAutenticacion:
             raise CredencialesInvalidas("Token inválido o expirado")
         usuario = UsuarioRepositorio(db).obtener_por_correo(payload.get("sub"))
         if not usuario or not GestorAutenticacion.sesion_vigente(payload.get("sver"), usuario):
+            raise CredencialesInvalidas("Token inválido o expirado")
+        # Revocación POR SESIÓN (#1653): un access con `sid` exige su fila viva
+        # y de este usuario -- una consulta por PK. Sin `sid` (emitidos antes de
+        # la rotación, <= 60 min de vida) solo responde al epoch, como siempre.
+        if "sid" in payload and not GestorAutenticacion.sesion_viva(db, usuario, payload["sid"]):
             raise CredencialesInvalidas("Token inválido o expirado")
 
         # `/auth/me` is the deliberately limited status surface for pending

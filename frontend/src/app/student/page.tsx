@@ -37,6 +37,7 @@ import FamilyStrip from "./FamilyStrip";
 import GuardiansCard from "./GuardiansCard";
 import CuotaCard from "./CuotaCard";
 import MemberCard from "./MemberCard";
+import CardHeader from "./CardHeader";
 import NoClassDays from "./NoClassDays";
 import WeekPlan from "./WeekPlan";
 import JoinAsPlayerAction from "./JoinAsPlayerAction";
@@ -193,14 +194,14 @@ function TrainingPanel({
       // payment button. `flex-1` takes only what `CuotaCard` doesn't need.
       className="card flex flex-col overflow-hidden"
     >
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-field px-5 pb-3.5 pt-[18px]">
-        <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Esta semana</h2>
-        <p className="text-xs text-ink-3-strong">
-          {viewingOwnProfile
+      <CardHeader
+        title="Esta semana"
+        subtitle={
+          viewingOwnProfile
             ? "El horario semanal que el club te asignó."
-            : `El horario semanal que el club le asignó a ${studentName}.`}
-        </p>
-      </div>
+            : `El horario semanal que el club le asignó a ${studentName}.`
+        }
+      />
 
       {horariosState.status === "loading" && (
         <div className="border-t border-line">
@@ -603,9 +604,6 @@ function ActivePortalView({
           next without leaving the page. */}
       <FamilyStrip profiles={managedProfiles} value={selectedId} onChange={setSelectedId} />
 
-      {/* Club-wide no-class days (issue #1665): members only, never the landing. */}
-      <NoClassDays />
-
       {selectedProfile === null || paymentSituation === null ? (
         <EmptyState
           icon={<User size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
@@ -940,6 +938,12 @@ function ActivePortalView({
               viewingOwnProfile={viewingOwnProfile}
               studentName={selectedName}
             />
+
+            {/* Club-wide no-class days (issue #1665): members only, never the
+                landing. Right under "Esta semana" — both answer "when do I
+                not train" — in the same rail column, so every layout keeps
+                them together. */}
+            <NoClassDays />
 
             {/* A minor manages nothing on their own account — no dependents, no
                 joining — but the ficha médica is theirs to read.

@@ -9,6 +9,7 @@ from app.infraestructura.db import obtener_sesion
 from app.servicios_negocio.gestor_permisos import GestorPermisos
 from app.servicios_negocio.dtos.auth_schemas import (
     RegistroUsuarioDTO, RefreshTokenDTO, UsuarioMeResponseDTO, LogoutResponseDTO,
+    ReautenticarDTO, ReautenticarResponseDTO,
     SolicitarRecuperacionDTO, SolicitarRecuperacionResponseDTO, RestablecerContraseniaDTO, CambiarContraseniaDTO,
     SolicitarVerificacionCorreoDTO, SolicitarVerificacionCorreoResponseDTO,
     ConfirmarVerificacionCorreoDTO,
@@ -43,6 +44,22 @@ router = APIRouter(prefix="/auth", tags=["Autenticación"])
 LONGITUD_MAXIMA_USERNAME_LOGIN = 254
 
 
+def _respuesta_enfriamiento(enfriamiento: LoginEnEnfriamiento) -> JSONResponse:
+    # REG-02: 429 con el cuerpo `{detail, message}` de toda la API más un
+    # `codigo` propio, para que el BFF lo distinga del 429 genérico del
+    # rate limiter por IP (que no lleva `codigo`) y muestre este texto.
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={
+            "detail": str(enfriamiento),
+            "message": str(enfriamiento),
+            "mensaje_seguro": True,
+            "codigo": "login_enfriamiento",
+        },
+        headers={"Retry-After": str(enfriamiento.segundos_restantes)},
+    )
+
+
 @router.post("/login")
 @limiter.limit("60/minute")
 async def login(
@@ -51,9 +68,9 @@ async def login(
     password: str = Form(...),
     db: Session = Depends(obtener_sesion),
 ):
-    # El user-agent alimenta SOLO el registro observacional de sesiones (ver
-    # `AuthServicio._registrar_sesion`). No participa de la autenticación: un
-    # cliente que no lo manda entra igual.
+    # El user-agent solo etiqueta el dispositivo de la fila `sesion` que abre
+    # el login (ver `AuthServicio._registrar_sesion`). No participa de la
+    # autenticación: un cliente que no lo manda entra igual.
     #
     # `username`/`password` sueltos en vez de `OAuth2PasswordRequestForm`:
     # ese DTO de FastAPI no expone un tope de longitud configurable en
@@ -76,19 +93,7 @@ async def login(
             username, password, user_agent=request.headers.get("user-agent"),
         )
     except LoginEnEnfriamiento as enfriamiento:
-        # REG-02: 429 con el cuerpo `{detail, message}` de toda la API más un
-        # `codigo` propio, para que el BFF lo distinga del 429 genérico del
-        # rate limiter por IP (que no lleva `codigo`) y muestre este texto.
-        return JSONResponse(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            content={
-                "detail": str(enfriamiento),
-                "message": str(enfriamiento),
-                "mensaje_seguro": True,
-                "codigo": "login_enfriamiento",
-            },
-            headers={"Retry-After": str(enfriamiento.segundos_restantes)},
-        )
+        return _respuesta_enfriamiento(enfriamiento)
 
 
 @router.post(
@@ -266,6 +271,28 @@ async def listar_mis_sesiones(
     )
 
 
+@router.post("/reautenticar", response_model=ReautenticarResponseDTO)
+@limiter.limit("10/minute")
+async def reautenticar(
+    request: Request,
+    datos: ReautenticarDTO,
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    db: Session = Depends(obtener_sesion),
+):
+    """Step-up de contraseña (#1653, S5): el titular re-ingresa su contraseña y
+    su sesión actual (`sid`) queda habilitada 10 minutos para cambiar roles.
+    Hashea con bcrypt y puede dormir por el freno de login, de ahí
+    `run_in_threadpool`. Una contraseña incorrecta es 401 y cuenta para el
+    mismo freno/enfriamiento que `/auth/login`."""
+    try:
+        return await run_in_threadpool(
+            AuthServicio(db).reautenticar,
+            token_payload["sub"], token_payload.get("sid"), datos.contrasenia,
+        )
+    except LoginEnEnfriamiento as enfriamiento:
+        return _respuesta_enfriamiento(enfriamiento)
+
+
 @router.post("/refresh")
 @limiter.limit("120/minute")
 async def refrescar(request: Request, datos: RefreshTokenDTO, db: Session = Depends(obtener_sesion)):
@@ -307,16 +334,14 @@ async def logout(
     db: Session = Depends(obtener_sesion),
 ):
     """
-    TRA-10: bombea `version_sesion` del usuario autenticado (mismo mecanismo
-    que `/auth/sesiones/invalidar`, ver `AuthServicio.cerrar_sesion`), así
-    que el access_token y el refresh_token usados para llamar a este
-    endpoint dejan de servir de inmediato -- antes, un token robado seguía
-    autenticando hasta su expiración natural (hasta 7 días en el caso del
-    refresh) aunque el dueño legítimo hubiera "cerrado sesión". El cierre en
-    el frontend (borrar las cookies httpOnly) sigue ocurriendo igual, esto
-    cierra además el lado servidor.
+    TRA-10 / #1653 S4: cierra SOLO la sesión del dispositivo que llama (`sid`
+    del access token, ver `AuthServicio.cerrar_sesion`): su access y su refresh
+    dejan de servir de inmediato y los demás dispositivos siguen autenticados.
+    Cerrar todas las demás es `/auth/sesiones/invalidar`. Un token sin `sid`
+    (anterior a la rotación) no identifica dispositivo y cae al epoch. El
+    cierre en el frontend (borrar las cookies httpOnly) ocurre igual.
     """
-    return AuthServicio(db).cerrar_sesion(token_payload["sub"])
+    return AuthServicio(db).cerrar_sesion(token_payload["sub"], token_payload.get("sid"))
 
 
 @router.post("/contrasenia/cambiar")

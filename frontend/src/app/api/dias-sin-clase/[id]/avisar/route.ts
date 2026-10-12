@@ -6,7 +6,7 @@
  * day that already ended. Its status and message pass through.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookies } from "@/lib/server/auth";
+import { refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 
 type Props = { params: Promise<{ id: string }> };
@@ -20,6 +20,6 @@ export async function POST(request: NextRequest, props: Props): Promise<NextResp
   if (!result.ok) return NextResponse.json({ message: "No se pudo reenviar el aviso." }, { status: result.status });
   if (!result.response.ok) return passthroughBackendError(result.response, "No se pudo reenviar el aviso.");
   const response = NextResponse.json(await result.response.json(), { status: 202 });
-  if (result.refreshedAccessToken) setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+  if (result.refreshedAccessToken) setAuthCookies(response, refreshedTokenCookies(result));
   return response;
 }

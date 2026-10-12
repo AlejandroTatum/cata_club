@@ -33,7 +33,6 @@ from app.dominio.modelos import (
     Usuario,
 )
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
-from app.servicios_negocio.membresia_pago_servicio import _meses_enteros_desde
 from app.soporte_transversal.tiempo import ZONA_HORARIA_CLUB
 
 
@@ -423,9 +422,11 @@ def test_resumen_admin_es_solo_in_app_sin_llamar_enviar_correo(
         .all()
     )
     assert {fila.persona_id for fila in resumenes} == {p.id for p in admin_personas}
-    meses = _meses_enteros_desde(HOY - timedelta(days=1), HOY)
     assert "Mora Uno" in resumenes[0].mensaje
-    assert f"{meses} meses" in resumenes[0].mensaje
+    # Issue #1747: el resumen sale el día 1 o el 8 de mora, así que los meses
+    # enteros siempre daban "0 meses"; lo que se informa son los días.
+    assert "vencida hace 1 día, cuota $" in resumenes[0].mensaje
+    assert "meses" not in resumenes[0].mensaje
 
     # El correo del alumno en mora sí sale (canal de familia); el resumen al
     # administrador nunca llama a `enviar_correo`.
@@ -704,4 +705,36 @@ def test_resumen_admin_no_crece_en_selects_con_la_cantidad_de_administradores(
         f"listado de administradores + dedup de resumen en lote), constantes "
         f"sin importar la cantidad de administradores; se ejecutaron "
         f"{len(selects)} con cantidad_admins={cantidad_admins}: {selects}"
+    )
+
+
+# --- Issue #1747: redacción del resumen de mora al administrador --------------
+def _moroso(nombre: str, dias: int, cuota: str) -> dict:
+    return {"nombre": nombre, "dias_mora": dias, "monto_mensual": cuota}
+
+
+def test_resumen_de_mora_informa_dias_de_vencida_y_cuota():
+    texto = alertas_mod._formatear_resumen_mora(
+        date(2026, 10, 11),
+        [
+            _moroso("Jamil Fernando Viñan Rojas", 1, "$40,00"),
+            _moroso("Felipe David Viñán Cabrera", 8, "$35,00"),
+        ],
+    )
+
+    assert texto == (
+        "Mora al 11/10/2026: 2 jugadores con la membresía vencida — "
+        "Jamil Fernando Viñan Rojas (vencida hace 1 día, cuota $40,00), "
+        "Felipe David Viñán Cabrera (vencida hace 8 días, cuota $35,00)"
+    )
+
+
+def test_resumen_de_mora_con_un_solo_jugador_va_en_singular():
+    texto = alertas_mod._formatear_resumen_mora(
+        date(2026, 10, 11), [_moroso("Ana Paz", 8, "$30,00")],
+    )
+
+    assert texto == (
+        "Mora al 11/10/2026: 1 jugador con la membresía vencida — "
+        "Ana Paz (vencida hace 8 días, cuota $30,00)"
     )

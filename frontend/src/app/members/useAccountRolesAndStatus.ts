@@ -18,10 +18,11 @@
 
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactElement } from "react";
 import { asignarRol, cambiarEstadoCuenta, obtenerRolesDePersona, quitarRol } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
 import { toUserMessage } from "@/lib/error-message";
+import { ReauthCancelledError, useReauthRetry } from "@/lib/use-reauth-retry";
 import type { BackendTipoRol } from "@/types/domain";
 
 /** Shared by the toast copy and the role options' labels. */
@@ -49,6 +50,11 @@ export interface AccountRolesAndStatus {
   /** An account has exactly ONE role: picking one replaces whatever it had. */
   selectRole: (role: BackendTipoRol) => Promise<void>;
   toggleEstado: () => Promise<void>;
+  /**
+   * The password prompt role changes raise when the backend wants a recent
+   * step-up (#1653, S5). The owner of the hook must render it.
+   */
+  reauthDialog: ReactElement;
 }
 
 export function useAccountRolesAndStatus(personaId: number): AccountRolesAndStatus {
@@ -62,6 +68,7 @@ export function useAccountRolesAndStatus(personaId: number): AccountRolesAndStat
   const [roleError, setRoleError] = useState<string | null>(null);
   const [stateError, setStateError] = useState<string | null>(null);
   const [changed, setChanged] = useState(false);
+  const { withReauth, reauthDialog } = useReauthRetry();
 
   useEffect(() => {
     let cancelled = false;
@@ -116,7 +123,7 @@ export function useAccountRolesAndStatus(personaId: number): AccountRolesAndStat
         // means it is already gone, which is what was asked for.
         for (const old of previous) {
           try {
-            await quitarRol(personaId, old);
+            await withReauth(() => quitarRol(personaId, old));
           } catch (error: unknown) {
             if (!toUserMessage(error, "").toLowerCase().includes("no tiene el rol")) throw error;
           }
@@ -125,7 +132,7 @@ export function useAccountRolesAndStatus(personaId: number): AccountRolesAndStat
         }
         if (!remaining.includes(role)) {
           try {
-            await asignarRol(personaId, role);
+            await withReauth(() => asignarRol(personaId, role));
           } catch (error: unknown) {
             // See the reconcile note below: the backend already has this role.
             if (!toUserMessage(error, "").toLowerCase().includes("ya tiene el rol")) throw error;
@@ -142,7 +149,12 @@ export function useAccountRolesAndStatus(personaId: number): AccountRolesAndStat
         // status or an error code the frontend can branch on.
         // ADMA-07: shown once, in the Roles panel. A toast on top of the
         // panel said the same sentence twice and stacked on repeated clicks.
-        setRoleError(toUserMessage(error, "No se pudo actualizar el rol."));
+        // Cancelling the password prompt is not a failure: the admin changed
+        // their mind, so there is nothing to report (any half-done switch is
+        // still rolled back below).
+        if (!(error instanceof ReauthCancelledError)) {
+          setRoleError(toUserMessage(error, "No se pudo actualizar el rol."));
+        }
         // The old role was already removed but the new one was refused: put
         // it back so the account is not left roleless by a half-done switch.
         if (roles.length > 0 && remaining.length === 0) {
@@ -158,7 +170,7 @@ export function useAccountRolesAndStatus(personaId: number): AccountRolesAndStat
         setRoleLoading(null);
       }
     },
-    [personaId, roles, showSuccess],
+    [personaId, roles, showSuccess, withReauth],
   );
 
   const toggleEstado = useCallback(async (): Promise<void> => {
@@ -192,5 +204,6 @@ export function useAccountRolesAndStatus(personaId: number): AccountRolesAndStat
     changed,
     selectRole,
     toggleEstado,
+    reauthDialog,
   };
 }

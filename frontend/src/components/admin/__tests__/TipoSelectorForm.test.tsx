@@ -72,6 +72,8 @@ describe("TipoSelectorForm options (ADMA-18)", () => {
   const CATALOGO = [
     { id: 1, categoria: "Mensual Adultos", precio: "40.00", modalidad: "MENSUAL" as const, activo: true, enUso: true },
     { id: 2, categoria: "Infantil", precio: "25.00", modalidad: "MENSUAL" as const, activo: true, enUso: true },
+    { id: 3, categoria: "Diaria", precio: "3.00", modalidad: "MENSUAL" as const, periodicidad: "DIARIA" as const, activo: true, enUso: false },
+    { id: 4, categoria: "Semanal", precio: "10.00", modalidad: "MENSUAL" as const, periodicidad: "SEMANAL" as const, activo: true, enUso: false },
   ];
 
   async function openForm(extra: Partial<React.ComponentProps<typeof TipoSelectorForm>> = {}) {
@@ -96,6 +98,12 @@ describe("TipoSelectorForm options (ADMA-18)", () => {
     await openForm();
     expect(screen.getByRole("option", { name: "Mensual Adultos — $40,00 al mes" })).toBeInTheDocument();
     expect(screen.queryByText(/MENSUAL\)/)).not.toBeInTheDocument();
+  });
+
+  it("labels daily and weekly tariffs with their own period, never «al mes»", async () => {
+    await openForm();
+    expect(screen.getByRole("option", { name: "Diaria — $3,00 por día" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Semanal — $10,00 a la semana" })).toBeInTheDocument();
   });
 
   it("keeps the default field label", async () => {

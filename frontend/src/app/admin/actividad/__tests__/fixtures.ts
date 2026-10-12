@@ -223,6 +223,16 @@ function buildAvanzadas(range: AvanzadasRange): AvanzadasData {
       loginsFailed: range === "1h" ? 1 : range === "24h" ? 9 : 52,
       sessionsByRole: { estudiante: 14, representante: 9, trainer: 3, admin: 1 },
     },
+    // 37 of 100 sent today; the quota resets at the next UTC midnight (19:00 club time).
+    emailQuota: {
+      limit: 100,
+      sent: 37,
+      remaining: 63,
+      omitted: 0,
+      waiting: 0,
+      resetsAt: "2026-10-01T19:00:00-05:00",
+      unlimited: false,
+    },
   };
 }
 
