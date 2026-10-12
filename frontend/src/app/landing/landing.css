@@ -1220,7 +1220,10 @@ html[data-theme="dark"] .landing-sponsor { box-shadow: 0 0 0 2px var(--landing-l
 html[data-theme="dark"] :is(.landing-hero, .landing-motto) { --landing-line: var(--landing-brand-black); --landing-drop: var(--landing-brand-black); }
 /* A brand FILL (red, yellow, white, green) keeps a coal edge on a dark page. */
 html[data-theme="dark"] :is(.landing-hero-accent, .landing-hero-badge, .landing-pillars .landing-index, .landing-stat:nth-child(3n + 1), .landing-price:nth-child(3n + 1), .landing-contact-icon, .landing-contact a.landing-contact-action, .landing-slide-title, .landing-gallery-nav button, .landing-schedule-cta, .landing-schedule-tile h3, .landing-schedule-help a, .landing-footer-social a, .landing-nav-links a.active, .landing-button, .landing-logo img, .landing-footer-brand > div > span:first-child) { --landing-line: var(--landing-brand-black); }
-html[data-theme="dark"] .landing-steps-list li:not(:nth-child(3n))::before, html[data-theme="dark"] .landing-faq-list summary::after { --landing-line: var(--landing-brand-black); }
+html[data-theme="dark"] .landing-steps-list li::before, html[data-theme="dark"] .landing-faq-list summary::after { --landing-line: var(--landing-brand-black); }
+/* The coal step badge vanished on the dark card (~1.2:1): it becomes the white
+   inverse block, with the coal edge and number every brand fill keeps here. */
+html[data-theme="dark"] .landing-steps-list li:nth-child(3n) { --step-bg: var(--landing-surface); --step-fg: var(--landing-brand-black); }
 
 /* The big yellow blocks become dark cards with a yellow edge and a yellow number. */
 html[data-theme="dark"] .landing-stat:nth-child(3n + 2) { --stat-bg: var(--landing-card); --stat-fg: var(--landing-text-strong); --stat-accent: var(--landing-highlight); --stat-shadow: #7a6400; --landing-line: var(--landing-highlight); }
