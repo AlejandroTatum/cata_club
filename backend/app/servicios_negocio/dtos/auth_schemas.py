@@ -39,6 +39,17 @@ class RefreshTokenDTO(BaseModel):
     refresh_token: str
 
 
+class ReautenticarDTO(BaseModel):
+    """Step-up de contraseña (#1653, S5). Sin `min_length`: el mismo criterio
+    que el login, un 422 no debe distinguir contraseñas por su largo."""
+
+    contrasenia: str = Field(..., max_length=1024)
+
+
+class ReautenticarResponseDTO(BaseModel):
+    reautenticado_hasta: datetime
+
+
 # Issue #1228: el estado del primer pago, cuando la activación todavía no
 # está completa -- ver `GestorAutenticacion.primer_pago_gate`.
 class PrimerPagoDTO(ResponseBase, BaseModel):

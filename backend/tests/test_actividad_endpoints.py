@@ -329,7 +329,7 @@ def _serie_ok(serie, rango):
 def test_avanzadas_sin_datos_conserva_la_forma_con_secciones_nulas(client, rango):
     cuerpo = client.get(RUTA_AVANZADAS + f"?rango={rango}").json()
 
-    assert set(cuerpo) == {"range", "service", "host", "runtime", "users", "health"}
+    assert set(cuerpo) == {"range", "service", "host", "runtime", "users", "health", "emailQuota"}
     assert cuerpo["range"] == rango
     assert cuerpo["service"] is None and cuerpo["host"] is None
     assert cuerpo["runtime"] is None and cuerpo["users"] is None
@@ -401,7 +401,8 @@ def test_avanzadas_tiene_la_forma_exacta_del_demo(client, db_session, rango):
 
     cuerpo = client.get(RUTA_AVANZADAS + f"?rango={rango}").json()
 
-    assert set(cuerpo) == {"range", "service", "host", "runtime", "users", "health"}
+    assert set(cuerpo) == {"range", "service", "host", "runtime", "users", "health", "emailQuota"}
+    assert set(cuerpo["emailQuota"]) == {"limit", "sent", "remaining", "omitted", "waiting", "resetsAt", "unlimited"}
     servicio = cuerpo["service"]
     assert set(servicio) == {
         "updatedAt", "requestsPerMinute", "errorRate5xx", "errorRate4xx", "latencyMs", "slowEndpoints",
@@ -524,3 +525,144 @@ def test_avanzadas_es_solo_agregados(client, db_session):
         cuerpo = client.get(RUTA_AVANZADAS + f"?rango={rango}").json()
         assert not (_claves(cuerpo) & PROHIBIDAS), _claves(cuerpo) & PROHIBIDAS
         assert not any("@" in t for t in _textos(cuerpo))
+
+
+# --- cupo diario de correos (tarjeta "Correos de hoy") --------------------------
+HOY_UTC = AHORA.date()
+
+
+@pytest.fixture()
+def limite_100(monkeypatch):
+    from app.soporte_transversal import configuracion
+
+    monkeypatch.setattr(configuracion.settings, "limite_correos_diario", 100)
+
+
+def _contador(db, enviados, fecha=HOY_UTC):
+    from app.dominio.modelos import ContadorCorreoDiario
+
+    db.add(ContadorCorreoDiario(fecha=fecha, enviados=enviados))
+    db.flush()
+
+
+def _cupo(client, rango="1h"):
+    return client.get(RUTA_AVANZADAS + f"?rango={rango}").json()["emailQuota"]
+
+
+def test_cupo_con_37_de_100_quedan_63(client, db_session, limite_100):
+    _contador(db_session, 37)
+
+    cupo = _cupo(client)
+
+    assert (cupo["limit"], cupo["sent"], cupo["remaining"], cupo["omitted"]) == (100, 37, 63, 0)
+    assert cupo["unlimited"] is False
+
+
+def test_cupo_pasado_del_limite_separa_enviados_de_omitidos(client, db_session, limite_100):
+    _contador(db_session, 105)
+
+    cupo = _cupo(client)
+
+    assert (cupo["sent"], cupo["omitted"], cupo["remaining"]) == (100, 5, 0)
+
+
+def test_cupo_sin_fila_hoy_son_cero_enviados_y_todo_disponible(client, db_session, limite_100):
+    _contador(db_session, 90, fecha=HOY_UTC - timedelta(days=1))
+
+    cupo = _cupo(client)
+
+    assert (cupo["sent"], cupo["remaining"], cupo["omitted"]) == (0, 100, 0)
+
+
+@pytest.mark.parametrize("limite", [0, -1])
+def test_cupo_con_limite_desactivado_es_ilimitado(client, db_session, monkeypatch, limite):
+    from app.soporte_transversal import configuracion
+
+    monkeypatch.setattr(configuracion.settings, "limite_correos_diario", limite)
+    _contador(db_session, 12)
+
+    cupo = _cupo(client)
+
+    assert cupo["unlimited"] is True
+    assert (cupo["sent"], cupo["omitted"], cupo["remaining"]) == (0, 0, 0)
+
+
+def test_cupo_esta_presente_sin_instantaneas(client, db_session, limite_100):
+    _contador(db_session, 37)
+
+    cuerpo = client.get(RUTA_AVANZADAS + "?rango=1h").json()
+
+    assert cuerpo["service"] is None
+    assert (cuerpo["emailQuota"]["sent"], cuerpo["emailQuota"]["remaining"]) == (37, 63)
+
+
+def test_cupo_cuenta_los_correos_en_espera_por_el_tope(client, db_session, limite_100):
+    from app.dominio.cedula import cedula_valida
+    from app.dominio.modelos import RecuperacionOutbox
+    from app.infraestructura.repositorios import outbox_cupo
+    from tests.fabricas_auth import crear_usuario_auth
+
+    assert _cupo(client)["waiting"] == 0
+    usuario = crear_usuario_auth(db_session, correo="cupo2@cataclub.test", cedula=cedula_valida(8420))
+    db_session.add(RecuperacionOutbox(
+        usuario_id=usuario.id,
+        expires_at=AHORA + timedelta(hours=48),
+        last_error_redacted=f"{outbox_cupo.MARCA_CUPO_AGOTADO}: diferido hasta el día siguiente",
+    ))
+    db_session.commit()
+
+    assert _cupo(client)["waiting"] == 1
+
+
+def test_cupo_se_reinicia_en_la_proxima_medianoche_utc(client, limite_100):
+    reinicio = datetime.fromisoformat(_cupo(client)["resetsAt"])
+
+    assert reinicio.tzinfo is not None
+    assert reinicio == datetime(2026, 10, 2, 0, 0, tzinfo=timezone.utc)
+
+
+def test_cupo_usa_la_misma_clave_de_dia_que_la_reserva():
+    from app.infraestructura import notificaciones_servicio as notificaciones
+
+    assert notificaciones.dia_del_contador(AHORA) == HOY_UTC
+    # 23:30 UTC y 19:00 club del mismo instante no cambian el día del contador.
+    assert notificaciones.dia_del_contador(datetime(2026, 10, 1, 23, 30, tzinfo=timezone.utc)) == HOY_UTC
+
+
+# --- el cupo falla abierto: sin tarjeta, pero el resto de la página sigue ------
+def _romper_cupo(monkeypatch, error):
+    from app.servicios_negocio import actividad_servicio
+
+    def _falla(_db):
+        raise error
+
+    monkeypatch.setattr(actividad_servicio, "contar_en_espera_por_cupo", _falla)
+
+
+@pytest.mark.parametrize("rango", ["1h", "24h", "7d"])
+def test_cupo_que_falla_deja_la_respuesta_en_200_con_cupo_nulo(client, db_session, monkeypatch, caplog, rango):
+    _sembrar_avanzadas(db_session)
+    esperado = client.get(RUTA_AVANZADAS + f"?rango={rango}").json()
+    _romper_cupo(monkeypatch, RuntimeError("redis caído"))
+
+    with caplog.at_level("WARNING"):
+        respuesta = client.get(RUTA_AVANZADAS + f"?rango={rango}")
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["emailQuota"] is None
+    assert {k: v for k, v in cuerpo.items() if k != "emailQuota"} == {
+        k: v for k, v in esperado.items() if k != "emailQuota"
+    }
+    assert cuerpo["service"] is not None and cuerpo["health"] is not None
+    assert any(r.levelname == "WARNING" and "cupo" in r.getMessage().lower() for r in caplog.records)
+
+
+def test_cupo_que_falla_tampoco_rompe_la_respuesta_sin_instantaneas(client, monkeypatch):
+    _romper_cupo(monkeypatch, RuntimeError("base caída"))
+
+    respuesta = client.get(RUTA_AVANZADAS + "?rango=1h")
+
+    assert respuesta.status_code == 200
+    assert respuesta.json()["emailQuota"] is None
+    assert respuesta.json()["service"] is None

@@ -208,6 +208,26 @@ describe("TrainerPage — Mi día", () => {
     vi.useRealTimers();
   });
 
+  it("announces the upcoming no-class days in a card right below today's timeline", async () => {
+    mockFetchDiasSinClase.mockResolvedValue([
+      { id: 1, fechaInicio: "2026-08-10", fechaFin: "2026-08-11", motivo: "Feriado nacional" },
+    ]);
+    render(<TrainerPage />);
+
+    const card = await screen.findByRole("region", { name: "Días sin clase" });
+    expect(within(card).getByRole("heading", { level: 2, name: "Días sin clase" })).toBeInTheDocument();
+    expect(within(card).getByText("10/08/2026 – 11/08/2026")).toBeInTheDocument();
+    expect(within(card).getByText("Feriado nacional")).toBeInTheDocument();
+    expect(card.previousElementSibling).toBe(screen.getByTestId("trainer-today"));
+  });
+
+  it("draws no no-class days card when none are announced", async () => {
+    render(<TrainerPage />);
+
+    await screen.findByTestId("trainer-today");
+    expect(screen.queryByRole("region", { name: "Días sin clase" })).not.toBeInTheDocument();
+  });
+
   it("greets the trainer by first name and states role and date", async () => {
     render(<TrainerPage />);
 

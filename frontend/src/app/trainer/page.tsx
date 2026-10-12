@@ -66,6 +66,7 @@ import {
 import type { EstadoAsistencia } from "@/types/domain";
 import { clubIsoDate, clubTimeHHMM, todayDiaSemana } from "@/lib/club-date";
 import { buildTimelineItems, buildTodayClasses, clubNowMinutes } from "@/app/dashboard/dashboard-utils";
+import NoClassDays from "@/app/student/NoClassDays";
 import { formatDate } from "@/lib/format-utils";
 import {
   buildEnrolledCountsByHorario,
@@ -429,6 +430,12 @@ export default function TrainerPage(): React.ReactElement {
                 </div>
               </DashboardSection>
             )}
+
+            {/* Club-wide no-class days (issue #1665): the trainer's weekly view
+                of the same card the families read, under the day's timeline
+                (or the hero, when there is no timeline). Renders nothing when
+                none are announced. */}
+            <NoClassDays />
 
             <div data-testid="trainer-lower" className={PAGE_RAIL}>
               {/* Two independent stacks: each column ends where its own content

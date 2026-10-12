@@ -9,6 +9,7 @@
  */
 
 import type { ReactElement, ReactNode } from "react";
+import { clubTimeHHMM } from "@/lib/club-date";
 import DashboardSection from "@/components/dashboard/DashboardSection";
 import {
   Badge,
@@ -49,6 +50,7 @@ import {
 import type {
   AvanzadasData,
   AvanzadasRange,
+  EmailQuota,
   HostMetrics,
   RuntimeMetrics,
   ServiceMetrics,
@@ -82,7 +84,7 @@ function Freshness({ at, now, warnWhenStale = false }: { at: string; now: string
 function NoMeasurements({ what }: { what: string }): ReactElement {
   return (
     <p className="m-0 px-[18px] py-4 text-sm text-ink-2">
-      Aún no hay mediciones de {what}. Aparecerán cuando el sistema registre las primeras.
+      Aún no hay mediciones {what}. Aparecerán cuando el sistema registre las primeras.
     </p>
   );
 }
@@ -100,7 +102,7 @@ function Service({ service, now }: { service: ServiceMetrics | null; now: string
   if (!service) {
     return (
       <DashboardSection title="Servicio" testId="service-metrics">
-        <NoMeasurements what="la aplicación" />
+        <NoMeasurements what="de la aplicación" />
       </DashboardSection>
     );
   }
@@ -168,7 +170,7 @@ function Service({ service, now }: { service: ServiceMetrics | null; now: string
 
       <div className="border-t border-line">
         {service.slowEndpoints.length === 0 ? (
-          <NoMeasurements what="endpoints" />
+          <NoMeasurements what="de endpoints" />
         ) : (
           <ScrollableTable label="Endpoints más lentos, tabla desplazable">
             <Table aria-label="Endpoints más lentos">
@@ -211,7 +213,7 @@ function Server({ host, now }: { host: HostMetrics | null; now: string }): React
   if (!host) {
     return (
       <DashboardSection title="Servidor" testId="server-metrics">
-        <NoMeasurements what="el servidor" />
+        <NoMeasurements what="del servidor" />
       </DashboardSection>
     );
   }
@@ -289,7 +291,7 @@ function Containers({ runtime, now }: { runtime: RuntimeMetrics | null; now: str
   if (!runtime) {
     return (
       <DashboardSection title="Memoria por contenedor" testId="container-memory">
-        <NoMeasurements what="los contenedores" />
+        <NoMeasurements what="de los contenedores" />
       </DashboardSection>
     );
   }
@@ -300,7 +302,7 @@ function Containers({ runtime, now }: { runtime: RuntimeMetrics | null; now: str
       action={<Freshness at={runtime.updatedAt} now={now} />}
     >
       {runtime.containers.length === 0 ? (
-        <NoMeasurements what="los contenedores" />
+        <NoMeasurements what="de los contenedores" />
       ) : (
         <ul className="m-0 grid list-none gap-x-page gap-y-4 p-[18px] sm:grid-cols-2">
           {runtime.containers.map((container) => {
@@ -332,7 +334,7 @@ function Users({ users, range, now }: { users: UsersMetrics | null; range: Avanz
   if (!users) {
     return (
       <DashboardSection title="Usuarios" testId="users-metrics">
-        <NoMeasurements what="usuarios" />
+        <NoMeasurements what="de usuarios" />
       </DashboardSection>
     );
   }
@@ -366,9 +368,51 @@ function Users({ users, range, now }: { users: UsersMetrics | null; range: Avanz
             ))}
           </dl>
         ) : (
-          <NoMeasurements what="sesiones" />
+          <NoMeasurements what="de sesiones" />
         )}
       </div>
+    </DashboardSection>
+  );
+}
+
+/** How many e-mails the club can still send today; the counter resets at the next UTC midnight. */
+function EmailQuotaCard({ quota }: { quota: EmailQuota | null | undefined }): ReactElement {
+  if (!quota) {
+    return (
+      <DashboardSection title="Correos de hoy" testId="email-quota">
+        <NoMeasurements what="del cupo de correos" />
+      </DashboardSection>
+    );
+  }
+  if (quota.unlimited) {
+    return (
+      <DashboardSection title="Correos de hoy" testId="email-quota">
+        <p className="m-0 px-[18px] py-4 text-sm text-ink-2">Sin límite diario configurado</p>
+      </DashboardSection>
+    );
+  }
+  const percent = shareOf(quota.sent, quota.limit);
+  const resetsAt = new Date(quota.resetsAt);
+  return (
+    <DashboardSection title="Correos de hoy" testId="email-quota">
+      <div className="flex flex-col gap-3 px-[18px] py-4">
+        <span className="font-display text-xl leading-none tabular-nums tracking-flat text-ink">
+          Quedan {formatCount(quota.remaining)} de {formatCount(quota.limit)}
+        </span>
+        <UsageBar
+          label={`Correos enviados hoy: ${formatCount(quota.sent)} de ${formatCount(quota.limit)} (${percent}%)`}
+          used={quota.sent}
+          limit={quota.limit}
+          tone={toneForThresholds(percent, CAPACITY_LIMITS)}
+        />
+        {Number.isNaN(resetsAt.getTime()) ? null : (
+          <span className="text-xs text-ink-3-strong">Se reinicia hoy a las {clubTimeHHMM(resetsAt)}</span>
+        )}
+      </div>
+      <dl className="m-0 divide-y divide-line border-t border-line">
+        <Row label="Omitidos hoy por cupo">{formatCount(quota.omitted)}</Row>
+        <Row label="En espera para mañana">{formatCount(quota.waiting)}</Row>
+      </dl>
     </DashboardSection>
   );
 }
@@ -409,7 +453,7 @@ function Backstage({ runtime, now }: { runtime: RuntimeMetrics | null; now: stri
   if (!runtime) {
     return (
       <DashboardSection title="Base de datos, caché y colas" testId="backstage-metrics">
-        <NoMeasurements what="la base de datos, la caché y las colas" />
+        <NoMeasurements what="de la base de datos, la caché y las colas" />
       </DashboardSection>
     );
   }
@@ -464,6 +508,7 @@ export default function AvanzadasView({ data, now }: { data: AvanzadasData; now:
         <Containers runtime={data.runtime} now={now} />
       </div>
       <div className="flex min-w-0 flex-col gap-page">
+        <EmailQuotaCard quota={data.emailQuota} />
         <Users users={data.users} range={data.range} now={now} />
         <Backstage runtime={data.runtime} now={now} />
         <InfoPanel title="Cómo leer estas métricas">

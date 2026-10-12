@@ -4,7 +4,7 @@
  * Admin-only edit and delete of a no-class day; the backend enforces the role.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookies } from "@/lib/server/auth";
+import { refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 import { deleteCatalogResource } from "@/lib/server/bff-helpers";
 
@@ -37,7 +37,7 @@ export async function PUT(request: NextRequest, props: Props): Promise<NextRespo
   if (!result.ok) return NextResponse.json({ message: "No se pudo guardar el día sin clase." }, { status: result.status });
   if (!result.response.ok) return passthroughBackendError(result.response, "No se pudo guardar el día sin clase.");
   const response = NextResponse.json(await result.response.json());
-  if (result.refreshedAccessToken) setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+  if (result.refreshedAccessToken) setAuthCookies(response, refreshedTokenCookies(result));
   return response;
 }
 

@@ -10,9 +10,9 @@ propia copia -- este módulo es la única, mismo criterio que
 `fabricas_pagos.py` (helpers de tests compartidos viven como módulo en
 `tests/`, no repetidos por archivo).
 """
-from datetime import date
+from datetime import date, datetime, timezone
 
-from app.dominio.modelos import Persona, Usuario
+from app.dominio.modelos import Persona, Sesion, Usuario
 from app.seguridad.gestor_auth import GestorAutenticacion
 
 
@@ -33,6 +33,23 @@ def crear_usuario_auth(
     db_session.add(usuario)
     db_session.commit()
     return usuario
+
+
+def token_admin_con_stepup(db_session, admin: Usuario) -> str:
+    """Access de un admin cuya sesión re-ingresó la contraseña ahora: el cambio
+    de roles lo exige (#1653, S5). Abre una fila `sesion` con `reautenticada_en`
+    y el token lleva su `sid`."""
+    sesion = Sesion(
+        usuario_id=admin.id, dispositivo="test", version_sesion=admin.version_sesion,
+        reautenticada_en=datetime.now(timezone.utc),
+    )
+    db_session.add(sesion)
+    db_session.commit()
+    return GestorAutenticacion.crear_token_acceso(
+        {"sub": admin.correo, "persona_id": admin.persona_id,
+         "roles": ["ADMINISTRADOR"], "sid": sesion.id},
+        version_sesion=admin.version_sesion,
+    )
 
 
 class SleeperEspia:

@@ -334,6 +334,33 @@ describe("ApiClientError.code", () => {
     }
   });
 
+  it("reads the backend's `codigo` too, which the BFF relays as-is (password step-up, #1653)", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      errorResponse(403, { message: "Confirma tu contraseña.", codigo: "reautenticacion_requerida" }),
+    );
+
+    try {
+      await fetchPaymentValidations();
+      expect.fail("Expected an error");
+    } catch (error) {
+      expect((error as ApiClientError).code).toBe("reautenticacion_requerida");
+      expect((error as ApiClientError).status).toBe(403);
+    }
+  });
+
+  it("prefers `code` when a body carries both", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      errorResponse(400, { message: "mensaje", code: "uno", codigo: "otro" }),
+    );
+
+    try {
+      await fetchPaymentValidations();
+      expect.fail("Expected an error");
+    } catch (error) {
+      expect((error as ApiClientError).code).toBe("uno");
+    }
+  });
+
   it.each([
     ["absent", {}],
     ["an empty string", { code: "" }],

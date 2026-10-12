@@ -38,6 +38,15 @@ describe("GET /api/actividad/avanzadas", () => {
     expect(target.searchParams.get("rango")).toBe(rango);
   });
 
+  it("passes the emailQuota block through untouched", async () => {
+    const emailQuota = { limit: 100, sent: 37, remaining: 63, omitted: 0, waiting: 2, resetsAt: "2026-10-02T00:00:00Z", unlimited: false };
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ range: "1h", emailQuota }));
+
+    const response = await GET(getRequest("?rango=1h"));
+
+    expect((await response.json()).emailQuota).toEqual(emailQuota);
+  });
+
   it("omits rango when none is given, so the backend default applies", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({}));
     await GET(getRequest());

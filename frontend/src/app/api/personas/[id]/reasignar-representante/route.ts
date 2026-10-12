@@ -19,7 +19,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookies } from "@/lib/server/auth";
+import { refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 import { parseNumericIdOrBadRequest } from "@/lib/server/bff-helpers";
 import type { ReasignacionResponse } from "@/types/domain";
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
   };
   const response = NextResponse.json(data, { status: 200 });
   if (result.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+    setAuthCookies(response, refreshedTokenCookies(result));
   }
   return response;
 }

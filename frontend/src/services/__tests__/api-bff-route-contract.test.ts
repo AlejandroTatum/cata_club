@@ -31,6 +31,7 @@ import { ACCESS_TOKEN_COOKIE } from "@/lib/server/auth";
 import {
   obtenerRolesDePersona,
   asignarRol,
+  reautenticar,
   quitarRol,
   cambiarEstadoCuenta,
   actualizarPersona,
@@ -206,6 +207,7 @@ describe("API client URLs resolve to a real BFF route handler", () => {
     ["obtenerRolesDePersona", () => obtenerRolesDePersona(2)],
     ["asignarRol", () => asignarRol(2, "ENTRENADOR")],
     ["quitarRol", () => quitarRol(2, "ENTRENADOR")],
+    ["reautenticar", () => reautenticar("claveAdmin123")],
     ["cambiarEstadoCuenta", () => cambiarEstadoCuenta(2, false)],
     ["actualizarPersona", () => actualizarPersona(2, { telefono: "0999999999" })],
     [

@@ -18,7 +18,8 @@ SCRIPT = ROOT / "scripts" / "feature_flow.sh"
 FAKE_GH = """#!/usr/bin/env bash
 echo "$*" >> "$GH_LOG"
 case "$1 $2" in
-  "pr view") echo "${GH_BASE:-}" ;;
+  "pr view")
+    if [[ " $* " == *" headRefName "* ]]; then echo "${GH_HEAD:-feat/demo-s1}"; else echo "${GH_BASE:-}"; fi ;;
   "pr checks")
     # Como el gh real: `--required` falla si la base no tiene protección,
     # que es el caso de toda rama de integración `feat/*`.
@@ -190,6 +191,37 @@ def test_slice_merge_squashes_when_green(repo):
     assert r.returncode == 0, r.stderr
     merges = [c for c in gh_calls(repo) if "pr merge" in c]
     assert merges == ["pr merge 7 --squash --delete-branch"]
+
+
+def test_slice_merge_refuses_when_a_worktree_has_the_slice_branch_checked_out(repo, tmp_path):
+    # `gh pr merge --delete-branch` borra la rama local Y el worktree que la
+    # tiene en checkout: el guard debe cortar antes de llamar a `gh pr merge`.
+    start_slice(repo)
+    git(repo, "checkout", "-q", "main")
+    wt = tmp_path / "slice-worktree"
+    git(repo, "worktree", "add", "-q", str(wt), "feat/demo-s1")
+    r = flow(repo, "slice-merge", "demo", "7", GH_BASE="feat/demo", GH_HEAD="feat/demo-s1")
+    assert r.returncode != 0
+    assert str(wt) in r.stderr and "feat/demo-s1" in r.stderr
+    assert "switch" in r.stderr.lower()
+    assert not any("pr merge" in c for c in gh_calls(repo))
+    assert wt.exists()
+
+
+def test_slice_merge_refuses_when_the_current_checkout_is_on_the_slice_branch(repo):
+    start_slice(repo)
+    r = flow(repo, "slice-merge", "demo", "7", GH_BASE="feat/demo", GH_HEAD="feat/demo-s1")
+    assert r.returncode != 0 and str(repo) in r.stderr
+    assert not any("pr merge" in c for c in gh_calls(repo))
+
+
+def test_slice_merge_proceeds_when_the_slice_branch_is_not_checked_out(repo, tmp_path):
+    start_slice(repo)
+    git(repo, "checkout", "-q", "main")
+    git(repo, "worktree", "add", "-q", "--detach", str(tmp_path / "other"), "main")
+    r = flow(repo, "slice-merge", "demo", "7", GH_BASE="feat/demo", GH_HEAD="feat/demo-s1")
+    assert r.returncode == 0, r.stderr
+    assert "pr merge 7 --squash --delete-branch" in gh_calls(repo)
 
 
 def test_slice_merge_rejects_non_numeric_pr(repo):

@@ -4,7 +4,7 @@
  * Core requirement: cookies are ALWAYS cleared, even when the upstream
  * FastAPI logout call throws/errors/times out — client-side cookie
  * clearing is authoritative. The backend logout DOES revoke the session
- * (it bumps the per-user session epoch), so an expired access token must not
+ * (only this device's `sid`), so an expired access token must not
  * leave the refresh token alive: the route refreshes first (#1653).
  *
  * @vitest-environment node
@@ -111,6 +111,25 @@ describe("POST /api/auth/logout", () => {
       { url: "http://localhost:8000/api/v1/auth/logout", auth: "Bearer fresh-access" },
     ]);
     expect(response.cookies.get(ACCESS_TOKEN_COOKIE)?.maxAge).toBe(0);
+    expect(response.cookies.get(REFRESH_TOKEN_COOKIE)?.maxAge).toBe(0);
+  });
+
+  it("authenticates with the new access token and still clears both cookies when the refresh rotated the refresh token", async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(
+        Response.json({ access_token: "fresh-access", refresh_token: jwt(9999), token_type: "bearer" }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    const response = await POST(
+      logoutRequest(`${ACCESS_TOKEN_COOKIE}=${jwt(-60)}; ${REFRESH_TOKEN_COOKIE}=refresh-token`),
+    );
+
+    expect(calls()[1]).toEqual({ url: "http://localhost:8000/api/v1/auth/logout", auth: "Bearer fresh-access" });
+    // The rotated token must not resurrect the session: the cookies are cleared, not replaced.
+    expect(response.cookies.get(ACCESS_TOKEN_COOKIE)?.value).toBe("");
+    expect(response.cookies.get(ACCESS_TOKEN_COOKIE)?.maxAge).toBe(0);
+    expect(response.cookies.get(REFRESH_TOKEN_COOKIE)?.value).toBe("");
     expect(response.cookies.get(REFRESH_TOKEN_COOKIE)?.maxAge).toBe(0);
   });
 

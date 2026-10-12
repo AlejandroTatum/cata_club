@@ -100,6 +100,41 @@ describe("GET /api/personas/[id]/roles", () => {
   });
 });
 
+describe("password step-up code (#1653, S5)", () => {
+  const stepUp = {
+    detail: "Por seguridad, confirma tu contraseña para cambiar roles.",
+    message: "Por seguridad, confirma tu contraseña para cambiar roles.",
+    mensaje_seguro: true,
+    codigo: "reautenticacion_requerida",
+  };
+
+  it("POST relays the backend's 403 with its `codigo` so the browser can prompt", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(stepUp, 403));
+
+    const response = await POST(
+      postRequest("5", { tipoRol: "ENTRENADOR" }, `${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`),
+      { params: Promise.resolve({ id: "5" }) },
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ codigo: "reautenticacion_requerida", mensaje_seguro: true });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("DELETE relays the backend's 403 with its `codigo` so the browser can prompt", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(stepUp, 403));
+
+    const response = await DELETE(
+      deleteRequest("5", "ENTRENADOR", `${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`),
+      { params: Promise.resolve({ id: "5" }) },
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ codigo: "reautenticacion_requerida", mensaje_seguro: true });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("POST /api/personas/[id]/roles", () => {
   it("returns 401 without calling the backend when no auth cookie is present", async () => {
     const response = await POST(postRequest("5", { tipoRol: "ENTRENADOR" }), { params: Promise.resolve({ id: "5" }) });

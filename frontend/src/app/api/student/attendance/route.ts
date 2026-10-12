@@ -9,7 +9,7 @@
  * labels each session with its horario, like the portal aggregate does.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookies } from "@/lib/server/auth";
+import { pickRefreshed, refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 import type { BackendAsistencia, BackendHorario } from "@/lib/server/attendance-adapter";
 import { buildSessionViews } from "@/lib/server/student-adapter";
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     { items: buildSessionViews(page.items, horariosById), total: page.total, skip: page.skip, limit: page.limit },
     { headers: { "Cache-Control": "no-store" } },
   );
-  const refreshed = historial.refreshedAccessToken ?? horarios.refreshedAccessToken;
-  if (refreshed) setAuthCookies(response, { accessToken: refreshed });
+  const refreshed = pickRefreshed(historial, horarios.ok && horarios);
+  if (refreshed.refreshedAccessToken) setAuthCookies(response, refreshedTokenCookies(refreshed));
   return response;
 }

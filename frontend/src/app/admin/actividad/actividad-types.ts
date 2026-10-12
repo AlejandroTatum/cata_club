@@ -141,6 +141,17 @@ export interface UsersMetrics {
   sessionsByRole: SessionsByRole | null;
 }
 
+/** Today's e-mail quota (UTC day). `resetsAt` is the next UTC midnight; with `unlimited` the figures are zeros. */
+export interface EmailQuota {
+  limit: number;
+  sent: number;
+  remaining: number;
+  omitted: number;
+  waiting: number;
+  resetsAt: string;
+  unlimited: boolean;
+}
+
 export interface AvanzadasData {
   range: AvanzadasRange;
   service: ServiceMetrics | null;
@@ -148,4 +159,5 @@ export interface AvanzadasData {
   runtime: RuntimeMetrics | null;
   users: UsersMetrics | null;
   health?: SystemHealth | null;
+  emailQuota?: EmailQuota | null;
 }
