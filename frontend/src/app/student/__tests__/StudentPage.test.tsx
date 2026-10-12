@@ -3265,7 +3265,7 @@ describe("StudentPage — no-class days", () => {
     ]);
     const { unmount } = render(<StudentPage />);
 
-    const panel = await screen.findByRole("complementary", { name: "Días sin clase" });
+    const panel = await screen.findByRole("region", { name: "Días sin clase" });
     expect(within(panel).getByText("04/07/2999")).toBeInTheDocument();
     expect(within(panel).getByText("Feriado nacional")).toBeInTheDocument();
     unmount();
@@ -3273,6 +3273,20 @@ describe("StudentPage — no-class days", () => {
     mockFetchDiasSinClase.mockResolvedValue([]);
     render(<StudentPage />);
     await screen.findByTestId("student-carnet");
-    expect(screen.queryByRole("complementary", { name: "Días sin clase" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Días sin clase" })).not.toBeInTheDocument();
+  });
+
+  // One DOM serves the desktop rail and the stacked phone order (only CSS
+  // reorders the columns), so "next sibling" holds in every layout.
+  it("sits immediately below \"Esta semana\", once", async () => {
+    mockFetchDiasSinClase.mockResolvedValue([
+      { id: 1, fechaInicio: "2999-07-04", fechaFin: "2999-07-04", motivo: "Feriado nacional" },
+    ]);
+    render(<StudentPage />);
+
+    const week = await screen.findByRole("region", { name: "Esta semana" });
+    const card = await screen.findByRole("region", { name: "Días sin clase" });
+    expect(week.nextElementSibling).toBe(card);
+    expect(screen.getAllByRole("region", { name: "Días sin clase" })).toHaveLength(1);
   });
 });
