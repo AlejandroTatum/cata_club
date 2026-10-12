@@ -373,6 +373,46 @@ describe("ActividadPage — Métricas avanzadas", () => {
     expect(screen.queryByTestId("sparkline")).toBeNull();
   });
 
+  it("keeps every existing advanced section when the email quota card is present", async () => {
+    await renderAvanzadas();
+    for (const testId of ["service-metrics", "server-metrics", "container-memory", "users-metrics", "backstage-metrics"]) {
+      expect(screen.getByTestId(testId)).toBeInTheDocument();
+    }
+    expect(screen.getByTestId("email-quota")).toBeInTheDocument();
+  });
+
+  it("tells how many emails are left today, the omitted and waiting ones, and when the quota resets in club time", async () => {
+    const base = avanzadasFixture("1h");
+    await renderAvanzadas({
+      ...base,
+      emailQuota: { limit: 100, sent: 37, remaining: 63, omitted: 4, waiting: 6, resetsAt: "2026-10-02T00:00:00Z", unlimited: false },
+    });
+    const card = within(screen.getByTestId("email-quota"));
+    expect(card.getByRole("heading", { level: 2, name: "Correos de hoy" })).toBeInTheDocument();
+    expect(card.getByText("Quedan 63 de 100")).toBeInTheDocument();
+    expect(card.getByRole("meter", { name: /37 de 100/ })).toHaveAttribute("aria-valuenow", "37");
+    expect(card.getByText("Omitidos hoy por cupo").nextSibling).toHaveTextContent("4");
+    expect(card.getByText("En espera para mañana").nextSibling).toHaveTextContent("6");
+    expect(card.getByText("Se reinicia hoy a las 19:00")).toBeInTheDocument();
+  });
+
+  it("says there is no daily limit instead of printing numbers when the limit is disabled", async () => {
+    await renderAvanzadas({
+      ...avanzadasFixture("1h"),
+      emailQuota: { limit: 0, sent: 0, remaining: 0, omitted: 0, waiting: 0, resetsAt: "2026-10-02T00:00:00Z", unlimited: true },
+    });
+    const card = within(screen.getByTestId("email-quota"));
+    expect(card.getByText("Sin límite diario configurado")).toBeInTheDocument();
+    expect(card.queryByText(/Quedan/)).toBeNull();
+    expect(card.queryByRole("meter")).toBeNull();
+  });
+
+  it("gives the email quota its own notice when the backend sends no block", async () => {
+    const { emailQuota: _omitted, ...withoutQuota } = avanzadasFixture("1h");
+    await renderAvanzadas(withoutQuota);
+    expect(within(screen.getByTestId("email-quota")).getByText(/Aún no hay mediciones/)).toBeInTheDocument();
+  });
+
   it("shows '—' for latencies, cache limit, queue and connection figures that were not measured", async () => {
     const data = avanzadasFixture("1h");
     await renderAvanzadas({

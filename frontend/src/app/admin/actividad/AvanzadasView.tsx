@@ -9,6 +9,7 @@
  */
 
 import type { ReactElement, ReactNode } from "react";
+import { clubTimeHHMM } from "@/lib/club-date";
 import DashboardSection from "@/components/dashboard/DashboardSection";
 import {
   Badge,
@@ -49,6 +50,7 @@ import {
 import type {
   AvanzadasData,
   AvanzadasRange,
+  EmailQuota,
   HostMetrics,
   RuntimeMetrics,
   ServiceMetrics,
@@ -373,6 +375,48 @@ function Users({ users, range, now }: { users: UsersMetrics | null; range: Avanz
   );
 }
 
+/** How many e-mails the club can still send today; the counter resets at the next UTC midnight. */
+function EmailQuotaCard({ quota }: { quota: EmailQuota | null | undefined }): ReactElement {
+  if (!quota) {
+    return (
+      <DashboardSection title="Correos de hoy" testId="email-quota">
+        <NoMeasurements what="el cupo de correos" />
+      </DashboardSection>
+    );
+  }
+  if (quota.unlimited) {
+    return (
+      <DashboardSection title="Correos de hoy" testId="email-quota">
+        <p className="m-0 px-[18px] py-4 text-sm text-ink-2">Sin límite diario configurado</p>
+      </DashboardSection>
+    );
+  }
+  const percent = shareOf(quota.sent, quota.limit);
+  const resetsAt = new Date(quota.resetsAt);
+  return (
+    <DashboardSection title="Correos de hoy" testId="email-quota">
+      <div className="flex flex-col gap-3 px-[18px] py-4">
+        <span className="font-display text-xl leading-none tabular-nums tracking-flat text-ink">
+          Quedan {formatCount(quota.remaining)} de {formatCount(quota.limit)}
+        </span>
+        <UsageBar
+          label={`Correos enviados hoy: ${formatCount(quota.sent)} de ${formatCount(quota.limit)} (${percent}%)`}
+          used={quota.sent}
+          limit={quota.limit}
+          tone={toneForThresholds(percent, CAPACITY_LIMITS)}
+        />
+        {Number.isNaN(resetsAt.getTime()) ? null : (
+          <span className="text-xs text-ink-3-strong">Se reinicia hoy a las {clubTimeHHMM(resetsAt)}</span>
+        )}
+      </div>
+      <dl className="m-0 divide-y divide-line border-t border-line">
+        <Row label="Omitidos hoy por cupo">{formatCount(quota.omitted)}</Row>
+        <Row label="En espera para mañana">{formatCount(quota.waiting)}</Row>
+      </dl>
+    </DashboardSection>
+  );
+}
+
 /** One "used of limit" line with its bar; the bar needs both figures, the line says what it has. */
 function Capacity({
   label,
@@ -464,6 +508,7 @@ export default function AvanzadasView({ data, now }: { data: AvanzadasData; now:
         <Containers runtime={data.runtime} now={now} />
       </div>
       <div className="flex min-w-0 flex-col gap-page">
+        <EmailQuotaCard quota={data.emailQuota} />
         <Users users={data.users} range={data.range} now={now} />
         <Backstage runtime={data.runtime} now={now} />
         <InfoPanel title="Cómo leer estas métricas">
