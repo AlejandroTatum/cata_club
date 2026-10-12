@@ -23,6 +23,7 @@ from app.dominio.modelos import Persona, Rol, Sesion, Usuario
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.auth_servicio import AuthServicio
 from app.soporte_transversal.configuracion import settings
+from tests.fabricas_auth import token_admin_con_stepup
 
 CORREO = "ana@cataclub.test"
 CLAVE = "clave12345"
@@ -167,12 +168,10 @@ def test_restablecer_contrasenia_mata_todas_las_sesiones(client_sin_token, dos_d
     _assert_ambos_muertos(client_sin_token, a, b)
 
 
-def test_quitar_rol_mata_todas_las_sesiones(client_sin_token, dos_dispositivos, usuario, admin):
+def test_quitar_rol_mata_todas_las_sesiones(client_sin_token, dos_dispositivos, usuario, admin, db_session):
     a, b = dos_dispositivos
-    token_admin = GestorAutenticacion.crear_token_acceso(
-        {"sub": admin.correo, "persona_id": admin.persona_id, "roles": ["ADMINISTRADOR"]},
-        version_sesion=admin.version_sesion,
-    )
+    # Quitar un rol exige el step-up de contraseña del admin (S5).
+    token_admin = token_admin_con_stepup(db_session, admin)
 
     respuesta = client_sin_token.delete(
         f"/api/v1/personas/{usuario.persona_id}/roles/ALUMNO", headers=_bearer(token_admin),

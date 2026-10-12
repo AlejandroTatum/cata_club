@@ -246,6 +246,32 @@ def test_reautenticar_con_la_contrasenia_correcta_limpia_los_fallos_previos(
     assert clave not in auth_servicio._INTENTOS_FALLIDOS_LOGIN
 
 
+def test_reautenticar_con_token_sin_sid_es_400_sin_sello_ni_tocar_el_freno_y_no_habilita_roles(
+    client_sin_token, admin, objetivo, db_session
+):
+    """Un access anterior a la rotación no tiene `sid`: no hay sesión donde
+    guardar el step-up."""
+    legacy = {"access_token": GestorAutenticacion.crear_token_acceso(
+        {"sub": admin.correo, "persona_id": admin.persona_id, "roles": ["ADMINISTRADOR"]},
+        version_sesion=admin.version_sesion,
+    )}
+    clave = admin.correo.strip().lower()
+    antes = dict(auth_servicio._INTENTOS_FALLIDOS_LOGIN)
+
+    resp = _reautenticar(client_sin_token, legacy)
+
+    assert resp.status_code == 400
+    assert "anterior" in resp.json()["message"]
+    assert db_session.query(Sesion).filter(Sesion.reautenticada_en.isnot(None)).count() == 0
+    # Ni cuenta como fallo ni limpia los previos: el freno queda como estaba.
+    assert dict(auth_servicio._INTENTOS_FALLIDOS_LOGIN) == antes
+    assert clave not in auth_servicio._INTENTOS_FALLIDOS_LOGIN
+    resp = _asignar(client_sin_token, legacy, objetivo.id)
+    assert resp.status_code == 403
+    assert resp.json()["codigo"] == CODIGO
+    assert _roles(db_session, objetivo.id) == []
+
+
 def test_reautenticar_exige_autenticacion(client_sin_token):
     resp = client_sin_token.post("/api/v1/auth/reautenticar", json={"contrasenia": "x"})
     assert resp.status_code == 401
@@ -303,3 +329,19 @@ def test_quitar_un_rol_sigue_bombeando_el_epoch_del_objetivo(
 
     db_session.refresh(usuario)
     assert usuario.version_sesion == version_previa + 1
+
+
+# --- el camino real exige el step-up aunque se pida también `client` ---------
+def test_client_sin_token_no_hereda_el_bypass_del_step_up_de_client(
+    client, client_sin_token, admin, objetivo, db_session
+):
+    """`client` desactiva el step-up para los tests de negocio; si
+    `client_sin_token` lo heredara, un test con ambas fixtures se saltaría la
+    regla sin saberlo."""
+    par = _login(db_session, admin.correo, CLAVE_ADMIN, "Firefox/130")
+
+    resp = _asignar(client_sin_token, par, objetivo.id)
+
+    assert resp.status_code == 403
+    assert resp.json()["codigo"] == CODIGO
+    assert _roles(db_session, objetivo.id) == []

@@ -17,14 +17,15 @@ Mismo patrón que test_sesiones_invalidar.py: tokens REALES contra
 `client_sin_token`, para que `decodificar_token` y `/auth/refresh` ejerciten
 la regla de vigencia de verdad (sin overrides).
 """
-from datetime import date, datetime, timezone
+from datetime import date
 
 import pytest
 
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import TipoRol
-from app.dominio.modelos import Persona, Rol, Sesion, Usuario
+from app.dominio.modelos import Persona, Rol, Usuario
 from app.seguridad.gestor_auth import GestorAutenticacion
+from tests.fabricas_auth import token_admin_con_stepup
 
 
 @pytest.fixture()
@@ -70,22 +71,6 @@ def _token_acceso(usuario: Usuario, roles: list[str] | None = None) -> str:
         {"sub": usuario.correo, "persona_id": usuario.persona_id,
          "roles": roles if roles is not None else ["ALUMNO"]},
         version_sesion=usuario.version_sesion,
-    )
-
-
-def _token_admin_con_stepup(db_session, admin: Usuario) -> str:
-    """Access de un admin cuya sesión re-ingresó la contraseña ahora: el
-    cambio de roles lo exige (#1653, S5)."""
-    sesion = Sesion(
-        usuario_id=admin.id, dispositivo="test", version_sesion=admin.version_sesion,
-        reautenticada_en=datetime.now(timezone.utc),
-    )
-    db_session.add(sesion)
-    db_session.commit()
-    return GestorAutenticacion.crear_token_acceso(
-        {"sub": admin.correo, "persona_id": admin.persona_id,
-         "roles": ["ADMINISTRADOR"], "sid": sesion.id},
-        version_sesion=admin.version_sesion,
     )
 
 
@@ -231,7 +216,7 @@ def test_quitar_rol_invalida_access_token_previo(
     usuario = usuario_real.usuario
     access_previo = _token_acceso(usuario)
     version_previa = usuario.version_sesion
-    token_admin = _token_admin_con_stepup(db_session, admin_real.usuario)
+    token_admin = token_admin_con_stepup(db_session, admin_real.usuario)
 
     respuesta = client_sin_token.delete(
         f"/api/v1/personas/{usuario_real.id}/roles/ALUMNO",

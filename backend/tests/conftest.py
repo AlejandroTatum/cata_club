@@ -521,6 +521,9 @@ def client_sin_token(db_session):
     # al no venir un Bearer en la cabecera lanza 401 (manejado por el
     # OAuth2PasswordBearer de gestor_auth.py).
     app.dependency_overrides.pop(GestorAutenticacion.decodificar_token, None)
+    # Tampoco hereda el bypass del step-up de `client` (#1653, S5): este es el
+    # camino real, aunque el test pida también `client`.
+    app.dependency_overrides.pop(exigir_reautenticacion_reciente, None)
 
     with TestClient(app) as c:
         yield c
