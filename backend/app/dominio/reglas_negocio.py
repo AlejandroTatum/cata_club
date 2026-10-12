@@ -28,6 +28,12 @@ from datetime import date, time
 # el campo.
 LIMITE_CORRECCION_ASISTENCIA_DIAS = 30
 
+# Issue #1749: fundación del club, el piso de «Miembro desde». Es la misma
+# fecha que publica la landing (`FOUNDING_DATE` en
+# `frontend/src/app/landing/landing-config.ts`); viven en dos lenguajes y
+# `tests/test_fecha_fundacion_paridad.py` falla si se separan.
+FECHA_FUNDACION_CLUB = date(2013, 10, 10)
+
 # ENT-02: una lista solo se toma para hoy o hasta este número de días atrás
 # (día del club). Antes cualquier fecha pasaba: una futura, o una de hace
 # años que quedaba cerrada y, pasados `LIMITE_CORRECCION_ASISTENCIA_DIAS`,

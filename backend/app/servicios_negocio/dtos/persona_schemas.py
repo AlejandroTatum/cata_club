@@ -165,6 +165,15 @@ class PersonaUpdateDTO(BaseModel):
     institucion_id: Optional[int] = None
 
 
+class MiembroDesdeDTO(BaseModel):
+    """Cuerpo de `PATCH /personas/{persona_id}/miembro-desde` (issue #1749).
+
+    El campo es OBLIGATORIO: `null` explícito limpia el valor, un cuerpo sin
+    él es un 422 (no se limpia por omisión). Cualquier día del mes sirve; el
+    servicio lo normaliza al día 1."""
+    miembro_desde: Optional[date] = Field(..., examples=["2019-03-01"])
+
+
 class EstadoPersonaDTO(BaseModel):
     """Cuerpo de `PATCH /personas/{persona_id}/estado`: baja lógica o
     reincorporación de una persona al club. Misma forma que el
@@ -236,6 +245,9 @@ class PersonaResponseDTO(ResponseBase, BaseModel):
     telefono_contacto: Optional[str] = Field(default=None, examples=["0998765432"])
     representante_id: Optional[int] = Field(default=None, examples=[None])
     fecha_registro: Optional[datetime] = Field(default=None, examples=["2024-01-15T10:30:00Z"])
+    # Issue #1749: primer día del mes desde el que el club cuenta al jugador;
+    # solo importan mes y año. `None` = sin dato (nunca se deriva).
+    miembro_desde: Optional[date] = Field(default=None, examples=["2019-03-01"])
     # Baja lógica: la UI necesita distinguir a un miembro activo de uno dado
     # de baja para poder marcarlo en el roster admin (que sí los sigue
     # listando) y ofrecer reincorporarlo.

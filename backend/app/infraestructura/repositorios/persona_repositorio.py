@@ -18,6 +18,23 @@ def _normalizar_termino(palabra: str) -> str:
     return palabra.translate(_ACENTOS_A_LLANOS).lower()
 
 
+def _condiciones_de_jugador():
+    """Las dos puertas de «es jugador» (#1669/#1661): el rol ALUMNO, o una
+    membresía que habilita entrenar (ACTIVA/VENCIDA). Una sola definición para
+    la búsqueda de jugadores y para `es_jugador` (issue #1749)."""
+    es_alumno = exists().where(
+        Usuario.persona_id == Persona.id,
+        usuario_rol.c.usuario_id == Usuario.id,
+        usuario_rol.c.rol_id == Rol.id,
+        Rol.tipo_rol == TipoRol.ALUMNO,
+    )
+    puede_entrenar = exists().where(
+        Membresia.persona_id == Persona.id,
+        Membresia.estado.in_((EstadoMembresia.ACTIVA, EstadoMembresia.VENCIDA)),
+    )
+    return es_alumno, puede_entrenar
+
+
 class PersonaRepositorio:
     """Encapsula todo el acceso a datos de Persona. Es la ÚNICA clase
     del proyecto que debe importar Session y ejecutar db.query/add/flush
@@ -216,6 +233,13 @@ class PersonaRepositorio:
             .scalar()
         )
 
+    def es_jugador(self, persona_id: int) -> bool:
+        """True si la persona es jugadora según la misma regla que
+        `buscar_por_nombre(solo_jugadores=True)` (issue #1749)."""
+        es_alumno, puede_entrenar = _condiciones_de_jugador()
+        stmt = select(Persona.id).where(Persona.id == persona_id, or_(es_alumno, puede_entrenar))
+        return self.db.execute(stmt).first() is not None
+
     def buscar_por_nombre(
         self,
         q: str,
@@ -234,16 +258,7 @@ class PersonaRepositorio:
         membresía."""
         stmt = select(Persona)
         if solo_jugadores:
-            es_alumno = exists().where(
-                Usuario.persona_id == Persona.id,
-                usuario_rol.c.usuario_id == Usuario.id,
-                usuario_rol.c.rol_id == Rol.id,
-                Rol.tipo_rol == TipoRol.ALUMNO,
-            )
-            puede_entrenar = exists().where(
-                Membresia.persona_id == Persona.id,
-                Membresia.estado.in_((EstadoMembresia.ACTIVA, EstadoMembresia.VENCIDA)),
-            )
+            es_alumno, puede_entrenar = _condiciones_de_jugador()
             stmt = stmt.where(or_(es_alumno, puede_entrenar))
         if rol:
             stmt = (

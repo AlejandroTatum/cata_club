@@ -14,7 +14,7 @@ from app.servicios_negocio.dtos.persona_schemas import (
     PersonaBusquedaDTO, RepresentadoCreateDTO, RepresentadoPropioResponseDTO,
     VincularRepresentadoDTO, IndependizarDTO,
     IndependenciaResponseDTO, ReasignarRepresentacionDTO, ReasignacionResponseDTO,
-    EstadoPersonaDTO, EntrenadorCreateDTO,
+    EstadoPersonaDTO, EntrenadorCreateDTO, MiembroDesdeDTO,
     AntecedentesClubCreateDTO, AntecedentesClubUpdateDTO, AntecedentesClubResponseDTO,
 )
 from app.servicios_negocio.dtos.base import PaginatedResponse
@@ -705,6 +705,16 @@ async def actualizar_foto_persona(
 )
 async def actualizar_persona(persona_id: int, cambios: PersonaUpdateDTO, db: Session = Depends(obtener_sesion)):
     return PersonaServicio(db).actualizar_persona(persona_id, cambios)
+
+
+# Issue #1749: «Miembro desde» de un jugador, solo ADMINISTRADOR (ni el propio
+# jugador lo fija). `null` lo limpia.
+@router.patch(
+    "/{persona_id}/miembro-desde", response_model=PersonaResponseDTO,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def fijar_miembro_desde(persona_id: int, datos: MiembroDesdeDTO, db: Session = Depends(obtener_sesion)):
+    return PersonaServicio(db).fijar_miembro_desde(persona_id, datos.miembro_desde)
 
 
 # --- Baja lógica de una persona --------------------------------------------
