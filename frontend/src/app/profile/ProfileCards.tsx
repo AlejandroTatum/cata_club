@@ -334,7 +334,6 @@ export function MembershipTicket({
   until,
   plan,
   modalidad,
-  since,
 }: {
   tone: TicketToneKey;
   /** Whole days of coverage left (negative once lapsed), or `null` when no payment date is known. */
@@ -344,8 +343,6 @@ export function MembershipTicket({
   until: string | null;
   plan: string;
   modalidad: string;
-  /** Pre-formatted activation date, or `null`. */
-  since: string | null;
 }): React.ReactElement {
   const skin = TICKET_TONE[tone];
   const expired = daysLeft !== null && daysLeft < 0;
@@ -407,7 +404,7 @@ export function MembershipTicket({
           </div>
         )}
       </div>
-      {(plan || since || modalidad) && (
+      {(plan || modalidad) && (
         <p className="flex flex-wrap justify-between gap-x-4 gap-y-1 border-t border-line-2/60 pt-2.5 text-xs text-ink-2 sm:col-span-2">
           {plan && (
             <span className="inline-flex gap-1">
@@ -417,11 +414,6 @@ export function MembershipTicket({
           {modalidad && (
             <span className="inline-flex gap-1">
               Modalidad{" "}<b className="text-ink">{modalidad}</b>
-            </span>
-          )}
-          {since && (
-            <span className="inline-flex gap-1">
-              Jugador desde{" "}<b className="text-ink">{since}</b>
             </span>
           )}
         </p>

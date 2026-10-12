@@ -481,7 +481,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     props.kind === "staff" ? props.perfil.fechaCreacion : props.perfil?.fechaCreacion;
   // `null`, not a labelled dash: the identity card never names an absence.
   // This is the CREATION date of the ACCOUNT (`Usuario.fecha_creacion`), not
-  // the club affiliation — that one is «Jugador desde» on the ticket.
+  // the club affiliation — that one is «Miembro desde» (#1749).
   const createdOn = fechaCreacion ? formatDate(fechaCreacion) : null;
 
   const telefonoRow = editing ? (
@@ -565,7 +565,6 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
               ? ""
               : modalidad.charAt(0).toUpperCase() + modalidad.slice(1).toLowerCase()
           }
-          since={selfMembership.fechaActivacion ? formatDate(selfMembership.fechaActivacion) : null}
         />
       );
     }
