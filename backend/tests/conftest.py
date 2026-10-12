@@ -429,7 +429,7 @@ def _sesion_con_commit_y_rollback(sesion):
 
 
 @pytest.fixture()
-def client(db_session):
+def client(db_session, request):
     """Cliente de pruebas con la sesión de BD inyectada y, por defecto,
     autenticado como ADMINISTRADOR + ENTRENADOR (para no tener que generar
     JWT reales en cada test de negocio; la seguridad de JWT/roles se prueba
@@ -445,8 +445,11 @@ def client(db_session):
     app.dependency_overrides[GestorAutenticacion.decodificar_token] = _override_token
     # El step-up de contraseña de los endpoints de roles (#1653, S5) se prueba
     # aparte con tokens reales (`test_reautenticacion_roles.py`); acá, como el
-    # token, se da por hecho para no repetirlo en cada test de negocio.
-    app.dependency_overrides[exigir_reautenticacion_reciente] = lambda: {}
+    # token, se da por hecho para no repetirlo en cada test de negocio. Si el
+    # test pide también `client_sin_token` (el camino real), no se instala:
+    # así no depende del orden en que pytest arme los dos fixtures.
+    if "client_sin_token" not in request.fixturenames:
+        app.dependency_overrides[exigir_reautenticacion_reciente] = lambda: {}
 
     with TestClient(app) as c:
         yield c

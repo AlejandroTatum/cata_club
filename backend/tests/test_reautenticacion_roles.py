@@ -345,3 +345,17 @@ def test_client_sin_token_no_hereda_el_bypass_del_step_up_de_client(
     assert resp.status_code == 403
     assert resp.json()["codigo"] == CODIGO
     assert _roles(db_session, objetivo.id) == []
+
+
+def test_el_orden_de_las_fixtures_no_reinstala_el_bypass(
+    client_sin_token, client, admin, objetivo, db_session
+):
+    """Mismo caso con `client` armado DESPUÉS de `client_sin_token`: el
+    bypass no debe volver por el orden de instanciación de pytest."""
+    par = _login(db_session, admin.correo, CLAVE_ADMIN, "Firefox/130")
+
+    resp = _asignar(client_sin_token, par, objetivo.id)
+
+    assert resp.status_code == 403
+    assert resp.json()["codigo"] == CODIGO
+    assert _roles(db_session, objetivo.id) == []
