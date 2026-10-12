@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookies } from "@/lib/server/auth";
+import { refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 
 export interface DashboardStats {
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const response = NextResponse.json(stats);
   if (result.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+    setAuthCookies(response, refreshedTokenCookies(result));
   }
   return response;
 }

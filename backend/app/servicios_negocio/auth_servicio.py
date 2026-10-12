@@ -1,6 +1,8 @@
+import hashlib
 import logging
 import math
 import time
+import uuid
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -246,9 +248,9 @@ class SesionVista:
     """Una fila de `sesion` ya resuelta contra el epoch del usuario.
 
     Existe para que `vigente` y `actual` -- que son DERIVADOS, no columnas--
-    no se calculen en el router ni, peor, se persistan. Si vivieran en la
-    tabla, la tabla habría empezado a opinar sobre validez, que es justo lo
-    que el docstring de `Sesion` prohíbe.
+    no se calculen en el router ni, peor, se persistan: `vigente` compone el
+    epoch con `revocada_en` (ver el docstring de `Sesion`) y se recalcula en
+    cada lectura.
     """
 
     id: int
@@ -332,13 +334,17 @@ class AuthServicio:
         contar_login(ok=True)
         _INTENTOS_FALLIDOS_LOGIN.pop(clave, None)
         sesion = self._registrar_sesion(usuario, user_agent)
-        tokens = self._emitir_par_tokens(usuario, sesion_id=sesion.id)
+        tokens = self._emitir_par_tokens(usuario, sesion)
         # Issue #1314: último, y sin poder fallar el login (ver `actividad`).
         actividad.registrar_sin_fallar(self.db, usuario.id)
         return tokens
 
-    def _registrar_sesion(self, usuario: Usuario, user_agent: str | None) -> Sesion:
-        """Deja constancia de un login. Nada más que constancia.
+    def _registrar_sesion(
+        self, usuario: Usuario, user_agent: str | None, iniciada_en: datetime | None = None,
+        legacy_huella: str | None = None, rotado_en: datetime | None = None,
+    ) -> Sesion:
+        """Abre la sesión de un par de tokens: la fila nace con el `jti` del
+        primer refresh y su actividad en este instante (ver `Sesion`).
 
         Va DESPUÉS de `_verificar_credenciales` a propósito: ese método
         rechaza también la cuenta suspendida y la persona dada de baja, que
@@ -346,15 +352,23 @@ class AuthServicio:
         sesión que nunca llegó a existir.
 
         La fila guarda el epoch vigente (`version_sesion`) para que después se
-        pueda DERIVAR si sigue viva, sin que esta tabla participe de la
-        decisión -- ver el docstring de `Sesion`. Por eso tampoco se limpia
-        nada acá: revocar sesiones bombea el epoch y no toca esta tabla.
+        pueda DERIVAR si sigue viva. Nada se limpia acá: revocar todas las
+        sesiones bombea el epoch y no toca esta tabla.
+
+        `iniciada_en`, `legacy_huella` y `rotado_en` solo los pasa la adopción
+        de un refresh legacy sin `sid` (ver `_sesion_de_legacy_sin_sid`).
         """
         sesion = Sesion(
             usuario_id=usuario.id,
             dispositivo=describir_dispositivo(user_agent),
             version_sesion=usuario.version_sesion,
+            refresh_jti=uuid.uuid4().hex,
+            ultimo_uso_en=datetime.now(timezone.utc),
         )
+        if iniciada_en is not None:
+            sesion.iniciada_en = iniciada_en
+        sesion.legacy_huella = legacy_huella
+        sesion.rotado_en = rotado_en
         self.db.add(sesion)
         self.db.commit()
         self.db.refresh(sesion)
@@ -660,29 +674,46 @@ class AuthServicio:
             "foto_url": usuario.persona.foto_url,
         }
 
-    # --- Refresh de access token a partir de un refresh token ---------------
+    # --- Refresh con rotación a partir de un refresh token ------------------
     def refrescar_sesion(self, refresh_token: str) -> dict:
-        """
-        Valida que `refresh_token` sea un JWT de tipo `refresh` (no `access`) y
-        emite un nuevo access token con los roles ACTUALES del usuario (por si
-        cambiaron desde la emisión del refresh original).
+        """Valida un refresh token y devuelve un par NUEVO (access + refresh)
+        con los roles ACTUALES del usuario. Cada uso ROTA el refresh (#1653).
 
-        Limitación documentada (extensión futura): NO hay rotación de refresh
-        tokens ni blacklist de tokens revocados. Es una simplificación aceptada
-        para el alcance académico del proyecto. En producción se debería:
-          1) rotar el refresh token en cada uso (refresh + access nuevos)
-          2) mantener una blacklist (Redis) de refresh revocados para permitir
-             invalidación real de sesión antes de los 7 días de vida del token.
+        Orden de las reglas:
+          1) firma, `type=refresh`, usuario existente y `sesion_vigente`
+             (epoch + cuenta activa), como siempre.
+          2) con `jti`: la fila `sesion` de `sid` debe ser del usuario y no
+             estar revocada; pasado el tope absoluto (`jwt_refresh_expira_dias`
+             desde `iniciada_en`) o la ventana inactiva
+             (`sesion_inactividad_horas` desde `ultimo_uso_en`) se REVOCA y se
+             rechaza.
+          3) `jti` == `refresh_jti`: se rota (el actual pasa a `_anterior`).
+             `jti` == `refresh_jti_anterior` dentro de
+             `sesion_gracia_rotacion_segundos` del `rotado_en`: es la carrera
+             de dos refresh concurrentes del mismo cliente (el BFF) -- se
+             reemite un par con el `jti` VIGENTE, sin rotar de nuevo. Cualquier
+             otro `jti` es REUSO de un token ya rotado: se revoca la sesión.
+          4) sin `jti` (refresh anterior a la rotación, S3): se acepta UNA vez.
+             Con `sid` cuya fila aún no tiene `refresh_jti` se adopta (se omite
+             la ventana inactiva esa vez, porque la fila no tiene
+             `ultimo_uso_en`). Si la fila YA fue adoptada (`refresh_jti` fijo,
+             `refresh_jti_anterior` nulo y `rotado_en` dentro de la gracia) es
+             la misma carrera benigna del BFF con la misma cookie legacy: se
+             reemite un par con el `jti` VIGENTE, sin rotar de nuevo, para que
+             el deploy no desloguee a nadie. Fuera de la gracia, o sobre una
+             fila nacida de un login (`rotado_en` nulo), es reuso y revoca.
+             Sin `sid`, el primer uso abre una sesión con la huella del token
+             (índice único) y los siguientes caen en esa fila con las mismas
+             reglas de adopción: gracia o reuso (`_sesion_de_legacy_sin_sid`).
+
+        La fila se bloquea (`FOR UPDATE`) mientras se decide: dos refresh
+        simultáneos con el mismo `jti` se serializan y el segundo ve el estado
+        ya rotado, cae en la gracia y no en el reuso.
 
         E01 -- invalidación de sesión (epoch compartido, ver `epoch_valido`):
-        este método SÍ valida el `sver` del refresh token, y no es opcional.
-        Sin este chequeo, un refresh token capturado junto al access token
-        comprometido (viajan como cookies httpOnly hermanas, ver
-        `_emitir_par_tokens`) seguía vivo hasta sus 7 días de vida y podía
-        reemitir un access token nuevo, totalmente compatible con el epoch
-        actual -- un bypass total de "cerrar mis otras sesiones", no un caso
-        de borde. `decodificar_token` ya aplica la misma regla del lado
-        access; esta es la otra mitad del par que cierra la ruta completa.
+        el `sver` del refresh se valida y no es opcional. Sin ese chequeo un
+        refresh capturado reemitiría un access compatible con el epoch actual
+        -- un bypass total de "cerrar mis otras sesiones".
         """
         try:
             payload = jwt.decode(
@@ -712,19 +743,128 @@ class AuthServicio:
         if not GestorAutenticacion.sesion_vigente(payload.get("sver"), usuario):
             raise CredencialesInvalidas("Refresh token inválido o expirado")
 
-        claims = GestorAutenticacion.claims_estandar(self.db, usuario)
-        # `sid` se arrastra del refresh en vez de abrirse de nuevo: refrescar
-        # es el mismo equipo continuando la misma sesión, no una sesión nueva.
-        # Sin esto, el primer refresh dejaría al usuario sin poder reconocer su
-        # propio equipo en la lista.
+        ahora = datetime.now(timezone.utc)
         sid = payload.get("sid")
-        if sid is not None:
-            claims["sid"] = sid
-        access_token = GestorAutenticacion.crear_token_acceso(
-            claims, version_sesion=usuario.version_sesion,
-        )
+        jti = payload.get("jti")
+        recien_abierta = False
+        if sid is None and jti is None:
+            sesion, recien_abierta = self._sesion_de_legacy_sin_sid(usuario, refresh_token, payload, ahora)
+        else:
+            sesion = self._sesion_bloqueada(usuario, sid)
+        if not recien_abierta:
+            if sesion is None or sesion.revocada_en is not None:
+                raise CredencialesInvalidas("Refresh token inválido o expirado")
+            if ahora - sesion.iniciada_en > timedelta(days=settings.jwt_refresh_expira_dias):
+                self._revocar_sesion(sesion, ahora)
+                raise CredencialesInvalidas("Refresh token inválido o expirado")
+            if jti is None:
+                self._adoptar_legacy(sesion, ahora)
+            else:
+                self._rotar_o_rechazar(sesion, jti, ahora)
+
+        tokens = self._armar_par_tokens(usuario, sesion.id, sesion.refresh_jti)
         actividad.registrar_sin_fallar(self.db, usuario.id)
-        return {"access_token": access_token, "token_type": "bearer"}
+        return tokens
+
+    def _sesion_de_legacy_sin_sid(
+        self, usuario: Usuario, refresh_token: str, payload: dict, ahora: datetime,
+    ) -> tuple[Sesion, bool]:
+        """S3, refresh legacy SIN `sid`: la fila de su primer uso guarda la
+        huella del token (índice único); un uso posterior cae en ella y sigue
+        `_adoptar_legacy` (gracia o reuso), y un primer uso simultáneo que
+        choca en el índice lee la del ganador. Sin `iat`, el inicio se deriva
+        del `exp`, así el tope absoluto cuenta desde el login original."""
+        huella = hashlib.sha256(refresh_token.encode()).hexdigest()
+        existente = self._sesion_legacy_bloqueada(usuario, huella)
+        if existente is not None:
+            return existente, False
+        exp = payload.get("exp")
+        if not isinstance(exp, (int, float)) or isinstance(exp, bool):
+            raise CredencialesInvalidas("Refresh token inválido o expirado")
+        emitido_en = datetime.fromtimestamp(exp, tz=timezone.utc) - timedelta(
+            days=settings.jwt_refresh_expira_dias
+        )
+        try:
+            sesion = self._registrar_sesion(
+                usuario, None, iniciada_en=min(emitido_en, ahora), legacy_huella=huella, rotado_en=ahora,
+            )
+        except IntegrityError:
+            self.db.rollback()
+            ganadora = self._sesion_legacy_bloqueada(usuario, huella)
+            if ganadora is None:
+                raise
+            return ganadora, False
+        return sesion, True
+
+    def _sesion_legacy_bloqueada(self, usuario: Usuario, huella: str) -> Sesion | None:
+        return (
+            self.db.query(Sesion)
+            .filter(Sesion.legacy_huella == huella, Sesion.usuario_id == usuario.id)
+            .with_for_update()
+            .one_or_none()
+        )
+
+    def _sesion_bloqueada(self, usuario: Usuario, sid: object) -> Sesion | None:
+        """La fila `sesion` de `sid`, bloqueada, solo si es de `usuario`."""
+        if not isinstance(sid, int) or isinstance(sid, bool):
+            return None
+        return (
+            self.db.query(Sesion)
+            .filter(Sesion.id == sid, Sesion.usuario_id == usuario.id)
+            .with_for_update()
+            .one_or_none()
+        )
+
+    def _revocar_sesion(self, sesion: Sesion, ahora: datetime) -> None:
+        """Revoca la sesión Y persiste: quien llama rechaza enseguida, y un
+        rechazo no puede deshacer la revocación que lo causó."""
+        sesion.revocada_en = ahora
+        self.db.commit()
+
+    def _adoptar_legacy(self, sesion: Sesion, ahora: datetime) -> None:
+        """S3: primer uso de un refresh sin `jti` sobre una fila anterior a la
+        rotación. Si la fila ya tiene `refresh_jti`, el token ya se usó: dentro
+        de la gracia de una adopción es la carrera benigna (no se rota), y en
+        cualquier otro caso es reuso."""
+        if sesion.refresh_jti is not None:
+            adoptada_en_gracia = (
+                sesion.refresh_jti_anterior is None
+                and sesion.rotado_en is not None
+                and ahora - sesion.rotado_en <= timedelta(seconds=settings.sesion_gracia_rotacion_segundos)
+            )
+            if adoptada_en_gracia:
+                return
+            self._revocar_sesion(sesion, ahora)
+            raise CredencialesInvalidas("Refresh token inválido o expirado")
+        sesion.refresh_jti = uuid.uuid4().hex
+        sesion.rotado_en = ahora
+        sesion.ultimo_uso_en = ahora
+        self.db.commit()
+
+    def _rotar_o_rechazar(self, sesion: Sesion, jti: str, ahora: datetime) -> None:
+        """Reglas de un refresh CON `jti` sobre una sesión viva (ver
+        `refrescar_sesion`, puntos 2 y 3)."""
+        ultimo_uso = sesion.ultimo_uso_en or sesion.iniciada_en
+        if ahora - ultimo_uso > timedelta(hours=settings.sesion_inactividad_horas):
+            self._revocar_sesion(sesion, ahora)
+            raise CredencialesInvalidas("Refresh token inválido o expirado")
+        if jti == sesion.refresh_jti:
+            sesion.refresh_jti_anterior = sesion.refresh_jti
+            sesion.refresh_jti = uuid.uuid4().hex
+            sesion.rotado_en = ahora
+            sesion.ultimo_uso_en = ahora
+            self.db.commit()
+            return
+        en_gracia = (
+            jti == sesion.refresh_jti_anterior
+            and sesion.rotado_en is not None
+            and ahora - sesion.rotado_en <= timedelta(seconds=settings.sesion_gracia_rotacion_segundos)
+        )
+        if en_gracia:
+            # El bloqueo de fila lo suelta el rollback/commit de la petición.
+            return
+        self._revocar_sesion(sesion, ahora)
+        raise CredencialesInvalidas("Refresh token inválido o expirado")
 
     # --- E01: invalidación de sesión (primitiva compartida) -----------------
     def _bombear_epoch_sesion(self, correo: str) -> Usuario:
@@ -757,7 +897,7 @@ class AuthServicio:
         """
         usuario = self._bombear_epoch_sesion(correo)
         sesion = self._registrar_sesion(usuario, user_agent)
-        tokens = self._emitir_par_tokens(usuario, sesion_id=sesion.id)
+        tokens = self._emitir_par_tokens(usuario, sesion)
         # Issue #1314: último, y sin poder fallar el login (ver `actividad`).
         actividad.registrar_sin_fallar(self.db, usuario.id)
         return tokens
@@ -778,53 +918,54 @@ class AuthServicio:
         return {"mensaje": "Sesión finalizada"}
 
     # --- Privado: emisión del par access + refresh -------------------------
-    def _emitir_par_tokens(self, usuario: Usuario, sesion_id: int | None = None) -> dict:
-        """`sesion_id` viaja como claim `sid` y es ADITIVO y OBSERVACIONAL.
+    def _emitir_par_tokens(self, usuario: Usuario, sesion: Sesion) -> dict:
+        """Emite el par de una sesión RECIÉN abierta (`_registrar_sesion`):
+        todo emisor abre su fila, así que los únicos refresh sin `jti` son los
+        anteriores a la rotación."""
+        return self._armar_par_tokens(usuario, sesion.id, sesion.refresh_jti)
 
-        Nada lo valida y nada autoriza con él: sirve para que
-        `GET /auth/me/sesiones` pueda decir cuál de las filas corresponde al
-        equipo que está mirando la pantalla, que con varios equipos bajo el
-        mismo epoch no se puede deducir de otra forma. Un token sin `sid` --
-        los emitidos antes de este cambio, y los de `registrar_usuario`, que
-        no abre sesión-- simplemente no marca ninguna como actual.
+    def _armar_par_tokens(self, usuario: Usuario, sesion_id: int, jti: str) -> dict:
+        """Firma el par de la sesión `sesion_id`: ambos llevan `sid` y el
+        refresh lleva además el `jti` que la fila tiene por vigente.
 
-        Que sea opcional no es descuido: si `sid` fuera obligatorio para algo,
-        habría dejado de ser observacional.
+        `sid` sirve a `GET /auth/me/sesiones` para marcar el equipo actual y a
+        `decodificar_token`/`refrescar_sesion` para exigir que su fila siga
+        viva (revocación por sesión, ver `Sesion`). Los roles se releen del
+        usuario en cada emisión.
         """
         claims = GestorAutenticacion.claims_estandar(self.db, usuario)
         # El refresh token no necesita roles (solo sirve para pedir un nuevo
-        # access token; los roles se releyan del usuario en cada refresh),
-        # pero sí lleva el estado para que el guard de borde pueda reconocer
-        # una cuenta pendiente sin validar el JWT en Edge.
+        # par; los roles se releen del usuario en cada refresh), pero sí lleva
+        # el estado para que el guard de borde pueda reconocer una cuenta
+        # pendiente sin validar el JWT en Edge.
         refresh_claims = {
             "sub": claims["sub"],
             "persona_id": claims["persona_id"],
             "activacion_completa": claims["activacion_completa"],
+            "sid": sesion_id,
         }
-        if sesion_id is not None:
-            claims["sid"] = sesion_id
-            # También en el refresh: sin esto, el primer refresh perdería la
-            # identidad de la sesión y el equipo del usuario dejaría de
-            # reconocerse a sí mismo en la lista.
-            refresh_claims["sid"] = sesion_id
+        claims["sid"] = sesion_id
 
         access_token = GestorAutenticacion.crear_token_acceso(claims, version_sesion=usuario.version_sesion)
-        refresh_token = GestorAutenticacion.crear_token_refresco(refresh_claims, version_sesion=usuario.version_sesion)
+        refresh_token = GestorAutenticacion.crear_token_refresco(
+            refresh_claims, version_sesion=usuario.version_sesion, jti=jti,
+        )
         return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
 
     # --- Issue #1318: reemisión para un cambio de rol de OTRO servicio ------
     def reemitir_tokens_para(self, usuario: Usuario) -> dict:
-        """Envoltorio público de `_emitir_par_tokens`, para un caller de otra
-        capa de negocio (`PersonaServicio.crear_representado_propio`) que
-        acaba de mutar `usuario.roles` en la MISMA transacción y necesita
-        reemitir el par sin reimplementar `claims_estandar`.
+        """Abre una sesión y emite su par, para un caller de otra capa de
+        negocio (`PersonaServicio.crear_representado_propio`, la inscripción)
+        que necesita un par sin reimplementar `claims_estandar` ni la
+        apertura de la fila `sesion`.
 
         Mismo motivo que `cambiar_correo_no_verificado`: los roles viajan
         embebidos en el JWT, así que un token emitido antes de la mutación
         sigue leyendo el rol viejo hasta su expiración natural -- sin
         reemisión, quien acaba de pasar a ser REPRESENTANTE seguiría viendo
         su sesión como ALUMNO hasta el próximo login."""
-        return self._emitir_par_tokens(usuario)
+        sesion = self._registrar_sesion(usuario, None)
+        return self._emitir_par_tokens(usuario, sesion)
 
     # --- Listado de sesiones propias ----------------------------------------
     def listar_sesiones(
@@ -873,7 +1014,7 @@ class AuthServicio:
                 usuario_id=fila.usuario_id,
                 dispositivo=fila.dispositivo,
                 iniciada_en=fila.iniciada_en,
-                vigente=fila.version_sesion == usuario.version_sesion,
+                vigente=fila.version_sesion == usuario.version_sesion and fila.revocada_en is None,
                 actual=sesion_actual_id is not None and fila.id == sesion_actual_id,
             )
             for fila in filas
@@ -1064,7 +1205,7 @@ class AuthServicio:
         self.db.refresh(usuario)
 
         sesion = self._registrar_sesion(usuario, user_agent)
-        tokens = self._emitir_par_tokens(usuario, sesion_id=sesion.id)
+        tokens = self._emitir_par_tokens(usuario, sesion)
         actividad.registrar_sin_fallar(self.db, usuario.id)
         return tokens
 
@@ -1208,5 +1349,5 @@ class AuthServicio:
 
         self.db.refresh(usuario)
         self.solicitar_verificacion_correo(usuario.correo)
-        tokens = self._emitir_par_tokens(usuario)
+        tokens = self.reemitir_tokens_para(usuario)
         return {"correo": usuario.correo, "mensaje": MENSAJE_VERIFICACION_ENVIADA, **tokens}

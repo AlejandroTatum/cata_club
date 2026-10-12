@@ -17,6 +17,7 @@ import type { PaymentValidationRequest, ProofFileType, ValidationStatus } from "
 import { MEMBERSHIP_STATUS_BY_ESTADO, type BackendEstadoMembresia } from "@/lib/membership-status";
 import { ESTADO_PAGO_TO_VALIDATION_STATUS } from "@/lib/status-badges";
 import { backendFetchAuthed } from "@/lib/server/backend-client";
+import { pickRefreshed, type RefreshedTokens } from "@/lib/server/auth";
 import { formatDateRange } from "@/lib/format-utils";
 
 export type BackendEstadoPago = "APROBADO" | "PENDIENTE_VALIDACION" | "RECHAZADO";
@@ -261,10 +262,9 @@ export async function enrichBackendPagos(
  * calls this to learn the payment's REAL state before deciding what to show
  * the admin, instead of assuming the optimistic snapshot was correct).
  */
-export interface EnrichedSinglePago {
+/** Propagate whichever of the three lookups actually refreshed the token, if any. */
+export interface EnrichedSinglePago extends RefreshedTokens {
   item: PaymentValidationRequest;
-  /** Propagate whichever of the three lookups actually refreshed the token, if any. */
-  refreshedAccessToken?: string;
 }
 
 export async function enrichSinglePago(
@@ -292,12 +292,10 @@ export async function enrichSinglePago(
   // Any of the three calls above may have independently refreshed the
   // token (each resolves/refreshes off the same request cookies) —
   // callers propagate whichever one actually did, same as GET /api/payments.
-  const refreshedAccessToken =
-    (personaResult.ok ? personaResult.refreshedAccessToken : undefined) ??
-    (membresiaResult.ok ? membresiaResult.refreshedAccessToken : undefined) ??
-    (tiposResult.ok ? tiposResult.refreshedAccessToken : undefined);
-
-  return { item, refreshedAccessToken };
+  return {
+    item,
+    ...pickRefreshed(personaResult.ok && personaResult, membresiaResult.ok && membresiaResult, tiposResult.ok && tiposResult),
+  };
 }
 
 /**

@@ -158,6 +158,18 @@ class UsuariosAvanzado(BaseModel):
     sessionsByRole: Optional[SesionesPorRol]
 
 
+class CuotaCorreos(BaseModel):
+    """Cupo diario de correos del día UTC en curso (se reinicia en `resetsAt`)."""
+
+    limit: int
+    sent: int
+    remaining: int
+    omitted: int
+    waiting: int
+    resetsAt: str
+    unlimited: bool
+
+
 class AvanzadasResponse(BaseModel):
     range: RangoAvanzadas
     service: Optional[ServicioAvanzado]
@@ -165,3 +177,4 @@ class AvanzadasResponse(BaseModel):
     runtime: Optional[RuntimeAvanzado]
     users: Optional[UsuariosAvanzado]
     health: Optional[SaludSistema] = None
+    emailQuota: Optional[CuotaCorreos] = None

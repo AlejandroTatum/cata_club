@@ -40,6 +40,14 @@ describe("activity fetchers", () => {
     expect(url.searchParams.get("rango")).toBe("1h");
   });
 
+  it("fetchActividadAvanzadas keeps the emailQuota block", async () => {
+    const emailQuota = { limit: 100, sent: 37, remaining: 63, omitted: 0, waiting: 2, resetsAt: "2026-10-02T00:00:00Z", unlimited: false };
+    const body = { range: "1h", service: null, host: null, runtime: null, users: null, emailQuota };
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(body));
+
+    await expect(fetchActividadAvanzadas("1h")).resolves.toEqual(body);
+  });
+
   it("surfaces a 403 as an ApiClientError carrying the status", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ message: "No autorizado" }, 403));
     const failure = await fetchActividadResumen("7d").catch((error: unknown) => error);

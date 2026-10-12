@@ -114,6 +114,25 @@ describe("POST /api/auth/logout", () => {
     expect(response.cookies.get(REFRESH_TOKEN_COOKIE)?.maxAge).toBe(0);
   });
 
+  it("authenticates with the new access token and still clears both cookies when the refresh rotated the refresh token", async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(
+        Response.json({ access_token: "fresh-access", refresh_token: jwt(9999), token_type: "bearer" }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    const response = await POST(
+      logoutRequest(`${ACCESS_TOKEN_COOKIE}=${jwt(-60)}; ${REFRESH_TOKEN_COOKIE}=refresh-token`),
+    );
+
+    expect(calls()[1]).toEqual({ url: "http://localhost:8000/api/v1/auth/logout", auth: "Bearer fresh-access" });
+    // The rotated token must not resurrect the session: the cookies are cleared, not replaced.
+    expect(response.cookies.get(ACCESS_TOKEN_COOKIE)?.value).toBe("");
+    expect(response.cookies.get(ACCESS_TOKEN_COOKIE)?.maxAge).toBe(0);
+    expect(response.cookies.get(REFRESH_TOKEN_COOKIE)?.value).toBe("");
+    expect(response.cookies.get(REFRESH_TOKEN_COOKIE)?.maxAge).toBe(0);
+  });
+
   it("refreshes and revokes when the access cookie is already gone but the refresh cookie remains", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(Response.json({ access_token: "fresh-access", token_type: "bearer" }))

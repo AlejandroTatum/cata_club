@@ -3,13 +3,13 @@ import {
   ACCESS_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE,
   backendMe,
-  backendRefresh,
   buildSession,
   clearAuthCookies,
   hasPendingActivationToken,
   isNearExpiry,
   setAuthCookies,
 } from "@/lib/server/auth";
+import { refreshForRequest } from "@/lib/server/backend-client";
 
 /** Refresh proactively once the access token has under 5 minutes left — well inside its 60-minute lifetime. */
 const PROACTIVE_REFRESH_THRESHOLD_SECONDS = 5 * 60;
@@ -39,14 +39,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   let activeAccessToken = accessCookie;
   let refreshedAccessToken: string | undefined;
+  // The refresh token rotates on every use: persist it with the access cookie.
+  let refreshedRefreshToken: string | undefined;
 
   const needsProactiveRefresh =
     activeAccessToken !== undefined && isNearExpiry(activeAccessToken, PROACTIVE_REFRESH_THRESHOLD_SECONDS);
 
   if ((!activeAccessToken || needsProactiveRefresh) && refreshCookie) {
-    const refreshResult = await backendRefresh(refreshCookie);
+    const refreshResult = await refreshForRequest(request, refreshCookie);
     if (refreshResult.ok) {
       refreshedAccessToken = refreshResult.data.access_token;
+      refreshedRefreshToken = refreshResult.data.refresh_token;
       activeAccessToken = refreshedAccessToken;
     } else if (!activeAccessToken) {
       // No access token at all and the refresh attempt failed too.
@@ -69,9 +72,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let meResult = await backendMe(activeAccessToken);
 
   if (!meResult.ok && meResult.error.code === "unauthorized" && refreshCookie && !refreshedAccessToken) {
-    const refreshResult = await backendRefresh(refreshCookie);
+    const refreshResult = await refreshForRequest(request, refreshCookie);
     if (refreshResult.ok) {
       refreshedAccessToken = refreshResult.data.access_token;
+      refreshedRefreshToken = refreshResult.data.refresh_token;
       meResult = await backendMe(refreshedAccessToken);
     }
   }
@@ -114,13 +118,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     built.session.activacionCompleta &&
     refreshCookie
   ) {
-    const refreshResult = await backendRefresh(refreshCookie);
-    if (refreshResult.ok) refreshedAccessToken = refreshResult.data.access_token;
+    const refreshResult = await refreshForRequest(request, refreshCookie);
+    if (refreshResult.ok) {
+      refreshedAccessToken = refreshResult.data.access_token;
+      refreshedRefreshToken = refreshResult.data.refresh_token;
+    }
   }
 
   const response = NextResponse.json(built.session, { status: 200 });
   if (refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: refreshedAccessToken });
+    setAuthCookies(response, { accessToken: refreshedAccessToken, refreshToken: refreshedRefreshToken });
   }
   return response;
 }

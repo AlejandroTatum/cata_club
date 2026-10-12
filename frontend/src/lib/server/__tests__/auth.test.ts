@@ -26,6 +26,7 @@ import {
   isNearExpiry,
   setAuthCookies,
   clearAuthCookies,
+  refreshedTokenCookies,
   ACCESS_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE,
   ACCESS_TOKEN_MAX_AGE_SECONDS,
@@ -668,6 +669,42 @@ describe("backendRefresh", () => {
     expect(result).toEqual({ ok: true, data: { access_token: "new-access", token_type: "bearer" } });
   });
 
+  it("surfaces the rotated refresh token when the backend returns one", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      jsonResponse({ access_token: "new-access", refresh_token: "rotated-refresh", token_type: "bearer" }),
+    );
+
+    const result = await backendRefresh("refresh-token-abc");
+
+    expect(result).toEqual({
+      ok: true,
+      data: { access_token: "new-access", refresh_token: "rotated-refresh", token_type: "bearer" },
+    });
+  });
+
+  it("stays compatible with an old backend that omits refresh_token", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(jsonResponse({ access_token: "new-access", token_type: "bearer" }));
+
+    const result = await backendRefresh("refresh-token-abc");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data.refresh_token).toBeUndefined();
+  });
+
+  it.each([[""], [null], [42]])("drops an unusable refresh_token (%j) instead of failing the refresh", async (bad) => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      jsonResponse({ access_token: "new-access", refresh_token: bad, token_type: "bearer" }),
+    );
+
+    const result = await backendRefresh("refresh-token-abc");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.access_token).toBe("new-access");
+      expect(result.data.refresh_token).toBeUndefined();
+    }
+  });
+
   it("maps 401 (rejected/expired refresh token) to unauthorized", async () => {
     vi.mocked(global.fetch).mockResolvedValue(jsonResponse({}, 401));
 
@@ -1090,6 +1127,27 @@ describe("setAuthCookies / clearAuthCookies", () => {
     expect(response.cookies.get(REFRESH_TOKEN_COOKIE)).toBeUndefined();
   });
 
+  it("sets the rotated refresh cookie with Max-Age taken from the token's exp, next to the access cookie", () => {
+    const response = NextResponse.json({});
+    const accessToken = makeJwt(3600);
+    const refreshToken = makeJwt(6 * 24 * 60 * 60);
+
+    setAuthCookies(response, { accessToken, refreshToken });
+
+    const refresh = response.cookies.get(REFRESH_TOKEN_COOKIE);
+    expect(refresh?.value).toBe(refreshToken);
+    expect(refresh?.maxAge).toBeGreaterThan(6 * 24 * 60 * 60 - 5);
+    expect(refresh?.maxAge).toBeLessThanOrEqual(6 * 24 * 60 * 60);
+  });
+
+  it("never clears or overwrites the refresh cookie when refreshToken is undefined", () => {
+    const response = NextResponse.json({});
+    setAuthCookies(response, { accessToken: makeJwt(60), refreshToken: undefined });
+
+    expect(response.cookies.get(REFRESH_TOKEN_COOKIE)).toBeUndefined();
+    expect(response.cookies.get(ACCESS_TOKEN_COOKIE)?.value).not.toBe("");
+  });
+
   it("clearAuthCookies sets both cookies to empty with Max-Age 0", () => {
     const response = NextResponse.json({});
     clearAuthCookies(response);
@@ -1105,5 +1163,43 @@ describe("setAuthCookies / clearAuthCookies", () => {
 
   it("REFRESH_TOKEN_MAX_AGE_SECONDS matches the documented 7-day lifetime", () => {
     expect(REFRESH_TOKEN_MAX_AGE_SECONDS).toBe(7 * 24 * 60 * 60);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// refreshedTokenCookies — maps a refreshed-token result to setAuthCookies input
+// ---------------------------------------------------------------------------
+
+describe("refreshedTokenCookies", () => {
+  it("carries both tokens when the refresh rotated the refresh token", () => {
+    expect(
+      refreshedTokenCookies({ refreshedAccessToken: "new-access", refreshedRefreshToken: "new-refresh" }),
+    ).toEqual({ accessToken: "new-access", refreshToken: "new-refresh" });
+  });
+
+  it("leaves refreshToken undefined when the backend did not rotate it", () => {
+    const cookies = refreshedTokenCookies({ refreshedAccessToken: "new-access" });
+
+    expect(cookies.accessToken).toBe("new-access");
+    expect(cookies.refreshToken).toBeUndefined();
+  });
+
+  it("feeds setAuthCookies so both cookies land together, and only the access cookie when not rotated", () => {
+    const rotated = NextResponse.json({});
+    setAuthCookies(
+      rotated,
+      refreshedTokenCookies({ refreshedAccessToken: makeJwt(3600), refreshedRefreshToken: makeJwt(7 * 86400) }),
+    );
+    expect(rotated.cookies.get(ACCESS_TOKEN_COOKIE)?.value).toBeTruthy();
+    expect(rotated.cookies.get(REFRESH_TOKEN_COOKIE)?.value).toBeTruthy();
+
+    const plain = NextResponse.json({});
+    setAuthCookies(plain, refreshedTokenCookies({ refreshedAccessToken: makeJwt(3600) }));
+    expect(plain.cookies.get(ACCESS_TOKEN_COOKIE)?.value).toBeTruthy();
+    expect(plain.cookies.get(REFRESH_TOKEN_COOKIE)).toBeUndefined();
+  });
+
+  it("throws when there is no refreshed access token, rather than emitting an empty cookie", () => {
+    expect(() => refreshedTokenCookies({})).toThrow();
   });
 });

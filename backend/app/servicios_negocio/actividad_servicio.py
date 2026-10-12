@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import zip_longest
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import Float, Integer, cast, distinct, extract, func, select, tuple_
@@ -26,18 +26,20 @@ from sqlalchemy.orm import Session
 
 from app.dominio.enums import EstadoAsistencia, TipoRol
 from app.dominio.modelos import (
-    ActividadUsuario, Asistencia, MetricaInstantanea, Pago, Persona, Rol, usuario_rol,
+    ActividadUsuario, Asistencia, ContadorCorreoDiario, MetricaInstantanea, Pago, Persona, Rol, usuario_rol,
 )
 from app.infraestructura.actividad import FRANJAS_POR_DIA, HORAS_POR_FRANJA, fecha_y_franja_del_club
 from app.infraestructura.colector_metricas import percentil_ms
-from app.infraestructura.repositorios.outbox_cupo import contar_en_espera_por_cupo
+from app.infraestructura.notificaciones_servicio import dia_del_contador
+from app.infraestructura.repositorios.outbox_cupo import contar_en_espera_por_cupo, inicio_del_dia_siguiente_utc
 from app.servicios_negocio.dtos.actividad_schemas import (
-    AvanzadasResponse, BaseDeDatos, Colas, ConteoPorRol, ContenedorMemoria, EndpointLento, EstadoSistema, SaludSistema,
+    AvanzadasResponse, BaseDeDatos, Colas, ConteoPorRol, ContenedorMemoria, CuotaCorreos, EndpointLento, EstadoSistema, SaludSistema,
     HostAvanzado, Latencia, MemoriaConSerie, PeriodoResumen, RangoAvanzadas, RangoResumen, RedisMemoria,
     ResumenResponse, RuntimeAvanzado, Serie, ServicioAvanzado, SesionesPorRol, UsuariosAvanzado,
     VisitantesUnicos,
 )
 from app.servicios_negocio import salud_sistema
+from app.soporte_transversal.configuracion import settings
 from app.soporte_transversal.tiempo import ZONA_HORARIA_CLUB
 
 ROL_A_COLUMNA = {
@@ -285,6 +287,7 @@ class ActividadServicio:
             return AvanzadasResponse(
                 range=rango, service=None, host=None, runtime=None, users=None,
                 health=self._salud(self._outbox_mas_antiguo_s()),
+                emailQuota=self._cupo_de_correos(ahora),
             )
 
         series = self._series(inicio, ahora, puntos, paso_min)
@@ -295,6 +298,27 @@ class ActividadServicio:
             runtime=self._runtime(ultima, en_rango),
             users=self._usuarios(ultima, en_rango),
             health=self._salud(ultima.outbox_mas_antiguo_s),
+            emailQuota=self._cupo_de_correos(ahora),
+        )
+
+    def _cupo_de_correos(self, ahora: datetime) -> CuotaCorreos:
+        """Cupo del día UTC en curso, leído de la misma fila que reserva el envío.
+
+        `enviados` también cuenta los intentos denegados (ver
+        `_reservar_cupo_de_envio_diario`): lo que pasa del límite son omitidos.
+        """
+        limite = settings.limite_correos_diario
+        fila = self.db.get(ContadorCorreoDiario, dia_del_contador(ahora))
+        reservados = fila.enviados if fila else 0
+        ilimitado = limite <= 0
+        return CuotaCorreos(
+            limit=limite,
+            sent=0 if ilimitado else min(reservados, limite),
+            remaining=0 if ilimitado else max(0, limite - reservados),
+            omitted=0 if ilimitado else max(0, reservados - limite),
+            waiting=contar_en_espera_por_cupo(self.db),
+            resetsAt=_iso(inicio_del_dia_siguiente_utc(ahora.astimezone(timezone.utc))),
+            unlimited=ilimitado,
         )
 
     def _series(self, inicio: datetime, ahora: datetime, puntos: int, paso_min: int) -> dict[str, list[Optional[float]]]:
