@@ -71,6 +71,10 @@ export default defineConfig({
 
   use: {
     baseURL: E2E_BASE_URL,
+    /* The BFF rejects mutations that carry neither Origin nor Sec-Fetch-Site
+       (#1653). APIRequestContext (`request`, `page.request`) sends neither,
+       so every context identifies itself as the app's own origin. */
+    extraHTTPHeaders: { Origin: new URL(E2E_BASE_URL).origin },
     trace: "on-first-retry",
     /* Every context starts as a returning user, so the release-notes dialog
        (T18) never covers the screen a spec is measuring. See the helper. */

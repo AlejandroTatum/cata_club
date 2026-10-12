@@ -72,7 +72,7 @@ def _calcular_edad(fecha_nacimiento: date, referencia: date | None = None) -> in
 
 
 # --- INS-2: freno progresivo de intentos de vinculación ---------------------
-# Mismo patrón que `AuthServicio._INTENTOS_FALLIDOS_LOGIN` (TRA-4,
+# Mismo patrón que tenía el freno de login antes de pasar a Redis (TRA-4,
 # docs/product/decisiones-de-negocio-2026-08-11.md §3): un dict a nivel de módulo,
 # simplificación aceptada para el alcance del proyecto (no sobrevive un
 # reinicio del proceso ni se comparte entre réplicas). Acá la clave es el

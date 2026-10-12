@@ -31,7 +31,7 @@ router = APIRouter(prefix="/auth", tags=["Autenticación"])
 # `POST /auth/login` en un vector de denegación de servicio sin autenticar
 # -- se medió que un string de 100.006 caracteres era aceptado (401, no
 # 422) y quedaba retenido para siempre como clave de
-# `auth_servicio._INTENTOS_FALLIDOS_LOGIN`. 254 es el límite de RFC 5321
+# los contadores de intentos de login (hoy en Redis, con TTL). 254 es el límite de RFC 5321
 # §4.5.3.1.3 (Path length restriction) para una ruta de correo completa
 # ("MAIL FROM"/"RCPT TO"), el mismo criterio que usa `EmailField` de Django
 # por defecto: cualquier username más largo que eso es estructuralmente
