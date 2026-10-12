@@ -131,7 +131,8 @@ const roleReadDuration = new Trend('journey_role_read_duration', true);
  */
 export const journeyFailureRate = new Rate('journey_failure_rate');
 
-const JSON_HEADERS = { 'Content-Type': 'application/json' };
+// The BFF rejects mutations without Origin or Sec-Fetch-Site (#1653).
+const JSON_HEADERS = { 'Content-Type': 'application/json', Origin: BASE_URL };
 
 // Think time (env-tunable). Defaults 2-4 s keep one VU per identity at
 // ~17-20 portal reads/min, under the 30/min PER-USER cap the backend puts on

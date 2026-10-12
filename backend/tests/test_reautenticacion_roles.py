@@ -23,6 +23,7 @@ import pytest
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import TipoRol
 from app.dominio.modelos import Persona, Rol, Sesion, Usuario
+from app.infraestructura import redis_intentos_login
 from app.seguridad import reautenticacion
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio import auth_servicio
@@ -33,11 +34,18 @@ CODIGO = "reautenticacion_requerida"
 ROLES_URL = "/api/v1/personas/{id}/roles"
 
 
-@pytest.fixture(autouse=True)
-def _contadores_de_login_limpios():
-    auth_servicio._INTENTOS_FALLIDOS_LOGIN.clear()
-    yield
-    auth_servicio._INTENTOS_FALLIDOS_LOGIN.clear()
+def _intentos(clave: str) -> int:
+    """Fallos que el freno de login (Redis, #1653 S6) lleva para `clave`. El
+    conftest le da a cada test un Redis falso vacío."""
+    valor = redis_intentos_login._cliente_redis.hget(
+        redis_intentos_login.clave_redis(clave), "intentos"
+    )
+    return int(valor or 0)
+
+
+def _sembrar_fallos(clave: str, veces: int) -> None:
+    for _ in range(veces):
+        redis_intentos_login.incrementar(clave, 900)
 
 
 def _persona(db_session, seed: int) -> Persona:
@@ -239,11 +247,11 @@ def test_reautenticar_con_la_contrasenia_correcta_limpia_los_fallos_previos(
 ):
     par = _login(db_session, admin.correo, CLAVE_ADMIN, "Firefox/130")
     clave = admin.correo.strip().lower()
-    auth_servicio._INTENTOS_FALLIDOS_LOGIN[clave] = (2, 0.0, None)
+    _sembrar_fallos(clave, 2)
 
     assert _reautenticar(client_sin_token, par).status_code == 200
 
-    assert clave not in auth_servicio._INTENTOS_FALLIDOS_LOGIN
+    assert _intentos(clave) == 0
 
 
 def test_reautenticar_con_token_sin_sid_es_400_sin_sello_ni_tocar_el_freno_y_no_habilita_roles(
@@ -256,7 +264,7 @@ def test_reautenticar_con_token_sin_sid_es_400_sin_sello_ni_tocar_el_freno_y_no_
         version_sesion=admin.version_sesion,
     )}
     clave = admin.correo.strip().lower()
-    antes = dict(auth_servicio._INTENTOS_FALLIDOS_LOGIN)
+    _sembrar_fallos(clave, 2)
 
     resp = _reautenticar(client_sin_token, legacy)
 
@@ -264,8 +272,7 @@ def test_reautenticar_con_token_sin_sid_es_400_sin_sello_ni_tocar_el_freno_y_no_
     assert "anterior" in resp.json()["message"]
     assert db_session.query(Sesion).filter(Sesion.reautenticada_en.isnot(None)).count() == 0
     # Ni cuenta como fallo ni limpia los previos: el freno queda como estaba.
-    assert dict(auth_servicio._INTENTOS_FALLIDOS_LOGIN) == antes
-    assert clave not in auth_servicio._INTENTOS_FALLIDOS_LOGIN
+    assert _intentos(clave) == 2
     resp = _asignar(client_sin_token, legacy, objetivo.id)
     assert resp.status_code == 403
     assert resp.json()["codigo"] == CODIGO

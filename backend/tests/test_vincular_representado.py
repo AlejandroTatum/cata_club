@@ -82,7 +82,7 @@ def _restaurar_override_token(correo="representante@cataclub.test", persona_id=1
 @pytest.fixture(autouse=True)
 def _limpiar_contador_intentos():
     """El contador vive en un dict a nivel de módulo (mismo criterio que
-    `AuthServicio._INTENTOS_FALLIDOS_LOGIN`) -- se limpia entre tests para
+    el que tenía el freno de login antes de pasar a Redis) -- se limpia entre tests para
     que los intentos de un test no se filtren al siguiente."""
     persona_servicio_modulo._INTENTOS_FALLIDOS_VINCULACION.clear()
     yield
