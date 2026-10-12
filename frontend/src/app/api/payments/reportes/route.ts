@@ -12,7 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookies } from "@/lib/server/auth";
+import { refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 import {
   buildPagosReporteQuery,
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const response = NextResponse.json(items);
   if (pagosResult.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: pagosResult.refreshedAccessToken });
+    setAuthCookies(response, refreshedTokenCookies(pagosResult));
   }
   return response;
 }

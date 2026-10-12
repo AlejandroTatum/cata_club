@@ -426,13 +426,21 @@ def _admins_ya_notificados_hoy(
 
 
 def _formatear_resumen_mora(hoy: date, morosos: list[dict]) -> str:
-    """Arma el texto del resumen diario de mora para el administrador."""
+    """Arma el texto del resumen diario de mora para el administrador.
+
+    Issue #1747: informa los DÍAS de vencida, no meses. El resumen solo sale
+    en las ventanas del día 1 y del día 8, así que los meses enteros daban
+    siempre "0 meses". El monto es la cuota mensual, y lo dice: no es la
+    deuda acumulada."""
     partes = []
     for moroso in morosos:
         nombre = acortar_nombre_para_notificacion(moroso["nombre"])
-        partes.append(f"{nombre} ({moroso['meses_adeudados']} meses, {moroso['monto_mensual']})")
+        dias = moroso["dias_mora"]
+        hace = "1 día" if dias == 1 else f"{dias} días"
+        partes.append(f"{nombre} (vencida hace {hace}, cuota {moroso['monto_mensual']})")
+    jugadores = "1 jugador" if len(morosos) == 1 else f"{len(morosos)} jugadores"
     return (
-        f"Mora del {hoy.strftime('%d/%m/%Y')}: {len(morosos)} jugadores — "
+        f"Mora al {hoy.strftime('%d/%m/%Y')}: {jugadores} con la membresía vencida — "
         + ", ".join(partes)
     )
 

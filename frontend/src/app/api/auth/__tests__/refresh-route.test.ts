@@ -13,6 +13,13 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
+function jwt(expOffsetSeconds: number): string {
+  const payload = Buffer.from(
+    JSON.stringify({ exp: Math.floor(Date.now() / 1000) + expOffsetSeconds }),
+  ).toString("base64url");
+  return `h.${payload}.s`;
+}
+
 function refreshRequest(cookie: string): NextRequest {
   return new NextRequest("http://localhost/api/auth/refresh", { method: "POST", headers: { cookie } });
 }
@@ -46,6 +53,26 @@ describe("POST /api/auth/refresh", () => {
     expect(JSON.stringify(json)).not.toMatch(/fresh-access/);
     expect(response.cookies.get(ACCESS_TOKEN_COOKIE)?.value).toBe("fresh-access");
     expect(response.cookies.get(ACCESS_TOKEN_COOKIE)?.httpOnly).toBe(true);
+  });
+
+  it("persists the rotated refresh token in the same response as the new access token", async () => {
+    const rotatedRefresh = jwt(7 * 24 * 60 * 60);
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ access_token: "fresh-access", refresh_token: rotatedRefresh, token_type: "bearer" }),
+    );
+
+    const response = await POST(refreshRequest(`${REFRESH_TOKEN_COOKIE}=some-refresh-token`));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json).toEqual({ success: true });
+    expect(JSON.stringify(json)).not.toContain(rotatedRefresh);
+    expect(response.cookies.get(ACCESS_TOKEN_COOKIE)?.value).toBe("fresh-access");
+    const refresh = response.cookies.get(REFRESH_TOKEN_COOKIE);
+    expect(refresh?.value).toBe(rotatedRefresh);
+    expect(refresh?.httpOnly).toBe(true);
+    expect(refresh?.maxAge).toBeGreaterThan(7 * 24 * 60 * 60 - 5);
+    expect(refresh?.maxAge).toBeLessThanOrEqual(7 * 24 * 60 * 60);
   });
 
   it("does not set a new refresh-token cookie (backend doesn't return one)", async () => {

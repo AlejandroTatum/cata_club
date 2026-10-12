@@ -13,7 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookies } from "@/lib/server/auth";
+import { refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 import { buildRecentSession, type BackendUltimaLista } from "@/lib/server/attendance-adapter";
 
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const listas = (await result.response.json()) as BackendUltimaLista[];
   const response = NextResponse.json(listas.map(buildRecentSession));
   if (result.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+    setAuthCookies(response, refreshedTokenCookies(result));
   }
   return response;
 }

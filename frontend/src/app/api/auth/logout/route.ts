@@ -19,6 +19,10 @@ function isExpired(token: string): boolean {
  * when it is still usable, otherwise a fresh one minted from the refresh
  * cookie. Without that fallback, signing out after the 60-minute access token
  * lapsed cleared the cookies but left the refresh token valid for up to 7 days.
+ *
+ * The refresh rotates the refresh token, but the rotated one is deliberately
+ * dropped: the route clears both cookies right after, so there is nothing to
+ * persist and the session ends here either way.
  */
 async function accessTokenForLogout(request: NextRequest): Promise<string | undefined> {
   const accessCookie = request.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
