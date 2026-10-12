@@ -413,6 +413,14 @@ describe("ActividadPage — Métricas avanzadas", () => {
     expect(within(screen.getByTestId("email-quota")).getByText(/Aún no hay mediciones/)).toBeInTheDocument();
   });
 
+  it("contracts 'de el' into 'del' in the no-measurements notices", async () => {
+    const { emailQuota: _omitted, ...withoutQuota } = avanzadasFixture("1h");
+    await renderAvanzadas({ ...withoutQuota, host: null });
+    expect(within(screen.getByTestId("email-quota")).getByText(/Aún no hay mediciones del cupo de correos\./)).toBeInTheDocument();
+    expect(within(screen.getByTestId("server-metrics")).getByText(/Aún no hay mediciones del servidor\./)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\bde el\b/);
+  });
+
   it("shows '—' for latencies, cache limit, queue and connection figures that were not measured", async () => {
     const data = avanzadasFixture("1h");
     await renderAvanzadas({

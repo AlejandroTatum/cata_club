@@ -39,6 +39,17 @@ require_remote_branch() {
   remote_branch_exists "$1" || die "$REMOTE/$1 does not exist (run feature-start first)"
 }
 
+# Imprime la ruta del worktree que tiene `$1` en checkout (vacío si ninguno).
+worktree_with_branch() {
+  local line path=""
+  while IFS= read -r line; do
+    case "$line" in
+      "worktree "*) path="${line#worktree }" ;;
+      "branch refs/heads/$1") printf '%s\n' "$path"; return 0 ;;
+    esac
+  done < <(git worktree list --porcelain)
+}
+
 require_clean_tree() {
   git diff --quiet HEAD -- || die "uncommitted tracked changes; commit or stash them first"
 }
@@ -87,6 +98,12 @@ case "$cmd" in
     [[ "$pr" =~ ^[0-9]+$ ]] || die "PR number must be numeric, got '$pr'"
     base="$(gh pr view "$pr" --json baseRefName --jq .baseRefName)"
     [[ "$base" == "$integration" ]] || die "PR #$pr targets '$base', not $integration; refusing to merge"
+    # `gh pr merge --delete-branch` borra la rama local Y el worktree que la
+    # tiene en checkout (se pierde el trabajo abierto ahí): se corta antes.
+    head="$(gh pr view "$pr" --json headRefName --jq .headRefName)"
+    [[ -n "$head" ]] || die "could not resolve the head branch of PR #$pr"
+    holder="$(worktree_with_branch "$head")"
+    [[ -z "$holder" ]] || die "worktree '$holder' has '$head' checked out and --delete-branch would delete it; switch that worktree to another branch first, then re-run"
     # Sin `--required`: las ramas feat/* no tienen protección, así que no hay
     # checks requeridos y gh fallaría siempre. Se exigen TODOS los checks.
     gh pr checks "$pr" || die "checks on PR #$pr are failing or pending; refusing to merge"

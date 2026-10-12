@@ -84,7 +84,7 @@ function Freshness({ at, now, warnWhenStale = false }: { at: string; now: string
 function NoMeasurements({ what }: { what: string }): ReactElement {
   return (
     <p className="m-0 px-[18px] py-4 text-sm text-ink-2">
-      Aún no hay mediciones de {what}. Aparecerán cuando el sistema registre las primeras.
+      Aún no hay mediciones {what}. Aparecerán cuando el sistema registre las primeras.
     </p>
   );
 }
@@ -102,7 +102,7 @@ function Service({ service, now }: { service: ServiceMetrics | null; now: string
   if (!service) {
     return (
       <DashboardSection title="Servicio" testId="service-metrics">
-        <NoMeasurements what="la aplicación" />
+        <NoMeasurements what="de la aplicación" />
       </DashboardSection>
     );
   }
@@ -170,7 +170,7 @@ function Service({ service, now }: { service: ServiceMetrics | null; now: string
 
       <div className="border-t border-line">
         {service.slowEndpoints.length === 0 ? (
-          <NoMeasurements what="endpoints" />
+          <NoMeasurements what="de endpoints" />
         ) : (
           <ScrollableTable label="Endpoints más lentos, tabla desplazable">
             <Table aria-label="Endpoints más lentos">
@@ -213,7 +213,7 @@ function Server({ host, now }: { host: HostMetrics | null; now: string }): React
   if (!host) {
     return (
       <DashboardSection title="Servidor" testId="server-metrics">
-        <NoMeasurements what="el servidor" />
+        <NoMeasurements what="del servidor" />
       </DashboardSection>
     );
   }
@@ -291,7 +291,7 @@ function Containers({ runtime, now }: { runtime: RuntimeMetrics | null; now: str
   if (!runtime) {
     return (
       <DashboardSection title="Memoria por contenedor" testId="container-memory">
-        <NoMeasurements what="los contenedores" />
+        <NoMeasurements what="de los contenedores" />
       </DashboardSection>
     );
   }
@@ -302,7 +302,7 @@ function Containers({ runtime, now }: { runtime: RuntimeMetrics | null; now: str
       action={<Freshness at={runtime.updatedAt} now={now} />}
     >
       {runtime.containers.length === 0 ? (
-        <NoMeasurements what="los contenedores" />
+        <NoMeasurements what="de los contenedores" />
       ) : (
         <ul className="m-0 grid list-none gap-x-page gap-y-4 p-[18px] sm:grid-cols-2">
           {runtime.containers.map((container) => {
@@ -334,7 +334,7 @@ function Users({ users, range, now }: { users: UsersMetrics | null; range: Avanz
   if (!users) {
     return (
       <DashboardSection title="Usuarios" testId="users-metrics">
-        <NoMeasurements what="usuarios" />
+        <NoMeasurements what="de usuarios" />
       </DashboardSection>
     );
   }
@@ -368,7 +368,7 @@ function Users({ users, range, now }: { users: UsersMetrics | null; range: Avanz
             ))}
           </dl>
         ) : (
-          <NoMeasurements what="sesiones" />
+          <NoMeasurements what="de sesiones" />
         )}
       </div>
     </DashboardSection>
@@ -380,7 +380,7 @@ function EmailQuotaCard({ quota }: { quota: EmailQuota | null | undefined }): Re
   if (!quota) {
     return (
       <DashboardSection title="Correos de hoy" testId="email-quota">
-        <NoMeasurements what="el cupo de correos" />
+        <NoMeasurements what="del cupo de correos" />
       </DashboardSection>
     );
   }
@@ -453,7 +453,7 @@ function Backstage({ runtime, now }: { runtime: RuntimeMetrics | null; now: stri
   if (!runtime) {
     return (
       <DashboardSection title="Base de datos, caché y colas" testId="backstage-metrics">
-        <NoMeasurements what="la base de datos, la caché y las colas" />
+        <NoMeasurements what="de la base de datos, la caché y las colas" />
       </DashboardSection>
     );
   }

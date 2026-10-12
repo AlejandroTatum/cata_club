@@ -627,3 +627,42 @@ def test_cupo_usa_la_misma_clave_de_dia_que_la_reserva():
     assert notificaciones.dia_del_contador(AHORA) == HOY_UTC
     # 23:30 UTC y 19:00 club del mismo instante no cambian el día del contador.
     assert notificaciones.dia_del_contador(datetime(2026, 10, 1, 23, 30, tzinfo=timezone.utc)) == HOY_UTC
+
+
+# --- el cupo falla abierto: sin tarjeta, pero el resto de la página sigue ------
+def _romper_cupo(monkeypatch, error):
+    from app.servicios_negocio import actividad_servicio
+
+    def _falla(_db):
+        raise error
+
+    monkeypatch.setattr(actividad_servicio, "contar_en_espera_por_cupo", _falla)
+
+
+@pytest.mark.parametrize("rango", ["1h", "24h", "7d"])
+def test_cupo_que_falla_deja_la_respuesta_en_200_con_cupo_nulo(client, db_session, monkeypatch, caplog, rango):
+    _sembrar_avanzadas(db_session)
+    esperado = client.get(RUTA_AVANZADAS + f"?rango={rango}").json()
+    _romper_cupo(monkeypatch, RuntimeError("redis caído"))
+
+    with caplog.at_level("WARNING"):
+        respuesta = client.get(RUTA_AVANZADAS + f"?rango={rango}")
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["emailQuota"] is None
+    assert {k: v for k, v in cuerpo.items() if k != "emailQuota"} == {
+        k: v for k, v in esperado.items() if k != "emailQuota"
+    }
+    assert cuerpo["service"] is not None and cuerpo["health"] is not None
+    assert any(r.levelname == "WARNING" and "cupo" in r.getMessage().lower() for r in caplog.records)
+
+
+def test_cupo_que_falla_tampoco_rompe_la_respuesta_sin_instantaneas(client, monkeypatch):
+    _romper_cupo(monkeypatch, RuntimeError("base caída"))
+
+    respuesta = client.get(RUTA_AVANZADAS + "?rango=1h")
+
+    assert respuesta.status_code == 200
+    assert respuesta.json()["emailQuota"] is None
+    assert respuesta.json()["service"] is None

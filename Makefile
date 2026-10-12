@@ -290,7 +290,10 @@ QA_COMPOSE = docker compose -f docker-compose.yml -f docker-compose.override.yml
 # entrar por el entorno. `:=` la evalúa UNA vez, para que todos los targets de
 # una misma corrida compartan el mismo valor.
 QA_JWT_SECRET_KEY := $(shell openssl rand -hex 32)
-QA_ENV = JWT_SECRET_KEY=$(QA_JWT_SECRET_KEY)
+#
+# `COMPOSE_BAKE=false` fuerza el builder clásico: con Docker Compose 5.6 el
+# build vía bake falla en `qa-up` con "pass --allow=network.host".
+QA_ENV = JWT_SECRET_KEY=$(QA_JWT_SECRET_KEY) COMPOSE_BAKE=false
 
 # `celery-worker` SÍ entra: reset de contraseña y generación de comprobante
 # son tareas encoladas (recuperacion_tareas.py/comprobante_tareas.py), no se

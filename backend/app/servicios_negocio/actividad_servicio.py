@@ -16,6 +16,7 @@ Fuentes de cada cifra:
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from itertools import zip_longest
 from datetime import date, datetime, time, timedelta, timezone
@@ -41,6 +42,8 @@ from app.servicios_negocio.dtos.actividad_schemas import (
 from app.servicios_negocio import salud_sistema
 from app.soporte_transversal.configuracion import settings
 from app.soporte_transversal.tiempo import ZONA_HORARIA_CLUB
+
+_log = logging.getLogger(__name__)
 
 ROL_A_COLUMNA = {
     TipoRol.ALUMNO: "alumnos",
@@ -287,7 +290,7 @@ class ActividadServicio:
             return AvanzadasResponse(
                 range=rango, service=None, host=None, runtime=None, users=None,
                 health=self._salud(self._outbox_mas_antiguo_s()),
-                emailQuota=self._cupo_de_correos(ahora),
+                emailQuota=self._cupo_o_none(ahora),
             )
 
         series = self._series(inicio, ahora, puntos, paso_min)
@@ -298,8 +301,18 @@ class ActividadServicio:
             runtime=self._runtime(ultima, en_rango),
             users=self._usuarios(ultima, en_rango),
             health=self._salud(ultima.outbox_mas_antiguo_s),
-            emailQuota=self._cupo_de_correos(ahora),
+            emailQuota=self._cupo_o_none(ahora),
         )
+
+    def _cupo_o_none(self, ahora: datetime) -> Optional[CuotaCorreos]:
+        """Falla abierto: la tarjeta de cupo es informativa y no puede tumbar la
+        página. Si leerlo falla, el bloque se omite y se deja una advertencia.
+        Solo envuelve esta lectura: el resto de la respuesta no se enmascara."""
+        try:
+            return self._cupo_de_correos(ahora)
+        except Exception:
+            _log.warning("No se pudo leer el cupo diario de correos; se omite emailQuota", exc_info=True)
+            return None
 
     def _cupo_de_correos(self, ahora: datetime) -> CuotaCorreos:
         """Cupo del día UTC en curso, leído de la misma fila que reserva el envío.
