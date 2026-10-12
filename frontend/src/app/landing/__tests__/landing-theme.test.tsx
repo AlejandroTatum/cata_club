@@ -192,6 +192,14 @@ describe("landing dark palette", (): void => {
     // The yellow on a card and the white on the calmer red both clear the bar.
     expect(contrastRatio(hex("--landing-brand-yellow"), hex("--landing-card"))).toBeGreaterThanOrEqual(7);
   });
+
+  it("turns the coal step badge white so it stands off the dark card, with a coal edge and number", (): void => {
+    // Coal on the dark card (#111 on #24242b) is ~1.2:1: the third badge and its edge disappeared.
+    expect(cssNoComments).toMatch(/html\[data-theme="dark"\] \.landing-steps-list li:nth-child\(3n\) \{ --step-bg: var\(--landing-surface\); --step-fg: var\(--landing-brand-black\); \}/);
+    expect(cssNoComments).toMatch(/html\[data-theme="dark"\] \.landing-steps-list li::before, html\[data-theme="dark"\] \.landing-faq-list summary::after \{ --landing-line: var\(--landing-brand-black\); \}/);
+    expect(contrastRatio(hex("--landing-surface-base", LIGHT), hex("--landing-card"))).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(hex("--landing-brand-black", LIGHT), hex("--landing-surface-base", LIGHT))).toBeGreaterThanOrEqual(7);
+  });
 });
 
 describe("landing dark, beyond the palette", (): void => {
