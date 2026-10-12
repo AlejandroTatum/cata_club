@@ -4,7 +4,7 @@
  * Core requirement: cookies are ALWAYS cleared, even when the upstream
  * FastAPI logout call throws/errors/times out — client-side cookie
  * clearing is authoritative. The backend logout DOES revoke the session
- * (it bumps the per-user session epoch), so an expired access token must not
+ * (only this device's `sid`), so an expired access token must not
  * leave the refresh token alive: the route refreshes first (#1653).
  *
  * @vitest-environment node
