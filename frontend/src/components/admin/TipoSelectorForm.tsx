@@ -163,7 +163,7 @@ export default function TipoSelectorForm({
           .filter((tipo) => tipo.categoria !== excludeCategoria)
           .map((tipo) => (
             <option key={tipo.id} value={tipo.id}>
-              {planOptionLabel(tipo.categoria, tipo.precio)}
+              {planOptionLabel(tipo.categoria, tipo.precio, tipo.periodicidad)}
             </option>
           ))}
       </select>
