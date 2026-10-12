@@ -110,6 +110,21 @@ def test_logout_revoca_solo_la_sesion_actual(client_sin_token, dos_dispositivos)
     assert _me(client_sin_token, refresco_b.json()["access_token"]).status_code == 200
 
 
+def test_logout_tras_rotacion_revoca_el_par_nuevo_y_el_viejo(client_sin_token, dos_dispositivos):
+    a, b = dos_dispositivos
+    rotado = _refrescar(client_sin_token, a["refresh_token"])
+    assert rotado.status_code == 200
+    a2 = rotado.json()
+
+    assert _logout(client_sin_token, a2["access_token"]).status_code == 200
+
+    for par in (a, a2):
+        assert _me(client_sin_token, par["access_token"]).status_code == 401
+        assert _refrescar(client_sin_token, par["refresh_token"]).status_code == 401
+    assert _me(client_sin_token, b["access_token"]).status_code == 200
+    assert _refrescar(client_sin_token, b["refresh_token"]).status_code == 200
+
+
 def test_logout_marca_revocada_en_y_no_bombea_el_epoch(client_sin_token, dos_dispositivos, usuario, db_session):
     a, b = dos_dispositivos
     version_previa = usuario.version_sesion
