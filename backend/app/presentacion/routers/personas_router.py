@@ -33,6 +33,7 @@ from app.servicios_negocio.dtos.beneficio_schemas import (
 from app.servicios_negocio.beneficio_servicio import BeneficioServicio
 from app.servicios_negocio.antecedentes_club_servicio import AntecedentesClubServicio
 from app.servicios_negocio.rol_servicio import RolServicio
+from app.seguridad.reautenticacion import exigir_reautenticacion_reciente
 from app.servicios_negocio.gestor_permisos import GestorPermisos
 from app.servicios_negocio.politica_acceso import SOLO_ADMINISTRADOR, PoliticaAccesoPersona
 from app.dominio.enums import TipoRol
@@ -858,7 +859,10 @@ async def obtener_roles(persona_id: int, db: Session = Depends(obtener_sesion)):
 
 @router.post(
     "/{persona_id}/roles", response_model=RolesResponseDTO, status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+    dependencies=[
+        Depends(GestorPermisos(["ADMINISTRADOR"])),
+        Depends(exigir_reautenticacion_reciente),  # step-up de contraseña (#1653, S5)
+    ],
 )
 async def asignar_rol(persona_id: int, datos: RolAsignarDTO, db: Session = Depends(obtener_sesion)):
     usuario = RolServicio(db).asignar_rol(persona_id, datos.tipo_rol)
@@ -867,7 +871,10 @@ async def asignar_rol(persona_id: int, datos: RolAsignarDTO, db: Session = Depen
 
 @router.delete(
     "/{persona_id}/roles/{tipo_rol}", response_model=RolesResponseDTO,
-    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+    dependencies=[
+        Depends(GestorPermisos(["ADMINISTRADOR"])),
+        Depends(exigir_reautenticacion_reciente),  # step-up de contraseña (#1653, S5)
+    ],
 )
 async def quitar_rol(
     persona_id: int,

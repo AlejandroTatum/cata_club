@@ -9,6 +9,7 @@ from app.infraestructura.db import obtener_sesion
 from app.servicios_negocio.gestor_permisos import GestorPermisos
 from app.servicios_negocio.dtos.auth_schemas import (
     RegistroUsuarioDTO, RefreshTokenDTO, UsuarioMeResponseDTO, LogoutResponseDTO,
+    ReautenticarDTO, ReautenticarResponseDTO,
     SolicitarRecuperacionDTO, SolicitarRecuperacionResponseDTO, RestablecerContraseniaDTO, CambiarContraseniaDTO,
     SolicitarVerificacionCorreoDTO, SolicitarVerificacionCorreoResponseDTO,
     ConfirmarVerificacionCorreoDTO,
@@ -41,6 +42,22 @@ router = APIRouter(prefix="/auth", tags=["Autenticación"])
 # `auth_servicio.py` para la otra mitad (direcciones DISTINTAS de longitud
 # válida, sin límite de cantidad).
 LONGITUD_MAXIMA_USERNAME_LOGIN = 254
+
+
+def _respuesta_enfriamiento(enfriamiento: LoginEnEnfriamiento) -> JSONResponse:
+    # REG-02: 429 con el cuerpo `{detail, message}` de toda la API más un
+    # `codigo` propio, para que el BFF lo distinga del 429 genérico del
+    # rate limiter por IP (que no lleva `codigo`) y muestre este texto.
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={
+            "detail": str(enfriamiento),
+            "message": str(enfriamiento),
+            "mensaje_seguro": True,
+            "codigo": "login_enfriamiento",
+        },
+        headers={"Retry-After": str(enfriamiento.segundos_restantes)},
+    )
 
 
 @router.post("/login")
@@ -76,19 +93,7 @@ async def login(
             username, password, user_agent=request.headers.get("user-agent"),
         )
     except LoginEnEnfriamiento as enfriamiento:
-        # REG-02: 429 con el cuerpo `{detail, message}` de toda la API más un
-        # `codigo` propio, para que el BFF lo distinga del 429 genérico del
-        # rate limiter por IP (que no lleva `codigo`) y muestre este texto.
-        return JSONResponse(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            content={
-                "detail": str(enfriamiento),
-                "message": str(enfriamiento),
-                "mensaje_seguro": True,
-                "codigo": "login_enfriamiento",
-            },
-            headers={"Retry-After": str(enfriamiento.segundos_restantes)},
-        )
+        return _respuesta_enfriamiento(enfriamiento)
 
 
 @router.post(
@@ -264,6 +269,28 @@ async def listar_mis_sesiones(
         limite=limite,
         desplazamiento=desplazamiento,
     )
+
+
+@router.post("/reautenticar", response_model=ReautenticarResponseDTO)
+@limiter.limit("10/minute")
+async def reautenticar(
+    request: Request,
+    datos: ReautenticarDTO,
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    db: Session = Depends(obtener_sesion),
+):
+    """Step-up de contraseña (#1653, S5): el titular re-ingresa su contraseña y
+    su sesión actual (`sid`) queda habilitada 10 minutos para cambiar roles.
+    Hashea con bcrypt y puede dormir por el freno de login, de ahí
+    `run_in_threadpool`. Una contraseña incorrecta es 401 y cuenta para el
+    mismo freno/enfriamiento que `/auth/login`."""
+    try:
+        return await run_in_threadpool(
+            AuthServicio(db).reautenticar,
+            token_payload["sub"], token_payload.get("sid"), datos.contrasenia,
+        )
+    except LoginEnEnfriamiento as enfriamiento:
+        return _respuesta_enfriamiento(enfriamiento)
 
 
 @router.post("/refresh")

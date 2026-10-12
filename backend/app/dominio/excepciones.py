@@ -83,6 +83,16 @@ class CredencialesInvalidas(ErrorDominio):
     pass
 
 
+class ContraseniaIncorrecta(CredencialesInvalidas):
+    """El step-up de contraseña falló (-> HTTP 401). Lleva `codigo`: el BFF lo
+    distingue de un 401 de sesión vencida, que sí debe refrescar el token."""
+
+    codigo = "contrasenia_incorrecta"
+
+    def __init__(self, mensaje: str):
+        super().__init__(mensaje, seguro_mostrar=True)
+
+
 class PermisosInsuficientes(ErrorDominio):
     """El usuario autenticado no tiene el rol requerido (-> HTTP 403)."""
     pass
@@ -98,6 +108,17 @@ class ReaceptacionLegalPendiente(PermisosInsuficientes):
     def __init__(self, mensaje: str, version: str):
         super().__init__(mensaje, seguro_mostrar=True)
         self.version = version
+
+
+class ReautenticacionRequerida(PermisosInsuficientes):
+    """Falta el step-up de contraseña (o venció) para una operación sensible
+    (-> HTTP 403). Lleva `codigo`: el manejador global lo agrega al cuerpo para
+    que el cliente abra el diálogo de contraseña y reintente."""
+
+    codigo = "reautenticacion_requerida"
+
+    def __init__(self, mensaje: str):
+        super().__init__(mensaje, seguro_mostrar=True)
 
 
 class ServicioNoDisponible(ErrorDominio):

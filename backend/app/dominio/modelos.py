@@ -511,6 +511,10 @@ class Sesion(Base):
     revocada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # sha256 del refresh legacy sin `sid` que abrió esta fila (S3); nulo en el resto.
     legacy_huella: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Step-up de contraseña para el cambio de roles (#1653, S5): cuándo el
+    # titular re-ingresó su contraseña EN ESTA sesión. Vale 10 minutos, ver
+    # `app.seguridad.reautenticacion`. Nulo = nunca.
+    reautenticada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     usuario: Mapped["Usuario"] = relationship()
 

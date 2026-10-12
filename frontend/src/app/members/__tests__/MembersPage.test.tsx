@@ -167,6 +167,7 @@ const mockRegularizarDeuda = vi.fn().mockResolvedValue({
 const mockSuspenderMembresia = vi.fn().mockResolvedValue({ id: 42, estado: "SUSPENDIDA" });
 const mockReactivarMembresia = vi.fn().mockResolvedValue({ id: 42, estado: "ACTIVA" });
 const mockCambiarPlanMembresia = vi.fn().mockResolvedValue({ id: 42, estado: "ACTIVA", tipoMembresiaId: 7 });
+const mockReautenticar = vi.fn();
 const mockSearchStudents = vi.fn().mockResolvedValue([]);
 const mockVincularRepresentado = vi.fn();
 const mockIndependizarPersona = vi.fn();
@@ -191,6 +192,7 @@ vi.mock("@/services/api", () => {
     obtenerRolesDePersona: (personaId: number) => mockObtenerRolesDePersona(personaId),
     asignarRol: (personaId: number, tipoRol: string) => mockAsignarRol(personaId, tipoRol),
     quitarRol: (personaId: number, tipoRol: string) => mockQuitarRol(personaId, tipoRol),
+    reautenticar: (contrasenia: string) => mockReautenticar(contrasenia),
     cambiarEstadoCuenta: (personaId: number, activo: boolean) => mockCambiarEstadoCuenta(personaId, activo),
     actualizarPersona: (personaId: number, data: unknown) => mockActualizarPersona(personaId, data),
     fetchFichaMedica: (personaId: number) => mockFetchFichaMedica(personaId),
@@ -336,6 +338,7 @@ describe("MembersPage — Editar member modal", () => {
     mockObtenerRolesDePersona.mockReset();
     mockAsignarRol.mockReset();
     mockQuitarRol.mockReset();
+    mockReautenticar.mockReset();
     mockCambiarEstadoCuenta.mockReset();
     mockFetchFichaMedica.mockReset();
     mockActualizarFichaMedica.mockReset();
@@ -849,6 +852,65 @@ describe("MembersPage — Editar member modal", () => {
       expect(mockAsignarRol).toHaveBeenCalledWith(1, "ADMINISTRADOR");
     });
     expect(mockQuitarRol).not.toHaveBeenCalled();
+  });
+
+  describe("password step-up for role changes (#1653, S5)", () => {
+    const stepUpRequired = () =>
+      Object.assign(new Error("Por seguridad, confirma tu contraseña para cambiar roles."), {
+        name: "ApiClientError",
+        status: 403,
+        code: "reautenticacion_requerida",
+      });
+
+    it("prompts for the password when the backend asks, then retries the role change once", async () => {
+      mockAsignarRol.mockRejectedValueOnce(stepUpRequired());
+      mockReautenticar.mockResolvedValue({ reautenticadoHasta: "2026-10-12T12:10:00Z" });
+      render(
+        <ToastProvider>
+          <MembersPage />
+        </ToastProvider>,
+      );
+      const row = await findAccountRow();
+      const dialog = await openModalAndWaitForRoles(row);
+
+      pickRole(dialog, /entrenador/i);
+
+      const prompt = await screen.findByRole("dialog", { name: /confirma tu contraseña/i });
+      expect(mockAsignarRol).toHaveBeenCalledTimes(1);
+      fireEvent.change(within(prompt).getByLabelText("Contraseña"), { target: { value: "claveAdmin123" } });
+      fireEvent.click(within(prompt).getByRole("button", { name: "Confirmar" }));
+
+      await waitFor(() => expect(mockAsignarRol).toHaveBeenCalledTimes(2));
+      expect(mockReautenticar).toHaveBeenCalledWith("claveAdmin123");
+      expect(mockAsignarRol).toHaveBeenLastCalledWith(1, "ENTRENADOR");
+      await waitFor(() => expect(within(dialog).getByRole("radio", { name: /entrenador/i })).toBeChecked());
+      expect(screen.queryByRole("dialog", { name: /confirma tu contraseña/i })).not.toBeInTheDocument();
+    });
+
+    it("cancelling the prompt changes nothing, retries nothing and shows no error", async () => {
+      mockAsignarRol.mockRejectedValue(stepUpRequired());
+      render(
+        <ToastProvider>
+          <MembersPage />
+        </ToastProvider>,
+      );
+      const row = await findAccountRow();
+      const dialog = await openModalAndWaitForRoles(row);
+
+      pickRole(dialog, /entrenador/i);
+      const prompt = await screen.findByRole("dialog", { name: /confirma tu contraseña/i });
+      fireEvent.click(within(prompt).getByRole("button", { name: "Cancelar" }));
+
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog", { name: /confirma tu contraseña/i })).not.toBeInTheDocument(),
+      );
+      expect(mockAsignarRol).toHaveBeenCalledTimes(1);
+      expect(mockReautenticar).not.toHaveBeenCalled();
+      expect(within(dialog).getByRole("radio", { name: /entrenador/i })).not.toBeChecked();
+      expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+      // Only the prompt closed: the member editor underneath is still open.
+      expect(dialog).toBeInTheDocument();
+    });
   });
 
   it("ADMA-07: picking Entrenador on an Admin account replaces the role in one step, behind the Admin confirmation", async () => {

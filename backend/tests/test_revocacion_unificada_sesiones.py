@@ -25,6 +25,7 @@ from app.dominio.cedula import cedula_valida
 from app.dominio.enums import TipoRol
 from app.dominio.modelos import Persona, Rol, Usuario
 from app.seguridad.gestor_auth import GestorAutenticacion
+from tests.fabricas_auth import token_admin_con_stepup
 
 
 @pytest.fixture()
@@ -215,7 +216,7 @@ def test_quitar_rol_invalida_access_token_previo(
     usuario = usuario_real.usuario
     access_previo = _token_acceso(usuario)
     version_previa = usuario.version_sesion
-    token_admin = _token_acceso(admin_real.usuario, roles=["ADMINISTRADOR"])
+    token_admin = token_admin_con_stepup(db_session, admin_real.usuario)
 
     respuesta = client_sin_token.delete(
         f"/api/v1/personas/{usuario_real.id}/roles/ALUMNO",
