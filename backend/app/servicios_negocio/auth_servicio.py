@@ -300,7 +300,7 @@ class AuthServicio:
             self._penalizar_intento_fallido(clave)
             raise ContraseniaIncorrecta("Contraseña incorrecta")
 
-        _INTENTOS_FALLIDOS_LOGIN.pop(clave, None)
+        redis_intentos_login.olvidar(clave)
         ahora = reautenticacion.ahora_utc()
         sesion.reautenticada_en = ahora
         self.db.commit()
