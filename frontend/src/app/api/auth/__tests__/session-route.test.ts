@@ -10,7 +10,7 @@
  * @vitest-environment node
  */
 
-import { NextRequest } from "next/server";
+import { NextRequest, type NextResponse } from "next/server";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { GET } from "../session/route";
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from "@/lib/server/auth";
@@ -27,6 +27,14 @@ function makeJwt(expSecondsFromNow: number): string {
   const header = base64Url(JSON.stringify({ alg: "none", typ: "JWT" }));
   const exp = Math.floor(Date.now() / 1000) + expSecondsFromNow;
   const payload = base64Url(JSON.stringify({ sub: "1", exp }));
+  return `${header}.${payload}.sig`;
+}
+
+/** Access token the backend issued while the club had not yet activated the membership. */
+function pendingActivationJwt(expSecondsFromNow: number): string {
+  const header = base64Url(JSON.stringify({ alg: "none", typ: "JWT" }));
+  const exp = Math.floor(Date.now() / 1000) + expSecondsFromNow;
+  const payload = base64Url(JSON.stringify({ sub: "1", exp, activacion_completa: false }));
   return `${header}.${payload}.sig`;
 }
 
@@ -120,6 +128,117 @@ describe("GET /api/auth/session", () => {
     expect(response.status).toBe(200);
     expect(global.fetch).toHaveBeenCalledTimes(3);
     expect(response.cookies.get(ACCESS_TOKEN_COOKIE)?.value).toBe("rotated-access");
+  });
+
+  // -------------------------------------------------------------------------
+  // Refresh-token rotation (#1653 T1a): every refresh path must persist the
+  // rotated refresh cookie in the same response as the new access cookie, and
+  // must leave the refresh cookie alone when the backend does not rotate.
+  // -------------------------------------------------------------------------
+
+  describe("refresh-token rotation", () => {
+    const rotated = makeJwt(7 * 24 * 60 * 60);
+
+    function expectBothCookies(response: NextResponse, access: string): void {
+      expect(response.cookies.get(ACCESS_TOKEN_COOKIE)?.value).toBe(access);
+      const refresh = response.cookies.get(REFRESH_TOKEN_COOKIE);
+      expect(refresh?.value).toBe(rotated);
+      expect(refresh?.httpOnly).toBe(true);
+      expect(refresh?.maxAge).toBeGreaterThan(7 * 24 * 60 * 60 - 5);
+      expect(refresh?.maxAge).toBeLessThanOrEqual(7 * 24 * 60 * 60);
+    }
+
+    it("persists the rotated refresh cookie on the proactive refresh path", async () => {
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(
+          jsonResponse({ access_token: "refreshed-access", refresh_token: rotated, token_type: "bearer" }),
+        )
+        .mockResolvedValueOnce(jsonResponse(meBody));
+
+      const response = await GET(
+        sessionRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(60)}; ${REFRESH_TOKEN_COOKIE}=${makeJwt(7 * 86400)}`),
+      );
+
+      expect(response.status).toBe(200);
+      expectBothCookies(response, "refreshed-access");
+    });
+
+    it("persists the rotated refresh cookie when only the refresh cookie is present", async () => {
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(jsonResponse({ access_token: "new-access", refresh_token: rotated, token_type: "bearer" }))
+        .mockResolvedValueOnce(jsonResponse(meBody));
+
+      const response = await GET(sessionRequest(`${REFRESH_TOKEN_COOKIE}=${makeJwt(7 * 86400)}`));
+
+      expect(response.status).toBe(200);
+      expectBothCookies(response, "new-access");
+    });
+
+    it("persists the rotated refresh cookie on the /auth/me 401-retry path", async () => {
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(jsonResponse({}, 401))
+        .mockResolvedValueOnce(
+          jsonResponse({ access_token: "rotated-access", refresh_token: rotated, token_type: "bearer" }),
+        )
+        .mockResolvedValueOnce(jsonResponse(meBody));
+
+      const response = await GET(
+        sessionRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}; ${REFRESH_TOKEN_COOKIE}=${makeJwt(7 * 86400)}`),
+      );
+
+      expect(response.status).toBe(200);
+      expectBothCookies(response, "rotated-access");
+    });
+
+    it("persists the rotated refresh cookie on the pending-activation reissue path", async () => {
+      const pendingAccess = pendingActivationJwt(3600);
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(jsonResponse({ ...meBody, activacionCompleta: true }))
+        .mockResolvedValueOnce(
+          jsonResponse({ access_token: "complete-access", refresh_token: rotated, token_type: "bearer" }),
+        );
+
+      const response = await GET(
+        sessionRequest(`${ACCESS_TOKEN_COOKIE}=${pendingAccess}; ${REFRESH_TOKEN_COOKIE}=${makeJwt(7 * 86400)}`),
+      );
+
+      expect(response.status).toBe(200);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expectBothCookies(response, "complete-access");
+    });
+
+    it.each([
+      ["proactive", () => `${ACCESS_TOKEN_COOKIE}=${makeJwt(60)}; ${REFRESH_TOKEN_COOKIE}=r`, [
+        { access_token: "a2", token_type: "bearer" },
+        meBody,
+      ]],
+      ["me-401 retry", () => `${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}; ${REFRESH_TOKEN_COOKIE}=r`, [
+        null,
+        { access_token: "a2", token_type: "bearer" },
+        meBody,
+      ]],
+    ])("keeps the existing refresh cookie untouched when the backend omits refresh_token (%s)", async (_name, cookie, bodies) => {
+      for (const body of bodies) {
+        vi.mocked(global.fetch).mockResolvedValueOnce(body === null ? jsonResponse({}, 401) : jsonResponse(body));
+      }
+
+      const response = await GET(sessionRequest(cookie()));
+
+      expect(response.status).toBe(200);
+      expect(response.cookies.get(ACCESS_TOKEN_COOKIE)?.value).toBe("a2");
+      expect(response.cookies.get(REFRESH_TOKEN_COOKIE)).toBeUndefined();
+    });
+
+    it("does not set a refresh cookie when no refresh happened", async () => {
+      vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(meBody));
+
+      const response = await GET(
+        sessionRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}; ${REFRESH_TOKEN_COOKIE}=r`),
+      );
+
+      expect(response.cookies.get(ACCESS_TOKEN_COOKIE)).toBeUndefined();
+      expect(response.cookies.get(REFRESH_TOKEN_COOKIE)).toBeUndefined();
+    });
   });
 
   it("clears cookies and reports unauthenticated when refresh also fails", async () => {

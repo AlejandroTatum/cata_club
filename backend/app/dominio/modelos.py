@@ -454,27 +454,33 @@ class RevocacionConsentimientoLegal(Base):
 
 
 class Sesion(Base):
-    """Registro OBSERVACIONAL de un login. No decide nada.
+    """Una sesión de un equipo: autoritativa para la revocación POR SESIÓN.
 
-    La invalidación de sesiones es y sigue siendo `Usuario.version_sesion`, el
-    epoch que viaja en el claim `sver` y que `GestorAutenticacion.epoch_valido`
-    compara. Esta tabla no participa de esa decisión: existe para que el dueño
-    de la cuenta pueda VER desde dónde entró, y nada más. Si un día se
-    consultara para autorizar, habríamos movido un control de seguridad a una
-    tabla que nació para llenar una pantalla.
+    Hay dos mecanismos y no se pisan. `Usuario.version_sesion` (el epoch que
+    viaja en el claim `sver`, comparado por `GestorAutenticacion.epoch_valido`)
+    sigue siendo la autoridad para REVOCAR TODO: cambio de contraseña, de rol,
+    baja o "cerrar las otras sesiones". Esta tabla es la autoridad de UNA
+    sesión: una fila con `revocada_en` fija, vencida por inactividad o pasada
+    del tope absoluto rechaza tanto el refresh como el access que lleva su
+    `sid`. Un token sin `sid` (anterior a este cambio) solo responde al epoch.
 
-    Por eso cada fila guarda el `version_sesion` vigente cuando se abrió: una
-    fila cuyo epoch quedó por debajo del epoch actual del usuario está muerta,
-    y eso se DERIVA del mecanismo autoritativo en lugar de duplicarlo.
-    `revocar_sesiones()` no toca esta tabla justamente por eso.
+    Cada fila guarda el `version_sesion` vigente cuando se abrió: una fila cuyo
+    epoch quedó por debajo del del usuario está muerta, y eso se DERIVA del
+    epoch en vez de duplicarlo. `revocar_sesiones()` por eso no toca la tabla.
+
+    Rotación del refresh (#1653): `refresh_jti` es el `jti` del único refresh
+    vigente de la sesión; en cada uso pasa a `refresh_jti_anterior` (con
+    `rotado_en`) y se emite uno nuevo. El anterior se tolera durante la gracia
+    de `sesion_gracia_rotacion_segundos` -- la carrera de dos refresh
+    concurrentes del mismo cliente --; fuera de ella es REUSO y revoca la
+    sesión. `ultimo_uso_en` alimenta la ventana inactiva y `iniciada_en` el
+    tope absoluto. Todas son nulas en las filas anteriores al cambio: un
+    `refresh_jti` nulo marca la sesión "legacy", cuyo primer refresh se acepta
+    una vez y se migra.
 
     Sin IP: es dato personal, el club maneja cuentas de menores y de sus
     representantes, y ningún caso de uso la lee (ver
     `soporte_transversal/dispositivo.py`).
-
-    Sin `ultimo_uso_en`: actualizarlo exigiría que el refresh sepa a QUÉ fila
-    corresponde, y hoy el token no lleva identificador de sesión. Una columna
-    que nunca se actualiza es una mentira con forma de dato.
     """
 
     __tablename__ = "sesion"
@@ -482,6 +488,9 @@ class Sesion(Base):
         # El acceso real es siempre "las sesiones de este usuario, la más
         # reciente primero" -- el índice cubre las dos mitades de esa consulta.
         Index("ix_sesion_usuario_iniciada", "usuario_id", "iniciada_en"),
+        # Un refresh legacy sin `sid` se acepta UNA vez: su huella, única, es lo
+        # que hace que el segundo uso encuentre esta fila en vez de abrir otra.
+        Index("uq_sesion_legacy_huella", "legacy_huella", unique=True),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -494,6 +503,14 @@ class Sesion(Base):
     # El epoch bajo el que se abrió. Ver el docstring: se guarda para derivar
     # "muerta", no para decidirlo.
     version_sesion: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Rotación del refresh y vigencia por sesión (#1653); ver el docstring.
+    refresh_jti: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    refresh_jti_anterior: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    rotado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ultimo_uso_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revocada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # sha256 del refresh legacy sin `sid` que abrió esta fila (S3); nulo en el resto.
+    legacy_huella: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     usuario: Mapped["Usuario"] = relationship()
 

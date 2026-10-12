@@ -126,6 +126,36 @@ describe("backendFetchAuthed — token resolution", () => {
     expect(result.ok && result.refreshedAccessToken).toBe("token-fresco");
   });
 
+  it("hands back the rotated refresh token from the proactive refresh", async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(
+        jsonResponse({ access_token: "token-fresco", refresh_token: "refresh-rotado", token_type: "bearer" }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+    const result = await backendFetchAuthed(
+      requestWith({ access: TOKEN_POR_VENCER, refresh: "refresh-valido" }),
+      "/recurso",
+    );
+
+    expect(result.ok && result.refreshedAccessToken).toBe("token-fresco");
+    expect(result.ok && result.refreshedRefreshToken).toBe("refresh-rotado");
+  });
+
+  it("leaves refreshedRefreshToken undefined when the backend omits it (old backend)", async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse({ access_token: "token-fresco", token_type: "bearer" }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+    const result = await backendFetchAuthed(
+      requestWith({ access: TOKEN_POR_VENCER, refresh: "refresh-valido" }),
+      "/recurso",
+    );
+
+    expect(result.ok && result.refreshedAccessToken).toBe("token-fresco");
+    expect(result.ok && result.refreshedRefreshToken).toBeUndefined();
+  });
+
   it("falls back to the current token when the proactive refresh fails", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(jsonResponse({}, 401)) // refresh rechazado
@@ -187,6 +217,38 @@ describe("backendFetchAuthed — refresh and retry once on 401", () => {
     expect(vi.mocked(global.fetch).mock.calls[1][0]).toContain("/auth/refresh");
     expect(bearerDeLlamada(2)).toBe("Bearer token-reintento");
     expect(result.ok && result.refreshedAccessToken).toBe("token-reintento");
+  });
+
+  it("hands back the rotated refresh token from the 401-retry refresh", async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse({ detail: "Token expirado" }, 401))
+      .mockResolvedValueOnce(
+        jsonResponse({ access_token: "token-reintento", refresh_token: "refresh-rotado", token_type: "bearer" }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+    const result = await backendFetchAuthed(
+      requestWith({ access: TOKEN_VIGENTE, refresh: "refresh-valido" }),
+      "/recurso",
+    );
+
+    expect(result.ok && result.refreshedAccessToken).toBe("token-reintento");
+    expect(result.ok && result.refreshedRefreshToken).toBe("refresh-rotado");
+  });
+
+  it("leaves refreshedRefreshToken undefined on the 401 retry when the backend omits it", async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse({ detail: "Token expirado" }, 401))
+      .mockResolvedValueOnce(jsonResponse({ access_token: "token-reintento", token_type: "bearer" }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+    const result = await backendFetchAuthed(
+      requestWith({ access: TOKEN_VIGENTE, refresh: "refresh-valido" }),
+      "/recurso",
+    );
+
+    expect(result.ok && result.refreshedAccessToken).toBe("token-reintento");
+    expect(result.ok && result.refreshedRefreshToken).toBeUndefined();
   });
 
   it("relays the 401 when the retry refresh also fails", async () => {
@@ -350,6 +412,74 @@ describe("proxyBackendGet", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ items: [1, 2] });
     expect(response.cookies.get(ACCESS_TOKEN_COOKIE)?.value).toBe("token-fresco");
+  });
+
+  it("sets both cookies in the same response when the proactive refresh rotated the refresh token", async () => {
+    const rotatedRefresh = makeJwt(7 * 24 * 60 * 60);
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(
+        jsonResponse({ access_token: "token-fresco", refresh_token: rotatedRefresh, token_type: "bearer" }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ items: [] }));
+
+    const response = await proxyBackendGet(
+      requestWith({ access: TOKEN_POR_VENCER, refresh: "refresh-valido" }),
+      "/recurso",
+      "error",
+    );
+
+    expect(response.cookies.get(ACCESS_TOKEN_COOKIE)?.value).toBe("token-fresco");
+    const refresh = response.cookies.get(REFRESH_TOKEN_COOKIE);
+    expect(refresh?.value).toBe(rotatedRefresh);
+    expect(refresh?.httpOnly).toBe(true);
+    // Max-Age comes from the token's own exp, not the documented fallback.
+    expect(refresh?.maxAge).toBeGreaterThan(7 * 24 * 60 * 60 - 5);
+    expect(refresh?.maxAge).toBeLessThanOrEqual(7 * 24 * 60 * 60);
+  });
+
+  it("sets both cookies in the same response when the 401-retry refresh rotated the refresh token", async () => {
+    const rotatedRefresh = makeJwt(7 * 24 * 60 * 60);
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse({ detail: "Token expirado" }, 401))
+      .mockResolvedValueOnce(
+        jsonResponse({ access_token: "token-reintento", refresh_token: rotatedRefresh, token_type: "bearer" }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ items: [] }));
+
+    const response = await proxyBackendGet(
+      requestWith({ access: TOKEN_VIGENTE, refresh: "refresh-valido" }),
+      "/recurso",
+      "error",
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.cookies.get(ACCESS_TOKEN_COOKIE)?.value).toBe("token-reintento");
+    expect(response.cookies.get(REFRESH_TOKEN_COOKIE)?.value).toBe(rotatedRefresh);
+  });
+
+  it("never touches the refresh cookie when the backend omits refresh_token", async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse({ access_token: "token-fresco", token_type: "bearer" }))
+      .mockResolvedValueOnce(jsonResponse({ items: [] }));
+
+    const response = await proxyBackendGet(
+      requestWith({ access: TOKEN_POR_VENCER, refresh: "refresh-valido" }),
+      "/recurso",
+      "error",
+    );
+
+    expect(response.cookies.get(ACCESS_TOKEN_COOKIE)?.value).toBe("token-fresco");
+    // Neither overwritten nor cleared: no Set-Cookie for it at all.
+    expect(response.cookies.get(REFRESH_TOKEN_COOKIE)).toBeUndefined();
+  });
+
+  it("does not set any cookie when no refresh happened", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ items: [] }));
+
+    const response = await proxyBackendGet(requestWith({ access: TOKEN_VIGENTE, refresh: "r" }), "/recurso", "error");
+
+    expect(response.cookies.get(ACCESS_TOKEN_COOKIE)).toBeUndefined();
+    expect(response.cookies.get(REFRESH_TOKEN_COOKIE)).toBeUndefined();
   });
 
   it("answers the caller's message when authentication is unrecoverable", async () => {

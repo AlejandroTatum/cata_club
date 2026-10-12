@@ -60,6 +60,7 @@ from app.infraestructura.repositorios.vinculacion_representante_repositorio impo
 )
 from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentCreateDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
+from app.servicios_negocio.auth_servicio import AuthServicio
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.persona_servicio import (
     _calcular_edad, EDAD_MINIMA_ALUMNO, EDAD_MAXIMA_ALUMNO, EDAD_MAYORIA_EDAD,
@@ -500,26 +501,16 @@ class EnrollmentServicio:
     def _emitir_tokens(self, usuario: Usuario) -> dict:
         """Emite el par access + refresh tokens para auto-login.
 
-        Usa `GestorAutenticacion.claims_estandar` -- el mismo cálculo que el
-        login normal -- en vez de armar su propia lista de claims: era esa
-        duplicación la que dejaba a este emisor sin `activacion_completa`
-        (issue #1040), así que una cuenta recién autoinscripta con el correo
-        sin verificar entraba a los módulos en su primera sesión.
+        Delega en `AuthServicio.reemitir_tokens_para` -- el mismo cálculo de
+        claims que el login normal y la misma apertura de la fila `sesion` --
+        en vez de armar su propia lista: era esa duplicación la que dejaba a
+        este emisor sin `activacion_completa` (issue #1040), así que una
+        cuenta recién autoinscripta con el correo sin verificar entraba a los
+        módulos en su primera sesión. Y todo par necesita su sesión para poder
+        rotar y revocarse (#1653).
         """
-        claims = GestorAutenticacion.claims_estandar(self.db, usuario)
-        access = GestorAutenticacion.crear_token_acceso(claims, version_sesion=usuario.version_sesion)
-        refresh_claims = {
-            "sub": claims["sub"],
-            "persona_id": claims["persona_id"],
-            "activacion_completa": claims["activacion_completa"],
-        }
-        refresh = GestorAutenticacion.crear_token_refresco(refresh_claims, version_sesion=usuario.version_sesion)
-        return {
-            "access_token": access,
-            "refresh_token": refresh,
-            "token_type": "bearer",
-            "persona_id": usuario.persona_id,
-        }
+        tokens = AuthServicio(self.db).reemitir_tokens_para(usuario)
+        return {**tokens, "persona_id": usuario.persona_id}
 
     def _encolar_verificacion_de_correo(self, usuario: Usuario) -> None:
         """Registra la intención de mandarle a la cuenta su enlace de

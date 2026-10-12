@@ -12,10 +12,11 @@
  */
 
 import { NextResponse, type NextRequest } from "next/server";
+import { pickRefreshed, type RefreshedTokens } from "@/lib/server/auth";
 import { backendFetchAuthed } from "@/lib/server/backend-client";
 
 export type AdminCheck =
-  | { ok: true; refreshedAccessToken?: string }
+  | ({ ok: true } & RefreshedTokens)
   | { ok: false; response: NextResponse };
 
 export async function requireAdmin(request: NextRequest): Promise<AdminCheck> {
@@ -31,5 +32,5 @@ export async function requireAdmin(request: NextRequest): Promise<AdminCheck> {
   if (!roles.includes("ADMINISTRADOR")) {
     return { ok: false, response: NextResponse.json({ message: "Solo un administrador puede imprimir carnets." }, { status: 403 }) };
   }
-  return { ok: true, refreshedAccessToken: result.refreshedAccessToken };
+  return { ok: true, ...pickRefreshed(result) };
 }

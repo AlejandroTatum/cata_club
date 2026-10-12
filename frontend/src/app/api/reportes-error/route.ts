@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
-import { setAuthCookies, userAgentFrom } from "@/lib/server/auth";
+import { refreshedTokenCookies, setAuthCookies, userAgentFrom } from "@/lib/server/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!result.ok) return NextResponse.json({ message: "No se pudo contactar al servicio de reportes." }, { status: result.status });
   if (!result.response.ok) return passthroughBackendError(result.response, "No se pudo enviar el reporte.");
   const response = NextResponse.json(await result.response.json(), { status: 201, headers: { "Cache-Control": "no-store" } });
-  if (result.refreshedAccessToken) setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+  if (result.refreshedAccessToken) setAuthCookies(response, refreshedTokenCookies(result));
   return response;
 }
 
@@ -41,6 +41,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!result.ok) return NextResponse.json({ message: "No se pudo cargar la bandeja." }, { status: result.status });
   if (!result.response.ok) return passthroughBackendError(result.response, "No se pudo cargar la bandeja.");
   const response = NextResponse.json(await result.response.json(), { headers: { "Cache-Control": "no-store" } });
-  if (result.refreshedAccessToken) setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+  if (result.refreshedAccessToken) setAuthCookies(response, refreshedTokenCookies(result));
   return response;
 }
