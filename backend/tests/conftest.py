@@ -256,6 +256,19 @@ def _presencia_en_memoria(monkeypatch):
     presencia.reiniciar_estado_local()
 
 
+@pytest.fixture(autouse=True)
+def _intentos_login_en_redis_falso(monkeypatch):
+    """El freno de login guarda su contador en Redis (#1653 S6) y la suite no
+    tiene Redis: cada test recibe un Redis falso propio, vacío, así que los
+    intentos de un test no se filtran al siguiente. `test_auth_login_contador_
+    redis.py` lo reemplaza por uno con reloj controlado o caído."""
+    from app.infraestructura import redis_intentos_login
+    from tests.redis_falso import RedisFalso
+
+    monkeypatch.setattr(redis_intentos_login, "_cliente_redis", RedisFalso())
+    monkeypatch.setattr(redis_intentos_login, "_ultimo_aviso_falla", 0.0)
+
+
 @pytest.fixture()
 def persona_sin_usuario(db_session):
     """Crea una Persona (sin Usuario asociado) directamente vía ORM, para

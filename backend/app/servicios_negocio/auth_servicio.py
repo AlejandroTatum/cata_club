@@ -3,7 +3,6 @@ import logging
 import math
 import time
 import uuid
-from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Callable
@@ -29,7 +28,7 @@ from app.dominio.mensajes import (
     MENSAJE_IDENTIDAD_DUPLICADA, MENSAJE_REPRESENTADO_SIN_CREDENCIALES_PROPIAS,
     MENSAJE_VERIFICACION_ENVIADA,
 )
-from app.infraestructura import actividad
+from app.infraestructura import actividad, redis_intentos_login
 from app.infraestructura.metricas import contar_login
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.tareas.outbox_despacho import encolar_despacho_tras_commit
@@ -49,63 +48,25 @@ _log = logging.getLogger(__name__)
 
 # --- TRA-4 (issue #111): freno progresivo de login por cuenta --------------
 # Contador de intentos fallidos CONSECUTIVOS por correo (normalizado, ver
-# `login`). Vive en un dict a nivel de módulo -- simplificación aceptada para
-# el alcance de este proyecto, mismo criterio que la ausencia de blacklist
-# Redis ya documentada en `refrescar_sesion`: no sobrevive un reinicio del
-# proceso ni se comparte entre réplicas. En producción multi-instancia cada
-# worker mantendría su propia cota (ver `_registrar_intento_fallido`), no un
-# contador compartido -- eso ya diluye la PRECISIÓN del freno entre workers
-# (issue conocido, mismo motivo que la ausencia de blacklist Redis), pero no
-# reabre el DoS de memoria de acá: la cota por worker es independiente del
-# número de workers, así que N workers acotados siguen sumando una cantidad
-# de memoria trivial. En producción multi-instancia esto se movería a Redis
-# con TTL, que además compartiría el conteo entre workers.
+# `login`). Vive en Redis (`infraestructura/redis_intentos_login`, #1653 S6):
+# un hash por cuenta con TTL, compartido entre workers y réplicas y que
+# sobrevive a un reinicio. Antes era un dict por proceso, y con varios
+# workers (PERF-12) cada uno llevaba su propia cuenta y su propio
+# enfriamiento. Esa política de almacenamiento (qué se guarda, cómo expira,
+# qué pasa si Redis no responde) está documentada en el módulo de Redis;
+# acá queda la POLÍTICA de negocio:
 #
-# Issue #733: hasta acá, `_INTENTOS_FALLIDOS_LOGIN` no tenía TTL ni cota de
-# tamaño, y la clave era el input CRUDO del atacante (sin tope de longitud
-# en `auth_router.py`). Un correo nunca visto antes solo se borra con un
-# login EXITOSO en esa clave exacta -- que nunca pasa para un string al
-# azar -- así que cada intento fallido con un correo/username DISTINTO
-# quedaba retenido para siempre: un vector de denegación de servicio SIN
-# autenticar (medido: ~115 KB retenidos por request con un username de
-# 100.006 caracteres, suficiente para tumbar por OOM los 320m del backend en
-# producción en menos de media hora desde una sola IP). Dos mitades:
-#   1. `auth_router.py` acota la longitud del username en la capa de FORM
-#      (422 antes de convertirse en clave) -- eso tapa la vía más barata
-#      (strings gigantes) pero NO alcanza sola: un atacante puede seguir
-#      acuñando direcciones DISTINTAS de longitud válida sin límite.
-#   2. El propio mapa se acota acá con `_MAX_ENTRADAS_INTENTOS_LOGIN` (tope
-#      duro, desalojo LRU) + `_TTL_INTENTOS_LOGIN_SEGUNDOS` (TTL deslizante,
-#      se renueva en cada intento fallido sobre esa clave). Quitar cualquiera
-#      de las dos reabre el OOM: solo el TTL no alcanza contra un ráfaga que
-#      llena el mapa en segundos (el TTL no tiene tiempo de expirar nada), y
-#      solo el tope de tamaño sin refresco por uso desalojaría al azar,
-#      pudiendo tirar la cuenta real bajo ataque.
-#
-# Por qué el TTL es DESLIZANTE (se toca en cada fallo, no fijo desde la
-# creación): un ataque dirigido de verdad contra UNA cuenta sigue tocando esa
-# clave en cada intento -- incluso escalado al techo de 8s entre intentos,
-# eso son como mucho ~8s de silencio entre toques, muy por debajo de los 15
-# minutos de TTL -- así que la cuenta atacada nunca se resetea mientras el
-# ataque siga activo. Solo se resetea una clave que quedó IDLE 15 minutos:
-# o basura del atacante que dejó de insistir en ese string puntual, o un
-# usuario real que tipeó mal y recién vuelve -- en ambos casos, perder el
-# contador es deseable, no una debilidad.
-#
-# Por qué el desalojo por tamaño es LRU (no FIFO ni al azar): con
-# `move_to_end` en cada toque, la clave MENOS recientemente usada es siempre
-# la primera en desalojarse. Una cuenta bajo ataque activo se sigue tocando
-# en cada intento propio, así que queda siempre al final de la cola y
-# sobrevive cualquier relleno de basura MIENTRAS el atacante no meta más de
-# `_MAX_ENTRADAS_INTENTOS_LOGIN` claves distintas ENTRE dos intentos
-# consecutivos contra esa cuenta -- con el tope elegido (50.000) eso exige
-# una ráfaga mucho más cara y visible que el ataque que esto tapa, y sigue
-# acotada en memoria (50.000 entradas de longitud acotada son unos pocos MB,
-# lejos de los 320m del contenedor). Ver
-# `tests/test_auth_login_dos_no_autenticado.py` para los tres escenarios
-# (mapa acotado, cuenta real sobrevive relleno, freno no regresiona).
-_INTENTOS_FALLIDOS_LOGIN: "OrderedDict[str, tuple[int, float, float | None]]" = OrderedDict()
-_MAX_ENTRADAS_INTENTOS_LOGIN = 50_000
+# Issue #733 (DoS sin autenticar): la clave es el input CRUDO del atacante,
+# y un correo nunca visto solo se borra con un login exitoso en esa clave
+# exacta, que nunca pasa para un string al azar. Dos mitades: `auth_router`
+# acota el largo del username en la capa de FORM (422 antes de convertirse
+# en clave), y el almacén acota lo demás con un TTL en CADA escritura (más
+# la clave hasheada, de largo fijo). El TTL es DESLIZANTE -- se renueva en
+# cada fallo -- así que una cuenta bajo ataque activo nunca se resetea
+# (incluso escalado al techo de 8 s entre intentos hay mucho menos de 15 min
+# de silencio), y solo se pierde el conteo de una clave que quedó IDLE 15
+# minutos: basura de un atacante que dejó de insistir o un usuario real que
+# tipeó mal y recién vuelve; en ambos casos perderlo es deseable.
 _TTL_INTENTOS_LOGIN_SEGUNDOS = 15 * 60
 _UMBRAL_RETRASO_INTENTOS = 3
 # QA4 REG-02: el techo era 60 s, pero la interfaz corta a los 10 s y culpaba a
@@ -119,22 +80,15 @@ _TECHO_RETRASO_SEGUNDOS = 8
 # Lo compensa un enfriamiento por cuenta: al 10.º fallo consecutivo (el mismo
 # contador, que el techo no resetea) la cuenta rechaza TODO intento durante 15
 # minutos -- también el de la contraseña correcta -- de inmediato y sin correr
-# bcrypt. Vive en la misma tupla del contador: (intentos, último toque,
-# fin del enfriamiento | None).
+# bcrypt. El hash guarda `intentos` y `enfriada_hasta`.
 #
-# Al entrar en enfriamiento el "último toque" se corre al FIN del enfriamiento:
-# así el TTL deslizante de 15 min cuenta desde ahí y el contador sobrevive al
-# enfriamiento. Eso es lo que hace que, vencido, el siguiente fallo (el 11.º)
-# reentre al enfriamiento de inmediato; solo un éxito (o el restablecimiento
-# de contraseña) o 15 min sin tocar la cuenta lo resetean. Los intentos
-# rechazados durante el enfriamiento NO tocan el mapa: no lo prolongan ni
+# Al entrar en enfriamiento el TTL de la clave se estira hasta 15 min DESPUÉS
+# del fin del enfriamiento: así el contador sobrevive al enfriamiento. Eso es
+# lo que hace que, vencido, el siguiente fallo (el 11.º) reentre al
+# enfriamiento de inmediato; solo un éxito (o el restablecimiento de
+# contraseña) o 15 min sin tocar la cuenta lo resetean. Los intentos
+# rechazados durante el enfriamiento NO tocan el hash: no lo prolongan ni
 # alargan la espera de nadie.
-#
-# Igual que el contador, es memoria POR PROCESO: con varios workers (PERF-12)
-# cada uno lleva su propia cuenta y su propio enfriamiento, así que el atacante
-# necesita 10 fallos en el worker que le toque y el enfriamiento solo vale en
-# ese worker; no se comparte ni sobrevive a un reinicio. Se moverá a un
-# almacén compartido (Redis) junto con el contador (#1553).
 _UMBRAL_ENFRIAMIENTO_INTENTOS = 10
 _ENFRIAMIENTO_LOGIN_SEGUNDOS = 15 * 60
 MENSAJE_LOGIN_ENFRIAMIENTO = (
@@ -174,60 +128,32 @@ class CuentaInactiva(PermisosInsuficientes):
     contraseña sigue recibiendo el mismo 401 que una cuenta inexistente."""
 
 
-def _purgar_entradas_expiradas(ahora: float) -> None:
-    """Desaloja del FRENTE de `_INTENTOS_FALLIDOS_LOGIN` -- el frente es
-    siempre lo menos recientemente tocado, ver `_registrar_intento_fallido`
-    -- toda clave IDLE por más de `_TTL_INTENTOS_LOGIN_SEGUNDOS`. Se corta en
-    el primer no-expirado: como el orden es por último toque, ninguna
-    entrada más atrás puede estar expirada si esta no lo está."""
-    while _INTENTOS_FALLIDOS_LOGIN:
-        clave_mas_vieja, (_, ultimo_toque, _) = next(iter(_INTENTOS_FALLIDOS_LOGIN.items()))
-        if ahora - ultimo_toque < _TTL_INTENTOS_LOGIN_SEGUNDOS:
-            break
-        _INTENTOS_FALLIDOS_LOGIN.pop(clave_mas_vieja)
-
-
-def _acotar_tamano_mapa() -> None:
-    """Red de seguridad ante una ráfaga de amplitud (muchas claves distintas
-    en segundos): el TTL solo no alcanza porque no le da tiempo a expirar
-    nada. Desaloja SIEMPRE por el frente (menos recientemente tocado, LRU),
-    nunca al azar -- ver el docstring de arriba para por qué eso protege a
-    una cuenta bajo ataque activo."""
-    while len(_INTENTOS_FALLIDOS_LOGIN) > _MAX_ENTRADAS_INTENTOS_LOGIN:
-        _INTENTOS_FALLIDOS_LOGIN.popitem(last=False)
-
-
 def _registrar_intento_fallido(clave: str, ahora: float | None = None) -> int:
-    """Incrementa el contador de `clave`, la marca como la más recientemente
-    tocada (mueve al FINAL) y purga el mapa (TTL + tope de tamaño) antes de
-    devolver el nuevo total. Al llegar a `_UMBRAL_ENFRIAMIENTO_INTENTOS` (y en
-    cada fallo posterior) arranca el enfriamiento de la cuenta. Separado de
+    """Suma un fallo a `clave` en Redis y devuelve el nuevo total. Al llegar
+    a `_UMBRAL_ENFRIAMIENTO_INTENTOS` (y en cada fallo posterior) arranca el
+    enfriamiento de la cuenta. Separado de
     `AuthServicio._penalizar_intento_fallido` para poder probarlo directo, sin
-    DB ni sleep (ver `tests/test_auth_login_dos_no_autenticado.py::
-    test_mapa_de_intentos_fallidos_no_crece_sin_limite`)."""
+    DB ni sleep. Con Redis caído devuelve 0 (fail-open, ver el módulo de
+    Redis): sin conteo no hay retraso ni enfriamiento."""
     if ahora is None:
-        ahora = time.monotonic()
-    intentos_previos, _, _ = _INTENTOS_FALLIDOS_LOGIN.get(clave, (0, ahora, None))
-    intentos = intentos_previos + 1
-    enfriada_hasta = None
-    ultimo_toque = ahora
+        ahora = time.time()
+    intentos = redis_intentos_login.incrementar(clave, _TTL_INTENTOS_LOGIN_SEGUNDOS)
     if intentos >= _UMBRAL_ENFRIAMIENTO_INTENTOS:
-        enfriada_hasta = ahora + _ENFRIAMIENTO_LOGIN_SEGUNDOS
-        ultimo_toque = enfriada_hasta  # ver el bloque REG-02 de arriba
-    _INTENTOS_FALLIDOS_LOGIN[clave] = (intentos, ultimo_toque, enfriada_hasta)
-    _INTENTOS_FALLIDOS_LOGIN.move_to_end(clave)
-    _purgar_entradas_expiradas(ahora)
-    _acotar_tamano_mapa()
+        redis_intentos_login.marcar_enfriamiento(
+            clave,
+            hasta=ahora + _ENFRIAMIENTO_LOGIN_SEGUNDOS,
+            ttl_s=_ENFRIAMIENTO_LOGIN_SEGUNDOS + _TTL_INTENTOS_LOGIN_SEGUNDOS,
+        )
     return intentos
 
 
 def _segundos_de_enfriamiento(clave: str, ahora: float) -> int:
     """Segundos que le faltan al enfriamiento de `clave`; 0 si no está
-    enfriada o ya venció. Solo lee: rechazar un intento no toca el mapa."""
-    entrada = _INTENTOS_FALLIDOS_LOGIN.get(clave)
-    if entrada is None or entrada[2] is None or ahora >= entrada[2]:
+    enfriada, ya venció o Redis no responde. Solo lee."""
+    hasta = redis_intentos_login.enfriada_hasta(clave)
+    if hasta is None or ahora >= hasta:
         return 0
-    return math.ceil(entrada[2] - ahora)
+    return math.ceil(hasta - ahora)
 
 
 # Cuántas sesiones devuelve `listar_sesiones`. La tarjeta del perfil responde
@@ -279,7 +205,7 @@ class AuthServicio:
         self,
         db: Session,
         dormir: Callable[[float], None] = time.sleep,
-        reloj: Callable[[], float] = time.monotonic,
+        reloj: Callable[[], float] = time.time,
     ):
         self.db = db
         self.repo = UsuarioRepositorio(db)
@@ -289,7 +215,8 @@ class AuthServicio:
         # usa el `time.sleep` real.
         self._dormir = dormir
         # Inyectable por lo mismo: los tests del enfriamiento de 15 min avanzan
-        # un reloj falso en vez de esperar.
+        # un reloj falso en vez de esperar. De pared y no monotónico: el fin del
+        # enfriamiento lo lee cualquier worker (ver `redis_intentos_login`).
         self._reloj = reloj
 
     # --- Login ---------------------------------------------------------------
@@ -298,7 +225,7 @@ class AuthServicio:
         Devuelve el shape estandarizado `{access_token, refresh_token, token_type}`
         para el auto-login tras autenticarse (y para reutilizarlo tras registro).
 
-        TRA-4: aplica el freno progresivo de `_INTENTOS_FALLIDOS_LOGIN` sobre
+        TRA-4: aplica el freno progresivo (contador en Redis) sobre
         el correo NORMALIZADO (trim + minúsculas), contra el string tal cual
         llega -- ANTES y con total independencia de si existe un Usuario con
         ese correo. Es lo que hace indistinguible por timing una cuenta real
@@ -333,7 +260,7 @@ class AuthServicio:
             raise
 
         contar_login(ok=True)
-        _INTENTOS_FALLIDOS_LOGIN.pop(clave, None)
+        redis_intentos_login.olvidar(clave)
         sesion = self._registrar_sesion(usuario, user_agent)
         tokens = self._emitir_par_tokens(usuario, sesion)
         # Issue #1314: último, y sin poder fallar el login (ver `actividad`).
@@ -1229,7 +1156,7 @@ class AuthServicio:
         # REG-02: quien restablece recupera la cuenta, así que se limpia el
         # contador y el enfriamiento (si no, seguiría bloqueado con la clave
         # nueva en la mano).
-        _INTENTOS_FALLIDOS_LOGIN.pop(usuario.correo.strip().lower(), None)
+        redis_intentos_login.olvidar(usuario.correo.strip().lower())
 
     def cambiar_contrasenia(
         self, correo: str, contrasenia_actual: str, nueva_contrasenia: str,

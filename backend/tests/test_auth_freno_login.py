@@ -19,20 +19,19 @@ import pytest
 
 from app.dominio.cedula import cedula_valida
 from app.dominio.excepciones import CredencialesInvalidas
+from app.infraestructura import redis_intentos_login
 from app.servicios_negocio import auth_servicio as auth_servicio_modulo
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.auth_servicio import AuthServicio, LoginEnEnfriamiento
 from tests.fabricas_auth import SleeperEspia, crear_usuario_auth as _crear_usuario
 
 
-@pytest.fixture(autouse=True)
-def _limpiar_contador_intentos():
-    """El contador vive en un dict a nivel de módulo (simplificación aceptada,
-    ver docstring de `AuthServicio.login`) -- se limpia entre tests para que
-    los intentos de un test no se filtren al siguiente."""
-    auth_servicio_modulo._INTENTOS_FALLIDOS_LOGIN.clear()
-    yield
-    auth_servicio_modulo._INTENTOS_FALLIDOS_LOGIN.clear()
+def _intentos_registrados(correo: str) -> int:
+    """Contador de `correo` en el Redis (falso) de la suite; ver el autouse
+    `_intentos_login_en_redis_falso` de `conftest.py`, que lo deja vacío en
+    cada test."""
+    cliente = redis_intentos_login._cliente()
+    return int(cliente.hget(redis_intentos_login.clave_redis(correo), "intentos") or 0)
 
 
 def test_primeros_dos_intentos_fallidos_no_retrasan(db_session):
@@ -90,13 +89,13 @@ def test_el_techo_acota_la_espera_no_el_conteo_de_intentos(db_session):
         with pytest.raises(CredencialesInvalidas):
             servicio.login("ana@cataclub.test", "mal")
 
-    assert auth_servicio_modulo._INTENTOS_FALLIDOS_LOGIN["ana@cataclub.test"][0] == 10
+    assert _intentos_registrados("ana@cataclub.test") == 10
     assert max(espia.llamadas) == 8
 
     # Solo el éxito resetea el contador (el enfriamiento de 15 min ya venció).
     servicio = AuthServicio(db_session, dormir=espia, reloj=lambda: 1_000.0 + 15 * 60)
     servicio.login("ana@cataclub.test", "clave-correcta")
-    assert "ana@cataclub.test" not in auth_servicio_modulo._INTENTOS_FALLIDOS_LOGIN
+    assert _intentos_registrados("ana@cataclub.test") == 0
 
 
 def test_contador_es_por_cuenta_no_global(db_session):
@@ -290,7 +289,7 @@ def test_restablecer_la_contrasenia_limpia_enfriamiento_y_contador(db_session):
     token = GestorAutenticacion.crear_token_recuperacion("ana@cataclub.test", usuario.version_contrasenia)
     servicio.restablecer_contrasenia(token, "clave-nueva-123")
 
-    assert "ana@cataclub.test" not in auth_servicio_modulo._INTENTOS_FALLIDOS_LOGIN
+    assert _intentos_registrados("ana@cataclub.test") == 0
     assert servicio.login("ana@cataclub.test", "clave-nueva-123")["access_token"]
 
 
@@ -328,13 +327,6 @@ def test_el_enfriamiento_es_por_cuenta(db_session):
     _fallar(servicio, 10, "ana@cataclub.test")
 
     assert servicio.login("beto@cataclub.test", "clave-beto")["access_token"]
-
-
-def test_el_mapa_sigue_acotado_aun_con_enfriamientos(db_session):
-    for i in range(auth_servicio_modulo._MAX_ENTRADAS_INTENTOS_LOGIN + 50):
-        for _ in range(10):
-            auth_servicio_modulo._registrar_intento_fallido(f"x{i}@ejemplo.test")
-    assert len(auth_servicio_modulo._INTENTOS_FALLIDOS_LOGIN) <= auth_servicio_modulo._MAX_ENTRADAS_INTENTOS_LOGIN
 
 
 def test_el_endpoint_responde_429_con_codigo_y_retry_after_durante_el_enfriamiento(db_session, client):

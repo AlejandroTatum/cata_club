@@ -1,8 +1,8 @@
 """
 Issue #733: `POST /auth/login` era un vector de denegación de servicio SIN
-autenticar. `_INTENTOS_FALLIDOS_LOGIN` (auth_servicio.py) es un dict a nivel
-de módulo, keyeado sobre `correo.strip().lower()` -- el input crudo del
-atacante, sin tope de longitud ni de tamaño de mapa. Un correo nunca visto
+autenticar. El contador de intentos fallidos (hoy en Redis, antes un dict a
+nivel de módulo en auth_servicio.py) se keyea sobre `correo.strip().lower()`
+-- el input crudo del atacante, sin tope de longitud ni de tamaño. Un correo nunca visto
 antes solo se borra con un login EXITOSO en esa clave exacta, que nunca pasa
 para un string al azar, así que cada intento fallido con un correo distinto
 queda retenido para siempre.
@@ -17,44 +17,23 @@ Dos mitades independientes:
   1. Tope de longitud en la capa de FORM (`auth_router.py`): un username más
      largo que cualquier dirección de correo real se rechaza con 422 ANTES
      de convertirse en clave del dict.
-  2. Cota del propio mapa (`_MAX_ENTRADAS_INTENTOS_LOGIN` +
-     `_TTL_INTENTOS_LOGIN_SEGUNDOS` en auth_servicio.py): aun con claves de
-     longitud acotada, un atacante puede acuñar direcciones distintas sin
-     límite, así que el mapa necesita desalojo propio.
+  2. Cota del propio almacén (TTL en cada escritura + clave hasheada de
+     largo fijo, ver `redis_intentos_login.py`): aun con claves de longitud
+     acotada, un atacante puede acuñar direcciones distintas sin límite, así
+     que nada puede quedar retenido para siempre.
 
 No repite acá la curva de retraso completa contra una cuenta real -- ya
-existe, sin cambios, en `test_auth_freno_login.py::
-test_retraso_duplica_y_tiene_techo_de_8_segundos`, y sigue en verde después
-de este fix: eso YA prueba la no-regresión. Lo que sí es específico de esta
-suite (`test_cuenta_atacada_no_es_desalojada_por_relleno_de_entradas_falsas`
-más abajo) es que esa misma cuenta sobrevive un relleno de basura antes de
-llegar a su 3er fallo -- el escenario que el desalojo por tamaño podría
-romper si estuviera mal elegido.
+existe en `test_auth_freno_login.py::test_retraso_duplica_y_tiene_techo_de_
+8_segundos`. Lo específico de esta suite es que el relleno de basura no se
+lleva puesta a la cuenta atacada.
 """
 import pytest
 
 from app.dominio.excepciones import CredencialesInvalidas
+from app.infraestructura import redis_intentos_login
 from app.servicios_negocio import auth_servicio as auth_servicio_modulo
 from app.servicios_negocio.auth_servicio import AuthServicio
 from tests.fabricas_auth import SleeperEspia, crear_usuario_auth
-
-
-def _rellenar_mapa_con_claves_distintas(cantidad: int, prefijo: str) -> None:
-    """Ataque de amplitud: registra `cantidad` intentos fallidos contra
-    `cantidad` claves DISTINTAS (sin DB, sin HTTP -- llama directo al helper
-    de registro). Compartido por los dos tests de la cota de tamaño: uno
-    prueba el tope global, el otro que ese desalojo no se lleva puesta a una
-    cuenta bajo ataque real -- cada uno agrega su propia aserción distinta
-    después de llamar a esto, así que no se pierde qué prueba qué."""
-    for i in range(cantidad):
-        auth_servicio_modulo._registrar_intento_fallido(f"{prefijo}{i}@ejemplo.test")
-
-
-@pytest.fixture(autouse=True)
-def _limpiar_contador_intentos():
-    auth_servicio_modulo._INTENTOS_FALLIDOS_LOGIN.clear()
-    yield
-    auth_servicio_modulo._INTENTOS_FALLIDOS_LOGIN.clear()
 
 
 # --- Mitad 1: tope de longitud en la capa de form ---------------------------
@@ -72,7 +51,7 @@ def test_username_demasiado_largo_se_rechaza_sin_crear_entrada(client):
     )
 
     assert respuesta.status_code == 422
-    assert len(auth_servicio_modulo._INTENTOS_FALLIDOS_LOGIN) == 0
+    assert not redis_intentos_login._cliente().hashes
 
 
 def test_username_en_el_limite_no_se_rechaza_por_longitud(client, db_session):
@@ -88,45 +67,37 @@ def test_username_en_el_limite_no_se_rechaza_por_longitud(client, db_session):
     assert respuesta.status_code == 401
 
 
-# --- Mitad 2: cota del mapa ---------------------------------------------------
+# --- Mitad 2: cota del almacén -----------------------------------------------
+# El dict por proceso y su tope LRU de 50.000 entradas desaparecieron con la
+# migración a Redis (#1653 S6): la cota ahora es el TTL de CADA escritura y la
+# clave hasheada, de largo fijo. El comportamiento de TTL deslizante y de
+# supervivencia al enfriamiento se prueba en `test_auth_login_contador_redis.py`.
 
-def test_mapa_de_intentos_fallidos_no_crece_sin_limite():
-    """Ataque de amplitud: muchas direcciones DISTINTAS, cada una de longitud
-    válida. Sin cota, cada una queda para siempre. Se llama directamente al
-    helper de registro (sin DB, sin HTTP) para poder probar el tope real de
-    producción (`_MAX_ENTRADAS_INTENTOS_LOGIN`) sin que el test se vuelva
-    lento."""
-    limite = auth_servicio_modulo._MAX_ENTRADAS_INTENTOS_LOGIN
+def test_ataque_de_amplitud_deja_solo_claves_con_ttl_y_de_largo_fijo(db_session):
+    """Muchas direcciones DISTINTAS, cada una de longitud válida: ninguna
+    queda retenida para siempre (todas vencen) ni crece con el input."""
+    redis_falso = redis_intentos_login._cliente()
+    for i in range(300):
+        auth_servicio_modulo._registrar_intento_fallido(f"atacante{i}@ejemplo.test")
+    auth_servicio_modulo._registrar_intento_fallido("a" * 254 + "@ejemplo.test")
 
-    _rellenar_mapa_con_claves_distintas(limite + 500, prefijo="atacante")
+    assert len(redis_falso.hashes) == 301
+    assert set(redis_falso.hashes) <= set(redis_falso.vence)
+    assert len({len(clave) for clave in redis_falso.hashes}) == 1
 
-    assert len(auth_servicio_modulo._INTENTOS_FALLIDOS_LOGIN) <= limite
 
-
-def test_cuenta_atacada_no_es_desalojada_por_relleno_de_entradas_falsas(db_session):
-    """El desalojo por tamaño no debe destruir la protección de una cuenta
-    REALMENTE atacada: si el atacante intercala intentos contra `ana` con el
-    relleno de basura, la clave de `ana` -- tocada en cada uno de sus propios
-    intentos -- debe sobrevivir el relleno (LRU: lo último tocado es lo
-    último en desalojarse)."""
+def test_cuenta_atacada_mantiene_su_conteo_entre_relleno_de_entradas_falsas(db_session):
+    """Sin desalojo por tamaño, el relleno de basura no puede llevarse puesta
+    la cuenta REALMENTE atacada: su 3.er fallo sigue disparando el freno."""
     crear_usuario_auth(db_session, correo="ana@cataclub.test")
     espia = SleeperEspia()
     servicio = AuthServicio(db_session, dormir=espia)
 
-    with pytest.raises(CredencialesInvalidas):
-        servicio.login("ana@cataclub.test", "mal")
-    with pytest.raises(CredencialesInvalidas):
-        servicio.login("ana@cataclub.test", "mal")
-
-    # Relleno: bastante menos que el límite, tocando `ana` de nuevo al final
-    # -- simula al atacante intercalando basura mientras sigue insistiendo
-    # sobre la cuenta real.
-    _rellenar_mapa_con_claves_distintas(
-        auth_servicio_modulo._MAX_ENTRADAS_INTENTOS_LOGIN // 4, prefijo="relleno",
-    )
-
-    # 3er fallo real sobre ana: si su entrada sobrevivió, dispara el freno de
-    # 1s (intentos 3..N ya vistos en test_auth_freno_login.py).
+    for _ in range(2):
+        with pytest.raises(CredencialesInvalidas):
+            servicio.login("ana@cataclub.test", "mal")
+    for i in range(2_000):
+        auth_servicio_modulo._registrar_intento_fallido(f"relleno{i}@ejemplo.test")
     with pytest.raises(CredencialesInvalidas):
         servicio.login("ana@cataclub.test", "mal")
 
