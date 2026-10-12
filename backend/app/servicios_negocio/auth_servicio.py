@@ -22,7 +22,7 @@ from app.dominio.modelos import (
     Persona, RecuperacionOutbox, Sesion, Usuario, VerificacionCorreoOutbox,
 )
 from app.dominio.excepciones import (
-    CredencialesInvalidas, EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida,
+    ContraseniaIncorrecta, CredencialesInvalidas, EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida,
     PermisosInsuficientes, ServicioNoDisponible,
 )
 from app.dominio.mensajes import (
@@ -36,6 +36,7 @@ from app.infraestructura.tareas.outbox_despacho import encolar_despacho_tras_com
 from app.infraestructura.repositorios.restricciones_identidad import identidad_en_conflicto
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
 from app.servicios_negocio.dtos.auth_schemas import RegistroUsuarioDTO, ActualizarPerfilPropioDTO
+from app.seguridad import reautenticacion
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.consentimiento_legal_servicio import (
     ConsentimientoLegalServicio, TEXTOS_LEGALES_VIGENTES, VERSION_LEGAL_VIGENTE,
@@ -338,6 +339,45 @@ class AuthServicio:
         # Issue #1314: último, y sin poder fallar el login (ver `actividad`).
         actividad.registrar_sin_fallar(self.db, usuario.id)
         return tokens
+
+    # --- Step-up de contraseña (#1653, S5) ------------------------------------
+    def reautenticar(self, correo: str, sid: object, contrasenia: str) -> dict:
+        """POST /auth/reautenticar: verifica la contraseña del titular y marca
+        su sesión `sid` con `reautenticada_en` (ver `app.seguridad.reautenticacion`).
+
+        Comparte el freno de login: usa el MISMO contador y enfriamiento por
+        correo normalizado que `login`, así que quien tenga un access token
+        robado no puede adivinar la contraseña por esta vía sin pagar el mismo
+        retraso y el mismo enfriamiento de 15 minutos (que también frena el
+        login legítimo de esa cuenta: es la política vigente, no una nueva).
+        """
+        clave = correo.strip().lower()
+        segundos_restantes = _segundos_de_enfriamiento(clave, self._reloj())
+        if segundos_restantes:
+            contar_login(ok=False)
+            raise LoginEnEnfriamiento(segundos_restantes)
+        usuario = self.obtener_usuario_actual(correo)
+        # El step-up se ata a una sesión: un token sin `sid` (anterior a la
+        # rotación) no tiene fila donde guardarlo.
+        sesion = (
+            self.db.get(Sesion, sid)
+            if isinstance(sid, int) and not isinstance(sid, bool) else None
+        )
+        if sesion is None or sesion.usuario_id != usuario.id or sesion.revocada_en is not None:
+            raise OperacionInvalida(
+                "Tu sesión es anterior a esta función. Cierra sesión y vuelve a entrar.",
+                seguro_mostrar=True,
+            )
+        if not GestorAutenticacion.verificar_contrasenia(contrasenia, usuario.contrasenia):
+            contar_login(ok=False)
+            self._penalizar_intento_fallido(clave)
+            raise ContraseniaIncorrecta("Contraseña incorrecta")
+
+        _INTENTOS_FALLIDOS_LOGIN.pop(clave, None)
+        ahora = reautenticacion.ahora_utc()
+        sesion.reautenticada_en = ahora
+        self.db.commit()
+        return {"reautenticado_hasta": ahora + reautenticacion.VENTANA_REAUTENTICACION}
 
     def _registrar_sesion(
         self, usuario: Usuario, user_agent: str | None, iniciada_en: datetime | None = None,

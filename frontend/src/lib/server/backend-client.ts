@@ -110,7 +110,14 @@ export async function backendFetchAuthed(
   request: NextRequest,
   path: string,
   init: RequestInit = {},
-  options: BackendFetchOptions = {},
+  options: BackendFetchOptions & {
+    /**
+     * Refresh and replay once after a backend 401. Defaults to `true`. A call
+     * whose 401 means "wrong password" (the step-up) sets it `false`: replaying
+     * it would count a second failed attempt against the account's lockout.
+     */
+    retryOnUnauthorized?: boolean;
+  } = {},
 ): Promise<BackendProxyResult> {
   const timeoutMs = options.timeoutMs ?? BACKEND_TIMEOUT_MS;
   const deadline = Date.now() + timeoutMs;
@@ -130,7 +137,7 @@ export async function backendFetchAuthed(
   let refreshedAccessToken = resolved.refreshedAccessToken;
   let refreshedRefreshToken = resolved.refreshedRefreshToken;
 
-  if (result.ok && result.data.status === 401 && !refreshedAccessToken) {
+  if (options.retryOnUnauthorized !== false && result.ok && result.data.status === 401 && !refreshedAccessToken) {
     const refreshCookie = request.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
     if (refreshCookie) {
       const refreshResult = await refreshForRequest(request, refreshCookie, remainingTimeout(deadline));

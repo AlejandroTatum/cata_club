@@ -522,6 +522,9 @@ async function request<T>(
           message = typeof errorBody.detail === "string" ? errorBody.detail : errorBody.message ?? message;
           safe = errorBody.mensaje_seguro === true;
           if (typeof errorBody.code === "string" && errorBody.code.length > 0) code = errorBody.code;
+          // The backend names its machine reasons `codigo` (e.g. `reautenticacion_requerida`)
+          // and the BFF relays them as-is; `code` wins when a route sent both.
+          else if (typeof errorBody.codigo === "string" && errorBody.codigo.length > 0) code = errorBody.codigo;
           validationLoc = parseValidationLoc(errorBody);
         }
       } catch {
@@ -1416,7 +1419,7 @@ export async function fetchTarifas(): Promise<TarifaPublica[]> {
 
 function isApiErrorBody(
   value: unknown,
-): value is { message?: string; detail?: string | unknown[]; mensaje_seguro?: unknown; code?: unknown; validation_loc?: unknown; membresia_id?: unknown } {
+): value is { message?: string; detail?: string | unknown[]; mensaje_seguro?: unknown; code?: unknown; codigo?: unknown; validation_loc?: unknown; membresia_id?: unknown } {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const body = value as Record<string, unknown>;
   return (typeof body.message === "string" && body.message.length > 0) ||
@@ -2831,6 +2834,19 @@ export async function quitarRol(personaId: number, tipoRol: BackendTipoRol): Pro
     apiEndpoint(`/personas/${personaId}/roles?tipoRol=${encodeURIComponent(tipoRol)}`),
     { method: "DELETE" },
   );
+}
+
+/**
+ * Password step-up for role changes (#1653, S5): proves the admin's password
+ * for THIS session, which the backend then honours for 10 minutes. The
+ * password is sent once and never kept. A wrong one rejects with an
+ * `ApiClientError` whose message is safe to show.
+ */
+export async function reautenticar(contrasenia: string): Promise<{ reautenticadoHasta: string }> {
+  return request<{ reautenticadoHasta: string }>(apiEndpoint("/auth/reautenticar"), {
+    method: "POST",
+    body: JSON.stringify({ contrasenia }),
+  });
 }
 
 /** Admin-only: activate or deactivate a person's account. */

@@ -114,6 +114,7 @@ from app.dominio.modelos import Persona, Usuario, Rol
 from app.dominio.enums import TipoRol
 from app.infraestructura.db import obtener_sesion
 from app.seguridad.gestor_auth import GestorAutenticacion
+from app.seguridad.reautenticacion import exigir_reautenticacion_reciente
 from main import app
 
 
@@ -442,6 +443,10 @@ def client(db_session):
 
     app.dependency_overrides[obtener_sesion] = _override_sesion
     app.dependency_overrides[GestorAutenticacion.decodificar_token] = _override_token
+    # El step-up de contraseña de los endpoints de roles (#1653, S5) se prueba
+    # aparte con tokens reales (`test_reautenticacion_roles.py`); acá, como el
+    # token, se da por hecho para no repetirlo en cada test de negocio.
+    app.dependency_overrides[exigir_reautenticacion_reciente] = lambda: {}
 
     with TestClient(app) as c:
         yield c

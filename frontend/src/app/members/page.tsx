@@ -622,6 +622,7 @@ function MemberEditDialog({
     changed,
     selectRole,
     toggleEstado,
+    reauthDialog,
   } = useAccountRolesAndStatus(Number(account.id));
   // ADMA-08: switching the account off locks the person out, so it asks first.
   const [deactivateConfirmOpen, setDeactivateConfirmOpen] = useState(false);
@@ -996,6 +997,9 @@ function MemberEditDialog({
           </dialog>,
           document.body,
         )}
+      {/* Password step-up for role changes (#1653, S5); portals to <body> and
+          opens above this modal only when the backend asks for it. */}
+      {reauthDialog}
     </>
   );
 }
