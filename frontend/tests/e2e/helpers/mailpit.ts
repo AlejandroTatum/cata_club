@@ -45,6 +45,9 @@ import type { APIRequestContext } from "@playwright/test";
  */
 const MAILPIT_PORT = /^\d{2,5}$/.test(process.env.E2E_MAILPIT_PORT ?? "") ? process.env.E2E_MAILPIT_PORT : "8025";
 const MAILPIT_BASE_URL = `http://localhost:${MAILPIT_PORT}`;
+/* playwright.config.ts sends the app's Origin on every request; Mailpit answers
+   a foreign Origin with 403, so its calls present Mailpit's own origin. */
+const MAILPIT_HEADERS = { Origin: MAILPIT_BASE_URL };
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
@@ -74,6 +77,7 @@ async function searchMessagesTo(
 ): Promise<MailpitMessageSummary[]> {
   const response = await request.get(`${MAILPIT_BASE_URL}/api/v1/search`, {
     params: { query: `to:${to}` },
+    headers: MAILPIT_HEADERS,
   });
   if (!response.ok()) {
     throw new Error(
@@ -85,7 +89,9 @@ async function searchMessagesTo(
 }
 
 async function fetchMessage(request: APIRequestContext, id: string): Promise<MailpitMessage> {
-  const response = await request.get(`${MAILPIT_BASE_URL}/api/v1/message/${id}`);
+  const response = await request.get(`${MAILPIT_BASE_URL}/api/v1/message/${id}`, {
+    headers: MAILPIT_HEADERS,
+  });
   if (!response.ok()) {
     throw new Error(`No se pudo leer el mensaje ${id} de Mailpit: ${response.status()}`);
   }
@@ -155,5 +161,6 @@ export async function purgeMessagesTo(request: APIRequestContext, to: string): P
   if (messages.length === 0) return;
   await request.delete(`${MAILPIT_BASE_URL}/api/v1/messages`, {
     data: { IDs: messages.map((message) => message.ID) },
+    headers: MAILPIT_HEADERS,
   });
 }
