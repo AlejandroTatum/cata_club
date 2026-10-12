@@ -81,8 +81,15 @@ describe("MemberCard — «Miembro desde» (#1749)", () => {
     const row = within(facts).getByText("Miembro desde").closest("div") as HTMLElement;
     expect(row).toHaveTextContent("Miembro desde");
     expect(within(row).getByText("mar 2019")).toBeInTheDocument();
-    // The membership's own activation row is a different fact and stays.
-    expect(within(facts).getByText("Jugador desde")).toBeInTheDocument();
+  });
+
+  it("no longer prints the membership's activation date as «Jugador desde» (#1749)", () => {
+    // PROFILE carries `membership.fechaActivacion`; the carnet must not read it.
+    renderCard({ profile: { ...PROFILE, miembroDesde: "2019-03-01" } });
+
+    const facts = screen.getByTestId("carnet-facts");
+    expect(within(facts).queryByText("Jugador desde")).not.toBeInTheDocument();
+    expect(within(facts).queryByText("04/10/2026")).not.toBeInTheDocument();
   });
 
   it.each([[null], [undefined]])("shows nothing, and no fallback date, when the value is %s", (value) => {
@@ -107,21 +114,21 @@ describe("MemberCard", () => {
     );
   });
 
-  it("lists Plan, Franja, Jugador desde and Válido hasta in order", () => {
-    renderCard();
+  it("lists Plan, Franja, Miembro desde and Válido hasta in order", () => {
+    renderCard({ profile: { ...PROFILE, miembroDesde: "2019-03-01" } });
 
     const facts = screen.getByTestId("carnet-facts");
     const rows = [...facts.children];
     expect(rows.map((row) => row.firstElementChild?.textContent)).toEqual([
       "Plan",
       "Franja",
-      "Jugador desde",
+      "Miembro desde",
       "Válido hasta",
     ]);
     expect(rows.map((row) => row.lastElementChild?.textContent)).toEqual([
       "Mensual Adulto",
       "13:00 — 14:00",
-      "04/10/2026",
+      "mar 2019",
       "04/04/2027",
     ]);
   });
