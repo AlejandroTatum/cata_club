@@ -51,7 +51,7 @@ function persona(id: number, extra: Record<string, unknown> = {}) {
 function portalBody(id: number) {
   return {
     titular: {
-      persona: persona(id, { cedula: `11500000${id}` }),
+      persona: persona(id, { cedula: `11500000${id}`, ...(id === 7 ? { miembroDesde: "2019-03-01" } : {}) }),
       representante: null,
       historial: [],
       membresias: [
@@ -143,6 +143,9 @@ describe("GET /api/carnets", () => {
     expect(body.carnets[0].profile).toMatchObject({ nombres: "Jugador7", cedula: "115000007", fotoUrl: null });
     expect(body.carnets[0].profile.membership).toMatchObject({ categoria: "Mensual" });
     expect(body.carnets[0].coverageEnd).toBe("2026-12-31");
+    // #1749: «Miembro desde» rides on the profile; a persona without one carries null.
+    expect(body.carnets[0].profile.miembroDesde).toBe("2019-03-01");
+    expect(body.carnets[1].profile.miembroDesde).toBeNull();
     expect(body.carnets[0].asignaciones).toEqual([{ id: 1, personaId: 7, horarioDia: "LUNES" }]);
     expect(body.missing).toEqual([]);
     // The card is the persona's, never a represented person's (portal `titular` only).

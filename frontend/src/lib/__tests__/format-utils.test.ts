@@ -10,6 +10,7 @@ import {
   formatDateShort,
   formatDateTime,
   formatDateRange,
+  formatMonthYear,
   joinWithY,
 } from "../format-utils";
 
@@ -209,5 +210,26 @@ describe("joinWithY", () => {
 
   it("drops blank entries instead of rendering a gap around them", () => {
     expect(joinWithY(["Ana Pérez", "", "Luis Pérez"])).toBe("Ana Pérez y Luis Pérez");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatMonthYear (issue #1749 — «Miembro desde mar 2019»)
+// ---------------------------------------------------------------------------
+
+describe("formatMonthYear", () => {
+  it("writes the month abbreviation of the app's vocabulary and the year", () => {
+    expect(formatMonthYear("2019-03-01")).toBe("mar 2019");
+    expect(formatMonthYear("2013-10-01")).toBe("oct 2013");
+    expect(formatMonthYear("2024-12-01")).toBe("dic 2024");
+  });
+
+  it("reads the calendar month whatever the runner's zone is (UTC-midnight timestamp)", () => {
+    expect(formatMonthYear("2019-03-01T00:00:00Z")).toBe("mar 2019");
+  });
+
+  it("returns an empty string for empty or invalid input", () => {
+    expect(formatMonthYear("")).toBe("");
+    expect(formatMonthYear("no es una fecha")).toBe("");
   });
 });

@@ -84,7 +84,7 @@ import { MEMBERSHIP_STATUS_BY_ESTADO } from "@/lib/membership-status";
 import { backendRoleForUserRole, getBackendRoleLabel, getRoleLabel } from "@/lib/auth-utils";
 import { Loader2, Save, X } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { formatDate } from "@/lib/format-utils";
+import { formatDate, formatMonthYear } from "@/lib/format-utils";
 import LinkifiedText from "@/components/LinkifiedText";
 import { toUserMessage } from "@/lib/error-message";
 import { phoneFieldRule, toPhoneFieldDigits, toStoredPhone } from "@/lib/identity-validation";
@@ -465,6 +465,9 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     const nacimiento = formatDate(self.fechaNacimiento);
     if (nacimiento) facts.push({ label: "Nacimiento", value: nacimiento });
   }
+  // Issue #1749: recorded by an admin; empty shows nothing, never another date.
+  const miembroDesde = self?.miembroDesde ? formatMonthYear(self.miembroDesde) : "";
+  if (miembroDesde) facts.push({ label: "Miembro desde", value: miembroDesde });
   if (self?.representante) {
     facts.push({
       label: "Tu representante",

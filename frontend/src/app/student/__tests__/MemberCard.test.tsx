@@ -73,6 +73,25 @@ function renderCard(overrides: Partial<React.ComponentProps<typeof MemberCard>> 
   );
 }
 
+describe("MemberCard — «Miembro desde» (#1749)", () => {
+  it("prints «Miembro desde mar 2019» as a register row when the club has the month on record", () => {
+    renderCard({ profile: { ...PROFILE, miembroDesde: "2019-03-01" } });
+
+    const facts = screen.getByTestId("carnet-facts");
+    const row = within(facts).getByText("Miembro desde").closest("div") as HTMLElement;
+    expect(row).toHaveTextContent("Miembro desde");
+    expect(within(row).getByText("mar 2019")).toBeInTheDocument();
+    // The membership's own activation row is a different fact and stays.
+    expect(within(facts).getByText("Jugador desde")).toBeInTheDocument();
+  });
+
+  it.each([[null], [undefined]])("shows nothing, and no fallback date, when the value is %s", (value) => {
+    renderCard({ profile: { ...PROFILE, miembroDesde: value } });
+
+    expect(screen.queryByText("Miembro desde")).not.toBeInTheDocument();
+  });
+});
+
 describe("MemberCard", () => {
   it("renders the name, cédula, role label and the real logo with alt text", () => {
     renderCard();

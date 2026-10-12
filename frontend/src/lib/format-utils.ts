@@ -115,6 +115,19 @@ export function formatDate(dateStr: string): string {
 }
 
 /**
+ * Format a date string as month + year, `mar 2019` — for a fact the club only
+ * knows to the month («Miembro desde», issue #1749). The month is the app's own
+ * `MONTH_ABBR` vocabulary, so it cannot drift into a fourth date grammar.
+ *
+ * Returns an empty string for invalid or empty input.
+ */
+export function formatMonthYear(dateStr: string): string {
+  const date = parseDateStringLocal(dateStr);
+  if (!date) return "";
+  return `${MONTH_ABBR[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+/**
  * Format a date string as `dd/mm/yy` — the dense-table-cell variant.
  *
  * Deliberately the SAME grammar as `formatDate`, only shorter: a table that

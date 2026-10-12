@@ -1435,6 +1435,19 @@ describe("ProfilePage — the club on the screen (faro: perfil y login)", () => 
     expect(within(membership).getByText("13/08/2026")).toBeInTheDocument();
   });
 
+  it("shows «Miembro desde» in the identity facts when the club has it on record (#1749)", async () => {
+    const hero = await renderStudent({ miembroDesde: "2019-03-01" });
+
+    const label = within(hero).getByText("Miembro desde");
+    expect(label.parentElement).toHaveTextContent("mar 2019");
+  });
+
+  it("shows no «Miembro desde» when it is empty — never the account or membership date (#1749)", async () => {
+    const hero = await renderStudent({ miembroDesde: null });
+
+    expect(within(hero).queryByText("Miembro desde")).not.toBeInTheDocument();
+  });
+
   it("keeps the plan label and value apart even when flex collapses the whitespace", async () => {
     await renderStudent();
 

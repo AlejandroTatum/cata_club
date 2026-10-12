@@ -1475,6 +1475,8 @@ export interface StudentProfileSummary {
   representanteId: number | null;
   /** Profile photo URL (Cloudinary). Absent/null until someone uploads one. */
   fotoUrl?: string | null;
+  /** «Miembro desde» (#1749): `YYYY-MM-01` set by an admin; absent/null shows nothing. */
+  miembroDesde?: string | null;
 }
 
 export interface MembershipSummary {
@@ -1567,6 +1569,20 @@ export interface CarnetsResponse {
 /** Admin only (enforced by the BFF): the carnets of these personas, in order. */
 export async function fetchCarnets(personaIds: readonly number[]): Promise<CarnetsResponse> {
   return request<CarnetsResponse>(apiEndpoint(`/carnets?ids=${personaIds.join(",")}`));
+}
+
+/**
+ * Admin only: sets (`"YYYY-MM"`) or clears (`null`) one player's «Miembro desde»
+ * (issue #1749). Answers the stored value, the first day of that month.
+ */
+export async function setMiembroDesde(
+  personaId: string | number,
+  month: string | null,
+): Promise<{ miembroDesde: string | null }> {
+  return request<{ miembroDesde: string | null }>(apiEndpoint(`/carnets/${personaId}/miembro-desde`), {
+    method: "PATCH",
+    body: JSON.stringify({ miembroDesde: month }),
+  });
 }
 
 // ---------------------------------------------------------------------------
