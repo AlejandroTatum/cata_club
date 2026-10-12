@@ -40,12 +40,13 @@ async function accessTokenForLogout(request: NextRequest): Promise<string | unde
 /**
  * POST /api/auth/logout — best-effort upstream logout, always clears cookies.
  *
- * The backend logout revokes the session server-side: it bumps the user's
- * session epoch, which invalidates every access AND refresh token issued
- * before it. This route makes that call best-effort — when the access token
- * has expired it first refreshes with the refresh cookie so the revoke still
- * lands — and clears the cookies regardless of whether any upstream call
- * succeeds, throws, or times out.
+ * The backend logout revokes THIS device's session server-side (the `sid` of
+ * the access token): that session's access AND refresh tokens stop working,
+ * while the user's other devices stay signed in. This route makes that call
+ * best-effort — when the access token has expired it first refreshes with the
+ * refresh cookie (same `sid`) so the revoke still lands — and clears the
+ * cookies regardless of whether any upstream call succeeds, throws, or times
+ * out.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const accessToken = await accessTokenForLogout(request);

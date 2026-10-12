@@ -870,8 +870,7 @@ class AuthServicio:
     def _bombear_epoch_sesion(self, correo: str) -> Usuario:
         """Bombea `version_sesion` del usuario autenticado (resuelto vía el
         `sub` del JWT) y persiste el cambio. NO reemite tokens -- eso queda a
-        criterio de cada caller, ver `invalidar_otras_sesiones` (sí reemite)
-        vs. `cerrar_sesion` (no reemite).
+        criterio de cada caller, ver `invalidar_otras_sesiones` (sí reemite).
 
         El bump del epoch invalida de inmediato TODO token previo -- access y
         refresh, ver `GestorAutenticacion.epoch_valido` -- incluido el que se
@@ -902,19 +901,31 @@ class AuthServicio:
         actividad.registrar_sin_fallar(self.db, usuario.id)
         return tokens
 
-    # --- TRA-10: POST /auth/logout -------------------------------------------
-    def cerrar_sesion(self, correo: str) -> dict:
-        """Bombea el epoch de sesión del caller y NO reemite tokens -- a
-        diferencia de `invalidar_otras_sesiones`, acá el caller debe quedar
-        deslogueado también. Reutiliza `_bombear_epoch_sesion` en vez de
-        reusar `invalidar_otras_sesiones` completo: llamar a ese método acá
-        generaría un par de tokens nuevo que este endpoint nunca devuelve
-        (`LogoutResponseDTO` solo expone `mensaje`) -- trabajo de firma JWT
-        desperdiciado, y semánticamente confuso (el docstring de ese método
-        promete dejar al caller autenticado, justo lo contrario de un
-        logout).
+    # --- TRA-10 / #1653 S4: POST /auth/logout --------------------------------
+    def cerrar_sesion(self, correo: str, sid: object = None) -> dict:
+        """Cierra la sesión del caller y NO reemite tokens -- a diferencia de
+        `invalidar_otras_sesiones`, acá el caller debe quedar deslogueado.
+
+        Revoca SOLO la sesión actual: marca `revocada_en` en la fila `sid`, y
+        con eso mueren su access (`decodificar_token`) y su refresh
+        (`refrescar_sesion`) sin tocar los demás dispositivos. Es idempotente:
+        una fila ya revocada conserva su marca original y una `sid` que no es
+        de este usuario (o no existe) no hace nada, sin error.
+
+        Un token sin `sid` (access emitido antes de la rotación, <= 60 min) no
+        dice de qué dispositivo es, así que no se puede cerrar "solo este":
+        cae al comportamiento anterior y bombea el epoch, que es el lado seguro
+        (mueren todas, nunca queda viva la que el usuario quiso cerrar).
         """
-        self._bombear_epoch_sesion(correo)
+        if sid is None:
+            self._bombear_epoch_sesion(correo)
+            return {"mensaje": "Sesión finalizada"}
+        usuario = self.obtener_usuario_actual(correo)
+        sesion = self._sesion_bloqueada(usuario, sid)
+        # Ya revocada o ajena: nada que hacer (el bloqueo de fila lo suelta el
+        # cierre de la petición, igual que en `_rotar_o_rechazar`).
+        if sesion is not None and sesion.revocada_en is None:
+            self._revocar_sesion(sesion, datetime.now(timezone.utc))
         return {"mensaje": "Sesión finalizada"}
 
     # --- Privado: emisión del par access + refresh -------------------------

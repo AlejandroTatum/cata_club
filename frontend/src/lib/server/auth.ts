@@ -30,10 +30,14 @@
  *                         together with the new access cookie (see
  *                         `refreshedTokenCookies`). An older backend omits
  *                         `refresh_token`; then the existing cookie is kept.
- *   POST /auth/logout   — Authorization: Bearer <access_token>. Revokes the
- *                         session server-side: bumps the user's session epoch,
- *                         so every access AND refresh token issued before it
- *                         stops working (TRA-10).
+ *   POST /auth/logout   — Authorization: Bearer <access_token>. Revokes ONLY
+ *                         the calling device's session server-side (its `sid`):
+ *                         that session's access AND refresh tokens stop
+ *                         working (TRA-10) while the user's other devices stay
+ *                         signed in. A token without `sid` (issued before the
+ *                         per-session rotation) falls back to revoking every
+ *                         session. Idempotent; revoking all the other devices
+ *                         is POST /auth/sesiones/invalidar.
  *   Access tokens expire in 60 min, refresh tokens in 7 days.
  */
 
@@ -787,7 +791,7 @@ export async function backendRefresh(
 
 /**
  * Best-effort logout call — failures are swallowed by design. A successful
- * call revokes the session server-side (session epoch bump); callers still
+ * call revokes this device's session server-side (other devices keep theirs); callers still
  * clear the cookies regardless of whether it succeeds, so the browser is
  * signed out even when the backend is unreachable.
  */

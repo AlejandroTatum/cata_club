@@ -307,16 +307,14 @@ async def logout(
     db: Session = Depends(obtener_sesion),
 ):
     """
-    TRA-10: bombea `version_sesion` del usuario autenticado (mismo mecanismo
-    que `/auth/sesiones/invalidar`, ver `AuthServicio.cerrar_sesion`), así
-    que el access_token y el refresh_token usados para llamar a este
-    endpoint dejan de servir de inmediato -- antes, un token robado seguía
-    autenticando hasta su expiración natural (hasta 7 días en el caso del
-    refresh) aunque el dueño legítimo hubiera "cerrado sesión". El cierre en
-    el frontend (borrar las cookies httpOnly) sigue ocurriendo igual, esto
-    cierra además el lado servidor.
+    TRA-10 / #1653 S4: cierra SOLO la sesión del dispositivo que llama (`sid`
+    del access token, ver `AuthServicio.cerrar_sesion`): su access y su refresh
+    dejan de servir de inmediato y los demás dispositivos siguen autenticados.
+    Cerrar todas las demás es `/auth/sesiones/invalidar`. Un token sin `sid`
+    (anterior a la rotación) no identifica dispositivo y cae al epoch. El
+    cierre en el frontend (borrar las cookies httpOnly) ocurre igual.
     """
-    return AuthServicio(db).cerrar_sesion(token_payload["sub"])
+    return AuthServicio(db).cerrar_sesion(token_payload["sub"], token_payload.get("sid"))
 
 
 @router.post("/contrasenia/cambiar")
