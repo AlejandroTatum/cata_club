@@ -42,10 +42,41 @@ describe("middleware → Origin check on mutating /api requests (#1653)", () => 
     expect(middleware(apiRequest("/api/payments", "POST", { "sec-fetch-site": "same-site" })).status).toBe(403);
   });
 
-  it("allows a request without Origin when Sec-Fetch-Site is same-origin, none, or absent", () => {
-    expect(middleware(apiRequest("/api/payments", "POST", { "sec-fetch-site": "same-origin" })).status).toBe(200);
-    expect(middleware(apiRequest("/api/payments", "POST", { "sec-fetch-site": "none" })).status).toBe(200);
-    expect(middleware(apiRequest("/api/payments", "POST")).status).toBe(200);
+  it.each(["POST", "PUT", "PATCH", "DELETE"])(
+    "allows a %s without Origin when Sec-Fetch-Site is same-origin or none",
+    (method) => {
+      expect(middleware(apiRequest("/api/payments", method, { "sec-fetch-site": "same-origin" })).status).toBe(200);
+      expect(middleware(apiRequest("/api/payments", method, { "sec-fetch-site": "none" })).status).toBe(200);
+    },
+  );
+
+  it.each(["POST", "PUT", "PATCH", "DELETE"])(
+    "rejects a %s carrying neither Origin nor Sec-Fetch-Site",
+    async (method) => {
+      const response = middleware(apiRequest("/api/payments", method));
+      expect(response.status).toBe(403);
+      expect(response.headers.get("x-middleware-next")).toBeNull();
+      expect(await response.json()).toEqual({
+        error: "forbidden_origin",
+        message: "Origen de la solicitud no permitido.",
+      });
+    },
+  );
+
+  it("rejects a header-less POST even on the auth routes", () => {
+    expect(middleware(apiRequest("/api/auth/login", "POST")).status).toBe(403);
+    expect(middleware(apiRequest("/api/auth/logout", "POST")).status).toBe(403);
+  });
+
+  it.each(["GET", "HEAD", "OPTIONS"])("still lets a %s through with neither Origin nor Sec-Fetch-Site", (method) => {
+    const response = middleware(apiRequest("/api/payments", method));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("still lets a header-less POST through to a document route and the CSP report sink", () => {
+    expect(middleware(apiRequest("/login", "POST")).status).toBe(200);
+    expect(middleware(apiRequest("/api/csp-report", "POST")).status).toBe(200);
   });
 
   it("resolves the public host from x-forwarded-host behind the reverse proxy", () => {

@@ -10,10 +10,13 @@
  *      opaque `null` origin (sandboxed iframes, some redirects) never matches.
  *   2. `Origin` absent   -> browsers omit it on some same-origin requests, so
  *      fall back to `Sec-Fetch-Site`: `same-origin` and `none` (user-initiated)
- *      pass; `same-site` and `cross-site` are rejected. When the header is
- *      absent too, the caller is not a browser that sends Fetch Metadata
- *      (curl, server-to-server, very old browsers), and ambient cookies are
- *      already covered by `SameSite=Lax`, so it is allowed.
+ *      pass; `same-site` and `cross-site` are rejected.
+ *   3. Neither header    -> rejected. Every browser that can attach the user's
+ *      cookies to a cross-site request sends at least one of the two, so a
+ *      mutation with neither is a non-browser caller (curl, a script, a
+ *      server-to-server client, an API test harness). Those must say where
+ *      they come from by sending `Origin` with the app's public origin. Safe
+ *      methods (GET/HEAD/OPTIONS) are never gated.
  *
  * The public host is `x-forwarded-host` (set by Caddy, the only public entry
  * point) or else `Host`. Only the host[:port] is compared, not the scheme:
@@ -69,5 +72,5 @@ export function isOriginAllowed(request: {
   }
 
   const fetchSite = request.headers.get("sec-fetch-site");
-  return fetchSite === null || fetchSite === "same-origin" || fetchSite === "none";
+  return fetchSite === "same-origin" || fetchSite === "none";
 }
