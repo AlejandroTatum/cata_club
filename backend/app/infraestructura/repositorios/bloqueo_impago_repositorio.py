@@ -53,30 +53,17 @@ class BloqueoImpagoRepositorio:
         if not ids:
             return {}
         hoy = hoy if hoy is not None else hoy_club()
-        lanzamiento = settings.bloqueo_impago_fecha_lanzamiento
 
         membresias = list(self.db.scalars(
             select(Membresia)
             .options(joinedload(Membresia.tipo_membresia))
             .where(Membresia.persona_id.in_(ids), Membresia.estado.in_(_ESTADOS_EVALUADOS))
         ).unique())
-        membresia_ids = [m.id for m in membresias]
-        cobertura = self.repo_cobertura.fecha_fin_maxima_combinada_bulk(membresia_ids)
-        con_transferencia = self.con_transferencia_pendiente(membresia_ids)
+        evaluadas = self._evaluar(membresias, hoy)
 
         por_persona: dict[int, list[tuple[bool, date | None]]] = {pid: [] for pid in ids}
         for m in membresias:
-            fin = cobertura.get(m.id)
-            bloqueada = esta_bloqueada_por_impago(
-                periodicidad=m.tipo_membresia.periodicidad,
-                estado=m.estado,
-                es_gratuidad_familiar=m.es_gratuidad_familiar,
-                cubierto_hasta=fin,
-                hoy=hoy,
-                fecha_lanzamiento=lanzamiento,
-                transferencia_pendiente=m.id in con_transferencia,
-            )
-            por_persona[m.persona_id].append((bloqueada, fin))
+            por_persona[m.persona_id].append(evaluadas[m.id])
         return {
             pid: EstadoBloqueoImpago(
                 bloqueado=bool(filas) and all(bloqueada for bloqueada, _ in filas),
@@ -84,6 +71,45 @@ class BloqueoImpagoRepositorio:
             )
             for pid, filas in por_persona.items()
         }
+
+    def membresia_bloqueada(self, membresia_id: int, hoy: date | None = None) -> bool:
+        """True si ESA membresía está bloqueada hoy (mismo criterio que
+        `por_personas`, sin esperar a que lo estén las demás de la persona)."""
+        membresia = self.db.scalars(
+            select(Membresia)
+            .options(joinedload(Membresia.tipo_membresia))
+            .where(Membresia.id == membresia_id, Membresia.estado.in_(_ESTADOS_EVALUADOS))
+        ).unique().first()
+        if membresia is None:
+            return False
+        hoy = hoy if hoy is not None else hoy_club()
+        return self._evaluar([membresia], hoy)[membresia.id][0]
+
+    def _evaluar(
+        self, membresias: list[Membresia], hoy: date,
+    ) -> dict[int, tuple[bool, date | None]]:
+        """`{membresia_id: (bloqueada, fin de cobertura)}`: una consulta por
+        fuente sin importar cuántas membresías se evalúen."""
+        lanzamiento = settings.bloqueo_impago_fecha_lanzamiento
+        membresia_ids = [m.id for m in membresias]
+        cobertura = self.repo_cobertura.fecha_fin_maxima_combinada_bulk(membresia_ids)
+        con_transferencia = self.con_transferencia_pendiente(membresia_ids)
+        resultado: dict[int, tuple[bool, date | None]] = {}
+        for m in membresias:
+            fin = cobertura.get(m.id)
+            resultado[m.id] = (
+                esta_bloqueada_por_impago(
+                    periodicidad=m.tipo_membresia.periodicidad,
+                    estado=m.estado,
+                    es_gratuidad_familiar=m.es_gratuidad_familiar,
+                    cubierto_hasta=fin,
+                    hoy=hoy,
+                    fecha_lanzamiento=lanzamiento,
+                    transferencia_pendiente=m.id in con_transferencia,
+                ),
+                fin,
+            )
+        return resultado
 
     def con_transferencia_pendiente(self, membresia_ids: list[int]) -> set[int]:
         """Membresías con una TRANSFERENCIA en revisión Y su comprobante

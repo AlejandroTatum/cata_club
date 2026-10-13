@@ -1122,6 +1122,17 @@ class Pago(Base):
         String(255), nullable=True,
     )
 
+    # --- Origen del registro (#1768, S10) ---------------------------------
+    # True: lo declaró el propio socio o su representante desde el portal;
+    # False: lo registró un administrador a nombre de otra persona. Solo un
+    # pendiente EFECTIVO declarado por el socio puede ser reemplazado por su
+    # transferencia (`PagoServicio._registrar_pago_sin_commit`). NULLABLE y sin
+    # backfill a propósito: un pago anterior a la columna no tiene origen
+    # conocido y nunca se anula solo (falla cerrado). Lo escribe únicamente
+    # `registrar_pago`; los pagos del admin (regularización, corrección) lo
+    # dejan en NULL.
+    autodeclarado: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+
 
 class CorreccionPago(Base):
     """Corrección financiera auditable de un `Pago` YA aprobado (issue #400,
