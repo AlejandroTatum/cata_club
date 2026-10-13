@@ -9,7 +9,7 @@ fixture para aislar el test del broker y de la BD real. La firma
 acepte `self`, pero Celery injerta `self` automáticamente al invocar la
 tarea como callable (ver `celery.app.task.Task.__call__`).
 """
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from contextlib import contextmanager
 
@@ -290,17 +290,16 @@ def test_no_levanta_la_membresia_de_una_persona_dada_de_baja(db_session, monkeyp
     assert membresia.estado == EstadoMembresia.VENCIDA
 
 
-def test_no_toca_una_suspendida_ni_una_inactiva_con_cobertura(db_session, monkeypatch):
+def test_no_toca_una_suspendida_con_cobertura(db_session, monkeypatch):
     hoy = date(2029, 6, 15)
-    for estado in (EstadoMembresia.SUSPENDIDA, EstadoMembresia.INACTIVA):
-        persona, membresia = _crear_persona_y_membresia_n(db_session, estado, 700 + len(estado.value))
-        _agregar_pago(db_session, membresia, persona, EstadoPago.APROBADO, date(2029, 7, 31))
+    persona, membresia = _crear_persona_y_membresia(db_session, EstadoMembresia.SUSPENDIDA)
+    _agregar_pago(db_session, membresia, persona, EstadoPago.APROBADO, date(2029, 7, 31))
 
-        resultado = _run_task(db_session, monkeypatch, hoy)
+    resultado = _run_task(db_session, monkeypatch, hoy)
 
-        assert resultado["total_reactivadas"] == 0
-        db_session.refresh(membresia)
-        assert membresia.estado == estado
+    assert resultado["total_reactivadas"] == 0
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.SUSPENDIDA
 
 
 def test_no_levanta_una_vencida_si_la_persona_ya_tiene_otra_activa_y_no_falla(db_session, monkeypatch):
@@ -459,3 +458,249 @@ def test_la_correccion_y_la_tarea_no_se_contradicen_con_cobertura_bonificada(db_
     db_session.refresh(membresia)
     assert membresia.estado == EstadoMembresia.ACTIVA
     assert db_session.query(CorreccionPago).filter_by(pago_id=pago.id).count() == 1
+
+
+# --- INACTIVA con cobertura aprobada que llega a hoy (issue #1762) ------------
+# Caso de producción: una regularización retroactiva (09-05 -> 10-05) registrada
+# el 10-12 no cubre el día de registro, así que `regularizar_deuda` no activa y
+# la membresía queda INACTIVA. Minutos después se corrige el pago a 10-01 ->
+# 11-01 y, sin reconciliación en esa corrección, nada la volvía a levantar. La
+# tarea nocturna tiene que hacerlo con la misma cobertura y las mismas guardas
+# que para una VENCIDA.
+
+_ACTIVACION_ORIGINAL = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+
+def _inactiva_con_fecha_activacion_original(db, n: int) -> tuple[Persona, Membresia]:
+    persona, membresia = _crear_persona_y_membresia_n(db, EstadoMembresia.INACTIVA, n)
+    membresia.fecha_activacion = _ACTIVACION_ORIGINAL
+    db.commit()
+    return persona, membresia
+
+
+def test_levanta_una_inactiva_con_pago_aprobado_que_cubre_hoy(db_session, monkeypatch):
+    hoy = date(2029, 6, 15)
+    persona, membresia = _crear_persona_y_membresia(db_session, EstadoMembresia.INACTIVA)
+    _agregar_pago(db_session, membresia, persona, EstadoPago.APROBADO, date(2029, 7, 31))
+
+    resultado = _run_task(db_session, monkeypatch, hoy)
+
+    assert resultado["total_reactivadas"] == 1
+    assert resultado["reactivadas"] == [{"membresia_id": membresia.id, "persona_id": persona.id}]
+    assert resultado["total_vencidas"] == 0
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+
+
+def test_levanta_una_inactiva_cuya_cobertura_termina_hoy(db_session, monkeypatch):
+    hoy = date(2029, 6, 15)
+    persona, membresia = _crear_persona_y_membresia(db_session, EstadoMembresia.INACTIVA)
+    _agregar_pago(db_session, membresia, persona, EstadoPago.APROBADO, hoy)
+
+    resultado = _run_task(db_session, monkeypatch, hoy)
+
+    assert resultado["total_reactivadas"] == 1
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+
+
+def test_levanta_una_inactiva_cubierta_solo_por_bonificada(db_session, monkeypatch):
+    hoy = date(2029, 6, 15)
+    persona, membresia = _crear_persona_y_membresia(db_session, EstadoMembresia.INACTIVA)
+    _agregar_bonificada(db_session, membresia, persona, hoy - timedelta(days=1), hoy + timedelta(days=30))
+
+    resultado = _run_task(db_session, monkeypatch, hoy)
+
+    assert resultado["total_reactivadas"] == 1
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+
+
+def test_levantar_una_inactiva_es_idempotente(db_session, monkeypatch):
+    hoy = date(2029, 6, 15)
+    persona, membresia = _crear_persona_y_membresia(db_session, EstadoMembresia.INACTIVA)
+    _agregar_pago(db_session, membresia, persona, EstadoPago.APROBADO, date(2029, 7, 31))
+
+    _run_task(db_session, monkeypatch, hoy)
+    db_session.refresh(membresia)
+    activada_en = membresia.fecha_activacion
+    segunda = _run_task(db_session, monkeypatch, hoy)
+
+    assert segunda["total_reactivadas"] == 0
+    assert segunda["total_vencidas"] == 0
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+    assert membresia.fecha_activacion == activada_en
+
+
+def test_primera_activacion_de_una_inactiva_escribe_fecha_activacion(db_session, monkeypatch):
+    """Misma semántica que `_activar_membresia_con_red_de_seguridad` (#1225):
+    una INACTIVA que se levanta por primera vez recibe el instante real."""
+    hoy = date(2029, 6, 15)
+    persona, membresia = _inactiva_con_fecha_activacion_original(db_session, 710)
+    _agregar_pago(db_session, membresia, persona, EstadoPago.APROBADO, date(2029, 7, 31))
+    antes = datetime.now(timezone.utc)
+
+    _run_task(db_session, monkeypatch, hoy)
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+    assert membresia.fecha_activacion > _ACTIVACION_ORIGINAL
+    assert membresia.fecha_activacion >= antes
+
+
+def test_levantar_una_vencida_conserva_fecha_activacion(db_session, monkeypatch):
+    """"Miembro desde" (#1749): una VENCIDA ya tuvo su primera activación."""
+    hoy = date(2029, 6, 15)
+    persona, membresia = _crear_persona_y_membresia_n(db_session, EstadoMembresia.VENCIDA, 711)
+    membresia.fecha_activacion = _ACTIVACION_ORIGINAL
+    db_session.commit()
+    _agregar_pago(db_session, membresia, persona, EstadoPago.APROBADO, date(2029, 7, 31))
+
+    _run_task(db_session, monkeypatch, hoy)
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+    assert membresia.fecha_activacion == _ACTIVACION_ORIGINAL
+
+
+def test_inactiva_con_pago_retroactivo_se_levanta_cuando_la_correccion_llega_a_hoy(db_session, monkeypatch):
+    """Caso de producción (persona 95, membresía 67): el pago retroactivo no
+    cubre hoy y la tarea no la toca; la corrección (aplicada sin reconciliar)
+    extiende el rango hasta cubrir hoy y la corrida siguiente la levanta."""
+    hoy = date(2029, 10, 12)
+    persona, membresia = _inactiva_con_fecha_activacion_original(db_session, 712)
+    pago = _agregar_pago(db_session, membresia, persona, EstadoPago.APROBADO, date(2029, 10, 5))
+    pago.fecha_inicio = date(2029, 9, 5)
+    db_session.commit()
+
+    antes_de_corregir = _run_task(db_session, monkeypatch, hoy)
+
+    assert antes_de_corregir["total_reactivadas"] == 0
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.INACTIVA
+
+    pago.fecha_inicio = date(2029, 10, 1)
+    pago.fecha_fin = date(2029, 11, 1)
+    db_session.commit()
+
+    despues = _run_task(db_session, monkeypatch, hoy)
+
+    assert despues["total_reactivadas"] == 1
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+    assert membresia.fecha_activacion > _ACTIVACION_ORIGINAL
+
+
+def test_no_levanta_una_inactiva_sin_pagos_ni_cobertura(db_session, monkeypatch):
+    hoy = date(2029, 6, 15)
+    _, membresia = _crear_persona_y_membresia(db_session, EstadoMembresia.INACTIVA)
+
+    resultado = _run_task(db_session, monkeypatch, hoy)
+
+    assert resultado["total_reactivadas"] == 0
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.INACTIVA
+
+
+def test_no_levanta_una_inactiva_con_pago_solo_pendiente(db_session, monkeypatch):
+    hoy = date(2029, 6, 15)
+    persona, membresia = _crear_persona_y_membresia(db_session, EstadoMembresia.INACTIVA)
+    _agregar_pago(db_session, membresia, persona, EstadoPago.PENDIENTE_VALIDACION, date(2029, 7, 31))
+
+    resultado = _run_task(db_session, monkeypatch, hoy)
+
+    assert resultado["total_reactivadas"] == 0
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.INACTIVA
+
+
+def test_no_levanta_una_inactiva_cuya_cobertura_ya_termino(db_session, monkeypatch):
+    hoy = date(2029, 6, 15)
+    persona, membresia = _crear_persona_y_membresia(db_session, EstadoMembresia.INACTIVA)
+    _agregar_pago(db_session, membresia, persona, EstadoPago.APROBADO, date(2029, 6, 14))
+
+    resultado = _run_task(db_session, monkeypatch, hoy)
+
+    assert resultado["total_reactivadas"] == 0
+    assert resultado["total_vencidas"] == 0
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.INACTIVA
+
+
+def test_no_levanta_la_inactiva_de_una_persona_dada_de_baja(db_session, monkeypatch):
+    hoy = date(2029, 6, 15)
+    persona, membresia = _inactiva_con_fecha_activacion_original(db_session, 713)
+    persona.activo = False
+    _agregar_pago(db_session, membresia, persona, EstadoPago.APROBADO, date(2029, 7, 31))
+
+    resultado = _run_task(db_session, monkeypatch, hoy)
+
+    assert resultado["total_reactivadas"] == 0
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.INACTIVA
+    assert membresia.fecha_activacion == _ACTIVACION_ORIGINAL
+
+
+def test_no_levanta_una_inactiva_si_la_persona_ya_tiene_otra_operativa_y_no_falla(db_session, monkeypatch):
+    hoy = date(2029, 6, 15)
+    for estado_otra, n in ((EstadoMembresia.ACTIVA, 714), (EstadoMembresia.SUSPENDIDA, 715)):
+        persona, inactiva = _inactiva_con_fecha_activacion_original(db_session, n)
+        _agregar_pago(db_session, inactiva, persona, EstadoPago.APROBADO, date(2029, 7, 31))
+        tipo = db_session.get(TipoMembresia, inactiva.tipo_membresia_id)
+        otra = Membresia(
+            estado=estado_otra, monto_aplicado=35.00, fecha_activacion=date(2026, 3, 1),
+            persona_id=persona.id, tipo_membresia_id=tipo.id,
+        )
+        db_session.add(otra)
+        db_session.commit()
+        _agregar_pago(db_session, otra, persona, EstadoPago.APROBADO, date(2029, 7, 31))
+
+        resultado = _run_task(db_session, monkeypatch, hoy)
+
+        assert resultado["total_reactivadas"] == 0
+        db_session.refresh(inactiva)
+        db_session.refresh(otra)
+        assert inactiva.estado == EstadoMembresia.INACTIVA
+        assert inactiva.fecha_activacion == _ACTIVACION_ORIGINAL
+        assert otra.estado == estado_otra
+
+
+def test_levantar_una_inactiva_no_impide_levantar_las_demas(db_session, monkeypatch):
+    """Una INACTIVA que se saltea por una guarda no corta el lote."""
+    hoy = date(2029, 6, 15)
+    persona_a, bloqueada = _crear_persona_y_membresia(db_session, EstadoMembresia.INACTIVA)
+    _agregar_pago(db_session, bloqueada, persona_a, EstadoPago.APROBADO, date(2029, 7, 31))
+    tipo = db_session.get(TipoMembresia, bloqueada.tipo_membresia_id)
+    db_session.add(Membresia(
+        estado=EstadoMembresia.ACTIVA, monto_aplicado=35.00, fecha_activacion=date(2026, 3, 1),
+        persona_id=persona_a.id, tipo_membresia_id=tipo.id,
+    ))
+    db_session.commit()
+    persona_b, libre = _crear_persona_y_membresia_n(db_session, EstadoMembresia.INACTIVA, 716)
+    _agregar_pago(db_session, libre, persona_b, EstadoPago.APROBADO, date(2029, 7, 31))
+
+    resultado = _run_task(db_session, monkeypatch, hoy)
+
+    assert resultado["total_reactivadas"] == 1
+    db_session.refresh(bloqueada)
+    db_session.refresh(libre)
+    assert bloqueada.estado == EstadoMembresia.INACTIVA
+    assert libre.estado == EstadoMembresia.ACTIVA
+
+
+def test_el_vencimiento_sigue_funcionando_junto_a_la_reconciliacion_de_inactivas(db_session, monkeypatch):
+    hoy = date(2029, 6, 15)
+    persona_a, activa = _crear_persona_y_membresia(db_session, EstadoMembresia.ACTIVA)
+    _agregar_pago(db_session, activa, persona_a, EstadoPago.APROBADO, date(2029, 6, 10))
+    persona_b, inactiva = _crear_persona_y_membresia_n(db_session, EstadoMembresia.INACTIVA, 717)
+    _agregar_pago(db_session, inactiva, persona_b, EstadoPago.APROBADO, date(2029, 7, 31))
+
+    resultado = _run_task(db_session, monkeypatch, hoy)
+
+    assert resultado["total_vencidas"] == 1
+    assert resultado["total_reactivadas"] == 1
+    db_session.refresh(activa)
+    db_session.refresh(inactiva)
+    assert activa.estado == EstadoMembresia.VENCIDA
+    assert inactiva.estado == EstadoMembresia.ACTIVA
