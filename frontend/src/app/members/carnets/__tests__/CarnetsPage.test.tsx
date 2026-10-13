@@ -63,9 +63,11 @@ function authAs(role: string, authenticated = true): ReturnType<typeof useAuth> 
 
 const mockFetchCarnets = vi.fn();
 const mockFetchMembers = vi.fn();
+const mockSetMiembroDesde = vi.fn();
 vi.mock("@/services/api", () => ({
   fetchCarnets: (ids: number[]) => mockFetchCarnets(ids),
   fetchMembers: () => mockFetchMembers(),
+  setMiembroDesde: (personaId: string, value: string | null) => mockSetMiembroDesde(personaId, value),
   subirFotoPersona: vi.fn(),
 }));
 
@@ -98,6 +100,7 @@ beforeEach(() => {
   mockPush.mockReset();
   mockFetchCarnets.mockReset();
   mockFetchMembers.mockReset();
+  mockSetMiembroDesde.mockReset();
   mockSearch = "";
   mockUseAuth.mockReturnValue(authAs("admin"));
 });
@@ -142,6 +145,40 @@ describe("CarnetsPage — one player", () => {
     expect(within(panel).getByRole("button", { name: /imprimir carnet/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /cambiar foto/i })).not.toBeInTheDocument();
     expect(screen.queryByTestId("carnet-batch")).not.toBeInTheDocument();
+  });
+});
+
+describe("CarnetsPage — «Miembro desde» (#1749)", () => {
+  it("lets the admin set the month under a single carnet and the card shows it at once", async () => {
+    mockSearch = "ids=7";
+    respondWith([7]);
+    mockSetMiembroDesde.mockResolvedValue({ miembroDesde: "2019-03-01" });
+    render(<CarnetsPage />);
+
+    const panel = await screen.findByTestId("student-carnet-panel");
+    expect(within(panel).queryByText("Miembro desde")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Miembro desde de Jugador7 Prueba"), { target: { value: "2019-03" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => expect(mockSetMiembroDesde).toHaveBeenCalledWith("7", "2019-03"));
+    expect(await within(screen.getByTestId("student-carnet")).findByText("mar 2019")).toBeInTheDocument();
+  });
+
+  it("offers one editor per player above a batch, closed by default, and keeps them off the printed sheet", async () => {
+    mockSearch = "ids=1,2";
+    respondWith([1, 2], { miembroDesde: "2020-05-01" });
+    render(<CarnetsPage />);
+
+    const section = await screen.findByTestId("miembro-desde-batch");
+    expect(section.tagName).toBe("DETAILS");
+    expect(section).not.toHaveAttribute("open");
+    expect(within(section).getByLabelText("Miembro desde de Jugador1 Prueba")).toHaveValue("2020-05");
+    expect(within(section).getByLabelText("Miembro desde de Jugador2 Prueba")).toHaveValue("2020-05");
+    expect(screen.getByTestId("carnet-batch")).not.toContainElement(section);
+    for (const card of within(screen.getByTestId("carnet-batch")).getAllByTestId("carnet-sheet-card")) {
+      expect(within(card).getByText("may 2020")).toBeInTheDocument();
+    }
   });
 });
 

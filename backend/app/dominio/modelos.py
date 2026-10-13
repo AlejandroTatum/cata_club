@@ -582,6 +582,12 @@ class Persona(Base):
     # cuándo se dio de alta cada Persona -- no existía ningún timestamp.
     fecha_registro: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
 
+    # Issue #1749: «Miembro desde», mes y año que el club tiene registrados
+    # para un JUGADOR (lo carga un administrador). Se guarda como DATE fijado
+    # SIEMPRE al día 1: el día no se inventa. NULL = sin dato, y no se
+    # reemplaza por `fecha_registro` ni por la activación de una membresía.
+    miembro_desde: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
     # Baja LÓGICA: quien deja el club se DESACTIVA, nunca se borra. El
     # `DELETE /personas/{id}` anterior destruía junto con la fila el historial
     # de asistencias, los pagos y la ficha médica -- registros que un club que

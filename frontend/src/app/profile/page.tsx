@@ -84,7 +84,7 @@ import { MEMBERSHIP_STATUS_BY_ESTADO } from "@/lib/membership-status";
 import { backendRoleForUserRole, getBackendRoleLabel, getRoleLabel } from "@/lib/auth-utils";
 import { Loader2, Save, X } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { formatDate } from "@/lib/format-utils";
+import { formatDate, formatMonthYear } from "@/lib/format-utils";
 import LinkifiedText from "@/components/LinkifiedText";
 import { toUserMessage } from "@/lib/error-message";
 import { phoneFieldRule, toPhoneFieldDigits, toStoredPhone } from "@/lib/identity-validation";
@@ -465,6 +465,9 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     const nacimiento = formatDate(self.fechaNacimiento);
     if (nacimiento) facts.push({ label: "Nacimiento", value: nacimiento });
   }
+  // Issue #1749: recorded by an admin; empty shows nothing, never another date.
+  const miembroDesde = self?.miembroDesde ? formatMonthYear(self.miembroDesde) : "";
+  if (miembroDesde) facts.push({ label: "Miembro desde", value: miembroDesde });
   if (self?.representante) {
     facts.push({
       label: "Tu representante",
@@ -478,7 +481,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     props.kind === "staff" ? props.perfil.fechaCreacion : props.perfil?.fechaCreacion;
   // `null`, not a labelled dash: the identity card never names an absence.
   // This is the CREATION date of the ACCOUNT (`Usuario.fecha_creacion`), not
-  // the club affiliation — that one is «Jugador desde» on the ticket.
+  // the club affiliation — that one is «Miembro desde» (#1749).
   const createdOn = fechaCreacion ? formatDate(fechaCreacion) : null;
 
   const telefonoRow = editing ? (
@@ -562,7 +565,6 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
               ? ""
               : modalidad.charAt(0).toUpperCase() + modalidad.slice(1).toLowerCase()
           }
-          since={selfMembership.fechaActivacion ? formatDate(selfMembership.fechaActivacion) : null}
         />
       );
     }

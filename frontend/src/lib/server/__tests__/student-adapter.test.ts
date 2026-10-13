@@ -97,7 +97,16 @@ describe("buildStudentProfileView", () => {
       historialTotal: 0,
       membership: null,
       fotoUrl: null,
+      miembroDesde: null,
     });
+  });
+
+  it("carries «miembro desde» from the persona, and never derives it from another date (#1749)", () => {
+    expect(buildStudentProfileView({ ...persona, miembroDesde: "2019-03-01" }, []).miembroDesde).toBe("2019-03-01");
+    expect(buildStudentProfileView({ ...persona, miembroDesde: null }, []).miembroDesde).toBeNull();
+    expect(
+      buildStudentProfileView({ ...persona, fechaRegistro: "2024-05-20T10:00:00Z" } as BackendPersonaFull, []).miembroDesde,
+    ).toBeNull();
   });
 
   it("carries the whole-history total so the screen knows older sessions exist", () => {

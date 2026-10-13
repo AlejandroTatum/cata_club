@@ -19,7 +19,7 @@ from app.dominio.mensajes import (
     MENSAJE_CORREO_SIN_VERIFICAR, MENSAJE_IDENTIDAD_DUPLICADA,
     MENSAJE_VINCULACION_NO_DISPONIBLE, MENSAJE_VINCULACION_SOLO_PRESENCIAL,
 )
-from app.dominio.reglas_negocio import EDAD_MAYORIA_EDAD, calcular_edad
+from app.dominio.reglas_negocio import EDAD_MAYORIA_EDAD, FECHA_FUNDACION_CLUB, calcular_edad
 from app.dominio.representados_alcanzables import (
     exigir_representante_con_rol_valido, exigir_representante_destino_alcanzable,
     exigir_sin_representados_menores_activos,
@@ -637,6 +637,29 @@ class PersonaServicio:
         resultado = self.repo.actualizar(persona, datos)
         self.db.commit()
         return resultado
+
+    # --- «Miembro desde» (issue #1749) ---------------------------------------
+    # Solo importan mes y año: se guarda el día 1 y se compara por MES (el mes
+    # actual y el de la fundación valen; el siguiente y los anteriores no).
+    def fijar_miembro_desde(self, persona_id: int, valor: date | None) -> Persona:
+        persona = self.obtener_persona(persona_id)
+        if valor is None:
+            persona.miembro_desde = None
+        else:
+            if not self.repo.es_jugador(persona_id):
+                raise OperacionInvalida(
+                    "«Miembro desde» solo se registra para jugadores; esta persona no es jugadora."
+                )
+            mes = valor.replace(day=1)
+            if mes > hoy_club().replace(day=1):
+                raise OperacionInvalida("«Miembro desde» no puede estar en el futuro.")
+            if mes < FECHA_FUNDACION_CLUB.replace(day=1):
+                raise OperacionInvalida(
+                    "«Miembro desde» no puede ser anterior a la fundación del club (octubre de 2013)."
+                )
+            persona.miembro_desde = mes
+        self.db.commit()
+        return persona
 
     # --- Foto de una persona (carnet de socio, issue #286) -------------------
     # Misma validación + subida que `AuthServicio.actualizar_foto_perfil`

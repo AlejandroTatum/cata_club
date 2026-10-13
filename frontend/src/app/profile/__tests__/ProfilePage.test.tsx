@@ -1425,14 +1425,27 @@ describe("ProfilePage — the club on the screen (faro: perfil y login)", () => 
     return `${date.getFullYear()}-${month}-${day}`;
   }
 
-  it("states the plan and the joining date the portal payload already carried", async () => {
+  it("states the plan, without the membership activation date as «Jugador desde» (#1749)", async () => {
     await renderStudent();
 
     const membership = await screen.findByTestId("profile-membership");
     expect(within(membership).getByText("Plan")).toBeInTheDocument();
     expect(within(membership).getByText("Mensual Infantil")).toBeInTheDocument();
-    expect(within(membership).getByText("Jugador desde")).toBeInTheDocument();
-    expect(within(membership).getByText("13/08/2026")).toBeInTheDocument();
+    expect(within(membership).queryByText("Jugador desde")).not.toBeInTheDocument();
+    expect(within(membership).queryByText("13/08/2026")).not.toBeInTheDocument();
+  });
+
+  it("shows «Miembro desde» in the identity facts when the club has it on record (#1749)", async () => {
+    const hero = await renderStudent({ miembroDesde: "2019-03-01" });
+
+    const label = within(hero).getByText("Miembro desde");
+    expect(label.parentElement).toHaveTextContent("mar 2019");
+  });
+
+  it("shows no «Miembro desde» when it is empty — never the account or membership date (#1749)", async () => {
+    const hero = await renderStudent({ miembroDesde: null });
+
+    expect(within(hero).queryByText("Miembro desde")).not.toBeInTheDocument();
   });
 
   it("keeps the plan label and value apart even when flex collapses the whitespace", async () => {
@@ -1840,8 +1853,7 @@ describe("ProfilePage — v2: the block of each role", () => {
     expect(strip.querySelectorAll("i.bg-state-ok")).toHaveLength(24);
     expect(strip.querySelectorAll("i.bg-state-ok\\/25")).toHaveLength(6);
     expect(within(ticket).getByText("Mensual Adultos")).toBeInTheDocument();
-    expect(within(ticket).getByText("Jugador desde")).toBeInTheDocument();
-    expect(within(ticket).getByText("13/08/2026")).toBeInTheDocument();
+    expect(within(ticket).queryByText("Jugador desde")).not.toBeInTheDocument();
   });
 
   it("jugador: the ticket warns in the last week and shows lapsed coverage as such", async () => {

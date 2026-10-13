@@ -93,6 +93,11 @@ export interface BackendPersonaFull {
   telefono: string | null;
   fechaNacimiento: string;
   representanteId: number | null;
+  /**
+   * Issue #1749: first day of the month the club has on record as the player's
+   * «Miembro desde», `null`/absent when nobody entered one. Never derived.
+   */
+  miembroDesde?: string | null;
   /** `Persona.activo`, supplied by the admin personas listing. */
   activo?: boolean;
   /**

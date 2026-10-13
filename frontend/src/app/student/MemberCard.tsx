@@ -2,12 +2,12 @@
 
 import { useRef, useState } from "react";
 import Image from "next/image";
-import { CalendarDays, Clock, ShieldCheck, User } from "lucide-react";
+import { Award, Clock, ShieldCheck, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { DIA_SEMANA_LABELS } from "@/app/attendance/attendance-utils";
 import { toStripDias } from "@/app/groups/groups-page-utils";
 import { buttonClasses, cn } from "@/components/ui";
-import { formatDate, joinWithY } from "@/lib/format-utils";
+import { formatDate, formatMonthYear, joinWithY } from "@/lib/format-utils";
 import { ICON } from "@/lib/icon-size";
 import { subirFotoDeArchivo } from "@/lib/photo-upload";
 import { MIN_TARGET_CLASS } from "@/lib/target-size";
@@ -22,7 +22,7 @@ import { buildWeeklyTrainingSchedule, describeAssignedWindows } from "./student-
 // A dark credential held by an ordinary dashboard panel: the panel is the
 // app's, the credential is the club's. Header (real club logo, wordmark, role
 // label), a brand accent bar, the photo with a ball-coloured edge, the name and
-// cédula, an icon register (Plan / Franja / Jugador desde / Válido hasta), the
+// cédula, an icon register (Plan / Franja / Miembro desde / Válido hasta), the
 // seven training-day chips and the club's signature line.
 //
 // What is on it is only what the frontend already holds. There is no role on
@@ -216,13 +216,12 @@ export function MemberCardCredential({
       isFigure: horariosState.status === "ready",
     });
   }
-  if (profile.membership?.fechaActivacion) {
-    register.push({
-      label: "Jugador desde",
-      value: formatDate(profile.membership.fechaActivacion),
-      icon: CalendarDays,
-      isFigure: true,
-    });
+  // Issue #1749: the month an admin recorded, «mar 2019». It replaced the old
+  // «Jugador desde» row (the CURRENT membership's activation date), which was
+  // not when the player joined the club. Empty shows nothing, never that date.
+  const miembroDesde = profile.miembroDesde ? formatMonthYear(profile.miembroDesde) : "";
+  if (miembroDesde) {
+    register.push({ label: "Miembro desde", value: miembroDesde, icon: Award, isFigure: true });
   }
   register.push({
     label: "Válido hasta",

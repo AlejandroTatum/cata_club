@@ -549,13 +549,13 @@ describe("StudentPage — the club membership card (carnet)", () => {
   /**
    * F4b — the credential's vigencia.
    *
-   * "Jugador desde" answers when the person belongs; "Válido hasta" answers
-   * until when the club has been paid for them. Both are the same fact read
-   * at its two ends, and the second is `MembershipSummary.cubiertoHasta` —
+   * "Válido hasta" answers until when the club has been paid for them (the
+   * «Jugador desde» row was dropped in favor of «Miembro desde», issue #1749).
+   * It is `MembershipSummary.cubiertoHasta` —
    * the backend's own combined anchor — not a new reading of the membership
    * row, whose `fechaFin` no adapter populates.
    */
-  it("states the real coverage end on the carnet, beside 'Jugador desde'", async () => {
+  it("states the real coverage end on the carnet, with no «Jugador desde» row", async () => {
     mockFetchStudentPortal.mockResolvedValueOnce({
       ...PORTAL,
       self: {
@@ -586,7 +586,7 @@ describe("StudentPage — the club membership card (carnet)", () => {
     // the row's right edge like every other register value.
     const row = within(facts).getByText("Válido hasta").parentElement!;
     expect(row.lastElementChild?.textContent).toBe("31/07/2026");
-    expect(within(facts).getByText("Jugador desde")).toBeInTheDocument();
+    expect(within(facts).queryByText("Jugador desde")).not.toBeInTheDocument();
     // And it is on the credential — the object that prints at 72 mm wide.
     expect(carnet).toContainElement(facts);
   });
@@ -662,8 +662,9 @@ describe("StudentPage — the club membership card (carnet)", () => {
 
     const facts = await screen.findByTestId("carnet-facts");
     await waitFor(() => {
-      expect(within(facts).getByText("Jugador desde")).toBeInTheDocument();
+      expect(within(facts).getByText("Válido hasta")).toBeInTheDocument();
     });
+    expect(within(facts).queryByText("Jugador desde")).not.toBeInTheDocument();
     // The row stays on the credential and reads "—" rather than a made-up date.
     expect(within(facts).getByText("Válido hasta").parentElement?.lastElementChild?.textContent).toBe("—");
     // No date from the refused rows leaked onto the credential.
@@ -701,8 +702,9 @@ describe("StudentPage — the club membership card (carnet)", () => {
 
     const facts = await screen.findByTestId("carnet-facts");
     await waitFor(() => {
-      expect(within(facts).getByText("Jugador desde")).toBeInTheDocument();
+      expect(within(facts).getByText("Válido hasta")).toBeInTheDocument();
     });
+    expect(within(facts).queryByText("Jugador desde")).not.toBeInTheDocument();
     // The row stays on the credential and reads "—" rather than a made-up date.
     expect(within(facts).getByText("Válido hasta").parentElement?.lastElementChild?.textContent).toBe("—");
     // The approved payment's own `fechaFin` never leaks onto the credential.
@@ -743,8 +745,8 @@ describe("StudentPage — the club membership card (carnet)", () => {
       },
     });
     mockFetchPagosDePersona.mockResolvedValueOnce([PAGO_APROBADO]);
-    // "Franja" is one of the four rows, and it only exists when the club has
-    // assigned a schedule to derive it from. "Válido hasta" is the fourth and
+    // "Franja" is one of the three rows, and it only exists when the club has
+    // assigned a schedule to derive it from. "Válido hasta" is the last and
     // only appears once an APPROVED payment gives it a date — see the
     // dedicated carnet-vigencia tests below.
     mockFetchHorariosPorAlumno.mockResolvedValue([asignacion("LUNES", "15:00:00", "16:00:00", 1)]);
@@ -757,11 +759,10 @@ describe("StudentPage — the club membership card (carnet)", () => {
     });
 
     const rows = [...facts.children];
-    expect(rows).toHaveLength(4);
+    expect(rows).toHaveLength(3);
     expect(rows.map((row) => row.firstElementChild?.textContent)).toEqual([
       "Plan",
       "Franja",
-      "Jugador desde",
       "Válido hasta",
     ]);
 
@@ -2490,7 +2491,10 @@ describe("StudentPage — the credential inside the panel (Funda)", () => {
   function renderFullCarnet() {
     mockFetchStudentPortal
       .mockReset()
-      .mockResolvedValue({ ...PORTAL, self: { ...PORTAL.self!, membership: FULL_MEMBERSHIP } });
+      .mockResolvedValue({
+        ...PORTAL,
+        self: { ...PORTAL.self!, membership: FULL_MEMBERSHIP, miembroDesde: "2019-03-01" },
+      });
     mockFetchHorariosPorAlumno.mockResolvedValue([asignacion("LUNES", "15:00:00", "16:00:00", 1)]);
     render(<StudentPage />);
   }
@@ -2688,7 +2692,10 @@ describe("StudentPage — the credential inside the panel (Funda)", () => {
   it("sets a franja that could not be consulted in Barlow, never in Graduate", async () => {
     mockFetchStudentPortal
       .mockReset()
-      .mockResolvedValue({ ...PORTAL, self: { ...PORTAL.self!, membership: FULL_MEMBERSHIP } });
+      .mockResolvedValue({
+        ...PORTAL,
+        self: { ...PORTAL.self!, membership: FULL_MEMBERSHIP, miembroDesde: "2019-03-01" },
+      });
     mockFetchHorariosPorAlumno.mockRejectedValue(new Error("boom"));
 
     render(<StudentPage />);
@@ -2703,7 +2710,7 @@ describe("StudentPage — the credential inside the panel (Funda)", () => {
 
     // The figures around it are unaffected — the exception is per row, driven
     // by an explicit boolean and never by inspecting the string.
-    const socioDesde = within(carnet).getByText("Jugador desde").parentElement!;
+    const socioDesde = within(carnet).getByText("Miembro desde").parentElement!;
     expect(socioDesde.lastElementChild?.className).toMatch(/font-display/);
   });
 
@@ -2765,7 +2772,7 @@ describe("StudentPage — the credential inside the panel (Funda)", () => {
     });
 
     const graduate = [...carnet.querySelectorAll('[class*="font-display"]')];
-    // The wordmark plus the two numeric register values (Franja, Jugador desde)
+    // The wordmark plus the two numeric register values (Franja, Miembro desde)
     // — if this ever finds nothing the assertion below would pass vacuously.
     expect(graduate.length).toBeGreaterThanOrEqual(3);
     for (const element of graduate) {

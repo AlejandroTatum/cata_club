@@ -1,3 +1,5 @@
+import type { CarnetSummary } from "@/services/api";
+
 /**
  * Pure helpers for the admin's carnet printing (issue #1670) — no React.
  */
@@ -40,4 +42,18 @@ export function chunkIntoSheets<T>(items: readonly T[], perSheet: number = CARDS
 export function describeSheets(count: number): string {
   const sheets = Math.ceil(count / CARDS_PER_SHEET);
   return `${count} ${count === 1 ? "carnet" : "carnets"} · ${sheets} ${sheets === 1 ? "hoja" : "hojas"} A4`;
+}
+
+/**
+ * The carnets with one player's «Miembro desde» replaced (issue #1749), so a
+ * saved edit shows on the card on screen. Every other carnet is the same object.
+ */
+export function withMiembroDesde(
+  carnets: readonly CarnetSummary[],
+  id: string,
+  miembroDesde: string | null,
+): CarnetSummary[] {
+  return carnets.map((carnet) =>
+    carnet.profile.personaId === id ? { ...carnet, profile: { ...carnet.profile, miembroDesde } } : carnet,
+  );
 }

@@ -62,6 +62,12 @@ export interface StudentProfileView {
   representanteId: number | null;
   /** Profile photo URL (Cloudinary) from `Persona.foto_url`, or null. */
   fotoUrl: string | null;
+  /**
+   * Issue #1749: «Miembro desde» — `YYYY-MM-01`, only month and year matter —
+   * entered by an admin, or `null`. Never falls back to the account or
+   * membership dates: an empty value shows nothing.
+   */
+  miembroDesde: string | null;
 }
 
 /**
@@ -255,6 +261,7 @@ export function buildStudentProfileView(
     representante,
     representanteId: persona.representanteId,
     fotoUrl: persona.fotoUrl ?? null,
+    miembroDesde: persona.miembroDesde ?? null,
   };
 }
 

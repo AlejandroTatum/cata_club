@@ -73,6 +73,32 @@ function renderCard(overrides: Partial<React.ComponentProps<typeof MemberCard>> 
   );
 }
 
+describe("MemberCard — «Miembro desde» (#1749)", () => {
+  it("prints «Miembro desde mar 2019» as a register row when the club has the month on record", () => {
+    renderCard({ profile: { ...PROFILE, miembroDesde: "2019-03-01" } });
+
+    const facts = screen.getByTestId("carnet-facts");
+    const row = within(facts).getByText("Miembro desde").closest("div") as HTMLElement;
+    expect(row).toHaveTextContent("Miembro desde");
+    expect(within(row).getByText("mar 2019")).toBeInTheDocument();
+  });
+
+  it("no longer prints the membership's activation date as «Jugador desde» (#1749)", () => {
+    // PROFILE carries `membership.fechaActivacion`; the carnet must not read it.
+    renderCard({ profile: { ...PROFILE, miembroDesde: "2019-03-01" } });
+
+    const facts = screen.getByTestId("carnet-facts");
+    expect(within(facts).queryByText("Jugador desde")).not.toBeInTheDocument();
+    expect(within(facts).queryByText("04/10/2026")).not.toBeInTheDocument();
+  });
+
+  it.each([[null], [undefined]])("shows nothing, and no fallback date, when the value is %s", (value) => {
+    renderCard({ profile: { ...PROFILE, miembroDesde: value } });
+
+    expect(screen.queryByText("Miembro desde")).not.toBeInTheDocument();
+  });
+});
+
 describe("MemberCard", () => {
   it("renders the name, cédula, role label and the real logo with alt text", () => {
     renderCard();
@@ -88,21 +114,21 @@ describe("MemberCard", () => {
     );
   });
 
-  it("lists Plan, Franja, Jugador desde and Válido hasta in order", () => {
-    renderCard();
+  it("lists Plan, Franja, Miembro desde and Válido hasta in order", () => {
+    renderCard({ profile: { ...PROFILE, miembroDesde: "2019-03-01" } });
 
     const facts = screen.getByTestId("carnet-facts");
     const rows = [...facts.children];
     expect(rows.map((row) => row.firstElementChild?.textContent)).toEqual([
       "Plan",
       "Franja",
-      "Jugador desde",
+      "Miembro desde",
       "Válido hasta",
     ]);
     expect(rows.map((row) => row.lastElementChild?.textContent)).toEqual([
       "Mensual Adulto",
       "13:00 — 14:00",
-      "04/10/2026",
+      "mar 2019",
       "04/04/2027",
     ]);
   });

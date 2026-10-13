@@ -335,6 +335,7 @@ RUTAS_ROLES_REQUERIDOS = {
     ("PATCH", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}/cuenta/estado"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}/estado"): frozenset({"ADMINISTRADOR"}),
+    ("PATCH", "/personas/{persona_id}/miembro-desde"): frozenset({"ADMINISTRADOR"}),  # #1749
     # Issue #389: corregir es un acto DISTINTO de tomar -- solo admin,
     # nunca el entrenador que puede tomar/crear via el POST de abajo.
     ("PATCH", "/asistencias/{asistencia_id}/corregir"): frozenset({"ADMINISTRADOR"}),
