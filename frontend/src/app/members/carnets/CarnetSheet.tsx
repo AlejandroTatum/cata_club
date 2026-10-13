@@ -41,7 +41,6 @@ export default function CarnetSheet({ carnets }: { carnets: readonly CarnetSumma
                   <MemberCardCredential
                     variant="sheet"
                     profile={carnet.profile}
-                    coverageEnd={carnet.coverageEnd}
                     horariosState={{ status: "ready", asignaciones: carnet.asignaciones }}
                   />
                 </div>

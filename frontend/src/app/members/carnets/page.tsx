@@ -95,7 +95,6 @@ function CarnetsContent(): React.ReactElement {
         <div className="mx-auto w-full max-w-md">
           <MemberCard
             profile={carnet.profile}
-            coverageEnd={carnet.coverageEnd}
             horariosState={{ status: "ready", asignaciones: carnet.asignaciones }}
             canManagePhoto={false}
             onPhotoUploaded={noop}

@@ -808,7 +808,6 @@ function ActivePortalView({
           <div className="flex flex-col gap-5 max-lg:contents lg:self-stretch">
             <MemberCard
               profile={selectedProfile}
-              coverageEnd={coverageEnd}
               horariosState={horariosState}
               canManagePhoto={canManagePhoto}
               onPhotoUploaded={() => {

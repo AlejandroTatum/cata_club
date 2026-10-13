@@ -142,6 +142,9 @@ describe("CarnetsPage — one player", () => {
     expect(within(panel).getByTestId("student-carnet")).toHaveAttribute("id", "carnet-print-area");
     expect(within(panel).getByText("Jugador7 Prueba")).toBeInTheDocument();
     expect(within(panel).getByText("115000007")).toBeInTheDocument();
+    // Vigencia is internal data: the payload carries it, the card never prints it.
+    expect(within(panel).queryByText("Válido hasta")).not.toBeInTheDocument();
+    expect(within(panel).queryByText("31/12/2026")).not.toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: /imprimir carnet/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /cambiar foto/i })).not.toBeInTheDocument();
     expect(screen.queryByTestId("carnet-batch")).not.toBeInTheDocument();
@@ -232,6 +235,8 @@ describe("CarnetsPage — batch", () => {
       expect(within(card).getByTestId("carnet-role")).toHaveTextContent("Jugador");
       expect(within(card).getByTestId("carnet-signature")).toBeInTheDocument();
       expect(card).not.toHaveAttribute("id");
+      expect(within(card).queryByText("Válido hasta")).not.toBeInTheDocument();
+      expect(within(card).queryByText("31/12/2026")).not.toBeInTheDocument();
     }
     // Payment status stays off the card.
     expect(screen.queryByText(/pago|cuota|deuda|pendiente/i)).not.toBeInTheDocument();
