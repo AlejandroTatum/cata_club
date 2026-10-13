@@ -101,6 +101,15 @@ function mesesCorregidos(form: FormState, actual: PagoActual): number | null {
   return meses === actual.mesesComprados ? null : meses;
 }
 
+/** Same wording as the server (`MENSAJE_BENEFICIO_SOLO_MES_A_MES`): a discounted payment is one month at a time. */
+const BENEFICIO_SOLO_MES_A_MES = "Con beneficio activo solo puedes pagar un mes a la vez.";
+
+/** True when the server will reject the months because a frozen discount limits the payment to one. */
+function mesesNoPermitidosConBeneficio(form: FormState, actual: PagoActual): boolean {
+  const meses = mesesCorregidos(form, actual);
+  return meses !== null && meses > 1 && Number(actual.descuentoValorAplicado ?? 0) > 0;
+}
+
 /**
  * The amount the server will set when only the months change: it keeps the
  * per-month tariff and recalculates `tarifa × meses − frozen discount`
@@ -112,6 +121,7 @@ function mesesCorregidos(form: FormState, actual: PagoActual): number | null {
 function montoRecalculado(form: FormState, actual: PagoActual): number | null {
   const meses = mesesCorregidos(form, actual);
   if (meses === null || actual.tarifaMensualAplicada === null) return null;
+  if (mesesNoPermitidosConBeneficio(form, actual)) return null;
   if (Number(form.monto) !== Number(actual.monto)) return null;
   if (Number(actual.monto) === 0) return null;
   const centavos = Math.round(Number(actual.tarifaMensualAplicada) * 100) * meses
@@ -216,6 +226,7 @@ export default function PagoCorreccionSection({
   const hasChange = extended ? Object.keys(input).length > 1 : Boolean(form.monto.trim());
   // Extended: what will change, as «antes → después», shown before the admin confirms.
   const recalculado = extended && pagoActual ? montoRecalculado(form, pagoActual) : null;
+  const beneficioLimitaMeses = extended && pagoActual ? mesesNoPermitidosConBeneficio(form, pagoActual) : false;
   const cambios =
     extended && pagoActual
       ? [
@@ -355,6 +366,9 @@ export default function PagoCorreccionSection({
                       numberInputMode="numeric"
                       labelClassName={FIELD_LABEL}
                     />
+                    {beneficioLimitaMeses && (
+                      <p role="status" className="mt-1 text-sm text-state-bad">{BENEFICIO_SOLO_MES_A_MES}</p>
+                    )}
                     {recalculado !== null && pagoActual && (
                       <p className="mt-1 text-sm text-ink-3">
                         El monto se recalcula a {formatCurrency(recalculado)} (

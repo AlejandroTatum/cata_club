@@ -146,13 +146,25 @@ describe("PagoCorreccionSection — extended (amount, months, dates)", () => {
     });
 
     it("subtracts the frozen discount, like the server does", async () => {
-      mockFetchPagoDetalle.mockResolvedValue({ ...PAGO_CON_SNAPSHOT, monto: "25.00", descuentoValorAplicado: "5.00" });
+      mockFetchPagoDetalle.mockResolvedValue({
+        ...PAGO_CON_SNAPSHOT, monto: "55.00", mesesComprados: 2, descuentoValorAplicado: "5.00",
+      });
       await renderExtended();
 
       fireEvent.change(screen.getByLabelText(/^meses/i), { target: { value: "1" } });
+
+      expect(screen.getByText("Monto: $55,00 → $25,00")).toBeInTheDocument();
+    });
+
+    it("shows the server's rule instead of a preview when a discounted payment goes past one month", async () => {
+      mockFetchPagoDetalle.mockResolvedValue({ ...PAGO_CON_SNAPSHOT, monto: "25.00", descuentoValorAplicado: "5.00" });
+      await renderExtended();
+
       fireEvent.change(screen.getByLabelText(/^meses/i), { target: { value: "2" } });
 
-      expect(screen.getByText("Monto: $25,00 → $55,00")).toBeInTheDocument();
+      expect(screen.getByText("Con beneficio activo solo puedes pagar un mes a la vez.")).toBeInTheDocument();
+      expect(screen.queryByText(/se recalcula a/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/^Monto:/)).not.toBeInTheDocument();
     });
 
     it("lets the amount the admin typed win over the recalculation", async () => {
