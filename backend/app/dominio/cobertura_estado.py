@@ -6,7 +6,7 @@ membresía, y tanto la corrección de pagos como la tarea nocturna de
 vencimientos deben dejarla donde la cobertura dice. Vive en el dominio (sin
 base de datos) para que ambos llamadores compartan UNA sola definición.
 """
-from datetime import date
+from datetime import date, datetime
 
 from app.dominio.enums import EstadoMembresia
 
@@ -55,3 +55,19 @@ def estado_segun_cobertura(
     if estado == EstadoMembresia.ACTIVA and persona_activa:
         return EstadoMembresia.VENCIDA
     return estado
+
+
+def marcar_activa(membresia, ahora: datetime) -> None:
+    """Pasa la membresía a ACTIVA con la semántica de primera activación.
+
+    `fecha_activacion` SOLO se escribe cuando la membresía todavía está
+    INACTIVA (issues #1225 y #1749, "Miembro desde"): es la PRIMERA vez que la
+    persona tuvo cobertura. Una VENCIDA o SUSPENDIDA que vuelve a ACTIVA
+    conserva la que ya tenía. Es la misma regla que aplica
+    `PagoServicio._activar_membresia_con_red_de_seguridad`; la tarea nocturna
+    no puede importar ese servicio, así que la regla se expone acá, sin base de
+    datos ni `flush`/`commit` (eso lo decide quien llama).
+    """
+    if membresia.estado == EstadoMembresia.INACTIVA:
+        membresia.fecha_activacion = ahora
+    membresia.estado = EstadoMembresia.ACTIVA

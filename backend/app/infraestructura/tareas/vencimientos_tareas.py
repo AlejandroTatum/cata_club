@@ -30,11 +30,16 @@ Reconciliación en ambas direcciones (issue #1762):
     El estado se guarda pero la cobertura se deriva de los pagos aprobados, y
     nada más levantaba una VENCIDA: un pago con fechas mal cargadas que esta
     tarea ya había vencido seguía VENCIDO aunque el admin lo corrigiera. Por eso
-    la tarea también vuelve a ACTIVA una VENCIDA cuya cobertura combinada llega
-    a hoy (`CoberturaEstadoRepositorio.levantar_vencida`: persona activa, sin
-    otra membresía operativa; sin avisos). La regla de qué estado corresponde
-    vive en `app.dominio.cobertura_estado`, compartida con la corrección de pagos. Una por transacción: una candidata
-    que se saltea no corta el lote. SUSPENDIDA e INACTIVA no se tocan.
+    la tarea también vuelve a ACTIVA una VENCIDA o una INACTIVA cuya cobertura
+    combinada llega a hoy (`CoberturaEstadoRepositorio.levantar_a_activa`:
+    persona activa, sin otra membresía operativa; sin avisos). La INACTIVA
+    cubre el caso de una regularización retroactiva que no cubría el día de
+    registro (no activó) y cuyo pago se corrigió después para cubrir hoy. Una
+    INACTIVA que se levanta recibe `fecha_activacion` (primera activación,
+    #1225); una VENCIDA conserva la suya. La regla de qué estado corresponde
+    vive en `app.dominio.cobertura_estado`, compartida con la corrección de
+    pagos. Una por transacción: una candidata que se saltea no corta el lote.
+    SUSPENDIDA no se toca.
 """
 import logging
 from datetime import date
@@ -120,17 +125,18 @@ def marcar_membresias_vencidas(self) -> dict:
         if miembros_vencidos:
             db.commit()
 
-        # VENCIDA -> ACTIVA: la misma cobertura; `levantar_vencida` aplica la
-        # regla completa (guardas incluidas), el `fin < hoy` solo evita abrir
-        # una transacción por candidatas sin cobertura vigente. Se evalúa
-        # DESPUÉS del paso anterior, que ya terminó (y commiteó), así que una
-        # membresía no puede ir y volver en la misma corrida.
-        for candidata, fin in _con_cobertura(EstadoMembresia.VENCIDA):
-            if fin < hoy:
-                continue
-            datos = {"membresia_id": candidata.id, "persona_id": candidata.persona_id}
-            if cobertura.levantar_vencida(candidata.id, hoy):
-                reactivadas.append(datos)
+        # VENCIDA / INACTIVA -> ACTIVA: la misma cobertura; `levantar_a_activa`
+        # aplica la regla completa (guardas incluidas), el `fin < hoy` solo
+        # evita abrir una transacción por candidatas sin cobertura vigente. Se
+        # evalúa DESPUÉS del paso anterior, que ya terminó (y commiteó), así
+        # que una membresía no puede ir y volver en la misma corrida.
+        for estado_origen in (EstadoMembresia.VENCIDA, EstadoMembresia.INACTIVA):
+            for candidata, fin in _con_cobertura(estado_origen):
+                if fin < hoy:
+                    continue
+                datos = {"membresia_id": candidata.id, "persona_id": candidata.persona_id}
+                if cobertura.levantar_a_activa(candidata.id, hoy, estado_origen):
+                    reactivadas.append(datos)
 
     logger.info(
         "Membresías VENCIDAS el %s -> %d actualizadas, %d reactivadas",

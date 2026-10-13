@@ -6,12 +6,12 @@ cobertura combinada, así hay UNA sola definición de "hasta cuándo está cubie
 una membresía". La regla de qué estado corresponde vive en
 `app.dominio.cobertura_estado`.
 """
-from datetime import date
+from datetime import date, datetime, timezone
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.dominio.cobertura_estado import estado_segun_cobertura, maximo_fecha_opcional
+from app.dominio.cobertura_estado import estado_segun_cobertura, marcar_activa, maximo_fecha_opcional
 from app.dominio.enums import EstadoMembresia
 from app.dominio.modelos import Membresia
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
@@ -56,21 +56,24 @@ class CoberturaEstadoRepositorio:
             persona_activa=persona_activa, hay_otra_operativa=hay_otra_operativa,
         )
 
-    def levantar_vencida(self, membresia_id: int, hoy: date) -> bool:
-        """VENCIDA -> ACTIVA cuando su cobertura combinada llega a `hoy`, en su
-        propia transacción (`FOR UPDATE` sobre la membresía, commit al final).
-        Sin avisos ni correos: es reconciliación, no una aprobación. Devuelve
-        `False` (sin error) si otra transacción ya la movió o si una guarda lo
-        impide, para que el lote siga con la siguiente."""
+    def levantar_a_activa(self, membresia_id: int, hoy: date, estado_origen: EstadoMembresia) -> bool:
+        """`estado_origen` (VENCIDA o INACTIVA) -> ACTIVA cuando su cobertura
+        combinada llega a `hoy`, en su propia transacción (`FOR UPDATE` sobre
+        la membresía, commit al final). Sin avisos ni correos: es
+        reconciliación, no una aprobación. Una INACTIVA que se levanta recibe
+        `fecha_activacion` (primera activación, `marcar_activa`); una VENCIDA
+        conserva la suya. Devuelve `False` (sin error) si otra transacción ya
+        la movió o si una guarda lo impide, para que el lote siga con la
+        siguiente."""
         membresia = self.repo_membresia.obtener_por_id_con_bloqueo(membresia_id)
-        if membresia is None or membresia.estado != EstadoMembresia.VENCIDA:
+        if membresia is None or membresia.estado != estado_origen:
             self.db.rollback()
             return False
         cubierto_hasta = self.fecha_fin_maxima_combinada_bulk([membresia_id])[membresia_id]
         if self.estado_corresponde(membresia, cubierto_hasta, hoy) != EstadoMembresia.ACTIVA:
             self.db.rollback()
             return False
-        membresia.estado = EstadoMembresia.ACTIVA
+        marcar_activa(membresia, datetime.now(timezone.utc))
         try:
             self.db.flush()
             self.db.commit()
