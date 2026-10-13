@@ -92,14 +92,6 @@ def _dia_en_plural(dia: DiaSemana) -> str:
     return nombre if nombre.endswith("s") else f"{nombre}s"
 
 
-def _mensaje_pago_pendiente(nombre: str) -> str:
-    """Motivo del rechazo por bloqueo (#1768). El frontend lo muestra tal cual."""
-    return (
-        f"{nombre} tiene un pago pendiente y no puede registrar asistencia "
-        "hasta regularizarlo."
-    )
-
-
 class AsistenciaServicio:
     def __init__(self, db: Session):
         self.db = db
@@ -840,7 +832,7 @@ class AsistenciaServicio:
                 # Bloqueo por impago (#1768): el jugador queda en `fallidos` y
                 # el resto de la lista se registra igual.
                 fallidos.append(AsistenciaLoteFallidoDTO(
-                    persona_id=item.persona_id, motivo=_mensaje_pago_pendiente(nombre),
+                    persona_id=item.persona_id, motivo=f"{nombre} tiene un pago pendiente.",
                 ))
                 continue
             try:
@@ -1001,9 +993,9 @@ class AsistenciaServicio:
         # más de 3 días no entrena hasta pagar. Va DESPUÉS del chequeo de fila
         # ya registrada: quien se anotó antes del bloqueo conserva ese mensaje.
         if self.repo_bloqueo.por_persona(datos.persona_id).bloqueado:
-            nombre = nombre_completo(persona.nombres, persona.apellidos)
             raise OperacionInvalida(
-                _mensaje_pago_pendiente(nombre),
+                f"{nombre_completo(persona.nombres, persona.apellidos)} tiene un pago "
+                "pendiente y no puede registrar asistencia hasta regularizarlo.",
                 detalle_tecnico=f"bloqueado por impago: persona_id={datos.persona_id}",
             )
 
