@@ -108,6 +108,13 @@ class UsuarioMeResponseDTO(ResponseBase, BaseModel):
     # pantalla de pagos para registrar ese primer pago; no habilita entrenar.
     # Sin default, por la misma razón que `puede_entrenar`.
     espera_primer_pago: bool
+    # Bloqueo por impago (#1768): la Persona de la cuenta tiene la cobertura
+    # vencida hace más de 3 días (`BloqueoImpagoRepositorio`). El frontend
+    # restringe el portal a Pagos y arma el banner «Tu membresía venció el
+    # {fecha}» con `cubierto_hasta`, el fin de su cobertura. Sin default, por
+    # la misma razón que `puede_entrenar`; el monto adeudado NO viaja.
+    bloqueado_por_impago: bool
+    cubierto_hasta: Optional[date] = None
 
     @field_serializer("foto_url")
     def _firmar_foto_url(self, valor: Optional[str]) -> Optional[str]:

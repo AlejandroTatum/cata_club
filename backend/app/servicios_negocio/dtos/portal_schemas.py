@@ -1,4 +1,5 @@
 """Respuesta agregada del portal del alumno (issue #1592)."""
+from datetime import date
 from typing import List, Optional
 
 from pydantic import BaseModel
@@ -23,6 +24,11 @@ class PortalPerfilDTO(ResponseBase, BaseModel):
     # y el cliente pagina el resto con `GET /asistencias/persona/{id}`.
     historial_total: int = 0
     membresias: List[MembresiaResponseDTO]
+    # Bloqueo por impago (#1768), por perfil: el titular y cada representado se
+    # bloquean por separado. `cubierto_hasta` es el fin de su cobertura (el
+    # «venció el {fecha}» del banner); no viaja ningún monto adeudado.
+    bloqueado_por_impago: bool = False
+    cubierto_hasta: Optional[date] = None
 
 
 class PortalAlumnoResponseDTO(ResponseBase, BaseModel):
