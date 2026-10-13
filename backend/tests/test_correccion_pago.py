@@ -36,7 +36,7 @@ mismo archivo:
    Membresia primero, Pago después) antes de leer/escribir.
 """
 import threading
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
@@ -49,6 +49,7 @@ from app.dominio.modelos import CorreccionPago, Membresia, Pago, Persona, TipoMe
 from app.dominio.periodicidad import PeriodicidadTarifa
 from app.servicios_negocio.dtos.membresia_pago_schemas import CorreccionPagoDTO, PagoCreateDTO
 from app.servicios_negocio.membresia_pago_servicio import PagoServicio, _fin_de_cobertura, _sumar_meses
+from app.soporte_transversal.tiempo import hoy_club
 from tests.fabricas_pagos import crear_membresia_orm, crear_persona_orm, crear_tipo_membresia_orm
 
 FECHA_INICIO = date(2027, 1, 1)
@@ -935,6 +936,151 @@ def test_el_detalle_de_un_pago_sin_snapshot_expone_tarifa_y_meses_nulos(client, 
 
     assert cuerpo["tarifaMensualAplicada"] is None
     assert cuerpo["mesesComprados"] is None
+
+
+# --- Issue #1762: la corrección reconcilia el estado de la membresía ---------
+# El estado se guarda (ACTIVA/VENCIDA/...), la cobertura y la deuda se derivan
+# al leer de los pagos aprobados. Aprobar un pago activa la membresía y el job
+# nocturno solo la baja a VENCIDA; si una corrección moviera la cobertura sin
+# reconciliar el estado, una membresía vencida por fechas mal cargadas jamás
+# volvería a salir aunque el admin las dejara correctas.
+
+def _membresia_con_pago(db_session, cedula: int, estado: EstadoMembresia, *, inicio: date, activo: bool = True):
+    persona = crear_persona_orm(db_session, cedula_valida(cedula))
+    persona.activo = activo
+    tipo = crear_tipo_membresia_orm(db_session, precio=TARIFA)
+    membresia = crear_membresia_orm(db_session, persona, tipo, estado, monto_aplicado=TARIFA)
+    pago = _pago_aprobado(db_session, persona, membresia, fecha_inicio=inicio)
+    return membresia, pago
+
+
+def test_corregir_fechas_que_vuelven_a_cubrir_hoy_reactiva_una_membresia_vencida(db_session, admin_id):
+    """Escenario del dueño: el pago quedó con fechas viejas, el job dejó la
+    membresía VENCIDA; el admin deja las fechas correctas y la membresía debe
+    quedar como si el pago se hubiera cargado bien desde el inicio."""
+    hoy = hoy_club()
+    membresia, pago = _membresia_con_pago(
+        db_session, 925, EstadoMembresia.VENCIDA, inicio=hoy - timedelta(days=90),
+    )
+
+    PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(fecha_inicio=hoy - timedelta(days=5), motivo="Fechas mal cargadas"),
+        actor_persona_id=admin_id,
+    )
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+    assert PagoServicio(db_session)._fecha_fin_maxima_combinada(membresia.id) >= hoy
+    assert len(_correcciones(db_session, pago.id)) == 1
+
+
+def test_corregir_fechas_que_cubren_hoy_activa_una_membresia_inactiva_y_fija_la_antiguedad(db_session, admin_id):
+    hoy = hoy_club()
+    membresia, pago = _membresia_con_pago(
+        db_session, 926, EstadoMembresia.INACTIVA, inicio=hoy - timedelta(days=90),
+    )
+    antes = membresia.fecha_activacion
+
+    PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(fecha_inicio=hoy - timedelta(days=5), motivo="Fechas mal cargadas"),
+        actor_persona_id=admin_id,
+    )
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+    assert membresia.fecha_activacion >= antes
+
+
+def test_corregir_fechas_que_dejan_de_cubrir_hoy_vence_una_membresia_activa(db_session, admin_id):
+    """Inverso: acortar la cobertura para que hoy ya no esté cubierto deja la
+    membresía VENCIDA, igual que lo haría el job de vencimientos."""
+    hoy = hoy_club()
+    membresia, pago = _membresia_con_pago(
+        db_session, 927, EstadoMembresia.ACTIVA, inicio=hoy - timedelta(days=5),
+    )
+
+    PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(fecha_inicio=hoy - timedelta(days=90), motivo="Empezó mucho antes"),
+        actor_persona_id=admin_id,
+    )
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.VENCIDA
+
+
+def test_corregir_fechas_no_vence_a_una_persona_dada_de_baja(db_session, admin_id):
+    """El job de vencimientos solo toca personas activas: la corrección sigue
+    la misma regla."""
+    hoy = hoy_club()
+    membresia, pago = _membresia_con_pago(
+        db_session, 928, EstadoMembresia.ACTIVA, inicio=hoy - timedelta(days=5), activo=False,
+    )
+
+    PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(fecha_inicio=hoy - timedelta(days=90), motivo="Empezó mucho antes"),
+        actor_persona_id=admin_id,
+    )
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+
+
+def test_corregir_fechas_no_toca_una_membresia_suspendida(db_session, admin_id):
+    hoy = hoy_club()
+    membresia, pago = _membresia_con_pago(
+        db_session, 929, EstadoMembresia.SUSPENDIDA, inicio=hoy - timedelta(days=90),
+    )
+
+    PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(fecha_inicio=hoy - timedelta(days=5), motivo="Fechas mal cargadas"),
+        actor_persona_id=admin_id,
+    )
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.SUSPENDIDA
+
+
+def test_corregir_fechas_de_un_pago_viejo_no_vence_si_otro_pago_cubre_hoy(db_session, admin_id):
+    """La cobertura es la MÁXIMA entre todos los pagos: mover un pago viejo
+    no vence una membresía que otro pago sigue cubriendo."""
+    hoy = hoy_club()
+    membresia, pago_viejo = _membresia_con_pago(
+        db_session, 930, EstadoMembresia.ACTIVA, inicio=hoy - timedelta(days=100),
+    )
+    persona = db_session.get(Persona, membresia.persona_id)
+    _pago_aprobado(db_session, persona, membresia, fecha_inicio=hoy - timedelta(days=5))
+
+    PagoServicio(db_session).corregir_pago(
+        pago_viejo.id,
+        CorreccionPagoDTO(fecha_inicio=hoy - timedelta(days=120), motivo="Era más atrás"),
+        actor_persona_id=admin_id,
+    )
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+
+
+def test_corregir_solo_el_monto_no_cambia_el_estado_de_la_membresia(db_session, admin_id):
+    """El estado depende de la cobertura, no del importe: corregir solo el
+    monto de un pago vencido no reactiva ni vence nada."""
+    hoy = hoy_club()
+    membresia, pago = _membresia_con_pago(
+        db_session, 931, EstadoMembresia.VENCIDA, inicio=hoy - timedelta(days=90),
+    )
+
+    PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(monto=Decimal("45.00"), motivo="Monto mal cargado"),
+        actor_persona_id=admin_id,
+    )
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.VENCIDA
 
 
 # --- Concurrencia REAL: dos correcciones del mismo pago -----------------------

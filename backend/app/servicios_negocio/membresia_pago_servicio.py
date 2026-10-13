@@ -2008,6 +2008,10 @@ class PagoServicio:
         la nueva: igual -> `SIN_CAMBIO`; posterior -> `AMPLIADA`; anterior
         -> `REDUCIDA`. Se persiste en la fila de corrección, nunca queda
         implícito.
+
+        Si `fecha_fin` cambia, el estado guardado de la membresía se
+        reconcilia con la nueva cobertura en la misma transacción
+        (`_reconciliar_estado_por_cobertura`, issue #1762).
         """
         # Existencia primero -- consulta de UNA SOLA COLUMNA
         # (`obtener_membresia_id`), nunca `Session.get(Pago, ...)` sin lock:
@@ -2021,7 +2025,7 @@ class PagoServicio:
         # Lock de `Membresia` PRIMERO, `Pago` DESPUÉS -- ver el docstring de
         # arriba para el porqué (orden consistente con el resto de la clase,
         # sin ciclo posible de deadlock).
-        self.repo_membresia.obtener_por_id_con_bloqueo(membresia_id)
+        membresia = self.repo_membresia.obtener_por_id_con_bloqueo(membresia_id)
 
         pago = self.repo.obtener_por_id_con_bloqueo(pago_id)
         if not pago:
@@ -2220,12 +2224,44 @@ class PagoServicio:
         )
         self.db.add(correccion)
         pago_guardado = self.repo.guardar_cambios(pago)
+        # Issue #1762: la cobertura cambió, así que el estado guardado de la
+        # membresía puede haber quedado desfasado -- se reconcilia en la MISMA
+        # transacción que la corrección y su rastro de auditoría.
+        if fecha_fin_nueva != anteriores["fecha_fin"] and membresia is not None:
+            self._reconciliar_estado_por_cobertura(membresia)
         self.db.commit()
         if inspeccionar_orm(pago_guardado).expired:
             self.db.refresh(pago_guardado)
         if inspeccionar_orm(correccion).expired:
             self.db.refresh(correccion)
         return pago_guardado, correccion
+
+    def _reconciliar_estado_por_cobertura(self, membresia: Membresia) -> None:
+        """Alinea el estado guardado de la membresía con su cobertura real tras
+        corregir las fechas de un pago (issue #1762). La cobertura y la deuda
+        se derivan al leer de los pagos aprobados; lo único guardado es el
+        estado, que aprobar un pago activa y el job nocturno
+        (`vencimientos_tareas.marcar_membresias_vencidas`) solo baja a VENCIDA,
+        nunca lo sube. Sin esto, un pago con fechas mal cargadas que el job ya
+        venció seguía VENCIDO aunque el admin lo dejara cubriendo hoy.
+
+        - Cobertura combinada (pagos + bonificada) que llega a hoy: INACTIVA/
+          VENCIDA -> ACTIVA por `_activar_membresia_con_red_de_seguridad`, el
+          mismo camino que aprobar un pago o regularizar una deuda.
+        - Ya no llega a hoy: ACTIVA -> VENCIDA, como el job (que solo toca
+          personas activas).
+        Una SUSPENDIDA no se toca: su estado es una decisión administrativa
+        propia. El lock de la membresía ya lo tomó `corregir_pago`."""
+        hasta = self._fecha_fin_maxima_combinada(membresia.id)
+        if hasta is None:
+            return
+        if hasta >= hoy_club():
+            if membresia.estado in (EstadoMembresia.INACTIVA, EstadoMembresia.VENCIDA):
+                self._activar_membresia_con_red_de_seguridad(membresia)
+        elif membresia.estado == EstadoMembresia.ACTIVA:
+            persona = self.repo_persona.obtener_por_id(membresia.persona_id)
+            if persona is not None and persona.activo:
+                membresia.estado = EstadoMembresia.VENCIDA
 
     def listar_correcciones_de_pago(self, pago_id: int) -> list[CorreccionPago]:
         """Historial completo de correcciones financieras de un pago (issue
