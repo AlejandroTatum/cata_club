@@ -909,6 +909,34 @@ def test_corregir_pago_via_api_admin_devuelve_pago_y_correccion(client, db_sessi
     assert len(resp_listado.json()) == 1
 
 
+def test_el_detalle_del_pago_expone_tarifa_y_meses_para_el_calculo_previo(client, db_session):
+    """El formulario de corrección calcula el monto nuevo antes de guardar
+    (tarifa * meses - descuento): necesita ver ambos valores congelados."""
+    persona = crear_persona_orm(db_session, cedula_valida(904))
+    tipo = crear_tipo_membresia_orm(db_session)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA)
+    pago = _pago_aprobado(db_session, persona, membresia, meses=2)
+
+    resp = client.get(f"/api/v1/membresias/pagos/{pago.id}")
+
+    assert resp.status_code == 200, resp.text
+    cuerpo = resp.json()
+    assert cuerpo["tarifaMensualAplicada"] == "30.00"
+    assert cuerpo["mesesComprados"] == 2
+
+
+def test_el_detalle_de_un_pago_sin_snapshot_expone_tarifa_y_meses_nulos(client, db_session):
+    persona = crear_persona_orm(db_session, cedula_valida(905))
+    tipo = crear_tipo_membresia_orm(db_session)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA)
+    pago = _pago_aprobado_sin_snapshot(db_session, persona, membresia)
+
+    cuerpo = client.get(f"/api/v1/membresias/pagos/{pago.id}").json()
+
+    assert cuerpo["tarifaMensualAplicada"] is None
+    assert cuerpo["mesesComprados"] is None
+
+
 # --- Concurrencia REAL: dos correcciones del mismo pago -----------------------
 
 def _limpiar_grafo(motor_test, *, persona_ids: list[int], membresia_id: int, tipo_id: int) -> None:
