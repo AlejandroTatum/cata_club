@@ -8,7 +8,10 @@
  *  - the selection bar sits above the tab bar on a phone and beside the list on
  *    a desktop, the report launcher does not cover it, and the primary action
  *    is visibly disabled — with its reason — until someone is chosen;
- *  - 60 is the ceiling, with 154 players on the list.
+ *  - 60 is the ceiling, with 154 players on the list, paged like Miembros (#1749):
+ *    the selection survives the page change and «Elegir esta página» picks one page;
+ *  - each row shows «Miembro desde» (or «Sin fecha») and an «Editar» that does not
+ *    toggle the row's checkbox.
  *
  * The BFF is intercepted like `shell-batch-a.spec.ts`: the subject is layout.
  * The phone is a 390px DESKTOP-pointer window, as the owner reviews it.
@@ -20,6 +23,7 @@ import { E2E_BASE_URL } from "./e2e-target";
 const PHONE = { width: 390, height: 844 };
 const DESKTOP = { width: 1440, height: 900 };
 const LIMIT = 60;
+const PAGE_SIZE = 10;
 
 const SESSION = {
   user: { id: "1", name: "Admin Demo", email: "admin@cataclub.com", role: "admin", representanteId: null },
@@ -40,6 +44,7 @@ function accounts(count: number): unknown[] {
     estudiantes: [],
     backendRoles: ["ALUMNO"],
     ...(index % 2 === 0 ? { representadoPor: "Rosa Vera Maldonado" } : {}),
+    miembroDesde: index === 0 ? "2019-03-01" : null,
   }));
 }
 
@@ -102,23 +107,45 @@ test.describe("Carnet picker", () => {
     const fab = await page.locator("button[data-report-ignore]").boundingBox();
     if (fab) expect(intersects(fab, barBox)).toBe(false);
     expect((await generate.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-    // The last row is reachable above the bar (the page reserves its height).
-    await page.getByRole("listitem").last().scrollIntoViewIfNeeded();
+    // The last row is reachable above the bar (the page reserves its height). Rows are taller now
+    // (date + «Editar»), so the page can scroll: go to its end rather than trust "already in view".
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     const last = (await page.getByRole("listitem").last().boundingBox())!;
     expect(last.y + last.height).toBeLessThanOrEqual(barBox.y + 1);
   });
 
-  test("154 players: chooses up to the ceiling, the list scrolls with the page", async ({ page }) => {
+  test("154 players: paged, the selection survives the page change and stops at the ceiling", async ({ page }) => {
     await openPicker(page, PHONE, 154);
 
     const list = page.getByRole("list", { name: "Jugadores" });
     expect(await list.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
-    await page.getByRole("button", { name: "Elegir visibles (154)" }).click();
-    await expect(page.getByTestId("carnet-selection-bar").getByRole("status")).toContainText(`${LIMIT} de 154 seleccionados`);
+    await expect(page.getByRole("listitem")).toHaveCount(PAGE_SIZE);
+    const status = page.getByTestId("carnet-selection-bar").getByRole("status");
+    const next = page.getByRole("button", { name: "Página siguiente" });
+    for (let chosen = 0; chosen < LIMIT; chosen += PAGE_SIZE) {
+      await page.getByRole("button", { name: `Elegir esta página (${PAGE_SIZE})` }).click();
+      await next.click();
+    }
+    await expect(status).toContainText(`${LIMIT} de 154 seleccionados`);
     await expect(page.getByText(/Llegaste al máximo/)).toBeVisible();
     await expect(page.getByRole("button", { name: `Generar ${LIMIT} carnets` })).toBeEnabled();
     await page.getByRole("button", { name: "Quitar selección" }).click();
-    await expect(page.getByTestId("carnet-selection-bar").getByRole("status")).toContainText("0 de 154 seleccionados");
+    await expect(status).toContainText("0 de 154 seleccionados");
+  });
+
+  test("phone: each row shows its date and «Editar» opens the editor without choosing the player", async ({ page }) => {
+    await openPicker(page, PHONE, 7);
+
+    const first = page.getByRole("listitem").first();
+    await expect(first.getByText("Miembro desde mar 2019")).toBeVisible();
+    await expect(page.getByRole("listitem").nth(1).getByText("Sin fecha")).toBeVisible();
+
+    await page.getByRole("button", { name: "Editar Miembro desde de Jugador2 Alcivar Vera" }).click();
+    await expect(page.getByLabel("Miembro desde de Jugador2 Alcivar Vera", { exact: true })).toBeVisible();
+    await expect(page.getByRole("checkbox", { name: "Elegir a Jugador2 Alcivar Vera" })).not.toBeChecked();
+    await expect(page.getByTestId("carnet-selection-bar").getByRole("status")).toContainText("0 de 7 seleccionados");
+    const widths = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
+    expect(widths[0]).toBeLessThanOrEqual(widths[1]);
   });
 
   test("desktop: the selection panel sits beside the list and stays in view while scrolling", async ({ page }) => {

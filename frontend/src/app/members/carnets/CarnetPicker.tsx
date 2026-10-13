@@ -12,17 +12,40 @@
  * the tab bar —
  * and a sticky side panel from `lg`. The list scrolls with the page: a second
  * scrollbar inside the page hid the bar's own rows on a phone.
+ *
+ * Issue #1749: the list is paged like Miembros (search first, then the page),
+ * the selection lives outside the page so it survives paging and searching, and
+ * each row carries the player's «Miembro desde» with an «Editar» that opens the
+ * editor in place — outside the checkbox's label, so it never toggles the row.
  */
 
 "use client";
 
 import { useEffect, useId, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, EmptyState, ErrorState, FilterPanel, LoadingState, PAGE_RAIL, SearchInput } from "@/components/ui";
+import {
+  Button,
+  EmptyState,
+  ErrorState,
+  FilterPanel,
+  LoadingState,
+  PAGE_RAIL,
+  Pagination,
+  SearchInput,
+} from "@/components/ui";
 import { toUserMessage } from "@/lib/error-message";
 import { fetchMembers } from "@/services/api";
-import { canPrintCarnet, carnetsHref, filterAccounts, type MemberAccount } from "../members-utils";
-import { MAX_CARNETS } from "./carnet-sheet-utils";
+import {
+  canPrintCarnet,
+  carnetsHref,
+  filterAccounts,
+  getTotalPages,
+  MEMBERS_PAGE_SIZE,
+  paginateAccounts,
+  type MemberAccount,
+} from "../members-utils";
+import MiembroDesdeEditor from "./MiembroDesdeEditor";
+import { describeMiembroDesde, MAX_CARNETS, withAccountMiembroDesde } from "./carnet-sheet-utils";
 
 export default function CarnetPicker(): React.ReactElement {
   const reasonId = useId();
@@ -31,6 +54,8 @@ export default function CarnetPicker(): React.ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,14 +79,31 @@ export default function CarnetPicker(): React.ReactElement {
   const total = accounts.length;
   const count = selected.length;
   const atLimit = count >= MAX_CARNETS;
-  const unchosenVisible = visible.filter((account) => !selected.includes(account.id));
+  const totalPages = getTotalPages(visible.length);
+  const pageRows = paginateAccounts(visible, page);
+  const unchosenOnPage = pageRows.filter((account) => !selected.includes(account.id));
+
+  function goToPage(next: number): void {
+    setPage(next);
+    setEditingId(null);
+  }
+
+  // A new search is a new list: back to its first page, nothing half-edited.
+  function changeSearch(next: string): void {
+    setSearch(next);
+    goToPage(1);
+  }
+
+  function saveMiembroDesde(id: string, miembroDesde: string | null): void {
+    setAccounts((current) => (current ? withAccountMiembroDesde(current, id, miembroDesde) : current));
+  }
 
   function toggle(id: string): void {
     setSelected((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
   }
 
-  function chooseVisible(): void {
-    setSelected((current) => [...current, ...unchosenVisible.map((account) => account.id)].slice(0, MAX_CARNETS));
+  function chooseOnPage(): void {
+    setSelected((current) => [...current, ...unchosenOnPage.map((account) => account.id)].slice(0, MAX_CARNETS));
   }
 
   if (total === 0) {
@@ -88,7 +130,7 @@ export default function CarnetPicker(): React.ReactElement {
               label="Buscar jugadores"
               placeholder="Buscar por nombre o cédula…"
               value={search}
-              onChange={setSearch}
+              onChange={changeSearch}
             />
           }
           fields={
@@ -96,10 +138,10 @@ export default function CarnetPicker(): React.ReactElement {
               <Button
                 variant="secondary"
                 size="sm"
-                disabled={unchosenVisible.length === 0 || atLimit}
-                onClick={chooseVisible}
+                disabled={unchosenOnPage.length === 0 || atLimit}
+                onClick={chooseOnPage}
               >
-                Elegir visibles ({visible.length})
+                {totalPages > 1 ? "Elegir esta página" : "Elegir visibles"} ({pageRows.length})
               </Button>
               <Button variant="tertiary" size="sm" disabled={count === 0} onClick={() => setSelected([])}>
                 Quitar selección
@@ -112,43 +154,82 @@ export default function CarnetPicker(): React.ReactElement {
             title="Sin resultados"
             description="Ningún jugador coincide con la búsqueda."
             action={
-              <Button variant="secondary" size="sm" onClick={() => setSearch("")}>
+              <Button variant="secondary" size="sm" onClick={() => changeSearch("")}>
                 Limpiar búsqueda
               </Button>
             }
           />
         ) : (
-          <ul className="card divide-y divide-line overflow-hidden" aria-label="Jugadores">
-            {visible.map((account) => {
-              const name = `${account.nombres} ${account.apellidos}`;
-              const checked = selected.includes(account.id);
-              const blocked = !checked && atLimit;
-              return (
-                <li key={account.id}>
-                  <label
-                    className={`flex min-h-11 items-center gap-3 px-4 py-2.5 text-ink ${
-                      blocked ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-sunken"
-                    } ${checked ? "bg-sunken" : ""}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={blocked}
-                      onChange={() => toggle(account.id)}
-                      aria-label={`Elegir a ${name}`}
-                      className="h-5 w-5 flex-none accent-ink"
-                    />
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-sm font-semibold">{name}</span>
-                      {account.representadoPor ? (
-                        <span className="truncate text-xs text-ink-2">Representado por {account.representadoPor}</span>
-                      ) : null}
-                    </span>
-                  </label>
-                </li>
-              );
-            })}
-          </ul>
+          <div className="card overflow-hidden">
+            <ul className="divide-y divide-line" aria-label="Jugadores">
+              {pageRows.map((account) => {
+                const name = `${account.nombres} ${account.apellidos}`;
+                const checked = selected.includes(account.id);
+                const blocked = !checked && atLimit;
+                const editing = editingId === account.id;
+                return (
+                  <li key={account.id}>
+                    <div className={`flex min-h-11 items-center gap-3 px-4 py-2.5 text-ink ${checked ? "bg-sunken" : ""}`}>
+                      <label
+                        className={`flex min-w-0 flex-1 items-center gap-3 self-stretch ${
+                          blocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={blocked}
+                          onChange={() => toggle(account.id)}
+                          aria-label={`Elegir a ${name}`}
+                          className="h-5 w-5 flex-none accent-ink"
+                        />
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate text-sm font-semibold">{name}</span>
+                          {account.representadoPor ? (
+                            <span className="truncate text-xs text-ink-2">Representado por {account.representadoPor}</span>
+                          ) : null}
+                        </span>
+                      </label>
+                      <span className="max-w-28 flex-none text-right text-xs text-ink-2 sm:max-w-none">
+                        {describeMiembroDesde(account.miembroDesde)}
+                      </span>
+                      <Button
+                        variant="tertiary"
+                        size="sm"
+                        className="flex-none"
+                        aria-expanded={editing}
+                        aria-label={`${editing ? "Cerrar" : "Editar"} Miembro desde de ${name}`}
+                        onClick={() => setEditingId(editing ? null : account.id)}
+                      >
+                        {editing ? "Cerrar" : "Editar"}
+                      </Button>
+                    </div>
+                    {editing ? (
+                      <div className="bg-sunken px-4 pb-3 pl-12">
+                        <MiembroDesdeEditor
+                          personaId={account.id}
+                          name={name}
+                          value={account.miembroDesde ?? null}
+                          onSaved={(value) => saveMiembroDesde(account.id, value)}
+                        />
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+            {totalPages > 1 ? (
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                onPageChange={goToPage}
+                totalItems={visible.length}
+                pageSize={MEMBERS_PAGE_SIZE}
+                itemNoun="jugador"
+                variant="footer"
+              />
+            ) : null}
+          </div>
         )}
       </div>
 

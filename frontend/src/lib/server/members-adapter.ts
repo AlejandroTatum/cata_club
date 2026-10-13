@@ -398,6 +398,7 @@ export function buildMemberAccounts(
       nombres: persona.nombres,
       apellidos: persona.apellidos,
       telefono: persona.telefono ?? "",
+      miembroDesde: persona.miembroDesde ?? null,
       representadoPor: representante ? `${representante.nombres} ${representante.apellidos}` : undefined,
       representadoPorId: persona.representanteId ?? undefined,
       // Issue #362's exact gap: no legal representative at all AND no ficha
