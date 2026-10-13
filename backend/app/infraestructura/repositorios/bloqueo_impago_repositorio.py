@@ -62,7 +62,7 @@ class BloqueoImpagoRepositorio:
         ).unique())
         membresia_ids = [m.id for m in membresias]
         cobertura = self.repo_cobertura.fecha_fin_maxima_combinada_bulk(membresia_ids)
-        con_transferencia = self._con_transferencia_pendiente(membresia_ids)
+        con_transferencia = self.con_transferencia_pendiente(membresia_ids)
 
         por_persona: dict[int, list[tuple[bool, date | None]]] = {pid: [] for pid in ids}
         for m in membresias:
@@ -85,7 +85,7 @@ class BloqueoImpagoRepositorio:
             for pid, filas in por_persona.items()
         }
 
-    def _con_transferencia_pendiente(self, membresia_ids: list[int]) -> set[int]:
+    def con_transferencia_pendiente(self, membresia_ids: list[int]) -> set[int]:
         """Membresías con una TRANSFERENCIA en revisión Y su comprobante
         adjunto. Un efectivo declarado por el socio, o una transferencia sin
         comprobante, no cuentan: el bloqueo solo lo levanta el administrador
