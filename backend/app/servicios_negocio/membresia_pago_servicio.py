@@ -25,6 +25,7 @@ from app.dominio.excepciones import (
 from app.dominio.nombre_propio import nombre_completo
 from app.infraestructura.correo_deuda_regularizada import enviar_deuda_regularizada
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
+from app.dominio.bloqueo_impago import ancla_del_pago
 from app.dominio.cobertura_estado import maximo_fecha_opcional
 from app.infraestructura.repositorios.cobertura_estado_repositorio import CoberturaEstadoRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
@@ -890,9 +891,13 @@ class PagoServicio:
         # el período (nunca lo elige el cliente), anclar sobre el máximo real
         # ya hace que el resultado no pueda solaparse por construcción -- no
         # hace falta un chequeo aparte de "rechazar" acá.
+        #
+        # Bloqueo por impago (#1768, S3): un pago MENSUAL registrado hasta 3
+        # días después del fin de la cobertura se ancla en ese fin (sin hueco);
+        # pasado ese plazo ancla en hoy y los meses bloqueados no se cobran.
+        # La deuda vieja la salda solo el admin (`regularizar_deuda`).
         ultima_fecha_fin = self._fecha_fin_maxima_combinada(datos.membresia_id)
-        hoy = hoy_club()
-        ancla = max(ultima_fecha_fin, hoy) if ultima_fecha_fin is not None else hoy
+        ancla = ancla_del_pago(ultima_fecha_fin, hoy_club(), periodicidad)
         fecha_inicio, fecha_fin = ancla, _fin_de_cobertura(ancla, meses, periodicidad)
 
         # Gratuidad familiar (E04-RF002, issue #400 slice 4c-b): el gate del
