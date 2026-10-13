@@ -142,6 +142,9 @@ describe("CarnetsPage — one player", () => {
     expect(within(panel).getByTestId("student-carnet")).toHaveAttribute("id", "carnet-print-area");
     expect(within(panel).getByText("Jugador7 Prueba")).toBeInTheDocument();
     expect(within(panel).getByText("115000007")).toBeInTheDocument();
+    // Vigencia is internal data: the payload carries it, the card never prints it.
+    expect(within(panel).queryByText("Válido hasta")).not.toBeInTheDocument();
+    expect(within(panel).queryByText("31/12/2026")).not.toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: /imprimir carnet/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /cambiar foto/i })).not.toBeInTheDocument();
     expect(screen.queryByTestId("carnet-batch")).not.toBeInTheDocument();
@@ -165,7 +168,7 @@ describe("CarnetsPage — «Miembro desde» (#1749)", () => {
     expect(await within(screen.getByTestId("student-carnet")).findByText("mar 2019")).toBeInTheDocument();
   });
 
-  it("offers one editor per player above a batch, closed by default, and keeps them off the printed sheet", async () => {
+  it("offers one editor per player above a batch, closed when every player has a date, and keeps them off the printed sheet", async () => {
     mockSearch = "ids=1,2";
     respondWith([1, 2], { miembroDesde: "2020-05-01" });
     render(<CarnetsPage />);
@@ -179,6 +182,39 @@ describe("CarnetsPage — «Miembro desde» (#1749)", () => {
     for (const card of within(screen.getByTestId("carnet-batch")).getAllByTestId("carnet-sheet-card")) {
       expect(within(card).getByText("may 2020")).toBeInTheDocument();
     }
+  });
+});
+
+describe("CarnetsPage — «Miembro desde» block opens for undated players (#1749, S3)", () => {
+  it("opens by default when at least one player has no date, and stays out of the printed sheet", async () => {
+    mockSearch = "ids=1,2";
+    mockFetchCarnets.mockResolvedValue({
+      carnets: [carnet(1, { miembroDesde: "2020-05-01" }), carnet(2)],
+      missing: [],
+    });
+    render(<CarnetsPage />);
+
+    const section = await screen.findByTestId("miembro-desde-batch");
+    expect(section).toHaveAttribute("open");
+    expect(screen.getByTestId("carnet-batch")).not.toContainElement(section);
+  });
+
+  it("does not close under the admin's hands when the last missing date is saved", async () => {
+    mockSearch = "ids=1,2";
+    mockFetchCarnets.mockResolvedValue({
+      carnets: [carnet(1, { miembroDesde: "2020-05-01" }), carnet(2)],
+      missing: [],
+    });
+    mockSetMiembroDesde.mockResolvedValue({ miembroDesde: "2021-02-01" });
+    render(<CarnetsPage />);
+
+    const section = await screen.findByTestId("miembro-desde-batch");
+    fireEvent.change(within(section).getByLabelText("Miembro desde de Jugador2 Prueba"), { target: { value: "2021-02" } });
+    fireEvent.click(within(section).getAllByRole("button", { name: "Guardar" })[1]);
+
+    await waitFor(() => expect(mockSetMiembroDesde).toHaveBeenCalledWith("2", "2021-02"));
+    expect(await within(section).findByText("Guardado.")).toBeInTheDocument();
+    expect(section).toHaveAttribute("open");
   });
 });
 
@@ -199,6 +235,8 @@ describe("CarnetsPage — batch", () => {
       expect(within(card).getByTestId("carnet-role")).toHaveTextContent("Jugador");
       expect(within(card).getByTestId("carnet-signature")).toBeInTheDocument();
       expect(card).not.toHaveAttribute("id");
+      expect(within(card).queryByText("Válido hasta")).not.toBeInTheDocument();
+      expect(within(card).queryByText("31/12/2026")).not.toBeInTheDocument();
     }
     // Payment status stays off the card.
     expect(screen.queryByText(/pago|cuota|deuda|pendiente/i)).not.toBeInTheDocument();

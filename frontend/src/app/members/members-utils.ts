@@ -156,6 +156,13 @@ export interface MemberAccount {
   telefono: string;
   estudiantes: MemberStudentSummary[];
   /**
+   * Issue #1749: first day of the month the club has on record as this
+   * player's «Miembro desde» (`YYYY-MM-01`), `null` when nobody entered one.
+   * Read off `Persona.miembroDesde`, never derived. Optional so fixtures built
+   * before the field existed read as "no date".
+   */
+  miembroDesde?: string | null;
+  /**
    * The full name of this person's representative — `undefined` when they
    * manage their own account (a root persona with no `representanteId`).
    * Read directly off `Persona.representanteId` in `members-adapter.ts`,

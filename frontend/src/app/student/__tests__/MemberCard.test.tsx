@@ -64,7 +64,6 @@ function renderCard(overrides: Partial<React.ComponentProps<typeof MemberCard>> 
   return render(
     <MemberCard
       profile={PROFILE}
-      coverageEnd="2027-04-04"
       horariosState={READY}
       canManagePhoto={false}
       onPhotoUploaded={() => {}}
@@ -114,7 +113,7 @@ describe("MemberCard", () => {
     );
   });
 
-  it("lists Plan, Franja, Miembro desde and Válido hasta in order", () => {
+  it("lists Plan, Franja and Miembro desde in order, with no Válido hasta", () => {
     renderCard({ profile: { ...PROFILE, miembroDesde: "2019-03-01" } });
 
     const facts = screen.getByTestId("carnet-facts");
@@ -123,21 +122,13 @@ describe("MemberCard", () => {
       "Plan",
       "Franja",
       "Miembro desde",
-      "Válido hasta",
     ]);
     expect(rows.map((row) => row.lastElementChild?.textContent)).toEqual([
       "Mensual Adulto",
       "13:00 — 14:00",
       "mar 2019",
-      "04/04/2027",
     ]);
-  });
-
-  it("falls back to a dash when there is no coverage end", () => {
-    renderCard({ coverageEnd: null });
-
-    const row = within(screen.getByTestId("carnet-facts")).getByText("Válido hasta").parentElement!;
-    expect(row.lastElementChild?.textContent).toBe("—");
+    expect(within(facts).queryByText("Válido hasta")).not.toBeInTheDocument();
   });
 
   it("marks the training days through data attributes and a spoken label", () => {

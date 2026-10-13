@@ -24,6 +24,7 @@ import { fetchCarnets } from "@/services/api";
 import type { CarnetsResponse } from "@/services/api";
 import CarnetPicker from "./CarnetPicker";
 import CarnetSheet from "./CarnetSheet";
+import MiembroDesdeBatch from "./MiembroDesdeBatch";
 import MiembroDesdeEditor from "./MiembroDesdeEditor";
 import { describeSheets, parseCarnetIds, withMiembroDesde } from "./carnet-sheet-utils";
 
@@ -94,7 +95,6 @@ function CarnetsContent(): React.ReactElement {
         <div className="mx-auto w-full max-w-md">
           <MemberCard
             profile={carnet.profile}
-            coverageEnd={carnet.coverageEnd}
             horariosState={{ status: "ready", asignaciones: carnet.asignaciones }}
             canManagePhoto={false}
             onPhotoUploaded={noop}
@@ -125,22 +125,7 @@ function CarnetsContent(): React.ReactElement {
         </Button>
       </div>
       {missingNotice}
-      {/* Outside `#carnet-batch`, so none of it prints. Closed by default: the sheet is the page. */}
-      <details data-testid="miembro-desde-batch" className="card px-5 py-3">
-        <summary className="cursor-pointer text-sm font-semibold text-ink">Miembro desde de cada jugador</summary>
-        <ul className="mt-3 grid gap-3">
-          {carnets.map((carnet) => (
-            <li key={carnet.profile.personaId}>
-              <MiembroDesdeEditor
-                personaId={carnet.profile.personaId}
-                name={`${carnet.profile.nombres} ${carnet.profile.apellidos}`.trim()}
-                value={carnet.profile.miembroDesde ?? null}
-                onSaved={(value) => applyMiembroDesde(carnet.profile.personaId, value)}
-              />
-            </li>
-          ))}
-        </ul>
-      </details>
+      <MiembroDesdeBatch carnets={carnets} onSaved={applyMiembroDesde} />
       <CarnetSheet carnets={carnets} />
     </div>
   );

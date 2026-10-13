@@ -1,4 +1,6 @@
+import { formatMonthYear } from "@/lib/format-utils";
 import type { CarnetSummary } from "@/services/api";
+import type { MemberAccount } from "../members-utils";
 
 /**
  * Pure helpers for the admin's carnet printing (issue #1670) — no React.
@@ -56,4 +58,24 @@ export function withMiembroDesde(
   return carnets.map((carnet) =>
     carnet.profile.personaId === id ? { ...carnet, profile: { ...carnet.profile, miembroDesde } } : carnet,
   );
+}
+
+/** The account list with one player's «Miembro desde» replaced (issue #1749); every other account is the same object. */
+export function withAccountMiembroDesde(
+  accounts: readonly MemberAccount[],
+  id: string,
+  miembroDesde: string | null,
+): MemberAccount[] {
+  return accounts.map((account) => (account.id === id ? { ...account, miembroDesde } : account));
+}
+
+/** What a picker row says about the date on record: «Miembro desde mar 2019» or «Sin fecha». */
+export function describeMiembroDesde(miembroDesde: string | null | undefined): string {
+  const label = miembroDesde ? formatMonthYear(miembroDesde) : "";
+  return label ? `Miembro desde ${label}` : "Sin fecha";
+}
+
+/** Whether at least one carnet in the batch has no «Miembro desde» — the case the batch block opens for. */
+export function hasUndatedPlayer(carnets: readonly CarnetSummary[]): boolean {
+  return carnets.some((carnet) => !carnet.profile.miembroDesde);
 }

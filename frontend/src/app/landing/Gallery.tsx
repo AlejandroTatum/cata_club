@@ -231,7 +231,7 @@ export default function Gallery(): React.ReactElement {
             }}
           >
             <div
-              className="landing-sponsors-track"
+              className="landing-sponsors-track landing-gallery-track"
               id="galeria-track"
               ref={trackRef}
               style={openKey !== null ? { animationPlayState: "paused" } : undefined}

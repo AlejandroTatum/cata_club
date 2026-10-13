@@ -62,6 +62,18 @@ const membresia: BackendMembresia = {
 const tipo: BackendTipoMembresia = { id: 5, categoria: "Mensual Adultos" };
 
 describe("buildMemberAccounts", () => {
+  it("carries «Miembro desde» (#1749) from the persona, and leaves it null when none was entered", () => {
+    const accounts = buildMemberAccounts(
+      [{ ...child, miembroDesde: "2019-03-01" }, admin],
+      new Map(),
+      new Map(),
+      new Map(),
+      new Map(),
+    );
+    expect(accounts.find((account) => account.id === "3")?.miembroDesde).toBe("2019-03-01");
+    expect(accounts.find((account) => account.id === "1")?.miembroDesde).toBeNull();
+  });
+
   it("returns one row per persona, not just per root — a representative and their representado both get their own row", () => {
     const accounts = buildMemberAccounts(
       [admin, parent, child],

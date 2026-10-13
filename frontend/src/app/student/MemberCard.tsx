@@ -2,12 +2,12 @@
 
 import { useRef, useState } from "react";
 import Image from "next/image";
-import { Award, Clock, ShieldCheck, User } from "lucide-react";
+import { Award, Clock, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { DIA_SEMANA_LABELS } from "@/app/attendance/attendance-utils";
 import { toStripDias } from "@/app/groups/groups-page-utils";
 import { buttonClasses, cn } from "@/components/ui";
-import { formatDate, formatMonthYear, joinWithY } from "@/lib/format-utils";
+import { formatMonthYear, joinWithY } from "@/lib/format-utils";
 import { ICON } from "@/lib/icon-size";
 import { subirFotoDeArchivo } from "@/lib/photo-upload";
 import { MIN_TARGET_CLASS } from "@/lib/target-size";
@@ -22,8 +22,8 @@ import { buildWeeklyTrainingSchedule, describeAssignedWindows } from "./student-
 // A dark credential held by an ordinary dashboard panel: the panel is the
 // app's, the credential is the club's. Header (real club logo, wordmark, role
 // label), a brand accent bar, the photo with a ball-coloured edge, the name and
-// cédula, an icon register (Plan / Franja / Miembro desde / Válido hasta), the
-// seven training-day chips and the club's signature line.
+// cédula, an icon register (Plan / Franja / Miembro desde), the seven
+// training-day chips and the club's signature line.
 //
 // What is on it is only what the frontend already holds. There is no role on
 // `StudentProfileSummary`, so the role label is the card's own purpose
@@ -43,9 +43,6 @@ export type MemberCardHorariosState =
 
 /** The week, in the order the club reads it. */
 const WEEK = Object.keys(DIA_SEMANA_LABELS) as DiaSemana[];
-
-/** Shown when the card has no coverage date on record. */
-const NO_DATE = "—";
 
 /** One line of the credential's register. */
 type RegisterSpec = {
@@ -176,12 +173,10 @@ function RegisterRow({
  */
 export function MemberCardCredential({
   profile,
-  coverageEnd,
   horariosState,
   variant = "single",
 }: {
   profile: StudentProfileSummary;
-  coverageEnd: string | null;
   horariosState: MemberCardHorariosState;
   variant?: "single" | "sheet";
 }): React.ReactElement {
@@ -202,8 +197,8 @@ export function MemberCardCredential({
 
   // "Plan" and not "Categoría": `membership.categoria` holds the PLAN's name (a
   // price); a training categoría is a group, and a student can be in several.
-  // "Válido hasta" is vigencia (the same `coverageEnd` `CuotaCard` prints), not
-  // the payment verdict; with no date on record it reads "—".
+  // No coverage end: vigencia is internal to the club, so it lives on the
+  // payment surfaces (`CuotaCard`) and never on the credential.
   const register: RegisterSpec[] = [];
   if (profile.membership?.categoria) {
     register.push({ label: "Plan", value: profile.membership.categoria, icon: User, isFigure: false });
@@ -223,12 +218,6 @@ export function MemberCardCredential({
   if (miembroDesde) {
     register.push({ label: "Miembro desde", value: miembroDesde, icon: Award, isFigure: true });
   }
-  register.push({
-    label: "Válido hasta",
-    value: coverageEnd ? formatDate(coverageEnd) : NO_DATE,
-    icon: ShieldCheck,
-    isFigure: Boolean(coverageEnd),
-  });
 
   // The same weekly schedule "Esta semana" reads, so the readings cannot
   // disagree. Shown only once the lookup answered: seven unlit chips would
@@ -369,18 +358,12 @@ export function MemberCardCredential({
 
 export default function MemberCard({
   profile,
-  coverageEnd,
   horariosState,
   className,
   canManagePhoto,
   onPhotoUploaded,
 }: {
   profile: StudentProfileSummary;
-  /**
-   * `MembershipSummary.cubiertoHasta`, `null` when the backend has no coverage
-   * on record (issue #1328). The same date `CuotaCard` prints.
-   */
-  coverageEnd: string | null;
   /** The same assignments the training panel reads. */
   horariosState: MemberCardHorariosState;
   className?: string;
@@ -445,7 +428,6 @@ export default function MemberCard({
         <MemberCardCredential
           key={profile.fotoUrl ?? ""}
           profile={profile}
-          coverageEnd={coverageEnd}
           horariosState={horariosState}
         />
       </div>

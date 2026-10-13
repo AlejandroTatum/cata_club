@@ -526,8 +526,8 @@ describe("StudentPage — the club membership card (carnet)", () => {
     const cuota = await screen.findByTestId("student-cuota-card");
     // "Cubierta hasta", not the old carnet fact's "Cobertura hasta" — the
     // Cuota card's own row label matches the chosen maquette's wording. The
-    // credential states vigencia as "Válido hasta" (see the carnet-vigencia
-    // tests below); the payment VERDICT never returns to it.
+    // credential states no vigencia at all (see the carnet-vigencia tests
+    // below), and the payment VERDICT never returns to it.
     await waitFor(() => {
       expect(within(cuota).getByText("Cubierta hasta")).toBeInTheDocument();
     });
@@ -547,15 +547,13 @@ describe("StudentPage — the club membership card (carnet)", () => {
   });
 
   /**
-   * F4b — the credential's vigencia.
+   * F4b — the credential carries no vigencia.
    *
-   * "Válido hasta" answers until when the club has been paid for them (the
-   * «Jugador desde» row was dropped in favor of «Miembro desde», issue #1749).
-   * It is `MembershipSummary.cubiertoHasta` —
-   * the backend's own combined anchor — not a new reading of the membership
-   * row, whose `fechaFin` no adapter populates.
+   * The club treats "until when is this player a member" as internal data, so
+   * the carnet never prints `MembershipSummary.cubiertoHasta` (nor a «Válido
+   * hasta» row). The date stays on the payment surfaces, `CuotaCard` first.
    */
-  it("states the real coverage end on the carnet, with no «Jugador desde» row", async () => {
+  it("states no coverage end on the carnet, and no «Jugador desde» row", async () => {
     mockFetchStudentPortal.mockResolvedValueOnce({
       ...PORTAL,
       self: {
@@ -579,15 +577,13 @@ describe("StudentPage — the club membership card (carnet)", () => {
     const carnet = await screen.findByTestId("student-carnet");
     const facts = await screen.findByTestId("carnet-facts");
     await waitFor(() => {
-      expect(within(facts).getByText("Válido hasta")).toBeInTheDocument();
+      expect(within(facts).getByText("Plan")).toBeInTheDocument();
     });
 
-    // The value is `MembershipSummary.cubiertoHasta` (31/07/2026), read off
-    // the row's right edge like every other register value.
-    const row = within(facts).getByText("Válido hasta").parentElement!;
-    expect(row.lastElementChild?.textContent).toBe("31/07/2026");
+    expect(within(carnet).queryByText("Válido hasta")).not.toBeInTheDocument();
+    expect(within(carnet).queryByText("31/07/2026")).not.toBeInTheDocument();
     expect(within(facts).queryByText("Jugador desde")).not.toBeInTheDocument();
-    // And it is on the credential — the object that prints at 72 mm wide.
+    // The register is still on the credential — the object that prints at 72 mm wide.
     expect(carnet).toContainElement(facts);
   });
 
@@ -595,9 +591,10 @@ describe("StudentPage — the club membership card (carnet)", () => {
    * Issue #1328: a benefit applied through `ApplyBenefitForm` writes a
    * `CoberturaBonificada`, never a `Pago` — its date only ever reaches this
    * screen through `MembershipSummary.cubiertoHasta`, the backend's own
-   * combined anchor over both sources.
+   * combined anchor over both sources. The Cuota card still states it; the
+   * carnet does not.
    */
-  it("reads the coverage end from MembershipSummary.cubiertoHasta even when it exceeds every approved payment", async () => {
+  it("keeps the benefit-extended coverage end off the carnet while the Cuota card states it", async () => {
     mockFetchStudentPortal.mockResolvedValueOnce({
       ...PORTAL,
       self: {
@@ -614,62 +611,17 @@ describe("StudentPage — the club membership card (carnet)", () => {
         },
       },
     });
-    // The furthest APPROVED payment (31/07/2026) is much earlier than the
-    // benefit-extended `cubiertoHasta` (31/01/2027) — proof the carnet and
-    // the Cuota card read the combined anchor, never the payments array.
     mockFetchPagosDePersona.mockResolvedValueOnce([PAGO_APROBADO]);
 
     render(<StudentPage />);
 
-    const facts = await screen.findByTestId("carnet-facts");
-    await waitFor(() => {
-      expect(within(facts).getByText("Válido hasta")).toBeInTheDocument();
-    });
-    const row = within(facts).getByText("Válido hasta").parentElement!;
-    expect(row.lastElementChild?.textContent).toBe("31/01/2027");
-
+    const carnet = await screen.findByTestId("student-carnet");
     const cuota = await screen.findByTestId("student-cuota-card");
     await waitFor(() => {
       expect(within(cuota).getByText("31/01/2027")).toBeInTheDocument();
     });
-  });
-
-  it("shows a dash for the coverage end when no payment has been approved", async () => {
-    mockFetchStudentPortal.mockResolvedValueOnce({
-      ...PORTAL,
-      self: {
-        ...PORTAL.self!,
-        membership: {
-          id: 4,
-          estado: "ACTIVA",
-          personaId: 9,
-          montoAplicado: "25.00",
-          categoria: "Mensual",
-          modalidad: "MENSUAL",
-          fechaActivacion: "2026-03-18",
-        },
-      },
-    });
-    // A rejected payment carries a `fechaFin` too, and a pending one likewise:
-    // neither has been approved by the club, so neither may become "Válido
-    // hasta".
-    mockFetchPagosDePersona.mockResolvedValueOnce([
-      PAGO_RECHAZADO,
-      { ...PAGO_APROBADO, id: 3, estadoPago: "PENDIENTE_VALIDACION" },
-    ]);
-
-    render(<StudentPage />);
-
-    const facts = await screen.findByTestId("carnet-facts");
-    await waitFor(() => {
-      expect(within(facts).getByText("Válido hasta")).toBeInTheDocument();
-    });
-    expect(within(facts).queryByText("Jugador desde")).not.toBeInTheDocument();
-    // The row stays on the credential and reads "—" rather than a made-up date.
-    expect(within(facts).getByText("Válido hasta").parentElement?.lastElementChild?.textContent).toBe("—");
-    // No date from the refused rows leaked onto the credential.
-    expect(within(facts).queryByText("30/06/2026")).not.toBeInTheDocument();
-    expect(within(facts).queryByText("31/07/2026")).not.toBeInTheDocument();
+    expect(within(carnet).queryByText("Válido hasta")).not.toBeInTheDocument();
+    expect(within(carnet).queryByText("31/01/2027")).not.toBeInTheDocument();
   });
 
   /**
@@ -677,9 +629,10 @@ describe("StudentPage — the club membership card (carnet)", () => {
    * membership has no coverage on record, even when an APPROVED `Pago`
    * exists — the field is the backend's own combined anchor over BOTH
    * sources (issue #1328), so a `null` here is authoritative and must not be
-   * second-guessed by re-deriving a date from `pagos`.
+   * second-guessed by re-deriving a date from `pagos`. The Cuota card shows
+   * nothing for it, and the carnet shows no placeholder either.
    */
-  it("shows a dash for the coverage end when MembershipSummary.cubiertoHasta is null, even with an approved payment", async () => {
+  it("shows no coverage date or dash on the carnet when MembershipSummary.cubiertoHasta is null, even with an approved payment", async () => {
     mockFetchStudentPortal.mockResolvedValueOnce({
       ...PORTAL,
       self: {
@@ -702,11 +655,11 @@ describe("StudentPage — the club membership card (carnet)", () => {
 
     const facts = await screen.findByTestId("carnet-facts");
     await waitFor(() => {
-      expect(within(facts).getByText("Válido hasta")).toBeInTheDocument();
+      expect(within(facts).getByText("Plan")).toBeInTheDocument();
     });
     expect(within(facts).queryByText("Jugador desde")).not.toBeInTheDocument();
-    // The row stays on the credential and reads "—" rather than a made-up date.
-    expect(within(facts).getByText("Válido hasta").parentElement?.lastElementChild?.textContent).toBe("—");
+    expect(within(facts).queryByText("Válido hasta")).not.toBeInTheDocument();
+    expect(within(facts).queryByText(/^\s*—\s*$/)).not.toBeInTheDocument();
     // The approved payment's own `fechaFin` never leaks onto the credential.
     expect(within(facts).queryByText("31/07/2026")).not.toBeInTheDocument();
 
@@ -745,10 +698,9 @@ describe("StudentPage — the club membership card (carnet)", () => {
       },
     });
     mockFetchPagosDePersona.mockResolvedValueOnce([PAGO_APROBADO]);
-    // "Franja" is one of the three rows, and it only exists when the club has
-    // assigned a schedule to derive it from. "Válido hasta" is the last and
-    // only appears once an APPROVED payment gives it a date — see the
-    // dedicated carnet-vigencia tests below.
+    // "Franja" is one of the two rows, and it only exists when the club has
+    // assigned a schedule to derive it from. There is no coverage-end row: the
+    // credential carries no vigencia — see the carnet-vigencia tests above.
     mockFetchHorariosPorAlumno.mockResolvedValue([asignacion("LUNES", "15:00:00", "16:00:00", 1)]);
 
     render(<StudentPage />);
@@ -759,12 +711,12 @@ describe("StudentPage — the club membership card (carnet)", () => {
     });
 
     const rows = [...facts.children];
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(2);
     expect(rows.map((row) => row.firstElementChild?.textContent)).toEqual([
       "Plan",
       "Franja",
-      "Válido hasta",
     ]);
+    expect(within(facts).queryByText("Válido hasta")).not.toBeInTheDocument();
 
     // The register reading, and the thing most likely to be silently reverted:
     // the LABEL leads each row and the value is read off the right edge.
@@ -2597,8 +2549,9 @@ describe("StudentPage — the credential inside the panel (Funda)", () => {
 
     const carnet = await screen.findByTestId("student-carnet");
     expect(within(carnet).queryByText("Cédula")).not.toBeInTheDocument();
-    // The only dash on the credential is the register's "Válido hasta" value.
-    expect(within(carnet).getAllByText(/^\s*—\s*$/)).toHaveLength(1);
+    // No register row writes a placeholder dash, and there is no «Válido hasta».
+    expect(within(carnet).queryAllByText(/^\s*—\s*$/)).toHaveLength(0);
+    expect(within(carnet).queryByText("Válido hasta")).not.toBeInTheDocument();
   });
 
   it("renders no plan row at all when the membership carries no categoría", async () => {
