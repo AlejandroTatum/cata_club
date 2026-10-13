@@ -25,6 +25,8 @@ from app.dominio.excepciones import (
 from app.dominio.nombre_propio import nombre_completo
 from app.infraestructura.correo_deuda_regularizada import enviar_deuda_regularizada
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
+from app.dominio.cobertura_estado import maximo_fecha_opcional
+from app.infraestructura.repositorios.cobertura_estado_repositorio import CoberturaEstadoRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.membresia_repositorio import (
     MembresiaRepositorio, TipoMembresiaRepositorio, HistorialEstadoMembresiaRepositorio,
@@ -112,18 +114,6 @@ def _meses_enteros_desde(fin: date, hoy: date) -> int:
     if hoy.day < fin.day:
         meses -= 1
     return meses
-
-
-def _maximo_fecha_opcional(*fechas: date | None) -> date | None:
-    """`max()` que tolera `None` (fecha ausente) sin romper -- `None` si
-    NINGUNA fecha está presente, la mayor de las que sí lo están en caso
-    contrario. Único lugar donde vive "combinar dos anclas de cobertura
-    opcionales" (issue #326): `_fecha_fin_maxima_combinada` (una membresía)
-    y `PagoServicio.obtener_deuda_bulk` (N membresías, con mapas
-    pre-cargados) lo comparten en vez de repetir el `[f for f in (...) if f
-    is not None]` cada uno por su lado."""
-    candidatos = [fecha for fecha in fechas if fecha is not None]
-    return max(candidatos) if candidatos else None
 
 
 # --- Regla Familiar E04-RF002 -----------------------------------------------
@@ -638,6 +628,7 @@ class PagoServicio:
         self.repo_descuento = DescuentoRepositorio(db)
         self.repo_asignacion = AsignacionDescuentoRepositorio(db)
         self.repo_cobertura_bonificada = CoberturaBonificadaRepositorio(db)
+        self.repo_cobertura_estado = CoberturaEstadoRepositorio(db)
         self.repo_rol = RolRepositorio(db)
         # Issue #400 (slice 5a): `repo_tipo` resincroniza la tarifa al
         # reactivar (`TipoMembresia.precio` vigente, no el congelado);
@@ -1236,7 +1227,7 @@ class PagoServicio:
         membresía, o `None` si no tiene ninguna. El ancla real de "hasta
         cuándo ya está cubierta esta membresía", sin importar por cuál de
         los dos caminos se cubrió."""
-        return _maximo_fecha_opcional(
+        return maximo_fecha_opcional(
             self.repo.fecha_fin_maxima_aprobada(membresia_id),
             self.repo_cobertura_bonificada.fecha_fin_maxima(membresia_id),
         )
@@ -1255,14 +1246,7 @@ class PagoServicio:
     # que `obtener_deuda_bulk` (issue #326) ya usa para las mismas dos
     # fuentes.
     def fecha_fin_maxima_combinada_bulk(self, membresia_ids: list[int]) -> dict[int, date | None]:
-        if not membresia_ids:
-            return {}
-        fin_pagos = self.repo.fecha_fin_maxima_aprobada_bulk(membresia_ids)
-        fin_cobertura = self.repo_cobertura_bonificada.fecha_fin_maxima_bulk(membresia_ids)
-        return {
-            membresia_id: _maximo_fecha_opcional(fin_pagos.get(membresia_id), fin_cobertura.get(membresia_id))
-            for membresia_id in membresia_ids
-        }
+        return self.repo_cobertura_estado.fecha_fin_maxima_combinada_bulk(membresia_ids)
 
     def _hay_cobertura_en_rango(
         self,
@@ -1446,7 +1430,7 @@ class PagoServicio:
         resultado = []
         for membresia_id in ids_existentes:
             membresia = membresias_por_id[membresia_id]
-            ultimo_fin = _maximo_fecha_opcional(fin_pagos.get(membresia_id), fin_cobertura.get(membresia_id))
+            ultimo_fin = maximo_fecha_opcional(fin_pagos.get(membresia_id), fin_cobertura.get(membresia_id))
             resultado.append({
                 "membresia_id": membresia_id,
                 "meses_adeudados": 0 if not membresia.persona.activo else self._calcular_meses_adeudados_desde_datos(
@@ -2238,78 +2222,25 @@ class PagoServicio:
             self.db.refresh(correccion)
         return pago_guardado, correccion
 
-    def _puede_levantarse_por_cobertura(self, membresia: Membresia) -> bool:
-        """Mismas guardas que aprobar un pago para volver a poner ACTIVA una
-        membresía por cobertura (issue #1762): persona activa, no SUSPENDIDA
-        (decisión administrativa propia) y ninguna OTRA membresía operativa de
-        la persona (`uq_membresia_activa_por_persona` admite una sola
-        ACTIVA/SUSPENDIDA). A diferencia de aprobar un pago, acá no se
-        rechaza: quien reconcilia simplemente la deja como está."""
-        persona = self.repo_persona.obtener_por_id(membresia.persona_id)
-        if persona is None or not persona.activo:
-            return False
-        if membresia.estado == EstadoMembresia.SUSPENDIDA:
-            return False
-        return not any(
-            otra.id != membresia.id
-            and otra.estado in (EstadoMembresia.ACTIVA, EstadoMembresia.SUSPENDIDA)
-            for otra in self.repo_membresia.listar_por_persona(membresia.persona_id)
-        )
+    def _reconciliar_estado_por_cobertura(self, membresia: Membresia) -> None:
+        """Alinea el estado guardado de la membresía con su cobertura real tras
+        una corrección (issue #1762). La regla vive en
+        `app.dominio.cobertura_estado.estado_segun_cobertura`, la misma que usa
+        la tarea nocturna de vencimientos. Sin esto, un pago con fechas mal
+        cargadas que la tarea ya venció seguía VENCIDO aunque el admin lo
+        dejara cubriendo hoy.
 
-    def _reconciliar_estado_por_cobertura(
-        self, membresia: Membresia, hoy: date | None = None,
-    ) -> bool:
-        """Alinea el estado guardado de la membresía con su cobertura real
-        (issue #1762). La cobertura y la deuda se derivan al leer de los pagos
-        aprobados; lo único guardado es el estado, que aprobar un pago activa y
-        el job nocturno (`vencimientos_tareas`) mantiene en ambas direcciones.
-        Sin esto, un pago con fechas mal cargadas que el job ya venció seguía
-        VENCIDO aunque el admin lo dejara cubriendo hoy. Devuelve `True` si
-        levantó la membresía a ACTIVA.
-
-        - Cobertura combinada (pagos + bonificada) que llega a hoy: INACTIVA/
-          VENCIDA -> ACTIVA por `_activar_membresia_con_red_de_seguridad`, el
-          mismo camino que aprobar un pago, SOLO si
-          `_puede_levantarse_por_cobertura`.
-        - Ya no llega a hoy: ACTIVA -> VENCIDA, como el job (que solo toca
-          personas activas).
-        Una SUSPENDIDA no se toca. El lock de la membresía ya lo tomó quien
+        Pasar a ACTIVA usa `_activar_membresia_con_red_de_seguridad`, el mismo
+        camino que aprobar un pago. El lock de la membresía ya lo tomó quien
         llama."""
-        hoy = hoy or hoy_club()
-        hasta = self._fecha_fin_maxima_combinada(membresia.id)
-        if hasta is None:
-            return False
-        if hasta >= hoy:
-            if (
-                membresia.estado in (EstadoMembresia.INACTIVA, EstadoMembresia.VENCIDA)
-                and self._puede_levantarse_por_cobertura(membresia)
-            ):
-                self._activar_membresia_con_red_de_seguridad(membresia)
-                return True
-        elif membresia.estado == EstadoMembresia.ACTIVA:
-            persona = self.repo_persona.obtener_por_id(membresia.persona_id)
-            if persona is not None and persona.activo:
-                membresia.estado = EstadoMembresia.VENCIDA
-        return False
-
-    def levantar_vencida_por_cobertura(self, membresia_id: int, hoy: date) -> bool:
-        """Paso del job de vencimientos (issue #1762): vuelve a ACTIVA una
-        VENCIDA cuya cobertura aprobada llega a `hoy`, en su propia
-        transacción. Sin avisos ni correos -- es reconciliación, no una
-        aprobación. Devuelve `False` (sin error) si otra transacción ya la
-        movió o si alguna guarda lo impide; el lote sigue con la siguiente."""
-        membresia = self.repo_membresia.obtener_por_id_con_bloqueo(membresia_id)
-        if membresia is None or membresia.estado != EstadoMembresia.VENCIDA:
-            self.db.rollback()
-            return False
-        try:
-            levantada = self._reconciliar_estado_por_cobertura(membresia, hoy)
-            self.db.commit()
-        except OperacionInvalida:
-            # Carrera contra otra activación de la misma persona (índice
-            # único): el helper ya hizo rollback.
-            return False
-        return levantada
+        cubierto_hasta = self._fecha_fin_maxima_combinada(membresia.id)
+        nuevo = self.repo_cobertura_estado.estado_corresponde(membresia, cubierto_hasta, hoy_club())
+        if nuevo == membresia.estado:
+            return
+        if nuevo == EstadoMembresia.ACTIVA:
+            self._activar_membresia_con_red_de_seguridad(membresia)
+        else:
+            membresia.estado = nuevo
 
     def listar_correcciones_de_pago(self, pago_id: int) -> list[CorreccionPago]:
         """Historial completo de correcciones financieras de un pago (issue

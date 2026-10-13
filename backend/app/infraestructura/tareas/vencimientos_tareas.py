@@ -13,7 +13,7 @@ Justificación del modelo:
     `Membresia` no tiene `fecha_vencimiento` propio — se reusa
     `Pago.fecha_fin` como vigencia (decision de diseño compartida con
     `alertas_tareas.py`), junto con la cobertura bonificada (issue #1762). La
-    vigencia sale de `PagoServicio.fecha_fin_maxima_combinada_bulk`; antes la
+    vigencia sale de `CoberturaEstadoRepositorio.fecha_fin_maxima_combinada_bulk`; antes la
     query se hacía sobre Pago APROBADO unido a
     Membresia ACTIVA, y por cada match se hace `UPDATE Membresia SET
     estado='VENCIDA'`.
@@ -31,8 +31,9 @@ Reconciliación en ambas direcciones (issue #1762):
     nada más levantaba una VENCIDA: un pago con fechas mal cargadas que esta
     tarea ya había vencido seguía VENCIDO aunque el admin lo corrigiera. Por eso
     la tarea también vuelve a ACTIVA una VENCIDA cuya cobertura combinada llega
-    a hoy (`PagoServicio.levantar_vencida_por_cobertura`: persona activa, sin
-    otra membresía operativa; sin avisos). Una por transacción: una candidata
+    a hoy (`CoberturaEstadoRepositorio.levantar_vencida`: persona activa, sin
+    otra membresía operativa; sin avisos). La regla de qué estado corresponde
+    vive en `app.dominio.cobertura_estado`, compartida con la corrección de pagos. Una por transacción: una candidata
     que se saltea no corta el lote. SUSPENDIDA e INACTIVA no se tocan.
 """
 import logging
@@ -43,8 +44,9 @@ from sqlalchemy import select
 from app.infraestructura.db import SessionLocal
 from app.infraestructura.tareas.celery_app import celery_app
 from app.dominio.modelos import Membresia, Persona
+from app.dominio.cobertura_estado import estado_segun_cobertura
 from app.dominio.enums import EstadoMembresia
-from app.servicios_negocio.membresia_pago_servicio import PagoServicio
+from app.infraestructura.repositorios.cobertura_estado_repositorio import CoberturaEstadoRepositorio
 from app.soporte_transversal.tiempo import hoy_club
 
 
@@ -80,7 +82,7 @@ def marcar_membresias_vencidas(self) -> dict:
     reactivadas: list[dict] = []
 
     with SessionLocal() as db:
-        servicio = PagoServicio(db)
+        cobertura = CoberturaEstadoRepositorio(db)
 
         # Cobertura = el MÁXIMO entre pagos aprobados y cobertura bonificada
         # (`fecha_fin_maxima_combinada_bulk`), la misma definición que usan la
@@ -94,11 +96,19 @@ def marcar_membresias_vencidas(self) -> dict:
                 .join(Persona, Persona.id == Membresia.persona_id)
                 .where(Membresia.estado == estado, Persona.activo.is_(True))
             ).unique().all())
-            fines = servicio.fecha_fin_maxima_combinada_bulk([m.id for m in membresias])
+            fines = cobertura.fecha_fin_maxima_combinada_bulk([m.id for m in membresias])
             return [(m, fines[m.id]) for m in membresias if fines.get(m.id) is not None]
 
-        # ACTIVA -> VENCIDA: la cobertura combinada ya terminó (`< hoy`).
-        miembros_vencidos = [m for m, fin in _con_cobertura(EstadoMembresia.ACTIVA) if fin < hoy]
+        # ACTIVA -> VENCIDA: la regla de dominio (`estado_segun_cobertura`) dice
+        # VENCIDA cuando la cobertura combinada ya terminó. Las personas ya
+        # vienen filtradas por `activo`, y "otra operativa" no aplica a una
+        # ACTIVA.
+        miembros_vencidos = [
+            m for m, fin in _con_cobertura(EstadoMembresia.ACTIVA)
+            if estado_segun_cobertura(
+                m.estado, fin, hoy, persona_activa=True, hay_otra_operativa=False,
+            ) == EstadoMembresia.VENCIDA
+        ]
 
         for membresia in miembros_vencidos:
             membresia.estado = EstadoMembresia.VENCIDA
@@ -110,14 +120,16 @@ def marcar_membresias_vencidas(self) -> dict:
         if miembros_vencidos:
             db.commit()
 
-        # VENCIDA -> ACTIVA: la misma cobertura, ahora con `>= hoy`. Se evalúa
+        # VENCIDA -> ACTIVA: la misma cobertura; `levantar_vencida` aplica la
+        # regla completa (guardas incluidas), el `fin < hoy` solo evita abrir
+        # una transacción por candidatas sin cobertura vigente. Se evalúa
         # DESPUÉS del paso anterior, que ya terminó (y commiteó), así que una
         # membresía no puede ir y volver en la misma corrida.
         for candidata, fin in _con_cobertura(EstadoMembresia.VENCIDA):
             if fin < hoy:
                 continue
             datos = {"membresia_id": candidata.id, "persona_id": candidata.persona_id}
-            if servicio.levantar_vencida_por_cobertura(candidata.id, hoy):
+            if cobertura.levantar_vencida(candidata.id, hoy):
                 reactivadas.append(datos)
 
     logger.info(
