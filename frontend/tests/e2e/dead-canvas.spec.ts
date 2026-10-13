@@ -84,11 +84,30 @@ import { E2E_BASE_URL } from "./e2e-target";
 
 const MOCK_ACCESS_TOKEN = "mock-header.mock-payload.mock-signature";
 
+/**
+ * The wall clock every reading is taken on.
+ *
+ * The date-ranged screens default to "this month", and `/attendance` draws a
+ * "Sin lista en el período" row in its rail for every scheduled session in
+ * that range that has already started (`findMissingSessions`, which also holds
+ * back a session of today until its `horaInicio`). The mocked schedule is a
+ * single Monday 18:00 slot and the mocked records carry no `horarioId`, so each
+ * Monday elapsed in the month adds one row — and on the day the suite ran
+ * after 18:00 on a Monday, one more. On the real clock the page height moved by
+ * ~40px with the date and the hour (1575 vs the 1536 budget, #1763).
+ *
+ * A fixed Wednesday noon, with a single Monday behind it in the month, makes
+ * the readings a function of the fixtures alone. It is a weekday inside the
+ * mocked records' month (July 2026).
+ */
+const FIXED_NOW = new Date("2026-07-08T12:00:00-05:00");
+
 async function fulfillJson(route: Route, body: unknown): Promise<void> {
   await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 }
 
 async function mockSession(page: Page, role: "admin" | "trainer"): Promise<void> {
+  await page.clock.setFixedTime(FIXED_NOW);
   await page.context().addCookies([
     { name: "access_token", value: MOCK_ACCESS_TOKEN, url: E2E_BASE_URL },
   ]);
