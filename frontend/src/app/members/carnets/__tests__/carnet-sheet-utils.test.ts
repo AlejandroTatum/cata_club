@@ -21,7 +21,6 @@ function carnet(id: string, miembroDesde: string | null = null): CarnetSummary {
       membership: null,
       miembroDesde,
     },
-    coverageEnd: null,
     asignaciones: [],
   };
 }

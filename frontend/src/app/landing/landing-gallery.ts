@@ -22,6 +22,33 @@
  * than rendered as broken cards.
  */
 
+import { repetitionsFor } from "./Sponsors";
+
+/**
+ * How long the marquee gives each tile to cross the screen (#1772). The owner
+ * approved the pace of the 45 photos published at the time (90s a loop), so
+ * 90 / 45 = 2s a tile; the loop then grows and shrinks with the catalog and
+ * every photo stays on screen for the same time.
+ */
+export const GALLERY_SECONDS_PER_TILE = 2;
+/** Floor, so a handful of photos does not whip past. */
+export const GALLERY_LOOP_MIN_SECONDS = 30;
+/** Ceiling (120 tiles), so a huge catalog does not take minutes to loop. */
+export const GALLERY_LOOP_MAX_SECONDS = 240;
+
+/**
+ * The loop duration for a roster of `photos`. The marquee travels one copy of
+ * the strip per loop, and a short roster is repeated to fill the screen, so the
+ * tiles to count are the rendered ones (`repetitionsFor`), not the unique ones.
+ */
+export function galleryLoopSeconds(photos: number): number {
+  const tiles = repetitionsFor(photos) * photos;
+  return Math.min(
+    GALLERY_LOOP_MAX_SECONDS,
+    Math.max(GALLERY_LOOP_MIN_SECONDS, tiles * GALLERY_SECONDS_PER_TILE),
+  );
+}
+
 export interface GalleryEntry {
   /** Numeric id from the backend — the stable identity used for React keys. */
   id: number;

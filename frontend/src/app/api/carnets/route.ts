@@ -76,7 +76,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       new Map(aggregate.tipos.map((tipo) => [tipo.id, tipo])),
     );
     const asignaciones = (await horarios.response.json()) as unknown[];
-    return { profile, coverageEnd: profile.membership?.cubiertoHasta ?? null, asignaciones };
+    return { profile, asignaciones };
   }
 
   const loaded = new Map<number, CarnetView | null>();
