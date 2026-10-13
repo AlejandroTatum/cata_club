@@ -462,7 +462,7 @@ export default function StudentMembershipActions({
               </ActionTile>
             </div>
           )}
-          {!preguntarTipoSocio && membresia && (
+          {membresia && (
             <div className="rounded-ctl border border-line bg-paper p-3">
               <ActionTile description="La nueva tarifa rige desde el próximo pago.">
                 <CambiarPlanForm
