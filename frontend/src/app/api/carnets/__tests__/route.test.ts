@@ -142,7 +142,7 @@ describe("GET /api/carnets", () => {
     expect(body.carnets.map((entry: { profile: { personaId: string } }) => entry.profile.personaId)).toEqual(["7", "5"]);
     expect(body.carnets[0].profile).toMatchObject({ nombres: "Jugador7", cedula: "115000007", fotoUrl: null });
     expect(body.carnets[0].profile.membership).toMatchObject({ categoria: "Mensual" });
-    expect(body.carnets[0].coverageEnd).toBe("2026-12-31");
+    expect(body.carnets[0]).not.toHaveProperty("coverageEnd");
     // #1749: «Miembro desde» rides on the profile; a persona without one carries null.
     expect(body.carnets[0].profile.miembroDesde).toBe("2019-03-01");
     expect(body.carnets[1].profile.miembroDesde).toBeNull();
