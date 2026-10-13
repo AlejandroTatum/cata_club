@@ -10,11 +10,22 @@ import StudentMembershipActions from "../StudentMembershipActions";
 import type { MemberStudentSummary } from "../members-utils";
 
 const mockFetchPagos = vi.fn();
+const mockFetchTipos = vi.fn();
+const mockCambiarPlan = vi.fn();
 
 vi.mock("@/services/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/services/api")>();
-  return { ...actual, fetchPagosDePersona: (id: string) => mockFetchPagos(id) };
+  return {
+    ...actual,
+    fetchPagosDePersona: (id: string) => mockFetchPagos(id),
+    fetchTiposMembresia: (opts: unknown) => mockFetchTipos(opts),
+    cambiarPlanMembresia: (membresiaId: number, tipoId: number) => mockCambiarPlan(membresiaId, tipoId),
+  };
 });
+
+vi.mock("@/contexts/ToastContext", () => ({
+  useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn() }),
+}));
 
 const mockBeneficioProps = vi.fn();
 vi.mock("../BeneficioSection", () => ({
@@ -31,7 +42,6 @@ vi.mock("../SuspenderReactivarForm", () => ({
     </button>
   ),
 }));
-vi.mock("../CambiarPlanForm", () => ({ default: () => <div /> }));
 vi.mock("../MigrarSocioAntiguoForm", () => ({
   default: ({ membresiaId, onDone, onBack }: { membresiaId?: number; onDone: (r: string) => void; onBack: () => void }) => (
     <div data-testid="migrar" data-membresia-id={membresiaId ?? ""}>
@@ -116,6 +126,11 @@ function renderActions(s: MemberStudentSummary, onPaymentRegistered = vi.fn()) {
 beforeEach(() => {
   vi.clearAllMocks();
   mockFetchPagos.mockResolvedValue([]);
+  mockFetchTipos.mockResolvedValue([
+    { id: 1, categoria: "Mensual Adultos", precio: "40.00", modalidad: "MENSUAL", activo: true, enUso: true },
+    { id: 3, categoria: "Diaria", precio: "3.00", modalidad: "MENSUAL", periodicidad: "DIARIA", activo: true, enUso: true },
+  ]);
+  mockCambiarPlan.mockResolvedValue({});
 });
 
 describe("StudentMembershipActions — ADMA-04 history refresh", () => {
@@ -248,5 +263,38 @@ describe("StudentMembershipActions — socio nuevo o antiguo (L17)", () => {
     renderActions(pendiente);
 
     expect(screen.queryByRole("button", { name: /^Socio nuevo/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("StudentMembershipActions — «Cambiar plan» before the first payment (#1761)", () => {
+  it("offers «Cambiar plan» for an INACTIVA membership with no coverage and no payment, and submits it", async () => {
+    const diaria = student("vencida", "INACTIVA");
+    diaria.membresia = { ...diaria.membresia!, tipo: "Diaria", periodicidad: "DIARIA" };
+    const onMembresiaChanged = vi.fn();
+    render(
+      <StudentMembershipActions
+        personaId={7}
+        student={diaria}
+        onMembershipCreated={vi.fn()}
+        onDebtRegularized={vi.fn()}
+        onMembresiaChanged={onMembresiaChanged}
+        onPaymentRegistered={vi.fn()}
+      />,
+    );
+
+    // The «¿Socio nuevo o antiguo?» prompt is still up: the plan change is independent of it.
+    expect(screen.getByRole("button", { name: /^Socio nuevo/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cambiar plan" }));
+    await screen.findByRole("option", { name: /Mensual Adultos/ });
+    fireEvent.change(screen.getByLabelText(/Plan nuevo/), { target: { value: "1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cambiar" }));
+
+    await waitFor(() => expect(mockCambiarPlan).toHaveBeenCalledWith(3, 1));
+    await waitFor(() => expect(onMembresiaChanged).toHaveBeenCalled());
+  });
+
+  it("still offers «Cambiar plan» for an ACTIVA membership", () => {
+    renderActions(student("activa", "ACTIVA"));
+    expect(screen.getByRole("button", { name: "Cambiar plan" })).toBeInTheDocument();
   });
 });
