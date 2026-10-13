@@ -25,6 +25,8 @@ from app.dominio.excepciones import (
 from app.dominio.nombre_propio import nombre_completo
 from app.infraestructura.correo_deuda_regularizada import enviar_deuda_regularizada
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
+from app.dominio.cobertura_estado import maximo_fecha_opcional
+from app.infraestructura.repositorios.cobertura_estado_repositorio import CoberturaEstadoRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.membresia_repositorio import (
     MembresiaRepositorio, TipoMembresiaRepositorio, HistorialEstadoMembresiaRepositorio,
@@ -112,18 +114,6 @@ def _meses_enteros_desde(fin: date, hoy: date) -> int:
     if hoy.day < fin.day:
         meses -= 1
     return meses
-
-
-def _maximo_fecha_opcional(*fechas: date | None) -> date | None:
-    """`max()` que tolera `None` (fecha ausente) sin romper -- `None` si
-    NINGUNA fecha está presente, la mayor de las que sí lo están en caso
-    contrario. Único lugar donde vive "combinar dos anclas de cobertura
-    opcionales" (issue #326): `_fecha_fin_maxima_combinada` (una membresía)
-    y `PagoServicio.obtener_deuda_bulk` (N membresías, con mapas
-    pre-cargados) lo comparten en vez de repetir el `[f for f in (...) if f
-    is not None]` cada uno por su lado."""
-    candidatos = [fecha for fecha in fechas if fecha is not None]
-    return max(candidatos) if candidatos else None
 
 
 # --- Regla Familiar E04-RF002 -----------------------------------------------
@@ -232,6 +222,10 @@ MENSAJE_BENEFICIO_SOLO_MES_A_MES = (
 # Tarifas semanales/diarias: un período por pago y sin deuda que regularizar.
 MENSAJE_PERIODICIDAD_UN_PERIODO = (
     "Las tarifas semanales y diarias se pagan de a un período por vez."
+)
+MENSAJE_FECHA_FIN_EXPLICITA = (
+    "Debes indicar la fecha de fin: no se puede determinar con certeza la "
+    "periodicidad de este pago a partir de su período guardado."
 )
 MENSAJE_PERIODICIDAD_SIN_DEUDA = (
     "Las tarifas semanales y diarias no acumulan deuda; no hay nada que regularizar."
@@ -634,6 +628,7 @@ class PagoServicio:
         self.repo_descuento = DescuentoRepositorio(db)
         self.repo_asignacion = AsignacionDescuentoRepositorio(db)
         self.repo_cobertura_bonificada = CoberturaBonificadaRepositorio(db)
+        self.repo_cobertura_estado = CoberturaEstadoRepositorio(db)
         self.repo_rol = RolRepositorio(db)
         # Issue #400 (slice 5a): `repo_tipo` resincroniza la tarifa al
         # reactivar (`TipoMembresia.precio` vigente, no el congelado);
@@ -1232,7 +1227,7 @@ class PagoServicio:
         membresía, o `None` si no tiene ninguna. El ancla real de "hasta
         cuándo ya está cubierta esta membresía", sin importar por cuál de
         los dos caminos se cubrió."""
-        return _maximo_fecha_opcional(
+        return maximo_fecha_opcional(
             self.repo.fecha_fin_maxima_aprobada(membresia_id),
             self.repo_cobertura_bonificada.fecha_fin_maxima(membresia_id),
         )
@@ -1251,14 +1246,7 @@ class PagoServicio:
     # que `obtener_deuda_bulk` (issue #326) ya usa para las mismas dos
     # fuentes.
     def fecha_fin_maxima_combinada_bulk(self, membresia_ids: list[int]) -> dict[int, date | None]:
-        if not membresia_ids:
-            return {}
-        fin_pagos = self.repo.fecha_fin_maxima_aprobada_bulk(membresia_ids)
-        fin_cobertura = self.repo_cobertura_bonificada.fecha_fin_maxima_bulk(membresia_ids)
-        return {
-            membresia_id: _maximo_fecha_opcional(fin_pagos.get(membresia_id), fin_cobertura.get(membresia_id))
-            for membresia_id in membresia_ids
-        }
+        return self.repo_cobertura_estado.fecha_fin_maxima_combinada_bulk(membresia_ids)
 
     def _hay_cobertura_en_rango(
         self,
@@ -1442,7 +1430,7 @@ class PagoServicio:
         resultado = []
         for membresia_id in ids_existentes:
             membresia = membresias_por_id[membresia_id]
-            ultimo_fin = _maximo_fecha_opcional(fin_pagos.get(membresia_id), fin_cobertura.get(membresia_id))
+            ultimo_fin = maximo_fecha_opcional(fin_pagos.get(membresia_id), fin_cobertura.get(membresia_id))
             resultado.append({
                 "membresia_id": membresia_id,
                 "meses_adeudados": 0 if not membresia.persona.activo else self._calcular_meses_adeudados_desde_datos(
@@ -1903,6 +1891,23 @@ class PagoServicio:
         "monto", "fecha_inicio", "fecha_fin",
     )
 
+    @staticmethod
+    def _periodicidades_del_rango_guardado(
+        fecha_inicio: date, meses_comprados: int | None, fecha_fin: date,
+    ) -> tuple[PeriodicidadTarifa, ...]:
+        """Periodicidades con las que `_fin_de_cobertura` reproduce EXACTAMENTE
+        el rango guardado de un pago (issue #1762). Una sola -> la periodicidad
+        del pago es inequívoca; cero (pago sin snapshot o rango ya editado) ->
+        no se puede inferir. Con los MISMOS `meses_comprados`, dos
+        periodicidades no dan nunca el mismo fin (n días, 7n días, n meses
+        calendario), así que un rango que coincide identifica una sola."""
+        if meses_comprados is None:
+            return ()
+        return tuple(
+            periodicidad for periodicidad in PeriodicidadTarifa
+            if _fin_de_cobertura(fecha_inicio, meses_comprados, periodicidad) == fecha_fin
+        )
+
     def corregir_pago(
         self, pago_id: int, datos: CorreccionPagoDTO, actor_persona_id: int,
     ) -> tuple[Pago, CorreccionPago]:
@@ -1987,6 +1992,10 @@ class PagoServicio:
         la nueva: igual -> `SIN_CAMBIO`; posterior -> `AMPLIADA`; anterior
         -> `REDUCIDA`. Se persiste en la fila de corrección, nunca queda
         implícito.
+
+        Toda corrección reconcilia el estado guardado de la membresía con su
+        cobertura en la misma transacción (`_reconciliar_estado_por_cobertura`,
+        issue #1762).
         """
         # Existencia primero -- consulta de UNA SOLA COLUMNA
         # (`obtener_membresia_id`), nunca `Session.get(Pago, ...)` sin lock:
@@ -2000,7 +2009,7 @@ class PagoServicio:
         # Lock de `Membresia` PRIMERO, `Pago` DESPUÉS -- ver el docstring de
         # arriba para el porqué (orden consistente con el resto de la clase,
         # sin ciclo posible de deadlock).
-        self.repo_membresia.obtener_por_id_con_bloqueo(membresia_id)
+        membresia = self.repo_membresia.obtener_por_id_con_bloqueo(membresia_id)
 
         pago = self.repo.obtener_por_id_con_bloqueo(pago_id)
         if not pago:
@@ -2027,23 +2036,72 @@ class PagoServicio:
             for campo in self._CAMPOS_CORREGIBLES_PAGO
         }
 
-        # QA4 ADMA-16: si el admin solo manda el monto final, el servidor
-        # deriva `monto_base` (monto + descuento congelado) y, si la división
-        # es exacta en centavos, la tarifa mensual -- el admin no hace cuentas.
+        # Issue #1762: la periodicidad es la del PAGO, no la del plan actual
+        # de la membresía (que pudo cambiar después). El `Pago` no la guarda,
+        # así que se infiere del rango que ya tiene: solo las periodicidades
+        # que reproducen exactamente `fecha_fin` a partir de `fecha_inicio` +
+        # `meses_comprados` ANTERIORES son candidatas.
+        candidatas = self._periodicidades_del_rango_guardado(
+            anteriores["fecha_inicio"], anteriores["meses_comprados"],
+            anteriores["fecha_fin"],
+        )
+        meses_cambian = (
+            datos.meses_comprados is not None
+            and anteriores["meses_comprados"] is not None
+            and datos.meses_comprados != anteriores["meses_comprados"]
+        )
+        descuento_congelado = pago.descuento_valor_aplicado or Decimal("0.00")
+
+        if meses_cambian:
+            # Mismas reglas que `registrar_pago`: una tarifa SEMANAL/DIARIA se
+            # paga de a un período, y con beneficio solo se paga un mes.
+            if len(candidatas) == 1:
+                self._exigir_un_periodo_si_corresponde(candidatas[0], datos.meses_comprados)
+            if (
+                pago.descuento_id is not None or pago.descuento_valor_aplicado is not None
+            ) and datos.meses_comprados > 1:
+                raise OperacionInvalida(MENSAJE_BENEFICIO_SOLO_MES_A_MES)
+
         if (
-            datos.monto is not None
-            and datos.monto_base is None
+            anteriores["monto_base"] is not None
             and datos.tarifa_mensual_aplicada is None
-            and datos.meses_comprados is None
-            and anteriores["monto_base"] is not None
+            and datos.monto_base is None
         ):
-            monto_base_derivado = datos.monto + (pago.descuento_valor_aplicado or Decimal("0.00"))
-            nuevos["monto_base"] = monto_base_derivado
-            meses = nuevos["meses_comprados"]
-            if meses is not None and nuevos["tarifa_mensual_aplicada"] is not None:
-                tarifa_derivada = (monto_base_derivado / meses).quantize(Decimal("0.01"))
-                if tarifa_derivada * meses == monto_base_derivado:
-                    nuevos["tarifa_mensual_aplicada"] = tarifa_derivada
+            if meses_cambian and datos.monto is None:
+                # Decisión del dueño (#1762): cambiar solo los meses mantiene
+                # el precio por mes. El monto base se recalcula como
+                # tarifa * meses y el final con el descuento ya congelado,
+                # igual que en el registro. Un pago cuyo monto ya no cerraba
+                # con esa fórmula (gratuidad familiar: cobro 0 sobre un monto
+                # base real) conserva su cobro: no se inventa dinero.
+                formula_cerraba = (
+                    anteriores["monto"] == anteriores["monto_base"] - descuento_congelado
+                )
+                nuevos["monto_base"] = (
+                    anteriores["tarifa_mensual_aplicada"] * datos.meses_comprados
+                )
+                if formula_cerraba:
+                    nuevos["monto"] = nuevos["monto_base"] - descuento_congelado
+            elif datos.monto is not None:
+                # QA4 ADMA-16: si el admin solo manda el monto final (con o
+                # sin cambiar los meses), el servidor deriva `monto_base`
+                # (monto + descuento congelado) y la tarifa mensual -- el
+                # admin no hace cuentas.
+                monto_base_derivado = datos.monto + descuento_congelado
+                nuevos["monto_base"] = monto_base_derivado
+                meses = nuevos["meses_comprados"]
+                if meses is not None and nuevos["tarifa_mensual_aplicada"] is not None:
+                    tarifa_derivada = (monto_base_derivado / meses).quantize(Decimal("0.01"))
+                    if tarifa_derivada * meses == monto_base_derivado:
+                        nuevos["tarifa_mensual_aplicada"] = tarifa_derivada
+                    elif meses_cambian:
+                        raise OperacionInvalida(
+                            f"El monto de {formatear_monto_usd(monto_base_derivado)} no se "
+                            f"puede repartir en partes iguales entre {meses} meses. "
+                            "Ajusta el monto para que cada mes cueste una cifra exacta "
+                            "en centavos, o corrige solo los meses para mantener la "
+                            "tarifa mensual actual."
+                        )
 
         if all(nuevos[campo] == anteriores[campo] for campo in self._CAMPOS_CORREGIBLES_PAGO):
             raise OperacionInvalida("La corrección no modifica ningún valor del pago.")
@@ -2058,21 +2116,26 @@ class PagoServicio:
         # nullable para pagos históricos pre-#400 sin snapshot -- no hay
         # nada que validar contra un valor ausente).
         if _tocado("meses_comprados") or _tocado("fecha_inicio") or _tocado("fecha_fin"):
-            membresia_del_pago = self.repo_membresia.obtener_por_id(pago.membresia_id)
-            periodicidad_del_pago = (
-                membresia_del_pago.tipo_membresia.periodicidad
-                if membresia_del_pago is not None else PeriodicidadTarifa.MENSUAL
-            )
-            if (
-                nuevos["meses_comprados"] is not None
-                and nuevos["fecha_fin"] != _fin_de_cobertura(
-                    nuevos["fecha_inicio"], nuevos["meses_comprados"], periodicidad_del_pago,
-                )
-            ):
-                raise OperacionInvalida(
-                    "La fecha de fin no coincide con la fecha de inicio más "
-                    "la cantidad de meses comprados."
-                )
+            if nuevos["meses_comprados"] is not None:
+                if not _tocado("fecha_fin"):
+                    # El formulario manda solo lo que cambió: si el admin
+                    # corrige el inicio o los meses sin tocar el fin, el fin
+                    # viejo quedaría desalineado. Se deriva con la misma
+                    # regla de cobertura del registro -- pero solo si la
+                    # periodicidad es inequívoca; si no, no se adivina.
+                    if len(candidatas) != 1:
+                        raise OperacionInvalida(MENSAJE_FECHA_FIN_EXPLICITA)
+                    nuevos["fecha_fin"] = _fin_de_cobertura(
+                        nuevos["fecha_inicio"], nuevos["meses_comprados"], candidatas[0],
+                    )
+                elif nuevos["fecha_fin"] not in {
+                    _fin_de_cobertura(nuevos["fecha_inicio"], nuevos["meses_comprados"], periodicidad)
+                    for periodicidad in (candidatas or tuple(PeriodicidadTarifa))
+                }:
+                    raise OperacionInvalida(
+                        "La fecha de fin no coincide con la fecha de inicio más "
+                        "la cantidad de meses comprados."
+                    )
 
         if _tocado("tarifa_mensual_aplicada") or _tocado("meses_comprados") or _tocado("monto_base"):
             if (
@@ -2088,7 +2151,6 @@ class PagoServicio:
 
         if _tocado("monto_base") or _tocado("monto"):
             if nuevos["monto_base"] is not None:
-                descuento_congelado = pago.descuento_valor_aplicado or Decimal("0.00")
                 if nuevos["monto"] != nuevos["monto_base"] - descuento_congelado:
                     raise OperacionInvalida(
                         "El monto final no coincide con el monto base menos "
@@ -2146,12 +2208,39 @@ class PagoServicio:
         )
         self.db.add(correccion)
         pago_guardado = self.repo.guardar_cambios(pago)
+        # Issue #1762: la cobertura pudo cambiar, así que el estado guardado
+        # de la membresía puede haber quedado desfasado -- se reconcilia en la
+        # MISMA transacción que la corrección y su rastro de auditoría.
+        # Se corre en TODA corrección (no solo si cambia `fecha_fin`): también
+        # sana un estado que ya había quedado desfasado.
+        if membresia is not None:
+            self._reconciliar_estado_por_cobertura(membresia)
         self.db.commit()
         if inspeccionar_orm(pago_guardado).expired:
             self.db.refresh(pago_guardado)
         if inspeccionar_orm(correccion).expired:
             self.db.refresh(correccion)
         return pago_guardado, correccion
+
+    def _reconciliar_estado_por_cobertura(self, membresia: Membresia) -> None:
+        """Alinea el estado guardado de la membresía con su cobertura real tras
+        una corrección (issue #1762). La regla vive en
+        `app.dominio.cobertura_estado.estado_segun_cobertura`, la misma que usa
+        la tarea nocturna de vencimientos. Sin esto, un pago con fechas mal
+        cargadas que la tarea ya venció seguía VENCIDO aunque el admin lo
+        dejara cubriendo hoy.
+
+        Pasar a ACTIVA usa `_activar_membresia_con_red_de_seguridad`, el mismo
+        camino que aprobar un pago. El lock de la membresía ya lo tomó quien
+        llama."""
+        cubierto_hasta = self._fecha_fin_maxima_combinada(membresia.id)
+        nuevo = self.repo_cobertura_estado.estado_corresponde(membresia, cubierto_hasta, hoy_club())
+        if nuevo == membresia.estado:
+            return
+        if nuevo == EstadoMembresia.ACTIVA:
+            self._activar_membresia_con_red_de_seguridad(membresia)
+        else:
+            membresia.estado = nuevo
 
     def listar_correcciones_de_pago(self, pago_id: int) -> list[CorreccionPago]:
         """Historial completo de correcciones financieras de un pago (issue

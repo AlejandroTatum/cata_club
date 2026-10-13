@@ -72,6 +72,10 @@ interface PagoActual {
   monto: string;
   fechaInicio: string;
   fechaFin: string;
+  /** Frozen tariff snapshot; `null` for a historical payment that never had one. */
+  tarifaMensualAplicada: string | null;
+  mesesComprados: number | null;
+  descuentoValorAplicado: string | null;
 }
 
 const EFECTO_LABEL: Record<CorreccionPago["efectoCobertura"], string> = {
@@ -90,13 +94,49 @@ function buildInput(form: FormState): CorreccionPagoInput {
   return { motivo: form.motivo.trim(), monto: form.monto.trim() };
 }
 
+/** The months the admin typed, when they are a valid count that differs from the payment's own. */
+function mesesCorregidos(form: FormState, actual: PagoActual): number | null {
+  const meses = Number(form.mesesComprados);
+  if (!form.mesesComprados.trim() || !Number.isInteger(meses) || meses <= 0) return null;
+  return meses === actual.mesesComprados ? null : meses;
+}
+
+/** Same wording as the server (`MENSAJE_BENEFICIO_SOLO_MES_A_MES`): a discounted payment is one month at a time. */
+const BENEFICIO_SOLO_MES_A_MES = "Con beneficio activo solo puedes pagar un mes a la vez.";
+
+/** True when the server will reject the months because a frozen discount limits the payment to one. */
+function mesesNoPermitidosConBeneficio(form: FormState, actual: PagoActual): boolean {
+  // Same condition as the server: a frozen discount (set, even at zero) and a payment that has months.
+  const meses = mesesCorregidos(form, actual);
+  return meses !== null && meses > 1 && actual.mesesComprados !== null && actual.descuentoValorAplicado !== null;
+}
+
+/**
+ * The amount the server will set when only the months change: it keeps the
+ * per-month tariff and recalculates `tarifa × meses − frozen discount`
+ * (cents, mirroring `PagoServicio.corregir_pago`). Display only — the form never
+ * sends it, so the server stays the single source of truth. `null` when the
+ * admin typed their own amount, when the payment has no tariff snapshot, or
+ * when it is free (the server keeps a zero charge as it is).
+ */
+function montoRecalculado(form: FormState, actual: PagoActual): number | null {
+  const meses = mesesCorregidos(form, actual);
+  if (meses === null || actual.tarifaMensualAplicada === null) return null;
+  if (mesesNoPermitidosConBeneficio(form, actual)) return null;
+  if (Number(form.monto) !== Number(actual.monto)) return null;
+  if (Number(actual.monto) === 0) return null;
+  const centavos = Math.round(Number(actual.tarifaMensualAplicada) * 100) * meses
+    - Math.round(Number(actual.descuentoValorAplicado ?? 0) * 100);
+  return centavos / 100;
+}
+
 /** Extended: only the fields that differ from the payment as it stands today. */
 function buildExtendedInput(form: FormState, actual: PagoActual): CorreccionPagoInput {
   const input: CorreccionPagoInput = { motivo: form.motivo.trim() };
   const monto = form.monto.trim();
   if (monto && Number(monto) !== Number(actual.monto)) input.monto = monto;
-  const meses = Number(form.mesesComprados);
-  if (form.mesesComprados.trim() && Number.isInteger(meses) && meses > 0) input.mesesComprados = meses;
+  const meses = mesesCorregidos(form, actual);
+  if (meses !== null) input.mesesComprados = meses;
   if (form.fechaInicio && form.fechaInicio !== actual.fechaInicio) input.fechaInicio = form.fechaInicio;
   if (form.fechaFin && form.fechaFin !== actual.fechaFin) input.fechaFin = form.fechaFin;
   return input;
@@ -145,11 +185,18 @@ export default function PagoCorreccionSection({
         fetchCorrecciones(pagoId),
       ]);
       setComprobanteUrl(pago.comprobanteOficialUrl ?? null);
-      const actual = { monto: pago.monto, fechaInicio: pago.fechaInicio, fechaFin: pago.fechaFin };
+      const actual = {
+        monto: pago.monto,
+        fechaInicio: pago.fechaInicio,
+        fechaFin: pago.fechaFin,
+        tarifaMensualAplicada: pago.tarifaMensualAplicada ?? null,
+        mesesComprados: pago.mesesComprados ?? null,
+        descuentoValorAplicado: pago.descuentoValorAplicado ?? null,
+      };
       setPagoActual(actual);
       if (initialOpen && extended && !autoOpened.current) {
         autoOpened.current = true;
-        setForm((current) => (current === EMPTY_FORM ? { ...EMPTY_FORM, ...actual } : current));
+        setForm((current) => (current === EMPTY_FORM ? { ...EMPTY_FORM, monto: actual.monto, fechaInicio: actual.fechaInicio, fechaFin: actual.fechaFin } : current));
         setFormOpen(true);
       }
       setCorrecciones(historial);
@@ -179,10 +226,17 @@ export default function PagoCorreccionSection({
   const input = extended && pagoActual ? buildExtendedInput(form, pagoActual) : buildInput(form);
   const hasChange = extended ? Object.keys(input).length > 1 : Boolean(form.monto.trim());
   // Extended: what will change, as «antes → después», shown before the admin confirms.
+  const recalculado = extended && pagoActual ? montoRecalculado(form, pagoActual) : null;
+  const beneficioLimitaMeses = extended && pagoActual ? mesesNoPermitidosConBeneficio(form, pagoActual) : false;
   const cambios =
     extended && pagoActual
       ? [
-          changedLine("Monto", Number(pagoActual.monto), input.monto ? Number(input.monto) : null, (v) => formatCurrency(v)),
+          changedLine(
+            "Monto",
+            Number(pagoActual.monto),
+            input.monto ? Number(input.monto) : recalculado,
+            (v) => formatCurrency(v),
+          ),
           input.mesesComprados ? `Meses comprados: pasa a ${input.mesesComprados}` : null,
           changedLine("Desde", pagoActual.fechaInicio, input.fechaInicio ?? null, formatDate),
           changedLine("Hasta", pagoActual.fechaFin, input.fechaFin ?? null, formatDate),
@@ -313,6 +367,17 @@ export default function PagoCorreccionSection({
                       numberInputMode="numeric"
                       labelClassName={FIELD_LABEL}
                     />
+                    {beneficioLimitaMeses && (
+                      <p role="status" className="mt-1 text-sm text-state-bad">{BENEFICIO_SOLO_MES_A_MES}</p>
+                    )}
+                    {recalculado !== null && pagoActual && (
+                      <p className="mt-1 text-sm text-ink-3">
+                        El monto se recalcula a {formatCurrency(recalculado)} (
+                        {formatCurrency(Number(pagoActual.tarifaMensualAplicada))} por mes × {form.mesesComprados}
+                        {pagoActual.descuentoValorAplicado ? ", menos el descuento ya aplicado" : ""}). Si no es
+                        correcto, escribe otro monto.
+                      </p>
+                    )}
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       <CampoFormularioAdmin
                         label="Desde"

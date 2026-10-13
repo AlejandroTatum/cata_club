@@ -332,6 +332,11 @@ class PagoResponseDTO(ResponseBase, BaseModel):
     descuento_valor_aplicado: Optional[Decimal] = None
     descuento_porcentaje_aplicado: Optional[Decimal] = None
     descuento_autorizado_por_persona_id: Optional[int] = None
+    # Issue #1762: snapshot de tarifa congelado (`None` en pagos históricos
+    # sin snapshot). Solo lectura: el formulario de corrección calcula con
+    # ellos el monto que el servidor recalculará al cambiar los meses.
+    tarifa_mensual_aplicada: Optional[Decimal] = None
+    meses_comprados: Optional[int] = None
     # Issue #458: quién aprobó o rechazó ESTE pago. `None` en pagos todavía
     # PENDIENTE_VALIDACION, y en pagos validados antes de este fix (no se
     # reescriben retroactivamente -- ver `app.dominio.modelos.Pago`).

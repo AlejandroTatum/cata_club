@@ -36,7 +36,7 @@ mismo archivo:
    Membresia primero, Pago después) antes de leer/escribir.
 """
 import threading
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
@@ -46,8 +46,10 @@ from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EfectoCoberturaCorreccion, EstadoMembresia, EstadoPago, TipoPago
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
 from app.dominio.modelos import CorreccionPago, Membresia, Pago, Persona, TipoMembresia
+from app.dominio.periodicidad import PeriodicidadTarifa
 from app.servicios_negocio.dtos.membresia_pago_schemas import CorreccionPagoDTO, PagoCreateDTO
-from app.servicios_negocio.membresia_pago_servicio import PagoServicio, _sumar_meses
+from app.servicios_negocio.membresia_pago_servicio import PagoServicio, _fin_de_cobertura, _sumar_meses
+from app.soporte_transversal.tiempo import hoy_club
 from tests.fabricas_pagos import crear_membresia_orm, crear_persona_orm, crear_tipo_membresia_orm
 
 FECHA_INICIO = date(2027, 1, 1)
@@ -71,6 +73,7 @@ def _pago_aprobado(
     meses: int = 1,
     fecha_inicio: date = FECHA_INICIO,
     descuento_valor_aplicado: Decimal | None = None,
+    periodicidad: PeriodicidadTarifa = PeriodicidadTarifa.MENSUAL,
 ) -> Pago:
     """Pago APROBADO con las tres fórmulas de consistencia YA cerradas
     (mismas que `registrar_pago` deja): `fecha_fin = _sumar_meses(fecha_
@@ -80,7 +83,7 @@ def _pago_aprobado(
     fixture ya inconsistente haría que esos tests no probaran nada nuevo."""
     monto_base = tarifa * meses
     monto = monto_base - (descuento_valor_aplicado or Decimal("0.00"))
-    fecha_fin = _sumar_meses(fecha_inicio, meses)
+    fecha_fin = _fin_de_cobertura(fecha_inicio, meses, periodicidad)
     pago = Pago(
         monto=monto,
         tarifa_mensual_aplicada=tarifa,
@@ -342,22 +345,269 @@ def test_corregir_sin_cambiar_ningun_valor_es_rechazada(db_session, admin_id):
 
 # --- Hallazgo 1: consistencia cruzada entre los seis campos ------------------
 
-def test_corregir_meses_comprados_solo_sin_ajustar_fechas_es_rechazada(db_session, grafo, admin_id):
-    """Tocar `meses_comprados` sin ajustar `fecha_fin` (ni `monto_base`)
-    deja el pago describiendo un período que ya no coincide con lo que dice
-    haber comprado -- se rechaza."""
+def test_corregir_fecha_fin_explicita_inconsistente_es_rechazada(db_session, grafo, admin_id):
+    """Un `fecha_fin` EXPLÍCITO que no cierra con inicio + meses se sigue
+    rechazando con el mismo mensaje (solo se deriva cuando el DTO no la
+    manda)."""
     _, _, _, pago = grafo
 
     with pytest.raises(OperacionInvalida, match="fecha de fin no coincide"):
         PagoServicio(db_session).corregir_pago(
             pago.id,
-            CorreccionPagoDTO(meses_comprados=2, motivo="Solo cambio los meses"),
+            CorreccionPagoDTO(
+                meses_comprados=2,
+                monto_base=Decimal("60.00"),
+                monto=Decimal("60.00"),
+                fecha_fin=_sumar_meses(FECHA_INICIO, 3),
+                motivo="Fin que no corresponde",
+            ),
             actor_persona_id=admin_id,
         )
     assert _correcciones(db_session, pago.id) == []
     db_session.refresh(pago)
     assert pago.meses_comprados == 1
     assert pago.fecha_fin == _sumar_meses(FECHA_INICIO, 1)
+
+
+# --- Issue #1762: la fecha de fin se DERIVA cuando no viaja en el DTO ---------
+
+def test_corregir_solo_fecha_inicio_deriva_la_fecha_fin(db_session, grafo, admin_id):
+    """El formulario manda solo lo que cambió: con solo `fecha_inicio` el
+    `fecha_fin` viejo quedaba desalineado y se rechazaba SIEMPRE. Ahora el
+    servidor la deriva con la misma regla de cobertura del registro."""
+    _, _, _, pago = grafo
+    nuevo_inicio = date(2027, 1, 15)
+
+    resultado, correccion = PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(fecha_inicio=nuevo_inicio, motivo="El socio pagó el 15"),
+        actor_persona_id=admin_id,
+    )
+
+    assert resultado.fecha_inicio == nuevo_inicio
+    assert resultado.fecha_fin == _sumar_meses(nuevo_inicio, 1)
+    assert correccion.fecha_fin_anterior == _sumar_meses(FECHA_INICIO, 1)
+    assert correccion.fecha_fin_nuevo == _sumar_meses(nuevo_inicio, 1)
+    assert correccion.efecto_cobertura == EfectoCoberturaCorreccion.AMPLIADA
+    assert len(_correcciones(db_session, pago.id)) == 1
+
+
+def test_corregir_solo_meses_comprados_mantiene_la_tarifa_y_recalcula_el_monto(db_session, grafo, admin_id):
+    """Decisión del dueño: cambiar solo los meses mantiene el precio por mes
+    (1 mes de $30 pasa a 2 meses por $60), la fecha de fin se extiende y el
+    monto se recalcula con la misma regla que el registro."""
+    _, _, _, pago = grafo
+
+    resultado, correccion = PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(meses_comprados=2, motivo="Eran dos meses"),
+        actor_persona_id=admin_id,
+    )
+
+    assert resultado.meses_comprados == 2
+    assert resultado.fecha_fin == _sumar_meses(FECHA_INICIO, 2)
+    assert resultado.tarifa_mensual_aplicada == Decimal("30.00")
+    assert resultado.monto_base == Decimal("60.00")
+    assert resultado.monto == Decimal("60.00")
+    assert correccion.monto_anterior == Decimal("30.00")
+    assert correccion.monto_nuevo == Decimal("60.00")
+    assert correccion.efecto_cobertura == EfectoCoberturaCorreccion.AMPLIADA
+
+
+def test_corregir_meses_y_monto_juntos_deriva_tarifa_y_monto_base(db_session, grafo, admin_id):
+    """El flujo real del formulario: meses 1 -> 2 y monto 30 -> 60 en el mismo
+    envío. Antes se rechazaba con el error interno del monto base."""
+    _, _, _, pago = grafo
+
+    resultado, correccion = PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(meses_comprados=2, monto=Decimal("60.00"), motivo="Pagó dos meses"),
+        actor_persona_id=admin_id,
+    )
+
+    assert resultado.meses_comprados == 2
+    assert resultado.tarifa_mensual_aplicada == Decimal("30.00")
+    assert resultado.monto_base == Decimal("60.00")
+    assert resultado.monto == Decimal("60.00")
+    assert resultado.fecha_fin == _sumar_meses(FECHA_INICIO, 2)
+    assert correccion.tarifa_mensual_aplicada_nuevo == Decimal("30.00")
+
+
+def test_corregir_meses_y_monto_con_otra_tarifa_deriva_la_nueva_tarifa(db_session, grafo, admin_id):
+    """Si el monto indicado implica otra tarifa por mes (90 / 3 = 30 no; 75 / 3
+    = 25), la tarifa se re-deriva en vez de rechazar."""
+    _, _, _, pago = grafo
+
+    resultado, _ = PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(meses_comprados=3, monto=Decimal("75.00"), motivo="Pagó 75 por tres"),
+        actor_persona_id=admin_id,
+    )
+
+    assert resultado.tarifa_mensual_aplicada == Decimal("25.00")
+    assert resultado.monto_base == Decimal("75.00")
+    assert resultado.monto == Decimal("75.00")
+
+
+def test_corregir_meses_y_monto_que_no_se_reparte_en_centavos_da_un_mensaje_claro(db_session, grafo, admin_id):
+    """$100 en 7 meses no da una tarifa exacta en centavos: se rechaza con un
+    mensaje accionable, no con el error interno del monto base."""
+    _, _, _, pago = grafo
+
+    with pytest.raises(OperacionInvalida, match="no se puede repartir") as error:
+        PagoServicio(db_session).corregir_pago(
+            pago.id,
+            CorreccionPagoDTO(meses_comprados=7, monto=Decimal("100.00"), motivo="Siete meses"),
+            actor_persona_id=admin_id,
+        )
+    assert "monto base" not in str(error.value)
+    db_session.refresh(pago)
+    assert pago.meses_comprados == 1
+    assert _correcciones(db_session, pago.id) == []
+
+
+def test_corregir_meses_de_un_pago_con_beneficio_se_rechaza_como_el_registro(db_session, admin_id):
+    """Con beneficio solo se paga un mes a la vez (misma regla que
+    `registrar_pago`): pasar de 1 a 2 meses un pago descontado se rechaza."""
+    persona = crear_persona_orm(db_session, cedula_valida(922))
+    tipo = crear_tipo_membresia_orm(db_session, precio=TARIFA)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=TARIFA)
+    pago = _pago_aprobado(db_session, persona, membresia, descuento_valor_aplicado=Decimal("5.00"))
+
+    with pytest.raises(OperacionInvalida, match="solo puedes pagar un mes a la vez"):
+        PagoServicio(db_session).corregir_pago(
+            pago.id,
+            CorreccionPagoDTO(meses_comprados=2, motivo="Dos meses"),
+            actor_persona_id=admin_id,
+        )
+    assert _correcciones(db_session, pago.id) == []
+
+
+def test_corregir_meses_de_un_pago_gratuito_conserva_el_cobro_en_cero(db_session, admin_id):
+    """Un pago de gratuidad familiar tiene monto 0 sobre un monto base real:
+    cambiar los meses recalcula el monto base pero NO inventa un cobro."""
+    persona = crear_persona_orm(db_session, cedula_valida(923))
+    tipo = crear_tipo_membresia_orm(db_session, precio=TARIFA)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=TARIFA)
+    pago = _pago_aprobado(db_session, persona, membresia)
+    pago.monto = Decimal("0.00")
+    db_session.commit()
+
+    resultado, _ = PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(meses_comprados=2, motivo="Dos meses gratis"),
+        actor_persona_id=admin_id,
+    )
+
+    assert resultado.monto_base == Decimal("60.00")
+    assert resultado.monto == Decimal("0.00")
+
+
+@pytest.mark.parametrize("periodicidad", [PeriodicidadTarifa.SEMANAL, PeriodicidadTarifa.DIARIA])
+def test_corregir_meses_de_un_pago_semanal_o_diario_se_rechaza_como_el_registro(
+    db_session, admin_id, periodicidad,
+):
+    """Las tarifas semanales y diarias se pagan de a un período: la
+    periodicidad es la inferida del propio pago (el plan actual es MENSUAL)."""
+    persona = crear_persona_orm(db_session, cedula_valida(924))
+    tipo = crear_tipo_membresia_orm(db_session, precio=TARIFA)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=TARIFA)
+    pago = _pago_aprobado(db_session, persona, membresia, periodicidad=periodicidad, tarifa=Decimal("5.00"))
+
+    with pytest.raises(OperacionInvalida, match="de a un período por vez"):
+        PagoServicio(db_session).corregir_pago(
+            pago.id,
+            CorreccionPagoDTO(meses_comprados=2, motivo="Dos períodos"),
+            actor_persona_id=admin_id,
+        )
+    assert _correcciones(db_session, pago.id) == []
+
+
+def test_corregir_fecha_inicio_derivada_respeta_la_continuidad_con_pago_posterior(db_session, admin_id):
+    """La fecha derivada pasa por los mismos chequeos que una explícita: mover
+    el inicio de un pago que ya tiene otro anclado a su fin rompe la cadena."""
+    persona = crear_persona_orm(db_session, cedula_valida(917))
+    tipo = crear_tipo_membresia_orm(db_session, precio=TARIFA)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=TARIFA)
+    pago = _pago_aprobado(db_session, persona, membresia)
+    _pago_aprobado(db_session, persona, membresia, fecha_inicio=_sumar_meses(FECHA_INICIO, 1))
+
+    with pytest.raises(OperacionInvalida, match="superpone o rompe la continuidad"):
+        PagoServicio(db_session).corregir_pago(
+            pago.id,
+            CorreccionPagoDTO(fecha_inicio=date(2027, 1, 10), motivo="Corrimiento"),
+            actor_persona_id=admin_id,
+        )
+    db_session.refresh(pago)
+    assert pago.fecha_inicio == FECHA_INICIO
+    assert _correcciones(db_session, pago.id) == []
+
+
+# --- Issue #1762: la periodicidad es la del PAGO, no la del plan actual -------
+
+def test_corregir_pago_diario_tras_cambiar_a_plan_mensual_usa_la_periodicidad_del_pago(db_session, admin_id):
+    """El pago se hizo con un plan DIARIO (1 día de cobertura) y la membresía
+    pasó después a MENSUAL: la periodicidad se infiere del rango guardado del
+    propio pago, no del tipo actual."""
+    persona = crear_persona_orm(db_session, cedula_valida(918))
+    tipo = crear_tipo_membresia_orm(db_session, precio=TARIFA)
+    tipo.periodicidad = PeriodicidadTarifa.MENSUAL
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=TARIFA)
+    pago = _pago_aprobado(
+        db_session, persona, membresia, periodicidad=PeriodicidadTarifa.DIARIA,
+        tarifa=Decimal("5.00"),
+    )
+    assert pago.fecha_fin == date(2027, 1, 2)
+
+    resultado, _ = PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(fecha_inicio=date(2027, 1, 5), motivo="Vino el 5"),
+        actor_persona_id=admin_id,
+    )
+
+    assert resultado.fecha_inicio == date(2027, 1, 5)
+    assert resultado.fecha_fin == date(2027, 1, 6)
+
+
+def test_corregir_pago_semanal_tras_cambiar_a_plan_mensual_usa_la_periodicidad_del_pago(db_session, admin_id):
+    persona = crear_persona_orm(db_session, cedula_valida(919))
+    tipo = crear_tipo_membresia_orm(db_session, precio=TARIFA)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=TARIFA)
+    pago = _pago_aprobado(
+        db_session, persona, membresia, periodicidad=PeriodicidadTarifa.SEMANAL,
+        tarifa=Decimal("10.00"),
+    )
+
+    resultado, _ = PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(fecha_inicio=date(2027, 1, 3), motivo="Empezó el 3"),
+        actor_persona_id=admin_id,
+    )
+
+    assert resultado.fecha_fin == date(2027, 1, 10)
+
+
+def test_rango_que_no_coincide_con_ninguna_periodicidad_exige_fecha_fin_explicita(db_session, admin_id):
+    """Un rango guardado que ya no responde a la regla de cobertura de
+    ninguna periodicidad (dato histórico o editado) no se adivina: ni se usa
+    el plan actual ni se deriva; se pide la fecha de fin explícita. (Con la
+    misma cantidad de períodos, dos periodicidades nunca dan el mismo fin:
+    1 día, 7 días y un mes calendario difieren siempre, así que un rango que
+    sí coincide identifica UNA sola periodicidad.)"""
+    persona = crear_persona_orm(db_session, cedula_valida(921))
+    tipo = crear_tipo_membresia_orm(db_session, precio=TARIFA)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=TARIFA)
+    pago = _pago_aprobado(db_session, persona, membresia)
+    pago.fecha_fin = date(2027, 1, 20)
+    db_session.commit()
+
+    with pytest.raises(OperacionInvalida, match="Debes indicar la fecha de fin"):
+        PagoServicio(db_session).corregir_pago(
+            pago.id,
+            CorreccionPagoDTO(meses_comprados=2, monto=Decimal("60.00"), motivo="Eran dos"),
+            actor_persona_id=admin_id,
+        )
+    assert _correcciones(db_session, pago.id) == []
 
 
 def test_corregir_monto_base_sin_ajustar_monto_es_rechazada(db_session, grafo, admin_id):
@@ -658,6 +908,242 @@ def test_corregir_pago_via_api_admin_devuelve_pago_y_correccion(client, db_sessi
     resp_listado = client.get(f"/api/v1/membresias/pagos/{pago.id}/correcciones")
     assert resp_listado.status_code == 200
     assert len(resp_listado.json()) == 1
+
+
+def test_el_detalle_del_pago_expone_tarifa_y_meses_para_el_calculo_previo(client, db_session):
+    """El formulario de corrección calcula el monto nuevo antes de guardar
+    (tarifa * meses - descuento): necesita ver ambos valores congelados."""
+    persona = crear_persona_orm(db_session, cedula_valida(904))
+    tipo = crear_tipo_membresia_orm(db_session)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA)
+    pago = _pago_aprobado(db_session, persona, membresia, meses=2)
+
+    resp = client.get(f"/api/v1/membresias/pagos/{pago.id}")
+
+    assert resp.status_code == 200, resp.text
+    cuerpo = resp.json()
+    assert cuerpo["tarifaMensualAplicada"] == "30.00"
+    assert cuerpo["mesesComprados"] == 2
+
+
+def test_el_detalle_de_un_pago_sin_snapshot_expone_tarifa_y_meses_nulos(client, db_session):
+    persona = crear_persona_orm(db_session, cedula_valida(905))
+    tipo = crear_tipo_membresia_orm(db_session)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA)
+    pago = _pago_aprobado_sin_snapshot(db_session, persona, membresia)
+
+    cuerpo = client.get(f"/api/v1/membresias/pagos/{pago.id}").json()
+
+    assert cuerpo["tarifaMensualAplicada"] is None
+    assert cuerpo["mesesComprados"] is None
+
+
+# --- Issue #1762: la corrección reconcilia el estado de la membresía ---------
+# El estado se guarda (ACTIVA/VENCIDA/...), la cobertura y la deuda se derivan
+# al leer de los pagos aprobados. Aprobar un pago activa la membresía y el job
+# nocturno solo la baja a VENCIDA; si una corrección moviera la cobertura sin
+# reconciliar el estado, una membresía vencida por fechas mal cargadas jamás
+# volvería a salir aunque el admin las dejara correctas.
+
+def _membresia_con_pago(db_session, cedula: int, estado: EstadoMembresia, *, inicio: date, activo: bool = True):
+    persona = crear_persona_orm(db_session, cedula_valida(cedula))
+    persona.activo = activo
+    tipo = crear_tipo_membresia_orm(db_session, precio=TARIFA)
+    membresia = crear_membresia_orm(db_session, persona, tipo, estado, monto_aplicado=TARIFA)
+    pago = _pago_aprobado(db_session, persona, membresia, fecha_inicio=inicio)
+    return membresia, pago
+
+
+def test_corregir_fechas_que_vuelven_a_cubrir_hoy_reactiva_una_membresia_vencida(db_session, admin_id):
+    """Escenario del dueño: el pago quedó con fechas viejas, el job dejó la
+    membresía VENCIDA; el admin deja las fechas correctas y la membresía debe
+    quedar como si el pago se hubiera cargado bien desde el inicio."""
+    hoy = hoy_club()
+    membresia, pago = _membresia_con_pago(
+        db_session, 925, EstadoMembresia.VENCIDA, inicio=hoy - timedelta(days=90),
+    )
+
+    PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(fecha_inicio=hoy - timedelta(days=5), motivo="Fechas mal cargadas"),
+        actor_persona_id=admin_id,
+    )
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+    assert PagoServicio(db_session)._fecha_fin_maxima_combinada(membresia.id) >= hoy
+    assert len(_correcciones(db_session, pago.id)) == 1
+
+
+def test_corregir_fechas_que_cubren_hoy_activa_una_membresia_inactiva_y_fija_la_antiguedad(db_session, admin_id):
+    hoy = hoy_club()
+    membresia, pago = _membresia_con_pago(
+        db_session, 926, EstadoMembresia.INACTIVA, inicio=hoy - timedelta(days=90),
+    )
+    antes = membresia.fecha_activacion
+
+    PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(fecha_inicio=hoy - timedelta(days=5), motivo="Fechas mal cargadas"),
+        actor_persona_id=admin_id,
+    )
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+    assert membresia.fecha_activacion >= antes
+
+
+def test_corregir_fechas_que_dejan_de_cubrir_hoy_vence_una_membresia_activa(db_session, admin_id):
+    """Inverso: acortar la cobertura para que hoy ya no esté cubierto deja la
+    membresía VENCIDA, igual que lo haría el job de vencimientos."""
+    hoy = hoy_club()
+    membresia, pago = _membresia_con_pago(
+        db_session, 927, EstadoMembresia.ACTIVA, inicio=hoy - timedelta(days=5),
+    )
+
+    PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(fecha_inicio=hoy - timedelta(days=90), motivo="Empezó mucho antes"),
+        actor_persona_id=admin_id,
+    )
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.VENCIDA
+
+
+def test_corregir_fechas_no_vence_a_una_persona_dada_de_baja(db_session, admin_id):
+    """El job de vencimientos solo toca personas activas: la corrección sigue
+    la misma regla."""
+    hoy = hoy_club()
+    membresia, pago = _membresia_con_pago(
+        db_session, 928, EstadoMembresia.ACTIVA, inicio=hoy - timedelta(days=5), activo=False,
+    )
+
+    PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(fecha_inicio=hoy - timedelta(days=90), motivo="Empezó mucho antes"),
+        actor_persona_id=admin_id,
+    )
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+
+
+def test_corregir_fechas_no_toca_una_membresia_suspendida(db_session, admin_id):
+    hoy = hoy_club()
+    membresia, pago = _membresia_con_pago(
+        db_session, 929, EstadoMembresia.SUSPENDIDA, inicio=hoy - timedelta(days=90),
+    )
+
+    PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(fecha_inicio=hoy - timedelta(days=5), motivo="Fechas mal cargadas"),
+        actor_persona_id=admin_id,
+    )
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.SUSPENDIDA
+
+
+def test_corregir_fechas_de_un_pago_viejo_no_vence_si_otro_pago_cubre_hoy(db_session, admin_id):
+    """La cobertura es la MÁXIMA entre todos los pagos: mover un pago viejo
+    no vence una membresía que otro pago sigue cubriendo."""
+    hoy = hoy_club()
+    membresia, pago_viejo = _membresia_con_pago(
+        db_session, 930, EstadoMembresia.ACTIVA, inicio=hoy - timedelta(days=100),
+    )
+    persona = db_session.get(Persona, membresia.persona_id)
+    _pago_aprobado(db_session, persona, membresia, fecha_inicio=hoy - timedelta(days=5))
+
+    PagoServicio(db_session).corregir_pago(
+        pago_viejo.id,
+        CorreccionPagoDTO(fecha_inicio=hoy - timedelta(days=120), motivo="Era más atrás"),
+        actor_persona_id=admin_id,
+    )
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+
+
+def test_corregir_solo_el_monto_no_cambia_el_estado_de_la_membresia(db_session, admin_id):
+    """El estado depende de la cobertura, no del importe: corregir solo el
+    monto de un pago vencido no reactiva ni vence nada."""
+    hoy = hoy_club()
+    membresia, pago = _membresia_con_pago(
+        db_session, 931, EstadoMembresia.VENCIDA, inicio=hoy - timedelta(days=90),
+    )
+
+    PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(monto=Decimal("45.00"), motivo="Monto mal cargado"),
+        actor_persona_id=admin_id,
+    )
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.VENCIDA
+
+
+def test_corregir_solo_el_monto_sana_un_estado_desfasado(db_session, admin_id):
+    """Cualquier corrección exitosa reconcilia el estado, no solo las de
+    fechas: una membresía VENCIDA cuyo pago ya cubre hoy (datos de antes de
+    este fix) se sana al corregir solo el monto."""
+    hoy = hoy_club()
+    membresia, pago = _membresia_con_pago(
+        db_session, 932, EstadoMembresia.VENCIDA, inicio=hoy - timedelta(days=5),
+    )
+
+    PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(monto=Decimal("45.00"), motivo="Monto mal cargado"),
+        actor_persona_id=admin_id,
+    )
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+
+
+def test_corregir_fechas_nunca_activa_la_membresia_de_una_persona_dada_de_baja(db_session, admin_id):
+    """Misma guarda que aprobar un pago: una persona retirada no se reactiva."""
+    hoy = hoy_club()
+    membresia, pago = _membresia_con_pago(
+        db_session, 933, EstadoMembresia.VENCIDA, inicio=hoy - timedelta(days=90), activo=False,
+    )
+
+    PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(fecha_inicio=hoy - timedelta(days=5), motivo="Fechas mal cargadas"),
+        actor_persona_id=admin_id,
+    )
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.VENCIDA
+
+
+def test_corregir_un_pago_viejo_con_otra_membresia_activa_no_falla_ni_la_reactiva(db_session, admin_id):
+    """La persona tiene una membresía vieja VENCIDA y una actual ACTIVA:
+    corregir el pago viejo para que cubra hoy tiene que andar y dejar la
+    vieja como está (el índice único no admite dos ACTIVAS)."""
+    hoy = hoy_club()
+    vieja, pago_viejo = _membresia_con_pago(
+        db_session, 934, EstadoMembresia.VENCIDA, inicio=hoy - timedelta(days=90),
+    )
+    persona = db_session.get(Persona, vieja.persona_id)
+    tipo = crear_tipo_membresia_orm(db_session, categoria="Otro plan", precio=TARIFA)
+    actual = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=TARIFA)
+    _pago_aprobado(db_session, persona, actual, fecha_inicio=hoy - timedelta(days=2))
+
+    resultado, _ = PagoServicio(db_session).corregir_pago(
+        pago_viejo.id,
+        CorreccionPagoDTO(fecha_inicio=hoy - timedelta(days=5), motivo="Fechas mal cargadas"),
+        actor_persona_id=admin_id,
+    )
+
+    assert resultado.fecha_inicio == hoy - timedelta(days=5)
+    db_session.refresh(vieja)
+    db_session.refresh(actual)
+    assert vieja.estado == EstadoMembresia.VENCIDA
+    assert actual.estado == EstadoMembresia.ACTIVA
+    assert len(_correcciones(db_session, pago_viejo.id)) == 1
 
 
 # --- Concurrencia REAL: dos correcciones del mismo pago -----------------------
