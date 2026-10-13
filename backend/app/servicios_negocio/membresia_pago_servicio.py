@@ -2048,40 +2048,72 @@ class PagoServicio:
             for campo in self._CAMPOS_CORREGIBLES_PAGO
         }
 
-        # QA4 ADMA-16: si el admin solo manda el monto final, el servidor
-        # deriva `monto_base` (monto + descuento congelado) y, si la división
-        # es exacta en centavos, la tarifa mensual -- el admin no hace cuentas.
-        if (
-            datos.monto is not None
-            and datos.monto_base is None
-            and datos.tarifa_mensual_aplicada is None
-            and datos.meses_comprados is None
-            and anteriores["monto_base"] is not None
-        ):
-            monto_base_derivado = datos.monto + (pago.descuento_valor_aplicado or Decimal("0.00"))
-            nuevos["monto_base"] = monto_base_derivado
-            meses = nuevos["meses_comprados"]
-            if meses is not None and nuevos["tarifa_mensual_aplicada"] is not None:
-                tarifa_derivada = (monto_base_derivado / meses).quantize(Decimal("0.01"))
-                if tarifa_derivada * meses == monto_base_derivado:
-                    nuevos["tarifa_mensual_aplicada"] = tarifa_derivada
-
-        # Issue #1762: corregir SOLO los meses no cambia lo cobrado -- el
-        # monto se conserva y la tarifa mensual se re-deriva (monto base /
-        # meses) cuando la división es exacta en centavos, para que
-        # `monto_base = tarifa * meses` siga cerrando. Si no es exacta, no se
-        # inventa dinero: la fórmula del monto base lo rechaza más abajo.
-        if (
+        # Issue #1762: la periodicidad es la del PAGO, no la del plan actual
+        # de la membresía (que pudo cambiar después). El `Pago` no la guarda,
+        # así que se infiere del rango que ya tiene: solo las periodicidades
+        # que reproducen exactamente `fecha_fin` a partir de `fecha_inicio` +
+        # `meses_comprados` ANTERIORES son candidatas.
+        candidatas = self._periodicidades_del_rango_guardado(
+            anteriores["fecha_inicio"], anteriores["meses_comprados"],
+            anteriores["fecha_fin"],
+        )
+        meses_cambian = (
             datos.meses_comprados is not None
+            and anteriores["meses_comprados"] is not None
             and datos.meses_comprados != anteriores["meses_comprados"]
+        )
+        descuento_congelado = pago.descuento_valor_aplicado or Decimal("0.00")
+
+        if meses_cambian:
+            # Mismas reglas que `registrar_pago`: una tarifa SEMANAL/DIARIA se
+            # paga de a un período, y con beneficio solo se paga un mes.
+            if len(candidatas) == 1:
+                self._exigir_un_periodo_si_corresponde(candidatas[0], datos.meses_comprados)
+            if (
+                pago.descuento_id is not None or pago.descuento_valor_aplicado is not None
+            ) and datos.meses_comprados > 1:
+                raise OperacionInvalida(MENSAJE_BENEFICIO_SOLO_MES_A_MES)
+
+        if (
+            anteriores["monto_base"] is not None
             and datos.tarifa_mensual_aplicada is None
             and datos.monto_base is None
-            and datos.monto is None
-            and anteriores["monto_base"] is not None
         ):
-            tarifa_derivada = (anteriores["monto_base"] / datos.meses_comprados).quantize(Decimal("0.01"))
-            if tarifa_derivada * datos.meses_comprados == anteriores["monto_base"]:
-                nuevos["tarifa_mensual_aplicada"] = tarifa_derivada
+            if meses_cambian and datos.monto is None:
+                # Decisión del dueño (#1762): cambiar solo los meses mantiene
+                # el precio por mes. El monto base se recalcula como
+                # tarifa * meses y el final con el descuento ya congelado,
+                # igual que en el registro. Un pago cuyo monto ya no cerraba
+                # con esa fórmula (gratuidad familiar: cobro 0 sobre un monto
+                # base real) conserva su cobro: no se inventa dinero.
+                formula_cerraba = (
+                    anteriores["monto"] == anteriores["monto_base"] - descuento_congelado
+                )
+                nuevos["monto_base"] = (
+                    anteriores["tarifa_mensual_aplicada"] * datos.meses_comprados
+                )
+                if formula_cerraba:
+                    nuevos["monto"] = nuevos["monto_base"] - descuento_congelado
+            elif datos.monto is not None:
+                # QA4 ADMA-16: si el admin solo manda el monto final (con o
+                # sin cambiar los meses), el servidor deriva `monto_base`
+                # (monto + descuento congelado) y la tarifa mensual -- el
+                # admin no hace cuentas.
+                monto_base_derivado = datos.monto + descuento_congelado
+                nuevos["monto_base"] = monto_base_derivado
+                meses = nuevos["meses_comprados"]
+                if meses is not None and nuevos["tarifa_mensual_aplicada"] is not None:
+                    tarifa_derivada = (monto_base_derivado / meses).quantize(Decimal("0.01"))
+                    if tarifa_derivada * meses == monto_base_derivado:
+                        nuevos["tarifa_mensual_aplicada"] = tarifa_derivada
+                    elif meses_cambian:
+                        raise OperacionInvalida(
+                            f"El monto de {formatear_monto_usd(monto_base_derivado)} no se "
+                            f"puede repartir en partes iguales entre {meses} meses. "
+                            "Ajusta el monto para que cada mes cueste una cifra exacta "
+                            "en centavos, o corrige solo los meses para mantener la "
+                            "tarifa mensual actual."
+                        )
 
         if all(nuevos[campo] == anteriores[campo] for campo in self._CAMPOS_CORREGIBLES_PAGO):
             raise OperacionInvalida("La corrección no modifica ningún valor del pago.")
@@ -2096,15 +2128,6 @@ class PagoServicio:
         # nullable para pagos históricos pre-#400 sin snapshot -- no hay
         # nada que validar contra un valor ausente).
         if _tocado("meses_comprados") or _tocado("fecha_inicio") or _tocado("fecha_fin"):
-            # Issue #1762: la periodicidad es la del PAGO, no la del plan
-            # actual de la membresía (que pudo cambiar después). El `Pago` no
-            # la guarda, así que se infiere del rango que ya tiene: solo las
-            # periodicidades que reproducen exactamente `fecha_fin` a partir
-            # de `fecha_inicio` + `meses_comprados` ANTERIORES son candidatas.
-            candidatas = self._periodicidades_del_rango_guardado(
-                anteriores["fecha_inicio"], anteriores["meses_comprados"],
-                anteriores["fecha_fin"],
-            )
             if nuevos["meses_comprados"] is not None:
                 if not _tocado("fecha_fin"):
                     # El formulario manda solo lo que cambió: si el admin
@@ -2140,7 +2163,6 @@ class PagoServicio:
 
         if _tocado("monto_base") or _tocado("monto"):
             if nuevos["monto_base"] is not None:
-                descuento_congelado = pago.descuento_valor_aplicado or Decimal("0.00")
                 if nuevos["monto"] != nuevos["monto_base"] - descuento_congelado:
                     raise OperacionInvalida(
                         "El monto final no coincide con el monto base menos "

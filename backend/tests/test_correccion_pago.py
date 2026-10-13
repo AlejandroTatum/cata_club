@@ -391,16 +391,11 @@ def test_corregir_solo_fecha_inicio_deriva_la_fecha_fin(db_session, grafo, admin
     assert len(_correcciones(db_session, pago.id)) == 1
 
 
-def test_corregir_solo_meses_comprados_deriva_la_fecha_fin(db_session, grafo, admin_id):
-    """Solo `meses_comprados` (1 -> 2): la fecha de fin se extiende. El dinero
-    cobrado no se toca: la tarifa mensual se re-deriva (60 / 2) para que
-    `monto_base = tarifa * meses` siga cerrando."""
+def test_corregir_solo_meses_comprados_mantiene_la_tarifa_y_recalcula_el_monto(db_session, grafo, admin_id):
+    """Decisión del dueño: cambiar solo los meses mantiene el precio por mes
+    (1 mes de $30 pasa a 2 meses por $60), la fecha de fin se extiende y el
+    monto se recalcula con la misma regla que el registro."""
     _, _, _, pago = grafo
-    PagoServicio(db_session).corregir_pago(
-        pago.id,
-        CorreccionPagoDTO(monto=Decimal("60.00"), motivo="Cobró 60"),
-        actor_persona_id=admin_id,
-    )
 
     resultado, correccion = PagoServicio(db_session).corregir_pago(
         pago.id,
@@ -410,25 +405,120 @@ def test_corregir_solo_meses_comprados_deriva_la_fecha_fin(db_session, grafo, ad
 
     assert resultado.meses_comprados == 2
     assert resultado.fecha_fin == _sumar_meses(FECHA_INICIO, 2)
-    assert resultado.monto == Decimal("60.00")
-    assert resultado.monto_base == Decimal("60.00")
     assert resultado.tarifa_mensual_aplicada == Decimal("30.00")
+    assert resultado.monto_base == Decimal("60.00")
+    assert resultado.monto == Decimal("60.00")
+    assert correccion.monto_anterior == Decimal("30.00")
+    assert correccion.monto_nuevo == Decimal("60.00")
     assert correccion.efecto_cobertura == EfectoCoberturaCorreccion.AMPLIADA
 
 
-def test_corregir_solo_meses_comprados_con_monto_que_no_cierra_es_rechazada(db_session, grafo, admin_id):
-    """Sin forma exacta de repartir el monto cobrado entre los nuevos meses
-    el servidor NO inventa dinero: rechaza por el monto base."""
+def test_corregir_meses_y_monto_juntos_deriva_tarifa_y_monto_base(db_session, grafo, admin_id):
+    """El flujo real del formulario: meses 1 -> 2 y monto 30 -> 60 en el mismo
+    envío. Antes se rechazaba con el error interno del monto base."""
     _, _, _, pago = grafo
 
-    with pytest.raises(OperacionInvalida, match="monto base no coincide"):
+    resultado, correccion = PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(meses_comprados=2, monto=Decimal("60.00"), motivo="Pagó dos meses"),
+        actor_persona_id=admin_id,
+    )
+
+    assert resultado.meses_comprados == 2
+    assert resultado.tarifa_mensual_aplicada == Decimal("30.00")
+    assert resultado.monto_base == Decimal("60.00")
+    assert resultado.monto == Decimal("60.00")
+    assert resultado.fecha_fin == _sumar_meses(FECHA_INICIO, 2)
+    assert correccion.tarifa_mensual_aplicada_nuevo == Decimal("30.00")
+
+
+def test_corregir_meses_y_monto_con_otra_tarifa_deriva_la_nueva_tarifa(db_session, grafo, admin_id):
+    """Si el monto indicado implica otra tarifa por mes (90 / 3 = 30 no; 75 / 3
+    = 25), la tarifa se re-deriva en vez de rechazar."""
+    _, _, _, pago = grafo
+
+    resultado, _ = PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(meses_comprados=3, monto=Decimal("75.00"), motivo="Pagó 75 por tres"),
+        actor_persona_id=admin_id,
+    )
+
+    assert resultado.tarifa_mensual_aplicada == Decimal("25.00")
+    assert resultado.monto_base == Decimal("75.00")
+    assert resultado.monto == Decimal("75.00")
+
+
+def test_corregir_meses_y_monto_que_no_se_reparte_en_centavos_da_un_mensaje_claro(db_session, grafo, admin_id):
+    """$100 en 7 meses no da una tarifa exacta en centavos: se rechaza con un
+    mensaje accionable, no con el error interno del monto base."""
+    _, _, _, pago = grafo
+
+    with pytest.raises(OperacionInvalida, match="no se puede repartir") as error:
         PagoServicio(db_session).corregir_pago(
             pago.id,
-            CorreccionPagoDTO(meses_comprados=7, motivo="Eran siete"),
+            CorreccionPagoDTO(meses_comprados=7, monto=Decimal("100.00"), motivo="Siete meses"),
             actor_persona_id=admin_id,
         )
+    assert "monto base" not in str(error.value)
     db_session.refresh(pago)
     assert pago.meses_comprados == 1
+    assert _correcciones(db_session, pago.id) == []
+
+
+def test_corregir_meses_de_un_pago_con_beneficio_se_rechaza_como_el_registro(db_session, admin_id):
+    """Con beneficio solo se paga un mes a la vez (misma regla que
+    `registrar_pago`): pasar de 1 a 2 meses un pago descontado se rechaza."""
+    persona = crear_persona_orm(db_session, cedula_valida(922))
+    tipo = crear_tipo_membresia_orm(db_session, precio=TARIFA)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=TARIFA)
+    pago = _pago_aprobado(db_session, persona, membresia, descuento_valor_aplicado=Decimal("5.00"))
+
+    with pytest.raises(OperacionInvalida, match="solo puedes pagar un mes a la vez"):
+        PagoServicio(db_session).corregir_pago(
+            pago.id,
+            CorreccionPagoDTO(meses_comprados=2, motivo="Dos meses"),
+            actor_persona_id=admin_id,
+        )
+    assert _correcciones(db_session, pago.id) == []
+
+
+def test_corregir_meses_de_un_pago_gratuito_conserva_el_cobro_en_cero(db_session, admin_id):
+    """Un pago de gratuidad familiar tiene monto 0 sobre un monto base real:
+    cambiar los meses recalcula el monto base pero NO inventa un cobro."""
+    persona = crear_persona_orm(db_session, cedula_valida(923))
+    tipo = crear_tipo_membresia_orm(db_session, precio=TARIFA)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=TARIFA)
+    pago = _pago_aprobado(db_session, persona, membresia)
+    pago.monto = Decimal("0.00")
+    db_session.commit()
+
+    resultado, _ = PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(meses_comprados=2, motivo="Dos meses gratis"),
+        actor_persona_id=admin_id,
+    )
+
+    assert resultado.monto_base == Decimal("60.00")
+    assert resultado.monto == Decimal("0.00")
+
+
+@pytest.mark.parametrize("periodicidad", [PeriodicidadTarifa.SEMANAL, PeriodicidadTarifa.DIARIA])
+def test_corregir_meses_de_un_pago_semanal_o_diario_se_rechaza_como_el_registro(
+    db_session, admin_id, periodicidad,
+):
+    """Las tarifas semanales y diarias se pagan de a un período: la
+    periodicidad es la inferida del propio pago (el plan actual es MENSUAL)."""
+    persona = crear_persona_orm(db_session, cedula_valida(924))
+    tipo = crear_tipo_membresia_orm(db_session, precio=TARIFA)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=TARIFA)
+    pago = _pago_aprobado(db_session, persona, membresia, periodicidad=periodicidad, tarifa=Decimal("5.00"))
+
+    with pytest.raises(OperacionInvalida, match="de a un período por vez"):
+        PagoServicio(db_session).corregir_pago(
+            pago.id,
+            CorreccionPagoDTO(meses_comprados=2, motivo="Dos períodos"),
+            actor_persona_id=admin_id,
+        )
     assert _correcciones(db_session, pago.id) == []
 
 
