@@ -106,8 +106,9 @@ const BENEFICIO_SOLO_MES_A_MES = "Con beneficio activo solo puedes pagar un mes 
 
 /** True when the server will reject the months because a frozen discount limits the payment to one. */
 function mesesNoPermitidosConBeneficio(form: FormState, actual: PagoActual): boolean {
+  // Same condition as the server: a frozen discount (set, even at zero) and a payment that has months.
   const meses = mesesCorregidos(form, actual);
-  return meses !== null && meses > 1 && Number(actual.descuentoValorAplicado ?? 0) > 0;
+  return meses !== null && meses > 1 && actual.mesesComprados !== null && actual.descuentoValorAplicado !== null;
 }
 
 /**

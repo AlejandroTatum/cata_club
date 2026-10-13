@@ -167,6 +167,24 @@ describe("PagoCorreccionSection — extended (amount, months, dates)", () => {
       expect(screen.queryByText(/^Monto:/)).not.toBeInTheDocument();
     });
 
+    it("does not show the discount rule for a legacy payment without months (the server would not reject it)", async () => {
+      mockFetchPagoDetalle.mockResolvedValue({ ...PAGO, descuentoValorAplicado: "5.00" });
+      await renderExtended();
+
+      fireEvent.change(screen.getByLabelText(/^meses/i), { target: { value: "2" } });
+
+      expect(screen.queryByText("Con beneficio activo solo puedes pagar un mes a la vez.")).not.toBeInTheDocument();
+    });
+
+    it("shows the discount rule even when the frozen discount value is zero", async () => {
+      mockFetchPagoDetalle.mockResolvedValue({ ...PAGO_CON_SNAPSHOT, descuentoValorAplicado: "0.00" });
+      await renderExtended();
+
+      fireEvent.change(screen.getByLabelText(/^meses/i), { target: { value: "2" } });
+
+      expect(screen.getByText("Con beneficio activo solo puedes pagar un mes a la vez.")).toBeInTheDocument();
+    });
+
     it("lets the amount the admin typed win over the recalculation", async () => {
       mockFetchPagoDetalle.mockResolvedValue(PAGO_CON_SNAPSHOT);
       mockCorregirPago.mockResolvedValue({ pago: PAGO, correccion: CORRECCION });
