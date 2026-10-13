@@ -233,6 +233,10 @@ MENSAJE_BENEFICIO_SOLO_MES_A_MES = (
 MENSAJE_PERIODICIDAD_UN_PERIODO = (
     "Las tarifas semanales y diarias se pagan de a un período por vez."
 )
+MENSAJE_FECHA_FIN_EXPLICITA = (
+    "Debes indicar la fecha de fin: no se puede determinar con certeza la "
+    "periodicidad de este pago a partir de su período guardado."
+)
 MENSAJE_PERIODICIDAD_SIN_DEUDA = (
     "Las tarifas semanales y diarias no acumulan deuda; no hay nada que regularizar."
 )
@@ -1903,6 +1907,23 @@ class PagoServicio:
         "monto", "fecha_inicio", "fecha_fin",
     )
 
+    @staticmethod
+    def _periodicidades_del_rango_guardado(
+        fecha_inicio: date, meses_comprados: int | None, fecha_fin: date,
+    ) -> tuple[PeriodicidadTarifa, ...]:
+        """Periodicidades con las que `_fin_de_cobertura` reproduce EXACTAMENTE
+        el rango guardado de un pago (issue #1762). Una sola -> la periodicidad
+        del pago es inequívoca; cero (pago sin snapshot o rango ya editado) ->
+        no se puede inferir. Con los MISMOS `meses_comprados`, dos
+        periodicidades no dan nunca el mismo fin (n días, 7n días, n meses
+        calendario), así que un rango que coincide identifica una sola."""
+        if meses_comprados is None:
+            return ()
+        return tuple(
+            periodicidad for periodicidad in PeriodicidadTarifa
+            if _fin_de_cobertura(fecha_inicio, meses_comprados, periodicidad) == fecha_fin
+        )
+
     def corregir_pago(
         self, pago_id: int, datos: CorreccionPagoDTO, actor_persona_id: int,
     ) -> tuple[Pago, CorreccionPago]:
@@ -2045,6 +2066,23 @@ class PagoServicio:
                 if tarifa_derivada * meses == monto_base_derivado:
                     nuevos["tarifa_mensual_aplicada"] = tarifa_derivada
 
+        # Issue #1762: corregir SOLO los meses no cambia lo cobrado -- el
+        # monto se conserva y la tarifa mensual se re-deriva (monto base /
+        # meses) cuando la división es exacta en centavos, para que
+        # `monto_base = tarifa * meses` siga cerrando. Si no es exacta, no se
+        # inventa dinero: la fórmula del monto base lo rechaza más abajo.
+        if (
+            datos.meses_comprados is not None
+            and datos.meses_comprados != anteriores["meses_comprados"]
+            and datos.tarifa_mensual_aplicada is None
+            and datos.monto_base is None
+            and datos.monto is None
+            and anteriores["monto_base"] is not None
+        ):
+            tarifa_derivada = (anteriores["monto_base"] / datos.meses_comprados).quantize(Decimal("0.01"))
+            if tarifa_derivada * datos.meses_comprados == anteriores["monto_base"]:
+                nuevos["tarifa_mensual_aplicada"] = tarifa_derivada
+
         if all(nuevos[campo] == anteriores[campo] for campo in self._CAMPOS_CORREGIBLES_PAGO):
             raise OperacionInvalida("La corrección no modifica ningún valor del pago.")
 
@@ -2058,21 +2096,35 @@ class PagoServicio:
         # nullable para pagos históricos pre-#400 sin snapshot -- no hay
         # nada que validar contra un valor ausente).
         if _tocado("meses_comprados") or _tocado("fecha_inicio") or _tocado("fecha_fin"):
-            membresia_del_pago = self.repo_membresia.obtener_por_id(pago.membresia_id)
-            periodicidad_del_pago = (
-                membresia_del_pago.tipo_membresia.periodicidad
-                if membresia_del_pago is not None else PeriodicidadTarifa.MENSUAL
+            # Issue #1762: la periodicidad es la del PAGO, no la del plan
+            # actual de la membresía (que pudo cambiar después). El `Pago` no
+            # la guarda, así que se infiere del rango que ya tiene: solo las
+            # periodicidades que reproducen exactamente `fecha_fin` a partir
+            # de `fecha_inicio` + `meses_comprados` ANTERIORES son candidatas.
+            candidatas = self._periodicidades_del_rango_guardado(
+                anteriores["fecha_inicio"], anteriores["meses_comprados"],
+                anteriores["fecha_fin"],
             )
-            if (
-                nuevos["meses_comprados"] is not None
-                and nuevos["fecha_fin"] != _fin_de_cobertura(
-                    nuevos["fecha_inicio"], nuevos["meses_comprados"], periodicidad_del_pago,
-                )
-            ):
-                raise OperacionInvalida(
-                    "La fecha de fin no coincide con la fecha de inicio más "
-                    "la cantidad de meses comprados."
-                )
+            if nuevos["meses_comprados"] is not None:
+                if not _tocado("fecha_fin"):
+                    # El formulario manda solo lo que cambió: si el admin
+                    # corrige el inicio o los meses sin tocar el fin, el fin
+                    # viejo quedaría desalineado. Se deriva con la misma
+                    # regla de cobertura del registro -- pero solo si la
+                    # periodicidad es inequívoca; si no, no se adivina.
+                    if len(candidatas) != 1:
+                        raise OperacionInvalida(MENSAJE_FECHA_FIN_EXPLICITA)
+                    nuevos["fecha_fin"] = _fin_de_cobertura(
+                        nuevos["fecha_inicio"], nuevos["meses_comprados"], candidatas[0],
+                    )
+                elif nuevos["fecha_fin"] not in {
+                    _fin_de_cobertura(nuevos["fecha_inicio"], nuevos["meses_comprados"], periodicidad)
+                    for periodicidad in (candidatas or tuple(PeriodicidadTarifa))
+                }:
+                    raise OperacionInvalida(
+                        "La fecha de fin no coincide con la fecha de inicio más "
+                        "la cantidad de meses comprados."
+                    )
 
         if _tocado("tarifa_mensual_aplicada") or _tocado("meses_comprados") or _tocado("monto_base"):
             if (

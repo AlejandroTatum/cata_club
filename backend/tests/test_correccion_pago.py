@@ -46,8 +46,9 @@ from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EfectoCoberturaCorreccion, EstadoMembresia, EstadoPago, TipoPago
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
 from app.dominio.modelos import CorreccionPago, Membresia, Pago, Persona, TipoMembresia
+from app.dominio.periodicidad import PeriodicidadTarifa
 from app.servicios_negocio.dtos.membresia_pago_schemas import CorreccionPagoDTO, PagoCreateDTO
-from app.servicios_negocio.membresia_pago_servicio import PagoServicio, _sumar_meses
+from app.servicios_negocio.membresia_pago_servicio import PagoServicio, _fin_de_cobertura, _sumar_meses
 from tests.fabricas_pagos import crear_membresia_orm, crear_persona_orm, crear_tipo_membresia_orm
 
 FECHA_INICIO = date(2027, 1, 1)
@@ -71,6 +72,7 @@ def _pago_aprobado(
     meses: int = 1,
     fecha_inicio: date = FECHA_INICIO,
     descuento_valor_aplicado: Decimal | None = None,
+    periodicidad: PeriodicidadTarifa = PeriodicidadTarifa.MENSUAL,
 ) -> Pago:
     """Pago APROBADO con las tres fórmulas de consistencia YA cerradas
     (mismas que `registrar_pago` deja): `fecha_fin = _sumar_meses(fecha_
@@ -80,7 +82,7 @@ def _pago_aprobado(
     fixture ya inconsistente haría que esos tests no probaran nada nuevo."""
     monto_base = tarifa * meses
     monto = monto_base - (descuento_valor_aplicado or Decimal("0.00"))
-    fecha_fin = _sumar_meses(fecha_inicio, meses)
+    fecha_fin = _fin_de_cobertura(fecha_inicio, meses, periodicidad)
     pago = Pago(
         monto=monto,
         tarifa_mensual_aplicada=tarifa,
@@ -342,22 +344,179 @@ def test_corregir_sin_cambiar_ningun_valor_es_rechazada(db_session, admin_id):
 
 # --- Hallazgo 1: consistencia cruzada entre los seis campos ------------------
 
-def test_corregir_meses_comprados_solo_sin_ajustar_fechas_es_rechazada(db_session, grafo, admin_id):
-    """Tocar `meses_comprados` sin ajustar `fecha_fin` (ni `monto_base`)
-    deja el pago describiendo un período que ya no coincide con lo que dice
-    haber comprado -- se rechaza."""
+def test_corregir_fecha_fin_explicita_inconsistente_es_rechazada(db_session, grafo, admin_id):
+    """Un `fecha_fin` EXPLÍCITO que no cierra con inicio + meses se sigue
+    rechazando con el mismo mensaje (solo se deriva cuando el DTO no la
+    manda)."""
     _, _, _, pago = grafo
 
     with pytest.raises(OperacionInvalida, match="fecha de fin no coincide"):
         PagoServicio(db_session).corregir_pago(
             pago.id,
-            CorreccionPagoDTO(meses_comprados=2, motivo="Solo cambio los meses"),
+            CorreccionPagoDTO(
+                meses_comprados=2,
+                monto_base=Decimal("60.00"),
+                monto=Decimal("60.00"),
+                fecha_fin=_sumar_meses(FECHA_INICIO, 3),
+                motivo="Fin que no corresponde",
+            ),
             actor_persona_id=admin_id,
         )
     assert _correcciones(db_session, pago.id) == []
     db_session.refresh(pago)
     assert pago.meses_comprados == 1
     assert pago.fecha_fin == _sumar_meses(FECHA_INICIO, 1)
+
+
+# --- Issue #1762: la fecha de fin se DERIVA cuando no viaja en el DTO ---------
+
+def test_corregir_solo_fecha_inicio_deriva_la_fecha_fin(db_session, grafo, admin_id):
+    """El formulario manda solo lo que cambió: con solo `fecha_inicio` el
+    `fecha_fin` viejo quedaba desalineado y se rechazaba SIEMPRE. Ahora el
+    servidor la deriva con la misma regla de cobertura del registro."""
+    _, _, _, pago = grafo
+    nuevo_inicio = date(2027, 1, 15)
+
+    resultado, correccion = PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(fecha_inicio=nuevo_inicio, motivo="El socio pagó el 15"),
+        actor_persona_id=admin_id,
+    )
+
+    assert resultado.fecha_inicio == nuevo_inicio
+    assert resultado.fecha_fin == _sumar_meses(nuevo_inicio, 1)
+    assert correccion.fecha_fin_anterior == _sumar_meses(FECHA_INICIO, 1)
+    assert correccion.fecha_fin_nuevo == _sumar_meses(nuevo_inicio, 1)
+    assert correccion.efecto_cobertura == EfectoCoberturaCorreccion.AMPLIADA
+    assert len(_correcciones(db_session, pago.id)) == 1
+
+
+def test_corregir_solo_meses_comprados_deriva_la_fecha_fin(db_session, grafo, admin_id):
+    """Solo `meses_comprados` (1 -> 2): la fecha de fin se extiende. El dinero
+    cobrado no se toca: la tarifa mensual se re-deriva (60 / 2) para que
+    `monto_base = tarifa * meses` siga cerrando."""
+    _, _, _, pago = grafo
+    PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(monto=Decimal("60.00"), motivo="Cobró 60"),
+        actor_persona_id=admin_id,
+    )
+
+    resultado, correccion = PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(meses_comprados=2, motivo="Eran dos meses"),
+        actor_persona_id=admin_id,
+    )
+
+    assert resultado.meses_comprados == 2
+    assert resultado.fecha_fin == _sumar_meses(FECHA_INICIO, 2)
+    assert resultado.monto == Decimal("60.00")
+    assert resultado.monto_base == Decimal("60.00")
+    assert resultado.tarifa_mensual_aplicada == Decimal("30.00")
+    assert correccion.efecto_cobertura == EfectoCoberturaCorreccion.AMPLIADA
+
+
+def test_corregir_solo_meses_comprados_con_monto_que_no_cierra_es_rechazada(db_session, grafo, admin_id):
+    """Sin forma exacta de repartir el monto cobrado entre los nuevos meses
+    el servidor NO inventa dinero: rechaza por el monto base."""
+    _, _, _, pago = grafo
+
+    with pytest.raises(OperacionInvalida, match="monto base no coincide"):
+        PagoServicio(db_session).corregir_pago(
+            pago.id,
+            CorreccionPagoDTO(meses_comprados=7, motivo="Eran siete"),
+            actor_persona_id=admin_id,
+        )
+    db_session.refresh(pago)
+    assert pago.meses_comprados == 1
+    assert _correcciones(db_session, pago.id) == []
+
+
+def test_corregir_fecha_inicio_derivada_respeta_la_continuidad_con_pago_posterior(db_session, admin_id):
+    """La fecha derivada pasa por los mismos chequeos que una explícita: mover
+    el inicio de un pago que ya tiene otro anclado a su fin rompe la cadena."""
+    persona = crear_persona_orm(db_session, cedula_valida(917))
+    tipo = crear_tipo_membresia_orm(db_session, precio=TARIFA)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=TARIFA)
+    pago = _pago_aprobado(db_session, persona, membresia)
+    _pago_aprobado(db_session, persona, membresia, fecha_inicio=_sumar_meses(FECHA_INICIO, 1))
+
+    with pytest.raises(OperacionInvalida, match="superpone o rompe la continuidad"):
+        PagoServicio(db_session).corregir_pago(
+            pago.id,
+            CorreccionPagoDTO(fecha_inicio=date(2027, 1, 10), motivo="Corrimiento"),
+            actor_persona_id=admin_id,
+        )
+    db_session.refresh(pago)
+    assert pago.fecha_inicio == FECHA_INICIO
+    assert _correcciones(db_session, pago.id) == []
+
+
+# --- Issue #1762: la periodicidad es la del PAGO, no la del plan actual -------
+
+def test_corregir_pago_diario_tras_cambiar_a_plan_mensual_usa_la_periodicidad_del_pago(db_session, admin_id):
+    """El pago se hizo con un plan DIARIO (1 día de cobertura) y la membresía
+    pasó después a MENSUAL: la periodicidad se infiere del rango guardado del
+    propio pago, no del tipo actual."""
+    persona = crear_persona_orm(db_session, cedula_valida(918))
+    tipo = crear_tipo_membresia_orm(db_session, precio=TARIFA)
+    tipo.periodicidad = PeriodicidadTarifa.MENSUAL
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=TARIFA)
+    pago = _pago_aprobado(
+        db_session, persona, membresia, periodicidad=PeriodicidadTarifa.DIARIA,
+        tarifa=Decimal("5.00"),
+    )
+    assert pago.fecha_fin == date(2027, 1, 2)
+
+    resultado, _ = PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(fecha_inicio=date(2027, 1, 5), motivo="Vino el 5"),
+        actor_persona_id=admin_id,
+    )
+
+    assert resultado.fecha_inicio == date(2027, 1, 5)
+    assert resultado.fecha_fin == date(2027, 1, 6)
+
+
+def test_corregir_pago_semanal_tras_cambiar_a_plan_mensual_usa_la_periodicidad_del_pago(db_session, admin_id):
+    persona = crear_persona_orm(db_session, cedula_valida(919))
+    tipo = crear_tipo_membresia_orm(db_session, precio=TARIFA)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=TARIFA)
+    pago = _pago_aprobado(
+        db_session, persona, membresia, periodicidad=PeriodicidadTarifa.SEMANAL,
+        tarifa=Decimal("10.00"),
+    )
+
+    resultado, _ = PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(fecha_inicio=date(2027, 1, 3), motivo="Empezó el 3"),
+        actor_persona_id=admin_id,
+    )
+
+    assert resultado.fecha_fin == date(2027, 1, 10)
+
+
+def test_rango_que_no_coincide_con_ninguna_periodicidad_exige_fecha_fin_explicita(db_session, admin_id):
+    """Un rango guardado que ya no responde a la regla de cobertura de
+    ninguna periodicidad (dato histórico o editado) no se adivina: ni se usa
+    el plan actual ni se deriva; se pide la fecha de fin explícita. (Con la
+    misma cantidad de períodos, dos periodicidades nunca dan el mismo fin:
+    1 día, 7 días y un mes calendario difieren siempre, así que un rango que
+    sí coincide identifica UNA sola periodicidad.)"""
+    persona = crear_persona_orm(db_session, cedula_valida(921))
+    tipo = crear_tipo_membresia_orm(db_session, precio=TARIFA)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=TARIFA)
+    pago = _pago_aprobado(db_session, persona, membresia)
+    pago.fecha_fin = date(2027, 1, 20)
+    db_session.commit()
+
+    with pytest.raises(OperacionInvalida, match="Debes indicar la fecha de fin"):
+        PagoServicio(db_session).corregir_pago(
+            pago.id,
+            CorreccionPagoDTO(meses_comprados=2, monto=Decimal("60.00"), motivo="Eran dos"),
+            actor_persona_id=admin_id,
+        )
+    assert _correcciones(db_session, pago.id) == []
 
 
 def test_corregir_monto_base_sin_ajustar_monto_es_rechazada(db_session, grafo, admin_id):
