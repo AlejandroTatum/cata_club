@@ -8,7 +8,7 @@ from alembic.script import ScriptDirectory
 
 from tests.arnes_migraciones import ArnesMigracion
 
-REVISION_ANTERIOR = "y1653sesionrotacion"
+REVISION_ANTERIOR = "y1653reautenticacion"
 REVISION = "z1749miembrodesde"
 
 SQL_COLUMNA = (

@@ -1,7 +1,7 @@
 """«Miembro desde» de un jugador (issue #1749).
 
 Revision ID: z1749miembrodesde
-Revises: y1653sesionrotacion
+Revises: y1653reautenticacion
 
 Aditiva y compatible hacia atrás: una columna `persona.miembro_desde` DATE
 NULLABLE, sin default y SIN backfill. Las filas existentes quedan en NULL
@@ -15,7 +15,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision: str = "z1749miembrodesde"
-down_revision: Union[str, Sequence[str], None] = "y1653sesionrotacion"
+down_revision: Union[str, Sequence[str], None] = "y1653reautenticacion"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
