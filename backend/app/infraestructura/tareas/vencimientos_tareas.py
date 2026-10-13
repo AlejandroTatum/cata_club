@@ -22,6 +22,15 @@ Idempotencia:
     No se reverifica si el pago fue reemplazado por uno nuevo a tiempo: la
     condición es `fecha_fin del pago aprobado más reciente < hoy`, calculada en
     runtime via SQL (no cacheada).
+
+Reconciliación en ambas direcciones (issue #1762):
+    El estado se guarda pero la cobertura se deriva de los pagos aprobados, y
+    nada más levantaba una VENCIDA: un pago con fechas mal cargadas que esta
+    tarea ya había vencido seguía VENCIDO aunque el admin lo corrigiera. Por eso
+    la tarea también vuelve a ACTIVA una VENCIDA cuyo último Pago APROBADO llega
+    a hoy (`PagoServicio.levantar_vencida_por_cobertura`: persona activa, sin
+    otra membresía operativa; sin avisos). Una por transacción: una candidata
+    que se saltea no corta el lote. SUSPENDIDA e INACTIVA no se tocan.
 """
 import logging
 
@@ -31,6 +40,7 @@ from app.infraestructura.db import SessionLocal
 from app.infraestructura.tareas.celery_app import celery_app
 from app.dominio.modelos import Membresia, Pago, Persona
 from app.dominio.enums import EstadoMembresia, EstadoPago
+from app.servicios_negocio.membresia_pago_servicio import PagoServicio
 from app.soporte_transversal.tiempo import hoy_club
 
 
@@ -63,6 +73,7 @@ def marcar_membresias_vencidas(self) -> dict:
     # calendario pactada con el socio, no un instante.
     hoy = hoy_club()
     vencidas: list[dict] = []
+    reactivadas: list[dict] = []
 
     with SessionLocal() as db:
         # Subconsulta: para cada membresía, la fecha_fin más reciente entre
@@ -102,14 +113,36 @@ def marcar_membresias_vencidas(self) -> dict:
         if miembros_vencidos:
             db.commit()
 
+        # VENCIDA -> ACTIVA: la misma subconsulta, ahora con `>= hoy`. Se
+        # evalúa DESPUÉS del paso anterior, que ya terminó (y commiteó), así
+        # que una membresía no puede ir y volver en la misma corrida.
+        candidatas = list(db.scalars(
+            select(Membresia)
+            .join(ultimo_fin, ultimo_fin.c.membresia_id == Membresia.id)
+            .join(Persona, Persona.id == Membresia.persona_id)
+            .where(
+                Membresia.estado == EstadoMembresia.VENCIDA,
+                Persona.activo.is_(True),
+                ultimo_fin.c.ultima_fecha_fin >= hoy,
+            )
+        ).unique().all())
+        servicio = PagoServicio(db)
+        for candidata in candidatas:
+            datos = {"membresia_id": candidata.id, "persona_id": candidata.persona_id}
+            if servicio.levantar_vencida_por_cobertura(candidata.id, hoy):
+                reactivadas.append(datos)
+
     logger.info(
-        "Membresías VENCIDAS el %s -> %d actualizadas",
+        "Membresías VENCIDAS el %s -> %d actualizadas, %d reactivadas",
         hoy.isoformat(),
         len(vencidas),
+        len(reactivadas),
     )
 
     return {
         "fecha": hoy.isoformat(),
         "total_vencidas": len(vencidas),
         "vencidas": vencidas,
+        "total_reactivadas": len(reactivadas),
+        "reactivadas": reactivadas,
     }

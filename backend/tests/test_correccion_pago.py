@@ -1083,6 +1083,69 @@ def test_corregir_solo_el_monto_no_cambia_el_estado_de_la_membresia(db_session, 
     assert membresia.estado == EstadoMembresia.VENCIDA
 
 
+def test_corregir_solo_el_monto_sana_un_estado_desfasado(db_session, admin_id):
+    """Cualquier corrección exitosa reconcilia el estado, no solo las de
+    fechas: una membresía VENCIDA cuyo pago ya cubre hoy (datos de antes de
+    este fix) se sana al corregir solo el monto."""
+    hoy = hoy_club()
+    membresia, pago = _membresia_con_pago(
+        db_session, 932, EstadoMembresia.VENCIDA, inicio=hoy - timedelta(days=5),
+    )
+
+    PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(monto=Decimal("45.00"), motivo="Monto mal cargado"),
+        actor_persona_id=admin_id,
+    )
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+
+
+def test_corregir_fechas_nunca_activa_la_membresia_de_una_persona_dada_de_baja(db_session, admin_id):
+    """Misma guarda que aprobar un pago: una persona retirada no se reactiva."""
+    hoy = hoy_club()
+    membresia, pago = _membresia_con_pago(
+        db_session, 933, EstadoMembresia.VENCIDA, inicio=hoy - timedelta(days=90), activo=False,
+    )
+
+    PagoServicio(db_session).corregir_pago(
+        pago.id,
+        CorreccionPagoDTO(fecha_inicio=hoy - timedelta(days=5), motivo="Fechas mal cargadas"),
+        actor_persona_id=admin_id,
+    )
+
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.VENCIDA
+
+
+def test_corregir_un_pago_viejo_con_otra_membresia_activa_no_falla_ni_la_reactiva(db_session, admin_id):
+    """La persona tiene una membresía vieja VENCIDA y una actual ACTIVA:
+    corregir el pago viejo para que cubra hoy tiene que andar y dejar la
+    vieja como está (el índice único no admite dos ACTIVAS)."""
+    hoy = hoy_club()
+    vieja, pago_viejo = _membresia_con_pago(
+        db_session, 934, EstadoMembresia.VENCIDA, inicio=hoy - timedelta(days=90),
+    )
+    persona = db_session.get(Persona, vieja.persona_id)
+    tipo = crear_tipo_membresia_orm(db_session, categoria="Otro plan", precio=TARIFA)
+    actual = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=TARIFA)
+    _pago_aprobado(db_session, persona, actual, fecha_inicio=hoy - timedelta(days=2))
+
+    resultado, _ = PagoServicio(db_session).corregir_pago(
+        pago_viejo.id,
+        CorreccionPagoDTO(fecha_inicio=hoy - timedelta(days=5), motivo="Fechas mal cargadas"),
+        actor_persona_id=admin_id,
+    )
+
+    assert resultado.fecha_inicio == hoy - timedelta(days=5)
+    db_session.refresh(vieja)
+    db_session.refresh(actual)
+    assert vieja.estado == EstadoMembresia.VENCIDA
+    assert actual.estado == EstadoMembresia.ACTIVA
+    assert len(_correcciones(db_session, pago_viejo.id)) == 1
+
+
 # --- Concurrencia REAL: dos correcciones del mismo pago -----------------------
 
 def _limpiar_grafo(motor_test, *, persona_ids: list[int], membresia_id: int, tipo_id: int) -> None:
