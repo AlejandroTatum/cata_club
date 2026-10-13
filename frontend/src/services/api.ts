@@ -2112,6 +2112,14 @@ export interface PagoPersona {
    * tocarse uno por uno.
    */
   motivoExcepcionSinComprobante?: string | null;
+  /**
+   * Frozen tariff snapshot (issue #400), read-only; `null` for a historical
+   * payment that never had one. Optional for the same reason as
+   * `comprobanteOficialUrl`. The correction form uses them to preview the
+   * amount the server recalculates when the months change (#1762).
+   */
+  tarifaMensualAplicada?: string | null;
+  mesesComprados?: number | null;
 }
 
 /**

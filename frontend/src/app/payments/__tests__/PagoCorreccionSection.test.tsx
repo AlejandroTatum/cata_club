@@ -124,6 +124,84 @@ describe("PagoCorreccionSection — extended (amount, months, dates)", () => {
     await waitFor(() => expect(onCorrected).toHaveBeenCalled());
   });
 
+  describe("months change — the recalculated amount is shown before saving (#1762)", () => {
+    const PAGO_CON_SNAPSHOT = { ...PAGO, monto: "30.00", fechaFin: "2026-08-01", tarifaMensualAplicada: "30.00", mesesComprados: 1, descuentoValorAplicado: null };
+
+    it("previews tariff × months when only the months change, and does not send an amount", async () => {
+      mockFetchPagoDetalle.mockResolvedValue(PAGO_CON_SNAPSHOT);
+      mockCorregirPago.mockResolvedValue({ pago: PAGO, correccion: CORRECCION });
+      await renderExtended();
+
+      fireEvent.change(screen.getByLabelText(/^meses/i), { target: { value: "2" } });
+
+      expect(screen.getByText("Monto: $30,00 → $60,00")).toBeInTheDocument();
+      expect(screen.getByText(/se recalcula a \$60,00/i)).toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText(/^motivo/i), { target: { value: "Eran dos meses" } });
+      fireEvent.click(screen.getByRole("button", { name: /registrar corrección/i }));
+      await waitFor(() =>
+        expect(mockCorregirPago).toHaveBeenCalledWith(9, { motivo: "Eran dos meses", mesesComprados: 2 }),
+      );
+      expect(mockCorregirPago.mock.calls[0][1]).not.toHaveProperty("monto");
+    });
+
+    it("subtracts the frozen discount, like the server does", async () => {
+      mockFetchPagoDetalle.mockResolvedValue({ ...PAGO_CON_SNAPSHOT, monto: "25.00", descuentoValorAplicado: "5.00" });
+      await renderExtended();
+
+      fireEvent.change(screen.getByLabelText(/^meses/i), { target: { value: "1" } });
+      fireEvent.change(screen.getByLabelText(/^meses/i), { target: { value: "2" } });
+
+      expect(screen.getByText("Monto: $25,00 → $55,00")).toBeInTheDocument();
+    });
+
+    it("lets the amount the admin typed win over the recalculation", async () => {
+      mockFetchPagoDetalle.mockResolvedValue(PAGO_CON_SNAPSHOT);
+      mockCorregirPago.mockResolvedValue({ pago: PAGO, correccion: CORRECCION });
+      await renderExtended();
+
+      fireEvent.change(screen.getByLabelText(/^meses/i), { target: { value: "2" } });
+      fireEvent.change(screen.getByLabelText(/^monto/i), { target: { value: "55.00" } });
+
+      expect(screen.getByText("Monto: $30,00 → $55,00")).toBeInTheDocument();
+      expect(screen.queryByText(/se recalcula a/i)).not.toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText(/^motivo/i), { target: { value: "Pagó 55" } });
+      fireEvent.click(screen.getByRole("button", { name: /registrar corrección/i }));
+      await waitFor(() =>
+        expect(mockCorregirPago).toHaveBeenCalledWith(9, { motivo: "Pagó 55", monto: "55.00", mesesComprados: 2 }),
+      );
+    });
+
+    it("shows no recalculated amount for a free payment (the server keeps it at zero)", async () => {
+      mockFetchPagoDetalle.mockResolvedValue({ ...PAGO_CON_SNAPSHOT, monto: "0.00" });
+      await renderExtended();
+
+      fireEvent.change(screen.getByLabelText(/^meses/i), { target: { value: "2" } });
+
+      expect(screen.queryByText(/se recalcula a/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/^Monto:/)).not.toBeInTheDocument();
+    });
+
+    it("shows no preview, and does not send the months, when they equal the payment's own", async () => {
+      mockFetchPagoDetalle.mockResolvedValue(PAGO_CON_SNAPSHOT);
+      await renderExtended();
+
+      fireEvent.change(screen.getByLabelText(/^meses/i), { target: { value: "1" } });
+      fireEvent.change(screen.getByLabelText(/^motivo/i), { target: { value: "Nada" } });
+
+      expect(screen.queryByText(/se recalcula a/i)).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /registrar corrección/i })).toBeDisabled();
+    });
+
+    it("shows no preview for a payment without a tariff snapshot", async () => {
+      await renderExtended();
+
+      fireEvent.change(screen.getByLabelText(/^meses/i), { target: { value: "2" } });
+
+      expect(screen.queryByText(/se recalcula a/i)).not.toBeInTheDocument();
+    });
+  });
+
   it("surfaces the backend's overlap / continuity message next to the form and keeps what was typed", async () => {
     const { ApiClientError } = await import("@/services/api");
     mockCorregirPago.mockRejectedValue(
