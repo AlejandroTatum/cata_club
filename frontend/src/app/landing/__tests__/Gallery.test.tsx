@@ -84,12 +84,12 @@ describe("Gallery", (): void => {
     delete (HTMLElement.prototype as { scrollBy?: unknown }).scrollBy;
   });
 
-  it("runs at half the sponsors' speed: the gallery track's own 56s duration, sponsors keep 28s", async (): Promise<void> => {
+  it("runs slower than the sponsors: the gallery track's own 90s duration, sponsors keep 28s", async (): Promise<void> => {
     await renderReady();
     const track = document.getElementById("galeria-track") as HTMLElement;
     expect(track).toHaveClass("landing-gallery-track");
     const css = readFileSync(resolve(process.cwd(), "src/app/landing/landing.css"), "utf8");
-    expect(css).toMatch(/\.landing-sponsors-track\.landing-gallery-track \{ animation-duration: 56s; \}/);
+    expect(css).toMatch(/\.landing-sponsors-track\.landing-gallery-track \{ animation-duration: 90s; \}/);
     expect(css).toMatch(/\.landing-sponsors-track \{[^}]*landing-sponsors-marquee 28s linear infinite/);
   });
 
