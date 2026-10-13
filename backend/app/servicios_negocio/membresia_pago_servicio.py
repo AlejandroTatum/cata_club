@@ -859,7 +859,7 @@ class PagoServicio:
         # Un pendiente bloquea otro registro (invariante 1), salvo el caso de
         # #1768/S10: la transferencia de un socio bloqueado reemplaza a su
         # propio efectivo. El efectivo se anula recién abajo, junto al INSERT.
-        a_reemplazar = self._pendiente_a_reemplazar(datos)
+        a_reemplazar = self._pendiente_a_reemplazar(datos, es_admin)
 
         # T5/S5 (L5): un pago iniciado por el socio no se acepta mientras su
         # cobertura vigente se pagó con descuento; el admin no queda bloqueado.
@@ -1007,18 +1007,20 @@ class PagoServicio:
             raise
         return resultado
 
-    def _pendiente_a_reemplazar(self, datos: PagoCreateDTO) -> Pago | None:
+    def _pendiente_a_reemplazar(self, datos: PagoCreateDTO, es_admin: bool) -> Pago | None:
         """El pendiente que `datos` reemplaza (S10, #1768), o `None` si la
         membresía no tiene ninguno. Rechaza todo otro duplicado como siempre.
 
-        Solo se reemplaza cuando `datos` es una TRANSFERENCIA, la membresía está
-        bloqueada por impago Y el pendiente es un EFECTIVO que el propio socio
-        declaró (`autodeclarado` True; NULL = origen desconocido, no se toca)."""
+        Solo se reemplaza cuando el socio (no el admin) carga una TRANSFERENCIA,
+        la membresía está bloqueada por impago Y el pendiente es un EFECTIVO que
+        el propio socio declaró (`autodeclarado` True; NULL = origen
+        desconocido, no se toca)."""
         pendiente = self.repo.obtener_pendiente_de_membresia(datos.membresia_id)
         if pendiente is None:
             return None
         if not (
-            datos.tipo_pago == TipoPago.TRANSFERENCIA
+            not es_admin
+            and datos.tipo_pago == TipoPago.TRANSFERENCIA
             and pendiente.tipo_pago == TipoPago.EFECTIVO
             and pendiente.autodeclarado is True
             and BloqueoImpagoRepositorio(self.db).membresia_bloqueada(

@@ -201,6 +201,20 @@ def test_el_efectivo_registrado_por_el_admin_no_se_anula(client, db_session):
     _assert_rechazo_de_siempre(respuesta, db_session, membresia, antes)
 
 
+def test_la_transferencia_cargada_por_el_admin_no_anula_el_efectivo_del_socio(client, db_session):
+    """S10 es un alivio para el socio desde el portal: el admin que carga una
+    transferencia no anula el efectivo que el socio declaró."""
+    persona, membresia = _moroso(db_session)
+    _como(persona.id, ["ALUMNO"])
+    _declarar(client, persona, membresia, "EFECTIVO")
+    antes = _foto(db_session, membresia)
+    _como(999_999, ["ADMINISTRADOR"])
+
+    respuesta = _declarar(client, persona, membresia, "TRANSFERENCIA")
+
+    _assert_rechazo_de_siempre(respuesta, db_session, membresia, antes)
+
+
 def test_un_efectivo_sin_marca_de_origen_no_se_anula(client, db_session):
     persona, membresia = _moroso(db_session)
     agregar_pago(
