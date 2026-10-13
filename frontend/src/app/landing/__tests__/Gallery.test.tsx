@@ -1,4 +1,6 @@
 /** @vitest-environment jsdom */
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Gallery, { wrapTime } from "../Gallery";
@@ -80,6 +82,15 @@ describe("Gallery", (): void => {
     delete (HTMLElement.prototype as { getAnimations?: unknown }).getAnimations;
     delete (HTMLElement.prototype as { offsetWidth?: unknown }).offsetWidth;
     delete (HTMLElement.prototype as { scrollBy?: unknown }).scrollBy;
+  });
+
+  it("runs at half the sponsors' speed: the gallery track's own 56s duration, sponsors keep 28s", async (): Promise<void> => {
+    await renderReady();
+    const track = document.getElementById("galeria-track") as HTMLElement;
+    expect(track).toHaveClass("landing-gallery-track");
+    const css = readFileSync(resolve(process.cwd(), "src/app/landing/landing.css"), "utf8");
+    expect(css).toMatch(/\.landing-sponsors-track\.landing-gallery-track \{ animation-duration: 56s; \}/);
+    expect(css).toMatch(/\.landing-sponsors-track \{[^}]*landing-sponsors-marquee 28s linear infinite/);
   });
 
   it("reuses the sponsors marquee: a CSS track of two identical copies, the second hidden from assistive technology", async (): Promise<void> => {

@@ -620,6 +620,8 @@ html[data-theme="dark"] .landing-page {
 .landing-sponsors-viewport { padding-block: 6px 22px; overflow: hidden; }
 .landing-sponsors-track { display: flex; width: max-content; animation: landing-sponsors-marquee 28s linear infinite; will-change: transform; }
 .landing-sponsors-track:hover, .landing-sponsors-track:focus-within { animation-play-state: paused; }
+/* The gallery reuses the sponsors marquee at half its speed: photos need time to be seen. */
+.landing-sponsors-track.landing-gallery-track { animation-duration: 56s; }
 /* Every copy spans at least the viewport, so the following identical copy is
    already under the viewport when the first reaches its repeat boundary. The
    copy earns that width with real logos: Sponsors.tsx repeats the roster inside
