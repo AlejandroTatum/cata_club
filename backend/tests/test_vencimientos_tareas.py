@@ -9,11 +9,14 @@ fixture para aislar el test del broker y de la BD real. La firma
 acepte `self`, pero Celery injerta `self` automáticamente al invocar la
 tarea como callable (ver `celery.app.task.Task.__call__`).
 """
-from datetime import date
+from datetime import date, timedelta
+from decimal import Decimal
 from contextlib import contextmanager
 
 from app.dominio.cedula import cedula_valida
-from app.dominio.modelos import Persona, Membresia, TipoMembresia, Pago
+from app.dominio.modelos import (
+    AsignacionDescuento, CoberturaBonificada, CorreccionPago, Descuento, Persona, Membresia, TipoMembresia, Pago,
+)
 from app.dominio.enums import (
     EstadoMembresia, EstadoPago, TipoPago, TipoModalidad,
 )
@@ -341,3 +344,118 @@ def test_levantar_una_no_impide_levantar_las_demas(db_session, monkeypatch):
     assert resultado["total_reactivadas"] == 1
     db_session.refresh(otra)
     assert otra.estado == EstadoMembresia.ACTIVA
+
+
+# --- Cobertura combinada: pagos + cobertura bonificada (issue #1762) ---------
+# El resto de la app (deuda, `cubiertoHasta`, la corrección de pagos) toma la
+# cobertura como el MÁXIMO entre pagos aprobados y cobertura bonificada. La
+# tarea usa la misma definición en ambas direcciones; si no, el estado guardado
+# oscila contra el derivado (la tarea vence, la corrección levanta, repite).
+
+def _agregar_bonificada(db, membresia: Membresia, persona: Persona, inicio: date, fin: date) -> CoberturaBonificada:
+    admin = Persona(
+        nombres="Admin", apellidos="Test", cedula=cedula_valida(790 + membresia.id % 50),
+        fecha_nacimiento=date(1980, 1, 1), telefono="0990000790",
+    )
+    descuento = Descuento(nombre=f"Beca {membresia.id}", porcentaje=Decimal("100.00"), activo=True)
+    db.add_all([admin, descuento])
+    db.flush()
+    asignacion = AsignacionDescuento(
+        persona_id=persona.id, descuento_id=descuento.id, asignado_por_persona_id=admin.id,
+    )
+    db.add(asignacion)
+    db.flush()
+    cobertura = CoberturaBonificada(
+        membresia_id=membresia.id, persona_id=persona.id, asignacion_descuento_id=asignacion.id,
+        tarifa_mensual_aplicada=Decimal("35.00"), meses_comprados=1,
+        descuento_valor_aplicado=Decimal("35.00"), descuento_porcentaje_aplicado=Decimal("100.00"),
+        fecha_inicio=inicio, fecha_fin=fin, otorgada_por_persona_id=admin.id,
+    )
+    db.add(cobertura)
+    db.commit()
+    return cobertura
+
+
+def test_no_vence_una_activa_cuyo_pago_termino_pero_la_bonificada_cubre_hoy(db_session, monkeypatch):
+    hoy = date(2029, 6, 15)
+    persona, membresia = _crear_persona_y_membresia(db_session, EstadoMembresia.ACTIVA)
+    _agregar_pago(db_session, membresia, persona, EstadoPago.APROBADO, hoy - timedelta(days=1))
+    _agregar_bonificada(db_session, membresia, persona, hoy - timedelta(days=1), hoy + timedelta(days=30))
+
+    resultado = _run_task(db_session, monkeypatch, hoy)
+
+    assert resultado["total_vencidas"] == 0
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+
+
+def test_vence_una_activa_cuando_ni_el_pago_ni_la_bonificada_cubren_hoy(db_session, monkeypatch):
+    hoy = date(2029, 6, 15)
+    persona, membresia = _crear_persona_y_membresia(db_session, EstadoMembresia.ACTIVA)
+    _agregar_pago(db_session, membresia, persona, EstadoPago.APROBADO, hoy - timedelta(days=10))
+    _agregar_bonificada(db_session, membresia, persona, hoy - timedelta(days=10), hoy - timedelta(days=2))
+
+    resultado = _run_task(db_session, monkeypatch, hoy)
+
+    assert resultado["total_vencidas"] == 1
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.VENCIDA
+
+
+def test_levanta_una_vencida_cubierta_solo_por_bonificada(db_session, monkeypatch):
+    hoy = date(2029, 6, 15)
+    persona, membresia = _crear_persona_y_membresia(db_session, EstadoMembresia.VENCIDA)
+    _agregar_bonificada(db_session, membresia, persona, hoy - timedelta(days=1), hoy + timedelta(days=30))
+
+    resultado = _run_task(db_session, monkeypatch, hoy)
+
+    assert resultado["total_reactivadas"] == 1
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+
+
+def test_vencida_cubierta_por_bonificada_no_se_levanta_si_la_persona_esta_dada_de_baja(db_session, monkeypatch):
+    hoy = date(2029, 6, 15)
+    persona, membresia = _crear_persona_y_membresia(db_session, EstadoMembresia.VENCIDA)
+    persona.activo = False
+    _agregar_bonificada(db_session, membresia, persona, hoy - timedelta(days=1), hoy + timedelta(days=30))
+
+    resultado = _run_task(db_session, monkeypatch, hoy)
+
+    assert resultado["total_reactivadas"] == 0
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.VENCIDA
+
+
+def test_la_correccion_y_la_tarea_no_se_contradicen_con_cobertura_bonificada(db_session, monkeypatch):
+    """El bucle que mostró la verificación: pago terminado ayer + bonificada
+    que cubre hoy. La tarea no vence, corregir el pago tampoco cambia nada, y
+    la tarea siguiente sigue sin vencer."""
+    from app.servicios_negocio.dtos.membresia_pago_schemas import CorreccionPagoDTO
+    from app.servicios_negocio.membresia_pago_servicio import PagoServicio
+    from app.soporte_transversal.tiempo import hoy_club
+
+    hoy = hoy_club()
+    persona, membresia = _crear_persona_y_membresia(db_session, EstadoMembresia.ACTIVA)
+    pago = _agregar_pago(db_session, membresia, persona, EstadoPago.APROBADO, hoy - timedelta(days=1))
+    _agregar_bonificada(db_session, membresia, persona, hoy - timedelta(days=1), hoy + timedelta(days=30))
+    admin = Persona(
+        nombres="Admin", apellidos="Corrige", cedula=cedula_valida(840),
+        fecha_nacimiento=date(1980, 1, 1), telefono="0990000840",
+    )
+    db_session.add(admin)
+    db_session.commit()
+
+    _run_task(db_session, monkeypatch, hoy)
+    PagoServicio(db_session).corregir_pago(
+        pago.id, CorreccionPagoDTO(monto=Decimal("40.00"), motivo="Monto mal cargado"),
+        actor_persona_id=admin.id,
+    )
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+    segunda = _run_task(db_session, monkeypatch, hoy)
+
+    assert segunda["total_vencidas"] == 0
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+    assert db_session.query(CorreccionPago).filter_by(pago_id=pago.id).count() == 1
