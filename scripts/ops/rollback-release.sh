@@ -34,6 +34,15 @@ esac
 [ -f "$TARGET_RECORD" ] || die "el SHA objetivo no tiene un registro local; no se ejecuta ningún cambio"
 [ "$(sed -n 's/^IMAGE_TAG=//p' "$TARGET_RECORD" | head -1)" = "$TARGET_TAG" ] \
   || die "el registro del SHA objetivo no está alineado; no se ejecuta ningún cambio"
+# Los registros anteriores al versionado no traen APP_VERSION: quedan `unversioned`,
+# el mismo valor por defecto de Compose. Lo que sí trae el registro se valida como
+# MAJOR.MINOR.PATCH antes de cambiar nada, porque termina en `.env` y en Compose.
+TARGET_APP_VERSION="$(sed -n 's/^APP_VERSION=//p' "$TARGET_RECORD" | head -1)"
+TARGET_APP_VERSION="${TARGET_APP_VERSION:-unversioned}"
+if [ "$TARGET_APP_VERSION" != "unversioned" ]; then
+  [[ "$TARGET_APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+    || die "el registro del SHA objetivo trae APP_VERSION inválida; no se ejecuta ningún cambio"
+fi
 [ -d "$STACK_DIR" ] || die "STACK_DIR no existe: $STACK_DIR"
 [ -f "$STACK_DIR/.env" ] || die "falta $STACK_DIR/.env"
 command -v docker >/dev/null 2>&1 || die "docker no está disponible"
@@ -41,28 +50,35 @@ command -v docker >/dev/null 2>&1 || die "docker no está disponible"
 persist_project_env() {
   local tmp
   tmp="$(mktemp "$STACK_DIR/.env.rollback.XXXXXX")" \
-    || die "no se pudo preparar ${STACK_DIR}/.env para persistir IMAGE_TAG=${TARGET_TAG}"
+    || die "no se pudo preparar ${STACK_DIR}/.env para persistir IMAGE_TAG=${TARGET_TAG} y APP_VERSION=${TARGET_APP_VERSION}"
   trap 'rm -f "$tmp"' EXIT
-  awk -v tag="$TARGET_TAG" '
-    BEGIN { found = 0 }
+  awk -v tag="$TARGET_TAG" -v version="$TARGET_APP_VERSION" '
+    BEGIN { found_tag = 0; found_version = 0 }
     /^IMAGE_TAG=/ {
-      if (!found) { print "IMAGE_TAG=" tag; found = 1 }
+      if (!found_tag) { print "IMAGE_TAG=" tag; found_tag = 1 }
+      next
+    }
+    /^APP_VERSION=/ {
+      if (!found_version) { print "APP_VERSION=" version; found_version = 1 }
       next
     }
     { print }
-    END { if (!found) print "IMAGE_TAG=" tag }
+    END {
+      if (!found_tag) print "IMAGE_TAG=" tag
+      if (!found_version) print "APP_VERSION=" version
+    }
   ' "$STACK_DIR/.env" > "$tmp" \
-    || die "no se pudo escribir ${STACK_DIR}/.env para persistir IMAGE_TAG=${TARGET_TAG}"
+    || die "no se pudo escribir ${STACK_DIR}/.env para persistir IMAGE_TAG=${TARGET_TAG} y APP_VERSION=${TARGET_APP_VERSION}"
   chmod 600 "$tmp"
   mv -f "$tmp" "$STACK_DIR/.env"
   trap - EXIT
 }
 
-log "Rollback de aplicación a ${TARGET_TAG}; no se ejecutará alembic downgrade"
+log "Rollback de aplicación a ${TARGET_TAG} (APP_VERSION=${TARGET_APP_VERSION}); no se ejecutará alembic downgrade"
 (
   cd "$STACK_DIR"
-  IMAGE_TAG="$TARGET_TAG" docker compose "${COMPOSE_FILES[@]}" pull
-  IMAGE_TAG="$TARGET_TAG" docker compose "${COMPOSE_FILES[@]}" up -d
+  IMAGE_TAG="$TARGET_TAG" APP_VERSION="$TARGET_APP_VERSION" docker compose "${COMPOSE_FILES[@]}" pull
+  IMAGE_TAG="$TARGET_TAG" APP_VERSION="$TARGET_APP_VERSION" docker compose "${COMPOSE_FILES[@]}" up -d
 )
 persist_project_env
 cp "$TARGET_RECORD" "$CURRENT_RECORD"

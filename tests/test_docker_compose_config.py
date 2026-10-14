@@ -1756,3 +1756,48 @@ def test_el_frontend_recibe_el_mismo_dominio_indexable_que_caddy():
         servicios["frontend"]["environment"]["DOMINIO_INDEXABLE"]
         == servicios["caddy"]["environment"]["DOMINIO_INDEXABLE"]
     )
+
+
+# ---------------------------------------------------------------------------
+# APP_VERSION (versionado SemVer por deploy)
+# ---------------------------------------------------------------------------
+# La versión nace DESPUÉS de construir las imágenes (se calcula al desplegar a
+# partir del SHA), así que solo puede llegar como variable de ENTORNO en runtime:
+# un build arg obligaría a reconstruir la imagen para cambiar un número.
+SERVICIOS_CON_APP_VERSION = ("backend", "frontend")
+
+
+def _produccion_con_app_version(valor: str | None) -> dict:
+    resultado = _ejecutar_config(
+        "docker-compose.yml",
+        "docker-compose.prod.yml",
+        entorno={"APP_VERSION": valor} if valor is not None else None,
+        omitir=() if valor is not None else ("APP_VERSION",),
+    )
+    assert resultado.returncode == 0, f"docker compose config falló:\n{resultado.stderr}"
+    return json.loads(resultado.stdout)
+
+
+@pytest.mark.parametrize("servicio", SERVICIOS_CON_APP_VERSION)
+def test_el_overlay_de_produccion_pasa_app_version_en_runtime(servicio):
+    config = _produccion_con_app_version("9.8.7")
+
+    assert config["services"][servicio]["environment"]["APP_VERSION"] == "9.8.7"
+
+
+@pytest.mark.parametrize("servicio", SERVICIOS_CON_APP_VERSION)
+def test_app_version_cae_a_unversioned_sin_la_variable(servicio):
+    """Un host sin `APP_VERSION` no debe romper el render (el rollback a una
+    release anterior a este cambio la deja en `unversioned`); `deploy.sh` es
+    quien exige una versión válida, no Compose."""
+    config = _produccion_con_app_version(None)
+
+    assert config["services"][servicio]["environment"]["APP_VERSION"] == "unversioned"
+
+
+@pytest.mark.parametrize("servicio", SERVICIOS_CON_APP_VERSION)
+def test_app_version_no_es_un_build_arg(servicio):
+    config = _produccion_con_app_version("9.8.7")
+
+    build = config["services"][servicio].get("build") or {}
+    assert "APP_VERSION" not in (build.get("args") or {})
