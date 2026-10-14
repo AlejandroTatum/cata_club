@@ -263,6 +263,31 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     });
   });
 
+  // #1787-g: nobody on the list can be marked, so the roll call says why instead of failing
+  // with the backend's "students es obligatorio", and cannot be sent.
+  it("explains an all-blocked roster and disables the save instead of sending an empty roll call", async () => {
+    const trainerAuth = createAuthenticatedAuth("trainer", "Coach Torres");
+    if (trainerAuth.session) trainerAuth.session.user.id = "17";
+    mockUseAuth.mockReturnValue(trainerAuth);
+    mockFetchTrainingSchedules.mockResolvedValue([
+      { id: 12, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres" },
+    ]);
+    mockFetchAlumnosPorHorario.mockResolvedValue([
+      { ...ANA_ALUMNO_HORARIO, bloqueadoPorImpago: true },
+      { ...ANA_ALUMNO_HORARIO, id: 2, personaId: 10, personaNombreCompleto: "Beto Luna", bloqueadoPorImpago: true },
+    ]);
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+
+    fireEvent.click(await screen.findByRole("button", { name: /^lunes/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /18:00/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+
+    expect(await screen.findByText(/ningún jugador de esta lista puede registrar asistencia/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
+    expect(mockRegisterAttendance).not.toHaveBeenCalled();
+  });
+
   // S15: the lock is judged on the session date. The roll call is for last Monday
   // (2026-07-20), the backend says Beto is current on that date, so he is markable.
   it("asks for the roster on the session date and leaves a player the backend flags false markable", async () => {
@@ -3494,6 +3519,19 @@ describe("TrainerAttendancePage — a corrected session keeps its own date", () 
       horarioId: 12,
     });
   });
+
+  // #1787-h: a hand-edited, malformed `fecha` must not reach the roster request (the backend answers 422).
+  it.each(["garbage", "2026-02-31", "2026-7-1", "2999-01-01"])(
+    "opens the roster without a date when the URL carries fecha=%s",
+    async (junk) => {
+      deepLink(`?horario=12&fecha=${junk}&paso=lista`);
+
+      render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+      await screen.findByText("Student 01");
+
+      expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(12, {});
+    },
+  );
 
   it("files the correction on the session's own date", async () => {
     deepLink("?horario=12&fecha=2026-07-13&paso=lista");

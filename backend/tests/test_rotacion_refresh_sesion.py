@@ -25,6 +25,7 @@ Tokens REALES contra `client_sin_token`, mismo patrón que
 `test_revocacion_unificada_sesiones.py`.
 """
 import asyncio
+import sys
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -672,10 +673,14 @@ def _refresh_legacy_real(correo: str, persona_id: int, version_sesion: int, sid:
 
 
 def _hay_un_refresh_esperando_el_bloqueo() -> bool:
+    """¿Hay otra conexión esperando el `FOR UPDATE` de la fila `sesion`? Se
+    acota a esa consulta (y se excluye la propia conexión) para no confundir
+    con un bloqueo en espera ajeno al refresh."""
     with db_engine.connect() as conexion:
         esperando = conexion.execute(text(
             "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() "
-            "AND wait_event_type = 'Lock' AND query ILIKE '%FOR UPDATE%'"
+            "AND pid <> pg_backend_pid() AND wait_event_type = 'Lock' "
+            "AND query ILIKE '%FROM sesion %' AND query ILIKE '%FOR UPDATE%'"
         )).scalar()
     return esperando >= 1
 
@@ -702,13 +707,19 @@ class _Corrida:
             except BaseException as error:  # noqa: BLE001 -- se re-lanza en el hilo principal
                 self.resultados[nombre] = error
 
-        hilo = threading.Thread(target=_correr, daemon=True)
+        hilo = threading.Thread(target=_correr)
         self.hilos.append(hilo)
         hilo.start()
 
-    def esperar(self) -> tuple:
+    def unir(self) -> None:
+        """Une los hilos sin afirmar nada: para el `finally` de quien lanza, de
+        modo que ningún hilo sobreviva a un test que falló antes de `esperar`."""
         for hilo in self.hilos:
             hilo.join(timeout=_ESPERA_MAXIMA_SEGUNDOS * 2)
+
+    def esperar(self) -> tuple:
+        self.unir()
+        for hilo in self.hilos:
             assert not hilo.is_alive(), "un refresh quedó colgado"
         for resultado in self.resultados.values():
             if isinstance(resultado, BaseException):
@@ -741,11 +752,61 @@ def _refrescos_con_ganador_retenido(monkeypatch, refresh_token: str, metodo: str
 
     monkeypatch.setattr(AuthServicio, metodo, retener)
     corrida = _Corrida()
-    corrida.lanzar("a", refresh_token)
-    assert a_tiene_el_bloqueo.wait(timeout=_ESPERA_MAXIMA_SEGUNDOS), "A nunca llegó a decidir"
-    corrida.lanzar("b", refresh_token)
-    respuesta_a, respuesta_b = corrida.esperar()
+    try:
+        corrida.lanzar("a", refresh_token)
+        assert a_tiene_el_bloqueo.wait(timeout=_ESPERA_MAXIMA_SEGUNDOS), "A nunca llegó a decidir"
+        corrida.lanzar("b", refresh_token)
+        respuesta_a, respuesta_b = corrida.esperar()
+    finally:
+        corrida.unir()
     return respuesta_a, respuesta_b, b_espero["valor"]
+
+
+def test_el_detector_de_espera_ignora_a_quien_espera_el_bloqueo_de_otra_tabla():
+    """#1787-j (R3-002): el detector cuenta SOLO a quien espera el `FOR UPDATE`
+    de `sesion`, no a cualquier bloqueo en espera de la base."""
+    usuario_id, persona_id, _ = _crear_cuenta_real(7150)
+    retenedor = Session(bind=db_engine)
+    espera_ajena = threading.Event()
+    try:
+        retenedor.execute(text("SELECT id FROM usuario WHERE id = :id FOR UPDATE"), {"id": usuario_id})
+
+        def _esperar_ajeno():
+            with db_engine.connect() as conexion:
+                espera_ajena.set()
+                conexion.execute(text("SELECT id FROM usuario WHERE id = :id FOR UPDATE"), {"id": usuario_id})
+
+        hilo = threading.Thread(target=_esperar_ajeno)
+        hilo.start()
+        assert espera_ajena.wait(timeout=_ESPERA_MAXIMA_SEGUNDOS)
+        limite = time.monotonic() + _ESPERA_MAXIMA_SEGUNDOS
+        with db_engine.connect() as conexion:
+            while time.monotonic() < limite and not conexion.execute(text(
+                "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() "
+                "AND wait_event_type = 'Lock'"
+            )).scalar():
+                time.sleep(0.05)
+
+        assert not _hay_un_refresh_esperando_el_bloqueo()
+    finally:
+        retenedor.rollback()  # suelta el bloqueo: el hilo ajeno termina
+        retenedor.close()
+        hilo.join(timeout=_ESPERA_MAXIMA_SEGUNDOS)
+        _limpiar_cuenta_real(usuario_id, persona_id)
+    assert not hilo.is_alive()
+
+
+def test_los_hilos_de_la_corrida_no_son_daemon_y_se_unen(monkeypatch):
+    """#1787-j: un hilo daemon se abandona en silencio si el test se cuelga; los
+    de la corrida son normales y `esperar` los une."""
+    monkeypatch.setattr(sys.modules[__name__], "_post_refresh", lambda token: token)
+    corrida = _Corrida()
+    corrida.lanzar("a", "x")
+    corrida.lanzar("b", "y")
+
+    assert all(not hilo.daemon for hilo in corrida.hilos)
+    assert corrida.esperar() == ("x", "y")
+    assert all(not hilo.is_alive() for hilo in corrida.hilos)
 
 
 def test_dos_refresh_simultaneos_con_el_mismo_token_rotan_una_sola_vez():

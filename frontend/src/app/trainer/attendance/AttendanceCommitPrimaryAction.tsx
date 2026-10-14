@@ -3,12 +3,15 @@ import { ICON } from "@/lib/icon-size";
 import { Button } from "@/components/ui";
 
 const UNMARKED_REASON_ID = "attendance-unmarked-reason";
+const ALL_BLOCKED_REASON_ID = "attendance-all-blocked-reason";
 
 interface AttendanceCommitPrimaryActionProps {
   isFirst: boolean;
   isLast: boolean;
   submitting: boolean;
   studentsCount: number;
+  /** Every player is locked for non-payment: the batch would be empty (#1787-g). */
+  nothingToSave?: boolean;
   unmarkedCount: number;
   readOnly: boolean;
   rosterLoading: boolean;
@@ -30,6 +33,7 @@ export default function AttendanceCommitPrimaryAction({
   isLast,
   submitting,
   studentsCount,
+  nothingToSave = false,
   unmarkedCount,
   readOnly,
   rosterLoading,
@@ -37,7 +41,11 @@ export default function AttendanceCommitPrimaryAction({
   onContinueToRoster,
   onNext,
 }: AttendanceCommitPrimaryActionProps): React.ReactElement {
-  const describedBy = unmarkedCount > 0 ? UNMARKED_REASON_ID : undefined;
+  const describedBy = nothingToSave
+    ? ALL_BLOCKED_REASON_ID
+    : unmarkedCount > 0
+      ? UNMARKED_REASON_ID
+      : undefined;
 
   if (isFirst) {
     return (
@@ -63,7 +71,7 @@ export default function AttendanceCommitPrimaryAction({
         variant="primary"
         className="min-h-[44px]"
         onClick={onNext}
-        disabled={studentsCount === 0 || unmarkedCount > 0 || readOnly}
+        disabled={studentsCount === 0 || nothingToSave || unmarkedCount > 0 || readOnly}
         aria-describedby={describedBy}
       >
         Revisar y confirmar
@@ -78,7 +86,7 @@ export default function AttendanceCommitPrimaryAction({
       type="submit"
       variant="primary"
       className="min-h-[44px]"
-      disabled={submitting || studentsCount === 0 || unmarkedCount > 0 || readOnly}
+      disabled={submitting || studentsCount === 0 || nothingToSave || unmarkedCount > 0 || readOnly}
       aria-describedby={describedBy}
     >
       {submitting ? (

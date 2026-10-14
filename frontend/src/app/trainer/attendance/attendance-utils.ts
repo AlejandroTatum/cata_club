@@ -369,6 +369,16 @@ export function isLocked(student: SessionStudent): boolean {
   return isFiled(student) || isBlocked(student);
 }
 
+/**
+ * Is every player on the roster locked for non-payment, with no row filed for any?
+ * Then there is nothing to save: the batch would be empty and the backend refuses
+ * it ("students es obligatorio"). A roster with a filed row is a closed or partial
+ * session and is handled by `isSessionClosed` / `isSessionPartial` instead.
+ */
+export function isEntireRosterBlocked(students: SessionStudent[]): boolean {
+  return students.length > 0 && students.every(isBlocked) && !students.some(isFiled);
+}
+
 /** ENT-07: is the session dated BEFORE the day this student was enrolled? */
 export function isBeforeEnrollment(student: SessionStudent, sessionDate: string | null): boolean {
   return !!student.assignedOn && !!sessionDate && sessionDate < student.assignedOn;

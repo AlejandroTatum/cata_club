@@ -1,11 +1,12 @@
 import { ChevronLeft, Undo2 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { Button } from "@/components/ui";
-import type { SessionStudent, WizardStep } from "./attendance-utils";
+import { isEntireRosterBlocked, type SessionStudent, type WizardStep } from "./attendance-utils";
 import AttendanceTotalsSummary from "./AttendanceTotalsSummary";
 import AttendanceCommitPrimaryAction from "./AttendanceCommitPrimaryAction";
 
 const UNMARKED_REASON_ID = "attendance-unmarked-reason";
+const ALL_BLOCKED_REASON_ID = "attendance-all-blocked-reason";
 
 interface UndoableAction {
   label: string;
@@ -51,6 +52,8 @@ export default function AttendanceCommitBar({
   onContinueToRoster,
   onNext,
 }: AttendanceCommitBarProps): React.ReactElement {
+  // #1787-g: nobody can be marked, so there is nothing to save.
+  const allBlocked = isEntireRosterBlocked(students);
   return (
     <div
       data-testid="attendance-commit-bar"
@@ -110,6 +113,11 @@ export default function AttendanceCommitBar({
         {/* The `UNMARKED` invariant, and its explanation — no path the wizard
             can take produces the sentinel any more, but a button disabled by
             an invariant still has to say why. */}
+        {allBlocked && step !== "select-session" && (
+          <p id={ALL_BLOCKED_REASON_ID} role="status" className="text-xs font-semibold text-ink-2">
+            Ningún jugador de esta lista puede registrar asistencia: todos tienen un pago pendiente.
+          </p>
+        )}
         {unmarkedCount > 0 && (
           <p id={UNMARKED_REASON_ID} role="status" className="text-xs font-semibold text-ink-2">
             {unmarkedCount === 1 ? "Falta 1 jugador por marcar" : `Faltan ${unmarkedCount} jugadores por marcar`}
@@ -126,6 +134,7 @@ export default function AttendanceCommitBar({
           isLast={isLast}
           submitting={submitting}
           studentsCount={students.length}
+          nothingToSave={allBlocked}
           unmarkedCount={unmarkedCount}
           readOnly={readOnly}
           rosterLoading={rosterLoading}

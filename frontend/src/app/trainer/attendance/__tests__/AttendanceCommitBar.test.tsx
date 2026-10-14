@@ -1,8 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import AttendanceCommitBar from "../AttendanceCommitBar";
+import { UNMARKED, type SessionStudent } from "../attendance-utils";
 
-function renderBar(step: "select-session" | "mark-attendance" | "confirm") {
+function renderBar(
+  step: "select-session" | "mark-attendance" | "confirm",
+  students: SessionStudent[] = [],
+) {
   render(
     <AttendanceCommitBar
       step={step}
@@ -12,7 +16,7 @@ function renderBar(step: "select-session" | "mark-attendance" | "confirm") {
       onBack={vi.fn()}
       lastUndoable={null}
       onUndo={vi.fn()}
-      students={[]}
+      students={students}
       unreviewedCount={0}
       unmarkedCount={0}
       readOnly={false}
@@ -42,5 +46,26 @@ describe("AttendanceCommitBar", () => {
       expect(button.className).toContain("min-h-[44px]");
     }
     expect(bar.querySelector(".max-lg\\:hidden")).not.toBeNull();
+  });
+
+  // #1787-g: a roster where every player is blocked has nothing to save.
+  describe("when every player is blocked for non-payment", () => {
+    const blocked = (id: number): SessionStudent => ({
+      id: String(id), name: `Jugador ${id}`, attendance: UNMARKED, reviewed: true, blocked: true,
+    });
+
+    it.each(["mark-attendance", "confirm"] as const)("says so and disables the primary action (%s)", (step) => {
+      renderBar(step, [blocked(1), blocked(2)]);
+      expect(screen.getByText(/ningún jugador de esta lista puede registrar asistencia/i)).toBeInTheDocument();
+      const primary = screen.getByRole("button", {
+        name: step === "confirm" ? "Confirmar asistencia" : "Revisar y confirmar",
+      });
+      expect(primary).toBeDisabled();
+    });
+
+    it("stays quiet when at least one player can be marked", () => {
+      renderBar("mark-attendance", [blocked(1), { ...blocked(2), blocked: false, attendance: "present" }]);
+      expect(screen.queryByText(/ningún jugador de esta lista/i)).not.toBeInTheDocument();
+    });
   });
 });
