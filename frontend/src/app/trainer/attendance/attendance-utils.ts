@@ -302,13 +302,12 @@ export function describeAttendanceSaveError(error: unknown): string {
     return "Tu sesión no tiene permiso para registrar esta lista. Vuelve a iniciar sesión e intenta nuevamente.";
   }
   if (status >= 400 && status < 500) {
-    // #1768: a refused registration for a pending payment is a reason the
-    // trainer can act on (pay first), whether or not the backend flagged it safe.
-    const refusal = (error as { message?: unknown }).message;
-    if (status === 400 && typeof refusal === "string" && PENDING_PAYMENT_REASON.test(refusal)) return refusal;
     // ENT-02: the backend's own reason ("solo se puede registrar … los últimos
     // 30 días") beats the generic text, but only when it marked it safe to show.
     const { message, safe } = error as { message?: unknown; safe?: unknown };
+    // #1768: a refusal for a pending payment is a reason the trainer can act on
+    // (the player has to pay first), whether or not the backend flagged it safe.
+    if (status === 400 && typeof message === "string" && PENDING_PAYMENT_REASON.test(message)) return message;
     if (safe === true && typeof message === "string" && message.trim()) return message;
     return "La lista no se pudo registrar porque ya no coincide con lo que hay en el sistema. Actualiza la página y revisa los datos.";
   }
