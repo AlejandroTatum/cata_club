@@ -1231,6 +1231,25 @@ describe("non-payment block (#1768)", () => {
     expect(isSessionPartial(roster)).toBe(false);
   });
 
+  it("does not read a roster where every player is blocked as an already-closed session", () => {
+    const roster: SessionStudent[] = [
+      { id: "1", name: "A", attendance: "unmarked", reviewed: true, blocked: true },
+      { id: "2", name: "B", attendance: "unmarked", reviewed: true, blocked: true },
+    ];
+
+    expect(isSessionClosed(roster)).toBe(false);
+    expect(isSessionPartial(roster)).toBe(false);
+  });
+
+  it("keeps a fully filed roster closed, whether or not some players are blocked", () => {
+    const filed = (id: string): SessionStudent => ({ id, name: id, attendance: "present", reviewed: true, asistenciaId: 10 });
+    const blocked: SessionStudent = { id: "9", name: "Z", attendance: "unmarked", reviewed: true, blocked: true };
+
+    expect(isSessionClosed([filed("1"), filed("2")])).toBe(true);
+    expect(isSessionClosed([filed("1"), blocked])).toBe(true);
+    expect(isSessionClosed([])).toBe(false);
+  });
+
   it("keeps a session with a markable player still open", () => {
     const roster: SessionStudent[] = [
       { id: "1", name: "A", attendance: "present", reviewed: true, asistenciaId: 10 },

@@ -378,10 +378,12 @@ export function isBeforeEnrollment(student: SessionStudent, sessionDate: string 
  * A list is "tomada" (closed) only when EVERY roster student has a row
  * (ENT-03). One filed row used to be enough, so a partially-saved list — or
  * one another trainer left half done — read as finished and pre-filled the
- * rest as "Presente".
+ * rest as "Presente". A blocked player (#1768) counts with the finished ones,
+ * but a roster where EVERY player is blocked has no row at all: nobody took
+ * that list, it is simply out of the trainer's hands (#1779-9).
  */
 export function isSessionClosed(roster: SessionStudent[]): boolean {
-  return roster.every(isLocked) && roster.length > 0;
+  return roster.length > 0 && roster.every(isLocked) && roster.some(isFiled);
 }
 
 /**
