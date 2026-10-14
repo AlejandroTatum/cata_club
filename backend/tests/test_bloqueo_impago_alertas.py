@@ -384,3 +384,45 @@ def test_el_aviso_regular_con_pago_de_un_responsable_no_cuenta_como_aviso_de_lan
 
     assert resultado["total_avisos"] == 1
 
+
+# --- Aviso de mora del día 1: copias de las exenciones (#1779, S8) ----------------------------
+COPIA_SIN_BLOQUEO = "Tu membresía venció el 14/06/2029. Regulariza tu pago para no perder los beneficios."
+
+
+def test_con_el_bloqueo_apagado_el_aviso_del_dia_1_llega_con_la_copia_sin_bloqueo_tambien_por_correo(
+    db_session, sesion_inyectada, monkeypatch,  # noqa: F811
+):
+    fijar_lanzamiento(monkeypatch, None)
+    persona, _ = _con_usuario(db_session, 1)
+    llamadas = _mock_envio(monkeypatch)
+
+    alertas_mod.alertar_mora_diaria()
+
+    assert _mensajes(db_session, persona) == [COPIA_SIN_BLOQUEO]
+    assert [COPIA_SIN_BLOQUEO in c["cuerpo_texto"] for c in llamadas] == [True]
+
+
+def test_el_miembro_gratuito_de_la_familia_recibe_la_copia_sin_bloqueo_aunque_el_bloqueo_este_activo(
+    db_session, sesion_inyectada, monkeypatch,  # noqa: F811
+):
+    persona, _ = _con_usuario(db_session, 1, gratuidad_familiar=True)
+    llamadas = _mock_envio(monkeypatch)
+
+    alertas_mod.alertar_mora_diaria()
+
+    assert _mensajes(db_session, persona) == [COPIA_SIN_BLOQUEO]
+    assert [COPIA_SIN_BLOQUEO in c["cuerpo_texto"] for c in llamadas] == [True]
+    assert all("registrar asistencia" not in c["cuerpo_texto"] for c in llamadas)
+
+
+def test_el_miembro_gratuito_ya_pasada_la_gracia_tampoco_recibe_texto_de_bloqueo(
+    db_session, sesion_inyectada, monkeypatch,  # noqa: F811
+):
+    persona, _ = _con_usuario(db_session, 6, gratuidad_familiar=True)
+    _mock_envio(monkeypatch)
+
+    alertas_mod.alertar_mora_diaria()
+
+    assert _mensajes(db_session, persona) == [
+        "Tu membresía venció el 09/06/2029. Regulariza tu pago para no perder los beneficios."
+    ]
