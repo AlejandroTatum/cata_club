@@ -579,3 +579,43 @@ describe("StudentAttendancePage — older sessions", () => {
     expect(screen.queryByText(/Página 1 de/)).not.toBeInTheDocument();
   });
 });
+
+/** #1768 — a blocked profile reaches only Payments; the other children of a family keep this page. */
+describe("StudentAttendancePage — non-payment block (#1768)", () => {
+  const BLOCKED = { bloqueadoPorImpago: true, cubiertoHasta: "2026-09-30" };
+
+  it("sends a blocked account holder to Payments", async () => {
+    mockFetchStudentPortal.mockResolvedValue({
+      self: { ...BASE_PROFILE, ...BLOCKED },
+      representados: [],
+      membershipPlans: [],
+    });
+
+    render(<StudentAttendancePage />);
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/student/payments?alumno=9");
+    });
+  });
+
+  it("restricts only the blocked child of a guardian", async () => {
+    mockUseAuth.mockReturnValue(sessionFor("representante"));
+    mockFetchStudentPortal.mockResolvedValue({
+      self: null,
+      representados: [
+        { ...BASE_PROFILE, personaId: "41", nombres: "Sofía", apellidos: "Vera", ...BLOCKED },
+        { ...BASE_PROFILE, personaId: "42", nombres: "Martín", apellidos: "Vera" },
+      ],
+      membershipPlans: [],
+    });
+    searchParams = new URLSearchParams("alumno=42");
+
+    render(<StudentAttendancePage />);
+
+    await waitFor(() => {
+      expect(mockFetchStudentPortal).toHaveBeenCalled();
+    });
+    expect(await screen.findAllByText(/Martín/)).not.toHaveLength(0);
+    expect(mockReplace).not.toHaveBeenCalledWith(expect.stringContaining("/student/payments"));
+  });
+});
