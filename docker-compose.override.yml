@@ -67,28 +67,31 @@ services:
       context: ./backend
       # El resolver DNS embebido de la red bridge por defecto falla para
       # descargar paquetes (PyPI) en algunos setups aunque el host tenga
-      # internet — se construye sobre la red del host para evitarlo. Solo
-      # afecta al build, no al contenedor en ejecución.
-      network: host
+      # internet. La salida es construir sobre la red del host
+      # (`CATA_BUILD_NETWORK=host`), pero es opt-in y no el default: Docker
+      # Compose >= 5 construye siempre vía Bake, que rechaza `network: host`
+      # sin `--allow=network.host`, algo que Compose no puede pasarle. Ver
+      # `make qa-up` para el flujo con la autorización explícita. Solo afecta
+      # al build, no al contenedor en ejecución.
+      network: ${CATA_BUILD_NETWORK:-default}
     ports:
       - "127.0.0.1:8000:8000"
 
   celery-worker:
     build:
       context: ./backend
-      network: host
+      network: ${CATA_BUILD_NETWORK:-default}
 
   celery-beat:
     build:
       context: ./backend
-      network: host
+      network: ${CATA_BUILD_NETWORK:-default}
 
   frontend:
     build:
       context: ./frontend
-      # Mismo motivo que el build del backend: se construye sobre la red
-      # del host para evitar el fallo del resolver DNS embebido.
-      network: host
+      # Mismo motivo y mismo opt-in que el build del backend.
+      network: ${CATA_BUILD_NETWORK:-default}
       args:
         NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
         NEXT_PUBLIC_APP_NAME: Cata Club Admin

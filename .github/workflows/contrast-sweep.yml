@@ -28,9 +28,6 @@ jobs:
     runs-on: ubuntu-latest
     # ~25 min de stack en frio + 2 temas x ~5 min (presupuesto del spec: 300 s).
     timeout-minutes: 60
-    env:
-      # Ver e2e-live.yml: el builder clasico respeta `network: host`.
-      COMPOSE_BAKE: "false"
 
     steps:
       - uses: actions/checkout@v4
