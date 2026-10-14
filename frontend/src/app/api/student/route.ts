@@ -5,10 +5,15 @@
  * returns the self profile, each representado's profile and the horarios /
  * membership-type catalogs in a single response, so this handler only maps it
  * to the `StudentPortalView` the browser has always received.
+ *
+ * #1779 S4: a profile blocked for non-payment gets only Payments, so its
+ * attendance is withheld here too (the client redirect is not a boundary). Staff
+ * are never restricted; an unresolvable caller is treated as non-staff.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
+import { pickRefreshed, refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
+import { resolveCaller } from "@/lib/server/payment-block-gate";
 import type { BackendHorario } from "@/lib/server/attendance-adapter";
 import {
   buildMembershipPlans,
@@ -16,6 +21,7 @@ import {
   type BackendPortalPerfil,
   type BackendTipoMembresiaCatalogo,
   type StudentPortalView,
+  withoutAttendanceHistory,
 } from "@/lib/server/student-adapter";
 
 /**
@@ -52,15 +58,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const horariosById = new Map(aggregate.horarios.map((horario) => [horario.id, horario]));
   const tiposById = new Map(aggregate.tipos.map((tipo) => [tipo.id, tipo]));
 
+  // Who is asking matters only when some profile is blocked: skip the lookup otherwise.
+  let withholdBlocked = false;
+  let caller: Awaited<ReturnType<typeof resolveCaller>> | null = null;
+  if ([aggregate.titular, ...aggregate.representados].some((perfil) => perfil.bloqueadoPorImpago === true)) {
+    caller = await resolveCaller(request);
+    withholdBlocked = !(caller.ok && caller.caller.isStaff);
+  }
+  const profileOf = (perfil: BackendPortalPerfil) => {
+    const view = buildPortalProfile(perfil, horariosById, tiposById);
+    return withholdBlocked && view.bloqueadoPorImpago ? withoutAttendanceHistory(view) : view;
+  };
+
   const portal: StudentPortalView = {
-    self: buildPortalProfile(aggregate.titular, horariosById, tiposById),
-    representados: aggregate.representados.map((perfil) => buildPortalProfile(perfil, horariosById, tiposById)),
+    self: profileOf(aggregate.titular),
+    representados: aggregate.representados.map(profileOf),
     membershipPlans: buildMembershipPlans(aggregate.tipos),
   };
 
   const response = NextResponse.json(portal);
-  if (result.refreshedAccessToken) {
-    setAuthCookies(response, refreshedTokenCookies(result));
+  const refreshed = pickRefreshed(result, caller?.ok && caller.caller);
+  if (refreshed.refreshedAccessToken) {
+    setAuthCookies(response, refreshedTokenCookies(refreshed));
   }
   return response;
 }

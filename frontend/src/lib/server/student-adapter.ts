@@ -318,6 +318,15 @@ export function buildPortalProfile(
 }
 
 /**
+ * A blocked profile as the server lets a non-staff caller read it (#1779 S4):
+ * its attendance is withheld, everything Payments reads (identity, membership,
+ * the block flag, the coverage end) stays.
+ */
+export function withoutAttendanceHistory(profile: StudentProfileView): StudentProfileView {
+  return { ...profile, recentSessions: [], historialTotal: 0 };
+}
+
+/**
  * What the admin's carnet needs for ONE person: the profile the player's own
  * card is built from and the assignments its "Franja" row and training-day
  * chips read. `asignaciones` is the backend's
