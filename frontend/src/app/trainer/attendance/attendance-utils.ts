@@ -95,6 +95,13 @@ export interface SessionStudent {
    * accepted — with a notice (ENT-07) — so the row can say so.
    */
   assignedOn?: string | null;
+  /**
+   * Non-payment block (#1768): the player stays on the roster, locked, and no
+   * attendance can be recorded for them until they pay. Absent means not blocked.
+   * An unfiled blocked row carries `UNMARKED` and `reviewed: true`: nothing is
+   * left for the trainer to decide, and nothing of theirs is sent.
+   */
+  blocked?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -260,6 +267,20 @@ export function formatSessionDateLabel(fecha: string): string {
 /** The action label of the "marcar restantes presentes" toast (ENT-12 dismisses it by this label). */
 export const UNDO_TOAST_ACTION_LABEL = "Deshacer";
 
+/** The backend's reason when it refuses attendance to a player with a lapsed payment (#1768). */
+const PENDING_PAYMENT_REASON = /pago pendiente/i;
+
+/**
+ * The failures a retry could fix. A player already recorded by someone else
+ * (ENT-04) and a player blocked for a pending payment (#1768) are not among
+ * them: the first is done, the second waits for their payment.
+ */
+export function retryableFailures<T extends { alreadyRegistered?: boolean; pendingPayment?: boolean }>(
+  failed: readonly T[],
+): T[] {
+  return failed.filter((f) => !f.alreadyRegistered && !f.pendingPayment);
+}
+
 /**
  * The message for a failed save, by WHAT failed (ENT-06): one text for every
  * failure told the trainer nothing about whether to retry, wait or call
@@ -281,6 +302,10 @@ export function describeAttendanceSaveError(error: unknown): string {
     return "Tu sesión no tiene permiso para registrar esta lista. Vuelve a iniciar sesión e intenta nuevamente.";
   }
   if (status >= 400 && status < 500) {
+    // #1768: a refused registration for a pending payment is a reason the
+    // trainer can act on (pay first), whether or not the backend flagged it safe.
+    const refusal = (error as { message?: unknown }).message;
+    if (status === 400 && typeof refusal === "string" && PENDING_PAYMENT_REASON.test(refusal)) return refusal;
     // ENT-02: the backend's own reason ("solo se puede registrar … los últimos
     // 30 días") beats the generic text, but only when it marked it safe to show.
     const { message, safe } = error as { message?: unknown; safe?: unknown };
@@ -315,7 +340,7 @@ export function countByState(
  * For "how many students has nobody looked at", use `countUnreviewed`.
  */
 export function countUnmarked(students: SessionStudent[]): number {
-  return students.filter((s) => s.attendance === UNMARKED).length;
+  return students.filter((s) => s.attendance === UNMARKED && !isBlocked(s)).length;
 }
 
 /** Did a human set this row's state, or is it still the default? */
@@ -332,6 +357,19 @@ export function isFiled(student: SessionStudent): boolean {
   return student.asistenciaId != null;
 }
 
+/** Is this player locked by the non-payment block (#1768)? A row that was filed before the block stays filed. */
+export function isBlocked(student: SessionStudent): boolean {
+  return student.blocked === true;
+}
+
+/**
+ * Can the trainer still decide anything for this row? No when it already has a
+ * row (ENT-04) or when the player is blocked for non-payment (#1768).
+ */
+export function isLocked(student: SessionStudent): boolean {
+  return isFiled(student) || isBlocked(student);
+}
+
 /** ENT-07: is the session dated BEFORE the day this student was enrolled? */
 export function isBeforeEnrollment(student: SessionStudent, sessionDate: string | null): boolean {
   return !!student.assignedOn && !!sessionDate && sessionDate < student.assignedOn;
@@ -344,12 +382,16 @@ export function isBeforeEnrollment(student: SessionStudent, sessionDate: string 
  * rest as "Presente".
  */
 export function isSessionClosed(roster: SessionStudent[]): boolean {
-  return roster.every(isFiled) && roster.length > 0;
+  return roster.every(isLocked) && roster.length > 0;
 }
 
-/** Some roster students have a row and some do not: editable only for the latter. */
+/**
+ * Some roster students have a row and some do not: editable only for the latter.
+ * A blocked player (#1768) counts with the finished ones: nobody can mark them,
+ * so they cannot keep a session open.
+ */
 export function isSessionPartial(roster: SessionStudent[]): boolean {
-  return roster.some(isFiled) && !roster.every(isFiled);
+  return roster.some(isFiled) && !roster.every(isLocked);
 }
 
 /**
@@ -497,11 +539,16 @@ export function buildRosterFromAlumnoHorarios(
   const missingDefault: WizardAttendance = sessionStarted ? UNMARKED : DEFAULT_ATTENDANCE;
   return items.map((item) => {
     const record = recordByPersonaId.get(item.personaId);
+    const blocked = item.bloqueadoPorImpago === true;
+    // #1768: a blocked player with no row yet has nothing to decide; one who was
+    // filed before the block keeps that row.
+    const lockedWithoutRow = blocked && record === undefined;
     return {
       id: String(item.personaId),
       name: item.personaNombreCompleto,
-      attendance: (record?.estado ?? missingDefault) as WizardAttendance,
-      reviewed: record !== undefined,
+      attendance: lockedWithoutRow ? UNMARKED : ((record?.estado ?? missingDefault) as WizardAttendance),
+      reviewed: record !== undefined || lockedWithoutRow,
+      ...(blocked ? { blocked: true } : {}),
       // `record.id` is the real Asistencia row id (`String(asistencia.id)`,
       // see `buildAttendanceRecord`) — NOT `item.personaId`, which is what
       // `id` above already holds. A student with no filed record yet has
@@ -715,7 +762,7 @@ export function applyAttendanceDraft(
     const drafted = draft[student.id];
     // A student who already has a row keeps the SERVER's value: another
     // trainer may have filed them since the draft was written (ENT-04).
-    return drafted && !isFiled(student) ? { ...student, attendance: drafted, reviewed: true } : student;
+    return drafted && !isLocked(student) ? { ...student, attendance: drafted, reviewed: true } : student;
   });
 }
 

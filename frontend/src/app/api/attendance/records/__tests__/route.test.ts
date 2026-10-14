@@ -291,6 +291,40 @@ describe("POST /api/attendance/records", () => {
     ]);
   });
 
+  it("flags the players the backend refused for a pending payment (#1768) and keeps its reason", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse(
+        {
+          creados: 1,
+          fallidos: [{ personaId: 8, motivo: "Ana Torres tiene un pago pendiente.", registradoPorNombre: null, yaRegistrada: false }],
+          registradoPorNombre: "Carlos Ruiz",
+        },
+        201,
+      ),
+    );
+
+    const access = makeJwt(3600);
+    const response = await POST(
+      postRequest(
+        { horarioId: 1, students: [{ personaId: 3, estado: "present" }, { personaId: 8, estado: "present" }] },
+        `${ACCESS_TOKEN_COOKIE}=${access}`,
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(body.createdCount).toBe(1);
+    expect(body.failed).toEqual([
+      {
+        personaId: 8,
+        message: "Ana Torres tiene un pago pendiente.",
+        registradoPorNombre: null,
+        alreadyRegistered: false,
+        pendingPayment: true,
+      },
+    ]);
+  });
+
   it("answers 201 with the report when the batch is accepted but nobody could be saved", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(
       jsonResponse(
