@@ -328,6 +328,69 @@ describe("ProfilePage — issue #204 redesign: representante with no representad
 
 });
 
+describe("ProfilePage — non-payment block (#1779 S5)", () => {
+  it("stays open for a guardian whose dependent is blocked, and never redirects to Payments", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("representante"));
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      self: null,
+      representados: [
+        {
+          personaId: "6",
+          nombres: "Mateo",
+          apellidos: "Alumno",
+          fechaNacimiento: "2014-03-10",
+          recentSessions: [],
+          membership: null,
+          representante: null,
+          representanteId: 1,
+          bloqueadoPorImpago: true,
+          cubiertoHasta: "2026-09-30",
+        } satisfies StudentProfileSummary,
+      ],
+      membershipPlans: [],
+    });
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+
+    const dependants = await screen.findByTestId("profile-dependants");
+    expect(within(dependants).getByText(/Mateo/)).toBeInTheDocument();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it("stays open for a blocked player's own account", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("estudiante"));
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      self: {
+        personaId: "1",
+        nombres: "Ana",
+        apellidos: "Garcia",
+        fechaNacimiento: "1995-08-13",
+        recentSessions: [],
+        membership: null,
+        representante: null,
+        representanteId: null,
+        bloqueadoPorImpago: true,
+        cubiertoHasta: "2026-09-30",
+      } satisfies StudentProfileSummary,
+      representados: [],
+      membershipPlans: [],
+    });
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+
+    expect(await screen.findByTestId("profile-hero")).toBeInTheDocument();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+});
+
 describe("ProfilePage — issue #204 redesign: long content wraps, never truncates", () => {
   const LONG_NAME_PERFIL: PerfilPropio = {
     ...PERFIL_ADMIN,
