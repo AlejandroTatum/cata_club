@@ -64,6 +64,20 @@ describe("useAttendanceRoster — session date", () => {
     expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(12, { fecha: "2026-07-21" });
   });
 
+  it("sends no fecha for a future date (the backend rejects it) and the roster still loads", async () => {
+    const { result } = renderHook(() => useAttendanceRoster());
+
+    let loaded = false;
+    await act(async () => {
+      loaded = await result.current.openRoster(12, "2026-07-28", "mark-attendance", vi.fn());
+    });
+
+    expect(loaded).toBe(true);
+    expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(12, {});
+    expect(result.current.students).toHaveLength(1);
+    expect(result.current.rosterError).toBeNull();
+  });
+
   it("re-requests the roster when the date changes, and takes the new date's flags", async () => {
     // Blocked on the later date, current (markable) on the earlier one.
     mockFetchAlumnosPorHorario.mockImplementation(async (_id: number, options?: { fecha?: string }) => [
