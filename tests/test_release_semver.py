@@ -681,3 +681,30 @@ def test_release_version_target_fails_closed_when_the_script_fails():
 
     assert result.returncode != 0
     assert "APP_VERSION=" not in result.stdout
+
+
+# --- Docs (#1788) -------------------------------------------------------------
+
+
+def _squash_section() -> str:
+    text = (ROOT / "docs" / "operations" / "release-versioning.md").read_text()
+    assert "## Squash merges" in text, "falta la sección sobre squash merges"
+    return text.split("## Squash merges", 1)[1].split("\n## ", 1)[0]
+
+
+def test_the_release_doc_says_the_pr_title_decides_the_bump_with_squash_merges():
+    section = _squash_section()
+
+    assert "título del PR" in section
+    assert "squash" in section.lower()
+    # A `feat!:` bullet inside the squash body is NOT a breaking marker.
+    assert "feat!:" in section
+    assert "no se detecta" in section
+    assert "BREAKING CHANGE:" in section
+
+
+def test_the_release_doc_describes_the_highest_tag_and_case_insensitive_types():
+    text = (ROOT / "docs" / "operations" / "release-versioning.md").read_text()
+
+    assert "tag más alto" in text
+    assert "mayúsculas" in text and "git tag -d" in text
