@@ -1254,6 +1254,21 @@ describe("fetchAlumnosPorHorario", () => {
   });
 });
 
+describe("fetchAlumnosPorHorario — session date (S15)", () => {
+  it("requests the roster for the given session date", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      okResponse({ items: [], total: 0, skip: 0, limit: 200 }),
+    );
+
+    await fetchAlumnosPorHorario(1, { fecha: "2026-07-20" });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/groups/horarios/1/alumnos?limit=200&fecha=2026-07-20",
+      expect.anything(),
+    );
+  });
+});
+
 describe("asignarAlumnoAHorario", () => {
   it("POSTs /api/groups/asignar-alumno and returns one row per horario the categoria enrolled", async () => {
     // The backend enrolls the whole categoria atomically (full-month

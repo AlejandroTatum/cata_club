@@ -339,10 +339,16 @@ function PaymentsContent({
   const isBlocked = selectedProfile?.bloqueadoPorImpago === true;
   /**
    * A blocked member's only pending payment is cash (a pending transfer would
-   * have lifted the block). The backend lets a transfer replace it (S10), so
-   * the pending cash payment must not hold the form back for them.
+   * have lifted the block) AND the member declared it themselves. The backend
+   * lets a transfer replace exactly that (S10); a cash payment the club
+   * registered, or a legacy one, only awaits the club's validation and a second
+   * pending payment is refused (#1779 S7). A missing `autodeclarado` is `false`.
+   * So the pending cash payment must not hold the form back only in that case.
    */
-  const replacesPendingCash = isBlocked && hasPendingPago && pendingPagos.every((pago) => pago.tipoPago === "EFECTIVO");
+  const replacesPendingCash =
+    isBlocked &&
+    hasPendingPago &&
+    pendingPagos.every((pago) => pago.tipoPago === "EFECTIVO" && pago.autodeclarado === true);
   const holdsFormBack = hasPendingPago && !replacesPendingCash;
 
   /**

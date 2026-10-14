@@ -13,8 +13,8 @@ from app.dominio.modelos import (
 from app.dominio.enums import DiaSemana, EstadoAsistencia, EstadoMembresia, EstadoPago
 from app.dominio.etiquetas import dia_en_castellano
 from app.dominio.excepciones import (
-    ConflictoConcurrencia, EntidadNoEncontrada, NombreDuplicado, OperacionInvalida,
-    PermisosInsuficientes,
+    AsistenciaBloqueadaPorImpago, ConflictoConcurrencia, EntidadNoEncontrada, NombreDuplicado,
+    OperacionInvalida, PermisosInsuficientes,
 )
 from app.dominio.nombres_catalogo import existe_nombre, normalizar_nombre
 from app.dominio.nombre_propio import nombre_completo
@@ -740,6 +740,16 @@ class AsistenciaServicio:
         self.db.commit()
 
     @staticmethod
+    def _rechazar_fecha_futura(fecha, hoy) -> None:
+        """Una sesión que aún no ocurrió no se registra ni se consulta (la
+        regla de fecha futura de ENT-02, compartida con el roster por fecha)."""
+        if fecha > hoy:
+            raise OperacionInvalida(
+                "No se puede registrar asistencia con una fecha futura.",
+                detalle_tecnico=f"fecha_entrenamiento={fecha.isoformat()} hoy_club={hoy.isoformat()}",
+            )
+
+    @staticmethod
     def _validar_fecha_de_sesion(fecha, horario: HorarioEntrenamiento) -> None:
         """Issue #308: `fecha` debe caer en el `dia_semana` real del horario.
         Invariante de dominio, no una validación de forma -- sin esto el
@@ -751,11 +761,7 @@ class AsistenciaServicio:
         `VENTANA_REGISTRO_ASISTENCIA_DIAS` días atrás; una fecha futura se
         rechaza con su propio mensaje."""
         hoy = hoy_club()
-        if fecha > hoy:
-            raise OperacionInvalida(
-                "No se puede registrar asistencia con una fecha futura.",
-                detalle_tecnico=f"fecha_entrenamiento={fecha.isoformat()} hoy_club={hoy.isoformat()}",
-            )
+        AsistenciaServicio._rechazar_fecha_futura(fecha, hoy)
         if (hoy - fecha).days > VENTANA_REGISTRO_ASISTENCIA_DIAS:
             raise OperacionInvalida(
                 "Solo se puede registrar asistencia de hoy y de los últimos "
@@ -806,7 +812,7 @@ class AsistenciaServicio:
         existentes = self.repo.listar_existentes_de_sesion(datos.horario_id, datos.fecha, ids)
 
         no_operativos = self.repo_alumno_horario.ids_no_operativos(ids)
-        bloqueados = self._ids_bloqueados_por_impago(ids)
+        bloqueados = self._ids_bloqueados_por_impago(ids, datos.fecha)
         fallidos: list[AsistenciaLoteFallidoDTO] = []
         creados = 0
         sesion_cerrada = False
@@ -833,6 +839,7 @@ class AsistenciaServicio:
                 # el resto de la lista se registra igual.
                 fallidos.append(AsistenciaLoteFallidoDTO(
                     persona_id=item.persona_id, motivo=f"{nombre} tiene un pago pendiente.",
+                    codigo=AsistenciaBloqueadaPorImpago.codigo,
                 ))
                 continue
             try:
@@ -871,10 +878,13 @@ class AsistenciaServicio:
             ),
         )
 
-    def _ids_bloqueados_por_impago(self, persona_ids) -> set[int]:
-        """Quiénes de `persona_ids` están bloqueados por impago hoy (#1768):
-        UNA lectura para toda la lista, con la misma regla que el portal."""
-        estados = self.repo_bloqueo.por_personas(list(persona_ids))
+    def _ids_bloqueados_por_impago(self, persona_ids, fecha_sesion=None) -> set[int]:
+        """Quiénes de `persona_ids` están bloqueados por impago (#1768): UNA
+        lectura para toda la lista, con la misma regla que el portal. Con
+        `fecha_sesion` se juzga ese día y no hoy (#1779): quien pasa lista
+        tarde no rechaza a un jugador que ese día aún estaba en gracia. Sin
+        ella (el roster) es el estado de hoy."""
+        estados = self.repo_bloqueo.por_personas(list(persona_ids), hoy=fecha_sesion)
         return {persona_id for persona_id, estado in estados.items() if estado.bloqueado}
 
     @staticmethod
@@ -992,8 +1002,12 @@ class AsistenciaServicio:
         # Bloqueo por impago (#1768, S5): un jugador cuya cobertura terminó hace
         # más de 3 días no entrena hasta pagar. Va DESPUÉS del chequeo de fila
         # ya registrada: quien se anotó antes del bloqueo conserva ese mensaje.
-        if self.repo_bloqueo.por_persona(datos.persona_id).bloqueado:
-            raise OperacionInvalida(
+        # Se juzga el día de la sesión, no hoy (#1779): una lista tomada tarde
+        # no rechaza a quien ese día todavía estaba en gracia.
+        if self.repo_bloqueo.por_persona(
+            datos.persona_id, hoy=datos.fecha_entrenamiento,
+        ).bloqueado:
+            raise AsistenciaBloqueadaPorImpago(
                 f"{nombre_completo(persona.nombres, persona.apellidos)} tiene un pago "
                 "pendiente y no puede registrar asistencia hasta regularizarlo.",
                 detalle_tecnico=f"bloqueado por impago: persona_id={datos.persona_id}",
@@ -1409,11 +1423,17 @@ class AsistenciaServicio:
 
     def _a_detalle_dtos(
         self, asignaciones: list[AlumnoHorario], categoria_labels: Optional[dict[str, str]] = None,
+        fecha_sesion=None,
     ) -> list[AlumnoHorarioDetalleDTO]:
         """Proyección de un listado de roster: marca, con UNA lectura para
         todos, quién está bloqueado por impago (#1768) -- sigue listado, con
-        candado."""
-        bloqueados = self._ids_bloqueados_por_impago({a.persona_id for a in asignaciones})
+        candado. Con `fecha_sesion` el candado es el de ESE día (#1779, la
+        misma regla con la que se registra la asistencia); sin ella, el de hoy."""
+        if fecha_sesion is not None:
+            self._rechazar_fecha_futura(fecha_sesion, hoy_club())
+        bloqueados = self._ids_bloqueados_por_impago(
+            {a.persona_id for a in asignaciones}, fecha_sesion,
+        )
         labels = categoria_labels or {}
         return [
             self._a_detalle_dto(
@@ -1448,10 +1468,11 @@ class AsistenciaServicio:
         )
 
     def listar_alumnos_por_horario(
-        self, horario_id: int, skip: int = 0, limit: Optional[int] = None
+        self, horario_id: int, skip: int = 0, limit: Optional[int] = None, fecha_sesion=None,
     ) -> tuple[list[AlumnoHorarioDetalleDTO], int]:
         """Página de alumnos asignados a un horario, más el total de alumnos
-        activos de ese horario (paginado, issue #7)."""
+        activos de ese horario (paginado, issue #7). `fecha_sesion`: día en
+        que se pasa lista, para el candado por impago (S15)."""
         if not self.repo_horario.obtener_por_id(horario_id):
             raise EntidadNoEncontrada(f"Horario con id {horario_id} no encontrado")
 
@@ -1459,9 +1480,9 @@ class AsistenciaServicio:
             horario_id, skip=skip, limit=limit
         )
         total = self.repo_alumno_horario.contar_por_horario(horario_id)
-        return self._a_detalle_dtos(asignaciones), total
+        return self._a_detalle_dtos(asignaciones, fecha_sesion=fecha_sesion), total
 
-    def listar_roster_de_todos_los_horarios(self) -> list[AlumnoHorarioDetalleDTO]:
+    def listar_roster_de_todos_los_horarios(self, fecha_sesion=None) -> list[AlumnoHorarioDetalleDTO]:
         """TRA-7: roster completo (todos los horarios) en una sola consulta,
         para el conteo "N inscriptos" de /groups. Deliberadamente SIN
         paginar: el volumen de filas ya viajaba completo hoy, repartido en 26
@@ -1469,7 +1490,7 @@ class AsistenciaServicio:
         una sola sin cambiar cuántas filas cruzan la red."""
         asignaciones = self.repo_alumno_horario.listar_activos_de_todos_los_horarios()
         labels = {c.codigo: c.label for c in self.repo_categoria.listar()}
-        return self._a_detalle_dtos(asignaciones, labels)
+        return self._a_detalle_dtos(asignaciones, labels, fecha_sesion)
 
     def contar_inscritos_por_horario(
         self, incluir_personas: bool = False

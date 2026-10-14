@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { pickRefreshed, refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 import type { BackendAsistencia, BackendHorario } from "@/lib/server/attendance-adapter";
+import { gateBlockedPersona } from "@/lib/server/payment-block-gate";
 import { buildSessionViews } from "@/lib/server/student-adapter";
 
 /** The backend's per-request ceiling on `GET /asistencias/persona/{id}`. */
@@ -37,6 +38,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ message: "Los parámetros de la consulta no son válidos." }, { status: 400 });
   }
 
+  // #1779 S4: a blocked profile's history stays behind Payments on the server too.
+  const gate = await gateBlockedPersona(request, personaId);
+  if (!gate.ok) return gate.response;
+
   const [historial, horarios] = await Promise.all([
     backendFetchAuthed(request, `/asistencias/persona/${personaId}?skip=${skip}&limit=${limit}`),
     backendFetchAuthed(request, "/asistencias/horarios"),
@@ -58,7 +63,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     { items: buildSessionViews(page.items, horariosById), total: page.total, skip: page.skip, limit: page.limit },
     { headers: { "Cache-Control": "no-store" } },
   );
-  const refreshed = pickRefreshed(historial, horarios.ok && horarios);
+  const refreshed = pickRefreshed(gate, historial, horarios.ok && horarios);
   if (refreshed.refreshedAccessToken) setAuthCookies(response, refreshedTokenCookies(refreshed));
   return response;
 }

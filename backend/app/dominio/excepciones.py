@@ -78,6 +78,14 @@ class MembresiaPendienteDePago(OperacionInvalida):
         self.membresia_id = membresia_id
 
 
+class AsistenciaBloqueadaPorImpago(OperacionInvalida):
+    """No se registra la asistencia porque el jugador está bloqueado por
+    impago (-> HTTP 400). Lleva `codigo`: el manejador global lo agrega al
+    cuerpo y el cliente reconoce el motivo por él, no por el texto."""
+
+    codigo = "asistencia_bloqueada_por_impago"
+
+
 class CredencialesInvalidas(ErrorDominio):
     """Login fallido (-> HTTP 401)."""
     pass

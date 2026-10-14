@@ -296,7 +296,15 @@ describe("POST /api/attendance/records", () => {
       jsonResponse(
         {
           creados: 1,
-          fallidos: [{ personaId: 8, motivo: "Ana Torres tiene un pago pendiente.", registradoPorNombre: null, yaRegistrada: false }],
+          fallidos: [
+            {
+              personaId: 8,
+              motivo: "Ana Torres tiene un pago pendiente.",
+              codigo: "asistencia_bloqueada_por_impago",
+              registradoPorNombre: null,
+              yaRegistrada: false,
+            },
+          ],
           registradoPorNombre: "Carlos Ruiz",
         },
         201,
@@ -323,6 +331,75 @@ describe("POST /api/attendance/records", () => {
         pendingPayment: true,
       },
     ]);
+  });
+
+  it("flags the non-payment refusal by its code, not by the wording of the reason", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse(
+        {
+          creados: 0,
+          fallidos: [
+            { personaId: 8, motivo: "Ana Torres no puede entrenar.", codigo: "asistencia_bloqueada_por_impago", registradoPorNombre: null, yaRegistrada: false },
+          ],
+          registradoPorNombre: null,
+        },
+        201,
+      ),
+    );
+
+    const response = await POST(
+      postRequest({ horarioId: 1, students: [{ personaId: 8, estado: "present" }] }, `${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`),
+    );
+    const body = await response.json();
+
+    expect(body.failed).toEqual([
+      expect.objectContaining({ personaId: 8, message: "Ana Torres no puede entrenar.", pendingPayment: true }),
+    ]);
+  });
+
+  it("does not flag a refusal that only mentions «pago pendiente» without the code, nor one with another code", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse(
+        {
+          creados: 0,
+          fallidos: [
+            { personaId: 8, motivo: "Ana Torres tiene un pago pendiente.", codigo: null, registradoPorNombre: null, yaRegistrada: false },
+            { personaId: 9, motivo: "Otra cosa.", codigo: "otro_codigo", registradoPorNombre: null, yaRegistrada: false },
+          ],
+          registradoPorNombre: null,
+        },
+        201,
+      ),
+    );
+
+    const response = await POST(
+      postRequest(
+        { horarioId: 1, students: [{ personaId: 8, estado: "present" }, { personaId: 9, estado: "present" }] },
+        `${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`,
+      ),
+    );
+    const body = await response.json();
+
+    expect(body.failed).toHaveLength(2);
+    for (const failure of body.failed) expect(failure).not.toHaveProperty("pendingPayment");
+  });
+
+  it("relays the refusal code when the whole batch is rejected for non-payment", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse(
+        { message: "Ana Torres no puede entrenar.", mensaje_seguro: false, codigo: "asistencia_bloqueada_por_impago" },
+        400,
+      ),
+    );
+
+    const response = await POST(
+      postRequest({ horarioId: 1, students: [{ personaId: 8, estado: "present" }] }, `${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.codigo).toBe("asistencia_bloqueada_por_impago");
+    expect(body.message).toBe("Ana Torres no puede entrenar.");
   });
 
   it("answers 201 with the report when the batch is accepted but nobody could be saved", async () => {

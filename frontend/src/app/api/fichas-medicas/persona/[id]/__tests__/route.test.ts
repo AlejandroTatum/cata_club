@@ -8,10 +8,13 @@ import { NextRequest } from "next/server";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { GET, PATCH } from "../route";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/server/auth";
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-}
+import {
+  fetchedUrls,
+  jsonResponse,
+  meBody,
+  portalBody,
+  routeFetch,
+} from "@/lib/server/__tests__/payment-block-fixtures";
 
 function base64Url(input: string): string {
   return Buffer.from(input).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -51,6 +54,14 @@ const fichaMedica = {
   telefonoEmergencia: "0997654321",
 };
 
+/** An admin caller (staff are never gated) and the record endpoint answering `record`. */
+function asAdminServing(record: Response): void {
+  routeFetch({
+    "/auth/me": jsonResponse(meBody({ personaId: 1, roles: ["ADMINISTRADOR"] })),
+    "/fichas-medicas/persona/": record,
+  });
+}
+
 beforeEach(() => {
   vi.spyOn(global, "fetch");
   process.env.BACKEND_API_URL = "http://localhost:8000/api/v1";
@@ -70,7 +81,7 @@ describe("GET /api/fichas-medicas/persona/[id]", () => {
   });
 
   it("calls /fichas-medicas/persona/{id} with Authorization: Bearer", async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(fichaMedica));
+    asAdminServing(jsonResponse(fichaMedica));
 
     const access = makeJwt(3600);
     const response = await GET(getRequest("5", `${ACCESS_TOKEN_COOKIE}=${access}`), { params: Promise.resolve({ id: "5" }) });
@@ -78,8 +89,7 @@ describe("GET /api/fichas-medicas/persona/[id]", () => {
 
     expect(response.status).toBe(200);
     expect(body).toEqual(fichaMedica);
-    expect(global.fetch).toHaveBeenNthCalledWith(
-      1,
+    expect(global.fetch).toHaveBeenCalledWith(
       "http://localhost:8000/api/v1/fichas-medicas/persona/5",
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: `Bearer ${access}` }),
@@ -88,7 +98,7 @@ describe("GET /api/fichas-medicas/persona/[id]", () => {
   });
 
   it("propagates the backend's 403", async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "No autorizado" }, 403));
+    asAdminServing(jsonResponse({ detail: "No autorizado" }, 403));
 
     const access = makeJwt(3600);
     const response = await GET(getRequest("5", `${ACCESS_TOKEN_COOKIE}=${access}`), { params: Promise.resolve({ id: "5" }) });
@@ -106,7 +116,7 @@ describe("PATCH /api/fichas-medicas/persona/[id]", () => {
   });
 
   it("calls /fichas-medicas/persona/{id} with snake_case body", async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(fichaMedica));
+    asAdminServing(jsonResponse(fichaMedica));
 
     const access = makeJwt(3600);
     const response = await PATCH(
@@ -127,8 +137,7 @@ describe("PATCH /api/fichas-medicas/persona/[id]", () => {
 
     expect(response.status).toBe(200);
     expect(body).toEqual(fichaMedica);
-    expect(global.fetch).toHaveBeenNthCalledWith(
-      1,
+    expect(global.fetch).toHaveBeenCalledWith(
       "http://localhost:8000/api/v1/fichas-medicas/persona/5",
       expect.objectContaining({
         method: "PATCH",
@@ -144,7 +153,7 @@ describe("PATCH /api/fichas-medicas/persona/[id]", () => {
   });
 
   it("propagates the backend's 403", async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "No autorizado" }, 403));
+    asAdminServing(jsonResponse({ detail: "No autorizado" }, 403));
 
     const access = makeJwt(3600);
     const response = await PATCH(
@@ -159,7 +168,7 @@ describe("PATCH /api/fichas-medicas/persona/[id]", () => {
     // Clearing a field must reach the backend as `null`, not be silently
     // omitted from the body — omitting it means "leave unchanged" server-side,
     // which is exactly the bug: the toast says success but nothing is cleared.
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(fichaMedica));
+    asAdminServing(jsonResponse(fichaMedica));
 
     const access = makeJwt(3600);
     await PATCH(
@@ -171,8 +180,7 @@ describe("PATCH /api/fichas-medicas/persona/[id]", () => {
       { params: Promise.resolve({ id: "5" }) },
     );
 
-    expect(global.fetch).toHaveBeenNthCalledWith(
-      1,
+    expect(global.fetch).toHaveBeenCalledWith(
       "http://localhost:8000/api/v1/fichas-medicas/persona/5",
       expect.objectContaining({
         method: "PATCH",
@@ -203,7 +211,7 @@ describe("PATCH /api/fichas-medicas/persona/[id]", () => {
 describe("PATCH /api/fichas-medicas/persona/[id] — #643 rejections reach the caller", () => {
   it("passes through the backend's 422 for a DESCONOCIDO blood type", async () => {
     const detail = "El tipo de sangre es obligatorio.";
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail, message: detail }, 422));
+    asAdminServing(jsonResponse({ detail, message: detail }, 422));
 
     const access = makeJwt(3600);
     const response = await PATCH(
@@ -219,7 +227,7 @@ describe("PATCH /api/fichas-medicas/persona/[id] — #643 rejections reach the c
 
   it("passes through the backend's 400 when a PATCH would leave the record invalid", async () => {
     const detail = "El teléfono de emergencia es obligatorio.";
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail, message: detail }, 400));
+    asAdminServing(jsonResponse({ detail, message: detail }, 400));
 
     const access = makeJwt(3600);
     const response = await PATCH(
@@ -234,7 +242,7 @@ describe("PATCH /api/fichas-medicas/persona/[id] — #643 rejections reach the c
   });
 
   it("still forwards a complete, valid record untouched", async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(fichaMedica));
+    asAdminServing(jsonResponse(fichaMedica));
 
     const access = makeJwt(3600);
     const response = await PATCH(
@@ -247,13 +255,75 @@ describe("PATCH /api/fichas-medicas/persona/[id] — #643 rejections reach the c
     );
 
     expect(response.status).toBe(200);
-    expect(global.fetch).toHaveBeenNthCalledWith(
-      1,
+    expect(global.fetch).toHaveBeenCalledWith(
       "http://localhost:8000/api/v1/fichas-medicas/persona/5",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({ tipo_sangre: "O_POSITIVO", telefono_emergencia: "0997654321" }),
       }),
     );
+  });
+});
+
+/**
+ * #1779 S4 — the medical record of a profile blocked for non-payment is behind
+ * Payments on the server too, for reads and for edits.
+ */
+describe("/api/fichas-medicas/persona/[id] — non-payment block (#1779 S4)", () => {
+  const access = () => `${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`;
+  const params = (id: string) => ({ params: Promise.resolve({ id }) });
+  const record = () => jsonResponse(fichaMedica);
+  const touchedRecord = () => fetchedUrls().some((u) => u.includes("/fichas-medicas/"));
+
+  it("denies a blocked adult player their own record: 403 + codigo, record never read", async () => {
+    routeFetch({
+      "/auth/me": jsonResponse(meBody({ personaId: 5, roles: ["ESTUDIANTE"], bloqueadoPorImpago: true })),
+      "/fichas-medicas/": record,
+    });
+
+    const response = await GET(getRequest("5", access()), params("5"));
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({ codigo: "bloqueo_impago" });
+    expect(touchedRecord()).toBe(false);
+  });
+
+  it("denies editing it too", async () => {
+    routeFetch({
+      "/auth/me": jsonResponse(meBody({ personaId: 5, roles: ["ESTUDIANTE"], bloqueadoPorImpago: true })),
+      "/fichas-medicas/": record,
+    });
+
+    const response = await PATCH(patchRequest("5", { tipoSangre: "A_POSITIVO" }, access()), params("5"));
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({ codigo: "bloqueo_impago" });
+    expect(touchedRecord()).toBe(false);
+  });
+
+  it("denies a guardian the record of the dependent flagged as blocked, and serves the sibling's", async () => {
+    routeFetch({
+      "/auth/me": jsonResponse(meBody({ personaId: 5, roles: ["REPRESENTANTE"] })),
+      "/portal/alumno/5": jsonResponse(portalBody({ id: 5 }, [{ id: 6, bloqueadoPorImpago: true }, { id: 7 }])),
+      "/fichas-medicas/": record,
+    });
+
+    const blocked = await GET(getRequest("6", access()), params("6"));
+    expect(blocked.status).toBe(403);
+    expect(touchedRecord()).toBe(false);
+
+    const sibling = await GET(getRequest("7", access()), params("7"));
+    expect(sibling.status).toBe(200);
+    expect(touchedRecord()).toBe(true);
+  });
+
+  it("never restricts an admin whose own membership lapsed", async () => {
+    routeFetch({
+      "/auth/me": jsonResponse(meBody({ personaId: 1, roles: ["ADMINISTRADOR"], bloqueadoPorImpago: true })),
+      "/fichas-medicas/": record,
+    });
+
+    expect((await GET(getRequest("6", access()), params("6"))).status).toBe(200);
+    expect((await PATCH(patchRequest("6", { tipoSangre: "A_POSITIVO" }, access()), params("6"))).status).toBe(200);
   });
 });

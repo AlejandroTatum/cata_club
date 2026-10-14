@@ -290,10 +290,26 @@ QA_COMPOSE = docker compose -f docker-compose.yml -f docker-compose.override.yml
 # entrar por el entorno. `:=` la evalúa UNA vez, para que todos los targets de
 # una misma corrida compartan el mismo valor.
 QA_JWT_SECRET_KEY := $(shell openssl rand -hex 32)
+QA_ENV = JWT_SECRET_KEY=$(QA_JWT_SECRET_KEY)
+
+# Docker Compose >= 5 construye SIEMPRE vía Bake: ya no existe `COMPOSE_BAKE`,
+# así que no hay builder clásico al que volver. Bake rechaza un build con
+# `network: host` ("pass --allow=network.host") y Compose no puede pasarle esa
+# autorización, por eso `docker-compose.override.yml` construye por defecto
+# sobre la red `default`.
 #
-# `COMPOSE_BAKE=false` fuerza el builder clásico: con Docker Compose 5.6 el
-# build vía bake falla en `qa-up` con "pass --allow=network.host".
-QA_ENV = JWT_SECRET_KEY=$(QA_JWT_SECRET_KEY) COMPOSE_BAKE=false
+# Si el resolver de la red de build no llega a PyPI/npm en tu host, la salida
+# es opt-in: `make qa-up CATA_BUILD_NETWORK=host`. Compose solo imprime la
+# definición de Bake (`build --print`) y la construye `docker buildx bake` con
+# la autorización explícita; después `up` reutiliza esas imágenes (sin
+# `--build`, que volvería a pedir el privilegio que Compose no puede dar).
+ifeq ($(CATA_BUILD_NETWORK),host)
+QA_UP_BUILD =
+QA_PREBUILD = BUILD_SHA=$$(git rev-parse HEAD) $(QA_ENV) $(QA_COMPOSE) build --print $(QA_SERVICIOS) | docker buildx bake --allow network.host -f -
+else
+QA_UP_BUILD = --build
+QA_PREBUILD = @:
+endif
 
 # `celery-worker` SÍ entra: reset de contraseña y generación de comprobante
 # son tareas encoladas (recuperacion_tareas.py/comprobante_tareas.py), no se
@@ -321,7 +337,8 @@ QA_SERVICIOS = db redis mailpit backend frontend celery-worker
 qa-up: ## Levantar el entorno de QA desde cero: build + base sembrada + frontend
 	@echo "Levantando entorno de QA (proyecto cataclub-qa)..."
 	git fetch origin main --quiet
-	BUILD_SHA=$$(git rev-parse HEAD) $(QA_ENV) $(QA_COMPOSE) up -d --build --wait $(QA_SERVICIOS)
+	$(QA_PREBUILD)
+	BUILD_SHA=$$(git rev-parse HEAD) $(QA_ENV) $(QA_COMPOSE) up -d $(QA_UP_BUILD) --wait $(QA_SERVICIOS)
 	@echo "Sembrando el dataset grande (seed_dev_bulk.py)..."
 	$(QA_ENV) $(QA_COMPOSE) exec -T backend uv run python scripts/seed_dev_bulk.py
 	@echo ""

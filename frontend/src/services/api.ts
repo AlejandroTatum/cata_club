@@ -2078,6 +2078,14 @@ export interface PagoPersona {
   voucherUrl: string | null;
   voucherFormato: string | null;
   /**
+   * #1779 S7: el pago lo declaró el propio socio desde el portal (no lo registró
+   * el club ni viene de un alta heredada). Solo un efectivo pendiente
+   * autodeclarado se puede reemplazar por una transferencia; sobre cualquier
+   * otro pendiente el backend responde 400 «ya tiene un pago por validar».
+   * Opcional: un backend previo no lo envía, y ausente se lee como `false`.
+   */
+  autodeclarado?: boolean;
+  /**
    * El descuento CONGELADO que el club aplicó a este pago, o `null` cuando no
    * llevó ninguno (hallazgo de QA humana del 17/08/2026: el socio veía el
    * monto ya descontado sin nada que lo explicara).
@@ -3629,14 +3637,22 @@ export async function desasignarAlumnoDeHorario(personaId: number, horarioId: nu
   );
 }
 
-/** List the students assigned to a specific schedule (one page at the backend's cap). */
-export async function fetchAlumnosPorHorario(horarioId: number): Promise<AlumnoHorario[]> {
+/**
+ * List the students assigned to a specific schedule (one page at the backend's cap).
+ * `fecha` (ISO YYYY-MM-DD) is the session date the roll call records: the
+ * non-payment lock on each player is judged on it, not on today. Absent = today.
+ */
+export async function fetchAlumnosPorHorario(
+  horarioId: number,
+  options: { fecha?: string } = {},
+): Promise<AlumnoHorario[]> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
   // Paginated (issue #7): standard `{items, total}` envelope. A single class
   // roster is bounded in practice, so one page at the cap keeps every caller
   // (groups, trainer, trainer/attendance) working unchanged.
+  const fechaQuery = options.fecha ? `&fecha=${encodeURIComponent(options.fecha)}` : "";
   const { items } = await request<PaginatedEnvelope<AlumnoHorario>>(
-    apiEndpoint(`/groups/horarios/${horarioId}/alumnos?limit=${ROSTER_PAGE_LIMIT}`),
+    apiEndpoint(`/groups/horarios/${horarioId}/alumnos?limit=${ROSTER_PAGE_LIMIT}${fechaQuery}`),
     { headers: mockHeaders },
   );
   return items;
