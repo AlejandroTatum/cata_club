@@ -86,7 +86,6 @@ function carnet(id: number, extra: Partial<CarnetSummary["profile"]> = {}): Carn
       membership: null,
       ...extra,
     },
-    coverageEnd: "2026-12-31",
     asignaciones: [],
   };
 }
