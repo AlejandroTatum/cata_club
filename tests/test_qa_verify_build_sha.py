@@ -19,6 +19,8 @@ import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 RAIZ = Path(__file__).resolve().parent.parent
 # `scripts/` no es un paquete instalado (ni vive bajo `backend/`), así que
 # hay que sumarlo a sys.path a mano para poder importarlo por nombre.
@@ -277,3 +279,40 @@ def test_main_usa_la_url_servida_fija():
     ):
         guard.main([])
     mock_fetch.assert_called_once_with(guard.DEFAULT_SERVED_URL)
+
+
+# ─── --port (#1787-m) ───────────────────────────────────────────────────────
+
+
+def test_main_consulta_el_puerto_indicado_con_port():
+    """El host sigue fijo en localhost; solo el puerto es configurable."""
+    with (
+        patch.object(guard, "fetch_served_sha", return_value="abc123") as mock_fetch,
+        patch.object(guard, "fetch_origin_main_sha", return_value="abc123"),
+    ):
+        codigo = guard.main(["--port", "3100"])
+    assert codigo == 0
+    mock_fetch.assert_called_once_with("http://localhost:3100/api/health")
+
+
+def test_main_sin_port_sigue_consultando_el_3000():
+    with (
+        patch.object(guard, "fetch_served_sha", return_value="abc123") as mock_fetch,
+        patch.object(guard, "fetch_origin_main_sha", return_value="abc123"),
+    ):
+        guard.main([])
+    mock_fetch.assert_called_once_with("http://localhost:3000/api/health")
+
+
+@pytest.mark.parametrize("valor", ["0", "65536", "-1", "abc", "3000.5", ""])
+def test_main_rechaza_un_port_invalido_sin_consultar_nada(valor, capsys):
+    with (
+        patch.object(guard, "fetch_served_sha") as mock_fetch,
+        patch.object(guard, "fetch_origin_main_sha") as mock_origin,
+        pytest.raises(SystemExit) as salida,
+    ):
+        guard.main(["--port", valor])
+    assert salida.value.code == 2
+    mock_fetch.assert_not_called()
+    mock_origin.assert_not_called()
+    assert "--port" in capsys.readouterr().err
