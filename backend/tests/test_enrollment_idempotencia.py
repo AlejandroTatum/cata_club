@@ -197,6 +197,26 @@ def test_api_replay_y_conflictos_exponen_status_correcto(client, db_session):
     assert "retry-after" not in conflicto.headers
 
 
+def test_api_replay_entrega_tokens_que_funcionan_en_el_primer_uso(client_sin_token, db_session):
+    """#1775 S11: el replay reemite tokens y abre una `sesion` nueva SIN
+    escribir nada más; la petición debe confirmarla ella misma, o el access
+    reemitido apunta a una fila que el cierre de la petición revirtió."""
+    cuerpo = _cuerpo(cedula_valida(308), "replay-token@example.com")
+    cabecera = {"Idempotency-Key": "clave-replay-token"}
+    primera = client_sin_token.post("/api/v1/enrollment/", json=cuerpo, headers=cabecera)
+    replay = client_sin_token.post("/api/v1/enrollment/", json=cuerpo, headers=cabecera)
+
+    assert primera.status_code == 201
+    assert replay.status_code == 201
+    assert replay.json()["access_token"] != primera.json()["access_token"]
+    for respuesta in (primera, replay):
+        me = client_sin_token.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {respuesta.json()['access_token']}"},
+        )
+        assert me.status_code == 200, me.text
+
+
 def test_api_pendiente_expone_425_y_retry_after(client, db_session):
     InscripcionIdempotenciaRepositorio(db_session).crear_pendiente(
         "clave-api-pendiente", "huella", vence_en=_ahora_utc() + timedelta(hours=24)

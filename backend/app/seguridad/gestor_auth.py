@@ -413,17 +413,63 @@ class GestorAutenticacion:
         este bug en el próximo refactor."""
         return usuario.activo and GestorAutenticacion.epoch_valido(sver_claim, usuario)
 
+    # --- #1653 / #1775: ventanas de vida de una sesión -----------------------
+    # ÚNICA definición de las dos ventanas: el refresh
+    # (`AuthServicio.refrescar_sesion`) y el access (`sesion_viva`) llaman a
+    # estos métodos, nunca comparan fechas por su lado -- misma filosofía que
+    # `epoch_valido`/`sesion_vigente`: dos copias de la regla es la
+    # bifurcación que dejaba vivo, hasta que expirara su access, un token de
+    # una sesión ya vencida.
+    @staticmethod
+    def sesion_pasada_del_tope_absoluto(sesion: Sesion, ahora: datetime) -> bool:
+        """Tope absoluto: `jwt_refresh_expira_dias` desde `iniciada_en`, sin
+        importar cuánto se use."""
+        return ahora - sesion.iniciada_en > timedelta(days=settings.jwt_refresh_expira_dias)
+
+    @staticmethod
+    def sesion_inactiva(sesion: Sesion, ahora: datetime) -> bool:
+        """Ventana inactiva: `sesion_inactividad_horas` desde `ultimo_uso_en`
+        (`iniciada_en` si la fila nunca lo fijó).
+
+        `ultimo_uso_en` lo mueven el login, la adopción legacy y cada rotación
+        del refresh -- NO el access: escribir la fila en cada request autenticado
+        sería una escritura en la ruta caliente. Por eso la ventana se juzga
+        sobre lo que el refresh actualiza: todo access nace de uno de esos
+        eventos (a lo sumo `sesion_gracia_rotacion_segundos` antes) y vive
+        `jwt_expira_minutos`, muy por debajo de la ventana, así que aplicarla
+        acá no acorta ninguna sesión que el refresh aceptaría."""
+        ultimo_uso = sesion.ultimo_uso_en or sesion.iniciada_en
+        return ahora - ultimo_uso > timedelta(hours=settings.sesion_inactividad_horas)
+
+    @staticmethod
+    def sesion_vencida(sesion: Sesion, ahora: datetime) -> bool:
+        """Vencida por cualquiera de las dos ventanas."""
+        return (
+            GestorAutenticacion.sesion_pasada_del_tope_absoluto(sesion, ahora)
+            or GestorAutenticacion.sesion_inactiva(sesion, ahora)
+        )
+
     @staticmethod
     def sesion_viva(db: Session, usuario: "Usuario", sid: object) -> bool:
-        """¿La fila `sesion` de `sid` existe, es de `usuario` y no está
-        revocada? Es la mitad "por sesión" de la vigencia de un access token;
-        el epoch (`sesion_vigente`) sigue siendo la mitad "todas a la vez".
-        Un `sid` que no sea un entero (token malformado pero con firma válida)
-        no resuelve a ninguna fila."""
+        """¿La fila `sesion` de `sid` existe, es de `usuario`, no está revocada
+        y no venció por inactividad ni por el tope absoluto? Es la mitad "por
+        sesión" de la vigencia de un access token; el epoch (`sesion_vigente`)
+        sigue siendo la mitad "todas a la vez".
+
+        Una sola lectura por PK, la de siempre: las ventanas se juzgan sobre
+        la misma fila. NO revoca ni escribe al rechazar (ruta caliente): el
+        siguiente refresh de esa sesión la revoca. Un `sid` que no sea un
+        entero (token malformado pero con firma válida) no resuelve a ninguna
+        fila."""
         if not isinstance(sid, int) or isinstance(sid, bool):
             return False
         sesion = db.get(Sesion, sid)
-        return sesion is not None and sesion.usuario_id == usuario.id and sesion.revocada_en is None
+        return (
+            sesion is not None
+            and sesion.usuario_id == usuario.id
+            and sesion.revocada_en is None
+            and not GestorAutenticacion.sesion_vencida(sesion, datetime.now(timezone.utc))
+        )
 
     @staticmethod
     def decodificar_token(
