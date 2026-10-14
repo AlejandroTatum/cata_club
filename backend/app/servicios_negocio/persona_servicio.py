@@ -353,6 +353,7 @@ class PersonaServicio:
             representante_id=persona_id, datos=datos, actor_persona_id=persona_id,
         )
         tokens = AuthServicio(self.db).reemitir_tokens_para(usuario)
+        self.db.commit()
         return representado, tokens
 
     # --- INS-2 retirada: parada segura de la vinculación de autoservicio -----

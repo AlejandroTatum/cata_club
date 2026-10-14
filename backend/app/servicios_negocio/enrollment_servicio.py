@@ -472,7 +472,11 @@ class EnrollmentServicio:
                     f"{registro.persona_id}; no se pueden reponer los tokens."
                 ),
             )
-        return self._emitir_tokens(usuario)
+        # El replay no pasa por `marcar_completada` (que sí confirma en el
+        # intento fresco): la sesión que abre la reemisión se confirma acá.
+        tokens = self._emitir_tokens(usuario)
+        self.db.commit()
+        return tokens
 
     @staticmethod
     def _es_conflicto_de_clave_idempotencia(error: IntegrityError) -> bool:

@@ -401,6 +401,25 @@ def test_reemitir_tokens_para_abre_una_sesion_con_jti(usuario, db_session):
     assert _claims(par["access_token"])["sid"] == claims_refresh["sid"]
 
 
+def test_reemitir_tokens_para_no_commitea_la_transaccion_del_llamador(usuario, db_session, monkeypatch):
+    """#1775 S11: el llamador decide la atomicidad. Si su operación falla
+    después de reemitir y hace rollback, la fila `sesion` se va con ella en
+    vez de quedar huérfana de un cambio que nunca ocurrió."""
+    commits: list[int] = []
+    commit_real = db_session.commit
+    monkeypatch.setattr(db_session, "commit", lambda: (commits.append(1), commit_real())[1])
+
+    par = AuthServicio(db_session).reemitir_tokens_para(usuario)
+    sid = _claims(par["refresh_token"])["sid"]
+
+    assert commits == []
+    assert db_session.get(Sesion, sid) is not None  # visible dentro de la transacción
+
+    db_session.rollback()
+
+    assert db_session.get(Sesion, sid) is None
+
+
 def test_emisor_de_inscripcion_abre_una_sesion_con_jti(usuario, db_session):
     from app.servicios_negocio.enrollment_servicio import EnrollmentServicio
 
