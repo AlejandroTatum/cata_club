@@ -12,7 +12,7 @@ import {
   fetchedUrls,
   jsonResponse,
   meBody,
-  portalBody,
+  bloqueosBody,
   routeFetch,
 } from "@/lib/server/__tests__/payment-block-fixtures";
 
@@ -304,7 +304,7 @@ describe("/api/fichas-medicas/persona/[id] — non-payment block (#1779 S4)", ()
   it("denies a guardian the record of the dependent flagged as blocked, and serves the sibling's", async () => {
     routeFetch({
       "/auth/me": jsonResponse(meBody({ personaId: 5, roles: ["REPRESENTANTE"] })),
-      "/portal/alumno/5": jsonResponse(portalBody({ id: 5 }, [{ id: 6, bloqueadoPorImpago: true }, { id: 7 }])),
+      "/portal/alumno/5/bloqueos": jsonResponse(bloqueosBody([{ id: 6, bloqueadoPorImpago: true }, { id: 7 }])),
       "/fichas-medicas/": record,
     });
 
@@ -315,6 +315,50 @@ describe("/api/fichas-medicas/persona/[id] — non-payment block (#1779 S4)", ()
     const sibling = await GET(getRequest("7", access()), params("7"));
     expect(sibling.status).toBe(200);
     expect(touchedRecord()).toBe(true);
+  });
+
+  it("never restricts a trainer whose own membership lapsed, for reads or edits", async () => {
+    routeFetch({
+      "/auth/me": jsonResponse(meBody({ personaId: 2, roles: ["ENTRENADOR"], bloqueadoPorImpago: true })),
+      "/fichas-medicas/": record,
+    });
+
+    expect((await GET(getRequest("6", access()), params("6"))).status).toBe(200);
+    expect((await PATCH(patchRequest("6", { tipoSangre: "A_POSITIVO" }, access()), params("6"))).status).toBe(200);
+    expect(fetchedUrls().some((u) => u.includes("/bloqueos"))).toBe(false);
+  });
+
+  it.each([
+    ["the caller cannot be resolved (/auth/me 500)", { "/auth/me": jsonResponse({ detail: "boom" }, 500) }, 500],
+    [
+      "/auth/me answers without a usable persona",
+      { "/auth/me": jsonResponse({ roles: ["REPRESENTANTE"] }) },
+      502,
+    ],
+    [
+      "the dependents endpoint fails (500)",
+      {
+        "/auth/me": jsonResponse(meBody({ personaId: 5, roles: ["REPRESENTANTE"] })),
+        "/portal/alumno/5/bloqueos": jsonResponse({ detail: "boom" }, 500),
+      },
+      500,
+    ],
+    [
+      "the dependents endpoint is rate limited (429)",
+      {
+        "/auth/me": jsonResponse(meBody({ personaId: 5, roles: ["REPRESENTANTE"] })),
+        "/portal/alumno/5/bloqueos": jsonResponse({ detail: "slow down" }, 429),
+      },
+      502,
+    ],
+  ])("fails closed when %s: the same status for a read and an edit, record untouched", async (_name, routes, status) => {
+    routeFetch({ ...routes, "/fichas-medicas/": record });
+
+    const read = await GET(getRequest("6", access()), params("6"));
+    const edit = await PATCH(patchRequest("6", { tipoSangre: "A_POSITIVO" }, access()), params("6"));
+
+    expect([read.status, edit.status]).toEqual([status, status]);
+    expect(touchedRecord()).toBe(false);
   });
 
   it("never restricts an admin whose own membership lapsed", async () => {

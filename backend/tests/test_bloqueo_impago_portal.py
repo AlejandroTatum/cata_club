@@ -149,3 +149,84 @@ def test_me_con_el_bloqueo_apagado_no_marca_a_un_vencido(client_sin_token, db_se
 
     assert me["bloqueadoPorImpago"] is False
     assert me["puedeEntrenar"] is True
+
+
+# --- GET /portal/alumno/{id}/bloqueos (#1787 S2/S3) --------------------------------------------------
+def test_el_endpoint_liviano_lista_el_bloqueo_de_cada_dependiente_sin_datos_del_portal(client, db_session):
+    padre = crear_persona_orm(db_session, "1710034065", nombres="Pat", apellidos="Padre")
+    al_dia, _ = crear_miembro(
+        db_session, cubierto_hasta=hoy_club() + timedelta(days=9),
+        estado=EstadoMembresia.ACTIVA, representante=padre, nombres="Alba",
+    )
+    moroso, _ = crear_miembro(
+        db_session, cubierto_hasta=_hoy_menos(10), representante=padre, nombres="Moro",
+    )
+    db_session.commit()
+    _como(padre.id, ["REPRESENTANTE"])
+
+    respuesta = client.get(f"{URL}/{padre.id}/bloqueos")
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert set(cuerpo) == {"representados"}
+    assert {fila["personaId"]: fila["bloqueadoPorImpago"] for fila in cuerpo["representados"]} == {
+        al_dia.id: False, moroso.id: True,
+    }
+    assert all(set(fila) == {"personaId", "bloqueadoPorImpago"} for fila in cuerpo["representados"])
+
+
+def test_el_endpoint_liviano_incluye_al_dependiente_inactivo_bloqueado(client, db_session):
+    padre = crear_persona_orm(db_session, "1710034065", nombres="Pat", apellidos="Padre")
+    inactivo, _ = crear_miembro(
+        db_session, cubierto_hasta=_hoy_menos(10), representante=padre, nombres="Baja",
+    )
+    inactivo.activo = False
+    db_session.commit()
+    _como(padre.id, ["REPRESENTANTE"])
+
+    portal = client.get(f"{URL}/{padre.id}").json()
+    cuerpo = client.get(f"{URL}/{padre.id}/bloqueos").json()
+
+    assert portal["representados"] == []  # el portal lo deja fuera...
+    assert cuerpo["representados"] == [{"personaId": inactivo.id, "bloqueadoPorImpago": True}]  # ...el gate no
+
+
+def test_el_endpoint_liviano_incluye_al_dependiente_del_segundo_guardian(client, db_session):
+    from app.dominio.modelos import CoRepresentante
+
+    principal = crear_persona_orm(db_session, "1710034065", nombres="Pat", apellidos="Padre")
+    segundo = crear_persona_orm(db_session, "1710034073", nombres="Sol", apellidos="Segunda")
+    moroso, _ = crear_miembro(db_session, cubierto_hasta=_hoy_menos(10), representante=principal)
+    db_session.add(CoRepresentante(
+        persona_id=moroso.id, co_representante_id=segundo.id, creado_por_persona_id=principal.id,
+    ))
+    db_session.commit()
+    _como(segundo.id, ["REPRESENTANTE"])
+
+    cuerpo = client.get(f"{URL}/{segundo.id}/bloqueos").json()
+
+    assert cuerpo["representados"] == [{"personaId": moroso.id, "bloqueadoPorImpago": True}]
+
+
+def test_el_endpoint_liviano_sin_dependientes_devuelve_lista_vacia(client, db_session):
+    persona = crear_persona_orm(db_session, "1710034065")
+    db_session.commit()
+    _como(persona.id, ["ALUMNO"])
+
+    assert client.get(f"{URL}/{persona.id}/bloqueos").json() == {"representados": []}
+
+
+def test_el_endpoint_liviano_respeta_la_politica_del_portal(client, db_session):
+    padre = crear_persona_orm(db_session, "1710034065", nombres="Pat", apellidos="Padre")
+    crear_miembro(db_session, cubierto_hasta=_hoy_menos(10), representante=padre)
+    intruso = crear_persona_orm(db_session, "1710034073")
+    db_session.commit()
+
+    _como(intruso.id, ["REPRESENTANTE"])
+    assert client.get(f"{URL}/{padre.id}/bloqueos").status_code == 403
+    _como(9999, ["ENTRENADOR"])
+    assert client.get(f"{URL}/{padre.id}/bloqueos").status_code == 403
+    _como(9999, ["ADMINISTRADOR"])
+    assert client.get(f"{URL}/{padre.id}/bloqueos").status_code == 200
+    _como(padre.id, ["REPRESENTANTE"])
+    assert client.get(f"{URL}/999999/bloqueos").status_code == 403

@@ -15,7 +15,7 @@ import {
   fetchedUrls,
   jsonResponse,
   meBody,
-  portalBody,
+  bloqueosBody,
   routeFetch,
 } from "@/lib/server/__tests__/payment-block-fixtures";
 
@@ -93,7 +93,7 @@ describe("GET /api/student/attendance", () => {
   it("passes a backend refusal through instead of an empty page", async () => {
     routeFetch({
       "/auth/me": jsonResponse(meBody({ personaId: 5 })),
-      "/portal/alumno/5": jsonResponse(portalBody({ id: 5 })),
+      "/portal/alumno/5/bloqueos": jsonResponse(bloqueosBody()),
       "/asistencias/persona/9": jsonResponse({ detail: "No puedes consultar el historial de asistencia de otra persona" }, 403),
       "/asistencias/horarios": jsonResponse([horario]),
     });
@@ -130,7 +130,7 @@ describe("GET /api/student/attendance — non-payment block (#1779 S4)", () => {
   it("denies a guardian the history of the dependent the backend flags as blocked", async () => {
     routeFetch({
       "/auth/me": jsonResponse(meBody({ personaId: 5, roles: ["REPRESENTANTE"] })),
-      "/portal/alumno/5": jsonResponse(portalBody({ id: 5 }, [{ id: 6, bloqueadoPorImpago: true }, { id: 7 }])),
+      "/portal/alumno/5/bloqueos": jsonResponse(bloqueosBody([{ id: 6, bloqueadoPorImpago: true }, { id: 7 }])),
       "/asistencias/": history,
     });
 
@@ -144,7 +144,7 @@ describe("GET /api/student/attendance — non-payment block (#1779 S4)", () => {
   it("still serves the guardian's other dependent, and the guardian's own history", async () => {
     routeFetch({
       "/auth/me": jsonResponse(meBody({ personaId: 5, roles: ["REPRESENTANTE"] })),
-      "/portal/alumno/5": jsonResponse(portalBody({ id: 5 }, [{ id: 6, bloqueadoPorImpago: true }, { id: 7 }])),
+      "/portal/alumno/5/bloqueos": jsonResponse(bloqueosBody([{ id: 6, bloqueadoPorImpago: true }, { id: 7 }])),
       "/asistencias/persona/": history,
       "/asistencias/horarios": horarios,
     });
@@ -167,7 +167,7 @@ describe("GET /api/student/attendance — non-payment block (#1779 S4)", () => {
     },
   );
 
-  it("fails closed when the caller cannot be resolved", async () => {
+  it("fails closed with the backend's own status when the caller cannot be resolved", async () => {
     routeFetch({
       "/auth/me": jsonResponse({ detail: "boom" }, 500),
       "/asistencias/": history,
@@ -175,7 +175,20 @@ describe("GET /api/student/attendance — non-payment block (#1779 S4)", () => {
 
     const response = await GET(getRequest(url(5)));
 
-    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.status).toBe(500);
+    expect(fetchedUrls().some((u) => u.includes("/asistencias/"))).toBe(false);
+  });
+
+  it("fails closed when the dependents endpoint fails, with the same status the other gated routes give", async () => {
+    routeFetch({
+      "/auth/me": jsonResponse(meBody({ personaId: 5, roles: ["REPRESENTANTE"] })),
+      "/portal/alumno/5/bloqueos": jsonResponse({ detail: "boom" }, 500),
+      "/asistencias/": history,
+    });
+
+    const response = await GET(getRequest(url(6)));
+
+    expect(response.status).toBe(500);
     expect(fetchedUrls().some((u) => u.includes("/asistencias/"))).toBe(false);
   });
 });
