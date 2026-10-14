@@ -950,11 +950,15 @@ class AuthServicio:
         reemisión, quien acaba de pasar a ser REPRESENTANTE seguiría viendo
         su sesión como ALUMNO hasta el próximo login.
 
-        NO commitea (#1775): la fila `sesion` queda flusheada dentro de la
-        transacción del llamador, que decide la atomicidad y DEBE confirmar
-        después de llamar -- el access lleva el `sid` de esa fila, y si nadie
-        confirma, el cierre de la petición la revierte y el primer uso del
-        token recibe 401."""
+        NO commitea (#1775): solo hace `flush()`, así que la fila `sesion` vive
+        en la transacción del llamador, que decide la atomicidad y DEBE
+        confirmar después de llamar. Hoy cada llamador lo hace así:
+        `cambiar_correo_no_verificado` y `crear_representado_propio` con su
+        propio `commit()`, y la inscripción con `marcar_completada`, que
+        commitea el intento de idempotencia junto con la sesión. Si nadie
+        confirma, `obtener_sesion` cierra la sesión de BD al terminar la
+        petición, la transacción se revierte y la fila desaparece: el access ya
+        entregado lleva el `sid` de esa fila y su primer uso recibe 401."""
         sesion = self._registrar_sesion(usuario, None, confirmar=False)
         return self._emitir_par_tokens(usuario, sesion)
 
