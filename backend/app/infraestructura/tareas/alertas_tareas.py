@@ -20,7 +20,7 @@ from datetime import date, datetime, time, timedelta
 import logging
 from typing import Sequence
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import joinedload
 
 from app.infraestructura.db import SessionLocal
@@ -694,14 +694,15 @@ def avisar_lanzamiento_bloqueo_impago(self, dry_run: bool = False) -> dict:
     regla (`inicio_del_bloqueo`: la gracia corre desde el lanzamiento). Sin
     fecha de lanzamiento no hace nada.
 
-    Idempotente POR JUGADOR (#1779): la fila queda como `MIEMBRESIA_MORA_DIA_1`
-    SIN entidad relacionada (los avisos regulares siempre llevan el pago), así
-    que correrla otra vez no repite el aviso y tampoco pisa el aviso de mora
-    regular. Como la fila del responsable nombra al jugador ("Para {nombre}:"),
-    eso mismo identifica de qué jugador es: un hijo que vence después recibe el
-    suyo aunque su responsable ya haya recibido el de un hermano, y las filas ya
-    enviadas en producción (mismo formato) siguen contando. Se reutiliza el tipo
-    a propósito: uno nuevo exige migración del enum de Postgres y su espejo en
+    Idempotente POR JUGADOR (#1779, #1787-f): la fila queda como
+    `MIEMBRESIA_MORA_DIA_1` SIN entidad relacionada (quien paga por sí mismo) o
+    con el id del jugador en negativo (el responsable que paga por otro); los
+    avisos regulares llevan el id positivo del pago, así que correrla otra vez no
+    repite el aviso y tampoco pisa el aviso de mora regular. Un hijo que vence
+    después recibe el suyo aunque su responsable ya haya recibido el de un
+    hermano, y renombrar al hijo no reenvía nada. Las filas ya enviadas en
+    producción (sin marca, "Para {nombre}: ") siguen contando por el nombre.
+    Se reutiliza el tipo a propósito: uno nuevo exige migración del enum de Postgres y su espejo en
     el frontend."""
     hoy = hoy_club()
     lanzamiento = settings.bloqueo_impago_fecha_lanzamiento
@@ -748,16 +749,22 @@ def avisar_lanzamiento_bloqueo_impago(self, dry_run: bool = False) -> dict:
         responsables_ids = {
             r.id for m, _ in vencidas for r in _responsables_de_pago(m.persona)
         }
-        ya_avisados: dict[int, list[str]] = {}
+        ya_avisados: dict[int, list[tuple[str, int | None]]] = {}
         if responsables_ids:
-            for persona_id, mensaje in db.execute(
-                select(Notificacion.persona_id, Notificacion.mensaje).where(
+            for persona_id, mensaje, entidad in db.execute(
+                select(
+                    Notificacion.persona_id, Notificacion.mensaje,
+                    Notificacion.entidad_relacionada_id,
+                ).where(
                     Notificacion.tipo == TipoNotificacion.MIEMBRESIA_MORA_DIA_1,
-                    Notificacion.entidad_relacionada_id.is_(None),
+                    or_(
+                        Notificacion.entidad_relacionada_id.is_(None),
+                        Notificacion.entidad_relacionada_id < 0,
+                    ),
                     Notificacion.persona_id.in_(responsables_ids),
                 )
             ):
-                ya_avisados.setdefault(persona_id, []).append(mensaje)
+                ya_avisados.setdefault(persona_id, []).append((mensaje, entidad))
 
         filas: list[Notificacion] = []
         correos: list[CorreoPendiente] = []
@@ -792,25 +799,41 @@ def _nombre_en_aviso(persona: Persona) -> str:
     return acortar_nombre_para_notificacion(nombre_completo(persona.nombres, persona.apellidos))
 
 
+def _marca_de_jugador(persona: Persona) -> int:
+    """`entidad_relacionada_id` de la fila de lanzamiento que un responsable
+    recibe por OTRO jugador: el id del jugador en negativo. Los avisos regulares
+    llevan el id del pago (siempre positivo) y su dedup es `(tipo, persona,
+    pago_id)`, así que una marca negativa nunca los pisa ni es pisada, y el
+    dedup por jugador no depende de cómo se llame (#1787-f). Evita una migración:
+    la columna no tiene FK por diseño."""
+    return -persona.id
+
+
 def _ya_avisado_de_lanzamiento(
-    mensajes_del_responsable: list[str], responsable: Persona, persona: Persona,
+    avisos_del_responsable: list[tuple[str, int | None]], responsable: Persona, persona: Persona,
 ) -> bool:
-    """¿Ya recibió `responsable` el aviso de lanzamiento DE ESTE jugador? Se
-    reconoce por el texto, que es lo único que distingue a un jugador de otro en
-    una fila sin entidad (y también en las ya enviadas en producción): la del
-    responsable que paga por otro empieza con "Para {nombre}: "; la de quien
-    paga por sí mismo, no."""
+    """¿Ya recibió `responsable` el aviso de lanzamiento DE ESTE jugador?
+
+    Quien paga por sí mismo: cualquier fila sin entidad que no empiece con
+    "Para ". Quien paga por otro: la fila marcada con el id del jugador
+    (`_marca_de_jugador`) -- y, para las filas sin marca ya enviadas en
+    producción antes de #1787, el prefijo "Para {nombre}: ", que sigue contando
+    para que ese despliegue no reenvíe nada."""
     if responsable.id == persona.id:
-        return any(not m.startswith("Para ") for m in mensajes_del_responsable)
+        return any(e is None and not m.startswith("Para ") for m, e in avisos_del_responsable)
+    marca = _marca_de_jugador(persona)
     prefijo = f"Para {_nombre_en_aviso(persona)}: "
-    return any(m.startswith(prefijo) for m in mensajes_del_responsable)
+    return any(
+        e == marca or (e is None and m.startswith(prefijo))
+        for m, e in avisos_del_responsable
+    )
 
 
 def _construir_aviso_lanzamiento(
-    ya_avisados: dict[int, list[str]], persona: Persona, texto: str,
+    ya_avisados: dict[int, list[tuple[str, int | None]]], persona: Persona, texto: str,
 ) -> tuple[list[Notificacion], list[CorreoPendiente]]:
-    """`Notificacion` (sin entidad relacionada: esa es la marca de idempotencia)
-    y correo del aviso de lanzamiento de `persona` para cada responsable de pago
+    """`Notificacion` (sin entidad relacionada, o con la marca negativa del
+    jugador si paga otro: esa es la marca de idempotencia) y correo del aviso de lanzamiento de `persona` para cada responsable de pago
     que todavía no recibió el SUYO. NO escribe en la base. `ya_avisados` (los
     mensajes de lanzamiento previos de cada responsable) se resuelve ANTES del
     lote, así que un responsable con dos hijos vencidos recibe los dos avisos en
@@ -821,12 +844,12 @@ def _construir_aviso_lanzamiento(
         if _ya_avisado_de_lanzamiento(ya_avisados.get(responsable.id, []), responsable, persona):
             continue
         if responsable.id == persona.id:
-            mensaje = texto
+            mensaje, entidad = texto, None
         else:
-            mensaje = f"Para {_nombre_en_aviso(persona)}: {texto}"
+            mensaje, entidad = f"Para {_nombre_en_aviso(persona)}: {texto}", _marca_de_jugador(persona)
         filas.append(Notificacion(
             tipo=TipoNotificacion.MIEMBRESIA_MORA_DIA_1, mensaje=mensaje,
-            persona_id=responsable.id, entidad_relacionada_id=None,
+            persona_id=responsable.id, entidad_relacionada_id=entidad,
         ))
         correos += _correo_para_responsable(
             responsable, _render_mora, TipoNotificacion.MIEMBRESIA_MORA_DIA_1,

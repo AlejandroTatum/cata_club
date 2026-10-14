@@ -426,3 +426,50 @@ def test_el_miembro_gratuito_ya_pasada_la_gracia_tampoco_recibe_texto_de_bloqueo
     assert _mensajes(db_session, persona) == [
         "Tu membresía venció el 09/06/2029. Regulariza tu pago para no perder los beneficios."
     ]
+
+
+# --- Aviso de lanzamiento: el dedup no depende del nombre del hijo (#1787-f) ------------------
+def test_renombrar_a_un_hijo_entre_corridas_no_reenvia_su_aviso(
+    db_session, sesion_inyectada, monkeypatch,  # noqa: F811
+):
+    representante, hijos = _familia(db_session, vencidos=["Nino"])
+    llamadas = _mock_envio(monkeypatch)
+    assert _lanzamiento()["total_avisos"] == 1
+    antes = _foto_de_avisos(db_session, representante)
+    hijos["Nino"].persona.nombres = "Ninito"
+    db_session.commit()
+
+    resultado = _lanzamiento()
+
+    assert resultado["total_avisos"] == 0
+    assert _foto_de_avisos(db_session, representante) == antes
+    assert len(llamadas) == 1
+
+
+def test_renombrar_a_un_hijo_no_le_quita_el_aviso_a_su_hermano(
+    db_session, sesion_inyectada, monkeypatch,  # noqa: F811
+):
+    representante, hijos = _familia(db_session, vencidos=["Nino"], al_dia=["Nina"])
+    _mock_envio(monkeypatch)
+    _lanzamiento()
+    hijos["Nino"].persona.nombres = "Ninito"
+    _vencer(db_session, hijos["Nina"])
+
+    resultado = _lanzamiento()
+
+    assert [a["membresia_id"] for a in resultado["avisos"]] == [hijos["Nina"].id]
+    assert len(_mensajes(db_session, representante)) == 2
+
+
+def test_la_marca_del_aviso_de_un_hijo_no_choca_con_el_pago_de_ese_mismo_id(
+    db_session, sesion_inyectada, monkeypatch,  # noqa: F811
+):
+    """La marca por hijo no puede coincidir con el id de un pago: la dedup del
+    aviso regular de día 1 es `(tipo, responsable, pago_id)`."""
+    representante, hijos = _familia(db_session, vencidos=["Nino"])
+    _mock_envio(monkeypatch)
+    _lanzamiento()
+
+    marcas = [e for _, _, e, _ in _foto_de_avisos(db_session, representante)]
+
+    assert marcas and all(e is None or e < 0 for e in marcas)
