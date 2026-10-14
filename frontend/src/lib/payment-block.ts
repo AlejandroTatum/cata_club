@@ -17,9 +17,15 @@ export const PAYMENT_BLOCK_MINOR_MESSAGE = "Pídele a tu representante que pague
 /** Shown beside the payment method while blocked: cash is not a way back in from the portal. */
 export const CASH_AT_CLUB_NOTE = "El efectivo se paga en el club.";
 
-/** The banner of a blocked profile. The date is the end of its coverage. */
-export function paymentBlockBanner(cubiertoHasta: string | null): string {
+/**
+ * The banner of a blocked profile. The date is the end of its coverage.
+ *
+ * @param studentName the dependent's given name when a guardian reads it; the
+ *   reader's own account (`null`) is addressed in «tú».
+ */
+export function paymentBlockBanner(cubiertoHasta: string | null, studentName: string | null = null): string {
   const venció = cubiertoHasta ? `venció el ${formatDate(cubiertoHasta)}` : "venció";
+  if (studentName) return `La membresía de ${studentName} ${venció}. Paga para que vuelva a entrenar.`;
   return `Tu membresía ${venció}. Paga para volver a entrenar.`;
 }
 
