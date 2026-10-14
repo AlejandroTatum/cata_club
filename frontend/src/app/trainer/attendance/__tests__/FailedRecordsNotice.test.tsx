@@ -59,4 +59,40 @@ describe("FailedRecordsNotice", () => {
     expect(screen.queryAllByRole("listitem")).toHaveLength(0);
     expect(screen.queryByText(/complete solo a los jugadores que faltan/)).not.toBeInTheDocument();
   });
+
+  // #1768: a batch refuses a player whose payment lapsed. That is a reason the
+  // trainer cannot fix by retrying, so it is said apart, with the names.
+  it("names the players refused for a pending payment, apart from real failures", () => {
+    render(
+      <FailedRecordsNotice
+        students={students}
+        failed={[
+          { personaId: 101, message: "Ana Torres tiene un pago pendiente.", pendingPayment: true },
+          { personaId: 102, message: "boom" },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("1 jugador con pago pendiente")).toBeInTheDocument();
+    expect(screen.getByText(/no se les puede registrar asistencia hasta que paguen/i)).toBeInTheDocument();
+    expect(screen.getByText("Ana Torres")).toBeInTheDocument();
+    expect(screen.getByText("No se pudo guardar 1 registro")).toBeInTheDocument();
+    expect(screen.getByText("Beto Luna")).toBeInTheDocument();
+  });
+
+  it("gives no «retry» advice when the only failures are pending payments", () => {
+    render(
+      <FailedRecordsNotice
+        students={students}
+        failed={[
+          { personaId: 101, message: "x", pendingPayment: true },
+          { personaId: 102, message: "x", pendingPayment: true },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("2 jugadores con pago pendiente")).toBeInTheDocument();
+    expect(screen.queryByText(/No se pudo/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/completa solo a los jugadores que faltan/i)).not.toBeInTheDocument();
+  });
 });

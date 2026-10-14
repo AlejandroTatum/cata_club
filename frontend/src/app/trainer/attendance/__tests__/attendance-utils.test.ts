@@ -1167,3 +1167,95 @@ describe("describeAttendanceSaveError — backend reason (ENT-02)", () => {
     expect(describeAttendanceSaveError(err)).toMatch(/ya no coincide/);
   });
 });
+
+describe("non-payment block (#1768)", () => {
+  const item = (personaId: number, extra: Partial<AlumnoHorario> = {}): AlumnoHorario =>
+    ({
+      id: personaId,
+      personaId,
+      personaNombreCompleto: `Jugador ${personaId}`,
+      edad: 12,
+      horarioId: 1,
+      horarioDia: "lun",
+      horarioHoraInicio: "18:00",
+      horarioHoraFin: "19:00",
+      fechaAsignacion: "2026-01-01",
+      ...extra,
+    }) as AlumnoHorario;
+
+  const rosterWithBlocked = () =>
+    buildRosterFromAlumnoHorarios([item(1), item(2, { bloqueadoPorImpago: true })]);
+
+  it("keeps a blocked player on the roster, flagged, with nothing for the trainer to mark", () => {
+    const [ok, blocked] = rosterWithBlocked();
+
+    expect(blocked).toMatchObject({ id: "2", blocked: true, attendance: "unmarked", reviewed: true });
+    // Everyone else is exactly as before: no flag at all.
+    expect(ok).not.toHaveProperty("blocked");
+    expect(ok).toMatchObject({ attendance: "present", reviewed: false });
+  });
+
+  it("does not make the roll call wait on a player nobody can mark", () => {
+    const roster = rosterWithBlocked();
+
+    expect(countUnmarked(roster)).toBe(0);
+    expect(countUnreviewed(roster)).toBe(1);
+  });
+
+  it("never sends a blocked player in the batch", () => {
+    const roster = markRemainingPresent(rosterWithBlocked());
+
+    expect(toAttendanceMarks(roster)).toEqual([{ personaId: 1, estado: "present" }]);
+  });
+
+  it("does not count a blocked player in the receipt", () => {
+    const roster = markRemainingPresent(rosterWithBlocked());
+
+    expect(buildAttendanceReceipt(roster).present).toBe(1);
+  });
+
+  it("never lets a stale draft mark a player who is blocked now", () => {
+    const merged = applyAttendanceDraft(rosterWithBlocked(), { "1": "late", "2": "present" });
+
+    expect(merged[1]).toMatchObject({ attendance: "unmarked", blocked: true });
+    expect(merged[0]).toMatchObject({ attendance: "late" });
+  });
+
+  it("still closes the session once everyone who can be marked has a row", () => {
+    const roster: SessionStudent[] = [
+      { id: "1", name: "A", attendance: "present", reviewed: true, asistenciaId: 10 },
+      { id: "2", name: "B", attendance: "unmarked", reviewed: true, blocked: true },
+    ];
+
+    expect(isSessionClosed(roster)).toBe(true);
+    expect(isSessionPartial(roster)).toBe(false);
+  });
+
+  it("keeps a session with a markable player still open", () => {
+    const roster: SessionStudent[] = [
+      { id: "1", name: "A", attendance: "present", reviewed: true, asistenciaId: 10 },
+      { id: "2", name: "B", attendance: "unmarked", reviewed: true, blocked: true },
+      { id: "3", name: "C", attendance: "present", reviewed: false },
+    ];
+
+    expect(isSessionClosed(roster)).toBe(false);
+    expect(isSessionPartial(roster)).toBe(true);
+  });
+
+  it("shows the backend's «pago pendiente» reason of a refused single registration, even when not flagged safe", () => {
+    const err = Object.assign(
+      new Error("Ana tiene un pago pendiente y no puede registrar asistencia hasta regularizarlo."),
+      { status: 400, safe: false },
+    );
+
+    expect(describeAttendanceSaveError(err)).toBe(
+      "Ana tiene un pago pendiente y no puede registrar asistencia hasta regularizarlo.",
+    );
+  });
+
+  it("keeps the generic text for an unflagged 400 about anything else", () => {
+    const err = Object.assign(new Error("otra cosa"), { status: 400, safe: false });
+
+    expect(describeAttendanceSaveError(err)).toMatch(/ya no coincide/);
+  });
+});

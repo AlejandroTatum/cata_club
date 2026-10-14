@@ -767,6 +767,11 @@ export interface RegisterAttendanceFailure {
   alreadyRegistered?: boolean;
   /** Who filed that earlier record, when the backend knows (historic rows have no author). */
   registradoPorNombre?: string | null;
+  /**
+   * #1768: refused because the player has a pending payment. Retrying cannot
+   * fix it — only their paying can — so the screens say it apart.
+   */
+  pendingPayment?: boolean;
 }
 
 /** Result of a `registerAttendance` batch — tolerates partial failure per student. */
@@ -1477,6 +1482,13 @@ export interface StudentProfileSummary {
   fotoUrl?: string | null;
   /** «Miembro desde» (#1749): `YYYY-MM-01` set by an admin; absent/null shows nothing. */
   miembroDesde?: string | null;
+  /**
+   * Non-payment block of THIS profile (#1768) — see `StudentProfileView`. Optional so fixtures
+   * and an older BFF read as «not blocked».
+   */
+  bloqueadoPorImpago?: boolean;
+  /** End of the coverage the «venció el …» banner names. */
+  cubiertoHasta?: string | null;
 }
 
 export interface MembershipSummary {
@@ -3535,6 +3547,12 @@ export interface AlumnoHorario {
   /** Categoría del horario (código y nombre); el nombre solo viaja en el padrón completo. */
   horarioCategoria?: string;
   horarioCategoriaLabel?: string | null;
+  /**
+   * Non-payment block (#1768): the player stays on the roster, but no
+   * attendance can be recorded for them until they pay. Only the roster
+   * listings compute it; absent reads as not blocked.
+   */
+  bloqueadoPorImpago?: boolean;
 }
 
 export interface AsignarAlumnoHorarioDTO {

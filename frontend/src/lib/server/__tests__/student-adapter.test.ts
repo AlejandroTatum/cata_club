@@ -6,6 +6,7 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  buildPortalProfile,
   buildRecentSessions,
   buildStudentProfileView,
   buildMembershipPlans,
@@ -98,6 +99,8 @@ describe("buildStudentProfileView", () => {
       membership: null,
       fotoUrl: null,
       miembroDesde: null,
+      bloqueadoPorImpago: false,
+      cubiertoHasta: null,
     });
   });
 
@@ -224,6 +227,34 @@ describe("buildMembershipView — cubiertoHasta", () => {
 
   it("defaults cubiertoHasta to null when the backend omits it", () => {
     const view = buildMembershipView(mem, tiposById);
+    expect(view.cubiertoHasta).toBeNull();
+  });
+});
+
+describe("buildPortalProfile — non-payment block (#1768)", () => {
+  const persona: BackendPersonaFull = {
+    id: 6,
+    nombres: "Mateo",
+    apellidos: "Alumno",
+    telefono: "0999999006",
+    fechaNacimiento: "2015-01-01",
+    representanteId: 5,
+  };
+  const perfil = { persona, representante: null, historial: [], membresias: [] };
+
+  it("carries the per-profile block flag and the coverage end the banner prints", () => {
+    const view = buildPortalProfile(
+      { ...perfil, bloqueadoPorImpago: true, cubiertoHasta: "2026-09-30" },
+      new Map(),
+      new Map(),
+    );
+    expect(view.bloqueadoPorImpago).toBe(true);
+    expect(view.cubiertoHasta).toBe("2026-09-30");
+  });
+
+  it("reads an older backend that omits the flag as not blocked", () => {
+    const view = buildPortalProfile(perfil, new Map(), new Map());
+    expect(view.bloqueadoPorImpago).toBe(false);
     expect(view.cubiertoHasta).toBeNull();
   });
 });

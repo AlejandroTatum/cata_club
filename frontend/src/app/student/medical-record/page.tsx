@@ -68,6 +68,7 @@ import type { StudentPortalSummary } from "@/services/api";
 import { BackLink, EmptyState, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
 import MedicalRecordEditor from "@/app/members/MedicalRecordEditor";
 import { useManagedProfiles } from "../ManagedStudentPicker";
+import { usePaymentsOnlyRedirect } from "../usePaymentsOnlyRedirect";
 import FamilyStrip from "../FamilyStrip";
 import { firstNameOf, isMinor } from "../student-utils";
 import { ChevronDown, Stethoscope } from "lucide-react";
@@ -148,6 +149,16 @@ function RepresentanteMedicalRecordView({
     false,
     accountPersonaId,
   );
+  // #1768: a blocked child's ficha waits behind Payments; their siblings' stay open.
+  const redirectingToPayments = usePaymentsOnlyRedirect(selectedProfile);
+
+  if (redirectingToPayments) {
+    return (
+      <div className="card">
+        <LoadingState label="Abriendo tus pagos…" />
+      </div>
+    );
+  }
 
   if (selectedProfile === null) {
     return (
@@ -285,6 +296,11 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
     router.replace(`${pathname}?${next.toString()}`, { scroll: false });
   }, [ownId, alumnoParam, selfIsMinor, searchParams, pathname, router]);
 
+  // #1768: an adult player's OWN ficha is closed while their membership is blocked.
+  const redirectingOwnToPayments = usePaymentsOnlyRedirect(
+    ownsRecord && state.status === "ready" ? state.data.self : null,
+  );
+
   if (selfIsMinor) return null;
 
   const subtitle =
@@ -308,7 +324,12 @@ function StudentMedicalRecordContent(): React.ReactElement | null {
       {state.status === "ready" && role === "representante" && (
         <RepresentanteMedicalRecordView data={state.data} accountPersonaId={personaId} />
       )}
-      {state.status === "ready" && ownsRecord && state.data.self && (
+      {redirectingOwnToPayments && (
+        <div className="card">
+          <LoadingState label="Abriendo tus pagos…" />
+        </div>
+      )}
+      {state.status === "ready" && ownsRecord && state.data.self && !redirectingOwnToPayments && (
         <>
           <MedicalRecordEditor
             personaId={Number(state.data.self.personaId)}

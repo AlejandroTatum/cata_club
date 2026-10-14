@@ -11,7 +11,7 @@ const students: SessionStudent[] = [
   { id: "2", name: "Beto Luna", attendance: "present" },
 ];
 
-function renderReceipt(failed: { personaId: number; message: string; alreadyRegistered?: boolean; registradoPorNombre?: string | null }[]) {
+function renderReceipt(failed: { personaId: number; message: string; alreadyRegistered?: boolean; pendingPayment?: boolean; registradoPorNombre?: string | null }[]) {
   const counts = { present: 0, late: 0, sick: 0, competition: 0, absent: 0 };
   render(
     <AttendanceReceipt
@@ -85,5 +85,24 @@ describe("AttendanceReceipt — another trainer filed first (ENT-03)", () => {
     expect(grid.contains(darkCard)).toBe(true);
     // Mobile order: the title still precedes the columns in the DOM.
     expect(title.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("AttendanceReceipt — players refused for a pending payment (#1768)", () => {
+  it("lists them but offers no retry: paying, not retrying, is what gets them in", () => {
+    renderReceipt([{ personaId: 2, message: "Beto tiene un pago pendiente.", pendingPayment: true }]);
+
+    expect(screen.getByText("1 jugador con pago pendiente")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Reintentar/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/parcialmente/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the retry when somebody else really failed beside them", () => {
+    renderReceipt([
+      { personaId: 1, message: "x", pendingPayment: true },
+      { personaId: 2, message: "boom" },
+    ]);
+
+    expect(screen.getByRole("button", { name: /Reintentar/ })).toBeInTheDocument();
   });
 });

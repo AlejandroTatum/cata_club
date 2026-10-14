@@ -36,6 +36,8 @@ import {
 import type { EstadoAsistencia } from "@/types/domain";
 import { clubIsoDate } from "@/lib/club-date";
 
+const PENDING_PAYMENT_REASON = /pago pendiente/i;
+
 const VALID_ESTADOS = new Set<string>(Object.keys(ESTADO_ASISTENCIA_FRONTEND_TO_BACKEND));
 
 /**
@@ -247,6 +249,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     message: f.motivo || "No se pudo registrar la asistencia.",
     registradoPorNombre: f.registradoPorNombre ?? null,
     alreadyRegistered: f.yaRegistrada === true,
+    // #1768: the backend refuses a player with a lapsed payment with a «pago
+    // pendiente» reason; the client says it apart because retrying cannot fix it.
+    ...(PENDING_PAYMENT_REASON.test(f.motivo ?? "") ? { pendingPayment: true } : {}),
   }));
   const createdCount = outcome.creados ?? 0;
 

@@ -2,7 +2,7 @@
 
 /** Payment registration and benefit forms for /student/payments. */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import { fetchPagosDePersona, subirVoucherPago, registrarPago, aplicarBeneficio } from "@/services/api";
 import type { PagoPersona, MembershipSummary, RegistrarPagoInput, BeneficioAsignado, CoberturaBonificada } from "@/services/api";
@@ -15,6 +15,7 @@ import { addMonthsIso, addPeriodsIso, estimateTotal, prepareVoucher } from "./pa
 import { CreditCard, Loader2, Minus, Paperclip, Plus, Upload, X } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
+import { CASH_AT_CLUB_NOTE } from "@/lib/payment-block";
 import { ProofPreview } from "./ProofPreview";
 import LinkifiedText from "@/components/LinkifiedText";
 
@@ -386,6 +387,8 @@ function RenewPaymentForm({
    */
   beneficioPorcentaje,
   beneficioMonto,
+  blockedByNonPayment,
+  pendingCashToReplace,
   onRegistered,
 }: {
   membership: MembershipSummary;
@@ -396,6 +399,14 @@ function RenewPaymentForm({
   studentName: string | null;
   beneficioPorcentaje: number | null;
   beneficioMonto: number | null;
+  /** #1768: this profile is blocked, so the method note says where cash is paid. */
+  blockedByNonPayment: boolean;
+  /**
+   * #1768: a blocked member whose only pending payment is cash. `hasPendingPago`
+   * does not hold the form back for them — a transfer replaces that cash payment
+   * (backend S10) — so cash is the one method left off the list.
+   */
+  pendingCashToReplace: boolean;
   onRegistered: () => void;
 }): React.ReactElement {
   /** Issue #400: a discrete month count, never a typed monto. */
@@ -411,6 +422,7 @@ function RenewPaymentForm({
   const [voucherRejection, setVoucherRejection] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { showSuccess, showWarning } = useToast();
+  const cashNoteId = useId();
 
   const monthlyPrice = Number(membership.montoAplicado ?? "") || 0;
   /** SEMANAL/DIARIA: one period per payment, so there is nothing to count. */
@@ -633,6 +645,7 @@ function RenewPaymentForm({
           <select
             value={tipoPago}
             required
+            aria-describedby={blockedByNonPayment ? cashNoteId : undefined}
             onChange={(e) => {
               const value = e.target.value as "EFECTIVO" | "TRANSFERENCIA";
               setTipoPago(value);
@@ -650,8 +663,20 @@ function RenewPaymentForm({
             className={FIELD_CLASSES}
           >
             <option value="TRANSFERENCIA">Transferencia</option>
-            <option value="EFECTIVO">Efectivo</option>
+            <option value="EFECTIVO" disabled={pendingCashToReplace}>Efectivo</option>
           </select>
+          {blockedByNonPayment && (
+            <span id={cashNoteId} className="text-xs text-ink-3-strong">
+              {CASH_AT_CLUB_NOTE}
+            </span>
+          )}
+          {pendingCashToReplace && (
+            <span className="text-xs font-semibold text-ink-2">
+              {studentName
+                ? `La transferencia reemplaza el pago en efectivo de ${studentName} que está por validar.`
+                : "Tu transferencia reemplaza tu pago en efectivo por validar."}
+            </span>
+          )}
         </label>
       </div>
 
@@ -974,6 +999,8 @@ function ApplyBenefitForm({
 export function PaymentOrBenefitForm({
   isFullBenefit,
   beneficioPorcentaje,
+  blockedByNonPayment,
+  pendingCashToReplace,
   ...common
 }: {
   membership: MembershipSummary;
@@ -991,9 +1018,19 @@ export function PaymentOrBenefitForm({
   isFullBenefit: boolean;
   beneficioPorcentaje: number | null;
   beneficioMonto: number | null;
+  /** #1768 — only the payment form reads these two; a benefit has no method to pick. */
+  blockedByNonPayment: boolean;
+  pendingCashToReplace: boolean;
 }): React.ReactElement {
   if (isFullBenefit) {
     return <ApplyBenefitForm {...common} />;
   }
-  return <RenewPaymentForm {...common} beneficioPorcentaje={beneficioPorcentaje} />;
+  return (
+    <RenewPaymentForm
+      {...common}
+      beneficioPorcentaje={beneficioPorcentaje}
+      blockedByNonPayment={blockedByNonPayment}
+      pendingCashToReplace={pendingCashToReplace}
+    />
+  );
 }

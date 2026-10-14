@@ -1,4 +1,4 @@
-import { Thermometer, Timer, Trophy, UserCheck, UserX } from "lucide-react";
+import { Lock, Thermometer, Timer, Trophy, UserCheck, UserX } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { Badge } from "@/components/ui";
 import { getAttendanceBadgeTone, getAttendanceBadgeTokens } from "@/app/attendance/attendance-utils";
@@ -9,6 +9,7 @@ import {
   ATTENDANCE_STATES,
   UNMARKED,
   isBeforeEnrollment,
+  isBlocked,
   isReviewed,
   type SessionStudent,
 } from "./attendance-utils";
@@ -61,6 +62,8 @@ export default function AttendanceRosterRow({
 }: AttendanceRosterRowProps): React.ReactElement {
   const isUnmarked = student.attendance === UNMARKED;
   const reviewed = isReviewed(student);
+  // #1768: a player blocked for non-payment stays on the list, but nothing can be marked for them.
+  const blocked = isBlocked(student) && student.asistenciaId == null;
   const nameId = `student-name-${student.id}`;
   const groupLabelId = `attendance-label-${student.id}`;
   const stateLabel = isUnmarked ? "Sin marcar" : ATTENDANCE_LABELS[student.attendance as EstadoAsistencia];
@@ -69,15 +72,19 @@ export default function AttendanceRosterRow({
     <li
       data-attendance={student.attendance}
       data-reviewed={reviewed}
+      data-blocked={blocked || undefined}
       className={`flex shrink-0 flex-col overflow-hidden rounded-ctl border bg-paper sm:flex-row sm:items-center ${
         reviewed ? "border-line-2" : "border-dashed border-ink-3/50"
-      }`}
+      } ${blocked ? "opacity-70" : ""}`}
     >
       <button
         type="button"
         onClick={() => onCycleAttendance(studentIndex)}
+        disabled={blocked}
         aria-label={
-          reviewed
+          blocked
+            ? `${student.name}: pago pendiente`
+            : reviewed
             ? `${student.name}: ${stateLabel}. Cambiar estado`
             : `${student.name}: ${stateLabel}, sin revisar. Confirmar o cambiar estado`
         }
@@ -107,7 +114,14 @@ export default function AttendanceRosterRow({
             </>
           )}
         </span>
-        {reviewed && !isUnmarked ? (
+        {blocked ? (
+          <span className="h-badge inline-flex flex-none items-center gap-1.5 whitespace-nowrap rounded-full bg-state-warn-bg px-[11px] text-2xs tracking-flat font-bold text-state-warn">
+            <span role="img" aria-label="Candado: no se puede registrar asistencia" className="inline-flex">
+              <Lock size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+            </span>
+            Pago pendiente
+          </span>
+        ) : reviewed && !isUnmarked ? (
           <Badge tone={getAttendanceBadgeTone(student.attendance)} className="flex-none">
             {stateLabel}
           </Badge>
@@ -134,6 +148,7 @@ export default function AttendanceRosterRow({
               type="button"
               role="radio"
               onClick={() => onDirectAttendanceSet(studentIndex, state)}
+              disabled={blocked}
               tabIndex={isActive ? 0 : -1}
               onKeyDown={(e) => onRadioKeyDown(e, studentIndex, state)}
               aria-checked={isActive}

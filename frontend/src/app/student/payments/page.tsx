@@ -64,9 +64,11 @@ import { formatDate } from "@/lib/format-utils";
 import { CreditCard } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
+import { PAYMENT_BLOCK_MINOR_MESSAGE, isPaymentsOnlyProfile } from "@/lib/payment-block";
 
 import HowToPay from "@/components/payments/HowToPay";
 import { MembershipCard } from "./MembershipAside";
+import PaymentBlockBanner from "./PaymentBlockBanner";
 import { BeneficioNote, PaymentOrBenefitForm } from "./PaymentForms";
 import { VoucherUploadPreview } from "./VoucherUploadPreview";
 import { PagoRow, CoberturaRow } from "./PagoHistoryRows";
@@ -326,7 +328,22 @@ function PaymentsContent({
       ),
     [pagos],
   );
-  const hasPendingPago = pagos.some((pago) => pago.estadoPago === "PENDIENTE_VALIDACION");
+  const pendingPagos = pagos.filter((pago) => pago.estadoPago === "PENDIENTE_VALIDACION");
+  const hasPendingPago = pendingPagos.length > 0;
+  /**
+   * #1768: this profile is blocked for non-payment. The Payments module is the
+   * only place it may be, so the screen keeps all of it and adds the banner.
+   * Staff see the banner too — they are blocked in the same way — but nothing
+   * of the staff area is locked (see `isPaymentsOnlyProfile`).
+   */
+  const isBlocked = selectedProfile?.bloqueadoPorImpago === true;
+  /**
+   * A blocked member's only pending payment is cash (a pending transfer would
+   * have lifted the block). The backend lets a transfer replace it (S10), so
+   * the pending cash payment must not hold the form back for them.
+   */
+  const replacesPendingCash = isBlocked && hasPendingPago && pendingPagos.every((pago) => pago.tipoPago === "EFECTIVO");
+  const holdsFormBack = hasPendingPago && !replacesPendingCash;
 
   /**
    * The dependent's given name, or `null` when the reader IS the student.
@@ -358,7 +375,7 @@ function PaymentsContent({
     periodicidad: selectedProfile?.membership?.periodicidad,
     coverageEnd,
     discountedCoverageEnd,
-    pendingCount: pagos.filter((pago) => pago.estadoPago === "PENDIENTE_VALIDACION").length,
+    pendingCount: pendingPagos.length,
     esGratuidadFamiliar: selectedProfile?.membership?.esGratuidadFamiliar ?? false,
     suspended: selectedProfile?.membership?.estado === "SUSPENDIDA",
     motivoSuspension: selectedProfile?.membership?.motivoSuspension ?? null,
@@ -408,7 +425,7 @@ function PaymentsContent({
     !isGratuitous &&
     !isSuspended &&
     discountedCoverageEnd === null &&
-    !hasPendingPago;
+    !holdsFormBack;
 
   /**
    * Issue #461: the same door D11's empty-state action already opens,
@@ -538,6 +555,10 @@ function PaymentsContent({
         }}
       />
 
+      {isBlocked && selectedProfile && (
+        <PaymentBlockBanner cubiertoHasta={selectedProfile.cubiertoHasta ?? null} studentName={studentName} />
+      )}
+
       {/* Rail layout: history on the left, the account's state and the action
           on the right. The aside comes FIRST in the DOM (phone reading order:
           status, pay, then history) and is placed in column 2 from `lg` up. */}
@@ -563,7 +584,7 @@ function PaymentsContent({
                 the ones whose `representanteId` is null, who were being pointed
                 at a person the backend does not have. `describePaymentSituation`
                 resolves that from the payload. */}
-            {situation.detail}
+            {isBlocked ? PAYMENT_BLOCK_MINOR_MESSAGE : situation.detail}
           </p>
         ) : isSuspended ? (
           <div className="flex flex-col items-start gap-2">
@@ -594,7 +615,9 @@ function PaymentsContent({
             membership={selectedProfile.membership}
             personaId={selectedProfile.personaId}
             coverageEnd={coverageEnd}
-            hasPendingPago={hasPendingPago}
+            hasPendingPago={holdsFormBack}
+            blockedByNonPayment={isBlocked}
+            pendingCashToReplace={replacesPendingCash}
             autoOpen={wantsRegisterForm && pagosState.status === "ready"}
             studentName={studentName}
             isFullBenefit={isFullBenefit}
@@ -850,6 +873,18 @@ function PaymentsPageContent(): React.ReactElement {
    */
   // FAM-01: a representative's own membership (even INACTIVA) is a payment she can register.
   const ownMembership = state.status === "ready" && hasOwnMembership(state.data);
+  // #1768: when every profile this account manages is blocked, "/student" would
+  // only send the reader back here, so no back control is offered.
+  const role = session?.user.role;
+  const onlyPaymentsLeft =
+    state.status === "ready" &&
+    (() => {
+      const profiles =
+        hasAlumnoRole || ownMembership
+          ? [...(state.data.self ? [state.data.self] : []), ...state.data.representados]
+          : state.data.representados;
+      return profiles.length > 0 && profiles.every((profile) => isPaymentsOnlyProfile(role, profile));
+    })();
   const accountCannotRegister =
     state.status === "ready" &&
     state.data.representados.length === 0 &&
@@ -881,7 +916,7 @@ function PaymentsPageContent(): React.ReactElement {
       // (issue #316 hallazgo #70) stands; only its placement moves.
       // A staff member still awaiting their first payment has no /student to go
       // back to (that page needs a membership that allows training).
-      back={session?.staffAwaitsFirstPayment ? undefined : <BackLink href="/student" />}
+      back={session?.staffAwaitsFirstPayment || onlyPaymentsLeft ? undefined : <BackLink href="/student" />}
     >
 
       {state.status === "loading" && (
