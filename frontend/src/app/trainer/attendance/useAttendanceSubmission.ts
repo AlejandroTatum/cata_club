@@ -13,6 +13,7 @@ import {
   buildAttendanceReceipt,
   clearAttendanceDraft,
   countUnmarked,
+  isEntireRosterBlocked,
   describeAttendanceSaveError,
   toAttendanceMarks,
   UNDO_TOAST_ACTION_LABEL,
@@ -120,6 +121,8 @@ export function useAttendanceSubmission({
       // `toAttendanceMarks` strips it, and this refuses the batch rather
       // than filing a short roster.
       if (countUnmarked(students) > 0) return;
+      // #1787-g: every player is locked for non-payment, so the batch would be empty.
+      if (isEntireRosterBlocked(students)) return;
       for (const toast of toastsRef.current) {
         if (toast.action?.label === UNDO_TOAST_ACTION_LABEL) removeToast(toast.id);
       }
