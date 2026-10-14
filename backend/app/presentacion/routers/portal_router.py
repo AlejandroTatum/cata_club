@@ -4,7 +4,9 @@ from sqlalchemy.orm import Session
 from app.infraestructura.db import obtener_sesion
 from app.presentacion.routers.membresias_pagos_router import _con_cubierto_hasta
 from app.seguridad.gestor_auth import GestorAutenticacion
-from app.servicios_negocio.dtos.portal_schemas import PortalAlumnoResponseDTO, PortalPerfilDTO
+from app.servicios_negocio.dtos.portal_schemas import (
+    PortalAlumnoResponseDTO, PortalBloqueoRepresentadoDTO, PortalBloqueosResponseDTO, PortalPerfilDTO,
+)
 from app.servicios_negocio.politica_acceso import SOLO_ADMINISTRADOR, PoliticaAccesoPersona
 from app.servicios_negocio.portal_servicio import HISTORIAL_LIMITE_MAXIMO, PerfilPortal, PortalServicio
 from app.soporte_transversal.rate_limit import limiter
@@ -50,6 +52,38 @@ def obtener_portal_alumno(
         representados=[_a_dto(p, membresias_dto) for p in portal.representados],
         horarios=portal.horarios,
         tipos=portal.tipos,
+    )
+
+
+# #1787: la compuerta del BFF consulta esto en CADA pedido gated sobre un
+# dependiente. Es una lectura liviana (sin historial ni catálogos) con el mismo
+# gate de acceso que el portal, y un tope propio más alto: el 30/min del
+# agregado se agotaría con un tutor que pagina rápido.
+@router.get(
+    "/alumno/{persona_id}/bloqueos",
+    response_model=PortalBloqueosResponseDTO,
+    dependencies=[Depends(GestorAutenticacion.decodificar_token)],
+)
+@limiter.limit("120/minute")
+def obtener_bloqueos_representados(
+    request: Request,
+    persona_id: int,
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    db: Session = Depends(obtener_sesion),
+):
+    PoliticaAccesoPersona(db).exigir_acceso_directo(
+        persona_id_objetivo=persona_id,
+        persona_id_solicitante=token_payload.get("persona_id"),
+        roles_solicitante=token_payload.get("roles", []),
+        roles_privilegiados=SOLO_ADMINISTRADOR,
+        mensaje="No puedes consultar el portal de otra cuenta",
+    )
+    bloqueos = PortalServicio(db).bloqueos_de_representados(persona_id)
+    return PortalBloqueosResponseDTO(
+        representados=[
+            PortalBloqueoRepresentadoDTO(persona_id=pid, bloqueado_por_impago=bloqueado)
+            for pid, bloqueado in bloqueos.items()
+        ]
     )
 
 
