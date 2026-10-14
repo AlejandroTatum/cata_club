@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   galleryImageSrc,
   galleryImageSrcSet,
+  galleryLoopSeconds,
   mapGallery,
   type GalleryEntry,
 } from "./landing-gallery";
@@ -234,7 +235,10 @@ export default function Gallery(): React.ReactElement {
               className="landing-sponsors-track landing-gallery-track"
               id="galeria-track"
               ref={trackRef}
-              style={openKey !== null ? { animationPlayState: "paused" } : undefined}
+              style={{
+                "--gallery-loop": `${galleryLoopSeconds(state.entries.length)}s`,
+                ...(openKey !== null ? { animationPlayState: "paused" } : {}),
+              } as React.CSSProperties}
             >
               <div className="landing-sponsors-copy">{renderCopy(false)}</div>
               <div className="landing-sponsors-copy" aria-hidden="true" style={reducedMotion ? { display: "none" } : undefined}>

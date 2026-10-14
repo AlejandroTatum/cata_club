@@ -387,6 +387,10 @@ class AlumnoHorarioDetalleDTO(ResponseBase, BaseModel):
     # padrón por categoría. El nombre solo se resuelve en el roster completo.
     horario_categoria: str
     horario_categoria_label: Optional[str] = None
+    # Bloqueo por impago (#1768): el jugador sigue en el roster pero no se le
+    # puede registrar asistencia hasta pagar. Solo lo calculan los listados de
+    # roster; el alta de una asignación lo deja en `False`.
+    bloqueado_por_impago: bool = False
 
 
 class ConteoHorarioDTO(ResponseBase, BaseModel):

@@ -319,12 +319,11 @@ export function buildPortalProfile(
 
 /**
  * What the admin's carnet needs for ONE person: the profile the player's own
- * card is built from, the coverage date the card prints, and the assignments
- * its "Franja" row and training-day chips read. `asignaciones` is the backend's
+ * card is built from and the assignments its "Franja" row and training-day
+ * chips read. `asignaciones` is the backend's
  * `AlumnoHorario` list, passed through untouched.
  */
 export interface CarnetView {
   profile: StudentProfileView;
-  coverageEnd: string | null;
   asignaciones: unknown[];
 }

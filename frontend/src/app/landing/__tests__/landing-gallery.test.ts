@@ -8,6 +8,9 @@ import {
   SLIDE_HEIGHT_DESKTOP,
   SLIDE_HEIGHT_MOBILE,
   clampSlideAspect,
+  GALLERY_LOOP_MAX_SECONDS,
+  GALLERY_LOOP_MIN_SECONDS,
+  galleryLoopSeconds,
   galleryImageSizes,
   galleryImageSrc,
   galleryImageSrcSet,
@@ -258,5 +261,35 @@ describe("landing gallery browse seek math", (): void => {
     // The reading window: long enough to read a caption, short enough that
     // the marquee clearly resumes on its own.
     expect(GALLERY_BROWSE_HOLD_MS).toBe(5000);
+  });
+});
+
+describe("galleryLoopSeconds", (): void => {
+  it("holds the pace of today's 45 photos: two seconds a tile, 90s a loop", (): void => {
+    expect(galleryLoopSeconds(45)).toBe(90);
+  });
+
+  it("scales linearly with the tiles one copy renders", (): void => {
+    expect(galleryLoopSeconds(30)).toBe(60);
+    expect(galleryLoopSeconds(60)).toBe(120);
+  });
+
+  it("counts the repeats a short roster is padded with, so the speed stays put", (): void => {
+    // Four photos render as three passes: twelve tiles, not four.
+    expect(galleryLoopSeconds(4)).toBe(GALLERY_LOOP_MIN_SECONDS);
+    expect(galleryLoopSeconds(10)).toBe(GALLERY_LOOP_MIN_SECONDS);
+  });
+
+  it("never drops below the minimum, however few photos there are", (): void => {
+    expect(galleryLoopSeconds(1)).toBe(GALLERY_LOOP_MIN_SECONDS);
+    expect(galleryLoopSeconds(2)).toBe(GALLERY_LOOP_MIN_SECONDS);
+  });
+
+  it("never exceeds the maximum, however big the catalog gets", (): void => {
+    expect(galleryLoopSeconds(500)).toBe(GALLERY_LOOP_MAX_SECONDS);
+  });
+
+  it("falls back to the minimum for an empty roster", (): void => {
+    expect(galleryLoopSeconds(0)).toBe(GALLERY_LOOP_MIN_SECONDS);
   });
 });

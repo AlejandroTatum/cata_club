@@ -1568,7 +1568,6 @@ export async function fetchStudentAttendancePage(
 /** One persona's carnet data for the admin's printing — `GET /api/carnets`. */
 export interface CarnetSummary {
   profile: StudentProfileSummary;
-  coverageEnd: string | null;
   asignaciones: AlumnoHorario[];
 }
 

@@ -24,15 +24,19 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 
 from app.infraestructura.db import SessionLocal
+from app.infraestructura.repositorios.bloqueo_impago_repositorio import BloqueoImpagoRepositorio
+from app.infraestructura.repositorios.cobertura_estado_repositorio import CoberturaEstadoRepositorio
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
 from app.infraestructura.tareas.celery_app import celery_app
 from app.dominio.modelos import CoRepresentante, Pago, Membresia, Persona, Notificacion, Rol, TipoMembresia, Usuario
 from app.dominio.guardianes import guardianes_de
 from app.dominio.enums import EstadoPago, EstadoMembresia, TipoNotificacion, TipoRol
+from app.dominio.bloqueo_impago import inicio_del_bloqueo
 from app.dominio.periodicidad import PeriodicidadTarifa
 from app.dominio.nombre_propio import nombre_completo
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.membresia_pago_servicio import _meses_enteros_desde
+from app.soporte_transversal.configuracion import settings
 from app.soporte_transversal.formato import formatear_monto_usd
 from app.soporte_transversal.tiempo import ZONA_HORARIA_CLUB, hoy_club
 
@@ -347,9 +351,39 @@ def _rango_dia_club(hoy: date) -> tuple[datetime, datetime]:
     return inicio, inicio + timedelta(days=1)
 
 
+def _texto_aviso_bloqueo(fecha_vencimiento: date, bloqueo_desde: date, hoy: date) -> str:
+    """Mensaje de mora que avisa del bloqueo por impago (#1768). Si el bloqueo
+    todavía no empezó dice hasta cuándo se puede pagar y desde qué día rige (el
+    día 4); si ya empezó, que ya rige. Pura, sin I/O."""
+    fecha_str = fecha_vencimiento.strftime("%d/%m/%Y")
+    if hoy >= bloqueo_desde:
+        return (
+            f"Tu membresía venció el {fecha_str} y no puedes registrar asistencia "
+            "hasta que pagues. El portal solo te deja entrar a Pagos."
+        )
+    ultimo_dia = (bloqueo_desde - timedelta(days=1)).strftime("%d/%m/%Y")
+    return (
+        f"Tu membresía venció el {fecha_str}. Tienes hasta el {ultimo_dia} para "
+        f"regularizar tu pago: desde el {bloqueo_desde.strftime('%d/%m/%Y')} (día 4) "
+        "no podrás registrar asistencia y el portal solo te dejará entrar a Pagos "
+        "hasta que pagues."
+    )
+
+
+def _bloqueo_desde(membresia: Membresia, fecha_vencimiento: date) -> date | None:
+    """Día en que empieza el bloqueo de esta membresía, o `None` si no aplica
+    (bloqueo apagado o socio gratuito de la familia). Las demás exenciones ya
+    las filtra la consulta de cada tarea."""
+    lanzamiento = settings.bloqueo_impago_fecha_lanzamiento
+    if lanzamiento is None or membresia.es_gratuidad_familiar:
+        return None
+    return inicio_del_bloqueo(fecha_vencimiento, lanzamiento)
+
+
 def _construir_notificaciones_mora(
     ya_notificados: set[tuple[TipoNotificacion, int, int]],
     persona: Persona, pago_id: int, fecha_vencimiento: date, tipo: TipoNotificacion,
+    *, bloqueo_desde: date | None = None, hoy: date | None = None,
 ) -> tuple[list[Notificacion], list[CorreoPendiente]]:
     """Arma la `Notificacion` de mora de CADA responsable de pago (issue #905;
     desde #1666 ambos guardianes) y su correo. NO escribe en la base -- el
@@ -357,7 +391,9 @@ def _construir_notificaciones_mora(
     `_construir_notificacion_vencimiento`: dedup resuelto en
     `ya_notificados`."""
     fecha_str = fecha_vencimiento.strftime("%d/%m/%Y")
-    if tipo == TipoNotificacion.MIEMBRESIA_MORA_DIA_1:
+    if tipo == TipoNotificacion.MIEMBRESIA_MORA_DIA_1 and bloqueo_desde is not None:
+        base = _texto_aviso_bloqueo(fecha_vencimiento, bloqueo_desde, hoy)
+    elif tipo == TipoNotificacion.MIEMBRESIA_MORA_DIA_1:
         base = (
             f"Tu membresía venció el {fecha_str}. Regulariza tu pago para no "
             f"perder los beneficios."
@@ -583,7 +619,8 @@ def alertar_mora_diaria(self) -> dict:
         correos_familia: list[CorreoPendiente] = []
         for membresia, persona, pago_id, ultima_fecha_fin, dias, tipo in candidatos:
             nuevas, correos = _construir_notificaciones_mora(
-                ya_notificados, persona, pago_id, ultima_fecha_fin, tipo
+                ya_notificados, persona, pago_id, ultima_fecha_fin, tipo,
+                bloqueo_desde=_bloqueo_desde(membresia, ultima_fecha_fin), hoy=hoy,
             )
             lote_familia.extend(nuevas)
             correos_familia.extend(correos)
@@ -635,3 +672,138 @@ def alertar_mora_diaria(self) -> dict:
         "resumen_admin_enviado": resumen_admin_enviado,
         "avisos": avisos_familia,
     }
+
+
+@celery_app.task(
+    name="app.infraestructura.tareas.alertas_tareas.avisar_lanzamiento_bloqueo_impago",
+    bind=True,
+)
+def avisar_lanzamiento_bloqueo_impago(self, dry_run: bool = False) -> dict:
+    """Aviso ÚNICO de lanzamiento del bloqueo por impago (#1768, S7).
+
+    NO está en el calendario de Beat: lo dispara el operador a mano, una vez,
+    cuando fija `BLOQUEO_IMPAGO_FECHA_LANZAMIENTO`::
+
+        celery -A app.infraestructura.tareas.celery_app call \\
+          app.infraestructura.tareas.alertas_tareas.avisar_lanzamiento_bloqueo_impago \\
+          --kwargs='{"dry_run": true}'     # ensayo: lista a quién avisaría, no escribe
+
+    Avisa a los responsables de pago de cada membresía ya vencida hoy (mensual,
+    ACTIVA/VENCIDA, ni suspendida ni gratuita, sin una transferencia en
+    revisión) desde cuándo rige el bloqueo para ella, con la misma cuenta que la
+    regla (`inicio_del_bloqueo`: la gracia corre desde el lanzamiento). Sin
+    fecha de lanzamiento no hace nada.
+
+    Idempotente: la fila queda como `MIEMBRESIA_MORA_DIA_1` SIN entidad
+    relacionada (los avisos regulares siempre llevan el pago), así que correrla
+    otra vez no repite el aviso y tampoco pisa el aviso de mora regular. Se
+    reutiliza el tipo a propósito: uno nuevo exige migración del enum de
+    Postgres y su espejo en el frontend."""
+    hoy = hoy_club()
+    lanzamiento = settings.bloqueo_impago_fecha_lanzamiento
+    if lanzamiento is None:
+        logger.info("Aviso de lanzamiento omitido: BLOQUEO_IMPAGO_FECHA_LANZAMIENTO sin definir")
+        return {
+            "fecha": hoy.isoformat(), "dry_run": dry_run, "total_avisos": 0,
+            "motivo": "bloqueo apagado", "avisos": [],
+        }
+
+    avisos: list[dict] = []
+    with SessionLocal() as db:
+        membresias = list(db.scalars(
+            select(Membresia)
+            .join(Persona, Persona.id == Membresia.persona_id)
+            .options(
+                joinedload(Membresia.persona).joinedload(Persona.usuario),
+                joinedload(Membresia.persona).joinedload(Persona.representante).joinedload(Persona.usuario),
+                joinedload(Membresia.persona)
+                .joinedload(Persona.co_representante_vinculo)
+                .joinedload(CoRepresentante.co_representante)
+                .joinedload(Persona.usuario),
+            )
+            .where(
+                Membresia.estado.in_((EstadoMembresia.ACTIVA, EstadoMembresia.VENCIDA)),
+                Membresia.es_gratuidad_familiar.is_(False),
+                Persona.activo.is_(True),
+                Membresia.tipo_membresia.has(
+                    TipoMembresia.periodicidad == PeriodicidadTarifa.MENSUAL
+                ),
+            )
+        ).unique())
+        ids = [m.id for m in membresias]
+        cobertura = CoberturaEstadoRepositorio(db).fecha_fin_maxima_combinada_bulk(ids)
+        pagando = BloqueoImpagoRepositorio(db).con_transferencia_pendiente(ids)
+        vencidas = [
+            (m, cobertura[m.id]) for m in membresias
+            if cobertura.get(m.id) is not None and cobertura[m.id] < hoy and m.id not in pagando
+        ]
+
+        # Dedup: el aviso de lanzamiento es la fila MORA_DIA_1 sin entidad.
+        responsables_ids = {
+            r.id for m, _ in vencidas for r in _responsables_de_pago(m.persona)
+        }
+        ya_avisados = set(db.scalars(
+            select(Notificacion.persona_id).where(
+                Notificacion.tipo == TipoNotificacion.MIEMBRESIA_MORA_DIA_1,
+                Notificacion.entidad_relacionada_id.is_(None),
+                Notificacion.persona_id.in_(responsables_ids),
+            )
+        )) if responsables_ids else set()
+
+        filas: list[Notificacion] = []
+        correos: list[CorreoPendiente] = []
+        for membresia, fin in vencidas:
+            persona = membresia.persona
+            texto = _texto_aviso_bloqueo(fin, inicio_del_bloqueo(fin, lanzamiento), hoy)
+            nuevas, nuevos_correos = _construir_aviso_lanzamiento(ya_avisados, persona, texto)
+            filas.extend(nuevas)
+            correos.extend(nuevos_correos)
+            if nuevas:
+                avisos.append({
+                    "membresia_id": membresia.id,
+                    "persona_id": persona.id,
+                    "nombre": nombre_completo(persona.nombres, persona.apellidos),
+                    "cubierto_hasta": fin.isoformat(),
+                    "bloqueo_desde": inicio_del_bloqueo(fin, lanzamiento).isoformat(),
+                })
+        if not dry_run:
+            _persistir_lote(filas, correos)
+
+    logger.info(
+        "Aviso de lanzamiento del bloqueo %s -> %d avisos (dry_run=%s)",
+        hoy.isoformat(), len(avisos), dry_run,
+    )
+    return {
+        "fecha": hoy.isoformat(), "dry_run": dry_run,
+        "total_avisos": len(avisos), "avisos": avisos,
+    }
+
+
+def _construir_aviso_lanzamiento(
+    ya_avisados: set[int], persona: Persona, texto: str,
+) -> tuple[list[Notificacion], list[CorreoPendiente]]:
+    """`Notificacion` (sin entidad relacionada: esa es la marca de idempotencia)
+    y correo del aviso de lanzamiento para cada responsable de pago. NO escribe
+    en la base. `ya_avisados` se resuelve ANTES del lote, así que un responsable
+    con dos hijos vencidos recibe los dos avisos en la misma corrida."""
+    filas: list[Notificacion] = []
+    correos: list[CorreoPendiente] = []
+    for responsable in _responsables_de_pago(persona):
+        if responsable.id in ya_avisados:
+            continue
+        if responsable.id == persona.id:
+            mensaje = texto
+        else:
+            nombre_alumno = acortar_nombre_para_notificacion(
+                nombre_completo(persona.nombres, persona.apellidos)
+            )
+            mensaje = f"Para {nombre_alumno}: {texto}"
+        filas.append(Notificacion(
+            tipo=TipoNotificacion.MIEMBRESIA_MORA_DIA_1, mensaje=mensaje,
+            persona_id=responsable.id, entidad_relacionada_id=None,
+        ))
+        correos += _correo_para_responsable(
+            responsable, _render_mora, TipoNotificacion.MIEMBRESIA_MORA_DIA_1,
+            responsable.nombres, mensaje,
+        )
+    return filas, correos

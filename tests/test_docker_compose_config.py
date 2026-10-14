@@ -1448,6 +1448,15 @@ def test_celery_worker_declara_concurrencia_explicita():
     assert "--concurrency" in comando_texto
 
 
+def test_fecha_de_lanzamiento_del_bloqueo_llega_a_los_tres_servicios():
+    """#1768: sin `env_file`, una variable que no esté en `backend_env` nunca
+    llega al contenedor y el bloqueo por impago queda apagado para siempre."""
+    config = _config_produccion()
+    for servicio in ("backend", "celery-worker", "celery-beat"):
+        entorno = config["services"][servicio].get("environment") or {}
+        assert "BLOQUEO_IMPAGO_FECHA_LANZAMIENTO" in entorno, servicio
+
+
 def test_override_de_desarrollo_sigue_publicando_los_mismos_puertos():
     """Regresión: `docker-compose.override.yml` se auto-carga con `docker
     compose up` sin flags -- el flujo local no debe cambiar. Incluye los
