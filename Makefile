@@ -314,9 +314,12 @@ QA_ENV = JWT_SECRET_KEY=$(QA_JWT_SECRET_KEY)
 # definición de Bake (`build --print`) y la construye `docker buildx bake` con
 # la autorización explícita; después `up` reutiliza esas imágenes (sin
 # `--build`, que volvería a pedir el privilegio que Compose no puede dar).
+# `pipefail` (bash, no `sh`) evita que un `build --print` roto pase como éxito
+# por el status de `bake`; `--load` deja las imágenes en el almacén local aunque
+# el builder activo no sea el predeterminado (docker-container).
 ifeq ($(CATA_BUILD_NETWORK),host)
 QA_UP_BUILD =
-QA_PREBUILD = BUILD_SHA=$$(git rev-parse HEAD) $(QA_ENV) $(QA_COMPOSE) build --print $(QA_SERVICIOS) | docker buildx bake --allow network.host -f -
+QA_PREBUILD = bash -o pipefail -c 'BUILD_SHA=$$(git rev-parse HEAD) $(QA_ENV) $(QA_COMPOSE) build --print $(QA_SERVICIOS) | docker buildx bake --allow network.host --load -f -'
 else
 QA_UP_BUILD = --build
 QA_PREBUILD = @:

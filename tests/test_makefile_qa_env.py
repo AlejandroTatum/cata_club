@@ -73,3 +73,63 @@ def test_el_host_network_es_opt_in_y_se_construye_con_la_autorizacion_explicita(
     # `up --build` volvería a pedir el privilegio que Compose no puede dar.
     assert not any(" up -d --build " in l for l in comandos)
     assert any(" up -d  --wait " in l or " up -d --wait " in l for l in comandos)
+
+
+# --- La receta opt-in de host network (#1787-k) ------------------------------
+
+
+def _qa_up_con_stubs(tmp_path: Path, *, print_falla: bool) -> tuple[subprocess.CompletedProcess, list[str]]:
+    """Corre `make qa-up CATA_BUILD_NETWORK=host` con `git` y `docker` de mentira.
+
+    `git` y `python3` también son de mentira. El `docker` de mentira anota cada invocación; `compose ... build --print`
+    falla cuando `print_falla` y `buildx bake` consume su stdin y sale en 0,
+    como haría un bake que recibe una definición vacía.
+    """
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "docker.log"
+    (bin_dir / "git").write_text("#!/bin/sh\necho abcdef1\n")
+    # Los guards de después del seed hablan con el stack real: acá no corren.
+    (bin_dir / "python3").write_text("#!/bin/sh\nexit 0\n")
+    (bin_dir / "docker").write_text(
+        "#!/bin/sh\n"
+        'echo "$*" >> "$DOCKER_LOG"\n'
+        'case " $* " in\n'
+        '  *" build --print "*) [ "$PRINT_FALLA" = 1 ] && { echo "boom" >&2; exit 1; }; echo "{}" ;;\n'
+        '  *" buildx bake "*) cat >/dev/null ;;\n'
+        "esac\n"
+        "exit 0\n"
+    )
+    for nombre in ("git", "python3", "docker"):
+        (bin_dir / nombre).chmod(0o755)
+    entorno = {
+        **os.environ,
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "DOCKER_LOG": str(log),
+        "PRINT_FALLA": "1" if print_falla else "0",
+    }
+    resultado = subprocess.run(
+        ["make", "-C", str(ROOT), "qa-up", "CATA_BUILD_NETWORK=host"],
+        env=entorno, capture_output=True, text=True,
+    )
+    llamadas = log.read_text().splitlines() if log.exists() else []
+    return resultado, llamadas
+
+
+def test_el_prebuild_host_corta_el_target_si_compose_build_print_falla(tmp_path):
+    # Sin `pipefail`, el status del pipe es el de `buildx bake`: un `build
+    # --print` roto pasaba como éxito y `up` seguía con imágenes viejas.
+    resultado, llamadas = _qa_up_con_stubs(tmp_path, print_falla=True)
+
+    assert resultado.returncode != 0
+    assert not any(" up -d " in f" {l} " for l in llamadas), llamadas
+
+
+def test_el_prebuild_host_carga_las_imagenes_en_el_almacen_local(tmp_path):
+    # Con un builder no predeterminado (docker-container) el resultado de bake
+    # queda en la caché del builder salvo `--load`; `up` no las encontraría.
+    resultado, llamadas = _qa_up_con_stubs(tmp_path, print_falla=False)
+
+    assert resultado.returncode == 0, resultado.stderr
+    bake = [l for l in llamadas if "buildx bake" in l]
+    assert len(bake) == 1 and "--load" in bake[0].split() and "--allow network.host" in bake[0]
