@@ -15,5 +15,9 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<NextResponse> {
-  return NextResponse.json({ status: "ok", sha: process.env.BUILD_SHA ?? "unknown" });
+  return NextResponse.json({
+    status: "ok",
+    sha: process.env.BUILD_SHA ?? "unknown",
+    version: process.env.APP_VERSION ?? "unversioned",
+  });
 }

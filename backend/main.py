@@ -499,7 +499,7 @@ async def raiz():
 # necesitaba un reemplazo que no dependa de nada que pueda estar caído.
 @app.get("/health", tags=["Salud"])
 async def salud():
-    return {"estado": "ok"}
+    return {"estado": "ok", "version": settings.app_version}
 
 
 # --- Readiness probe -----------------------------------------------------

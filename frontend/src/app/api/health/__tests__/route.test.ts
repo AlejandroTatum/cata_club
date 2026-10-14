@@ -28,7 +28,11 @@ describe("GET /api/health", () => {
     const response = await GET();
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ status: "ok", sha: expect.any(String) });
+    expect(await response.json()).toEqual({
+      status: "ok",
+      sha: expect.any(String),
+      version: expect.any(String),
+    });
   });
 
   it("has no downstream dependency: never calls fetch", async () => {
@@ -46,7 +50,7 @@ describe("GET /api/health", () => {
 
     const response = await GET();
 
-    expect(await response.json()).toEqual({ status: "ok", sha: "abc123" });
+    expect(await response.json()).toMatchObject({ status: "ok", sha: "abc123" });
   });
 
   it("defaults the sha to 'unknown' when BUILD_SHA is unset", async () => {
@@ -54,6 +58,22 @@ describe("GET /api/health", () => {
 
     const response = await GET();
 
-    expect(await response.json()).toEqual({ status: "ok", sha: "unknown" });
+    expect(await response.json()).toMatchObject({ status: "ok", sha: "unknown" });
+  });
+
+  it("reports the app version from APP_VERSION when set", async () => {
+    vi.stubEnv("APP_VERSION", "1.4.2");
+
+    const response = await GET();
+
+    expect(await response.json()).toEqual({ status: "ok", sha: expect.any(String), version: "1.4.2" });
+  });
+
+  it("defaults the version to 'unversioned' when APP_VERSION is unset", async () => {
+    vi.stubEnv("APP_VERSION", undefined);
+
+    const response = await GET();
+
+    expect(await response.json()).toMatchObject({ version: "unversioned" });
   });
 });
