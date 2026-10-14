@@ -1,5 +1,5 @@
 """Bloqueo por impago en la toma de asistencia y en el roster (#1768, S2, S5)."""
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 
@@ -19,8 +19,9 @@ def _lanzamiento_lejano(monkeypatch):
     fijar_lanzamiento(monkeypatch)
 
 
-def _horario(client, db_session, *miembros):
-    """Autor (id=1, el `persona_id` del token) + un horario con `miembros` asignados."""
+def _horario(client, db_session, *miembros, semanas_atras=0):
+    """Autor (id=1, el `persona_id` del token) + un horario con `miembros` asignados.
+    La fecha devuelta es el último lunes, o el de `semanas_atras` semanas antes."""
     _crear_persona_api(client, "1710034065", "Autor")
     horario = client.post(
         "/api/v1/asistencias/horarios",
@@ -32,7 +33,7 @@ def _horario(client, db_session, *miembros):
             json={"persona_id": persona.id, "horario_id": horario["id"]},
         )
         assert resp.status_code in (200, 201), resp.text
-    return horario, str(ultima_fecha_en("LUNES"))
+    return horario, str(ultima_fecha_en("LUNES", semanas_atras))
 
 
 def _cuerpo(horario, fecha, persona):
@@ -203,3 +204,61 @@ def test_los_horarios_de_un_alumno_marcan_si_esta_bloqueado(client, db_session):
     resp = client.get(f"/api/v1/asistencias/alumnos/{moroso.id}/horarios")
 
     assert [f["bloqueadoPorImpago"] for f in resp.json()] == [True]
+
+
+# --- S1 (#1779): el bloqueo se juzga el día de la sesión, no hoy ---------------------------
+def _miembro_vencido_el(db, fecha_sesion, dias_antes_de_la_sesion):
+    return crear_miembro(
+        db, cubierto_hasta=date.fromisoformat(fecha_sesion) - timedelta(days=dias_antes_de_la_sesion),
+    )[0]
+
+
+def test_una_sesion_pasada_se_registra_si_el_jugador_aun_estaba_en_gracia_ese_dia(client, db_session):
+    horario, fecha = _horario(client, db_session, semanas_atras=1)
+    # Su cobertura termina 2 días antes de la sesión: hoy lleva días vencido,
+    # pero ese día todavía estaba en gracia.
+    persona = _miembro_vencido_el(db_session, fecha, 2)
+    client.post(
+        "/api/v1/asistencias/asignar-alumno", json={"persona_id": persona.id, "horario_id": horario["id"]},
+    )
+
+    resp = client.post(URL_UNA, json=_cuerpo(horario, fecha, persona))
+
+    assert resp.status_code == 201, resp.text
+    assert [a.persona_id for a in db_session.query(Asistencia).all()] == [persona.id]
+
+
+def test_una_sesion_pasada_se_rechaza_si_el_jugador_ya_estaba_bloqueado_ese_dia(client, db_session):
+    horario, fecha = _horario(client, db_session, semanas_atras=1)
+    persona = _miembro_vencido_el(db_session, fecha, 4)
+    client.post(
+        "/api/v1/asistencias/asignar-alumno", json={"persona_id": persona.id, "horario_id": horario["id"]},
+    )
+
+    resp = client.post(URL_UNA, json=_cuerpo(horario, fecha, persona))
+
+    assert resp.status_code == 400
+    assert "pago pendiente" in resp.json()["detail"]
+    assert db_session.query(Asistencia).count() == 0
+
+
+def test_el_lote_de_una_sesion_pasada_juzga_a_cada_jugador_por_el_dia_de_la_sesion(client, db_session):
+    horario, fecha = _horario(client, db_session, semanas_atras=1)
+    en_gracia = _miembro_vencido_el(db_session, fecha, 3)
+    bloqueado = _miembro_vencido_el(db_session, fecha, 4)
+    for persona in (en_gracia, bloqueado):
+        client.post(
+            "/api/v1/asistencias/asignar-alumno",
+            json={"persona_id": persona.id, "horario_id": horario["id"]},
+        )
+
+    resp = client.post(URL_LOTE, json={
+        "horario_id": horario["id"], "fecha": fecha,
+        "items": [{"persona_id": p.id, "estado": "PRESENTE"} for p in (en_gracia, bloqueado)],
+    })
+
+    assert resp.status_code == 201, resp.text
+    cuerpo = resp.json()
+    assert cuerpo["creados"] == 1
+    assert [f["personaId"] for f in cuerpo["fallidos"]] == [bloqueado.id]
+    assert [a.persona_id for a in db_session.query(Asistencia).all()] == [en_gracia.id]

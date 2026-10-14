@@ -806,7 +806,7 @@ class AsistenciaServicio:
         existentes = self.repo.listar_existentes_de_sesion(datos.horario_id, datos.fecha, ids)
 
         no_operativos = self.repo_alumno_horario.ids_no_operativos(ids)
-        bloqueados = self._ids_bloqueados_por_impago(ids)
+        bloqueados = self._ids_bloqueados_por_impago(ids, datos.fecha)
         fallidos: list[AsistenciaLoteFallidoDTO] = []
         creados = 0
         sesion_cerrada = False
@@ -871,10 +871,13 @@ class AsistenciaServicio:
             ),
         )
 
-    def _ids_bloqueados_por_impago(self, persona_ids) -> set[int]:
-        """Quiénes de `persona_ids` están bloqueados por impago hoy (#1768):
-        UNA lectura para toda la lista, con la misma regla que el portal."""
-        estados = self.repo_bloqueo.por_personas(list(persona_ids))
+    def _ids_bloqueados_por_impago(self, persona_ids, fecha_sesion=None) -> set[int]:
+        """Quiénes de `persona_ids` están bloqueados por impago (#1768): UNA
+        lectura para toda la lista, con la misma regla que el portal. Con
+        `fecha_sesion` se juzga ese día y no hoy (#1779): quien pasa lista
+        tarde no rechaza a un jugador que ese día aún estaba en gracia. Sin
+        ella (el roster) es el estado de hoy."""
+        estados = self.repo_bloqueo.por_personas(list(persona_ids), hoy=fecha_sesion)
         return {persona_id for persona_id, estado in estados.items() if estado.bloqueado}
 
     @staticmethod
@@ -992,7 +995,11 @@ class AsistenciaServicio:
         # Bloqueo por impago (#1768, S5): un jugador cuya cobertura terminó hace
         # más de 3 días no entrena hasta pagar. Va DESPUÉS del chequeo de fila
         # ya registrada: quien se anotó antes del bloqueo conserva ese mensaje.
-        if self.repo_bloqueo.por_persona(datos.persona_id).bloqueado:
+        # Se juzga el día de la sesión, no hoy (#1779): una lista tomada tarde
+        # no rechaza a quien ese día todavía estaba en gracia.
+        if self.repo_bloqueo.por_persona(
+            datos.persona_id, hoy=datos.fecha_entrenamiento,
+        ).bloqueado:
             raise OperacionInvalida(
                 f"{nombre_completo(persona.nombres, persona.apellidos)} tiene un pago "
                 "pendiente y no puede registrar asistencia hasta regularizarlo.",
