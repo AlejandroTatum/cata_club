@@ -18,6 +18,9 @@ from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Asistencia, Membresia, Persona, TipoMembresia
 from app.infraestructura.repositorios.asistencia_repositorio import AsistenciaRepositorio
+from app.infraestructura.repositorios.bloqueo_impago_repositorio import (
+    BloqueoImpagoRepositorio, EstadoBloqueoImpago,
+)
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
@@ -38,6 +41,8 @@ class PerfilPortal:
     #: Filas del historial COMPLETO; `historial` es solo la ventana reciente.
     historial_total: int = 0
     membresias: list[Membresia] = field(default_factory=list)
+    #: Bloqueo por impago (#1768) de ESTA persona.
+    bloqueo: EstadoBloqueoImpago = field(default_factory=EstadoBloqueoImpago)
 
 
 @dataclass
@@ -66,6 +71,7 @@ class PortalServicio:
         )
         totales = AsistenciaRepositorio(self.db).contar_por_personas(ids)
         membresias = MembresiaRepositorio(self.db).listar_por_personas(ids)
+        bloqueos = BloqueoImpagoRepositorio(self.db).por_personas(ids)
         representantes = PersonaRepositorio(self.db).listar_por_ids(
             sorted({p.representante_id for p in personas if p.representante_id})
         )
@@ -76,6 +82,7 @@ class PortalServicio:
                 historial=historiales[p.id],
                 historial_total=totales[p.id],
                 membresias=membresias[p.id],
+                bloqueo=bloqueos[p.id],
             )
             for p in personas
         ]

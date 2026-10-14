@@ -23,6 +23,7 @@ from app.dominio.reglas_negocio import (
     LIMITE_CORRECCION_ASISTENCIA_DIAS, MAXIMO_DIAS_POR_CATEGORIA,
     VENTANA_REGISTRO_ASISTENCIA_DIAS,
 )
+from app.infraestructura.repositorios.bloqueo_impago_repositorio import BloqueoImpagoRepositorio
 from app.infraestructura.repositorios.categoria_repositorio import CategoriaRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
@@ -100,6 +101,7 @@ class AsistenciaServicio:
         self.repo_alumno_horario = AlumnoHorarioRepositorio(db)
         self.repo_categoria = CategoriaRepositorio(db)
         self.repo_membresia = MembresiaRepositorio(db)
+        self.repo_bloqueo = BloqueoImpagoRepositorio(db)
         self.repo_sesion = SesionAsistenciaRepositorio(db)
 
     def _validar_dia_y_derivar_horas(self, horario: HorarioEntrenamiento) -> CategoriaHorario:
@@ -804,6 +806,7 @@ class AsistenciaServicio:
         existentes = self.repo.listar_existentes_de_sesion(datos.horario_id, datos.fecha, ids)
 
         no_operativos = self.repo_alumno_horario.ids_no_operativos(ids)
+        bloqueados = self._ids_bloqueados_por_impago(ids)
         fallidos: list[AsistenciaLoteFallidoDTO] = []
         creados = 0
         sesion_cerrada = False
@@ -824,6 +827,13 @@ class AsistenciaServicio:
             previa = existentes.get(item.persona_id)
             if previa is not None:
                 fallidos.append(self._fallido_por_ya_registrada(item.persona_id, nombre, previa))
+                continue
+            if item.persona_id in bloqueados:
+                # Bloqueo por impago (#1768): el jugador queda en `fallidos` y
+                # el resto de la lista se registra igual.
+                fallidos.append(AsistenciaLoteFallidoDTO(
+                    persona_id=item.persona_id, motivo=f"{nombre} tiene un pago pendiente.",
+                ))
                 continue
             try:
                 with self.db.begin_nested():
@@ -860,6 +870,12 @@ class AsistenciaServicio:
                 nombre_completo(autor.nombres, autor.apellidos) if autor and creados else None
             ),
         )
+
+    def _ids_bloqueados_por_impago(self, persona_ids) -> set[int]:
+        """Quiénes de `persona_ids` están bloqueados por impago hoy (#1768):
+        UNA lectura para toda la lista, con la misma regla que el portal."""
+        estados = self.repo_bloqueo.por_personas(list(persona_ids))
+        return {persona_id for persona_id, estado in estados.items() if estado.bloqueado}
 
     @staticmethod
     def _requiere_revision(
@@ -971,6 +987,16 @@ class AsistenciaServicio:
                     f"fecha_entrenamiento={datos.fecha_entrenamiento.isoformat()} "
                     f"persona_id={datos.persona_id}"
                 ),
+            )
+
+        # Bloqueo por impago (#1768, S5): un jugador cuya cobertura terminó hace
+        # más de 3 días no entrena hasta pagar. Va DESPUÉS del chequeo de fila
+        # ya registrada: quien se anotó antes del bloqueo conserva ese mensaje.
+        if self.repo_bloqueo.por_persona(datos.persona_id).bloqueado:
+            raise OperacionInvalida(
+                f"{nombre_completo(persona.nombres, persona.apellidos)} tiene un pago "
+                "pendiente y no puede registrar asistencia hasta regularizarlo.",
+                detalle_tecnico=f"bloqueado por impago: persona_id={datos.persona_id}",
             )
 
         # Primer registro exitoso de esta persona en la sesión: si es
@@ -1381,12 +1407,31 @@ class AsistenciaServicio:
         self.repo_alumno_horario.eliminar_muchos(asignaciones)
         self.db.commit()
 
+    def _a_detalle_dtos(
+        self, asignaciones: list[AlumnoHorario], categoria_labels: Optional[dict[str, str]] = None,
+    ) -> list[AlumnoHorarioDetalleDTO]:
+        """Proyección de un listado de roster: marca, con UNA lectura para
+        todos, quién está bloqueado por impago (#1768) -- sigue listado, con
+        candado."""
+        bloqueados = self._ids_bloqueados_por_impago({a.persona_id for a in asignaciones})
+        labels = categoria_labels or {}
+        return [
+            self._a_detalle_dto(
+                a, labels.get(a.horario.categoria),
+                bloqueado_por_impago=a.persona_id in bloqueados,
+            )
+            for a in asignaciones
+        ]
+
     @staticmethod
     def _a_detalle_dto(
-        a: AlumnoHorario, categoria_label: Optional[str] = None
+        a: AlumnoHorario, categoria_label: Optional[str] = None,
+        bloqueado_por_impago: bool = False,
     ) -> AlumnoHorarioDetalleDTO:
         """Proyección compartida AlumnoHorario -> DTO de detalle (la usan el
-        alta, el roster del horario y los horarios del alumno)."""
+        alta, el roster del horario y los horarios del alumno). El alta no
+        calcula el bloqueo (`False`): su respuesta no lo muestra y evitaría una
+        lectura extra."""
         return AlumnoHorarioDetalleDTO(
             id=a.id,
             persona_id=a.persona_id,
@@ -1399,6 +1444,7 @@ class AsistenciaServicio:
             fecha_asignacion=a.fecha_asignacion,
             horario_categoria=a.horario.categoria,
             horario_categoria_label=categoria_label,
+            bloqueado_por_impago=bloqueado_por_impago,
         )
 
     def listar_alumnos_por_horario(
@@ -1413,7 +1459,7 @@ class AsistenciaServicio:
             horario_id, skip=skip, limit=limit
         )
         total = self.repo_alumno_horario.contar_por_horario(horario_id)
-        return [self._a_detalle_dto(a) for a in asignaciones], total
+        return self._a_detalle_dtos(asignaciones), total
 
     def listar_roster_de_todos_los_horarios(self) -> list[AlumnoHorarioDetalleDTO]:
         """TRA-7: roster completo (todos los horarios) en una sola consulta,
@@ -1423,7 +1469,7 @@ class AsistenciaServicio:
         una sola sin cambiar cuántas filas cruzan la red."""
         asignaciones = self.repo_alumno_horario.listar_activos_de_todos_los_horarios()
         labels = {c.codigo: c.label for c in self.repo_categoria.listar()}
-        return [self._a_detalle_dto(a, labels.get(a.horario.categoria)) for a in asignaciones]
+        return self._a_detalle_dtos(asignaciones, labels)
 
     def contar_inscritos_por_horario(
         self, incluir_personas: bool = False
@@ -1448,4 +1494,4 @@ class AsistenciaServicio:
             raise EntidadNoEncontrada(f"Persona con id {persona_id} no encontrada")
 
         asignaciones = self.repo_alumno_horario.listar_por_persona(persona_id)
-        return [self._a_detalle_dto(a) for a in asignaciones]
+        return self._a_detalle_dtos(asignaciones)

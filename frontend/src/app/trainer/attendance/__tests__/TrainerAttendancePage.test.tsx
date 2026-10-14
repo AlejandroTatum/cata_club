@@ -227,6 +227,41 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     });
   });
 
+  // #1768: the lapsed player stays on the list, locked; the rest of the roll call goes through.
+  it("lists a blocked player locked, and files the roll call without them", async () => {
+    const trainerAuth = createAuthenticatedAuth("trainer", "Coach Torres");
+    if (trainerAuth.session) trainerAuth.session.user.id = "17";
+    mockUseAuth.mockReturnValue(trainerAuth);
+    mockFetchTrainingSchedules.mockResolvedValue([
+      { id: 12, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres" },
+    ]);
+    mockFetchAlumnosPorHorario.mockResolvedValue([
+      ANA_ALUMNO_HORARIO,
+      { ...ANA_ALUMNO_HORARIO, id: 2, personaId: 10, personaNombreCompleto: "Beto Luna", bloqueadoPorImpago: true },
+    ]);
+    mockRegisterAttendance.mockResolvedValue({ createdCount: 1, failed: [] });
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+
+    fireEvent.click(await screen.findByRole("button", { name: /^lunes/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /18:00/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+
+    expect(await screen.findByText("Pago pendiente")).toBeInTheDocument();
+    const locked = screen.getByRole("radiogroup", { name: "Estado de asistencia de Beto Luna" });
+    within(locked).getAllByRole("radio").forEach((radio) => expect(radio).toBeDisabled());
+
+    fireEvent.click(screen.getByRole("button", { name: "Revisar y confirmar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar asistencia" }));
+
+    await waitFor(() => {
+      expect(mockRegisterAttendance).toHaveBeenCalledWith(expect.objectContaining({
+        horarioId: 12,
+        students: [{ personaId: 9, estado: "present" }],
+      }));
+    });
+  });
+
   it("shows the horario descriptor (día + rango) and no nivel/grupo text on mark-attendance and confirm", async () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
     mockFetchTrainingSchedules.mockResolvedValue([

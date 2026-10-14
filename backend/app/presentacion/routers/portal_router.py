@@ -61,5 +61,7 @@ def _a_dto(perfil: PerfilPortal, membresias_dto: dict) -> PortalPerfilDTO:
             "historial": perfil.historial,
             "historial_total": perfil.historial_total,
             "membresias": [membresias_dto[m.id] for m in perfil.membresias],
+            "bloqueado_por_impago": perfil.bloqueo.bloqueado,
+            "cubierto_hasta": perfil.bloqueo.cubierto_hasta,
         }
     )

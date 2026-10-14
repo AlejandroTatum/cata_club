@@ -72,6 +72,7 @@ import {
 import { attendanceTone } from "@/lib/attendance-tone";
 import { breakdownAttendance, firstNameOf, hasOwnMembership, summarizeRecentAttendance } from "../student-utils";
 import { useManagedProfiles } from "../ManagedStudentPicker";
+import { usePaymentsOnlyRedirect } from "../usePaymentsOnlyRedirect";
 import FamilyStrip from "../FamilyStrip";
 import { CalendarCheck, CheckCircle2, Clock, UserX, User } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -453,6 +454,8 @@ function AttendanceView({
     hasAlumnoRole || hasOwnMembership(data),
     accountPersonaId,
   );
+  // #1768: a blocked profile gets only Payments; the page draws nothing of its own meanwhile.
+  const redirectingToPayments = usePaymentsOnlyRedirect(selectedProfile);
 
   const viewingOwnProfile =
     selectedProfile !== null && selectedProfile.personaId === accountPersonaId;
@@ -470,7 +473,11 @@ function AttendanceView({
         onChange={setSelectedId}
       />
 
-      {selectedProfile === null ? (
+      {redirectingToPayments ? (
+        <div className="card">
+          <LoadingState label="Abriendo tus pagos…" />
+        </div>
+      ) : selectedProfile === null ? (
         <EmptyState
           icon={<User size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
           title="No se encontraron jugadores asociados a esta cuenta"

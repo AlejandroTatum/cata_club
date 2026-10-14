@@ -129,6 +129,7 @@ async def obtener_perfil(
     # Issue #1056: `decision_activacion` es el único armado de esta
     # decisión -- `claims_estandar` (claim del token) lo llama igual.
     activacion_completa = GestorAutenticacion.decision_activacion(db, usuario)
+    bloqueo = GestorAutenticacion.bloqueo_impago(db, usuario.persona_id)
     return {
         "correo": usuario.correo,
         "persona_id": usuario.persona_id,
@@ -152,6 +153,8 @@ async def obtener_perfil(
         ),
         "puede_entrenar": GestorAutenticacion.puede_entrenar(db, usuario.persona_id),
         "espera_primer_pago": GestorAutenticacion.espera_primer_pago(db, usuario.persona_id),
+        "bloqueado_por_impago": bloqueo.bloqueado,
+        "cubierto_hasta": bloqueo.cubierto_hasta,
     }
 
 

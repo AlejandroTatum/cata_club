@@ -2259,3 +2259,160 @@ describe("StudentPaymentsPage — a discounted current month blocks the next pay
     expect(screen.queryByTestId("discount-block-message")).not.toBeInTheDocument();
   });
 });
+
+/**
+ * #1768 — a profile blocked for non-payment reaches the Payments module and
+ * nothing else. This screen is where the block gets paid off, so it keeps the
+ * whole module (months, method, receipt) and adds the banner; it never turns
+ * into a «go to the club» screen.
+ */
+describe("StudentPaymentsPage — non-payment block (#1768)", () => {
+  const COVERAGE_LAPSED = "2026-06-30";
+  const BLOCKED_SELF: StudentProfileSummary = {
+    ...SELF,
+    bloqueadoPorImpago: true,
+    cubiertoHasta: COVERAGE_LAPSED,
+    membership: { ...SELF.membership!, estado: "VENCIDA", cubiertoHasta: COVERAGE_LAPSED },
+  };
+  const BANNER = "Tu membresía venció el 30/06/2026. Paga para volver a entrenar.";
+
+  function portalWith(self: StudentProfileSummary): void {
+    mockFetchStudentPortal.mockReset().mockResolvedValue({ ...PORTAL, self });
+    mockFetchPagosDePersona.mockReset().mockResolvedValue([makePago({ fechaFin: COVERAGE_LAPSED })]);
+  }
+
+  async function openForm(): Promise<void> {
+    fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
+  }
+
+  it("shows the banner and keeps the whole payment module for a blocked account holder", async () => {
+    portalWith(BLOCKED_SELF);
+
+    render(<StudentPaymentsPage />);
+
+    expect(await screen.findByText(BANNER)).toBeInTheDocument();
+    await openForm();
+    expect(screen.getByRole("group", { name: /meses/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/forma de pago/i)).toBeInTheDocument();
+    expect(screen.getByTestId("renew-voucher-input")).toBeInTheDocument();
+    expect(await screen.findByTestId("student-payments-table")).toBeInTheDocument();
+  });
+
+  it("starts the payment from today, not from the lapsed coverage", async () => {
+    portalWith(BLOCKED_SELF);
+
+    render(<StudentPaymentsPage />);
+    await openForm();
+
+    // NOW is 2026-07-15; coverage ended 2026-06-30 — nothing is charged in between.
+    expect(await screen.findByText(shownRange("2026-07-15", "2026-08-15"))).toBeInTheDocument();
+  });
+
+  it("does not offer a way back to a home that would only send the reader here again", async () => {
+    portalWith(BLOCKED_SELF);
+
+    render(<StudentPaymentsPage />);
+    await screen.findByText(BANNER);
+
+    expect(screen.queryByRole("link", { name: /volver a mi cuenta/i })).not.toBeInTheDocument();
+  });
+
+  it("shows no banner and keeps the way back for a profile that is not blocked", async () => {
+    render(<StudentPaymentsPage />);
+
+    await screen.findByRole("button", { name: /registrar un pago/i });
+    expect(screen.queryByText(/venció el/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /volver a mi cuenta/i })).toBeInTheDocument();
+  });
+
+  it("restricts only the blocked child: a guardian pays for them and sees no banner on the sibling", async () => {
+    mockUseAuth.mockReturnValue(authSession("representante"));
+    const sofia = { ...BLOCKED_SELF, personaId: "41", nombres: "Sofía", apellidos: "Vera", fechaNacimiento: MINOR_BIRTH_DATE };
+    const martin = { ...SELF, personaId: "42", nombres: "Martín", apellidos: "Vera", fechaNacimiento: MINOR_BIRTH_DATE };
+    mockFetchStudentPortal.mockReset().mockResolvedValue({ self: null, representados: [sofia, martin], membershipPlans: [] });
+    mockFetchPagosDePersona.mockReset().mockResolvedValue([makePago({ fechaFin: COVERAGE_LAPSED })]);
+
+    render(<StudentPaymentsPage />);
+
+    expect(
+      await screen.findByText("La membresía de Sofía venció el 30/06/2026. Paga para que vuelva a entrenar."),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /registrar un pago de sofía/i })).toBeInTheDocument();
+
+    fireEvent.click(within(screen.getByRole("group", { name: "Jugador" })).getByRole("button", { name: /Martín/ }));
+
+    await screen.findByRole("button", { name: /registrar un pago de martín/i });
+    expect(screen.queryByText(/venció el/i)).not.toBeInTheDocument();
+  });
+
+  it("tells a blocked minor on their own account to ask their representative, with no payment form", async () => {
+    portalWith({ ...BLOCKED_SELF, fechaNacimiento: MINOR_BIRTH_DATE });
+
+    render(<StudentPaymentsPage />);
+
+    expect(await screen.findByText(BANNER)).toBeInTheDocument();
+    expect(screen.getByText("Pídele a tu representante que pague.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /registrar un pago/i })).not.toBeInTheDocument();
+  });
+
+  it("shows a coach with a blocked membership the banner on their own Payments page, without locking anything", async () => {
+    mockUseAuth.mockReturnValue({
+      ...authSession(),
+      session: { ...authSession().session, user: { ...authSession().session.user, role: "trainer" }, roles: ["ENTRENADOR"], isStaffPlayer: true },
+    });
+    portalWith(BLOCKED_SELF);
+
+    render(<StudentPaymentsPage />);
+
+    expect(await screen.findByText(BANNER)).toBeInTheDocument();
+    await openForm();
+    expect(screen.getByLabelText(/forma de pago/i)).toBeInTheDocument();
+  });
+
+  describe("paying by cash", () => {
+    it("says cash is paid at the club while blocked, and keeps the option selectable", async () => {
+      portalWith(BLOCKED_SELF);
+
+      render(<StudentPaymentsPage />);
+      await openForm();
+
+      expect(screen.getByText("El efectivo se paga en el club.")).toBeInTheDocument();
+      const cash = screen.getByRole("option", { name: "Efectivo" }) as HTMLOptionElement;
+      expect(cash.disabled).toBe(false);
+    });
+
+    it("does not say it to a member who is not blocked", async () => {
+      render(<StudentPaymentsPage />);
+      await openForm();
+
+      expect(screen.queryByText("El efectivo se paga en el club.")).not.toBeInTheDocument();
+    });
+
+    it("lets a blocked member with a pending cash payment send a transfer instead, without pre-blocking them", async () => {
+      portalWith(BLOCKED_SELF);
+      mockFetchPagosDePersona.mockResolvedValue([
+        makePago({ id: 7, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "EFECTIVO", fechaFin: COVERAGE_LAPSED }),
+      ]);
+
+      render(<StudentPaymentsPage />);
+      await openForm();
+
+      expect(screen.queryByText(/ya tienes un pago esperando validación/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/reemplaza tu pago en efectivo/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/forma de pago/i)).toHaveValue("TRANSFERENCIA");
+      expect((screen.getByRole("option", { name: "Efectivo" }) as HTMLOptionElement).disabled).toBe(true);
+
+      fireEvent.change(screen.getByTestId("renew-voucher-input"), {
+        target: { files: [new File(["x"], "comprobante.png", { type: "image/png" })] },
+      });
+      fireEvent.click(await screen.findByRole("button", { name: /^registrar pago$/i }));
+      fireEvent.click(await screen.findByRole("button", { name: /confirmar y registrar/i }));
+
+      await waitFor(() => {
+        expect(mockRegistrarPago).toHaveBeenCalledWith(
+          expect.objectContaining({ tipoPago: "TRANSFERENCIA", personaId: 9 }),
+        );
+      });
+    });
+  });
+});

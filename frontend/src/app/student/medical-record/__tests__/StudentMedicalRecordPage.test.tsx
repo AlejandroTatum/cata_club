@@ -374,3 +374,38 @@ describe("StudentMedicalRecordPage — the representative is the default emergen
     expect(contacto).not.toHaveTextContent("Sin registrar");
   });
 });
+
+/** #1768 — the blocked child's ficha is closed behind Payments; the sibling's stays open. */
+describe("StudentMedicalRecordPage — non-payment block (#1768)", () => {
+  const BLOCKED = { bloqueadoPorImpago: true, cubiertoHasta: "2026-09-30" };
+
+  it("sends a guardian to Payments for the blocked child they are looking at", async () => {
+    mockFetchStudentPortal.mockResolvedValue({
+      self: null,
+      representados: [{ ...SOFIA, ...BLOCKED }, MARTIN],
+      membershipPlans: [],
+    });
+    searchParams = new URLSearchParams("alumno=41");
+
+    render(<StudentMedicalRecordPage />);
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/student/payments?alumno=41");
+    });
+    expect(mockFetchFichaMedica).not.toHaveBeenCalledWith(41);
+  });
+
+  it("keeps the other child's ficha reachable", async () => {
+    mockFetchStudentPortal.mockResolvedValue({
+      self: null,
+      representados: [{ ...SOFIA, ...BLOCKED }, MARTIN],
+      membershipPlans: [],
+    });
+    searchParams = new URLSearchParams("alumno=42");
+
+    render(<StudentMedicalRecordPage />);
+
+    await waitFor(() => expect(mockFetchFichaMedica).toHaveBeenCalledWith(42));
+    expect(mockReplace).not.toHaveBeenCalledWith(expect.stringContaining("/student/payments"));
+  });
+});

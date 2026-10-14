@@ -1,4 +1,5 @@
 import ipaddress
+from datetime import date
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -194,6 +195,10 @@ _CAMPOS_EXCLUIDOS_A_PROPOSITO: dict[str, str] = {
     "jwt_expira_minutos": "política de sesión con default seguro; int, nunca queda vacío",
     "jwt_refresh_expira_dias": "idem jwt_expira_minutos: política de sesión con default seguro",
     "sesion_inactividad_horas": "idem jwt_expira_minutos: política de sesión con default seguro",
+    "bloqueo_impago_fecha_lanzamiento": (
+        "vacío es el default seguro (bloqueo apagado), y fijarlo es una decisión "
+        "operativa de salida a producción, no un dato que arranque deba exigir"
+    ),
     "sesion_gracia_rotacion_segundos": "idem jwt_expira_minutos: política de sesión con default seguro",
     "redis_url": (
         "coordenada de red interna fijada en docker-compose.yml "
@@ -532,6 +537,22 @@ class Settings(BaseSettings):
     # `0` (o negativo) DESACTIVA el límite -- escape operativo para entornos
     # donde no aplica, no el default. Ver `notificaciones_servicio`.
     limite_correos_diario: int = 100
+
+    # --- Bloqueo por impago (#1768) ---
+    # Día de lanzamiento del bloqueo: quien ya estaba vencido ese día cuenta
+    # sus 3 días de gracia desde acá, no desde el fin de su cobertura (ver
+    # `app.dominio.bloqueo_impago`). SIN valor (default) el bloqueo está
+    # APAGADO: subir el código no bloquea a nadie hasta que el operador fija
+    # `BLOQUEO_IMPAGO_FECHA_LANZAMIENTO=AAAA-MM-DD` y reinicia el backend.
+    # Vacío equivale a no definido, para poder pasarlo siempre por Compose.
+    bloqueo_impago_fecha_lanzamiento: Optional[date] = None
+
+    @field_validator("bloqueo_impago_fecha_lanzamiento", mode="before")
+    @classmethod
+    def _lanzamiento_vacio_es_apagado(cls, v):
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
     # --- Logging (ver configuracion_logging.py) ---
     # Nivel del logger RAÍZ del proceso. INFO por defecto: es el nivel al que
