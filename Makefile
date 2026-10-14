@@ -301,7 +301,13 @@ QA_COMPOSE = docker compose -f docker-compose.yml -f docker-compose.override.yml
 # entrar por el entorno. `:=` la evalúa UNA vez, para que todos los targets de
 # una misma corrida compartan el mismo valor.
 QA_JWT_SECRET_KEY := $(shell openssl rand -hex 32)
-QA_ENV = JWT_SECRET_KEY=$(QA_JWT_SECRET_KEY)
+#
+# El bloqueo por impago (#1768) arranca con la misma fecha que producción
+# (2026-10-13): sin ella el flag queda vacío y el bloqueo apagado en QA, que es
+# justo donde se lo quiere ver. Se puede sobrescribir: `make qa-up
+# QA_BLOQUEO_IMPAGO_FECHA=2026-12-01`.
+QA_BLOQUEO_IMPAGO_FECHA ?= 2026-10-13
+QA_ENV = JWT_SECRET_KEY=$(QA_JWT_SECRET_KEY) BLOQUEO_IMPAGO_FECHA_LANZAMIENTO=$(QA_BLOQUEO_IMPAGO_FECHA)
 
 # Docker Compose >= 5 construye SIEMPRE vía Bake: ya no existe `COMPOSE_BAKE`,
 # así que no hay builder clásico al que volver. Bake rechaza un build con

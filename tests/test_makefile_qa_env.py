@@ -133,3 +133,17 @@ def test_el_prebuild_host_carga_las_imagenes_en_el_almacen_local(tmp_path):
     assert resultado.returncode == 0, resultado.stderr
     bake = [l for l in llamadas if "buildx bake" in l]
     assert len(bake) == 1 and "--load" in bake[0].split() and "--allow network.host" in bake[0]
+
+
+# --- El bloqueo por impago nace activo en QA (#1787-l) -------------------------
+
+
+def test_qa_fija_la_fecha_de_lanzamiento_del_bloqueo_por_impago():
+    comandos = _dry_run("qa-up").splitlines()
+    levantar = [l for l in comandos if " up -d " in l]
+
+    assert levantar and all(
+        "BLOQUEO_IMPAGO_FECHA_LANZAMIENTO=2026-10-13" in l for l in levantar
+    ), levantar
+    # Las demás invocaciones de Compose del entorno ven el mismo valor.
+    assert "BLOQUEO_IMPAGO_FECHA_LANZAMIENTO=2026-10-13" in _dry_run("qa-down")
