@@ -116,7 +116,8 @@ const mockCreateCorrectionRequest = vi.fn();
 
 vi.mock("@/services/api", () => ({
   fetchTrainingSchedules: () => mockFetchTrainingSchedules(),
-  fetchAlumnosPorHorario: (horarioId: number) => mockFetchAlumnosPorHorario(horarioId),
+  fetchAlumnosPorHorario: (horarioId: number, options?: unknown) =>
+    mockFetchAlumnosPorHorario(horarioId, options),
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
   fetchConteosPorHorario: (options?: unknown) => mockFetchConteosPorHorario(options),
   registerAttendance: (request: unknown) => mockRegisterAttendance(request),
@@ -260,6 +261,32 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
         students: [{ personaId: 9, estado: "present" }],
       }));
     });
+  });
+
+  // S15: the lock is judged on the session date. The roll call is for last Monday
+  // (2026-07-20), the backend says Beto is current on that date, so he is markable.
+  it("asks for the roster on the session date and leaves a player the backend flags false markable", async () => {
+    const trainerAuth = createAuthenticatedAuth("trainer", "Coach Torres");
+    if (trainerAuth.session) trainerAuth.session.user.id = "17";
+    mockUseAuth.mockReturnValue(trainerAuth);
+    mockFetchTrainingSchedules.mockResolvedValue([
+      { id: 12, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres" },
+    ]);
+    mockFetchAlumnosPorHorario.mockResolvedValue([
+      ANA_ALUMNO_HORARIO,
+      { ...ANA_ALUMNO_HORARIO, id: 2, personaId: 10, personaNombreCompleto: "Beto Luna", bloqueadoPorImpago: false },
+    ]);
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+
+    fireEvent.click(await screen.findByRole("button", { name: /^lunes/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /18:00/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+
+    const markable = await screen.findByRole("radiogroup", { name: "Estado de asistencia de Beto Luna" });
+    within(markable).getAllByRole("radio").forEach((radio) => expect(radio).toBeEnabled());
+    expect(screen.queryByText("Pago pendiente")).not.toBeInTheDocument();
+    expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(12, { fecha: "2026-07-20" });
   });
 
   it("shows the horario descriptor (día + rango) and no nivel/grupo text on mark-attendance and confirm", async () => {
@@ -423,7 +450,7 @@ describe("TrainerAttendancePage — schedule accordion grouped by day (Slice A)"
     fireEvent.click(await screen.findByRole("button", { name: /18:00/i }));
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
 
-    await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(12));
+    await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(12, expect.anything()));
     expect(await screen.findByText("Ana López")).toBeInTheDocument();
   });
 

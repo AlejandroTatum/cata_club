@@ -83,7 +83,7 @@ export function useAttendanceRoster(): AttendanceRoster {
       try {
         const fecha = requestedDateArg ?? clubIsoDate();
         const [alumnoHorarios, existingRecords] = await Promise.all([
-          fetchAlumnosPorHorario(horarioId),
+          fetchAlumnosPorHorario(horarioId, { fecha }),
           fetchAttendanceRecords({ fechaInicio: fecha, fechaFin: fecha, horarioId }).catch(
             (err: unknown) => {
               console.error("[trainer/attendance] fetchAttendanceRecords prefill failed", err);
