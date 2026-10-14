@@ -36,6 +36,11 @@ from app.servicios_negocio.politica_acceso import (
 
 router = APIRouter(prefix="/asistencias", tags=["Asistencias"])
 
+_DESC_FECHA_ROSTER = (
+    "Día de la sesión (YYYY-MM-DD) con el que se calcula `bloqueado_por_impago`, "
+    "igual que al registrar asistencia ese día. Sin fecha, hoy; una fecha futura se rechaza."
+)
+
 # Las columnas viven fuera del endpoint, como sus hermanas
 # `_COLUMNAS_PERSONAS_PDF` y `_COLUMNAS_PAGOS_PDF`, para que el candado de
 # ancho de página pueda medir las columnas REALES del reporte y no una copia
@@ -531,10 +536,11 @@ async def listar_alumnos_por_horario(
     horario_id: int,
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
+    fecha: Optional[date] = Query(default=None, description=_DESC_FECHA_ROSTER),
     db: Session = Depends(obtener_sesion),
 ):
     items, total = AsistenciaServicio(db).listar_alumnos_por_horario(
-        horario_id, skip=skip, limit=limit
+        horario_id, skip=skip, limit=limit, fecha_sesion=fecha
     )
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
@@ -551,8 +557,11 @@ async def listar_alumnos_por_horario(
     response_model=List[AlumnoHorarioDetalleDTO],
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
 )
-async def listar_roster_de_todos_los_horarios(db: Session = Depends(obtener_sesion)):
-    return AsistenciaServicio(db).listar_roster_de_todos_los_horarios()
+async def listar_roster_de_todos_los_horarios(
+    fecha: Optional[date] = Query(default=None, description=_DESC_FECHA_ROSTER),
+    db: Session = Depends(obtener_sesion),
+):
+    return AsistenciaServicio(db).listar_roster_de_todos_los_horarios(fecha_sesion=fecha)
 
 
 # QA4 PERF-01: el conteo "N inscritos" no necesita los alumnos. Este endpoint
