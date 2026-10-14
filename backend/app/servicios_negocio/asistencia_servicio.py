@@ -740,6 +740,16 @@ class AsistenciaServicio:
         self.db.commit()
 
     @staticmethod
+    def _rechazar_fecha_futura(fecha, hoy) -> None:
+        """Una sesión que aún no ocurrió no se registra ni se consulta (la
+        regla de fecha futura de ENT-02, compartida con el roster por fecha)."""
+        if fecha > hoy:
+            raise OperacionInvalida(
+                "No se puede registrar asistencia con una fecha futura.",
+                detalle_tecnico=f"fecha_entrenamiento={fecha.isoformat()} hoy_club={hoy.isoformat()}",
+            )
+
+    @staticmethod
     def _validar_fecha_de_sesion(fecha, horario: HorarioEntrenamiento) -> None:
         """Issue #308: `fecha` debe caer en el `dia_semana` real del horario.
         Invariante de dominio, no una validación de forma -- sin esto el
@@ -751,11 +761,7 @@ class AsistenciaServicio:
         `VENTANA_REGISTRO_ASISTENCIA_DIAS` días atrás; una fecha futura se
         rechaza con su propio mensaje."""
         hoy = hoy_club()
-        if fecha > hoy:
-            raise OperacionInvalida(
-                "No se puede registrar asistencia con una fecha futura.",
-                detalle_tecnico=f"fecha_entrenamiento={fecha.isoformat()} hoy_club={hoy.isoformat()}",
-            )
+        AsistenciaServicio._rechazar_fecha_futura(fecha, hoy)
         if (hoy - fecha).days > VENTANA_REGISTRO_ASISTENCIA_DIAS:
             raise OperacionInvalida(
                 "Solo se puede registrar asistencia de hoy y de los últimos "
@@ -1417,11 +1423,17 @@ class AsistenciaServicio:
 
     def _a_detalle_dtos(
         self, asignaciones: list[AlumnoHorario], categoria_labels: Optional[dict[str, str]] = None,
+        fecha_sesion=None,
     ) -> list[AlumnoHorarioDetalleDTO]:
         """Proyección de un listado de roster: marca, con UNA lectura para
         todos, quién está bloqueado por impago (#1768) -- sigue listado, con
-        candado."""
-        bloqueados = self._ids_bloqueados_por_impago({a.persona_id for a in asignaciones})
+        candado. Con `fecha_sesion` el candado es el de ESE día (#1779, la
+        misma regla con la que se registra la asistencia); sin ella, el de hoy."""
+        if fecha_sesion is not None:
+            self._rechazar_fecha_futura(fecha_sesion, hoy_club())
+        bloqueados = self._ids_bloqueados_por_impago(
+            {a.persona_id for a in asignaciones}, fecha_sesion,
+        )
         labels = categoria_labels or {}
         return [
             self._a_detalle_dto(
@@ -1456,10 +1468,11 @@ class AsistenciaServicio:
         )
 
     def listar_alumnos_por_horario(
-        self, horario_id: int, skip: int = 0, limit: Optional[int] = None
+        self, horario_id: int, skip: int = 0, limit: Optional[int] = None, fecha_sesion=None,
     ) -> tuple[list[AlumnoHorarioDetalleDTO], int]:
         """Página de alumnos asignados a un horario, más el total de alumnos
-        activos de ese horario (paginado, issue #7)."""
+        activos de ese horario (paginado, issue #7). `fecha_sesion`: día en
+        que se pasa lista, para el candado por impago (S15)."""
         if not self.repo_horario.obtener_por_id(horario_id):
             raise EntidadNoEncontrada(f"Horario con id {horario_id} no encontrado")
 
@@ -1467,9 +1480,9 @@ class AsistenciaServicio:
             horario_id, skip=skip, limit=limit
         )
         total = self.repo_alumno_horario.contar_por_horario(horario_id)
-        return self._a_detalle_dtos(asignaciones), total
+        return self._a_detalle_dtos(asignaciones, fecha_sesion=fecha_sesion), total
 
-    def listar_roster_de_todos_los_horarios(self) -> list[AlumnoHorarioDetalleDTO]:
+    def listar_roster_de_todos_los_horarios(self, fecha_sesion=None) -> list[AlumnoHorarioDetalleDTO]:
         """TRA-7: roster completo (todos los horarios) en una sola consulta,
         para el conteo "N inscriptos" de /groups. Deliberadamente SIN
         paginar: el volumen de filas ya viajaba completo hoy, repartido en 26
@@ -1477,7 +1490,7 @@ class AsistenciaServicio:
         una sola sin cambiar cuántas filas cruzan la red."""
         asignaciones = self.repo_alumno_horario.listar_activos_de_todos_los_horarios()
         labels = {c.codigo: c.label for c in self.repo_categoria.listar()}
-        return self._a_detalle_dtos(asignaciones, labels)
+        return self._a_detalle_dtos(asignaciones, labels, fecha_sesion)
 
     def contar_inscritos_por_horario(
         self, incluir_personas: bool = False

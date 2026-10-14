@@ -264,6 +264,96 @@ def test_el_lote_de_una_sesion_pasada_juzga_a_cada_jugador_por_el_dia_de_la_sesi
     assert [a.persona_id for a in db_session.query(Asistencia).all()] == [en_gracia.id]
 
 
+# --- S15 (#1779): el roster juzga el bloqueo en la fecha de la sesión ---------------------
+def _roster(client, horario, fecha=None):
+    url = f"/api/v1/asistencias/horarios/{horario['id']}/alumnos"
+    resp = client.get(url, params={"fecha": fecha} if fecha else None)
+    assert resp.status_code == 200, resp.text
+    return {fila["personaId"]: fila["bloqueadoPorImpago"] for fila in resp.json()["items"]}
+
+
+def _roster_con_pasado(client, db_session):
+    """Sesión de hace una semana: `en_gracia` ese día estaba a 2 días de vencer
+    (hoy ya bloqueado), `bloqueado` ya llevaba 4 días vencido ese día."""
+    horario, fecha = _horario(client, db_session, semanas_atras=1)
+    en_gracia = _miembro_vencido_el(db_session, fecha, 2)
+    bloqueado = _miembro_vencido_el(db_session, fecha, 4)
+    for persona in (en_gracia, bloqueado):
+        client.post(
+            "/api/v1/asistencias/asignar-alumno",
+            json={"persona_id": persona.id, "horario_id": horario["id"]},
+        )
+    return horario, fecha, en_gracia, bloqueado
+
+
+def test_el_roster_con_fecha_de_sesion_pasada_desbloquea_a_quien_aun_estaba_en_gracia(
+    client, db_session,
+):
+    horario, fecha, en_gracia, bloqueado = _roster_con_pasado(client, db_session)
+
+    assert _roster(client, horario) == {en_gracia.id: True, bloqueado.id: True}
+    assert _roster(client, horario, fecha) == {en_gracia.id: False, bloqueado.id: True}
+
+
+def test_el_roster_de_todos_los_horarios_tambien_acepta_la_fecha_de_sesion(client, db_session):
+    horario, fecha, en_gracia, bloqueado = _roster_con_pasado(client, db_session)
+
+    resp = client.get("/api/v1/asistencias/horarios/alumnos", params={"fecha": fecha})
+
+    assert resp.status_code == 200, resp.text
+    assert {f["personaId"]: f["bloqueadoPorImpago"] for f in resp.json()} == {
+        en_gracia.id: False, bloqueado.id: True,
+    }
+
+
+def test_el_roster_con_fecha_de_hoy_es_igual_al_roster_sin_fecha(client, db_session):
+    horario, _, en_gracia, bloqueado = _roster_con_pasado(client, db_session)
+
+    assert _roster(client, horario, hoy_club().isoformat()) == _roster(client, horario)
+
+
+def test_el_roster_con_fecha_futura_se_rechaza_como_el_registro_de_asistencia(client, db_session):
+    horario, _, _, _ = _roster_con_pasado(client, db_session)
+    manana = (hoy_club() + timedelta(days=1)).isoformat()
+
+    resp = client.get(f"/api/v1/asistencias/horarios/{horario['id']}/alumnos", params={"fecha": manana})
+
+    assert resp.status_code == 400
+    assert "fecha futura" in resp.json()["detail"]
+
+
+def test_el_roster_con_fecha_mal_formada_se_rechaza_con_422(client, db_session):
+    horario, _, _, _ = _roster_con_pasado(client, db_session)
+
+    resp = client.get(f"/api/v1/asistencias/horarios/{horario['id']}/alumnos", params={"fecha": "ayer"})
+
+    assert resp.status_code == 422
+
+
+def test_el_roster_con_fecha_resuelve_el_bloqueo_con_una_sola_lectura_para_todos(
+    client, db_session, contar_selects,
+):
+    horario, fecha = _horario(client, db_session, semanas_atras=1)
+
+    def asignar_y_medir(cantidad):
+        for _ in range(cantidad):
+            persona = _miembro_vencido_el(db_session, fecha, 2)
+            client.post(
+                "/api/v1/asistencias/asignar-alumno",
+                json={"persona_id": persona.id, "horario_id": horario["id"]},
+            )
+        with contar_selects() as sentencias:
+            assert len(_roster(client, horario, fecha)) >= cantidad
+        lecturas = [s for s in sentencias if s.startswith("SELECT membresia.")]
+        return len(sentencias), len(lecturas)
+
+    totales_con_2, lecturas_con_2 = asignar_y_medir(2)
+    totales_con_5, lecturas_con_5 = asignar_y_medir(3)  # 5 en total
+
+    assert lecturas_con_2 == lecturas_con_5 == 1
+    assert totales_con_2 == totales_con_5  # el costo no crece con el roster (sin N+1)
+
+
 # --- S2 (#1779): código de motivo estable --------------------------------------------------
 CODIGO_BLOQUEO = "asistencia_bloqueada_por_impago"
 
