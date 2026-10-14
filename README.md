@@ -200,6 +200,20 @@ un error durante las pruebas no puede tocar datos reales.
 Publica los mismos puertos que `make dev`, así que los dos son alternativas:
 pará el stack de desarrollo (`make docker-down`) antes de levantar el de QA.
 
+### Si el build no resuelve PyPI/npm
+
+Docker Compose >= 5 construye siempre vía Bake y las imágenes se construyen
+sobre la red de build `default`. Si en tu host el resolver DNS de esa red no
+llega a PyPI/npm, construí sobre la red del host:
+
+```bash
+make qa-up CATA_BUILD_NETWORK=host
+```
+
+Bake rechaza `network: host` sin una autorización explícita que Compose no
+puede pasar, así que en este modo el target construye con
+`docker buildx bake --allow network.host` y `up` reutiliza esas imágenes.
+
 ### Resetear y destruir
 
 ```bash
