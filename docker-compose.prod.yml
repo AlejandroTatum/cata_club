@@ -131,6 +131,12 @@ services:
       # proveedor SMTP real. El operador puede seguir desactivándolo
       # explícitamente si su proveedor no lo soporta.
       SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      # Versión SemVer de esta release (`make release-version`), que el operador
+      # fija en el `.env` del host junto a IMAGE_TAG. Es de RUNTIME y no un build
+      # arg: las imágenes se construyen en CI antes de que exista la versión.
+      # `/health` la expone; `unversioned` solo aparece en un host sin ella
+      # (p. ej. tras un rollback a una release anterior al versionado).
+      APP_VERSION: ${APP_VERSION:-unversioned}
     logging:
       driver: journald
 
@@ -188,6 +194,8 @@ services:
       # JSON-LD) en cada petición, no en el build. Sin ella, o con el
       # centinela `.invalid`, el frontend publica `Disallow: /` y `noindex`.
       DOMINIO_INDEXABLE: "${DOMINIO_INDEXABLE:-ninguno.invalid}"
+      # Misma versión que el backend (ver arriba): `/api/health` la expone.
+      APP_VERSION: ${APP_VERSION:-unversioned}
     logging:
       driver: journald
 

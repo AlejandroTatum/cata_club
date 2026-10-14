@@ -40,7 +40,15 @@ def test_health_responde_200_sin_autenticacion_ni_overrides():
     with TestClient(app) as cliente:
         respuesta = cliente.get("/health")
     assert respuesta.status_code == 200
-    assert respuesta.json() == {"estado": "ok"}
+    assert respuesta.json() == {"estado": "ok", "version": settings.app_version}
+
+
+def test_health_expone_la_version_de_la_app(monkeypatch):
+    """S6: `/health` devuelve la versión que fijó el despliegue (APP_VERSION)."""
+    monkeypatch.setattr(settings, "app_version", "1.4.2")
+    with TestClient(app) as cliente:
+        respuesta = cliente.get("/health")
+    assert respuesta.json() == {"estado": "ok", "version": "1.4.2"}
 
 
 # --- Middleware de cabeceras de seguridad (PR-10) ---------------------------

@@ -184,7 +184,7 @@ _RAZON_SMTP_SIN_AUTENTICACION = (
 # revisa en el PR: es lo único que distingue "vacío legítimo" de "olvidado".
 _CAMPOS_EXCLUIDOS_A_PROPOSITO: dict[str, str] = {
     "app_nombre": "metadato de presentación; ningún despliegue depende de su valor",
-    "app_version": "metadato que fija el repositorio, no el despliegue",
+    "app_version": "metadato que fija el despliegue vía APP_VERSION (tag vX.Y.Z); `dev` es el default seguro y no tumba el arranque",
     "ambiente": "es la LLAVE que activa este propio validador; exigirlo acá sería circular",
     "jwt_secret_key": (
         "ya lo valida _secreto_jwt_debe_ser_real de forma INCONDICIONAL "
@@ -446,7 +446,7 @@ class Settings(BaseSettings):
     y NUNCA se hardcodean (a diferencia del ejemplo inicial con SECRET_KEY fija).
     """
     app_nombre: str = "API Cata Club - UNL"
-    app_version: str = "1.3.0"
+    app_version: str = "dev"
     ambiente: str = "production"
 
     database_url: str = _DATABASE_URL_DE_EJEMPLO

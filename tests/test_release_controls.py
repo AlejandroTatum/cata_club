@@ -502,6 +502,9 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
     (bin_dir / "docker").write_text(
         "#!/usr/bin/env bash\n"
         'printf \'%s\\n\' "$*" >> "$DOCKER_LOG"\n'
+        # APP_VERSION que ve cada invocación de Compose, en un archivo aparte para
+        # no alterar el formato de `$DOCKER_LOG` que leen los demás tests.
+        'printf \'%s|%s\\n\' "${APP_VERSION-sin-definir}" "$*" >> "$DOCKER_LOG.app-version"\n'
         'case " $* " in\n'
             # Issue #791: `do_checks` ya NO filtra por servicio en el argv --
             # ese filtro posicional no es un contrato estable entre
@@ -624,6 +627,7 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
         "BACKUP_DIR": str(backups),
         "RELEASE_RECORD_DIR": str(records),
         "IMAGE_TAG": "abcdef1",
+        "APP_VERSION": "1.4.0",
         "MIGRATION_COMPATIBILITY": "none",
         "DOCKER_LOG": str(docker_log),
         "COMPOSE_JSON_CONTADOR": str(tmp_path / "config-json.contador"),
@@ -1442,6 +1446,7 @@ def test_record_release_writes_auditable_current_record_without_credentials(tmp_
         "scripts/ops/record-release.sh",
         env={
             "IMAGE_TAG": "abcdef1",
+            "APP_VERSION": "1.4.0",
             "MIGRATION_COMPATIBILITY": "backward-compatible",
             "RELEASE_RECORD_DIR": str(records),
             "STACK_DIR": str(stack),
@@ -1497,6 +1502,7 @@ def _entorno_record_release(
     (bin_dir / "docker").chmod(0o755)
     env = {
         "IMAGE_TAG": image_tag,
+        "APP_VERSION": "1.4.0",
         "MIGRATION_COMPATIBILITY": "backward-compatible",
         "RELEASE_RECORD_DIR": str(records),
         "STACK_DIR": str(stack),
@@ -1559,7 +1565,13 @@ def test_el_registro_de_release_sigue_siendo_un_archivo_de_entorno(tmp_path):
     for linea in lineas:
         assert re.match(r"^[A-Z_]+=", linea), f"línea que no es KEY=VALUE: {linea!r}"
     claves = [linea.split("=", 1)[0] for linea in lineas]
-    assert claves == ["IMAGE_TAG", "IMAGE_REFERENCE", "MIGRATION_COMPATIBILITY", "RECORDED_AT"]
+    assert claves == [
+        "IMAGE_TAG",
+        "IMAGE_REFERENCE",
+        "APP_VERSION",
+        "MIGRATION_COMPATIBILITY",
+        "RECORDED_AT",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -1613,11 +1625,19 @@ def _rollback_env(tmp_path) -> tuple[dict[str, str], Path, Path, Path]:
     sano."""
     stack = tmp_path / "stack"
     stack.mkdir()
-    (stack / ".env").write_text("IMAGE_TAG=abcdef1\nDOMINIO=staging.example.test\n")
+    (stack / ".env").write_text(
+        "IMAGE_TAG=abcdef1\nAPP_VERSION=1.4.0\nDOMINIO=staging.example.test\n"
+    )
     records = tmp_path / "releases"
     records.mkdir()
     (records / "current.env").write_text(
-        "IMAGE_TAG=abcdef1\nMIGRATION_COMPATIBILITY=backward-compatible\n"
+        "IMAGE_TAG=abcdef1\nAPP_VERSION=1.4.0\nMIGRATION_COMPATIBILITY=backward-compatible\n"
+    )
+    # Release posterior a SemVer: su registro lleva APP_VERSION. `deadbee` es de
+    # antes del cambio y no la lleva.
+    (records / "cafe123.env").write_text(
+        "IMAGE_TAG=cafe123\nIMAGE_REFERENCE=registry.example/backend:cafe123\n"
+        "APP_VERSION=1.3.0\nMIGRATION_COMPATIBILITY=backward-compatible\n"
     )
     (records / "deadbee.env").write_text(
         "IMAGE_TAG=deadbee\nIMAGE_REFERENCE=registry.example/backend:deadbee\n"
@@ -1629,6 +1649,9 @@ def _rollback_env(tmp_path) -> tuple[dict[str, str], Path, Path, Path]:
     (bin_dir / "docker").write_text(
         "#!/usr/bin/env bash\n"
         'printf \'%s\\n\' "$*" >> "$DOCKER_LOG"\n'
+        # APP_VERSION que ve cada invocación de Compose, en un archivo aparte para
+        # no alterar el formato de `$DOCKER_LOG` que leen los demás tests.
+        'printf \'%s|%s\\n\' "${APP_VERSION-sin-definir}" "$*" >> "$DOCKER_LOG.app-version"\n'
         'case " $* " in\n'
         '  *" ps --format json "*)\n'
         '    if [ -n "${CELERY_WORKER_STATE-running}" ]; then\n'
@@ -1656,6 +1679,8 @@ def _rollback_env(tmp_path) -> tuple[dict[str, str], Path, Path, Path]:
         "STACK_DIR": str(stack),
         "RELEASE_RECORD_DIR": str(records),
         "DOCKER_LOG": str(docker_log),
+        # La del shell del operador: el rollback tiene que pisarla con la del registro.
+        "APP_VERSION": "1.4.0",
         "SERVICIO_HEALTH_MAX_INTENTOS": "1",
         "SERVICIO_HEALTH_INTERVALO_SEGUNDOS": "0",
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
@@ -2787,3 +2812,206 @@ def test_release_record_dir_esta_asignada_antes_de_su_primer_uso():
         "RELEASE_RECORD_DIR se asigna después de usarse; con `set -u` eso "
         "sigue siendo una variable no ligada en el momento del uso"
     )
+
+
+
+# --- APP_VERSION: versionado SemVer por deploy (S4, S5) ----------------------
+# `deploy.sh deploy` exige MAJOR.MINOR.PATCH ANTES de cualquier cambio;
+# `record-release.sh` la persiste en `.env` y en el registro, y
+# `rollback-release.sh` restaura la del registro destino (o `unversioned`).
+
+
+def _app_versions_vistas_por_compose(docker_log: Path) -> list[tuple[str, str]]:
+    registro = Path(f"{docker_log}.app-version")
+    if not registro.exists():
+        return []
+    # Algunos argumentos de `docker` (el `python -c` de las sondas) son
+    # multilínea: solo cuentan las líneas que abren con `<versión>|`.
+    coincidencias = (re.match(r"^(\S+)\|(.*)$", l) for l in registro.read_text().splitlines())
+    return [(m.group(1), m.group(2)) for m in coincidencias if m]
+
+
+def _app_version_de(archivo: Path) -> list[str]:
+    return [l for l in archivo.read_text().splitlines() if l.startswith("APP_VERSION=")]
+
+
+@pytest.mark.parametrize(
+    "valor",
+    [
+        pytest.param("", id="ausente"),
+        pytest.param("v1.2.3", id="con-v"),
+        pytest.param("1.2", id="sin-patch"),
+        pytest.param("1.2.3-rc1", id="prerelease"),
+        pytest.param("1.2.3.4", id="cuatro-partes"),
+        pytest.param("unversioned", id="unversioned"),
+        pytest.param("1.2.x", id="no-numerico"),
+        pytest.param("1.2.3\nIMAGE_TAG=evil", id="multilinea"),
+    ],
+)
+def test_deploy_falla_cerrado_sin_una_app_version_valida_antes_de_tocar_nada(tmp_path, valor):
+    env, backups, docker_log = _deploy_env(tmp_path, db_running=True)
+    env["APP_VERSION"] = valor
+    stack = Path(env["STACK_DIR"])
+    env_antes = (stack / ".env").read_text()
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode != 0, result.stdout
+    assert "APP_VERSION" in result.stderr
+    assert "make release-version" in result.stderr
+    assert not docker_log.exists(), "se invocó docker antes de validar APP_VERSION"
+    assert not list(backups.glob("*")), "se tomó un backup antes de validar APP_VERSION"
+    assert not Path(env["RELEASE_RECORD_DIR"]).exists()
+    assert (stack / ".env").read_text() == env_antes
+
+
+def test_deploy_falla_cerrado_si_la_app_version_invalida_esta_en_el_env_del_host(tmp_path):
+    env, _, docker_log = _deploy_env(tmp_path, db_running=False)
+    env["APP_VERSION"] = ""
+    stack = Path(env["STACK_DIR"])
+    stack.joinpath(".env").write_text(stack.joinpath(".env").read_text() + "APP_VERSION=v1.2.3\n")
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode != 0
+    assert "APP_VERSION" in result.stderr
+    assert not docker_log.exists()
+
+
+def test_deploy_lee_la_app_version_del_env_del_host_y_se_la_pasa_a_compose(tmp_path):
+    env, _, docker_log = _deploy_env(tmp_path, db_running=False)
+    env["APP_VERSION"] = ""
+    stack = Path(env["STACK_DIR"])
+    stack.joinpath(".env").write_text(stack.joinpath(".env").read_text() + "APP_VERSION=2.0.1\n")
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    llamadas = _app_versions_vistas_por_compose(docker_log)
+    assert [v for v, args in llamadas if args.endswith(" up -d")] == ["2.0.1"]
+    assert [v for v, args in llamadas if args.endswith(" pull")] == ["2.0.1"]
+    registro = Path(env["RELEASE_RECORD_DIR"]) / "current.env"
+    assert _app_version_de(registro) == ["APP_VERSION=2.0.1"]
+    assert _app_version_de(stack / ".env") == ["APP_VERSION=2.0.1"]
+
+
+def test_deploy_registra_la_app_version_del_entorno_en_el_env_y_el_ledger(tmp_path):
+    env, _, docker_log = _deploy_env(tmp_path, db_running=False)
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _app_version_de(Path(env["RELEASE_RECORD_DIR"]) / "abcdef1.env") == ["APP_VERSION=1.4.0"]
+    assert _app_version_de(Path(env["STACK_DIR"]) / ".env") == ["APP_VERSION=1.4.0"]
+    assert {v for v, _ in _app_versions_vistas_por_compose(docker_log)} == {"1.4.0"}
+
+
+def test_checks_no_exige_app_version(tmp_path):
+    env, _, _ = _deploy_env(tmp_path, db_running=False)
+    env["APP_VERSION"] = ""
+
+    result = run_script("scripts/deploy/deploy.sh", "checks", env=env)
+
+    assert "APP_VERSION" not in result.stderr
+
+
+def test_record_release_anota_la_app_version_en_el_ledger_y_en_el_env(tmp_path):
+    env, records = _entorno_record_release(tmp_path)
+    stack = Path(env["STACK_DIR"])
+    (stack / ".env").write_text("IMAGE_TAG=stale\nAPP_VERSION=0.0.1\nOTHER=value\n")
+
+    result = run_script("scripts/ops/record-release.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _app_version_de(records / "current.env") == ["APP_VERSION=1.4.0"]
+    assert _app_version_de(records / "abcdef1.env") == ["APP_VERSION=1.4.0"]
+    contenido = (stack / ".env").read_text()
+    assert contenido.splitlines().count("APP_VERSION=1.4.0") == 1
+    assert "0.0.1" not in contenido
+    assert "IMAGE_TAG=abcdef1" in contenido and "OTHER=value" in contenido
+
+
+def test_record_release_agrega_app_version_al_env_si_no_estaba(tmp_path):
+    env, _ = _entorno_record_release(tmp_path)
+    stack = Path(env["STACK_DIR"])
+    (stack / ".env").write_text("IMAGE_TAG=abcdef1\nOTHER=value\n")
+
+    result = run_script("scripts/ops/record-release.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _app_version_de(stack / ".env") == ["APP_VERSION=1.4.0"]
+
+
+@pytest.mark.parametrize("valor", ["", "v1.2.3", "1.2", "1.2.3-rc1", "unversioned"])
+def test_record_release_falla_cerrado_sin_una_app_version_valida(tmp_path, valor):
+    env, records = _entorno_record_release(tmp_path)
+    env["APP_VERSION"] = valor
+    stack = Path(env["STACK_DIR"])
+    env_antes = (stack / ".env").read_text()
+
+    result = run_script("scripts/ops/record-release.sh", env=env)
+
+    assert result.returncode == 1
+    assert "APP_VERSION" in result.stderr
+    assert not records.exists(), "quedó un registro sin una versión válida"
+    assert (stack / ".env").read_text() == env_antes
+
+
+def test_rollback_restaura_la_app_version_del_registro_destino(tmp_path):
+    env, stack, records, docker_log = _rollback_env(tmp_path)
+
+    result = run_script(
+        "scripts/ops/rollback-release.sh", "cafe123", "--confirm-rollback", env=env
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _app_version_de(stack / ".env") == ["APP_VERSION=1.3.0"]
+    assert _app_version_de(records / "current.env") == ["APP_VERSION=1.3.0"]
+    llamadas = _app_versions_vistas_por_compose(docker_log)
+    assert [v for v, args in llamadas if args.endswith(" pull")] == ["1.3.0"]
+    assert [v for v, args in llamadas if args.endswith(" up -d")] == ["1.3.0"]
+
+
+def test_rollback_a_un_registro_sin_app_version_deja_unversioned(tmp_path):
+    env, stack, records, docker_log = _rollback_env(tmp_path)
+
+    result = run_script(
+        "scripts/ops/rollback-release.sh", "deadbee", "--confirm-rollback", env=env
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _app_version_de(stack / ".env") == ["APP_VERSION=unversioned"]
+    llamadas = _app_versions_vistas_por_compose(docker_log)
+    assert [v for v, args in llamadas if args.endswith(" pull")] == ["unversioned"]
+    assert [v for v, args in llamadas if args.endswith(" up -d")] == ["unversioned"]
+    # El ledger actual es el registro destino, tal cual: sin APP_VERSION.
+    assert _app_version_de(records / "current.env") == []
+
+
+def test_rollback_agrega_app_version_al_env_si_no_estaba(tmp_path):
+    env, stack, _, _ = _rollback_env(tmp_path)
+    (stack / ".env").write_text("IMAGE_TAG=abcdef1\nDOMINIO=staging.example.test\n")
+
+    result = run_script(
+        "scripts/ops/rollback-release.sh", "cafe123", "--confirm-rollback", env=env
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _app_version_de(stack / ".env") == ["APP_VERSION=1.3.0"]
+
+
+def test_rollback_falla_cerrado_si_el_registro_destino_trae_una_app_version_invalida(tmp_path):
+    env, stack, records, docker_log = _rollback_env(tmp_path)
+    (records / "cafe123.env").write_text(
+        "IMAGE_TAG=cafe123\nAPP_VERSION=v1.3.0 ; rm -rf /\nMIGRATION_COMPATIBILITY=backward-compatible\n"
+    )
+    env_antes = (stack / ".env").read_text()
+
+    result = run_script(
+        "scripts/ops/rollback-release.sh", "cafe123", "--confirm-rollback", env=env
+    )
+
+    assert result.returncode != 0
+    assert "APP_VERSION" in result.stderr
+    assert not docker_log.exists(), "se invocó docker con un registro inválido"
+    assert (stack / ".env").read_text() == env_antes

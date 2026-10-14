@@ -428,6 +428,23 @@ def test_una_fecha_de_lanzamiento_invalida_tumba_el_arranque():
         _construir(bloqueo_impago_fecha_lanzamiento="mañana")
 
 
+# --- Versión de la app (S1): la fija el despliegue, no el repositorio ---------
+def test_la_version_de_la_app_se_lee_de_app_version(monkeypatch):
+    monkeypatch.setenv("APP_VERSION", "2.1.0")
+    assert _construir().app_version == "2.1.0"
+
+
+def test_la_version_de_la_app_es_dev_cuando_no_se_define(monkeypatch):
+    monkeypatch.delenv("APP_VERSION", raising=False)
+    assert _construir().app_version == "dev"
+
+
+def test_produccion_arranca_sin_app_version(monkeypatch):
+    """Fuera del fail-fast: el default `dev` no tumba el arranque."""
+    monkeypatch.delenv("APP_VERSION", raising=False)
+    assert _construir(ambiente="production").app_version == "dev"
+
+
 # --- 4. Registro de triage: todo campo de Settings, decidido una sola vez ---
 def test_todo_campo_de_settings_esta_triado_exactamente_una_vez():
     """`Settings.model_fields` es la fuente de verdad. Cada campo tiene que

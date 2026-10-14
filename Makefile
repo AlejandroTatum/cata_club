@@ -9,7 +9,8 @@
        docker-up docker-down docker-build \
        migrate migrate-create db-reset seed seed-bulk clean \
        qa-up qa-down qa-seed qa-reset qa-live qa-contrast-sweep qa-logs qa-pdf-delivery-check \
-       feature-start slice-start slice-pr slice-merge feature-sync feature-pr
+       feature-start slice-start slice-pr slice-merge feature-sync feature-pr \
+       release-version release-tag
 
 # ─── Default ────────────────────────────────────────────────────────────────
 help: ## Show this help
@@ -58,6 +59,16 @@ feature-sync: ## Merge main into feat/<FEATURE> and push, no rebase (FEATURE=)
 feature-pr: ## Open feat/<FEATURE> -> main PR and enable auto-merge squash (FEATURE=)
 	@test -n "$(FEATURE)" || { echo "Error: FEATURE is required. Use: make feature-pr FEATURE=<name>" >&2; exit 2; }
 	@scripts/feature_flow.sh feature-pr "$(FEATURE)"
+
+# ─── Releases (SemVer, docs/operations/production-cutover.md) ───────────────
+release-version: ## Print APP_VERSION=X.Y.Z for a SHA, to put in the host .env (SHA=)
+	@test -n "$(SHA)" || { echo "Error: SHA is required. Use: make release-version SHA=<sha>" >&2; exit 2; }
+	@version="$$(scripts/release/next-version.sh "$(SHA)")" && echo "APP_VERSION=$$version"
+
+release-tag: ## After the deploy: verify the public health and push tag vX.Y.Z (SHA= HEALTH_URL=)
+	@test -n "$(SHA)" || { echo "Error: SHA is required. Use: make release-tag SHA=<sha> HEALTH_URL=<url>" >&2; exit 2; }
+	@test -n "$(HEALTH_URL)" || { echo "Error: HEALTH_URL is required. Use: make release-tag SHA=<sha> HEALTH_URL=<url>" >&2; exit 2; }
+	@scripts/release/tag-release.sh "$(SHA)" "$(HEALTH_URL)"
 
 # ─── Install ────────────────────────────────────────────────────────────────
 install: install-backend install-frontend ## Install all dependencies

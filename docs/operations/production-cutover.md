@@ -377,7 +377,14 @@ DC="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
 
 ## 6. Primer deploy
 
-- [ ] **6.1 🤖 Preflight y deploy**:
+- [ ] **6.1 🤖 Preflight y deploy**. Antes, con la versión calculada por el
+  dueño (`make release-version SHA=<sha>`, ver
+  [release-versioning.md](release-versioning.md)), fija `APP_VERSION=X.Y.Z` en
+  el `.env` junto a `IMAGE_TAG`: `deploy.sh` se detiene sin tocar nada si falta.
+  Después del deploy y de los post-checks del 6.2, el dueño corre `make
+  release-tag SHA=<sha> HEALTH_URL=https://cataclub.com/api/health`. El tag
+  de arranque `v1.3.0` se crea una sola vez, antes del primer release versionado
+  (mismo documento):
 
   ```bash
   cd /opt/cata-club
@@ -402,7 +409,7 @@ DC="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
   ```bash
   # Salud a través del borde
   curl -fsS https://cataclub.com/health/ready               # {"estado":"listo",...}
-  curl -fsS https://cataclub.com/api/health                 # {"status":"ok","sha":"<IMAGE_TAG>"}
+  curl -fsS https://cataclub.com/api/health                 # {"status":"ok","sha":"<IMAGE_TAG>","version":"<APP_VERSION>"}
   # Latido de workers: el beat lo emite cada 60 s; puede tardar ~1-3 min tras el arranque
   curl -s -o /dev/null -w '%{http_code}\n' https://cataclub.com/health/workers   # 200
 
@@ -659,6 +666,8 @@ en los resultados; no es un fallo. **Detente si:** Search Console reporta
   - No hay `alembic downgrade`. Un rollback de aplicación solo revierte imágenes a
     un SHA registrado y compatible:
     `./scripts/ops/rollback-release.sh <sha-anterior> --confirm-rollback`.
+    Restaura también `APP_VERSION` desde el registro destino (`unversioned` si no
+    la tiene); ver [release-versioning.md](release-versioning.md#rollback).
     El primer release de producción **no tiene** SHA anterior en el ledger nuevo
     (el archivado del paso 2.5 es de staging): si el primer deploy falla, se corrige
     hacia adelante o se vuelve a empezar desde el paso 2.

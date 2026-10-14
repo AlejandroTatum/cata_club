@@ -6,6 +6,7 @@ log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*"; }
 die() { log "ERROR: $*" >&2; exit 1; }
 
 IMAGE_TAG="${IMAGE_TAG:-}"
+APP_VERSION="${APP_VERSION:-}"
 MIGRATION_COMPATIBILITY="${MIGRATION_COMPATIBILITY:-}"
 STACK_DIR="${STACK_DIR:-/opt/cata-club}"
 RELEASE_RECORD_DIR="${RELEASE_RECORD_DIR:-/var/lib/cata-club/releases}"
@@ -13,6 +14,12 @@ RELEASE_RECORD_DIR="${RELEASE_RECORD_DIR:-/var/lib/cata-club/releases}"
 case "$IMAGE_TAG" in
   ''|latest|*[!0-9a-fA-F]*) die "IMAGE_TAG debe ser un SHA hexadecimal inmutable, nunca latest" ;;
 esac
+# Misma fuente que `deploy.sh`: el entorno primero y, si no, el `.env` del host.
+if [ -z "$APP_VERSION" ] && [ -f "$STACK_DIR/.env" ]; then
+  APP_VERSION="$(sed -n 's/^APP_VERSION=//p' "$STACK_DIR/.env" | head -1)"
+fi
+[[ "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+  || die "APP_VERSION='${APP_VERSION:-vacía}' debe ser MAJOR.MINOR.PATCH (solo dígitos, sin 'v'); calculala con 'make release-version SHA=<sha>'"
 case "$MIGRATION_COMPATIBILITY" in
   none|backward-compatible|manual-review-required) ;;
   *) die "MIGRATION_COMPATIBILITY debe ser none, backward-compatible o manual-review-required" ;;
@@ -60,21 +67,30 @@ case "$IMAGE_REFERENCE" in
 esac
 
 [ -f "$STACK_DIR/.env" ] || die "falta $STACK_DIR/.env para persistir IMAGE_TAG=${IMAGE_TAG}"
+# Reescribe IMAGE_TAG y APP_VERSION en el `.env` del host (una sola vez cada una,
+# al final si no estaban) y deja el resto del archivo intacto.
 persist_project_env() {
   local tmp
   tmp="$(mktemp "$STACK_DIR/.env.release.XXXXXX")" \
-    || die "no se pudo preparar ${STACK_DIR}/.env para persistir IMAGE_TAG=${IMAGE_TAG}"
+    || die "no se pudo preparar ${STACK_DIR}/.env para persistir IMAGE_TAG=${IMAGE_TAG} y APP_VERSION=${APP_VERSION}"
   trap 'rm -f "$tmp"' EXIT
-  awk -v tag="$IMAGE_TAG" '
-    BEGIN { found = 0 }
+  awk -v tag="$IMAGE_TAG" -v version="$APP_VERSION" '
+    BEGIN { found_tag = 0; found_version = 0 }
     /^IMAGE_TAG=/ {
-      if (!found) { print "IMAGE_TAG=" tag; found = 1 }
+      if (!found_tag) { print "IMAGE_TAG=" tag; found_tag = 1 }
+      next
+    }
+    /^APP_VERSION=/ {
+      if (!found_version) { print "APP_VERSION=" version; found_version = 1 }
       next
     }
     { print }
-    END { if (!found) print "IMAGE_TAG=" tag }
+    END {
+      if (!found_tag) print "IMAGE_TAG=" tag
+      if (!found_version) print "APP_VERSION=" version
+    }
   ' "$STACK_DIR/.env" > "$tmp" \
-    || die "no se pudo escribir ${STACK_DIR}/.env para persistir IMAGE_TAG=${IMAGE_TAG}"
+    || die "no se pudo escribir ${STACK_DIR}/.env para persistir IMAGE_TAG=${IMAGE_TAG} y APP_VERSION=${APP_VERSION}"
   chmod 600 "$tmp"
   mv -f "$tmp" "$STACK_DIR/.env"
   trap - EXIT
@@ -88,6 +104,7 @@ trap 'rm -f "$tmp"' EXIT
 {
   printf 'IMAGE_TAG=%s\n' "$IMAGE_TAG"
   printf 'IMAGE_REFERENCE=%s\n' "$IMAGE_REFERENCE"
+  printf 'APP_VERSION=%s\n' "$APP_VERSION"
   printf 'MIGRATION_COMPATIBILITY=%s\n' "$MIGRATION_COMPATIBILITY"
   printf 'RECORDED_AT=%s\n' "$(date -u '+%FT%TZ')"
 } > "$tmp"
@@ -96,4 +113,4 @@ mv -f "$tmp" "$RELEASE_RECORD_DIR/${IMAGE_TAG}.env"
 cp "$RELEASE_RECORD_DIR/${IMAGE_TAG}.env" "$RELEASE_RECORD_DIR/current.env"
 chmod 600 "$RELEASE_RECORD_DIR/current.env"
 trap - EXIT
-log "Release registrada: ${IMAGE_TAG} (${MIGRATION_COMPATIBILITY})"
+log "Release registrada: ${IMAGE_TAG} v${APP_VERSION} (${MIGRATION_COMPATIBILITY})"

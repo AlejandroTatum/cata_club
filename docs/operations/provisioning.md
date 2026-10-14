@@ -23,6 +23,12 @@ export MIGRATION_COMPATIBILITY=none  # o backward-compatible
 ./scripts/deploy/deploy.sh
 ```
 
+Desde el versionado SemVer, `deploy.sh deploy` también exige `APP_VERSION`
+(`MAJOR.MINOR.PATCH`, sin `v`) en el entorno o en el `.env` del host, y falla
+antes de cambiar nada si falta o está mal formada. La calcula el dueño con
+`make release-version SHA=<sha>` y, tras el deploy, etiqueta con `make
+release-tag`: ver [release-versioning.md](release-versioning.md).
+
 Antes del primer deploy productivo (reconversión de staging a producción),
 valida el `.env` del host con `scripts/ops/check-prod-env.sh` (falla cerrado y
 solo imprime nombres de variable): `DOMINIO_INDEXABLE == DOMINIO`, `DOMINIO_ALIAS_WWW == www.$DOMINIO`, sin

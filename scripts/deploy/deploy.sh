@@ -27,6 +27,29 @@ load_image_tag() {
   fi
 }
 
+# Versión SemVer de la release (`make release-version SHA=<sha>`, en la máquina
+# del dueño). Misma fuente que IMAGE_TAG: el entorno primero y, si no, el `.env`
+# del host. Se exporta para que Compose (`pull`/`up`) y `record-release.sh` vean
+# la MISMA que se validó.
+load_app_version() {
+  if [ -z "${APP_VERSION:-}" ] && [ -f "$STACK_DIR/.env" ]; then
+    APP_VERSION="$(sed -n 's/^APP_VERSION=//p' "$STACK_DIR/.env" | head -1)"
+  fi
+  APP_VERSION="${APP_VERSION:-}"
+  export APP_VERSION
+}
+
+# Falla cerrado ANTES de cualquier cambio (backup, pull, up): una release sin
+# versión no se despliega, porque después no habría con qué etiquetarla. Solo
+# `deploy`; `checks` no despliega y no la exige.
+validar_app_version() {
+  [[ "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+    || die "$(printf '%s\n' \
+      "APP_VERSION='${APP_VERSION:-vacía}' no es MAJOR.MINOR.PATCH (solo dígitos, sin 'v')." \
+      "       Calculala en tu máquina con 'make release-version SHA=${IMAGE_TAG:-<sha>}'," \
+      "       ponela en ${STACK_DIR}/.env junto a IMAGE_TAG y repetí. No se tocó nada.")"
+}
+
 verify_checkout_head() {
   local checkout_head stack_image_tag
   [ -f "$STACK_DIR/.env" ] || die "falta ${STACK_DIR}/.env"
@@ -224,6 +247,8 @@ validar_caddyfile() {
 case "$cmd" in
   deploy)
     load_image_tag
+    load_app_version
+    validar_app_version
     verify_checkout_head
     pre_deploy_backup
     "$SCRIPT_DIR/../ops/preflight-production.sh"
