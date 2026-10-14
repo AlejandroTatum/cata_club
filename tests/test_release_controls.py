@@ -3015,3 +3015,146 @@ def test_rollback_falla_cerrado_si_el_registro_destino_trae_una_app_version_inva
     assert "APP_VERSION" in result.stderr
     assert not docker_log.exists(), "se invocó docker con un registro inválido"
     assert (stack / ".env").read_text() == env_antes
+
+
+# --- Un solo validador de MAJOR.MINOR.PATCH (#1788-4) -------------------------
+# `deploy.sh`, `record-release.sh` y `rollback-release.sh` comparten
+# `scripts/deploy/lib/semver.sh`. Estos tests caracterizan el comportamiento
+# observable de CADA script (qué valores pasan, qué mensaje y qué código de salida
+# dan al rechazar) para que el refactor no cambie nada del camino de deploy a
+# producción: se escribieron y pasaron contra los tres regex duplicados antes de
+# moverlos.
+
+VERSIONES_VALIDAS = ["0.0.0", "1.4.0", "10.20.30", "01.02.03", "123456789.0.1"]
+VERSIONES_INVALIDAS = [
+    "",
+    "v1.2.3",
+    "1.2",
+    "1",
+    "1.2.3-rc1",
+    "1.2.3+build",
+    "1.2.3.4",
+    "1.2.x",
+    "1..3",
+    ".1.2",
+    "1.2.",
+    " 1.2.3",
+    "1.2.3 ",
+    "unversioned",
+    "1.2.3; touch /tmp/pwned",
+    "$(echo 1.2.3)",
+]
+# Solo el entorno puede traer saltos de línea; en un registro `sed -n` lee la primera.
+VERSIONES_INVALIDAS_DE_ENTORNO = [*VERSIONES_INVALIDAS, "1.2.3\nIMAGE_TAG=evil", "1.2.3\n"]
+
+
+def _vista(valor: str) -> str:
+    return valor or "vacía"
+
+
+@pytest.mark.parametrize("valor", VERSIONES_VALIDAS)
+def test_deploy_acepta_exactamente_las_versiones_semver(tmp_path, valor):
+    env, _, docker_log = _deploy_env(tmp_path, db_running=False)
+    env["APP_VERSION"] = valor
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert docker_log.exists()
+
+
+@pytest.mark.parametrize("valor", VERSIONES_INVALIDAS_DE_ENTORNO)
+def test_deploy_rechaza_con_el_mismo_mensaje_y_codigo_de_salida(tmp_path, valor):
+    env, _, docker_log = _deploy_env(tmp_path, db_running=False)
+    env["APP_VERSION"] = valor
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode == 1
+    assert (
+        f"ERROR: APP_VERSION='{_vista(valor)}' no es MAJOR.MINOR.PATCH (solo dígitos, sin 'v')."
+        in result.stderr
+    )
+    assert "       Calculala en tu máquina con 'make release-version SHA=abcdef1'," in result.stderr
+    assert "No se tocó nada." in result.stderr
+    assert not docker_log.exists()
+
+
+@pytest.mark.parametrize("valor", VERSIONES_VALIDAS)
+def test_record_release_acepta_exactamente_las_versiones_semver(tmp_path, valor):
+    env, records = _entorno_record_release(tmp_path)
+    env["APP_VERSION"] = valor
+
+    result = run_script("scripts/ops/record-release.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"APP_VERSION={valor}" in (records / "current.env").read_text().splitlines()
+
+
+@pytest.mark.parametrize("valor", VERSIONES_INVALIDAS_DE_ENTORNO)
+def test_record_release_rechaza_con_el_mismo_mensaje_y_codigo_de_salida(tmp_path, valor):
+    env, records = _entorno_record_release(tmp_path)
+    env["APP_VERSION"] = valor
+    stack = Path(env["STACK_DIR"])
+    # Sin APP_VERSION en el entorno se lee del `.env` del host: no debe rescatarla.
+    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
+
+    result = run_script("scripts/ops/record-release.sh", env=env)
+
+    assert result.returncode == 1
+    assert (
+        f"ERROR: APP_VERSION='{_vista(valor)}' debe ser MAJOR.MINOR.PATCH "
+        "(solo dígitos, sin 'v'); calculala con 'make release-version SHA=<sha>'"
+    ) in result.stderr
+    assert not records.exists()
+
+
+@pytest.mark.parametrize("valor", VERSIONES_VALIDAS)
+def test_rollback_acepta_exactamente_las_versiones_semver_del_registro(tmp_path, valor):
+    env, stack, records, _ = _rollback_env(tmp_path)
+    (records / "cafe123.env").write_text(
+        f"IMAGE_TAG=cafe123\nAPP_VERSION={valor}\nMIGRATION_COMPATIBILITY=backward-compatible\n"
+    )
+
+    result = run_script("scripts/ops/rollback-release.sh", "cafe123", "--confirm-rollback", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _app_version_de(stack / ".env") == [f"APP_VERSION={valor}"]
+
+
+@pytest.mark.parametrize("valor", [v for v in VERSIONES_INVALIDAS if v not in ("", "unversioned")])
+def test_rollback_rechaza_con_el_mismo_mensaje_y_codigo_de_salida(tmp_path, valor):
+    env, stack, records, docker_log = _rollback_env(tmp_path)
+    (records / "cafe123.env").write_text(
+        f"IMAGE_TAG=cafe123\nAPP_VERSION={valor}\nMIGRATION_COMPATIBILITY=backward-compatible\n"
+    )
+    env_antes = (stack / ".env").read_text()
+
+    result = run_script("scripts/ops/rollback-release.sh", "cafe123", "--confirm-rollback", env=env)
+
+    assert result.returncode == 1
+    assert (
+        "ERROR: el registro del SHA objetivo trae APP_VERSION inválida; no se ejecuta ningún cambio"
+        in result.stderr
+    )
+    assert not docker_log.exists()
+    assert (stack / ".env").read_text() == env_antes
+
+
+def _is_semver(valor: str) -> int:
+    helper = ROOT / "scripts" / "deploy" / "lib" / "semver.sh"
+    return subprocess.run(
+        ["bash", "-c", 'source "$1"; is_semver "$2"', "_", str(helper), valor],
+        capture_output=True, text=True,
+    ).returncode
+
+
+def test_la_regla_semver_vive_en_un_solo_helper_compartido():
+    assert (ROOT / "scripts" / "deploy" / "lib" / "semver.sh").is_file()
+    assert _is_semver("1.4.0") == 0
+    assert [_is_semver(v) for v in ("v1.4.0", "1.4", "", "1.2.3\n")] == [1, 1, 1, 1]
+
+    for script in ("scripts/deploy/deploy.sh", "scripts/ops/record-release.sh", "scripts/ops/rollback-release.sh"):
+        texto = (ROOT / script).read_text()
+        assert "[0-9]+\\.[0-9]+\\.[0-9]+" not in texto, f"{script} duplica el regex SemVer"
+        assert "lib/semver.sh" in texto, f"{script} no usa el helper compartido"

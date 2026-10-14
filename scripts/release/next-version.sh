@@ -7,7 +7,7 @@
 #   - si no, cualquier `feat` -> minor;
 #   - si no -> patch.
 #
-# El tag base es el último `vMAJOR.MINOR.PATCH` ALCANZABLE desde el SHA: un tag en
+# El tag base es el `vMAJOR.MINOR.PATCH` más alto ALCANZABLE desde el SHA: un tag en
 # otra rama no cuenta. Sin tag base, o sin commits desde él, falla.
 set -euo pipefail
 
@@ -19,8 +19,19 @@ die() { log "ERROR: $*"; exit 1; }
 sha="$(git rev-parse --verify --quiet "$1^{commit}")" \
   || die "no se encontró el commit '$1' en este repositorio"
 
-# `--exclude 'v*-*'` deja fuera los prereleases (v1.9.0-rc1): no son una base de release.
-if ! tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' --exclude 'v*-*' "$sha" 2>/dev/null)"; then
+# La base es el tag vMAJOR.MINOR.PATCH MÁS ALTO alcanzable desde el SHA, no el más
+# cercano (`git describe`): un branch mergeado con un tag viejo quedaría más cerca y
+# bajaría la base. `--sort=-v:refname` ordena por versión (1.10.0 > 1.9.0) y el
+# filtro estricto deja fuera los prereleases (v1.9.0-rc1) y los tags mal formados.
+# Se lee la lista completa, sin `| head` ni `grep -m1`: cortar el pipe con
+# `pipefail` activo devolvería SIGPIPE.
+tag=""
+while IFS= read -r candidate; do
+  if [ -z "$tag" ] && [[ "$candidate" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    tag="$candidate"
+  fi
+done < <(git tag --merged "$sha" --list 'v[0-9]*' --sort=-v:refname)
+if [ -z "$tag" ]; then
   die "$(printf '%s\n' \
     "no hay ningún tag vMAJOR.MINOR.PATCH alcanzable desde ${sha}." \
     "       Falta el tag de arranque: ponelo en el SHA que hoy corre en producción y subilo:" \
@@ -34,19 +45,23 @@ major="${BASH_REMATCH[1]}"; minor="${BASH_REMATCH[2]}"; patch="${BASH_REMATCH[3]
 commits="$(git rev-list --count "${tag}..${sha}")"
 [ "$commits" -gt 0 ] || die "no hay commits entre ${tag} y ${sha}: no hay nada que publicar"
 
-# Un registro por commit (`-z`: separados por NUL): el asunto decide `!` y `feat`; el
-# cuerpo, el pie BREAKING CHANGE.
+# Un registro por commit (`-z`: separados por NUL): el asunto decide `!` y `feat` (el
+# tipo no distingue mayúsculas, como en Conventional Commits); el cuerpo, el pie
+# BREAKING CHANGE (ese token sí es solo en mayúsculas). El pie se busca con el regex de
+# bash y no con `printf | grep -q`: con un cuerpo mayor que el buffer del pipe, grep
+# sale al primer match, `printf` muere por SIGPIPE y con `pipefail` el 141 se leía como
+# "no hay pie": un major salía como patch.
 bump=patch
 while IFS= read -r -d '' record; do
   subject="${record%%$'\n'*}"
   body=""
   [ "$subject" = "$record" ] || body="${record#*$'\n'}"
   if [[ "$subject" =~ ^[A-Za-z]+(\([^\)]*\))?!: ]] \
-     || printf '%s\n' "$body" | grep -Eq '^BREAKING[ -]CHANGE:'; then
+     || [[ $'\n'"$body" =~ $'\n'BREAKING[\ -]CHANGE: ]]; then
     bump=major
     break
   fi
-  if [[ "$subject" =~ ^feat(\([^\)]*\))?: ]]; then
+  if [[ "${subject,,}" =~ ^feat(\([^\)]*\))?: ]]; then
     bump=minor
   fi
 done < <(git log -z --format='%s%n%b' "${tag}..${sha}")

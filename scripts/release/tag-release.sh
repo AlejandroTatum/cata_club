@@ -22,6 +22,16 @@ command -v python3 >/dev/null 2>&1 || die "falta python3 para leer la respuesta 
 
 sha="$(git rev-parse --verify --quiet "$1^{commit}")" \
   || die "no se encontró el commit '$1' en este repositorio"
+# Una corrida interrumpida (Ctrl-C entre `git tag` y `git push`) deja el tag local EN
+# este sha, y entonces next-version.sh diría "nada que publicar". Se detecta antes y se
+# explica la salida.
+while IFS= read -r existing; do
+  [[ "$existing" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
+  die "$(printf '%s\n' \
+    "el tag ${existing} ya existe localmente en ${sha}; no se crea nada." \
+    "       Si ya está en origin, la release ya se etiquetó. Si quedó de una corrida" \
+    "       interrumpida antes del push, quitalo con 'git tag -d ${existing}' y repetí.")"
+done < <(git tag --points-at "$sha" --list 'v[0-9]*')
 version="$("$SCRIPT_DIR/next-version.sh" "$sha")" \
   || die "no se pudo calcular la versión de ${sha}"
 tag="v${version}"
@@ -56,7 +66,7 @@ raise SystemExit(1 if problems else 0)
 fi
 
 if git rev-parse --verify --quiet "refs/tags/${tag}" >/dev/null; then
-  die "el tag ${tag} ya existe localmente; no se crea nada"
+  die "el tag ${tag} ya existe localmente; no se crea nada. Si quedó de una corrida interrumpida, quitalo con 'git tag -d ${tag}' y repetí"
 fi
 remote_tag="$(git ls-remote --tags origin "refs/tags/${tag}")" \
   || die "no se pudo consultar los tags de origin; no se crea ningún tag"

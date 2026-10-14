@@ -434,15 +434,15 @@ def test_la_version_de_la_app_se_lee_de_app_version(monkeypatch):
     assert _construir().app_version == "2.1.0"
 
 
-def test_la_version_de_la_app_es_dev_cuando_no_se_define(monkeypatch):
+def test_la_version_de_la_app_es_unversioned_cuando_no_se_define(monkeypatch):
     monkeypatch.delenv("APP_VERSION", raising=False)
-    assert _construir().app_version == "dev"
+    assert _construir().app_version == "unversioned"
 
 
 def test_produccion_arranca_sin_app_version(monkeypatch):
-    """Fuera del fail-fast: el default `dev` no tumba el arranque."""
+    """Fuera del fail-fast: el default `unversioned` no tumba el arranque."""
     monkeypatch.delenv("APP_VERSION", raising=False)
-    assert _construir(ambiente="production").app_version == "dev"
+    assert _construir(ambiente="production").app_version == "unversioned"
 
 
 # --- 4. Registro de triage: todo campo de Settings, decidido una sola vez ---

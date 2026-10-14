@@ -13,6 +13,8 @@ COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.prod.yml)
 BACKUP_CRON_LOG="${BACKUP_CRON_LOG:-/var/log/cataclub-backup.log}"
 # shellcheck source=lib/post-checks.sh
 source "$SCRIPT_DIR/lib/post-checks.sh"
+# shellcheck source=lib/semver.sh
+source "$SCRIPT_DIR/lib/semver.sh"
 cmd="${1:-deploy}"
 case "$cmd" in deploy|checks|install-cron) ;; *) die "subcomando desconocido: $cmd" ;; esac
 if [ "$cmd" = "install-cron" ] && { [ "$#" -ne 2 ] || [ "${2:-}" != "--confirm-install-cron" ]; }; then
@@ -43,7 +45,7 @@ load_app_version() {
 # versión no se despliega, porque después no habría con qué etiquetarla. Solo
 # `deploy`; `checks` no despliega y no la exige.
 validar_app_version() {
-  [[ "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+  is_semver "$APP_VERSION" \
     || die "$(printf '%s\n' \
       "APP_VERSION='${APP_VERSION:-vacía}' no es MAJOR.MINOR.PATCH (solo dígitos, sin 'v')." \
       "       Calculala en tu máquina con 'make release-version SHA=${IMAGE_TAG:-<sha>}'," \

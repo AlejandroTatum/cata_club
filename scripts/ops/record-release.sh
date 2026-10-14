@@ -5,6 +5,10 @@ set -euo pipefail
 log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*"; }
 die() { log "ERROR: $*" >&2; exit 1; }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../deploy/lib/semver.sh
+source "$SCRIPT_DIR/../deploy/lib/semver.sh"
+
 IMAGE_TAG="${IMAGE_TAG:-}"
 APP_VERSION="${APP_VERSION:-}"
 MIGRATION_COMPATIBILITY="${MIGRATION_COMPATIBILITY:-}"
@@ -18,7 +22,7 @@ esac
 if [ -z "$APP_VERSION" ] && [ -f "$STACK_DIR/.env" ]; then
   APP_VERSION="$(sed -n 's/^APP_VERSION=//p' "$STACK_DIR/.env" | head -1)"
 fi
-[[ "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+is_semver "$APP_VERSION" \
   || die "APP_VERSION='${APP_VERSION:-vacía}' debe ser MAJOR.MINOR.PATCH (solo dígitos, sin 'v'); calculala con 'make release-version SHA=<sha>'"
 case "$MIGRATION_COMPATIBILITY" in
   none|backward-compatible|manual-review-required) ;;
