@@ -54,14 +54,15 @@ describe("useAttendanceRoster — session date", () => {
     expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(12, { fecha: "2026-07-20" });
   });
 
-  it("requests today's date when no date was requested", async () => {
+  it("sends no fecha when no session date was picked, so the backend decides today", async () => {
     const { result } = renderHook(() => useAttendanceRoster());
 
     await act(async () => {
       await result.current.openRoster(12, null, "mark-attendance", vi.fn());
     });
 
-    expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(12, { fecha: "2026-07-21" });
+    expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(12, {});
+    expect(result.current.sessionDate).toBe("2026-07-21");
   });
 
   it("sends no fecha for a future date (the backend rejects it) and the roster still loads", async () => {
@@ -81,7 +82,7 @@ describe("useAttendanceRoster — session date", () => {
   it("re-requests the roster when the date changes, and takes the new date's flags", async () => {
     // Blocked on the later date, current (markable) on the earlier one.
     mockFetchAlumnosPorHorario.mockImplementation(async (_id: number, options?: { fecha?: string }) => [
-      { ...BETO, bloqueadoPorImpago: options?.fecha === "2026-07-21" },
+      { ...BETO, bloqueadoPorImpago: options?.fecha === undefined },
     ]);
     const { result } = renderHook(() => useAttendanceRoster());
 
