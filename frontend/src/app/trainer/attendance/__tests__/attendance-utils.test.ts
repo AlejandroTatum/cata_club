@@ -1231,6 +1231,25 @@ describe("non-payment block (#1768)", () => {
     expect(isSessionPartial(roster)).toBe(false);
   });
 
+  it("does not read a roster where every player is blocked as an already-closed session", () => {
+    const roster: SessionStudent[] = [
+      { id: "1", name: "A", attendance: "unmarked", reviewed: true, blocked: true },
+      { id: "2", name: "B", attendance: "unmarked", reviewed: true, blocked: true },
+    ];
+
+    expect(isSessionClosed(roster)).toBe(false);
+    expect(isSessionPartial(roster)).toBe(false);
+  });
+
+  it("keeps a fully filed roster closed, whether or not some players are blocked", () => {
+    const filed = (id: string): SessionStudent => ({ id, name: id, attendance: "present", reviewed: true, asistenciaId: 10 });
+    const blocked: SessionStudent = { id: "9", name: "Z", attendance: "unmarked", reviewed: true, blocked: true };
+
+    expect(isSessionClosed([filed("1"), filed("2")])).toBe(true);
+    expect(isSessionClosed([filed("1"), blocked])).toBe(true);
+    expect(isSessionClosed([])).toBe(false);
+  });
+
   it("keeps a session with a markable player still open", () => {
     const roster: SessionStudent[] = [
       { id: "1", name: "A", attendance: "present", reviewed: true, asistenciaId: 10 },
@@ -1245,12 +1264,28 @@ describe("non-payment block (#1768)", () => {
   it("shows the backend's «pago pendiente» reason of a refused single registration, even when not flagged safe", () => {
     const err = Object.assign(
       new Error("Ana tiene un pago pendiente y no puede registrar asistencia hasta regularizarlo."),
-      { status: 400, safe: false },
+      { status: 400, safe: false, code: "asistencia_bloqueada_por_impago" },
     );
 
     expect(describeAttendanceSaveError(err)).toBe(
       "Ana tiene un pago pendiente y no puede registrar asistencia hasta regularizarlo.",
     );
+  });
+
+  it("detects the refusal by its code, whatever the wording of the message", () => {
+    const err = Object.assign(new Error("Ana no puede entrenar hasta regularizar su cuenta."), {
+      status: 400,
+      safe: false,
+      code: "asistencia_bloqueada_por_impago",
+    });
+
+    expect(describeAttendanceSaveError(err)).toBe("Ana no puede entrenar hasta regularizar su cuenta.");
+  });
+
+  it("no longer takes a «pago pendiente» wording without the code for the non-payment refusal", () => {
+    const err = Object.assign(new Error("Ana tiene un pago pendiente."), { status: 400, safe: false });
+
+    expect(describeAttendanceSaveError(err)).toMatch(/ya no coincide/);
   });
 
   it("keeps the generic text for an unflagged 400 about anything else", () => {

@@ -35,8 +35,7 @@ import {
 } from "@/lib/server/attendance-adapter";
 import type { EstadoAsistencia } from "@/types/domain";
 import { clubIsoDate } from "@/lib/club-date";
-
-const PENDING_PAYMENT_REASON = /pago pendiente/i;
+import { isAttendanceBlockedByNonPayment } from "@/lib/attendance-block";
 
 const VALID_ESTADOS = new Set<string>(Object.keys(ESTADO_ASISTENCIA_FRONTEND_TO_BACKEND));
 
@@ -216,9 +215,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // every student as failed with the backend's message.
   if (!result.ok || !result.response.ok) {
     const status = result.ok ? result.response.status : result.status;
-    const { message, safe } = result.ok
+    const { message, safe, codigo } = result.ok
       ? await readBackendMessage(result.response, "No se pudo registrar la asistencia.")
-      : { message: "No se pudo contactar al servidor.", safe: false };
+      : { message: "No se pudo contactar al servidor.", safe: false, codigo: undefined };
     const failed = parsed.students.map((student) => ({ personaId: student.personaId, message }));
     // ENT-02: the rejection's reason also travels at the top level, where the
     // client's error reader looks, flagged safe only when the backend said so.
@@ -229,6 +228,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         registradoPorNombre: null,
         message,
         ...(safe ? { mensaje_seguro: true } : {}),
+        // #1779-8: the machine reason travels with the text, so the client
+        // tells a non-payment refusal from the code and not from the wording.
+        ...(codigo !== undefined ? { codigo } : {}),
       },
       { status },
     );
@@ -249,9 +251,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     message: f.motivo || "No se pudo registrar la asistencia.",
     registradoPorNombre: f.registradoPorNombre ?? null,
     alreadyRegistered: f.yaRegistrada === true,
-    // #1768: the backend refuses a player with a lapsed payment with a «pago
-    // pendiente» reason; the client says it apart because retrying cannot fix it.
-    ...(PENDING_PAYMENT_REASON.test(f.motivo ?? "") ? { pendingPayment: true } : {}),
+    // #1768: the backend refuses a player with a lapsed payment with a stable
+    // `codigo`; the client says it apart because retrying cannot fix it.
+    ...(isAttendanceBlockedByNonPayment(f.codigo) ? { pendingPayment: true } : {}),
   }));
   const createdCount = outcome.creados ?? 0;
 
@@ -271,23 +273,35 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
 interface BackendBatchOutcome {
   creados: number;
-  fallidos: { personaId: number; motivo: string; registradoPorNombre?: string | null; yaRegistrada?: boolean }[];
+  fallidos: {
+    personaId: number;
+    motivo: string;
+    codigo?: string | null;
+    registradoPorNombre?: string | null;
+    yaRegistrada?: boolean;
+  }[];
   registradoPorNombre?: string | null;
 }
 
 async function readBackendMessage(
   response: Response,
   fallback: string,
-): Promise<{ message: string; safe: boolean }> {
+): Promise<{ message: string; safe: boolean; codigo: string | undefined }> {
   try {
     const errorBody: unknown = await response.json();
     if (typeof errorBody === "object" && errorBody !== null) {
       const b = errorBody as Record<string, unknown>;
       const message = (typeof b.message === "string" && b.message) || (typeof b.detail === "string" && b.detail);
-      if (message) return { message, safe: b.mensaje_seguro === true };
+      if (message) {
+        return {
+          message,
+          safe: b.mensaje_seguro === true,
+          codigo: typeof b.codigo === "string" ? b.codigo : undefined,
+        };
+      }
     }
   } catch {
     // ignore parse errors — use fallback
   }
-  return { message: fallback, safe: false };
+  return { message: fallback, safe: false, codigo: undefined };
 }

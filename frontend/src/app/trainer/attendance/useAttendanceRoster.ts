@@ -81,9 +81,15 @@ export function useAttendanceRoster(): AttendanceRoster {
       setRosterLoading(true);
       setRosterError(null);
       try {
-        const fecha = requestedDateArg ?? clubIsoDate();
+        const today = clubIsoDate();
+        const fecha = requestedDateArg ?? today;
+        // The backend judges the lock on the session date and refuses a future
+        // one (400). Send it only for a date the trainer picked, and never a
+        // future one: with no pick the backend uses its own today, so a device
+        // clock ahead of the server cannot fail the whole roster load.
+        const rosterOptions = requestedDateArg !== null && fecha <= today ? { fecha } : {};
         const [alumnoHorarios, existingRecords] = await Promise.all([
-          fetchAlumnosPorHorario(horarioId),
+          fetchAlumnosPorHorario(horarioId, rosterOptions),
           fetchAttendanceRecords({ fechaInicio: fecha, fechaFin: fecha, horarioId }).catch(
             (err: unknown) => {
               console.error("[trainer/attendance] fetchAttendanceRecords prefill failed", err);

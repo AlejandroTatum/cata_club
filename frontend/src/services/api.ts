@@ -3637,14 +3637,22 @@ export async function desasignarAlumnoDeHorario(personaId: number, horarioId: nu
   );
 }
 
-/** List the students assigned to a specific schedule (one page at the backend's cap). */
-export async function fetchAlumnosPorHorario(horarioId: number): Promise<AlumnoHorario[]> {
+/**
+ * List the students assigned to a specific schedule (one page at the backend's cap).
+ * `fecha` (ISO YYYY-MM-DD) is the session date the roll call records: the
+ * non-payment lock on each player is judged on it, not on today. Absent = today.
+ */
+export async function fetchAlumnosPorHorario(
+  horarioId: number,
+  options: { fecha?: string } = {},
+): Promise<AlumnoHorario[]> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
   // Paginated (issue #7): standard `{items, total}` envelope. A single class
   // roster is bounded in practice, so one page at the cap keeps every caller
   // (groups, trainer, trainer/attendance) working unchanged.
+  const fechaQuery = options.fecha ? `&fecha=${encodeURIComponent(options.fecha)}` : "";
   const { items } = await request<PaginatedEnvelope<AlumnoHorario>>(
-    apiEndpoint(`/groups/horarios/${horarioId}/alumnos?limit=${ROSTER_PAGE_LIMIT}`),
+    apiEndpoint(`/groups/horarios/${horarioId}/alumnos?limit=${ROSTER_PAGE_LIMIT}${fechaQuery}`),
     { headers: mockHeaders },
   );
   return items;
