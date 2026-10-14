@@ -95,4 +95,16 @@ describe("GET /api/membresias/pagos/persona/:id", () => {
       "Solo la propia persona, su representante, o un administrador pueden ver este historial de pagos",
     );
   });
+
+  it("is never gated by the non-payment block: a blocked profile's Payments history is served as-is (#1779 S4)", async () => {
+    // Payments is the one module a blocked profile keeps — it is how they pay and get back in.
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse([pagoRechazado]));
+
+    const access = makeJwt(3600);
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`), { params: Promise.resolve({ id: "9" }) });
+
+    expect(response.status).toBe(200);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(String(vi.mocked(global.fetch).mock.calls[0][0])).toContain("/membresias/pagos/persona/9");
+  });
 });
