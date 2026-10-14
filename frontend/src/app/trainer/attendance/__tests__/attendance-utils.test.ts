@@ -1245,12 +1245,28 @@ describe("non-payment block (#1768)", () => {
   it("shows the backend's «pago pendiente» reason of a refused single registration, even when not flagged safe", () => {
     const err = Object.assign(
       new Error("Ana tiene un pago pendiente y no puede registrar asistencia hasta regularizarlo."),
-      { status: 400, safe: false },
+      { status: 400, safe: false, code: "asistencia_bloqueada_por_impago" },
     );
 
     expect(describeAttendanceSaveError(err)).toBe(
       "Ana tiene un pago pendiente y no puede registrar asistencia hasta regularizarlo.",
     );
+  });
+
+  it("detects the refusal by its code, whatever the wording of the message", () => {
+    const err = Object.assign(new Error("Ana no puede entrenar hasta regularizar su cuenta."), {
+      status: 400,
+      safe: false,
+      code: "asistencia_bloqueada_por_impago",
+    });
+
+    expect(describeAttendanceSaveError(err)).toBe("Ana no puede entrenar hasta regularizar su cuenta.");
+  });
+
+  it("no longer takes a «pago pendiente» wording without the code for the non-payment refusal", () => {
+    const err = Object.assign(new Error("Ana tiene un pago pendiente."), { status: 400, safe: false });
+
+    expect(describeAttendanceSaveError(err)).toMatch(/ya no coincide/);
   });
 
   it("keeps the generic text for an unflagged 400 about anything else", () => {

@@ -13,6 +13,7 @@ import type { EstadoAsistencia } from "@/types/domain";
 import type { AlumnoHorario, AttendanceStudentMark } from "@/services/api";
 import type { AttendanceRecord } from "@/app/attendance/attendance-utils";
 import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
+import { isAttendanceBlockedByNonPayment } from "@/lib/attendance-block";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -267,9 +268,6 @@ export function formatSessionDateLabel(fecha: string): string {
 /** The action label of the "marcar restantes presentes" toast (ENT-12 dismisses it by this label). */
 export const UNDO_TOAST_ACTION_LABEL = "Deshacer";
 
-/** The backend's reason when it refuses attendance to a player with a lapsed payment (#1768). */
-const PENDING_PAYMENT_REASON = /pago pendiente/i;
-
 /**
  * The failures a retry could fix. A player already recorded by someone else
  * (ENT-04) and a player blocked for a pending payment (#1768) are not among
@@ -305,9 +303,11 @@ export function describeAttendanceSaveError(error: unknown): string {
     // ENT-02: the backend's own reason ("solo se puede registrar … los últimos
     // 30 días") beats the generic text, but only when it marked it safe to show.
     const { message, safe } = error as { message?: unknown; safe?: unknown };
-    // #1768: a refusal for a pending payment is a reason the trainer can act on
-    // (the player has to pay first), whether or not the backend flagged it safe.
-    if (status === 400 && typeof message === "string" && PENDING_PAYMENT_REASON.test(message)) return message;
+    // #1768: a refusal for non-payment is a reason the trainer can act on (the
+    // player has to pay first), whether or not the backend flagged it safe. It
+    // is recognised by the backend's `codigo` (`ApiClientError.code`), not its text.
+    const { code } = error as { code?: unknown };
+    if (status === 400 && typeof message === "string" && isAttendanceBlockedByNonPayment(code)) return message;
     if (safe === true && typeof message === "string" && message.trim()) return message;
     return "La lista no se pudo registrar porque ya no coincide con lo que hay en el sistema. Actualiza la página y revisa los datos.";
   }
