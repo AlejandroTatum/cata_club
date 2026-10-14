@@ -1121,7 +1121,8 @@ describe("MedicalRecordEditor — representative as the default emergency contac
     );
 
     const nombre = await screen.findByLabelText<HTMLInputElement>("Contacto de emergencia");
-    expect(nombre.value).toBe("Sofia Loor Zamora");
+    // The pre-fill lands in an effect after the field first renders (#1776 CI flake).
+    await waitFor(() => expect(nombre.value).toBe("Sofia Loor Zamora"));
     expect(screen.getByLabelText<HTMLInputElement>(/Teléfono de emergencia/).value).toBe("900000004");
     expect(mockFetchFichaEmergencia).not.toHaveBeenCalled();
 
