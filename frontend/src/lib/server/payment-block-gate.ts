@@ -6,8 +6,11 @@
  * aggregate, the attendance history, the medical record) must refuse the same
  * profile themselves, so the data is not one URL away. The backend already
  * computes the block per profile (`bloqueadoPorImpago` on `/auth/me` and on each
- * portal profile) and is not reachable from outside except through this BFF, so
- * the decision is made here from those two reads.
+ * dependent via `/portal/alumno/{id}/bloqueos`) and is not reachable from
+ * outside except through this BFF, so the decision is made here from those two
+ * reads. The second one is deliberately NOT the portal aggregate: that is
+ * rate-limited to 30/min, leaves inactive dependents out, and carries far more
+ * than a yes/no (#1787).
  *
  * Staff are NEVER restricted (see `isPaymentsOnlyProfile`), and the Payments
  * module is not behind this gate.
@@ -37,14 +40,25 @@ function failure(status: number): { ok: false; response: NextResponse } {
   return { ok: false, response: NextResponse.json({ message: "No autorizado" }, { status }) };
 }
 
+/**
+ * The one fail-closed status for a backend answer the gate cannot use, shared
+ * by every read so gated routes refuse alike: 401/403 are the backend's own
+ * verdict on the caller and keep their meaning; a 5xx stays a server error
+ * (never read as "unauthenticated", which would make the client refresh and
+ * retry); anything else unexpected is a bad gateway.
+ */
+function upstreamFailure(status: number): { ok: false; response: NextResponse } {
+  return failure(status === 401 || status === 403 || status >= 500 ? status : 502);
+}
+
 /** Who the caller is and whether their own profile is blocked, from `/auth/me`. */
 export async function resolveCaller(request: NextRequest): Promise<CallerCheck> {
   const result = await backendFetchAuthed(request, "/auth/me", { method: "GET", cache: "no-store" });
   if (!result.ok) return failure(result.status);
-  if (!result.response.ok) return failure(result.response.status === 403 ? 403 : 401);
+  if (!result.response.ok) return upstreamFailure(result.response.status);
   const me = (await result.response.json().catch(() => null)) as Record<string, unknown> | null;
   const personaId = Number(me?.personaId);
-  if (!Number.isInteger(personaId)) return failure(401);
+  if (!Number.isInteger(personaId)) return failure(502);
   const roles = Array.isArray(me?.roles) ? me.roles : [];
   return {
     ok: true,
@@ -74,9 +88,10 @@ export type PersonaGate =
 /**
  * Lets the request through unless `personaId` is a blocked profile the caller
  * is NOT staff for. The target is the caller (own flag), or one of the caller's
- * dependents (the portal aggregate carries each one's flag). A target that is
- * neither is left to the backend's own ownership check, which refuses it.
- * An unresolvable caller or portal fails closed.
+ * dependents, active or not (the dependents endpoint carries each one's flag,
+ * read fresh on every request). A target that is neither is left to the
+ * backend's own ownership check, which refuses it. An unresolvable caller or
+ * dependents read fails closed.
  */
 export async function gateBlockedPersona(request: NextRequest, personaId: number): Promise<PersonaGate> {
   const who = await resolveCaller(request);
@@ -88,17 +103,17 @@ export async function gateBlockedPersona(request: NextRequest, personaId: number
     return caller.blocked ? { ok: false, response: paymentBlockedResponse(caller) } : { ok: true, ...pickRefreshed(caller) };
   }
 
-  const portal = await backendFetchAuthed(request, `/portal/alumno/${caller.personaId}?historial_limite=1`, {
+  const dependents = await backendFetchAuthed(request, `/portal/alumno/${caller.personaId}/bloqueos`, {
     cache: "no-store",
   });
-  if (!portal.ok) return failure(portal.status);
-  if (!portal.response.ok) return failure(portal.response.status === 403 ? 403 : 502);
-  const body = (await portal.response.json().catch(() => null)) as {
-    representados?: Array<{ persona?: { id?: number | string }; bloqueadoPorImpago?: boolean }>;
+  if (!dependents.ok) return failure(dependents.status);
+  if (!dependents.response.ok) return upstreamFailure(dependents.response.status);
+  const body = (await dependents.response.json().catch(() => null)) as {
+    representados?: Array<{ personaId?: number | string; bloqueadoPorImpago?: boolean }>;
   } | null;
-  if (body === null) return failure(502);
-  const refreshed = pickRefreshed(caller, portal);
-  const dependent = body.representados?.find((perfil) => Number(perfil.persona?.id) === personaId);
+  if (body === null || !Array.isArray(body.representados)) return failure(502);
+  const refreshed = pickRefreshed(caller, dependents);
+  const dependent = body.representados.find((perfil) => Number(perfil.personaId) === personaId);
   if (dependent?.bloqueadoPorImpago === true) return { ok: false, response: paymentBlockedResponse(refreshed) };
   return { ok: true, ...refreshed };
 }

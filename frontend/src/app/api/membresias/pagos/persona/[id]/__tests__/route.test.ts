@@ -107,4 +107,26 @@ describe("GET /api/membresias/pagos/persona/:id", () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(String(vi.mocked(global.fetch).mock.calls[0][0])).toContain("/membresias/pagos/persona/9");
   });
+
+  // #1779 S7 / #1787: the payments screen reads `autodeclarado` off this very
+  // payload to decide whether a pending cash payment may be replaced by a
+  // transfer. The handler must hand the flag over untouched: `true` and `false`
+  // as the backend sent them, and a field the backend omits stays omitted.
+  it("delivers autodeclarado to the browser exactly as the backend sent it", async () => {
+    const pendiente = { ...pagoRechazado, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "EFECTIVO", motivoRechazo: null };
+    const backendBody = [
+      { ...pendiente, id: 1, autodeclarado: true },
+      { ...pendiente, id: 2, autodeclarado: false },
+      { ...pendiente, id: 3 },
+    ];
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(backendBody));
+
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`), { params: Promise.resolve({ id: "9" }) });
+    const body = (await response.json()) as Array<Record<string, unknown>>;
+
+    expect(response.status).toBe(200);
+    expect(body.map((pago) => pago.autodeclarado)).toEqual([true, false, undefined]);
+    expect("autodeclarado" in body[2]).toBe(false);
+    expect(body).toEqual(backendBody);
+  });
 });

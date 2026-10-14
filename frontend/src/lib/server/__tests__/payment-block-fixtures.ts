@@ -1,7 +1,7 @@
 /**
  * Shared fixtures for the BFF tests that sit behind the non-payment block gate
- * (#1779 S4): `GET /auth/me` says who the caller is, `GET /portal/alumno/{id}`
- * says which of their profiles is blocked, and the resource itself answers last.
+ * (#1779 S4): `GET /auth/me` says who the caller is, `GET /portal/alumno/{id}/bloqueos`
+ * (#1787) says which of their dependents is blocked, and the resource itself answers last.
  */
 
 import { vi } from "vitest";
@@ -27,24 +27,12 @@ export function meBody(overrides: {
   };
 }
 
-/** A minimal `GET /portal/alumno/{id}` body: the caller's own profile and their dependents. */
-export function portalBody(
-  titular: { id: number; bloqueadoPorImpago?: boolean },
+/** `GET /portal/alumno/{id}/bloqueos`: the block flag of EVERY dependent, inactive ones included. */
+export function bloqueosBody(
   representados: Array<{ id: number; bloqueadoPorImpago?: boolean }> = [],
 ): Record<string, unknown> {
-  const perfil = (p: { id: number; bloqueadoPorImpago?: boolean }) => ({
-    persona: { id: p.id, nombres: "N", apellidos: "A", representanteId: null },
-    representante: null,
-    historial: [],
-    membresias: [],
-    bloqueadoPorImpago: p.bloqueadoPorImpago ?? false,
-    cubiertoHasta: p.bloqueadoPorImpago ? "2026-09-30" : null,
-  });
   return {
-    titular: perfil(titular),
-    representados: representados.map(perfil),
-    horarios: [],
-    tipos: [],
+    representados: representados.map((p) => ({ personaId: p.id, bloqueadoPorImpago: p.bloqueadoPorImpago ?? false })),
   };
 }
 
