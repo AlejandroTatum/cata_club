@@ -729,7 +729,7 @@ class AuthServicio:
         if not recien_abierta:
             if sesion is None or sesion.revocada_en is not None:
                 raise CredencialesInvalidas("Refresh token inválido o expirado")
-            if ahora - sesion.iniciada_en > timedelta(days=settings.jwt_refresh_expira_dias):
+            if GestorAutenticacion.sesion_pasada_del_tope_absoluto(sesion, ahora):
                 self._revocar_sesion(sesion, ahora)
                 raise CredencialesInvalidas("Refresh token inválido o expirado")
             if jti is None:
@@ -819,8 +819,7 @@ class AuthServicio:
     def _rotar_o_rechazar(self, sesion: Sesion, jti: str, ahora: datetime) -> None:
         """Reglas de un refresh CON `jti` sobre una sesión viva (ver
         `refrescar_sesion`, puntos 2 y 3)."""
-        ultimo_uso = sesion.ultimo_uso_en or sesion.iniciada_en
-        if ahora - ultimo_uso > timedelta(hours=settings.sesion_inactividad_horas):
+        if GestorAutenticacion.sesion_inactiva(sesion, ahora):
             self._revocar_sesion(sesion, ahora)
             raise CredencialesInvalidas("Refresh token inválido o expirado")
         if jti == sesion.refresh_jti:

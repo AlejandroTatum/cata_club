@@ -375,6 +375,104 @@ def test_access_de_una_sesion_revocada_recibe_401(client_sin_token, usuario, db_
     assert _me(client_sin_token, par["access_token"]).status_code == 401
 
 
+# --- S10 (#1775): las ventanas también rigen en la ruta del access ----------
+def _marcas(fila: Sesion) -> tuple:
+    return (fila.iniciada_en, fila.ultimo_uso_en, fila.rotado_en, fila.refresh_jti,
+            fila.refresh_jti_anterior, fila.revocada_en)
+
+
+def _login_con_marcas(db_session, *, iniciada_hace: timedelta, ultimo_uso_hace: timedelta | None):
+    par = _login(db_session)
+    sid = _claims(par["access_token"])["sid"]
+    fila = _fila(db_session, sid)
+    fila.iniciada_en = _ahora() - iniciada_hace
+    fila.ultimo_uso_en = None if ultimo_uso_hace is None else _ahora() - ultimo_uso_hace
+    db_session.commit()
+    return par, sid
+
+
+@pytest.mark.parametrize(
+    "iniciada_hace, ultimo_uso_hace",
+    [
+        pytest.param(timedelta(days=2), timedelta(hours=24, minutes=1), id="inactiva-24h-1m"),
+        pytest.param(timedelta(days=7, minutes=1), timedelta(minutes=5), id="tope-absoluto-7d-1m"),
+        pytest.param(timedelta(days=9), timedelta(days=9), id="ambas"),
+    ],
+)
+def test_access_de_una_sesion_vencida_recibe_el_mismo_401_que_una_revocada(
+    client_sin_token, usuario, db_session, iniciada_hace, ultimo_uso_hace
+):
+    par, sid = _login_con_marcas(db_session, iniciada_hace=iniciada_hace, ultimo_uso_hace=ultimo_uso_hace)
+    antes = _marcas(_fila(db_session, sid))
+
+    respuesta = _me(client_sin_token, par["access_token"])
+
+    assert respuesta.status_code == 401
+    # El mismo cuerpo que hoy recibe la sesión revocada: el cliente no puede
+    # distinguir (ni necesita) por qué murió.
+    revocada, sid_revocada = _login_con_marcas(
+        db_session, iniciada_hace=timedelta(minutes=1), ultimo_uso_hace=timedelta(minutes=1),
+    )
+    fila = _fila(db_session, sid_revocada)
+    fila.revocada_en = _ahora()
+    db_session.commit()
+    assert respuesta.json() == _me(client_sin_token, revocada["access_token"]).json()
+    # La ruta caliente no escribe: rechazar no revoca ni toca la fila.
+    assert _marcas(_fila(db_session, sid)) == antes
+
+
+@pytest.mark.parametrize(
+    "iniciada_hace, ultimo_uso_hace",
+    [
+        pytest.param(timedelta(days=2), timedelta(hours=23, minutes=59), id="inactiva-justo-dentro"),
+        pytest.param(timedelta(days=6, hours=23, minutes=59), timedelta(minutes=5), id="tope-justo-dentro"),
+        pytest.param(timedelta(days=6, hours=23, minutes=59), timedelta(hours=23, minutes=59), id="ambas-justo-dentro"),
+        pytest.param(timedelta(hours=1), None, id="sin-ultimo-uso-cae-en-iniciada_en"),
+        pytest.param(timedelta(minutes=1), timedelta(minutes=1), id="sesion-nueva"),
+    ],
+)
+def test_access_dentro_de_ambas_ventanas_sigue_aceptado_y_no_toca_la_fila(
+    client_sin_token, usuario, db_session, iniciada_hace, ultimo_uso_hace
+):
+    par, sid = _login_con_marcas(db_session, iniciada_hace=iniciada_hace, ultimo_uso_hace=ultimo_uso_hace)
+    antes = _marcas(_fila(db_session, sid))
+
+    for _ in range(2):
+        assert _me(client_sin_token, par["access_token"]).status_code == 200
+    # El access NO desliza `ultimo_uso_en`: la ventana inactiva se juzga sobre
+    # lo que actualiza el refresh (ver `GestorAutenticacion.sesion_inactiva`).
+    assert _marcas(_fila(db_session, sid)) == antes
+
+
+def test_sesion_activa_con_refresh_reciente_nunca_pierde_su_access(client_sin_token, usuario, db_session):
+    """El caso real que no puede romperse: una sesión de 6 días y 23 horas
+    que refresca dentro de la ventana inactiva recibe un access que funciona."""
+    par, sid = _login_con_marcas(
+        db_session, iniciada_hace=timedelta(days=6, hours=23), ultimo_uso_hace=timedelta(hours=23),
+    )
+
+    refresco = _refrescar(client_sin_token, par["refresh_token"])
+
+    assert refresco.status_code == 200, refresco.text
+    assert _me(client_sin_token, refresco.json()["access_token"]).status_code == 200
+    assert _fila(db_session, sid).revocada_en is None
+
+
+def test_access_con_sid_cuesta_una_sola_lectura_de_la_tabla_sesion(
+    client_sin_token, usuario, db_session, contar_selects
+):
+    par, _ = _login_con_marcas(
+        db_session, iniciada_hace=timedelta(hours=1), ultimo_uso_hace=timedelta(minutes=5),
+    )
+
+    with contar_selects() as sentencias:
+        assert _me(client_sin_token, par["access_token"]).status_code == 200
+
+    lecturas_de_sesion = [sql for sql in sentencias if "FROM sesion" in sql]
+    print(f"S10 access path: {len(sentencias)} SELECT en total, {len(lecturas_de_sesion)} de `sesion`")
+    assert len(lecturas_de_sesion) == 1
+
+
 def test_access_sin_sid_sigue_aceptado(client_sin_token, usuario):
     access = GestorAutenticacion.crear_token_acceso(
         {"sub": usuario.correo, "persona_id": usuario.persona_id, "roles": []},
