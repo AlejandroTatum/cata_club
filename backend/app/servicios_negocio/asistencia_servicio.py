@@ -13,8 +13,8 @@ from app.dominio.modelos import (
 from app.dominio.enums import DiaSemana, EstadoAsistencia, EstadoMembresia, EstadoPago
 from app.dominio.etiquetas import dia_en_castellano
 from app.dominio.excepciones import (
-    ConflictoConcurrencia, EntidadNoEncontrada, NombreDuplicado, OperacionInvalida,
-    PermisosInsuficientes,
+    AsistenciaBloqueadaPorImpago, ConflictoConcurrencia, EntidadNoEncontrada, NombreDuplicado,
+    OperacionInvalida, PermisosInsuficientes,
 )
 from app.dominio.nombres_catalogo import existe_nombre, normalizar_nombre
 from app.dominio.nombre_propio import nombre_completo
@@ -833,6 +833,7 @@ class AsistenciaServicio:
                 # el resto de la lista se registra igual.
                 fallidos.append(AsistenciaLoteFallidoDTO(
                     persona_id=item.persona_id, motivo=f"{nombre} tiene un pago pendiente.",
+                    codigo=AsistenciaBloqueadaPorImpago.codigo,
                 ))
                 continue
             try:
@@ -1000,7 +1001,7 @@ class AsistenciaServicio:
         if self.repo_bloqueo.por_persona(
             datos.persona_id, hoy=datos.fecha_entrenamiento,
         ).bloqueado:
-            raise OperacionInvalida(
+            raise AsistenciaBloqueadaPorImpago(
                 f"{nombre_completo(persona.nombres, persona.apellidos)} tiene un pago "
                 "pendiente y no puede registrar asistencia hasta regularizarlo.",
                 detalle_tecnico=f"bloqueado por impago: persona_id={datos.persona_id}",

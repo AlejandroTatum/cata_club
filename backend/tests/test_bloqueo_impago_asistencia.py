@@ -262,3 +262,59 @@ def test_el_lote_de_una_sesion_pasada_juzga_a_cada_jugador_por_el_dia_de_la_sesi
     assert cuerpo["creados"] == 1
     assert [f["personaId"] for f in cuerpo["fallidos"]] == [bloqueado.id]
     assert [a.persona_id for a in db_session.query(Asistencia).all()] == [en_gracia.id]
+
+
+# --- S2 (#1779): código de motivo estable --------------------------------------------------
+CODIGO_BLOQUEO = "asistencia_bloqueada_por_impago"
+
+
+def test_el_registro_individual_bloqueado_lleva_el_codigo_de_motivo_y_conserva_el_mensaje(
+    client, db_session,
+):
+    moroso = _moroso(db_session)
+    horario, fecha = _horario(client, db_session, moroso)
+
+    resp = client.post(URL_UNA, json=_cuerpo(horario, fecha, moroso))
+
+    assert resp.status_code == 400
+    cuerpo = resp.json()
+    assert cuerpo["codigo"] == CODIGO_BLOQUEO
+    assert "tiene un pago pendiente y no puede registrar asistencia" in cuerpo["detail"]
+    assert db_session.query(Asistencia).count() == 0
+
+
+def test_otros_rechazos_individuales_no_llevan_el_codigo_del_bloqueo(client, db_session):
+    persona = _moroso(db_session, dias_vencido=1)
+    horario, fecha = _horario(client, db_session, persona)
+    assert client.post(URL_UNA, json=_cuerpo(horario, fecha, persona)).status_code == 201
+
+    resp = client.post(URL_UNA, json=_cuerpo(horario, fecha, persona))
+
+    assert resp.status_code == 400
+    assert "codigo" not in resp.json()
+
+
+def test_el_lote_marca_con_el_codigo_solo_al_fallido_por_bloqueo(client, db_session):
+    moroso = _moroso(db_session)
+    al_dia, _ = crear_miembro(
+        db_session, cubierto_hasta=hoy_club() + timedelta(days=10), estado=EstadoMembresia.ACTIVA,
+    )
+    ajeno, _ = crear_miembro(
+        db_session, cubierto_hasta=hoy_club() + timedelta(days=10), estado=EstadoMembresia.ACTIVA,
+    )
+    horario, fecha = _horario(client, db_session, moroso, al_dia)
+
+    resp = client.post(URL_LOTE, json={
+        "horario_id": horario["id"], "fecha": fecha,
+        "items": [{"persona_id": p.id, "estado": "PRESENTE"} for p in (moroso, al_dia, ajeno)],
+    })
+
+    assert resp.status_code == 201, resp.text
+    cuerpo = resp.json()
+    assert cuerpo["creados"] == 1
+    codigos = {f["personaId"]: f["codigo"] for f in cuerpo["fallidos"]}
+    assert codigos == {moroso.id: CODIGO_BLOQUEO, ajeno.id: None}
+    assert "pago pendiente" in next(
+        f["motivo"] for f in cuerpo["fallidos"] if f["personaId"] == moroso.id
+    )
+    assert [a.persona_id for a in db_session.query(Asistencia).all()] == [al_dia.id]
