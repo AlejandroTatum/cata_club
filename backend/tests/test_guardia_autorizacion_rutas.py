@@ -198,6 +198,7 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("GET", "/personas/{persona_id}/beneficio"),                 # (b)
     ("GET", "/personas/{persona_id}/representados"),             # (b)
     ("GET", "/portal/alumno/{persona_id}"),                      # (b) - titular o admin via PoliticaAccesoPersona
+    ("GET", "/portal/alumno/{persona_id}/bloqueos"),             # (b) - titular o admin via PoliticaAccesoPersona (#1787)
     ("GET", "/ranking/notificaciones/mias"),                     # (b) - propio via `persona_id` del token
     ("PATCH", "/auth/correo"),                                   # (b) - propio via `sub`, solo mientras no verificado
     ("GET", "/auth/consentimiento-legal"),                       # (b) - propio via `sub`, sin ids (S8)

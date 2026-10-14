@@ -20,6 +20,8 @@ RELEASE_RECORD_DIR="${RELEASE_RECORD_DIR:-/var/lib/cata-club/releases}"
 COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.prod.yml)
 # shellcheck source=../deploy/lib/post-checks.sh
 source "$SCRIPT_DIR/../deploy/lib/post-checks.sh"
+# shellcheck source=../deploy/lib/semver.sh
+source "$SCRIPT_DIR/../deploy/lib/semver.sh"
 CURRENT_RECORD="$RELEASE_RECORD_DIR/current.env"
 TARGET_RECORD="$RELEASE_RECORD_DIR/${TARGET_TAG}.env"
 [ -f "$CURRENT_RECORD" ] || die "no hay registro de release actual; no se ejecuta ningún cambio"
@@ -40,7 +42,7 @@ esac
 TARGET_APP_VERSION="$(sed -n 's/^APP_VERSION=//p' "$TARGET_RECORD" | head -1)"
 TARGET_APP_VERSION="${TARGET_APP_VERSION:-unversioned}"
 if [ "$TARGET_APP_VERSION" != "unversioned" ]; then
-  [[ "$TARGET_APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+  is_semver "$TARGET_APP_VERSION" \
     || die "el registro del SHA objetivo trae APP_VERSION inválida; no se ejecuta ningún cambio"
 fi
 [ -d "$STACK_DIR" ] || die "STACK_DIR no existe: $STACK_DIR"

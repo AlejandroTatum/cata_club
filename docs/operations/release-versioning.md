@@ -26,10 +26,12 @@ suben tags: el único paso que escribe en GitHub corre en la máquina del dueño
 
 ## Cómo se calcula la versión
 
-`scripts/release/next-version.sh <sha>` toma el último tag `vMAJOR.MINOR.PATCH`
-**alcanzable desde ese SHA** (un tag en otra rama no cuenta; los prereleases
-como `v1.9.0-rc1` tampoco) y lee asunto y cuerpo de cada commit en
-`<tag>..<sha>`:
+`scripts/release/next-version.sh <sha>` toma el tag más alto `vMAJOR.MINOR.PATCH`
+**alcanzable desde ese SHA** (el más alto, no el más cercano: un branch
+mergeado con un tag viejo no baja la base; un tag en otra rama no cuenta; los
+prereleases como `v1.9.0-rc1` tampoco) y lee asunto y cuerpo de cada commit en
+`<tag>..<sha>`. El tipo del asunto no distingue mayúsculas (`Feat:` es un
+`feat`); el pie `BREAKING CHANGE:` sí va en mayúsculas:
 
 | Si hay… | Sube |
 | --- | --- |
@@ -40,6 +42,23 @@ como `v1.9.0-rc1` tampoco) y lee asunto y cuerpo de cada commit en
 Falla, sin imprimir una versión, si no hay ningún tag base (ver
 [Arranque único](#arranque-único-el-tag-v130)) o si no hay commits desde él
 (no hay nada que publicar).
+
+## Squash merges
+
+Si `main` recibe los PRs con **squash**, cada PR es UN commit y su asunto es el
+título del PR: **el título del PR decide el bump** (`feat:` sube minor,
+`feat!:` sube major, el resto patch). Dentro del cuerpo del squash solo se lee
+el pie `BREAKING CHANGE:` / `BREAKING-CHANGE:` al inicio de una línea; una viñeta
+como `- feat!: quitar el endpoint v1` en ese cuerpo **no se detecta** y la
+release saldría con un bump menor al esperado. Si un PR rompe compatibilidad,
+marcalo en el título (`feat!:`) o con un pie `BREAKING CHANGE:`.
+
+## Si `release-tag` se interrumpe
+
+`make release-tag` crea el tag local y recién después lo sube. Si se corta
+entre ambos pasos (Ctrl-C) queda un tag local sin publicar y la corrida
+siguiente se niega con "ya existe localmente". Quitalo con
+`git tag -d vX.Y.Z` y repetí. Si el push falla, el script quita el tag local solo.
 
 ## Flujo de cada release
 

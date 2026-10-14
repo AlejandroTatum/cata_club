@@ -92,3 +92,16 @@ class PortalServicio:
             horarios=AsistenciaServicio(self.db).listar_horarios(),
             tipos=MembresiaServicio(self.db).listar_tipos_membresia(),
         )
+
+    def bloqueos_de_representados(self, persona_id: int) -> dict[int, bool]:
+        """`{representado_id: bloqueado}` de TODOS los dependientes de los que
+        `persona_id` es guardián, activos o no (#1787).
+
+        Es la lectura de la compuerta del BFF: a diferencia de `obtener`, no
+        omite a un dependiente dado de baja -- un hijo inactivo con deuda no
+        debe pasar la compuerta -- y no arma historial, membresías ni
+        catálogos. Sin caché: cada pedido recalcula el estado."""
+        PersonaServicio(self.db).obtener_persona(persona_id)
+        ids = PersonaRepositorio(self.db).ids_representados_accesibles(persona_id)
+        bloqueos = BloqueoImpagoRepositorio(self.db).por_personas(ids)
+        return {pid: bloqueos[pid].bloqueado for pid in ids}

@@ -36,3 +36,14 @@ class PortalAlumnoResponseDTO(ResponseBase, BaseModel):
     representados: List[PortalPerfilDTO]
     horarios: List[HorarioResponseDTO]
     tipos: List[TipoMembresiaResponseDTO]
+
+
+class PortalBloqueoRepresentadoDTO(ResponseBase, BaseModel):
+    persona_id: int
+    bloqueado_por_impago: bool
+
+
+class PortalBloqueosResponseDTO(ResponseBase, BaseModel):
+    """Solo el estado de bloqueo (#1787): lo que la compuerta del BFF necesita
+    por pedido, sin el agregado del portal."""
+    representados: List[PortalBloqueoRepresentadoDTO]

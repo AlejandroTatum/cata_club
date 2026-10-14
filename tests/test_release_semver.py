@@ -293,6 +293,103 @@ def test_requires_a_sha_argument(repo):
     assert result.stdout == ""
 
 
+# --- next-version.sh: follow-ups #1788 ---------------------------------------
+
+
+def _merge_a_side_branch_carrying(repo: Repo, tag: str) -> None:
+    """Merge a side branch whose tip is tagged `tag`: after the merge, `tag` is the
+    NEAREST reachable tag even when it is lower than the one on `main`."""
+    repo.git("checkout", "-q", "-b", "side")
+    repo.commit("fix: side work")
+    repo.tag(tag)
+    repo.git("checkout", "-q", "main")
+    repo.git("merge", "-q", "--no-ff", "side", "-m", "Merge side")
+
+
+def test_the_highest_reachable_tag_is_the_base_not_the_nearest(repo):
+    repo.commit("fix: after the bootstrap")
+    _merge_a_side_branch_carrying(repo, "v1.2.9")
+    repo.commit("fix: after the merge")
+    assert repo.git("describe", "--tags", "--abbrev=0", "--match", "v*") == "v1.2.9", (
+        "fixture must make the nearest tag differ from the highest"
+    )
+
+    result = _next(repo)
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "1.3.1\n"
+
+
+def test_the_highest_tag_wins_numerically_not_lexically(repo):
+    repo.commit("fix: a")
+    repo.tag("v1.9.0")
+    repo.commit("fix: b")
+    repo.tag("v1.10.0")
+    repo.commit("fix: c")
+
+    assert _next(repo).stdout == "1.10.1\n"
+
+
+def test_prerelease_and_malformed_tags_are_never_the_base_even_when_higher(repo):
+    repo.commit("fix: a")
+    for name in ("v9.0.0-rc1", "v9.0.0.1", "v9.0", "vfoo"):
+        repo.tag(name)
+    repo.commit("fix: b")
+
+    assert _next(repo).stdout == "1.3.1\n"
+
+
+@pytest.mark.parametrize(
+    "subject,expected",
+    [
+        ("Feat: add a thing", "1.4.0"),
+        ("FEAT(socios): add a thing", "1.4.0"),
+        ("Fix: tweak", "1.3.1"),
+        ("Refactor!: rename", "2.0.0"),
+        ("FEAT!: drop the old API", "2.0.0"),
+    ],
+)
+def test_commit_types_match_case_insensitively(repo, subject, expected):
+    repo.commit(subject)
+
+    result = _next(repo)
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == f"{expected}\n"
+
+
+def test_a_lowercase_breaking_change_footer_is_still_not_a_breaking_footer(repo):
+    # Conventional Commits: the footer token `BREAKING CHANGE` is uppercase-only.
+    repo.commit("fix: x", "breaking change: not a footer")
+
+    assert _next(repo).stdout == "1.3.1\n"
+
+
+def _commit_with_body_file(repo: Repo, subject: str, body: str) -> None:
+    """Like `Repo.commit`, but through a file: a body above ~128 KiB does not fit
+    in one argv entry."""
+    repo._n += 1
+    (repo.path / "file.txt").write_text(f"{repo._n}\n")
+    repo.git("add", "file.txt")
+    message = repo.path.parent / "message.txt"
+    message.write_text(f"{subject}\n\n{body}")
+    repo.git("commit", "-q", "-F", str(message))
+
+
+@pytest.mark.parametrize("padding", [1_000_000, 100])
+def test_a_breaking_footer_is_found_even_in_a_very_large_commit_body(repo, padding):
+    # Under `pipefail`, `printf body | grep -q` could lose to SIGPIPE: grep exits
+    # on the first match while printf is still writing, and the 141 status turned a
+    # major bump into a patch. The footer comes FIRST so grep quits early.
+    filler = "lorem ipsum dolor sit amet\n" * (padding // 27 + 1)
+    _commit_with_body_file(repo, "fix: big body", f"BREAKING CHANGE: contract change\n{filler}")
+
+    result = _next(repo)
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "2.0.0\n"
+
+
 # --- tag-release.sh (S7) -----------------------------------------------------
 
 
@@ -487,6 +584,54 @@ def test_requires_sha_and_health_url(released):
     assert released.run(TAG_RELEASE, released.head()).returncode != 0
 
 
+def test_removes_the_local_tag_when_the_push_to_origin_fails(released, health):
+    sha = released.head()
+    health.serve(sha=sha, version="1.3.1")
+    hook = released.remote / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho 'rejected by test hook' >&2\nexit 1\n")
+    hook.chmod(0o755)
+
+    result = _tag(released, health, sha)
+
+    assert result.returncode != 0
+    assert "no se pudo subir v1.3.1" in result.stderr
+    assert released.git("tag", "-l", "v1.3.1") == "", "the failed push must not leave a local tag"
+    assert _remote_tags(released) == ["refs/tags/v1.3.0", "refs/tags/v1.3.0^{}"]
+
+
+def test_a_leftover_local_tag_on_the_candidate_tells_the_operator_how_to_remove_it(released, health):
+    # An interrupted run (Ctrl-C between `git tag` and `git push`) leaves the tag ON
+    # the candidate sha; the next run must say how to recover instead of reporting
+    # "nothing to release".
+    sha = released.head()
+    released.tag("v1.3.1", ref=sha)
+    health.serve(sha=sha, version="1.3.1")
+
+    result = _tag(released, health, sha)
+
+    assert result.returncode != 0
+    assert "ya existe localmente" in result.stderr
+    assert "git tag -d v1.3.1" in result.stderr
+    assert released.git("tag", "-l", "v1.3.1") == "v1.3.1", "a refusal must not touch the tag"
+    assert _remote_tags(released) == ["refs/tags/v1.3.0", "refs/tags/v1.3.0^{}"]
+
+
+def test_a_local_tag_with_the_computed_name_elsewhere_also_names_the_command(released, health):
+    sha = released.head()
+    released.git("checkout", "-q", "-b", "elsewhere", "v1.3.0")
+    released.commit("fix: unrelated")
+    released.tag("v1.3.1")
+    released.git("checkout", "-q", "main")
+    health.serve(sha=sha, version="1.3.1")
+
+    result = _tag(released, health, sha)
+
+    assert result.returncode != 0
+    assert "ya existe localmente" in result.stderr
+    assert "git tag -d v1.3.1" in result.stderr
+    assert _remote_tags(released) == ["refs/tags/v1.3.0", "refs/tags/v1.3.0^{}"]
+
+
 # --- Make targets (S3, S7) ---------------------------------------------------
 
 
@@ -536,3 +681,30 @@ def test_release_version_target_fails_closed_when_the_script_fails():
 
     assert result.returncode != 0
     assert "APP_VERSION=" not in result.stdout
+
+
+# --- Docs (#1788) -------------------------------------------------------------
+
+
+def _squash_section() -> str:
+    text = (ROOT / "docs" / "operations" / "release-versioning.md").read_text()
+    assert "## Squash merges" in text, "falta la sección sobre squash merges"
+    return text.split("## Squash merges", 1)[1].split("\n## ", 1)[0]
+
+
+def test_the_release_doc_says_the_pr_title_decides_the_bump_with_squash_merges():
+    section = _squash_section()
+
+    assert "título del PR" in section
+    assert "squash" in section.lower()
+    # A `feat!:` bullet inside the squash body is NOT a breaking marker.
+    assert "feat!:" in section
+    assert "no se detecta" in section
+    assert "BREAKING CHANGE:" in section
+
+
+def test_the_release_doc_describes_the_highest_tag_and_case_insensitive_types():
+    text = (ROOT / "docs" / "operations" / "release-versioning.md").read_text()
+
+    assert "tag más alto" in text
+    assert "mayúsculas" in text and "git tag -d" in text

@@ -24,12 +24,23 @@ from urllib.parse import urlparse
 
 ALLOWED_SERVED_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
-# `make qa-up` always serves the frontend at this fixed local address (see
-# `docker-compose.override.yml`); this script only ever supports that one
-# use case, so the URL is a constant rather than a CLI-configurable value —
-# a CLI-sourced value here would itself be an SSRF taint source (S5144),
-# not just something to validate after the fact.
-DEFAULT_SERVED_URL = "http://localhost:3000/api/health"
+# `make qa-up` serves the frontend on localhost (see `docker-compose.override.yml`).
+# The host and path are constants and only the PORT is configurable (`--port`):
+# a CLI-sourced URL would itself be an SSRF taint source (S5144), while an
+# integer port bounded to 1-65535 cannot change where the request goes.
+DEFAULT_PORT = 3000
+SERVED_URL_TEMPLATE = "http://localhost:{port}/api/health"
+DEFAULT_SERVED_URL = SERVED_URL_TEMPLATE.format(port=DEFAULT_PORT)
+
+
+def _port(valor: str) -> int:
+    try:
+        puerto = int(valor)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{valor!r} no es un entero") from None
+    if not 1 <= puerto <= 65535:
+        raise argparse.ArgumentTypeError(f"{puerto} fuera del rango 1-65535")
+    return puerto
 
 
 def validate_served_url(url: str) -> None:
@@ -145,14 +156,21 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Verifica que el SHA servido por el frontend de QA coincida con "
-            f"origin/main (issue #350). Siempre consulta {DEFAULT_SERVED_URL}, "
-            "la URL fija que sirve `make qa-up`."
+            f"origin/main (issue #350). Consulta {DEFAULT_SERVED_URL} (el host y "
+            "la ruta son fijos; solo el puerto se puede cambiar con --port)."
         )
     )
-    parser.parse_args(argv)
+    parser.add_argument(
+        "--port",
+        type=_port,
+        default=DEFAULT_PORT,
+        help=f"puerto local del frontend de QA (por defecto {DEFAULT_PORT})",
+    )
+    args = parser.parse_args(argv)
+    served_url = SERVED_URL_TEMPLATE.format(port=args.port)
 
     try:
-        served_sha = fetch_served_sha(DEFAULT_SERVED_URL)
+        served_sha = fetch_served_sha(served_url)
         origin_sha = fetch_origin_main_sha()
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)
