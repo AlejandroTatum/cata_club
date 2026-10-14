@@ -5,7 +5,7 @@ import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
 import { formatDateTime } from "@/lib/format-utils";
 import type { RegisterAttendanceResult } from "@/services/api";
 import type { EstadoAsistencia } from "@/types/domain";
-import { formatSessionDateLabel, type SessionStudent } from "./attendance-utils";
+import { formatSessionDateLabel, retryableFailures, type SessionStudent } from "./attendance-utils";
 import FailedRecordsNotice from "./FailedRecordsNotice";
 import SessionReceiptBreakdown from "./SessionReceiptBreakdown";
 
@@ -60,7 +60,10 @@ export default function AttendanceReceipt({
   // to redo a list that is complete.
   const allAlreadyRegistered =
     hasFailedRecords && (result?.failed.every((f) => f.alreadyRegistered) ?? false);
-  const needsRetry = hasFailedRecords && !allAlreadyRegistered;
+  // #1768: players refused for a pending payment are listed, but a retry cannot save them.
+  const needsRetry =
+    hasFailedRecords && !allAlreadyRegistered && retryableFailures(result?.failed ?? []).length > 0;
+  const missingCount = (result?.failed ?? []).filter((f) => !f.pendingPayment).length;
   const registeredBy = result?.failed.find((f) => f.registradoPorNombre)?.registradoPorNombre ?? null;
 
   return (
@@ -101,7 +104,7 @@ export default function AttendanceReceipt({
               allAlreadyRegistered
                 ? "Ya estaba guardada en el historial del club"
                 : needsRetry
-                ? `Falta${result && result.failed.length === 1 ? "" : "n"} ${result?.failed.length ?? 0} ${result?.failed.length === 1 ? "jugador" : "jugadores"} por guardar`
+                ? `Falta${missingCount === 1 ? "" : "n"} ${missingCount} ${missingCount === 1 ? "jugador" : "jugadores"} por guardar`
                 : "Guardada en el historial del club"
             }
             value={allAlreadyRegistered ? students.length : (result?.createdCount ?? 0)}

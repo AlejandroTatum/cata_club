@@ -185,7 +185,8 @@ export function useAttendanceSubmission({
   const hasFailedRecords = (result?.failed.length ?? 0) > 0;
   const retryButtonLabel = (() => {
     if (rosterLoading) return "Reintentando…";
-    const failedCount = result?.failed.length ?? 0;
+    // #1768: players refused for a pending payment are not part of a retry.
+    const failedCount = (result?.failed ?? []).filter((f) => !f.pendingPayment).length;
     if (failedCount === 1) return "Reintentar con ese jugador";
     return `Reintentar con esos ${failedCount} jugadores`;
   })();

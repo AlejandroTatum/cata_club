@@ -11,6 +11,8 @@ Dos contratos:
    estrictez está condicionada a `AMBIENTE=production`: en `development` y
    `test` un `.env` incompleto NO puede tumbar el arranque.
 """
+from datetime import date
+
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
@@ -403,6 +405,27 @@ def test_produccion_reporta_juntos_los_dos_problemas_que_antes_pasaban():
     mensaje = str(error.value)
     assert "SMTP_HOST" in mensaje
     assert "FRONTEND_URL" in mensaje
+
+
+# --- Bloqueo por impago (#1768): fecha de lanzamiento -------------------------
+def test_el_bloqueo_por_impago_arranca_apagado_por_defecto():
+    assert _construir().bloqueo_impago_fecha_lanzamiento is None
+
+
+@pytest.mark.parametrize("valor", ["", "   "])
+def test_una_fecha_de_lanzamiento_vacia_equivale_a_bloqueo_apagado(valor):
+    """Compose pasa la variable siempre (`${VAR:-}`): vacía no puede romper el arranque."""
+    assert _construir(bloqueo_impago_fecha_lanzamiento=valor).bloqueo_impago_fecha_lanzamiento is None
+
+
+def test_la_fecha_de_lanzamiento_se_lee_como_fecha_iso():
+    ajustes = _construir(bloqueo_impago_fecha_lanzamiento="2026-11-01")
+    assert ajustes.bloqueo_impago_fecha_lanzamiento == date(2026, 11, 1)
+
+
+def test_una_fecha_de_lanzamiento_invalida_tumba_el_arranque():
+    with pytest.raises(ValidationError):
+        _construir(bloqueo_impago_fecha_lanzamiento="mañana")
 
 
 # --- 4. Registro de triage: todo campo de Settings, decidido una sola vez ---

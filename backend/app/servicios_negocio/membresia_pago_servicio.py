@@ -25,7 +25,9 @@ from app.dominio.excepciones import (
 from app.dominio.nombre_propio import nombre_completo
 from app.infraestructura.correo_deuda_regularizada import enviar_deuda_regularizada
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
+from app.dominio.bloqueo_impago import ancla_del_pago
 from app.dominio.cobertura_estado import maximo_fecha_opcional
+from app.infraestructura.repositorios.bloqueo_impago_repositorio import BloqueoImpagoRepositorio
 from app.infraestructura.repositorios.cobertura_estado_repositorio import CoberturaEstadoRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.membresia_repositorio import (
@@ -144,6 +146,7 @@ MENSAJE_PAGO_PENDIENTE_DUPLICADO = (
     "Espera a que sea validado antes de registrar uno nuevo."
 )
 MENSAJE_MEMBRESIA_PENDIENTE_DE_PAGO = "Ya tiene una membresía pendiente de pago."
+MOTIVO_REEMPLAZADO_POR_TRANSFERENCIA = "Reemplazado por una transferencia"
 MENSAJE_MEMBRESIA_INACTIVA_EXISTENTE = (
     "Esta persona ya tiene una membresía inactiva. Registra el pago en esa "
     "membresía para activarla."
@@ -853,8 +856,10 @@ class PagoServicio:
         # reactivarse primero (`PagoServicio.reactivar_membresia`).
         self._exigir_membresia_financieramente_operativa(membresia)
 
-        if self.repo.existe_pendiente_para_membresia(datos.membresia_id):
-            raise OperacionInvalida(MENSAJE_PAGO_PENDIENTE_DUPLICADO)
+        # Un pendiente bloquea otro registro (invariante 1), salvo el caso de
+        # #1768/S10: la transferencia de un socio bloqueado reemplaza a su
+        # propio efectivo. El efectivo se anula recién abajo, junto al INSERT.
+        a_reemplazar = self._pendiente_a_reemplazar(datos, es_admin)
 
         # T5/S5 (L5): un pago iniciado por el socio no se acepta mientras su
         # cobertura vigente se pagó con descuento; el admin no queda bloqueado.
@@ -890,9 +895,13 @@ class PagoServicio:
         # el período (nunca lo elige el cliente), anclar sobre el máximo real
         # ya hace que el resultado no pueda solaparse por construcción -- no
         # hace falta un chequeo aparte de "rechazar" acá.
+        #
+        # Bloqueo por impago (#1768, S3): un pago MENSUAL registrado hasta 3
+        # días después del fin de la cobertura se ancla en ese fin (sin hueco);
+        # pasado ese plazo ancla en hoy y los meses bloqueados no se cobran.
+        # La deuda vieja la salda solo el admin (`regularizar_deuda`).
         ultima_fecha_fin = self._fecha_fin_maxima_combinada(datos.membresia_id)
-        hoy = hoy_club()
-        ancla = max(ultima_fecha_fin, hoy) if ultima_fecha_fin is not None else hoy
+        ancla = ancla_del_pago(ultima_fecha_fin, hoy_club(), periodicidad)
         fecha_inicio, fecha_fin = ancla, _fin_de_cobertura(ancla, meses, periodicidad)
 
         # Gratuidad familiar (E04-RF002, issue #400 slice 4c-b): el gate del
@@ -945,6 +954,9 @@ class PagoServicio:
             estado_pago=EstadoPago.PENDIENTE_VALIDACION,
             fecha_inicio=fecha_inicio,
             fecha_fin=fecha_fin,
+            # Origen (#1768, S10): el admin registra a nombre de un tercero; el
+            # resto es el socio o su representante declarando por sí mismo.
+            autodeclarado=not es_admin,
         )
         pago.monto = monto_final
         if descuento_congelado is not None:
@@ -982,6 +994,10 @@ class PagoServicio:
         # `rollback()` es obligatorio: un flush fallido deja la sesión
         # inválida para cualquier uso posterior.
         try:
+            # Anular ANTES de insertar: el índice único parcial solo admite un
+            # pendiente por membresía, y todo va en la misma transacción (si el
+            # INSERT falla, el efectivo vuelve a estar pendiente).
+            self._anular_por_reemplazo(a_reemplazar)
             resultado = self.repo.crear(pago)
             self.db.flush()
         except IntegrityError as error:
@@ -990,6 +1006,41 @@ class PagoServicio:
                 raise OperacionInvalida(MENSAJE_PAGO_PENDIENTE_DUPLICADO) from error
             raise
         return resultado
+
+    def _pendiente_a_reemplazar(self, datos: PagoCreateDTO, es_admin: bool) -> Pago | None:
+        """El pendiente que `datos` reemplaza (S10, #1768), o `None` si la
+        membresía no tiene ninguno. Rechaza todo otro duplicado como siempre.
+
+        Solo se reemplaza cuando el socio (no el admin) carga una TRANSFERENCIA,
+        la membresía está bloqueada por impago Y el pendiente es un EFECTIVO que
+        el propio socio declaró (`autodeclarado` True; NULL = origen
+        desconocido, no se toca)."""
+        pendiente = self.repo.obtener_pendiente_de_membresia(datos.membresia_id)
+        if pendiente is None:
+            return None
+        if not (
+            not es_admin
+            and datos.tipo_pago == TipoPago.TRANSFERENCIA
+            and pendiente.tipo_pago == TipoPago.EFECTIVO
+            and pendiente.autodeclarado is True
+            and BloqueoImpagoRepositorio(self.db).membresia_bloqueada(
+                datos.membresia_id, hoy=hoy_club(),
+            )
+        ):
+            raise OperacionInvalida(MENSAJE_PAGO_PENDIENTE_DUPLICADO)
+        return pendiente
+
+    def _anular_por_reemplazo(self, pago: Pago | None) -> None:
+        """Anulación del sistema, no una decisión de un revisor: queda RECHAZADO
+        con el motivo, sin `validado_por_persona_id` y sin aviso al pagador (los
+        avisos de rechazo nacen en `validar_pago`, que acá no interviene). Sin
+        pago a reemplazar no hace nada."""
+        if pago is None:
+            return
+        pago.estado_pago = EstadoPago.RECHAZADO
+        pago.motivo_rechazo = MOTIVO_REEMPLAZADO_POR_TRANSFERENCIA
+        pago.fecha_validacion = datetime.now(timezone.utc)
+        self.db.flush()
 
     # --- Issue #1402: pago presencial de primera inscripción -----------------
     def registrar_pago_presencial(

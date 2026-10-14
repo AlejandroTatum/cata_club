@@ -28,9 +28,12 @@ def _sembrar(arnes: ArnesMigracion) -> None:
     )
 
 
-def test_la_revision_es_la_unica_cabeza():
-    config = AlembicConfig("alembic.ini")
-    assert ScriptDirectory.from_config(config).get_heads() == [REVISION]
+def test_la_revision_sigue_en_una_unica_cadena():
+    """Hay una sola cabeza y la revisión forma parte de su historia (una
+    migración posterior se encadena sobre ella, no la reemplaza)."""
+    script = ScriptDirectory.from_config(AlembicConfig("alembic.ini"))
+    assert len(script.get_heads()) == 1
+    assert REVISION in {r.revision for r in script.walk_revisions()}
 
 
 def test_columna_nullable_sin_default_y_sin_backfill(arnes_migracion):

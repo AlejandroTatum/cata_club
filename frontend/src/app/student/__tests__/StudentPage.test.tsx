@@ -3250,3 +3250,98 @@ describe("StudentPage — no-class days", () => {
     expect(screen.getAllByRole("region", { name: "Días sin clase" })).toHaveLength(1);
   });
 });
+
+/**
+ * #1768 — a profile blocked for non-payment gets ONLY the Payments module. The
+ * restriction is per profile: a guardian's other children keep the whole
+ * portal, and staff are never locked out of it.
+ */
+describe("StudentPage — non-payment block (#1768)", () => {
+  const BLOCKED = { bloqueadoPorImpago: true, cubiertoHasta: "2026-09-30" };
+
+  it("sends a blocked account holder to Payments instead of drawing the home", async () => {
+    mockFetchStudentPortal.mockResolvedValue({ ...PORTAL, self: { ...PORTAL.self!, ...BLOCKED } });
+
+    render(<StudentPage />);
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/student/payments?alumno=9");
+    });
+    expect(screen.queryByTestId("student-carnet")).not.toBeInTheDocument();
+  });
+
+  describe("in a family", () => {
+    const FAMILY: StudentPortalSummary = {
+      self: null,
+      representados: [
+        { ...PORTAL.self!, personaId: "41", nombres: "Sofía", apellidos: "Vera", ...BLOCKED },
+        { ...PORTAL.self!, personaId: "42", nombres: "Martín", apellidos: "Vera" },
+      ],
+      membershipPlans: [],
+    };
+
+    beforeEach(() => {
+      mockFetchStudentPortal.mockResolvedValue(FAMILY);
+    });
+
+    it("restricts only the blocked child: the other child keeps the home", async () => {
+      searchParams = new URLSearchParams("alumno=42");
+
+      render(<StudentPage />);
+
+      expect(await screen.findByTestId("student-carnet")).toHaveAttribute(
+        "aria-label",
+        "Carnet de jugador de Martín Vera",
+      );
+      expect(mockReplace).not.toHaveBeenCalledWith(expect.stringContaining("/student/payments"));
+    });
+
+    it("sends the blocked child to ITS Payments, so the guardian can pay for them", async () => {
+      searchParams = new URLSearchParams("alumno=41");
+
+      render(<StudentPage />);
+
+      await waitFor(() => {
+        expect(mockReplace).toHaveBeenCalledWith("/student/payments?alumno=41");
+      });
+    });
+  });
+
+  it("does not lock out a coach whose own membership is blocked", async () => {
+    mockAuthSession = {
+      user: { id: "9", name: "Coach Test", email: "coach@cataclub.com", role: "trainer", representanteId: null },
+      roles: ["ENTRENADOR"],
+      isStaffPlayer: true,
+      loggedInAt: "2026-07-01T12:00:00Z",
+    } as typeof mockAuthSession;
+    mockFetchStudentPortal.mockResolvedValue({
+      ...PORTAL,
+      self: {
+        ...PORTAL.self!,
+        ...BLOCKED,
+        membership: {
+          id: 3,
+          estado: "VENCIDA",
+          personaId: 9,
+          montoAplicado: "35.00",
+          categoria: "Mensual",
+          modalidad: "MENSUAL",
+          fechaActivacion: null,
+          fechaFin: null,
+        },
+      },
+    });
+
+    render(<StudentPage />);
+
+    expect(await screen.findByTestId("student-carnet")).toBeInTheDocument();
+    expect(mockReplace).not.toHaveBeenCalledWith(expect.stringContaining("/student/payments"));
+  });
+
+  it("leaves a profile that is not blocked on the home, as before", async () => {
+    render(<StudentPage />);
+
+    expect(await screen.findByTestId("student-carnet")).toBeInTheDocument();
+    expect(mockReplace).not.toHaveBeenCalledWith(expect.stringContaining("/student/payments"));
+  });
+});

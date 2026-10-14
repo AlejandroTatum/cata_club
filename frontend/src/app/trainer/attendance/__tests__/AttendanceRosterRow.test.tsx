@@ -168,3 +168,36 @@ describe("AttendanceRosterRow — the name survives the enrolment notice (ENT-01
     expect(screen.getByText(/Se registrará y quedará marcada para revisión/)).toBeVisible();
   });
 });
+
+describe("AttendanceRosterRow — a player blocked for non-payment (#1768)", () => {
+  const blocked = () => buildStudent({ blocked: true, reviewed: true });
+
+  it("stays listed with a labelled lock and the words «Pago pendiente»", () => {
+    renderRow({ student: blocked() });
+
+    expect(screen.getByText("Ana López")).toBeInTheDocument();
+    expect(screen.getByText("Pago pendiente")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /candado.*no se puede registrar asistencia/i })).toBeInTheDocument();
+  });
+
+  it("disables every control, and the fiche no longer cycles the state", () => {
+    const handlers = renderRow({ student: blocked() });
+
+    const group = screen.getByRole("radiogroup", { name: /Ana López/ });
+    const radios = within(group).getAllByRole("radio");
+    expect(radios).toHaveLength(5);
+    radios.forEach((radio) => expect(radio).toBeDisabled());
+    fireEvent.click(radios[1]);
+    fireEvent.click(screen.getByRole("button", { name: /Ana López/ }));
+    expect(handlers.onDirectAttendanceSet).not.toHaveBeenCalled();
+    expect(handlers.onCycleAttendance).not.toHaveBeenCalled();
+  });
+
+  it("leaves a player who is not blocked fully interactive, with no lock", () => {
+    renderRow({ student: buildStudent({ attendance: "present", reviewed: true }) });
+
+    const group = screen.getByRole("radiogroup", { name: /Ana López/ });
+    within(group).getAllByRole("radio").forEach((radio) => expect(radio).toBeEnabled());
+    expect(screen.queryByText("Pago pendiente")).not.toBeInTheDocument();
+  });
+});

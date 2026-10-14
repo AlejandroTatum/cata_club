@@ -18,7 +18,7 @@ import {
   countUnmarked,
   countUnreviewed,
   hasUnsavedAttendanceEdits,
-  isFiled,
+  isLocked,
   isReviewed,
   markRemainingPresent,
   saveAttendanceDraft,
@@ -120,8 +120,9 @@ export function useAttendanceMarking({
   const handleDirectAttendanceSet = useCallback(
     (studentIndex: number, state: EstadoAsistencia): void => {
       // First registration wins (ENT-04): a student who already has a row is
-      // not editable from the wizard.
-      if (students[studentIndex] && isFiled(students[studentIndex])) return;
+      // not editable from the wizard. Neither is a player blocked for
+      // non-payment (#1768).
+      if (students[studentIndex] && isLocked(students[studentIndex])) return;
       commitStudents(
         students.map((s, i) => (i === studentIndex ? { ...s, attendance: state, reviewed: true } : s)),
         `marcar a ${students[studentIndex]?.name ?? "un jugador"}`,
@@ -156,7 +157,7 @@ export function useAttendanceMarking({
 
   const handleCycleAttendance = useCallback(
     (studentIndex: number): void => {
-      if (students[studentIndex] && isFiled(students[studentIndex])) return;
+      if (students[studentIndex] && isLocked(students[studentIndex])) return;
       commitStudents(
         students.map((s, i) =>
           i === studentIndex ? { ...s, attendance: tapWizardAttendance(s), reviewed: true } : s,
