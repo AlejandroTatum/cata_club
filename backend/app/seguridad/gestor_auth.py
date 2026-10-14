@@ -18,6 +18,9 @@ from app.dominio.excepciones import (
 from app.dominio.modelos import HistorialEstadoMembresia, Membresia, Pago, Sesion
 from app.infraestructura import presencia
 from app.infraestructura.db import obtener_sesion
+from app.infraestructura.repositorios.bloqueo_impago_repositorio import (
+    BloqueoImpagoRepositorio, EstadoBloqueoImpago,
+)
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
@@ -125,6 +128,14 @@ class GestorAutenticacion:
         tiene una membresía ACTIVA o VENCIDA. Delega en la regla única
         `MembresiaRepositorio.puede_entrenar`; el rol de la cuenta no entra."""
         return MembresiaRepositorio(db).puede_entrenar(persona_id)
+
+    @staticmethod
+    def bloqueo_impago(db: Session, persona_id: int) -> EstadoBloqueoImpago:
+        """Hecho que `/auth/me` entrega al frontend (#1768): la Persona de la
+        cuenta está bloqueada por impago, y hasta cuándo estuvo cubierta (el
+        «venció el {fecha}» del banner). Delega en la regla única
+        `BloqueoImpagoRepositorio`; el rol de la cuenta no entra."""
+        return BloqueoImpagoRepositorio(db).por_persona(persona_id)
 
     @staticmethod
     def espera_primer_pago(db: Session, persona_id: int) -> bool:

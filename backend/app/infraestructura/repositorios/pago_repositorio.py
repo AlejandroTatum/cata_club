@@ -159,6 +159,17 @@ class PagoRepositorio:
         )
         return self.db.execute(stmt).scalar_one() > 0
 
+    def obtener_pendiente_de_membresia(self, membresia_id: int) -> Optional[Pago]:
+        """El pago PENDIENTE_VALIDACION de la membresía, o `None`. El índice
+        único parcial `uq_pago_pendiente_por_membresia` garantiza que hay a lo
+        sumo uno."""
+        return self.db.execute(
+            select(Pago).where(
+                Pago.membresia_id == membresia_id,
+                Pago.estado_pago == EstadoPago.PENDIENTE_VALIDACION,
+            )
+        ).scalars().first()
+
     def fecha_fin_maxima_aprobada(self, membresia_id: int) -> Optional[date]:
         """`fecha_fin` más lejana entre los pagos APROBADOS de una membresía,
         o `None` si nunca tuvo uno. Es el ancla desde donde
