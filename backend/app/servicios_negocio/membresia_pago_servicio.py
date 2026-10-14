@@ -2430,13 +2430,13 @@ class PagoServicio:
         if descuento_congelado is None or monto_final != 0:
             raise OperacionInvalida(MENSAJE_BENEFICIO_NO_ES_TOTAL)
 
+        # Mismo ancla que un pago (#1768, #1779): dentro de la gracia de 3 días
+        # el mes arranca en el fin de la cobertura, sin hueco.
+        periodicidad = PeriodicidadTarifa(membresia.tipo_membresia.periodicidad)
         ultima_fecha_fin = self._fecha_fin_maxima_combinada(membresia_id)
-        hoy = hoy_club()
-        ancla = max(ultima_fecha_fin, hoy) if ultima_fecha_fin is not None else hoy
+        ancla = ancla_del_pago(ultima_fecha_fin, hoy_club(), periodicidad)
         fecha_inicio = ancla
-        fecha_fin = _fin_de_cobertura(
-            ancla, meses, PeriodicidadTarifa(membresia.tipo_membresia.periodicidad),
-        )
+        fecha_fin = _fin_de_cobertura(ancla, meses, periodicidad)
 
         if self._hay_cobertura_en_rango(
             membresia_id, fecha_inicio, fecha_fin, medio_abierto=True,
