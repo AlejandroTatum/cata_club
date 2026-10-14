@@ -473,3 +473,23 @@ def test_la_marca_del_aviso_de_un_hijo_no_choca_con_el_pago_de_ese_mismo_id(
     marcas = [e for _, _, e, _ in _foto_de_avisos(db_session, representante)]
 
     assert marcas and all(e is None or e < 0 for e in marcas)
+
+
+def test_el_feed_del_representante_muestra_cada_aviso_marcado_por_hijo_sin_ocultar_ninguno(
+    db_session, sesion_inyectada, monkeypatch,  # noqa: F811
+):
+    """Nada deduplica ni enlaza por `entidad_relacionada_id` negativo: el feed
+    (`NotificacionServicio`) muestra las dos filas y devuelve la marca tal cual."""
+    from app.servicios_negocio.notificacion_servicio import NotificacionServicio
+
+    representante, hijos = _familia(db_session, vencidos=["Nino", "Nina"])
+    _mock_envio(monkeypatch)
+    _lanzamiento()
+
+    items, total = NotificacionServicio(db_session).listar_para_persona_y_hijos(representante.id)
+
+    assert total == 2
+    assert sorted(i.entidad_relacionada_id for i in items) == sorted(
+        alertas_mod._marca_de_jugador(h.persona) for h in hijos.values()
+    )
+    assert NotificacionServicio(db_session).contar_no_leidas(representante.id, es_representante=True) == 2
