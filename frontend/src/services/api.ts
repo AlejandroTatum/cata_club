@@ -1477,6 +1477,13 @@ export interface StudentProfileSummary {
   fotoUrl?: string | null;
   /** «Miembro desde» (#1749): `YYYY-MM-01` set by an admin; absent/null shows nothing. */
   miembroDesde?: string | null;
+  /**
+   * Non-payment block of THIS profile (#1768) — see `StudentProfileView`. Optional so fixtures
+   * and an older BFF read as «not blocked».
+   */
+  bloqueadoPorImpago?: boolean;
+  /** End of the coverage the «venció el …» banner names. */
+  cubiertoHasta?: string | null;
 }
 
 export interface MembershipSummary {

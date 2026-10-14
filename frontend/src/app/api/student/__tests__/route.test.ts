@@ -178,4 +178,21 @@ describe("GET /api/student", () => {
     expect(body.self.recentSessions).toHaveLength(1);
     expect(body.self.recentSessions[0]).toMatchObject({ fecha: "2026-07-01", estado: "present" });
   });
+
+  it("blocks only the dependent the backend flags, leaving the account holder untouched (#1768)", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({
+        titular: perfil(self, { bloqueadoPorImpago: false, cubiertoHasta: null }),
+        representados: [perfil(child, { bloqueadoPorImpago: true, cubiertoHasta: "2026-09-30" })],
+        horarios: [],
+        tipos: [tipo],
+      }),
+    );
+
+    const response = await GET(getRequest("http://localhost/api/student?personaId=5", cookie()));
+    const body = await response.json();
+
+    expect(body.self).toMatchObject({ bloqueadoPorImpago: false, cubiertoHasta: null });
+    expect(body.representados[0]).toMatchObject({ bloqueadoPorImpago: true, cubiertoHasta: "2026-09-30" });
+  });
 });

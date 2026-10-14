@@ -68,6 +68,15 @@ export interface StudentProfileView {
    * membership dates: an empty value shows nothing.
    */
   miembroDesde: string | null;
+  /**
+   * Issue #1768: this profile's membership ended more than the 3-day grace ago
+   * and no transfer is pending. The portal then shows ONLY Payments for this
+   * profile. Per profile, never per account: a family's other children are
+   * unaffected. The backend computes it on read; it carries no amount owed.
+   */
+  bloqueadoPorImpago: boolean;
+  /** End of the coverage the banner says «venció el …» about; `null` when the backend sends none. */
+  cubiertoHasta: string | null;
 }
 
 /**
@@ -245,6 +254,10 @@ export function buildStudentProfileView(
   membership: MembershipView | null = null,
   representante: { nombres: string; apellidos: string } | null = null,
   historialTotal: number = recentSessions.length,
+  bloqueo: { bloqueadoPorImpago: boolean; cubiertoHasta: string | null } = {
+    bloqueadoPorImpago: false,
+    cubiertoHasta: null,
+  },
 ): StudentProfileView {
   return {
     personaId: String(persona.id),
@@ -262,6 +275,8 @@ export function buildStudentProfileView(
     representanteId: persona.representanteId,
     fotoUrl: persona.fotoUrl ?? null,
     miembroDesde: persona.miembroDesde ?? null,
+    bloqueadoPorImpago: bloqueo.bloqueadoPorImpago,
+    cubiertoHasta: bloqueo.cubiertoHasta,
   };
 }
 
@@ -278,6 +293,9 @@ export interface BackendPortalPerfil {
   /** Rows in the whole history; `historial` is only the recent window. Absent on an older backend. */
   historialTotal?: number;
   membresias: BackendMembresiaPropia[];
+  /** Non-payment block (#1768) of THIS profile. Absent on a backend that predates it = not blocked. */
+  bloqueadoPorImpago?: boolean;
+  cubiertoHasta?: string | null;
 }
 
 export function buildPortalProfile(
@@ -293,7 +311,10 @@ export function buildPortalProfile(
   const representante = perfil.representante
     ? { nombres: perfil.representante.nombres, apellidos: perfil.representante.apellidos }
     : null;
-  return buildStudentProfileView(perfil.persona, recentSessions, membership, representante, perfil.historialTotal);
+  return buildStudentProfileView(perfil.persona, recentSessions, membership, representante, perfil.historialTotal, {
+    bloqueadoPorImpago: perfil.bloqueadoPorImpago === true,
+    cubiertoHasta: perfil.cubiertoHasta ?? null,
+  });
 }
 
 /**
