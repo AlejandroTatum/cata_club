@@ -371,9 +371,12 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
     return JSON.parse(String(body));
   }
 
-  /** The JSON body the handler forwarded to FastAPI. */
+  /**
+   * The JSON body the handler forwarded to FastAPI: the first backend call that
+   * carries one (a handler may first ask `/auth/me` who is calling).
+   */
   function forwardedToBackend(): Record<string, unknown> {
-    const init = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    const init = vi.mocked(global.fetch).mock.calls.map((call) => call[1]).find((candidate) => candidate?.body !== undefined);
     return JSON.parse(String(init?.body));
   }
 
@@ -565,12 +568,14 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
       }),
     );
 
-    vi.spyOn(global, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ id: 2 }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
+    // The medical-record handler first asks `/auth/me` who is calling (non-payment block, #1779 S4);
+    // an admin is never gated, so the PATCH reaches the backend unchanged.
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const body = String(input).includes("/auth/me")
+        ? { correo: "a@b.c", personaId: 1, nombres: "A", apellidos: "B", roles: ["ADMINISTRADOR"], bloqueadoPorImpago: false }
+        : { id: 2 };
+      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
 
     const response = await PATCH_FICHA_MEDICA(
       new NextRequest("http://localhost/api/fichas-medicas/persona/2", {
