@@ -110,6 +110,38 @@ describe("GET /api/groups/horarios/[id]/alumnos", () => {
     );
   });
 
+  // S15: the roster's `bloqueado_por_impago` flag is judged on the session date.
+  it("forwards the session date (fecha) to the backend unchanged", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ items: [], total: 0, skip: 0, limit: 200 }),
+    );
+
+    const access = makeJwt(3600);
+    await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`, "?limit=200&fecha=2026-07-20"), {
+      params: Promise.resolve({ id: "1" }),
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/asistencias/horarios/1/alumnos?limit=200&fecha=2026-07-20",
+      expect.anything(),
+    );
+  });
+
+  it("omits fecha when the caller sent none, so the backend defaults to today", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ items: [], total: 0, skip: 0, limit: 200 }),
+    );
+
+    const access = makeJwt(3600);
+    await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`, "?limit=200"), {
+      params: Promise.resolve({ id: "1" }),
+    });
+
+    const [url] = vi.mocked(global.fetch).mock.calls[0];
+    expect(String(url)).toBe("http://localhost:8000/api/v1/asistencias/horarios/1/alumnos?limit=200");
+    expect(String(url)).not.toContain("fecha");
+  });
+
   it("propagates backend errors", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ message: "No encontrado" }, 404));
 

@@ -5,7 +5,9 @@
  * the backend's standard `{items, total, skip, limit}` envelope (issue #7).
  * Proxies to FastAPI's GET /asistencias/horarios/{horario_id}/alumnos.
  * `skip`/`limit` are forwarded verbatim — the backend validates the bounds
- * (`skip >= 0`, `1 <= limit <= 200`).
+ * (`skip >= 0`, `1 <= limit <= 200`). `fecha` (ISO YYYY-MM-DD) is the session
+ * date the roster's `bloqueado_por_impago` flag is judged on; absent, the
+ * backend uses today.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -20,8 +22,10 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
   const qs = new URLSearchParams();
   const skip = searchParams.get("skip");
   const limit = searchParams.get("limit");
+  const fecha = searchParams.get("fecha");
   if (skip) qs.set("skip", skip);
   if (limit) qs.set("limit", limit);
+  if (fecha) qs.set("fecha", fecha);
   const suffix = qs.size > 0 ? `?${qs.toString()}` : "";
 
   return proxyToBackend(
