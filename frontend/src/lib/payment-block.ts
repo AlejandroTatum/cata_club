@@ -17,6 +17,12 @@ export const PAYMENT_BLOCK_MINOR_MESSAGE = "Pídele a tu representante que pague
 /** Shown beside the payment method while blocked: cash is not a way back in from the portal. */
 export const CASH_AT_CLUB_NOTE = "El efectivo se paga en el club.";
 
+/** What the BFF answers (403) when asked for the data of a blocked profile: only Payments stays open. */
+export const PAYMENT_BLOCK_API_MESSAGE = "La membresía de esta cuenta está vencida. Paga para volver a ver esta información.";
+
+/** Machine-readable `codigo` of that 403, so a client never has to match the message. */
+export const PAYMENT_BLOCK_ERROR_CODE = "bloqueo_impago";
+
 /**
  * The banner of a blocked profile. The date is the end of its coverage.
  *

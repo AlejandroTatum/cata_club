@@ -14,10 +14,7 @@ import { NextRequest } from "next/server";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { GET } from "../route";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/server/auth";
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-}
+import { fetchedUrls, jsonResponse, meBody, routeFetch } from "@/lib/server/__tests__/payment-block-fixtures";
 
 function base64Url(input: string): string {
   return Buffer.from(input).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -180,19 +177,120 @@ describe("GET /api/student", () => {
   });
 
   it("blocks only the dependent the backend flags, leaving the account holder untouched (#1768)", async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(
-      jsonResponse({
+    routeFetch({
+      "/auth/me": jsonResponse(meBody({ personaId: 5, roles: ["REPRESENTANTE"] })),
+      "/portal/alumno/5": jsonResponse({
         titular: perfil(self, { bloqueadoPorImpago: false, cubiertoHasta: null }),
         representados: [perfil(child, { bloqueadoPorImpago: true, cubiertoHasta: "2026-09-30" })],
         horarios: [],
         tipos: [tipo],
       }),
-    );
+    });
 
     const response = await GET(getRequest("http://localhost/api/student?personaId=5", cookie()));
     const body = await response.json();
 
     expect(body.self).toMatchObject({ bloqueadoPorImpago: false, cubiertoHasta: null });
     expect(body.representados[0]).toMatchObject({ bloqueadoPorImpago: true, cubiertoHasta: "2026-09-30" });
+  });
+
+});
+
+/**
+ * #1779 S4 — the portal aggregate must not hand a blocked profile's attendance
+ * to a non-staff caller. What Payments needs (identity, membership, the block
+ * flag, the coverage end) stays, so a guardian still reaches the child's Payments.
+ */
+describe("GET /api/student — non-payment block (#1779 S4)", () => {
+  const sesion = (id: number, personaId: number) => ({
+    id, fechaEntrenamiento: "2026-06-11", fechaRegistro: "2026-06-11T10:00:00Z", estado: "PRESENTE",
+    personaId, personaNombreCompleto: "N A", horarioId: 3,
+  });
+  const horario = { id: 3, diaSemana: "JUEVES", horaInicio: "15:00:00", horaFin: "16:00:00" };
+  const membresia = (id: number, personaId: number) => ({
+    id, estado: "VENCIDA", personaId, montoAplicado: "25.00", tipoMembresiaId: 1,
+  });
+  const aggregate = () => ({
+    titular: perfil(self, { historial: [sesion(1, 5)], membresias: [membresia(4, 5)] }),
+    representados: [
+      perfil(child, {
+        historial: [sesion(2, 6), sesion(3, 6)],
+        historialTotal: 2,
+        membresias: [membresia(7, 6)],
+        bloqueadoPorImpago: true,
+        cubiertoHasta: "2026-09-30",
+      }),
+    ],
+    horarios: [horario],
+    tipos: [tipo],
+  });
+  const request = () => getRequest("http://localhost/api/student?personaId=5", cookie());
+
+  it("withholds a blocked dependent's attendance from the guardian but keeps what Payments reads", async () => {
+    routeFetch({
+      "/auth/me": jsonResponse(meBody({ personaId: 5, roles: ["REPRESENTANTE"] })),
+      "/portal/alumno/5": jsonResponse(aggregate()),
+    });
+
+    const body = await (await GET(request())).json();
+
+    expect(body.representados[0]).toMatchObject({
+      personaId: "6",
+      bloqueadoPorImpago: true,
+      cubiertoHasta: "2026-09-30",
+      membership: { estado: "VENCIDA" },
+      recentSessions: [],
+      historialTotal: 0,
+    });
+    // The guardian's own profile is not blocked: nothing of it is withheld.
+    expect(body.self.recentSessions).toHaveLength(1);
+  });
+
+  it("withholds a blocked player's own attendance from them", async () => {
+    const own = aggregate();
+    own.titular = perfil(self, { historial: [sesion(1, 5)], bloqueadoPorImpago: true, cubiertoHasta: "2026-09-30" });
+    own.representados = [];
+    routeFetch({
+      "/auth/me": jsonResponse(meBody({ personaId: 5, roles: ["ESTUDIANTE"], bloqueadoPorImpago: true })),
+      "/portal/alumno/5": jsonResponse(own),
+    });
+
+    const body = await (await GET(request())).json();
+
+    expect(body.self).toMatchObject({ bloqueadoPorImpago: true, recentSessions: [], historialTotal: 0 });
+  });
+
+  it("never restricts staff reading a portal, even a lapsed admin's own", async () => {
+    routeFetch({
+      "/auth/me": jsonResponse(meBody({ personaId: 1, roles: ["ADMINISTRADOR"], bloqueadoPorImpago: true })),
+      "/portal/alumno/5": jsonResponse(aggregate()),
+    });
+
+    const body = await (await GET(request())).json();
+
+    expect(body.representados[0].recentSessions).toHaveLength(2);
+    expect(body.representados[0].historialTotal).toBe(2);
+  });
+
+  it("fails closed when the caller cannot be resolved", async () => {
+    routeFetch({
+      "/auth/me": jsonResponse({ detail: "boom" }, 500),
+      "/portal/alumno/5": jsonResponse(aggregate()),
+    });
+
+    const body = await (await GET(request())).json();
+
+    expect(body.representados[0].recentSessions).toEqual([]);
+  });
+
+  it("asks who the caller is only when some profile is blocked", async () => {
+    const unblocked = aggregate();
+    unblocked.representados[0] = perfil(child, { historial: [sesion(2, 6)], membresias: [membresia(7, 6)] });
+    routeFetch({ "/portal/alumno/5": jsonResponse(unblocked) });
+
+    const body = await (await GET(request())).json();
+
+    expect(body.representados[0].recentSessions).toHaveLength(1);
+    expect(fetchedUrls().some((u) => u.includes("/auth/me"))).toBe(false);
   });
 });

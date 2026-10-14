@@ -309,6 +309,7 @@ class AuthServicio:
     def _registrar_sesion(
         self, usuario: Usuario, user_agent: str | None, iniciada_en: datetime | None = None,
         legacy_huella: str | None = None, rotado_en: datetime | None = None,
+        confirmar: bool = True,
     ) -> Sesion:
         """Abre la sesión de un par de tokens: la fila nace con el `jti` del
         primer refresh y su actividad en este instante (ver `Sesion`).
@@ -324,6 +325,10 @@ class AuthServicio:
 
         `iniciada_en`, `legacy_huella` y `rotado_en` solo los pasa la adopción
         de un refresh legacy sin `sid` (ver `_sesion_de_legacy_sin_sid`).
+
+        `confirmar=False` solo hace `flush()` (la fila ya tiene `id`) y deja el
+        commit al llamador: es para quien abre la sesión DENTRO de una
+        operación suya y decide la atomicidad (`reemitir_tokens_para`).
         """
         sesion = Sesion(
             usuario_id=usuario.id,
@@ -337,7 +342,10 @@ class AuthServicio:
         sesion.legacy_huella = legacy_huella
         sesion.rotado_en = rotado_en
         self.db.add(sesion)
-        self.db.commit()
+        if confirmar:
+            self.db.commit()
+        else:
+            self.db.flush()
         self.db.refresh(sesion)
         return sesion
 
@@ -721,7 +729,7 @@ class AuthServicio:
         if not recien_abierta:
             if sesion is None or sesion.revocada_en is not None:
                 raise CredencialesInvalidas("Refresh token inválido o expirado")
-            if ahora - sesion.iniciada_en > timedelta(days=settings.jwt_refresh_expira_dias):
+            if GestorAutenticacion.sesion_pasada_del_tope_absoluto(sesion, ahora):
                 self._revocar_sesion(sesion, ahora)
                 raise CredencialesInvalidas("Refresh token inválido o expirado")
             if jti is None:
@@ -811,8 +819,7 @@ class AuthServicio:
     def _rotar_o_rechazar(self, sesion: Sesion, jti: str, ahora: datetime) -> None:
         """Reglas de un refresh CON `jti` sobre una sesión viva (ver
         `refrescar_sesion`, puntos 2 y 3)."""
-        ultimo_uso = sesion.ultimo_uso_en or sesion.iniciada_en
-        if ahora - ultimo_uso > timedelta(hours=settings.sesion_inactividad_horas):
+        if GestorAutenticacion.sesion_inactiva(sesion, ahora):
             self._revocar_sesion(sesion, ahora)
             raise CredencialesInvalidas("Refresh token inválido o expirado")
         if jti == sesion.refresh_jti:
@@ -941,8 +948,14 @@ class AuthServicio:
         embebidos en el JWT, así que un token emitido antes de la mutación
         sigue leyendo el rol viejo hasta su expiración natural -- sin
         reemisión, quien acaba de pasar a ser REPRESENTANTE seguiría viendo
-        su sesión como ALUMNO hasta el próximo login."""
-        sesion = self._registrar_sesion(usuario, None)
+        su sesión como ALUMNO hasta el próximo login.
+
+        NO commitea (#1775): la fila `sesion` queda flusheada dentro de la
+        transacción del llamador, que decide la atomicidad y DEBE confirmar
+        después de llamar -- el access lleva el `sid` de esa fila, y si nadie
+        confirma, el cierre de la petición la revierte y el primer uso del
+        token recibe 401."""
+        sesion = self._registrar_sesion(usuario, None, confirmar=False)
         return self._emitir_par_tokens(usuario, sesion)
 
     # --- Listado de sesiones propias ----------------------------------------
@@ -1328,4 +1341,5 @@ class AuthServicio:
         self.db.refresh(usuario)
         self.solicitar_verificacion_correo(usuario.correo)
         tokens = self.reemitir_tokens_para(usuario)
+        self.db.commit()
         return {"correo": usuario.correo, "mensaje": MENSAJE_VERIFICACION_ENVIADA, **tokens}

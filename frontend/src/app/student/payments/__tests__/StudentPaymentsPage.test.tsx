@@ -2391,7 +2391,7 @@ describe("StudentPaymentsPage — non-payment block (#1768)", () => {
     it("lets a blocked member with a pending cash payment send a transfer instead, without pre-blocking them", async () => {
       portalWith(BLOCKED_SELF);
       mockFetchPagosDePersona.mockResolvedValue([
-        makePago({ id: 7, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "EFECTIVO", fechaFin: COVERAGE_LAPSED }),
+        makePago({ id: 7, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "EFECTIVO", autodeclarado: true, fechaFin: COVERAGE_LAPSED }),
       ]);
 
       render(<StudentPaymentsPage />);
@@ -2413,6 +2413,50 @@ describe("StudentPaymentsPage — non-payment block (#1768)", () => {
           expect.objectContaining({ tipoPago: "TRANSFERENCIA", personaId: 9 }),
         );
       });
+    });
+
+    // #1779 S7: the backend refuses a second pending payment unless the pending cash is
+    // self-declared (400 «ya tiene un pago por validar»), so the replacement is offered
+    // only then. An admin-registered or legacy pending cash payment awaits the club.
+    describe.each([
+      ["registered by the club (autodeclarado: false)", { autodeclarado: false }],
+      ["legacy, with no autodeclarado field", {}],
+    ])("a blocked member's pending cash payment %s", (_label, flag) => {
+      beforeEach(() => {
+        portalWith(BLOCKED_SELF);
+        mockFetchPagosDePersona.mockResolvedValue([
+          makePago({ id: 7, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "EFECTIVO", fechaFin: COVERAGE_LAPSED, ...flag }),
+        ]);
+      });
+
+      it("says it awaits the club's validation and promises no replacement", async () => {
+        render(<StudentPaymentsPage />);
+
+        expect(await screen.findByText(/ya tienes un pago esperando validación/i)).toBeInTheDocument();
+        expect(screen.queryByText(/reemplaza tu pago en efectivo/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/reemplaza/i)).not.toBeInTheDocument();
+      });
+
+      it("offers no payment form, so no request that the backend would refuse can be sent", async () => {
+        render(<StudentPaymentsPage />);
+
+        await screen.findByText(/ya tienes un pago esperando validación/i);
+        expect(screen.queryByRole("button", { name: /registrar un pago/i })).not.toBeInTheDocument();
+        expect(mockRegistrarPago).not.toHaveBeenCalled();
+      });
+    });
+
+    it("does not promise the replacement when one of several pending cash payments is not self-declared", async () => {
+      portalWith(BLOCKED_SELF);
+      mockFetchPagosDePersona.mockResolvedValue([
+        makePago({ id: 7, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "EFECTIVO", autodeclarado: true, fechaFin: COVERAGE_LAPSED }),
+        makePago({ id: 8, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "EFECTIVO", autodeclarado: false, fechaFin: COVERAGE_LAPSED }),
+      ]);
+
+      render(<StudentPaymentsPage />);
+
+      expect(await screen.findByText(/ya tienes un pago esperando validación/i)).toBeInTheDocument();
+      expect(screen.queryByText(/reemplaza/i)).not.toBeInTheDocument();
     });
   });
 });

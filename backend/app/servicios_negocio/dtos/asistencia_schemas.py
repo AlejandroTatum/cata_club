@@ -210,6 +210,9 @@ class AsistenciaLoteFallidoDTO(ResponseBase, BaseModel):
     # El cliente lo usa para refrescar la lista y completar solo a quienes
     # faltan, en vez de tratarlo como un error que reintentar.
     ya_registrada: bool = False
+    # #1779: motivo estable de rechazos que el cliente distingue sin leer el
+    # texto (`AsistenciaBloqueadaPorImpago.codigo`); `None` en cualquier otro.
+    codigo: Optional[str] = None
 
 
 class AsistenciaLoteResponseDTO(ResponseBase, BaseModel):

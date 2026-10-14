@@ -67,6 +67,27 @@ def test_corrige_el_correo_borra_la_fila_vieja_y_encola_una_nueva(client, db_ses
     assert [(f.status,) for f in filas] == [("PENDIENTE",)]
 
 
+def test_el_par_reemitido_al_corregir_el_correo_funciona_en_el_primer_uso(client_sin_token, db_session):
+    """#1775 S11: el access reemitido lleva el `sid` de una sesión nueva, que
+    el endpoint debe dejar confirmada junto con el cambio de correo."""
+    from app.servicios_negocio.auth_servicio import AuthServicio
+
+    crear_usuario_auth(db_session, correo="sofia@tpyo.com")
+    viejo = AuthServicio(db_session).login("sofia@tpyo.com", "clave12345")
+
+    resp = client_sin_token.patch(
+        "/api/v1/auth/correo", json={"correo": "sofia@example.com"},
+        headers={"Authorization": f"Bearer {viejo['access_token']}"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    me = client_sin_token.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {resp.json()['accessToken']}"},
+    )
+    assert me.status_code == 200, me.text
+    assert me.json()["correo"] == "sofia@example.com"
+
+
 def test_una_cuenta_ya_verificada_no_puede_cambiar_su_correo(client, db_session):
     cuenta = crear_usuario_auth(db_session, correo="verificada@cataclub.test")
     cuenta.correo_verificado = True

@@ -7,12 +7,17 @@
  *   PATCH /fichas-medicas/persona/{persona_id}
  * Both are ADMINISTRADOR-only in the backend; we propagate its 401/403.
  * IMPORTANT: when PATCH sends `enfermedades`, the backend replaces the whole list.
+ *
+ * #1779 S4: both verbs answer 403 (`codigo: "bloqueo_impago"`) for a profile
+ * blocked for non-payment, unless the caller is staff — the portal hides this
+ * record behind Payments and the server must agree.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
+import { pickRefreshed, refreshedTokenCookies, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 import { parseNumericIdOrBadRequest } from "@/lib/server/bff-helpers";
+import { gateBlockedPersona } from "@/lib/server/payment-block-gate";
 import type { FichaMedicaEditable, FichaMedicaUpdatePayload, TipoSangre } from "@/types/domain";
 
 interface RouteContext {
@@ -22,6 +27,9 @@ interface RouteContext {
 export async function GET(request: NextRequest, context: RouteContext): Promise<NextResponse> {
   const personaId = parseNumericIdOrBadRequest((await context.params).id, "persona");
   if (personaId instanceof NextResponse) return personaId;
+
+  const gate = await gateBlockedPersona(request, personaId);
+  if (!gate.ok) return gate.response;
 
   const result = await backendFetchAuthed(request, `/fichas-medicas/persona/${personaId}`);
 
@@ -34,8 +42,9 @@ export async function GET(request: NextRequest, context: RouteContext): Promise<
 
   const data = (await result.response.json()) as FichaMedicaEditable;
   const response = NextResponse.json(data);
-  if (result.refreshedAccessToken) {
-    setAuthCookies(response, refreshedTokenCookies(result));
+  const refreshed = pickRefreshed(gate, result);
+  if (refreshed.refreshedAccessToken) {
+    setAuthCookies(response, refreshedTokenCookies(refreshed));
   }
   return response;
 }
@@ -78,6 +87,9 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
   if (payload.contactoEmergencia !== undefined) backendBody.contacto_emergencia = payload.contactoEmergencia;
   if (payload.telefonoEmergencia !== undefined) backendBody.telefono_emergencia = payload.telefonoEmergencia;
 
+  const gate = await gateBlockedPersona(request, personaId);
+  if (!gate.ok) return gate.response;
+
   const result = await backendFetchAuthed(request, `/fichas-medicas/persona/${personaId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -93,8 +105,9 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
 
   const data = (await result.response.json()) as FichaMedicaEditable;
   const response = NextResponse.json(data);
-  if (result.refreshedAccessToken) {
-    setAuthCookies(response, refreshedTokenCookies(result));
+  const refreshed = pickRefreshed(gate, result);
+  if (refreshed.refreshedAccessToken) {
+    setAuthCookies(response, refreshedTokenCookies(refreshed));
   }
   return response;
 }

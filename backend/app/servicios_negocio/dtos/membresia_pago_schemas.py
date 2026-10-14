@@ -341,6 +341,11 @@ class PagoResponseDTO(ResponseBase, BaseModel):
     # PENDIENTE_VALIDACION, y en pagos validados antes de este fix (no se
     # reescriben retroactivamente -- ver `app.dominio.modelos.Pago`).
     validado_por_persona_id: Optional[int] = None
+    # #1779: True si lo declaró el propio socio o su representante; False si lo
+    # registró un administrador. Un pago anterior a la columna (NULL, origen
+    # desconocido) sale False: la regla de reemplazo del servidor tampoco lo
+    # trata como del socio (`autodeclarado is True`).
+    autodeclarado: bool = False
     # Issue #459: por qué se aprobó ESTA transferencia sin comprobante
     # adjunto -- `None` salvo en ese caso exacto (ver
     # `app.dominio.modelos.Pago.motivo_excepcion_sin_comprobante`).
@@ -355,6 +360,11 @@ class PagoResponseDTO(ResponseBase, BaseModel):
     # administrador que el aviso no salió, en vez de dejarlo bajo un 200
     # mudo (hallazgo en vivo, 2026-08-11).
     aviso_no_enviado: bool = False
+
+    @field_validator("autodeclarado", mode="before")
+    @classmethod
+    def _origen_desconocido_es_no_autodeclarado(cls, valor):
+        return valor is True
 
 
 # --- Listado / cola de validación (GET /membresias/pagos) -------------------

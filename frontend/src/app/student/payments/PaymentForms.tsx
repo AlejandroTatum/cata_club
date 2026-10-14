@@ -402,9 +402,10 @@ function RenewPaymentForm({
   /** #1768: this profile is blocked, so the method note says where cash is paid. */
   blockedByNonPayment: boolean;
   /**
-   * #1768: a blocked member whose only pending payment is cash. `hasPendingPago`
-   * does not hold the form back for them — a transfer replaces that cash payment
-   * (backend S10) — so cash is the one method left off the list.
+   * #1768: a blocked member whose only pending payment is cash they declared
+   * themselves (#1779 S7). `hasPendingPago` does not hold the form back for them —
+   * a transfer replaces that cash payment (backend S10) — so cash is the one method
+   * left off the list.
    */
   pendingCashToReplace: boolean;
   onRegistered: () => void;
