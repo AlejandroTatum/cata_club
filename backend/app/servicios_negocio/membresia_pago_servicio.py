@@ -26,7 +26,7 @@ from app.dominio.nombre_propio import nombre_completo
 from app.infraestructura.correo_deuda_regularizada import enviar_deuda_regularizada
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
 from app.dominio.bloqueo_impago import ancla_del_pago
-from app.dominio.cobertura_estado import maximo_fecha_opcional
+from app.dominio.cobertura_estado import marcar_activa, maximo_fecha_opcional
 from app.infraestructura.repositorios.bloqueo_impago_repositorio import BloqueoImpagoRepositorio
 from app.infraestructura.repositorios.cobertura_estado_repositorio import CoberturaEstadoRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
@@ -3005,6 +3005,10 @@ class PagoServicio:
         #1492): los tres caminos hacen que la persona reciba
         cobertura REAL, así que los tres deben dejar la membresía ACTIVA.
 
+        La regla de `fecha_activacion` vive en `marcar_activa` (dominio), la
+        misma que usa la tarea nocturna; acá quedan el `flush` y el manejo del
+        `IntegrityError`.
+
         Issue #1225: `fecha_activacion` SOLO se escribe cuando la membresía
         todavía está INACTIVA al entrar acá -- la primera activación real.
         "Socio desde" lee esta columna (`frontend/src/app/student/page.tsx`),
@@ -3034,9 +3038,7 @@ class PagoServicio:
         al MISMO error de dominio para ambos llamadores, así ninguno de los
         dos tiene que saber del índice. El `rollback()` es obligatorio: un
         flush fallido deja la sesión inválida para cualquier uso posterior."""
-        if membresia.estado == EstadoMembresia.INACTIVA:
-            membresia.fecha_activacion = datetime.now(timezone.utc)
-        membresia.estado = EstadoMembresia.ACTIVA
+        marcar_activa(membresia, datetime.now(timezone.utc))
         try:
             self.db.flush()
         except IntegrityError as error:
