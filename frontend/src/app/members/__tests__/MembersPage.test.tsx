@@ -1932,7 +1932,7 @@ describe("MembersPage — Registrar pago inline form", () => {
 
   // QA3 ADM-14: Vigencia es la cobertura real de la membresía (`cubiertoHasta`),
   // no el período del último pago (que puede estar pendiente o ser retroactivo).
-  it("shows Vigencia as the real coverage end, not the last payment's period", async () => {
+  it("shows Vigencia as the last covered day (cubiertoHasta − 1), not the last payment's period", async () => {
     const dialog = await openMemberDialog({
       membresia: {
         tipo: "Mensual Infantil",
@@ -1945,7 +1945,7 @@ describe("MembersPage — Registrar pago inline form", () => {
       },
     });
 
-    expect(within(dialog).getAllByText(/hasta 01\/12\/2026/i).length).toBeGreaterThan(0);
+    expect(within(dialog).getAllByText(/hasta 30\/11\/2026/i).length).toBeGreaterThan(0);
     expect(within(dialog).queryByText(/01\/09\/2026/)).not.toBeInTheDocument();
   });
 

@@ -15,7 +15,7 @@ import { E2E_BASE_URL } from "./e2e-target";
 import { mockClubPaymentInfo } from "./helpers/club-payment-info";
 
 const MOCK_ACCESS_TOKEN = "mock-header.mock-payload.mock-signature";
-const BANNER = "Tu membresía venció el 30/09/2026. Paga para volver a entrenar.";
+const BANNER = "Tu membresía venció el 29/09/2026. Paga para volver a entrenar.";
 
 const LAPSED_MEMBERSHIP = {
   id: 90,

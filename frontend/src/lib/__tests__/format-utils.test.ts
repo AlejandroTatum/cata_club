@@ -12,6 +12,7 @@ import {
   formatDateRange,
   formatMonthYear,
   joinWithY,
+  lastCoveredDay,
 } from "../format-utils";
 
 // ---------------------------------------------------------------------------
@@ -231,5 +232,35 @@ describe("formatMonthYear", () => {
   it("returns an empty string for empty or invalid input", () => {
     expect(formatMonthYear("")).toBe("");
     expect(formatMonthYear("no es una fecha")).toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// lastCoveredDay (fecha-cobertura — the backend `fecha_fin` is EXCLUSIVE)
+// ---------------------------------------------------------------------------
+
+describe("lastCoveredDay", () => {
+  it("is the day before the exclusive fecha_fin", () => {
+    expect(lastCoveredDay("2026-10-15")).toBe("2026-10-14");
+    expect(lastCoveredDay("2026-09-30")).toBe("2026-09-29");
+  });
+
+  it("crosses month, year and leap-day boundaries", () => {
+    expect(lastCoveredDay("2026-10-01")).toBe("2026-09-30");
+    expect(lastCoveredDay("2027-01-01")).toBe("2026-12-31");
+    expect(lastCoveredDay("2028-03-01")).toBe("2028-02-29");
+  });
+
+  it("feeds formatDate to the date the family actually has covered", () => {
+    expect(formatDate(lastCoveredDay("2026-10-15"))).toBe("14/10/2026");
+  });
+
+  it("reads the calendar day of a UTC-midnight timestamp, whatever the runner's zone", () => {
+    expect(lastCoveredDay("2026-10-15T00:00:00Z")).toBe("2026-10-14");
+  });
+
+  it("hands back input it cannot read, so formatDate keeps its empty-string contract", () => {
+    expect(lastCoveredDay("")).toBe("");
+    expect(lastCoveredDay("no es una fecha")).toBe("no es una fecha");
   });
 });

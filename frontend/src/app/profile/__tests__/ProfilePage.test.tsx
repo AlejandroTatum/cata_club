@@ -1565,7 +1565,7 @@ describe("ProfilePage — the club on the screen (faro: perfil y login)", () => 
   });
 
   it("shows an empty meter and how long ago coverage lapsed", async () => {
-    await renderStudent({}, [makePago({ fechaFin: isoDaysFromToday(-3) })]);
+    await renderStudent({}, [makePago({ fechaFin: isoDaysFromToday(-2) })]);
 
     const membership = await screen.findByTestId("profile-membership");
     expect(within(membership).getByText("Venció hace 3 días")).toBeInTheDocument();
@@ -1904,12 +1904,14 @@ describe("ProfilePage — v2: the block of each role", () => {
   // ---- jugador ----------------------------------------------------------
 
   it("jugador: the ticket counts the days left and draws a 30-day strip", async () => {
-    await renderStudent(SELF, { pagos: [pago(daysFromToday(24))] });
+    // `fechaFin` is exclusive: the last covered day is the day before it.
+    await renderStudent(SELF, { pagos: [pago(daysFromToday(25))] });
 
     const ticket = await screen.findByTestId("profile-membership");
     expect(within(ticket).getByTestId("profile-coverage")).toHaveTextContent("24");
     expect(within(ticket).getByText("días restantes")).toBeInTheDocument();
     expect(within(ticket).getByText(/Al día · hasta/)).toBeInTheDocument();
+    expect(within(ticket).getByText(new RegExp(`hasta ${formatDate(daysFromToday(24))}`))).toBeInTheDocument();
     const strip = within(ticket).getByRole("progressbar", { name: /cobertura restante/i });
     expect(strip).toHaveAttribute("aria-valuenow", "24");
     expect(strip.children).toHaveLength(30);
@@ -1920,14 +1922,14 @@ describe("ProfilePage — v2: the block of each role", () => {
   });
 
   it("jugador: the ticket warns in the last week and shows lapsed coverage as such", async () => {
-    await renderStudent(SELF, { pagos: [pago(daysFromToday(5))] });
+    await renderStudent(SELF, { pagos: [pago(daysFromToday(6))] });
     const warn = await screen.findByTestId("profile-membership");
     expect(warn).toHaveAttribute("data-tone", "warn");
     expect(within(warn).getByText(/Vence pronto/)).toBeInTheDocument();
   });
 
   it("jugador: lapsed coverage turns the ticket red and says how long ago", async () => {
-    const hero = await renderStudent(SELF, { pagos: [pago(daysFromToday(-3))] });
+    const hero = await renderStudent(SELF, { pagos: [pago(daysFromToday(-2))] });
 
     const ticket = await screen.findByTestId("profile-membership");
     expect(ticket).toHaveAttribute("data-tone", "bad");

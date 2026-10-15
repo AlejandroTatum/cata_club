@@ -37,12 +37,12 @@ import Link from "next/link";
 import { ArrowRight, CreditCard } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { Badge, buttonClasses, cn } from "@/components/ui";
-import { formatCurrency, formatDate } from "@/lib/format-utils";
+import { formatCurrency, formatDate, lastCoveredDay } from "@/lib/format-utils";
 import { MIN_TARGET_CLASS } from "@/lib/target-size";
 import { periodSuffix, type Periodicidad } from "@/lib/tarifa-periodo";
 import {
   COVERAGE_ENDING_SOON_DAYS,
-  daysUntil,
+  daysUntilCoverageEnd,
   describeCuotaBadge,
   paymentBandTone,
   type PaymentSituation,
@@ -77,8 +77,8 @@ const COUNTDOWN_KINDS = new Set<PaymentSituation["kind"]>(["expired", "ending-so
  * can act on. «Vence en 12 días (03/11/2026). Paga $25,00 y sube el
  * comprobante; el club lo revisa y te avisamos aquí.»
  */
-function describeNextStep(daysLeft: number, coverageEnd: string, price: string): string {
-  const date = formatDate(coverageEnd);
+function describeNextStep(daysLeft: number, lastDay: string, price: string): string {
+  const date = formatDate(lastDay);
   const when =
     daysLeft < 0
       ? `Venció hace ${-daysLeft} ${daysLeft === -1 ? "día" : "días"} (${date}).`
@@ -117,12 +117,15 @@ export default function CuotaCard({
   const monthlyPriceLabel = monthlyPrice && !isGratuitous ? formatCurrency(monthlyPrice) : null;
   const showDetail = !(coverageEnd && DETAIL_IS_THE_DATE.has(situation.kind));
   const hasFigures = Boolean(coverageEnd || monthlyPriceLabel);
-  const daysLeft = daysUntil(coverageEnd, today);
+  // `coverageEnd` is the backend's exclusive `fecha_fin`; the card counts and
+  // prints the last covered day instead.
+  const lastDay = coverageEnd ? lastCoveredDay(coverageEnd) : null;
+  const daysLeft = daysUntilCoverageEnd(coverageEnd, today);
   // The primary (red) button is the one nudge: only when 7 days or fewer remain.
   const dueSoon = daysLeft !== null && daysLeft <= COVERAGE_ENDING_SOON_DAYS;
   const nextStep =
-    action && coverageEnd && monthlyPriceLabel && daysLeft !== null && COUNTDOWN_KINDS.has(situation.kind)
-      ? describeNextStep(daysLeft, coverageEnd, monthlyPriceLabel)
+    action && lastDay && monthlyPriceLabel && daysLeft !== null && COUNTDOWN_KINDS.has(situation.kind)
+      ? describeNextStep(daysLeft, lastDay, monthlyPriceLabel)
       : null;
 
   return (
@@ -176,7 +179,7 @@ export default function CuotaCard({
                 coverageEnd && monthlyPriceLabel ? "grid-cols-2" : "grid-cols-1",
               )}
             >
-              {coverageEnd && <CuotaFigure label="Cubierta hasta" value={formatDate(coverageEnd)} />}
+              {coverageEnd && <CuotaFigure label="Cubierta hasta" value={formatDate(lastCoveredDay(coverageEnd))} />}
               {monthlyPriceLabel && <CuotaFigure label="A pagar" value={monthlyPriceLabel} note={periodSuffix(periodicidad)} />}
             </div>
           )}

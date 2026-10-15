@@ -1459,7 +1459,8 @@ describe("describePaymentsState", () => {
     const student = { ...base, membresia: membresia({ cubiertoHasta: "2026-12-01", mesesAdeudados: 0 }) };
     const state = describePaymentsState(student);
     expect(state).toMatchObject({ key: "al-dia", label: "Al día", primaryAction: "registrar-pago" });
-    expect(state.detail).toContain("01/12/2026");
+    // `cubiertoHasta` is exclusive: the last covered day is the day before it.
+    expect(state.detail).toContain("30/11/2026");
   });
 });
 

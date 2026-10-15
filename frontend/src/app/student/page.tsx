@@ -56,7 +56,7 @@ import {
   firstNameOf,
   summarizeRecentAttendance,
   contarEntrenamientosSemanales,
-  daysUntil,
+  daysUntilCoverageEnd,
   describeCoverageStat,
   describePendingStat,
   type UpcomingTraining,
@@ -475,7 +475,7 @@ function ActivePortalView({
    * aprobado y uno cuya cobertura vence hoy son situaciones distintas, y un
    * horario que no cargó no es un alumno sin entrenamientos.
    */
-  const diasDeCobertura = useMemo(() => daysUntil(coverageEnd), [coverageEnd]);
+  const diasDeCobertura = useMemo(() => daysUntilCoverageEnd(coverageEnd), [coverageEnd]);
   const coverageStat = describeCoverageStat(diasDeCobertura, coverageEnd);
   const pendingStat = describePendingStat(pendingPagos);
   const nextPayment = describeNextPayment({

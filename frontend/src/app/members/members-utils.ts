@@ -317,7 +317,7 @@ export const MEMBERSHIP_TYPE_LABELS: Record<TipoMembresia, string> = {
 import type { BadgeTone } from "@/components/ui/Badge";
 
 export { formatCurrency, formatDate } from "@/lib/format-utils";
-import { formatCurrency, formatDate, formatDateRange } from "@/lib/format-utils";
+import { formatCurrency, formatDate, formatDateRange, lastCoveredDay } from "@/lib/format-utils";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -425,13 +425,13 @@ export function formatMembershipPeriod(
 }
 
 /**
- * "Vigencia" of a membership: the end of its REAL coverage (QA3 ADM-14), e.g.
- * "Hasta 01/12/2026". Empty when nothing was ever covered, so the caller
+ * "Vigencia" of a membership: the last day of its REAL coverage (QA3 ADM-14), e.g.
+ * "Hasta 01/12/2026" — `cubiertoHasta` is exclusive, so that is the day before it. Empty when nothing was ever covered, so the caller
  * renders a dash rather than an invented range.
  */
 export function formatMembershipCoverage(cubiertoHasta: string | null | undefined): string {
   if (!cubiertoHasta || !parseDateStringLocal(cubiertoHasta)) return "";
-  return `Hasta ${formatDate(cubiertoHasta)}`;
+  return `Hasta ${formatDate(lastCoveredDay(cubiertoHasta))}`;
 }
 
 /**

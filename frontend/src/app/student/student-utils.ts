@@ -597,6 +597,22 @@ export function daysUntil(isoDate: string | null | undefined, today: Date = new 
   return Math.round((target.getTime() - start.getTime()) / 86_400_000);
 }
 
+/**
+ * `daysUntil` counted to the LAST COVERED day of a coverage end.
+ *
+ * `cubiertoHasta` / `fechaFin` is exclusive (the first uncovered day), so a
+ * plan paid today for one day ends on `fechaFin = tomorrow` and still reads
+ * "0 days left" today — and expires the day after, not on `fechaFin` itself.
+ * Every day count the portal shows goes through here; the raw date keeps
+ * feeding non-display logic.
+ */
+export function daysUntilCoverageEnd(
+  fechaFin: string | null | undefined,
+  today: Date = new Date(),
+): number | null {
+  return daysUntil(fechaFin ? lastCoveredDay(fechaFin) : fechaFin, today);
+}
+
 /** The furthest `fechaFin` among APPROVED payments — the real end of paid coverage, or `null` when nothing is approved yet. */
 export function resolveCoverageEnd(pagos: PagoPersona[]): string | null {
   return pagos
@@ -637,10 +653,10 @@ export function readCoverageStanding(
   coverageEnd: string | null | undefined,
   today: Date = new Date(),
 ): CoverageStanding {
-  const daysLeft = daysUntil(coverageEnd, today);
+  const daysLeft = daysUntilCoverageEnd(coverageEnd, today);
   if (daysLeft === null) return "none";
-  // `daysUntil` returns 0 on the `fecha_fin` day itself, never -1 because of
-  // the hour, so a family that paid through today is covered through today —
+  // The count is to the last covered day and is 0 on that day itself, never -1
+  // because of the hour, so a family that paid through today is covered through today —
   // the same day `resolveSituation` calls "termina hoy" rather than "venció".
   return daysLeft < 0 ? "lapsed" : "current";
 }
@@ -672,7 +688,7 @@ export function readCoverageStanding(
 // that no branch ever emits "saldo", "adeuda", "debe" or "vence el".
 // ---------------------------------------------------------------------------
 
-import { formatCurrency, formatDate } from "@/lib/format-utils";
+import { formatCurrency, formatDate, lastCoveredDay } from "@/lib/format-utils";
 
 /** Default subject of `describeRejectedPago`: the account holder's own view. */
 const OWN_PAGO_SUBJECT = { viewingOwnProfile: true, studentName: "" };
@@ -861,11 +877,13 @@ export function describePaymentSituation(
 
 function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSituation {
   const priceNote = describePrice(input);
-  const daysLeft = daysUntil(input.coverageEnd, today);
+  const daysLeft = daysUntilCoverageEnd(input.coverageEnd, today);
   // An unparseable `fechaFin` is treated as no coverage at all rather than as
   // "hace NaN días" — over-reporting coverage is the one error that costs the
   // family money, and under-reporting it only costs them a second look.
-  const coverageEnd = daysLeft === null ? null : input.coverageEnd;
+  // From here `coverageEnd` is the LAST COVERED day: `input.coverageEnd` is
+  // the exclusive `fecha_fin`, and every sentence below names the day covered.
+  const coverageEnd = daysLeft === null || !input.coverageEnd ? null : lastCoveredDay(input.coverageEnd);
 
   if (input.blockedAsMinor) {
     return {
@@ -1185,7 +1203,7 @@ export function describeFamilyCoverage(
   // FAM-02: a suspension outranks the coverage count — «30 días de cobertura»
   // in green hid that the club had suspended the membership.
   if (membership.estado === "SUSPENDIDA") return { label: "Suspendida", tone: "warn" };
-  const days = daysUntil(membership.cubiertoHasta ?? null, today);
+  const days = daysUntilCoverageEnd(membership.cubiertoHasta ?? null, today);
   if (days === null) return { label: "Sin pago aprobado", tone: "warn" };
   if (days < 0) return { label: "Vencida", tone: "bad" };
   if (days === 0) return { label: "Vence hoy", tone: "warn" };
@@ -1228,7 +1246,7 @@ export interface NextPaymentInput {
   esGratuidadFamiliar: boolean;
   /** The furthest APPROVED `fechaFin`, or `null` when nothing was ever approved. */
   coverageEnd: string | null;
-  /** `daysUntil(coverageEnd)`; negative once it has lapsed. */
+  /** `daysUntilCoverageEnd(coverageEnd)`; negative once it has lapsed. */
   daysLeft: number | null;
   /** Payments the club has not validated yet. */
   pendingCount: number;
@@ -1263,13 +1281,14 @@ export function describeNextPayment(input: NextPaymentInput): NextPaymentTile {
   if (input.coverageEnd === null || input.daysLeft === null) {
     return { hot: true, tone: "warn", value, status: "Por pagar", hint: "sin pago aprobado todavía" };
   }
+  const lastDay = formatDate(lastCoveredDay(input.coverageEnd));
   if (input.daysLeft < 0) {
-    return { hot: true, tone: "warn", value, status: "Vencido", hint: `venció el ${formatDate(input.coverageEnd)}` };
+    return { hot: true, tone: "warn", value, status: "Vencido", hint: `venció el ${lastDay}` };
   }
   if (input.daysLeft <= PAYMENT_DUE_SOON_DAYS) {
-    return { hot: true, tone: "warn", value, status: "Vence pronto", hint: `vence el ${formatDate(input.coverageEnd)}` };
+    return { hot: true, tone: "warn", value, status: "Vence pronto", hint: `vence el ${lastDay}` };
   }
-  return { hot: false, tone: "ok", value, status: "Al día", hint: `vence el ${formatDate(input.coverageEnd)}` };
+  return { hot: false, tone: "ok", value, status: "Al día", hint: `vence el ${lastDay}` };
 }
 
 export interface CoverageStat {
@@ -1287,7 +1306,7 @@ export function describeCoverageStat(daysLeft: number | null, coverageEnd: strin
   if (daysLeft === null || coverageEnd === null) {
     return { tone: "neutral", status: "Sin pago", value: "—", unit: undefined, hint: "sin pago aprobado todavía" };
   }
-  const date = formatDate(coverageEnd);
+  const date = formatDate(lastCoveredDay(coverageEnd));
   const days = Math.abs(daysLeft);
   const unit = pluralDays(days);
   if (daysLeft < 0) {

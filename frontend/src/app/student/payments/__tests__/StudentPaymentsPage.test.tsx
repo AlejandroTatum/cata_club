@@ -14,6 +14,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import StudentPaymentsPage from "@/app/student/payments/page";
+import { lastCoveredDay } from "@/lib/format-utils";
 import type { PagoPersona, StudentPortalSummary, StudentProfileSummary, CoberturaBonificada } from "@/services/api";
 
 const shrinkImage = vi.hoisted(() => vi.fn());
@@ -175,6 +176,14 @@ const MINOR_BIRTH_DATE = "2014-03-10";
 function shown(isoDate: string): string {
   const [year, month, day] = isoDate.split("-");
   return `${day}/${month}/${year}`;
+}
+
+/**
+ * `cubiertoHasta` / `fechaFin` is EXCLUSIVE (the first uncovered day): the
+ * coverage end the screen prints is the day before it.
+ */
+function shownLastCovered(isoDate: string): string {
+  return shown(lastCoveredDay(isoDate));
 }
 
 /** Un período tal como lo escribe la pantalla, con raya y no con guion. */
@@ -447,9 +456,32 @@ describe("StudentPaymentsPage — the membership card", () => {
 
     const card = await screen.findByTestId("membership-status");
     await waitFor(() => {
-      expect(within(card).getByText(shown(COVERAGE_END_AHEAD))).toBeInTheDocument();
+      expect(within(card).getByText(shownLastCovered(COVERAGE_END_AHEAD))).toBeInTheDocument();
     });
     expect(within(card).queryByText(/2099/)).not.toBeInTheDocument();
+  });
+
+  it("prints the last covered day on the card and the stat, while the raw cubiertoHasta still starts the next payment", async () => {
+    searchParams = new URLSearchParams("registrar=1");
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      ...PORTAL,
+      self: { ...SELF, membership: { ...SELF.membership!, cubiertoHasta: COVERAGE_END_AHEAD } },
+    });
+    mockFetchPagosDePersona.mockReset().mockResolvedValue([makePago({ fechaFin: COVERAGE_END_AHEAD })]);
+
+    render(<StudentPaymentsPage />);
+
+    // Display: the day before the exclusive fecha_fin ("Pagado hasta").
+    const card = await screen.findByTestId("membership-status");
+    await waitFor(() => {
+      expect(within(card).getByText(shownLastCovered(COVERAGE_END_AHEAD))).toBeInTheDocument();
+    });
+    expect(shownLastCovered(COVERAGE_END_AHEAD)).not.toBe(shown(COVERAGE_END_AHEAD));
+    // Logic: the next period still starts AT the raw date, not the day before.
+    const period = (await screen.findByText("Período que cubre")).parentElement!;
+    expect(
+      within(period).getByText(shownRange(COVERAGE_END_AHEAD, RENEWAL_END_AHEAD)),
+    ).toBeInTheDocument();
   });
 
   it("says no payment has been approved rather than showing an empty coverage line", async () => {
@@ -533,7 +565,7 @@ describe("StudentPaymentsPage — the membership card", () => {
     const card = await screen.findByTestId("membership-status");
     // The heading still reports the same date it always did…
     await waitFor(() => {
-      expect(within(card).getByText(shown(COVERAGE_END_PAST))).toBeInTheDocument();
+      expect(within(card).getByText(shownLastCovered(COVERAGE_END_PAST))).toBeInTheDocument();
     });
     // …and `estado` is still ACTIVA in the fixture, exactly as the database
     // has it before the batch runs — but nothing on the card says so.
@@ -562,7 +594,7 @@ describe("StudentPaymentsPage — the membership card", () => {
 
     const card = await screen.findByTestId("membership-status");
     await waitFor(() => {
-      expect(within(card).getByText(shown(COVERAGE_END_AHEAD))).toBeInTheDocument();
+      expect(within(card).getByText(shownLastCovered(COVERAGE_END_AHEAD))).toBeInTheDocument();
     });
     expect(within(card).getAllByText("Membresía activa")).toHaveLength(2);
     expect(within(card).queryByText(/cobertura vencida/i)).not.toBeInTheDocument();
@@ -1286,6 +1318,16 @@ describe("StudentPaymentsPage — the row accordion (#513)", () => {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     }
     expect(screen.getByText(/^Último pago/)).toBeInTheDocument();
+  });
+
+  it("states «Pagado hasta» as the last covered day, not the exclusive fecha_fin", async () => {
+    render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
+
+    const stat = screen.getByText("Pagado hasta").closest(".min-h-stat") as HTMLElement | null;
+    expect(stat).not.toBeNull();
+    expect(within(stat!).getByText(shownLastCovered(COVERAGE_END))).toBeInTheDocument();
+    expect(within(stat!).queryByText(shown(COVERAGE_END))).not.toBeInTheDocument();
   });
 });
 
@@ -2267,7 +2309,7 @@ describe("StudentPaymentsPage — a discounted current month blocks the next pay
  * into a «go to the club» screen.
  */
 describe("StudentPaymentsPage — non-payment block (#1768)", () => {
-  const COVERAGE_LAPSED = "2026-06-30";
+  const COVERAGE_LAPSED = "2026-07-01";
   const BLOCKED_SELF: StudentProfileSummary = {
     ...SELF,
     bloqueadoPorImpago: true,

@@ -60,7 +60,7 @@ import { describeDiscountBlock, describePaymentSituation, firstNameOf, resolveDi
 import { useManagedProfiles, withSelectedStudent } from "../ManagedStudentPicker";
 import FamilyStrip from "../FamilyStrip";
 import { getEmptyStateMessage, countPagosByStatus, formatPagoMonto, PAGO_FILTER_LABELS, prepareVoucher, type PagoStatusFilter } from "./payments-utils";
-import { formatDate } from "@/lib/format-utils";
+import { formatDate, lastCoveredDay } from "@/lib/format-utils";
 import { CreditCard } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
@@ -673,7 +673,7 @@ function PaymentsContent({
         <div className="grid grid-cols-2 gap-section xl:grid-cols-[1.5fr_1fr_1fr_1fr]">
           <StatCard
             label="Pagado hasta"
-            value={<StatValue>{coverageEnd ? formatDate(coverageEnd) : "—"}</StatValue>}
+            value={<StatValue>{coverageEnd ? formatDate(lastCoveredDay(coverageEnd)) : "—"}</StatValue>}
             hint={coverageEnd ? "fin de la cobertura aprobada" : "sin pagos aprobados"}
           />
           <StatCard label="Pagos aprobados" value={<StatValue>{counts.APROBADO}</StatValue>} hint="en tu historial" />

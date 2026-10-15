@@ -265,7 +265,7 @@ describe("PagosPage — one plain state and ONE primary action each", () => {
     const facts = await screen.findByLabelText("Resumen de la membresía");
     expect(within(facts).getByText("Mensual")).toBeInTheDocument();
     expect(within(facts).getByText("$25,00")).toBeInTheDocument();
-    expect(within(facts).getByText(/hasta 01\/12\/2026/)).toBeInTheDocument();
+    expect(within(facts).getByText(/hasta 30\/11\/2026/)).toBeInTheDocument();
   });
 
   it("suspended: reactivate first", async () => {

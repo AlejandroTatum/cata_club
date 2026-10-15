@@ -115,6 +115,28 @@ export function formatDate(dateStr: string): string {
 }
 
 /**
+ * The last day a payment actually covers, from the backend's EXCLUSIVE
+ * `fecha_fin` / `cubiertoHasta` (the first uncovered day): that date minus one
+ * calendar day, as `YYYY-MM-DD`.
+ *
+ * For DISPLAY only. The raw value keeps feeding logic (the next payment's
+ * start, the block rules). Pure calendar arithmetic in UTC, so the runner's
+ * zone and DST never move the result — the same date-only convention as
+ * `formatDate`. Input it cannot read comes back untouched, so `formatDate`
+ * keeps answering an empty string for it.
+ */
+export function lastCoveredDay(fechaFin: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T00:00:00(?:\.0+)?(?:Z|\+00:00))?$/.exec(fechaFin);
+  if (!match) return fechaFin;
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const end = new Date(Date.UTC(Number(match[1]), month, day));
+  if (end.getUTCMonth() !== month || end.getUTCDate() !== day) return fechaFin;
+  end.setUTCDate(end.getUTCDate() - 1);
+  return end.toISOString().slice(0, 10);
+}
+
+/**
  * Format a date string as month + year, `mar 2019` — for a fact the club only
  * knows to the month («Miembro desde», issue #1749). The month is the app's own
  * `MONTH_ABBR` vocabulary, so it cannot drift into a fourth date grammar.
