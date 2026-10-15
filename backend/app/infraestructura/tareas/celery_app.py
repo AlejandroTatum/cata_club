@@ -19,6 +19,7 @@ celery_app = Celery(
     backend=settings.result_backend_efectivo,
     include=[
         "app.infraestructura.tareas.alertas_tareas",
+        "app.infraestructura.tareas.cumpleanos_tareas",
         "app.infraestructura.tareas.comprobante_tareas",
         "app.infraestructura.tareas.recuperacion_tareas",
         "app.infraestructura.tareas.verificacion_correo_tareas",
@@ -136,6 +137,12 @@ celery_app.conf.beat_schedule = {
     "alertar-mora-diaria": {
         "task": "app.infraestructura.tareas.alertas_tareas.alertar_mora_diaria",
         "schedule": _parsear_hora_crontab("02:40"),
+    },
+    # S6: aviso in-app a los administradores con los cumpleaños del día. Va
+    # temprano para que lo vean al empezar la jornada.
+    "avisar-cumpleanos-diario": {
+        "task": "app.infraestructura.tareas.cumpleanos_tareas.avisar_cumpleanos_del_dia",
+        "schedule": _parsear_hora_crontab("06:00"),
     },
     "reconciliar-comprobantes-faltantes": {
         "task": "app.infraestructura.tareas.comprobante_tareas.reconciliar_comprobantes_faltantes",

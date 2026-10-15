@@ -211,3 +211,9 @@ class TipoNotificacion(str, enum.Enum):
     # Tipo propio: la dedup `(tipo, persona_id, entidad_relacionada_id)` se
     # apoya en el tipo, y `entidad_relacionada_id` es el id del `DiaSinClase`.
     DIA_SIN_CLASE = "DIA_SIN_CLASE"
+    # S6 (cumpleaños): aviso IN-APP diario a cada administrador con los
+    # jugadores que cumplen años hoy. Tipo propio: la dedup por administrador
+    # y día del club se apoya en el tipo, y compartirlo con el resumen de mora
+    # haría que los dos se pisaran la fila del día. Ver
+    # `app/infraestructura/tareas/cumpleanos_tareas.py`.
+    CUMPLEANOS_HOY_ADMIN = "CUMPLEANOS_HOY_ADMIN"
