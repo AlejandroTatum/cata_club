@@ -9,6 +9,7 @@ Everything runs against throwaway git repositories, never the real checkout.
 import json
 import os
 import re
+import shutil
 import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -368,6 +369,29 @@ def test_the_scripts_avoid_bash4_only_case_modification():
     ]
 
     assert offenders == []
+
+
+def test_a_git_failure_listing_tags_is_not_reported_as_a_missing_bootstrap_tag(repo, tmp_path):
+    shim = tmp_path / "shim"
+    shim.mkdir()
+    real_git = shutil.which("git")
+    (shim / "git").write_text(
+        "#!/bin/sh\n"
+        f'[ "$1" = tag ] && {{ echo "fatal: simulated tag listing failure" >&2; exit 128; }}\n'
+        f'exec {real_git} "$@"\n'
+    )
+    (shim / "git").chmod(0o755)
+    repo.commit("fix: something")
+
+    result = repo.run(
+        NEXT_VERSION, repo.head(), env={"PATH": f"{shim}:{os.environ['PATH']}"}
+    )
+
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "simulated tag listing failure" in result.stderr
+    assert "git tag -a" not in result.stderr
+    assert "arranque" not in result.stderr
 
 
 def test_a_lowercase_breaking_change_footer_is_still_not_a_breaking_footer(repo):
