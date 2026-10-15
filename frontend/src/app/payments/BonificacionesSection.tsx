@@ -97,12 +97,17 @@ export function BonificacionesSection({ query = "" }: { query?: string }): React
     const controller = new AbortController();
     (async () => {
       const all: BonificacionItem[] = [];
+      const seen = new Set<number>();
       let count: number | null;
       do {
         const page = await fetchCoberturasPage(all.length, DRAIN_BATCH, controller.signal);
-        all.push(...page.items);
+        const fresh = page.items.filter((it) => !seen.has(it.id));
+        fresh.forEach((it) => seen.add(it.id));
+        all.push(...fresh);
         count = page.total;
-        if (page.items.length === 0) break;
+        // An empty page, or one that only repeats what we have (a backend
+        // ignoring `skip`), ends the drain: without a total nothing else would.
+        if (fresh.length === 0) break;
       } while (count === null || all.length < count);
       if (cancelled) return;
       setItems(all);

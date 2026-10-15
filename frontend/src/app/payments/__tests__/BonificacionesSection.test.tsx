@@ -129,6 +129,23 @@ describe("BonificacionesSection (admin review)", () => {
       expect(global.fetch).toHaveBeenLastCalledWith("/api/membresias/coberturas/todas?skip=200&limit=200", expect.anything());
     });
 
+    it("stops draining when a page brings no new coverage, even without a total", async () => {
+      // A backend that ignored `skip` would hand back the same full page forever.
+      let calls = 0;
+      vi.spyOn(global, "fetch").mockImplementation(async () => {
+        calls += 1;
+        const items = calls === 1 ? page(1, 10) : calls > 20 ? [] : page(1, 200);
+        return new Response(JSON.stringify({ items }), { status: 200, headers: { "Content-Type": "application/json" } });
+      });
+      const { rerender } = render(<BonificacionesSection />);
+      await screen.findByText("Persona 1");
+
+      rerender(<BonificacionesSection query="persona 150" />);
+
+      expect(await screen.findByText("Persona 150")).toBeInTheDocument();
+      expect(calls).toBeLessThanOrEqual(3);
+    });
+
     it("treats a short first page without a total as the whole set", async () => {
       mockFetchOnce({ items: page(1, 3) });
       render(<BonificacionesSection />);
