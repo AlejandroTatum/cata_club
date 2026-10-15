@@ -472,7 +472,10 @@ export type TipoNotificacion =
   // `backend/app/infraestructura/tareas/recordatorio_sesion_tareas.py`.
   | "RECORDATORIO_SESION"
   // Issue #1665: in-app (and email) notice of a club-wide no-class day.
-  | "DIA_SIN_CLASE";
+  | "DIA_SIN_CLASE"
+  // S6: daily in-app notice to each admin with the players whose birthday is
+  // today. See `backend/app/infraestructura/tareas/cumpleanos_tareas.py`.
+  | "CUMPLEANOS_HOY_ADMIN";
 
 /**
  * An in-app notification (`GET /ranking/notificaciones/mias`) —
