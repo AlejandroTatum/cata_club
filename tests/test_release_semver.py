@@ -8,6 +8,8 @@ Everything runs against throwaway git repositories, never the real checkout.
 
 import json
 import os
+import re
+import shutil
 import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -356,6 +358,40 @@ def test_commit_types_match_case_insensitively(repo, subject, expected):
 
     assert result.returncode == 0, result.stderr
     assert result.stdout == f"{expected}\n"
+
+
+def test_the_scripts_avoid_bash4_only_case_modification():
+    # macOS ships bash 3.2, where `${var,,}` / `${var^^}` are a syntax error.
+    offenders = [
+        script.name
+        for script in (NEXT_VERSION, TAG_RELEASE)
+        if re.search(r"\$\{[A-Za-z_][A-Za-z0-9_]*(,,?|\^\^?)\}", script.read_text())
+    ]
+
+    assert offenders == []
+
+
+def test_a_git_failure_listing_tags_is_not_reported_as_a_missing_bootstrap_tag(repo, tmp_path):
+    shim = tmp_path / "shim"
+    shim.mkdir()
+    real_git = shutil.which("git")
+    (shim / "git").write_text(
+        "#!/bin/sh\n"
+        f'[ "$1" = tag ] && {{ echo "fatal: simulated tag listing failure" >&2; exit 128; }}\n'
+        f'exec {real_git} "$@"\n'
+    )
+    (shim / "git").chmod(0o755)
+    repo.commit("fix: something")
+
+    result = repo.run(
+        NEXT_VERSION, repo.head(), env={"PATH": f"{shim}:{os.environ['PATH']}"}
+    )
+
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "simulated tag listing failure" in result.stderr
+    assert "git tag -a" not in result.stderr
+    assert "arranque" not in result.stderr
 
 
 def test_a_lowercase_breaking_change_footer_is_still_not_a_breaking_footer(repo):
