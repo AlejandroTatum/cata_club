@@ -13,6 +13,7 @@ import {
   formatMonthYear,
   joinWithY,
   lastCoveredDay,
+  formatPaymentPeriod,
 } from "../format-utils";
 
 // ---------------------------------------------------------------------------
@@ -262,5 +263,27 @@ describe("lastCoveredDay", () => {
   it("hands back input it cannot read, so formatDate keeps its empty-string contract", () => {
     expect(lastCoveredDay("")).toBe("");
     expect(lastCoveredDay("no es una fecha")).toBe("no es una fecha");
+  });
+
+  it("never rolls an impossible calendar date over: it is handed back as written", () => {
+    expect(lastCoveredDay("2026-02-30")).toBe("2026-02-30");
+    expect(lastCoveredDay("2026-13-01")).toBe("2026-13-01");
+    expect(formatDate(lastCoveredDay("2026-02-30"))).toBe("");
+  });
+});
+
+describe("formatPaymentPeriod", () => {
+  it("ends a week at its last covered day, not at the exclusive fecha_fin", () => {
+    expect(formatPaymentPeriod("2026-10-08", "2026-10-15")).toBe("08/10/2026 – 14/10/2026");
+  });
+
+  it("shows a single date for a one-day pass (start == last covered day)", () => {
+    expect(formatPaymentPeriod("2026-10-15", "2026-10-16")).toBe("15/10/2026");
+  });
+
+  it("keeps formatDateRange's degradation when a side is unreadable", () => {
+    expect(formatPaymentPeriod("2026-10-08", "")).toBe("08/10/2026");
+    expect(formatPaymentPeriod("", "2026-10-15")).toBe("14/10/2026");
+    expect(formatPaymentPeriod("", "")).toBe("");
   });
 });

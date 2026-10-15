@@ -1304,9 +1304,9 @@ describe("describeCoverageStat — the «Cobertura» tile copy (#QA-R2 S4)", () 
 
   it("says how long ago an overdue coverage ended", () => {
     expect(describeCoverageStat(-5, "2026-09-30")).toEqual({
-      tone: "bad", status: "Vencida", value: 5, unit: "días", hint: "vencida hace 5 días · desde el 29/09/2026",
+      tone: "bad", status: "Vencida", value: 5, unit: "días", hint: "vencida hace 5 días · venció el 29/09/2026",
     });
-    expect(describeCoverageStat(-1, "2026-10-04")).toMatchObject({ unit: "día", hint: "vencida hace 1 día · desde el 03/10/2026" });
+    expect(describeCoverageStat(-1, "2026-10-04")).toMatchObject({ unit: "día", hint: "vencida hace 1 día · venció el 03/10/2026" });
   });
 
   it("reads «Sin pago» when there is no coverage yet", () => {
@@ -1433,9 +1433,15 @@ describe("fecha-cobertura — display follows the last covered day", () => {
     expect(describeNextPayment({ ...base, daysLeft: -2 }).hint).toBe("venció el 27/10/2026");
   });
 
+  it("an overdue «Cobertura» tile says «venció el» the last covered day, never «desde el» it", () => {
+    // A weekly plan whose last covered day is 14/10 (fecha_fin 15/10).
+    expect(describeCoverageStat(-1, "2026-10-15").hint).toBe("vencida hace 1 día · venció el 14/10/2026");
+    expect(describeCoverageStat(-2, "2026-10-15").hint).not.toMatch(/desde el/);
+  });
+
   it("the «Cobertura» tile prints the last covered day", () => {
     expect(describeCoverageStat(8, "2026-10-28").hint).toBe("restantes · hasta el 27/10/2026");
     expect(describeCoverageStat(0, "2026-10-28").hint).toBe("vence hoy · 27/10/2026");
-    expect(describeCoverageStat(-2, "2026-10-28").hint).toBe("vencida hace 2 días · desde el 27/10/2026");
+    expect(describeCoverageStat(-2, "2026-10-28").hint).toBe("vencida hace 2 días · venció el 27/10/2026");
   });
 });

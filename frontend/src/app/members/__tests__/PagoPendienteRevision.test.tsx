@@ -28,7 +28,7 @@ function pago(overrides: Partial<PagoPersona> = {}): PagoPersona {
     fechaRegistro: "2026-10-06T10:00:00",
     fechaValidacion: null,
     fechaInicio: "2026-10-01",
-    fechaFin: "2026-10-31",
+    fechaFin: "2026-11-01",
     personaId: 7,
     membresiaId: 3,
     voucherUrl: "https://files.example/voucher.pdf",

@@ -1310,7 +1310,7 @@ export function describeCoverageStat(daysLeft: number | null, coverageEnd: strin
   const days = Math.abs(daysLeft);
   const unit = pluralDays(days);
   if (daysLeft < 0) {
-    return { tone: "bad", status: "Vencida", value: days, unit, hint: `vencida hace ${days} ${unit} · desde el ${date}` };
+    return { tone: "bad", status: "Vencida", value: days, unit, hint: `vencida hace ${days} ${unit} · venció el ${date}` };
   }
   if (daysLeft === 0) {
     return { tone: "ok", status: "Al día", value: days, unit, hint: `vence hoy · ${date}` };

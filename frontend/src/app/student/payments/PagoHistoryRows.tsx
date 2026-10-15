@@ -5,7 +5,7 @@
 import Link from "next/link";
 import type { PagoPersona, CoberturaBonificada } from "@/services/api";
 import { Badge, Button, cn, type BadgeTone } from "@/components/ui";
-import { formatDate, formatDateRange } from "@/lib/format-utils";
+import { formatDate, formatPaymentPeriod } from "@/lib/format-utils";
 import { formatPagoMonto, describePagoEstado, describePagoDescuento, pagoFaltaComprobante, TIPO_PAGO_LABEL } from "./payments-utils";
 import { ChevronDown, Download, Loader2, Paperclip, RefreshCw } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -41,7 +41,7 @@ function buildPagoRowFields(pago: PagoPersona): PagoRowFields {
     estado: describePagoEstado(pago.estadoPago),
     faltaComprobante: pagoFaltaComprobante(pago),
     method: TIPO_PAGO_LABEL[pago.tipoPago],
-    period: formatDateRange(pago.fechaInicio, pago.fechaFin),
+    period: formatPaymentPeriod(pago.fechaInicio, pago.fechaFin),
   };
 }
 
@@ -380,7 +380,7 @@ function buildCoberturaRowFields(cobertura: CoberturaBonificada): {
 } {
   return {
     badge: "Otorgada",
-    period: formatDateRange(cobertura.fechaInicio, cobertura.fechaFin),
+    period: formatPaymentPeriod(cobertura.fechaInicio, cobertura.fechaFin),
     concept: "Cobertura bonificada — 100%",
     grantedOn: formatDate(cobertura.fechaInicio),
   };

@@ -186,6 +186,11 @@ function shownLastCovered(isoDate: string): string {
   return shown(lastCoveredDay(isoDate));
 }
 
+/** A history row's period: the end is the last covered day (the stored `fechaFin` is exclusive). */
+function shownPeriod(startIso: string, fechaFin: string): string {
+  return shownRange(startIso, lastCoveredDay(fechaFin));
+}
+
 /** Un período tal como lo escribe la pantalla, con raya y no con guion. */
 function shownRange(startIso: string, endIso: string): string {
   return `${shown(startIso)} – ${shown(endIso)}`;
@@ -795,6 +800,26 @@ describe("StudentPaymentsPage — the club's benefit, read before paying", () =>
 });
 
 describe("StudentPaymentsPage — the history", () => {
+  it("ends a weekly payment's period at its last covered day, not at the exclusive fecha_fin", async () => {
+    mockFetchPagosDePersona.mockReset().mockResolvedValue([makePago({ fechaInicio: "2026-10-08", fechaFin: "2026-10-15" })]);
+
+    render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
+
+    expect(within(historyTable()).getByText("08/10/2026 – 14/10/2026")).toBeInTheDocument();
+    expect(within(historyTable()).queryByText(/15\/10\/2026/)).not.toBeInTheDocument();
+  });
+
+  it("shows just the single date for a one-day pass", async () => {
+    mockFetchPagosDePersona.mockReset().mockResolvedValue([makePago({ fechaInicio: "2026-10-15", fechaFin: "2026-10-16" })]);
+
+    render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
+
+    expect(within(historyTable()).getByText("15/10/2026")).toBeInTheDocument();
+    expect(within(historyTable()).queryByText(/16\/10\/2026/)).not.toBeInTheDocument();
+  });
+
   it("renders amounts and periods in the product's formats, never the raw API strings", async () => {
     render(<StudentPaymentsPage />);
     await screen.findByTestId("student-payments-table");
@@ -803,7 +828,7 @@ describe("StudentPaymentsPage — the history", () => {
     // membership card states the same monthly price), so the row is anchored
     // on the period and the amount is asserted across both. Scoped to the
     // table — `ResponsiveList` mounts the mobile cards at the same time.
-    expect(within(historyTable()).getByText(shownRange(PAGO_START, COVERAGE_END))).toBeInTheDocument();
+    expect(within(historyTable()).getByText(shownPeriod(PAGO_START, COVERAGE_END))).toBeInTheDocument();
     expect(screen.getAllByText("$25,00").length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText(PAGO_START, { exact: false })).not.toBeInTheDocument();
   });
@@ -844,7 +869,7 @@ describe("StudentPaymentsPage — the history", () => {
     render(<StudentPaymentsPage />);
     await screen.findByTestId("student-payments-table");
 
-    expect(within(historyTable()).getByText(shownRange(PAGO_START, COVERAGE_END))).toBeInTheDocument();
+    expect(within(historyTable()).getByText(shownPeriod(PAGO_START, COVERAGE_END))).toBeInTheDocument();
     // Nothing to explain for this payment (no discount, no voucher, no
     // comprobante, no rejection) — the row gets no "Detalle" toggle at all.
     expect(within(historyTable()).queryByRole("button", { name: /detalle/i })).not.toBeInTheDocument();
@@ -878,7 +903,7 @@ describe("StudentPaymentsPage — the history", () => {
     render(<StudentPaymentsPage />);
     await screen.findByTestId("student-payments-table");
 
-    expect(within(historyTable()).getByText(shownRange(PAGO_START, COVERAGE_END))).toBeInTheDocument();
+    expect(within(historyTable()).getByText(shownPeriod(PAGO_START, COVERAGE_END))).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^Rechazados/ }));
 
     expect(await screen.findByText("No hay pagos rechazados.")).toBeInTheDocument();
@@ -939,7 +964,7 @@ describe("StudentPaymentsPage — the history", () => {
     render(<StudentPaymentsPage />);
     await screen.findByTestId("student-payments-table");
 
-    expect(within(historyTable()).getByText(shownRange(PAGO_START, COVERAGE_END))).toBeInTheDocument();
+    expect(within(historyTable()).getByText(shownPeriod(PAGO_START, COVERAGE_END))).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /subir comprobante/i })).not.toBeInTheDocument();
   });
 
@@ -1224,7 +1249,7 @@ describe("StudentPaymentsPage — the merged coverage rows (issue #1369)", () =>
 
     const table = historyTable();
     expect(within(table).getByText(/Cobertura bonificada — 100%/)).toBeInTheDocument();
-    expect(within(table).getByText(shownRange("2026-08-01", "2026-08-31"))).toBeInTheDocument();
+    expect(within(table).getByText(shownPeriod("2026-08-01", "2026-08-31"))).toBeInTheDocument();
     expect(within(table).getByText(/Otorgada el/)).toBeInTheDocument();
     // Owner decision (QA round 2): the zero charge is shown, not a dash.
     expect(within(table).getByText("$0,00")).toBeInTheDocument();
@@ -1244,7 +1269,7 @@ describe("StudentPaymentsPage — the merged coverage rows (issue #1369)", () =>
 
     const text = historyTable().textContent ?? "";
     const coberturaAt = text.indexOf("Cobertura bonificada — 100%");
-    const pagoPeriodAt = text.indexOf(shownRange(PAGO_START, COVERAGE_END));
+    const pagoPeriodAt = text.indexOf(shownPeriod(PAGO_START, COVERAGE_END));
     expect(coberturaAt).toBeGreaterThanOrEqual(0);
     expect(pagoPeriodAt).toBeGreaterThanOrEqual(0);
     expect(coberturaAt).toBeLessThan(pagoPeriodAt);
@@ -1261,7 +1286,7 @@ describe("StudentPaymentsPage — the merged coverage rows (issue #1369)", () =>
     fireEvent.click(screen.getByRole("button", { name: /aprobados/i }));
 
     expect(within(historyTable()).queryByText("Cobertura bonificada — 100%")).not.toBeInTheDocument();
-    expect(within(historyTable()).getByText(shownRange(PAGO_START, COVERAGE_END))).toBeInTheDocument();
+    expect(within(historyTable()).getByText(shownPeriod(PAGO_START, COVERAGE_END))).toBeInTheDocument();
   });
 });
 

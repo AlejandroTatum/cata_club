@@ -129,7 +129,7 @@ export default function CuotaCard({
   // prints the last covered day instead.
   const lastDay = coverageEnd ? lastCoveredDay(coverageEnd) : null;
   const daysLeft = daysUntilCoverageEnd(coverageEnd, today);
-  const planTitle = PLAN_TITLES[periodicidad ?? "MENSUAL"];
+  const planTitle = (periodicidad && PLAN_TITLES[periodicidad]) || PLAN_TITLES.MENSUAL;
   // The primary (red) button is the one nudge: only when 7 days or fewer remain.
   const dueSoon = daysLeft !== null && daysLeft <= COVERAGE_ENDING_SOON_DAYS;
   const nextStep =

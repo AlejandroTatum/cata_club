@@ -1464,19 +1464,28 @@ describe("describePaymentsState", () => {
   });
 });
 
+// `fechaFin` is EXCLUSIVE (the first uncovered day): the words name the last covered day.
 describe("describePeriodoPago — the period a payment covers, in words (#1668)", () => {
   it("names a whole calendar month", () => {
-    expect(describePeriodoPago("2026-10-01", "2026-10-31")).toBe("octubre 2026");
+    expect(describePeriodoPago("2026-10-01", "2026-11-01")).toBe("octubre 2026");
   });
 
   it("names several whole calendar months", () => {
-    expect(describePeriodoPago("2026-10-01", "2026-12-31")).toBe("octubre – diciembre 2026");
-    expect(describePeriodoPago("2026-12-01", "2027-01-31")).toBe("diciembre 2026 – enero 2027");
+    expect(describePeriodoPago("2026-10-01", "2027-01-01")).toBe("octubre – diciembre 2026");
+    expect(describePeriodoPago("2026-12-01", "2027-02-01")).toBe("diciembre 2026 – enero 2027");
   });
 
   it("falls back to day and month when the period does not follow the calendar", () => {
-    expect(describePeriodoPago("2026-08-22", "2026-09-21")).toBe("22 ago – 21 sep 2026");
-    expect(describePeriodoPago("2026-12-22", "2027-01-21")).toBe("22 dic 2026 – 21 ene 2027");
+    expect(describePeriodoPago("2026-08-22", "2026-09-22")).toBe("22 ago – 21 sep 2026");
+    expect(describePeriodoPago("2026-12-22", "2027-01-22")).toBe("22 dic 2026 – 21 ene 2027");
+  });
+
+  it("ends a week at its last covered day", () => {
+    expect(describePeriodoPago("2026-10-08", "2026-10-15")).toBe("8 oct – 14 oct 2026");
+  });
+
+  it("names just the day for a one-day pass (start == last covered day)", () => {
+    expect(describePeriodoPago("2026-10-15", "2026-10-16")).toBe("15 oct 2026");
   });
 
   it("is empty when a date is missing", () => {

@@ -78,6 +78,15 @@ describe("CuotaCard — coverage end is the last covered day (fecha-cobertura)",
   });
 });
 
+describe("CuotaCard — an unknown periodicidad", () => {
+  it("falls back to the «Mensualidad» title instead of breaking the card", () => {
+    renderCard(situation({}), { periodicidad: "ANUAL" as never });
+    const card = screen.getByTestId("student-cuota-card");
+    expect(within(card).getByRole("heading", { name: "Mensualidad" })).toBeInTheDocument();
+    expect(card).toHaveAttribute("aria-label", "Tu mensualidad");
+  });
+});
+
 describe("CuotaCard — periodicidad", () => {
   it.each([
     ["MENSUAL", "al mes"],

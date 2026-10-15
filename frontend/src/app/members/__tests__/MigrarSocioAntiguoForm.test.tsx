@@ -78,7 +78,7 @@ describe("MigrarSocioAntiguoForm", () => {
     ultimoPago("2026-09-20");
     registrar();
 
-    await waitFor(() => expect(onDone).toHaveBeenCalledWith("Al día hasta 20/10/2026"));
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("Al día hasta 19/10/2026"));
     expect(mockCrearMembresia).toHaveBeenCalledWith({ personaId: 7, tipoMembresiaId: 2 });
     expect(mockCotizacion).toHaveBeenCalledWith(55, "2026-09-20", "2026-10-20", undefined);
     expect(mockRegularizar).toHaveBeenCalledWith(55, {
@@ -88,7 +88,7 @@ describe("MigrarSocioAntiguoForm", () => {
       motivo: "Migración: socio antiguo",
     });
     expect(mockCrearMembresia.mock.invocationCallOrder[0]).toBeLessThan(mockRegularizar.mock.invocationCallOrder[0]);
-    expect(showSuccess).toHaveBeenCalledWith("Socio antiguo registrado. Al día hasta 20/10/2026.");
+    expect(showSuccess).toHaveBeenCalledWith("Socio antiguo registrado. Al día hasta 19/10/2026.");
   });
 
   it("with an existing INACTIVA membership: does not create another one", async () => {

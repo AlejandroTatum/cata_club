@@ -191,6 +191,19 @@ export function formatDateRange(startStr: string, endStr: string): string {
 }
 
 /**
+ * A payment's period for display, from its start and the backend's EXCLUSIVE
+ * `fecha_fin`: `dd/mm/yyyy – dd/mm/yyyy` ending at the last covered day, or
+ * just `dd/mm/yyyy` when the payment covers a single day (a one-day pass).
+ * Unreadable ends degrade exactly like `formatDateRange`.
+ */
+export function formatPaymentPeriod(startStr: string, fechaFin: string): string {
+  const last = lastCoveredDay(fechaFin);
+  const start = formatDate(startStr);
+  if (start && start === formatDate(last)) return start;
+  return formatDateRange(startStr, last);
+}
+
+/**
  * Join a list of names into one Spanish enumeration — "Ana", "Ana y Luis",
  * "Ana, Luis y Sofía".
  *
