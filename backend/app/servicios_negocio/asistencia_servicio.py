@@ -999,8 +999,9 @@ class AsistenciaServicio:
                 ),
             )
 
-        # Bloqueo por impago (#1768, S5): un jugador cuya cobertura terminó hace
-        # más de 3 días no entrena hasta pagar. Va DESPUÉS del chequeo de fila
+        # Bloqueo por impago (#1768, S5): un jugador cuya cobertura terminó y ya
+        # pasó su gracia (MENSUAL 3 días, SEMANAL 1, DIARIA ninguna) no entrena
+        # hasta pagar. Va DESPUÉS del chequeo de fila
         # ya registrada: quien se anotó antes del bloqueo conserva ese mensaje.
         # Se juzga el día de la sesión, no hoy (#1779): una lista tomada tarde
         # no rechaza a quien ese día todavía estaba en gracia.

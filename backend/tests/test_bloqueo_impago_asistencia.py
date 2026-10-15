@@ -5,6 +5,7 @@ import pytest
 
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoPago
 from app.dominio.modelos import Asistencia
+from app.dominio.periodicidad import PeriodicidadTarifa
 from app.soporte_transversal.tiempo import hoy_club
 from tests.arnes_bloqueo_impago import agregar_pago, crear_miembro, fijar_lanzamiento
 from tests.fechas_validas import ultima_fecha_en
@@ -66,6 +67,38 @@ def test_el_dia_3_de_gracia_todavia_se_registra_la_asistencia(client, db_session
     resp = client.post(URL_UNA, json=_cuerpo(horario, fecha, en_gracia))
 
     assert resp.status_code == 201, resp.text
+
+
+@pytest.mark.parametrize(
+    "periodicidad, dias_tras_la_sesion, esperado",
+    [
+        # `cubierto_hasta` (fecha_fin) es exclusivo: una DIARIA pagada para la
+        # sesión termina el día siguiente; sin ese pago ya está bloqueada.
+        (PeriodicidadTarifa.DIARIA, 1, 201),
+        (PeriodicidadTarifa.DIARIA, 0, 400),
+        # SEMANAL: último día cubierto, único día de gracia y primer bloqueado.
+        (PeriodicidadTarifa.SEMANAL, 1, 201),
+        (PeriodicidadTarifa.SEMANAL, 0, 201),
+        (PeriodicidadTarifa.SEMANAL, -1, 400),
+    ],
+)
+def test_la_diaria_y_la_semanal_bloquean_la_asistencia_segun_su_gracia(
+    client, db_session, periodicidad, dias_tras_la_sesion, esperado,
+):
+    horario, fecha = _horario(client, db_session)
+    sesion = date.fromisoformat(fecha)
+    persona, _ = crear_miembro(
+        db_session, cubierto_hasta=sesion + timedelta(days=dias_tras_la_sesion),
+        periodicidad=periodicidad,
+    )
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": persona.id, "horario_id": horario["id"]},
+    )
+
+    resp = client.post(URL_UNA, json=_cuerpo(horario, fecha, persona))
+
+    assert resp.status_code == esperado, resp.text
 
 
 def test_una_transferencia_pendiente_con_comprobante_permite_registrar_asistencia(client, db_session):

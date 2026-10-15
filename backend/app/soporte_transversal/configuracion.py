@@ -540,8 +540,8 @@ class Settings(BaseSettings):
 
     # --- Bloqueo por impago (#1768) ---
     # Día de lanzamiento del bloqueo: quien ya estaba vencido ese día cuenta
-    # sus 3 días de gracia desde acá, no desde el fin de su cobertura (ver
-    # `app.dominio.bloqueo_impago`). SIN valor (default) el bloqueo está
+    # su gracia (3 días la mensual, 1 la semanal, 0 la diaria) desde acá, no
+    # desde el fin de su cobertura (ver `app.dominio.bloqueo_impago`). SIN valor (default) el bloqueo está
     # APAGADO: subir el código no bloquea a nadie hasta que el operador fija
     # `BLOQUEO_IMPAGO_FECHA_LANZAMIENTO=AAAA-MM-DD` y reinicia el backend.
     # Vacío equivale a no definido, para poder pasarlo siempre por Compose.

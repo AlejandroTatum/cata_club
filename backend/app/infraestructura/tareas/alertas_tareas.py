@@ -377,7 +377,7 @@ def _bloqueo_desde(membresia: Membresia, fecha_vencimiento: date) -> date | None
     lanzamiento = settings.bloqueo_impago_fecha_lanzamiento
     if lanzamiento is None or membresia.es_gratuidad_familiar:
         return None
-    return inicio_del_bloqueo(fecha_vencimiento, lanzamiento)
+    return inicio_del_bloqueo(fecha_vencimiento, lanzamiento, PeriodicidadTarifa.MENSUAL)
 
 
 def _construir_notificaciones_mora(
@@ -770,7 +770,7 @@ def avisar_lanzamiento_bloqueo_impago(self, dry_run: bool = False) -> dict:
         correos: list[CorreoPendiente] = []
         for membresia, fin in vencidas:
             persona = membresia.persona
-            texto = _texto_aviso_bloqueo(fin, inicio_del_bloqueo(fin, lanzamiento), hoy)
+            texto = _texto_aviso_bloqueo(fin, inicio_del_bloqueo(fin, lanzamiento, PeriodicidadTarifa.MENSUAL), hoy)
             nuevas, nuevos_correos = _construir_aviso_lanzamiento(ya_avisados, persona, texto)
             filas.extend(nuevas)
             correos.extend(nuevos_correos)
@@ -780,7 +780,7 @@ def avisar_lanzamiento_bloqueo_impago(self, dry_run: bool = False) -> dict:
                     "persona_id": persona.id,
                     "nombre": nombre_completo(persona.nombres, persona.apellidos),
                     "cubierto_hasta": fin.isoformat(),
-                    "bloqueo_desde": inicio_del_bloqueo(fin, lanzamiento).isoformat(),
+                    "bloqueo_desde": inicio_del_bloqueo(fin, lanzamiento, PeriodicidadTarifa.MENSUAL).isoformat(),
                 })
         if not dry_run:
             _persistir_lote(filas, correos)
