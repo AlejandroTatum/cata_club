@@ -38,13 +38,13 @@ _DIAS_HASTA_EL_BLOQUEO = {
 def inicio_del_bloqueo(
     cubierto_hasta: date,
     fecha_lanzamiento: date,
-    periodicidad: PeriodicidadTarifa = PeriodicidadTarifa.MENSUAL,
+    periodicidad: PeriodicidadTarifa,
 ) -> date:
     """Primer día en que la membresía está bloqueada.
 
     Quien ya estaba vencido el día del lanzamiento cuenta la gracia desde ese
-    día (`max`), no desde un vencimiento viejo. `periodicidad` es MENSUAL por
-    defecto (el aviso de lanzamiento solo existe para esa tarifa)."""
+    día (`max`), no desde un vencimiento viejo. `periodicidad` es obligatoria:
+    cada tarifa tiene su gracia y un default silencioso daría la equivocada."""
     dias = _DIAS_HASTA_EL_BLOQUEO[periodicidad]
     return max(cubierto_hasta, fecha_lanzamiento) + timedelta(days=dias)
 
