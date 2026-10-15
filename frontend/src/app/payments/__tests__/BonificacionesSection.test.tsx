@@ -34,18 +34,51 @@ describe("BonificacionesSection (admin review)", () => {
     expect(link).toHaveAttribute("href", "/api/membresias/coberturas/4/comprobante");
   });
 
-  it("renders nothing when there are no coverages", async () => {
+  it("shows an empty state when there are no coverages", async () => {
     mockFetchOnce({ items: [], total: 0 });
-    const { container } = render(<BonificacionesSection />);
-    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
-    expect(container).toBeEmptyDOMElement();
+    render(<BonificacionesSection />);
+    expect(await screen.findByText("Aún no hay bonificaciones")).toBeInTheDocument();
   });
 
-  it("renders nothing when the request fails", async () => {
+  it("offers a retry when the request fails", async () => {
     mockFetchOnce({ message: "boom" }, false);
-    const { container } = render(<BonificacionesSection />);
-    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
-    expect(container).toBeEmptyDOMElement();
+    mockFetchOnce({ items: [item], total: 1 });
+    render(<BonificacionesSection />);
+
+    expect(await screen.findByText("No se pudieron cargar las bonificaciones.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /reintentar/i }));
+    expect(await screen.findByText("Ana Pérez")).toBeInTheDocument();
+  });
+
+  describe("search", () => {
+    const page = (from: number, count: number) =>
+      Array.from({ length: count }, (_, i) => ({ ...item, id: from + i, personaNombreCompleto: `Persona ${from + i}` }));
+
+    it("drains every page so a name beyond the first batch is found", async () => {
+      mockFetchOnce({ items: page(1, 10), total: 250 });
+      mockFetchOnce({ items: page(1, 200), total: 250 });
+      mockFetchOnce({ items: page(201, 50), total: 250 });
+      const { rerender } = render(<BonificacionesSection />);
+      await screen.findByText("Persona 1");
+
+      rerender(<BonificacionesSection query="persona 249" />);
+
+      expect(await screen.findByText("Persona 249")).toBeInTheDocument();
+      expect(screen.queryByText("Persona 1")).not.toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveTextContent("1 de 1");
+      expect(global.fetch).toHaveBeenCalledWith("/api/membresias/coberturas/todas?skip=0&limit=200");
+      expect(global.fetch).toHaveBeenLastCalledWith("/api/membresias/coberturas/todas?skip=200&limit=200");
+    });
+
+    it("shows a search-specific empty state when nobody matches", async () => {
+      mockFetchOnce({ items: [item], total: 1 });
+      const { rerender } = render(<BonificacionesSection />);
+      await screen.findByText("Ana Pérez");
+
+      rerender(<BonificacionesSection query="zzz" />);
+
+      expect(await screen.findByText("Ninguna bonificación coincide con la búsqueda")).toBeInTheDocument();
+    });
   });
 
   describe("pagination", () => {

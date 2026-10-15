@@ -209,10 +209,16 @@ test.describe("Payments batch E", () => {
   });
 
   for (const viewport of [PHONE, DESKTOP]) {
-    test(`RC2: Bonificaciones shows a short batch with a count at ${viewport.width}px`, async ({ page }) => {
+    test(`RC2: Bonificados shows a short batch with a count at ${viewport.width}px`, async ({ page }) => {
       await page.setViewportSize(viewport);
       await mockAdminRuntime(page);
       await page.goto("/payments");
+
+      // Issue #1683: out of the default view, behind the «Bonificados» filter.
+      const pill = page.getByRole("button", { name: /^bonificados/i });
+      await expect(pill).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByTestId("bonificaciones-section")).toHaveCount(0);
+      await pill.click();
 
       const section = page.getByTestId("bonificaciones-section");
       await expect(section).toBeVisible({ timeout: 20_000 });

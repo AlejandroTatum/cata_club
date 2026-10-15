@@ -2263,3 +2263,96 @@ describe("PaymentsPage — QA4 fixes", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Bonificados (issue #1683): 100% coverages live behind a filter, not under the queue
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — Bonificados filter", () => {
+  const BONIFICACION = {
+    id: 4,
+    personaId: 9,
+    personaNombreCompleto: "Ana Bonificada",
+    membresiaId: 3,
+    monto: "0.00",
+    fechaInicio: "2026-08-01",
+    fechaFin: "2026-09-01",
+    otorgadaEn: "2026-08-01T09:00:00Z",
+  };
+
+  function mockCoberturas(items: unknown[]) {
+    return vi.spyOn(global, "fetch").mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ items, total: items.length }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("keeps bonified receipts out of the default view and does not even request them", async () => {
+    const fetchSpy = mockCoberturas([BONIFICACION]);
+    renderPage();
+
+    await screen.findByTestId("payments-table");
+    expect(screen.queryByText("Ana Bonificada")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /bonificaciones/i })).not.toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /^bonificados/i })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("lists them, with the official receipt, when the Bonificados filter is on", async () => {
+    mockCoberturas([BONIFICACION]);
+    renderPage();
+    await screen.findByTestId("payments-table");
+
+    fireEvent.click(screen.getByRole("button", { name: /^bonificados/i }));
+
+    expect(await screen.findByText("Ana Bonificada")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /recibo oficial/i })).toHaveAttribute(
+      "href",
+      "/api/membresias/coberturas/4/comprobante",
+    );
+    expect(screen.getByRole("button", { name: /^bonificados/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^pendientes/i })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByTestId("payments-table")).not.toBeInTheDocument();
+  });
+
+  it("shows an empty state when there are no bonified receipts", async () => {
+    mockCoberturas([]);
+    renderPage();
+    await screen.findByTestId("payments-table");
+
+    fireEvent.click(screen.getByRole("button", { name: /^bonificados/i }));
+
+    expect(await screen.findByText(/aún no hay bonificaciones/i)).toBeInTheDocument();
+  });
+
+  it("returns to the queue when a status filter is picked again", async () => {
+    mockCoberturas([BONIFICACION]);
+    renderPage();
+    await screen.findByTestId("payments-table");
+    fireEvent.click(screen.getByRole("button", { name: /^bonificados/i }));
+    await screen.findByText("Ana Bonificada");
+
+    fireEvent.click(screen.getByRole("button", { name: /^pendientes/i }));
+
+    expect(await screen.findByTestId("payments-table")).toBeInTheDocument();
+    expect(screen.queryByText("Ana Bonificada")).not.toBeInTheDocument();
+  });
+
+  it("finds a bonification by name through the page search box", async () => {
+    mockCoberturas([BONIFICACION, { ...BONIFICACION, id: 5, personaNombreCompleto: "Luis Otro" }]);
+    renderPage();
+    await screen.findByTestId("payments-table");
+    fireEvent.click(screen.getByRole("button", { name: /^bonificados/i }));
+    await screen.findByText("Ana Bonificada");
+
+    fireEvent.change(screen.getByRole("searchbox", { name: /buscar jugador/i }), { target: { value: "luis" } });
+
+    expect(await screen.findByText("Luis Otro")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Ana Bonificada")).not.toBeInTheDocument());
+  });
+});

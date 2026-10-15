@@ -626,6 +626,12 @@ export default function PaymentsPage(): React.ReactElement {
     isFilterKey,
   );
   const [query, setQuery] = useState("");
+  /**
+   * Issue #1683: 100% bonified coverages are not payments to review, so they
+   * stay out of the default view and open from their own pill. Deliberately
+   * not persisted: the screen always opens on the work of the day.
+   */
+  const [showBonificados, setShowBonificados] = useState(false);
   /** ADMA-25: narrows the queue to cash or transfer, client-side over the drained set. */
   const [methodFilter, setMethodFilter] = useState<MethodFilterKey>("all");
   /** Selection is by id, never by object: the object is replaced on every
@@ -836,11 +842,11 @@ export default function PaymentsPage(): React.ReactElement {
   }, [activeFilter]);
 
   useEffect(() => {
-    if (!isAdmin || !isSearching) return;
+    if (!isAdmin || !isSearching || showBonificados) return;
     void loadSearchDrain();
     // `searchDrainRetryToken` intentionally forces a re-run without being
     // read inside — see its own declaration.
-  }, [isAdmin, isSearching, loadSearchDrain, searchDrainRetryToken]);
+  }, [isAdmin, isSearching, showBonificados, loadSearchDrain, searchDrainRetryToken]);
 
   const searchMatches = useMemo(
     () =>
@@ -1335,26 +1341,37 @@ export default function PaymentsPage(): React.ReactElement {
                   key={f.key}
                   label={f.label}
                   count={filterCounts[f.key]}
-                  active={activeFilter === f.key}
-                  onClick={() => setActiveFilter(f.key)}
+                  active={!showBonificados && activeFilter === f.key}
+                  onClick={() => {
+                    setShowBonificados(false);
+                    setActiveFilter(f.key);
+                  }}
                 />
               ))}
+              <FilterPill
+                label="Bonificados"
+                active={showBonificados}
+                onClick={() => setShowBonificados(true)}
+              />
             </div>
-              {/* ADMA-25: a second, separate group — method is not a status. */}
-              <div
-                className="flex flex-wrap items-center gap-2"
-                role="group"
-                aria-label="Filtrar pagos por método"
-              >
-                {METHOD_FILTERS.map((f) => (
-                  <FilterPill
-                    key={f.key}
-                    label={f.label}
-                    active={methodFilter === f.key}
-                    onClick={() => setMethodFilter(f.key)}
-                  />
-                ))}
-              </div>
+              {/* ADMA-25: a second, separate group — method is not a status.
+                  Bonified coverages are never paid, so it does not apply. */}
+              {!showBonificados && (
+                <div
+                  className="flex flex-wrap items-center gap-2"
+                  role="group"
+                  aria-label="Filtrar pagos por método"
+                >
+                  {METHOD_FILTERS.map((f) => (
+                    <FilterPill
+                      key={f.key}
+                      label={f.label}
+                      active={methodFilter === f.key}
+                      onClick={() => setMethodFilter(f.key)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           }
           // D11c, and the panel's fourth slot, which this screen left empty
@@ -1372,6 +1389,10 @@ export default function PaymentsPage(): React.ReactElement {
           // this page, so it was removed rather than left to mislead.
         />
 
+        {showBonificados ? (
+          <BonificacionesSection query={query} />
+        ) : (
+          <>
         {visibleLoading && <LoadingState label="Cargando solicitudes…" />}
 
         {visibleError && !visibleLoading && (
@@ -1564,6 +1585,8 @@ export default function PaymentsPage(): React.ReactElement {
               </div>
             ))}
           </div>
+        )}
+          </>
         )}
           </div>
 
@@ -2114,7 +2137,6 @@ export default function PaymentsPage(): React.ReactElement {
         }
       >
         {selectedRequest ? renderDetail(selectedRequest) : renderQueue()}
-        {!selectedRequest && <BonificacionesSection />}
 
         {/* Fullscreen voucher viewer modal */}
         {voucherModalOpen && selectedRequest?.proofPreviewUrl &&
