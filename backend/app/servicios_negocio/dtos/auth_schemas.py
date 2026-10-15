@@ -109,7 +109,7 @@ class UsuarioMeResponseDTO(ResponseBase, BaseModel):
     # Sin default, por la misma razón que `puede_entrenar`.
     espera_primer_pago: bool
     # Bloqueo por impago (#1768): la Persona de la cuenta tiene la cobertura
-    # vencida hace más de 3 días (`BloqueoImpagoRepositorio`). El frontend
+    # vencida más allá de su gracia (`BloqueoImpagoRepositorio`). El frontend
     # restringe el portal a Pagos y arma el banner «Tu membresía venció el
     # {fecha}» con `cubierto_hasta`, el fin de su cobertura. Sin default, por
     # la misma razón que `puede_entrenar`; el monto adeudado NO viaja.

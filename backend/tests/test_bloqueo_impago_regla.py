@@ -96,13 +96,135 @@ def test_si_la_cobertura_termina_despues_del_lanzamiento_manda_la_cobertura(db_s
 
 
 # --- S1: exenciones --------------------------------------------------------------
+# --- Diaria y semanal (bloqueo-diaria-semanal, S1-S4) ------------------------------
+# `fecha_fin` es EXCLUSIVO (ver `_fin_de_cobertura`): una DIARIA pagada para el
+# día D guarda `fecha_fin = D + 1`; una SEMANAL cuyo último día cubierto es E
+# guarda `fecha_fin = E + 1`.
+DIA_PAGADO = date(2029, 6, 10)
+
+
+@pytest.mark.parametrize(
+    "hoy, esperado",
+    [
+        (DIA_PAGADO, False),                            # el día pagado se entrena
+        (DIA_PAGADO + timedelta(days=1), True),         # el día siguiente ya bloquea
+        (DIA_PAGADO + timedelta(days=2), True),
+    ],
+)
+def test_la_diaria_pagada_sirve_ese_dia_y_bloquea_desde_el_siguiente(db_session, hoy, esperado):
+    persona, _ = crear_miembro(
+        db_session, cubierto_hasta=DIA_PAGADO + timedelta(days=1),
+        periodicidad=PeriodicidadTarifa.DIARIA,
+    )
+
+    assert _bloqueado(db_session, persona, hoy=hoy) is esperado
+
+
+@pytest.mark.parametrize(
+    "hoy, esperado",
+    [
+        (date(2029, 6, 16), False),   # último día cubierto
+        (date(2029, 6, 17), False),   # único día de gracia
+        (date(2029, 6, 18), True),    # primer día bloqueado
+        (date(2029, 6, 19), True),
+    ],
+)
+def test_la_semanal_tiene_un_dia_de_gracia_y_bloquea_desde_el_segundo(db_session, hoy, esperado):
+    ultimo_dia_cubierto = date(2029, 6, 16)
+    persona, _ = crear_miembro(
+        db_session, cubierto_hasta=ultimo_dia_cubierto + timedelta(days=1),
+        periodicidad=PeriodicidadTarifa.SEMANAL,
+    )
+
+    assert _bloqueado(db_session, persona, hoy=hoy) is esperado
+
+
+@pytest.mark.parametrize(
+    "hoy, esperado",
+    [(date(2029, 6, 4), False), (date(2029, 6, 5), True)],   # fecha_fin + 3 / + 4
+)
+def test_la_mensual_conserva_sus_3_dias_de_gracia(db_session, hoy, esperado):
+    persona, _ = crear_miembro(db_session, cubierto_hasta=date(2029, 6, 1))
+
+    assert _bloqueado(db_session, persona, hoy=hoy) is esperado
+
+
 @pytest.mark.parametrize("periodicidad", [PeriodicidadTarifa.SEMANAL, PeriodicidadTarifa.DIARIA])
-def test_solo_las_tarifas_mensuales_se_bloquean(db_session, periodicidad):
+def test_diaria_y_semanal_comparten_el_ancla_de_lanzamiento(db_session, monkeypatch, periodicidad):
+    # Moroso de antes: la gracia de SU tarifa corre desde el lanzamiento.
+    gracia = {PeriodicidadTarifa.DIARIA: 0, PeriodicidadTarifa.SEMANAL: 1}[periodicidad]
+    lanzamiento = HOY - timedelta(days=gracia)
+    fijar_lanzamiento(monkeypatch, lanzamiento)
+    persona, _ = crear_miembro(
+        db_session, cubierto_hasta=HOY - timedelta(days=60), periodicidad=periodicidad,
+    )
+
+    assert _bloqueado(db_session, persona, hoy=HOY - timedelta(days=1)) is False
+    assert _bloqueado(db_session, persona, hoy=HOY) is True
+
+
+@pytest.mark.parametrize("periodicidad", [PeriodicidadTarifa.SEMANAL, PeriodicidadTarifa.DIARIA])
+def test_diaria_y_semanal_sin_lanzamiento_no_se_bloquean(db_session, monkeypatch, periodicidad):
+    fijar_lanzamiento(monkeypatch, None)
     persona, _ = crear_miembro(
         db_session, cubierto_hasta=HOY - timedelta(days=30), periodicidad=periodicidad,
     )
 
     assert _bloqueado(db_session, persona) is False
+
+
+@pytest.mark.parametrize("periodicidad", [PeriodicidadTarifa.SEMANAL, PeriodicidadTarifa.DIARIA])
+def test_diaria_y_semanal_morosas_se_bloquean(db_session, periodicidad):
+    persona, _ = crear_miembro(
+        db_session, cubierto_hasta=HOY - timedelta(days=30), periodicidad=periodicidad,
+    )
+
+    assert _bloqueado(db_session, persona) is True
+
+
+@pytest.mark.parametrize("periodicidad", [PeriodicidadTarifa.SEMANAL, PeriodicidadTarifa.DIARIA])
+def test_diaria_y_semanal_conservan_las_exenciones(db_session, periodicidad):
+    suspendida, _ = crear_miembro(
+        db_session, cubierto_hasta=HOY - timedelta(days=30), periodicidad=periodicidad,
+        estado=EstadoMembresia.SUSPENDIDA,
+    )
+    gratuita, _ = crear_miembro(
+        db_session, cubierto_hasta=HOY - timedelta(days=30), periodicidad=periodicidad,
+        gratuidad_familiar=True,
+    )
+    inactiva, _ = crear_miembro(
+        db_session, cubierto_hasta=None, periodicidad=periodicidad,
+        estado=EstadoMembresia.INACTIVA,
+    )
+
+    assert _bloqueado(db_session, suspendida) is False
+    assert _bloqueado(db_session, gratuita) is False
+    assert _bloqueado(db_session, inactiva) is False
+
+
+@pytest.mark.parametrize(
+    "periodicidad, con_voucher, tipo_pago, esperado",
+    [
+        (PeriodicidadTarifa.DIARIA, True, TipoPago.TRANSFERENCIA, False),
+        (PeriodicidadTarifa.SEMANAL, True, TipoPago.TRANSFERENCIA, False),
+        (PeriodicidadTarifa.DIARIA, False, TipoPago.TRANSFERENCIA, True),
+        (PeriodicidadTarifa.DIARIA, False, TipoPago.EFECTIVO, True),
+        (PeriodicidadTarifa.SEMANAL, False, TipoPago.EFECTIVO, True),
+    ],
+)
+def test_diaria_y_semanal_solo_las_levanta_una_transferencia_con_comprobante(
+    db_session, periodicidad, con_voucher, tipo_pago, esperado,
+):
+    persona, membresia = crear_miembro(
+        db_session, cubierto_hasta=HOY - timedelta(days=20), periodicidad=periodicidad,
+    )
+    agregar_pago(
+        db_session, persona, membresia, EstadoPago.PENDIENTE_VALIDACION,
+        tipo_pago=tipo_pago, con_voucher=con_voucher,
+        fecha_inicio=HOY, fecha_fin=HOY + timedelta(days=1),
+    )
+
+    assert _bloqueado(db_session, persona) is esperado
 
 
 def test_una_membresia_suspendida_no_se_bloquea(db_session):

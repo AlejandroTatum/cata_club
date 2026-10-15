@@ -8,6 +8,7 @@ from datetime import timedelta
 import pytest
 
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoPago, TipoRol
+from app.dominio.periodicidad import PeriodicidadTarifa
 from app.soporte_transversal.tiempo import hoy_club
 from tests.arnes_bloqueo_impago import agregar_pago, crear_miembro, fijar_lanzamiento
 from tests.fabricas_pagos import crear_persona_orm
@@ -118,6 +119,25 @@ def test_me_expone_el_bloqueo_propio_y_el_fin_de_cobertura(client_sin_token, db_
 
     assert me["bloqueadoPorImpago"] is True
     assert me["cubiertoHasta"] == _hoy_menos(10).isoformat()
+
+
+def test_me_marca_bloqueado_a_quien_paga_por_dia(client_sin_token, db_session):
+    usuario = _crear_usuario(
+        db_session, correo="diaria-me@cataclub.test", correo_verificado=True,
+        estado_membresia=EstadoMembresia.VENCIDA,
+    )
+    membresia = usuario.persona.membresias[0]
+    membresia.tipo_membresia.periodicidad = PeriodicidadTarifa.DIARIA
+    agregar_pago(
+        db_session, usuario.persona, membresia, EstadoPago.APROBADO,
+        fecha_inicio=_hoy_menos(2), fecha_fin=_hoy_menos(1),
+    )
+    db_session.commit()
+
+    me = _me(client_sin_token, usuario)
+
+    assert me["bloqueadoPorImpago"] is True
+    assert me["cubiertoHasta"] == _hoy_menos(1).isoformat()
 
 
 @pytest.mark.parametrize("rol", [TipoRol.ALUMNO, TipoRol.ADMINISTRADOR])
