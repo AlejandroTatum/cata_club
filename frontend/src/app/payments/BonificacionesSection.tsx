@@ -33,11 +33,21 @@ interface BonificacionesPage {
   total?: number;
 }
 
-async function fetchCoberturasPage(skip: number, limit: number): Promise<{ items: BonificacionItem[]; total: number }> {
-  const res = await fetch(`/api/membresias/coberturas/todas?skip=${skip}&limit=${limit}`);
+/**
+ * `total` is null while it is unknowable: the backend omitted it and the page
+ * came back full, so more rows may follow. A short or empty page proves the end
+ * and yields `skip + items.length`, so a missing `total` never marks the first
+ * page as the whole set.
+ */
+async function fetchCoberturasPage(
+  skip: number,
+  limit: number,
+  signal?: AbortSignal,
+): Promise<{ items: BonificacionItem[]; total: number | null }> {
+  const res = await fetch(`/api/membresias/coberturas/todas?skip=${skip}&limit=${limit}`, { signal });
   const body: BonificacionesPage | null = res.ok ? await res.json() : null;
   if (!body?.items) throw new Error("bonificaciones page failed");
-  return { items: body.items, total: body.total ?? body.items.length };
+  return { items: body.items, total: body.total ?? (body.items.length < limit ? skip + body.items.length : null) };
 }
 
 /**
@@ -49,18 +59,19 @@ async function fetchCoberturasPage(skip: number, limit: number): Promise<{ items
  */
 export function BonificacionesSection({ query = "" }: { query?: string }): React.ReactElement {
   const [items, setItems] = useState<BonificacionItem[]>([]);
-  const [total, setTotal] = useState(0);
+  const [total, setTotal] = useState<number | null>(0);
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const [retryToken, setRetryToken] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreFailed, setMoreFailed] = useState(false);
   const normalizedQuery = query.trim().toLowerCase();
-  const complete = loaded && items.length >= total;
+  const complete = loaded && total !== null && items.length >= total;
 
   useEffect(() => {
     let cancelled = false;
-    fetchCoberturasPage(0, LOAD_MORE_BATCH)
+    const controller = new AbortController();
+    fetchCoberturasPage(0, LOAD_MORE_BATCH, controller.signal)
       .then((page) => {
         if (cancelled) return;
         setItems(page.items);
@@ -73,6 +84,7 @@ export function BonificacionesSection({ query = "" }: { query?: string }): React
       });
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [retryToken]);
 
@@ -80,23 +92,27 @@ export function BonificacionesSection({ query = "" }: { query?: string }): React
   useEffect(() => {
     if (!normalizedQuery || !loaded || complete) return;
     let cancelled = false;
+    // Each keystroke re-runs this effect: aborting on cleanup stops the
+    // superseded drain's remaining round trips instead of letting them pile up.
+    const controller = new AbortController();
     (async () => {
       const all: BonificacionItem[] = [];
-      let count = 0;
+      let count: number | null;
       do {
-        const page = await fetchCoberturasPage(all.length, DRAIN_BATCH);
+        const page = await fetchCoberturasPage(all.length, DRAIN_BATCH, controller.signal);
         all.push(...page.items);
         count = page.total;
         if (page.items.length === 0) break;
-      } while (all.length < count);
+      } while (count === null || all.length < count);
       if (cancelled) return;
       setItems(all);
-      setTotal(count);
+      setTotal(count ?? all.length);
     })().catch(() => {
       if (!cancelled) setFailed(true);
     });
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [normalizedQuery, loaded, complete, retryToken]);
 
@@ -134,6 +150,7 @@ export function BonificacionesSection({ query = "" }: { query?: string }): React
     ? items.filter((i) => i.personaNombreCompleto.toLowerCase().includes(normalizedQuery))
     : items;
   const shownTotal = normalizedQuery ? visible.length : total;
+  const shownCount = shownTotal === null ? `${visible.length}+` : `${visible.length} de ${shownTotal}`;
 
   if (visible.length === 0) {
     return (
@@ -162,7 +179,7 @@ export function BonificacionesSection({ query = "" }: { query?: string }): React
           </p>
         </div>
         <p role="status" className="flex-none text-xs font-semibold tabular-nums text-ink-2">
-          {visible.length} de {shownTotal}
+          {shownCount}
         </p>
       </header>
       <ul className="divide-y divide-line">
@@ -199,7 +216,7 @@ export function BonificacionesSection({ query = "" }: { query?: string }): React
           No se pudieron cargar más bonificaciones. Intenta de nuevo.
         </p>
       )}
-      {!normalizedQuery && items.length < total && (
+      {!normalizedQuery && (total === null || items.length < total) && (
         <footer className="border-t border-line px-5 py-3">
           <Button size="sm" onClick={() => void loadMore()} disabled={loadingMore} className="max-md:w-full">
             Cargar más
