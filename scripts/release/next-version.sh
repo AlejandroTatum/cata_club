@@ -61,7 +61,9 @@ while IFS= read -r -d '' record; do
     bump=major
     break
   fi
-  if [[ "${subject,,}" =~ ^feat(\([^\)]*\))?: ]]; then
+  # `tr` y no la expansión de minúsculas de bash >= 4: macOS trae bash 3.2.
+  lower_subject="$(printf '%s' "$subject" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$lower_subject" =~ ^feat(\([^\)]*\))?: ]]; then
     bump=minor
   fi
 done < <(git log -z --format='%s%n%b' "${tag}..${sha}")

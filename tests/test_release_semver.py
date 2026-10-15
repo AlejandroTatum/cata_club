@@ -8,6 +8,7 @@ Everything runs against throwaway git repositories, never the real checkout.
 
 import json
 import os
+import re
 import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -356,6 +357,17 @@ def test_commit_types_match_case_insensitively(repo, subject, expected):
 
     assert result.returncode == 0, result.stderr
     assert result.stdout == f"{expected}\n"
+
+
+def test_the_scripts_avoid_bash4_only_case_modification():
+    # macOS ships bash 3.2, where `${var,,}` / `${var^^}` are a syntax error.
+    offenders = [
+        script.name
+        for script in (NEXT_VERSION, TAG_RELEASE)
+        if re.search(r"\$\{[A-Za-z_][A-Za-z0-9_]*(,,?|\^\^?)\}", script.read_text())
+    ]
+
+    assert offenders == []
 
 
 def test_a_lowercase_breaking_change_footer_is_still_not_a_breaking_footer(repo):
