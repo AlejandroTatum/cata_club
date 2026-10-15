@@ -7,7 +7,7 @@ from app.soporte_transversal.tiempo import ahora_club
 from app.dominio.enums import DiaSemana, EstadoMembresia, EstadoPago, TipoRol
 from app.dominio.modelos import HorarioEntrenamiento, Membresia, Pago, Persona, Rol, Usuario
 from app.presentacion.schemas.dashboard_schemas import CumpleanosHoyDTO, DashboardStatsDTO
-from app.servicios_negocio.cumpleanos_servicio import cumpleanos_de_hoy
+from app.infraestructura.repositorios.cumpleanos_repositorio import cumpleanos_de_hoy
 from app.servicios_negocio.gestor_permisos import GestorPermisos
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])

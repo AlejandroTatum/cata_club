@@ -2,7 +2,7 @@
 Tarea Celery Beat diaria: aviso de cumpleaños a los administradores (S6).
 
 Cada día del club se arma UNA notificación in-app por administrador activo con
-los jugadores que cumplen años hoy (ver `cumpleanos_servicio`). Sin
+los jugadores que cumplen años hoy (ver `cumpleanos_repositorio`). Sin
 cumpleaños no hay fila. Es exclusivamente in-app: nada de correo y nada a
 jugadores ni a familias.
 
@@ -23,8 +23,7 @@ from app.infraestructura.tareas.alertas_tareas import (
     _rango_dia_club,
 )
 from app.infraestructura.tareas.celery_app import celery_app
-from app.servicios_negocio.cumpleanos_servicio import CumpleanosHoy, cumpleanos_de_hoy
-from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
+from app.infraestructura.repositorios.cumpleanos_repositorio import CumpleanosHoy, cumpleanos_de_hoy
 from app.soporte_transversal.tiempo import hoy_club
 
 
@@ -35,12 +34,21 @@ logger.setLevel(logging.INFO)
 # "y N más" del recorte.
 _LIMITE_LISTA = 420
 
+# Un nombre aislado no debe comerse el cupo de toda la lista.
+_LIMITE_NOMBRE = 60
+
+
+def _acortar(nombre: str) -> str:
+    if len(nombre) <= _LIMITE_NOMBRE:
+        return nombre
+    return nombre[: _LIMITE_NOMBRE - 1].rstrip() + "…"
+
 
 def _formatear_aviso(hoy, cumpleaneros: list[CumpleanosHoy]) -> str:
     """Texto del aviso: encabezado con la fecha y `Nombre (edad)` por jugador.
     Pura -- sin I/O. Si la lista no cabe, corta y dice cuántos faltan."""
     entradas = [
-        f"{acortar_nombre_para_notificacion(c.nombre)} ({c.edad})" for c in cumpleaneros
+        f"{_acortar(c.nombre)} ({c.edad})" for c in cumpleaneros
     ]
     visibles: list[str] = []
     largo = 0

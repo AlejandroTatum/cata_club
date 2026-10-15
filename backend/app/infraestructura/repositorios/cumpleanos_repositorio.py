@@ -1,4 +1,4 @@
-"""Cumpleaños de los jugadores del club (S6).
+"""Consulta de cumpleaños de los jugadores del club (S6).
 
 Un jugador es una persona ACTIVA con una membresía ACTIVA (la misma población
 que cuenta el Panel en "Membresías activas"). Quien tiene una supresión de datos

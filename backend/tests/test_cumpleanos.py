@@ -16,7 +16,7 @@ from decimal import Decimal
 import pytest
 
 import app.infraestructura.tareas.cumpleanos_tareas as tareas_mod
-import app.servicios_negocio.cumpleanos_servicio as servicio_mod
+import app.infraestructura.repositorios.cumpleanos_repositorio as repo_mod
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, TipoModalidad, TipoNotificacion, TipoRol
 from app.dominio.modelos import (
@@ -28,7 +28,7 @@ from app.dominio.modelos import (
     TipoMembresia,
     Usuario,
 )
-from app.servicios_negocio.cumpleanos_servicio import cumpleanos_de_hoy
+from app.infraestructura.repositorios.cumpleanos_repositorio import cumpleanos_de_hoy
 from app.soporte_transversal.tiempo import hoy_club
 
 HOY = date(2029, 6, 15)  # 2029 no es bisiesto, 2028 sí
@@ -47,7 +47,7 @@ def sesion_inyectada(db_session, monkeypatch):
 @pytest.fixture()
 def hoy_fijo(monkeypatch):
     def _fijar(dia: date) -> None:
-        monkeypatch.setattr(servicio_mod, "hoy_club", lambda: dia)
+        monkeypatch.setattr(repo_mod, "hoy_club", lambda: dia)
         monkeypatch.setattr(tareas_mod, "hoy_club", lambda: dia)
 
     _fijar(HOY)

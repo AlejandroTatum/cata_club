@@ -19,5 +19,5 @@ class DashboardStatsDTO(ResponseBase, BaseModel):
     pending_payments: int = Field(..., examples=[5])
     today_schedules: int = Field(..., examples=[8])
     personas_sin_membresia: int = Field(..., examples=[12])
-    # Jugadores que cumplen años hoy (día del club); ver `cumpleanos_servicio`.
+    # Jugadores que cumplen años hoy (día del club); ver `cumpleanos_repositorio`.
     cumpleanos_hoy: list[CumpleanosHoyDTO] = Field(default_factory=list)
