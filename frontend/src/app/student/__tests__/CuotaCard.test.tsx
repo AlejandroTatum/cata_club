@@ -38,6 +38,26 @@ function renderCard(s: PaymentSituation, extra: Partial<React.ComponentProps<typ
   );
 }
 
+describe("CuotaCard — plan title follows the periodicidad (S3)", () => {
+  it.each([
+    ["MENSUAL", "Mensualidad"],
+    ["SEMANAL", "Plan semanal"],
+    ["DIARIA", "Pase diario"],
+  ] as const)("titles a %s plan «%s», on the heading and the aria-label", (periodicidad, title) => {
+    renderCard(situation({}), { periodicidad });
+    const card = screen.getByTestId("student-cuota-card");
+    expect(within(card).getByRole("heading", { name: title })).toBeInTheDocument();
+    expect(card).toHaveAttribute("aria-label", title === "Mensualidad" ? "Tu mensualidad" : `Tu ${title.toLowerCase()}`);
+  });
+
+  it("falls back to «Mensualidad» when the periodicity is unknown", () => {
+    renderCard(situation({}));
+    const card = screen.getByTestId("student-cuota-card");
+    expect(within(card).getByRole("heading", { name: "Mensualidad" })).toBeInTheDocument();
+    expect(card).toHaveAttribute("aria-label", "Tu mensualidad");
+  });
+});
+
 describe("CuotaCard — coverage end is the last covered day (fecha-cobertura)", () => {
   const TODAY = new Date(2026, 9, 14); // 14/10/2026
 

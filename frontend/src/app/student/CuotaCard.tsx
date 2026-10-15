@@ -1,5 +1,6 @@
 /**
  * CuotaCard — the family portal's "Mensualidad" card (FAM-27; it was «Cuota»).
+ * Its title follows the plan: «Plan semanal» / «Pase diario» for those tariffs.
  *
  * A calm, compact card with ONE urgency signal. It states the situation as a
  * headline with a single coloured badge (Vencida / Vence en N días / Al día),
@@ -72,6 +73,13 @@ const DETAIL_IS_THE_DATE = new Set<PaymentSituation["kind"]>(["expired", "ending
 /** The kinds that have a coverage date to count down to and a plan price to pay. */
 const COUNTDOWN_KINDS = new Set<PaymentSituation["kind"]>(["expired", "ending-soon", "covered"]);
 
+/** The card's title and its aria-label subject, by how the plan is charged; a missing periodicidad reads as monthly. */
+const PLAN_TITLES: Record<Periodicidad, { title: string; label: string }> = {
+  MENSUAL: { title: "Mensualidad", label: "Tu mensualidad" },
+  SEMANAL: { title: "Plan semanal", label: "Tu plan semanal" },
+  DIARIA: { title: "Pase diario", label: "Tu pase diario" },
+};
+
 /**
  * FAM-27: how much, until when and what comes next, in one sentence the family
  * can act on. «Vence en 12 días (03/11/2026). Paga $25,00 y sube el
@@ -121,6 +129,7 @@ export default function CuotaCard({
   // prints the last covered day instead.
   const lastDay = coverageEnd ? lastCoveredDay(coverageEnd) : null;
   const daysLeft = daysUntilCoverageEnd(coverageEnd, today);
+  const planTitle = PLAN_TITLES[periodicidad ?? "MENSUAL"];
   // The primary (red) button is the one nudge: only when 7 days or fewer remain.
   const dueSoon = daysLeft !== null && daysLeft <= COVERAGE_ENDING_SOON_DAYS;
   const nextStep =
@@ -131,11 +140,11 @@ export default function CuotaCard({
   return (
     <section
       data-testid="student-cuota-card"
-      aria-label="Tu mensualidad"
+      aria-label={planTitle.label}
       className="card overflow-hidden"
     >
       <div className="flex items-center gap-3 border-b border-line px-5 py-3">
-        <h2 className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">Mensualidad</h2>
+        <h2 className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">{planTitle.title}</h2>
         <Link
           href={viewPagosHref}
           // `MIN_TARGET_CLASS` (issue #818, WCAG 2.5.8 AA): the link used to
