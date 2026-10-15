@@ -66,8 +66,92 @@ describe("BonificacionesSection (admin review)", () => {
       expect(await screen.findByText("Persona 249")).toBeInTheDocument();
       expect(screen.queryByText("Persona 1")).not.toBeInTheDocument();
       expect(screen.getByRole("status")).toHaveTextContent("1 de 1");
-      expect(global.fetch).toHaveBeenCalledWith("/api/membresias/coberturas/todas?skip=0&limit=200");
-      expect(global.fetch).toHaveBeenLastCalledWith("/api/membresias/coberturas/todas?skip=200&limit=200");
+      expect(global.fetch).toHaveBeenCalledWith("/api/membresias/coberturas/todas?skip=0&limit=200", expect.anything());
+      expect(global.fetch).toHaveBeenLastCalledWith("/api/membresias/coberturas/todas?skip=200&limit=200", expect.anything());
+    });
+
+    it("shows the error state, not a spinner, when the drain fails, and recovers on retry", async () => {
+      mockFetchOnce({ items: page(1, 10), total: 250 });
+      mockFetchOnce({ message: "boom" }, false);
+      const { rerender } = render(<BonificacionesSection />);
+      await screen.findByText("Persona 1");
+
+      rerender(<BonificacionesSection query="persona 249" />);
+
+      expect(await screen.findByText("No se pudieron cargar las bonificaciones.")).toBeInTheDocument();
+      expect(screen.queryByText("Cargando bonificaciones…")).not.toBeInTheDocument();
+
+      mockFetchOnce({ items: page(1, 10), total: 250 });
+      mockFetchOnce({ items: page(1, 200), total: 250 });
+      mockFetchOnce({ items: page(201, 50), total: 250 });
+      fireEvent.click(screen.getByRole("button", { name: /reintentar/i }));
+
+      expect(await screen.findByText("Persona 249")).toBeInTheDocument();
+    });
+
+    it("aborts a superseded drain when the query changes and when the section unmounts", async () => {
+      const signals: AbortSignal[] = [];
+      const fetchSpy = vi.spyOn(global, "fetch");
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify({ items: page(1, 10), total: 250 }), { status: 200 }),
+      );
+      fetchSpy.mockImplementation((_url, init) => {
+        signals.push(init!.signal as AbortSignal);
+        return new Promise<Response>(() => {});
+      });
+      const { rerender, unmount } = render(<BonificacionesSection />);
+      await screen.findByText("Persona 1");
+
+      rerender(<BonificacionesSection query="pe" />);
+      await waitFor(() => expect(signals).toHaveLength(1));
+      expect(signals[0].aborted).toBe(false);
+
+      rerender(<BonificacionesSection query="per" />);
+      await waitFor(() => expect(signals).toHaveLength(2));
+      expect(signals[0].aborted).toBe(true);
+      expect(signals[1].aborted).toBe(false);
+
+      unmount();
+      expect(signals[1].aborted).toBe(true);
+    });
+
+    it("does not treat a full first page as complete when the total is missing", async () => {
+      mockFetchOnce({ items: page(1, 10) });
+      mockFetchOnce({ items: page(1, 200) });
+      mockFetchOnce({ items: page(201, 50) });
+      const { rerender } = render(<BonificacionesSection />);
+      await screen.findByText("Persona 1");
+      expect(screen.getByRole("button", { name: /cargar más/i })).toBeInTheDocument();
+
+      rerender(<BonificacionesSection query="persona 249" />);
+
+      expect(await screen.findByText("Persona 249")).toBeInTheDocument();
+      expect(global.fetch).toHaveBeenLastCalledWith("/api/membresias/coberturas/todas?skip=200&limit=200", expect.anything());
+    });
+
+    it("stops draining when a page brings no new coverage, even without a total", async () => {
+      // A backend that ignored `skip` would hand back the same full page forever.
+      let calls = 0;
+      vi.spyOn(global, "fetch").mockImplementation(async () => {
+        calls += 1;
+        const items = calls === 1 ? page(1, 10) : calls > 20 ? [] : page(1, 200);
+        return new Response(JSON.stringify({ items }), { status: 200, headers: { "Content-Type": "application/json" } });
+      });
+      const { rerender } = render(<BonificacionesSection />);
+      await screen.findByText("Persona 1");
+
+      rerender(<BonificacionesSection query="persona 150" />);
+
+      expect(await screen.findByText("Persona 150")).toBeInTheDocument();
+      expect(calls).toBeLessThanOrEqual(3);
+    });
+
+    it("treats a short first page without a total as the whole set", async () => {
+      mockFetchOnce({ items: page(1, 3) });
+      render(<BonificacionesSection />);
+      await screen.findByText("Persona 1");
+      expect(screen.queryByRole("button", { name: /cargar más/i })).not.toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveTextContent("3 de 3");
     });
 
     it("shows a search-specific empty state when nobody matches", async () => {
@@ -111,7 +195,7 @@ describe("BonificacionesSection (admin review)", () => {
 
       expect(await screen.findByText("Persona 15")).toBeInTheDocument();
       expect(screen.getByText("Persona 1")).toBeInTheDocument();
-      expect(global.fetch).toHaveBeenLastCalledWith("/api/membresias/coberturas/todas?skip=10&limit=10");
+      expect(global.fetch).toHaveBeenLastCalledWith("/api/membresias/coberturas/todas?skip=10&limit=10", expect.anything());
       expect(screen.queryByRole("button", { name: /cargar más/i })).not.toBeInTheDocument();
     });
 

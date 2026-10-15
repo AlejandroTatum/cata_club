@@ -25,12 +25,16 @@ sha="$(git rev-parse --verify --quiet "$1^{commit}")" \
 # filtro estricto deja fuera los prereleases (v1.9.0-rc1) y los tags mal formados.
 # Se lee la lista completa, sin `| head` ni `grep -m1`: cortar el pipe con
 # `pipefail` activo devolvería SIGPIPE.
+# La lista se captura aparte: con `done < <(git ...)` un fallo de git se perdía y
+# se diagnosticaba como "falta el tag de arranque".
+tag_list="$(git tag --merged "$sha" --list 'v[0-9]*' --sort=-v:refname)" \
+  || die "git no pudo listar los tags alcanzables desde ${sha} (ver el error de git arriba)"
 tag=""
 while IFS= read -r candidate; do
   if [ -z "$tag" ] && [[ "$candidate" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     tag="$candidate"
   fi
-done < <(git tag --merged "$sha" --list 'v[0-9]*' --sort=-v:refname)
+done <<< "$tag_list"
 if [ -z "$tag" ]; then
   die "$(printf '%s\n' \
     "no hay ningún tag vMAJOR.MINOR.PATCH alcanzable desde ${sha}." \
@@ -61,7 +65,9 @@ while IFS= read -r -d '' record; do
     bump=major
     break
   fi
-  if [[ "${subject,,}" =~ ^feat(\([^\)]*\))?: ]]; then
+  # `tr` y no la expansión de minúsculas de bash >= 4: macOS trae bash 3.2.
+  lower_subject="$(printf '%s' "$subject" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$lower_subject" =~ ^feat(\([^\)]*\))?: ]]; then
     bump=minor
   fi
 done < <(git log -z --format='%s%n%b' "${tag}..${sha}")
