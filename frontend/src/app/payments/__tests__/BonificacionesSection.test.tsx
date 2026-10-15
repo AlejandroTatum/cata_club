@@ -34,6 +34,14 @@ describe("BonificacionesSection (admin review)", () => {
     expect(link).toHaveAttribute("href", "/api/membresias/coberturas/4/comprobante");
   });
 
+  it("ends the period at the last covered day, not at the exclusive fecha_fin", async () => {
+    mockFetchOnce({ items: [item], total: 1 });
+    render(<BonificacionesSection />);
+
+    expect(await screen.findByText("01/08/2026 – 31/08/2026")).toBeInTheDocument();
+    expect(screen.queryByText(/01\/09\/2026/)).not.toBeInTheDocument();
+  });
+
   it("shows an empty state when there are no coverages", async () => {
     mockFetchOnce({ items: [], total: 0 });
     render(<BonificacionesSection />);
