@@ -78,6 +78,14 @@ def _responsables_de_pago(persona: Persona) -> list[Persona]:
 WHATSAPP_CANONICO = "0994219619"
 
 
+def _ultimo_dia_cubierto(fecha_fin: date) -> str:
+    """`dd/mm/AAAA` del último día que cubre una vigencia. `Pago.fecha_fin` es
+    EXCLUSIVA (el primer día sin cobertura), así que los textos al socio que
+    nombran "hasta cuándo" muestran el día anterior. Solo presentación: ninguna
+    regla ni dato guardado cambia. Pura."""
+    return (fecha_fin - timedelta(days=1)).strftime("%d/%m/%Y")
+
+
 def _render_vencimiento(nombre: str, mensaje: str) -> tuple[str, str]:
     """`(asunto, cuerpo_texto)` del correo de vencimiento. Pura -- sin I/O.
     Ronda 2 del issue #898: solo texto (asunto, mención de "Ir a mis pagos" y
@@ -322,12 +330,12 @@ def _construir_notificacion_vencimiento(
             continue  # ya procesado por completo en un intento anterior
 
         if responsable.id == persona.id:
-            mensaje = f"Tu membresía vence el {vence.strftime('%d/%m/%Y')}."
+            mensaje = f"Tu membresía vence el {_ultimo_dia_cubierto(vence)}."
         else:
             nombre_alumno = acortar_nombre_para_notificacion(
                 nombre_completo(persona.nombres, persona.apellidos)
             )
-            mensaje = f"La membresía de {nombre_alumno} vence el {vence.strftime('%d/%m/%Y')}."
+            mensaje = f"La membresía de {nombre_alumno} vence el {_ultimo_dia_cubierto(vence)}."
 
         fila = Notificacion(
             tipo=tipo, mensaje=mensaje,
@@ -355,7 +363,7 @@ def _texto_aviso_bloqueo(fecha_vencimiento: date, bloqueo_desde: date, hoy: date
     """Mensaje de mora que avisa del bloqueo por impago (#1768). Si el bloqueo
     todavía no empezó dice hasta cuándo se puede pagar y desde qué día rige (el
     día 4); si ya empezó, que ya rige. Pura, sin I/O."""
-    fecha_str = fecha_vencimiento.strftime("%d/%m/%Y")
+    fecha_str = _ultimo_dia_cubierto(fecha_vencimiento)
     if hoy >= bloqueo_desde:
         return (
             f"Tu membresía venció el {fecha_str} y no puedes registrar asistencia "
@@ -390,7 +398,7 @@ def _construir_notificaciones_mora(
     llamador persiste el lote entero junto (issue #833). Mismo criterio que
     `_construir_notificacion_vencimiento`: dedup resuelto en
     `ya_notificados`."""
-    fecha_str = fecha_vencimiento.strftime("%d/%m/%Y")
+    fecha_str = _ultimo_dia_cubierto(fecha_vencimiento)
     if tipo == TipoNotificacion.MIEMBRESIA_MORA_DIA_1 and bloqueo_desde is not None:
         base = _texto_aviso_bloqueo(fecha_vencimiento, bloqueo_desde, hoy)
     elif tipo == TipoNotificacion.MIEMBRESIA_MORA_DIA_1:

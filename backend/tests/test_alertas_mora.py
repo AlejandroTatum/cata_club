@@ -541,8 +541,10 @@ def test_mora_a_4_dias_recibe_aviso_dia_1_por_ventana_de_recuperacion(
     # `alertar_vencimientos_hoy_mas_5`): a diferencia de ese caso, acá
     # `_disparar_notificacion_mora` recibe `ultima_fecha_fin` -- la fecha REAL
     # de esa fila, no un borde de ventana compartido -- así que el mensaje
-    # debe nombrar la fecha real de vencimiento (HOY - 4 días).
-    fecha_real = (HOY - timedelta(days=4)).strftime("%d/%m/%Y")
+    # debe nombrar el último día cubierto de esa fila: su `fecha_fin`
+    # (HOY - 4 días) es exclusiva, así que es HOY - 5 días.
+    fecha_real = (HOY - timedelta(days=5)).strftime("%d/%m/%Y")
+    fecha_exclusiva = (HOY - timedelta(days=4)).strftime("%d/%m/%Y")
     fila = (
         db_session.query(Notificacion)
         .filter(
@@ -552,6 +554,7 @@ def test_mora_a_4_dias_recibe_aviso_dia_1_por_ventana_de_recuperacion(
         .one()
     )
     assert fecha_real in fila.mensaje
+    assert fecha_exclusiva not in fila.mensaje
     assert fecha_real in llamadas[0]["cuerpo_texto"]
 
 
