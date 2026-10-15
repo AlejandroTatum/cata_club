@@ -54,7 +54,7 @@ describe("BirthdaysToday", () => {
     expect(rows[0]).toHaveTextContent("Jugador 01");
     expect(rows[4]).toHaveTextContent("Jugador 05");
     expect(within(section).getByText("Página 1 de 9")).toBeInTheDocument();
-    expect(within(section).getByText(/1–5 de 43/)).toBeInTheDocument();
+    expect(within(section).getByText(/1–5 de 43 jugadores/)).toBeInTheDocument();
   });
 
   it("navigates to the next and previous pages", () => {

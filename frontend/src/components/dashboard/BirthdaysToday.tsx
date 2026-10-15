@@ -59,6 +59,7 @@ export default function BirthdaysToday({ birthdays }: BirthdaysTodayProps): Reac
               totalItems={total}
               pageSize={BIRTHDAYS_PAGE_SIZE}
               itemNoun="jugador"
+              itemNounPlural="jugadores"
             />
           )}
         </>
