@@ -6,7 +6,8 @@ from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.tiempo import ahora_club
 from app.dominio.enums import DiaSemana, EstadoMembresia, EstadoPago, TipoRol
 from app.dominio.modelos import HorarioEntrenamiento, Membresia, Pago, Persona, Rol, Usuario
-from app.presentacion.schemas.dashboard_schemas import DashboardStatsDTO
+from app.presentacion.schemas.dashboard_schemas import CumpleanosHoyDTO, DashboardStatsDTO
+from app.infraestructura.repositorios.cumpleanos_repositorio import cumpleanos_de_hoy
 from app.servicios_negocio.gestor_permisos import GestorPermisos
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
@@ -97,4 +98,7 @@ async def dashboard_stats(db: Session = Depends(obtener_sesion)) -> DashboardSta
         pending_payments=pending_payments,
         today_schedules=today_schedules,
         personas_sin_membresia=personas_sin_membresia,
+        cumpleanos_hoy=[
+            CumpleanosHoyDTO(nombre=c.nombre, edad=c.edad) for c in cumpleanos_de_hoy(db)
+        ],
     )

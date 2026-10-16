@@ -62,6 +62,7 @@ import {
   Timeline,
 } from "@/components/charts";
 import AttentionStrip, { type AttentionItem } from "@/components/dashboard/AttentionStrip";
+import BirthdaysToday from "@/components/dashboard/BirthdaysToday";
 import CompactEmpty from "@/components/dashboard/CompactEmpty";
 import DashboardSection from "@/components/dashboard/DashboardSection";
 import KpiTile from "@/components/dashboard/KpiTile";
@@ -809,6 +810,8 @@ export default function DashboardPage(): React.ReactElement {
             data-dash-col
             className="flex min-w-0 flex-col gap-page"
           >
+            {stats && <BirthdaysToday birthdays={stats.cumpleanosHoy ?? []} />}
+
             <DashboardSection
               title="Pagos"
               testId="payment-queue"

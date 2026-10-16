@@ -1701,6 +1701,14 @@ export interface DashboardStats {
   pendingPayments: number;
   todaySchedules: number;
   personasSinMembresia: number;
+  /** Players whose birthday is today (club day), with the age they turn. */
+  cumpleanosHoy?: BirthdayToday[];
+}
+
+/** One entry of `DashboardStats.cumpleanosHoy`. */
+export interface BirthdayToday {
+  nombre: string;
+  edad: number;
 }
 
 /** Fetch aggregate dashboard stats, composed server-side from `/personas`, `/membresias/pagos*` and `/asistencias/horarios` — `GET /api/dashboard`. */

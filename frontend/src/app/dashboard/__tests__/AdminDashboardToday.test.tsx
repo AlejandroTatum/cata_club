@@ -184,6 +184,24 @@ describe("admin dashboard — hoy en el club", () => {
     expect(screen.getByTestId("attention-chips")).toHaveClass("max-lg:hidden");
   });
 
+  it("lists today's birthdays with the age they turn", async () => {
+    mockStats.mockResolvedValue({
+      ...stats(),
+      cumpleanosHoy: [{ nombre: "Ana Gómez", edad: 14 }],
+    });
+    render(<DashboardPage />);
+    const block = await screen.findByTestId("birthdays-today");
+    expect(within(block).getByText("Ana Gómez")).toBeInTheDocument();
+    expect(within(block).getByText(/cumple 14/)).toBeInTheDocument();
+  });
+
+  it("says nobody has a birthday today when the list is empty", async () => {
+    mockStats.mockResolvedValue({ ...stats(), cumpleanosHoy: [] });
+    render(<DashboardPage />);
+    const block = await screen.findByTestId("birthdays-today");
+    expect(within(block).getByText("Hoy no hay cumpleaños")).toBeInTheDocument();
+  });
+
   it("says there are no classes today in one line", async () => {
     render(<DashboardPage />);
     const hero = await screen.findByTestId("today-hero");
@@ -393,7 +411,8 @@ describe("admin dashboard — two independent columns", () => {
     await within(screen.getByTestId("today-hero")).findByText("Hoy no hay clases");
     await within(screen.getByTestId("activity-feed")).findByText("Todavía no hay movimiento");
     await within(screen.getByTestId("attendance-distribution")).findByText("Sin asistencias registradas");
-    expect(screen.getAllByTestId("compact-empty")).toHaveLength(4);
+    await within(screen.getByTestId("birthdays-today")).findByText("Hoy no hay cumpleaños");
+    expect(screen.getAllByTestId("compact-empty")).toHaveLength(5);
     expect(screen.queryByTestId("empty-state")).toBeNull();
   });
 });
