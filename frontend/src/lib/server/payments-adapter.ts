@@ -18,7 +18,7 @@ import { MEMBERSHIP_STATUS_BY_ESTADO, type BackendEstadoMembresia } from "@/lib/
 import { ESTADO_PAGO_TO_VALIDATION_STATUS } from "@/lib/status-badges";
 import { backendFetchAuthed } from "@/lib/server/backend-client";
 import { pickRefreshed, type RefreshedTokens } from "@/lib/server/auth";
-import { formatDateRange } from "@/lib/format-utils";
+import { formatPaymentPeriod } from "@/lib/format-utils";
 
 export type BackendEstadoPago = "APROBADO" | "PENDIENTE_VALIDACION" | "RECHAZADO";
 // REGULARIZACION (issue #935, backend since #284): bookkeeping-only, never
@@ -170,7 +170,9 @@ export function buildPaymentValidationRequest(
     // either. Safe to do server-side: `fechaInicio`/`fechaFin` are date-only
     // strings, which `formatDateRange` anchors at noon UTC — the rendered
     // calendar day is the same whether Node runs in UTC or America/Guayaquil.
-    membershipPeriod: formatDateRange(pago.fechaInicio, pago.fechaFin),
+    // The end is the last covered day (`fechaFin` is exclusive); `endDate`
+    // below stays the raw value.
+    membershipPeriod: formatPaymentPeriod(pago.fechaInicio, pago.fechaFin),
     membershipType: tipoMembresia ? tipoMembresia.categoria : "Plan sin asignar",
     expectedAmount: Number(pago.monto),
     paymentMethod: PAYMENT_METHOD_BY_TIPO_PAGO[pago.tipoPago],

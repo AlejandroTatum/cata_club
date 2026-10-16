@@ -84,7 +84,7 @@ import { MEMBERSHIP_STATUS_BY_ESTADO } from "@/lib/membership-status";
 import { backendRoleForUserRole, getBackendRoleLabel, getRoleLabel } from "@/lib/auth-utils";
 import { Loader2, Save, X } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { formatDate, formatMonthYear } from "@/lib/format-utils";
+import { formatDate, formatMonthYear, lastCoveredDay } from "@/lib/format-utils";
 import LinkifiedText from "@/components/LinkifiedText";
 import { toUserMessage } from "@/lib/error-message";
 import { phoneFieldRule, toPhoneFieldDigits, toStoredPhone } from "@/lib/identity-validation";
@@ -531,7 +531,9 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   );
 
   // ---- The role's block --------------------------------------------------
-  const daysLeft = coverageEnd ? daysUntil(coverageEnd, clubToday()) : null;
+  // `coverageEnd` is the exclusive `fecha_fin`: the ticket counts and prints the last covered day.
+  const lastDay = coverageEnd ? lastCoveredDay(coverageEnd) : null;
+  const daysLeft = lastDay ? daysUntil(lastDay, clubToday()) : null;
   const blocks = roleBlocksFor(props.role, selfMembership !== null).map((kind) => {
     if (kind === "dependants") {
       return (
@@ -558,7 +560,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
           tone={tone}
           daysLeft={daysLeft}
           statusWord={ticketWord(tone, daysLeft, membershipState.label)}
-          until={coverageEnd ? formatDate(coverageEnd) : null}
+          until={lastDay ? formatDate(lastDay) : null}
           plan={plan}
           modalidad={
             modalidadRedundant

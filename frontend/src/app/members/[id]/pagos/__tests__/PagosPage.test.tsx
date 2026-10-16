@@ -265,7 +265,7 @@ describe("PagosPage — one plain state and ONE primary action each", () => {
     const facts = await screen.findByLabelText("Resumen de la membresía");
     expect(within(facts).getByText("Mensual")).toBeInTheDocument();
     expect(within(facts).getByText("$25,00")).toBeInTheDocument();
-    expect(within(facts).getByText(/hasta 01\/12\/2026/)).toBeInTheDocument();
+    expect(within(facts).getByText(/hasta 30\/11\/2026/)).toBeInTheDocument();
   });
 
   it("suspended: reactivate first", async () => {
@@ -480,7 +480,7 @@ describe("PagosPage — the history", () => {
 
     await screen.findByRole("button", { name: "Corregir monto o meses" });
     expect(container.querySelectorAll('li[aria-hidden="true"]')).toHaveLength(0);
-    expect(screen.getByText("1 jul – 1 sep 2026")).toBeInTheDocument();
+    expect(screen.getByText("julio – agosto 2026")).toBeInTheDocument();
     // S3-1: helper text and rows use the app's body type; `text-2xs` is the letter-spaced caption step.
     // The shared Badge chip keeps its own size; the page's own text must not use it.
     expect(container.querySelector('[class*="text-2xs"]:not(.rounded-full)')).toBeNull();

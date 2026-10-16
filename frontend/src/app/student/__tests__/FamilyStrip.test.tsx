@@ -58,7 +58,7 @@ describe("FamilyStrip", () => {
   it("lists each dependent with its coverage status and marks the selected one", () => {
     render(
       <FamilyStrip
-        profiles={[profile("1", "Martin", "2026-10-03"), profile("2", "Sofia", "2026-09-01")]}
+        profiles={[profile("1", "Martin", "2026-10-04"), profile("2", "Sofia", "2026-09-01")]}
         value="1"
         onChange={vi.fn()}
         today={TODAY}
@@ -125,7 +125,7 @@ describe("FamilyStrip", () => {
     render(
       <FamilyStrip
         profiles={[
-          profile("1", "Martin", "2026-10-03", "Mensual Adultos"),
+          profile("1", "Martin", "2026-10-04", "Mensual Adultos"),
           profile("2", "Sofia", "2026-09-01", "Mensual Infantil"),
         ]}
         value="1"
