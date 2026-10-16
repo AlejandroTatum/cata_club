@@ -9,7 +9,7 @@
  */
 
 import type { UserRole } from "@/types/domain";
-import { formatDate } from "@/lib/format-utils";
+import { formatDate, lastCoveredDay } from "@/lib/format-utils";
 
 /** A blocked minor on their own account cannot pay: the representative does. */
 export const PAYMENT_BLOCK_MINOR_MESSAGE = "Pídele a tu representante que pague.";
@@ -24,13 +24,14 @@ export const PAYMENT_BLOCK_API_MESSAGE = "La membresía de esta cuenta está ven
 export const PAYMENT_BLOCK_ERROR_CODE = "bloqueo_impago";
 
 /**
- * The banner of a blocked profile. The date is the end of its coverage.
+ * The banner of a blocked profile. The date is the last day its coverage held
+ * (`cubiertoHasta` is exclusive: the first uncovered day).
  *
  * @param studentName the dependent's given name when a guardian reads it; the
  *   reader's own account (`null`) is addressed in «tú».
  */
 export function paymentBlockBanner(cubiertoHasta: string | null, studentName: string | null = null): string {
-  const venció = cubiertoHasta ? `venció el ${formatDate(cubiertoHasta)}` : "venció";
+  const venció = cubiertoHasta ? `venció el ${formatDate(lastCoveredDay(cubiertoHasta))}` : "venció";
   if (studentName) return `La membresía de ${studentName} ${venció}. Paga para que vuelva a entrenar.`;
   return `Tu membresía ${venció}. Paga para volver a entrenar.`;
 }

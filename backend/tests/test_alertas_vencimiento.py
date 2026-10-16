@@ -366,11 +366,11 @@ def test_vencimiento_a_3_dias_se_notifica_por_ventana_de_recuperacion(
     ).count()
     assert total == 1
     # La ventana amplió QUÉ pagos matchean, pero el aviso debe seguir
-    # nombrando la fecha REAL de vencimiento de ESE pago (HOY + 3), no el
-    # borde de la ventana escaneada (HOY + 5) -- ver
+    # nombrando el último día cubierto de ESE pago (`fecha_fin` HOY + 3 es
+    # exclusiva: HOY + 2), no el borde de la ventana escaneada (HOY + 5) -- ver
     # `test_el_aviso_nombra_la_fecha_real_de_vencimiento_no_el_borde_de_la_ventana`
     # más abajo, que es la que realmente fija esta regla.
-    fecha_real = (HOY + timedelta(days=3)).strftime("%d/%m/%Y")
+    fecha_real = (HOY + timedelta(days=2)).strftime("%d/%m/%Y")
     fila = db_session.query(Notificacion).filter(
         Notificacion.persona_id == persona.id
     ).one()
@@ -382,7 +382,8 @@ def test_el_aviso_nombra_la_fecha_real_de_vencimiento_no_el_borde_de_la_ventana(
 ):
     """Pin de contenido, no solo de conteo: una membresía que vence en 3 días
     (dentro de la ventana de recuperación `hoy..hoy+5`) debe recibir un aviso
-    que diga "vence el <HOY+3>" -- la fecha REAL de ESE pago -- y NUNCA
+    que diga "vence el <HOY+2>" -- el último día cubierto de ESE pago, porque su
+    `fecha_fin` (HOY+3) es exclusiva -- y NUNCA "vence el <HOY+3>" ni
     "vence el <HOY+5>" (`fecha_objetivo`, el borde de la ventana escaneada por
     el lote). Cubre tanto la notificación in-app como el cuerpo del correo
     realmente enviado."""
@@ -394,7 +395,8 @@ def test_el_aviso_nombra_la_fecha_real_de_vencimiento_no_el_borde_de_la_ventana(
 
     alertas_mod.alertar_vencimientos_hoy_mas_5()
 
-    fecha_real = (HOY + timedelta(days=3)).strftime("%d/%m/%Y")
+    fecha_real = (HOY + timedelta(days=2)).strftime("%d/%m/%Y")
+    fecha_exclusiva = (HOY + timedelta(days=3)).strftime("%d/%m/%Y")
     fecha_borde_ventana = (HOY + timedelta(days=5)).strftime("%d/%m/%Y")
     assert fecha_real != fecha_borde_ventana  # la prueba no sería honesta si coincidieran
 
@@ -402,11 +404,13 @@ def test_el_aviso_nombra_la_fecha_real_de_vencimiento_no_el_borde_de_la_ventana(
         Notificacion.persona_id == persona.id
     ).one()
     assert fecha_real in fila.mensaje
+    assert fecha_exclusiva not in fila.mensaje
     assert fecha_borde_ventana not in fila.mensaje
 
     assert len(llamadas) == 1
     cuerpo = llamadas[0]["cuerpo_texto"]
     assert fecha_real in cuerpo
+    assert fecha_exclusiva not in cuerpo
     assert fecha_borde_ventana not in cuerpo
 
 

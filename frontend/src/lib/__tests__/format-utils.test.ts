@@ -12,6 +12,8 @@ import {
   formatDateRange,
   formatMonthYear,
   joinWithY,
+  lastCoveredDay,
+  formatPaymentPeriod,
 } from "../format-utils";
 
 // ---------------------------------------------------------------------------
@@ -231,5 +233,57 @@ describe("formatMonthYear", () => {
   it("returns an empty string for empty or invalid input", () => {
     expect(formatMonthYear("")).toBe("");
     expect(formatMonthYear("no es una fecha")).toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// lastCoveredDay (fecha-cobertura — the backend `fecha_fin` is EXCLUSIVE)
+// ---------------------------------------------------------------------------
+
+describe("lastCoveredDay", () => {
+  it("is the day before the exclusive fecha_fin", () => {
+    expect(lastCoveredDay("2026-10-15")).toBe("2026-10-14");
+    expect(lastCoveredDay("2026-09-30")).toBe("2026-09-29");
+  });
+
+  it("crosses month, year and leap-day boundaries", () => {
+    expect(lastCoveredDay("2026-10-01")).toBe("2026-09-30");
+    expect(lastCoveredDay("2027-01-01")).toBe("2026-12-31");
+    expect(lastCoveredDay("2028-03-01")).toBe("2028-02-29");
+  });
+
+  it("feeds formatDate to the date the family actually has covered", () => {
+    expect(formatDate(lastCoveredDay("2026-10-15"))).toBe("14/10/2026");
+  });
+
+  it("reads the calendar day of a UTC-midnight timestamp, whatever the runner's zone", () => {
+    expect(lastCoveredDay("2026-10-15T00:00:00Z")).toBe("2026-10-14");
+  });
+
+  it("hands back input it cannot read, so formatDate keeps its empty-string contract", () => {
+    expect(lastCoveredDay("")).toBe("");
+    expect(lastCoveredDay("no es una fecha")).toBe("no es una fecha");
+  });
+
+  it("never rolls an impossible calendar date over: it is handed back as written", () => {
+    expect(lastCoveredDay("2026-02-30")).toBe("2026-02-30");
+    expect(lastCoveredDay("2026-13-01")).toBe("2026-13-01");
+    expect(formatDate(lastCoveredDay("2026-02-30"))).toBe("");
+  });
+});
+
+describe("formatPaymentPeriod", () => {
+  it("ends a week at its last covered day, not at the exclusive fecha_fin", () => {
+    expect(formatPaymentPeriod("2026-10-08", "2026-10-15")).toBe("08/10/2026 – 14/10/2026");
+  });
+
+  it("shows a single date for a one-day pass (start == last covered day)", () => {
+    expect(formatPaymentPeriod("2026-10-15", "2026-10-16")).toBe("15/10/2026");
+  });
+
+  it("keeps formatDateRange's degradation when a side is unreadable", () => {
+    expect(formatPaymentPeriod("2026-10-08", "")).toBe("08/10/2026");
+    expect(formatPaymentPeriod("", "2026-10-15")).toBe("14/10/2026");
+    expect(formatPaymentPeriod("", "")).toBe("");
   });
 });

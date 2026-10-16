@@ -29,7 +29,7 @@ function renderCard(s: PaymentSituation, extra: Partial<React.ComponentProps<typ
   return render(
     <CuotaCard
       situation={s}
-      coverageEnd="2026-09-26"
+      coverageEnd="2026-09-27"
       monthlyPrice="40.00"
       action={ACTION}
       viewPagosHref="/student/payments"
@@ -37,6 +37,55 @@ function renderCard(s: PaymentSituation, extra: Partial<React.ComponentProps<typ
     />,
   );
 }
+
+describe("CuotaCard — plan title follows the periodicidad (S3)", () => {
+  it.each([
+    ["MENSUAL", "Mensualidad"],
+    ["SEMANAL", "Plan semanal"],
+    ["DIARIA", "Pase diario"],
+  ] as const)("titles a %s plan «%s», on the heading and the aria-label", (periodicidad, title) => {
+    renderCard(situation({}), { periodicidad });
+    const card = screen.getByTestId("student-cuota-card");
+    expect(within(card).getByRole("heading", { name: title })).toBeInTheDocument();
+    expect(card).toHaveAttribute("aria-label", title === "Mensualidad" ? "Tu mensualidad" : `Tu ${title.toLowerCase()}`);
+  });
+
+  it("falls back to «Mensualidad» when the periodicity is unknown", () => {
+    renderCard(situation({}));
+    const card = screen.getByTestId("student-cuota-card");
+    expect(within(card).getByRole("heading", { name: "Mensualidad" })).toBeInTheDocument();
+    expect(card).toHaveAttribute("aria-label", "Tu mensualidad");
+  });
+});
+
+describe("CuotaCard — coverage end is the last covered day (fecha-cobertura)", () => {
+  const TODAY = new Date(2026, 9, 14); // 14/10/2026
+
+  it("prints «Cubierta hasta» as the day before the exclusive fecha_fin", () => {
+    // A daily plan paid on 14/10 has fecha_fin 15/10: covered through the 14th.
+    renderCard(situation({ kind: "ending-soon", figure: null }), { coverageEnd: "2026-10-15", periodicidad: "DIARIA", today: TODAY });
+    expect(within(screen.getByTestId("cuota-figures")).getByText("14/10/2026")).toBeInTheDocument();
+  });
+
+  it("says «Vence hoy» on the last covered day", () => {
+    renderCard(situation({ kind: "ending-soon", figure: null }), { coverageEnd: "2026-10-15", today: TODAY });
+    expect(screen.getByTestId("cuota-next-step")).toHaveTextContent("Vence hoy (14/10/2026).");
+  });
+
+  it("counts «Venció hace N días» from the last covered day", () => {
+    renderCard(situation({}), { coverageEnd: "2026-10-12", today: TODAY });
+    expect(screen.getByTestId("cuota-next-step")).toHaveTextContent("Venció hace 3 días (11/10/2026).");
+  });
+});
+
+describe("CuotaCard — an unknown periodicidad", () => {
+  it("falls back to the «Mensualidad» title instead of breaking the card", () => {
+    renderCard(situation({}), { periodicidad: "ANUAL" as never });
+    const card = screen.getByTestId("student-cuota-card");
+    expect(within(card).getByRole("heading", { name: "Mensualidad" })).toBeInTheDocument();
+    expect(card).toHaveAttribute("aria-label", "Tu mensualidad");
+  });
+});
 
 describe("CuotaCard — periodicidad", () => {
   it.each([
@@ -139,7 +188,7 @@ describe("CuotaCard", () => {
     it("spells out the days left, the date, the amount and what happens after paying", () => {
       renderCard(
         situation({ kind: "covered", urgent: false, figure: { value: 12, unit: "días de cobertura" }, headline: "Estás al día con el club" }),
-        { coverageEnd: "2026-11-03", monthlyPrice: "25.00", today: TODAY },
+        { coverageEnd: "2026-11-04", monthlyPrice: "25.00", today: TODAY },
       );
       expect(screen.getByTestId("cuota-next-step")).toHaveTextContent(
         "Vence en 12 días (03/11/2026). Paga $25,00 y sube el comprobante; el club lo revisa y te avisamos aquí.",
@@ -149,7 +198,7 @@ describe("CuotaCard", () => {
     it("keeps the primary button neutral while more than 7 days remain", () => {
       renderCard(
         situation({ kind: "covered", urgent: false, figure: { value: 8, unit: "días de cobertura" } }),
-        { coverageEnd: "2026-10-30", today: TODAY },
+        { coverageEnd: "2026-10-31", today: TODAY },
       );
       const cta = screen.getByRole("link", { name: /Registrar un pago/ });
       expect(cta.className).not.toMatch(/bg-ball/);
@@ -158,13 +207,13 @@ describe("CuotaCard", () => {
     it("turns the primary button to the ball fill at 7 days or fewer", () => {
       renderCard(
         situation({ kind: "ending-soon", figure: { value: 7, unit: "días de cobertura" } }),
-        { coverageEnd: "2026-10-29", today: TODAY },
+        { coverageEnd: "2026-10-30", today: TODAY },
       );
       expect(screen.getByRole("link", { name: /Registrar un pago/ }).className).toMatch(/bg-ball/);
     });
 
     it("keeps the ball primary and says how long ago it expired", () => {
-      renderCard(situation({}), { coverageEnd: "2026-10-19", monthlyPrice: "25.00", today: TODAY });
+      renderCard(situation({}), { coverageEnd: "2026-10-20", monthlyPrice: "25.00", today: TODAY });
       expect(screen.getByRole("link", { name: /Registrar un pago/ }).className).toMatch(/bg-ball/);
       expect(screen.getByTestId("cuota-next-step")).toHaveTextContent(
         "Venció hace 3 días (19/10/2026). Paga $25,00 y sube el comprobante",

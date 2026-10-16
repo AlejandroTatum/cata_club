@@ -79,6 +79,16 @@ describe("buildPaymentValidationRequest", () => {
   const membresia: BackendMembresia = { id: 100, estado: "ACTIVA", tipoMembresiaId: 5 };
   const tipo: BackendTipoMembresia = { id: 5, categoria: "Mensual Adultos" };
 
+  it("ends the queue period at the last covered day (fechaFin is exclusive)", () => {
+    const semana = { ...pago, fechaInicio: "2026-10-08", fechaFin: "2026-10-15" };
+    expect(buildPaymentValidationRequest(semana, "Sofia", membresia, tipo).membershipPeriod).toBe("08/10/2026 – 14/10/2026");
+  });
+
+  it("shows a single date for a one-day pass", () => {
+    const pase = { ...pago, fechaInicio: "2026-10-15", fechaFin: "2026-10-16" };
+    expect(buildPaymentValidationRequest(pase, "Sofia", membresia, tipo).membershipPeriod).toBe("15/10/2026");
+  });
+
   it("populates responsablePagoName when provided", () => {
     const request = buildPaymentValidationRequest(pago, "Sofia Martinez", membresia, tipo, "Carlos Martinez");
     expect(request.responsablePagoName).toBe("Carlos Martinez");

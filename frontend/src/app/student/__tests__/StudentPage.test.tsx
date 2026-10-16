@@ -618,10 +618,10 @@ describe("StudentPage — the club membership card (carnet)", () => {
     const carnet = await screen.findByTestId("student-carnet");
     const cuota = await screen.findByTestId("student-cuota-card");
     await waitFor(() => {
-      expect(within(cuota).getByText("31/01/2027")).toBeInTheDocument();
+      expect(within(cuota).getByText("30/01/2027")).toBeInTheDocument();
     });
     expect(within(carnet).queryByText("Válido hasta")).not.toBeInTheDocument();
-    expect(within(carnet).queryByText("31/01/2027")).not.toBeInTheDocument();
+    expect(within(carnet).queryByText("30/01/2027")).not.toBeInTheDocument();
   });
 
   /**
@@ -1659,11 +1659,11 @@ describe("StudentPage — the Cuota card carries the whole payment reading", () 
 
     const cuota = await screen.findByTestId("student-cuota-card");
     // Exact string, not a substring regex: the detail sentence below also
-    // names the same date ("El último pago aprobado cubrió hasta el
-    // 31/07/2026."), so a partial match finds both and this specifically
-    // wants the "Cubierta hasta" row's own value.
+    // names the same date, so a partial match finds both and this specifically
+    // wants the "Cubierta hasta" row's own value. `cubiertoHasta` is exclusive
+    // (31/07 is the first uncovered day), so the card prints the day before.
     await waitFor(() => {
-      expect(within(cuota).getByText("31/07/2026")).toBeInTheDocument();
+      expect(within(cuota).getByText("30/07/2026")).toBeInTheDocument();
     });
   });
 

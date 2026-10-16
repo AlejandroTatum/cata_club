@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Download, Gift } from "lucide-react";
-import { formatDate, formatDateRange } from "@/lib/format-utils";
+import { formatDate, formatPaymentPeriod } from "@/lib/format-utils";
 import { formatCurrency } from "@/lib/format-utils";
 import { ICON } from "@/lib/icon-size";
 import { Button, buttonClasses, EmptyState, ErrorState, LoadingState } from "@/components/ui";
@@ -193,7 +193,7 @@ export function BonificacionesSection({ query = "" }: { query?: string }): React
             <div className="min-w-0 flex-1">
               <p className="text-sm font-bold text-ink">{item.personaNombreCompleto}</p>
               <p className="mt-0.5 text-xs text-ink-3-strong">
-                <span className="tabular-nums">{formatDateRange(item.fechaInicio, item.fechaFin)}</span> · Otorgada el{" "}
+                <span className="tabular-nums">{formatPaymentPeriod(item.fechaInicio, item.fechaFin)}</span> · Otorgada el{" "}
                 <span className="tabular-nums">{formatDate(item.otorgadaEn)}</span>
               </p>
             </div>

@@ -317,7 +317,7 @@ export const MEMBERSHIP_TYPE_LABELS: Record<TipoMembresia, string> = {
 import type { BadgeTone } from "@/components/ui/Badge";
 
 export { formatCurrency, formatDate } from "@/lib/format-utils";
-import { formatCurrency, formatDate, formatDateRange } from "@/lib/format-utils";
+import { formatCurrency, formatDate, formatDateRange, lastCoveredDay } from "@/lib/format-utils";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -425,13 +425,13 @@ export function formatMembershipPeriod(
 }
 
 /**
- * "Vigencia" of a membership: the end of its REAL coverage (QA3 ADM-14), e.g.
- * "Hasta 01/12/2026". Empty when nothing was ever covered, so the caller
+ * "Vigencia" of a membership: the last day of its REAL coverage (QA3 ADM-14), e.g.
+ * "Hasta 01/12/2026" — `cubiertoHasta` is exclusive, so that is the day before it. Empty when nothing was ever covered, so the caller
  * renders a dash rather than an invented range.
  */
 export function formatMembershipCoverage(cubiertoHasta: string | null | undefined): string {
   if (!cubiertoHasta || !parseDateStringLocal(cubiertoHasta)) return "";
-  return `Hasta ${formatDate(cubiertoHasta)}`;
+  return `Hasta ${formatDate(lastCoveredDay(cubiertoHasta))}`;
 }
 
 /**
@@ -824,8 +824,10 @@ const MESES = [
 
 /**
  * The period a payment covers, in words: «octubre 2026» for whole calendar
- * months, «22 ago – 21 sep 2026» for a period that starts mid-month. Reads the
- * ISO date as written (no timezone shift), so a payment never moves a day.
+ * months, «22 ago – 21 sep 2026» for a period that starts mid-month, «15 oct
+ * 2026» for a one-day pass. `fechaFin` is the backend's exclusive end, so the
+ * words stop at the last covered day. Reads the ISO date as written (no
+ * timezone shift), so a payment never moves a day.
  */
 export function describePeriodoPago(fechaInicio: string, fechaFin: string): string {
   const parse = (iso: string): { y: number; m: number; d: number } | null => {
@@ -833,8 +835,11 @@ export function describePeriodoPago(fechaInicio: string, fechaFin: string): stri
     return match ? { y: Number(match[1]), m: Number(match[2]) - 1, d: Number(match[3]) } : null;
   };
   const a = parse(fechaInicio);
-  const b = parse(fechaFin);
+  // `fechaFin` is exclusive: the words name the last covered day.
+  const b = parse(lastCoveredDay(fechaFin));
   if (!a || !b) return "";
+  const short = (m: number): string => MESES[m].slice(0, 3);
+  if (a.y === b.y && a.m === b.m && a.d === b.d) return `${a.d} ${short(a.m)} ${a.y}`;
   const lastDay = new Date(Date.UTC(b.y, b.m + 1, 0)).getUTCDate();
   if (a.d === 1 && b.d === lastDay) {
     if (a.y === b.y && a.m === b.m) return `${MESES[a.m]} ${a.y}`;
@@ -842,7 +847,6 @@ export function describePeriodoPago(fechaInicio: string, fechaFin: string): stri
       ? `${MESES[a.m]} – ${MESES[b.m]} ${b.y}`
       : `${MESES[a.m]} ${a.y} – ${MESES[b.m]} ${b.y}`;
   }
-  const short = (m: number): string => MESES[m].slice(0, 3);
   return a.y === b.y
     ? `${a.d} ${short(a.m)} – ${b.d} ${short(b.m)} ${b.y}`
     : `${a.d} ${short(a.m)} ${a.y} – ${b.d} ${short(b.m)} ${b.y}`;
@@ -1030,11 +1034,14 @@ export function getTotalPages(
 
 /**
  * «Socio antiguo» result line: the one-month period that starts at the last
- * payment ends at `fechaFin`; from that day on the member either is covered
- * (`fechaFin >= hoy`) or owes (`Debe desde`).
+ * payment ends at the exclusive `fechaFin`; the member either is still covered
+ * (last covered day >= hoy) or owes since `fechaFin`, the first uncovered day
+ * (`Debe desde`).
  */
 export function describeEstadoMigracion(fechaFin: string, hoy: string): string {
-  return fechaFin >= hoy ? `Al día hasta ${formatDate(fechaFin)}` : `Debe desde ${formatDate(fechaFin)}`;
+  // `fechaFin` is exclusive: the member is covered through the day before it.
+  const ultimoDia = lastCoveredDay(fechaFin);
+  return ultimoDia >= hoy ? `Al día hasta ${formatDate(ultimoDia)}` : `Debe desde ${formatDate(fechaFin)}`;
 }
 
 /**

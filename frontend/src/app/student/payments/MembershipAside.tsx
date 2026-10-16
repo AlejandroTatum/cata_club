@@ -4,7 +4,7 @@
 
 import type { MembershipSummary } from "@/services/api";
 import { Badge, cn, type BadgeTone } from "@/components/ui";
-import { formatCurrency, formatDate } from "@/lib/format-utils";
+import { formatCurrency, formatDate, lastCoveredDay } from "@/lib/format-utils";
 import { priceFactLabel } from "@/lib/tarifa-periodo";
 import { describeMembershipState, describePaymentSituation } from "../student-utils";
 
@@ -103,7 +103,7 @@ export function MembershipCard({
         <h2 id="membership-status-title" className="text-base font-bold tracking-tight text-ink">
           {coverageEnd ? (
             <>
-              Pagado hasta el <span className="tabular-nums">{formatDate(coverageEnd)}</span>
+              Pagado hasta el <span className="tabular-nums">{formatDate(lastCoveredDay(coverageEnd))}</span>
             </>
           ) : (
             "Todavía no hay ningún pago aprobado"

@@ -49,8 +49,9 @@ def test_el_aviso_del_dia_1_anuncia_el_bloqueo_del_dia_4_con_su_fecha(
     alertas_mod.alertar_mora_diaria()
 
     [mensaje] = _mensajes(db_session, persona)
-    # Venció ayer (14/06): la gracia llega al 17/06 y el bloqueo empieza el 18/06.
-    assert "Tu membresía venció el 14/06/2029" in mensaje
+    # `fecha_fin` = 14/06 es EXCLUSIVA: el último día cubierto fue el 13/06. La gracia
+    # llega al 17/06 y el bloqueo empieza el 18/06 (esas fechas no cambian).
+    assert "Tu membresía venció el 13/06/2029" in mensaje
     assert "18/06/2029" in mensaje and "día 4" in mensaje
     assert "18/06/2029" in llamadas[0]["cuerpo_texto"]
 
@@ -85,7 +86,7 @@ def test_con_el_bloqueo_apagado_el_aviso_del_dia_1_conserva_su_texto(db_session,
     alertas_mod.alertar_mora_diaria()
 
     assert _mensajes(db_session, persona) == [
-        "Tu membresía venció el 14/06/2029. Regulariza tu pago para no perder los beneficios."
+        "Tu membresía venció el 13/06/2029. Regulariza tu pago para no perder los beneficios."
     ]
 
 
@@ -124,7 +125,7 @@ def test_el_aviso_de_lanzamiento_llega_a_quien_ya_estaba_vencido(db_session, ses
 
     assert resultado["total_avisos"] == 1
     [mensaje] = _mensajes(db_session, persona)
-    assert "Tu membresía venció el 16/05/2029" in mensaje
+    assert "Tu membresía venció el 15/05/2029" in mensaje
     assert "26/06/2029" in mensaje  # lanzamiento 22/06 + 4 días
     assert [c["destinatario"] for c in llamadas] == [f"socio{persona.id}@cataclub.test"]
 
@@ -386,7 +387,7 @@ def test_el_aviso_regular_con_pago_de_un_responsable_no_cuenta_como_aviso_de_lan
 
 
 # --- Aviso de mora del día 1: copias de las exenciones (#1779, S8) ----------------------------
-COPIA_SIN_BLOQUEO = "Tu membresía venció el 14/06/2029. Regulariza tu pago para no perder los beneficios."
+COPIA_SIN_BLOQUEO = "Tu membresía venció el 13/06/2029. Regulariza tu pago para no perder los beneficios."
 
 
 def test_con_el_bloqueo_apagado_el_aviso_del_dia_1_llega_con_la_copia_sin_bloqueo_tambien_por_correo(
@@ -424,7 +425,7 @@ def test_el_miembro_gratuito_ya_pasada_la_gracia_tampoco_recibe_texto_de_bloqueo
     alertas_mod.alertar_mora_diaria()
 
     assert _mensajes(db_session, persona) == [
-        "Tu membresía venció el 09/06/2029. Regulariza tu pago para no perder los beneficios."
+        "Tu membresía venció el 08/06/2029. Regulariza tu pago para no perder los beneficios."
     ]
 
 

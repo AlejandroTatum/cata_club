@@ -11,6 +11,7 @@ import {
   readCoverageStanding,
   breakdownAttendance,
   daysUntil,
+  daysUntilCoverageEnd,
   paymentBandTone,
   personInitials,
   summarizeRecentAttendance,
@@ -284,11 +285,11 @@ describe("daysUntil", () => {
 // suites have to be reading the same day for the agreement lock to mean
 // anything.
 /** Coverage that still has days left on it. */
-const LIVE_END = "2026-07-31";
-/** Coverage whose last day IS today. */
-const ENDS_TODAY = "2026-07-25";
-/** Coverage that ran out five days ago. */
-const LAPSED_END = "2026-07-20";
+const LIVE_END = "2026-08-01";
+/** Coverage whose last covered day IS today (`fecha_fin` is exclusive: tomorrow). */
+const ENDS_TODAY = "2026-07-26";
+/** Coverage whose last covered day was five days ago. */
+const LAPSED_END = "2026-07-21";
 
 describe("readCoverageStanding", () => {
   it("calls coverage current while days remain", () => {
@@ -296,14 +297,14 @@ describe("readCoverageStanding", () => {
   });
 
   it("still calls coverage current on its last day, not lapsed", () => {
-    // Same boundary `daysUntil` draws: the `fecha_fin` day returns 0, and a
-    // family that paid through today is covered through today.
+    // The count is to the last covered day (`fecha_fin` − 1): it returns 0 on
+    // that day, and a family that paid through today is covered through today.
     expect(readCoverageStanding(ENDS_TODAY, TODAY)).toBe("current");
   });
 
   it("calls coverage lapsed the day after it ends", () => {
     expect(readCoverageStanding(LAPSED_END, TODAY)).toBe("lapsed");
-    expect(readCoverageStanding("2026-07-24", TODAY)).toBe("lapsed");
+    expect(readCoverageStanding("2026-07-25", TODAY)).toBe("lapsed");
   });
 
   it('reports "none" — never "lapsed" — when there is no readable date at all', () => {
@@ -319,7 +320,7 @@ describe("readCoverageStanding", () => {
     // rule living beside `resolveSituation`, it is the SAME two thresholds
     // (`daysLeft === null`, `daysLeft < 0`) given a name so the badge can
     // consume them. If either side ever moves, this fails.
-    for (const end of [LAPSED_END, "2026-07-24", ENDS_TODAY, "2026-07-26", LIVE_END]) {
+    for (const end of [LAPSED_END, "2026-07-25", ENDS_TODAY, "2026-07-27", LIVE_END]) {
       const kind = describePaymentSituation(situation({ coverageEnd: end }), TODAY).kind;
       expect(readCoverageStanding(end, TODAY) === "lapsed").toBe(kind === "expired");
     }
@@ -360,7 +361,7 @@ describe("describeMembershipState", () => {
   });
 
   it("still reads ACTIVA as active on the last day of coverage", () => {
-    // The `fecha_fin` day counts as covered on both sides of the screen —
+    // The last covered day counts as covered on both sides of the screen —
     // `resolveSituation` calls it "termina hoy", not "venció".
     expect(describeMembershipState("ACTIVA", ENDS_TODAY, TODAY)).toEqual({
       label: "Membresía activa",
@@ -595,8 +596,8 @@ describe("describePaymentSituation", () => {
     const inputs: PaymentSituationInput[] = [
       situation(),
       situation({ coverageEnd: null }),
-      situation({ coverageEnd: "2026-07-01" }),
-      situation({ coverageEnd: "2026-07-28" }),
+      situation({ coverageEnd: "2026-07-02" }),
+      situation({ coverageEnd: "2026-07-29" }),
       situation({ pendingCount: 2 }),
       situation({ hasMembership: false, monthlyPrice: null, planName: null }),
       situation({ blockedAsMinor: true }),
@@ -612,7 +613,7 @@ describe("describePaymentSituation", () => {
   });
 
   it("reports days of coverage left and stays quiet when there is plenty", () => {
-    const result = describePaymentSituation(situation({ coverageEnd: "2026-08-30" }), TODAY);
+    const result = describePaymentSituation(situation({ coverageEnd: "2026-08-31" }), TODAY);
     expect(result.kind).toBe("covered");
     expect(result.figure).toEqual({ value: 36, unit: "días de cobertura" });
     expect(result.urgent).toBe(false);
@@ -621,7 +622,7 @@ describe("describePaymentSituation", () => {
   });
 
   it("asks for action once coverage is inside the last week", () => {
-    const result = describePaymentSituation(situation({ coverageEnd: "2026-07-28" }), TODAY);
+    const result = describePaymentSituation(situation({ coverageEnd: "2026-07-29" }), TODAY);
     expect(result.kind).toBe("ending-soon");
     expect(result.figure).toEqual({ value: 3, unit: "días de cobertura" });
     expect(result.headline).toBe("Te quedan 3 días de cobertura");
@@ -629,17 +630,17 @@ describe("describePaymentSituation", () => {
   });
 
   it("uses the singular for the last day and drops the figure on the final day", () => {
-    expect(describePaymentSituation(situation({ coverageEnd: "2026-07-26" }), TODAY).figure).toEqual(
+    expect(describePaymentSituation(situation({ coverageEnd: "2026-07-27" }), TODAY).figure).toEqual(
       { value: 1, unit: "día de cobertura" },
     );
-    const today = describePaymentSituation(situation({ coverageEnd: "2026-07-25" }), TODAY);
+    const today = describePaymentSituation(situation({ coverageEnd: "2026-07-26" }), TODAY);
     expect(today.figure).toBeNull();
     expect(today.headline).toBe("Tu cobertura termina hoy");
     expect(today.urgent).toBe(true);
   });
 
   it("counts the days since coverage ran out rather than the days that are left", () => {
-    const result = describePaymentSituation(situation({ coverageEnd: "2026-07-20" }), TODAY);
+    const result = describePaymentSituation(situation({ coverageEnd: "2026-07-21" }), TODAY);
     expect(result.kind).toBe("expired");
     expect(result.figure).toEqual({ value: 5, unit: "días vencida" });
     expect(result.headline).toBe("Tu cobertura venció");
@@ -659,18 +660,18 @@ describe("describePaymentSituation", () => {
 
   it("names the dependent when the reader is the guardian, and uses «tú» for their own profile", () => {
     const guardian = describePaymentSituation(
-      situation({ studentName: "Sofía", viewingOwnProfile: false, coverageEnd: "2026-07-28" }),
+      situation({ studentName: "Sofía", viewingOwnProfile: false, coverageEnd: "2026-07-29" }),
       TODAY,
     );
     expect(guardian.headline).toBe("A Sofía le quedan 3 días de cobertura");
 
-    const own = describePaymentSituation(situation({ coverageEnd: "2026-07-28" }), TODAY);
+    const own = describePaymentSituation(situation({ coverageEnd: "2026-07-29" }), TODAY);
     expect(own.headline).toBe("Te quedan 3 días de cobertura");
   });
 
   it("hands a pending payment back to the club instead of asking for another one", () => {
     const result = describePaymentSituation(
-      situation({ pendingCount: 1, coverageEnd: "2026-07-20" }),
+      situation({ pendingCount: 1, coverageEnd: "2026-07-21" }),
       TODAY,
     );
     expect(result.kind).toBe("awaiting-validation");
@@ -751,7 +752,7 @@ describe("describePaymentSituation", () => {
   // the branch reads the flag and not the price.
   it("reports gratuity from the flag, not from the price, and blocks registration", () => {
     const result = describePaymentSituation(
-      situation({ esGratuidadFamiliar: true, monthlyPrice: "35.00", coverageEnd: "2026-08-30" }),
+      situation({ esGratuidadFamiliar: true, monthlyPrice: "35.00", coverageEnd: "2026-08-31" }),
       TODAY,
     );
     expect(result.kind).toBe("gratuitous");
@@ -763,7 +764,7 @@ describe("describePaymentSituation", () => {
 
   it("takes priority over an expired or ending-soon coverage date — nothing is urgent for a member who does not pay", () => {
     const expired = describePaymentSituation(
-      situation({ esGratuidadFamiliar: true, monthlyPrice: "35.00", coverageEnd: "2026-07-01" }),
+      situation({ esGratuidadFamiliar: true, monthlyPrice: "35.00", coverageEnd: "2026-07-02" }),
       TODAY,
     );
     expect(expired.kind).toBe("gratuitous");
@@ -785,10 +786,10 @@ describe("describePaymentSituation", () => {
 
   it("keeps the ending-soon window at exactly one week", () => {
     expect(COVERAGE_ENDING_SOON_DAYS).toBe(7);
-    expect(describePaymentSituation(situation({ coverageEnd: "2026-08-01" }), TODAY).kind).toBe(
+    expect(describePaymentSituation(situation({ coverageEnd: "2026-08-02" }), TODAY).kind).toBe(
       "ending-soon",
     );
-    expect(describePaymentSituation(situation({ coverageEnd: "2026-08-02" }), TODAY).kind).toBe(
+    expect(describePaymentSituation(situation({ coverageEnd: "2026-08-03" }), TODAY).kind).toBe(
       "covered",
     );
   });
@@ -1025,14 +1026,14 @@ describe("describeFamilyCoverage", () => {
   });
 
   it("flags expired coverage as bad", () => {
-    expect(describeFamilyCoverage(membership("2026-09-20"), TODAY)).toEqual({ label: "Vencida", tone: "bad" });
+    expect(describeFamilyCoverage(membership("2026-09-21"), TODAY)).toEqual({ label: "Vencida", tone: "bad" });
   });
 
   it("warns for the last days and reads ok beyond that", () => {
-    expect(describeFamilyCoverage(membership("2026-09-29"), TODAY)).toEqual({ label: "Vence hoy", tone: "warn" });
-    expect(describeFamilyCoverage(membership("2026-10-03"), TODAY)).toEqual({ label: "4 días de cobertura", tone: "warn" });
-    expect(describeFamilyCoverage(membership("2026-09-30"), TODAY)).toEqual({ label: "1 día de cobertura", tone: "warn" });
-    expect(describeFamilyCoverage(membership("2026-11-29"), TODAY)).toEqual({ label: "61 días de cobertura", tone: "ok" });
+    expect(describeFamilyCoverage(membership("2026-09-30"), TODAY)).toEqual({ label: "Vence hoy", tone: "warn" });
+    expect(describeFamilyCoverage(membership("2026-10-04"), TODAY)).toEqual({ label: "4 días de cobertura", tone: "warn" });
+    expect(describeFamilyCoverage(membership("2026-10-01"), TODAY)).toEqual({ label: "1 día de cobertura", tone: "warn" });
+    expect(describeFamilyCoverage(membership("2026-11-30"), TODAY)).toEqual({ label: "61 días de cobertura", tone: "ok" });
   });
 });
 
@@ -1074,7 +1075,7 @@ describe("describeCuotaBadge", () => {
 describe("QA4 FAM-02 — a suspended membership is not «Al día»", () => {
   it("states the suspension with the coverage date and how to reactivate", () => {
     const result = describePaymentSituation(
-      situation({ viewingOwnProfile: false, studentName: "Sofia", suspended: true, coverageEnd: "2026-11-02" }),
+      situation({ viewingOwnProfile: false, studentName: "Sofia", suspended: true, coverageEnd: "2026-11-03" }),
       TODAY,
     );
 
@@ -1096,7 +1097,7 @@ describe("QA4 FAM-02 — a suspended membership is not «Al día»", () => {
   });
 
   it("says the coverage lapsed when its date is already past", () => {
-    const result = describePaymentSituation(situation({ suspended: true, coverageEnd: "2026-07-01" }), TODAY);
+    const result = describePaymentSituation(situation({ suspended: true, coverageEnd: "2026-07-02" }), TODAY);
 
     expect(result.detail).toContain("Tu cobertura venció el 01/07/2026.");
   });
@@ -1221,7 +1222,7 @@ describe("QA4 W3-4 — payment copy stays in «tú» and names the jugador", () 
 
   it("names the jugador's lapsed coverage for a suspended dependent", () => {
     const result = describePaymentSituation(
-      situation({ viewingOwnProfile: false, studentName: "Sofia", suspended: true, coverageEnd: "2026-07-01" }),
+      situation({ viewingOwnProfile: false, studentName: "Sofia", suspended: true, coverageEnd: "2026-07-02" }),
       TODAY,
     );
 
@@ -1230,8 +1231,8 @@ describe("QA4 W3-4 — payment copy stays in «tú» and names the jugador", () 
   });
 
   it("keeps «Tu cobertura» for the account holder's own suspended membership", () => {
-    const lapsed = describePaymentSituation(situation({ suspended: true, coverageEnd: "2026-07-01" }), TODAY);
-    const live = describePaymentSituation(situation({ suspended: true, coverageEnd: "2026-11-02" }), TODAY);
+    const lapsed = describePaymentSituation(situation({ suspended: true, coverageEnd: "2026-07-02" }), TODAY);
+    const live = describePaymentSituation(situation({ suspended: true, coverageEnd: "2026-11-03" }), TODAY);
 
     expect(lapsed.detail).toContain("Tu cobertura venció el 01/07/2026.");
     expect(live.detail).toContain("Tu cobertura sigue vigente hasta 02/11/2026.");
@@ -1251,7 +1252,7 @@ describe("QA4 REG-26 — «el club», not «administración»", () => {
 });
 
 describe("describeNextPayment — the representante's «Próximo pago» tile", () => {
-  const base = { monthlyPrice: "40.00", esGratuidadFamiliar: false, coverageEnd: "2026-10-28", daysLeft: 24, pendingCount: 0 };
+  const base = { monthlyPrice: "40.00", esGratuidadFamiliar: false, coverageEnd: "2026-10-29", daysLeft: 24, pendingCount: 0 };
 
   it("is the coal action tile when the coverage ends within 7 days", () => {
     expect(describeNextPayment({ ...base, daysLeft: 7 })).toMatchObject({ hot: true, status: "Vence pronto" });
@@ -1286,26 +1287,26 @@ describe("describeNextPayment — the representante's «Próximo pago» tile", (
 
 describe("describeCoverageStat — the «Cobertura» tile copy (#QA-R2 S4)", () => {
   it("reads «restantes · hasta el …» while coverage runs", () => {
-    expect(describeCoverageStat(31, "2026-11-04")).toEqual({
+    expect(describeCoverageStat(31, "2026-11-05")).toEqual({
       tone: "ok", status: "Al día", value: 31, unit: "días", hint: "restantes · hasta el 04/11/2026",
     });
   });
 
   it("uses the singular for one day", () => {
-    expect(describeCoverageStat(1, "2026-10-05")).toMatchObject({ value: 1, unit: "día", hint: "restante · hasta el 05/10/2026" });
+    expect(describeCoverageStat(1, "2026-10-06")).toMatchObject({ value: 1, unit: "día", hint: "restante · hasta el 05/10/2026" });
   });
 
   it("says it ends today", () => {
-    expect(describeCoverageStat(0, "2026-10-04")).toMatchObject({
+    expect(describeCoverageStat(0, "2026-10-05")).toMatchObject({
       tone: "ok", status: "Al día", value: 0, unit: "días", hint: "vence hoy · 04/10/2026",
     });
   });
 
   it("says how long ago an overdue coverage ended", () => {
-    expect(describeCoverageStat(-5, "2026-09-29")).toEqual({
-      tone: "bad", status: "Vencida", value: 5, unit: "días", hint: "vencida hace 5 días · desde el 29/09/2026",
+    expect(describeCoverageStat(-5, "2026-09-30")).toEqual({
+      tone: "bad", status: "Vencida", value: 5, unit: "días", hint: "vencida hace 5 días · venció el 29/09/2026",
     });
-    expect(describeCoverageStat(-1, "2026-10-03")).toMatchObject({ unit: "día", hint: "vencida hace 1 día · desde el 03/10/2026" });
+    expect(describeCoverageStat(-1, "2026-10-04")).toMatchObject({ unit: "día", hint: "vencida hace 1 día · venció el 03/10/2026" });
   });
 
   it("reads «Sin pago» when there is no coverage yet", () => {
@@ -1379,5 +1380,68 @@ describe("discounted current coverage (T5/S5)", () => {
     expect(result.detail).toBe(
       "Tu mes actual se pagó con descuento. Podrás renovar cuando termine, el 31/10/2026.",
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fecha-cobertura — `cubiertoHasta` / `fecha_fin` is EXCLUSIVE (the first
+// uncovered day); the portal counts and prints the LAST COVERED day (L).
+// «Vence hoy» when today == L, expired once today > L.
+// ---------------------------------------------------------------------------
+
+describe("fecha-cobertura — display follows the last covered day", () => {
+  const TODAY = new Date(2026, 9, 14); // 14/10/2026
+  const membership = (cubiertoHasta: string | null) =>
+    ({ id: 1, estado: "ACTIVA", personaId: 1, montoAplicado: "40.00", categoria: null, modalidad: null, fechaActivacion: null, fechaFin: null, cubiertoHasta }) as never;
+
+  it("daysUntilCoverageEnd counts to the day before the exclusive fecha_fin", () => {
+    expect(daysUntilCoverageEnd("2026-10-15", TODAY)).toBe(0);
+    expect(daysUntilCoverageEnd("2026-10-16", TODAY)).toBe(1);
+    expect(daysUntilCoverageEnd("2026-10-14", TODAY)).toBe(-1);
+    expect(daysUntilCoverageEnd(null, TODAY)).toBeNull();
+    expect(daysUntilCoverageEnd("no es una fecha", TODAY)).toBeNull();
+  });
+
+  it("a daily plan paid on 14/10 (fecha_fin 15/10) is covered today and lapsed tomorrow", () => {
+    expect(readCoverageStanding("2026-10-15", TODAY)).toBe("current");
+    expect(readCoverageStanding("2026-10-15", new Date(2026, 9, 15))).toBe("lapsed");
+  });
+
+  it("the situation ends TODAY on the last covered day and names that day", () => {
+    const today = describePaymentSituation(situation({ coverageEnd: "2026-10-15" }), TODAY);
+    expect(today.kind).toBe("ending-soon");
+    expect(today.headline).toBe("Tu cobertura termina hoy");
+    expect(today.detail).toBe("El último pago aprobado cubre hasta el 14/10/2026.");
+  });
+
+  it("the situation is expired the day after the last covered day, with the count from it", () => {
+    const expired = describePaymentSituation(situation({ coverageEnd: "2026-10-14" }), TODAY);
+    expect(expired.kind).toBe("expired");
+    expect(expired.figure).toEqual({ value: 1, unit: "día vencida" });
+    expect(expired.detail).toBe("El último pago aprobado cubrió hasta el 13/10/2026.");
+  });
+
+  it("the family strip says «Vence hoy» on the last covered day", () => {
+    expect(describeFamilyCoverage(membership("2026-10-15"), TODAY)).toEqual({ label: "Vence hoy", tone: "warn" });
+    expect(describeFamilyCoverage(membership("2026-10-14"), TODAY)).toEqual({ label: "Vencida", tone: "bad" });
+  });
+
+  it("the guardian's «Próximo pago» hint prints the last covered day", () => {
+    const base = { monthlyPrice: "40.00", esGratuidadFamiliar: false, coverageEnd: "2026-10-28", pendingCount: 0 };
+    expect(describeNextPayment({ ...base, daysLeft: 8 }).hint).toBe("vence el 27/10/2026");
+    expect(describeNextPayment({ ...base, daysLeft: 3 }).hint).toBe("vence el 27/10/2026");
+    expect(describeNextPayment({ ...base, daysLeft: -2 }).hint).toBe("venció el 27/10/2026");
+  });
+
+  it("an overdue «Cobertura» tile says «venció el» the last covered day, never «desde el» it", () => {
+    // A weekly plan whose last covered day is 14/10 (fecha_fin 15/10).
+    expect(describeCoverageStat(-1, "2026-10-15").hint).toBe("vencida hace 1 día · venció el 14/10/2026");
+    expect(describeCoverageStat(-2, "2026-10-15").hint).not.toMatch(/desde el/);
+  });
+
+  it("the «Cobertura» tile prints the last covered day", () => {
+    expect(describeCoverageStat(8, "2026-10-28").hint).toBe("restantes · hasta el 27/10/2026");
+    expect(describeCoverageStat(0, "2026-10-28").hint).toBe("vence hoy · 27/10/2026");
+    expect(describeCoverageStat(-2, "2026-10-28").hint).toBe("vencida hace 2 días · venció el 27/10/2026");
   });
 });

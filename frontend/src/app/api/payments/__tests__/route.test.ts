@@ -176,7 +176,7 @@ describe("GET /api/payments", () => {
         {
           id: "1",
           studentName: "Sofia Alumna",
-          membershipPeriod: "01/07/2026 – 31/07/2026",
+          membershipPeriod: "01/07/2026 – 30/07/2026",
           membershipType: "Mensual",
           expectedAmount: 85,
           paymentMethod: "Transferencia",

@@ -11,9 +11,9 @@ import {
 } from "@/lib/payment-block";
 
 describe("paymentBlockBanner", () => {
-  it("names the day the coverage ended, in the product's date grammar", () => {
+  it("names the last covered day (the day before the exclusive fecha_fin), in the product's date grammar", () => {
     expect(paymentBlockBanner("2026-09-30")).toBe(
-      "Tu membresía venció el 30/09/2026. Paga para volver a entrenar.",
+      "Tu membresía venció el 29/09/2026. Paga para volver a entrenar.",
     );
   });
 
@@ -23,7 +23,7 @@ describe("paymentBlockBanner", () => {
 
   it("names the dependent when a guardian is the reader", () => {
     expect(paymentBlockBanner("2026-09-30", "Sofía")).toBe(
-      "La membresía de Sofía venció el 30/09/2026. Paga para que vuelva a entrenar.",
+      "La membresía de Sofía venció el 29/09/2026. Paga para que vuelva a entrenar.",
     );
   });
 });
